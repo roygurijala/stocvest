@@ -9,9 +9,10 @@ from stocvest.api.handlers.market_data import (
     bars_handler,
     market_status_handler,
     news_handler,
+    options_chain_handler,
     snapshot_handler,
 )
-from stocvest.data.models import Bar, MarketStatus, NewsArticle, Snapshot, Timeframe
+from stocvest.data.models import Bar, MarketStatus, NewsArticle, OptionContract, Snapshot, Timeframe
 from stocvest.utils.config import get_settings
 
 
@@ -77,6 +78,40 @@ class _FakePolygonClient:
             for _ in range(min(limit, 1))
         ]
 
+    async def get_options_chain(
+        self,
+        underlying: str,
+        expiration_date: str | None = None,
+        strike_price_gte: float | None = None,
+        strike_price_lte: float | None = None,
+        option_type: str | None = None,
+        limit: int = 100,
+    ) -> list[OptionContract]:
+        _ = expiration_date
+        _ = strike_price_gte
+        _ = strike_price_lte
+        _ = option_type
+        _ = limit
+        return [
+            OptionContract(
+                symbol=f"O:{underlying}260620C00100000",
+                underlying=underlying,
+                expiration=datetime(2026, 6, 20, tzinfo=timezone.utc),
+                strike=100.0,
+                option_type="call",
+                last_price=2.5,
+                bid=2.4,
+                ask=2.6,
+                volume=1200,
+                open_interest=4500,
+                implied_volatility=0.28,
+                delta=0.52,
+                gamma=0.03,
+                theta=-0.02,
+                vega=0.11,
+            )
+        ]
+
 
 @pytest.fixture(autouse=True)
 def _clear_settings(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -132,4 +167,17 @@ def test_news_handler_returns_filtered_news() -> None:
     body = json.loads(response["body"])
     assert len(body) == 1
     assert body[0]["title"] == "Headline MSFT"
+
+
+def test_options_chain_handler_returns_contracts_with_greeks() -> None:
+    event = {"queryStringParameters": {"symbol": "aapl", "limit": "10"}}
+    response = options_chain_handler(event, {}, client_factory=_FakePolygonClient)
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert len(body) == 1
+    assert body[0]["underlying"] == "AAPL"
+    assert body[0]["delta"] == 0.52
+    assert body[0]["gamma"] == 0.03
+    assert body[0]["theta"] == -0.02
+    assert body[0]["vega"] == 0.11
 

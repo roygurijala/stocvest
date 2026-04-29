@@ -9,9 +9,9 @@ and what must never be changed without explicit discussion.
 
 ## Current Status
 
-**Phase:** 1 — Complete ✅ / Phase 2 — Complete ✅ / Phase 2.5 — Complete ✅ / Phase 3 — Complete ✅ / Phase 4 — Complete ✅
+**Phase:** 1 — Complete ✅ / Phase 2 — Complete ✅ / Phase 2.5 — Complete ✅ / Phase 3 — Complete ✅ / Phase 4 — Complete ✅ / Phase 5 — In Progress 🚧
 **Last Updated:** 2026-04-28
-**Last Session:** Post-Phase-4 hardening — WebSocket registry migrated to DynamoDB (TTL-backed) with local-dev in-memory fallback
+**Last Session:** Scanner optimization pass — scanner inputs now sourced from real `/v1/market/*` data and scanner handlers cache results for 60 seconds
 
 ---
 
@@ -66,7 +66,7 @@ Claude in Cursor should always read this file before writing any code.
 ✅ tests/utils/test_logging.py         Logger factory
 ✅ tests/test_package_smoke.py         Package import / export smoke tests
 
-TEST STATUS: 282/282 passing ✅
+TEST STATUS: 310/310 backend tests passing ✅ + 25/25 frontend unit tests passing ✅
 
 ✅ stocvest/signals/   — Phase 2 complete
                          ✅ 2a News sentiment scorer (Claude API) implemented
@@ -174,7 +174,70 @@ TEST STATUS: 282/282 passing ✅
                          ✅ tests/api/handlers/test_websocket.py extended:
                             - DynamoDB TTL refresh behavior
                             - dev-only fallback selection behavior
-❌ frontend/           — Phase 5 (not started)
+🚧 frontend/           — Phase 5 (started)
+                         ✅ 5a initial auth foundation:
+                            - Next.js app scaffold (`frontend/`, app router)
+                            - token-based login + HTTP-only auth cookie
+                            - protected dashboard route + auth middleware
+                            - shared frontend API client bootstrap
+                            - frontend unit tests (`frontend/tests/session.test.ts`, 3 tests)
+                         ✅ 5b broker connectivity panel:
+                            - broker health/accounts/positions fetched from backend APIs
+                            - per-broker error handling in dashboard cards
+                            - frontend unit tests for broker API orchestration (`frontend/tests/brokers-api.test.ts`, 2 tests)
+                         ✅ 5c dashboard visualization cards:
+                            - market session status, watchlist snapshots, and latest headlines on dashboard
+                            - market orchestration layer (`frontend/lib/api/market.ts`) using `/v1/market/status|snapshot|news`
+                            - frontend unit tests for market API orchestration (`frontend/tests/market-api.test.ts`, 2 tests)
+                         ✅ 5d order entry UI:
+                            - dashboard order form (broker/account/symbol/side/type/qty/prices)
+                            - server action submits orders to `/v1/brokers/orders` via authenticated API client
+                            - frontend broker API tests extended for order submission (`frontend/tests/brokers-api.test.ts`, +1 test)
+                         ✅ 5e trade journal UI:
+                            - journal API handlers (`GET/POST /v1/journal/entries`) backed by shared TradeJournal engine
+                            - dashboard journal panel with entry form + recent entries list
+                            - frontend journal API client + tests (`frontend/tests/journal-api.test.ts`, 2 tests)
+                            - backend journal handler tests (`tests/api/handlers/test_journal.py`, 2 tests)
+                         ✅ 5f PDT widget:
+                            - PDT status API handler (`GET /v1/pdt/status`) derived from user journal day-trade entries
+                            - dashboard PDT status widget (OK/WARNING/BLOCKED with next-trade allowance)
+                            - frontend PDT API client + test (`frontend/tests/pdt-api.test.ts`, 1 test)
+                            - backend PDT handler tests (`tests/api/handlers/test_pdt.py`, 2 tests)
+                         ✅ 5g scanner dashboard panel:
+                            - scanner API orchestration (`frontend/lib/api/scanner.ts`) for gaps/catalysts/intraday/briefing
+                            - dashboard scanner overview panel + briefing preview (`frontend/components/scanner-overview-panel.tsx`)
+                            - frontend scanner API tests (`frontend/tests/scanner-api.test.ts`, 2 tests)
+                         ✅ 5h options chain viewer:
+                            - market options API handler (`GET /v1/market/options`) wired to Polygon options chain
+                            - dashboard options chain table with Greeks (delta/gamma/theta/vega) columns
+                            - prominent UI banner: "Options data delayed by 15 minutes (Polygon Options Starter)"
+                            - backend + frontend test coverage for options endpoint and client layer
+                         ✅ 5i futures dashboard:
+                            - futures panel consumes IBKR broker APIs (`/v1/brokers/health|accounts|positions`) and does not use Polygon
+                            - explicit graceful fallback when TWS is unavailable/disconnected
+                            - frontend tests for connected + unavailable scenarios (`frontend/tests/futures-api.test.ts`, 2 tests)
+                         ✅ 5j crypto panel:
+                            - crypto market bars sourced from Polygon Currencies Starter via `/v1/market/bars`
+                            - explicit UI statement that on-chain metrics are not included (deferred scope)
+                            - frontend crypto API tests (`frontend/tests/crypto-api.test.ts`, 1 test)
+                         ✅ 5k portfolio view:
+                            - multi-broker portfolio summary aggregation across broker/accounts
+                            - disconnected broker/account failures are isolated to per-account cards (partial data still renders)
+                            - frontend portfolio API tests (`frontend/tests/portfolio-api.test.ts`, 1 test)
+                         ✅ 5l PDT tracker widget hardening:
+                            - shows current day trade count, days until reset, and next-trade allowance
+                            - explicit warning message when count reaches 2 day trades
+                            - backend PDT API now returns `current_day_trade_count` + `days_until_reset`
+                            - deterministic edge-case tests for warn-at-2, at-limit, weekend-as_of behavior
+                         ✅ Dashboard/broker/scanner performance hardening:
+                            - broker aggregation endpoint used for one-call health+accounts+positions per broker
+                            - scanner endpoints consume real market data inputs and use 60s server-side cache
+                            - futures fetch parallelized with scanner/options/crypto batch on dashboard load
+                            - portfolio overview derived from aggregated broker snapshot (no extra portfolio fetch)
+                         ✅ Additional test hardening completed:
+                            - direct DynamoDB store unit tests for journal + PDT persistence services
+                            - scanner cache tests extended for TTL expiry and payload-key isolation
+                            - broker overview failure-path and PDT query edge-case tests added
 ❌ infra/              — Phase 6 (not started)
 ```
 
@@ -377,8 +440,19 @@ Phase 4 — API Layer                                  ✅ COMPLETE
   4g. WebSocket handler                              ✅
   4h. Scanner endpoints                              ✅
 
-Phase 5 — Frontend (Next.js on stocvest.app)
-  5a–5l. Auth, broker UI, dashboards, order entry, journal, PDT widget
+Phase 5 — Frontend (Next.js on stocvest.app)             🚧 IN PROGRESS
+  5a. Auth foundation (scaffold + session + guarded routes) ✅
+  5b. Broker connectivity UI                              ✅
+  5c. Market/signal dashboard cards                       ✅
+  5d. Order entry UI                                      ✅
+  5e. Trade journal UI                                    ✅
+  5f. PDT widget                                           ✅
+  5g. Scanner overview panel                               ✅
+  5h. Options chain viewer                                 ✅
+  5i. Futures dashboard                                    ✅
+  5j. Crypto panel                                         ✅
+  5k. Portfolio view                                       ✅
+  5l. PDT tracker widget hardening                         ✅
 
 Phase 6 — Infrastructure (Terraform)
   6a–6i. VPC, DynamoDB, Redis, ECS, Lambda, Cognito, EventBridge, Vercel, CI/CD

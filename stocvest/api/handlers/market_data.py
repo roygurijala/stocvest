@@ -128,6 +128,54 @@ def news_handler(
         return internal_error(str(exc))
 
 
+def options_chain_handler(
+    event: LambdaEvent,
+    context: LambdaContext,
+    client_factory: Callable[..., PolygonClient] = PolygonClient,
+) -> dict[str, Any]:
+    _ = context
+    query = _query_params(event)
+    symbol = str(query.get("symbol") or "").strip().upper()
+    if not symbol:
+        return bad_request("Query param 'symbol' is required.")
+
+    expiration = str(query.get("expiration") or "").strip() or None
+    option_type = str(query.get("option_type") or "").strip().lower() or None
+    strike_gte_raw = query.get("strike_gte")
+    strike_lte_raw = query.get("strike_lte")
+    try:
+        limit = int(query.get("limit") or 100)
+    except ValueError:
+        return bad_request("Invalid limit.")
+    if limit < 1 or limit > 250:
+        return bad_request("Limit must be between 1 and 250.")
+    try:
+        strike_gte = float(strike_gte_raw) if strike_gte_raw is not None else None
+        strike_lte = float(strike_lte_raw) if strike_lte_raw is not None else None
+    except ValueError:
+        return bad_request("Invalid strike_gte/strike_lte.")
+    if option_type and option_type not in {"call", "put"}:
+        return bad_request("option_type must be 'call' or 'put'.")
+
+    async def _run() -> dict[str, Any]:
+        settings = get_settings()
+        async with client_factory(api_key=settings.polygon_api_key) as client:
+            contracts = await client.get_options_chain(
+                underlying=symbol,
+                expiration_date=expiration,
+                strike_price_gte=strike_gte,
+                strike_price_lte=strike_lte,
+                option_type=option_type,
+                limit=limit,
+            )
+        return ok([contract.model_dump(mode="json") for contract in contracts])
+
+    try:
+        return asyncio.run(_run())
+    except PolygonError as exc:
+        return internal_error(str(exc))
+
+
 def _query_params(event: LambdaEvent) -> dict[str, str]:
     query = event.get("queryStringParameters") or {}
     if not isinstance(query, dict):

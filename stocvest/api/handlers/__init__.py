@@ -6,6 +6,7 @@ from stocvest.api.handlers.market_data import (
     bars_handler,
     market_status_handler,
     news_handler,
+    options_chain_handler,
     snapshot_handler,
 )
 from stocvest.api.handlers.brokers import (
@@ -13,6 +14,7 @@ from stocvest.api.handlers.brokers import (
     broker_cancel_order_handler,
     broker_get_order_handler,
     broker_health_handler,
+    broker_overview_handler,
     broker_place_order_handler,
     broker_positions_handler,
 )
@@ -38,6 +40,11 @@ from stocvest.api.handlers.portfolio import (
     portfolio_holdings_handler,
     portfolio_summary_handler,
 )
+from stocvest.api.handlers.journal import (
+    journal_create_entry_handler,
+    journal_list_entries_handler,
+)
+from stocvest.api.handlers.pdt import pdt_status_handler
 
 __all__ = [
     "authorizer_handler",
@@ -46,6 +53,7 @@ __all__ = [
     "broker_cancel_order_handler",
     "broker_get_order_handler",
     "broker_health_handler",
+    "broker_overview_handler",
     "broker_place_order_handler",
     "broker_positions_handler",
     "day_briefing_handler",
@@ -53,9 +61,13 @@ __all__ = [
     "health_handler",
     "market_status_handler",
     "news_handler",
+    "options_chain_handler",
     "portfolio_allocation_handler",
     "portfolio_holdings_handler",
     "portfolio_summary_handler",
+    "journal_create_entry_handler",
+    "journal_list_entries_handler",
+    "pdt_status_handler",
     "scanner_briefing_handler",
     "scanner_catalysts_handler",
     "scanner_gaps_handler",

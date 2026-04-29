@@ -140,3 +140,25 @@ def test_websocket_registry_fields_default(monkeypatch: pytest.MonkeyPatch) -> N
     s = get_settings()
     assert s.websocket_connections_table == ""
     assert s.websocket_connection_ttl_seconds == 86400
+
+
+@pytest.mark.unit
+def test_journal_pdt_tables_parse_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("POLYGON_API_KEY", "x")
+    monkeypatch.setenv("STOCVEST_TRADE_JOURNAL_TABLE", "TradeJournal")
+    monkeypatch.setenv("STOCVEST_PDT_STATE_TABLE", "PDTState")
+    get_settings.cache_clear()
+    s = get_settings()
+    assert s.trade_journal_table == "TradeJournal"
+    assert s.pdt_state_table == "PDTState"
+
+
+@pytest.mark.unit
+def test_journal_pdt_tables_default_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("POLYGON_API_KEY", "x")
+    monkeypatch.delenv("STOCVEST_TRADE_JOURNAL_TABLE", raising=False)
+    monkeypatch.delenv("STOCVEST_PDT_STATE_TABLE", raising=False)
+    get_settings.cache_clear()
+    s = get_settings()
+    assert s.trade_journal_table == ""
+    assert s.pdt_state_table == ""

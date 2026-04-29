@@ -52,6 +52,10 @@ class Settings(BaseSettings):
         86400, alias="STOCVEST_WS_CONNECTION_TTL_SECONDS"
     )
 
+    # ── Journal + PDT persistence ────────────────────────────────
+    trade_journal_table: str = Field("", alias="STOCVEST_TRADE_JOURNAL_TABLE")
+    pdt_state_table: str = Field("", alias="STOCVEST_PDT_STATE_TABLE")
+
     model_config = {"populate_by_name": True}
 
     @property

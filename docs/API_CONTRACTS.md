@@ -39,6 +39,7 @@ All REST routes are versioned under `/v1/`.
 - `GET /v1/market/snapshot?symbol={ticker}` — point-in-time snapshot for one symbol
 - `GET /v1/market/bars?symbol={ticker}&timeframe={tf}&limit={n}&from={yyyy-mm-dd}&to={yyyy-mm-dd}`
 - `GET /v1/market/news?symbol={ticker?}&limit={n}`
+- `GET /v1/market/options?symbol={ticker}&limit={n}[&expiration={yyyy-mm-dd}&option_type={call|put}&strike_gte={x}&strike_lte={y}]`
 
 `timeframe` values are fixed to `Timeframe` enum values:
 `1min`, `5min`, `15min`, `30min`, `1hour`, `4hour`, `1day`, `1week`.
@@ -55,6 +56,7 @@ All REST routes are versioned under `/v1/`.
 - `GET /v1/brokers/health?broker={mock|ibkr|etrade}[&account_id={id}]`
 - `GET /v1/brokers/accounts?broker={mock|ibkr|etrade}`
 - `GET /v1/brokers/positions?broker={mock|ibkr|etrade}&account_id={id}`
+- `GET /v1/brokers/overview?broker={mock|ibkr|etrade}` — returns health + accounts + positions_by_account in one broker session
 - `POST /v1/brokers/orders?broker={mock|ibkr|etrade}&account_id={id}`
 - `GET /v1/brokers/orders?broker={mock|ibkr|etrade}&account_id={id}&client_order_id={id}`
 - `DELETE /v1/brokers/orders?broker={mock|ibkr|etrade}&account_id={id}&client_order_id={id}`
@@ -89,3 +91,14 @@ Supported default actions:
 - `POST /v1/scanner/catalysts` — rank news catalysts from scored article payloads
 - `POST /v1/scanner/intraday` — run intraday setup scan from 1-minute bar payloads
 - `POST /v1/scanner/briefing` — generate daily scanner briefing markdown
+
+### 4.8 Journal endpoints (Phase 5 support)
+
+- `GET /v1/journal/entries` — list trade-journal entries for authenticated user
+- `POST /v1/journal/entries` — create a new open trade-journal entry for authenticated user
+
+### 4.9 PDT endpoint (Phase 5 support)
+
+- `GET /v1/pdt/status` — returns authenticated user's PDT assessment snapshot
+  - Includes `current_day_trade_count` and `days_until_reset`
+  - Supports optional `as_of=YYYY-MM-DD` query for deterministic assessments/testing

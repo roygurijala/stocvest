@@ -3,7 +3,10 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from stocvest.api.handlers.scanner import (
+    _SCANNER_CACHE,
     scanner_briefing_handler,
     scanner_catalysts_handler,
     scanner_gaps_handler,
@@ -128,6 +131,118 @@ def test_scanner_briefing_handler_renders_markdown() -> None:
 def test_scanner_handlers_validate_inputs() -> None:
     response = scanner_gaps_handler({"body": json.dumps({"snapshots": {}})}, {})
     assert response["statusCode"] == 400
+
+
+def test_scanner_gaps_handler_uses_cache_within_ttl(monkeypatch: pytest.MonkeyPatch) -> None:
+    _SCANNER_CACHE.clear()
+    calls = {"count": 0}
+
+    class _FakeGapScanner:
+        def __init__(self, min_abs_gap_percent: float, min_day_volume: float) -> None:
+            _ = min_abs_gap_percent
+            _ = min_day_volume
+
+        def scan_snapshots(self, snapshots, limit: int):
+            _ = snapshots
+            _ = limit
+            calls["count"] += 1
+            return []
+
+    monkeypatch.setattr("stocvest.api.handlers.scanner.PremarketGapScanner", _FakeGapScanner)
+
+    event = {
+        "body": json.dumps(
+            {
+                "snapshots": [
+                    {"symbol": "GAP1", "prev_close": 100.0, "pre_market_price": 104.0, "day_volume": 12_000_000}
+                ],
+                "limit": 5,
+                "min_abs_gap_percent": 2.0,
+            }
+        )
+    }
+    first = scanner_gaps_handler(event, {})
+    second = scanner_gaps_handler(event, {})
+    assert first["statusCode"] == 200
+    assert second["statusCode"] == 200
+    assert calls["count"] == 1
+
+
+def test_scanner_gaps_cache_expires_after_ttl(monkeypatch: pytest.MonkeyPatch) -> None:
+    _SCANNER_CACHE.clear()
+    calls = {"count": 0}
+    fake_time = {"value": 1000.0}
+
+    class _FakeGapScanner:
+        def __init__(self, min_abs_gap_percent: float, min_day_volume: float) -> None:
+            _ = min_abs_gap_percent
+            _ = min_day_volume
+
+        def scan_snapshots(self, snapshots, limit: int):
+            _ = snapshots
+            _ = limit
+            calls["count"] += 1
+            return []
+
+    monkeypatch.setattr("stocvest.api.handlers.scanner.PremarketGapScanner", _FakeGapScanner)
+    monkeypatch.setattr("stocvest.api.handlers.scanner.time.time", lambda: fake_time["value"])
+
+    event = {
+        "body": json.dumps(
+            {
+                "snapshots": [
+                    {"symbol": "GAP1", "prev_close": 100.0, "pre_market_price": 104.0, "day_volume": 12_000_000}
+                ],
+                "limit": 5,
+                "min_abs_gap_percent": 2.0,
+            }
+        )
+    }
+    scanner_gaps_handler(event, {})
+    scanner_gaps_handler(event, {})
+    fake_time["value"] += 61.0
+    scanner_gaps_handler(event, {})
+    assert calls["count"] == 2
+
+
+def test_scanner_cache_keys_are_payload_specific(monkeypatch: pytest.MonkeyPatch) -> None:
+    _SCANNER_CACHE.clear()
+    calls = {"count": 0}
+
+    class _FakeGapScanner:
+        def __init__(self, min_abs_gap_percent: float, min_day_volume: float) -> None:
+            _ = min_abs_gap_percent
+            _ = min_day_volume
+
+        def scan_snapshots(self, snapshots, limit: int):
+            _ = snapshots
+            _ = limit
+            calls["count"] += 1
+            return []
+
+    monkeypatch.setattr("stocvest.api.handlers.scanner.PremarketGapScanner", _FakeGapScanner)
+
+    event_a = {
+        "body": json.dumps(
+            {
+                "snapshots": [
+                    {"symbol": "AAA", "prev_close": 100.0, "pre_market_price": 104.0, "day_volume": 12_000_000}
+                ]
+            }
+        )
+    }
+    event_b = {
+        "body": json.dumps(
+            {
+                "snapshots": [
+                    {"symbol": "BBB", "prev_close": 100.0, "pre_market_price": 104.0, "day_volume": 12_000_000}
+                ]
+            }
+        )
+    }
+    scanner_gaps_handler(event_a, {})
+    scanner_gaps_handler(event_b, {})
+    assert calls["count"] == 2
 
 
 def _bar(ts: datetime, *, close: float, volume: float) -> dict[str, object]:

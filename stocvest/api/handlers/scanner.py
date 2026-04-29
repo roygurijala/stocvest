@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from datetime import date
+import json
+import time
 from typing import Any
 
 from stocvest.api.response import bad_request, internal_error, ok
@@ -27,11 +29,39 @@ from stocvest.signals import (
     PremarketGapScanner,
 )
 
+_SCANNER_CACHE_TTL_SECONDS = 60
+_SCANNER_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+
+
+def _cache_key(endpoint: str, payload: dict[str, Any]) -> str:
+    normalized = json.dumps(payload, sort_keys=True, default=str, separators=(",", ":"))
+    return f"{endpoint}:{normalized}"
+
+
+def _cache_get(key: str) -> dict[str, Any] | None:
+    row = _SCANNER_CACHE.get(key)
+    if row is None:
+        return None
+    expires_at, value = row
+    if expires_at <= time.time():
+        _SCANNER_CACHE.pop(key, None)
+        return None
+    return json.loads(json.dumps(value))
+
+
+def _cache_set(key: str, value: dict[str, Any]) -> dict[str, Any]:
+    _SCANNER_CACHE[key] = (time.time() + _SCANNER_CACHE_TTL_SECONDS, value)
+    return value
+
 
 def scanner_gaps_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
     _ = context
     try:
         payload = parse_json_body(event)
+        key = _cache_key("gaps", payload)
+        cached = _cache_get(key)
+        if cached is not None:
+            return cached
         snapshots_raw = payload.get("snapshots")
         if not isinstance(snapshots_raw, list):
             return bad_request("Body field 'snapshots' must be a list.")
@@ -43,7 +73,7 @@ def scanner_gaps_handler(event: LambdaEvent, context: LambdaContext) -> dict[str
             min_abs_gap_percent=min_abs_gap_percent,
             min_day_volume=min_day_volume,
         ).scan_snapshots(snapshots, limit=limit)
-        return ok([serialize_gap_candidate(c) for c in candidates])
+        return _cache_set(key, ok([serialize_gap_candidate(c) for c in candidates]))
     except (TypeError, ValueError) as exc:
         return bad_request(f"Invalid gap scanner request: {exc}")
     except Exception as exc:
@@ -54,6 +84,10 @@ def scanner_catalysts_handler(event: LambdaEvent, context: LambdaContext) -> dic
     _ = context
     try:
         payload = parse_json_body(event)
+        key = _cache_key("catalysts", payload)
+        cached = _cache_get(key)
+        if cached is not None:
+            return cached
         articles_raw = payload.get("articles")
         if not isinstance(articles_raw, list):
             return bad_request("Body field 'articles' must be a list.")
@@ -61,7 +95,7 @@ def scanner_catalysts_handler(event: LambdaEvent, context: LambdaContext) -> dic
         limit = int(payload.get("limit", 8))
         articles = [parse_article(item) for item in articles_raw]
         candidates = NewsCatalystDetector(min_score=min_score).detect(articles, limit=limit)
-        return ok([serialize_catalyst(c) for c in candidates])
+        return _cache_set(key, ok([serialize_catalyst(c) for c in candidates]))
     except (TypeError, ValueError) as exc:
         return bad_request(f"Invalid catalyst request: {exc}")
     except Exception as exc:
@@ -72,6 +106,10 @@ def scanner_intraday_handler(event: LambdaEvent, context: LambdaContext) -> dict
     _ = context
     try:
         payload = parse_json_body(event)
+        key = _cache_key("intraday", payload)
+        cached = _cache_get(key)
+        if cached is not None:
+            return cached
         bars_by_symbol_raw = payload.get("bars_by_symbol")
         if not isinstance(bars_by_symbol_raw, dict):
             return bad_request("Body field 'bars_by_symbol' must be an object.")
@@ -83,7 +121,7 @@ def scanner_intraday_handler(event: LambdaEvent, context: LambdaContext) -> dict
                 return bad_request("bars_by_symbol entries must map symbol strings to bar arrays.")
             bars_by_symbol[symbol.upper()] = [parse_bar(item, symbol.upper()) for item in bars]
         setups = IntradaySetupScanner(min_score=min_score).scan(bars_by_symbol, limit=limit)
-        return ok([serialize_intraday_setup(c) for c in setups])
+        return _cache_set(key, ok([serialize_intraday_setup(c) for c in setups]))
     except (TypeError, ValueError, KeyError) as exc:
         return bad_request(f"Invalid intraday scanner request: {exc}")
     except Exception as exc:
@@ -94,6 +132,10 @@ def scanner_briefing_handler(event: LambdaEvent, context: LambdaContext) -> dict
     _ = context
     try:
         payload = parse_json_body(event)
+        key = _cache_key("briefing", payload)
+        cached = _cache_get(key)
+        if cached is not None:
+            return cached
         briefing_date = date.fromisoformat(str(payload["briefing_date"]))
         gaps_raw = payload.get("gap_candidates", [])
         catalysts_raw = payload.get("news_catalysts", [])
@@ -115,7 +157,10 @@ def scanner_briefing_handler(event: LambdaEvent, context: LambdaContext) -> dict
                 ),
             )
         )
-        return ok({"date_iso": briefing.date_iso, "title": briefing.title, "markdown": briefing.markdown})
+        return _cache_set(
+            key,
+            ok({"date_iso": briefing.date_iso, "title": briefing.title, "markdown": briefing.markdown}),
+        )
     except (TypeError, ValueError, KeyError) as exc:
         return bad_request(f"Invalid scanner briefing request: {exc}")
     except Exception as exc:

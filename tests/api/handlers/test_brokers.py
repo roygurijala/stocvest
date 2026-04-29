@@ -9,6 +9,7 @@ from stocvest.api.handlers.brokers import (
     broker_cancel_order_handler,
     broker_get_order_handler,
     broker_health_handler,
+    broker_overview_handler,
     broker_place_order_handler,
     broker_positions_handler,
 )
@@ -108,6 +109,44 @@ def test_broker_accounts_handler() -> None:
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
     assert body[0]["account_id"] == "A1"
+
+
+def test_broker_overview_handler_returns_health_accounts_positions() -> None:
+    event = {"queryStringParameters": {"broker": "mock"}}
+    response = broker_overview_handler(
+        event,
+        {},
+        factory=_FakeFactory,
+        gateway_provider=_FakeGatewayProvider(),
+    )
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["broker"] == "mock"
+    assert body["health"]["ok"] is True
+    assert body["accounts"][0]["account_id"] == "A1"
+    assert body["positions_by_account"]["A1"][0]["symbol"] == "AAPL"
+
+
+def test_broker_overview_handler_maps_positions_failure() -> None:
+    class _FailingAdapter(_FakeAdapter):
+        async def get_positions(self, account_id: str) -> list[BrokerPosition]:
+            _ = account_id
+            raise RuntimeError("backend unavailable")
+
+    class _FailingFactory:
+        @staticmethod
+        def create(kind: str) -> _FailingAdapter:
+            assert kind in {"mock", "ibkr", "etrade"}
+            return _FailingAdapter()
+
+    event = {"queryStringParameters": {"broker": "mock"}}
+    response = broker_overview_handler(
+        event,
+        {},
+        factory=_FailingFactory,
+        gateway_provider=_FakeGatewayProvider(),
+    )
+    assert response["statusCode"] == 500
 
 
 def test_broker_positions_handler_requires_account() -> None:

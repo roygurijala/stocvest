@@ -88,6 +88,45 @@ def broker_accounts_handler(
     return _run_with_broker_error_mapping(_run)
 
 
+def broker_overview_handler(
+    event: LambdaEvent,
+    context: LambdaContext,
+    factory: type[BrokerAdapterFactory] = BrokerAdapterFactory,
+    gateway_provider: BrokerGatewayProvider = DEFAULT_BROKER_GATEWAY_PROVIDER,
+) -> dict[str, Any]:
+    _ = context
+    broker, _ = _extract_broker_context(event)
+    if broker is None:
+        return bad_request("Query param 'broker' is required.")
+    try:
+        connect_config = _connect_config_from_environment(event, broker, gateway_provider)
+    except ValueError as exc:
+        return bad_request(str(exc))
+
+    async def _run() -> dict[str, Any]:
+        adapter = factory.create(broker)
+        try:
+            await adapter.connect(connect_config)
+            health = await adapter.health_check()
+            accounts = await adapter.list_accounts()
+            positions_by_account: dict[str, list[dict[str, Any]]] = {}
+            for account in accounts:
+                positions = await adapter.get_positions(account.account_id)
+                positions_by_account[account.account_id] = [p.model_dump(mode="json") for p in positions]
+            return ok(
+                {
+                    "broker": broker,
+                    "health": health.model_dump(mode="json"),
+                    "accounts": [a.model_dump(mode="json") for a in accounts],
+                    "positions_by_account": positions_by_account,
+                }
+            )
+        finally:
+            await adapter.disconnect()
+
+    return _run_with_broker_error_mapping(_run)
+
+
 def broker_positions_handler(
     event: LambdaEvent,
     context: LambdaContext,
