@@ -8,9 +8,14 @@ This module manages OAuth token workflow and is intentionally transport-only:
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
+import secrets
+import time
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qs, quote, urlencode, urlparse, urlunparse
 
 import httpx
 
@@ -73,9 +78,11 @@ class ETradeOAuthClient:
     def request_token(self, *, callback_url: str = "oob") -> OAuthTemporaryToken:
         headers = {
             "Authorization": self._auth_header(
+                method="POST",
+                path="/oauth/request_token",
                 token=None,
                 token_secret=None,
-                extra_params={"oauth_callback": callback_url},
+                oauth_params={"oauth_callback": callback_url},
             )
         }
         resp = self._request("POST", "/oauth/request_token", headers=headers)
@@ -102,9 +109,11 @@ class ETradeOAuthClient:
     ) -> OAuthAccessToken:
         headers = {
             "Authorization": self._auth_header(
+                method="POST",
+                path="/oauth/access_token",
                 token=request_token,
                 token_secret=request_token_secret,
-                extra_params={"oauth_verifier": verifier},
+                oauth_params={"oauth_verifier": verifier},
             )
         }
         resp = self._request("POST", "/oauth/access_token", headers=headers)
@@ -118,9 +127,11 @@ class ETradeOAuthClient:
     def renew_access_token(self, *, access_token: str, access_token_secret: str) -> None:
         headers = {
             "Authorization": self._auth_header(
+                method="POST",
+                path="/oauth/renew_access_token",
                 token=access_token,
                 token_secret=access_token_secret,
-                extra_params={},
+                oauth_params={},
             )
         }
         self._request("POST", "/oauth/renew_access_token", headers=headers)
@@ -128,9 +139,11 @@ class ETradeOAuthClient:
     def revoke_access_token(self, *, access_token: str, access_token_secret: str) -> None:
         headers = {
             "Authorization": self._auth_header(
+                method="POST",
+                path="/oauth/revoke_access_token",
                 token=access_token,
                 token_secret=access_token_secret,
-                extra_params={},
+                oauth_params={},
             )
         }
         self._request("POST", "/oauth/revoke_access_token", headers=headers)
@@ -163,26 +176,114 @@ class ETradeOAuthClient:
     def _auth_header(
         self,
         *,
+        method: str,
+        path: str,
         token: str | None,
         token_secret: str | None,
-        extra_params: dict[str, str],
+        oauth_params: dict[str, str],
+        request_params: dict[str, Any] | None = None,
+        nonce: str | None = None,
+        timestamp: str | None = None,
     ) -> str:
-        """
-        Build OAuth1 header placeholder.
-
-        For current phase scope, we provide a deterministic header shape used by tests.
-        Swap this with a full OAuth1 signer before live rollout if required by broker.
-        """
-        parts = [
-            f'oauth_consumer_key="{self._consumer_key}"',
-            'oauth_signature_method="PLAINTEXT"',
-            'oauth_version="1.0"',
-        ]
+        oauth_values: dict[str, str] = {
+            "oauth_consumer_key": self._consumer_key,
+            "oauth_signature_method": "HMAC-SHA1",
+            "oauth_timestamp": timestamp or str(int(time.time())),
+            "oauth_nonce": nonce or self._generate_nonce(),
+            "oauth_version": "1.0",
+        }
         if token:
-            parts.append(f'oauth_token="{token}"')
-        for key, val in extra_params.items():
-            parts.append(f'{key}="{val}"')
-        signature_right = token_secret or ""
-        parts.append(f'oauth_signature="{self._consumer_secret}&{signature_right}"')
+            oauth_values["oauth_token"] = token
+        oauth_values.update(oauth_params)
+
+        signature = self._oauth_hmac_sha1_signature(
+            method=method,
+            url=f"{self._base_url}{path}",
+            oauth_params=oauth_values,
+            request_params=request_params or {},
+            token_secret=token_secret,
+        )
+        oauth_values["oauth_signature"] = signature
+
+        parts = [
+            f'{self._percent_encode(k)}="{self._percent_encode(v)}"'
+            for k, v in sorted(oauth_values.items())
+        ]
         return "OAuth " + ", ".join(parts)
+
+    def _oauth_hmac_sha1_signature(
+        self,
+        *,
+        method: str,
+        url: str,
+        oauth_params: dict[str, str],
+        request_params: dict[str, Any],
+        token_secret: str | None,
+    ) -> str:
+        normalized = self._normalize_params(oauth_params, request_params)
+        base_string = "&".join(
+            [
+                method.upper(),
+                self._percent_encode(self._normalize_url(url)),
+                self._percent_encode(normalized),
+            ]
+        )
+        signing_key = "&".join(
+            [
+                self._percent_encode(self._consumer_secret),
+                self._percent_encode(token_secret or ""),
+            ]
+        )
+        digest = hmac.new(
+            signing_key.encode("utf-8"),
+            base_string.encode("utf-8"),
+            hashlib.sha1,
+        ).digest()
+        return base64.b64encode(digest).decode("ascii")
+
+    @staticmethod
+    def _normalize_params(
+        oauth_params: dict[str, str],
+        request_params: dict[str, Any],
+    ) -> str:
+        items: list[tuple[str, str]] = []
+        for key, value in oauth_params.items():
+            if key == "oauth_signature":
+                continue
+            items.append((str(key), str(value)))
+        for key, value in request_params.items():
+            if isinstance(value, (list, tuple)):
+                for sub_value in value:
+                    items.append((str(key), str(sub_value)))
+            else:
+                items.append((str(key), str(value)))
+
+        items.sort(key=lambda kv: (ETradeOAuthClient._percent_encode(kv[0]), ETradeOAuthClient._percent_encode(kv[1])))
+        return "&".join(
+            f"{ETradeOAuthClient._percent_encode(k)}={ETradeOAuthClient._percent_encode(v)}"
+            for k, v in items
+        )
+
+    @staticmethod
+    def _normalize_url(url: str) -> str:
+        parsed = urlparse(url)
+        scheme = parsed.scheme.lower()
+        host = (parsed.hostname or "").lower()
+        port = parsed.port
+        include_port = (
+            port is not None
+            and not (scheme == "http" and port == 80)
+            and not (scheme == "https" and port == 443)
+        )
+        authority = f"{host}:{port}" if include_port else host
+        path = parsed.path or "/"
+        return f"{scheme}://{authority}{path}"
+
+    @staticmethod
+    def _percent_encode(value: str) -> str:
+        return quote(value, safe="~-._")
+
+    @staticmethod
+    def _generate_nonce() -> str:
+        return secrets.token_urlsafe(18)
 

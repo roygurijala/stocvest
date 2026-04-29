@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import pytest
 import respx
 from httpx import Response
@@ -71,4 +73,47 @@ def test_oauth_error_mapping() -> None:
             verifier="ver1",
         )
     client.close()
+
+
+@pytest.mark.unit
+def test_oauth_hmac_sha1_signature_matches_rfc_example() -> None:
+    """
+    Verifies signature math against OAuth 1.0 RFC example values.
+    """
+    client = ETradeOAuthClient(consumer_key="dpf43f3p2l4k3l03", consumer_secret="kd94hf93k423kf44", sandbox=True)
+    oauth_params = {
+        "oauth_consumer_key": "dpf43f3p2l4k3l03",
+        "oauth_token": "nnch734d00sl2jdk",
+        "oauth_signature_method": "HMAC-SHA1",
+        "oauth_timestamp": "1191242096",
+        "oauth_nonce": "kllo9940pd9333jh",
+        "oauth_version": "1.0",
+    }
+    signature = client._oauth_hmac_sha1_signature(
+        method="GET",
+        url="http://photos.example.net/photos",
+        oauth_params=oauth_params,
+        request_params={"file": "vacation.jpg", "size": "original"},
+        token_secret="pfkkdhi9sl3r4s00",
+    )
+    assert signature == "tR3+Ty81lMeYAr/Fid0kMTYa/WM="
+    client.close()
+
+
+@pytest.mark.integration
+def test_etrade_oauth_request_token_live_sandbox() -> None:
+    if os.getenv("STOCVEST_ENABLE_SANDBOX_INTEGRATION") != "1":
+        pytest.skip("Set STOCVEST_ENABLE_SANDBOX_INTEGRATION=1 to run sandbox tests.")
+    consumer_key = os.getenv("ETRADE_CONSUMER_KEY", "").strip()
+    consumer_secret = os.getenv("ETRADE_CONSUMER_SECRET", "").strip()
+    if not consumer_key or not consumer_secret:
+        pytest.skip("ETRADE_CONSUMER_KEY/ETRADE_CONSUMER_SECRET are required.")
+
+    client = ETradeOAuthClient(consumer_key=consumer_key, consumer_secret=consumer_secret, sandbox=True)
+    try:
+        temp = client.request_token(callback_url="oob")
+        assert temp.token
+        assert temp.token_secret
+    finally:
+        client.close()
 

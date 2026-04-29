@@ -12,6 +12,7 @@ def test_stocvest_version() -> None:
 
 @pytest.mark.unit
 def test_public_subpackages_importable() -> None:
+    import stocvest.api  # noqa: F401
     import stocvest.brokers  # noqa: F401
     import stocvest.data  # noqa: F401
     import stocvest.indicators  # noqa: F401
@@ -52,3 +53,13 @@ def test_brokers_package_exports() -> None:
 
     assert BrokerAdapterFactory.create("mock") is not None
     assert isinstance(BrokerAdapterFactory.create("mock"), MockBrokerAdapter)
+
+
+@pytest.mark.unit
+def test_api_package_exports() -> None:
+    from stocvest.api import CognitoJwtVerifier, build_request_context, ok, parse_json_body
+
+    assert CognitoJwtVerifier is not None
+    assert callable(build_request_context)
+    assert callable(parse_json_body)
+    assert ok({"status": "ok"})["statusCode"] == 200

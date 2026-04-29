@@ -41,6 +41,17 @@ class Settings(BaseSettings):
     etrade_consumer_key: str = Field("", alias="ETRADE_CONSUMER_KEY")
     etrade_consumer_secret: str = Field("", alias="ETRADE_CONSUMER_SECRET")
 
+    # ── API auth (Cognito) ───────────────────────────────────────
+    cognito_user_pool_id: str = Field("", alias="COGNITO_USER_POOL_ID")
+    cognito_region: str = Field("", alias="COGNITO_REGION")
+    cognito_app_client_id: str = Field("", alias="COGNITO_APP_CLIENT_ID")
+
+    # ── WebSocket connection registry ────────────────────────────
+    websocket_connections_table: str = Field("", alias="STOCVEST_WS_CONNECTIONS_TABLE")
+    websocket_connection_ttl_seconds: int = Field(
+        86400, alias="STOCVEST_WS_CONNECTION_TTL_SECONDS"
+    )
+
     model_config = {"populate_by_name": True}
 
     @property

@@ -20,6 +20,7 @@ dependencies = [
     "pytest-mock>=3.12",
     "respx>=0.21",           # httpx mock library
     "anyio>=4.3",
+    "PyJWT>=2.8",
 ]
 
 [tool.setuptools.packages.find]

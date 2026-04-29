@@ -9,9 +9,9 @@ and what must never be changed without explicit discussion.
 
 ## Current Status
 
-**Phase:** 1 — Complete ✅ / Phase 2 — Complete ✅ / Phase 2.5 — Complete ✅ / Phase 3 — Complete ✅
+**Phase:** 1 — Complete ✅ / Phase 2 — Complete ✅ / Phase 2.5 — Complete ✅ / Phase 3 — Complete ✅ / Phase 4 — Complete ✅
 **Last Updated:** 2026-04-28
-**Last Session:** Phase 3 completed — live sandbox integration harness executed successfully
+**Last Session:** Post-Phase-4 hardening — WebSocket registry migrated to DynamoDB (TTL-backed) with local-dev in-memory fallback
 
 ---
 
@@ -66,7 +66,7 @@ Claude in Cursor should always read this file before writing any code.
 ✅ tests/utils/test_logging.py         Logger factory
 ✅ tests/test_package_smoke.py         Package import / export smoke tests
 
-TEST STATUS: 224/224 passing ✅
+TEST STATUS: 282/282 passing ✅
 
 ✅ stocvest/signals/   — Phase 2 complete
                          ✅ 2a News sentiment scorer (Claude API) implemented
@@ -140,7 +140,40 @@ TEST STATUS: 224/224 passing ✅
                          ✅ tests/brokers/test_etrade_http_gateway.py (4 tests)
                          ✅ tests/brokers/test_etrade_oauth.py (4 tests)
                          ✅ tests/brokers/test_pdt_enforcement.py (5 tests)
-❌ stocvest/api/       — Phase 4 (not started)
+✅ stocvest/api/       — Phase 4 complete
+                         ✅ 4a Lambda function structure + shared utilities
+                         ✅ API shared helpers (`response.py`, `shared.py`, typed Lambda event aliases)
+                         ✅ Health handler scaffold (`handlers/health.py`)
+                         ✅ 4b Cognito JWT authorizer (`auth.py`, `handlers/authorizer.py`)
+                         ✅ 4c Market data endpoints (`handlers/market_data.py`)
+                         ✅ 4d Signal endpoints (`handlers/signals.py`)
+                         ✅ 4e Broker endpoints (`handlers/brokers.py`)
+                         ✅ 4f Portfolio endpoints (`handlers/portfolio.py`)
+                         ✅ 4g WebSocket handler (`handlers/websocket.py`)
+                         ✅ 4h Scanner endpoints (`handlers/scanner.py`)
+                         ✅ Broker gateway provider (`api/broker_gateway_provider.py`) resolves live gateways by env binding
+                         ✅ Broker handlers reject caller-supplied gateway objects (`handlers/brokers.py`)
+                         ✅ E*TRADE OAuth upgraded from PLAINTEXT placeholder to OAuth1 HMAC-SHA1 signer
+                         ✅ WebSocket connection registry supports DynamoDB + TTL (`handlers/websocket.py`)
+                         ✅ InMemoryWebSocketRegistry retained for development fallback only
+                         ✅ tests/api/test_shared.py added (6 tests)
+                         ✅ tests/api/test_response.py added (3 tests)
+                         ✅ tests/api/handlers/test_health.py added (1 test)
+                         ✅ tests/api/test_auth.py added (2 tests)
+                         ✅ tests/api/handlers/test_authorizer.py added (3 tests)
+                         ✅ tests/api/handlers/test_market_data.py added (6 tests)
+                         ✅ tests/api/handlers/test_signals.py added (5 tests)
+                         ✅ tests/api/handlers/test_brokers.py added (5 tests)
+                         ✅ tests/api/handlers/test_portfolio.py added (4 tests)
+                         ✅ tests/api/handlers/test_websocket.py added (5 tests)
+                         ✅ tests/api/handlers/test_scanner.py added (5 tests)
+                         ✅ tests/api/test_broker_gateway_provider.py added (3 tests)
+                         ✅ tests/brokers/test_etrade_oauth.py extended:
+                            - RFC OAuth1 HMAC-SHA1 signature verification
+                            - live sandbox request-token integration path
+                         ✅ tests/api/handlers/test_websocket.py extended:
+                            - DynamoDB TTL refresh behavior
+                            - dev-only fallback selection behavior
 ❌ frontend/           — Phase 5 (not started)
 ❌ infra/              — Phase 6 (not started)
 ```
@@ -224,11 +257,11 @@ Data model canonical types (stocvest/data/models.py):
    Indices Basic:      $0       End of day, sufficient for VIX/internals
    Total Polygon:      $2,676/y
 
-2. ETrade sandbox credentials — UNRESOLVED ⏳
-   → Register at developer.etrade.com
+2. ETrade sandbox credentials — RESOLVED ✅
+   Connected locally via `.env` and exercised in Phase 3f sandbox harness.
 
-3. IBKR paper trading account — UNRESOLVED ⏳
-   → Enable in IBKR portal: Settings → Paper Trading Account
+3. IBKR paper trading account — RESOLVED ✅
+   Paper path configured locally and exercised in Phase 3f sandbox harness.
 
 4. Domain name — RESOLVED ✅
    Domain: stocvest.app — registered at Cloudflare
@@ -334,15 +367,15 @@ Phase 3 — Broker Layer                               ✅ COMPLETE
   3e. BrokerAdapterFactory                           ✅
   3f. Integration tests against broker sandboxes     ✅
 
-Phase 4 — API Layer
-  4a. Lambda function structure + shared utilities
-  4b. Cognito JWT authorizer
-  4c. Market data endpoints
-  4d. Signal endpoints (swing + day trading)
-  4e. Broker endpoints
-  4f. Portfolio endpoints
-  4g. WebSocket handler
-  4h. Scanner endpoints
+Phase 4 — API Layer                                  ✅ COMPLETE
+  4a. Lambda function structure + shared utilities   ✅
+  4b. Cognito JWT authorizer                         ✅
+  4c. Market data endpoints                          ✅
+  4d. Signal endpoints (swing + day trading)         ✅
+  4e. Broker endpoints                               ✅
+  4f. Portfolio endpoints                            ✅
+  4g. WebSocket handler                              ✅
+  4h. Scanner endpoints                              ✅
 
 Phase 5 — Frontend (Next.js on stocvest.app)
   5a–5l. Auth, broker UI, dashboards, order entry, journal, PDT widget

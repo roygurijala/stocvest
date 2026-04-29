@@ -92,3 +92,51 @@ def test_broker_sandbox_fields_default_empty(monkeypatch: pytest.MonkeyPatch) ->
     assert s.etrade_gateway_binding == ""
     assert s.etrade_consumer_key == ""
     assert s.etrade_consumer_secret == ""
+
+
+@pytest.mark.unit
+def test_cognito_fields_parse_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("POLYGON_API_KEY", "x")
+    monkeypatch.setenv("COGNITO_USER_POOL_ID", "us-east-1_pool")
+    monkeypatch.setenv("COGNITO_REGION", "us-east-1")
+    monkeypatch.setenv("COGNITO_APP_CLIENT_ID", "client-id-123")
+    get_settings.cache_clear()
+    s = get_settings()
+    assert s.cognito_user_pool_id == "us-east-1_pool"
+    assert s.cognito_region == "us-east-1"
+    assert s.cognito_app_client_id == "client-id-123"
+
+
+@pytest.mark.unit
+def test_cognito_fields_default_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("POLYGON_API_KEY", "x")
+    monkeypatch.delenv("COGNITO_USER_POOL_ID", raising=False)
+    monkeypatch.delenv("COGNITO_REGION", raising=False)
+    monkeypatch.delenv("COGNITO_APP_CLIENT_ID", raising=False)
+    get_settings.cache_clear()
+    s = get_settings()
+    assert s.cognito_user_pool_id == ""
+    assert s.cognito_region == ""
+    assert s.cognito_app_client_id == ""
+
+
+@pytest.mark.unit
+def test_websocket_registry_fields_parse_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("POLYGON_API_KEY", "x")
+    monkeypatch.setenv("STOCVEST_WS_CONNECTIONS_TABLE", "WsConnections")
+    monkeypatch.setenv("STOCVEST_WS_CONNECTION_TTL_SECONDS", "7200")
+    get_settings.cache_clear()
+    s = get_settings()
+    assert s.websocket_connections_table == "WsConnections"
+    assert s.websocket_connection_ttl_seconds == 7200
+
+
+@pytest.mark.unit
+def test_websocket_registry_fields_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("POLYGON_API_KEY", "x")
+    monkeypatch.delenv("STOCVEST_WS_CONNECTIONS_TABLE", raising=False)
+    monkeypatch.delenv("STOCVEST_WS_CONNECTION_TTL_SECONDS", raising=False)
+    get_settings.cache_clear()
+    s = get_settings()
+    assert s.websocket_connections_table == ""
+    assert s.websocket_connection_ttl_seconds == 86400
