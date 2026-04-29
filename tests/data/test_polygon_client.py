@@ -145,6 +145,58 @@ class TestGetSnapshot:
         assert snap.change_percent is not None
         assert snap.change_percent == pytest.approx(2.186, rel=0.01)
 
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_bid_ask_mapping_uses_distinct_fields(self):
+        payload = {
+            "status": "OK",
+            "ticker": {
+                "ticker": "AAPL",
+                "day": {"o": 185.0, "h": 188.0, "l": 183.0, "c": 187.0, "v": 50_000_000, "vw": 186.0},
+                "prevDay": {"c": 183.0},
+                "lastTrade": {"p": 187.0, "s": 100},
+                "lastQuote": {"P": 186.99, "p": 187.02},
+                "market": "open",
+            },
+        }
+        respx.get(
+            "https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/AAPL"
+        ).mock(return_value=httpx.Response(200, json=payload))
+
+        async with PolygonClient(FAKE_KEY) as client:
+            snap = await client.get_snapshot("AAPL")
+
+        assert snap.last_quote_bid == pytest.approx(186.99)
+        assert snap.last_quote_ask == pytest.approx(187.02)
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_snapshot_parses_pre_and_after_hours_fields(self):
+        payload = {
+            "status": "OK",
+            "ticker": {
+                "ticker": "AAPL",
+                "day": {"o": 185.0, "h": 188.0, "l": 183.0, "c": 187.0, "v": 50_000_000, "vw": 186.0},
+                "prevDay": {"c": 183.0},
+                "lastTrade": {"p": 187.0, "s": 100},
+                "lastQuote": {"P": 186.99, "p": 187.02},
+                "preMarket": {"p": 188.5, "cp": 1.2},
+                "afterHours": {"p": 186.1, "cp": -0.5},
+                "market": "open",
+            },
+        }
+        respx.get(
+            "https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/AAPL"
+        ).mock(return_value=httpx.Response(200, json=payload))
+
+        async with PolygonClient(FAKE_KEY) as client:
+            snap = await client.get_snapshot("AAPL")
+
+        assert snap.pre_market_price == pytest.approx(188.5)
+        assert snap.pre_market_change_percent == pytest.approx(1.2)
+        assert snap.after_hours_price == pytest.approx(186.1)
+        assert snap.after_hours_change_percent == pytest.approx(-0.5)
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # get_news
@@ -197,6 +249,52 @@ class TestGetNews:
 
         assert articles == []
 
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_news_paginates_until_limit(self):
+        first_page = {
+            "status": "OK",
+            "results": [
+                {
+                    "id": "a1",
+                    "published_utc": "2024-01-02T14:30:00Z",
+                    "title": "First article",
+                    "description": "first",
+                    "article_url": "https://example.com/a1",
+                    "publisher": {"name": "Reuters"},
+                    "tickers": ["AAPL"],
+                    "keywords": [],
+                }
+            ],
+            "next_url": "https://api.polygon.io/v2/reference/news?cursor=abc",
+        }
+        second_page = {
+            "status": "OK",
+            "results": [
+                {
+                    "id": "a2",
+                    "published_utc": "2024-01-02T14:31:00Z",
+                    "title": "Second article",
+                    "description": "second",
+                    "article_url": "https://example.com/a2",
+                    "publisher": {"name": "Reuters"},
+                    "tickers": ["AAPL"],
+                    "keywords": [],
+                }
+            ],
+        }
+        route = respx.get("https://api.polygon.io/v2/reference/news")
+        route.side_effect = [
+            httpx.Response(200, json=first_page),
+            httpx.Response(200, json=second_page),
+        ]
+
+        async with PolygonClient(FAKE_KEY) as client:
+            articles = await client.get_news("AAPL", limit=2)
+
+        assert [a.article_id for a in articles] == ["a1", "a2"]
+        assert route.call_count == 2
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # get_previous_close
@@ -233,6 +331,132 @@ class TestGetPreviousClose:
         assert bar is None
 
 
+class TestAdditionalRestEndpoints:
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_get_snapshots_returns_symbol_map(self):
+        payload = {
+            "status": "OK",
+            "tickers": [
+                {"ticker": "AAPL", "day": {"c": 190.0}, "prevDay": {"c": 188.0}, "lastTrade": {"p": 190.0}},
+                {"ticker": "MSFT", "day": {"c": 410.0}, "prevDay": {"c": 405.0}, "lastTrade": {"p": 410.0}},
+            ],
+        }
+        respx.get("https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers").mock(
+            return_value=httpx.Response(200, json=payload)
+        )
+
+        async with PolygonClient(FAKE_KEY) as client:
+            snaps = await client.get_snapshots(["AAPL", "MSFT"])
+
+        assert set(snaps.keys()) == {"AAPL", "MSFT"}
+        assert snaps["AAPL"].symbol == "AAPL"
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_get_gainers_losers_returns_snapshots(self):
+        payload = {
+            "status": "OK",
+            "tickers": [
+                {"ticker": "NVDA", "day": {"c": 950.0}, "prevDay": {"c": 900.0}, "lastTrade": {"p": 950.0}},
+            ],
+        }
+        respx.get("https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/gainers").mock(
+            return_value=httpx.Response(200, json=payload)
+        )
+
+        async with PolygonClient(FAKE_KEY) as client:
+            gainers = await client.get_gainers_losers("gainers")
+
+        assert len(gainers) == 1
+        assert isinstance(gainers[0], Snapshot)
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_get_options_chain_parses_contracts(self):
+        payload = {
+            "status": "OK",
+            "results": [
+                {
+                    "details": {
+                        "ticker": "AAPL250117C00150000",
+                        "expiration_date": "2025-01-17",
+                        "strike_price": 150.0,
+                        "contract_type": "call",
+                    },
+                    "greeks": {"delta": 0.55},
+                    "last_quote": {"bid": 4.9, "ask": 5.1},
+                    "day": {"volume": 1200},
+                    "open_interest": 7500,
+                    "implied_volatility": 0.28,
+                    "last_trade": {"price": 5.0},
+                }
+            ],
+        }
+        respx.get("https://api.polygon.io/v3/snapshot/options/AAPL").mock(
+            return_value=httpx.Response(200, json=payload)
+        )
+
+        async with PolygonClient(FAKE_KEY) as client:
+            contracts = await client.get_options_chain("AAPL")
+
+        assert len(contracts) == 1
+        assert isinstance(contracts[0], OptionContract)
+        assert contracts[0].symbol == "AAPL250117C00150000"
+        assert contracts[0].bid == pytest.approx(4.9)
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_get_market_status_parses_payload(self):
+        payload = {
+            "market": "open",
+            "serverTime": "2026-04-28T14:00:00Z",
+            "exchanges": {"nasdaq": "open"},
+            "currencies": {"fx": "open"},
+        }
+        respx.get("https://api.polygon.io/v1/marketstatus/now").mock(
+            return_value=httpx.Response(200, json=payload)
+        )
+
+        async with PolygonClient(FAKE_KEY) as client:
+            status = await client.get_market_status()
+
+        assert status.market == "open"
+        assert status.exchanges["nasdaq"] == "open"
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_get_ticker_details_returns_results_dict(self):
+        payload = {"status": "OK", "results": {"ticker": "AAPL", "name": "Apple Inc."}}
+        respx.get("https://api.polygon.io/v3/reference/tickers/AAPL").mock(
+            return_value=httpx.Response(200, json=payload)
+        )
+
+        async with PolygonClient(FAKE_KEY) as client:
+            details = await client.get_ticker_details("AAPL")
+
+        assert details["ticker"] == "AAPL"
+
+
+class TestRetries:
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_get_retries_on_429_then_succeeds(self):
+        route = respx.get(
+            "https://api.polygon.io/v2/aggs/ticker/AAPL/range/1/day/2000-01-01/2024-01-02"
+        )
+        route.side_effect = [
+            httpx.Response(429, text="Too Many Requests"),
+            httpx.Response(200, json={"status": "OK", "results": [agg_bar(1704182400000)]}),
+        ]
+
+        async with PolygonClient(FAKE_KEY, retry_backoff_seconds=0.0) as client:
+            bars = await client.get_bars("AAPL", Timeframe.DAY_1, to_date="2024-01-02")
+
+        assert len(bars) == 1
+        assert route.call_count == 2
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # PolygonClient initialisation
 # ──────────────────────────────────────────────────────────────────────────────
@@ -246,6 +470,24 @@ class TestClientInit:
         client = PolygonClient(FAKE_KEY)
         with pytest.raises(AssertionError):
             import asyncio
-            asyncio.get_event_loop().run_until_complete(
-                client.get_bars("AAPL", Timeframe.DAY_1)
-            )
+            asyncio.run(client.get_bars("AAPL", Timeframe.DAY_1))
+
+
+class TestWebsocketParsers:
+    def test_parse_ws_bar_uses_minute_volume_not_accumulated_volume(self):
+        client = PolygonClient(FAKE_KEY)
+        msg = {
+            "ev": "A",
+            "sym": "AAPL",
+            "s": 1704182400000,
+            "o": 100.0,
+            "h": 101.0,
+            "l": 99.0,
+            "c": 100.5,
+            "v": 12345,      # minute volume
+            "av": 9999999,   # session cumulative volume
+            "vw": 100.3,
+        }
+        bar = client._parse_ws_bar(msg)
+        assert bar is not None
+        assert bar.volume == pytest.approx(12345)

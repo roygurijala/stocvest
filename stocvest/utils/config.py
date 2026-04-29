@@ -8,7 +8,6 @@ Never hardcodes credentials. Never logs sensitive values.
 
 from __future__ import annotations
 
-import os
 from functools import lru_cache
 
 from dotenv import load_dotenv
@@ -32,6 +31,15 @@ class Settings(BaseSettings):
     # ── App ──────────────────────────────────────────────────────
     env: str = Field("development", alias="STOCVEST_ENV")
     redis_url: str = Field("redis://localhost:6379", alias="REDIS_URL")
+
+    # ── Broker sandbox integration / OAuth ───────────────────────
+    sandbox_integration_enabled: bool = Field(
+        False, alias="STOCVEST_ENABLE_SANDBOX_INTEGRATION"
+    )
+    ibkr_gateway_binding: str = Field("", alias="STOCVEST_IBKR_GATEWAY")
+    etrade_gateway_binding: str = Field("", alias="STOCVEST_ETRADE_GATEWAY")
+    etrade_consumer_key: str = Field("", alias="ETRADE_CONSUMER_KEY")
+    etrade_consumer_secret: str = Field("", alias="ETRADE_CONSUMER_SECRET")
 
     model_config = {"populate_by_name": True}
 

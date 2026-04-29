@@ -1,0 +1,94 @@
+from __future__ import annotations
+
+import pytest
+from pydantic import ValidationError
+
+from stocvest.utils.config import Settings, get_settings
+
+
+@pytest.fixture(autouse=True)
+def clear_settings_cache() -> None:
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+@pytest.mark.unit
+def test_get_settings_loads_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("POLYGON_API_KEY", "poly-test-key")
+    monkeypatch.setenv("STOCVEST_ENV", "production")
+    monkeypatch.setenv("AWS_REGION", "us-west-2")
+    get_settings.cache_clear()
+    s = get_settings()
+    assert s.polygon_api_key == "poly-test-key"
+    assert s.is_production is True
+    assert s.is_development is False
+    assert s.aws_region == "us-west-2"
+
+
+@pytest.mark.unit
+def test_get_settings_cached(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("POLYGON_API_KEY", "k1")
+    get_settings.cache_clear()
+    a = get_settings()
+    monkeypatch.setenv("POLYGON_API_KEY", "k2")
+    b = get_settings()
+    assert a is b
+    assert a.polygon_api_key == "k1"
+
+
+@pytest.mark.unit
+def test_settings_missing_polygon_key_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("POLYGON_API_KEY", raising=False)
+    get_settings.cache_clear()
+    with pytest.raises(ValidationError):
+        get_settings()
+
+
+@pytest.mark.unit
+def test_settings_anthropic_optional_default_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("POLYGON_API_KEY", "x")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    get_settings.cache_clear()
+    s = get_settings()
+    assert s.anthropic_api_key == ""
+
+
+@pytest.mark.unit
+def test_settings_model_validate() -> None:
+    s = Settings.model_validate({"polygon_api_key": "mv"})
+    assert s.polygon_api_key == "mv"
+
+
+@pytest.mark.unit
+def test_broker_sandbox_fields_parse_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("POLYGON_API_KEY", "x")
+    monkeypatch.setenv("STOCVEST_ENABLE_SANDBOX_INTEGRATION", "1")
+    monkeypatch.setenv("STOCVEST_IBKR_GATEWAY", "ibkr.binding")
+    monkeypatch.setenv("STOCVEST_ETRADE_GATEWAY", "etrade.binding")
+    monkeypatch.setenv("ETRADE_CONSUMER_KEY", "ck")
+    monkeypatch.setenv("ETRADE_CONSUMER_SECRET", "cs")
+    get_settings.cache_clear()
+    s = get_settings()
+    assert s.sandbox_integration_enabled is True
+    assert s.ibkr_gateway_binding == "ibkr.binding"
+    assert s.etrade_gateway_binding == "etrade.binding"
+    assert s.etrade_consumer_key == "ck"
+    assert s.etrade_consumer_secret == "cs"
+
+
+@pytest.mark.unit
+def test_broker_sandbox_fields_default_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("POLYGON_API_KEY", "x")
+    monkeypatch.delenv("STOCVEST_ENABLE_SANDBOX_INTEGRATION", raising=False)
+    monkeypatch.delenv("STOCVEST_IBKR_GATEWAY", raising=False)
+    monkeypatch.delenv("STOCVEST_ETRADE_GATEWAY", raising=False)
+    monkeypatch.delenv("ETRADE_CONSUMER_KEY", raising=False)
+    monkeypatch.delenv("ETRADE_CONSUMER_SECRET", raising=False)
+    get_settings.cache_clear()
+    s = get_settings()
+    assert s.sandbox_integration_enabled is False
+    assert s.ibkr_gateway_binding == ""
+    assert s.etrade_gateway_binding == ""
+    assert s.etrade_consumer_key == ""
+    assert s.etrade_consumer_secret == ""

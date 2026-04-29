@@ -25,14 +25,13 @@ from __future__ import annotations
 
 import asyncio
 from datetime import date, datetime, timezone
-from typing import AsyncIterator, Callable, Optional
+from typing import Awaitable, Callable, Optional
 
 import httpx
 import websockets
 import json
 
 from stocvest.data.models import (
-    AssetType,
     Bar,
     MarketStatus,
     NewsArticle,
@@ -77,11 +76,19 @@ class PolygonClient:
             bars = await client.get_bars("AAPL", Timeframe.MIN_1, limit=200)
     """
 
-    def __init__(self, api_key: str, timeout: float = 30.0) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        timeout: float = 30.0,
+        max_retries: int = 3,
+        retry_backoff_seconds: float = 0.5,
+    ) -> None:
         if not api_key:
             raise ValueError("POLYGON_API_KEY is required")
         self._api_key = api_key
         self._timeout = timeout
+        self._max_retries = max_retries
+        self._retry_backoff_seconds = retry_backoff_seconds
         self._http: Optional[httpx.AsyncClient] = None
 
     # ── Context manager ────────────────────────────────────────────────────────
@@ -104,14 +111,40 @@ class PolygonClient:
         assert self._http, "Use 'async with PolygonClient(...) as client:'"
         params = params or {}
         log.debug("GET %s params=%s", path, {k: v for k, v in params.items() if k != "apiKey"})
-        resp = await self._http.get(path, params=params)
-        if resp.status_code != 200:
+        last_error: Exception | None = None
+        last_status: int | None = None
+        last_body_snippet = ""
+
+        for attempt in range(self._max_retries + 1):
+            try:
+                resp = await self._http.get(path, params=params)
+            except httpx.RequestError as exc:
+                last_error = exc
+                if attempt >= self._max_retries:
+                    break
+                await asyncio.sleep(self._retry_backoff_seconds * (2**attempt))
+                continue
+
+            if resp.status_code == 200:
+                data = resp.json()
+                status = data.get("status", "")
+                if status not in ("OK", "DELAYED", ""):
+                    raise PolygonError(f"Polygon status={status} on {path}: {data.get('error', '')}")
+                return data
+
+            if resp.status_code in (429, 500, 502, 503, 504) and attempt < self._max_retries:
+                last_status = resp.status_code
+                last_body_snippet = resp.text[:200]
+                await asyncio.sleep(self._retry_backoff_seconds * (2**attempt))
+                continue
+
             raise PolygonError(f"Polygon {resp.status_code} on {path}: {resp.text[:200]}")
-        data = resp.json()
-        status = data.get("status", "")
-        if status not in ("OK", "DELAYED", ""):
-            raise PolygonError(f"Polygon status={status} on {path}: {data.get('error', '')}")
-        return data
+
+        if last_status is not None:
+            raise PolygonError(
+                f"Polygon {last_status} on {path} after retries: {last_body_snippet}"
+            )
+        raise PolygonError(f"Polygon request failed on {path}: {type(last_error).__name__}")
 
     @staticmethod
     def _ts_ms_to_dt(ts_ms: int) -> datetime:
@@ -236,21 +269,50 @@ class PolygonClient:
         last  = ticker.get("lastTrade", {}) or {}
         quote = ticker.get("lastQuote", {}) or {}
         fmh   = ticker.get("fmh",       {}) or {}  # pre-market / after-hours from some endpoints
+        pre_market = ticker.get("preMarket", {}) or ticker.get("premarket", {}) or {}
+        after_hours = ticker.get("afterHours", {}) or ticker.get("afterhours", {}) or {}
 
         prev_close = prev.get("c")
         last_price = last.get("p")
         change = None
         change_pct = None
-        if last_price is not None and prev_close:
+        if last_price is not None and prev_close not in (None, 0):
             change = last_price - prev_close
             change_pct = (change / prev_close) * 100
+
+        pre_market_price = PolygonClient._first_present(
+            pre_market.get("p"),
+            pre_market.get("price"),
+            fmh.get("preMarket"),
+            fmh.get("p"),
+            ticker.get("preMarket"),
+        )
+        pre_market_change_pct = PolygonClient._first_present(
+            pre_market.get("cp"),
+            pre_market.get("change_percent"),
+            fmh.get("preMarketChangePercent"),
+            ticker.get("preMarketChangePercent"),
+        )
+        after_hours_price = PolygonClient._first_present(
+            after_hours.get("p"),
+            after_hours.get("price"),
+            fmh.get("afterHours"),
+            fmh.get("a"),
+            ticker.get("afterHours"),
+        )
+        after_hours_change_pct = PolygonClient._first_present(
+            after_hours.get("cp"),
+            after_hours.get("change_percent"),
+            fmh.get("afterHoursChangePercent"),
+            ticker.get("afterHoursChangePercent"),
+        )
 
         return Snapshot(
             symbol=symbol,
             last_trade_price=last_price,
             last_trade_size=last.get("s"),
             last_quote_bid=quote.get("P"),
-            last_quote_ask=quote.get("P"),  # Polygon uses P for bid, p for ask in lastQuote
+            last_quote_ask=quote.get("p"),  # Polygon uses P for bid, p for ask in lastQuote
             day_open=day.get("o"),
             day_high=day.get("h"),
             day_low=day.get("l"),
@@ -260,6 +322,10 @@ class PolygonClient:
             prev_close=prev_close,
             change=change,
             change_percent=change_pct,
+            pre_market_price=pre_market_price,
+            pre_market_change_percent=pre_market_change_pct,
+            after_hours_price=after_hours_price,
+            after_hours_change_percent=after_hours_change_pct,
             market_status=ticker.get("market"),
         )
 
@@ -284,25 +350,40 @@ class PolygonClient:
         params: dict = {"limit": str(limit), "order": order}
         if symbol:
             params["ticker"] = symbol
-        data = await self._get("/v2/reference/news", params)
-
         articles: list[NewsArticle] = []
-        for r in data.get("results", []):
-            try:
-                articles.append(NewsArticle(
-                    article_id=r.get("id", ""),
-                    published_at=datetime.fromisoformat(
-                        r["published_utc"].replace("Z", "+00:00")
-                    ),
-                    title=r.get("title", ""),
-                    description=r.get("description"),
-                    url=r.get("article_url", ""),
-                    source=r.get("publisher", {}).get("name"),
-                    tickers=r.get("tickers", []),
-                    keywords=r.get("keywords", []),
-                ))
-            except Exception as exc:
-                log.warning("Skipping malformed news article: %s", exc)
+        path = "/v2/reference/news"
+        page_count = 0
+
+        while len(articles) < limit:
+            data = await self._get(path, params)
+            page_count += 1
+
+            for r in data.get("results", []):
+                if len(articles) >= limit:
+                    break
+                try:
+                    articles.append(NewsArticle(
+                        article_id=r.get("id", ""),
+                        published_at=datetime.fromisoformat(
+                            r["published_utc"].replace("Z", "+00:00")
+                        ),
+                        title=r.get("title", ""),
+                        description=r.get("description"),
+                        url=r.get("article_url", ""),
+                        source=r.get("publisher", {}).get("name"),
+                        tickers=r.get("tickers", []),
+                        keywords=r.get("keywords", []),
+                    ))
+                except Exception as exc:
+                    log.warning("Skipping malformed news article: %s", exc)
+
+            next_url = data.get("next_url")
+            if not next_url:
+                break
+            path, params = self._extract_path_and_params(next_url)
+            if page_count >= 20:
+                # Safety cap to prevent infinite pagination loops if API misbehaves.
+                break
 
         log.debug("get_news(symbol=%s) → %d articles", symbol, len(articles))
         return articles
@@ -486,7 +567,7 @@ class PolygonClient:
         url:      str,
         channels: list[str],
         parser:   Callable[[dict], object | None],
-        callback: Callable[[object], None],
+        callback: Callable[[object], None] | Callable[[object], Awaitable[None]],
     ) -> None:
         """
         Internal: connect to a Polygon WebSocket, authenticate, subscribe,
@@ -508,15 +589,31 @@ class PolygonClient:
 
                 # Dispatch loop
                 async for raw in ws:
-                    messages = json.loads(raw)
+                    try:
+                        messages = json.loads(raw)
+                    except json.JSONDecodeError as exc:
+                        log.warning("WebSocket JSON decode error: %s", exc)
+                        continue
+
                     for msg in messages:
                         obj = parser(msg)
                         if obj is not None:
-                            callback(obj)
+                            try:
+                                result = callback(obj)
+                                if asyncio.iscoroutine(result):
+                                    await result
+                            except Exception as exc:
+                                log.warning("WebSocket callback error: %s", exc)
 
             except websockets.ConnectionClosed as exc:
-                log.warning("WebSocket closed (%s), reconnecting…", exc)
-                await asyncio.sleep(1)
+                delay = min(self._retry_backoff_seconds * 2, 5.0)
+                log.warning("WebSocket closed (%s), reconnecting in %.1fs", exc, delay)
+                await asyncio.sleep(delay)
+                continue
+            except Exception as exc:
+                delay = min(self._retry_backoff_seconds * 2, 5.0)
+                log.warning("WebSocket stream error (%s), reconnecting in %.1fs", exc, delay)
+                await asyncio.sleep(delay)
                 continue
 
     # ── WebSocket parsers ─────────────────────────────────────────────────────
@@ -567,9 +664,22 @@ class PolygonClient:
                 high=msg.get("h", 0.0),
                 low=msg.get("l", 0.0),
                 close=msg.get("c", 0.0),
-                volume=msg.get("av", 0.0),  # accumulated volume
+                volume=msg.get("v", 0.0),  # minute bar volume
                 vwap=msg.get("vw"),
             )
         except Exception as exc:
             log.debug("Bad bar message: %s — %s", exc, msg)
             return None
+
+    @staticmethod
+    def _first_present(*values):
+        for value in values:
+            if value is not None:
+                return value
+        return None
+
+    @staticmethod
+    def _extract_path_and_params(next_url: str) -> tuple[str, dict[str, str]]:
+        url = httpx.URL(next_url)
+        params = {key: value for key, value in url.params.multi_items()}
+        return url.path, params
