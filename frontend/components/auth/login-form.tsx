@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
-import { loginAsDevUser, loginWithToken, type LoginActionState } from "@/app/login/actions";
+import { completeNewPassword, loginAsDevUser, loginWithPassword, type LoginActionState } from "@/app/login/actions";
 
 const INITIAL_STATE: LoginActionState = {};
 
@@ -31,10 +31,38 @@ function DevSubmitButton() {
 
 export function LoginForm({ showDevBypass = false }: { showDevBypass?: boolean }) {
   const [showPassword, setShowPassword] = useState(false);
-  const [state, formAction] = useFormState(loginWithToken, INITIAL_STATE);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [state, formAction] = useFormState(loginWithPassword, INITIAL_STATE);
+  const [challengeState, challengeAction] = useFormState(completeNewPassword, INITIAL_STATE);
   const [devState, devFormAction] = useFormState(loginAsDevUser, INITIAL_STATE);
   return (
     <div className="grid w-full max-w-md gap-4">
+      {state.challengeName === "NEW_PASSWORD_REQUIRED" ? (
+        <form action={challengeAction} className="grid gap-4">
+          <input type="hidden" name="email" value={state.challengeEmail || ""} />
+          <input type="hidden" name="challenge_session" value={state.challengeSession || ""} />
+          <p className="m-0 text-sm text-slate-300">A new password is required for this account.</p>
+          <div className="grid gap-1.5">
+            <label htmlFor="new_password" className="text-sm text-slate-300">
+              New password
+            </label>
+            <div className="flex items-center gap-2 rounded-md border border-white/15 bg-[#111827] px-3 py-1.5 focus-within:border-[#3b82f6]">
+              <input
+                id="new_password"
+                name="new_password"
+                type={showNewPassword ? "text" : "password"}
+                required
+                className="w-full bg-transparent py-1 text-slate-100 placeholder:text-slate-500 focus:outline-none"
+              />
+              <button type="button" onClick={() => setShowNewPassword((v) => !v)} className="text-xs text-slate-400 hover:text-slate-200">
+                {showNewPassword ? "Hide" : "Show"}
+              </button>
+            </div>
+          </div>
+          {challengeState.error ? <p className="m-0 text-sm text-rose-300">{challengeState.error}</p> : null}
+          <SubmitButton />
+        </form>
+      ) : (
       <form action={formAction} className="grid gap-4">
         <div className="grid gap-1.5">
           <label htmlFor="email" className="text-sm text-slate-300">
@@ -50,13 +78,13 @@ export function LoginForm({ showDevBypass = false }: { showDevBypass?: boolean }
           />
         </div>
         <div className="grid gap-1.5">
-          <label htmlFor="id_token" className="text-sm text-slate-300">
+          <label htmlFor="password" className="text-sm text-slate-300">
             Password
           </label>
           <div className="flex items-center gap-2 rounded-md border border-white/15 bg-[#111827] px-3 py-1.5 focus-within:border-[#3b82f6]">
             <input
-              id="id_token"
-              name="id_token"
+              id="password"
+              name="password"
               type={showPassword ? "text" : "password"}
               required
               placeholder="Enter password"
@@ -73,6 +101,7 @@ export function LoginForm({ showDevBypass = false }: { showDevBypass?: boolean }
           Forgot password?
         </button>
       </form>
+      )}
       <div className="flex items-center gap-3">
         <div className="h-px flex-1 bg-white/15" />
         <span className="text-xs uppercase tracking-wide text-slate-500">or</span>
