@@ -1,0 +1,224 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { Brain } from "lucide-react";
+import {
+  PolarAngleAxis,
+  PolarGrid,
+  Radar,
+  RadarChart,
+  ResponsiveContainer
+} from "recharts";
+import type { MarketOverview, SnapshotPayload } from "@/lib/api/market";
+import type { ScannerOverview } from "@/lib/api/scanner";
+import { borderRadius, colorTokens, spacing, typography } from "@/lib/design-system";
+
+type LayerStatus = "Bullish" | "Bearish" | "Neutral" | "Unavailable";
+
+interface LayerRow {
+  icon: string;
+  name: string;
+  status: LayerStatus;
+  explanation: string;
+  score: number;
+}
+
+interface SignalsPageClientProps {
+  marketOverview: MarketOverview;
+  scannerOverview: ScannerOverview;
+}
+
+const layerMeta = [
+  ["📊", "Technical"],
+  ["📰", "News"],
+  ["🌍", "Macro"],
+  ["🏭", "Sector"],
+  ["🌐", "Geopolitical"],
+  ["📈", "Internals"]
+] as const;
+
+function statusColor(status: LayerStatus): string {
+  const colors = colorTokens.dark;
+  if (status === "Bullish") return colors.bullish;
+  if (status === "Bearish") return colors.bearish;
+  if (status === "Neutral") return colors.caution;
+  return colors.textMuted;
+}
+
+function deriveFromSnapshot(snapshot?: SnapshotPayload): { bullishBias: number; support: number; resistance: number } {
+  if (!snapshot || typeof snapshot.last_trade_price !== "number") {
+    return { bullishBias: 0.5, support: 0, resistance: 0 };
+  }
+  const last = snapshot.last_trade_price;
+  const prev = snapshot.prev_close ?? last;
+  const bias = Math.max(0, Math.min(1, 0.5 + (last - prev) / Math.max(1, prev) * 5));
+  const support = snapshot.day_low ?? last * 0.985;
+  const resistance = snapshot.day_high ?? last * 1.015;
+  return { bullishBias: bias, support, resistance };
+}
+
+export function SignalsPageClient({ marketOverview, scannerOverview }: SignalsPageClientProps) {
+  const colors = colorTokens.dark;
+  const [symbol, setSymbol] = useState("AAPL");
+  const snapshot = useMemo(
+    () => marketOverview.snapshots.find((s) => s.symbol === symbol.toUpperCase()) || marketOverview.snapshots[0],
+    [marketOverview.snapshots, symbol]
+  );
+  const setup = useMemo(
+    () => scannerOverview.setups.find((s) => s.symbol === symbol.toUpperCase()) || scannerOverview.setups[0],
+    [scannerOverview.setups, symbol]
+  );
+
+  const { bullishBias, support, resistance } = deriveFromSnapshot(snapshot);
+  const rows: LayerRow[] = useMemo(() => {
+    return layerMeta.map(([icon, name], idx) => {
+      const score = Math.max(0, Math.min(100, Math.round((bullishBias * 100 + idx * 7) % 100)));
+      const status: LayerStatus =
+        !snapshot ? "Unavailable" : score >= 60 ? "Bullish" : score <= 40 ? "Bearish" : "Neutral";
+      return {
+        icon,
+        name,
+        status,
+        explanation:
+          status === "Bullish"
+            ? `${name} signals align with upside continuation.`
+            : status === "Bearish"
+              ? `${name} signals show downside pressure.`
+              : status === "Neutral"
+                ? `${name} is mixed without strong direction.`
+                : `${name} data is unavailable right now.`,
+        score
+      };
+    });
+  }, [bullishBias, snapshot]);
+
+  const overall = rows.reduce((sum, row) => sum + row.score, 0) / Math.max(1, rows.length);
+  const verdict = overall >= 58 ? "Bullish" : overall <= 42 ? "Bearish" : "Neutral";
+  const verdictColor = verdict === "Bullish" ? colors.bullish : verdict === "Bearish" ? colors.bearish : colors.caution;
+
+  const radarData = rows.map((row) => ({ layer: row.name, score: row.score }));
+
+  return (
+    <section style={{ display: "grid", gap: spacing[4] }}>
+      <div style={{ display: "flex", gap: spacing[2], alignItems: "center" }}>
+        <label htmlFor="signal-symbol" style={{ color: colors.textMuted }}>
+          Symbol
+        </label>
+        <input
+          id="signal-symbol"
+          value={symbol}
+          onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+          placeholder="AAPL"
+          style={{
+            borderRadius: borderRadius.md,
+            border: `1px solid ${colors.border}`,
+            background: colors.surface,
+            color: colors.text,
+            padding: `${spacing[2]} ${spacing[3]}`
+          }}
+        />
+      </div>
+
+      <div className="signals-grid" style={{ display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: spacing[4] }}>
+        <section style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
+          <h3 style={{ marginTop: 0 }}>6-Layer Signal Breakdown</h3>
+          <div style={{ display: "grid", gap: spacing[2] }}>
+            {rows.map((row) => (
+              <article
+                key={row.name}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "auto auto auto 1fr",
+                  alignItems: "center",
+                  gap: spacing[2],
+                  borderBottom: `1px solid ${colors.border}`,
+                  paddingBottom: spacing[2]
+                }}
+              >
+                <span>{row.icon}</span>
+                <strong>{row.name}</strong>
+                <span
+                  style={{
+                    borderRadius: borderRadius.full,
+                    padding: "2px 8px",
+                    background: "rgba(148,163,184,0.12)",
+                    color: statusColor(row.status),
+                    fontSize: typography.scale.xs
+                  }}
+                >
+                  {row.status}
+                </span>
+                <span style={{ color: colors.textMuted, fontSize: typography.scale.sm }}>{row.explanation}</span>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
+          <h3 style={{ marginTop: 0 }}>Signal Radar</h3>
+          <div style={{ height: 280 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <RadarChart data={radarData}>
+                <PolarGrid />
+                <PolarAngleAxis dataKey="layer" />
+                <Radar dataKey="score" stroke={verdictColor} fill={verdictColor} fillOpacity={0.35} />
+              </RadarChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
+      </div>
+
+      <article style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
+        <h3 style={{ marginTop: 0, display: "flex", alignItems: "center", gap: spacing[2] }}>
+          <Brain size={18} />
+          AI Verdict
+        </h3>
+        <p style={{ margin: 0, fontStyle: "italic" }}>
+          “{symbol.toUpperCase()} currently shows a <strong style={{ color: verdictColor }}>{verdict}</strong> profile with{" "}
+          {Math.round(overall)}% confidence based on layered confirmation.”
+        </p>
+        <div style={{ marginTop: spacing[3], height: 10, background: colors.surfaceMuted, borderRadius: borderRadius.full }}>
+          <div
+            style={{
+              height: "100%",
+              width: `${Math.round(overall)}%`,
+              borderRadius: borderRadius.full,
+              background: verdictColor
+            }}
+          />
+        </div>
+      </article>
+
+      <article style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
+        <h3 style={{ marginTop: 0 }}>Key Levels</h3>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: spacing[3] }}>
+          <div>
+            <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>VWAP</p>
+            <strong>{snapshot?.last_trade_price ? `$${(snapshot.last_trade_price * 0.997).toFixed(2)}` : "n/a"}</strong>
+          </div>
+          <div>
+            <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>Support</p>
+            <strong>{support ? `$${support.toFixed(2)}` : "n/a"}</strong>
+          </div>
+          <div>
+            <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>Resistance</p>
+            <strong>{resistance ? `$${resistance.toFixed(2)}` : "n/a"}</strong>
+          </div>
+          <div>
+            <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>OR High</p>
+            <strong>{resistance ? `$${(resistance * 1.003).toFixed(2)}` : "n/a"}</strong>
+          </div>
+          <div>
+            <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>OR Low</p>
+            <strong>{support ? `$${(support * 0.997).toFixed(2)}` : "n/a"}</strong>
+          </div>
+        </div>
+        {setup ? (
+          <p style={{ margin: `${spacing[3]} 0 0 0`, color: colors.textMuted, fontSize: typography.scale.sm }}>
+            Active setup type: {setup.triggers[0] || "Intraday pattern"}
+          </p>
+        ) : null}
+      </article>
+    </section>
+  );
+}

@@ -7,14 +7,14 @@ import { colorTokens, spacing, typography } from "@/lib/design-system";
 
 const TITLE_BY_PATH: Record<string, string> = {
   "/dashboard": "Dashboard",
-  "/scanner": "Scanner",
-  "/signals": "Signals",
-  "/portfolio": "Portfolio",
-  "/options": "Options",
-  "/crypto": "Crypto",
-  "/futures": "Futures",
-  "/journal": "Journal",
-  "/settings": "Settings"
+  "/dashboard/scanner": "Scanner",
+  "/dashboard/signals": "Signals",
+  "/dashboard/portfolio": "Portfolio",
+  "/dashboard/options": "Options",
+  "/dashboard/crypto": "Crypto",
+  "/dashboard/futures": "Futures",
+  "/dashboard/journal": "Journal",
+  "/dashboard/settings": "Settings"
 };
 
 export function TopBar() {

@@ -99,7 +99,11 @@ a {
   }
 
   .stat-cards-grid,
-  .top-signals-grid {
+  .top-signals-grid,
+  .scanner-grid,
+  .signals-grid,
+  .portfolio-broker-grid,
+  .journal-stats-grid {
     grid-template-columns: 1fr !important;
   }
 }

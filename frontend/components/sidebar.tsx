@@ -23,14 +23,14 @@ interface SidebarProps {
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/scanner", label: "Scanner", icon: Radio },
-  { href: "/signals", label: "Signals", icon: Zap },
-  { href: "/portfolio", label: "Portfolio", icon: Briefcase },
-  { href: "/options", label: "Options", icon: Layers },
-  { href: "/crypto", label: "Crypto", icon: TrendingUp },
-  { href: "/futures", label: "Futures", icon: BarChart2 },
-  { href: "/journal", label: "Journal", icon: BookOpen },
-  { href: "/settings", label: "Settings", icon: Settings }
+  { href: "/dashboard/scanner", label: "Scanner", icon: Radio },
+  { href: "/dashboard/signals", label: "Signals", icon: Zap },
+  { href: "/dashboard/portfolio", label: "Portfolio", icon: Briefcase },
+  { href: "/dashboard/options", label: "Options", icon: Layers },
+  { href: "/dashboard/crypto", label: "Crypto", icon: TrendingUp },
+  { href: "/dashboard/futures", label: "Futures", icon: BarChart2 },
+  { href: "/dashboard/journal", label: "Journal", icon: BookOpen },
+  { href: "/dashboard/settings", label: "Settings", icon: Settings }
 ] as const;
 
 export function Sidebar({ userLabel }: SidebarProps) {
@@ -68,7 +68,7 @@ export function Sidebar({ userLabel }: SidebarProps) {
       <nav style={{ padding: spacing[4], display: "grid", gap: spacing[2], alignContent: "start" }}>
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
-          const isActive = pathname === item.href;
+          const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
           return (
             <Link
               key={item.href}
