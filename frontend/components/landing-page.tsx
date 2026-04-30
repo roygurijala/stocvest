@@ -296,7 +296,7 @@ export function LandingPage() {
               initial={{ opacity: 0, y: 24 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              className={`rounded-xl border bg-white/5 p-6 ${plan.recommended ? "border-[#3b82f6] shadow-[0_0_30px_rgba(59,130,246,0.35)]" : "border-white/10"}`}
+              className={`flex flex-col rounded-xl border bg-white/5 p-6 ${plan.recommended ? "border-[#3b82f6] shadow-[0_0_30px_rgba(59,130,246,0.35)]" : "border-white/10"}`}
             >
               <div className="mb-2 flex items-center justify-between">
                 <h3 className="text-xl font-semibold">{plan.tier}</h3>
@@ -308,7 +308,7 @@ export function LandingPage() {
                   <li key={f}>• {f}</li>
                 ))}
               </ul>
-              <Link href="/login" className="inline-block rounded-md bg-[#3b82f6] px-4 py-2 text-sm font-semibold">
+              <Link href="/login" className="mt-auto inline-block rounded-md bg-[#3b82f6] px-4 py-2 text-sm font-semibold">
                 Get Started
               </Link>
             </motion.article>
@@ -327,8 +327,8 @@ export function LandingPage() {
       <footer className="flex flex-col items-center gap-2 px-4 py-8 text-sm text-slate-400 md:flex-row md:justify-between md:px-8">
         <span>Copyright 2026 STOCVEST LLC</span>
         <div className="flex gap-4">
-          <Link href="#">Terms</Link>
-          <Link href="#">Privacy</Link>
+          <Link href="/terms">Terms</Link>
+          <Link href="/privacy">Privacy</Link>
           <span>Not investment advice</span>
         </div>
       </footer>
