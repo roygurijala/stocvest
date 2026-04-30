@@ -582,6 +582,7 @@ Phase D: Individual pages — Scanner, Signals with evidence card, Portfolio, Jo
 Phase E: Landing page — full public marketing page with animations ✅ COMPLETE
 Phase F: Signal Evidence Card — reasoning transparency on all signal views ✅ COMPLETE
 UI polish pass (login redesign, 404, loaders, landing contrast/animation/chart/pricing refinements) ✅ COMPLETE
+Dashboard cleanup redesign (focused single-view dashboard with pulse bar, 60/40 layout, and morning briefing window) ✅ COMPLETE
 
 Rules:
 

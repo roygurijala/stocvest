@@ -65,24 +65,25 @@ export function DashboardRealtime() {
     };
   }, []);
 
-  if (connection === "no_url") {
+  if (connection === "no_url" || connection === "error" || connection === "off") {
     return null;
   }
-
-  const dotColor =
-    connection === "live" ? "#22c55e" : connection === "connecting" ? "#9ca3af" : "#6b7280";
+  const dotColor = connection === "live" ? "#22c55e" : "#9ca3af";
+  const label = connection === "live" ? "Live" : "Connecting...";
 
   return (
-    <div
-      aria-label="Realtime connection status"
-      title={connection === "live" ? "Realtime connected" : "Realtime unavailable"}
-      style={{
-        marginTop: 16,
-        width: 8,
-        height: 8,
-        borderRadius: "999px",
-        background: dotColor
-      }}
-    />
+    <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+      <span
+        aria-label="Realtime connection status"
+        title={connection === "live" ? "Realtime connected" : "Realtime connecting"}
+        style={{
+          width: 8,
+          height: 8,
+          borderRadius: "999px",
+          background: dotColor
+        }}
+      />
+      <span style={{ fontSize: 12, color: "#94a3b8" }}>{label}</span>
+    </div>
   );
 }
