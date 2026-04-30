@@ -9,9 +9,9 @@ and what must never be changed without explicit discussion.
 
 ## Current Status
 
-**Phase:** 1 — Complete ✅ / Phase 2 — Complete ✅ / Phase 2.5 — Complete ✅ / Phase 3 — Complete ✅ / Phase 4 — Complete ✅ / Phase 5 — In Progress 🚧
-**Last Updated:** 2026-04-28
-**Last Session:** Scanner optimization pass — scanner inputs now sourced from real `/v1/market/*` data and scanner handlers cache results for 60 seconds
+**Phase:** 1 — Complete ✅ / Phase 2 — Complete ✅ / Phase 2.5 — Complete ✅ / Phase 3 — Complete ✅ / Phase 4 — Complete ✅ / Phase 5 — Complete ✅ / Phase 6 — In Progress 🚧 (6a–6i: Terraform + Vercel config + GitHub Actions CI/CD ✅ / cloud apply + hook wiring pending)
+**Last Updated:** 2026-04-29
+**Last Session:** Redis-backed scanner cache + Polygon/Claude rate limits; DayTradingSetups sort key + persistence; scheduled scanner Polygon→score→Dynamo→Alerts→WebSocket fan-out; Next.js `DashboardRealtime` + `NEXT_PUBLIC_STOCVEST_WS_URL`
 
 ---
 
@@ -238,7 +238,16 @@ TEST STATUS: 310/310 backend tests passing ✅ + 25/25 frontend unit tests passi
                             - direct DynamoDB store unit tests for journal + PDT persistence services
                             - scanner cache tests extended for TTL expiry and payload-key isolation
                             - broker overview failure-path and PDT query edge-case tests added
-❌ infra/              — Phase 6 (not started)
+🚧 infra/              — Phase 6 (Terraform)
+                         ✅ 6a: VPC, subnets, NAT, route tables, security groups, S3 remote state (`use_lockfile`), tags
+                         ✅ 6b: DynamoDB (Terraform) — contract tables; PAY_PER_REQUEST; TTL on `Alerts`; tags — apply + env wiring still pending
+                         ✅ 6c: ElastiCache Redis (Terraform) — single-node `cache.t3.micro`, Redis 7.x, private subnets, data SG, parameter group; `REDIS_URL` outputs — apply pending
+                         ✅ 6d: ECS (Terraform) — cluster `stocvest-development`, Fargate task def `ibeam` port 4002; apply pending
+                         ✅ 6e: Lambda + API Gateway (Terraform) — Lambdas, HTTP + WS APIs, `/v1/*` routes — apply pending
+                         ✅ 6f: Cognito (Terraform) — pool `stocvest-development`, SPA + authorizer clients, JWT wired to HTTP API (tfvars overrides optional) — apply pending
+                         ✅ 6g: EventBridge Scheduler (America/New_York) → scanner Lambda; IAM + Lambda permission; distinct schedule payloads (`premarket` / `intraday` / `eod_summary`)
+                         ✅ 6h: Vercel — `frontend/vercel.json` (Next.js, `iad1`, www→apex redirect); env vars documented from Terraform outputs; PR previews via default Vercel Git behavior
+                         ✅ 6i: GitHub Actions — CI on push/PR; `main` deploys Lambda zip to S3 + `update-function-code`; Vercel production via deploy hook; secrets documented in root `README.md`
 ```
 
 ---
@@ -454,8 +463,16 @@ Phase 5 — Frontend (Next.js on stocvest.app)             🚧 IN PROGRESS
   5k. Portfolio view                                       ✅
   5l. PDT tracker widget hardening                         ✅
 
-Phase 6 — Infrastructure (Terraform)
-  6a–6i. VPC, DynamoDB, Redis, ECS, Lambda, Cognito, EventBridge, Vercel, CI/CD
+Phase 6 — Infrastructure (Terraform)                   🚧 IN PROGRESS
+  6a. VPC, subnets, security groups, NAT               ✅
+  6b. DynamoDB (contract tables + TTL on Alerts)       ✅ (Terraform in repo; apply pending)
+  6c. Redis (ElastiCache single-node dev)               ✅ (Terraform in repo; apply pending)
+  6d. ECS (Fargate cluster + TWS/ibeam task definition)  ✅ (Terraform in repo; apply pending)
+  6e. Lambda + HTTP/WebSocket API Gateway               ✅ (Terraform in repo; apply pending)
+  6f. Cognito (user pool + app clients + JWT wiring)    ✅ (Terraform in repo; apply pending)
+  6g. EventBridge (Scheduler → scanner Lambda)         ✅ (Terraform in repo; apply pending)
+  6h. Vercel (`frontend/vercel.json` + env mapping)     ✅ (config in repo; project + domain wiring pending)
+  6i. CI/CD (GitHub Actions)                             ✅ (workflow in repo; secrets + S3 bucket + hooks pending)
 
 Phase 7 — Testing & Hardening
   7a. End-to-end test suite

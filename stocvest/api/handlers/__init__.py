@@ -30,6 +30,7 @@ from stocvest.api.handlers.websocket import (
     websocket_disconnect_handler,
 )
 from stocvest.api.handlers.scanner import (
+    handler as scanner_lambda_handler,
     scanner_briefing_handler,
     scanner_catalysts_handler,
     scanner_gaps_handler,
@@ -72,6 +73,7 @@ __all__ = [
     "scanner_catalysts_handler",
     "scanner_gaps_handler",
     "scanner_intraday_handler",
+    "scanner_lambda_handler",
     "snapshot_handler",
     "swing_composite_handler",
     "swing_synthesis_parse_handler",

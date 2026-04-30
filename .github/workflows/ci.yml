@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install Python dependencies
+        run: python -m pip install -e .
+
+      - name: Run tests
+        run: pytest tests/ -q
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.0"
+
+      - name: Terraform fmt (infra)
+        run: terraform fmt -check
+        working-directory: infra
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install and test frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+          npm run test -- --silent
+
+  deploy-lambda:
+    needs: backend
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install package (same as runtime bundle)
+        run: python -m pip install -e .
+
+      - name: Require Lambda artifacts bucket
+        run: |
+          if [ -z "${{ vars.STOCVEST_LAMBDA_S3_BUCKET }}" ]; then
+            echo "Set the GitHub repository variable STOCVEST_LAMBDA_S3_BUCKET to your S3 bucket for Lambda zips."
+            exit 1
+          fi
+
+      - name: Build Lambda zip
+        run: bash scripts/build_lambda_package.sh "dist/lambda_api.zip"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Upload package to S3
+        id: lambda_pkg
+        env:
+          BUCKET: ${{ vars.STOCVEST_LAMBDA_S3_BUCKET }}
+        run: |
+          KEY="lambda/api-${GITHUB_SHA}.zip"
+          aws s3 cp "dist/lambda_api.zip" "s3://${BUCKET}/${KEY}"
+          echo "s3_key=${KEY}" >> "${GITHUB_OUTPUT}"
+
+      - name: Update Lambda function code
+        env:
+          BUCKET: ${{ vars.STOCVEST_LAMBDA_S3_BUCKET }}
+          LAMBDA_S3_KEY: ${{ steps.lambda_pkg.outputs.s3_key }}
+        run: |
+          for mod in health market_data signals brokers portfolio journal pdt scanner authorizer websocket; do
+            aws lambda update-function-code \
+              --function-name "stocvest-development-api-${mod}" \
+              --s3-bucket "${BUCKET}" \
+              --s3-key "${LAMBDA_S3_KEY}"
+          done
+
+  deploy-vercel:
+    needs: frontend
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Vercel production deploy
+        run: curl -fsS -X POST "${{ secrets.VERCEL_DEPLOY_HOOK_URL }}"

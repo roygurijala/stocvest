@@ -31,6 +31,8 @@ import httpx
 import websockets
 import json
 
+from stocvest.utils.api_rate_limits import await_polygon_rest_slot
+
 from stocvest.data.models import (
     Bar,
     MarketStatus,
@@ -117,6 +119,7 @@ class PolygonClient:
 
         for attempt in range(self._max_retries + 1):
             try:
+                await await_polygon_rest_slot()
                 resp = await self._http.get(path, params=params)
             except httpx.RequestError as exc:
                 last_error = exc

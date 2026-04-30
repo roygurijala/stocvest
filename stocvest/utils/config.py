@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     # ── App ──────────────────────────────────────────────────────
     env: str = Field("development", alias="STOCVEST_ENV")
     redis_url: str = Field("redis://localhost:6379", alias="REDIS_URL")
+    stocvest_disable_redis: bool = Field(False, alias="STOCVEST_DISABLE_REDIS")
+    polygon_rate_limit_per_second: int = Field(30, alias="STOCVEST_POLYGON_RATE_PER_SEC")
+    claude_rate_limit_per_minute: int = Field(20, alias="STOCVEST_CLAUDE_RATE_PER_MIN")
+    scanner_cache_bucket_seconds: int = Field(60, alias="STOCVEST_SCANNER_CACHE_BUCKET_SEC")
+    scanner_cache_bucket_seconds_intraday: int = Field(300, alias="STOCVEST_SCANNER_CACHE_BUCKET_INTRADAY_SEC")
 
     # ── Broker sandbox integration / OAuth ───────────────────────
     sandbox_integration_enabled: bool = Field(
@@ -55,6 +60,12 @@ class Settings(BaseSettings):
     # ── Journal + PDT persistence ────────────────────────────────
     trade_journal_table: str = Field("", alias="STOCVEST_TRADE_JOURNAL_TABLE")
     pdt_state_table: str = Field("", alias="STOCVEST_PDT_STATE_TABLE")
+    dynamodb_day_trading_setups: str = Field("", alias="DYNAMODB_DAY_TRADING_SETUPS")
+    dynamodb_alerts: str = Field("", alias="DYNAMODB_ALERTS")
+
+    # ── Scanner schedule + WebSocket broadcast ────────────────────
+    scanner_symbols: str = Field("AAPL,MSFT,NVDA", alias="STOCVEST_SCANNER_SYMBOLS")
+    websocket_management_api_url: str = Field("", alias="STOCVEST_WS_MANAGEMENT_API_URL")
 
     model_config = {"populate_by_name": True}
 

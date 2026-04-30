@@ -7,6 +7,7 @@ import { OptionsChainPanel } from "@/components/options-chain-panel";
 import { PDTStatusWidget } from "@/components/pdt-status-widget";
 import { PortfolioMultiBrokerPanel } from "@/components/portfolio-multi-broker-panel";
 import { OrderEntryForm } from "@/components/order-entry-form";
+import { DashboardRealtime } from "@/components/dashboard-realtime";
 import { ScannerOverviewPanel } from "@/components/scanner-overview-panel";
 import type { BrokerOverview } from "@/lib/api/brokers";
 import { MarketOverviewPanel } from "@/components/market-overview-panel";
@@ -66,6 +67,7 @@ export function DashboardShell({
         </article>
         <PDTStatusWidget status={pdtStatus} />
       </section>
+      <DashboardRealtime />
       <MarketOverviewPanel overview={marketOverview} />
       <ScannerOverviewPanel overview={scannerOverview} />
       <OptionsChainPanel overview={optionsOverview} />

@@ -8,6 +8,11 @@ import json
 from typing import Any, Callable, Protocol
 
 from stocvest.api.response import bad_request, internal_error, ok
+from stocvest.api.services.ws_connection_index import (
+    SCANNER_UPDATES_CHANNEL,
+    index_subscribe_scanner_updates,
+    index_unsubscribe_scanner_updates,
+)
 from stocvest.api.types import LambdaContext, LambdaEvent
 from stocvest.utils.config import Settings, get_settings
 
@@ -180,6 +185,7 @@ def websocket_disconnect_handler(
     if not connection_id:
         return bad_request("Missing websocket connection id.")
     registry.disconnect(connection_id)
+    index_unsubscribe_scanner_updates(connection_id)
     return ok({"disconnected": True, "connection_id": connection_id})
 
 
@@ -208,10 +214,14 @@ def websocket_default_handler(
         if action == "subscribe":
             channel = _channel(payload)
             subscriptions = sorted(registry.subscribe(connection_id, channel))
+            if channel == SCANNER_UPDATES_CHANNEL:
+                index_subscribe_scanner_updates(connection_id)
             return ok({"subscribed": channel, "subscriptions": subscriptions})
         if action == "unsubscribe":
             channel = _channel(payload)
             subscriptions = sorted(registry.unsubscribe(connection_id, channel))
+            if channel == SCANNER_UPDATES_CHANNEL:
+                index_unsubscribe_scanner_updates(connection_id)
             return ok({"unsubscribed": channel, "subscriptions": subscriptions})
         if action == "list_subscriptions":
             subscriptions = sorted(registry.subscriptions(connection_id))

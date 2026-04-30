@@ -14,8 +14,11 @@ def _event_with_user_sub(user_sub: str, body: dict[str, object] | None = None) -
 
 
 def test_pdt_status_warns_when_near_limit() -> None:
-    # seed two day trades for this user
-    for idx in ("1", "2"):
+    # seed two day trades for this user (fixed dates so as_of is stable across runner clocks)
+    for opened_at, idx in (
+        ("2026-04-28T14:30:00+00:00", "1"),
+        ("2026-04-29T15:00:00+00:00", "2"),
+    ):
         journal_create_entry_handler(
             _event_with_user_sub(
                 "pdt-user",
@@ -25,6 +28,7 @@ def test_pdt_status_warns_when_near_limit() -> None:
                     "opening_side": "buy",
                     "quantity": 1,
                     "is_day_trade": True,
+                    "opened_at": opened_at,
                 },
             ),
             {},

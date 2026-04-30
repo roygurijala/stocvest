@@ -42,3 +42,6 @@ frontend/.env.local
 *.tfstate
 *.tfstate.backup
 .terraform/
+infra/terraform.tfvars
+infra/backend.hcl
+infra/.terraform_placeholder_lambda.zip

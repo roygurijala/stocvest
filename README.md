@@ -46,6 +46,32 @@ cp .env.example .env
 pytest tests/ -v
 ```
 
+## CI/CD (GitHub Actions)
+
+Workflow: [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+
+**On every push and pull request**
+
+- **Backend:** Python 3.11, `pip install -e .`, `pytest tests/ -q`, `terraform fmt -check` in `infra/`.
+- **Frontend:** Node 20, `npm ci` / `npm run build` / `npm run test -- --silent` in `frontend/`.
+
+**On push to `main` only** (after the checks above succeed on that run)
+
+- **AWS:** Build one Lambda deployment zip (`scripts/build_lambda_package.sh`), upload to S3, then `aws lambda update-function-code` for each `stocvest-development-api-*` function (same artifact; dispatch uses `STOCVEST_LAMBDA_MODULE` from Terraform).
+- **Vercel:** `POST` to the production [deploy hook](https://vercel.com/docs/deployments/deployment-methods#deploy-hooks).
+
+Configure these in the GitHub repository (**Settings → Secrets and variables**). Do not commit real values.
+
+| Name | Type | Purpose |
+|------|------|--------|
+| `AWS_ACCESS_KEY_ID` | Secret | IAM user or role key for CI deploy |
+| `AWS_SECRET_ACCESS_KEY` | Secret | IAM secret for CI deploy |
+| `AWS_REGION` | Secret | e.g. `us-east-1` (must match Terraform `aws_region`) |
+| `VERCEL_DEPLOY_HOOK_URL` | Secret | Vercel production deploy hook URL |
+| `STOCVEST_LAMBDA_S3_BUCKET` | **Variable** (not secret) | S3 bucket for `lambda/api-<sha>.zip` artifacts |
+
+The IAM principal behind `AWS_*` needs at least: `s3:PutObject` on `arn:aws:s3:::STOCVEST_LAMBDA_S3_BUCKET/lambda/*`, and `lambda:UpdateFunctionCode` (and `lambda:GetFunction`) on `arn:aws:lambda:REGION:ACCOUNT:function:stocvest-development-api-*`.
+
 ## Build phases
 
 | Phase | Status |

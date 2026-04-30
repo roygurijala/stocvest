@@ -1,0 +1,5 @@
+bucket         = "REPLACE_WITH_TERRAFORM_STATE_BUCKET"
+key            = "stocvest/development/terraform.tfstate"
+region         = "REPLACE_WITH_AWS_REGION"
+dynamodb_table = "REPLACE_WITH_TERRAFORM_LOCKS_TABLE"
+encrypt        = true

@@ -1,0 +1,58 @@
+variable "aws_region" {
+  description = "AWS region for infrastructure deployment."
+  type        = string
+  # Convenience default for local apply; override in `terraform.tfvars` for other regions.
+  default = "us-east-1"
+}
+
+variable "aws_account_id" {
+  description = "AWS account ID used for environment-level configuration."
+  type        = string
+}
+
+variable "vpc_cidr_block" {
+  description = "CIDR block for the primary VPC."
+  type        = string
+}
+
+variable "availability_zones" {
+  description = "Availability zones used for subnet placement."
+  type        = list(string)
+}
+
+variable "public_subnet_cidr_blocks" {
+  description = "CIDR blocks for public subnets."
+  type        = list(string)
+
+  validation {
+    condition     = length(var.public_subnet_cidr_blocks) <= length(var.availability_zones)
+    error_message = "public_subnet_cidr_blocks length must be less than or equal to availability_zones length."
+  }
+}
+
+variable "private_subnet_cidr_blocks" {
+  description = "CIDR blocks for private subnets."
+  type        = list(string)
+
+  validation {
+    condition     = length(var.private_subnet_cidr_blocks) <= length(var.availability_zones)
+    error_message = "private_subnet_cidr_blocks length must be less than or equal to availability_zones length."
+  }
+}
+
+variable "allowed_ingress_cidrs" {
+  description = "CIDR ranges allowed for ingress into the app security group."
+  type        = list(string)
+}
+
+variable "cognito_jwt_issuer" {
+  description = "Override JWT issuer for HTTP API JWT authorizer. Leave empty to use Cognito pool from this stack (Phase 6f)."
+  type        = string
+  default     = ""
+}
+
+variable "cognito_jwt_audience" {
+  description = "Override JWT audience (single app client id). Leave empty to allow SPA + Lambda authorizer app client ids from this stack."
+  type        = string
+  default     = ""
+}

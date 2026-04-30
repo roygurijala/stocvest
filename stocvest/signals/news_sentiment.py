@@ -153,8 +153,11 @@ class NewsSentimentScorer:
         last_status: int | None = None
         last_body_snippet = ""
 
+        from stocvest.utils.api_rate_limits import await_claude_api_slot
+
         for attempt in range(self._max_retries + 1):
             try:
+                await await_claude_api_slot()
                 response = await self._send_claude_request(headers, payload)
             except httpx.RequestError as exc:
                 last_error = exc

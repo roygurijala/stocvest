@@ -5,13 +5,65 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from stocvest.api.services import scanner_response_cache
 from stocvest.api.handlers.scanner import (
-    _SCANNER_CACHE,
+    handler,
     scanner_briefing_handler,
     scanner_catalysts_handler,
     scanner_gaps_handler,
     scanner_intraday_handler,
 )
+
+
+def test_handler_routes_eventbridge_schedule_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _fake_scan(st: str) -> dict:
+        return {
+            "invocation": "schedule",
+            "source": "eventbridge",
+            "scan_type": st,
+            "status": "completed",
+            "setup_key": f"{st}#stub",
+        }
+
+    monkeypatch.setattr("stocvest.api.handlers.scanner.run_scheduled_scan_sync", _fake_scan)
+    for scan_type in ("premarket", "intraday", "eod_summary"):
+        response = handler({"source": "eventbridge", "scan_type": scan_type}, {})
+        assert response["statusCode"] == 200
+        body = json.loads(response["body"])
+        assert body["invocation"] == "schedule"
+        assert body["scan_type"] == scan_type
+        assert body["status"] == "completed"
+
+
+def test_handler_rejects_unknown_eventbridge_scan_type() -> None:
+    response = handler({"source": "eventbridge", "scan_type": "overnight"}, {})
+    assert response["statusCode"] == 400
+
+
+def test_handler_routes_api_gateway_http_v2_route_key() -> None:
+    event = {
+        "version": "2.0",
+        "routeKey": "POST /v1/scanner/gaps",
+        "body": json.dumps(
+            {
+                "snapshots": [
+                    {"symbol": "GAP1", "prev_close": 100.0, "pre_market_price": 104.0, "day_volume": 12_000_000}
+                ],
+                "limit": 5,
+                "min_abs_gap_percent": 2.0,
+            }
+        ),
+    }
+    response = handler(event, {})
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert len(body) == 1
+    assert body[0]["symbol"] == "GAP1"
+
+
+def test_handler_unknown_route_returns_not_found() -> None:
+    response = handler({"version": "2.0", "routeKey": "GET /v1/scanner/gaps", "body": "{}"}, {})
+    assert response["statusCode"] == 404
 
 
 def test_scanner_gaps_handler_returns_ranked_candidates() -> None:
@@ -134,7 +186,7 @@ def test_scanner_handlers_validate_inputs() -> None:
 
 
 def test_scanner_gaps_handler_uses_cache_within_ttl(monkeypatch: pytest.MonkeyPatch) -> None:
-    _SCANNER_CACHE.clear()
+    scanner_response_cache._MEMORY.clear()
     calls = {"count": 0}
 
     class _FakeGapScanner:
@@ -169,7 +221,7 @@ def test_scanner_gaps_handler_uses_cache_within_ttl(monkeypatch: pytest.MonkeyPa
 
 
 def test_scanner_gaps_cache_expires_after_ttl(monkeypatch: pytest.MonkeyPatch) -> None:
-    _SCANNER_CACHE.clear()
+    scanner_response_cache._MEMORY.clear()
     calls = {"count": 0}
     fake_time = {"value": 1000.0}
 
@@ -185,7 +237,7 @@ def test_scanner_gaps_cache_expires_after_ttl(monkeypatch: pytest.MonkeyPatch) -
             return []
 
     monkeypatch.setattr("stocvest.api.handlers.scanner.PremarketGapScanner", _FakeGapScanner)
-    monkeypatch.setattr("stocvest.api.handlers.scanner.time.time", lambda: fake_time["value"])
+    monkeypatch.setattr("stocvest.api.services.scanner_response_cache.time.time", lambda: fake_time["value"])
 
     event = {
         "body": json.dumps(
@@ -206,7 +258,7 @@ def test_scanner_gaps_cache_expires_after_ttl(monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_scanner_cache_keys_are_payload_specific(monkeypatch: pytest.MonkeyPatch) -> None:
-    _SCANNER_CACHE.clear()
+    scanner_response_cache._MEMORY.clear()
     calls = {"count": 0}
 
     class _FakeGapScanner:

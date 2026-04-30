@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from datetime import date
-import json
-import time
 from typing import Any
 
-from stocvest.api.response import bad_request, internal_error, ok
+from stocvest.api.http_route import http_route_descriptor
+from stocvest.api.response import bad_request, internal_error, not_found, ok
+from stocvest.api.services.scanner_response_cache import build_cache_key, cache_get, cache_set
+from stocvest.api.services.scanner_scheduled_pipeline import run_scheduled_scan_sync
 from stocvest.api.services.signal_dto import (
     parse_article,
     parse_bar,
@@ -28,38 +29,59 @@ from stocvest.signals import (
     NewsCatalystDetector,
     PremarketGapScanner,
 )
+from stocvest.utils.logging import get_logger
 
-_SCANNER_CACHE_TTL_SECONDS = 60
-_SCANNER_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_LOG = get_logger(__name__)
 
-
-def _cache_key(endpoint: str, payload: dict[str, Any]) -> str:
-    normalized = json.dumps(payload, sort_keys=True, default=str, separators=(",", ":"))
-    return f"{endpoint}:{normalized}"
+_SCHEDULED_SCAN_TYPES = frozenset({"premarket", "intraday", "eod_summary"})
 
 
-def _cache_get(key: str) -> dict[str, Any] | None:
-    row = _SCANNER_CACHE.get(key)
-    if row is None:
-        return None
-    expires_at, value = row
-    if expires_at <= time.time():
-        _SCANNER_CACHE.pop(key, None)
-        return None
-    return json.loads(json.dumps(value))
+def _is_eventbridge_schedule_event(event: LambdaEvent) -> bool:
+    if event.get("source") != "eventbridge":
+        return False
+    scan_type = event.get("scan_type")
+    return isinstance(scan_type, str) and scan_type in _SCHEDULED_SCAN_TYPES
 
 
-def _cache_set(key: str, value: dict[str, Any]) -> dict[str, Any]:
-    _SCANNER_CACHE[key] = (time.time() + _SCANNER_CACHE_TTL_SECONDS, value)
-    return value
+def _handle_eventbridge_schedule(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    """EventBridge Scheduler passes the schedule Input JSON as the Lambda event body (top-level dict)."""
+    _ = context
+    scan_type = str(event.get("scan_type"))
+    _LOG.info("scanner schedule invocation scan_type=%s", scan_type)
+    try:
+        result = run_scheduled_scan_sync(scan_type)
+        return ok(result)
+    except Exception as exc:
+        _LOG.exception("scheduled scanner failed scan_type=%s", scan_type)
+        return internal_error(str(exc))
+
+
+def handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    """Scanner Lambda entry: EventBridge Scheduler payloads or API Gateway HTTP routes."""
+    if event.get("source") == "eventbridge":
+        if not _is_eventbridge_schedule_event(event):
+            return bad_request("Scheduled scanner event requires scan_type premarket|intraday|eod_summary.")
+        return _handle_eventbridge_schedule(event, context)
+
+    route = http_route_descriptor(event)
+    routes: dict[str, Any] = {
+        "POST /v1/scanner/gaps": scanner_gaps_handler,
+        "POST /v1/scanner/catalysts": scanner_catalysts_handler,
+        "POST /v1/scanner/intraday": scanner_intraday_handler,
+        "POST /v1/scanner/briefing": scanner_briefing_handler,
+    }
+    target = routes.get(route)
+    if target is None:
+        return not_found(f"Unknown scanner route: {route or '(empty)'}.")
+    return target(event, context)
 
 
 def scanner_gaps_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
     _ = context
     try:
         payload = parse_json_body(event)
-        key = _cache_key("gaps", payload)
-        cached = _cache_get(key)
+        key = build_cache_key("gaps", payload)
+        cached = cache_get(key)
         if cached is not None:
             return cached
         snapshots_raw = payload.get("snapshots")
@@ -73,7 +95,7 @@ def scanner_gaps_handler(event: LambdaEvent, context: LambdaContext) -> dict[str
             min_abs_gap_percent=min_abs_gap_percent,
             min_day_volume=min_day_volume,
         ).scan_snapshots(snapshots, limit=limit)
-        return _cache_set(key, ok([serialize_gap_candidate(c) for c in candidates]))
+        return cache_set(key, ok([serialize_gap_candidate(c) for c in candidates]), ttl_seconds=60)
     except (TypeError, ValueError) as exc:
         return bad_request(f"Invalid gap scanner request: {exc}")
     except Exception as exc:
@@ -84,8 +106,8 @@ def scanner_catalysts_handler(event: LambdaEvent, context: LambdaContext) -> dic
     _ = context
     try:
         payload = parse_json_body(event)
-        key = _cache_key("catalysts", payload)
-        cached = _cache_get(key)
+        key = build_cache_key("catalysts", payload)
+        cached = cache_get(key)
         if cached is not None:
             return cached
         articles_raw = payload.get("articles")
@@ -95,7 +117,7 @@ def scanner_catalysts_handler(event: LambdaEvent, context: LambdaContext) -> dic
         limit = int(payload.get("limit", 8))
         articles = [parse_article(item) for item in articles_raw]
         candidates = NewsCatalystDetector(min_score=min_score).detect(articles, limit=limit)
-        return _cache_set(key, ok([serialize_catalyst(c) for c in candidates]))
+        return cache_set(key, ok([serialize_catalyst(c) for c in candidates]), ttl_seconds=60)
     except (TypeError, ValueError) as exc:
         return bad_request(f"Invalid catalyst request: {exc}")
     except Exception as exc:
@@ -106,8 +128,8 @@ def scanner_intraday_handler(event: LambdaEvent, context: LambdaContext) -> dict
     _ = context
     try:
         payload = parse_json_body(event)
-        key = _cache_key("intraday", payload)
-        cached = _cache_get(key)
+        key = build_cache_key("intraday", payload)
+        cached = cache_get(key)
         if cached is not None:
             return cached
         bars_by_symbol_raw = payload.get("bars_by_symbol")
@@ -121,7 +143,7 @@ def scanner_intraday_handler(event: LambdaEvent, context: LambdaContext) -> dict
                 return bad_request("bars_by_symbol entries must map symbol strings to bar arrays.")
             bars_by_symbol[symbol.upper()] = [parse_bar(item, symbol.upper()) for item in bars]
         setups = IntradaySetupScanner(min_score=min_score).scan(bars_by_symbol, limit=limit)
-        return _cache_set(key, ok([serialize_intraday_setup(c) for c in setups]))
+        return cache_set(key, ok([serialize_intraday_setup(c) for c in setups]), ttl_seconds=300)
     except (TypeError, ValueError, KeyError) as exc:
         return bad_request(f"Invalid intraday scanner request: {exc}")
     except Exception as exc:
@@ -132,8 +154,8 @@ def scanner_briefing_handler(event: LambdaEvent, context: LambdaContext) -> dict
     _ = context
     try:
         payload = parse_json_body(event)
-        key = _cache_key("briefing", payload)
-        cached = _cache_get(key)
+        key = build_cache_key("briefing", payload)
+        cached = cache_get(key)
         if cached is not None:
             return cached
         briefing_date = date.fromisoformat(str(payload["briefing_date"]))
@@ -157,12 +179,12 @@ def scanner_briefing_handler(event: LambdaEvent, context: LambdaContext) -> dict
                 ),
             )
         )
-        return _cache_set(
+        return cache_set(
             key,
             ok({"date_iso": briefing.date_iso, "title": briefing.title, "markdown": briefing.markdown}),
+            ttl_seconds=60,
         )
     except (TypeError, ValueError, KeyError) as exc:
         return bad_request(f"Invalid scanner briefing request: {exc}")
     except Exception as exc:
         return internal_error(str(exc))
-
