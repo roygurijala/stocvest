@@ -82,6 +82,9 @@ jobs:
             exit 1
           fi
 
+      - name: Create dist directory
+        run: mkdir -p dist
+
       - name: Build Lambda zip
         run: bash scripts/build_lambda_package.sh "dist/lambda_api.zip"
 
