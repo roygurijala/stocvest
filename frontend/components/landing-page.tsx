@@ -41,7 +41,7 @@ export function LandingPage() {
               Login
             </Link>
             <Link
-              href="/login"
+              href="/signup"
               className="rounded-md bg-[#3b82f6] px-4 py-2 text-sm font-semibold text-white shadow-[0_0_24px_rgba(59,130,246,0.4)] transition hover:shadow-[0_0_30px_rgba(59,130,246,0.7)]"
             >
               Get Started
@@ -97,7 +97,7 @@ export function LandingPage() {
           </motion.p>
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.7, delay: 0.2 }} className="flex flex-wrap gap-3">
             <Link
-              href="/login"
+              href="/signup"
               className="rounded-md bg-[#3b82f6] px-6 py-3 font-semibold shadow-[0_0_24px_rgba(59,130,246,0.5)] transition hover:shadow-[0_0_35px_rgba(59,130,246,0.8)]"
             >
               Start Free Trial

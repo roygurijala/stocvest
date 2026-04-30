@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { redirect } from "next/navigation";
 
-export default function LoginPage() {
+export default function LoginPage({ searchParams }: { searchParams?: { message?: string } }) {
   const session = getServerSession();
   if (session) {
     redirect("/dashboard");
@@ -21,6 +21,7 @@ export default function LoginPage() {
         <p className="mb-3 text-xl font-extrabold tracking-tight text-[#3b82f6]">STOCVEST</p>
         <h1 className="m-0 text-3xl font-bold text-slate-100">Welcome back.</h1>
         <p className="mb-6 mt-1 text-slate-400">Sign in to your account</p>
+        {searchParams?.message ? <p className="mb-4 rounded-md bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300">{searchParams.message}</p> : null}
         <LoginForm showDevBypass={isStocvestDevelopment()} />
       </section>
     </main>
