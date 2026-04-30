@@ -1,5 +1,11 @@
 import { redirect } from "next/navigation";
+import { LandingPage } from "@/components/landing-page";
+import { getServerSession } from "@/lib/auth/session";
 
 export default function HomePage() {
-  redirect("/dashboard");
+  const session = getServerSession();
+  if (session) {
+    redirect("/dashboard");
+  }
+  return <LandingPage />;
 }
