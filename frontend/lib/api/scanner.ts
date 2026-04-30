@@ -75,7 +75,7 @@ export async function fetchScannerOverview(pdtStatus: PDTStatusPayload | null): 
         method: "POST",
         body: JSON.stringify({ articles: cleanArticles, limit: 5, min_score: 0.35 })
       }),
-      apiFetch<IntradaySetupPayload[]>("/v1/scanner/intraday", {
+      apiFetch<IntradaySetupPayload[]>("/v1/signals/day/setups", {
         method: "POST",
         body: JSON.stringify({ bars_by_symbol: cleanBarsBySymbol, limit: 5, min_score: 0.35 })
       })
@@ -90,7 +90,7 @@ export async function fetchScannerOverview(pdtStatus: PDTStatusPayload | null): 
       };
     }
 
-    const briefing = await apiFetch<ScannerBriefingPayload>("/v1/scanner/briefing", {
+    const briefing = await apiFetch<ScannerBriefingPayload>("/v1/signals/day/briefing", {
       method: "POST",
       body: JSON.stringify({
         briefing_date: new Date().toISOString().slice(0, 10),

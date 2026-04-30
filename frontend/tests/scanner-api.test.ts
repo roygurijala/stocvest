@@ -55,10 +55,10 @@ describe("scanner API overview", () => {
       if (path === "/v1/scanner/catalysts") {
         return [{ article_id: "a1", symbol: "GAP1", title: "x", catalyst_type: "earnings", direction: "up", catalyst_score: 0.8 }];
       }
-      if (path === "/v1/scanner/intraday") {
+      if (path === "/v1/signals/day/setups") {
         return [{ symbol: "GAP1", direction: "long", score: 0.7, triggers: [], timestamp_iso: "x" }];
       }
-      if (path === "/v1/scanner/briefing") {
+      if (path === "/v1/signals/day/briefing") {
         return { date_iso: "2026-04-29", title: "Briefing", markdown: "ok" };
       }
       throw new Error(`Unhandled path ${path}`);
