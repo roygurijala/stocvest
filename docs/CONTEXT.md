@@ -496,3 +496,563 @@ Phase 7 — Testing & Hardening
 7. **Never hardcode credentials** — always Secrets Manager
 8. **Never log sensitive data** — no prices, accounts, or credentials in logs
 9. **PDT rule is non-negotiable** — always enforce, never bypass
+
+UI Redesign Plan
+Status: Not started — begins after CONTEXT.md update
+Decision: Full UI redesign before Phase 7
+Reason: Current UI is a developer dashboard with no visual hierarchy and does not communicate product differentiation
+Design Goals:
+
+Elegant, minimal, wow factor
+TradingView meets Apple design language
+Dark theme by default, light theme available
+User theme preference persisted in localStorage
+Google-level simplicity — one primary focus per screen
+Easy navigation, everything one click away
+
+Design System:
+
+Dark theme base: deep navy/charcoal (#0a0e1a)
+Accent: electric blue (#3b82f6)
+Green for bullish: #22c55e
+Red for bearish: #ef4444
+Amber for caution: #f59e0b
+Typography: clean modern sans-serif, monospace for prices
+Tailwind CSS throughout, no inline styles
+Framer Motion for page transitions and micro-animations
+Recharts for all data visualizations
+
+Navigation:
+
+Sidebar with icons, collapsible to icons-only on mobile
+Pages: Dashboard, Scanner, Signals, Portfolio, Options, Crypto, Futures, Journal, Settings
+User email and sign out at bottom of sidebar
+Theme toggle sun/moon icon in top bar
+
+Core differentiators to highlight prominently in UI:
+
+Signal Intelligence Panel — radar/spider chart of all 6 signal layers
+Morning Briefing — hero feature at 8 AM with ranked setups
+PDT Guardian — shield icon, trust and safety feature not a warning
+Multi-broker cards — premium feel with real-time P&L
+AI Verdict card — Claude as analyst not data feed
+Signal Evidence Card — full reasoning transparency on every signal
+
+Signal Evidence Card — most important component:
+Every signal verdict must show full reasoning:
+
+Verdict header: symbol, direction, confidence gauge 0-100%
+Signal layer breakdown: one row per layer with icon, status, weight, plain English explanation, key data points
+Layers: Technical (📊), News Sentiment (📰), Macro (🌍), Sector (🏭), Geopolitical (🌐), Internals (📈)
+AI verdict: Claude assessment displayed as analyst quote
+Risk factors: contradicting layers highlighted in amber
+Key levels: support, resistance, VWAP, opening range high/low
+Confidence breakdown: bar chart showing each layer contribution
+Transparency principle: users always see exactly what drove the signal
+Never show REGIME_WEIGHTS or internal formulas — verdicts and explanations only
+
+Landing Page — public route at /:
+
+Full viewport hero: dark navy, animated background, bold headline
+Headline: Trade with institutional intelligence.
+Subheadline: Six signal layers. AI synthesis. Multi-broker execution. Built for serious retail traders.
+Two CTAs: Start Free Trial (primary) and Watch Demo (secondary)
+Section 2: The Problem — old way vs STOCVEST way, three columns
+Section 3: Signal Intelligence — animated radar chart, 6 layers animate in on scroll, example verdict card
+Section 4: Morning Briefing — animated 8 AM briefing mockup
+Section 5: Comparison table vs ThinkorSwim, Unusual Whales, Finviz
+AI Synthesis:      STOCVEST ✅  ThinkorSwim ❌  Unusual Whales ❌  Finviz ❌
+Multi-broker:      STOCVEST ✅  ThinkorSwim ❌  Unusual Whales ❌  Finviz ❌
+Signal Reasoning:  STOCVEST ✅  ThinkorSwim ❌  Unusual Whales ❌  Finviz ❌
+Pre-market Intel:  STOCVEST ✅  ThinkorSwim ❌  Unusual Whales ❌  Finviz ❌
+PDT Guardian:      STOCVEST ✅  ThinkorSwim ❌  Unusual Whales ❌  Finviz ❌
+Day plus Swing:    STOCVEST ✅  ThinkorSwim ✅  Unusual Whales ❌  Finviz ❌
+Section 6: PDT Guardian — shield icon with green glow animation
+Section 7: Pricing — Free $0, Pro $49/mo, Institutional $199/mo
+Section 8: Final CTA — full width dramatic dark section
+Footer: © 2026 STOCVEST LLC | Terms | Privacy | Not investment advice
+Authenticated users redirect to /dashboard automatically
+
+Redesign Phases:
+
+Phase A: Design system — colors, typography, spacing, theme provider with localStorage ✅ COMPLETE
+Phase B: Navigation — sidebar, routing, theme toggle, collapsible mobile
+Phase C: Dashboard — hero market sentiment, stat cards, PDT guardian, headlines feed
+Phase D: Individual pages — Scanner, Signals with evidence card, Portfolio, Journal, Options, Settings
+Phase E: Landing page — full public marketing page with animations
+Phase F: Signal Evidence Card — reasoning transparency on all signal views
+
+Rules:
+
+Backend code untouched during redesign
+npm run build and npm run test after every phase
+Mobile responsive throughout
+Commit after every phase with passing tests
+
+
+Order Execution — Current State and Gaps
+How it works:
+
+STOCVEST routes orders to users own brokerage accounts
+STOCVEST never holds customer funds or securities
+Users authenticate directly with their broker
+ETrade: OAuth, user logs in on ETrade website, STOCVEST gets access token
+IBKR: IB Gateway connection, credentials handled by ibeam
+Orders placed via official broker API into user own account
+
+What exists:
+
+BrokerAdapter base class with PDT enforcement at submission
+MockAdapter: fully working, simulates fills instantly
+IBKRAdapter: built, needs ECS Fargate TWS container running
+ETradeAdapter: built, needs OAuth UI flow in frontend
+Order entry UI: exists but missing safety gates
+POST /v1/brokers/{broker}/orders endpoint: exists
+
+Critical gaps before real money:
+
+Order confirmation screen — full details and dollar value before submit
+Paper vs live mode toggle — paper default, live requires typing CONFIRM LIVE TRADING
+Order status tracking — pending, filled, rejected with fill price and reason
+ETrade OAuth UI flow — connect button, redirect, callback, token storage
+Auto journal on fill — automatic entry creation when order fills
+Trade This Setup button — on every signal card, pre-fills form and captures signal context
+
+Safety rules non-negotiable:
+
+Paper mode is always the default
+No auto-execution without explicit user confirmation
+Every order shows dollar value before confirmation
+PDT guardian checks before every submission
+2 weeks paper trading minimum before real money
+Phase 7 security audit must complete before real money
+Legal disclaimers on every order screen
+
+
+Trade Journal — Current State and Plan
+Current state:
+
+Manual entry only
+No automatic capture
+No signal context recorded
+No exit tracking
+No analytics
+
+Why this is critical:
+
+Manual journals do not get filled in consistently
+Without automatic capture there is no performance data
+Without performance data there is no data flywheel
+Without data flywheel there is no competitive moat
+
+Required implementation:
+
+Auto-capture on order fill
+When place_order() succeeds automatically create journal entry
+Capture: symbol, side, quantity, fill price, timestamp, broker, is_day_trade, signal_id
+Wire into broker layer so all adapters capture automatically
+Signal context capture
+Add signal_context parameter to order flow
+When Trade This Setup clicked pass verdict, confidence, active layers, setup type
+Store with journal entry automatically
+Link trade to signal via signal_id foreign key
+Exit tracking
+When position closes calculate P&L, hold time, winner/loser
+Update original journal entry with exit data automatically
+Compute: entry price vs exit price, dollar P&L, percent P&L, hold duration
+Journal analytics
+Win rate: winners divided by total trades
+Average winner vs average loser
+Best performing setup types ranked by win rate
+Best performing times of day
+P&L chart over time using Recharts
+Current win/loss streak tracker
+Expectancy = (win rate x avg winner) minus (loss rate x avg loser)
+Trade This Setup button
+On every signal card and scanner setup
+Pre-fills order entry form with symbol and suggested size
+Captures signal context for journal automatically
+Creates the complete signal to trade to outcome loop
+
+
+Self-Improvement Architecture
+Current state: static signal weights, no feedback loop
+Target: continuously learning system that improves weekly
+Four improvement loops:
+Loop 1 — Signal Weight Tuning
+Weekly analytics job measures per-layer win rates
+Weight advisor suggests adjustments max 5% per layer per week
+Minimum 100 signals per layer before suggesting changes
+Human admin review required before applying any change
+Full audit trail of every weight change with reasoning
+Loop 2 — Claude Prompt Refinement
+Every signal stores prompt_version field
+A/B testing: 50% control, 50% variant
+Promote variants that outperform control by more than 5%
+Discard variants that underperform
+Loop 3 — Setup Pattern Recognition
+Track win rates per setup type: ORB, VWAP, gap, 9 EMA
+Scanner ranks setups by historically proven win rates
+Minimum 50 occurrences before including in rankings
+Loop 4 — Market Regime Adaptation
+Detect regime: bull/bear/sideways, high/low VIX, trending/ranging
+Apply regime-specific weight adjustments
+Validate adjustments against historical regime performance
+New components to build:
+stocvest/signals/performance_tracker.py
+record_signal_verdict() — writes to SignalPerformance table
+update_signal_outcomes() — fetches Polygon prices and fills outcomes
+get_layer_accuracy(layer, days) — win rate per layer
+get_setup_accuracy(setup_type, days) — win rate per setup
+stocvest/signals/analytics_engine.py
+Runs every Sunday 6 AM ET via EventBridge
+Computes per-layer win rates for 30/60/90 day windows
+Computes per-setup-type win rates
+Computes per-market-regime win rates
+Computes per-time-of-day win rates
+Stores results in SignalAnalytics DynamoDB table
+Generates weight adjustment suggestions
+stocvest/signals/weight_advisor.py
+Reads SignalAnalytics table
+Computes suggested REGIME_WEIGHTS adjustments
+Stores in WeightSuggestions table with reasoning
+Never auto-applies — human review only
+stocvest/api/handlers/admin.py
+Weekly summary email to admin
+Shows accuracy trends and suggested weight changes
+POST /v1/admin/weights/approve
+POST /v1/admin/weights/reject
+New DynamoDB tables needed:
+SignalPerformance
+PK: signalId
+Fields: userId, symbol, verdict, confidence, signalLayers,
+setupType, promptVersion, price_at_signal, timestamp,
+price_1h_after, price_1d_after, price_1w_after,
+outcome_1h, outcome_1d, outcome_1w
+GSI 1: verdict-timestamp-index
+GSI 2: setupType-timestamp-index
+GSI 3: userId-timestamp-index
+Retention: PERMANENT — never add TTL
+SignalAnalytics
+PK: weekStartDate
+SK: metricType
+Retention: PERMANENT
+WeightSuggestions
+PK: suggestionId
+SK: createdAt
+GSI: status-index
+Retention: PERMANENT
+Human oversight principle:
+AI measures and suggests
+Human admin reviews and approves
+System implements approved changes only
+Every change logged permanently
+Timeline:
+Month 1: data collection only, no adjustments
+Month 2: first suggestions generated for review
+Month 3: first approved adjustments applied
+Month 6: measurable accuracy improvement visible
+Year 1: publishable accuracy track record
+
+Data Architecture and Retention Policy
+Two buckets of all data:
+BUCKET 1 — Personal Data (belongs to user)
+What: email, name, preferences, broker connections, OAuth tokens
+Where: Cognito and Users DynamoDB table and Secrets Manager
+On deletion: permanently deleted immediately
+On inactivity 2 years: 30-day warning email then permanently deleted
+BUCKET 2 — Anonymized Behavioral Data (STOCVEST asset)
+What: trade outcomes, signal performance, win/loss records, setup results
+Where: Journal, Orders, SignalPerformance, SignalAnalytics tables
+On deletion: userId replaced with string ANONYMIZED, all other fields kept
+Legal basis: anonymized data is not personal data under CCPA and GDPR
+Business purpose: signal improvement, backtesting, moat
+Retention: PERMANENT
+Complete retention schedule:
+DATA TYPE                    RETENTION    STORAGE
+Signal performance           Forever      DynamoDB permanent
+Trade journal anonymized     Forever      DynamoDB permanent
+Weight change history        Forever      DynamoDB permanent
+Prompt version history       Forever      DynamoDB permanent
+Personal data active user    While active Cognito
+Personal data inactive 2yr   Delete       After 30-day warning
+Order audit logs             7 years      S3 Glacier
+PDT decision logs            7 years      S3 Glacier
+Admin action logs            7 years      S3 Glacier
+Application error logs       90 days      CloudWatch
+Market data snapshots        30 days      DynamoDB TTL
+Real-time quotes             60 seconds   Redis TTL
+Scanner results              300 seconds  Redis TTL
+WebSocket connections        24 hours     Redis TTL
+Raw Polygon bars             Do not store Fetch on demand
+User deletion flow:
+Step 1: Replace userId with ANONYMIZED in all behavioral tables
+Step 2: Delete Users DynamoDB record
+Step 3: Delete OAuth tokens from Secrets Manager
+Step 4: Delete Cognito account
+Step 5: Log deletion event to S3 audit bucket
+Step 6: Confirm to user what was deleted and what was anonymized
+Inactive user cleanup:
+EventBridge: first of every month
+Find users with last_login more than 2 years ago
+Send reactivation email with 30-day warning
+If no login within 30 days: anonymize and delete per above flow
+Cost estimate at 1000 users after 10 years:
+DynamoDB permanent tables: approximately $25/month
+S3 Glacier audit logs: approximately $0.20/month
+Total: negligible — never a cost reason to delete valuable data
+10-year value:
+Signal performance validated across multiple market cycles
+Decade of continuously improving accuracy
+Potential licensing asset for institutions
+No competitor can shortcut time — data moat compounds annually
+
+Competitive Moat Strategy
+Reality: code can be replicated with AI tools in weeks
+Real moat: data, trust, distribution, and iteration speed
+Five pillars of defensibility:
+
+Data flywheel
+Track every signal verdict against actual price outcomes
+After 6 months: dataset competitors cannot copy overnight
+After 3 years: validated across multiple market regimes
+Action: build SignalPerformance tracking before launch
+Published performance track record
+Public page at stocvest.app/performance
+Shows aggregate signal accuracy with no login required
+Launch when 30 days of real data exists
+No competitor can fake historical accuracy
+User workflow lock-in
+Journal history, custom watchlists, connected brokers
+Switching cost grows every day of use
+Target: make journal and watchlists indispensable
+Prompt quality iteration
+Claude prompts stored in AWS Secrets Manager not in code
+Prompt versions tracked, accuracy measured per version
+Continuous improvement based on real market feedback
+Distribution first mover advantage
+Target: 100 serious traders in first 90 days
+Strategy: Pro free for 90 days for first 100 users
+Channels: fintwit, r/Daytrading, trading Discord servers
+Goal: establish trust before competitors exist
+
+Proprietary files — never expose internals in API responses:
+stocvest/signals/composite_score.py       REGIME_WEIGHTS
+stocvest/signals/news_sentiment.py        Claude prompts
+stocvest/signals/geopolitical_scanner.py  Claude prompts
+stocvest/signals/macro_events.py          Macro logic
+stocvest/api/services/scanner_scheduled_pipeline.py  Ranking
+Protection measures:
+Repo stays private permanently
+Signal endpoints return verdicts only, never weights or formulas
+Claude prompts moved to AWS Secrets Manager
+Rate limiting: 100 signal API calls per user per day
+ToS prohibits scraping, reselling, reverse engineering
+
+Legal and Business Structure
+Entity: STOCVEST LLC Delaware
+Formation method: Stripe Atlas $500 one-time
+Status: In progress
+What Stripe Atlas includes:
+Delaware LLC formation
+EIN from IRS
+Stripe account activated
+Mercury business bank account
+Operating agreement
+Registered agent first year free
+Basic legal document templates
+AWS credits and startup perks
+Post-formation checklist:
+Foreign qualification in home state $100-300
+Move all STOCVEST expenses to Mercury account
+AWS, Polygon, Anthropic, domain are all business expenses
+Terms of Service using Termly.io as starting point
+Privacy Policy CCPA compliant
+Securities lawyer consultation 1 hour $300-500
+Ask: RIA registration needed?
+Ask: Broker-dealer registration needed?
+Ask: Are disclaimers sufficient?
+Update footer: 2026 STOCVEST LLC All rights reserved
+What STOCVEST is:
+SaaS signal platform
+Order routing layer to users own broker accounts
+Analytics and intelligence tool
+What STOCVEST is not:
+Registered investment advisor
+Broker-dealer
+Custodian of funds
+Fund manager
+Required legal disclaimers in app:
+Footer every page: STOCVEST signals are for informational purposes only and do not constitute investment advice. You are solely responsible for your trading decisions.
+Order confirmation: This order will be placed in your personal brokerage account. STOCVEST does not provide investment advice or manage your funds.
+Signal cards: small Not investment advice label
+Onboarding: explicit acknowledgment screen user must accept
+Before charging users:
+LLC formation complete
+Terms of Service live on site
+Privacy Policy live on site
+Securities lawyer review complete
+Stripe subscription configured
+
+Future Features Backlog
+PRIORITY 1 — Automatic Journal Capture
+Auto-capture on every order fill via broker layer hook
+Signal context captured when Trade This Setup clicked
+Exit tracking with automatic P&L calculation
+Journal analytics: win rate, avg winner/loser, setup performance, expectancy
+Trade This Setup button on all signal and scanner cards
+Note: manual journal exists but will not be used consistently
+Note: this creates the performance data moat
+PRIORITY 2 — Alerting System
+Email alerts when setup triggers
+Push notifications mobile
+SMS for critical PDT warnings
+Webhook support for power users
+Note: Alerts DynamoDB table exists, nothing sends to users yet
+PRIORITY 3 — Signal Performance Tracking
+Track every verdict against actual price outcomes 1h, 1d, 1w
+Performance dashboard with accuracy metrics
+Public page at stocvest.app/performance
+Per signal type win rate and average return
+Note: credibility proof and primary marketing asset
+PRIORITY 4 — Backtesting Engine
+Run signal engine against 2 years of Polygon historical data
+Win rate, average return, max drawdown per signal type
+Backtest ORB, VWAP reclaim, 9 EMA bounce, gap strategies
+Compare performance across bull, bear, sideways regimes
+Note: number one credibility feature for serious traders
+PRIORITY 5 — Watchlist Management
+Create and edit named watchlists per user
+Scanner runs on user watchlist not hardcoded symbols
+Share watchlists between swing and day trading scanner
+Wire to Watchlists DynamoDB table already exists
+PRIORITY 6 — Paper Trading Mode UI
+Toggle between paper and live in UI
+Paper mode always default
+Live mode requires typing CONFIRM LIVE TRADING
+Track paper P&L separately from real P&L
+MockAdapter exists but no UI toggle yet
+Required before real money — 2 weeks minimum per rules
+PRIORITY 7 — Onboarding Flow
+Welcome screen explaining STOCVEST value proposition
+Step-by-step broker connection wizard
+First signal walkthrough with explanation
+Empty states that guide rather than show no data
+Legal acknowledgment screen user must accept
+PRIORITY 8 — Risk Management Layer
+Position sizing calculator percentage of portfolio per trade
+Max daily loss limit with auto-stop if hit
+Correlation warnings e.g. 80 percent long tech
+Kelly criterion or fixed fractional sizing suggestions
+PRIORITY 9 — Earnings Calendar Integration
+Upcoming earnings for watchlist symbols
+Flag earnings risk on open positions
+Pre-earnings volatility signals
+Post-earnings gap scanner
+Note: Polygon has this data not yet wired in
+PRIORITY 10 — Sector and Market Internals Dashboard
+Sector rotation heatmap showing leaders and laggards
+Market breadth: advance/decline, new highs/lows
+VIX trend and regime indicator
+Put/call ratio
+PRIORITY 11 — Subscription and Monetization
+Pricing tiers: Free $0, Pro $49/month, Institutional $199/month
+Stripe integration via Atlas account already created
+Feature gating by tier
+Usage limits per tier
+Referral program: invite a trader, both get free Pro month
+PRIORITY 12 — Audit Trail for Orders
+Every order attempt logged with timestamp
+PDT decision logged with full reasoning
+Signal that triggered trade recorded
+Immutable audit log in S3 Glacier
+PRIORITY 13 — Multi-Asset Signal Correlation
+Cross-asset signals e.g. USD strength vs commodity weakness
+Options flow vs price action divergence
+Futures premium/discount vs spot price
+Crypto correlation with risk assets
+PRIORITY 14 — Mobile App
+React Native or PWA wrapper
+Push notifications for alerts
+Mobile-optimized order entry
+PDT guardian widget on home screen
+
+Immediate Next Actions — Ordered by Priority
+
+Fix GitHub Actions CI/CD
+Add pip install --upgrade setuptools before pip install -e . in backend job
+Fix deploy-vercel job to skip gracefully when VERCEL_DEPLOY_HOOK_URL is missing
+File: .github/workflows/ci.yml
+Add VERCEL_DEPLOY_HOOK_URL to GitHub secrets
+Vercel project Settings → Git → Deploy Hooks
+Create hook named github-actions on branch main
+Add URL as secret in GitHub
+Verify Lambda deployment after CI fix
+Push to main, watch Actions tab
+Confirm all 10 Lambda functions updated
+Test: curl https://oumjg5j4z2.execute-api.us-east-1.amazonaws.com/v1/health
+UI Redesign Phase A — Design system
+Create frontend/lib/design-system.ts
+Theme provider with localStorage persistence
+Dark and light color palettes
+UI Redesign Phase B — Navigation
+Sidebar with icons and collapsible mobile
+All page routes wired
+Theme toggle button
+UI Redesign Phase C — Dashboard
+Hero section with market sentiment
+Stat cards for SPY QQQ IWM
+PDT Guardian as shield widget
+Headlines feed on right panel
+UI Redesign Phase D — Individual pages
+Scanner, Signals with Evidence Card, Portfolio, Journal, Options, Settings
+UI Redesign Phase E — Landing page
+Full public marketing page with animations
+Comparison table, pricing, CTAs
+UI Redesign Phase F — Signal Evidence Card
+Full reasoning transparency on every signal
+6-layer breakdown with plain English explanation
+Order execution safety gates
+Confirmation screen with dollar value
+Paper vs live mode toggle
+Order status tracking
+ETrade OAuth UI flow
+Automatic journal capture
+Auto-capture on fill via broker layer
+Trade This Setup button
+Exit tracking and P&L calculation
+Journal analytics page
+Self-improvement infrastructure
+SignalPerformance tracking wired into signal generation
+Hourly price outcome update job
+Weekly analytics engine
+Weight advisor with human review
+Admin notification and approval flow
+Data retention infrastructure
+S3 Glacier audit bucket for 7-year logs
+CloudWatch logs updated to 90-day retention
+Market data TTL 30 days in DynamoDB
+Inactive user cleanup job monthly
+Audit logger utility wired into broker and PDT layers
+Legal disclaimers throughout app
+Footer on every page
+Order confirmation disclaimer
+Not investment advice on signal cards
+Onboarding acknowledgment screen
+Claude prompts to AWS Secrets Manager
+Move all prompt strings from code to Secrets Manager
+Load at Lambda cold start and cache
+Add prompt_version field to all Claude API calls
+Phase 7 — Testing and hardening
+End-to-end test suite
+Security audit: multi-tenant isolation, no PII leaks
+Load testing: market open spike simulation
+Paper trading validation 2 weeks swing
+Paper trading validation 2 weeks day trading
+Staged rollout to real trading
+Beta launch to first 100 traders
+LLC formation complete
+Legal docs live
+Securities lawyer sign-off
+Pro free 90 days for first 100 users
+Outreach to fintwit and r/Daytrading
