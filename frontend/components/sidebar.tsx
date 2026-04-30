@@ -44,11 +44,9 @@ export function Sidebar({ userLabel }: SidebarProps) {
         maxWidth: 248,
         background: colors.surface,
         borderRight: `1px solid ${colors.border}`,
-        minHeight: "100vh",
-        display: "grid",
-        gridTemplateRows: "auto 1fr auto",
-        position: "sticky",
-        top: 0
+        height: "100vh",
+        display: "flex",
+        flexDirection: "column"
       }}
     >
       <div style={{ padding: spacing[6], borderBottom: `1px solid ${colors.border}` }}>
@@ -65,7 +63,17 @@ export function Sidebar({ userLabel }: SidebarProps) {
         </Link>
       </div>
 
-      <nav style={{ padding: spacing[4], display: "grid", gap: spacing[2], alignContent: "start" }}>
+      <nav
+        style={{
+          padding: spacing[4],
+          display: "grid",
+          gap: spacing[2],
+          alignContent: "start",
+          flexGrow: 1,
+          overflowY: "auto",
+          minHeight: 0
+        }}
+      >
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -94,7 +102,15 @@ export function Sidebar({ userLabel }: SidebarProps) {
         })}
       </nav>
 
-      <div style={{ padding: spacing[4], borderTop: `1px solid ${colors.border}`, display: "grid", gap: spacing[3] }}>
+      <div
+        style={{
+          padding: spacing[4],
+          borderTop: `1px solid ${colors.border}`,
+          display: "grid",
+          gap: spacing[3],
+          flexShrink: 0
+        }}
+      >
         <p
           className="sidebar-user-label"
           style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.sm, overflowWrap: "anywhere" }}
