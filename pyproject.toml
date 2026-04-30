@@ -22,6 +22,7 @@ dependencies = [
     "respx>=0.21",           # httpx mock library
     "anyio>=4.3",
     "PyJWT>=2.8",
+    "pydantic-settings>=2.2",
 ]
 
 [tool.setuptools.packages.find]
