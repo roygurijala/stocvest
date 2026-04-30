@@ -17,6 +17,6 @@ export interface PDTStatusPayload {
   assessment: PDTAssessmentPayload;
 }
 
-export async function fetchPdtStatus(): Promise<PDTStatusPayload> {
+export async function fetchPdtStatus(): Promise<PDTStatusPayload | null> {
   return apiFetch<PDTStatusPayload>("/v1/pdt/status");
 }

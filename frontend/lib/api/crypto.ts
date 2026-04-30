@@ -22,6 +22,15 @@ export async function fetchCryptoOverview(symbol: string = "X:BTCUSD"): Promise<
     const bars = await apiFetch<CryptoBar[]>(
       `/v1/market/bars?symbol=${encodeURIComponent(symbol)}&timeframe=1min&limit=30`
     );
+    if (!bars) {
+      return {
+        symbol,
+        bars: [],
+        delayed: false,
+        onChainMetricsIncluded: false,
+        error: "Service temporarily unavailable. Please try again."
+      };
+    }
     const latest = bars[bars.length - 1];
     return {
       symbol,
@@ -37,7 +46,7 @@ export async function fetchCryptoOverview(symbol: string = "X:BTCUSD"): Promise<
       bars: [],
       delayed: false,
       onChainMetricsIncluded: false,
-      error: error instanceof Error ? error.message : "Unknown crypto API error."
+      error: error instanceof Error ? error.message : "Unable to connect. Check your connection."
     };
   }
 }

@@ -13,14 +13,18 @@ export interface CreateJournalEntryRequest {
 }
 
 export async function fetchJournalEntries(): Promise<JournalEntryPayload[]> {
-  return apiFetch<JournalEntryPayload[]>("/v1/journal/entries");
+  return (await apiFetch<JournalEntryPayload[]>("/v1/journal/entries")) || [];
 }
 
 export async function createJournalEntry(
   payload: CreateJournalEntryRequest
 ): Promise<JournalEntryPayload> {
-  return apiFetch<JournalEntryPayload>("/v1/journal/entries", {
+  const result = await apiFetch<JournalEntryPayload>("/v1/journal/entries", {
     method: "POST",
     body: JSON.stringify(payload)
   });
+  if (!result) {
+    throw new Error("Service temporarily unavailable. Please try again.");
+  }
+  return result;
 }

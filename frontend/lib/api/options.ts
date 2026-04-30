@@ -30,13 +30,21 @@ export async function fetchOptionChainOverview(symbol: string = "AAPL"): Promise
     const rows = await apiFetch<OptionChainRow[]>(
       `/v1/market/options?symbol=${encodeURIComponent(symbol)}&limit=30`
     );
+    if (!rows) {
+      return {
+        symbol,
+        rows: [],
+        delayedByMinutes: 15,
+        error: "Service temporarily unavailable. Please try again."
+      };
+    }
     return { symbol, rows, delayedByMinutes: 15 };
   } catch (error: unknown) {
     return {
       symbol,
       rows: [],
       delayedByMinutes: 15,
-      error: error instanceof Error ? error.message : "Unknown options API error."
+      error: error instanceof Error ? error.message : "Unable to connect. Check your connection."
     };
   }
 }

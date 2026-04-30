@@ -39,16 +39,23 @@ export async function fetchMarketOverview(symbols: string[] = DEFAULT_SYMBOLS): 
   const cleanSymbols = symbols.map((s) => s.trim().toUpperCase()).filter(Boolean);
   try {
     const status = await apiFetch<MarketStatusPayload>("/v1/market/status");
+    if (!status) {
+      return { snapshots: [], news: [], error: "Service temporarily unavailable. Please try again." };
+    }
     const snapshots = await Promise.all(
       cleanSymbols.map((symbol) => apiFetch<SnapshotPayload>(`/v1/market/snapshot?symbol=${symbol}`))
     );
     const news = await apiFetch<NewsPayload[]>("/v1/market/news?limit=5");
-    return { status, snapshots, news };
+    return {
+      status,
+      snapshots: snapshots.filter((s): s is SnapshotPayload => Boolean(s)),
+      news: news || []
+    };
   } catch (error: unknown) {
     return {
       snapshots: [],
       news: [],
-      error: error instanceof Error ? error.message : "Unknown market API error."
+      error: error instanceof Error ? error.message : "Unable to connect. Check your connection."
     };
   }
 }

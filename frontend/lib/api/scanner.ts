@@ -60,20 +60,35 @@ export async function fetchScannerOverview(pdtStatus: PDTStatusPayload | null): 
       ).then((rows) => Object.fromEntries(rows))
     ]);
 
+    const cleanSnapshots = snapshots.filter((s): s is Record<string, unknown> => Boolean(s));
+    const cleanArticles = (articles || []) as Record<string, unknown>[];
+    const cleanBarsBySymbol = Object.fromEntries(
+      Object.entries(barsBySymbol).map(([k, v]) => [k, (v || []) as Record<string, unknown>[]])
+    );
+
     const [gaps, catalysts, setups] = await Promise.all([
       apiFetch<GapCandidatePayload[]>("/v1/scanner/gaps", {
         method: "POST",
-        body: JSON.stringify({ snapshots, limit: 5, min_abs_gap_percent: 2.0 })
+        body: JSON.stringify({ snapshots: cleanSnapshots, limit: 5, min_abs_gap_percent: 2.0 })
       }),
       apiFetch<CatalystPayload[]>("/v1/scanner/catalysts", {
         method: "POST",
-        body: JSON.stringify({ articles, limit: 5, min_score: 0.35 })
+        body: JSON.stringify({ articles: cleanArticles, limit: 5, min_score: 0.35 })
       }),
       apiFetch<IntradaySetupPayload[]>("/v1/scanner/intraday", {
         method: "POST",
-        body: JSON.stringify({ bars_by_symbol: barsBySymbol, limit: 5, min_score: 0.35 })
+        body: JSON.stringify({ bars_by_symbol: cleanBarsBySymbol, limit: 5, min_score: 0.35 })
       })
     ]);
+
+    if (!gaps || !catalysts || !setups) {
+      return {
+        gaps: [],
+        catalysts: [],
+        setups: [],
+        error: "Service temporarily unavailable. Please try again."
+      };
+    }
 
     const briefing = await apiFetch<ScannerBriefingPayload>("/v1/scanner/briefing", {
       method: "POST",
@@ -96,13 +111,13 @@ export async function fetchScannerOverview(pdtStatus: PDTStatusPayload | null): 
       })
     });
 
-    return { gaps, catalysts, setups, briefing };
+    return { gaps, catalysts, setups, briefing: briefing || undefined };
   } catch (error: unknown) {
     return {
       gaps: [],
       catalysts: [],
       setups: [],
-      error: error instanceof Error ? error.message : "Unknown scanner API error."
+      error: error instanceof Error ? error.message : "Unable to connect. Check your connection."
     };
   }
 }

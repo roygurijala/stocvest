@@ -13,6 +13,14 @@ export async function fetchIbkrFuturesOverview(): Promise<FuturesDashboardOvervi
     const health = await apiFetch<{ broker: string; ok: boolean; message?: string }>(
       "/v1/brokers/health?broker=ibkr"
     );
+    if (!health) {
+      return {
+        connected: false,
+        statusMessage: "Service temporarily unavailable. Please try again.",
+        accounts: [],
+        positionsByAccount: {}
+      };
+    }
     if (!health.ok) {
       return {
         connected: false,
@@ -23,6 +31,14 @@ export async function fetchIbkrFuturesOverview(): Promise<FuturesDashboardOvervi
     }
 
     const accounts = await apiFetch<BrokerAccountPayload[]>("/v1/brokers/accounts?broker=ibkr");
+    if (!accounts) {
+      return {
+        connected: false,
+        statusMessage: "Service temporarily unavailable. Please try again.",
+        accounts: [],
+        positionsByAccount: {}
+      };
+    }
     const positionsByAccount: Record<string, BrokerPositionPayload[]> = {};
     await Promise.all(
       accounts.map(async (account) => {
@@ -31,7 +47,7 @@ export async function fetchIbkrFuturesOverview(): Promise<FuturesDashboardOvervi
           account_id: account.account_id
         }).toString();
         const positions = await apiFetch<BrokerPositionPayload[]>(`/v1/brokers/positions?${qs}`);
-        positionsByAccount[account.account_id] = positions;
+        positionsByAccount[account.account_id] = positions || [];
       })
     );
     return {
@@ -41,8 +57,7 @@ export async function fetchIbkrFuturesOverview(): Promise<FuturesDashboardOvervi
       positionsByAccount
     };
   } catch (error: unknown) {
-    const message =
-      error instanceof Error ? error.message : "Unable to reach IBKR TWS gateway.";
+    const message = error instanceof Error ? error.message : "Unable to connect. Check your connection.";
     return {
       connected: false,
       statusMessage: `IBKR TWS unavailable: ${message}`,

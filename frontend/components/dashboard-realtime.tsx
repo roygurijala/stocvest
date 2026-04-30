@@ -25,8 +25,6 @@ function parseWsPayload(raw: string): unknown {
  */
 export function DashboardRealtime() {
   const [connection, setConnection] = useState<"off" | "connecting" | "live" | "error" | "no_url">("off");
-  const [scannerLine, setScannerLine] = useState<string>("");
-  const [quoteLine, setQuoteLine] = useState<string>("");
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -50,13 +48,6 @@ export function DashboardRealtime() {
       if (!parsed || typeof parsed !== "object") {
         return;
       }
-      const p = parsed as Record<string, unknown>;
-      if (p.type === "scanner_run" && typeof p.scan_type === "string") {
-        setScannerLine(`Last scanner run: ${p.scan_type} (${String(p.setup_key || "")})`);
-      }
-      if (p.type === "quote" || p.channel === "quotes:SPY") {
-        setQuoteLine(`Quote channel: ${JSON.stringify(p).slice(0, 120)}`);
-      }
     };
 
     ws.onerror = () => {
@@ -78,29 +69,20 @@ export function DashboardRealtime() {
     return null;
   }
 
+  const dotColor =
+    connection === "live" ? "#22c55e" : connection === "connecting" ? "#9ca3af" : "#6b7280";
+
   return (
-    <section
+    <div
+      aria-label="Realtime connection status"
+      title={connection === "live" ? "Realtime connected" : "Realtime unavailable"}
       style={{
         marginTop: 16,
-        padding: 12,
-        borderRadius: 10,
-        background: "#0f172a",
-        border: "1px solid #1e293b"
+        width: 8,
+        height: 8,
+        borderRadius: "999px",
+        background: dotColor
       }}
-    >
-      <h3 style={{ marginTop: 0 }}>Live</h3>
-      <p style={{ margin: 0, opacity: 0.85, fontSize: 13 }}>
-        WebSocket:{" "}
-        {connection === "connecting" ? "connecting…" : connection === "live" ? "connected" : connection}
-      </p>
-      {scannerLine ? (
-        <p style={{ margin: "8px 0 0", fontSize: 13 }}>{scannerLine}</p>
-      ) : (
-        <p style={{ margin: "8px 0 0", fontSize: 12, opacity: 0.7 }}>
-          Subscribed to scanner:updates — server pushes after each scheduled scan.
-        </p>
-      )}
-      {quoteLine ? <p style={{ margin: "6px 0 0", fontSize: 12 }}>{quoteLine}</p> : null}
-    </section>
+    />
   );
 }

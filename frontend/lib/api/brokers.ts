@@ -55,6 +55,13 @@ export async function fetchBrokerOverview(broker: BrokerKind): Promise<BrokerOve
       accounts: BrokerAccountPayload[];
       positions_by_account: Record<string, BrokerPositionPayload[]>;
     }>(`/v1/brokers/overview?broker=${broker}`);
+    if (!payload) {
+      return {
+        broker,
+        positionsByAccount: {},
+        error: "Service temporarily unavailable. Please try again."
+      };
+    }
     return {
       broker: payload.broker,
       health: payload.health,
@@ -65,7 +72,7 @@ export async function fetchBrokerOverview(broker: BrokerKind): Promise<BrokerOve
     return {
       broker,
       positionsByAccount: {},
-      error: error instanceof Error ? error.message : "Unknown broker API error."
+      error: error instanceof Error ? error.message : "Unable to connect. Check your connection."
     };
   }
 }
@@ -81,8 +88,12 @@ export async function placeBrokerOrder(
   payload: PlaceOrderPayload
 ): Promise<OrderAckPayload> {
   const query = new URLSearchParams({ broker, account_id: accountId }).toString();
-  return apiFetch<OrderAckPayload>(`/v1/brokers/orders?${query}`, {
+  const result = await apiFetch<OrderAckPayload>(`/v1/brokers/orders?${query}`, {
     method: "POST",
     body: JSON.stringify(payload)
   });
+  if (!result) {
+    throw new Error("Service temporarily unavailable. Please try again.");
+  }
+  return result;
 }
