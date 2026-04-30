@@ -576,7 +576,7 @@ Authenticated users redirect to /dashboard automatically
 Redesign Phases:
 
 Phase A: Design system — colors, typography, spacing, theme provider with localStorage ✅ COMPLETE
-Phase B: Navigation — sidebar, routing, theme toggle, collapsible mobile
+Phase B: Navigation — sidebar, routing, theme toggle, collapsible mobile ✅ COMPLETE
 Phase C: Dashboard — hero market sentiment, stat cards, PDT guardian, headlines feed
 Phase D: Individual pages — Scanner, Signals with evidence card, Portfolio, Journal, Options, Settings
 Phase E: Landing page — full public marketing page with animations

@@ -61,9 +61,27 @@ a {
   background: var(--color-bg);
 }
 
-.app-topbar {
-  position: fixed;
-  top: 12px;
-  right: 12px;
-  z-index: 40;
+.app-shell-layout {
+  display: grid;
+  grid-template-columns: 248px 1fr;
+}
+
+@media (max-width: 1023px) {
+  .app-shell-layout {
+    grid-template-columns: 76px 1fr;
+  }
+
+  .sidebar-nav-label,
+  .sidebar-user-label,
+  .sidebar-signout-label {
+    display: none;
+  }
+
+  .sidebar-nav-item {
+    justify-content: center;
+  }
+
+  .sidebar-signout-btn {
+    justify-content: center;
+  }
 }

@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { ThemeProvider } from "@/lib/theme-provider";
 import "./globals.css";
 
@@ -14,12 +13,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en" className="theme-dark" data-theme="dark">
       <body>
         <ThemeProvider>
-          <div className="app-shell">
-            <header className="app-topbar">
-              <ThemeToggle />
-            </header>
-            {children}
-          </div>
+          <div className="app-shell">{children}</div>
         </ThemeProvider>
       </body>
     </html>
