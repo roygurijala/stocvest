@@ -1,3 +1,4 @@
+import { buildDevMockIdToken } from "@/lib/auth/dev-mock-token";
 import { decodeJwtPayload, isSessionExpired, parseSessionFromToken } from "@/lib/auth/session";
 
 function makeToken(payload: Record<string, unknown>): string {
@@ -24,5 +25,12 @@ describe("auth session helpers", () => {
   test("isSessionExpired compares epoch values", () => {
     expect(isSessionExpired(100, 100)).toBe(true);
     expect(isSessionExpired(101, 100)).toBe(false);
+  });
+
+  test("buildDevMockIdToken parses as session", () => {
+    const session = parseSessionFromToken(buildDevMockIdToken());
+    expect(session.subject).toBe("local-dev-user");
+    expect(session.email).toBe("dev@stocvest.local");
+    expect(session.expiresAtUnix).toBeGreaterThan(Math.floor(Date.now() / 1000));
   });
 });

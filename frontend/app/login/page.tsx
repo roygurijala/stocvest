@@ -1,4 +1,5 @@
 import { getServerSession } from "@/lib/auth/session";
+import { isStocvestDevelopment } from "@/lib/auth/stocvest-env";
 import { LoginForm } from "@/components/auth/login-form";
 import { redirect } from "next/navigation";
 
@@ -13,7 +14,7 @@ export default function LoginPage() {
       <section style={{ width: "100%", maxWidth: 640, background: "#101a32", padding: "24px", borderRadius: 12 }}>
         <h1 style={{ marginTop: 0 }}>STOCVEST login</h1>
         <p>Phase 5a auth foundation: sign in with a valid Cognito ID token.</p>
-        <LoginForm />
+        <LoginForm showDevBypass={isStocvestDevelopment()} />
       </section>
     </main>
   );

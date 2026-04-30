@@ -159,7 +159,6 @@ resource "aws_ecs_task_definition" "tws" {
           "awslogs-group"         = aws_cloudwatch_log_group.ecs_tws.name
           "awslogs-region"        = var.aws_region
           "awslogs-stream-prefix" = "ibeam"
-          "awslogs-create-group"  = "false"
         }
       }
     }

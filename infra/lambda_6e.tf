@@ -28,8 +28,9 @@ locals {
 
   lambda_common_env = {
     REDIS_URL                   = "redis://${aws_elasticache_replication_group.redis.primary_endpoint_address}:${aws_elasticache_replication_group.redis.port}/0"
+    STOCVEST_DISABLE_REDIS      = "0"
     ECS_CLUSTER_ARN             = aws_ecs_cluster.development.arn
-    AWS_REGION                  = var.aws_region
+    # Do not set AWS_REGION — Lambda reserves it; runtime still exposes it to the handler.
     STOCVEST_ENV                = "development"
     DYNAMODB_USERS              = aws_dynamodb_table.users.name
     DYNAMODB_BROKER_CONNECTIONS = aws_dynamodb_table.broker_connections.name

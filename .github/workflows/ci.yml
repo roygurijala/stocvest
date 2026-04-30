@@ -21,7 +21,9 @@ jobs:
           cache-dependency-path: pyproject.toml
 
       - name: Install Python dependencies
-        run: python -m pip install -e .
+        run: |
+          python -m pip install --upgrade setuptools
+          python -m pip install -e .
 
       - name: Run tests
         run: pytest tests/ -q
@@ -66,7 +68,9 @@ jobs:
           cache-dependency-path: pyproject.toml
 
       - name: Install package (same as runtime bundle)
-        run: python -m pip install -e .
+        run: |
+          python -m pip install --upgrade setuptools
+          python -m pip install -e .
 
       - name: Require Lambda artifacts bucket
         run: |
@@ -111,5 +115,10 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
+      - name: Skip when Vercel hook is not configured
+        if: ${{ secrets.VERCEL_DEPLOY_HOOK_URL == '' }}
+        run: echo "VERCEL_DEPLOY_HOOK_URL is not set; skipping Vercel deploy."
+
       - name: Trigger Vercel production deploy
+        if: ${{ secrets.VERCEL_DEPLOY_HOOK_URL != '' }}
         run: curl -fsS -X POST "${{ secrets.VERCEL_DEPLOY_HOOK_URL }}"
