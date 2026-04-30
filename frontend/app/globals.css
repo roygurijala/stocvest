@@ -66,6 +66,15 @@ a {
   grid-template-columns: 248px 1fr;
 }
 
+@keyframes stocvest-skeleton {
+  0% {
+    background-position: 180% 0;
+  }
+  100% {
+    background-position: -20% 0;
+  }
+}
+
 @media (max-width: 1023px) {
   .app-shell-layout {
     grid-template-columns: 76px 1fr;
@@ -83,5 +92,14 @@ a {
 
   .sidebar-signout-btn {
     justify-content: center;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .stat-cards-grid,
+  .top-signals-grid {
+    grid-template-columns: 1fr !important;
   }
 }
