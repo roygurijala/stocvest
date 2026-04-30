@@ -117,11 +117,13 @@ jobs:
     needs: frontend
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
+    env:
+      VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
     steps:
       - name: Skip when Vercel hook is not configured
-        if: ${{ secrets.VERCEL_DEPLOY_HOOK_URL == '' }}
+        if: ${{ env.VERCEL_DEPLOY_HOOK_URL == '' }}
         run: echo "VERCEL_DEPLOY_HOOK_URL is not set; skipping Vercel deploy."
 
       - name: Trigger Vercel production deploy
-        if: ${{ secrets.VERCEL_DEPLOY_HOOK_URL != '' }}
-        run: curl -fsS -X POST "${{ secrets.VERCEL_DEPLOY_HOOK_URL }}"
+        if: ${{ env.VERCEL_DEPLOY_HOOK_URL != '' }}
+        run: curl -fsS -X POST "${VERCEL_DEPLOY_HOOK_URL}"
