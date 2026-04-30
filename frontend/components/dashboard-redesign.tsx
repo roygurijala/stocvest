@@ -1,12 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { ShieldCheck, TrendingDown, TrendingUp } from "lucide-react";
+import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import type { MarketOverview, SnapshotPayload } from "@/lib/api/market";
 import type { PDTStatusPayload } from "@/lib/api/pdt";
 import type { ScannerOverview } from "@/lib/api/scanner";
 import { borderRadius, colorTokens, shadows, spacing, typography } from "@/lib/design-system";
+import { buildEvidenceFromSetup, type SignalEvidenceData } from "@/lib/signal-evidence";
 
 interface DashboardRedesignProps {
   marketOverview: MarketOverview;
@@ -98,6 +101,8 @@ function timeAgo(iso: string): string {
 
 export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview }: DashboardRedesignProps) {
   const colors = colorTokens.dark;
+  const [evidence, setEvidence] = useState<SignalEvidenceData | null>(null);
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
   const sentiment = sentimentFromSnapshots(marketOverview.snapshots);
   const regime = marketRegimeLabel(marketOverview);
   const sentimentColor =
@@ -266,6 +271,27 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview }
                     <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.sm }}>
                       Confidence {Math.round(signal.score * 100)}%
                     </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const snapshot = snapshotsBySymbol.get(signal.symbol);
+                        const headline = marketOverview.news.find((n) => n.tickers.includes(signal.symbol))?.title;
+                        setEvidence(buildEvidenceFromSetup(signal, snapshot, headline));
+                        setEvidenceOpen(true);
+                      }}
+                      style={{
+                        marginTop: spacing[2],
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: borderRadius.md,
+                        background: "transparent",
+                        color: colors.text,
+                        padding: `${spacing[1]} ${spacing[2]}`,
+                        cursor: "pointer",
+                        fontSize: typography.scale.xs
+                      }}
+                    >
+                      View Evidence
+                    </button>
                   </motion.article>
                 ))
               )}
@@ -321,6 +347,7 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview }
           )}
         </aside>
       </div>
+      <SignalEvidenceModal open={evidenceOpen} evidence={evidence} onClose={() => setEvidenceOpen(false)} />
     </section>
   );
 }

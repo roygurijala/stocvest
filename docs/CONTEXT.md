@@ -580,7 +580,7 @@ Phase B: Navigation — sidebar, routing, theme toggle, collapsible mobile ✅ C
 Phase C: Dashboard — hero market sentiment, stat cards, PDT guardian, headlines feed ✅ COMPLETE
 Phase D: Individual pages — Scanner, Signals with evidence card, Portfolio, Journal, Options, Settings ✅ COMPLETE
 Phase E: Landing page — full public marketing page with animations ✅ COMPLETE
-Phase F: Signal Evidence Card — reasoning transparency on all signal views
+Phase F: Signal Evidence Card — reasoning transparency on all signal views ✅ COMPLETE
 
 Rules:
 

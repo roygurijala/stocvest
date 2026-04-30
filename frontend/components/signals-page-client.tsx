@@ -11,7 +11,9 @@ import {
 } from "recharts";
 import type { MarketOverview, SnapshotPayload } from "@/lib/api/market";
 import type { ScannerOverview } from "@/lib/api/scanner";
+import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import { borderRadius, colorTokens, spacing, typography } from "@/lib/design-system";
+import { buildEvidenceFromSetup, type SignalEvidenceData } from "@/lib/signal-evidence";
 
 type LayerStatus = "Bullish" | "Bearish" | "Neutral" | "Unavailable";
 
@@ -60,6 +62,8 @@ function deriveFromSnapshot(snapshot?: SnapshotPayload): { bullishBias: number; 
 export function SignalsPageClient({ marketOverview, scannerOverview }: SignalsPageClientProps) {
   const colors = colorTokens.dark;
   const [symbol, setSymbol] = useState("AAPL");
+  const [evidence, setEvidence] = useState<SignalEvidenceData | null>(null);
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
   const snapshot = useMemo(
     () => marketOverview.snapshots.find((s) => s.symbol === symbol.toUpperCase()) || marketOverview.snapshots[0],
     [marketOverview.snapshots, symbol]
@@ -187,6 +191,33 @@ export function SignalsPageClient({ marketOverview, scannerOverview }: SignalsPa
             }}
           />
         </div>
+        <button
+          type="button"
+          onClick={() => {
+            const setupLike = setup || {
+              symbol: symbol.toUpperCase(),
+              direction: verdict,
+              score: overall / 100,
+              triggers: ["Multi-layer synthesis"],
+              timestamp_iso: new Date().toISOString()
+            };
+            const headline = marketOverview.news.find((n) => n.tickers.includes(symbol.toUpperCase()))?.title;
+            setEvidence(buildEvidenceFromSetup(setupLike, snapshot, headline));
+            setEvidenceOpen(true);
+          }}
+          style={{
+            marginTop: spacing[3],
+            border: `1px solid ${colors.border}`,
+            borderRadius: borderRadius.md,
+            background: "transparent",
+            color: colors.text,
+            padding: `${spacing[1]} ${spacing[2]}`,
+            cursor: "pointer",
+            fontSize: typography.scale.xs
+          }}
+        >
+          View Evidence
+        </button>
       </article>
 
       <article style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
@@ -219,6 +250,7 @@ export function SignalsPageClient({ marketOverview, scannerOverview }: SignalsPa
           </p>
         ) : null}
       </article>
+      <SignalEvidenceModal open={evidenceOpen} evidence={evidence} onClose={() => setEvidenceOpen(false)} />
     </section>
   );
 }

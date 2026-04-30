@@ -4,8 +4,10 @@ import { useMemo, useState, useTransition } from "react";
 import { motion } from "framer-motion";
 import { RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import type { ScannerOverview } from "@/lib/api/scanner";
 import { borderRadius, colorTokens, spacing, typography } from "@/lib/design-system";
+import { buildEvidenceFromSetup, type SignalEvidenceData } from "@/lib/signal-evidence";
 
 interface ScannerPageClientProps {
   initialOverview: ScannerOverview;
@@ -23,6 +25,8 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso }: Scan
   const colors = colorTokens.dark;
   const [isPending, startTransition] = useTransition();
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
+  const [evidence, setEvidence] = useState<SignalEvidenceData | null>(null);
   const router = useRouter();
 
   const gapMaxVolume = useMemo(
@@ -203,6 +207,27 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso }: Scan
                   >
                     Trade This Setup
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const headline = initialOverview.catalysts.find((c) => c.symbol === setup.symbol)?.title;
+                      setEvidence(buildEvidenceFromSetup(setup, undefined, headline));
+                      setEvidenceOpen(true);
+                    }}
+                    style={{
+                      marginTop: spacing[2],
+                      marginLeft: spacing[2],
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: borderRadius.md,
+                      background: "transparent",
+                      color: colors.text,
+                      padding: `${spacing[1]} ${spacing[2]}`,
+                      cursor: "pointer",
+                      fontSize: typography.scale.xs
+                    }}
+                  >
+                    View Evidence
+                  </button>
                 </motion.article>
               ))
             )}
@@ -245,6 +270,7 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso }: Scan
           </div>
         </div>
       ) : null}
+      <SignalEvidenceModal open={evidenceOpen} evidence={evidence} onClose={() => setEvidenceOpen(false)} />
     </section>
   );
 }
