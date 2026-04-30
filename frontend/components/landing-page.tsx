@@ -52,16 +52,29 @@ export function LandingPage() {
 
       <section className="relative flex min-h-screen items-center overflow-hidden px-4 pt-24 md:px-8">
         <div className="absolute inset-0">
-          {Array.from({ length: 22 }).map((_, idx) => (
+          {Array.from({ length: 48 }).map((_, idx) => (
             <motion.span
               key={idx}
-              className="absolute h-1 w-1 rounded-full bg-[#3b82f6]/40"
+              className="absolute h-1 w-1 rounded-full bg-[#3b82f6]/60"
               style={{
-                left: `${(idx * 13) % 100}%`,
-                top: `${(idx * 17) % 100}%`
+                left: `${(idx * 11) % 100}%`,
+                top: `${(idx * 19) % 100}%`
               }}
-              animate={{ y: [0, -20, 0], opacity: [0.15, 0.55, 0.15] }}
-              transition={{ duration: 3 + (idx % 4), repeat: Infinity, ease: "easeInOut" }}
+              animate={{ y: [0, -30, 0], opacity: [0.22, 0.8, 0.22] }}
+              transition={{ duration: 3.5 + (idx % 5), repeat: Infinity, ease: "easeInOut" }}
+            />
+          ))}
+          {Array.from({ length: 26 }).map((_, idx) => (
+            <motion.span
+              key={`candle-${idx}`}
+              className="absolute w-px bg-white/10"
+              style={{
+                left: `${4 + idx * 3.7}%`,
+                bottom: `${(idx * 7) % 45}%`,
+                height: `${28 + (idx % 8) * 14}px`
+              }}
+              animate={{ y: [0, -14, 0], opacity: [0.05, 0.09, 0.05] }}
+              transition={{ duration: 6 + (idx % 4), repeat: Infinity, ease: "easeInOut", delay: idx * 0.12 }}
             />
           ))}
         </div>
@@ -89,8 +102,8 @@ export function LandingPage() {
             >
               Start Free Trial
             </Link>
-            <Link href="/login" className="rounded-md border border-slate-300/30 px-6 py-3 font-semibold hover:border-slate-200/60">
-              Watch Demo
+            <Link href="#the-problem" className="rounded-md border border-slate-300/30 px-6 py-3 font-semibold hover:border-slate-200/60">
+              Learn More
             </Link>
           </motion.div>
         </div>
@@ -103,7 +116,7 @@ export function LandingPage() {
         </motion.div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-4 py-20 md:px-8">
+      <section id="the-problem" className="mx-auto max-w-7xl px-4 py-20 md:px-8">
         <motion.div initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="mb-10 text-center">
           <h2 className="text-3xl font-bold md:text-4xl">Most platforms show you data. STOCVEST shows you decisions.</h2>
         </motion.div>
@@ -119,11 +132,11 @@ export function LandingPage() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: i * 0.08 }}
-              className="rounded-xl border border-white/10 bg-white/5 p-6"
+              className="rounded-xl border border-white/10 border-l-2 border-l-[#3b82f6] bg-[#111827] p-6"
             >
-              <item.icon className="mb-3 h-6 w-6 text-[#3b82f6]" />
-              <p className="text-slate-300">{item.a}</p>
-              <p className="font-semibold">{item.b}</p>
+              <item.icon className="mb-3 h-8 w-8 text-[#3b82f6]" />
+              <p className="text-sm text-[#6b7280]">{item.a}</p>
+              <p className="text-xl font-bold text-[#3b82f6]">{item.b}</p>
             </motion.article>
           ))}
         </div>
@@ -134,13 +147,13 @@ export function LandingPage() {
           Six layers of intelligence. One clear verdict.
         </motion.h2>
         <div className="grid gap-6 lg:grid-cols-2">
-          <motion.article initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="rounded-xl border border-white/10 bg-white/5 p-4 md:p-6">
+          <motion.article initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="rounded-xl border border-white/10 bg-transparent p-4 md:p-6">
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <RadarChart data={radarData}>
-                  <PolarGrid />
-                  <PolarAngleAxis dataKey="layer" />
-                  <Radar dataKey="score" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.4} />
+                  <PolarGrid stroke="#1e3a5f" />
+                  <PolarAngleAxis dataKey="layer" tick={{ fill: "#ffffff", fontSize: 12 }} />
+                  <Radar dataKey="score" stroke="rgba(59,130,246,0.8)" fill="rgba(59,130,246,0.2)" fillOpacity={1} />
                 </RadarChart>
               </ResponsiveContainer>
             </div>
@@ -296,13 +309,14 @@ export function LandingPage() {
               initial={{ opacity: 0, y: 24 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              className={`flex flex-col rounded-xl border bg-white/5 p-6 ${plan.recommended ? "border-[#3b82f6] shadow-[0_0_30px_rgba(59,130,246,0.35)]" : "border-white/10"}`}
+              className={`relative flex flex-col rounded-xl border bg-white/5 p-6 ${plan.recommended ? "scale-105 border-2 border-[#3b82f6] bg-[#0f172a] shadow-[0_0_20px_rgba(59,130,246,0.4)]" : "border-white/10"}`}
             >
+              {plan.recommended ? <p className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-bold uppercase tracking-wide text-[#3b82f6]">Most Popular</p> : null}
               <div className="mb-2 flex items-center justify-between">
                 <h3 className="text-xl font-semibold">{plan.tier}</h3>
-                {plan.recommended ? <span className="rounded-full bg-[#3b82f6]/20 px-2 py-1 text-xs font-semibold text-[#3b82f6]">Recommended</span> : null}
+                {plan.recommended ? <span className="rounded-full bg-[#3b82f6] px-3 py-1 text-sm font-bold text-white">Recommended</span> : null}
               </div>
-              <p className="mb-3 text-2xl font-bold">{plan.price}</p>
+              <p className={`mb-3 text-2xl font-bold ${plan.recommended ? "text-[#3b82f6]" : ""}`}>{plan.price}</p>
               <ul className="mb-4 space-y-1 text-slate-300">
                 {plan.features.map((f) => (
                   <li key={f}>• {f}</li>

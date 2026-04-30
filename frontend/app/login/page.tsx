@@ -10,10 +10,11 @@ export default function LoginPage() {
   }
 
   return (
-    <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: "24px" }}>
-      <section style={{ width: "100%", maxWidth: 640, background: "#101a32", padding: "24px", borderRadius: 12 }}>
-        <h1 style={{ marginTop: 0 }}>STOCVEST login</h1>
-        <p>Phase 5a auth foundation: sign in with a valid Cognito ID token.</p>
+    <main className="grid min-h-screen place-items-center bg-[#0a0e1a] px-4 py-10">
+      <section className="w-full max-w-md rounded-xl border border-white/10 bg-[#111827] p-6 shadow-[0_0_30px_rgba(0,0,0,0.35)]">
+        <p className="mb-3 text-xl font-extrabold tracking-tight text-[#3b82f6]">STOCVEST</p>
+        <h1 className="m-0 text-3xl font-bold text-slate-100">Welcome back.</h1>
+        <p className="mb-6 mt-1 text-slate-400">Sign in to your account</p>
         <LoginForm showDevBypass={isStocvestDevelopment()} />
       </section>
     </main>

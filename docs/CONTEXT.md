@@ -581,6 +581,7 @@ Phase C: Dashboard — hero market sentiment, stat cards, PDT guardian, headline
 Phase D: Individual pages — Scanner, Signals with evidence card, Portfolio, Journal, Options, Settings ✅ COMPLETE
 Phase E: Landing page — full public marketing page with animations ✅ COMPLETE
 Phase F: Signal Evidence Card — reasoning transparency on all signal views ✅ COMPLETE
+UI polish pass (login redesign, 404, loaders, landing contrast/animation/chart/pricing refinements) ✅ COMPLETE
 
 Rules:
 
