@@ -27,17 +27,19 @@ locals {
   ])
 
   lambda_common_env = {
+    POLYGON_API_KEY        = var.polygon_api_key
+    ANTHROPIC_API_KEY      = var.anthropic_api_key
     REDIS_URL              = "redis://${aws_elasticache_replication_group.redis.primary_endpoint_address}:${aws_elasticache_replication_group.redis.port}/0"
-    STOCVEST_DISABLE_REDIS = "0"
+    STOCVEST_DISABLE_REDIS = "1"
     ECS_CLUSTER_ARN        = aws_ecs_cluster.development.arn
     # Do not set AWS_REGION — Lambda reserves it; runtime still exposes it to the handler.
-    STOCVEST_ENV                = "development"
-    DYNAMODB_USERS              = aws_dynamodb_table.users.name
-    DYNAMODB_BROKER_CONNECTIONS = aws_dynamodb_table.broker_connections.name
-    DYNAMODB_WATCHLISTS         = aws_dynamodb_table.watchlists.name
-    DYNAMODB_ALERTS             = aws_dynamodb_table.alerts.name
-    DYNAMODB_ORDERS             = aws_dynamodb_table.orders.name
-    DYNAMODB_DAY_TRADING_SETUPS = aws_dynamodb_table.day_trading_setups.name
+    STOCVEST_ENV                      = "development"
+    DYNAMODB_USERS_TABLE              = aws_dynamodb_table.users.name
+    DYNAMODB_ORDERS_TABLE             = aws_dynamodb_table.orders.name
+    DYNAMODB_ALERTS_TABLE             = aws_dynamodb_table.alerts.name
+    DYNAMODB_WATCHLISTS_TABLE         = aws_dynamodb_table.watchlists.name
+    DYNAMODB_BROKER_CONNECTIONS_TABLE = aws_dynamodb_table.broker_connections.name
+    DYNAMODB_DAY_TRADING_SETUPS_TABLE = aws_dynamodb_table.day_trading_setups.name
   }
 
   lambda_dynamodb_resources = flatten([

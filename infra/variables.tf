@@ -56,3 +56,15 @@ variable "cognito_jwt_audience" {
   type        = string
   default     = ""
 }
+
+variable "polygon_api_key" {
+  description = "Polygon API key injected into Lambda environment (set via terraform.tfvars or TF_VAR_polygon_api_key)."
+  type        = string
+  sensitive   = true
+}
+
+variable "anthropic_api_key" {
+  description = "Anthropic API key injected into Lambda environment (set via terraform.tfvars or TF_VAR_anthropic_api_key)."
+  type        = string
+  sensitive   = true
+}
