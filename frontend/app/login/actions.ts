@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { buildDevMockIdToken } from "@/lib/auth/dev-mock-token";
 import { cognitoErrorMessage, signIn } from "@/lib/auth/cognito";
-import { authCookieName, parseSessionFromToken } from "@/lib/auth/session";
+import { clearSessionTokenCookies, setSessionTokenCookiesFromIdToken } from "@/lib/auth/session-cookies";
 import { isStocvestDevelopment } from "@/lib/auth/stocvest-env";
 
 export interface LoginActionState {
@@ -15,14 +15,7 @@ const NEW_PASSWORD_SESSION_COOKIE = "stocvest_new_password_session";
 const NEW_PASSWORD_EMAIL_COOKIE = "stocvest_new_password_email";
 
 function setAuthCookieFromIdToken(idToken: string): void {
-  const session = parseSessionFromToken(idToken);
-  cookies().set(authCookieName(), session.token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    expires: new Date(session.expiresAtUnix * 1000)
-  });
+  setSessionTokenCookiesFromIdToken(idToken);
 }
 
 export async function loginWithPassword(
@@ -77,24 +70,16 @@ export async function loginAsDevUser(
   if (!isStocvestDevelopment()) {
     return { error: "Dev login is only available when NEXT_PUBLIC_STOCVEST_ENV=development." };
   }
-  let session;
   try {
-    session = parseSessionFromToken(buildDevMockIdToken());
+    setSessionTokenCookiesFromIdToken(buildDevMockIdToken());
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Dev login failed.";
     return { error: message };
   }
-  cookies().set(authCookieName(), session.token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    expires: new Date(session.expiresAtUnix * 1000)
-  });
   redirect("/dashboard");
 }
 
 export async function logoutAction(): Promise<void> {
-  cookies().delete(authCookieName());
+  clearSessionTokenCookies();
   redirect("/login");
 }

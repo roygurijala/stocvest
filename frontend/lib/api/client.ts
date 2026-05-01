@@ -1,6 +1,5 @@
 import { getServerSession } from "@/lib/auth/session";
-import { authCookieName } from "@/lib/auth/session";
-import { cookies } from "next/headers";
+import { clearSessionTokenCookies } from "@/lib/auth/session-cookies";
 import { redirect } from "next/navigation";
 
 const DEFAULT_BASE_URL = "http://localhost:3001";
@@ -31,7 +30,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T |
 
   if (response.status === 401) {
     try {
-      cookies().delete(authCookieName());
+      clearSessionTokenCookies();
     } catch {
       // Best effort in contexts where cookie mutation is restricted.
     }

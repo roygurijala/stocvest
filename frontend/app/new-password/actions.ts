@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { cognitoErrorMessage, respondToNewPasswordChallenge } from "@/lib/auth/cognito";
-import { authCookieName, parseSessionFromToken } from "@/lib/auth/session";
+import { setSessionTokenCookiesFromIdToken } from "@/lib/auth/session-cookies";
 
 const NEW_PASSWORD_SESSION_COOKIE = "stocvest_new_password_session";
 const NEW_PASSWORD_EMAIL_COOKIE = "stocvest_new_password_email";
@@ -36,14 +36,7 @@ export async function setNewPasswordAction(
     if (!result.idToken) {
       return { error: "Unable to complete sign in. Please try again." };
     }
-    const session = parseSessionFromToken(result.idToken);
-    cookies().set(authCookieName(), session.token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      expires: new Date(session.expiresAtUnix * 1000)
-    });
+    setSessionTokenCookiesFromIdToken(result.idToken);
     cookies().delete(NEW_PASSWORD_SESSION_COOKIE);
     cookies().delete(NEW_PASSWORD_EMAIL_COOKIE);
     redirect("/dashboard");
