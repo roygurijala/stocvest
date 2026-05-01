@@ -8,7 +8,7 @@ import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { InfoTip } from "@/components/info-tip";
 import { layerFreshnessFromIso, type EvidenceLayer, type EvidenceStatus, type SignalEvidenceData } from "@/lib/signal-evidence";
-import { LAYER_NAME_HINTS } from "@/lib/ui-tooltips";
+import { AI_VERDICT_TIP, CONFIDENCE_PERCENT_TIP, LAYER_NAME_HINTS } from "@/lib/ui-tooltips";
 
 interface SignalEvidenceCardProps {
   evidence: SignalEvidenceData;
@@ -116,6 +116,10 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
               {pct}%
             </text>
           </svg>
+          <span style={{ color: colors.textMuted, fontSize: typography.scale.xs, display: "inline-flex", alignItems: "center", gap: 6 }}>
+            Confidence
+            <InfoTip text={CONFIDENCE_PERCENT_TIP} label="About confidence percentage" />
+          </span>
           <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>{displayUpdatedLabel(evidence)}</span>
         </div>
       </section>
@@ -181,6 +185,7 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
         <h3 style={{ margin: 0, display: "flex", alignItems: "center", gap: spacing[2] }}>
           <Brain size={18} />
           AI Verdict
+          <InfoTip text={AI_VERDICT_TIP} label="About AI verdict" />
         </h3>
         <p style={{ margin: 0, fontStyle: "italic" }}>"{evidence.aiVerdict}"</p>
         <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>AI Analysis</span>

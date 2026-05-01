@@ -15,7 +15,16 @@ import type { ScannerOverview } from "@/lib/api/scanner";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { buildEvidenceFromSetup, type SignalEvidenceData } from "@/lib/signal-evidence";
-import { CONFIDENCE_PERCENT_TIP, MARKET_SENTIMENT_SCORE_TIP, PDT_GUARDIAN_TIP } from "@/lib/ui-tooltips";
+import {
+  CONFIDENCE_PERCENT_TIP,
+  IWM_CARD_TIP,
+  LATEST_HEADLINES_TIP,
+  MARKET_SENTIMENT_SCORE_TIP,
+  PDT_GUARDIAN_TIP,
+  QQQ_CARD_TIP,
+  SPY_CARD_TIP,
+  TOP_SIGNALS_TIP
+} from "@/lib/ui-tooltips";
 
 interface DashboardRedesignProps {
   marketOverview: MarketOverview;
@@ -105,6 +114,12 @@ function timeAgo(iso: string): string {
   return `${Math.floor(delta / 86400)}d ago`;
 }
 
+const SYMBOL_CARD_TIPS: Record<string, string> = {
+  SPY: SPY_CARD_TIP,
+  QQQ: QQQ_CARD_TIP,
+  IWM: IWM_CARD_TIP
+};
+
 export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview }: DashboardRedesignProps) {
   const { colors } = useTheme();
   const [evidence, setEvidence] = useState<SignalEvidenceData | null>(null);
@@ -189,7 +204,10 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview }
                   }}
                 >
                   <div style={{ color: colors.textMuted }}>
-                    <strong style={{ color: colors.text }}>{symbol}</strong>{" "}
+                    <strong style={{ color: colors.text, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      {symbol}
+                      <InfoTip text={SYMBOL_CARD_TIPS[symbol]} label={`${symbol} explanation`} />
+                    </strong>{" "}
                     <span style={{ color: colors.text }}>{toPrice(snapshot.last_trade_price)}</span>
                   </div>
                   <div style={{ color: percent >= 0 ? colors.bullish : colors.bearish, fontWeight: 600 }}>{toPercent(percent)}</div>
@@ -271,7 +289,10 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview }
           </article>
 
           <section>
-            <h3 style={{ marginTop: 0, marginBottom: spacing[2] }}>Top Signals</h3>
+            <h3 style={{ marginTop: 0, marginBottom: spacing[2], display: "inline-flex", alignItems: "center", gap: 8 }}>
+              Top Signals
+              <InfoTip text={TOP_SIGNALS_TIP} label="About top signals" />
+            </h3>
             <div style={{ display: "grid", gap: spacing[3] }}>
               {topSignals.length === 0 ? (
                 <article style={{ background: colors.surface, borderRadius: borderRadius.lg, padding: spacing[4] }}>
@@ -398,7 +419,10 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview }
               overflow: "auto"
             }}
           >
-            <h3 style={{ marginTop: 0, marginBottom: spacing[2] }}>Latest Headlines</h3>
+            <h3 style={{ marginTop: 0, marginBottom: spacing[2], display: "inline-flex", alignItems: "center", gap: 8 }}>
+              Latest Headlines
+              <InfoTip text={LATEST_HEADLINES_TIP} label="About latest headlines" />
+            </h3>
             {marketOverview.news.length === 0 ? (
               marketOverview.error ? (
                 <p style={{ color: colors.textMuted, margin: 0 }}>Unable to connect. Check your connection.</p>

@@ -11,7 +11,13 @@ import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { buildEvidenceFromSetup, type SignalEvidenceData } from "@/lib/signal-evidence";
-import { CONFIDENCE_PERCENT_TIP, GAP_CANDIDATES_TIP, SETUP_RELATIVE_VOLUME_TIP } from "@/lib/ui-tooltips";
+import {
+  CONFIDENCE_PERCENT_TIP,
+  GAP_CANDIDATES_TIP,
+  INTRADAY_SETUPS_TIP,
+  NEWS_CATALYSTS_TIP,
+  SETUP_RELATIVE_VOLUME_TIP
+} from "@/lib/ui-tooltips";
 import { InfoTip } from "@/components/info-tip";
 
 interface ScannerPageClientProps {
@@ -164,7 +170,10 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso }: Scan
         </section>
 
         <section style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
-          <h3 style={{ marginTop: 0 }}>News Catalysts</h3>
+          <h3 style={{ marginTop: 0, display: "flex", alignItems: "center", gap: 8 }}>
+            News Catalysts
+            <InfoTip text={NEWS_CATALYSTS_TIP} label="About news catalysts" />
+          </h3>
           <div style={{ display: "grid", gap: spacing[3] }}>
             {initialOverview.catalysts.length === 0 ? (
               <p style={{ margin: 0, color: colors.textMuted }}>No catalysts right now.</p>
@@ -205,7 +214,10 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso }: Scan
         </section>
 
         <section style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
-          <h3 style={{ marginTop: 0 }}>Intraday Setups</h3>
+          <h3 style={{ marginTop: 0, display: "flex", alignItems: "center", gap: 8 }}>
+            Intraday Setups
+            <InfoTip text={INTRADAY_SETUPS_TIP} label="About intraday setups" />
+          </h3>
           <div style={{ display: "grid", gap: spacing[3] }}>
             {initialOverview.setups.length === 0 ? (
               <p style={{ margin: 0, color: colors.textMuted }}>No setups right now.</p>

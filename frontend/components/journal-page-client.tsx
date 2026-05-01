@@ -3,8 +3,10 @@
 import { useMemo, useState, useTransition } from "react";
 import type { JournalEntryPayload } from "@/lib/api/contracts";
 import { Area, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { InfoTip } from "@/components/info-tip";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
+import { AVG_LOSER_TIP, AVG_WINNER_TIP, EXPECTANCY_TIP, STREAK_TIP, WIN_RATE_TIP } from "@/lib/ui-tooltips";
 
 interface JournalPageClientProps {
   initialEntries: JournalEntryPayload[];
@@ -54,6 +56,19 @@ export function JournalPageClient({ initialEntries }: JournalPageClientProps) {
   const lastPnl = chartData.length ? chartData[chartData.length - 1].pnl : 0;
   const lineStroke = lastPnl >= 0 ? colors.bullish : colors.bearish;
 
+  const streak = useMemo(() => {
+    const realized = sorted.filter((e) => typeof e.pnl_realized_usd === "number");
+    if (realized.length === 0) return { label: "Streak", value: "0" };
+    let count = 0;
+    const firstSign = (realized[0].pnl_realized_usd || 0) >= 0 ? 1 : -1;
+    for (const entry of realized) {
+      const sign = (entry.pnl_realized_usd || 0) >= 0 ? 1 : -1;
+      if (sign !== firstSign) break;
+      count += 1;
+    }
+    return { label: "Streak", value: `${firstSign > 0 ? "W" : "L"}${count}` };
+  }, [sorted]);
+
   async function handleCreateEntry(formData: FormData) {
     const symbol = String(formData.get("symbol") || "").toUpperCase().trim();
     const quantity = Number(formData.get("quantity") || 0);
@@ -100,16 +115,20 @@ export function JournalPageClient({ initialEntries }: JournalPageClientProps) {
         </button>
       </div>
 
-      <div className="journal-stats-grid" style={{ display: "grid", gridTemplateColumns: "repeat(5,minmax(0,1fr))", gap: spacing[3] }}>
+      <div className="journal-stats-grid" style={{ display: "grid", gridTemplateColumns: "repeat(6,minmax(0,1fr))", gap: spacing[3] }}>
         {[
-          ["Win Rate", `${stats.winRate.toFixed(1)}%`],
-          ["Total Trades", String(stats.totalTrades)],
-          ["Avg Winner", `$${stats.avgWinner.toFixed(2)}`],
-          ["Avg Loser", `$${stats.avgLoser.toFixed(2)}`],
-          ["Expectancy", `$${stats.expectancy.toFixed(2)}`]
-        ].map(([k, v]) => (
+          ["Win Rate", `${stats.winRate.toFixed(1)}%`, WIN_RATE_TIP],
+          ["Total Trades", String(stats.totalTrades), ""],
+          ["Avg Winner", `$${stats.avgWinner.toFixed(2)}`, AVG_WINNER_TIP],
+          ["Avg Loser", `$${stats.avgLoser.toFixed(2)}`, AVG_LOSER_TIP],
+          ["Expectancy", `$${stats.expectancy.toFixed(2)}`, EXPECTANCY_TIP],
+          [streak.label, streak.value, STREAK_TIP]
+        ].map(([k, v, tip]) => (
           <article key={k} style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.lg, padding: spacing[3] }}>
-            <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>{k}</p>
+            <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs, display: "inline-flex", alignItems: "center", gap: 6 }}>
+              {k}
+              {tip ? <InfoTip text={String(tip)} label={`About ${k}`} /> : null}
+            </p>
             <strong>{v}</strong>
           </article>
         ))}
