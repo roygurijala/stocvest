@@ -5,7 +5,8 @@ import { motion } from "framer-motion";
 import { ShieldCheck } from "lucide-react";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import { DashboardRealtime } from "@/components/dashboard-realtime";
-import type { MarketOverview, SnapshotPayload } from "@/lib/api/market";
+import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
+import type { MarketOverview, NewsPayload, SnapshotPayload } from "@/lib/api/market";
 import type { PDTStatusPayload } from "@/lib/api/pdt";
 import type { ScannerOverview } from "@/lib/api/scanner";
 import { borderRadius, colorTokens, spacing, typography } from "@/lib/design-system";
@@ -255,10 +256,15 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview }
                     </div>
                     <button
                       type="button"
-                      onClick={() => {
+                      onClick={async () => {
                         const snapshot = snapshotsBySymbol.get(signal.symbol);
-                        const headline = marketOverview.news.find((n) => n.tickers.includes(signal.symbol))?.title;
-                        setEvidence(buildEvidenceFromSetup(signal, snapshot, headline));
+                        let symbolNewsArticles: NewsPayload[] = [];
+                        try {
+                          symbolNewsArticles = await fetchSymbolNews(signal.symbol, 10);
+                        } catch {
+                          symbolNewsArticles = [];
+                        }
+                        setEvidence(buildEvidenceFromSetup(signal, snapshot, { symbolNewsArticles }));
                         setEvidenceOpen(true);
                       }}
                       style={{

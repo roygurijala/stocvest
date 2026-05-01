@@ -9,6 +9,7 @@ import {
   RadarChart,
   ResponsiveContainer
 } from "recharts";
+import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import type { MarketOverview, SnapshotPayload } from "@/lib/api/market";
 import type { ScannerOverview } from "@/lib/api/scanner";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
@@ -193,7 +194,7 @@ export function SignalsPageClient({ marketOverview, scannerOverview }: SignalsPa
         </div>
         <button
           type="button"
-          onClick={() => {
+          onClick={async () => {
             const setupLike = setup || {
               symbol: symbol.toUpperCase(),
               direction: verdict,
@@ -201,8 +202,13 @@ export function SignalsPageClient({ marketOverview, scannerOverview }: SignalsPa
               triggers: ["Multi-layer synthesis"],
               timestamp_iso: new Date().toISOString()
             };
-            const headline = marketOverview.news.find((n) => n.tickers.includes(symbol.toUpperCase()))?.title;
-            setEvidence(buildEvidenceFromSetup(setupLike, snapshot, headline));
+            let symbolNewsArticles: Awaited<ReturnType<typeof fetchSymbolNews>> = [];
+            try {
+              symbolNewsArticles = await fetchSymbolNews(symbol.toUpperCase(), 10);
+            } catch {
+              symbolNewsArticles = [];
+            }
+            setEvidence(buildEvidenceFromSetup(setupLike, snapshot, { symbolNewsArticles }));
             setEvidenceOpen(true);
           }}
           style={{

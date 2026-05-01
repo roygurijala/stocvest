@@ -1,5 +1,7 @@
 import { apiFetch } from "@/lib/api/client";
 
+/** Symbol-scoped news for Client Components lives in `./fetch-symbol-news` (this file’s `apiFetch` pulls server-only auth). */
+
 export interface MarketStatusPayload {
   market: string;
   server_time?: string | null;
@@ -24,6 +26,9 @@ export interface NewsPayload {
   tickers: string[];
   published_at: string;
   url: string;
+  /** Present when backend has run sentiment enrichment (e.g. Claude). */
+  sentiment?: string | null;
+  sentiment_score?: number | null;
 }
 
 export interface MarketOverview {

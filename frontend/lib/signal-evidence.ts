@@ -1,4 +1,4 @@
-import type { SnapshotPayload } from "@/lib/api/market";
+import type { NewsPayload, SnapshotPayload } from "@/lib/api/market";
 import type { IntradaySetupPayload } from "@/lib/api/scanner";
 
 export type EvidenceDirection = "bullish" | "bearish" | "neutral";
@@ -32,6 +32,8 @@ export interface SignalEvidenceData {
   };
   updatedLabel: string;
   newsFreshnessLabel: string;
+  /** ISO string used for `updatedLabel`; lets the card clamp invalid or very stale timestamps. */
+  updatedAtIso?: string | null;
 }
 
 function clamp(v: number, min: number, max: number): number {
@@ -53,11 +55,35 @@ function statusFromScore(score: number): EvidenceStatus {
   return "Neutral";
 }
 
+function relativeNewsTime(iso: string | null | undefined): string {
+  const ts = iso ? Date.parse(iso) : Number.NaN;
+  if (!Number.isFinite(ts)) {
+    return "recently";
+  }
+  const delta = Math.max(1, Math.floor((Date.now() - ts) / 1000));
+  if (delta < 60) return `${delta}s ago`;
+  if (delta < 3600) return `${Math.floor(delta / 60)}m ago`;
+  if (delta < 86400) return `${Math.floor(delta / 3600)}h ago`;
+  return `${Math.floor(delta / 86400)}d ago`;
+}
+
+export interface BuildEvidenceOptions {
+  symbolNewsArticles?: NewsPayload[];
+}
+
 export function buildEvidenceFromSetup(
   setup: IntradaySetupPayload,
   snapshot?: SnapshotPayload,
-  newsHeadline?: string
+  options?: BuildEvidenceOptions
 ): SignalEvidenceData {
+  const symbolUpper = setup.symbol.trim().toUpperCase();
+  const articles = options?.symbolNewsArticles ?? [];
+  const first = articles[0];
+  const headline = first?.title?.trim() || undefined;
+  const articleCount = articles.length;
+  const sentimentScore = first?.sentiment_score;
+  const hasNumericSentiment = typeof sentimentScore === "number" && Number.isFinite(sentimentScore);
+
   const direction = setup.direction.toLowerCase() === "bullish" ? "bullish" : setup.direction.toLowerCase() === "bearish" ? "bearish" : "neutral";
   const confidencePercent = clamp(Math.round(setup.score * 100), 0, 100);
   const last = snapshot?.last_trade_price ?? null;
@@ -66,7 +92,8 @@ export function buildEvidenceFromSetup(
   const base = clamp(50 + momentum * 6, 0, 100);
 
   const technical = clamp(base + 18, 0, 100);
-  const news = clamp(base + (newsHeadline ? 10 : -8), 0, 100);
+  const newsDelta = hasNumericSentiment ? sentimentScore * 12 : headline ? 10 : -8;
+  const news = clamp(base + newsDelta, 0, 100);
   const macro = clamp(base - 6, 0, 100);
   const sector = clamp(base + 4, 0, 100);
   const geopolitical = clamp(base - 11, 0, 100);
@@ -95,9 +122,16 @@ export function buildEvidenceFromSetup(
       status: statusFromScore(news),
       weightPercent: 18,
       explanation: "Headline sentiment and catalyst intensity shape short-term directional bias.",
-      keyPoints: [`Sentiment ${Math.round(news)}%`, `Articles ${newsHeadline ? "1+" : "0"}`, newsHeadline ? newsHeadline.slice(0, 40) : "No headline"],
+      keyPoints: [
+        `Articles ${articleCount}`,
+        hasNumericSentiment
+          ? `Sentiment score ${sentimentScore >= 0 ? "+" : ""}${sentimentScore.toFixed(2)}`
+          : "Sentiment score n/a",
+        headline ? headline.slice(0, 40) : `No recent news for ${symbolUpper}`
+      ],
       contributionScore: news,
-      freshnessLabel: newsHeadline ? "News 2h ago" : "News unavailable"
+      freshnessLabel:
+        articleCount > 0 ? `News ${relativeNewsTime(first?.published_at)}` : `No recent news for ${symbolUpper}`
     },
     {
       key: "macro",
@@ -168,6 +202,8 @@ export function buildEvidenceFromSetup(
       orLow: typeof support === "number" ? support * 0.997 : null
     },
     updatedLabel: timeAgoLabelFromIso(setup.timestamp_iso),
-    newsFreshnessLabel: newsHeadline ? "News 2h ago" : "News unavailable"
+    updatedAtIso: setup.timestamp_iso,
+    newsFreshnessLabel:
+      articleCount > 0 ? `News ${relativeNewsTime(first?.published_at)}` : `No recent news for ${symbolUpper}`
   };
 }

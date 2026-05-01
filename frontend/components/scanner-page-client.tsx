@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
+import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import type { ScannerOverview } from "@/lib/api/scanner";
 import { borderRadius, colorTokens, spacing, typography } from "@/lib/design-system";
 import { buildEvidenceFromSetup, type SignalEvidenceData } from "@/lib/signal-evidence";
@@ -209,9 +210,14 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso }: Scan
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      const headline = initialOverview.catalysts.find((c) => c.symbol === setup.symbol)?.title;
-                      setEvidence(buildEvidenceFromSetup(setup, undefined, headline));
+                    onClick={async () => {
+                      let symbolNewsArticles: Awaited<ReturnType<typeof fetchSymbolNews>> = [];
+                      try {
+                        symbolNewsArticles = await fetchSymbolNews(setup.symbol, 10);
+                      } catch {
+                        symbolNewsArticles = [];
+                      }
+                      setEvidence(buildEvidenceFromSetup(setup, undefined, { symbolNewsArticles }));
                       setEvidenceOpen(true);
                     }}
                     style={{
