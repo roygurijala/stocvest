@@ -3,15 +3,16 @@
 import { motion } from "framer-motion";
 import { Brain } from "lucide-react";
 import { Bar, BarChart, Cell, ResponsiveContainer, XAxis, YAxis } from "recharts";
-import { borderRadius, colorTokens, spacing, typography } from "@/lib/design-system";
+import type { ThemeColors } from "@/lib/design-system";
+import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { useTheme } from "@/lib/theme-provider";
 import { layerFreshnessFromIso, type EvidenceLayer, type EvidenceStatus, type SignalEvidenceData } from "@/lib/signal-evidence";
 
 interface SignalEvidenceCardProps {
   evidence: SignalEvidenceData;
 }
 
-function statusColor(status: EvidenceStatus): string {
-  const colors = colorTokens.dark;
+function statusColor(status: EvidenceStatus, colors: ThemeColors): string {
   if (status === "Bullish") return colors.bullish;
   if (status === "Bearish") return colors.bearish;
   if (status === "Neutral") return colors.caution;
@@ -66,7 +67,7 @@ function displayLayerFreshness(layer: EvidenceLayer, evidence: SignalEvidenceDat
 }
 
 export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
-  const colors = colorTokens.dark;
+  const { colors } = useTheme();
   const arcRadius = 44;
   const circumference = 2 * Math.PI * arcRadius;
   const pct = Math.max(0, Math.min(100, evidence.confidencePercent));
@@ -141,7 +142,7 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
                     borderRadius: borderRadius.full,
                     padding: "2px 8px",
                     background: "rgba(148,163,184,0.15)",
-                    color: statusColor(layer.status),
+                    color: statusColor(layer.status, colors),
                     fontSize: typography.scale.xs
                   }}
                 >
@@ -239,7 +240,7 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
               <YAxis type="category" dataKey="layer" width={90} />
               <Bar dataKey="score" radius={[0, 6, 6, 0]}>
                 {evidence.layers.map((l) => (
-                  <Cell key={l.key} fill={statusColor(l.status)} />
+                  <Cell key={l.key} fill={statusColor(l.status, colors)} />
                 ))}
               </Bar>
             </BarChart>

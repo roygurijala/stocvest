@@ -2,14 +2,15 @@
 
 import { useState } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { borderRadius, colorTokens, spacing, typography } from "@/lib/design-system";
+import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { useTheme } from "@/lib/theme-provider";
 
 interface SettingsPageClientProps {
   email: string;
 }
 
 export function SettingsPageClient({ email }: SettingsPageClientProps) {
-  const colors = colorTokens.dark;
+  const { colors } = useTheme();
   const [confirmText, setConfirmText] = useState("");
   const [emailNotif, setEmailNotif] = useState(true);
   const [pushNotif, setPushNotif] = useState(false);

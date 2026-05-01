@@ -13,7 +13,9 @@ import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import type { MarketOverview, SnapshotPayload } from "@/lib/api/market";
 import type { ScannerOverview } from "@/lib/api/scanner";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
-import { borderRadius, colorTokens, spacing, typography } from "@/lib/design-system";
+import type { ThemeColors } from "@/lib/design-system";
+import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { useTheme } from "@/lib/theme-provider";
 import { buildEvidenceFromSetup, type SignalEvidenceData } from "@/lib/signal-evidence";
 
 type LayerStatus = "Bullish" | "Bearish" | "Neutral" | "Unavailable";
@@ -40,8 +42,7 @@ const layerMeta = [
   ["📈", "Internals"]
 ] as const;
 
-function statusColor(status: LayerStatus): string {
-  const colors = colorTokens.dark;
+function statusColor(status: LayerStatus, colors: ThemeColors): string {
   if (status === "Bullish") return colors.bullish;
   if (status === "Bearish") return colors.bearish;
   if (status === "Neutral") return colors.caution;
@@ -61,7 +62,7 @@ function deriveFromSnapshot(snapshot?: SnapshotPayload): { bullishBias: number; 
 }
 
 export function SignalsPageClient({ marketOverview, scannerOverview }: SignalsPageClientProps) {
-  const colors = colorTokens.dark;
+  const { colors } = useTheme();
   const [symbol, setSymbol] = useState("AAPL");
   const [evidence, setEvidence] = useState<SignalEvidenceData | null>(null);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
@@ -147,7 +148,7 @@ export function SignalsPageClient({ marketOverview, scannerOverview }: SignalsPa
                     borderRadius: borderRadius.full,
                     padding: "2px 8px",
                     background: "rgba(148,163,184,0.12)",
-                    color: statusColor(row.status),
+                    color: statusColor(row.status, colors),
                     fontSize: typography.scale.xs
                   }}
                 >

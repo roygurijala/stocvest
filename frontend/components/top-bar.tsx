@@ -3,7 +3,8 @@
 import { useMemo } from "react";
 import { usePathname } from "next/navigation";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { colorTokens, spacing, typography } from "@/lib/design-system";
+import { spacing, typography } from "@/lib/design-system";
+import { useTheme } from "@/lib/theme-provider";
 
 const TITLE_BY_PATH: Record<string, string> = {
   "/dashboard": "Dashboard",
@@ -19,7 +20,7 @@ const TITLE_BY_PATH: Record<string, string> = {
 
 export function TopBar() {
   const pathname = usePathname();
-  const colors = colorTokens.dark;
+  const { colors } = useTheme();
   const title = useMemo(() => TITLE_BY_PATH[pathname] || "STOCVEST", [pathname]);
 
   return (

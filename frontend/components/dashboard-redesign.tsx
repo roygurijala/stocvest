@@ -9,7 +9,8 @@ import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import type { MarketOverview, NewsPayload, SnapshotPayload } from "@/lib/api/market";
 import type { PDTStatusPayload } from "@/lib/api/pdt";
 import type { ScannerOverview } from "@/lib/api/scanner";
-import { borderRadius, colorTokens, spacing, typography } from "@/lib/design-system";
+import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { useTheme } from "@/lib/theme-provider";
 import { buildEvidenceFromSetup, type SignalEvidenceData } from "@/lib/signal-evidence";
 
 interface DashboardRedesignProps {
@@ -101,7 +102,7 @@ function timeAgo(iso: string): string {
 }
 
 export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview }: DashboardRedesignProps) {
-  const colors = colorTokens.dark;
+  const { colors } = useTheme();
   const [evidence, setEvidence] = useState<SignalEvidenceData | null>(null);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [briefOpen, setBriefOpen] = useState(false);

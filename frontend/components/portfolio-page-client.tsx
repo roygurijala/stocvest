@@ -2,7 +2,8 @@
 
 import type { BrokerOverview } from "@/lib/api/brokers";
 import type { PortfolioMultiBrokerOverview } from "@/lib/api/portfolio";
-import { borderRadius, colorTokens, spacing, typography } from "@/lib/design-system";
+import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { useTheme } from "@/lib/theme-provider";
 
 interface PortfolioPageClientProps {
   brokerOverviews: BrokerOverview[];
@@ -14,7 +15,7 @@ function money(n: number): string {
 }
 
 export function PortfolioPageClient({ brokerOverviews, overview }: PortfolioPageClientProps) {
-  const colors = colorTokens.dark;
+  const { colors } = useTheme();
   const brokerCards = brokerOverviews.map((broker) => {
     const healthy = broker.health?.ok ?? !broker.error;
     const accountType = broker.broker === "mock" ? "paper" : "live";

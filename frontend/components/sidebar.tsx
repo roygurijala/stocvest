@@ -15,7 +15,8 @@ import {
   Zap
 } from "lucide-react";
 import { logoutAction } from "@/app/login/actions";
-import { colorTokens, spacing, borderRadius, typography } from "@/lib/design-system";
+import { spacing, borderRadius, typography } from "@/lib/design-system";
+import { useTheme } from "@/lib/theme-provider";
 
 interface SidebarProps {
   userLabel: string;
@@ -35,7 +36,7 @@ const NAV_ITEMS = [
 
 export function Sidebar({ userLabel }: SidebarProps) {
   const pathname = usePathname();
-  const colors = colorTokens.dark;
+  const { colors } = useTheme();
 
   return (
     <aside

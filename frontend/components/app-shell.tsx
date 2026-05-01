@@ -6,7 +6,7 @@ import { PageLoader } from "@/components/page-loader";
 import { Sidebar } from "@/components/sidebar";
 import { TopBar } from "@/components/top-bar";
 import type { AuthSession } from "@/lib/auth/types";
-import { colorTokens } from "@/lib/design-system";
+import { useTheme } from "@/lib/theme-provider";
 
 interface AppShellProps {
   session: AuthSession;
@@ -14,7 +14,7 @@ interface AppShellProps {
 }
 
 export function AppShell({ session, children }: AppShellProps) {
-  const colors = colorTokens.dark;
+  const { colors } = useTheme();
   const pathname = usePathname();
   const [loading, setLoading] = useState(false);
 

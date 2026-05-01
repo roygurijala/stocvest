@@ -7,7 +7,9 @@ import { useRouter } from "next/navigation";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import type { ScannerOverview } from "@/lib/api/scanner";
-import { borderRadius, colorTokens, spacing, typography } from "@/lib/design-system";
+import type { ThemeColors } from "@/lib/design-system";
+import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { useTheme } from "@/lib/theme-provider";
 import { buildEvidenceFromSetup, type SignalEvidenceData } from "@/lib/signal-evidence";
 
 interface ScannerPageClientProps {
@@ -15,15 +17,14 @@ interface ScannerPageClientProps {
   initialTimestampIso: string;
 }
 
-function scoreColor(score: number): string {
-  const colors = colorTokens.dark;
+function scoreColor(score: number, colors: ThemeColors): string {
   if (score >= 0.65) return colors.bullish;
   if (score <= 0.35) return colors.bearish;
   return colors.caution;
 }
 
 export function ScannerPageClient({ initialOverview, initialTimestampIso }: ScannerPageClientProps) {
-  const colors = colorTokens.dark;
+  const { colors } = useTheme();
   const [isPending, startTransition] = useTransition();
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
@@ -132,7 +133,7 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso }: Scan
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2] }}>
                     <strong>{c.symbol}</strong>
-                    <span style={{ color: scoreColor(c.catalyst_score), fontSize: typography.scale.xs }}>
+                    <span style={{ color: scoreColor(c.catalyst_score, colors), fontSize: typography.scale.xs }}>
                       {Math.round(c.catalyst_score * 100)}
                     </span>
                   </div>

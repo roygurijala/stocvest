@@ -3,7 +3,8 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
 import { SignalEvidenceCard } from "@/components/signal-evidence-card";
-import { borderRadius, colorTokens, spacing } from "@/lib/design-system";
+import { borderRadius, spacing } from "@/lib/design-system";
+import { useTheme } from "@/lib/theme-provider";
 import type { SignalEvidenceData } from "@/lib/signal-evidence";
 
 interface SignalEvidenceModalProps {
@@ -13,7 +14,7 @@ interface SignalEvidenceModalProps {
 }
 
 export function SignalEvidenceModal({ evidence, open, onClose }: SignalEvidenceModalProps) {
-  const colors = colorTokens.dark;
+  const { colors } = useTheme();
   return (
     <AnimatePresence>
       {open && evidence ? (

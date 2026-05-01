@@ -3,14 +3,15 @@
 import { useMemo, useState, useTransition } from "react";
 import type { JournalEntryPayload } from "@/lib/api/contracts";
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { borderRadius, colorTokens, spacing, typography } from "@/lib/design-system";
+import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { useTheme } from "@/lib/theme-provider";
 
 interface JournalPageClientProps {
   initialEntries: JournalEntryPayload[];
 }
 
 export function JournalPageClient({ initialEntries }: JournalPageClientProps) {
-  const colors = colorTokens.dark;
+  const { colors } = useTheme();
   const [entries, setEntries] = useState(initialEntries);
   const [sortDesc, setSortDesc] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);

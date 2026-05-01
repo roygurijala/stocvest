@@ -2,14 +2,15 @@
 
 import { useMemo, useState } from "react";
 import type { OptionChainOverview } from "@/lib/api/options";
-import { borderRadius, colorTokens, spacing, typography } from "@/lib/design-system";
+import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { useTheme } from "@/lib/theme-provider";
 
 interface OptionsPageClientProps {
   overview: OptionChainOverview;
 }
 
 export function OptionsPageClient({ overview }: OptionsPageClientProps) {
-  const colors = colorTokens.dark;
+  const { colors } = useTheme();
   const [symbol, setSymbol] = useState(overview.symbol);
   const [expiration, setExpiration] = useState("all");
   const [side, setSide] = useState<"all" | "call" | "put">("all");
