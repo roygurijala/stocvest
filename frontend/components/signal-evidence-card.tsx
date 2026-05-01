@@ -36,6 +36,25 @@ function conflictingLayers(layers: EvidenceLayer[], direction: SignalEvidenceDat
   return layers.filter((l) => l.status === conflictStatus);
 }
 
+const MAX_UPDATED_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** If setup time is missing, invalid, in the future, or older than 30 days, avoid bogus "h ago" strings. */
+function displayUpdatedLabel(evidence: SignalEvidenceData): string {
+  const raw = evidence.updatedAtIso;
+  if (raw == null || String(raw).trim() === "") {
+    return "Just now";
+  }
+  const ms = Date.parse(String(raw));
+  if (!Number.isFinite(ms)) {
+    return "Just now";
+  }
+  const ageMs = Date.now() - ms;
+  if (ageMs < 0 || ageMs > MAX_UPDATED_AGE_MS) {
+    return "Just now";
+  }
+  return evidence.updatedLabel;
+}
+
 export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
   const colors = colorTokens.dark;
   const arcRadius = 44;
@@ -84,7 +103,7 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
               {pct}%
             </text>
           </svg>
-          <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>{evidence.updatedLabel}</span>
+          <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>{displayUpdatedLabel(evidence)}</span>
         </div>
       </section>
 
