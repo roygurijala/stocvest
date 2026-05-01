@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from datetime import date, timedelta
 from typing import Any
 
 from stocvest.api.response import bad_request, internal_error, ok
@@ -169,6 +170,52 @@ def options_chain_handler(
                 limit=limit,
             )
         return ok([contract.model_dump(mode="json") for contract in contracts])
+
+    try:
+        return asyncio.run(_run())
+    except PolygonError as exc:
+        return internal_error(str(exc))
+
+
+def earnings_calendar_handler(
+    event: LambdaEvent,
+    context: LambdaContext,
+    client_factory: Callable[..., PolygonClient] = PolygonClient,
+) -> dict[str, Any]:
+    _ = context
+    query = _query_params(event)
+    symbols_raw = str(query.get("symbols") or "").strip()
+    if not symbols_raw:
+        return bad_request("Query param 'symbols' is required.")
+
+    try:
+        days = int(query.get("days") or 7)
+    except ValueError:
+        return bad_request("Invalid days.")
+    if days < 1 or days > 30:
+        return bad_request("days must be between 1 and 30.")
+
+    symbols = [s.strip().upper() for s in symbols_raw.split(",") if s.strip()]
+    if not symbols:
+        return bad_request("Query param 'symbols' is required.")
+
+    async def _run() -> dict[str, Any]:
+        settings = get_settings()
+        today = date.today()
+        to_date = today + timedelta(days=days)
+        recent_from = today - timedelta(days=3)
+        async with client_factory(api_key=settings.polygon_api_key) as client:
+            rows = await client.get_earnings_calendar(symbols=symbols, from_date=recent_from, to_date=to_date)
+        upcoming = [r for r in rows if r.report_date >= today]
+        recent = [r for r in rows if r.report_date < today]
+        return ok(
+            {
+                "symbols": symbols,
+                "days": days,
+                "upcoming": [x.model_dump(mode="json") for x in upcoming],
+                "recent": [x.model_dump(mode="json") for x in recent],
+            }
+        )
 
     try:
         return asyncio.run(_run())

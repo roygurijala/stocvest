@@ -3,6 +3,7 @@ import { AppShell } from "@/components/app-shell";
 import { ScannerPageClient } from "@/components/scanner-page-client";
 import { fetchScannerOverview } from "@/lib/api/scanner";
 import { fetchPdtStatus } from "@/lib/api/pdt";
+import { fetchEarningsCalendar } from "@/lib/api/earnings";
 import { getServerSession } from "@/lib/auth/session";
 
 export default async function DashboardScannerPage() {
@@ -12,9 +13,16 @@ export default async function DashboardScannerPage() {
   }
   const pdtStatus = await fetchPdtStatus().catch(() => null);
   const overview = await fetchScannerOverview(pdtStatus);
+  const scannerSymbols = Array.from(
+    new Set([...overview.gaps.map((g) => g.symbol), ...overview.setups.map((s) => s.symbol)])
+  );
+  const earnings = await fetchEarningsCalendar(scannerSymbols, 2);
+  const earningsBySymbol = Object.fromEntries(
+    [...earnings.upcoming, ...earnings.recent].map((e) => [e.symbol.toUpperCase(), e])
+  );
   return (
     <AppShell session={session}>
-      <ScannerPageClient initialOverview={overview} initialTimestampIso={new Date().toISOString()} />
+      <ScannerPageClient initialOverview={overview} initialTimestampIso={new Date().toISOString()} earningsBySymbol={earningsBySymbol} />
     </AppShell>
   );
 }

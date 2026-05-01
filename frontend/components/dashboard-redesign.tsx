@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { ShieldCheck } from "lucide-react";
 import { DashboardRealtime } from "@/components/dashboard-realtime";
+import { EarningsCalendar } from "@/components/earnings-calendar";
 import { InfoTip } from "@/components/info-tip";
 import { MiniSparkline } from "@/components/mini-sparkline";
 import { SentimentGauge } from "@/components/sentiment-gauge";
@@ -12,6 +13,7 @@ import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import type { MarketOverview, NewsPayload, SnapshotPayload } from "@/lib/api/market";
 import type { PDTStatusPayload } from "@/lib/api/pdt";
 import type { ScannerOverview } from "@/lib/api/scanner";
+import type { EarningsEvent } from "@/lib/api/earnings";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { buildEvidenceFromSetup, type SignalEvidenceData } from "@/lib/signal-evidence";
@@ -30,6 +32,7 @@ interface DashboardRedesignProps {
   marketOverview: MarketOverview;
   pdtStatus: PDTStatusPayload | null;
   scannerOverview: ScannerOverview;
+  earningsEvents: EarningsEvent[];
 }
 
 function SkeletonLine({ width = "100%", height = 14 }: { width?: string; height?: number }) {
@@ -120,7 +123,7 @@ const SYMBOL_CARD_TIPS: Record<string, string> = {
   IWM: IWM_CARD_TIP
 };
 
-export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview }: DashboardRedesignProps) {
+export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview, earningsEvents }: DashboardRedesignProps) {
   const { colors } = useTheme();
   const [evidence, setEvidence] = useState<SignalEvidenceData | null>(null);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
@@ -144,6 +147,7 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview }
         : colors.bullish;
   const pdtLabel = !pdt ? "Unavailable" : pdt.at_limit ? "Blocked" : pdt.warn_near_limit ? "Warning" : "Clear";
   const vixSnapshot = snapshotsBySymbol.get("VIX") || snapshotsBySymbol.get("^VIX");
+  const earningsBySymbol = new Map(earningsEvents.map((e) => [e.symbol.toUpperCase(), e] as const));
 
   return (
     <section style={{ display: "grid", gap: spacing[4] }}>
@@ -358,7 +362,19 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview }
                         } catch {
                           symbolNewsArticles = [];
                         }
-                        setEvidence(buildEvidenceFromSetup(signal, snapshot, { symbolNewsArticles }));
+                        const event = earningsBySymbol.get(signal.symbol.toUpperCase());
+                        const today = new Date().toISOString().slice(0, 10);
+                        const daysUntil =
+                          event != null
+                            ? Math.floor((Date.parse(`${event.report_date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000)
+                            : undefined;
+                        setEvidence(
+                          buildEvidenceFromSetup(signal, snapshot, {
+                            symbolNewsArticles,
+                            earningsRiskDays: typeof daysUntil === "number" ? daysUntil : undefined,
+                            earningsReportTime: event?.report_time
+                          })
+                        );
                         setEvidenceOpen(true);
                       }}
                       style={{
@@ -379,6 +395,7 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview }
               )}
             </div>
           </section>
+          <EarningsCalendar events={earningsEvents} title="Upcoming Earnings (Next 7 Days)" maxDays={7} />
         </div>
 
         <aside style={{ display: "grid", gap: spacing[4] }}>

@@ -79,6 +79,32 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
 
   return (
     <article style={{ display: "grid", gap: spacing[4] }}>
+      {evidence.earningsRisk ? (
+        <section
+          style={{
+            border: "1px solid rgba(245,158,11,0.5)",
+            background: "rgba(245,158,11,0.14)",
+            borderRadius: borderRadius.lg,
+            padding: spacing[3]
+          }}
+        >
+          <p style={{ margin: 0, fontWeight: 700, color: colors.caution }}>
+            ⚠️ Earnings Risk: {evidence.symbol} reports earnings in {evidence.earningsRisk.daysUntil} day
+            {evidence.earningsRisk.daysUntil === 1 ? "" : "s"} (
+            {evidence.earningsRisk.reportTime === "before_market"
+              ? "before market"
+              : evidence.earningsRisk.reportTime === "after_market"
+                ? "after market close"
+                : evidence.earningsRisk.reportTime === "during_market"
+                  ? "during market"
+                  : "timing TBD"}
+            )
+          </p>
+          <p style={{ margin: `${spacing[1]} 0 0 0`, color: colors.textMuted }}>
+            All signals carry additional uncertainty until after the earnings report. Consider waiting or reducing position size.
+          </p>
+        </section>
+      ) : null}
       <section style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[3] }}>
         <div style={{ display: "flex", alignItems: "center", gap: spacing[2] }}>
           <h2 style={{ margin: 0 }}>{evidence.symbol}</h2>

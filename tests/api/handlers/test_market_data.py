@@ -7,12 +7,13 @@ import pytest
 
 from stocvest.api.handlers.market_data import (
     bars_handler,
+    earnings_calendar_handler,
     market_status_handler,
     news_handler,
     options_chain_handler,
     snapshot_handler,
 )
-from stocvest.data.models import Bar, MarketStatus, NewsArticle, OptionContract, Snapshot, Timeframe
+from stocvest.data.models import Bar, EarningsEvent, MarketStatus, NewsArticle, OptionContract, Snapshot, Timeframe
 from stocvest.utils.config import get_settings
 
 
@@ -112,6 +113,23 @@ class _FakePolygonClient:
             )
         ]
 
+    async def get_earnings_calendar(self, symbols: list[str], from_date: str, to_date: str) -> list[EarningsEvent]:
+        _ = from_date
+        _ = to_date
+        return [
+            EarningsEvent(
+                symbol=symbol,
+                company_name=f"{symbol} Inc",
+                report_date=datetime(2026, 1, 3, tzinfo=timezone.utc).date(),
+                report_time="before_market",
+                estimated_eps=1.2,
+                actual_eps=1.3,
+                surprise_percent=8.3,
+                market_cap=2_000_000_000_000,
+            )
+            for symbol in symbols[:2]
+        ]
+
 
 @pytest.fixture(autouse=True)
 def _clear_settings(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -180,4 +198,14 @@ def test_options_chain_handler_returns_contracts_with_greeks() -> None:
     assert body[0]["gamma"] == 0.03
     assert body[0]["theta"] == -0.02
     assert body[0]["vega"] == 0.11
+
+
+def test_earnings_calendar_handler_returns_upcoming_and_recent() -> None:
+    event = {"queryStringParameters": {"symbols": "aapl,msft", "days": "7"}}
+    response = earnings_calendar_handler(event, {}, client_factory=_FakePolygonClient)
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["symbols"] == ["AAPL", "MSFT"]
+    assert isinstance(body["upcoming"], list)
+    assert isinstance(body["recent"], list)
 

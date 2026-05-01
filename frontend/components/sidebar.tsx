@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   LogOut,
   Radio,
+  CalendarDays,
   Settings,
   TrendingUp,
   Zap
@@ -25,6 +26,7 @@ interface SidebarProps {
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/scanner", label: "Scanner", icon: Radio },
+  { href: "/dashboard/earnings", label: "Earnings", icon: CalendarDays },
   { href: "/dashboard/signals", label: "Signals", icon: Zap },
   { href: "/dashboard/portfolio", label: "Portfolio", icon: Briefcase },
   { href: "/dashboard/options", label: "Options", icon: Layers },

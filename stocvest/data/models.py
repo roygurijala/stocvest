@@ -9,7 +9,7 @@ requires updating polygon_client.py.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from enum import Enum
 from typing import Optional
 
@@ -179,3 +179,16 @@ class MarketStatus(BaseModel):
     server_time:    datetime
     exchanges:      dict[str, str] = Field(default_factory=dict)
     currencies:     dict[str, str] = Field(default_factory=dict)
+
+
+class EarningsEvent(BaseModel):
+    """Upcoming or recently reported earnings event."""
+
+    symbol: str
+    company_name: str
+    report_date: date
+    report_time: str  # "before_market" | "after_market" | "during_market" | "unknown"
+    estimated_eps: Optional[float] = None
+    actual_eps: Optional[float] = None
+    surprise_percent: Optional[float] = None
+    market_cap: Optional[float] = None

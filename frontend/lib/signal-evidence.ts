@@ -36,6 +36,10 @@ export interface SignalEvidenceData {
   newsFreshnessLabel: string;
   /** ISO string used for `updatedLabel`; lets the card clamp invalid or very stale timestamps. */
   updatedAtIso?: string | null;
+  earningsRisk?: {
+    daysUntil: number;
+    reportTime: "before_market" | "after_market" | "during_market" | "unknown";
+  } | null;
 }
 
 function clamp(v: number, min: number, max: number): number {
@@ -109,6 +113,8 @@ function relativeNewsTime(iso: string | null | undefined): string {
 
 export interface BuildEvidenceOptions {
   symbolNewsArticles?: NewsPayload[];
+  earningsRiskDays?: number;
+  earningsReportTime?: "before_market" | "after_market" | "during_market" | "unknown";
 }
 
 export function buildEvidenceFromSetup(
@@ -246,6 +252,13 @@ export function buildEvidenceFromSetup(
     updatedLabel: timeAgoLabelFromIso(setup.timestamp_iso),
     updatedAtIso: setup.timestamp_iso,
     newsFreshnessLabel:
-      articleCount > 0 ? `News ${relativeNewsTime(first?.published_at)}` : `No recent news for ${symbolUpper}`
+      articleCount > 0 ? `News ${relativeNewsTime(first?.published_at)}` : `No recent news for ${symbolUpper}`,
+    earningsRisk:
+      typeof options?.earningsRiskDays === "number" && options.earningsRiskDays >= 0 && options.earningsRiskDays <= 3
+        ? {
+            daysUntil: options.earningsRiskDays,
+            reportTime: options.earningsReportTime || "unknown"
+          }
+        : null
   };
 }

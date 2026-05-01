@@ -9,6 +9,7 @@ locals {
     "GET /v1/market/bars"     = { module_key = "market_data", authorizer = true }
     "GET /v1/market/news"     = { module_key = "market_data", authorizer = true }
     "GET /v1/market/options"  = { module_key = "market_data", authorizer = true }
+    "GET /v1/market/earnings" = { module_key = "market_data", authorizer = true }
 
     "POST /v1/signals/swing/composite"       = { module_key = "signals", authorizer = true }
     "POST /v1/signals/swing/synthesis/parse" = { module_key = "signals", authorizer = true }

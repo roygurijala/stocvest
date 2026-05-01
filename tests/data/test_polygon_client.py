@@ -437,6 +437,38 @@ class TestAdditionalRestEndpoints:
 
         assert details["ticker"] == "AAPL"
 
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_get_earnings_calendar_returns_events(self):
+        payload = {
+            "status": "OK",
+            "results": [
+                {
+                    "ticker": "AAPL",
+                    "name": "Apple Inc.",
+                    "market_cap": 3000000000000,
+                    "earnings": {
+                        "report_date": "2026-05-05",
+                        "time": "bmo",
+                        "eps_estimate": 1.55,
+                        "eps_actual": 1.65,
+                        "surprise_percent": 6.5,
+                    },
+                }
+            ],
+        }
+        respx.get("https://api.polygon.io/vX/reference/tickers").mock(
+            return_value=httpx.Response(200, json=payload)
+        )
+
+        async with PolygonClient(FAKE_KEY) as client:
+            rows = await client.get_earnings_calendar(["AAPL"], from_date="2026-05-01", to_date="2026-05-10")
+
+        assert len(rows) == 1
+        assert rows[0].symbol == "AAPL"
+        assert rows[0].report_time == "before_market"
+        assert rows[0].actual_eps == pytest.approx(1.65)
+
 
 class TestRetries:
     @pytest.mark.asyncio

@@ -2,19 +2,21 @@
 
 import type { BrokerOverview } from "@/lib/api/brokers";
 import type { PortfolioMultiBrokerOverview } from "@/lib/api/portfolio";
+import type { EarningsEvent } from "@/lib/api/earnings";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
 interface PortfolioPageClientProps {
   brokerOverviews: BrokerOverview[];
   overview: PortfolioMultiBrokerOverview;
+  earningsBySymbol: Record<string, EarningsEvent>;
 }
 
 function money(n: number): string {
   return `$${n.toFixed(2)}`;
 }
 
-export function PortfolioPageClient({ brokerOverviews, overview }: PortfolioPageClientProps) {
+export function PortfolioPageClient({ brokerOverviews, overview, earningsBySymbol }: PortfolioPageClientProps) {
   const { colors } = useTheme();
   const brokerCards = brokerOverviews.map((broker) => {
     const healthy = broker.health?.ok ?? !broker.error;
@@ -120,6 +122,7 @@ export function PortfolioPageClient({ brokerOverviews, overview }: PortfolioPage
                   <th align="left">Current Price</th>
                   <th align="left">P&L $</th>
                   <th align="left">P&L %</th>
+                  <th align="left">Risk</th>
                 </tr>
               </thead>
               <tbody>
@@ -131,6 +134,18 @@ export function PortfolioPageClient({ brokerOverviews, overview }: PortfolioPage
                     <td>{money(row.current)}</td>
                     <td style={{ color: row.pnl >= 0 ? colors.bullish : colors.bearish }}>{money(row.pnl)}</td>
                     <td style={{ color: row.pnlPct >= 0 ? colors.bullish : colors.bearish }}>{row.pnlPct.toFixed(2)}%</td>
+                    <td>
+                      {(() => {
+                        const event = earningsBySymbol[row.symbol.toUpperCase()];
+                        if (!event) return null;
+                        const today = new Date().toISOString().slice(0, 10);
+                        const dayDelta = Math.floor((Date.parse(`${event.report_date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000);
+                        if (dayDelta < 0 || dayDelta > 2) return null;
+                        const when = dayDelta === 0 ? "today" : dayDelta === 1 ? "tomorrow" : "in 2 days";
+                        const timing = event.report_time === "after_market" ? "after close" : event.report_time === "before_market" ? "before open" : "during market";
+                        return <span style={{ color: colors.caution }}>⚠️ Earnings {when} {timing}</span>;
+                      })()}
+                    </td>
                   </tr>
                 ))}
               </tbody>

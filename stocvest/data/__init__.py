@@ -1,6 +1,7 @@
 from .models import (
     AssetType,
     Bar,
+    EarningsEvent,
     MarketStatus,
     NewsArticle,
     OptionContract,
@@ -12,7 +13,7 @@ from .models import (
 from .polygon_client import PolygonClient, PolygonError
 
 __all__ = [
-    "AssetType", "Bar", "MarketStatus", "NewsArticle", "OptionContract",
+    "AssetType", "Bar", "EarningsEvent", "MarketStatus", "NewsArticle", "OptionContract",
     "Quote", "Snapshot", "Timeframe", "Trade",
     "PolygonClient", "PolygonError",
 ]

@@ -10,13 +10,19 @@ and what must never be changed without explicit discussion.
 ## Current Status
 
 **Phase:** 1 — Complete ✅ / Phase 2 — Complete ✅ / Phase 2.5 — Complete ✅ / Phase 3 — Complete ✅ / Phase 4 — Complete ✅ / Phase 5 — Complete ✅ / Phase 6 — In Progress 🚧 (6a–6i: Terraform + Vercel config + GitHub Actions CI/CD ✅ / cloud apply + hook wiring pending)
-**Last Updated:** 2026-04-30
-**Last Session:** Trust-building release completed: public signals + performance endpoints, landing live ticker/history, public how-it-works/performance/about pages, trust nav/footer badges, explanatory tooltip polish
+**Last Updated:** 2026-05-01
+**Last Session:** Priority 9 earnings integration completed: Polygon earnings endpoint + Redis cache, authenticated market earnings API, dashboard earnings widget/page, scanner badges, signal evidence warnings, portfolio earnings alerts
 
 **Trust-building features:** ✅ COMPLETE
 - Public endpoints added (no JWT): `GET /v1/signals/recent` and `GET /v1/signals/performance/summary`
 - New public pages: `/how-it-works`, `/performance`, `/about` (plus `/security` placeholder)
 - Landing page updated with trust signals: live signal ticker, recent signal history section, trust badges bar, and expanded public nav/footer trust links
+
+**Priority 9 earnings integration:** ✅ COMPLETE
+- Backend: `PolygonClient.get_earnings_calendar()` using Polygon `/vX/reference/tickers` + Redis cache (1h)
+- Backend API: authenticated `GET /v1/market/earnings?symbols=...&days=...` for upcoming + recent earnings
+- Frontend: new earnings calendar widget + `/dashboard/earnings` page (30-day view, filters)
+- Risk overlays: scanner earnings badges, signal evidence earnings warning card, portfolio inline earnings risk warning
 
 ---
 
@@ -951,12 +957,12 @@ Position sizing calculator percentage of portfolio per trade
 Max daily loss limit with auto-stop if hit
 Correlation warnings e.g. 80 percent long tech
 Kelly criterion or fixed fractional sizing suggestions
-PRIORITY 9 — Earnings Calendar Integration
-Upcoming earnings for watchlist symbols
-Flag earnings risk on open positions
-Pre-earnings volatility signals
-Post-earnings gap scanner
-Note: Polygon has this data not yet wired in
+PRIORITY 9 — Earnings Calendar Integration ✅ COMPLETE
+Upcoming earnings for watchlist symbols ✅
+Flag earnings risk on open positions ✅
+Pre-earnings volatility signal context ✅ (scanner/setup badges + evidence warnings)
+Post-earnings gap scanner context ✅ (earnings badges on gap candidates)
+Note: Polygon earnings data is now wired through backend and dashboard surfaces
 PRIORITY 10 — Sector and Market Internals Dashboard
 Sector rotation heatmap showing leaders and laggards
 Market breadth: advance/decline, new highs/lows

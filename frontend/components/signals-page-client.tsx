@@ -14,6 +14,7 @@ import {
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import type { MarketOverview, SnapshotPayload } from "@/lib/api/market";
 import type { ScannerOverview } from "@/lib/api/scanner";
+import type { EarningsEvent } from "@/lib/api/earnings";
 import { InfoTip } from "@/components/info-tip";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import type { ThemeColors } from "@/lib/design-system";
@@ -35,6 +36,7 @@ interface LayerRow {
 interface SignalsPageClientProps {
   marketOverview: MarketOverview;
   scannerOverview: ScannerOverview;
+  earningsBySymbol: Record<string, EarningsEvent>;
 }
 
 const layerMeta = [
@@ -65,7 +67,7 @@ function deriveFromSnapshot(snapshot?: SnapshotPayload): { bullishBias: number; 
   return { bullishBias: bias, support, resistance };
 }
 
-export function SignalsPageClient({ marketOverview, scannerOverview }: SignalsPageClientProps) {
+export function SignalsPageClient({ marketOverview, scannerOverview, earningsBySymbol }: SignalsPageClientProps) {
   const { colors } = useTheme();
   const [symbol, setSymbol] = useState("AAPL");
   const [evidence, setEvidence] = useState<SignalEvidenceData | null>(null);
@@ -250,7 +252,19 @@ export function SignalsPageClient({ marketOverview, scannerOverview }: SignalsPa
             } catch {
               symbolNewsArticles = [];
             }
-            setEvidence(buildEvidenceFromSetup(setupLike, snapshot, { symbolNewsArticles }));
+            const event = earningsBySymbol[symbol.toUpperCase()];
+            const today = new Date().toISOString().slice(0, 10);
+            const daysUntil =
+              event != null
+                ? Math.floor((Date.parse(`${event.report_date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000)
+                : undefined;
+            setEvidence(
+              buildEvidenceFromSetup(setupLike, snapshot, {
+                symbolNewsArticles,
+                earningsRiskDays: daysUntil,
+                earningsReportTime: event?.report_time
+              })
+            );
             setEvidenceOpen(true);
           }}
           style={{

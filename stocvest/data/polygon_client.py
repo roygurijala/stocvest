@@ -35,6 +35,7 @@ from stocvest.utils.api_rate_limits import await_polygon_rest_slot
 
 from stocvest.data.models import (
     Bar,
+    EarningsEvent,
     MarketStatus,
     NewsArticle,
     OptionContract,
@@ -43,6 +44,7 @@ from stocvest.data.models import (
     Timeframe,
     Trade,
 )
+from stocvest.utils.redis_client import get_sync_redis
 from stocvest.utils.logging import get_logger
 
 log = get_logger(__name__)
@@ -512,6 +514,85 @@ class PolygonClient:
         data = await self._get(f"/v3/reference/tickers/{symbol}")
         return data.get("results", {})
 
+    async def get_earnings_calendar(
+        self,
+        symbols: list[str],
+        from_date: date | str,
+        to_date: date | str,
+    ) -> list[EarningsEvent]:
+        """
+        Fetch earnings events from Polygon reference endpoint.
+
+        Uses Redis cache for 1 hour by (symbols, from_date, to_date).
+        """
+        normalized_symbols = sorted({s.strip().upper() for s in symbols if s and s.strip()})
+        if not normalized_symbols:
+            return []
+        from_iso = from_date.isoformat() if isinstance(from_date, date) else str(from_date)
+        to_iso = to_date.isoformat() if isinstance(to_date, date) else str(to_date)
+        cache_key = f"stocvest:earnings:v1:{','.join(normalized_symbols)}:{from_iso}:{to_iso}"
+
+        r = get_sync_redis()
+        if r is not None:
+            try:
+                cached = r.get(cache_key)
+                if cached:
+                    rows = json.loads(cached)
+                    if isinstance(rows, list):
+                        return [EarningsEvent.model_validate(row) for row in rows]
+            except Exception:
+                pass
+
+        params = {
+            "active": "true",
+            "limit": "1000",
+            "sort": "ticker",
+            "order": "asc",
+            "ticker.any_of": ",".join(normalized_symbols),
+        }
+        data = await self._get("/vX/reference/tickers", params)
+
+        events: list[EarningsEvent] = []
+        for row in data.get("results", []) or []:
+            if not isinstance(row, dict):
+                continue
+            ticker = str(row.get("ticker") or "").strip().upper()
+            if not ticker:
+                continue
+            earnings = row.get("earnings") or {}
+            if not isinstance(earnings, dict):
+                continue
+            report_date_raw = earnings.get("report_date") or earnings.get("date")
+            if not report_date_raw:
+                continue
+            try:
+                report_dt = date.fromisoformat(str(report_date_raw))
+            except ValueError:
+                continue
+            if report_dt < date.fromisoformat(from_iso) or report_dt > date.fromisoformat(to_iso):
+                continue
+
+            events.append(
+                EarningsEvent(
+                    symbol=ticker,
+                    company_name=str(row.get("name") or ticker),
+                    report_date=report_dt,
+                    report_time=self._normalize_report_time(earnings.get("time") or earnings.get("timing")),
+                    estimated_eps=self._safe_float(earnings.get("eps_estimate") or earnings.get("estimated_eps")),
+                    actual_eps=self._safe_float(earnings.get("eps_actual") or earnings.get("actual_eps")),
+                    surprise_percent=self._safe_float(earnings.get("surprise_percent")),
+                    market_cap=self._safe_float(row.get("market_cap")),
+                )
+            )
+
+        events.sort(key=lambda e: (e.report_date, e.symbol))
+        if r is not None:
+            try:
+                r.setex(cache_key, 3600, json.dumps([e.model_dump(mode="json") for e in events], default=str))
+            except Exception:
+                pass
+        return events
+
     # ──────────────────────────────────────────────────────────────────────────
     # WebSocket — Real-time streaming
     # ──────────────────────────────────────────────────────────────────────────
@@ -686,3 +767,23 @@ class PolygonClient:
         url = httpx.URL(next_url)
         params = {key: value for key, value in url.params.multi_items()}
         return url.path, params
+
+    @staticmethod
+    def _safe_float(v: object) -> float | None:
+        try:
+            if v is None:
+                return None
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _normalize_report_time(raw: object) -> str:
+        text = str(raw or "").strip().lower()
+        if text in {"bmo", "before", "before_open", "before market", "before_market"}:
+            return "before_market"
+        if text in {"amc", "after", "after_close", "after market", "after_market"}:
+            return "after_market"
+        if text in {"dmh", "during", "during_market", "during market"}:
+            return "during_market"
+        return "unknown"

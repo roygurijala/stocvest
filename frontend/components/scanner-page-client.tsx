@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import type { ScannerOverview } from "@/lib/api/scanner";
+import type { EarningsEvent } from "@/lib/api/earnings";
 import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
@@ -23,6 +24,7 @@ import { InfoTip } from "@/components/info-tip";
 interface ScannerPageClientProps {
   initialOverview: ScannerOverview;
   initialTimestampIso: string;
+  earningsBySymbol: Record<string, EarningsEvent>;
 }
 
 function scoreColor(score: number, colors: ThemeColors): string {
@@ -31,7 +33,7 @@ function scoreColor(score: number, colors: ThemeColors): string {
   return colors.caution;
 }
 
-export function ScannerPageClient({ initialOverview, initialTimestampIso }: ScannerPageClientProps) {
+export function ScannerPageClient({ initialOverview, initialTimestampIso, earningsBySymbol }: ScannerPageClientProps) {
   const { colors } = useTheme();
   const [isPending, startTransition] = useTransition();
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
@@ -56,6 +58,28 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso }: Scan
     }
     return m;
   }, [initialOverview.gaps]);
+
+  const earningsBadgeFor = (symbol: string): { label: string; tip: string } | null => {
+    const event = earningsBySymbol[symbol.toUpperCase()];
+    if (!event) return null;
+    const today = new Date().toISOString().slice(0, 10);
+    const tomorrow = new Date(Date.now() + 86400 * 1000).toISOString().slice(0, 10);
+    if (event.report_date !== today && event.report_date !== tomorrow) return null;
+    const when = event.report_date === today ? "today" : "tomorrow";
+    const timing = event.report_time === "before_market" ? "before market" : event.report_time === "after_market" ? "after market" : "during market";
+    return {
+      label: "📊 Earnings",
+      tip: `This stock reports earnings ${when} ${timing}. Gaps and setups around earnings carry higher risk and reward.`
+    };
+  };
+  const earningsRiskFor = (symbol: string): { daysUntil: number; reportTime: EarningsEvent["report_time"] } | null => {
+    const event = earningsBySymbol[symbol.toUpperCase()];
+    if (!event) return null;
+    const today = new Date().toISOString().slice(0, 10);
+    const dayDelta = Math.floor((Date.parse(`${event.report_date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000);
+    if (dayDelta < 0 || dayDelta > 3) return null;
+    return { daysUntil: dayDelta, reportTime: event.report_time };
+  };
 
   return (
     <section style={{ display: "grid", gap: spacing[4] }}>
@@ -107,18 +131,41 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso }: Scan
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2] }}>
                     <strong>{gap.symbol}</strong>
-                    <span
-                      style={{
-                        borderRadius: borderRadius.full,
-                        padding: "2px 8px",
-                        background: "rgba(59,130,246,0.14)",
-                        color: colors.accent,
-                        fontSize: typography.scale.xs
-                      }}
-                    >
-                      {gap.gap_percent > 0 ? "+" : ""}
-                      {gap.gap_percent.toFixed(2)}%
-                    </span>
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: spacing[1] }}>
+                      {(() => {
+                        const b = earningsBadgeFor(gap.symbol);
+                        if (!b) return null;
+                        return (
+                          <span
+                            style={{
+                              borderRadius: borderRadius.full,
+                              padding: "2px 8px",
+                              background: "rgba(245,158,11,.18)",
+                              color: colors.caution,
+                              fontSize: typography.scale.xs,
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 4
+                            }}
+                          >
+                            {b.label}
+                            <InfoTip text={b.tip} label="Earnings risk" />
+                          </span>
+                        );
+                      })()}
+                      <span
+                        style={{
+                          borderRadius: borderRadius.full,
+                          padding: "2px 8px",
+                          background: "rgba(59,130,246,0.14)",
+                          color: colors.accent,
+                          fontSize: typography.scale.xs
+                        }}
+                      >
+                        {gap.gap_percent > 0 ? "+" : ""}
+                        {gap.gap_percent.toFixed(2)}%
+                      </span>
+                    </div>
                   </div>
                   <div style={{ marginTop: spacing[2], display: "grid", gap: spacing[2] }}>
                     <div
@@ -232,18 +279,30 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso }: Scan
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2] }}>
                     <strong>{setup.symbol}</strong>
-                    <span
-                      style={{
-                        borderRadius: borderRadius.full,
-                        padding: "2px 8px",
-                        background:
-                          ["bullish", "long"].includes(setup.direction.toLowerCase()) ? "rgba(34,197,94,.15)" : "rgba(239,68,68,.15)",
-                        color: ["bullish", "long"].includes(setup.direction.toLowerCase()) ? colors.bullish : colors.bearish,
-                        fontSize: typography.scale.xs
-                      }}
-                    >
-                      {setup.direction}
-                    </span>
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: spacing[1] }}>
+                      {(() => {
+                        const b = earningsBadgeFor(setup.symbol);
+                        if (!b) return null;
+                        return (
+                          <span style={{ borderRadius: borderRadius.full, padding: "2px 8px", background: "rgba(245,158,11,.18)", color: colors.caution, fontSize: typography.scale.xs, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                            {b.label}
+                            <InfoTip text={b.tip} label="Earnings risk" />
+                          </span>
+                        );
+                      })()}
+                      <span
+                        style={{
+                          borderRadius: borderRadius.full,
+                          padding: "2px 8px",
+                          background:
+                            ["bullish", "long"].includes(setup.direction.toLowerCase()) ? "rgba(34,197,94,.15)" : "rgba(239,68,68,.15)",
+                          color: ["bullish", "long"].includes(setup.direction.toLowerCase()) ? colors.bullish : colors.bearish,
+                          fontSize: typography.scale.xs
+                        }}
+                      >
+                        {setup.direction}
+                      </span>
+                    </div>
                   </div>
                   <p style={{ margin: `${spacing[2]} 0 0 0`, color: colors.textMuted, fontSize: typography.scale.sm, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                     Confidence {Math.round(setup.score * 100)}%
@@ -309,7 +368,14 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso }: Scan
                       } catch {
                         symbolNewsArticles = [];
                       }
-                      setEvidence(buildEvidenceFromSetup(setup, undefined, { symbolNewsArticles }));
+                      const risk = earningsRiskFor(setup.symbol);
+                      setEvidence(
+                        buildEvidenceFromSetup(setup, undefined, {
+                          symbolNewsArticles,
+                          earningsRiskDays: risk?.daysUntil,
+                          earningsReportTime: risk?.reportTime
+                        })
+                      );
                       setEvidenceOpen(true);
                     }}
                     style={{

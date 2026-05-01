@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from stocvest.data.models import (
     AssetType,
     Bar,
+    EarningsEvent,
     MarketStatus,
     NewsArticle,
     Newssentiment,
@@ -115,6 +116,20 @@ def test_market_status() -> None:
         exchanges={"nyse": "open"},
     )
     assert m.exchanges["nyse"] == "open"
+
+
+@pytest.mark.unit
+def test_earnings_event_model() -> None:
+    e = EarningsEvent(
+        symbol="AAPL",
+        company_name="Apple Inc.",
+        report_date=datetime(2026, 5, 1, tzinfo=timezone.utc).date(),
+        report_time="before_market",
+        estimated_eps=1.5,
+        actual_eps=1.7,
+        surprise_percent=13.3,
+    )
+    assert e.symbol == "AAPL"
 
 
 @pytest.mark.unit
