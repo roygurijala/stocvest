@@ -137,23 +137,23 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
 
       <div className="signals-grid" style={{ display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: spacing[4] }}>
         <section style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
-          <h3 style={{ marginTop: 0 }}>6-Layer Signal Breakdown</h3>
+          <h3 style={{ marginTop: 0, marginBottom: spacing[2] }}>6-Layer Signal Breakdown</h3>
           <div style={{ display: "grid", gap: spacing[2] }}>
             {rows.map((row, rowIdx) => (
               <article
                 key={row.name}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "auto auto auto 1fr",
-                  alignItems: "center",
                   gap: spacing[2],
                   borderBottom: `1px solid ${colors.border}`,
                   paddingBottom: spacing[2]
                 }}
               >
-                <span>{row.icon}</span>
-                <strong style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                  {row.name}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2] }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: spacing[2], minWidth: 0 }}>
+                    <span>{row.icon}</span>
+                    <strong style={{ margin: 0 }}>{row.name}</strong>
+                  </div>
                   <InfoTip
                     text={(() => {
                       const keys = ["technical", "news", "macro", "sector", "geopolitical", "internals"] as const;
@@ -162,19 +162,21 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
                     })()}
                     label={row.name}
                   />
-                </strong>
-                <span
-                  style={{
-                    borderRadius: borderRadius.full,
-                    padding: "2px 8px",
-                    background: "rgba(148,163,184,0.12)",
-                    color: statusColor(row.status, colors),
-                    fontSize: typography.scale.xs
-                  }}
-                >
-                  {row.status}
-                </span>
-                <span style={{ color: colors.textMuted, fontSize: typography.scale.sm }}>{row.explanation}</span>
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: spacing[2] }}>
+                  <span
+                    style={{
+                      borderRadius: borderRadius.full,
+                      padding: "2px 8px",
+                      background: "rgba(148,163,184,0.12)",
+                      color: statusColor(row.status, colors),
+                      fontSize: typography.scale.xs
+                    }}
+                  >
+                    {row.status}
+                  </span>
+                  <span style={{ color: colors.textMuted, fontSize: typography.scale.sm, flex: "1 1 200px" }}>{row.explanation}</span>
+                </div>
               </article>
             ))}
           </div>

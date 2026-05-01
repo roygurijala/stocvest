@@ -207,11 +207,11 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview, 
                     gap: spacing[2]
                   }}
                 >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2] }}>
+                    <strong style={{ color: colors.text, margin: 0 }}>{symbol}</strong>
+                    <InfoTip text={SYMBOL_CARD_TIPS[symbol]} label={`${symbol} explanation`} />
+                  </div>
                   <div style={{ color: colors.textMuted }}>
-                    <strong style={{ color: colors.text, display: "inline-flex", alignItems: "center", gap: 6 }}>
-                      {symbol}
-                      <InfoTip text={SYMBOL_CARD_TIPS[symbol]} label={`${symbol} explanation`} />
-                    </strong>{" "}
                     <span style={{ color: colors.text }}>{toPrice(snapshot.last_trade_price)}</span>
                   </div>
                   <div style={{ color: percent >= 0 ? colors.bullish : colors.bearish, fontWeight: 600 }}>{toPercent(percent)}</div>
@@ -260,11 +260,19 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview, 
               alignItems: "center"
             }}
           >
+            <div
+              style={{
+                gridColumn: "1 / -1",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: spacing[2]
+              }}
+            >
+              <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.sm }}>Market Sentiment Score</p>
+              <InfoTip text={MARKET_SENTIMENT_SCORE_TIP} label="About market sentiment score" />
+            </div>
             <div>
-              <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.sm, display: "flex", alignItems: "center", gap: 6 }}>
-                Market Sentiment Score
-                <InfoTip text={MARKET_SENTIMENT_SCORE_TIP} label="About market sentiment score" />
-              </p>
               {marketOverview.snapshots.length === 0 && !marketOverview.error ? (
                 <div style={{ marginTop: spacing[3], display: "grid", gap: spacing[2] }}>
                   <SkeletonLine width="95px" height={38} />
@@ -293,10 +301,18 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview, 
           </article>
 
           <section>
-            <h3 style={{ marginTop: 0, marginBottom: spacing[2], display: "inline-flex", alignItems: "center", gap: 8 }}>
-              Top Signals
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: spacing[2],
+                marginBottom: spacing[2]
+              }}
+            >
+              <h3 style={{ margin: 0 }}>Top Signals</h3>
               <InfoTip text={TOP_SIGNALS_TIP} label="About top signals" />
-            </h3>
+            </div>
             <div style={{ display: "grid", gap: spacing[3] }}>
               {topSignals.length === 0 ? (
                 <article style={{ background: colors.surface, borderRadius: borderRadius.lg, padding: spacing[4] }}>
@@ -320,37 +336,29 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview, 
                       border: `1px solid ${colors.border}`,
                       borderRadius: borderRadius.lg,
                       padding: spacing[3],
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      gap: spacing[3]
+                      display: "grid",
+                      gap: spacing[2]
                     }}
                   >
-                    <div style={{ display: "flex", alignItems: "center", gap: spacing[3], minWidth: 0 }}>
-                      <p style={{ margin: 0, fontWeight: 700 }}>{signal.symbol}</p>
-                      <span
-                        style={{
-                          background: signal.direction.toLowerCase() === "bullish" ? "rgba(34,197,94,.2)" : "rgba(239,68,68,.2)",
-                          color: signal.direction.toLowerCase() === "bullish" ? colors.bullish : colors.bearish,
-                          borderRadius: borderRadius.full,
-                          padding: "2px 8px",
-                          fontSize: typography.scale.xs
-                        }}
-                      >
-                        {signal.direction}
-                      </span>
-                      <span
-                        style={{
-                          color: colors.textMuted,
-                          fontSize: typography.scale.sm,
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 4
-                        }}
-                      >
-                        {Math.round(signal.score * 100)}%
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2] }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: spacing[2], minWidth: 0, flexWrap: "wrap" }}>
+                        <p style={{ margin: 0, fontWeight: 700 }}>{signal.symbol}</p>
+                        <span
+                          style={{
+                            background: signal.direction.toLowerCase() === "bullish" ? "rgba(34,197,94,.2)" : "rgba(239,68,68,.2)",
+                            color: signal.direction.toLowerCase() === "bullish" ? colors.bullish : colors.bearish,
+                            borderRadius: borderRadius.full,
+                            padding: "2px 8px",
+                            fontSize: typography.scale.xs
+                          }}
+                        >
+                          {signal.direction}
+                        </span>
+                      </div>
+                      <div style={{ display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                        <span style={{ color: colors.textMuted, fontSize: typography.scale.sm }}>{Math.round(signal.score * 100)}%</span>
                         <InfoTip text={CONFIDENCE_PERCENT_TIP} label="About confidence" />
-                      </span>
+                      </div>
                     </div>
                     <button
                       type="button"
@@ -385,7 +393,8 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview, 
                         padding: `${spacing[1]} ${spacing[2]}`,
                         cursor: "pointer",
                         fontSize: typography.scale.xs,
-                        whiteSpace: "nowrap"
+                        whiteSpace: "nowrap",
+                        justifySelf: "start"
                       }}
                     >
                       View Evidence
@@ -407,12 +416,20 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview, 
               padding: spacing[4]
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: spacing[2], flexWrap: "wrap" }}>
-              <ShieldCheck color={pdtColor} size={20} />
-              <strong style={{ color: pdtColor, fontSize: typography.scale.sm, display: "inline-flex", alignItems: "center", gap: 6 }}>
-                PDT Guardian: {pdtLabel}
-                <InfoTip text={PDT_GUARDIAN_TIP} label="About pattern day trader rules" />
-              </strong>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: spacing[2],
+                flexShrink: 0
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: spacing[2], minWidth: 0 }}>
+                <ShieldCheck color={pdtColor} size={20} />
+                <strong style={{ color: pdtColor, fontSize: typography.scale.sm, margin: 0 }}>PDT Guardian: {pdtLabel}</strong>
+              </div>
+              <InfoTip text={PDT_GUARDIAN_TIP} label="About pattern day trader rules" />
             </div>
             {!pdt ? (
               <p style={{ margin: `${spacing[2]} 0 0 0`, color: colors.textMuted, fontSize: typography.scale.sm }}>
@@ -432,45 +449,59 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview, 
               border: `1px solid ${colors.border}`,
               borderRadius: borderRadius.xl,
               padding: spacing[4],
+              height: 390,
               maxHeight: 390,
-              overflow: "auto"
+              display: "flex",
+              flexDirection: "column",
+              minHeight: 0
             }}
           >
-            <h3 style={{ marginTop: 0, marginBottom: spacing[2], display: "inline-flex", alignItems: "center", gap: 8 }}>
-              Latest Headlines
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: spacing[2],
+                flexShrink: 0,
+                marginBottom: spacing[2]
+              }}
+            >
+              <h3 style={{ margin: 0 }}>Latest Headlines</h3>
               <InfoTip text={LATEST_HEADLINES_TIP} label="About latest headlines" />
-            </h3>
-            {marketOverview.news.length === 0 ? (
-              marketOverview.error ? (
-                <p style={{ color: colors.textMuted, margin: 0 }}>Unable to connect. Check your connection.</p>
+            </div>
+            <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+              {marketOverview.news.length === 0 ? (
+                marketOverview.error ? (
+                  <p style={{ color: colors.textMuted, margin: 0 }}>Unable to connect. Check your connection.</p>
+                ) : (
+                  <p style={{ color: colors.textMuted, margin: 0 }}>No recent market news.</p>
+                )
               ) : (
-                <p style={{ color: colors.textMuted, margin: 0 }}>No recent market news.</p>
-              )
-            ) : (
-              <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: spacing[3] }}>
-                {marketOverview.news.slice(0, 5).map((article) => (
-                  <li key={article.article_id} style={{ borderBottom: `1px solid ${colors.border}`, paddingBottom: spacing[3] }}>
-                    <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>
-                      {article.source || "Unknown source"} - {timeAgo(article.published_at)}
-                    </p>
-                    <a
-                      href={article.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{
-                        display: "inline-block",
-                        marginTop: spacing[1],
-                        color: colors.text,
-                        fontSize: typography.scale.sm,
-                        lineHeight: 1.35
-                      }}
-                    >
-                      {article.title.length > 110 ? `${article.title.slice(0, 107)}...` : article.title}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            )}
+                <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: spacing[3] }}>
+                  {marketOverview.news.slice(0, 5).map((article) => (
+                    <li key={article.article_id} style={{ borderBottom: `1px solid ${colors.border}`, paddingBottom: spacing[3] }}>
+                      <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>
+                        {article.source || "Unknown source"} - {timeAgo(article.published_at)}
+                      </p>
+                      <a
+                        href={article.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          display: "inline-block",
+                          marginTop: spacing[1],
+                          color: colors.text,
+                          fontSize: typography.scale.sm,
+                          lineHeight: 1.35
+                        }}
+                      >
+                        {article.title.length > 110 ? `${article.title.slice(0, 107)}...` : article.title}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </article>
         </aside>
       </div>

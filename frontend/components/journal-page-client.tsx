@@ -125,10 +125,10 @@ export function JournalPageClient({ initialEntries }: JournalPageClientProps) {
           [streak.label, streak.value, STREAK_TIP]
         ].map(([k, v, tip]) => (
           <article key={k} style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.lg, padding: spacing[3] }}>
-            <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs, display: "inline-flex", alignItems: "center", gap: 6 }}>
-              {k}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2], marginBottom: spacing[1] }}>
+              <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>{k}</p>
               {tip ? <InfoTip text={String(tip)} label={`About ${k}`} /> : null}
-            </p>
+            </div>
             <strong>{v}</strong>
           </article>
         ))}

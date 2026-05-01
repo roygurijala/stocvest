@@ -113,10 +113,10 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
 
       <div className="scanner-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: spacing[3] }}>
         <section style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
-          <h3 style={{ marginTop: 0, display: "flex", alignItems: "center", gap: 8 }}>
-            Gap Candidates
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2], marginBottom: spacing[2] }}>
+            <h3 style={{ margin: 0 }}>Gap Candidates</h3>
             <InfoTip text={GAP_CANDIDATES_TIP} label="About gap candidates" />
-          </h3>
+          </div>
           <div style={{ display: "grid", gap: spacing[3] }}>
             {initialOverview.gaps.length === 0 ? (
               <p style={{ margin: 0, color: colors.textMuted }}>No gap candidates right now.</p>
@@ -217,10 +217,10 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
         </section>
 
         <section style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
-          <h3 style={{ marginTop: 0, display: "flex", alignItems: "center", gap: 8 }}>
-            News Catalysts
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2], marginBottom: spacing[2] }}>
+            <h3 style={{ margin: 0 }}>News Catalysts</h3>
             <InfoTip text={NEWS_CATALYSTS_TIP} label="About news catalysts" />
-          </h3>
+          </div>
           <div style={{ display: "grid", gap: spacing[3] }}>
             {initialOverview.catalysts.length === 0 ? (
               <p style={{ margin: 0, color: colors.textMuted }}>No catalysts right now.</p>
@@ -261,10 +261,10 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
         </section>
 
         <section style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
-          <h3 style={{ marginTop: 0, display: "flex", alignItems: "center", gap: 8 }}>
-            Intraday Setups
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2], marginBottom: spacing[2] }}>
+            <h3 style={{ margin: 0 }}>Intraday Setups</h3>
             <InfoTip text={INTRADAY_SETUPS_TIP} label="About intraday setups" />
-          </h3>
+          </div>
           <div style={{ display: "grid", gap: spacing[3] }}>
             {initialOverview.setups.length === 0 ? (
               <p style={{ margin: 0, color: colors.textMuted }}>No setups right now.</p>
@@ -275,7 +275,7 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: idx * 0.05 }}
-                  style={{ border: `1px solid ${colors.border}`, borderRadius: borderRadius.lg, padding: spacing[3] }}
+                  style={{ border: `1px solid ${colors.border}`, borderRadius: borderRadius.lg, padding: spacing[3], display: "grid", gap: spacing[2] }}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2] }}>
                     <strong>{setup.symbol}</strong>
@@ -304,10 +304,22 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                       </span>
                     </div>
                   </div>
-                  <p style={{ margin: `${spacing[2]} 0 0 0`, color: colors.textMuted, fontSize: typography.scale.sm, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                    Confidence {Math.round(setup.score * 100)}%
-                    <InfoTip text={CONFIDENCE_PERCENT_TIP} label="About confidence" />
-                  </p>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: spacing[2],
+                      color: colors.textMuted,
+                      fontSize: typography.scale.sm
+                    }}
+                  >
+                    <span>Confidence</span>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      {Math.round(setup.score * 100)}%
+                      <InfoTip text={CONFIDENCE_PERCENT_TIP} label="About confidence" />
+                    </span>
+                  </div>
                   <p style={{ margin: `${spacing[1]} 0`, color: colors.textMuted, fontSize: typography.scale.xs }}>
                     {setup.triggers[0] || "Intraday pattern"}
                   </p>
