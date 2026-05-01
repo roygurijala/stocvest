@@ -33,6 +33,14 @@ const outcomeText: Record<PublicSignalOutcome, string> = {
   neutral: "➖ Neutral"
 };
 
+const demoTickerSignals: PublicSignal[] = [
+  { symbol: "AAPL", direction: "long", confidence: 65, timestamp_iso: "just-now", outcome: "pending" },
+  { symbol: "TSLA", direction: "short", confidence: 71, timestamp_iso: "2m-ago", outcome: "pending" },
+  { symbol: "NVDA", direction: "long", confidence: 78, timestamp_iso: "5m-ago", outcome: "pending" },
+  { symbol: "SPY", direction: "neutral", confidence: 52, timestamp_iso: "8m-ago", outcome: "pending" },
+  { symbol: "MSFT", direction: "long", confidence: 68, timestamp_iso: "12m-ago", outcome: "pending" }
+];
+
 function timeAgo(iso: string): string {
   const ms = Date.parse(iso);
   if (!Number.isFinite(ms)) return "just now";
@@ -66,13 +74,7 @@ export function LandingPage() {
 
   const tickerSignals = useMemo(() => {
     if (signals.length === 0) {
-      return Array.from({ length: 5 }).map((_, i) => ({
-        symbol: `SIGNAL ${i + 1}`,
-        direction: "neutral" as const,
-        confidence: 0,
-        timestamp_iso: "",
-        outcome: "pending" as const
-      }));
+      return [...demoTickerSignals, ...demoTickerSignals];
     }
     return [...signals, ...signals];
   }, [signals]);
@@ -186,6 +188,7 @@ export function LandingPage() {
 
       <section id="live-signals" className="mx-auto max-w-7xl px-4 pb-8 md:px-8">
         <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+          <p className="mb-1 text-xs text-slate-400">Example signals shown — live signals appear as they are generated</p>
           <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-wide text-slate-300">
             <span>Live Signals — Updated in real time</span>
           </div>
@@ -202,12 +205,18 @@ export function LandingPage() {
                 return (
                   <div
                     key={`${signal.symbol}-${idx}`}
-                    className={`inline-flex min-w-[250px] items-center gap-2 rounded-md border border-white/10 px-3 py-2 text-sm ${isPlaceholder ? "animate-pulse" : ""}`}
+                    className={`inline-flex min-w-[250px] items-center gap-2 rounded-md border border-white/10 px-3 py-2 text-sm ${isPlaceholder ? "animate-pulse opacity-90" : ""}`}
                   >
                     <span className="font-semibold">{signal.symbol}</span>
                     <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${dir}`}>{signal.direction}</span>
-                    <span className="text-slate-300">{isPlaceholder ? "..." : `${Math.round(signal.confidence)}%`}</span>
-                    <span className="ml-auto text-xs text-slate-400">{isPlaceholder ? "loading..." : timeAgo(signal.timestamp_iso)}</span>
+                    <span className="text-slate-300">{`${Math.round(signal.confidence)}%`}</span>
+                    <span className="ml-auto text-xs text-slate-400">
+                      {isPlaceholder
+                        ? signal.timestamp_iso === "just-now"
+                          ? "Just now"
+                          : signal.timestamp_iso.replace("-", " ")
+                        : timeAgo(signal.timestamp_iso)}
+                    </span>
                   </div>
                 );
               })}
@@ -260,13 +269,17 @@ export function LandingPage() {
             </table>
           </div>
         )}
-        <p className={`mt-4 text-sm font-semibold ${winRateTone}`}>
-          {summary?.win_count ?? 0} wins out of {summary?.total_resolved ?? 0} resolved signals = {(summary?.win_rate_percent ?? 0).toFixed(1)}% win rate
-        </p>
-        <p className="mt-2 text-xs text-slate-400">
-          Based on {summary?.total_signals_tracked ?? 0} signals since {summary?.launch_date ?? new Date().toISOString().slice(0, 10)}. Small sample size — accuracy improves as
-          our history grows. Past performance does not guarantee future results.
-        </p>
+        {signals.length > 0 ? (
+          <>
+            <p className={`mt-4 text-sm font-semibold ${winRateTone}`}>
+              {summary?.win_count ?? 0} wins out of {summary?.total_resolved ?? 0} resolved signals = {(summary?.win_rate_percent ?? 0).toFixed(1)}% win rate
+            </p>
+            <p className="mt-2 text-xs text-slate-400">
+              Based on {summary?.total_signals_tracked ?? 0} signals since {summary?.launch_date ?? new Date().toISOString().slice(0, 10)}. Small sample size — accuracy improves as
+              our history grows. Past performance does not guarantee future results.
+            </p>
+          </>
+        ) : null}
       </section>
 
       <section id="the-problem" className="mx-auto max-w-7xl px-4 py-20 md:px-8">
@@ -353,7 +366,8 @@ export function LandingPage() {
           Every morning at 8 AM. Before the market opens.
         </motion.h2>
         <motion.article initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="mx-auto max-w-3xl rounded-xl border border-white/10 bg-white/5 p-6">
-          <h3 className="mb-4 text-lg font-semibold">Today&apos;s Intelligence Briefing</h3>
+          <h3 className="text-lg font-semibold">Sample Intelligence Briefing</h3>
+          <p className="mb-4 text-xs italic text-slate-400">Real briefings delivered daily at 8 AM ET to logged-in users</p>
           <div className="grid gap-4 md:grid-cols-3">
             <div>
               <p className="mb-2 text-sm text-slate-400">Gap Candidates</p>
@@ -380,7 +394,9 @@ export function LandingPage() {
             </div>
           </div>
         </motion.article>
-        <p className="mt-4 text-center text-slate-300">Automatic. No setup required. Just open the app.</p>
+        <p className="mt-4 text-center text-slate-300">
+          Every trading day at 8 AM ET, STOCVEST delivers your pre-market intelligence briefing automatically. No manual research required.
+        </p>
       </section>
 
       <section className="mx-auto max-w-7xl px-4 py-20 md:px-8">
