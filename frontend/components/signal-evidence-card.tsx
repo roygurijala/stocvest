@@ -6,7 +6,9 @@ import { Bar, BarChart, Cell, ResponsiveContainer, XAxis, YAxis } from "recharts
 import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
+import { InfoTip } from "@/components/info-tip";
 import { layerFreshnessFromIso, type EvidenceLayer, type EvidenceStatus, type SignalEvidenceData } from "@/lib/signal-evidence";
+import { LAYER_NAME_HINTS } from "@/lib/ui-tooltips";
 
 interface SignalEvidenceCardProps {
   evidence: SignalEvidenceData;
@@ -135,7 +137,10 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2] }}>
                 <div style={{ display: "flex", alignItems: "center", gap: spacing[2] }}>
                   <span>{layer.icon}</span>
-                  <strong>{layer.name}</strong>
+                  <strong style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    {layer.name}
+                    <InfoTip text={LAYER_NAME_HINTS[layer.key] || "Signal layer readout."} label={layer.name} />
+                  </strong>
                 </div>
                 <span
                   style={{

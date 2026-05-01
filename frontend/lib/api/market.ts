@@ -35,10 +35,24 @@ export interface MarketOverview {
   status?: MarketStatusPayload;
   snapshots: SnapshotPayload[];
   news: NewsPayload[];
+  /** Last 20 five-minute closes per symbol (for dashboard sparklines). */
+  sparklinesBySymbol?: Record<string, number[]>;
   error?: string;
 }
 
 const DEFAULT_SYMBOLS = ["SPY", "QQQ", "IWM"];
+
+function barClose(bar: Record<string, unknown>): number | null {
+  const c = bar.close ?? bar.c;
+  if (typeof c === "number" && Number.isFinite(c)) {
+    return c;
+  }
+  if (typeof c === "string") {
+    const n = Number.parseFloat(c);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
 
 export async function fetchMarketOverview(symbols: string[] = DEFAULT_SYMBOLS): Promise<MarketOverview> {
   const cleanSymbols = symbols.map((s) => s.trim().toUpperCase()).filter(Boolean);
@@ -51,10 +65,24 @@ export async function fetchMarketOverview(symbols: string[] = DEFAULT_SYMBOLS): 
       cleanSymbols.map((symbol) => apiFetch<SnapshotPayload>(`/v1/market/snapshot?symbol=${symbol}`))
     );
     const news = await apiFetch<NewsPayload[]>("/v1/market/news?limit=5");
+    const sparklinesEntries = await Promise.all(
+      cleanSymbols.map(async (symbol) => {
+        const bars = await apiFetch<Record<string, unknown>[]>(
+          `/v1/market/bars?symbol=${encodeURIComponent(symbol)}&timeframe=5min&limit=20`
+        );
+        const rows = Array.isArray(bars) ? bars : [];
+        const closes = rows
+          .map((b) => barClose(b))
+          .filter((n): n is number => n !== null)
+          .slice(-20);
+        return [symbol, closes] as const;
+      })
+    );
     return {
       status,
       snapshots: snapshots.filter((s): s is SnapshotPayload => Boolean(s)),
-      news: news || []
+      news: news || [],
+      sparklinesBySymbol: Object.fromEntries(sparklinesEntries)
     };
   } catch (error: unknown) {
     return {

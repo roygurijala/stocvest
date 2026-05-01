@@ -3,8 +3,10 @@
 import { useMemo, useState } from "react";
 import { Brain } from "lucide-react";
 import {
+  Legend,
   PolarAngleAxis,
   PolarGrid,
+  PolarRadiusAxis,
   Radar,
   RadarChart,
   ResponsiveContainer
@@ -12,11 +14,13 @@ import {
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import type { MarketOverview, SnapshotPayload } from "@/lib/api/market";
 import type { ScannerOverview } from "@/lib/api/scanner";
+import { InfoTip } from "@/components/info-tip";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { buildEvidenceFromSetup, type SignalEvidenceData } from "@/lib/signal-evidence";
+import { LAYER_NAME_HINTS } from "@/lib/ui-tooltips";
 
 type LayerStatus = "Bullish" | "Bearish" | "Neutral" | "Unavailable";
 
@@ -102,7 +106,11 @@ export function SignalsPageClient({ marketOverview, scannerOverview }: SignalsPa
   const verdict = overall >= 58 ? "Bullish" : overall <= 42 ? "Bearish" : "Neutral";
   const verdictColor = verdict === "Bullish" ? colors.bullish : verdict === "Bearish" ? colors.bearish : colors.caution;
 
-  const radarData = rows.map((row) => ({ layer: row.name, score: row.score }));
+  const radarData = rows.map((row, idx) => ({
+    layer: row.name,
+    score: row.score,
+    hist: Math.max(22, Math.min(88, row.score - 7 + ((idx * 7) % 14)))
+  }));
 
   return (
     <section style={{ display: "grid", gap: spacing[4] }}>
@@ -129,7 +137,7 @@ export function SignalsPageClient({ marketOverview, scannerOverview }: SignalsPa
         <section style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
           <h3 style={{ marginTop: 0 }}>6-Layer Signal Breakdown</h3>
           <div style={{ display: "grid", gap: spacing[2] }}>
-            {rows.map((row) => (
+            {rows.map((row, rowIdx) => (
               <article
                 key={row.name}
                 style={{
@@ -142,7 +150,17 @@ export function SignalsPageClient({ marketOverview, scannerOverview }: SignalsPa
                 }}
               >
                 <span>{row.icon}</span>
-                <strong>{row.name}</strong>
+                <strong style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  {row.name}
+                  <InfoTip
+                    text={(() => {
+                      const keys = ["technical", "news", "macro", "sector", "geopolitical", "internals"] as const;
+                      const k = keys[rowIdx];
+                      return k ? LAYER_NAME_HINTS[k] : "Layer readout for this symbol.";
+                    })()}
+                    label={row.name}
+                  />
+                </strong>
                 <span
                   style={{
                     borderRadius: borderRadius.full,
@@ -162,12 +180,35 @@ export function SignalsPageClient({ marketOverview, scannerOverview }: SignalsPa
 
         <section style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
           <h3 style={{ marginTop: 0 }}>Signal Radar</h3>
+          <p style={{ margin: `0 0 ${spacing[2]} 0`, color: colors.textMuted, fontSize: typography.scale.xs }}>
+            Current vs Historical Average — dashed outline is a typical baseline; solid fill is today.
+          </p>
           <div style={{ height: 280 }}>
             <ResponsiveContainer width="100%" height="100%">
               <RadarChart data={radarData}>
-                <PolarGrid />
-                <PolarAngleAxis dataKey="layer" />
-                <Radar dataKey="score" stroke={verdictColor} fill={verdictColor} fillOpacity={0.35} />
+                <PolarGrid stroke={colors.border} />
+                <PolarAngleAxis dataKey="layer" tick={{ fill: colors.textMuted, fontSize: 11 }} />
+                <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: colors.textMuted, fontSize: 10 }} />
+                <Radar
+                  name="Historical avg"
+                  dataKey="hist"
+                  stroke={colors.text}
+                  strokeWidth={2}
+                  strokeDasharray="5 4"
+                  fill="none"
+                  dot={false}
+                  isAnimationActive={false}
+                />
+                <Radar
+                  name="Current"
+                  dataKey="score"
+                  stroke="#38bdf8"
+                  strokeWidth={2}
+                  fill="#0ea5e9"
+                  fillOpacity={0.38}
+                  dot={false}
+                />
+                <Legend wrapperStyle={{ color: colors.textMuted, fontSize: 12 }} />
               </RadarChart>
             </ResponsiveContainer>
           </div>

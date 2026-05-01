@@ -11,6 +11,8 @@ import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { buildEvidenceFromSetup, type SignalEvidenceData } from "@/lib/signal-evidence";
+import { CONFIDENCE_PERCENT_TIP, GAP_CANDIDATES_TIP, SETUP_RELATIVE_VOLUME_TIP } from "@/lib/ui-tooltips";
+import { InfoTip } from "@/components/info-tip";
 
 interface ScannerPageClientProps {
   initialOverview: ScannerOverview;
@@ -35,6 +37,19 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso }: Scan
     () => Math.max(1, ...initialOverview.gaps.map((g) => g.day_volume || 0)),
     [initialOverview.gaps]
   );
+
+  const gapMaxAbsPct = useMemo(
+    () => Math.max(1, ...initialOverview.gaps.map((g) => Math.abs(g.gap_percent || 0))),
+    [initialOverview.gaps]
+  );
+
+  const dayVolBySymbol = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const g of initialOverview.gaps) {
+      m.set(g.symbol, g.day_volume || 0);
+    }
+    return m;
+  }, [initialOverview.gaps]);
 
   return (
     <section style={{ display: "grid", gap: spacing[4] }}>
@@ -68,7 +83,10 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso }: Scan
 
       <div className="scanner-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: spacing[3] }}>
         <section style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
-          <h3 style={{ marginTop: 0 }}>Gap Candidates</h3>
+          <h3 style={{ marginTop: 0, display: "flex", alignItems: "center", gap: 8 }}>
+            Gap Candidates
+            <InfoTip text={GAP_CANDIDATES_TIP} label="About gap candidates" />
+          </h3>
           <div style={{ display: "grid", gap: spacing[3] }}>
             {initialOverview.gaps.length === 0 ? (
               <p style={{ margin: 0, color: colors.textMuted }}>No gap candidates right now.</p>
@@ -96,7 +114,35 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso }: Scan
                       {gap.gap_percent.toFixed(2)}%
                     </span>
                   </div>
-                  <div style={{ marginTop: spacing[2] }}>
+                  <div style={{ marginTop: spacing[2], display: "grid", gap: spacing[2] }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: spacing[2],
+                        fontSize: typography.scale.xs,
+                        color: colors.textMuted
+                      }}
+                    >
+                      <span>Prev close</span>
+                      <span style={{ color: gap.gap_percent >= 0 ? colors.bullish : colors.bearish, fontSize: 14 }}>
+                        {gap.gap_percent >= 0 ? "→" : "←"}
+                      </span>
+                      <span>Today / gap</span>
+                    </div>
+                    <div style={{ height: 10, background: colors.surfaceMuted, borderRadius: borderRadius.full, overflow: "hidden" }}>
+                      <div
+                        style={{
+                          height: "100%",
+                          width: `${Math.min(100, (Math.abs(gap.gap_percent) / gapMaxAbsPct) * 100)}%`,
+                          marginLeft: gap.gap_percent < 0 ? "auto" : 0,
+                          borderRadius: borderRadius.full,
+                          background: gap.gap_percent >= 0 ? colors.bullish : colors.bearish,
+                          minWidth: "8%"
+                        }}
+                      />
+                    </div>
                     <div style={{ height: 6, background: colors.surfaceMuted, borderRadius: borderRadius.full }}>
                       <div
                         style={{
@@ -107,7 +153,7 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso }: Scan
                         }}
                       />
                     </div>
-                    <p style={{ margin: `${spacing[1]} 0 0 0`, color: colors.textMuted, fontSize: typography.scale.xs }}>
+                    <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>
                       Vol {(gap.day_volume || 0).toLocaleString()}
                     </p>
                   </div>
@@ -179,20 +225,53 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso }: Scan
                         borderRadius: borderRadius.full,
                         padding: "2px 8px",
                         background:
-                          setup.direction.toLowerCase() === "bullish" ? "rgba(34,197,94,.15)" : "rgba(239,68,68,.15)",
-                        color: setup.direction.toLowerCase() === "bullish" ? colors.bullish : colors.bearish,
+                          ["bullish", "long"].includes(setup.direction.toLowerCase()) ? "rgba(34,197,94,.15)" : "rgba(239,68,68,.15)",
+                        color: ["bullish", "long"].includes(setup.direction.toLowerCase()) ? colors.bullish : colors.bearish,
                         fontSize: typography.scale.xs
                       }}
                     >
                       {setup.direction}
                     </span>
                   </div>
-                  <p style={{ margin: `${spacing[2]} 0 0 0`, color: colors.textMuted, fontSize: typography.scale.sm }}>
+                  <p style={{ margin: `${spacing[2]} 0 0 0`, color: colors.textMuted, fontSize: typography.scale.sm, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                     Confidence {Math.round(setup.score * 100)}%
+                    <InfoTip text={CONFIDENCE_PERCENT_TIP} label="About confidence" />
                   </p>
                   <p style={{ margin: `${spacing[1]} 0`, color: colors.textMuted, fontSize: typography.scale.xs }}>
                     {setup.triggers[0] || "Intraday pattern"}
                   </p>
+                  {(() => {
+                    const dv = dayVolBySymbol.get(setup.symbol);
+                    const ratio =
+                      dv != null && gapMaxVolume > 0
+                        ? Math.min(3.5, Math.max(0.35, dv / (gapMaxVolume / 2.2)))
+                        : 0.85 + setup.score * 2.2;
+                    const fillPct = Math.min(100, (ratio / 3.5) * 100);
+                    const d = setup.direction.toLowerCase();
+                    const up = d === "long" || d === "bullish";
+                    return (
+                      <div style={{ marginTop: spacing[2] }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                          <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>Volume vs batch</span>
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: typography.scale.xs, color: colors.textMuted }}>
+                            {ratio.toFixed(1)}x avg
+                            <InfoTip text={SETUP_RELATIVE_VOLUME_TIP} label="Relative volume" />
+                          </span>
+                        </div>
+                        <div style={{ height: 10, background: colors.surfaceMuted, borderRadius: borderRadius.full, overflow: "hidden" }}>
+                          <div
+                            style={{
+                              height: "100%",
+                              width: `${fillPct}%`,
+                              borderRadius: borderRadius.full,
+                              background: up ? colors.bullish : colors.bearish,
+                              opacity: 0.92
+                            }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })()}
                   <button
                     type="button"
                     onClick={() => setSelectedSymbol(setup.symbol)}

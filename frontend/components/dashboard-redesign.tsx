@@ -3,8 +3,11 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { ShieldCheck } from "lucide-react";
-import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import { DashboardRealtime } from "@/components/dashboard-realtime";
+import { InfoTip } from "@/components/info-tip";
+import { MiniSparkline } from "@/components/mini-sparkline";
+import { SentimentGauge } from "@/components/sentiment-gauge";
+import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import type { MarketOverview, NewsPayload, SnapshotPayload } from "@/lib/api/market";
 import type { PDTStatusPayload } from "@/lib/api/pdt";
@@ -12,6 +15,7 @@ import type { ScannerOverview } from "@/lib/api/scanner";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { buildEvidenceFromSetup, type SignalEvidenceData } from "@/lib/signal-evidence";
+import { CONFIDENCE_PERCENT_TIP, MARKET_SENTIMENT_SCORE_TIP, PDT_GUARDIAN_TIP } from "@/lib/ui-tooltips";
 
 interface DashboardRedesignProps {
   marketOverview: MarketOverview;
@@ -138,45 +142,84 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview }
           gap: spacing[3]
         }}
       >
-        <div style={{ display: "flex", gap: spacing[3], flexWrap: "wrap", fontSize: typography.scale.sm }}>
-          {statSymbols.map((symbol) => {
-            const snapshot = snapshotsBySymbol.get(symbol);
-            if (!snapshot && !marketOverview.error) {
-              return <SkeletonLine key={symbol} width="150px" />;
-            }
-            if (!snapshot) {
-              return null;
-            }
-            const { percent } = computeSnapshotChange(snapshot);
-            return (
-              <span key={symbol} style={{ color: colors.textMuted }}>
-                <strong style={{ color: colors.text }}>{symbol}</strong> {toPrice(snapshot.last_trade_price)}{" "}
-                <span style={{ color: percent >= 0 ? colors.bullish : colors.bearish }}>{toPercent(percent)}</span>
-              </span>
-            );
-          })}
-          <span style={{ color: colors.textMuted }}>
-            <strong style={{ color: colors.text }}>Market</strong>{" "}
-            {marketOverview.status ? (
-              <span
-                style={{
-                  color:
-                    marketOverview.status.market?.toLowerCase() === "open"
-                      ? colors.bullish
-                      : colors.textMuted
-                }}
-              >
-                {marketOverview.status.market?.toLowerCase() === "open" ? "Open" : "Closed"}
-              </span>
-            ) : !marketOverview.error ? (
-              <SkeletonLine width="64px" />
-            ) : null}
-          </span>
-          {vixSnapshot ? (
+        <div style={{ display: "grid", gap: spacing[3] }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+              gap: spacing[3],
+              fontSize: typography.scale.sm
+            }}
+          >
+            {statSymbols.map((symbol) => {
+              const snapshot = snapshotsBySymbol.get(symbol);
+              const spark = marketOverview.sparklinesBySymbol?.[symbol] ?? [];
+              if (!snapshot && !marketOverview.error) {
+                return (
+                  <article
+                    key={symbol}
+                    style={{
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: borderRadius.lg,
+                      padding: spacing[3],
+                      background: colors.surfaceMuted
+                    }}
+                  >
+                    <SkeletonLine width="80%" />
+                    <div style={{ marginTop: spacing[2] }}>
+                      <SkeletonLine width="100%" height={36} />
+                    </div>
+                  </article>
+                );
+              }
+              if (!snapshot) {
+                return null;
+              }
+              const { percent } = computeSnapshotChange(snapshot);
+              return (
+                <article
+                  key={symbol}
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: borderRadius.lg,
+                    padding: spacing[3],
+                    background: colors.surface,
+                    display: "grid",
+                    gap: spacing[2]
+                  }}
+                >
+                  <div style={{ color: colors.textMuted }}>
+                    <strong style={{ color: colors.text }}>{symbol}</strong>{" "}
+                    <span style={{ color: colors.text }}>{toPrice(snapshot.last_trade_price)}</span>
+                  </div>
+                  <div style={{ color: percent >= 0 ? colors.bullish : colors.bearish, fontWeight: 600 }}>{toPercent(percent)}</div>
+                  <MiniSparkline closes={spark} upColor={colors.bullish} downColor={colors.bearish} height={36} />
+                </article>
+              );
+            })}
+          </div>
+          <div style={{ display: "flex", gap: spacing[3], flexWrap: "wrap", alignItems: "center", fontSize: typography.scale.sm }}>
             <span style={{ color: colors.textMuted }}>
-              <strong style={{ color: colors.text }}>VIX</strong> {toPrice(vixSnapshot.last_trade_price)}
+              <strong style={{ color: colors.text }}>Market</strong>{" "}
+              {marketOverview.status ? (
+                <span
+                  style={{
+                    color:
+                      marketOverview.status.market?.toLowerCase() === "open" ? colors.bullish : colors.textMuted
+                  }}
+                >
+                  {marketOverview.status.market?.toLowerCase() === "open" ? "Open" : "Closed"}
+                </span>
+              ) : !marketOverview.error ? (
+                <SkeletonLine width="64px" />
+              ) : null}
             </span>
-          ) : null}
+            {vixSnapshot ? (
+              <span style={{ color: colors.textMuted }}>
+                <strong style={{ color: colors.text }}>VIX</strong> {toPrice(vixSnapshot.last_trade_price)}
+              </span>
+            ) : null}
+          </div>
         </div>
         <DashboardRealtime />
       </article>
@@ -188,23 +231,43 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview }
               background: colors.surface,
               border: `1px solid ${colors.border}`,
               borderRadius: borderRadius.xl,
-              padding: spacing[6]
+              padding: spacing[6],
+              display: "grid",
+              gridTemplateColumns: "auto 1fr",
+              gap: spacing[4],
+              alignItems: "center"
             }}
           >
-            <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.sm }}>Market Sentiment Score</p>
-            {marketOverview.snapshots.length === 0 && !marketOverview.error ? (
-              <div style={{ marginTop: spacing[3], display: "grid", gap: spacing[2] }}>
-                <SkeletonLine width="95px" height={38} />
-                <SkeletonLine width="200px" />
-              </div>
-            ) : (
-              <>
-                <div style={{ fontSize: typography.scale["4xl"], fontWeight: 800, color: sentimentColor, marginTop: spacing[2] }}>
-                  {sentiment.score}
+            <div>
+              <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.sm, display: "flex", alignItems: "center", gap: 6 }}>
+                Market Sentiment Score
+                <InfoTip text={MARKET_SENTIMENT_SCORE_TIP} label="About market sentiment score" />
+              </p>
+              {marketOverview.snapshots.length === 0 && !marketOverview.error ? (
+                <div style={{ marginTop: spacing[3], display: "grid", gap: spacing[2] }}>
+                  <SkeletonLine width="95px" height={38} />
+                  <SkeletonLine width="200px" />
                 </div>
-                <p style={{ margin: `${spacing[2]} 0 0 0`, color: colors.textMuted }}>{regime}</p>
-              </>
-            )}
+              ) : (
+                <>
+                  <SentimentGauge
+                    score={sentiment.score}
+                    textColor={colors.text}
+                    zoneColors={{
+                      red: "#ef4444",
+                      amber: "#f59e0b",
+                      grey: "#64748b",
+                      green: "#22c55e",
+                      bright: "#4ade80"
+                    }}
+                  />
+                  <p style={{ margin: `${spacing[2]} 0 0 0`, color: sentimentColor, fontWeight: 600 }}>{regime}</p>
+                </>
+              )}
+            </div>
+            <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.sm, alignSelf: "center" }}>
+              Blend of tape tone from SPY, QQQ, and IWM snapshots. Use as a quick pulse, not trade advice.
+            </p>
           </article>
 
           <section>
@@ -251,8 +314,17 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview }
                       >
                         {signal.direction}
                       </span>
-                      <span style={{ color: colors.textMuted, fontSize: typography.scale.sm }}>
+                      <span
+                        style={{
+                          color: colors.textMuted,
+                          fontSize: typography.scale.sm,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 4
+                        }}
+                      >
                         {Math.round(signal.score * 100)}%
+                        <InfoTip text={CONFIDENCE_PERCENT_TIP} label="About confidence" />
                       </span>
                     </div>
                     <button
@@ -297,9 +369,12 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview }
               padding: spacing[4]
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: spacing[2] }}>
+            <div style={{ display: "flex", alignItems: "center", gap: spacing[2], flexWrap: "wrap" }}>
               <ShieldCheck color={pdtColor} size={20} />
-              <strong style={{ color: pdtColor, fontSize: typography.scale.sm }}>PDT Guardian: {pdtLabel}</strong>
+              <strong style={{ color: pdtColor, fontSize: typography.scale.sm, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                PDT Guardian: {pdtLabel}
+                <InfoTip text={PDT_GUARDIAN_TIP} label="About pattern day trader rules" />
+              </strong>
             </div>
             {!pdt ? (
               <p style={{ margin: `${spacing[2]} 0 0 0`, color: colors.textMuted, fontSize: typography.scale.sm }}>

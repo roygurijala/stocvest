@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import type { JournalEntryPayload } from "@/lib/api/contracts";
-import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -38,12 +38,21 @@ export function JournalPageClient({ initialEntries }: JournalPageClientProps) {
   }, [entries]);
 
   const chartData = useMemo(() => {
+    const withPnl = sorted.filter((e) => typeof e.pnl_realized_usd === "number");
+    if (withPnl.length === 0) {
+      const d = new Date().toISOString().slice(0, 10);
+      return [{ date: d, pnl: 0 }];
+    }
     let running = 0;
-    return [...sorted].reverse().map((entry) => {
+    return [...withPnl].reverse().map((entry) => {
       running += entry.pnl_realized_usd || 0;
       return { date: entry.opened_at.slice(0, 10), pnl: Number(running.toFixed(2)) };
     });
   }, [sorted]);
+
+  const hasRealizedCurve = sorted.some((e) => typeof e.pnl_realized_usd === "number");
+  const lastPnl = chartData.length ? chartData[chartData.length - 1].pnl : 0;
+  const lineStroke = lastPnl >= 0 ? colors.bullish : colors.bearish;
 
   async function handleCreateEntry(formData: FormData) {
     const symbol = String(formData.get("symbol") || "").toUpperCase().trim();
@@ -110,20 +119,27 @@ export function JournalPageClient({ initialEntries }: JournalPageClientProps) {
         <h3 style={{ marginTop: 0 }}>Cumulative P&L</h3>
         <div style={{ height: 260 }}>
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData}>
-              <XAxis dataKey="date" />
-              <YAxis />
-              <Tooltip />
-              <Line
-                type="monotone"
-                dataKey="pnl"
-                stroke={chartData.length && chartData[chartData.length - 1].pnl >= 0 ? colors.bullish : colors.bearish}
-                strokeWidth={2}
-                dot={false}
-              />
+            <LineChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="stocvestPnlFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={lineStroke} stopOpacity={0.35} />
+                  <stop offset="100%" stopColor={lineStroke} stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke={colors.border} vertical={false} />
+              <XAxis dataKey="date" tick={{ fill: colors.textMuted, fontSize: 11 }} />
+              <YAxis tick={{ fill: colors.textMuted, fontSize: 11 }} width={56} />
+              <Tooltip contentStyle={{ background: colors.surface, border: `1px solid ${colors.border}` }} />
+              <Area type="monotone" dataKey="pnl" stroke="none" fill="url(#stocvestPnlFill)" isAnimationActive={false} />
+              <Line type="monotone" dataKey="pnl" stroke={lineStroke} strokeWidth={2.5} dot={false} isAnimationActive={false} />
             </LineChart>
           </ResponsiveContainer>
         </div>
+        {!hasRealizedCurve ? (
+          <p style={{ margin: `${spacing[2]} 0 0 0`, color: colors.textMuted, fontSize: typography.scale.sm }}>
+            Start trading to build your performance chart — line stays at $0 until closed trades include realized P&L.
+          </p>
+        ) : null}
       </article>
 
       <article style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
