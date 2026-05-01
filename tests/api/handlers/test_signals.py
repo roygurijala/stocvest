@@ -6,6 +6,8 @@ from datetime import datetime, timedelta, timezone
 from stocvest.api.handlers.signals import (
     day_briefing_handler,
     day_setups_handler,
+    public_performance_summary_handler,
+    public_recent_signals_handler,
     swing_composite_handler,
     swing_synthesis_parse_handler,
 )
@@ -122,6 +124,135 @@ def test_day_briefing_handler_renders_markdown() -> None:
 def test_day_setups_handler_validates_body() -> None:
     response = day_setups_handler({"body": json.dumps({"bars_by_symbol": []})}, {})
     assert response["statusCode"] == 400
+
+
+class _FakeDynamoTable:
+    def __init__(self, items: list[dict[str, object]], *, raises: Exception | None = None) -> None:
+        self._items = items
+        self._raises = raises
+
+    def scan(self, **kwargs: object) -> dict[str, object]:
+        _ = kwargs
+        if self._raises is not None:
+            raise self._raises
+        return {"Items": self._items}
+
+
+class _FakeDynamoResource:
+    def __init__(self, table: _FakeDynamoTable) -> None:
+        self._table = table
+
+    def Table(self, name: str) -> _FakeDynamoTable:
+        _ = name
+        return self._table
+
+
+class _FakeClientError(Exception):
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.response = {"Error": {"Code": code}}
+
+
+def test_public_recent_signals_returns_sanitized_latest_10(monkeypatch) -> None:
+    now = datetime.now(timezone.utc)
+    items = []
+    for i in range(12):
+        items.append(
+            {
+                "symbol": f"T{i}",
+                "direction": "long" if i % 2 == 0 else "short",
+                "confidence": 70 + i,
+                "timestamp_iso": (now - timedelta(hours=30 + i)).isoformat(),
+                "price_at_signal": 100.0,
+                "price_1d_after": 101.0 if i % 2 == 0 else 99.0,
+                "internal_score": 999,
+            }
+        )
+
+    fake_boto3 = type(
+        "FakeBoto3",
+        (),
+        {"resource": staticmethod(lambda *_a, **_k: _FakeDynamoResource(_FakeDynamoTable(items)))},
+    )
+    fake_botocore_exceptions = type("FakeBotocoreEx", (), {"ClientError": _FakeClientError})
+    monkeypatch.setitem(__import__("sys").modules, "boto3", fake_boto3)
+    monkeypatch.setitem(__import__("sys").modules, "botocore.exceptions", fake_botocore_exceptions)
+
+    response = public_recent_signals_handler({}, {})
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert len(body) == 10
+    assert set(body[0].keys()) == {"symbol", "direction", "confidence", "timestamp_iso", "outcome"}
+    assert body[0]["outcome"] in {"win", "loss", "neutral", "pending"}
+
+
+def test_public_recent_signals_returns_empty_when_table_missing(monkeypatch) -> None:
+    fake_boto3 = type(
+        "FakeBoto3",
+        (),
+        {
+            "resource": staticmethod(
+                lambda *_a, **_k: _FakeDynamoResource(
+                    _FakeDynamoTable([], raises=_FakeClientError("ResourceNotFoundException"))
+                )
+            )
+        },
+    )
+    fake_botocore_exceptions = type("FakeBotocoreEx", (), {"ClientError": _FakeClientError})
+    monkeypatch.setitem(__import__("sys").modules, "boto3", fake_boto3)
+    monkeypatch.setitem(__import__("sys").modules, "botocore.exceptions", fake_botocore_exceptions)
+
+    response = public_recent_signals_handler({}, {})
+    assert response["statusCode"] == 200
+    assert json.loads(response["body"]) == []
+
+
+def test_public_performance_summary_aggregates_outcomes(monkeypatch) -> None:
+    now = datetime.now(timezone.utc)
+    items = [
+        {
+            "symbol": "AAA",
+            "direction": "long",
+            "confidence": 84,
+            "timestamp_iso": (now - timedelta(hours=30)).isoformat(),
+            "price_at_signal": 100,
+            "price_1d_after": 101,
+        },
+        {
+            "symbol": "BBB",
+            "direction": "short",
+            "confidence": 79,
+            "timestamp_iso": (now - timedelta(hours=30)).isoformat(),
+            "price_at_signal": 100,
+            "price_1d_after": 101,
+        },
+        {
+            "symbol": "CCC",
+            "direction": "long",
+            "confidence": 52,
+            "timestamp_iso": (now - timedelta(hours=30)).isoformat(),
+            "price_at_signal": 100,
+            "price_1d_after": 100.2,
+        },
+    ]
+    fake_boto3 = type(
+        "FakeBoto3",
+        (),
+        {"resource": staticmethod(lambda *_a, **_k: _FakeDynamoResource(_FakeDynamoTable(items)))},
+    )
+    fake_botocore_exceptions = type("FakeBotocoreEx", (), {"ClientError": _FakeClientError})
+    monkeypatch.setitem(__import__("sys").modules, "boto3", fake_boto3)
+    monkeypatch.setitem(__import__("sys").modules, "botocore.exceptions", fake_botocore_exceptions)
+
+    response = public_performance_summary_handler({}, {})
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["total_signals_tracked"] == 3
+    assert body["total_resolved"] == 3
+    assert body["win_count"] == 1
+    assert body["loss_count"] == 1
+    assert body["neutral_count"] == 1
+    assert body["win_rate_percent"] == 33.3
 
 
 def _bar_payload(ts: datetime, *, close: float, volume: float) -> dict[str, object]:

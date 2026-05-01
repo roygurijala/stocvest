@@ -10,8 +10,13 @@ and what must never be changed without explicit discussion.
 ## Current Status
 
 **Phase:** 1 — Complete ✅ / Phase 2 — Complete ✅ / Phase 2.5 — Complete ✅ / Phase 3 — Complete ✅ / Phase 4 — Complete ✅ / Phase 5 — Complete ✅ / Phase 6 — In Progress 🚧 (6a–6i: Terraform + Vercel config + GitHub Actions CI/CD ✅ / cloud apply + hook wiring pending)
-**Last Updated:** 2026-04-29
-**Last Session:** Redis-backed scanner cache + Polygon/Claude rate limits; DayTradingSetups sort key + persistence; scheduled scanner Polygon→score→Dynamo→Alerts→WebSocket fan-out; Next.js `DashboardRealtime` + `NEXT_PUBLIC_STOCVEST_WS_URL`
+**Last Updated:** 2026-04-30
+**Last Session:** Trust-building release completed: public signals + performance endpoints, landing live ticker/history, public how-it-works/performance/about pages, trust nav/footer badges, explanatory tooltip polish
+
+**Trust-building features:** ✅ COMPLETE
+- Public endpoints added (no JWT): `GET /v1/signals/recent` and `GET /v1/signals/performance/summary`
+- New public pages: `/how-it-works`, `/performance`, `/about` (plus `/security` placeholder)
+- Landing page updated with trust signals: live signal ticker, recent signal history section, trust badges bar, and expanded public nav/footer trust links
 
 ---
 

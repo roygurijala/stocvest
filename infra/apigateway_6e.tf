@@ -14,6 +14,8 @@ locals {
     "POST /v1/signals/swing/synthesis/parse" = { module_key = "signals", authorizer = true }
     "POST /v1/signals/day/setups"            = { module_key = "signals", authorizer = true }
     "POST /v1/signals/day/briefing"          = { module_key = "signals", authorizer = true }
+    "GET /v1/signals/recent"                 = { module_key = "signals", authorizer = false }
+    "GET /v1/signals/performance/summary"    = { module_key = "signals", authorizer = false }
 
     "GET /v1/brokers/health"    = { module_key = "brokers", authorizer = true }
     "GET /v1/brokers/accounts"  = { module_key = "brokers", authorizer = true }

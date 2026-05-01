@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Bot, ChartColumnIncreasing, Newspaper, ShieldCheck } from "lucide-react";
 import { PolarAngleAxis, PolarGrid, Radar, RadarChart, ResponsiveContainer } from "recharts";
 import { useScrollPosition } from "@/lib/hooks/use-scroll-position";
+import { fetchLiveSignals, fetchPerformanceSummary, type PublicSignal, type PublicSignalOutcome, type PerformanceSummary } from "@/lib/api/public-signals";
 
 const radarData = [
   { layer: "Technical", score: 84 },
@@ -24,8 +26,59 @@ const comparisonRows = [
   "Day and Swing Trading Combined"
 ];
 
+const outcomeText: Record<PublicSignalOutcome, string> = {
+  pending: "⏳ Pending",
+  win: "✅ Win",
+  loss: "❌ Loss",
+  neutral: "➖ Neutral"
+};
+
+function timeAgo(iso: string): string {
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return "just now";
+  const deltaSec = Math.max(0, Math.floor((Date.now() - ms) / 1000));
+  if (deltaSec < 60) return `${deltaSec}s ago`;
+  if (deltaSec < 3600) return `${Math.floor(deltaSec / 60)}m ago`;
+  if (deltaSec < 86400) return `${Math.floor(deltaSec / 3600)}h ago`;
+  return `${Math.floor(deltaSec / 86400)}d ago`;
+}
+
 export function LandingPage() {
   const isScrolled = useScrollPosition(24);
+  const [signals, setSignals] = useState<PublicSignal[]>([]);
+  const [summary, setSummary] = useState<PerformanceSummary | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      const [recent, perf] = await Promise.all([fetchLiveSignals(), fetchPerformanceSummary()]);
+      if (!active) return;
+      setSignals(recent);
+      setSummary(perf);
+    };
+    void load();
+    const id = window.setInterval(load, 30_000);
+    return () => {
+      active = false;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  const tickerSignals = useMemo(() => {
+    if (signals.length === 0) {
+      return Array.from({ length: 5 }).map((_, i) => ({
+        symbol: `SIGNAL ${i + 1}`,
+        direction: "neutral" as const,
+        confidence: 0,
+        timestamp_iso: "",
+        outcome: "pending" as const
+      }));
+    }
+    return [...signals, ...signals];
+  }, [signals]);
+
+  const winRateTone =
+    (summary?.win_rate_percent ?? 0) > 60 ? "text-[#22c55e]" : (summary?.win_rate_percent ?? 0) >= 50 ? "text-[#f59e0b]" : "text-[#ef4444]";
 
   return (
     <main className="bg-[#0a0e1a] text-slate-100">
@@ -36,6 +89,14 @@ export function LandingPage() {
       >
         <nav className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 md:px-8">
           <p className="text-xl font-extrabold tracking-tight text-[#3b82f6]">STOCVEST</p>
+          <div className="hidden items-center gap-5 text-sm text-slate-300 md:flex">
+            <Link href="/how-it-works" className="hover:text-white">
+              How It Works
+            </Link>
+            <Link href="/performance" className="hover:text-white">
+              Performance
+            </Link>
+          </div>
           <div className="flex items-center gap-2 md:gap-3">
             <Link href="/login" className="rounded-md border border-white/20 px-4 py-2 text-sm hover:border-white/40">
               Login
@@ -106,6 +167,13 @@ export function LandingPage() {
               Learn More
             </Link>
           </motion.div>
+          <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-400">
+            {["Real-time data by Polygon.io", "AI by Anthropic Claude", "Infrastructure on AWS", "STOCVEST LLC", "Not investment advice"].map((b) => (
+              <span key={b} className="rounded-full border border-white/10 bg-white/5 px-2 py-1">
+                {b}
+              </span>
+            ))}
+          </div>
         </div>
         <motion.div
           animate={{ y: [0, 8, 0] }}
@@ -114,6 +182,91 @@ export function LandingPage() {
         >
           ↓
         </motion.div>
+      </section>
+
+      <section id="live-signals" className="mx-auto max-w-7xl px-4 pb-8 md:px-8">
+        <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+          <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-wide text-slate-300">
+            <span>Live Signals — Updated in real time</span>
+          </div>
+          <div className="ticker-mask overflow-hidden rounded-lg border border-white/10 bg-black/20">
+            <div className="ticker-track flex gap-2 px-2 py-2">
+              {tickerSignals.map((signal, idx) => {
+                const dir =
+                  signal.direction === "long"
+                    ? "bg-[#22c55e]/15 text-[#22c55e]"
+                    : signal.direction === "short"
+                      ? "bg-[#ef4444]/15 text-[#ef4444]"
+                      : "bg-slate-500/20 text-slate-300";
+                const isPlaceholder = signals.length === 0;
+                return (
+                  <div
+                    key={`${signal.symbol}-${idx}`}
+                    className={`inline-flex min-w-[250px] items-center gap-2 rounded-md border border-white/10 px-3 py-2 text-sm ${isPlaceholder ? "animate-pulse" : ""}`}
+                  >
+                    <span className="font-semibold">{signal.symbol}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${dir}`}>{signal.direction}</span>
+                    <span className="text-slate-300">{isPlaceholder ? "..." : `${Math.round(signal.confidence)}%`}</span>
+                    <span className="ml-auto text-xs text-slate-400">{isPlaceholder ? "loading..." : timeAgo(signal.timestamp_iso)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl px-4 pb-16 md:px-8">
+        <motion.div initial={{ opacity: 0, y: 18 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
+          <h2 className="text-3xl font-bold md:text-4xl">Every signal. Tracked and published.</h2>
+          <p className="mt-2 text-slate-300">We show our winners and our losses. No cherry-picking.</p>
+        </motion.div>
+        {signals.length === 0 ? (
+          <div className="mt-6 rounded-xl border border-white/10 bg-white/5 p-6 text-slate-300">
+            Signal history tracking begins at launch. Our first signals are being generated now. Check back soon.
+          </div>
+        ) : (
+          <div className="mt-6 overflow-x-auto rounded-xl border border-white/10">
+            <table className="w-full min-w-[780px] bg-white/5 text-sm">
+              <thead>
+                <tr className="border-b border-white/10 text-left text-slate-300">
+                  <th className="px-4 py-3">Symbol</th>
+                  <th className="px-4 py-3">Direction</th>
+                  <th className="px-4 py-3">Confidence</th>
+                  <th className="px-4 py-3">Date and Time</th>
+                  <th className="px-4 py-3">Outcome</th>
+                </tr>
+              </thead>
+              <motion.tbody
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true }}
+                variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.08 } } }}
+              >
+                {signals.map((row) => (
+                  <motion.tr
+                    key={`${row.symbol}-${row.timestamp_iso}`}
+                    variants={{ hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0 } }}
+                    className="border-b border-white/10"
+                  >
+                    <td className="px-4 py-3 font-semibold">{row.symbol}</td>
+                    <td className="px-4 py-3 capitalize text-slate-300">{row.direction}</td>
+                    <td className="px-4 py-3">{Math.round(row.confidence)}%</td>
+                    <td className="px-4 py-3 text-slate-300">{new Date(row.timestamp_iso).toLocaleString()}</td>
+                    <td className="px-4 py-3">{outcomeText[row.outcome]}</td>
+                  </motion.tr>
+                ))}
+              </motion.tbody>
+            </table>
+          </div>
+        )}
+        <p className={`mt-4 text-sm font-semibold ${winRateTone}`}>
+          {summary?.win_count ?? 0} wins out of {summary?.total_resolved ?? 0} resolved signals = {(summary?.win_rate_percent ?? 0).toFixed(1)}% win rate
+        </p>
+        <p className="mt-2 text-xs text-slate-400">
+          Based on {summary?.total_signals_tracked ?? 0} signals since {summary?.launch_date ?? new Date().toISOString().slice(0, 10)}. Small sample size — accuracy improves as
+          our history grows. Past performance does not guarantee future results.
+        </p>
       </section>
 
       <section id="the-problem" className="mx-auto max-w-7xl px-4 py-20 md:px-8">
@@ -341,11 +494,32 @@ export function LandingPage() {
       <footer className="flex flex-col items-center gap-2 px-4 py-8 text-sm text-slate-400 md:flex-row md:justify-between md:px-8">
         <span>Copyright 2026 STOCVEST LLC</span>
         <div className="flex gap-4">
+          <Link href="/about">About</Link>
+          <Link href="/how-it-works">How It Works</Link>
+          <Link href="/performance">Performance</Link>
+          <Link href="/security">Security</Link>
           <Link href="/terms">Terms</Link>
           <Link href="/privacy">Privacy</Link>
           <span>Not investment advice</span>
         </div>
       </footer>
+      <style jsx>{`
+        .ticker-mask {
+          position: relative;
+        }
+        .ticker-track {
+          width: max-content;
+          animation: stocvestTicker 28s linear infinite;
+        }
+        @keyframes stocvestTicker {
+          from {
+            transform: translateX(0);
+          }
+          to {
+            transform: translateX(-50%);
+          }
+        }
+      `}</style>
     </main>
   );
 }

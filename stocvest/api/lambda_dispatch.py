@@ -80,6 +80,8 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
         from stocvest.api.handlers.signals import (
             day_briefing_handler,
             day_setups_handler,
+            public_performance_summary_handler,
+            public_recent_signals_handler,
             swing_composite_handler,
             swing_synthesis_parse_handler,
         )
@@ -92,6 +94,8 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
                 "POST /v1/signals/swing/synthesis/parse": swing_synthesis_parse_handler,
                 "POST /v1/signals/day/setups": day_setups_handler,
                 "POST /v1/signals/day/briefing": day_briefing_handler,
+                "GET /v1/signals/recent": public_recent_signals_handler,
+                "GET /v1/signals/performance/summary": public_performance_summary_handler,
             },
         )
 
