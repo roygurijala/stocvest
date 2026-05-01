@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { Brain } from "lucide-react";
 import { Bar, BarChart, Cell, ResponsiveContainer, XAxis, YAxis } from "recharts";
 import { borderRadius, colorTokens, spacing, typography } from "@/lib/design-system";
-import type { EvidenceLayer, EvidenceStatus, SignalEvidenceData } from "@/lib/signal-evidence";
+import { layerFreshnessFromIso, type EvidenceLayer, type EvidenceStatus, type SignalEvidenceData } from "@/lib/signal-evidence";
 
 interface SignalEvidenceCardProps {
   evidence: SignalEvidenceData;
@@ -16,12 +16,6 @@ function statusColor(status: EvidenceStatus): string {
   if (status === "Bearish") return colors.bearish;
   if (status === "Neutral") return colors.caution;
   return colors.textMuted;
-}
-
-function directionLabel(direction: SignalEvidenceData["direction"]): string {
-  if (direction === "bullish") return "BULLISH";
-  if (direction === "bearish") return "BEARISH";
-  return "NEUTRAL";
 }
 
 function formatLevel(n: number | null | undefined): string {
@@ -55,6 +49,22 @@ function displayUpdatedLabel(evidence: SignalEvidenceData): string {
   return evidence.updatedLabel;
 }
 
+const MAX_REASONABLE_HOURS = 24 * 30;
+
+function displayLayerFreshness(layer: EvidenceLayer, evidence: SignalEvidenceData): string {
+  if (layer.key === "technical") {
+    return layerFreshnessFromIso(evidence.updatedAtIso);
+  }
+  const m = /^Updated (\d+)h ago$/.exec(layer.freshnessLabel);
+  if (m) {
+    const hours = Number(m[1]);
+    if (Number.isFinite(hours) && hours > MAX_REASONABLE_HOURS) {
+      return "Just now";
+    }
+  }
+  return layer.freshnessLabel;
+}
+
 export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
   const colors = colorTokens.dark;
   const arcRadius = 44;
@@ -79,7 +89,7 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
               color: directionTone
             }}
           >
-            {directionLabel(evidence.direction)}
+            {evidence.directionBadgeLabel}
           </span>
         </div>
         <div style={{ display: "grid", justifyItems: "center", gap: spacing[1] }}>
@@ -126,20 +136,17 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
                   <span>{layer.icon}</span>
                   <strong>{layer.name}</strong>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: spacing[2] }}>
-                  <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>{layer.weightPercent}% weight</span>
-                  <span
-                    style={{
-                      borderRadius: borderRadius.full,
-                      padding: "2px 8px",
-                      background: "rgba(148,163,184,0.15)",
-                      color: statusColor(layer.status),
-                      fontSize: typography.scale.xs
-                    }}
-                  >
-                    {layer.status}
-                  </span>
-                </div>
+                <span
+                  style={{
+                    borderRadius: borderRadius.full,
+                    padding: "2px 8px",
+                    background: "rgba(148,163,184,0.15)",
+                    color: statusColor(layer.status),
+                    fontSize: typography.scale.xs
+                  }}
+                >
+                  {layer.status}
+                </span>
               </div>
               <p style={{ margin: 0, color: colors.textMuted }}>{layer.explanation}</p>
               <div style={{ display: "flex", gap: spacing[2], flexWrap: "wrap" }}>
@@ -158,7 +165,7 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
                   </span>
                 ))}
               </div>
-              <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>{layer.freshnessLabel}</span>
+              <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>{displayLayerFreshness(layer, evidence)}</span>
             </article>
           ))}
         </div>
@@ -223,7 +230,7 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
             <BarChart
               data={evidence.layers.map((l) => ({
                 layer: l.name,
-                score: Math.round((l.contributionScore * l.weightPercent) / 100),
+                score: Math.round(l.contributionScore),
                 status: l.status
               }))}
               layout="vertical"

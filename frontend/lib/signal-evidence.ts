@@ -19,6 +19,8 @@ export interface EvidenceLayer {
 export interface SignalEvidenceData {
   symbol: string;
   direction: EvidenceDirection;
+  /** Same string as dashboard Top Signals (e.g. long / short), not swing BULLISH copy. */
+  directionBadgeLabel: string;
   confidencePercent: number;
   layers: EvidenceLayer[];
   aiVerdict: string;
@@ -40,6 +42,8 @@ function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
 }
 
+const MAX_LAYER_STALE_MS = 30 * 24 * 60 * 60 * 1000;
+
 export function timeAgoLabelFromIso(iso: string | null | undefined): string {
   const ts = iso ? Date.parse(iso) : Number.NaN;
   if (Number.isNaN(ts)) return "Updated recently";
@@ -47,6 +51,42 @@ export function timeAgoLabelFromIso(iso: string | null | undefined): string {
   if (delta < 60) return `Updated ${delta}s ago`;
   if (delta < 3600) return `Updated ${Math.floor(delta / 60)}m ago`;
   return `Updated ${Math.floor(delta / 3600)}h ago`;
+}
+
+/** Same shape as time-ago labels but clamps invalid / future / >30d (avoids bogus layer lines like 198443h ago). */
+export function layerFreshnessFromIso(iso: string | null | undefined): string {
+  if (iso == null || String(iso).trim() === "") {
+    return "Just now";
+  }
+  const ms = Date.parse(String(iso));
+  if (!Number.isFinite(ms)) {
+    return "Just now";
+  }
+  const ageMs = Date.now() - ms;
+  if (ageMs < 0 || ageMs > MAX_LAYER_STALE_MS) {
+    return "Just now";
+  }
+  const delta = Math.max(1, Math.floor(ageMs / 1000));
+  if (delta < 60) return `Updated ${delta}s ago`;
+  if (delta < 3600) return `Updated ${Math.floor(delta / 60)}m ago`;
+  return `Updated ${Math.floor(delta / 3600)}h ago`;
+}
+
+function evidenceDirectionFromSetup(raw: string | undefined): EvidenceDirection {
+  const d = (raw ?? "").trim().toLowerCase();
+  if (d === "long" || d === "bullish") {
+    return "bullish";
+  }
+  if (d === "short" || d === "bearish") {
+    return "bearish";
+  }
+  return "neutral";
+}
+
+/** Verbatim scanner/dashboard wording for the badge (must match Top Signals row). */
+function directionBadgeFromSetup(raw: string | undefined): string {
+  const t = (raw ?? "").trim();
+  return t.length > 0 ? t : "neutral";
 }
 
 function statusFromScore(score: number): EvidenceStatus {
@@ -84,7 +124,8 @@ export function buildEvidenceFromSetup(
   const sentimentScore = first?.sentiment_score;
   const hasNumericSentiment = typeof sentimentScore === "number" && Number.isFinite(sentimentScore);
 
-  const direction = setup.direction.toLowerCase() === "bullish" ? "bullish" : setup.direction.toLowerCase() === "bearish" ? "bearish" : "neutral";
+  const direction = evidenceDirectionFromSetup(setup.direction);
+  const directionBadgeLabel = directionBadgeFromSetup(setup.direction);
   const confidencePercent = clamp(Math.round(setup.score * 100), 0, 100);
   const last = snapshot?.last_trade_price ?? null;
   const prev = snapshot?.prev_close ?? last;
@@ -113,7 +154,7 @@ export function buildEvidenceFromSetup(
         `EMA9 ${momentum >= 0 ? "Crossed up" : "Crossed down"}`
       ],
       contributionScore: technical,
-      freshnessLabel: timeAgoLabelFromIso(setup.timestamp_iso)
+      freshnessLabel: layerFreshnessFromIso(setup.timestamp_iso)
     },
     {
       key: "news",
@@ -185,6 +226,7 @@ export function buildEvidenceFromSetup(
   return {
     symbol: setup.symbol,
     direction,
+    directionBadgeLabel,
     confidencePercent,
     layers,
     aiVerdict:

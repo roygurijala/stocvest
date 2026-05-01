@@ -12,6 +12,34 @@ const baseSetup: IntradaySetupPayload = {
   timestamp_iso: new Date().toISOString()
 };
 
+describe("buildEvidenceFromSetup direction", () => {
+  test("maps long to bullish and preserves dashboard badge text", () => {
+    const data = buildEvidenceFromSetup(
+      { ...baseSetup, direction: "long" },
+      undefined,
+      { symbolNewsArticles: [] }
+    );
+    expect(data.direction).toBe("bullish");
+    expect(data.directionBadgeLabel).toBe("long");
+  });
+
+  test("maps short to bearish", () => {
+    const data = buildEvidenceFromSetup({ ...baseSetup, direction: "SHORT" }, undefined, { symbolNewsArticles: [] });
+    expect(data.direction).toBe("bearish");
+    expect(data.directionBadgeLabel).toBe("SHORT");
+  });
+
+  test("technical freshness is Just now for epoch stale timestamp", () => {
+    const data = buildEvidenceFromSetup(
+      { ...baseSetup, timestamp_iso: "1970-01-01T00:00:00.000Z" },
+      undefined,
+      { symbolNewsArticles: [] }
+    );
+    const tech = data.layers.find((l) => l.key === "technical");
+    expect(tech?.freshnessLabel).toBe("Just now");
+  });
+});
+
 describe("buildEvidenceFromSetup news layer", () => {
   test("uses symbol news count, title, and sentiment score when articles provided", () => {
     const articles: NewsPayload[] = [
