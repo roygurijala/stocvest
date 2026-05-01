@@ -105,9 +105,11 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
           </p>
         </section>
       ) : null}
-      <section style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[3] }}>
-        <div style={{ display: "flex", alignItems: "center", gap: spacing[2] }}>
-          <h2 style={{ margin: 0 }}>{evidence.symbol}</h2>
+      <section className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <h2 className="text-xl sm:text-2xl" style={{ margin: 0 }}>
+            {evidence.symbol}
+          </h2>
           <span
             style={{
               borderRadius: borderRadius.full,
@@ -121,7 +123,8 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
             {evidence.directionBadgeLabel}
           </span>
         </div>
-        <div style={{ display: "grid", justifyItems: "center", gap: spacing[1] }}>
+        <div className="flex justify-start sm:justify-end">
+          <div style={{ display: "grid", justifyItems: "center", gap: spacing[1] }}>
           <svg width="108" height="108" viewBox="0 0 108 108">
             <circle cx="54" cy="54" r={arcRadius} stroke="rgba(148,163,184,0.25)" strokeWidth="10" fill="transparent" />
             <motion.circle
@@ -146,7 +149,10 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
             Confidence
             <InfoTip text={CONFIDENCE_PERCENT_TIP} label="About confidence percentage" />
           </span>
-          <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>{displayUpdatedLabel(evidence)}</span>
+          <span className="text-sm" style={{ color: colors.textMuted }}>
+            {displayUpdatedLabel(evidence)}
+          </span>
+        </div>
         </div>
       </section>
 
@@ -164,28 +170,30 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
                 gap: spacing[2]
               }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2] }}>
-                <div style={{ display: "flex", alignItems: "center", gap: spacing[2] }}>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <span>{layer.icon}</span>
-                  <strong style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <strong className="inline-flex items-center gap-1.5 text-sm sm:text-base">
                     {layer.name}
                     <InfoTip text={LAYER_NAME_HINTS[layer.key] || "Signal layer readout."} label={layer.name} />
                   </strong>
                 </div>
                 <span
+                  className="w-fit text-sm"
                   style={{
                     borderRadius: borderRadius.full,
                     padding: "2px 8px",
                     background: "rgba(148,163,184,0.15)",
-                    color: statusColor(layer.status, colors),
-                    fontSize: typography.scale.xs
+                    color: statusColor(layer.status, colors)
                   }}
                 >
                   {layer.status}
                 </span>
               </div>
-              <p style={{ margin: 0, color: colors.textMuted }}>{layer.explanation}</p>
-              <div style={{ display: "flex", gap: spacing[2], flexWrap: "wrap" }}>
+              <p className="text-sm leading-relaxed sm:text-base" style={{ margin: 0, color: colors.textMuted }}>
+                {layer.explanation}
+              </p>
+              <div className="flex flex-wrap gap-2">
                 {layer.keyPoints.map((point, idx) => (
                   <span
                     key={`${layer.key}-${idx}`}
@@ -243,7 +251,7 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
 
       <section style={{ border: `1px solid ${colors.border}`, borderRadius: borderRadius.lg, padding: spacing[3], display: "grid", gap: spacing[3] }}>
         <h3 style={{ margin: 0 }}>Key Levels</h3>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: spacing[2] }}>
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
           {[
             ["VWAP", evidence.keyLevels.vwap],
             ["Support", evidence.keyLevels.support],
@@ -262,7 +270,7 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
 
       <section style={{ border: `1px solid ${colors.border}`, borderRadius: borderRadius.lg, padding: spacing[3], display: "grid", gap: spacing[2] }}>
         <h3 style={{ margin: 0 }}>Confidence Breakdown</h3>
-        <div style={{ height: 200 }}>
+        <div className="h-[160px] w-full max-w-full lg:h-[200px]">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={evidence.layers.map((l) => ({

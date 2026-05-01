@@ -45,12 +45,11 @@ export function ThemeToggle() {
       transition={{ type: "spring", stiffness: 320, damping: 22 }}
       aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
       title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+      className="h-11 w-11 min-h-[44px] min-w-[44px] shrink-0"
       style={{
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
-        width: 36,
-        height: 36,
         borderRadius: 9999,
         border: "1px solid var(--color-border)",
         background: "var(--color-surface)",

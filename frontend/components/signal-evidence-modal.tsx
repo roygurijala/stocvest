@@ -3,7 +3,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
 import { SignalEvidenceCard } from "@/components/signal-evidence-card";
-import { borderRadius, spacing } from "@/lib/design-system";
+import { spacing } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import type { SignalEvidenceData } from "@/lib/signal-evidence";
 
@@ -22,14 +22,9 @@ export function SignalEvidenceModal({ evidence, open, onClose }: SignalEvidenceM
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[90] grid place-items-stretch p-0 lg:place-items-center lg:p-3"
           style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(2,6,23,0.75)",
-            zIndex: 90,
-            display: "grid",
-            placeItems: "center",
-            padding: spacing[3]
+            background: "rgba(2,6,23,0.75)"
           }}
           onClick={onClose}
         >
@@ -38,36 +33,28 @@ export function SignalEvidenceModal({ evidence, open, onClose }: SignalEvidenceM
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.98 }}
             transition={{ duration: 0.2 }}
+            className="flex max-h-none min-h-screen w-full max-w-none flex-col overflow-y-auto rounded-none lg:max-h-[95vh] lg:min-h-0 lg:w-[min(1000px,100vw-1.5rem)] lg:rounded-xl"
             onClick={(e) => e.stopPropagation()}
             style={{
-              width: "min(1000px, 100vw)",
-              maxHeight: "95vh",
-              overflow: "auto",
               background: colors.surface,
               border: `1px solid ${colors.border}`,
-              borderRadius: borderRadius.xl,
               padding: spacing[4]
             }}
           >
-            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: spacing[2] }}>
+            <div className="mb-2 flex justify-end">
               <button
                 type="button"
                 onClick={onClose}
+                className="inline-flex h-11 w-11 items-center justify-center rounded-md border"
                 style={{
-                  border: `1px solid ${colors.border}`,
-                  borderRadius: borderRadius.md,
+                  borderColor: colors.border,
                   background: "transparent",
                   color: colors.text,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  width: 34,
-                  height: 34,
                   cursor: "pointer"
                 }}
                 aria-label="Close evidence"
               >
-                <X size={16} />
+                <X size={18} />
               </button>
             </div>
             <SignalEvidenceCard evidence={evidence} />

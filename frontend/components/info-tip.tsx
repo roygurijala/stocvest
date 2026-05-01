@@ -1,16 +1,24 @@
 "use client";
 
-import { useCallback, useId, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useIsMobileLayout } from "@/lib/hooks/use-is-mobile-layout";
 
 const MAX_WIDTH_PX = 260;
 const VIEW_MARGIN = 8;
 const GAP_PX = 8;
 
+const TIP_BG = "#1e293b";
+const TIP_BORDER = "#334155";
+const ICON_GREY = "#6b7280";
+const ICON_BLUE = "#3b82f6";
+
 export function InfoTip({ text, label }: { text: string; label?: string }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const tooltipId = useId();
+  const isMobile = useIsMobileLayout();
+
   const [open, setOpen] = useState(false);
   const [hover, setHover] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -88,30 +96,91 @@ export function InfoTip({ text, label }: { text: string; label?: string }) {
     };
   }, [open, mounted, placeTooltip, text]);
 
-  const active = hover || focused;
-  const borderColor = active ? "#3b82f6" : "#6b7280";
-  const fg = active ? "#3b82f6" : "#6b7280";
+  useEffect(() => {
+    if (!isMobile || !open) return;
+    const onDoc = (e: MouseEvent | TouchEvent) => {
+      const t = e.target as Node;
+      if (triggerRef.current?.contains(t)) return;
+      if (tooltipRef.current?.contains(t)) return;
+      setOpen(false);
+      setHover(false);
+      setFocused(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("touchstart", onDoc, { passive: true });
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("touchstart", onDoc);
+    };
+  }, [isMobile, open]);
 
-  const tooltip =
-    mounted && open ? (
-      <div
-        ref={tooltipRef}
-        id={tooltipId}
-        role="tooltip"
-        className="pointer-events-none rounded-md bg-[#0f172a] px-3 py-2 text-xs leading-relaxed text-white shadow-xl transition-opacity duration-150"
-        style={{
-          position: "fixed",
-          left: coords.left,
-          top: coords.top,
-          maxWidth: MAX_WIDTH_PX,
-          zIndex: 9999,
-          opacity: tipReady ? 1 : 0,
-          transition: "opacity 120ms ease"
-        }}
-      >
-        {text}
-      </div>
-    ) : null;
+  const active = hover || focused;
+  const borderColor = active ? ICON_BLUE : ICON_GREY;
+  const fg = active ? ICON_BLUE : ICON_GREY;
+
+  const showTooltip = mounted && open;
+
+  const tooltip = showTooltip ? (
+    <div
+      ref={tooltipRef}
+      id={tooltipId}
+      role="tooltip"
+      className={isMobile ? "shadow-xl" : "pointer-events-none shadow-xl"}
+      style={{
+        position: "fixed",
+        left: coords.left,
+        top: coords.top,
+        maxWidth: MAX_WIDTH_PX,
+        zIndex: 9999,
+        background: TIP_BG,
+        color: "#ffffff",
+        border: `1px solid ${TIP_BORDER}`,
+        borderRadius: 8,
+        padding: "8px 12px",
+        fontSize: 13,
+        lineHeight: 1.5,
+        opacity: tipReady ? 1 : 0,
+        transition: "opacity 150ms ease"
+      }}
+    >
+      {isMobile ? (
+        <div style={{ position: "relative", paddingRight: 28 }}>
+          <button
+            type="button"
+            aria-label="Close tooltip"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen(false);
+              setHover(false);
+              setFocused(false);
+            }}
+            style={{
+              position: "absolute",
+              right: 0,
+              top: 0,
+              width: 28,
+              height: 28,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              border: "none",
+              background: "transparent",
+              color: "#94a3b8",
+              cursor: "pointer",
+              fontSize: 18,
+              lineHeight: 1,
+              padding: 0
+            }}
+          >
+            ×
+          </button>
+          {text}
+        </div>
+      ) : (
+        text
+      )}
+    </div>
+  ) : null;
 
   return (
     <>
@@ -119,37 +188,50 @@ export function InfoTip({ text, label }: { text: string; label?: string }) {
         ref={triggerRef}
         type="button"
         aria-label={label ?? "More information"}
+        aria-expanded={open}
         aria-describedby={open ? tooltipId : undefined}
         onMouseEnter={() => {
+          if (isMobile) return;
           setHover(true);
           setOpen(true);
         }}
         onMouseLeave={() => {
+          if (isMobile) return;
           setHover(false);
           setOpen(false);
         }}
         onFocus={() => {
+          if (isMobile) return;
           setFocused(true);
           setOpen(true);
         }}
         onBlur={() => {
+          if (isMobile) return;
           setFocused(false);
           setOpen(false);
         }}
-        className="inline-flex shrink-0 items-center justify-center p-0 leading-none transition-colors"
-        style={{
-          width: 16,
-          height: 16,
-          borderRadius: "50%",
-          border: `1px solid ${borderColor}`,
-          background: "transparent",
-          color: fg,
-          cursor: active ? "pointer" : "default",
-          fontSize: 10,
-          fontWeight: 700
+        onClick={(e) => {
+          if (!isMobile) return;
+          e.stopPropagation();
+          setOpen((v) => !v);
         }}
+        className="inline-flex h-11 w-11 shrink-0 items-center justify-center border-0 bg-transparent p-0 leading-none"
+        style={{ cursor: "pointer" }}
       >
-        i
+        <span
+          className="inline-flex items-center justify-center font-bold transition-[color,border-color] duration-150 ease-out"
+          style={{
+            width: 16,
+            height: 16,
+            borderRadius: "50%",
+            border: `1.5px solid ${borderColor}`,
+            background: "transparent",
+            color: fg,
+            fontSize: 10
+          }}
+        >
+          i
+        </span>
       </button>
       {tooltip ? createPortal(tooltip, document.body) : null}
     </>

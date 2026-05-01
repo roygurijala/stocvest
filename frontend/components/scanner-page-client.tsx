@@ -83,21 +83,19 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
 
   return (
     <section style={{ display: "grid", gap: spacing[4] }}>
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[3] }}>
-        <p style={{ margin: 0, color: colors.textMuted }}>
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="min-w-0 text-sm sm:text-base" style={{ margin: 0, color: colors.textMuted }}>
           Last scan: {new Date(initialTimestampIso).toLocaleString()}
         </p>
         <button
           type="button"
+          className="inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-2 sm:w-auto"
           onClick={() =>
             startTransition(() => {
               router.refresh();
             })
           }
           style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: spacing[2],
             border: `1px solid ${colors.border}`,
             borderRadius: borderRadius.md,
             background: colors.surface,
@@ -111,8 +109,8 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
         </button>
       </header>
 
-      <div className="scanner-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: spacing[3] }}>
-        <section style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
+      <div className="scanner-grid grid grid-cols-1 gap-3 lg:grid-cols-3">
+        <section className="min-w-0" style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2], marginBottom: spacing[2] }}>
             <h3 style={{ margin: 0 }}>Gap Candidates</h3>
             <InfoTip text={GAP_CANDIDATES_TIP} label="About gap candidates" />
@@ -216,7 +214,7 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
           </div>
         </section>
 
-        <section style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
+        <section className="min-w-0" style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2], marginBottom: spacing[2] }}>
             <h3 style={{ margin: 0 }}>News Catalysts</h3>
             <InfoTip text={NEWS_CATALYSTS_TIP} label="About news catalysts" />
@@ -260,7 +258,7 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
           </div>
         </section>
 
-        <section style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
+        <section className="min-w-0" style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2], marginBottom: spacing[2] }}>
             <h3 style={{ margin: 0 }}>Intraday Setups</h3>
             <InfoTip text={INTRADAY_SETUPS_TIP} label="About intraday setups" />

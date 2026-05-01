@@ -47,9 +47,20 @@ export function OptionsPageClient({ overview }: OptionsPageClientProps) {
         Options quotes are delayed by {overview.delayedByMinutes} minutes.
       </article>
 
-      <div style={{ display: "flex", gap: spacing[2], flexWrap: "wrap" }}>
-        <input value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase())} placeholder="Symbol" style={{ padding: spacing[2] }} />
-        <select value={expiration} onChange={(e) => setExpiration(e.target.value)} style={{ padding: spacing[2] }}>
+      <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        <input
+          value={symbol}
+          onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+          placeholder="Symbol"
+          className="min-h-11 w-full min-w-0 text-base sm:max-w-[200px]"
+          style={{ padding: spacing[2] }}
+        />
+        <select
+          value={expiration}
+          onChange={(e) => setExpiration(e.target.value)}
+          className="min-h-11 w-full text-base sm:w-auto"
+          style={{ padding: spacing[2] }}
+        >
           <option value="all">All expirations</option>
           {expirations.map((exp) => (
             <option key={exp} value={exp}>
@@ -57,12 +68,16 @@ export function OptionsPageClient({ overview }: OptionsPageClientProps) {
             </option>
           ))}
         </select>
-        <div style={{ display: "inline-flex", border: `1px solid ${colors.border}`, borderRadius: borderRadius.md }}>
+        <div
+          className="inline-flex w-full min-h-11 sm:w-auto"
+          style={{ border: `1px solid ${colors.border}`, borderRadius: borderRadius.md }}
+        >
           {(["all", "call", "put"] as const).map((s) => (
             <button
               key={s}
               type="button"
               onClick={() => setSide(s)}
+              className="min-h-11 flex-1 sm:flex-none"
               style={{
                 border: "none",
                 borderRight: s !== "put" ? `1px solid ${colors.border}` : "none",
@@ -77,21 +92,42 @@ export function OptionsPageClient({ overview }: OptionsPageClientProps) {
         </div>
       </div>
 
-      <section style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[3], overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: typography.scale.sm }}>
+      <section
+        className="-mx-1 overflow-x-auto px-1 sm:mx-0 sm:px-0"
+        style={{
+          background: colors.surface,
+          border: `1px solid ${colors.border}`,
+          borderRadius: borderRadius.xl,
+          padding: spacing[3],
+          WebkitOverflowScrolling: "touch"
+        }}
+      >
+        <table className="min-w-[320px] lg:min-w-0" style={{ width: "100%", borderCollapse: "collapse", fontSize: typography.scale.sm }}>
           <thead>
             <tr style={{ color: colors.textMuted }}>
-              <th align="left">Contract</th>
+              <th className="hidden lg:table-cell" align="left">
+                Contract
+              </th>
               <th align="left">Strike</th>
               <th align="left">Type</th>
               <th align="left">Bid</th>
               <th align="left">Ask</th>
               <th align="left">Delta</th>
-              <th align="left">Gamma</th>
-              <th align="left">Theta</th>
-              <th align="left">Vega</th>
-              <th align="left">Volume</th>
-              <th align="left">OI</th>
+              <th className="hidden lg:table-cell" align="left">
+                Gamma
+              </th>
+              <th className="hidden lg:table-cell" align="left">
+                Theta
+              </th>
+              <th className="hidden lg:table-cell" align="left">
+                Vega
+              </th>
+              <th className="hidden lg:table-cell" align="left">
+                Volume
+              </th>
+              <th className="hidden lg:table-cell" align="left">
+                OI
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -106,17 +142,17 @@ export function OptionsPageClient({ overview }: OptionsPageClientProps) {
                     background: isMidline ? "rgba(59,130,246,.09)" : isITM ? "rgba(148,163,184,.08)" : "transparent"
                   }}
                 >
-                  <td>{row.symbol}</td>
+                  <td className="hidden lg:table-cell">{row.symbol}</td>
                   <td>{row.strike}</td>
                   <td>{row.option_type.toUpperCase()}</td>
                   <td>{row.bid ?? "—"}</td>
                   <td>{row.ask ?? "—"}</td>
                   <td>{row.delta ?? "—"}</td>
-                  <td>{row.gamma ?? "—"}</td>
-                  <td>{row.theta ?? "—"}</td>
-                  <td>{row.vega ?? "—"}</td>
-                  <td>{row.volume ?? "—"}</td>
-                  <td>{row.open_interest ?? "—"}</td>
+                  <td className="hidden lg:table-cell">{row.gamma ?? "—"}</td>
+                  <td className="hidden lg:table-cell">{row.theta ?? "—"}</td>
+                  <td className="hidden lg:table-cell">{row.vega ?? "—"}</td>
+                  <td className="hidden lg:table-cell">{row.volume ?? "—"}</td>
+                  <td className="hidden lg:table-cell">{row.open_interest ?? "—"}</td>
                 </tr>
               );
             })}

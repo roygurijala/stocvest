@@ -36,7 +36,7 @@ export default function PerformancePage() {
   const launchDate = summary?.launch_date ?? new Date().toISOString().slice(0, 10);
 
   return (
-    <main className="min-h-screen bg-[#0a0e1a] px-4 py-14 text-slate-100 md:px-8">
+    <main className="min-h-screen overflow-x-hidden bg-[#0a0e1a] px-4 py-14 text-slate-100 md:px-8">
       <div className="mx-auto max-w-7xl">
         <Link href="/" className="text-sm text-[#3b82f6] hover:underline">
           ← Back to home
@@ -46,7 +46,7 @@ export default function PerformancePage() {
           Every signal we generate is tracked against real market outcomes. Published transparently — wins and losses.
         </p>
 
-        <section className="mt-8 grid gap-3 md:grid-cols-4">
+        <section className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <div className="rounded-xl border border-white/10 bg-white/5 p-4">
             <p className="text-xs uppercase tracking-wide text-slate-400">Total Signals</p>
             <p className="mt-2 text-2xl font-bold">{summary?.total_signals_tracked ?? 0}</p>

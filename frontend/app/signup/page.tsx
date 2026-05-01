@@ -10,10 +10,10 @@ export default function SignupPage() {
   }
 
   return (
-    <main className="grid min-h-screen place-items-center bg-[#0a0e1a] px-4 py-10">
-      <section className="w-full max-w-md rounded-xl border border-white/10 bg-[#111827] p-6 shadow-[0_0_30px_rgba(0,0,0,0.35)]">
+    <main className="grid min-h-screen place-items-center overflow-x-hidden bg-[#0a0e1a] px-4 py-8 sm:py-10">
+      <section className="w-full max-w-full rounded-xl border border-white/10 bg-[#111827] p-4 shadow-[0_0_30px_rgba(0,0,0,0.35)] sm:max-w-md sm:p-6">
         <p className="mb-3 text-xl font-extrabold tracking-tight text-[#3b82f6]">STOCVEST</p>
-        <h1 className="m-0 text-3xl font-bold text-slate-100">Create your account.</h1>
+        <h1 className="m-0 text-2xl font-bold text-slate-100 sm:text-3xl">Create your account.</h1>
         <p className="mb-6 mt-1 text-slate-400">Start trading with institutional intelligence.</p>
         <SignupForm />
         <p className="mt-4 text-sm text-slate-400">

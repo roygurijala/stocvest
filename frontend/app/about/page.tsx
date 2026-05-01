@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export default function AboutPage() {
   return (
-    <main className="min-h-screen bg-[#0a0e1a] px-4 py-14 text-slate-100 md:px-8">
+    <main className="min-h-screen overflow-x-hidden bg-[#0a0e1a] px-4 py-14 text-slate-100 md:px-8">
       <div className="mx-auto max-w-6xl">
         <Link href="/" className="text-sm text-[#3b82f6] hover:underline">
           ← Back to home
@@ -18,7 +18,7 @@ export default function AboutPage() {
           </p>
         </section>
 
-        <section className="mt-6 grid gap-4 md:grid-cols-3">
+        <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {[
             {
               title: "Transparency over black boxes",

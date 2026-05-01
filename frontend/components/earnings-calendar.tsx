@@ -9,6 +9,7 @@ interface EarningsCalendarProps {
   events: EarningsEvent[];
   title?: string;
   maxDays?: number;
+  className?: string;
 }
 
 function dayKey(isoDate: string): string {
@@ -29,7 +30,7 @@ function earningsTimingLabel(reportTime: EarningsEvent["report_time"]): "BMO" | 
   return "TBD";
 }
 
-export function EarningsCalendar({ events, title = "Earnings Calendar", maxDays = 7 }: EarningsCalendarProps) {
+export function EarningsCalendar({ events, title = "Earnings Calendar", maxDays = 7, className }: EarningsCalendarProps) {
   const { colors } = useTheme();
   const today = new Date().toISOString().slice(0, 10);
   const grouped = useMemo(() => {
@@ -49,7 +50,10 @@ export function EarningsCalendar({ events, title = "Earnings Calendar", maxDays 
   if (grouped.length === 0) return null;
 
   return (
-    <section style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
+    <section
+      className={className}
+      style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
+    >
       <h3 style={{ marginTop: 0 }}>{title}</h3>
       <div style={{ display: "grid", gap: spacing[3] }}>
         {grouped.map(([date, rows]) => {
@@ -74,7 +78,11 @@ export function EarningsCalendar({ events, title = "Earnings Calendar", maxDays 
                       : null;
                   const epsColor = epsDiff == null ? colors.textMuted : epsDiff > 0 ? colors.bullish : epsDiff < 0 ? colors.bearish : colors.textMuted;
                   return (
-                    <div key={`${row.symbol}-${row.report_date}`} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto auto", gap: spacing[2], alignItems: "center" }}>
+                    <div
+                      key={`${row.symbol}-${row.report_date}`}
+                      className="min-w-0"
+                      style={{ display: "grid", gridTemplateColumns: "auto minmax(0,1fr) auto auto", gap: spacing[2], alignItems: "center" }}
+                    >
                       <span
                         style={{
                           width: 24,

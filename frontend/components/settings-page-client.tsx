@@ -33,13 +33,17 @@ export function SettingsPageClient({ email }: SettingsPageClientProps) {
       <article style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
         <h3 style={{ marginTop: 0 }}>Broker Connections</h3>
         <div style={{ display: "grid", gap: spacing[2] }}>
-          <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <span>IBKR</span>
-            <button type="button">Connect IB Gateway</button>
+            <button type="button" className="min-h-11 w-full rounded-md border px-3 sm:w-auto" style={{ borderColor: colors.border }}>
+              Connect IB Gateway
+            </button>
           </div>
-          <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <span>ETrade</span>
-            <button type="button">Connect ETrade</button>
+            <button type="button" className="min-h-11 w-full rounded-md border px-3 sm:w-auto" style={{ borderColor: colors.border }}>
+              Connect ETrade
+            </button>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", color: colors.bullish }}>
             <span>MOCK</span>
@@ -50,13 +54,13 @@ export function SettingsPageClient({ email }: SettingsPageClientProps) {
 
       <article style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
         <h3 style={{ marginTop: 0 }}>Notifications</h3>
-        <label style={{ display: "flex", justifyContent: "space-between" }}>
+        <label className="flex min-h-11 items-center justify-between gap-3">
           Email Alerts
-          <input type="checkbox" checked={emailNotif} onChange={(e) => setEmailNotif(e.target.checked)} />
+          <input type="checkbox" className="h-6 w-6 shrink-0" checked={emailNotif} onChange={(e) => setEmailNotif(e.target.checked)} />
         </label>
-        <label style={{ display: "flex", justifyContent: "space-between", marginTop: spacing[2] }}>
+        <label className="mt-2 flex min-h-11 items-center justify-between gap-3">
           Push Alerts
-          <input type="checkbox" checked={pushNotif} onChange={(e) => setPushNotif(e.target.checked)} />
+          <input type="checkbox" className="h-6 w-6 shrink-0" checked={pushNotif} onChange={(e) => setPushNotif(e.target.checked)} />
         </label>
       </article>
 
@@ -71,8 +75,16 @@ export function SettingsPageClient({ email }: SettingsPageClientProps) {
         />
         <button
           type="button"
+          className="mt-2 min-h-11 w-full sm:w-auto"
           disabled={confirmText !== "DELETE"}
-          style={{ marginTop: spacing[2], background: colors.bearish, color: "white", border: "none", borderRadius: borderRadius.md, padding: `${spacing[2]} ${spacing[3]}`, opacity: confirmText === "DELETE" ? 1 : 0.6 }}
+          style={{
+            background: colors.bearish,
+            color: "white",
+            border: "none",
+            borderRadius: borderRadius.md,
+            padding: `${spacing[2]} ${spacing[3]}`,
+            opacity: confirmText === "DELETE" ? 1 : 0.6
+          }}
         >
           Delete Account
         </button>

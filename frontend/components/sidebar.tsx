@@ -23,7 +23,7 @@ interface SidebarProps {
   userLabel: string;
 }
 
-const NAV_ITEMS = [
+export const DASHBOARD_NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/scanner", label: "Scanner", icon: Radio },
   { href: "/dashboard/earnings", label: "Earnings", icon: CalendarDays },
@@ -42,14 +42,10 @@ export function Sidebar({ userLabel }: SidebarProps) {
 
   return (
     <aside
+      className="hidden h-screen w-[248px] shrink-0 flex-col lg:flex lg:flex-col"
       style={{
-        width: "100%",
-        maxWidth: 248,
         background: colors.surface,
-        borderRight: `1px solid ${colors.border}`,
-        height: "100vh",
-        display: "flex",
-        flexDirection: "column"
+        borderRight: `1px solid ${colors.border}`
       }}
     >
       <div style={{ padding: spacing[6], borderBottom: `1px solid ${colors.border}` }}>
@@ -77,7 +73,7 @@ export function Sidebar({ userLabel }: SidebarProps) {
           minHeight: 0
         }}
       >
-        {NAV_ITEMS.map((item) => {
+        {DASHBOARD_NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
           return (

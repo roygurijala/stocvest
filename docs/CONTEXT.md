@@ -24,6 +24,12 @@ and what must never be changed without explicit discussion.
 - Frontend: new earnings calendar widget + `/dashboard/earnings` page (30-day view, filters)
 - Risk overlays: scanner earnings badges, signal evidence earnings warning card, portfolio inline earnings risk warning
 
+**Frontend mobile responsiveness:** ✅ COMPLETE (2026-05-01)
+- App shell: hidden sidebar below `lg`; hamburger + Framer Motion slide-in drawer with full nav labels; overlay and close (X / outside tap); main content `px-4` on small screens, no sidebar gutter on mobile
+- InfoTip: 16px circular “i” control with 44×44px touch target wrapper on mobile; desktop hover tooltip + mobile tap with outside dismiss and in-tooltip close
+- Dashboard, scanner, signals, portfolio, journal, options (narrow table columns on small screens), settings, signal evidence modal (full-screen on mobile), landing, login/signup, how-it-works, performance, and about: responsive grids, stacked layouts, horizontal scroll for wide tables, minimum 14px body text on narrow viewports where adjusted
+- Verified: `npm run build` and `npm run test` in `frontend/` (33 tests)
+
 ---
 
 ## Development Environment
@@ -77,7 +83,7 @@ Claude in Cursor should always read this file before writing any code.
 ✅ tests/utils/test_logging.py         Logger factory
 ✅ tests/test_package_smoke.py         Package import / export smoke tests
 
-TEST STATUS: 310/310 backend tests passing ✅ + 25/25 frontend unit tests passing ✅
+TEST STATUS: 310/310 backend tests passing ✅ + 33/33 frontend unit tests passing ✅
 
 ✅ stocvest/signals/   — Phase 2 complete
                          ✅ 2a News sentiment scorer (Claude API) implemented

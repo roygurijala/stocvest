@@ -46,14 +46,12 @@ export function PortfolioPageClient({ brokerOverviews, overview, earningsBySymbo
   return (
     <section style={{ display: "grid", gap: spacing[4] }}>
       <article
+        className="grid grid-cols-1 gap-3 sm:grid-cols-3"
         style={{
           background: colors.surface,
           border: `1px solid ${colors.border}`,
           borderRadius: borderRadius.xl,
-          padding: spacing[4],
-          display: "grid",
-          gridTemplateColumns: "repeat(3,minmax(0,1fr))",
-          gap: spacing[3]
+          padding: spacing[4]
         }}
       >
         <div>
@@ -70,7 +68,7 @@ export function PortfolioPageClient({ brokerOverviews, overview, earningsBySymbo
         </div>
       </article>
 
-      <div className="portfolio-broker-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: spacing[3] }}>
+      <div className="portfolio-broker-grid grid grid-cols-1 gap-3 lg:grid-cols-3">
         {brokerCards.map((card) => (
           <article key={card.broker} style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.lg, padding: spacing[4] }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -91,13 +89,14 @@ export function PortfolioPageClient({ brokerOverviews, overview, earningsBySymbo
             {!card.healthy ? (
               <button
                 type="button"
+                className="min-h-11 w-full sm:w-auto"
                 style={{
                   marginTop: spacing[2],
                   border: `1px solid ${colors.bearish}`,
                   background: "rgba(239,68,68,0.12)",
                   color: colors.bearish,
                   borderRadius: borderRadius.md,
-                  padding: `${spacing[1]} ${spacing[2]}`
+                  padding: `${spacing[2]} ${spacing[3]}`
                 }}
               >
                 Connect
@@ -112,8 +111,8 @@ export function PortfolioPageClient({ brokerOverviews, overview, earningsBySymbo
         {positions.length === 0 ? (
           <p style={{ color: colors.textMuted }}>No open positions.</p>
         ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: typography.scale.sm }}>
+          <div className="-mx-1 overflow-x-auto px-1 sm:mx-0 sm:px-0" style={{ WebkitOverflowScrolling: "touch" }}>
+            <table className="min-w-[560px]" style={{ width: "100%", borderCollapse: "collapse", fontSize: typography.scale.sm }}>
               <thead>
                 <tr style={{ color: colors.textMuted }}>
                   <th align="left">Symbol</th>

@@ -116,8 +116,8 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
 
   return (
     <section style={{ display: "grid", gap: spacing[4] }}>
-      <div style={{ display: "flex", gap: spacing[2], alignItems: "center" }}>
-        <label htmlFor="signal-symbol" style={{ color: colors.textMuted }}>
+      <div className="flex w-full min-w-0 flex-col gap-2 sm:max-w-md sm:flex-row sm:items-center">
+        <label htmlFor="signal-symbol" className="text-sm" style={{ color: colors.textMuted }}>
           Symbol
         </label>
         <input
@@ -125,6 +125,7 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
           value={symbol}
           onChange={(e) => setSymbol(e.target.value.toUpperCase())}
           placeholder="AAPL"
+          className="min-h-11 w-full min-w-0 text-base sm:flex-1"
           style={{
             borderRadius: borderRadius.md,
             border: `1px solid ${colors.border}`,
@@ -135,8 +136,8 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
         />
       </div>
 
-      <div className="signals-grid" style={{ display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: spacing[4] }}>
-        <section style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
+      <div className="signals-grid grid grid-cols-1 gap-4 lg:grid-cols-[1.35fr_1fr] [&>*]:min-w-0">
+        <section className="order-2 min-w-0 lg:order-1" style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
           <h3 style={{ marginTop: 0, marginBottom: spacing[2] }}>6-Layer Signal Breakdown</h3>
           <div style={{ display: "grid", gap: spacing[2] }}>
             {rows.map((row, rowIdx) => (
@@ -163,58 +164,91 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
                     label={row.name}
                   />
                 </div>
-                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: spacing[2] }}>
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                   <span
+                    className="text-sm"
                     style={{
                       borderRadius: borderRadius.full,
                       padding: "2px 8px",
                       background: "rgba(148,163,184,0.12)",
-                      color: statusColor(row.status, colors),
-                      fontSize: typography.scale.xs
+                      color: statusColor(row.status, colors)
                     }}
                   >
                     {row.status}
                   </span>
-                  <span style={{ color: colors.textMuted, fontSize: typography.scale.sm, flex: "1 1 200px" }}>{row.explanation}</span>
+                  <span className="min-w-0 flex-1 text-sm leading-snug sm:text-sm" style={{ color: colors.textMuted }}>
+                    {row.explanation}
+                  </span>
                 </div>
               </article>
             ))}
           </div>
         </section>
 
-        <section style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
+        <section className="order-1 min-w-0 lg:order-2" style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
           <h3 style={{ marginTop: 0 }}>Signal Radar</h3>
-          <p style={{ margin: `0 0 ${spacing[2]} 0`, color: colors.textMuted, fontSize: typography.scale.xs }}>
+          <p className="text-sm" style={{ margin: `0 0 ${spacing[2]} 0`, color: colors.textMuted }}>
             Current vs Historical Average — dashed outline is a typical baseline; solid fill is today.
           </p>
-          <div style={{ height: 280 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <RadarChart data={radarData}>
-                <PolarGrid stroke={colors.border} />
-                <PolarAngleAxis dataKey="layer" tick={{ fill: colors.textMuted, fontSize: 11 }} />
-                <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: colors.textMuted, fontSize: 10 }} />
-                <Radar
-                  name="Historical avg"
-                  dataKey="hist"
-                  stroke={colors.text}
-                  strokeWidth={2}
-                  strokeDasharray="5 4"
-                  fill="none"
-                  dot={false}
-                  isAnimationActive={false}
-                />
-                <Radar
-                  name="Current"
-                  dataKey="score"
-                  stroke="#38bdf8"
-                  strokeWidth={2}
-                  fill="#0ea5e9"
-                  fillOpacity={0.38}
-                  dot={false}
-                />
-                <Legend wrapperStyle={{ color: colors.textMuted, fontSize: 12 }} />
-              </RadarChart>
-            </ResponsiveContainer>
+          <div className="mx-auto max-w-full" style={{ height: 220 }}>
+            <div className="lg:hidden" style={{ height: 220 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <RadarChart data={radarData}>
+                  <PolarGrid stroke={colors.border} />
+                  <PolarAngleAxis dataKey="layer" tick={{ fill: colors.textMuted, fontSize: 10 }} />
+                  <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: colors.textMuted, fontSize: 9 }} />
+                  <Radar
+                    name="Historical avg"
+                    dataKey="hist"
+                    stroke={colors.text}
+                    strokeWidth={2}
+                    strokeDasharray="5 4"
+                    fill="none"
+                    dot={false}
+                    isAnimationActive={false}
+                  />
+                  <Radar
+                    name="Current"
+                    dataKey="score"
+                    stroke="#38bdf8"
+                    strokeWidth={2}
+                    fill="#0ea5e9"
+                    fillOpacity={0.38}
+                    dot={false}
+                  />
+                  <Legend wrapperStyle={{ color: colors.textMuted, fontSize: 11 }} />
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="hidden lg:block" style={{ height: 280 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <RadarChart data={radarData}>
+                  <PolarGrid stroke={colors.border} />
+                  <PolarAngleAxis dataKey="layer" tick={{ fill: colors.textMuted, fontSize: 11 }} />
+                  <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: colors.textMuted, fontSize: 10 }} />
+                  <Radar
+                    name="Historical avg"
+                    dataKey="hist"
+                    stroke={colors.text}
+                    strokeWidth={2}
+                    strokeDasharray="5 4"
+                    fill="none"
+                    dot={false}
+                    isAnimationActive={false}
+                  />
+                  <Radar
+                    name="Current"
+                    dataKey="score"
+                    stroke="#38bdf8"
+                    strokeWidth={2}
+                    fill="#0ea5e9"
+                    fillOpacity={0.38}
+                    dot={false}
+                  />
+                  <Legend wrapperStyle={{ color: colors.textMuted, fontSize: 12 }} />
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </section>
       </div>
@@ -240,6 +274,7 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
         </div>
         <button
           type="button"
+          className="min-h-11 text-sm"
           onClick={async () => {
             const setupLike = setup || {
               symbol: symbol.toUpperCase(),
@@ -275,9 +310,8 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
             borderRadius: borderRadius.md,
             background: "transparent",
             color: colors.text,
-            padding: `${spacing[1]} ${spacing[2]}`,
-            cursor: "pointer",
-            fontSize: typography.scale.xs
+            padding: `${spacing[2]} ${spacing[3]}`,
+            cursor: "pointer"
           }}
         >
           View Evidence
@@ -286,7 +320,7 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
 
       <article style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
         <h3 style={{ marginTop: 0 }}>Key Levels</h3>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: spacing[3] }}>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
           <div>
             <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>VWAP</p>
             <strong>{snapshot?.last_trade_price ? `$${(snapshot.last_trade_price * 0.997).toFixed(2)}` : "n/a"}</strong>

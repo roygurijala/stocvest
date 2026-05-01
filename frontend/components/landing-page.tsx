@@ -89,8 +89,8 @@ export function LandingPage() {
           isScrolled ? "border-b border-white/10 bg-[#0a0e1a]/95 backdrop-blur" : "bg-transparent"
         }`}
       >
-        <nav className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 md:px-8">
-          <p className="text-xl font-extrabold tracking-tight text-[#3b82f6]">STOCVEST</p>
+        <nav className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-4 md:px-8">
+          <p className="text-lg font-extrabold tracking-tight text-[#3b82f6] sm:text-xl">STOCVEST</p>
           <div className="hidden items-center gap-5 text-sm text-slate-300 md:flex">
             <Link href="/how-it-works" className="hover:text-white">
               How It Works
@@ -146,7 +146,7 @@ export function LandingPage() {
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
-            className="max-w-4xl text-4xl font-black leading-tight md:text-6xl"
+            className="max-w-4xl text-3xl font-black leading-tight sm:text-4xl md:text-6xl"
           >
             Trade with institutional intelligence.
           </motion.h1>
@@ -154,22 +154,30 @@ export function LandingPage() {
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.1 }}
-            className="max-w-3xl text-lg text-slate-300 md:text-2xl"
+            className="max-w-3xl text-base text-slate-300 sm:text-lg md:text-2xl"
           >
             Six signal layers. AI synthesis. Multi-broker execution. Built for serious retail traders.
           </motion.p>
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.7, delay: 0.2 }} className="flex flex-wrap gap-3">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.7, delay: 0.2 }}
+            className="flex w-full max-w-md flex-col gap-3 sm:max-w-none sm:flex-row sm:flex-wrap"
+          >
             <Link
               href="/signup"
-              className="rounded-md bg-[#3b82f6] px-6 py-3 font-semibold shadow-[0_0_24px_rgba(59,130,246,0.5)] transition hover:shadow-[0_0_35px_rgba(59,130,246,0.8)]"
+              className="inline-flex min-h-11 items-center justify-center rounded-md bg-[#3b82f6] px-6 py-3 text-center font-semibold shadow-[0_0_24px_rgba(59,130,246,0.5)] transition hover:shadow-[0_0_35px_rgba(59,130,246,0.8)]"
             >
               Start Free Trial
             </Link>
-            <Link href="#the-problem" className="rounded-md border border-slate-300/30 px-6 py-3 font-semibold hover:border-slate-200/60">
+            <Link
+              href="#the-problem"
+              className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-300/30 px-6 py-3 text-center font-semibold hover:border-slate-200/60"
+            >
               Learn More
             </Link>
           </motion.div>
-          <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-400">
+          <div className="mt-2 flex flex-wrap gap-2 text-sm text-slate-400 sm:text-xs">
             {["Real-time data by Polygon.io", "AI by Anthropic Claude", "Infrastructure on AWS", "STOCVEST LLC", "Not investment advice"].map((b) => (
               <span key={b} className="rounded-full border border-white/10 bg-white/5 px-2 py-1">
                 {b}
@@ -286,7 +294,7 @@ export function LandingPage() {
         <motion.div initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="mb-10 text-center">
           <h2 className="text-3xl font-bold md:text-4xl">Most platforms show you data. STOCVEST shows you decisions.</h2>
         </motion.div>
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {[
             { icon: ChartColumnIncreasing, a: "They give you charts", b: "We give you verdicts" },
             { icon: Newspaper, a: "They show you news", b: "We show you impact" },
@@ -312,9 +320,14 @@ export function LandingPage() {
         <motion.h2 initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="mb-10 text-center text-3xl font-bold md:text-4xl">
           Six layers of intelligence. One clear verdict.
         </motion.h2>
-        <div className="grid gap-6 lg:grid-cols-2">
-          <motion.article initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="rounded-xl border border-white/10 bg-transparent p-4 md:p-6">
-            <div className="h-72">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <motion.article
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="order-1 rounded-xl border border-white/10 bg-transparent p-4 lg:order-none md:p-6"
+          >
+            <div className="mx-auto h-56 max-w-full sm:h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <RadarChart data={radarData}>
                   <PolarGrid stroke="#1e3a5f" />
@@ -337,7 +350,12 @@ export function LandingPage() {
               ))}
             </motion.div>
           </motion.article>
-          <motion.article initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="rounded-xl border border-white/10 bg-white/5 p-6">
+          <motion.article
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="order-2 rounded-xl border border-white/10 bg-white/5 p-6 lg:order-none"
+          >
             <div className="mb-4 flex items-center gap-2">
               <span className="text-xl font-bold">AAPL</span>
               <span className="rounded-full bg-[#22c55e]/20 px-2 py-1 text-xs font-semibold text-[#22c55e]">Bullish</span>
@@ -368,7 +386,7 @@ export function LandingPage() {
         <motion.article initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="mx-auto max-w-3xl rounded-xl border border-white/10 bg-white/5 p-6">
           <h3 className="text-lg font-semibold">Sample Intelligence Briefing</h3>
           <p className="mb-4 text-xs italic text-slate-400">Real briefings delivered daily at 8 AM ET to logged-in users</p>
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
               <p className="mb-2 text-sm text-slate-400">Gap Candidates</p>
               <p>NVDA +4.2%</p>
@@ -458,7 +476,7 @@ export function LandingPage() {
         <motion.h2 initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="mb-8 text-center text-3xl font-bold md:text-4xl">
           Simple pricing. No hidden fees.
         </motion.h2>
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           {[
             { tier: "Free", price: "$0/month", features: ["3 signals per day", "Basic scanner", "1 broker"] },
             {
@@ -478,7 +496,7 @@ export function LandingPage() {
               initial={{ opacity: 0, y: 24 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              className={`relative flex flex-col rounded-xl border bg-white/5 p-6 ${plan.recommended ? "scale-105 border-2 border-[#3b82f6] bg-[#0f172a] shadow-[0_0_20px_rgba(59,130,246,0.4)]" : "border-white/10"}`}
+              className={`relative flex flex-col rounded-xl border bg-white/5 p-6 ${plan.recommended ? "border-2 border-[#3b82f6] bg-[#0f172a] shadow-[0_0_20px_rgba(59,130,246,0.4)] lg:scale-105" : "border-white/10"}`}
             >
               {plan.recommended ? <p className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-bold uppercase tracking-wide text-[#3b82f6]">Most Popular</p> : null}
               <div className="mb-2 flex items-center justify-between">
@@ -491,7 +509,10 @@ export function LandingPage() {
                   <li key={f}>• {f}</li>
                 ))}
               </ul>
-              <Link href="/login" className="mt-auto inline-block rounded-md bg-[#3b82f6] px-4 py-2 text-sm font-semibold">
+              <Link
+                href="/login"
+                className="mt-auto inline-flex min-h-11 w-full items-center justify-center rounded-md bg-[#3b82f6] px-4 py-2 text-sm font-semibold sm:w-auto"
+              >
                 Get Started
               </Link>
             </motion.article>
@@ -501,15 +522,18 @@ export function LandingPage() {
 
       <section className="border-t border-white/10 bg-black/20 px-4 py-20 text-center md:px-8">
         <h2 className="mb-4 text-3xl font-bold md:text-4xl">Stop guessing. Start trading with intelligence.</h2>
-        <Link href="/login" className="inline-block rounded-md bg-[#3b82f6] px-6 py-3 font-semibold">
+        <Link
+          href="/login"
+          className="inline-flex min-h-11 items-center justify-center rounded-md bg-[#3b82f6] px-6 py-3 font-semibold"
+        >
           Create Your Free Account
         </Link>
         <p className="mt-3 text-slate-300">No credit card required for free tier</p>
       </section>
 
-      <footer className="flex flex-col items-center gap-2 px-4 py-8 text-sm text-slate-400 md:flex-row md:justify-between md:px-8">
+      <footer className="flex flex-col items-center gap-3 px-4 py-8 text-sm text-slate-400 md:flex-row md:justify-between md:px-8">
         <span>Copyright 2026 STOCVEST LLC</span>
-        <div className="flex gap-4">
+        <div className="flex max-w-full flex-wrap justify-center gap-x-4 gap-y-2">
           <Link href="/about">About</Link>
           <Link href="/how-it-works">How It Works</Link>
           <Link href="/performance">Performance</Link>

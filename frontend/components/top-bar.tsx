@@ -2,13 +2,15 @@
 
 import { useMemo } from "react";
 import { usePathname } from "next/navigation";
+import { Menu } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { spacing, typography } from "@/lib/design-system";
+import { spacing } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
 const TITLE_BY_PATH: Record<string, string> = {
   "/dashboard": "Dashboard",
   "/dashboard/scanner": "Scanner",
+  "/dashboard/earnings": "Earnings",
   "/dashboard/signals": "Signals",
   "/dashboard/portfolio": "Portfolio",
   "/dashboard/options": "Options",
@@ -18,24 +20,43 @@ const TITLE_BY_PATH: Record<string, string> = {
   "/dashboard/settings": "Settings"
 };
 
-export function TopBar() {
+interface TopBarProps {
+  onMenuClick?: () => void;
+}
+
+export function TopBar({ onMenuClick }: TopBarProps) {
   const pathname = usePathname();
   const { colors } = useTheme();
   const title = useMemo(() => TITLE_BY_PATH[pathname] || "STOCVEST", [pathname]);
 
   return (
     <header
+      className="flex min-h-14 items-center gap-2 px-4 lg:justify-between lg:px-6"
       style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: `${spacing[4]} ${spacing[6]}`,
+        paddingTop: spacing[3],
+        paddingBottom: spacing[3],
         borderBottom: `1px solid ${colors.border}`,
         background: colors.surface
       }}
     >
-      <h1 style={{ margin: 0, fontSize: typography.scale.xl, fontWeight: 700 }}>{title}</h1>
-      <ThemeToggle />
+      <button
+        type="button"
+        className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md border lg:hidden"
+        style={{
+          borderColor: colors.border,
+          background: "transparent",
+          color: colors.text,
+          cursor: "pointer"
+        }}
+        aria-label="Open navigation menu"
+        onClick={onMenuClick}
+      >
+        <Menu size={22} />
+      </button>
+      <h1 className="m-0 min-w-0 flex-1 truncate text-center text-lg font-bold lg:flex-none lg:text-left lg:text-xl">{title}</h1>
+      <div className="flex shrink-0 justify-end">
+        <ThemeToggle />
+      </div>
     </header>
   );
 }

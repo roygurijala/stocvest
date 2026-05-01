@@ -161,12 +161,10 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview, 
           gap: spacing[3]
         }}
       >
-        <div style={{ display: "grid", gap: spacing[3] }}>
+        <div className="min-w-0" style={{ display: "grid", gap: spacing[3] }}>
           <div
+            className="grid grid-cols-1 gap-3 sm:grid-cols-3"
             style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-              gap: spacing[3],
               fontSize: typography.scale.sm
             }}
           >
@@ -220,7 +218,10 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview, 
               );
             })}
           </div>
-          <div style={{ display: "flex", gap: spacing[3], flexWrap: "wrap", alignItems: "center", fontSize: typography.scale.sm }}>
+          <div
+            className="min-w-0 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            style={{ display: "flex", gap: spacing[3], flexWrap: "nowrap", alignItems: "center", fontSize: typography.scale.sm }}
+          >
             <span style={{ color: colors.textMuted }}>
               <strong style={{ color: colors.text }}>Market</strong>{" "}
               {marketOverview.status ? (
@@ -246,18 +247,14 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview, 
         <DashboardRealtime />
       </article>
 
-      <div className="dashboard-grid" style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: spacing[4] }}>
-        <div style={{ display: "grid", gap: spacing[4] }}>
+      <div className="dashboard-grid grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr] [&>*]:min-w-0">
           <article
+            className="order-1 grid grid-cols-1 items-center gap-4 sm:grid-cols-[auto_1fr] lg:col-start-1 lg:row-start-1"
             style={{
               background: colors.surface,
               border: `1px solid ${colors.border}`,
               borderRadius: borderRadius.xl,
-              padding: spacing[6],
-              display: "grid",
-              gridTemplateColumns: "auto 1fr",
-              gap: spacing[4],
-              alignItems: "center"
+              padding: spacing[6]
             }}
           >
             <div
@@ -300,7 +297,43 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview, 
             </p>
           </article>
 
-          <section>
+          <article
+            className="order-4 w-full lg:col-start-2 lg:row-start-1"
+            style={{
+              background: colors.surface,
+              border: `1px solid ${colors.border}`,
+              borderRadius: borderRadius.xl,
+              padding: spacing[4]
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: spacing[2],
+                flexShrink: 0
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: spacing[2], minWidth: 0 }}>
+                <ShieldCheck color={pdtColor} size={20} />
+                <strong style={{ color: pdtColor, fontSize: typography.scale.sm, margin: 0 }}>PDT Guardian: {pdtLabel}</strong>
+              </div>
+              <InfoTip text={PDT_GUARDIAN_TIP} label="About pattern day trader rules" />
+            </div>
+            {!pdt ? (
+              <p style={{ margin: `${spacing[2]} 0 0 0`, color: colors.textMuted, fontSize: typography.scale.sm }}>
+                Connect a broker to enable PDT tracking.
+              </p>
+            ) : (
+              <p style={{ margin: `${spacing[2]} 0 0 0`, color: colors.textMuted, fontSize: typography.scale.sm }}>
+                Day trades used {pdt.current_day_trade_count} of {pdt.max_non_exempt} - resets in {pdt.days_until_reset} day
+                {pdt.days_until_reset === 1 ? "" : "s"}.
+              </p>
+            )}
+          </article>
+
+          <section className="order-2 lg:col-start-1 lg:row-start-2">
             <div
               style={{
                 display: "flex",
@@ -362,6 +395,7 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview, 
                     </div>
                     <button
                       type="button"
+                      className="min-h-11 text-sm"
                       onClick={async () => {
                         const snapshot = snapshotsBySymbol.get(signal.symbol);
                         let symbolNewsArticles: NewsPayload[] = [];
@@ -390,9 +424,8 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview, 
                         borderRadius: borderRadius.md,
                         background: "transparent",
                         color: colors.text,
-                        padding: `${spacing[1]} ${spacing[2]}`,
+                        padding: `${spacing[2]} ${spacing[3]}`,
                         cursor: "pointer",
-                        fontSize: typography.scale.xs,
                         whiteSpace: "nowrap",
                         justifySelf: "start"
                       }}
@@ -404,56 +437,22 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview, 
               )}
             </div>
           </section>
-          <EarningsCalendar events={earningsEvents} title="Upcoming Earnings (Next 7 Days)" maxDays={7} />
-        </div>
-
-        <aside style={{ display: "grid", gap: spacing[4] }}>
-          <article
-            style={{
-              background: colors.surface,
-              border: `1px solid ${colors.border}`,
-              borderRadius: borderRadius.xl,
-              padding: spacing[4]
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: spacing[2],
-                flexShrink: 0
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: spacing[2], minWidth: 0 }}>
-                <ShieldCheck color={pdtColor} size={20} />
-                <strong style={{ color: pdtColor, fontSize: typography.scale.sm, margin: 0 }}>PDT Guardian: {pdtLabel}</strong>
-              </div>
-              <InfoTip text={PDT_GUARDIAN_TIP} label="About pattern day trader rules" />
-            </div>
-            {!pdt ? (
-              <p style={{ margin: `${spacing[2]} 0 0 0`, color: colors.textMuted, fontSize: typography.scale.sm }}>
-                Connect a broker to enable PDT tracking.
-              </p>
-            ) : (
-              <p style={{ margin: `${spacing[2]} 0 0 0`, color: colors.textMuted, fontSize: typography.scale.sm }}>
-                Day trades used {pdt.current_day_trade_count} of {pdt.max_non_exempt} - resets in {pdt.days_until_reset} day
-                {pdt.days_until_reset === 1 ? "" : "s"}.
-              </p>
-            )}
-          </article>
+          <EarningsCalendar
+            className="order-5 lg:col-start-1 lg:row-start-3"
+            events={earningsEvents}
+            title="Upcoming Earnings (Next 7 Days)"
+            maxDays={7}
+          />
 
           <article
+            className="order-3 flex min-h-0 flex-col lg:col-start-2 lg:row-start-2"
             style={{
               background: colors.surface,
               border: `1px solid ${colors.border}`,
               borderRadius: borderRadius.xl,
               padding: spacing[4],
               height: 390,
-              maxHeight: 390,
-              display: "flex",
-              flexDirection: "column",
-              minHeight: 0
+              maxHeight: 390
             }}
           >
             <div
@@ -503,7 +502,6 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview, 
               )}
             </div>
           </article>
-        </aside>
       </div>
 
       {morningVisible ? (

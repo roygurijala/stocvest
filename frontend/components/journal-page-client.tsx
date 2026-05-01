@@ -98,10 +98,13 @@ export function JournalPageClient({ initialEntries }: JournalPageClientProps) {
 
   return (
     <section style={{ display: "grid", gap: spacing[4] }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h2 style={{ margin: 0 }}>Trade Journal</h2>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="text-lg sm:text-xl" style={{ margin: 0 }}>
+          Trade Journal
+        </h2>
         <button
           type="button"
+          className="min-h-11 w-full sm:w-auto"
           onClick={() => setShowModal(true)}
           style={{
             border: `1px solid ${colors.accent}`,
@@ -115,7 +118,7 @@ export function JournalPageClient({ initialEntries }: JournalPageClientProps) {
         </button>
       </div>
 
-      <div className="journal-stats-grid" style={{ display: "grid", gridTemplateColumns: "repeat(6,minmax(0,1fr))", gap: spacing[3] }}>
+      <div className="journal-stats-grid grid grid-cols-2 gap-3 lg:grid-cols-6">
         {[
           ["Win Rate", `${stats.winRate.toFixed(1)}%`, WIN_RATE_TIP],
           ["Total Trades", String(stats.totalTrades), ""],
@@ -136,7 +139,7 @@ export function JournalPageClient({ initialEntries }: JournalPageClientProps) {
 
       <article style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
         <h3 style={{ marginTop: 0 }}>Cumulative P&L</h3>
-        <div style={{ height: 260 }}>
+        <div className="h-[200px] lg:h-[260px]">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
               <defs>
@@ -162,18 +165,19 @@ export function JournalPageClient({ initialEntries }: JournalPageClientProps) {
       </article>
 
       <article style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h3 style={{ marginTop: 0 }}>Trade History</h3>
           <button
             type="button"
+            className="min-h-11 w-full sm:w-auto"
             onClick={() => setSortDesc((v) => !v)}
-            style={{ border: `1px solid ${colors.border}`, borderRadius: borderRadius.md, background: "transparent", color: colors.text }}
+            style={{ border: `1px solid ${colors.border}`, borderRadius: borderRadius.md, background: "transparent", color: colors.text, padding: spacing[2] }}
           >
             Sort by date {sortDesc ? "↓" : "↑"}
           </button>
         </div>
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: typography.scale.sm }}>
+        <div className="-mx-1 overflow-x-auto px-1 sm:mx-0 sm:px-0" style={{ WebkitOverflowScrolling: "touch" }}>
+          <table className="min-w-[640px]" style={{ width: "100%", borderCollapse: "collapse", fontSize: typography.scale.sm }}>
             <thead>
               <tr style={{ color: colors.textMuted }}>
                 <th align="left">Date</th>

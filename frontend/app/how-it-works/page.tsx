@@ -44,7 +44,7 @@ const steps = [
 
 export default function HowItWorksPage() {
   return (
-    <main className="min-h-screen bg-[#0a0e1a] px-4 py-14 text-slate-100 md:px-8">
+    <main className="min-h-screen overflow-x-hidden bg-[#0a0e1a] px-4 py-14 text-slate-100 md:px-8">
       <div className="mx-auto max-w-6xl">
         <Link href="/" className="text-sm text-[#3b82f6] hover:underline">
           ← Back to home
@@ -54,7 +54,7 @@ export default function HowItWorksPage() {
           Institutional-grade intelligence built on transparent, verifiable methodology
         </p>
 
-        <div className="mt-10 grid gap-4 md:grid-cols-2">
+        <div className="mt-10 grid grid-cols-1 gap-4 md:grid-cols-2">
           {steps.map((step) => (
             <article key={step.title} className="rounded-xl border border-white/10 bg-white/5 p-6">
               <step.icon className="mb-3 h-8 w-8 text-[#3b82f6]" />
@@ -78,7 +78,10 @@ export default function HowItWorksPage() {
           activity in your accounts.
         </p>
 
-        <Link href="/signup" className="mt-8 inline-block rounded-md bg-[#3b82f6] px-6 py-3 font-semibold text-white">
+        <Link
+          href="/signup"
+          className="mt-8 inline-flex min-h-11 items-center justify-center rounded-md bg-[#3b82f6] px-6 py-3 font-semibold text-white"
+        >
           Get Started
         </Link>
       </div>
