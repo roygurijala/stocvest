@@ -9,6 +9,7 @@ import {
   Layers,
   LayoutDashboard,
   LogOut,
+  MessageCircle,
   Radio,
   CalendarDays,
   Settings,
@@ -16,6 +17,7 @@ import {
   Zap
 } from "lucide-react";
 import { logoutAction } from "@/app/login/actions";
+import { openCrispChat } from "@/components/crisp-chat";
 import { spacing, borderRadius, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -116,6 +118,23 @@ export function Sidebar({ userLabel }: SidebarProps) {
         >
           {userLabel}
         </p>
+        <button
+          type="button"
+          onClick={() => openCrispChat()}
+          title="Share feedback or report issues"
+          className="sidebar-feedback-btn flex w-full min-h-11 items-center justify-center gap-2 rounded-md border font-medium"
+          style={{
+            borderColor: "rgba(245,158,11,0.55)",
+            background: "rgba(245,158,11,0.12)",
+            color: "#f59e0b",
+            padding: `${spacing[2]} ${spacing[3]}`,
+            cursor: "pointer",
+            fontSize: typography.scale.sm
+          }}
+        >
+          <MessageCircle size={18} />
+          <span className="sidebar-feedback-label">Send Feedback</span>
+        </button>
         <form action={logoutAction}>
           <button
             type="submit"

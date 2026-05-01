@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { CrispChat } from "@/components/crisp-chat";
+import { getServerSession } from "@/lib/auth/session";
 import { ThemeProvider } from "@/lib/theme-provider";
 import "./globals.css";
 
@@ -9,10 +11,14 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
+  const session = getServerSession();
+  const crispUserEmail = session?.email ?? null;
+
   return (
     <html lang="en" className="theme-dark" data-theme="dark" suppressHydrationWarning>
       <body>
         <ThemeProvider>
+          <CrispChat userEmail={crispUserEmail} />
           <div className="app-shell">{children}</div>
         </ThemeProvider>
       </body>

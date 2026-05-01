@@ -30,6 +30,13 @@ and what must never be changed without explicit discussion.
 - Dashboard, scanner, signals, portfolio, journal, options (narrow table columns on small screens), settings, signal evidence modal (full-screen on mobile), landing, login/signup, how-it-works, performance, and about: responsive grids, stacked layouts, horizontal scroll for wide tables, minimum 14px body text on narrow viewports where adjusted
 - Verified: `npm run build` and `npm run test` in `frontend/` (33 tests)
 
+**Crisp chat (beta feedback):** ✅ INTEGRATED
+- `frontend/components/crisp-chat.tsx`: loads Crisp asynchronously when `NEXT_PUBLIC_CRISP_WEBSITE_ID` is set; skips cleanly when unset
+- Logged-in users: `user:email`, `user:nickname`, and `session:data` keys `page` (pathname) and `plan` (`beta`); theme `blue` (closest SDK preset to #3b82f6), dark mode, bottom-right; welcome line via `message:show` on `session:loaded`
+- `CrispChat` mounted from `frontend/app/layout.tsx` (all routes); sidebar **Send Feedback** (amber) calls `chat:open`
+- Document `NEXT_PUBLIC_CRISP_WEBSITE_ID` in `frontend/.env.example`; set the same in Vercel env
+- **Future:** consider migrating to **Intercom** if paying users exceed ~100 ( richer automation / sales tooling )
+
 ---
 
 ## Development Environment
@@ -995,6 +1002,21 @@ React Native or PWA wrapper
 Push notifications for alerts
 Mobile-optimized order entry
 PDT guardian widget on home screen
+PRIORITY 15 — Enhanced Authentication Options
+Phone number as optional username alternative
+SMS OTP passwordless login via AWS SNS + Cognito
+Magic link login (email OTP, no password required)
+Two-factor authentication (2FA) via SMS optional
+WebAuthn biometric login for mobile (Face ID, Touch ID)
+Remember device for 30 days option
+Social login (Google OAuth) — lower priority
+Implementation notes:
+Cognito supports phone + SMS OTP natively
+Requires AWS SNS configuration for SMS
+Cost: approximately $0.00645 per SMS in US
+Collect both email and phone regardless of login method
+Email always required for morning briefing and alerts
+Build after core product is stable with real users
 
 Immediate Next Actions — Ordered by Priority
 
