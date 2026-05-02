@@ -8,6 +8,7 @@ day-trading candidates.
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from stocvest.data.models import Bar, Snapshot, Timeframe
@@ -23,6 +24,58 @@ class PremarketGapCandidate:
     day_volume: float
     direction: str  # "up" or "down"
     rank_score: float
+
+
+def dynamic_gap_candidates_from_snapshots(
+    snapshots: Iterable[Snapshot],
+    *,
+    limit: int = 20,
+    min_abs_gap_percent: float = 2.0,
+    min_day_volume: float = 500_000.0,
+    min_trade_price: float = 5.0,
+) -> list[PremarketGapCandidate]:
+    """
+    Rank gap candidates from Polygon snapshots using session price vs prior close.
+
+    Uses ``last_trade_price`` when present; otherwise ``day_open`` if that is the
+    only session price available. Filters: min |gap| %, liquidity, and price floor.
+    Sorted by ``abs(gap_percent)`` descending.
+    """
+    scored: list[tuple[float, PremarketGapCandidate]] = []
+    for snap in snapshots:
+        prev = snap.prev_close
+        if prev is None or prev <= 0:
+            continue
+        last = snap.last_trade_price
+        o = snap.day_open
+        if last is not None and last > 0:
+            price = float(last)
+        elif o is not None and o > 0:
+            price = float(o)
+        else:
+            continue
+        if price < min_trade_price:
+            continue
+        vol = float(snap.day_volume or 0.0)
+        if vol < min_day_volume:
+            continue
+        gap_pct = (price - float(prev)) / float(prev) * 100.0
+        if abs(gap_pct) < min_abs_gap_percent:
+            continue
+        direction = "up" if gap_pct >= 0 else "down"
+        mag = abs(gap_pct)
+        cand = PremarketGapCandidate(
+            symbol=snap.symbol,
+            prev_close=float(prev),
+            premarket_price=price,
+            gap_percent=round(gap_pct, 4),
+            day_volume=vol,
+            direction=direction,
+            rank_score=round(mag, 4),
+        )
+        scored.append((mag, cand))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [c for _, c in scored[: max(0, limit)]]
 
 
 class PremarketGapScanner:

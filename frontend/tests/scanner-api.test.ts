@@ -13,10 +13,18 @@ describe("scanner API overview", () => {
 
   test("fetchScannerOverview orchestrates scanner endpoints", async () => {
     const { fetchScannerOverview } = await import("@/lib/api/scanner");
-    apiFetchMock.mockImplementation(async (path: string) => {
+    apiFetchMock.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === "/v1/scanner/gaps") {
+        expect(init?.method).toBe("POST");
+        const body = JSON.parse(String(init?.body ?? "{}")) as { snapshots: unknown };
+        expect(body.snapshots).toEqual([]);
+        return [{ symbol: "GAP1", gap_percent: 4, day_volume: 1, rank_score: 1, direction: "up" }];
+      }
       if (path.startsWith("/v1/market/snapshot?symbol=")) {
+        const q = path.includes("?") ? path.split("?")[1] : "";
+        const sym = new URLSearchParams(q).get("symbol") ?? "UNK";
         return {
-          symbol: "AAPL",
+          symbol: sym,
           prev_close: 100,
           pre_market_price: 104,
           day_volume: 1_000_000
@@ -48,9 +56,6 @@ describe("scanner API overview", () => {
             volume: 120000
           }
         ];
-      }
-      if (path === "/v1/scanner/gaps") {
-        return [{ symbol: "GAP1", gap_percent: 4, day_volume: 1, rank_score: 1, direction: "up" }];
       }
       if (path === "/v1/scanner/catalysts") {
         return [{ article_id: "a1", symbol: "GAP1", title: "x", catalyst_type: "earnings", direction: "up", catalyst_score: 0.8 }];

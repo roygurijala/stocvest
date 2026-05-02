@@ -257,6 +257,48 @@ class PolygonClient:
         log.debug("get_snapshots(%d symbols) → %d results", len(symbols), len(result))
         return result
 
+    async def get_snapshots_many(self, symbols: list[str], *, chunk_size: int = 50) -> list[Snapshot]:
+        """Batch-fetch snapshots in chunks (Polygon limits request size)."""
+        if not symbols:
+            return []
+        out: list[Snapshot] = []
+        for i in range(0, len(symbols), max(1, chunk_size)):
+            chunk = symbols[i : i + chunk_size]
+            batch = await self.get_snapshots(chunk)
+            out.extend(batch.values())
+        return out
+
+    async def get_us_stocks_market_snapshots(self, *, include_otc: bool = False) -> list[Snapshot]:
+        """
+        All US stock tickers in one snapshot feed (paginated via ``next_url``).
+
+        Endpoint: ``GET /v2/snapshot/locale/us/markets/stocks/tickers`` without ``tickers=``.
+        Requires a Polygon plan that includes this aggregate snapshot; otherwise expect 403
+        (caller should fall back to :data:`LIQUID_SYMBOLS_FALLBACK`).
+        """
+        snapshots: list[Snapshot] = []
+        path = "/v2/snapshot/locale/us/markets/stocks/tickers"
+        params: dict[str, str] = {"include_otc": "true" if include_otc else "false"}
+        page = 0
+        while True:
+            data = await self._get(path, params)
+            for ticker_data in data.get("tickers", []) or []:
+                if not isinstance(ticker_data, dict):
+                    continue
+                sym = str(ticker_data.get("ticker", "") or "").strip().upper()
+                if sym:
+                    snapshots.append(self._parse_snapshot(sym, ticker_data))
+            next_url = data.get("next_url")
+            if not next_url:
+                break
+            path, params = self._extract_path_and_params(next_url)
+            page += 1
+            if page >= 100:
+                log.warning("get_us_stocks_market_snapshots: safety stop after %d pages", page)
+                break
+        log.debug("get_us_stocks_market_snapshots → %d tickers", len(snapshots))
+        return snapshots
+
     async def get_gainers_losers(self, direction: str = "gainers") -> list[Snapshot]:
         """
         Fetch top 20 gainers or losers.

@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from stocvest.data.models import Snapshot
-from stocvest.signals.day_trading_scanner import PremarketGapScanner
+from stocvest.signals.day_trading_scanner import PremarketGapScanner, dynamic_gap_candidates_from_snapshots
 
 
 def snapshot(
@@ -88,3 +88,39 @@ def test_scanner_ignores_invalid_snapshot_inputs():
 
     results = scanner.scan_snapshots(snaps)
     assert results == []
+
+
+@pytest.mark.unit
+def test_dynamic_gap_candidates_prefers_last_trade_then_open():
+    snaps = [
+        Snapshot(
+            symbol="LAST",
+            prev_close=100.0,
+            last_trade_price=103.0,
+            day_open=102.0,
+            day_volume=600_000.0,
+        ),
+        Snapshot(
+            symbol="OPENONLY",
+            prev_close=100.0,
+            last_trade_price=None,
+            day_open=104.0,
+            day_volume=600_000.0,
+        ),
+    ]
+    out = dynamic_gap_candidates_from_snapshots(snaps, limit=10, min_abs_gap_percent=2.0)
+    assert [c.symbol for c in out] == ["OPENONLY", "LAST"]
+    assert out[0].gap_percent == pytest.approx(4.0)
+    assert out[1].gap_percent == pytest.approx(3.0)
+
+
+@pytest.mark.unit
+def test_dynamic_gap_candidates_filters_penny_and_volume():
+    snaps = [
+        Snapshot(symbol="PENNY", prev_close=2.0, last_trade_price=2.2, day_volume=600_000.0),
+        Snapshot(symbol="LOWVOL", prev_close=100.0, last_trade_price=110.0, day_volume=100_000.0),
+        Snapshot(symbol="OK", prev_close=10.0, last_trade_price=11.0, day_volume=600_000.0),
+    ]
+    out = dynamic_gap_candidates_from_snapshots(snaps, limit=10, min_abs_gap_percent=2.0, min_day_volume=500_000.0)
+    assert len(out) == 1
+    assert out[0].symbol == "OK"

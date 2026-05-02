@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import pytest
 
 from stocvest.api.services import scanner_response_cache
+from stocvest.data.models import Snapshot
+from stocvest.data.polygon_client import PolygonError
 from stocvest.api.handlers.scanner import (
     handler,
     scanner_briefing_handler,
@@ -184,6 +187,77 @@ def test_scanner_briefing_handler_renders_markdown() -> None:
 def test_scanner_handlers_validate_inputs() -> None:
     response = scanner_gaps_handler({"body": json.dumps({"snapshots": {}})}, {})
     assert response["statusCode"] == 400
+
+
+def test_scanner_gaps_handler_dynamic_empty_snapshots(monkeypatch: pytest.MonkeyPatch) -> None:
+    scanner_response_cache._MEMORY.clear()
+    class _FakePoly:
+        def __init__(self, api_key: str) -> None:
+            _ = api_key
+
+        async def __aenter__(self) -> "_FakePoly":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            _ = args
+
+        async def get_us_stocks_market_snapshots(self, *, include_otc: bool = False) -> list[Snapshot]:
+            _ = include_otc
+            return [
+                Snapshot(symbol="BIG", prev_close=100.0, last_trade_price=104.0, day_volume=600_000.0),
+                Snapshot(symbol="FLAT", prev_close=50.0, last_trade_price=50.2, day_volume=600_000.0),
+            ]
+
+        async def get_snapshots_many(self, symbols: list[str], chunk_size: int = 50) -> list[Snapshot]:
+            _ = symbols
+            _ = chunk_size
+            return []
+
+    monkeypatch.setattr("stocvest.api.handlers.scanner.PolygonClient", _FakePoly)
+    monkeypatch.setattr("stocvest.api.handlers.scanner.get_settings", lambda: SimpleNamespace(polygon_api_key="k"))
+
+    event = {
+        "body": json.dumps({"snapshots": [], "limit": 5, "min_abs_gap_percent": 2.0, "min_day_volume": 0.0})
+    }
+    response = scanner_gaps_handler(event, {})
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert len(body) == 1
+    assert body[0]["symbol"] == "BIG"
+
+
+def test_scanner_gaps_handler_dynamic_falls_back_on_polygon_403(monkeypatch: pytest.MonkeyPatch) -> None:
+    scanner_response_cache._MEMORY.clear()
+    class _FakePoly403:
+        def __init__(self, api_key: str) -> None:
+            _ = api_key
+
+        async def __aenter__(self) -> "_FakePoly403":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            _ = args
+
+        async def get_us_stocks_market_snapshots(self, *, include_otc: bool = False) -> list[Snapshot]:
+            _ = include_otc
+            raise PolygonError("Polygon 403 on /v2/snapshot/locale/us/markets/stocks/tickers: denied")
+
+        async def get_snapshots_many(self, symbols: list[str], chunk_size: int = 50) -> list[Snapshot]:
+            _ = chunk_size
+            assert "AAPL" in symbols
+            return [
+                Snapshot(symbol="FALL1", prev_close=50.0, last_trade_price=52.0, day_volume=600_000.0),
+            ]
+
+    monkeypatch.setattr("stocvest.api.handlers.scanner.PolygonClient", _FakePoly403)
+    monkeypatch.setattr("stocvest.api.handlers.scanner.get_settings", lambda: SimpleNamespace(polygon_api_key="k"))
+
+    event = {"body": json.dumps({"snapshots": [], "limit": 10, "min_abs_gap_percent": 2.0})}
+    response = scanner_gaps_handler(event, {})
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert len(body) == 1
+    assert body[0]["symbol"] == "FALL1"
 
 
 def test_scanner_gaps_handler_uses_cache_within_ttl(monkeypatch: pytest.MonkeyPatch) -> None:

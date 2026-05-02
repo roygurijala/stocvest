@@ -1,6 +1,20 @@
 import { apiFetch } from "@/lib/api/client";
 import type { PDTStatusPayload } from "@/lib/api/pdt";
 
+/** When the scanner has no gap symbols and no user watchlist, intraday bars use this liquid floor. */
+const INTRADAY_FALLBACK_SYMBOLS = [
+  "SPY",
+  "QQQ",
+  "AAPL",
+  "NVDA",
+  "TSLA",
+  "MSFT",
+  "AMZN",
+  "META",
+  "AMD",
+  "GOOGL"
+] as const;
+
 export interface GapCandidatePayload {
   symbol: string;
   gap_percent: number;
@@ -42,18 +56,42 @@ export interface ScannerOverview {
   error?: string;
 }
 
-export async function fetchScannerOverview(pdtStatus: PDTStatusPayload | null): Promise<ScannerOverview> {
-  const watchSymbols = ["SPY", "QQQ", "AAPL", "NVDA", "TSLA", "MSFT", "AMZN", "META", "AMD", "GOOGL"];
+export async function fetchScannerOverview(
+  pdtStatus: PDTStatusPayload | null,
+  watchlistSymbols: string[] = []
+): Promise<ScannerOverview> {
   const pdtAssessment = pdtStatus?.assessment;
 
   try {
-    const [snapshots, articles, barsBySymbol] = await Promise.all([
-      Promise.all(
-        watchSymbols.map((symbol) => apiFetch<Record<string, unknown>>(`/v1/market/snapshot?symbol=${symbol}`))
-      ),
+    const gapsFull = await apiFetch<GapCandidatePayload[]>("/v1/scanner/gaps", {
+      method: "POST",
+      body: JSON.stringify({
+        snapshots: [],
+        limit: 20,
+        min_abs_gap_percent: 2.0,
+        min_day_volume: 500_000
+      })
+    });
+    if (gapsFull == null) {
+      return {
+        gaps: [],
+        catalysts: [],
+        setups: [],
+        error: "Service temporarily unavailable. Please try again."
+      };
+    }
+
+    const gapSyms = gapsFull.map((g) => g.symbol.trim().toUpperCase()).filter(Boolean);
+    const watchUpper = watchlistSymbols.map((s) => s.trim().toUpperCase()).filter(Boolean);
+    let universe = [...new Set([...gapSyms, ...watchUpper])];
+    if (universe.length === 0) {
+      universe = [...INTRADAY_FALLBACK_SYMBOLS];
+    }
+
+    const [articles, barsBySymbol] = await Promise.all([
       apiFetch<Record<string, unknown>[]>("/v1/market/news?limit=20"),
       Promise.all(
-        watchSymbols.map(async (symbol) => {
+        universe.map(async (symbol) => {
           const bars = await apiFetch<Record<string, unknown>[]>(
             `/v1/market/bars?symbol=${symbol}&timeframe=1min&limit=30`
           );
@@ -62,17 +100,12 @@ export async function fetchScannerOverview(pdtStatus: PDTStatusPayload | null): 
       ).then((rows) => Object.fromEntries(rows))
     ]);
 
-    const cleanSnapshots = snapshots.filter((s): s is Record<string, unknown> => Boolean(s));
     const cleanArticles = (articles || []) as Record<string, unknown>[];
     const cleanBarsBySymbol = Object.fromEntries(
       Object.entries(barsBySymbol).map(([k, v]) => [k, (v || []) as Record<string, unknown>[]])
     );
 
-    const [gaps, catalysts, setups] = await Promise.all([
-      apiFetch<GapCandidatePayload[]>("/v1/scanner/gaps", {
-        method: "POST",
-        body: JSON.stringify({ snapshots: cleanSnapshots, limit: 5, min_abs_gap_percent: 2.0 })
-      }),
+    const [catalysts, setups] = await Promise.all([
       apiFetch<CatalystPayload[]>("/v1/scanner/catalysts", {
         method: "POST",
         body: JSON.stringify({ articles: cleanArticles, limit: 5, min_score: 0.35 })
@@ -82,8 +115,7 @@ export async function fetchScannerOverview(pdtStatus: PDTStatusPayload | null): 
         body: JSON.stringify({ bars_by_symbol: cleanBarsBySymbol, limit: 10, min_score: 0.35 })
       })
     ]);
-
-    if (!gaps || !catalysts || !setups) {
+    if (catalysts == null || setups == null) {
       return {
         gaps: [],
         catalysts: [],
@@ -91,6 +123,11 @@ export async function fetchScannerOverview(pdtStatus: PDTStatusPayload | null): 
         error: "Service temporarily unavailable. Please try again."
       };
     }
+
+    const gaps = [...gapsFull]
+      .filter((g) => typeof g.gap_percent === "number" && Number.isFinite(g.gap_percent))
+      .sort((a, b) => Math.abs(b.gap_percent) - Math.abs(a.gap_percent))
+      .slice(0, 10);
 
     const briefing = await apiFetch<ScannerBriefingPayload>("/v1/signals/day/briefing", {
       method: "POST",

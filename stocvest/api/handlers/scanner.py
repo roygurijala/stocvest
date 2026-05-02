@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import date
 from typing import Any
 
@@ -22,7 +23,9 @@ from stocvest.api.services.signal_dto import (
 )
 from stocvest.api.shared import parse_json_body
 from stocvest.api.types import LambdaContext, LambdaEvent
+from stocvest.data import PolygonClient, PolygonError
 from stocvest.data.models import Bar, Snapshot
+from stocvest.data.scanner_universe import LIQUID_SYMBOLS_FALLBACK
 from stocvest.signals import (
     DailyBriefingGenerator,
     DailyBriefingInput,
@@ -30,11 +33,36 @@ from stocvest.signals import (
     NewsCatalystDetector,
     PremarketGapScanner,
 )
+from stocvest.signals.day_trading_scanner import dynamic_gap_candidates_from_snapshots
+from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
 
 _SCHEDULED_SCAN_TYPES = frozenset({"premarket", "intraday", "eod_summary"})
+
+
+async def _load_snapshots_for_dynamic_gaps() -> list[Snapshot]:
+    """
+    Prefer Polygon's full US equities snapshot (one paginated REST feed).
+
+    If the API key's tier returns 401/403 on that aggregate route, batch-fetch
+    :data:`LIQUID_SYMBOLS_FALLBACK` instead (~50–100 liquid names).
+    """
+    settings = get_settings()
+    async with PolygonClient(api_key=settings.polygon_api_key) as client:
+        try:
+            return await client.get_us_stocks_market_snapshots(include_otc=False)
+        except PolygonError as exc:
+            msg = str(exc)
+            if "Polygon 403" in msg or "Polygon 401" in msg:
+                _LOG.warning(
+                    "Polygon aggregate US snapshot unavailable for this tier; "
+                    "using batched liquid fallback universe: %s",
+                    msg[:200],
+                )
+                return await client.get_snapshots_many(list(LIQUID_SYMBOLS_FALLBACK), chunk_size=50)
+            raise
 
 
 def _is_eventbridge_schedule_event(event: LambdaEvent) -> bool:
@@ -91,11 +119,25 @@ def scanner_gaps_handler(event: LambdaEvent, context: LambdaContext) -> dict[str
         limit = int(payload.get("limit", 8))
         min_abs_gap_percent = float(payload.get("min_abs_gap_percent", 2.0))
         min_day_volume = float(payload.get("min_day_volume", 0.0))
-        snapshots = [Snapshot.model_validate(item) for item in snapshots_raw]
-        candidates = PremarketGapScanner(
-            min_abs_gap_percent=min_abs_gap_percent,
-            min_day_volume=min_day_volume,
-        ).scan_snapshots(snapshots, limit=limit)
+
+        if len(snapshots_raw) == 0:
+            out_limit = max(1, min(limit, 20))
+            dyn_min_vol = max(500_000.0, min_day_volume)
+            snapshots = asyncio.run(_load_snapshots_for_dynamic_gaps())
+            candidates = dynamic_gap_candidates_from_snapshots(
+                snapshots,
+                limit=20,
+                min_abs_gap_percent=min_abs_gap_percent,
+                min_day_volume=dyn_min_vol,
+                min_trade_price=5.0,
+            )
+            candidates = candidates[:out_limit]
+        else:
+            snapshots = [Snapshot.model_validate(item) for item in snapshots_raw]
+            candidates = PremarketGapScanner(
+                min_abs_gap_percent=min_abs_gap_percent,
+                min_day_volume=min_day_volume,
+            ).scan_snapshots(snapshots, limit=limit)
         return cache_set(key, ok([serialize_gap_candidate(c) for c in candidates]), ttl_seconds=60)
     except (TypeError, ValueError) as exc:
         return bad_request(f"Invalid gap scanner request: {exc}")

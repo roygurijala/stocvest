@@ -354,6 +354,67 @@ class TestAdditionalRestEndpoints:
 
     @pytest.mark.asyncio
     @respx.mock
+    async def test_get_us_stocks_market_snapshots_paginates(self):
+        page1 = {
+            "status": "OK",
+            "tickers": [
+                {
+                    "ticker": "AAA",
+                    "day": {"o": 10.0, "v": 1_000_000},
+                    "prevDay": {"c": 9.0},
+                    "lastTrade": {"p": 10.0},
+                },
+            ],
+            "next_url": "https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers?cursor=abc&include_otc=false",
+        }
+        page2 = {
+            "status": "OK",
+            "tickers": [
+                {
+                    "ticker": "BBB",
+                    "day": {"c": 20.0, "v": 1_000_000},
+                    "prevDay": {"c": 19.0},
+                    "lastTrade": {"p": 20.0},
+                },
+            ],
+        }
+        route = respx.get(url__regex=r"https://api\.polygon\.io/v2/snapshot/locale/us/markets/stocks/tickers.*")
+        route.side_effect = [
+            httpx.Response(200, json=page1),
+            httpx.Response(200, json=page2),
+        ]
+
+        async with PolygonClient(FAKE_KEY) as client:
+            rows = await client.get_us_stocks_market_snapshots(include_otc=False)
+
+        assert [s.symbol for s in rows] == ["AAA", "BBB"]
+        assert route.call_count == 2
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_get_snapshots_many_batches_requests(self):
+        def _ticker(sym: str, p: float, last: float) -> dict:
+            return {
+                "ticker": sym,
+                "day": {"c": last, "v": 1_000_000},
+                "prevDay": {"c": p},
+                "lastTrade": {"p": last},
+            }
+
+        route = respx.get(url__regex=r"https://api\.polygon\.io/v2/snapshot/locale/us/markets/stocks/tickers.*")
+        route.side_effect = [
+            httpx.Response(200, json={"status": "OK", "tickers": [_ticker("A", 10.0, 10.0)]}),
+            httpx.Response(200, json={"status": "OK", "tickers": [_ticker("B", 20.0, 20.0)]}),
+        ]
+
+        async with PolygonClient(FAKE_KEY) as client:
+            snaps = await client.get_snapshots_many(["A", "B"], chunk_size=1)
+
+        assert {s.symbol for s in snaps} == {"A", "B"}
+        assert route.call_count == 2
+
+    @pytest.mark.asyncio
+    @respx.mock
     async def test_get_gainers_losers_returns_snapshots(self):
         payload = {
             "status": "OK",
