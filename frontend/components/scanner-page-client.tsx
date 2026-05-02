@@ -593,21 +593,30 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                       />
                     </div>
                     <div style={{ display: "inline-flex", flexWrap: "wrap", gap: spacing[2], alignItems: "center" }}>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedSymbol(setup.symbol)}
-                        style={{
-                          border: `1px solid ${colors.accent}`,
-                          borderRadius: borderRadius.md,
-                          background: "rgba(59,130,246,0.15)",
-                          color: colors.accent,
-                          padding: `${spacing[1]} ${spacing[2]}`,
-                          cursor: "pointer",
-                          fontSize: typography.scale.xs
-                        }}
+                      <span
+                        title={orbExpired ? "ORB window has closed for today" : undefined}
+                        style={{ display: "inline-flex", cursor: orbExpired ? "not-allowed" : undefined }}
                       >
-                        Open order entry
-                      </button>
+                        <button
+                          type="button"
+                          disabled={orbExpired}
+                          onClick={() => {
+                            if (orbExpired) return;
+                            setSelectedSymbol(setup.symbol);
+                          }}
+                          style={{
+                            border: `1px solid ${orbExpired ? colors.border : colors.accent}`,
+                            borderRadius: borderRadius.md,
+                            background: orbExpired ? colors.surfaceMuted : "rgba(59,130,246,0.15)",
+                            color: orbExpired ? colors.textMuted : colors.accent,
+                            padding: `${spacing[1]} ${spacing[2]}`,
+                            cursor: orbExpired ? "not-allowed" : "pointer",
+                            fontSize: typography.scale.xs
+                          }}
+                        >
+                          Open order entry
+                        </button>
+                      </span>
                       <button
                         type="button"
                         onClick={async () => {

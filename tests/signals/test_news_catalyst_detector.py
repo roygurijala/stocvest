@@ -103,6 +103,39 @@ def test_direction_down_for_bearish_news():
 
 
 @pytest.mark.unit
+def test_excludes_law_firm_and_retrospective_headline_noise():
+    detector = NewsCatalystDetector(min_score=0.2)
+    noise_titles = [
+        "ROSEN LAW FIRM Encourages AAPL Investors to Contact Before Deadline: May 1",
+        "NATIONAL TRIAL LAWYERS reminds shareholders of CLASS ACTION deadline",
+        "If You'd Invested $1000 in AAPL Five Years Ago, Here's How Much You'd Have",
+        "Top Stocks This Week: What Wall Street Says",
+    ]
+    articles = [
+        article(f"n{i}", title, sentiment_score=0.9, keywords=["earnings"]) for i, title in enumerate(noise_titles)
+    ]
+    assert detector.detect(articles) == []
+
+
+@pytest.mark.unit
+def test_keeps_actionable_headlines_without_noise():
+    detector = NewsCatalystDetector(min_score=0.35)
+    candidates = detector.detect(
+        [
+            article(
+                "ok1",
+                "Analyst raises price target after earnings beat and strong revenue outlook",
+                sentiment=Newssentiment.BULLISH,
+                sentiment_score=0.6,
+                keywords=["analyst", "earnings"],
+            )
+        ]
+    )
+    assert len(candidates) == 1
+    assert candidates[0].article_id == "ok1"
+
+
+@pytest.mark.unit
 def test_respects_limit_and_threshold():
     detector = NewsCatalystDetector(min_score=0.5)
     candidates = detector.detect(

@@ -30,11 +30,31 @@ class NewsCatalystDetector:
     Uses deterministic heuristics so behavior is transparent and testable.
     """
 
+    # Law-firm alerts, retrospective fluff, PR churn — exclude on headline only (case-insensitive).
+    _HEADLINE_NOISE_SUBSTRINGS: tuple[str, ...] = (
+        "rosen",
+        "national trial lawyers",
+        "investor counsel",
+        "class action",
+        "deadline:",
+        "investigation:",
+        "securities fraud",
+        "if you'd invested",
+        "here's how much",
+        "this week",
+    )
+
     _KEYWORD_WEIGHTS: dict[str, tuple[str, float]] = {
+        "price target": ("analyst", 0.40),
         "earnings": ("earnings", 0.45),
         "guidance": ("guidance", 0.40),
+        "outlook": ("guidance", 0.35),
+        "revenue": ("earnings", 0.30),
+        "beat": ("earnings", 0.42),
+        "miss": ("earnings", 0.40),
         "merger": ("m&a", 0.50),
         "acquisition": ("m&a", 0.50),
+        "analyst": ("analyst", 0.32),
         "fda": ("regulatory", 0.55),
         "approval": ("regulatory", 0.45),
         "investigation": ("legal", 0.50),
@@ -68,8 +88,15 @@ class NewsCatalystDetector:
         candidates.sort(key=lambda item: item.catalyst_score, reverse=True)
         return candidates[: max(0, limit)]
 
+    @classmethod
+    def _headline_is_noise(cls, title: str) -> bool:
+        h = title.lower()
+        return any(sub in h for sub in cls._HEADLINE_NOISE_SUBSTRINGS)
+
     def _to_candidate(self, article: NewsArticle) -> NewsCatalystCandidate | None:
         if not article.tickers:
+            return None
+        if self._headline_is_noise(article.title):
             return None
 
         text = f"{article.title} {article.description or ''} {' '.join(article.keywords)}".lower()

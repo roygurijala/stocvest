@@ -43,7 +43,7 @@ export interface ScannerOverview {
 }
 
 export async function fetchScannerOverview(pdtStatus: PDTStatusPayload | null): Promise<ScannerOverview> {
-  const watchSymbols = ["AAPL", "MSFT", "NVDA"];
+  const watchSymbols = ["SPY", "QQQ", "AAPL", "NVDA", "TSLA", "MSFT", "AMZN", "META", "AMD", "GOOGL"];
   const pdtAssessment = pdtStatus?.assessment;
 
   try {
