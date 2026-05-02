@@ -1,6 +1,6 @@
 # STOCVEST
 
-Multi-broker swing + day trading signal platform.
+Signal intelligence platform that surfaces technical patterns, AI-synthesized signal data, and multi-broker execution tools for self-directed traders.
 
 ## Stack
 

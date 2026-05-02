@@ -16,6 +16,7 @@ import type { MarketOverview, SnapshotPayload } from "@/lib/api/market";
 import type { ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
 import { InfoTip } from "@/components/info-tip";
+import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
@@ -105,8 +106,11 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
   }, [bullishBias, snapshot]);
 
   const overall = rows.reduce((sum, row) => sum + row.score, 0) / Math.max(1, rows.length);
-  const verdict = overall >= 58 ? "Bullish" : overall <= 42 ? "Bearish" : "Neutral";
-  const verdictColor = verdict === "Bullish" ? colors.bullish : verdict === "Bearish" ? colors.bearish : colors.caution;
+  const layerSignalSummary = overall >= 58 ? "Bullish" : overall <= 42 ? "Bearish" : "Neutral";
+  const summaryTone =
+    layerSignalSummary === "Bullish" ? colors.bullish : layerSignalSummary === "Bearish" ? colors.bearish : colors.caution;
+  const setupDirectionForEvidence =
+    layerSignalSummary === "Bullish" ? "long" : layerSignalSummary === "Bearish" ? "short" : "neutral";
 
   const radarData = rows.map((row, idx) => ({
     layer: row.name,
@@ -256,11 +260,11 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
       <article style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
         <h3 style={{ marginTop: 0, display: "flex", alignItems: "center", gap: spacing[2] }}>
           <Brain size={18} />
-          AI Verdict
+          AI Signal Analysis
         </h3>
         <p style={{ margin: 0, fontStyle: "italic" }}>
-          “{symbol.toUpperCase()} currently shows a <strong style={{ color: verdictColor }}>{verdict}</strong> profile with{" "}
-          {Math.round(overall)}% confidence based on layered confirmation.”
+          “{symbol.toUpperCase()} currently shows a <strong style={{ color: summaryTone }}>{layerSignalSummary}</strong> profile with{" "}
+          {Math.round(overall)}% signal strength based on layered confirmation.”
         </p>
         <div style={{ marginTop: spacing[3], height: 10, background: colors.surfaceMuted, borderRadius: borderRadius.full }}>
           <div
@@ -268,9 +272,27 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
               height: "100%",
               width: `${Math.round(overall)}%`,
               borderRadius: borderRadius.full,
-              background: verdictColor
+              background: summaryTone
             }}
           />
+        </div>
+        <div
+          style={{
+            background: "rgba(255,193,7,0.06)",
+            border: "1px solid rgba(255,193,7,0.2)",
+            borderRadius: "8px",
+            padding: "12px 16px",
+            fontSize: "12px",
+            color: "#8a9ab0",
+            lineHeight: "1.6",
+            marginTop: spacing[3],
+            marginBottom: spacing[2]
+          }}
+        >
+          <strong style={{ color: "#f5c542" }}>Signal Data Only</strong>
+          <br />
+          This analysis surfaces technical patterns and signal data for informational purposes. It is not investment advice. Reference
+          levels shown are derived from historical patterns — not predictions. You are solely responsible for all trading decisions.
         </div>
         <button
           type="button"
@@ -278,7 +300,7 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
           onClick={async () => {
             const setupLike = setup || {
               symbol: symbol.toUpperCase(),
-              direction: verdict,
+              direction: setupDirectionForEvidence,
               score: overall / 100,
               triggers: ["Multi-layer synthesis"],
               timestamp_iso: new Date().toISOString()
@@ -316,10 +338,13 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
         >
           View Evidence
         </button>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: spacing[2] }}>
+          <SignalDisclaimerChip />
+        </div>
       </article>
 
-      <article style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
-        <h3 style={{ marginTop: 0 }}>Key Levels</h3>
+      <article style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4], position: "relative", paddingBottom: spacing[5] }}>
+        <h3 style={{ marginTop: 0 }}>Reference Levels</h3>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
           <div>
             <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>VWAP</p>
@@ -344,9 +369,12 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
         </div>
         {setup ? (
           <p style={{ margin: `${spacing[3]} 0 0 0`, color: colors.textMuted, fontSize: typography.scale.sm }}>
-            Active setup type: {setup.triggers[0] || "Intraday pattern"}
+            Active signal pattern: {setup.triggers[0] || "Intraday pattern"}
           </p>
         ) : null}
+        <div style={{ position: "absolute", right: spacing[3], bottom: spacing[3] }}>
+          <SignalDisclaimerChip />
+        </div>
       </article>
       <SignalEvidenceModal open={evidenceOpen} evidence={evidence} onClose={() => setEvidenceOpen(false)} />
     </section>

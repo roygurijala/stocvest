@@ -8,6 +8,7 @@ import { EarningsCalendar } from "@/components/earnings-calendar";
 import { InfoTip } from "@/components/info-tip";
 import { MiniSparkline } from "@/components/mini-sparkline";
 import { SentimentGauge } from "@/components/sentiment-gauge";
+import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import type { MarketOverview, NewsPayload, SnapshotPayload } from "@/lib/api/market";
@@ -370,7 +371,9 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview, 
                       borderRadius: borderRadius.lg,
                       padding: spacing[3],
                       display: "grid",
-                      gap: spacing[2]
+                      gap: spacing[2],
+                      position: "relative",
+                      paddingBottom: spacing[5]
                     }}
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2] }}>
@@ -378,8 +381,10 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview, 
                         <p style={{ margin: 0, fontWeight: 700 }}>{signal.symbol}</p>
                         <span
                           style={{
-                            background: signal.direction.toLowerCase() === "bullish" ? "rgba(34,197,94,.2)" : "rgba(239,68,68,.2)",
-                            color: signal.direction.toLowerCase() === "bullish" ? colors.bullish : colors.bearish,
+                            background: ["bullish", "long"].includes(signal.direction.toLowerCase())
+                              ? "rgba(34,197,94,.2)"
+                              : "rgba(239,68,68,.2)",
+                            color: ["bullish", "long"].includes(signal.direction.toLowerCase()) ? colors.bullish : colors.bearish,
                             borderRadius: borderRadius.full,
                             padding: "2px 8px",
                             fontSize: typography.scale.xs
@@ -390,7 +395,7 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview, 
                       </div>
                       <div style={{ display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
                         <span style={{ color: colors.textMuted, fontSize: typography.scale.sm }}>{Math.round(signal.score * 100)}%</span>
-                        <InfoTip text={CONFIDENCE_PERCENT_TIP} label="About confidence" />
+                        <InfoTip text={CONFIDENCE_PERCENT_TIP} label="About signal strength" />
                       </div>
                     </div>
                     <button
@@ -432,6 +437,9 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview, 
                     >
                       View Evidence
                     </button>
+                    <div style={{ position: "absolute", right: spacing[3], bottom: spacing[3] }}>
+                      <SignalDisclaimerChip />
+                    </div>
                   </motion.article>
                 ))
               )}
@@ -525,13 +533,19 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview, 
               padding: 0
             }}
           >
-            Morning Briefing: {scannerOverview.gaps.length} gaps, {scannerOverview.catalysts.length} catalysts, top setup{" "}
-            {topSignals[0]?.symbol || "pending"}
+            Pre-Market Signal Briefing: {scannerOverview.gaps.length} gap candidates, {scannerOverview.catalysts.length} catalysts, top
+            active signal {topSignals[0]?.symbol || "pending"}
           </button>
           {briefOpen ? (
-            <pre style={{ whiteSpace: "pre-wrap", margin: `${spacing[3]} 0 0 0`, fontFamily: typography.fontFamilySans }}>
-              {scannerOverview.briefing?.markdown || "Briefing unavailable."}
-            </pre>
+            <>
+              <p style={{ margin: `${spacing[3]} 0 0 0`, color: colors.textMuted, fontSize: typography.scale.sm, lineHeight: 1.5 }}>
+                Signal data for informational purposes only. Not investment advice. Past signal performance does not guarantee future
+                results.
+              </p>
+              <pre style={{ whiteSpace: "pre-wrap", margin: `${spacing[2]} 0 0 0`, fontFamily: typography.fontFamilySans }}>
+                {scannerOverview.briefing?.markdown || "Briefing unavailable."}
+              </pre>
+            </>
           ) : null}
         </article>
       ) : null}

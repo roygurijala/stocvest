@@ -178,6 +178,7 @@ def test_scanner_briefing_handler_renders_markdown() -> None:
     body = json.loads(response["body"])
     assert "GAP1" in body["markdown"]
     assert body["date_iso"] == "2026-04-28"
+    assert body.get("disclaimer")
 
 
 def test_scanner_handlers_validate_inputs() -> None:

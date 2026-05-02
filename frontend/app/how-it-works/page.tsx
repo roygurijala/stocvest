@@ -18,14 +18,14 @@ const steps = [
   {
     title: "Step 3 — AI Synthesis",
     description:
-      "Claude AI (by Anthropic) reads all six layers and synthesizes them into a single plain-English verdict. It identifies conflicts, weighs evidence, and explains its reasoning — just like a senior analyst would.",
+      "Claude AI (by Anthropic) reads all six layers and synthesizes them into a single plain-English signal summary. It highlights conflicts, weighs evidence, and explains how the layers align — as structured narrative, not a directive.",
     badge: "Powered by Anthropic Claude",
     icon: Brain
   },
   {
     title: "Step 4 — Full Reasoning Transparency",
     description:
-      "Every verdict comes with a complete breakdown. You see exactly which data points drove the signal, which layers agree, which conflict, and what the risk factors are. No black boxes.",
+      "Every signal comes with a complete breakdown. You see exactly which data points drove the readout, which layers agree, which conflict, and what the risk factors are. No black boxes.",
     icon: Eye
   },
   {

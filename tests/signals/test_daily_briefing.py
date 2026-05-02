@@ -63,7 +63,7 @@ def test_generate_includes_core_sections():
     )
     out = DailyBriefingGenerator().generate(inp)
     assert "2026-04-28" in out.markdown
-    assert "Pre-market gaps" in out.markdown
+    assert "Gap signal candidates" in out.markdown
     assert "AAPL" in out.markdown
     assert "PDT" in out.markdown
     assert "Warning" in out.markdown
@@ -75,7 +75,7 @@ def test_generate_includes_core_sections():
 def test_empty_optional_sections():
     inp = DailyBriefingInput(briefing_date=date(2026, 4, 28))
     md = DailyBriefingGenerator().generate(inp).markdown
-    assert "No gap candidates" in md
+    assert "No gap signal candidates" in md
     assert "No ranked catalysts" in md
     assert "No PDT assessment" in md
 

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { CrispChat } from "@/components/crisp-chat";
-import { DisclaimerFooter } from "@/components/disclaimer-footer";
+import { GlobalDisclaimer } from "@/components/global-disclaimer";
 import { getServerSession } from "@/lib/auth/session";
 import { ThemeProvider } from "@/lib/theme-provider";
 import "./globals.css";
@@ -22,8 +22,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <CrispChat userEmail={crispUserEmail} />
           <div className="app-shell flex min-h-screen flex-col">
             <div className="flex-1">{children}</div>
-            <DisclaimerFooter />
           </div>
+          <GlobalDisclaimer />
         </ThemeProvider>
       </body>
     </html>

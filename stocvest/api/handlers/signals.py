@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Any
 
+from stocvest.api.legal_copy import API_SIGNAL_DISCLAIMER
 from stocvest.api.response import bad_request, internal_error, ok
 from stocvest.api.services.signal_dto import (
     parse_bar,
@@ -52,13 +53,13 @@ def swing_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[
         return ok(
             {
                 "score": composite.score,
-                "confidence": composite.confidence,
-                "verdict": composite.verdict.value,
+                "signal_strength": composite.confidence,
+                "signal_summary": composite.verdict.value,
                 "contributions": [
                     {
                         "layer": c.layer,
                         "raw_score": c.raw_score,
-                        "confidence": c.confidence,
+                        "signal_strength": c.confidence,
                         "base_weight": c.base_weight,
                         "regime_multiplier": c.regime_multiplier,
                         "effective_weight": c.effective_weight,
@@ -66,6 +67,7 @@ def swing_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[
                     }
                     for c in composite.contributions
                 ],
+                "disclaimer": API_SIGNAL_DISCLAIMER,
             }
         )
     except (KeyError, TypeError, ValueError) as exc:
@@ -95,13 +97,14 @@ def swing_synthesis_parse_handler(event: LambdaEvent, context: LambdaContext) ->
                 "symbol": verdict.symbol,
                 "action": verdict.action.value,
                 "conviction": verdict.conviction,
-                "confidence": verdict.confidence,
+                "signal_strength": verdict.confidence,
                 "position_size_pct": verdict.position_size_pct,
                 "stop_loss_pct": verdict.stop_loss_pct,
                 "take_profit_pct": verdict.take_profit_pct,
                 "rationale": verdict.rationale,
                 "risks": verdict.risks,
                 "timeframe": verdict.timeframe,
+                "disclaimer": API_SIGNAL_DISCLAIMER,
             }
         )
     except ValueError as exc:
@@ -171,6 +174,7 @@ def day_briefing_handler(event: LambdaEvent, context: LambdaContext) -> dict[str
                 "date_iso": briefing.date_iso,
                 "title": briefing.title,
                 "markdown": briefing.markdown,
+                "disclaimer": API_SIGNAL_DISCLAIMER,
             }
         )
     except (KeyError, TypeError, ValueError) as exc:
@@ -246,13 +250,16 @@ def _public_signal_shape(item: dict[str, Any], now: datetime) -> dict[str, Any]:
     elif direction not in {"long", "short", "neutral"}:
         direction = "neutral"
 
-    confidence = _to_float(item.get("confidence"))
+    raw_strength = _to_float(item.get("signal_strength"))
+    if raw_strength is None:
+        raw_strength = _to_float(item.get("confidence"))
     return {
         "symbol": str(item.get("symbol") or "").upper(),
         "direction": direction,
-        "confidence": round(confidence, 2) if confidence is not None else 0.0,
+        "signal_strength": round(raw_strength, 2) if raw_strength is not None else 0.0,
         "timestamp_iso": str(item.get("timestamp_iso") or item.get("timestamp") or ""),
         "outcome": _compute_signal_outcome(item, now),
+        "disclaimer": API_SIGNAL_DISCLAIMER,
     }
 
 
@@ -315,13 +322,14 @@ def public_performance_summary_handler(event: LambdaEvent, context: LambdaContex
             return ok(
                 {
                     "total_signals_tracked": 0,
-                    "total_resolved": 0,
+                    "signals_evaluated": 0,
                     "win_count": 0,
                     "loss_count": 0,
                     "neutral_count": 0,
-                    "win_rate_percent": 0.0,
+                    "directional_accuracy_percent": 0.0,
                     "launch_date": launch_date,
                     "date_range_days": 0,
+                    "disclaimer": API_SIGNAL_DISCLAIMER,
                 }
             )
 
@@ -336,13 +344,14 @@ def public_performance_summary_handler(event: LambdaEvent, context: LambdaContex
         return ok(
             {
                 "total_signals_tracked": len(signals),
-                "total_resolved": resolved,
+                "signals_evaluated": resolved,
                 "win_count": wins,
                 "loss_count": losses,
                 "neutral_count": neutral,
-                "win_rate_percent": win_rate,
+                "directional_accuracy_percent": win_rate,
                 "launch_date": launch_date,
                 "date_range_days": days,
+                "disclaimer": API_SIGNAL_DISCLAIMER,
             }
         )
     except Exception as exc:

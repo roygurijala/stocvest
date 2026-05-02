@@ -186,7 +186,7 @@ export function buildEvidenceFromSetup(
       name: "Macro",
       status: statusFromScore(macro),
       weightPercent: 14,
-      explanation: "Rates and macro event pressure influence conviction and risk appetite.",
+      explanation: "Rates and macro event pressure influence signal alignment and risk appetite.",
       keyPoints: ["Fed Watch: Steady", "Yield Curve: Flat", "Event: CPI pending"],
       contributionScore: macro,
       freshnessLabel: "Updated 30m ago"
@@ -237,10 +237,10 @@ export function buildEvidenceFromSetup(
     layers,
     aiVerdict:
       direction === "bullish"
-        ? "Strong technical setup with supportive internals; geopolitical noise is the main risk to continuation."
+        ? "Strong technical pattern with supportive internals; geopolitical noise is the main risk to continuation."
         : direction === "bearish"
-          ? "Momentum and risk signals lean defensive; macro crosscurrents limit reversal confidence."
-          : "Signal layers are mixed, so conviction remains moderate until stronger alignment appears.",
+          ? "Momentum and risk signals lean defensive; macro crosscurrents limit reversal signal strength."
+          : "Signal layers are mixed, so signal strength remains moderate until stronger alignment appears.",
     aiFreshnessLabel: "Updated 30s ago",
     keyLevels: {
       vwap: typeof last === "number" ? last * 0.997 : null,

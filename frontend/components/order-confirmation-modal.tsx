@@ -175,8 +175,8 @@ export function OrderConfirmationModal({ open, draft, tradingMode, onClose, onAc
         {pdtUsed >= 3 ? <p style={{ color: colors.bearish, marginTop: spacing[2] }}>🔴 PDT: Limit reached — blocked</p> : null}
         <hr style={{ borderColor: colors.border, margin: `${spacing[3]} 0` }} />
         <p style={{ fontSize: typography.scale.sm, color: colors.textMuted, lineHeight: 1.5 }}>
-          STOCVEST signals are for informational purposes only. This order executes in your personal brokerage account.
-          You are solely responsible.
+          This order will be placed directly in your personal brokerage account. STOCVEST does not provide investment advice and is not
+          responsible for trading outcomes. You are solely responsible for this order and all resulting gains or losses.
         </p>
         {inlineError ? <p style={{ color: colors.bearish }}>{inlineError}</p> : null}
         <div className="mt-4 flex flex-wrap justify-end gap-2">

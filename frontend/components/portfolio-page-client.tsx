@@ -108,6 +108,7 @@ export function PortfolioPageClient({ brokerOverviews, overview, earningsBySymbo
         ))}
       </div>
 
+      {/* TODO: Portfolio signal alignment view — Phase post-Step 9. Frame as: signal status per holding, NOT as rebalancing advice */}
       <section style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
         <h3 style={{ marginTop: 0 }}>Positions</h3>
         {positions.length === 0 ? (

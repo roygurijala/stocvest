@@ -30,7 +30,7 @@ export default function AboutPage() {
             },
             {
               title: "Intelligence over noise",
-              body: "Six signal layers synthesized by AI cuts through market noise to surface only the highest-conviction setups."
+              body: "Six signal layers synthesized by AI cut through market noise to surface the strongest active signal patterns."
             }
           ].map((card) => (
             <article key={card.title} className="rounded-xl border border-white/10 bg-white/5 p-6">

@@ -24,12 +24,14 @@ export interface IntradaySetupPayload {
   score: number;
   triggers: string[];
   timestamp_iso: string;
+  disclaimer?: string;
 }
 
 export interface ScannerBriefingPayload {
   date_iso: string;
   title: string;
   markdown: string;
+  disclaimer?: string;
 }
 
 export interface ScannerOverview {

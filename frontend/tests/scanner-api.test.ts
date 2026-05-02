@@ -59,7 +59,7 @@ describe("scanner API overview", () => {
         return [{ symbol: "GAP1", direction: "long", score: 0.7, triggers: [], timestamp_iso: "x" }];
       }
       if (path === "/v1/signals/day/briefing") {
-        return { date_iso: "2026-04-29", title: "Briefing", markdown: "ok" };
+        return { date_iso: "2026-04-29", title: "Your Pre-Market Signal Briefing — 2026-04-29", markdown: "ok" };
       }
       throw new Error(`Unhandled path ${path}`);
     });
@@ -67,7 +67,7 @@ describe("scanner API overview", () => {
     const result = await fetchScannerOverview(null);
     expect(result.error).toBeUndefined();
     expect(result.gaps).toHaveLength(1);
-    expect(result.briefing?.title).toBe("Briefing");
+    expect(result.briefing?.title).toContain("Pre-Market Signal Briefing");
   });
 
   test("fetchScannerOverview handles scanner failures", async () => {

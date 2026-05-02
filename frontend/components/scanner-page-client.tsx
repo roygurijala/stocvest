@@ -20,6 +20,7 @@ import {
   SETUP_RELATIVE_VOLUME_TIP
 } from "@/lib/ui-tooltips";
 import { InfoTip } from "@/components/info-tip";
+import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 
 interface ScannerPageClientProps {
   initialOverview: ScannerOverview;
@@ -273,7 +274,15 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: idx * 0.05 }}
-                  style={{ border: `1px solid ${colors.border}`, borderRadius: borderRadius.lg, padding: spacing[3], display: "grid", gap: spacing[2] }}
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: borderRadius.lg,
+                    padding: spacing[3],
+                    display: "grid",
+                    gap: spacing[2],
+                    position: "relative",
+                    paddingBottom: spacing[5]
+                  }}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2] }}>
                     <strong>{setup.symbol}</strong>
@@ -312,10 +321,10 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                       fontSize: typography.scale.sm
                     }}
                   >
-                    <span>Confidence</span>
+                    <span>Signal strength</span>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                       {Math.round(setup.score * 100)}%
-                      <InfoTip text={CONFIDENCE_PERCENT_TIP} label="About confidence" />
+                      <InfoTip text={CONFIDENCE_PERCENT_TIP} label="About signal strength" />
                     </span>
                   </div>
                   <p style={{ margin: `${spacing[1]} 0`, color: colors.textMuted, fontSize: typography.scale.xs }}>
@@ -367,7 +376,7 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                       fontSize: typography.scale.xs
                     }}
                   >
-                    Trade This Setup
+                    Open order entry
                   </button>
                   <button
                     type="button"
@@ -402,6 +411,9 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                   >
                     View Evidence
                   </button>
+                  <div style={{ position: "absolute", right: spacing[3], bottom: spacing[3] }}>
+                    <SignalDisclaimerChip />
+                  </div>
                 </motion.article>
               ))
             )}

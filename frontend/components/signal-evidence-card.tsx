@@ -7,6 +7,7 @@ import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { InfoTip } from "@/components/info-tip";
+import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import { layerFreshnessFromIso, type EvidenceLayer, type EvidenceStatus, type SignalEvidenceData } from "@/lib/signal-evidence";
 import { AI_VERDICT_TIP, CONFIDENCE_PERCENT_TIP, LAYER_NAME_HINTS } from "@/lib/ui-tooltips";
 
@@ -78,7 +79,7 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
   const conflicts = conflictingLayers(evidence.layers, evidence.direction);
 
   return (
-    <article style={{ display: "grid", gap: spacing[4] }}>
+    <article style={{ display: "grid", gap: spacing[4], position: "relative", paddingBottom: spacing[4] }}>
       {evidence.earningsRisk ? (
         <section
           style={{
@@ -101,7 +102,8 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
             )
           </p>
           <p style={{ margin: `${spacing[1]} 0 0 0`, color: colors.textMuted }}>
-            All signals carry additional uncertainty until after the earnings report. Consider waiting or reducing position size.
+            All signals carry additional uncertainty until after the earnings report. Signal parameters show elevated event risk —
+            size and timing are solely your decision.
           </p>
         </section>
       ) : null}
@@ -158,8 +160,8 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
             </text>
           </svg>
           <span style={{ color: colors.textMuted, fontSize: typography.scale.xs, display: "inline-flex", alignItems: "center", gap: 6 }}>
-            Confidence
-            <InfoTip text={CONFIDENCE_PERCENT_TIP} label="About confidence percentage" />
+            Signal strength
+            <InfoTip text={CONFIDENCE_PERCENT_TIP} label="About signal strength percentage" />
           </span>
           <span className="text-sm" style={{ color: colors.textMuted }}>
             {displayUpdatedLabel(evidence)}
@@ -230,13 +232,31 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
       <section style={{ border: `1px solid ${colors.border}`, borderRadius: borderRadius.lg, padding: spacing[3], display: "grid", gap: spacing[2] }}>
         <h3 style={{ margin: 0, display: "flex", alignItems: "center", gap: spacing[2] }}>
           <Brain size={18} />
-          AI Verdict
-          <InfoTip text={AI_VERDICT_TIP} label="About AI verdict" />
+          AI Signal Analysis
+          <InfoTip text={AI_VERDICT_TIP} label="About AI signal analysis" />
         </h3>
         <p style={{ margin: 0, fontStyle: "italic" }}>"{evidence.aiVerdict}"</p>
-        <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>AI Analysis</span>
+        <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>Signal summary</span>
         <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>{evidence.aiFreshnessLabel}</span>
       </section>
+
+      <div
+        style={{
+          background: "rgba(255,193,7,0.06)",
+          border: "1px solid rgba(255,193,7,0.2)",
+          borderRadius: "8px",
+          padding: "12px 16px",
+          fontSize: "12px",
+          color: "#8a9ab0",
+          lineHeight: "1.6",
+          marginBottom: "16px"
+        }}
+      >
+        <strong style={{ color: "#f5c542" }}>Signal Data Only</strong>
+        <br />
+        This analysis surfaces technical patterns and signal data for informational purposes. It is not investment advice. Reference
+        levels shown are derived from historical patterns — not predictions. You are solely responsible for all trading decisions.
+      </div>
 
       {conflicts.length > 0 ? (
         <section
@@ -262,7 +282,7 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
       ) : null}
 
       <section style={{ border: `1px solid ${colors.border}`, borderRadius: borderRadius.lg, padding: spacing[3], display: "grid", gap: spacing[3] }}>
-        <h3 style={{ margin: 0 }}>Key Levels</h3>
+        <h3 style={{ margin: 0 }}>Reference Levels</h3>
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
           {[
             ["VWAP", evidence.keyLevels.vwap],
@@ -281,7 +301,7 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
       </section>
 
       <section style={{ border: `1px solid ${colors.border}`, borderRadius: borderRadius.lg, padding: spacing[3], display: "grid", gap: spacing[2] }}>
-        <h3 style={{ margin: 0 }}>Confidence Breakdown</h3>
+        <h3 style={{ margin: 0 }}>Signal Strength Breakdown</h3>
         <div className="h-[160px] w-full max-w-full lg:h-[200px]">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
@@ -304,6 +324,9 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
         </div>
         <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>{evidence.newsFreshnessLabel}</span>
       </section>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: spacing[1] }}>
+        <SignalDisclaimerChip />
+      </div>
     </article>
   );
 }

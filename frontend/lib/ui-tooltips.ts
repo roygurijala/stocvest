@@ -25,19 +25,19 @@ export const PDT_GUARDIAN_TIP =
   "The Pattern Day Trader rule limits brokerage accounts under $25,000 to 3 day trades within any 5 business days. STOCVEST enforces this automatically at the broker layer so your account is never restricted by accident.";
 
 export const CONFIDENCE_PERCENT_TIP =
-  "How strongly all six signal layers agree on the direction. Above 80 percent means strong alignment across all layers. Between 50 and 65 percent means mixed signals — consider trading smaller size.";
+  "How strongly all six signal layers agree on the direction. Above 80 percent means strong alignment across all layers. Between 50 and 65 percent means mixed signals — signal data supports smaller exposure if you choose to act.";
 
 export const SETUP_RELATIVE_VOLUME_TIP =
   "How today's trading volume compares to the 20-day average. 2x means twice the normal activity. Higher volume confirms stronger price moves and more reliable signals.";
 
 export const TOP_SIGNALS_TIP =
-  "The highest-conviction trading setups identified by the signal engine right now. Confidence shows how strongly all 6 signal layers agree on the direction.";
+  "The strongest active signals identified by the signal engine right now. Signal strength shows how strongly all six layers align on direction.";
 
 export const LATEST_HEADLINES_TIP =
   "Real-time market news from Polygon.io. Headlines are scored for sentiment and used as one of the six signal layers.";
 
 export const AI_VERDICT_TIP =
-  "Claude AI reads all six signal layers simultaneously and writes a plain-English synthesis of what the data means, where signals agree, where they conflict, and what risks to watch.";
+  "Claude AI reads all six signal layers simultaneously and writes a plain-English synthesis of what the data shows, where signals align, where they conflict, and what risks to monitor.";
 
 export const WIN_RATE_TIP =
   "The percentage of your closed trades that were profitable. Most professional traders target between 55 and 65 percent. A lower win rate can still be profitable if your average winner is larger than your average loser.";

@@ -6,6 +6,7 @@ from datetime import date
 from typing import Any
 
 from stocvest.api.http_route import http_route_descriptor
+from stocvest.api.legal_copy import API_SIGNAL_DISCLAIMER
 from stocvest.api.response import bad_request, internal_error, not_found, ok
 from stocvest.api.services.scanner_response_cache import build_cache_key, cache_get, cache_set
 from stocvest.api.services.scanner_scheduled_pipeline import run_scheduled_scan_sync
@@ -181,7 +182,14 @@ def scanner_briefing_handler(event: LambdaEvent, context: LambdaContext) -> dict
         )
         return cache_set(
             key,
-            ok({"date_iso": briefing.date_iso, "title": briefing.title, "markdown": briefing.markdown}),
+            ok(
+                {
+                    "date_iso": briefing.date_iso,
+                    "title": briefing.title,
+                    "markdown": briefing.markdown,
+                    "disclaimer": API_SIGNAL_DISCLAIMER,
+                }
+            ),
             ttl_seconds=60,
         )
     except (TypeError, ValueError, KeyError) as exc:

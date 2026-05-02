@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from stocvest.api.handlers.signals import (
     day_briefing_handler,
     day_setups_handler,
@@ -13,7 +15,7 @@ from stocvest.api.handlers.signals import (
 )
 
 
-def test_swing_composite_handler_returns_bullish_verdict() -> None:
+def test_swing_composite_handler_returns_bullish_signal_summary() -> None:
     event = {
         "body": json.dumps(
             {
@@ -29,12 +31,14 @@ def test_swing_composite_handler_returns_bullish_verdict() -> None:
     response = swing_composite_handler(event, {})
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
-    assert body["verdict"] == "bullish"
+    assert body["signal_summary"] == "bullish"
+    assert body["disclaimer"]
     assert body["score"] > 0
     assert len(body["contributions"]) == 3
+    assert "signal_strength" in body["contributions"][0]
 
 
-def test_swing_synthesis_parse_handler_parses_json_verdict() -> None:
+def test_swing_synthesis_parse_handler_parses_json_signal_payload() -> None:
     event = {
         "body": json.dumps(
             {
@@ -53,6 +57,8 @@ def test_swing_synthesis_parse_handler_parses_json_verdict() -> None:
     assert body["symbol"] == "SPY"
     assert body["action"] == "buy"
     assert body["timeframe"] == "swing"
+    assert body["signal_strength"] == pytest.approx(0.81)
+    assert body["disclaimer"]
 
 
 def test_day_setups_handler_returns_ranked_candidates() -> None:
@@ -71,6 +77,7 @@ def test_day_setups_handler_returns_ranked_candidates() -> None:
     assert len(body) >= 1
     assert body[0]["symbol"] == "GAP1"
     assert body[0]["direction"] in {"long", "short"}
+    assert body[0].get("disclaimer")
 
 
 def test_day_briefing_handler_renders_markdown() -> None:
@@ -117,6 +124,7 @@ def test_day_briefing_handler_renders_markdown() -> None:
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
     assert body["date_iso"] == "2026-04-28"
+    assert body.get("disclaimer")
     assert "GAP1" in body["markdown"]
     assert "PDT" in body["markdown"]
 
@@ -182,7 +190,7 @@ def test_public_recent_signals_returns_sanitized_latest_10(monkeypatch) -> None:
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
     assert len(body) == 10
-    assert set(body[0].keys()) == {"symbol", "direction", "confidence", "timestamp_iso", "outcome"}
+    assert set(body[0].keys()) == {"symbol", "direction", "signal_strength", "timestamp_iso", "outcome", "disclaimer"}
     assert body[0]["outcome"] in {"win", "loss", "neutral", "pending"}
 
 
@@ -248,11 +256,12 @@ def test_public_performance_summary_aggregates_outcomes(monkeypatch) -> None:
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
     assert body["total_signals_tracked"] == 3
-    assert body["total_resolved"] == 3
+    assert body["signals_evaluated"] == 3
     assert body["win_count"] == 1
     assert body["loss_count"] == 1
     assert body["neutral_count"] == 1
-    assert body["win_rate_percent"] == 33.3
+    assert body["directional_accuracy_percent"] == 33.3
+    assert body["disclaimer"]
 
 
 def _bar_payload(ts: datetime, *, close: float, volume: float) -> dict[str, object]:

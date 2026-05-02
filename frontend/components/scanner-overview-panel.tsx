@@ -10,7 +10,7 @@ export function ScannerOverviewPanel({ overview }: ScannerOverviewPanelProps) {
       <h2 style={{ marginBottom: 10 }}>Scanner Overview</h2>
       <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}>
         <article style={{ background: "#101a32", borderRadius: 12, padding: 16 }}>
-          <h3 style={{ marginTop: 0 }}>Gap Candidates</h3>
+          <h3 style={{ marginTop: 0 }}>Gap Signal Candidates</h3>
           {overview.gaps.length === 0 ? (
             <p style={{ opacity: 0.85 }}>{overview.error ? "Unavailable" : "No candidates"}</p>
           ) : (
@@ -57,6 +57,9 @@ export function ScannerOverviewPanel({ overview }: ScannerOverviewPanelProps) {
       {overview.briefing ? (
         <article style={{ background: "#101a32", borderRadius: 12, padding: 16, marginTop: 12 }}>
           <h3 style={{ marginTop: 0 }}>{overview.briefing.title}</h3>
+          <p style={{ margin: "0 0 12px 0", fontSize: 13, opacity: 0.85, lineHeight: 1.5 }}>
+            Signal data for informational purposes only. Not investment advice. Past signal performance does not guarantee future results.
+          </p>
           <pre style={{ whiteSpace: "pre-wrap", margin: 0, fontFamily: "inherit", opacity: 0.9 }}>
             {overview.briefing.markdown}
           </pre>

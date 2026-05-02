@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from stocvest.data.models import Bar, NewsArticle, Newssentiment, Timeframe
+from stocvest.api.legal_copy import API_SIGNAL_DISCLAIMER
 from stocvest.signals import (
     IntradaySetupCandidate,
     NewsCatalystCandidate,
@@ -94,6 +95,7 @@ def serialize_intraday_setup(candidate: IntradaySetupCandidate) -> dict[str, Any
         "vwap": candidate.vwap,
         "ema9": candidate.ema9,
         "timestamp_iso": candidate.timestamp_iso,
+        "disclaimer": API_SIGNAL_DISCLAIMER,
     }
 
 

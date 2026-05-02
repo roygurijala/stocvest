@@ -48,8 +48,13 @@ class DailyBriefingGenerator:
     def generate(self, inp: DailyBriefingInput) -> DailyBriefing:
         lines: list[str] = []
         date_iso = inp.briefing_date.isoformat()
-        title = f"STOCVEST daily briefing — {date_iso}"
+        title = f"Your Pre-Market Signal Briefing — {date_iso}"
         lines.append(f"# {title}")
+        lines.append("")
+        lines.append(
+            "Signal data for informational purposes only. Not investment advice. "
+            "Past signal performance does not guarantee future results."
+        )
         lines.append("")
 
         if inp.market_session_summary:
@@ -72,14 +77,14 @@ class DailyBriefingGenerator:
             sc = inp.swing_composite
             lines.append("## Swing composite")
             lines.append(
-                f"- Verdict: **{sc.verdict.value}** (score {sc.score:.2f}, "
-                f"confidence {sc.confidence:.2f})"
+                f"- Signal summary: **{sc.verdict.value}** (score {sc.score:.2f}, "
+                f"signal strength {sc.confidence:.2f})"
             )
             lines.append("")
 
-        lines.append("## Pre-market gaps")
+        lines.append("## Gap signal candidates")
         if not inp.gap_candidates:
-            lines.append("- No gap candidates above current scan thresholds.")
+            lines.append("- No gap signal candidates above current scan thresholds.")
         else:
             for c in inp.gap_candidates[: self._max_gaps]:
                 lines.append(

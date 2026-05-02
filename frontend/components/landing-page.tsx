@@ -34,11 +34,11 @@ const outcomeText: Record<PublicSignalOutcome, string> = {
 };
 
 const demoTickerSignals: PublicSignal[] = [
-  { symbol: "AAPL", direction: "long", confidence: 65, timestamp_iso: "just-now", outcome: "pending" },
-  { symbol: "TSLA", direction: "short", confidence: 71, timestamp_iso: "2m-ago", outcome: "pending" },
-  { symbol: "NVDA", direction: "long", confidence: 78, timestamp_iso: "5m-ago", outcome: "pending" },
-  { symbol: "SPY", direction: "neutral", confidence: 52, timestamp_iso: "8m-ago", outcome: "pending" },
-  { symbol: "MSFT", direction: "long", confidence: 68, timestamp_iso: "12m-ago", outcome: "pending" }
+  { symbol: "AAPL", direction: "long", signal_strength: 65, timestamp_iso: "just-now", outcome: "pending" },
+  { symbol: "TSLA", direction: "short", signal_strength: 71, timestamp_iso: "2m-ago", outcome: "pending" },
+  { symbol: "NVDA", direction: "long", signal_strength: 78, timestamp_iso: "5m-ago", outcome: "pending" },
+  { symbol: "SPY", direction: "neutral", signal_strength: 52, timestamp_iso: "8m-ago", outcome: "pending" },
+  { symbol: "MSFT", direction: "long", signal_strength: 68, timestamp_iso: "12m-ago", outcome: "pending" }
 ];
 
 function timeAgo(iso: string): string {
@@ -80,7 +80,11 @@ export function LandingPage() {
   }, [signals]);
 
   const winRateTone =
-    (summary?.win_rate_percent ?? 0) > 60 ? "text-[#22c55e]" : (summary?.win_rate_percent ?? 0) >= 50 ? "text-[#f59e0b]" : "text-[#ef4444]";
+    (summary?.directional_accuracy_percent ?? 0) > 60
+      ? "text-[#22c55e]"
+      : (summary?.directional_accuracy_percent ?? 0) >= 50
+        ? "text-[#f59e0b]"
+        : "text-[#ef4444]";
 
   return (
     <main className="bg-[#0a0e1a] text-slate-100">
@@ -156,7 +160,7 @@ export function LandingPage() {
             transition={{ duration: 0.7, delay: 0.1 }}
             className="max-w-3xl text-base text-slate-300 sm:text-lg md:text-2xl"
           >
-            Six signal layers. AI synthesis. Multi-broker execution. Built for serious retail traders.
+            Six signal layers. AI synthesis. Multi-broker execution. Built for traders who want data-driven signal intelligence.
           </motion.p>
           <motion.div
             initial={{ opacity: 0 }}
@@ -217,7 +221,7 @@ export function LandingPage() {
                   >
                     <span className="font-semibold">{signal.symbol}</span>
                     <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${dir}`}>{signal.direction}</span>
-                    <span className="text-slate-300">{`${Math.round(signal.confidence)}%`}</span>
+                    <span className="text-slate-300">{`${Math.round(signal.signal_strength)}%`}</span>
                     <span className="ml-auto text-xs text-slate-400">
                       {isPlaceholder
                         ? signal.timestamp_iso === "just-now"
@@ -249,7 +253,7 @@ export function LandingPage() {
                 <tr className="border-b border-white/10 text-left text-slate-300">
                   <th className="px-4 py-3">Symbol</th>
                   <th className="px-4 py-3">Direction</th>
-                  <th className="px-4 py-3">Confidence</th>
+                  <th className="px-4 py-3">Signal Strength</th>
                   <th className="px-4 py-3">Date and Time</th>
                   <th className="px-4 py-3">Outcome</th>
                 </tr>
@@ -268,7 +272,7 @@ export function LandingPage() {
                   >
                     <td className="px-4 py-3 font-semibold">{row.symbol}</td>
                     <td className="px-4 py-3 capitalize text-slate-300">{row.direction}</td>
-                    <td className="px-4 py-3">{Math.round(row.confidence)}%</td>
+                    <td className="px-4 py-3">{Math.round(row.signal_strength)}%</td>
                     <td className="px-4 py-3 text-slate-300">{new Date(row.timestamp_iso).toLocaleString()}</td>
                     <td className="px-4 py-3">{outcomeText[row.outcome]}</td>
                   </motion.tr>
@@ -280,7 +284,8 @@ export function LandingPage() {
         {signals.length > 0 ? (
           <>
             <p className={`mt-4 text-sm font-semibold ${winRateTone}`}>
-              {summary?.win_count ?? 0} wins out of {summary?.total_resolved ?? 0} resolved signals = {(summary?.win_rate_percent ?? 0).toFixed(1)}% win rate
+              {summary?.win_count ?? 0} directionally correct out of {summary?.signals_evaluated ?? 0} evaluated signals ={" "}
+              {(summary?.directional_accuracy_percent ?? 0).toFixed(1)}% directional accuracy
             </p>
             <p className="mt-2 text-xs text-slate-400">
               Based on {summary?.total_signals_tracked ?? 0} signals since {summary?.launch_date ?? new Date().toISOString().slice(0, 10)}. Small sample size — accuracy improves as
@@ -292,13 +297,13 @@ export function LandingPage() {
 
       <section id="the-problem" className="mx-auto max-w-7xl px-4 py-20 md:px-8">
         <motion.div initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="mb-10 text-center">
-          <h2 className="text-3xl font-bold md:text-4xl">Most platforms show you data. STOCVEST shows you decisions.</h2>
+          <h2 className="text-3xl font-bold md:text-4xl">Most platforms show you data. STOCVEST surfaces the signals — you make the call.</h2>
         </motion.div>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {[
-            { icon: ChartColumnIncreasing, a: "They give you charts", b: "We give you verdicts" },
-            { icon: Newspaper, a: "They show you news", b: "We show you impact" },
-            { icon: Bot, a: "They use old rules", b: "We use AI reasoning" }
+            { icon: ChartColumnIncreasing, a: "They give you charts", b: "We surface signal patterns" },
+            { icon: Newspaper, a: "They show you news", b: "We show signal relevance" },
+            { icon: Bot, a: "They use static rules", b: "We use AI synthesis" }
           ].map((item, i) => (
             <motion.article
               key={item.a}
@@ -318,7 +323,7 @@ export function LandingPage() {
 
       <section className="mx-auto max-w-7xl px-4 py-20 md:px-8">
         <motion.h2 initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="mb-10 text-center text-3xl font-bold md:text-4xl">
-          Six layers of intelligence. One clear verdict.
+          Six layers of intelligence. One synthesized signal readout.
         </motion.h2>
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <motion.article
@@ -359,7 +364,7 @@ export function LandingPage() {
             <div className="mb-4 flex items-center gap-2">
               <span className="text-xl font-bold">AAPL</span>
               <span className="rounded-full bg-[#22c55e]/20 px-2 py-1 text-xs font-semibold text-[#22c55e]">Bullish</span>
-              <span className="text-sm text-slate-300">82% confidence</span>
+              <span className="text-sm text-slate-300">82% signal strength</span>
             </div>
             <div className="mb-4">
               <div className="h-2 w-full rounded-full bg-slate-800">
@@ -373,7 +378,7 @@ export function LandingPage() {
               </div>
             </div>
             <p className="italic text-slate-300">
-              Strong technical setup backed by earnings beat. Macro uncertainty is the primary risk.
+              Strong technical pattern with supportive catalyst data. Macro uncertainty is the primary risk factor in the signal layers.
             </p>
           </motion.article>
         </div>
@@ -388,7 +393,7 @@ export function LandingPage() {
           <p className="mb-4 text-xs italic text-slate-400">Real briefings delivered daily at 8 AM ET to logged-in users</p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
-              <p className="mb-2 text-sm text-slate-400">Gap Candidates</p>
+              <p className="mb-2 text-sm text-slate-400">Gap Signal Candidates</p>
               <p>NVDA +4.2%</p>
               <p>AMD +2.8%</p>
               <p>TSLA -1.9%</p>
@@ -406,9 +411,9 @@ export function LandingPage() {
               </p>
             </div>
             <div>
-              <p className="mb-2 text-sm text-slate-400">Top Setup</p>
+              <p className="mb-2 text-sm text-slate-400">Top Active Signal</p>
               <p className="font-semibold">AAPL ORB Long</p>
-              <p className="text-[#3b82f6]">82% confidence</p>
+              <p className="text-[#3b82f6]">82% signal strength</p>
             </div>
           </div>
         </motion.article>
@@ -501,7 +506,7 @@ export function LandingPage() {
               {plan.recommended ? <p className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-bold uppercase tracking-wide text-[#3b82f6]">Most Popular</p> : null}
               <div className="mb-2 flex items-center justify-between">
                 <h3 className="text-xl font-semibold">{plan.tier}</h3>
-                {plan.recommended ? <span className="rounded-full bg-[#3b82f6] px-3 py-1 text-sm font-bold text-white">Recommended</span> : null}
+                {plan.recommended ? <span className="rounded-full bg-[#3b82f6] px-3 py-1 text-sm font-bold text-white">Popular</span> : null}
               </div>
               <p className={`mb-3 text-2xl font-bold ${plan.recommended ? "text-[#3b82f6]" : ""}`}>{plan.price}</p>
               <ul className="mb-4 space-y-1 text-slate-300">

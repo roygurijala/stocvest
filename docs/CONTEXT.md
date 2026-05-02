@@ -11,13 +11,13 @@ and what must never be changed without explicit discussion.
 
 **Phase:** 1 — Complete ✅ / Phase 2 — Complete ✅ / Phase 2.5 — Complete ✅ / Phase 3 — Complete ✅ / Phase 4 — Complete ✅ / Phase 5 — Complete ✅ / Phase 6 — In Progress 🚧 (6a–6i: Terraform + Vercel config + GitHub Actions CI/CD ✅ / cloud apply + hook wiring pending)
 **Last Updated:** 2026-05-01
-**Last Session:** Step 8 — Order execution safety gates (backend + frontend), paper/live trading mode, confirmation modal, E*TRADE OAuth BFF routes, legal footer + signal chip; API routes on `brokers` Lambda; `tests/api/test_order_safety.py` + `tests/api/handlers/test_orders.py`; frontend Vitest 45 tests
+**Last Session:** Legal compliance pass — signal-oriented copy across UI, `GlobalDisclaimer` in root layout, `SignalDisclaimerChip` on signal cards, API field renames (`signal_summary`, `signal_strength`, `signals_evaluated`, `directional_accuracy_percent`, etc.) + `disclaimer` on signal payloads; Terms draft + order modal disclaimer; briefing title/copy; `docs/CONTEXT.md` LEGAL COMPLIANCE section; pytest 338 passed (3 skipped); frontend build + Vitest 45 tests
 
 **Step 8 — Order execution safety gates:** ✅ COMPLETE
 - Backend: `stocvest/api/services/order_safety.py` (`OrderSafetyGate`, `OrderAccountState`, `ValidationResult`); broker adapters call gate + structured order-attempt logging (no dollar amounts or account numbers) when `order_safety_*` keys are present in `connect` config
 - New API (same `brokers` Lambda / Terraform routes): `POST /v1/orders/validate`, `POST /v1/orders/submit` (requires `confirmed: true`), `GET /v1/orders/{order_id}/status`, `GET`/`POST /v1/profile/trading-mode`, `GET /v1/auth/etrade/start`, `POST /v1/auth/etrade/callback`
 - Models: `TradingMode`, `UserProfile`, `OrderAttemptLog` in `stocvest/data/models.py`; `user_profile_store` (Dynamo Users table or in-memory); exceptions: `PDTViolationError`, `InsufficientFundsError`, `MarketClosedError`, `UnknownSymbolError`, `OrderQuantityLimitError`, `OrderRejectedError`
-- Frontend: `OrderEntryPanel`, `OrderConfirmationModal`, `OrderStatusTracker`, `TradingModeBadge`, `TradingModeModal`, `DisclaimerFooter`; Next.js BFF under `app/api/stocvest/*` and `app/api/auth/etrade/*`; portfolio embeds order entry; top bar shows mode badge; layout footer disclaimer; signal evidence “Not investment advice” chip; settings E*TRADE connect + masked account placeholder
+- Frontend: `OrderEntryPanel`, `OrderConfirmationModal`, `OrderStatusTracker`, `TradingModeBadge`, `TradingModeModal`, `GlobalDisclaimer`; Next.js BFF under `app/api/stocvest/*` and `app/api/auth/etrade/*`; portfolio embeds order entry; top bar shows mode badge; layout footer disclaimer; signal evidence “Not investment advice” chip; settings E*TRADE connect + masked account placeholder
 - Tests: backend 341 collected (338 passed + 3 skipped); frontend 45 Vitest tests
 **Last Session (previous):** Priority 9 earnings integration completed: Polygon earnings endpoint + Redis cache, authenticated market earnings API, dashboard earnings widget/page, scanner badges, signal evidence warnings, portfolio earnings alerts
 
@@ -44,6 +44,19 @@ and what must never be changed without explicit discussion.
 - `CrispChat` mounted from `frontend/app/layout.tsx` (all routes); sidebar **Send Feedback** (amber) calls `chat:open`
 - Document `NEXT_PUBLIC_CRISP_WEBSITE_ID` in `frontend/.env.example`; set the same in Vercel env
 - **Future:** consider migrating to **Intercom** if paying users exceed ~100 ( richer automation / sales tooling )
+
+---
+
+## LEGAL COMPLIANCE (product copy & API framing)
+
+- **STOCVEST is NOT a registered investment adviser.** Position the product as signal intelligence and data tooling, not advisory services.
+- **Signal language** must use data/pattern framing (signal summary, signal strength, reference levels, signal parameters), never advice framing in user-facing UI.
+- **Banned words/phrases in UI copy (signal context):** verdict, recommendation, you should, buy this, sell this, confidence (use “signal strength”), trade plan (use “signal parameters”).
+- **Every signal card** must show the `NOT INVESTMENT ADVICE` chip (`SignalDisclaimerChip`).
+- **`GlobalDisclaimer`** must appear on every page as the last element inside `<body>` (after all page content).
+- **Terms of Service** requires attorney review before paid launch; working draft lives at `/terms` with a prominent banner.
+- **Performance page** shows directional accuracy only; do not present dollar returns or percentage P&L as “signal performance.”
+- **Public signal API fields** (serialized): `signal_summary` / `signal_strength` / `signal_parameters` / `reference_stop` / `historical_entry_zone` / `reference_target_1` / `reference_target_2` where applicable; each response includes `disclaimer`: “Signal data for informational purposes only. Not investment advice.”
 
 ---
 
@@ -908,7 +921,7 @@ Ask: Broker-dealer registration needed?
 Ask: Are disclaimers sufficient?
 Update footer: 2026 STOCVEST LLC All rights reserved
 What STOCVEST is:
-SaaS signal platform
+Signal intelligence platform that surfaces technical patterns, AI-synthesized signal data, and multi-broker execution tools for self-directed traders
 Order routing layer to users own broker accounts
 Analytics and intelligence tool
 What STOCVEST is not:
@@ -930,10 +943,10 @@ Stripe subscription configured
 
 Future Features Backlog
 POST-BETA PRIORITY 1 — Complete Trade Brief
-6-level verdict: Strong Buy / Buy / Hold / Wait / Sell / Strong Sell
-Key Levels: Entry zone, Target 1, Target 2, Stop Loss calculated from ATR
-Risk/Reward ratio with visual bar
-Trade Plan: specific entry trigger, scale-in plan, exit plan, invalidation
+6-level signal labels (UI): Strong Bullish / Bullish / Neutral / Monitoring / Bearish / Strong Bearish (internal enums may differ; never “Strong Buy”/“Strong Sell” in customer copy)
+Reference levels: Historical entry zone, Reference Target 1/2, Reference Stop Level (e.g. ATR-derived) — framed as data, not instructions
+Risk/reward visualization as data-only (no advice copy)
+Signal parameters: entry trigger description, scale-in parameters, exit parameters, invalidation — framed as parameters, not a “plan”
 Technical signals grid: VWAP, EMA, RSI, trend, momentum, volume
 Catalysts and Risks two-column layout
 Requires: 30 days of real signal outcome data to validate key level accuracy
