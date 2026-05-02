@@ -9,11 +9,15 @@ interface OptionsPageClientProps {
   overview: OptionChainOverview;
 }
 
-function fmtGreek(value: number | null | undefined): string {
-  if (value == null || typeof value !== "number" || !Number.isFinite(value)) {
+function fmtGreek(value: number | string | null | undefined): string {
+  if (value == null) {
     return "—";
   }
-  return value.toFixed(4);
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) {
+    return "—";
+  }
+  return n.toFixed(4);
 }
 
 export function OptionsPageClient({ overview }: OptionsPageClientProps) {

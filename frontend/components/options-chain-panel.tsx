@@ -12,6 +12,17 @@ function fmt(value: number | null | undefined, digits: number = 3): string {
   return value.toFixed(digits);
 }
 
+function fmtGreek(value: number | string | null | undefined): string {
+  if (value === null || value === undefined) {
+    return "-";
+  }
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) {
+    return "-";
+  }
+  return n.toFixed(4);
+}
+
 export function OptionsChainPanel({ overview }: OptionsChainPanelProps) {
   return (
     <section style={{ marginTop: 18 }}>
@@ -58,10 +69,10 @@ export function OptionsChainPanel({ overview }: OptionsChainPanelProps) {
                   <td style={{ padding: "8px 6px" }}>{row.option_type}</td>
                   <td style={{ textAlign: "right", padding: "8px 6px" }}>{fmt(row.bid, 2)}</td>
                   <td style={{ textAlign: "right", padding: "8px 6px" }}>{fmt(row.ask, 2)}</td>
-                  <td style={{ textAlign: "right", padding: "8px 6px" }}>{fmt(row.delta, 4)}</td>
-                  <td style={{ textAlign: "right", padding: "8px 6px" }}>{fmt(row.gamma, 4)}</td>
-                  <td style={{ textAlign: "right", padding: "8px 6px" }}>{fmt(row.theta, 4)}</td>
-                  <td style={{ textAlign: "right", padding: "8px 6px" }}>{fmt(row.vega, 4)}</td>
+                  <td style={{ textAlign: "right", padding: "8px 6px" }}>{fmtGreek(row.delta)}</td>
+                  <td style={{ textAlign: "right", padding: "8px 6px" }}>{fmtGreek(row.gamma)}</td>
+                  <td style={{ textAlign: "right", padding: "8px 6px" }}>{fmtGreek(row.theta)}</td>
+                  <td style={{ textAlign: "right", padding: "8px 6px" }}>{fmtGreek(row.vega)}</td>
                 </tr>
               ))}
             </tbody>

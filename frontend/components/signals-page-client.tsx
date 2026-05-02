@@ -23,6 +23,7 @@ import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
+import { coerceSnapshotForReferenceLevels } from "@/lib/snapshot-reference-levels";
 import { buildEvidenceFromSetup, type SignalEvidenceData } from "@/lib/signal-evidence";
 import { fetchLiveSignals, formatHorizonOutcome, type PublicSignal } from "@/lib/api/public-signals";
 import { LAYER_NAME_HINTS } from "@/lib/ui-tooltips";
@@ -86,10 +87,12 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
     "all" | "correct" | "incorrect" | "neutral" | "pending"
   >("all");
 
-  const snapshot = useMemo(() => {
+  const rawSnapshot = useMemo(() => {
     const sym = symbol.toUpperCase();
     return marketOverview.snapshots.find((s) => s.symbol === sym) ?? symbolSnapshot;
   }, [marketOverview.snapshots, symbol, symbolSnapshot]);
+
+  const snapshot = useMemo(() => coerceSnapshotForReferenceLevels(rawSnapshot), [rawSnapshot]);
 
   useEffect(() => {
     const sym = symbol.trim().toUpperCase();

@@ -1,5 +1,6 @@
 import type { NewsPayload, SnapshotPayload } from "@/lib/api/market";
 import type { IntradaySetupPayload } from "@/lib/api/scanner";
+import { coerceSnapshotForReferenceLevels } from "@/lib/snapshot-reference-levels";
 
 export type EvidenceDirection = "bullish" | "bearish" | "neutral";
 export type EvidenceStatus = "Bullish" | "Bearish" | "Neutral" | "Unavailable";
@@ -130,12 +131,14 @@ export function buildEvidenceFromSetup(
   const sentimentScore = first?.sentiment_score;
   const hasNumericSentiment = typeof sentimentScore === "number" && Number.isFinite(sentimentScore);
 
+  const snap = coerceSnapshotForReferenceLevels(snapshot ?? null);
+
   const direction = evidenceDirectionFromSetup(setup.direction);
   const directionBadgeLabel = directionBadgeFromSetup(setup.direction);
   const confidencePercent = clamp(Math.round(setup.score * 100), 0, 100);
-  const last = snapshot?.last_trade_price ?? null;
-  const dayVwap = snapshot?.day_vwap;
-  const prev = snapshot?.prev_close ?? last;
+  const last = snap?.last_trade_price ?? null;
+  const dayVwap = snap?.day_vwap;
+  const prev = snap?.prev_close ?? last;
   const momentum = typeof last === "number" && typeof prev === "number" && prev > 0 ? ((last - prev) / prev) * 100 : 0;
   const base = clamp(50 + momentum * 6, 0, 100);
 
@@ -227,8 +230,8 @@ export function buildEvidenceFromSetup(
     }
   ];
 
-  const support = snapshot?.day_low ?? (typeof last === "number" ? last * 0.985 : null);
-  const resistance = snapshot?.day_high ?? (typeof last === "number" ? last * 1.015 : null);
+  const support = snap?.day_low ?? (typeof last === "number" ? last * 0.985 : null);
+  const resistance = snap?.day_high ?? (typeof last === "number" ? last * 1.015 : null);
   const vwapLevel =
     typeof dayVwap === "number" && Number.isFinite(dayVwap)
       ? dayVwap

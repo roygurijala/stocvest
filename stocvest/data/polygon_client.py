@@ -52,6 +52,10 @@ log = get_logger(__name__)
 _POLYGON_REST_BASE = "https://api.polygon.io"
 _POLYGON_WS_BASE   = "wss://socket.polygon.io"
 
+# Polygon occasionally returns a `day` OHLC/VWAP block on a different price scale than
+# `lastTrade.p` (bad aggregate / stale session). Reference levels must not mix the two.
+_DAY_VS_LAST_MAX_RATIO = 2.5
+
 
 # ─── timeframe → Polygon multiplier + timespan ────────────────────────────────
 
@@ -268,6 +272,27 @@ class PolygonClient:
         return snapshots
 
     @staticmethod
+    def _session_day_prices_align_with_last(
+        last_price: float | None,
+        day_open: float | None,
+        day_high: float | None,
+        day_low: float | None,
+        day_close: float | None,
+        day_vwap: float | None,
+    ) -> bool:
+        """True if session OHLC/VWAP are on the same scale as last trade (or last is unknown)."""
+        if last_price is None or last_price <= 0:
+            return True
+        for m in (day_open, day_high, day_low, day_close, day_vwap):
+            if m is None or m <= 0:
+                continue
+            ratio = m / last_price if last_price else 0.0
+            inv = last_price / m if m else 0.0
+            if ratio > _DAY_VS_LAST_MAX_RATIO or inv > _DAY_VS_LAST_MAX_RATIO:
+                return False
+        return True
+
+    @staticmethod
     def _parse_snapshot(symbol: str, ticker: dict) -> Snapshot:
         day   = ticker.get("day",       {}) or {}
         prev  = ticker.get("prevDay",   {}) or {}
@@ -312,18 +337,34 @@ class PolygonClient:
             ticker.get("afterHoursChangePercent"),
         )
 
+        day_open = day.get("o")
+        day_high = day.get("h")
+        day_low = day.get("l")
+        day_close = day.get("c")
+        day_volume = day.get("v")
+        day_vwap = day.get("vw")
+        if not PolygonClient._session_day_prices_align_with_last(
+            last_price, day_open, day_high, day_low, day_close, day_vwap
+        ):
+            log.warning(
+                "snapshot %s: dropping session OHLC/VWAP (mismatched scale vs last_trade=%s)",
+                symbol,
+                last_price,
+            )
+            day_open = day_high = day_low = day_close = day_volume = day_vwap = None
+
         return Snapshot(
             symbol=symbol,
             last_trade_price=last_price,
             last_trade_size=last.get("s"),
             last_quote_bid=quote.get("P"),
             last_quote_ask=quote.get("p"),  # Polygon uses P for bid, p for ask in lastQuote
-            day_open=day.get("o"),
-            day_high=day.get("h"),
-            day_low=day.get("l"),
-            day_close=day.get("c"),
-            day_volume=day.get("v"),
-            day_vwap=day.get("vw"),
+            day_open=day_open,
+            day_high=day_high,
+            day_low=day_low,
+            day_close=day_close,
+            day_volume=day_volume,
+            day_vwap=day_vwap,
             prev_close=prev_close,
             change=change,
             change_percent=change_pct,
