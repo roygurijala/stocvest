@@ -45,3 +45,5 @@ frontend/.env.local
 infra/terraform.tfvars
 infra/backend.hcl
 infra/.terraform_placeholder_lambda.zip
+infra/tfplan
+*.tfplan
