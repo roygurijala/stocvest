@@ -1,6 +1,8 @@
-# D1 — Signal resolution Lambda (EventBridge) — **not applied in repo**
+# D1 — Signal resolution Lambda (EventBridge)
 
 The `SignalHistory` DynamoDB table and `DYNAMODB_SIGNAL_HISTORY_TABLE` env var are defined in Terraform (`infra/dynamodb.tf`, `infra/lambda_6e.tf`). A separate Lambda alias **`signal_resolution`** is included in `local.api_handler_modules` with handler `stocvest.api.handlers.signal_resolution:signal_resolution_scheduled_handler` (dispatched when `STOCVEST_LAMBDA_MODULE=signal_resolution`).
+
+**Schedule:** `infra/eventbridge_signal_resolution.tf` defines the EventBridge rule (**`stocvest-signal-resolution`**, `rate(30 minutes)`), target, and Lambda invoke permission. Run **`terraform apply`** in `infra/` to create them in AWS (not applied automatically by CI).
 
 ## What the job does
 
@@ -11,7 +13,7 @@ On each invocation it runs (async, Polygon snapshot):
 
 Outcomes use a **0.1%** neutral band; bullish/bearish correctness is price vs `price_at_signal` per `stocvest/api/services/signal_recorder.py`.
 
-## Example: EventBridge → Lambda (apply manually)
+## Terraform (source of truth in repo)
 
 ```hcl
 resource "aws_cloudwatch_event_rule" "signal_resolution" {

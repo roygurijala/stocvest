@@ -19,7 +19,7 @@
 | Frontend (Next.js) | ✅ | Auth, dashboard redesign, scanner/signals/portfolio/journal/options/crypto/futures, landing, legal pages |
 | Order safety (Step 8) | ✅ | `order_safety.py`, validate/submit BFF, confirmation modal, paper/live mode |
 | Legal compliance pass | ✅ | `GlobalDisclaimer`, `SignalDisclaimerChip`, signal-oriented copy, public API field names + `disclaimer` |
-| D1 Signal outcome pipeline | 🚧 | `SignalRecord`, `SignalHistory` table + `signal_recorder`, composite persistence, resolution Lambda module, recent/summary + UI; EventBridge schedule **documented only** — see `docs/D1_SIGNAL_RESOLUTION_SCHEDULE.md` |
+| D1 Signal outcome pipeline | 🚧 | `SignalRecord`, `SignalHistory` table + `signal_recorder`, composite persistence, resolution Lambda module, recent/summary + UI; EventBridge **rate(30 minutes)** → `signal_resolution` in `infra/eventbridge_signal_resolution.tf` (**`terraform apply`** to enable) — see `docs/D1_SIGNAL_RESOLUTION_SCHEDULE.md` |
 | Terraform / AWS apply | 🚧 | Modules in `infra/`; **apply**, secrets, S3 artifact bucket, Cognito/Vercel hook wiring **pending** |
 | Phase 7 (E2E, audits, paper validation) | 🔜 | Not started as a program |
 
@@ -51,7 +51,7 @@ App router pages (dashboard incl. **`/dashboard/performance`**, scanner, signals
 | 2 | **GitHub:** Repository **variable** `STOCVEST_LAMBDA_S3_BUCKET`; **secrets** `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`; optional `VERCEL_DEPLOY_HOOK_URL`. |
 | 3 | **Push `main`:** Open **Actions** → confirm backend, frontend, `deploy-lambda`, and `deploy-vercel` (or skip if hook unset). |
 | 4 | **Smoke:** `GET /v1/health` on the HTTP API base URL; optional `GET /v1/signals/recent` if D1 table is applied. |
-| 5 | **Scheduled resolution (optional):** EventBridge → `stocvest-development-api-signal_resolution` is **not** wired in Terraform in-repo; see [`docs/D1_SIGNAL_RESOLUTION_SCHEDULE.md`](./D1_SIGNAL_RESOLUTION_SCHEDULE.md). |
+| 5 | **Scheduled resolution:** `aws_cloudwatch_event_rule` **`stocvest-signal-resolution`** (`rate(30 minutes)`) → `stocvest-development-api-signal_resolution` in **`infra/eventbridge_signal_resolution.tf`**. Run **`terraform apply`** so the rule, target, and Lambda permission exist in AWS. Details: [`docs/D1_SIGNAL_RESOLUTION_SCHEDULE.md`](./D1_SIGNAL_RESOLUTION_SCHEDULE.md). |
 
 1. **Infrastructure:** Same as checklist rows 1–2; keep API Gateway URLs and Cognito/Vercel env aligned with the deployed stage.
 2. **Broker runtime:** IBKR path needs ECS/Fargate + TWS/ibeam where applicable; E*TRADE OAuth is wired in app but production tokens/env must match deployment.

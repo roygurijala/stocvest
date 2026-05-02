@@ -4,7 +4,7 @@
 `CONTEXT.md` holds **status-at-a-glance**, **what’s implemented**, **near-term ops** (Terraform, secrets, CI, legal), **legal rules**, and **session rules**.  
 **This file** holds **planned work only**: themes, sub-items, and notes—**without** repeating the CONTEXT status table or §3 pending list.
 
-**Last updated:** 2026-05-02 (D1 engineering pass)
+**Last updated:** 2026-05-02 (D1 EventBridge schedule in Terraform)
 
 ---
 
@@ -42,7 +42,7 @@ Tracked in **`CONTEXT.md` §3** only (Terraform apply, GitHub/AWS/Vercel secrets
 
 | ID | Theme | Status | Notes |
 |----|--------|--------|--------|
-| D1 | **Signal outcome pipeline** | In progress | **Shipped in repo:** `SignalRecord` + DynamoDB `SignalHistory` (GSI `scope_generated_at`), `signal_recorder.record_signal` / `resolve_signals` / `get_signal_history`, auto-record on `POST /v1/signals/swing/composite` when `symbol` + `price_at_signal` present, `GET /v1/signals/recent` (50 public rows + outcome fields), summary from 1d outcomes, Lambda module `signal_resolution`, journal optional `signal_id` / `signal_direction` / `signal_generated_at`, dashboard Signal history tab + `/dashboard/performance` + journal signal chip. **Not applied in tf yet:** EventBridge → resolution Lambda (see `docs/D1_SIGNAL_RESOLUTION_SCHEDULE.md`). **Still open:** auto-attach `signal_id` from order flow (tie to B1), optional `GET` by `signal_id`, weekly horizon if desired. |
+| D1 | **Signal outcome pipeline** | In progress | **Shipped in repo:** `SignalRecord` + DynamoDB `SignalHistory` (GSI `scope_generated_at`), `signal_recorder.record_signal` / `resolve_signals` / `get_signal_history`, auto-record on `POST /v1/signals/swing/composite` when `symbol` + `price_at_signal` present, `GET /v1/signals/recent` (50 public rows + outcome fields), summary from 1d outcomes, Lambda module `signal_resolution`, journal optional `signal_id` / `signal_direction` / `signal_generated_at`, dashboard Signal history tab + `/dashboard/performance` + journal signal chip. **Terraform:** EventBridge **`stocvest-signal-resolution`** `rate(30 minutes)` → resolution Lambda in `infra/eventbridge_signal_resolution.tf` — **apply in AWS** per `docs/D1_SIGNAL_RESOLUTION_SCHEDULE.md`. **Still open:** auto-attach `signal_id` from order flow (tie to B1), optional `GET` by `signal_id`, weekly horizon if desired. |
 | D2 | **Backtesting** | Not done | Historical Polygon bars; per-setup and per-regime stats; no promise of future performance in UI. |
 | D3 | **Weight / prompt iteration** | Not done | Optional: weekly analytics, suggested layer weight or prompt changes, **human approve** before apply; store `prompt_version` on generations; move prompts toward Secrets Manager (`CONTEXT.md` already flags this under platform). |
 | D4 | **Audit trail** | Not done | Immutable order/PDT/admin logs to durable storage (e.g. S3 Glacier-class); retention policy to align with counsel. |
