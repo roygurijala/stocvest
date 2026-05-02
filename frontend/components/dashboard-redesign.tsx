@@ -11,7 +11,7 @@ import { SentimentGauge } from "@/components/sentiment-gauge";
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
-import type { MarketOverview, NewsPayload, SnapshotPayload } from "@/lib/api/market";
+import { fetchSymbolSnapshot, type MarketOverview, type NewsPayload, type SnapshotPayload } from "@/lib/api/market";
 import type { PDTStatusPayload } from "@/lib/api/pdt";
 import type { ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
@@ -402,7 +402,11 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview, 
                       type="button"
                       className="min-h-11 text-sm"
                       onClick={async () => {
-                        const snapshot = snapshotsBySymbol.get(signal.symbol);
+                        const sym = signal.symbol.trim().toUpperCase();
+                        let snapshot = snapshotsBySymbol.get(sym);
+                        if (!snapshot) {
+                          snapshot = (await fetchSymbolSnapshot(sym)) ?? undefined;
+                        }
                         let symbolNewsArticles: NewsPayload[] = [];
                         try {
                           symbolNewsArticles = await fetchSymbolNews(signal.symbol, 10);

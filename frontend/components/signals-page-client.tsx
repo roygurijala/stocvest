@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Brain } from "lucide-react";
 import {
   Legend,
@@ -12,7 +12,7 @@ import {
   ResponsiveContainer
 } from "recharts";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
-import type { MarketOverview, SnapshotPayload } from "@/lib/api/market";
+import { fetchSymbolSnapshot, type MarketOverview, type SnapshotPayload } from "@/lib/api/market";
 import type { ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
 import { InfoTip } from "@/components/info-tip";
@@ -73,10 +73,35 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
   const [symbol, setSymbol] = useState("AAPL");
   const [evidence, setEvidence] = useState<SignalEvidenceData | null>(null);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
-  const snapshot = useMemo(
-    () => marketOverview.snapshots.find((s) => s.symbol === symbol.toUpperCase()) || marketOverview.snapshots[0],
-    [marketOverview.snapshots, symbol]
-  );
+  const [symbolSnapshot, setSymbolSnapshot] = useState<SnapshotPayload | null>(null);
+
+  const snapshot = useMemo(() => {
+    const sym = symbol.toUpperCase();
+    return marketOverview.snapshots.find((s) => s.symbol === sym) ?? symbolSnapshot;
+  }, [marketOverview.snapshots, symbol, symbolSnapshot]);
+
+  useEffect(() => {
+    const sym = symbol.trim().toUpperCase();
+    if (!sym) {
+      setSymbolSnapshot(null);
+      return;
+    }
+    const fromOverview = marketOverview.snapshots.find((s) => s.symbol === sym);
+    if (fromOverview) {
+      setSymbolSnapshot(null);
+      return;
+    }
+    setSymbolSnapshot(null);
+    let cancelled = false;
+    void fetchSymbolSnapshot(sym).then((row) => {
+      if (!cancelled) {
+        setSymbolSnapshot(row && row.symbol.toUpperCase() === sym ? row : null);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [symbol, marketOverview.snapshots]);
   const setup = useMemo(
     () => scannerOverview.setups.find((s) => s.symbol === symbol.toUpperCase()) || scannerOverview.setups[0],
     [scannerOverview.setups, symbol]
@@ -348,7 +373,13 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
           <div>
             <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>VWAP</p>
-            <strong>{snapshot?.last_trade_price ? `$${(snapshot.last_trade_price * 0.997).toFixed(2)}` : "n/a"}</strong>
+            <strong>
+              {typeof snapshot?.day_vwap === "number" && Number.isFinite(snapshot.day_vwap)
+                ? `$${snapshot.day_vwap.toFixed(2)}`
+                : snapshot?.last_trade_price
+                  ? `$${(snapshot.last_trade_price * 0.997).toFixed(2)}`
+                  : "n/a"}
+            </strong>
           </div>
           <div>
             <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>Support</p>

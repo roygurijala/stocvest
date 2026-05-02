@@ -9,6 +9,13 @@ interface OptionsPageClientProps {
   overview: OptionChainOverview;
 }
 
+function fmtGreek(value: number | null | undefined): string {
+  if (value == null || typeof value !== "number" || !Number.isFinite(value)) {
+    return "—";
+  }
+  return value.toFixed(4);
+}
+
 export function OptionsPageClient({ overview }: OptionsPageClientProps) {
   const { colors } = useTheme();
   const [symbol, setSymbol] = useState(overview.symbol);
@@ -147,10 +154,10 @@ export function OptionsPageClient({ overview }: OptionsPageClientProps) {
                   <td>{row.option_type.toUpperCase()}</td>
                   <td>{row.bid ?? "—"}</td>
                   <td>{row.ask ?? "—"}</td>
-                  <td>{row.delta ?? "—"}</td>
-                  <td className="hidden lg:table-cell">{row.gamma ?? "—"}</td>
-                  <td className="hidden lg:table-cell">{row.theta ?? "—"}</td>
-                  <td className="hidden lg:table-cell">{row.vega ?? "—"}</td>
+                  <td>{fmtGreek(row.delta)}</td>
+                  <td className="hidden lg:table-cell">{fmtGreek(row.gamma)}</td>
+                  <td className="hidden lg:table-cell">{fmtGreek(row.theta)}</td>
+                  <td className="hidden lg:table-cell">{fmtGreek(row.vega)}</td>
                   <td className="hidden lg:table-cell">{row.volume ?? "—"}</td>
                   <td className="hidden lg:table-cell">{row.open_interest ?? "—"}</td>
                 </tr>

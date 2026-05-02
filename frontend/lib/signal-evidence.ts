@@ -134,6 +134,7 @@ export function buildEvidenceFromSetup(
   const directionBadgeLabel = directionBadgeFromSetup(setup.direction);
   const confidencePercent = clamp(Math.round(setup.score * 100), 0, 100);
   const last = snapshot?.last_trade_price ?? null;
+  const dayVwap = snapshot?.day_vwap;
   const prev = snapshot?.prev_close ?? last;
   const momentum = typeof last === "number" && typeof prev === "number" && prev > 0 ? ((last - prev) / prev) * 100 : 0;
   const base = clamp(50 + momentum * 6, 0, 100);
@@ -228,6 +229,12 @@ export function buildEvidenceFromSetup(
 
   const support = snapshot?.day_low ?? (typeof last === "number" ? last * 0.985 : null);
   const resistance = snapshot?.day_high ?? (typeof last === "number" ? last * 1.015 : null);
+  const vwapLevel =
+    typeof dayVwap === "number" && Number.isFinite(dayVwap)
+      ? dayVwap
+      : typeof last === "number"
+        ? last * 0.997
+        : null;
 
   return {
     symbol: setup.symbol,
@@ -243,7 +250,7 @@ export function buildEvidenceFromSetup(
           : "Signal layers are mixed, so signal strength remains moderate until stronger alignment appears.",
     aiFreshnessLabel: "Updated 30s ago",
     keyLevels: {
-      vwap: typeof last === "number" ? last * 0.997 : null,
+      vwap: vwapLevel,
       support,
       resistance,
       orHigh: typeof resistance === "number" ? resistance * 1.003 : null,

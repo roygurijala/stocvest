@@ -70,3 +70,22 @@ describe("buildEvidenceFromSetup news layer", () => {
     expect(data.newsFreshnessLabel).toBe("No recent news for AAPL");
   });
 });
+
+describe("buildEvidenceFromSetup key levels", () => {
+  test("uses Polygon day_vwap for VWAP when provided", () => {
+    const data = buildEvidenceFromSetup(
+      baseSetup,
+      {
+        symbol: "AAPL",
+        last_trade_price: 200,
+        day_vwap: 199.5,
+        day_low: 198,
+        day_high: 202
+      },
+      { symbolNewsArticles: [] }
+    );
+    expect(data.keyLevels.vwap).toBe(199.5);
+    expect(data.keyLevels.support).toBe(198);
+    expect(data.keyLevels.resistance).toBe(202);
+  });
+});

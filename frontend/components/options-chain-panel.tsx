@@ -58,10 +58,10 @@ export function OptionsChainPanel({ overview }: OptionsChainPanelProps) {
                   <td style={{ padding: "8px 6px" }}>{row.option_type}</td>
                   <td style={{ textAlign: "right", padding: "8px 6px" }}>{fmt(row.bid, 2)}</td>
                   <td style={{ textAlign: "right", padding: "8px 6px" }}>{fmt(row.ask, 2)}</td>
-                  <td style={{ textAlign: "right", padding: "8px 6px" }}>{fmt(row.delta)}</td>
-                  <td style={{ textAlign: "right", padding: "8px 6px" }}>{fmt(row.gamma)}</td>
-                  <td style={{ textAlign: "right", padding: "8px 6px" }}>{fmt(row.theta)}</td>
-                  <td style={{ textAlign: "right", padding: "8px 6px" }}>{fmt(row.vega)}</td>
+                  <td style={{ textAlign: "right", padding: "8px 6px" }}>{fmt(row.delta, 4)}</td>
+                  <td style={{ textAlign: "right", padding: "8px 6px" }}>{fmt(row.gamma, 4)}</td>
+                  <td style={{ textAlign: "right", padding: "8px 6px" }}>{fmt(row.theta, 4)}</td>
+                  <td style={{ textAlign: "right", padding: "8px 6px" }}>{fmt(row.vega, 4)}</td>
                 </tr>
               ))}
             </tbody>

@@ -11,6 +11,7 @@ import type { EarningsEvent } from "@/lib/api/earnings";
 import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
+import { fetchSymbolSnapshot } from "@/lib/api/market";
 import { buildEvidenceFromSetup, type SignalEvidenceData } from "@/lib/signal-evidence";
 import {
   CONFIDENCE_PERCENT_TIP,
@@ -388,8 +389,10 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                         symbolNewsArticles = [];
                       }
                       const risk = earningsRiskFor(setup.symbol);
+                      const sym = setup.symbol.trim().toUpperCase();
+                      const snap = (await fetchSymbolSnapshot(sym)) ?? undefined;
                       setEvidence(
-                        buildEvidenceFromSetup(setup, undefined, {
+                        buildEvidenceFromSetup(setup, snap, {
                           symbolNewsArticles,
                           earningsRiskDays: risk?.daysUntil,
                           earningsReportTime: risk?.reportTime
