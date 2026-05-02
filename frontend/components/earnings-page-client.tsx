@@ -251,31 +251,6 @@ export function EarningsPageClient({ events, notice }: EarningsPageClientProps) 
       ) : null}
 
       <div style={{ minWidth: 0 }}>
-        {!showEmpty ? (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: gridCols,
-              gap: "0 8px",
-              alignItems: "center",
-              marginBottom: spacing[2],
-              padding: "0 8px",
-              fontSize: "9px",
-              textTransform: "uppercase",
-              letterSpacing: "0.5px",
-              color: colors.textMuted,
-              fontFamily: typography.fontFamilySans
-            }}
-          >
-            <span>Symbol</span>
-            <span>Company</span>
-            <span>Time</span>
-            <span style={{ textAlign: "right" }}>Est EPS</span>
-            <span style={{ textAlign: "right" }}>Actual</span>
-            <span style={{ textAlign: "right" }}>Surprise %</span>
-          </div>
-        ) : null}
-
         {showEmpty ? (
           <p
             style={{
@@ -288,18 +263,44 @@ export function EarningsPageClient({ events, notice }: EarningsPageClientProps) 
             {emptyCopy}
           </p>
         ) : (
-          groups.map((g) => (
-            <div key={g.key} style={{ marginBottom: spacing[5] }}>
+          groups.map((g, gi) => (
+            <div key={g.key} style={{ marginBottom: gi < groups.length - 1 ? spacing[5] : 0 }}>
               <div
                 style={{
-                  fontSize: "10px",
+                  display: "grid",
+                  gridTemplateColumns: gridCols,
+                  gap: "0 8px",
+                  alignItems: "center",
+                  marginTop: gi > 0 ? "16px" : 0,
+                  padding: "0 8px",
+                  paddingBottom: spacing[2],
+                  fontSize: "9px",
                   textTransform: "uppercase",
                   letterSpacing: "2px",
                   color: colors.textMuted,
-                  borderBottom: "0.5px solid " + colors.border,
+                  fontFamily: typography.fontFamilySans,
+                  borderBottom: `0.5px solid ${colors.border}`
+                }}
+              >
+                <span>Symbol</span>
+                <span>Company</span>
+                <span>Time</span>
+                <span style={{ textAlign: "right" }}>Est EPS</span>
+                <span style={{ textAlign: "right" }}>Actual</span>
+                <span style={{ textAlign: "right" }}>Surprise %</span>
+              </div>
+              <div
+                style={{
+                  marginTop: "16px",
                   marginBottom: "4px",
+                  padding: "0 8px",
                   paddingBottom: spacing[2],
-                  fontFamily: typography.fontFamilySans
+                  fontSize: "10px",
+                  textTransform: "uppercase",
+                  letterSpacing: "2px",
+                  color: "var(--color-text-tertiary)",
+                  fontFamily: typography.fontFamilySans,
+                  borderBottom: `0.5px solid ${colors.border}`
                 }}
               >
                 {g.label}
@@ -338,7 +339,7 @@ export function EarningsPageClient({ events, notice }: EarningsPageClientProps) 
                         gridTemplateColumns: gridCols,
                         gap: "0 8px",
                         alignItems: "center",
-                        padding: "10px 8px",
+                        padding: "8px 8px",
                         borderRadius: "6px",
                         transition: "background 0.1s ease",
                         fontFamily: typography.fontFamilySans
@@ -354,7 +355,7 @@ export function EarningsPageClient({ events, notice }: EarningsPageClientProps) 
                         style={{
                           fontSize: "13px",
                           fontWeight: 600,
-                          color: colors.accent,
+                          color: "var(--color-text-primary)",
                           letterSpacing: "0.5px"
                         }}
                       >
@@ -392,14 +393,17 @@ export function EarningsPageClient({ events, notice }: EarningsPageClientProps) 
                       >
                         {typeof est === "number" ? est.toFixed(2) : "—"}
                       </span>
-                      <div style={{ textAlign: "right", minWidth: 0 }}>
+                      <div style={{ textAlign: "right", minWidth: 0, justifySelf: "stretch" }}>
                         {isUpcoming ? (
                           <span
                             style={{
+                              display: "block",
+                              width: "100%",
                               fontSize: "10px",
                               textTransform: "uppercase",
-                              color: colors.textMuted,
-                              fontFamily: typography.fontFamilySans
+                              color: "var(--color-text-tertiary)",
+                              fontFamily: MONO,
+                              textAlign: "right"
                             }}
                           >
                             {formatMonthDayUpper(row.report_date)}
@@ -443,6 +447,18 @@ export function EarningsPageClient({ events, notice }: EarningsPageClientProps) 
             </div>
           ))
         )}
+        <p
+          style={{
+            margin: `${spacing[4]} 0 0`,
+            padding: showEmpty ? `${spacing[2]} ${spacing[4]} 0` : `${spacing[3]} ${spacing[2]} 0`,
+            textAlign: "center",
+            fontSize: "12px",
+            color: colors.textMuted,
+            lineHeight: typography.lineHeight.normal
+          }}
+        >
+          Showing earnings for the next 30 days. Updates daily before market open.
+        </p>
       </div>
     </section>
   );
