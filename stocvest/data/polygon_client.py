@@ -37,6 +37,7 @@ from stocvest.utils.api_rate_limits import await_polygon_rest_slot
 from stocvest.data.models import (
     Bar,
     EarningsEvent,
+    EconomicCalendarEvent,
     MarketStatus,
     NewsArticle,
     OptionContract,
@@ -721,6 +722,47 @@ class PolygonClient:
             except Exception:
                 pass
         return events
+
+    async def get_economic_calendar_for_day(self, on_date: date) -> list[EconomicCalendarEvent]:
+        """
+        Macro calendar rows for a single session date (Benzinga partner economics).
+
+        Returns an empty list if the endpoint is unavailable for the API tier or on error.
+        """
+        iso = on_date.isoformat()
+        try:
+            data = await self._get(
+                "/benzinga/v1/economics",
+                {
+                    "date.gte": iso,
+                    "date.lte": iso,
+                    "limit": "100",
+                    "sort": "time.asc",
+                },
+            )
+        except (PolygonError, Exception) as exc:
+            log.debug("get_economic_calendar_for_day: %s", exc)
+            return []
+        out: list[EconomicCalendarEvent] = []
+        for r in data.get("results") or []:
+            if not isinstance(r, dict):
+                continue
+            try:
+                raw_imp = str(r.get("importance") or r.get("impact") or "").lower()
+                if raw_imp in ("high", "1", "3"):
+                    imp = "high"
+                elif raw_imp in ("medium", "2", "med"):
+                    imp = "medium"
+                else:
+                    imp = "low"
+                t = str(r.get("time") or r.get("event_time") or "")
+                nm = str(r.get("event_name") or r.get("title") or r.get("description") or "Economic indicator")
+                out.append(EconomicCalendarEvent(time_et=t, event_name=nm, impact=imp))
+            except Exception:
+                continue
+        rank = {"high": 0, "medium": 1, "low": 2}
+        out.sort(key=lambda e: (rank.get(e.impact, 3), e.time_et))
+        return out[:10]
 
     # ──────────────────────────────────────────────────────────────────────────
     # WebSocket — Real-time streaming

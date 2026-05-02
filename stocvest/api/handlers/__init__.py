@@ -33,6 +33,7 @@ from stocvest.api.handlers.scanner import (
     handler as scanner_lambda_handler,
     scanner_briefing_handler,
     scanner_catalysts_handler,
+    scanner_gap_intelligence_handler,
     scanner_gaps_handler,
     scanner_intraday_handler,
 )
@@ -71,6 +72,7 @@ __all__ = [
     "pdt_status_handler",
     "scanner_briefing_handler",
     "scanner_catalysts_handler",
+    "scanner_gap_intelligence_handler",
     "scanner_gaps_handler",
     "scanner_intraday_handler",
     "scanner_lambda_handler",

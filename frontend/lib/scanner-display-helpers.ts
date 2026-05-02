@@ -1,5 +1,4 @@
 import type { SnapshotPayload } from "@/lib/api/market";
-import type { GapCandidatePayload } from "@/lib/api/scanner";
 import { coerceSnapshotForReferenceLevels } from "@/lib/snapshot-reference-levels";
 import { barIsPremarketEt, isoDateInNewYork } from "@/lib/market-hours-et";
 import type { MinuteBarPayload } from "@/lib/fetch-symbol-bars";
@@ -24,7 +23,10 @@ export function entryZoneFromSnapshot(snapshot: SnapshotPayload | null | undefin
   return null;
 }
 
-export function gapDirectionContext(gap: GapCandidatePayload, snapshot: SnapshotPayload | null | undefined): string | null {
+export function gapDirectionContext(
+  gap: { gap_percent: number },
+  snapshot: SnapshotPayload | null | undefined
+): string | null {
   const snap = coerceSnapshotForReferenceLevels(snapshot ?? null);
   if (!snap) return null;
   const last = snap.last_trade_price;

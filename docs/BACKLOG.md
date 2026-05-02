@@ -4,7 +4,7 @@
 `CONTEXT.md` holds **status-at-a-glance**, **what’s implemented**, **near-term ops** (Terraform, secrets, CI, legal), **legal rules**, and **session rules**.  
 **This file** holds **planned work only**: themes, sub-items, and notes—**without** repeating the CONTEXT status table or §3 pending list.
 
-**Last updated:** 2026-05-02 (scanner quality: liquidity + ORB timing + company on cards)
+**Last updated:** 2026-05-02 (Gap Intelligence + morning brief redesign + news catalyst quality)
 
 ---
 
@@ -36,6 +36,7 @@ Tracked in **`CONTEXT.md` §3** only (Terraform apply, GitHub/AWS/Vercel secrets
 | B7 | **Risk management UX** | Not done | Position sizing helper (% of portfolio), optional max daily loss guardrails, concentration / correlation hints—**never** framed as advice; copy reviewed with counsel. |
 | B8 | **Scanner order placeholder** | Not done | Replace “Order modal placeholder” on scanner with real order entry or deep-link to portfolio panel; align with Step 8 validation flow. |
 | B9 | **Earnings calendar UI** | Done 2026-05-02 | Redesign: default **Upcoming** filter, Mon–Fri **This Week**, grouped sections (Today / This Week / Upcoming), grid rows with beat/miss bars, monospace figures. **Polish (density, section/header separation, Actual & Surprise alignment, hover):** resolved 2026-05-02 — same commit as PF3. |
+| B10 | **Gap Intelligence + morning brief** | Done 2026-05-02 · commit: d40b8c6 | **Backend:** `POST /v1/scanner/gap-intelligence` merges dynamic gaps + 24h news, quality score + filters, catalyst block; `news_catalyst_detector` noise phrases, categories (insider/analyst/fda/merger/earnings/macro), narrative sentiment 0–100; structured morning brief from `morning_brief.py` + `morning_brief_fetch` (SPY/QQQ/VIX, Benzinga economics stub, earnings today, gap-intel top watch, PDT); default intraday `min_score` **0.55**. **Frontend:** single Gap Intelligence panel (2-col scanner with intraday); dashboard morning brief sections. **Terraform:** API route `gap-intelligence`. |
 
 ---
 

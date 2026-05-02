@@ -5,34 +5,20 @@ interface ScannerOverviewPanelProps {
 }
 
 export function ScannerOverviewPanel({ overview }: ScannerOverviewPanelProps) {
+  const gi = overview.gapIntelligence;
   return (
     <section style={{ marginTop: 18 }}>
       <h2 style={{ marginBottom: 10 }}>Scanner Overview</h2>
       <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}>
         <article style={{ background: "#101a32", borderRadius: 12, padding: 16 }}>
-          <h3 style={{ marginTop: 0 }}>Gap Signal Candidates</h3>
-          {overview.gaps.length === 0 ? (
+          <h3 style={{ marginTop: 0 }}>Gap Intelligence</h3>
+          {!gi || gi.length === 0 ? (
             <p style={{ opacity: 0.85 }}>{overview.error ? "Unavailable" : "No candidates"}</p>
           ) : (
             <ul style={{ margin: "8px 0 0 18px", padding: 0 }}>
-              {overview.gaps.slice(0, 5).map((item) => (
+              {gi.slice(0, 5).map((item) => (
                 <li key={item.symbol}>
-                  {item.symbol}: {item.gap_percent.toFixed(2)}%
-                </li>
-              ))}
-            </ul>
-          )}
-        </article>
-
-        <article style={{ background: "#101a32", borderRadius: 12, padding: 16 }}>
-          <h3 style={{ marginTop: 0 }}>News Catalysts</h3>
-          {overview.catalysts.length === 0 ? (
-            <p style={{ opacity: 0.85 }}>{overview.error ? "Unavailable" : "No catalysts"}</p>
-          ) : (
-            <ul style={{ margin: "8px 0 0 18px", padding: 0 }}>
-              {overview.catalysts.slice(0, 5).map((item) => (
-                <li key={item.article_id}>
-                  {item.symbol}: {item.catalyst_type}
+                  {item.symbol}: {item.gap_pct.toFixed(2)}%{item.has_catalyst ? " · catalyst" : ""}
                 </li>
               ))}
             </ul>
@@ -54,15 +40,16 @@ export function ScannerOverviewPanel({ overview }: ScannerOverviewPanelProps) {
           )}
         </article>
       </div>
-      {overview.briefing ? (
+      {overview.morningBrief ? (
         <article style={{ background: "#101a32", borderRadius: 12, padding: 16, marginTop: 12 }}>
-          <h3 style={{ marginTop: 0 }}>{overview.briefing.title}</h3>
+          <h3 style={{ marginTop: 0 }}>{overview.morningBrief.title ?? "Morning brief"}</h3>
           <p style={{ margin: "0 0 12px 0", fontSize: 13, opacity: 0.85, lineHeight: 1.5 }}>
-            Signal data for informational purposes only. Not investment advice. Past signal performance does not guarantee future results.
+            Signal data for informational purposes only. Not investment advice. Past signal performance does not guarantee future
+            results.
           </p>
-          <pre style={{ whiteSpace: "pre-wrap", margin: 0, fontFamily: "inherit", opacity: 0.9 }}>
-            {overview.briefing.markdown}
-          </pre>
+          <p style={{ margin: 0, opacity: 0.9 }}>
+            Conditions: <strong>{overview.morningBrief.conditions.label}</strong> · Regime {overview.morningBrief.conditions.regime}
+          </p>
         </article>
       ) : null}
     </section>

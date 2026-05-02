@@ -24,7 +24,7 @@ def _payload_hash(payload: dict[str, Any]) -> str:
 
 
 def _symbol_fingerprint(payload: dict[str, Any], scan_kind: str) -> str:
-    if scan_kind == "gaps":
+    if scan_kind == "gaps" or scan_kind == "gap_intelligence":
         snaps = payload.get("snapshots")
         if not isinstance(snaps, list):
             return "none"

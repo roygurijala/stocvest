@@ -92,7 +92,7 @@ async def run_scheduled_scan(scan_type: str) -> dict[str, Any]:
                 bars_by_symbol = await _fetch_bars_by_symbol(client, symbols)
                 snaps = await _fetch_snapshots(client, symbols)
                 liq = _liquidity_from_snapshots(snaps)
-                setups = IntradaySetupScanner(min_score=0.5).scan(
+                setups = IntradaySetupScanner(min_score=0.55).scan(
                     bars_by_symbol, liquidity_by_symbol=liq, limit=8
                 )
                 document["data"]["setups"] = [serialize_intraday_setup(s) for s in setups]
@@ -105,7 +105,7 @@ async def run_scheduled_scan(scan_type: str) -> dict[str, Any]:
                 catalyst_objs = NewsCatalystDetector(min_score=0.35).detect(articles, limit=8)
                 bars_by_symbol = await _fetch_bars_by_symbol(client, symbols)
                 liq_eod = _liquidity_from_snapshots(snaps)
-                setup_objs = IntradaySetupScanner(min_score=0.5).scan(
+                setup_objs = IntradaySetupScanner(min_score=0.55).scan(
                     bars_by_symbol, liquidity_by_symbol=liq_eod, limit=8
                 )
                 briefing = DailyBriefingGenerator().generate(

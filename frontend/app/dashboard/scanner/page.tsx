@@ -14,7 +14,7 @@ export default async function DashboardScannerPage() {
   const pdtStatus = await fetchPdtStatus().catch(() => null);
   const overview = await fetchScannerOverview(pdtStatus);
   const scannerSymbols = Array.from(
-    new Set([...overview.gaps.map((g) => g.symbol), ...overview.setups.map((s) => s.symbol)])
+    new Set([...overview.gapIntelligence.map((g) => g.symbol), ...overview.setups.map((s) => s.symbol)])
   );
   const earnings = await fetchEarningsCalendar(scannerSymbols, 2);
   const earningsBySymbol = Object.fromEntries(

@@ -82,6 +82,8 @@ def parse_catalyst(item: dict[str, Any]) -> NewsCatalystCandidate:
         catalyst_score=float(item["catalyst_score"]),
         sentiment_score=float(item["sentiment_score"]),
         source=str(item["source"]) if item.get("source") is not None else None,
+        sentiment_label=str(item.get("sentiment_label") or "mixed"),
+        narrative_score=int(item.get("narrative_score") or 55),
     )
 
 
@@ -124,5 +126,7 @@ def serialize_catalyst(candidate: NewsCatalystCandidate) -> dict[str, Any]:
         "catalyst_score": candidate.catalyst_score,
         "sentiment_score": candidate.sentiment_score,
         "source": candidate.source,
+        "sentiment_label": candidate.sentiment_label,
+        "narrative_score": candidate.narrative_score,
     }
 

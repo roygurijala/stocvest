@@ -43,10 +43,11 @@ locals {
 
     "GET /v1/pdt/status" = { module_key = "pdt", authorizer = true }
 
-    "POST /v1/scanner/gaps"      = { module_key = "scanner", authorizer = true }
-    "POST /v1/scanner/catalysts" = { module_key = "scanner", authorizer = true }
-    "POST /v1/scanner/intraday"  = { module_key = "scanner", authorizer = true }
-    "POST /v1/scanner/briefing"  = { module_key = "scanner", authorizer = true }
+    "POST /v1/scanner/gaps"             = { module_key = "scanner", authorizer = true }
+    "POST /v1/scanner/catalysts"      = { module_key = "scanner", authorizer = true }
+    "POST /v1/scanner/intraday"       = { module_key = "scanner", authorizer = true }
+    "POST /v1/scanner/briefing"       = { module_key = "scanner", authorizer = true }
+    "POST /v1/scanner/gap-intelligence" = { module_key = "scanner", authorizer = true }
   }
 
   http_lambda_integration_keys = distinct([for _, v in local.http_api_route_definitions : v.module_key])

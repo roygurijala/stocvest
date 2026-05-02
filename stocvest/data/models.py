@@ -197,6 +197,14 @@ class EarningsEvent(BaseModel):
     market_cap: Optional[float] = None
 
 
+class EconomicCalendarEvent(BaseModel):
+    """Macro economic release (Benzinga partner or similar)."""
+
+    time_et: str
+    event_name: str
+    impact: str  # high | medium | low
+
+
 class TradingMode(str, Enum):
     """Paper vs live execution preference (stored per user)."""
 

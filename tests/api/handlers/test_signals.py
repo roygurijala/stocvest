@@ -96,34 +96,11 @@ def test_day_setups_handler_returns_ranked_candidates() -> None:
     assert body[0].get("company_name") == "Gap1 Inc"
 
 
-def test_day_briefing_handler_renders_markdown() -> None:
+def test_day_briefing_handler_returns_structured_brief() -> None:
     event = {
         "body": json.dumps(
             {
                 "briefing_date": "2026-04-28",
-                "gap_candidates": [
-                    {
-                        "symbol": "GAP1",
-                        "prev_close": 100.0,
-                        "premarket_price": 104.0,
-                        "gap_percent": 4.0,
-                        "day_volume": 12000000.0,
-                        "direction": "up",
-                        "rank_score": 4.8,
-                    }
-                ],
-                "news_catalysts": [
-                    {
-                        "article_id": "a1",
-                        "symbol": "GAP1",
-                        "title": "Strong earnings beat",
-                        "catalyst_type": "earnings",
-                        "direction": "up",
-                        "catalyst_score": 0.8,
-                        "sentiment_score": 0.6,
-                        "source": "Reuters",
-                    }
-                ],
                 "pdt_assessment": {
                     "day_trades_in_window": 2,
                     "max_non_exempt": 3,
@@ -132,7 +109,36 @@ def test_day_briefing_handler_renders_markdown() -> None:
                     "at_limit": False,
                     "pdt_exempt": False,
                 },
-                "market_session_summary": "Synthetic test session.",
+                "morning_brief_context": {
+                    "futures_spy_pct": 0.35,
+                    "futures_qqq_pct": 0.4,
+                    "vix_level": 17.5,
+                    "vix_direction": "falling",
+                    "regime": "Bullish",
+                    "economic_events": [],
+                    "earnings_today": [],
+                    "gap_intelligence_items": [
+                        {
+                            "symbol": "GAP1",
+                            "company_name": "",
+                            "gap_pct": 4.0,
+                            "gap_dollars": 4.0,
+                            "prev_close": 100.0,
+                            "current_price": 104.0,
+                            "volume": 12_000_000,
+                            "volume_vs_avg": 2.0,
+                            "gap_quality_score": 90,
+                            "catalyst": {
+                                "headline": "Strong earnings beat",
+                                "category": "earnings",
+                                "sentiment": "bullish",
+                                "score": 72,
+                            },
+                            "has_catalyst": True,
+                            "no_catalyst_warning": None,
+                        }
+                    ],
+                },
             }
         )
     }
@@ -141,8 +147,8 @@ def test_day_briefing_handler_renders_markdown() -> None:
     body = json.loads(response["body"])
     assert body["date_iso"] == "2026-04-28"
     assert body.get("disclaimer")
-    assert "GAP1" in body["markdown"]
-    assert "PDT" in body["markdown"]
+    assert body.get("pdt_status", {}).get("status") == "warning"
+    assert body.get("top_watch", {}).get("symbol") == "GAP1"
 
 
 def test_day_setups_handler_validates_body() -> None:

@@ -7,12 +7,13 @@ from types import SimpleNamespace
 import pytest
 
 from stocvest.api.services import scanner_response_cache
-from stocvest.data.models import Snapshot
+from stocvest.data.models import NewsArticle, Snapshot
 from stocvest.data.polygon_client import PolygonError
 from stocvest.api.handlers.scanner import (
     handler,
     scanner_briefing_handler,
     scanner_catalysts_handler,
+    scanner_gap_intelligence_handler,
     scanner_gaps_handler,
     scanner_intraday_handler,
 )
@@ -150,34 +151,11 @@ def test_scanner_intraday_handler_returns_setups() -> None:
     assert body[0]["symbol"] == "GAP1"
 
 
-def test_scanner_briefing_handler_renders_markdown() -> None:
+def test_scanner_briefing_handler_returns_structured_morning_brief() -> None:
     event = {
         "body": json.dumps(
             {
                 "briefing_date": "2026-04-28",
-                "gap_candidates": [
-                    {
-                        "symbol": "GAP1",
-                        "prev_close": 100.0,
-                        "premarket_price": 104.0,
-                        "gap_percent": 4.0,
-                        "day_volume": 12000000.0,
-                        "direction": "up",
-                        "rank_score": 4.8,
-                    }
-                ],
-                "news_catalysts": [
-                    {
-                        "article_id": "a1",
-                        "symbol": "GAP1",
-                        "title": "Strong earnings beat",
-                        "catalyst_type": "earnings",
-                        "direction": "up",
-                        "catalyst_score": 0.8,
-                        "sentiment_score": 0.6,
-                        "source": "Reuters",
-                    }
-                ],
                 "pdt_assessment": {
                     "day_trades_in_window": 2,
                     "max_non_exempt": 3,
@@ -186,16 +164,105 @@ def test_scanner_briefing_handler_renders_markdown() -> None:
                     "at_limit": False,
                     "pdt_exempt": False,
                 },
-                "market_session_summary": "Synthetic test session.",
+                "morning_brief_context": {
+                    "futures_spy_pct": 0.35,
+                    "futures_qqq_pct": 0.4,
+                    "vix_level": 17.5,
+                    "vix_direction": "falling",
+                    "regime": "Bullish",
+                    "economic_events": [
+                        {"time": "08:30", "event_name": "CPI", "impact": "high"},
+                    ],
+                    "earnings_today": [
+                        {"symbol": "GAP1", "company": "Gap One", "time": "AMC", "est_eps": 1.2},
+                    ],
+                    "gap_intelligence_items": [
+                        {
+                            "symbol": "GAP1",
+                            "company_name": "Gap One Inc",
+                            "gap_pct": 4.0,
+                            "gap_dollars": 4.0,
+                            "prev_close": 100.0,
+                            "current_price": 104.0,
+                            "volume": 12_000_000,
+                            "volume_vs_avg": 2.0,
+                            "gap_quality_score": 90,
+                            "catalyst": {
+                                "headline": "Strong earnings beat",
+                                "category": "earnings",
+                                "sentiment": "bullish",
+                                "score": 72,
+                            },
+                            "has_catalyst": True,
+                            "no_catalyst_warning": None,
+                        }
+                    ],
+                },
             }
         )
     }
     response = scanner_briefing_handler(event, {})
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
-    assert "GAP1" in body["markdown"]
     assert body["date_iso"] == "2026-04-28"
+    assert body.get("conditions", {}).get("label")
+    assert body.get("top_watch", {}).get("symbol") == "GAP1"
     assert body.get("disclaimer")
+
+
+def test_scanner_gap_intelligence_handler_merges_news(monkeypatch: pytest.MonkeyPatch) -> None:
+    scanner_response_cache._MEMORY.clear()
+
+    class _FakePoly:
+        def __init__(self, api_key: str) -> None:
+            _ = api_key
+
+        async def __aenter__(self) -> "_FakePoly":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            _ = args
+
+        async def get_news(self, symbol=None, limit: int = 50):
+            _ = symbol
+            _ = limit
+            return [
+                NewsArticle(
+                    article_id="n1",
+                    published_at=datetime.now(timezone.utc),
+                    title="GAP1 stock upgraded by analysts with higher price target",
+                    description="",
+                    url="https://example.com",
+                    source="Reuters",
+                    tickers=["GAP1"],
+                    keywords=[],
+                )
+            ]
+
+    monkeypatch.setattr("stocvest.api.handlers.scanner.PolygonClient", _FakePoly)
+    monkeypatch.setattr("stocvest.api.handlers.scanner.get_settings", lambda: SimpleNamespace(polygon_api_key="k"))
+
+    event = {
+        "body": json.dumps(
+            {
+                "snapshots": [
+                    {
+                        "symbol": "GAP1",
+                        "prev_close": 100.0,
+                        "last_trade_price": 110.0,
+                        "day_volume": 900_000.0,
+                        "prev_day_volume": 1_000_000.0,
+                        "company_name": "Gap1 Co",
+                    }
+                ],
+            }
+        )
+    }
+    response = scanner_gap_intelligence_handler(event, {})
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["items"][0]["symbol"] == "GAP1"
+    assert body["items"][0]["has_catalyst"] is True
 
 
 def test_scanner_handlers_validate_inputs() -> None:

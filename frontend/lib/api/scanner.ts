@@ -15,21 +15,26 @@ const INTRADAY_FALLBACK_SYMBOLS = [
   "GOOGL"
 ] as const;
 
-export interface GapCandidatePayload {
-  symbol: string;
-  gap_percent: number;
-  day_volume: number;
-  rank_score: number;
-  direction: string;
+export interface GapIntelligenceCatalyst {
+  headline: string;
+  category: string;
+  sentiment: string;
+  score: number;
 }
 
-export interface CatalystPayload {
-  article_id: string;
+export interface GapIntelligenceItem {
   symbol: string;
-  title: string;
-  catalyst_type: string;
-  direction: string;
-  catalyst_score: number;
+  company_name: string;
+  gap_pct: number;
+  gap_dollars: number;
+  prev_close: number;
+  current_price: number;
+  volume: number;
+  volume_vs_avg: number;
+  gap_quality_score: number;
+  catalyst: GapIntelligenceCatalyst | null;
+  has_catalyst: boolean;
+  no_catalyst_warning: string | null;
 }
 
 export interface IntradaySetupPayload {
@@ -42,18 +47,39 @@ export interface IntradaySetupPayload {
   company_name?: string;
 }
 
-export interface ScannerBriefingPayload {
-  date_iso: string;
-  title: string;
-  markdown: string;
+export interface MorningBriefPayload {
+  generated_at: string;
+  conditions: {
+    label: string;
+    futures_spy_pct: number | null;
+    futures_qqq_pct: number | null;
+    vix_level: number | null;
+    vix_direction: string;
+    regime: string;
+  };
+  economic_events:
+    | Array<{ time: string; event_name: string; impact: string }>
+    | { message: string };
+  earnings_today:
+    | Array<{ symbol: string; company: string; time: string; est_eps: number | null }>
+    | { message: string };
+  top_watch: Record<string, unknown> | null;
+  best_setup: { setup_type: string; guidance: string };
+  pdt_status: {
+    trades_used: number;
+    trades_remaining: number;
+    status: string;
+    message: string;
+  };
   disclaimer?: string;
+  date_iso?: string;
+  title?: string;
 }
 
 export interface ScannerOverview {
-  gaps: GapCandidatePayload[];
-  catalysts: CatalystPayload[];
+  gapIntelligence: GapIntelligenceItem[];
   setups: IntradaySetupPayload[];
-  briefing?: ScannerBriefingPayload;
+  morningBrief?: MorningBriefPayload;
   error?: string;
 }
 
@@ -64,33 +90,34 @@ export async function fetchScannerOverview(
   const pdtAssessment = pdtStatus?.assessment;
 
   try {
-    const gapsFull = await apiFetch<GapCandidatePayload[]>("/v1/scanner/gaps", {
-      method: "POST",
-      body: JSON.stringify({
-        snapshots: [],
-        limit: 20,
-        min_abs_gap_percent: 2.0,
-        min_day_volume: 500_000
-      })
-    });
-    if (gapsFull == null) {
+    const gapIntelResp = await apiFetch<{ items: GapIntelligenceItem[]; disclaimer?: string }>(
+      "/v1/scanner/gap-intelligence",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          snapshots: [],
+          min_abs_gap_percent: 2.0,
+          min_day_volume: 500_000
+        })
+      }
+    );
+    if (gapIntelResp == null || !Array.isArray(gapIntelResp.items)) {
       return {
-        gaps: [],
-        catalysts: [],
+        gapIntelligence: [],
         setups: [],
         error: "Service temporarily unavailable. Please try again."
       };
     }
 
-    const gapSyms = gapsFull.map((g) => g.symbol.trim().toUpperCase()).filter(Boolean);
+    const gapItems = gapIntelResp.items;
+    const gapSyms = gapItems.map((g) => g.symbol.trim().toUpperCase()).filter(Boolean);
     const watchUpper = watchlistSymbols.map((s) => s.trim().toUpperCase()).filter(Boolean);
     let universe = [...new Set([...gapSyms, ...watchUpper])];
     if (universe.length === 0) {
       universe = [...INTRADAY_FALLBACK_SYMBOLS];
     }
 
-    const [articles, snapshotRows, barsBySymbol] = await Promise.all([
-      apiFetch<Record<string, unknown>[]>("/v1/market/news?limit=20"),
+    const [snapshotRows, barsBySymbol] = await Promise.all([
       Promise.all(
         universe.map((symbol) => apiFetch<Record<string, unknown>>(`/v1/market/snapshot?symbol=${symbol}`))
       ),
@@ -104,7 +131,6 @@ export async function fetchScannerOverview(
       ).then((rows) => Object.fromEntries(rows))
     ]);
 
-    const cleanArticles = (articles || []) as Record<string, unknown>[];
     const cleanBarsBySymbol = Object.fromEntries(
       Object.entries(barsBySymbol).map(([k, v]) => [k, (v || []) as Record<string, unknown>[]])
     );
@@ -117,11 +143,9 @@ export async function fetchScannerOverview(
       const snap = snapshotRows[i];
       if (!snap || typeof snap !== "object") return;
       const prevVol = snap.prev_day_volume;
-      const adv =
-        typeof prevVol === "number" && Number.isFinite(prevVol) ? prevVol : null;
+      const adv = typeof prevVol === "number" && Number.isFinite(prevVol) ? prevVol : null;
       const lastRaw = snap.last_trade_price ?? snap.day_open;
-      const last =
-        typeof lastRaw === "number" && Number.isFinite(lastRaw) ? lastRaw : null;
+      const last = typeof lastRaw === "number" && Number.isFinite(lastRaw) ? lastRaw : null;
       const cn = snap.company_name;
       const name = typeof cn === "string" && cn.trim().length ? cn.trim() : undefined;
       liquidity_by_symbol[sym] = {
@@ -131,41 +155,27 @@ export async function fetchScannerOverview(
       };
     });
 
-    const [catalysts, setups] = await Promise.all([
-      apiFetch<CatalystPayload[]>("/v1/scanner/catalysts", {
-        method: "POST",
-        body: JSON.stringify({ articles: cleanArticles, limit: 5, min_score: 0.35 })
-      }),
-      apiFetch<IntradaySetupPayload[]>("/v1/signals/day/setups", {
-        method: "POST",
-        body: JSON.stringify({
-          bars_by_symbol: cleanBarsBySymbol,
-          limit: 10,
-          min_score: 0.5,
-          liquidity_by_symbol: liquidity_by_symbol
-        })
+    const setups = await apiFetch<IntradaySetupPayload[]>("/v1/signals/day/setups", {
+      method: "POST",
+      body: JSON.stringify({
+        bars_by_symbol: cleanBarsBySymbol,
+        limit: 10,
+        min_score: 0.55,
+        liquidity_by_symbol: liquidity_by_symbol
       })
-    ]);
-    if (catalysts == null || setups == null) {
+    });
+    if (setups == null) {
       return {
-        gaps: [],
-        catalysts: [],
+        gapIntelligence: [],
         setups: [],
         error: "Service temporarily unavailable. Please try again."
       };
     }
 
-    const gaps = [...gapsFull]
-      .filter((g) => typeof g.gap_percent === "number" && Number.isFinite(g.gap_percent))
-      .sort((a, b) => Math.abs(b.gap_percent) - Math.abs(a.gap_percent))
-      .slice(0, 10);
-
-    const briefing = await apiFetch<ScannerBriefingPayload>("/v1/signals/day/briefing", {
+    const morningBrief = await apiFetch<MorningBriefPayload>("/v1/signals/day/briefing", {
       method: "POST",
       body: JSON.stringify({
         briefing_date: new Date().toISOString().slice(0, 10),
-        gap_candidates: gaps,
-        news_catalysts: catalysts,
         pdt_assessment: pdtAssessment
           ? {
               day_trades_in_window: pdtAssessment.day_trades_in_window,
@@ -176,16 +186,14 @@ export async function fetchScannerOverview(
               pdt_exempt: pdtAssessment.pdt_exempt,
               allow_next_day_trade: pdtAssessment.allow_next_day_trade
             }
-          : undefined,
-        market_session_summary: "Frontend scanner summary"
+          : undefined
       })
     });
 
-    return { gaps, catalysts, setups, briefing: briefing || undefined };
+    return { gapIntelligence: gapItems, setups, morningBrief: morningBrief || undefined };
   } catch (error: unknown) {
     return {
-      gaps: [],
-      catalysts: [],
+      gapIntelligence: [],
       setups: [],
       error: error instanceof Error ? error.message : "Unable to connect. Check your connection."
     };

@@ -14,11 +14,28 @@ describe("scanner API overview", () => {
   test("fetchScannerOverview orchestrates scanner endpoints", async () => {
     const { fetchScannerOverview } = await import("@/lib/api/scanner");
     apiFetchMock.mockImplementation(async (path: string, init?: RequestInit) => {
-      if (path === "/v1/scanner/gaps") {
+      if (path === "/v1/scanner/gap-intelligence") {
         expect(init?.method).toBe("POST");
         const body = JSON.parse(String(init?.body ?? "{}")) as { snapshots: unknown };
         expect(body.snapshots).toEqual([]);
-        return [{ symbol: "GAP1", gap_percent: 4, day_volume: 1, rank_score: 1, direction: "up" }];
+        return {
+          items: [
+            {
+              symbol: "GAP1",
+              company_name: "G1",
+              gap_pct: 4,
+              gap_dollars: 4,
+              prev_close: 100,
+              current_price: 104,
+              volume: 1_000_000,
+              volume_vs_avg: 2,
+              gap_quality_score: 80,
+              catalyst: null,
+              has_catalyst: false,
+              no_catalyst_warning: "x"
+            }
+          ]
+        };
       }
       if (path.startsWith("/v1/market/snapshot?symbol=")) {
         const q = path.includes("?") ? path.split("?")[1] : "";
@@ -29,20 +46,6 @@ describe("scanner API overview", () => {
           pre_market_price: 104,
           day_volume: 1_000_000
         };
-      }
-      if (path === "/v1/market/news?limit=20") {
-        return [
-          {
-            article_id: "a1",
-            published_at: "2026-04-29T10:00:00+00:00",
-            title: "News",
-            url: "https://example.com",
-            tickers: ["AAPL"],
-            keywords: [],
-            sentiment: "bullish",
-            sentiment_score: 0.7
-          }
-        ];
       }
       if (path.includes("/v1/market/bars?")) {
         return [
@@ -57,22 +60,35 @@ describe("scanner API overview", () => {
           }
         ];
       }
-      if (path === "/v1/scanner/catalysts") {
-        return [{ article_id: "a1", symbol: "GAP1", title: "x", catalyst_type: "earnings", direction: "up", catalyst_score: 0.8 }];
-      }
       if (path === "/v1/signals/day/setups") {
         return [{ symbol: "GAP1", direction: "long", score: 0.7, triggers: [], timestamp_iso: "x" }];
       }
       if (path === "/v1/signals/day/briefing") {
-        return { date_iso: "2026-04-29", title: "Your Pre-Market Signal Briefing — 2026-04-29", markdown: "ok" };
+        return {
+          generated_at: "2026-04-29T12:00:00Z",
+          conditions: {
+            label: "CHOPPY",
+            futures_spy_pct: 0.1,
+            futures_qqq_pct: 0.1,
+            vix_level: 19,
+            vix_direction: "flat",
+            regime: "Neutral"
+          },
+          economic_events: [],
+          earnings_today: { message: "No earnings today" },
+          top_watch: { message: "none" },
+          best_setup: { setup_type: "High conviction only", guidance: "Wait." },
+          pdt_status: { trades_used: 0, trades_remaining: 3, status: "clear", message: "ok" },
+          title: "Morning Brief — 2026-04-29"
+        };
       }
       throw new Error(`Unhandled path ${path}`);
     });
 
     const result = await fetchScannerOverview(null);
     expect(result.error).toBeUndefined();
-    expect(result.gaps).toHaveLength(1);
-    expect(result.briefing?.title).toContain("Pre-Market Signal Briefing");
+    expect(result.gapIntelligence).toHaveLength(1);
+    expect(result.morningBrief?.conditions.label).toBe("CHOPPY");
   });
 
   test("fetchScannerOverview handles scanner failures", async () => {
@@ -80,6 +96,6 @@ describe("scanner API overview", () => {
     apiFetchMock.mockRejectedValueOnce(new Error("API request failed (500): scanner"));
     const result = await fetchScannerOverview(null);
     expect(result.error).toContain("500");
-    expect(result.gaps).toHaveLength(0);
+    expect(result.gapIntelligence).toHaveLength(0);
   });
 });

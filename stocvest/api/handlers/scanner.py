@@ -11,11 +11,14 @@ from stocvest.api.legal_copy import API_SIGNAL_DISCLAIMER
 from stocvest.api.response import bad_request, internal_error, not_found, ok
 from stocvest.api.services.scanner_response_cache import build_cache_key, cache_get, cache_set
 from stocvest.api.services.scanner_scheduled_pipeline import run_scheduled_scan_sync
+from stocvest.api.services.morning_brief_fetch import (
+    fetch_morning_brief_context_live,
+    morning_brief_context_from_payload_dict,
+)
 from stocvest.api.services.signal_dto import (
     parse_article,
     parse_bar,
     parse_catalyst,
-    parse_gap_candidate,
     parse_pdt_assessment,
     serialize_catalyst,
     serialize_gap_candidate,
@@ -27,14 +30,14 @@ from stocvest.data import PolygonClient, PolygonError
 from stocvest.data.models import Bar, Snapshot
 from stocvest.data.scanner_universe import LIQUID_SYMBOLS_FALLBACK
 from stocvest.signals import (
-    DailyBriefingGenerator,
-    DailyBriefingInput,
     IntradaySetupScanner,
     NewsCatalystDetector,
     PremarketGapScanner,
     parse_liquidity_by_symbol_payload,
 )
 from stocvest.signals.day_trading_scanner import dynamic_gap_candidates_from_snapshots
+from stocvest.signals.gap_intelligence import build_gap_intelligence_items
+from stocvest.signals.morning_brief import build_morning_brief_payload
 from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
 
@@ -99,6 +102,7 @@ def handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
         "POST /v1/scanner/catalysts": scanner_catalysts_handler,
         "POST /v1/scanner/intraday": scanner_intraday_handler,
         "POST /v1/scanner/briefing": scanner_briefing_handler,
+        "POST /v1/scanner/gap-intelligence": scanner_gap_intelligence_handler,
     }
     target = routes.get(route)
     if target is None:
@@ -180,7 +184,7 @@ def scanner_intraday_handler(event: LambdaEvent, context: LambdaContext) -> dict
         if not isinstance(bars_by_symbol_raw, dict):
             return bad_request("Body field 'bars_by_symbol' must be an object.")
         limit = int(payload.get("limit", 8))
-        min_score = float(payload.get("min_score", 0.5))
+        min_score = float(payload.get("min_score", 0.55))
         bars_by_symbol: dict[str, list[Bar]] = {}
         for symbol, bars in bars_by_symbol_raw.items():
             if not isinstance(symbol, str) or not isinstance(bars, list):
@@ -206,33 +210,22 @@ def scanner_briefing_handler(event: LambdaEvent, context: LambdaContext) -> dict
         if cached is not None:
             return cached
         briefing_date = date.fromisoformat(str(payload["briefing_date"]))
-        gaps_raw = payload.get("gap_candidates", [])
-        catalysts_raw = payload.get("news_catalysts", [])
-        if not isinstance(gaps_raw, list) or not isinstance(catalysts_raw, list):
-            return bad_request("gap_candidates/news_catalysts must be lists.")
         pdt_raw = payload.get("pdt_assessment")
         pdt = parse_pdt_assessment(pdt_raw) if isinstance(pdt_raw, dict) else None
-
-        briefing = DailyBriefingGenerator().generate(
-            DailyBriefingInput(
-                briefing_date=briefing_date,
-                gap_candidates=tuple(parse_gap_candidate(item) for item in gaps_raw),
-                news_catalysts=tuple(parse_catalyst(item) for item in catalysts_raw),
-                pdt_assessment=pdt,
-                market_session_summary=(
-                    str(payload.get("market_session_summary"))
-                    if payload.get("market_session_summary") is not None
-                    else None
-                ),
-            )
-        )
+        ctx_raw = payload.get("morning_brief_context")
+        if isinstance(ctx_raw, dict):
+            ctx = morning_brief_context_from_payload_dict(ctx_raw, briefing_date, pdt)
+        else:
+            ctx = asyncio.run(fetch_morning_brief_context_live(briefing_date, pdt))
+        brief = build_morning_brief_payload(ctx)
+        title = f"Morning Brief — {briefing_date.isoformat()}"
         return cache_set(
             key,
             ok(
                 {
-                    "date_iso": briefing.date_iso,
-                    "title": briefing.title,
-                    "markdown": briefing.markdown,
+                    "date_iso": briefing_date.isoformat(),
+                    "title": title,
+                    **brief,
                     "disclaimer": API_SIGNAL_DISCLAIMER,
                 }
             ),
@@ -240,5 +233,52 @@ def scanner_briefing_handler(event: LambdaEvent, context: LambdaContext) -> dict
         )
     except (TypeError, ValueError, KeyError) as exc:
         return bad_request(f"Invalid scanner briefing request: {exc}")
+    except Exception as exc:
+        return internal_error(str(exc))
+
+
+async def _gap_intelligence_async(payload: dict[str, Any]) -> dict[str, Any]:
+    snapshots_raw = payload.get("snapshots")
+    if not isinstance(snapshots_raw, list):
+        raise TypeError("Body field 'snapshots' must be a list.")
+    min_abs_gap_percent = float(payload.get("min_abs_gap_percent", 2.0))
+    min_day_volume = float(payload.get("min_day_volume", 500_000))
+    news_limit = min(1000, max(50, int(payload.get("news_limit", 400))))
+
+    if len(snapshots_raw) == 0:
+        snapshots = await _load_snapshots_for_dynamic_gaps()
+    else:
+        snapshots = [Snapshot.model_validate(item) for item in snapshots_raw]
+
+    dyn_min_vol = max(500_000.0, min_day_volume)
+    gaps = dynamic_gap_candidates_from_snapshots(
+        snapshots,
+        limit=60,
+        min_abs_gap_percent=min_abs_gap_percent,
+        min_day_volume=dyn_min_vol,
+        min_trade_price=5.0,
+    )
+    settings = get_settings()
+    async with PolygonClient(api_key=settings.polygon_api_key) as client:
+        news = await client.get_news(limit=news_limit)
+    sym_map = {s.symbol: s for s in snapshots}
+    items = build_gap_intelligence_items(gaps, sym_map, news)
+    return ok({"items": items, "disclaimer": API_SIGNAL_DISCLAIMER})
+
+
+def scanner_gap_intelligence_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    _ = context
+    try:
+        payload = parse_json_body(event)
+        key = build_cache_key("gap_intelligence", payload)
+        cached = cache_get(key)
+        if cached is not None:
+            return cached
+        out = asyncio.run(_gap_intelligence_async(payload))
+        return cache_set(key, out, ttl_seconds=60)
+    except TypeError as exc:
+        return bad_request(str(exc))
+    except ValueError as exc:
+        return bad_request(f"Invalid gap intelligence request: {exc}")
     except Exception as exc:
         return internal_error(str(exc))

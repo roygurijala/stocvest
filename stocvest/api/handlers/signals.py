@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import date, datetime, timezone
 from typing import Any
 from uuid import uuid4
@@ -10,24 +11,25 @@ from stocvest.api.legal_copy import API_SIGNAL_DISCLAIMER
 from stocvest.api.response import bad_request, internal_error, ok
 from stocvest.api.services.signal_dto import (
     parse_bar,
-    parse_catalyst,
-    parse_gap_candidate,
     parse_pdt_assessment,
     serialize_intraday_setup,
 )
 from stocvest.api.shared import build_request_context, parse_json_body
 from stocvest.api.types import LambdaContext, LambdaEvent
+from stocvest.api.services.morning_brief_fetch import (
+    fetch_morning_brief_context_live,
+    morning_brief_context_from_payload_dict,
+)
 from stocvest.api.services.signal_recorder import get_signal_recorder, performance_summary_from_records
 from stocvest.data.models import Bar, SignalRecord
 from stocvest.signals import (
     AISynthesis,
     CompositeScoreEngine,
-    DailyBriefingGenerator,
-    DailyBriefingInput,
     IntradaySetupScanner,
     LayerSignal,
     parse_liquidity_by_symbol_payload,
 )
+from stocvest.signals.morning_brief import build_morning_brief_payload
 from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
@@ -153,7 +155,7 @@ def day_setups_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, 
 
     try:
         limit = int(payload.get("limit", 8))
-        min_score = float(payload.get("min_score", 0.5))
+        min_score = float(payload.get("min_score", 0.55))
     except ValueError:
         return bad_request("Invalid 'limit' or 'min_score'.")
 
@@ -184,26 +186,20 @@ def day_briefing_handler(event: LambdaEvent, context: LambdaContext) -> dict[str
 
     try:
         briefing_date = date.fromisoformat(str(payload["briefing_date"]))
-        gaps = tuple(parse_gap_candidate(item) for item in payload.get("gap_candidates", []))
-        catalysts = tuple(parse_catalyst(item) for item in payload.get("news_catalysts", []))
         pdt_raw = payload.get("pdt_assessment")
         pdt = parse_pdt_assessment(pdt_raw) if isinstance(pdt_raw, dict) else None
-        market_session_summary = payload.get("market_session_summary")
-
-        briefing = DailyBriefingGenerator().generate(
-            DailyBriefingInput(
-                briefing_date=briefing_date,
-                gap_candidates=gaps,
-                news_catalysts=catalysts,
-                pdt_assessment=pdt,
-                market_session_summary=str(market_session_summary) if market_session_summary else None,
-            )
-        )
+        ctx_raw = payload.get("morning_brief_context")
+        if isinstance(ctx_raw, dict):
+            ctx = morning_brief_context_from_payload_dict(ctx_raw, briefing_date, pdt)
+        else:
+            ctx = asyncio.run(fetch_morning_brief_context_live(briefing_date, pdt))
+        brief = build_morning_brief_payload(ctx)
+        title = f"Morning Brief — {briefing_date.isoformat()}"
         return ok(
             {
-                "date_iso": briefing.date_iso,
-                "title": briefing.title,
-                "markdown": briefing.markdown,
+                "date_iso": briefing_date.isoformat(),
+                "title": title,
+                **brief,
                 "disclaimer": API_SIGNAL_DISCLAIMER,
             }
         )

@@ -18,6 +18,9 @@ export const GAP_CANDIDATES_TIP =
 export const NEWS_CATALYSTS_TIP =
   "Stocks with significant news events today that could drive price movement. Earnings reports, FDA decisions, analyst upgrades, and major contracts all qualify as catalysts.";
 
+export const GAP_INTELLIGENCE_TIP =
+  "Pre-market gaps ranked by quality, volume versus average, and whether same-day news supports the move. Gaps without a clear catalyst are flagged as higher reversal risk.";
+
 export const INTRADAY_SETUPS_TIP =
   "Real-time trading opportunities identified during market hours based on price action and volume patterns. Updated every 5 minutes by the scanner engine.";
 
