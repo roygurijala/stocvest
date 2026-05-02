@@ -53,6 +53,17 @@ function isLongDirection(direction: string): boolean {
   return ["bullish", "long"].includes(direction.toLowerCase());
 }
 
+function formatSignalFiredTimeEt(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString("en-US", {
+    timeZone: "America/New_York",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true
+  });
+}
+
 export function ScannerPageClient({ initialOverview, initialTimestampIso, earningsBySymbol }: ScannerPageClientProps) {
   const { colors } = useTheme();
   const [isPending, startTransition] = useTransition();
@@ -489,34 +500,34 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                       gap: spacing[2],
                       position: "relative",
                       paddingBottom: spacing[5],
-                      opacity: orbExpired ? 0.55 : 1,
-                      filter: orbExpired ? "grayscale(0.25)" : undefined,
+                      opacity: orbExpired ? 0.7 : 1,
                       transition: "opacity 0.15s ease"
                     }}
                   >
-                    {orbExpired ? (
-                      <span
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px", width: "100%" }}>
+                      <div
                         style={{
-                          position: "absolute",
-                          top: spacing[2],
-                          right: spacing[2],
-                          fontSize: typography.scale.xs,
-                          fontWeight: 700,
-                          color: colors.caution,
-                          background: "rgba(245,158,11,.2)",
-                          borderRadius: borderRadius.md,
-                          padding: "2px 8px"
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: spacing[2],
+                          flexWrap: "wrap"
                         }}
                       >
-                        ORB EXPIRED
-                      </span>
-                    ) : null}
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: spacing[2], flexWrap: "wrap" }}>
-                      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: spacing[2] }}>
-                        <strong style={{ fontSize: typography.scale.base }}>{setup.symbol}</strong>
-                        <span style={{ color: colors.textMuted, fontSize: typography.scale.sm }}>{patternLabel}</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: spacing[2], minWidth: 0 }}>
+                          <strong style={{ fontSize: typography.scale.base }}>{setup.symbol}</strong>
+                          <span style={{ color: colors.textMuted, fontSize: typography.scale.sm }}>{patternLabel}</span>
+                        </div>
                       </div>
-                      <div style={{ display: "inline-flex", alignItems: "center", gap: spacing[1], flexWrap: "wrap" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          flexWrap: "wrap",
+                          width: "100%"
+                        }}
+                      >
                         {(() => {
                           const b = earningsBadgeFor(setup.symbol);
                           if (!b) return null;
@@ -563,7 +574,34 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                           {Math.round(setup.score * 100)}%
                           <InfoTip text={CONFIDENCE_PERCENT_TIP} label="About signal strength" />
                         </span>
+                        {orbExpired ? (
+                          <span
+                            style={{
+                              marginLeft: "auto",
+                              fontSize: typography.scale.xs,
+                              fontWeight: 700,
+                              color: colors.caution,
+                              background: "rgba(245,158,11,.2)",
+                              borderRadius: borderRadius.md,
+                              padding: "2px 8px"
+                            }}
+                          >
+                            ORB EXPIRED
+                          </span>
+                        ) : null}
                       </div>
+                      {orbExpired ? (
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: "11px",
+                            color: "var(--color-text-tertiary)",
+                            fontStyle: "italic"
+                          }}
+                        >
+                          Signal fired at {formatSignalFiredTimeEt(setup.timestamp_iso) || "—"} — window closed 10:00 AM ET
+                        </p>
+                      ) : null}
                     </div>
                     <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>
                       Vol: {volNum != null ? `${formatVolumeShort(volNum)} (${ratio.toFixed(1)}x avg)` : `${ratio.toFixed(1)}x avg`}
@@ -605,13 +643,14 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                             setSelectedSymbol(setup.symbol);
                           }}
                           style={{
-                            border: `1px solid ${orbExpired ? colors.border : colors.accent}`,
+                            border: `1px solid ${orbExpired ? "var(--color-border)" : colors.accent}`,
                             borderRadius: borderRadius.md,
-                            background: orbExpired ? colors.surfaceMuted : "rgba(59,130,246,0.15)",
-                            color: orbExpired ? colors.textMuted : colors.accent,
+                            background: orbExpired ? "var(--color-background-secondary)" : "rgba(59,130,246,0.15)",
+                            color: orbExpired ? "var(--color-text-tertiary)" : colors.accent,
                             padding: `${spacing[1]} ${spacing[2]}`,
                             cursor: orbExpired ? "not-allowed" : "pointer",
-                            fontSize: typography.scale.xs
+                            fontSize: typography.scale.xs,
+                            opacity: orbExpired ? 0.4 : 1
                           }}
                         >
                           Open order entry

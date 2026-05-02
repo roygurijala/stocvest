@@ -267,32 +267,8 @@ export function EarningsPageClient({ events, notice }: EarningsPageClientProps) 
             <div key={g.key} style={{ marginBottom: gi < groups.length - 1 ? spacing[5] : 0 }}>
               <div
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: gridCols,
-                  gap: "0 8px",
-                  alignItems: "center",
-                  marginTop: gi > 0 ? "16px" : 0,
-                  padding: "0 8px",
-                  paddingBottom: spacing[2],
-                  fontSize: "9px",
-                  textTransform: "uppercase",
-                  letterSpacing: "2px",
-                  color: colors.textMuted,
-                  fontFamily: typography.fontFamilySans,
-                  borderBottom: `0.5px solid ${colors.border}`
-                }}
-              >
-                <span>Symbol</span>
-                <span>Company</span>
-                <span>Time</span>
-                <span style={{ textAlign: "right" }}>Est EPS</span>
-                <span style={{ textAlign: "right" }}>Actual</span>
-                <span style={{ textAlign: "right" }}>Surprise %</span>
-              </div>
-              <div
-                style={{
-                  marginTop: "16px",
-                  marginBottom: "4px",
+                  marginTop: gi > 0 ? "20px" : 0,
+                  marginBottom: "6px",
                   padding: "0 8px",
                   paddingBottom: spacing[2],
                   fontSize: "10px",
@@ -305,7 +281,30 @@ export function EarningsPageClient({ events, notice }: EarningsPageClientProps) 
               >
                 {g.label}
               </div>
-              <div style={{ display: "grid", gap: spacing[1] }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: gridCols,
+                  gap: "0 8px",
+                  alignItems: "center",
+                  padding: "6px 8px",
+                  paddingTop: "4px",
+                  fontSize: "9px",
+                  textTransform: "uppercase",
+                  letterSpacing: "2px",
+                  color: colors.textMuted,
+                  fontFamily: typography.fontFamilySans,
+                  borderBottom: "0.5px solid var(--color-border-tertiary)"
+                }}
+              >
+                <span>Symbol</span>
+                <span>Company</span>
+                <span>Time</span>
+                <span style={{ justifySelf: "end", textAlign: "right" }}>Est EPS</span>
+                <span style={{ justifySelf: "end", textAlign: "right" }}>Actual</span>
+                <span style={{ justifySelf: "end", textAlign: "right" }}>Surprise %</span>
+              </div>
+              <div style={{ display: "grid", gap: 0 }}>
                 {g.rows.map((row, idx) => {
                   const est = row.estimated_eps;
                   const act = row.actual_eps;
@@ -339,13 +338,13 @@ export function EarningsPageClient({ events, notice }: EarningsPageClientProps) 
                         gridTemplateColumns: gridCols,
                         gap: "0 8px",
                         alignItems: "center",
-                        padding: "8px 8px",
+                        padding: "6px 8px",
                         borderRadius: "6px",
                         transition: "background 0.1s ease",
                         fontFamily: typography.fontFamilySans
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.background = colors.surfaceMuted + "66";
+                        e.currentTarget.style.background = "var(--color-background-secondary)";
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.background = "transparent";
@@ -387,19 +386,27 @@ export function EarningsPageClient({ events, notice }: EarningsPageClientProps) 
                         style={{
                           fontSize: "12px",
                           fontFamily: MONO,
+                          justifySelf: "end",
                           textAlign: "right",
                           color: colors.textMuted
                         }}
                       >
                         {typeof est === "number" ? est.toFixed(2) : "—"}
                       </span>
-                      <div style={{ textAlign: "right", minWidth: 0, justifySelf: "stretch" }}>
+                      <div
+                        style={{
+                          textAlign: "right",
+                          minWidth: 0,
+                          justifySelf: "stretch"
+                        }}
+                      >
                         {isUpcoming ? (
                           <span
                             style={{
                               display: "block",
                               width: "100%",
                               fontSize: "10px",
+                              letterSpacing: "1.5px",
                               textTransform: "uppercase",
                               color: "var(--color-text-tertiary)",
                               fontFamily: MONO,
@@ -437,7 +444,15 @@ export function EarningsPageClient({ events, notice }: EarningsPageClientProps) 
                           </>
                         )}
                       </div>
-                      <span style={{ fontSize: "11px", fontFamily: MONO, textAlign: "right", color: surpriseColor }}>
+                      <span
+                        style={{
+                          fontSize: "11px",
+                          fontFamily: MONO,
+                          justifySelf: "end",
+                          textAlign: "right",
+                          color: surpriseColor
+                        }}
+                      >
                         {surpriseText}
                       </span>
                     </div>

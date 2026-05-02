@@ -4,7 +4,7 @@
 `CONTEXT.md` holds **status-at-a-glance**, **what’s implemented**, **near-term ops** (Terraform, secrets, CI, legal), **legal rules**, and **session rules**.  
 **This file** holds **planned work only**: themes, sub-items, and notes—**without** repeating the CONTEXT status table or §3 pending list.
 
-**Last updated:** 2026-05-02 (earnings calendar UI redesign)
+**Last updated:** 2026-05-02 (earnings calendar polish + scanner ORB badge layout)
 
 ---
 
@@ -35,7 +35,7 @@ Tracked in **`CONTEXT.md` §3** only (Terraform apply, GitHub/AWS/Vercel secrets
 | B6 | **Sector & market internals** | Not done | Sector rotation view, breadth (A/D, highs/lows), VIX regime, optional put/call—**data-only** copy per legal framing. |
 | B7 | **Risk management UX** | Not done | Position sizing helper (% of portfolio), optional max daily loss guardrails, concentration / correlation hints—**never** framed as advice; copy reviewed with counsel. |
 | B8 | **Scanner order placeholder** | Not done | Replace “Order modal placeholder” on scanner with real order entry or deep-link to portfolio panel; align with Step 8 validation flow. |
-| B9 | **Earnings calendar UI** | Done 2026-05-02 | Redesign: default **Upcoming** filter, Mon–Fri **This Week**, grouped sections (Today / This Week / Upcoming), grid rows with beat/miss bars, monospace figures. Frontend only. |
+| B9 | **Earnings calendar UI** | Done 2026-05-02 | Redesign: default **Upcoming** filter, Mon–Fri **This Week**, grouped sections (Today / This Week / Upcoming), grid rows with beat/miss bars, monospace figures. **Polish (density, section/header separation, Actual & Surprise alignment, hover):** resolved 2026-05-02 — same commit as PF3. |
 
 ---
 
@@ -61,6 +61,7 @@ Tracked in **`CONTEXT.md` §3** only (Terraform apply, GitHub/AWS/Vercel secrets
 | P4 | **Enhanced auth** | Not done | Optional SMS OTP, WebAuthn, magic link—Cognito capabilities; cost/compliance review. |
 | PF1 | **Production: reference levels wrong vs spot** | Resolved | **Cause:** Polygon snapshot sometimes returned `day` OHLC/VWAP on a different price scale than `lastTrade.p`; UI preferred `day_*` so VWAP/Support/Resistance could show ~$700s while last was ~$200. **Original fix:** drop session bar when scale off vs last (initially **2.5×**). **Superseded by PF2** (looser **5×**, keep session when last missing). Done 2026-05-02 (commit message: *Fix reference level prices + Greeks precision*). |
 | PF2 | **Regression: reference levels all n/a (9f80282)** | Resolved | **Cause:** **2.5×** check too aggressive and/or compared against missing/stale `lastTrade.p`, stripping valid `day` → UI n/a. **Fix:** Only run ratio check when `last_trade_price` is **> 0**; if last missing, **keep** session bar; threshold **5×**; warning log includes ratio when dropping. Frontend `snapshot-reference-levels.ts` mirrors. **Tests:** `tests/signals/test_reference_levels.py`. Done 2026-05-02 (PF2; see git history). |
+| PF3 | **Scanner: ORB EXPIRED badge overlap** | Resolved | Intraday setup card: badge row layout (`flex-wrap`, `margin-left: auto` on amber badge), dimmed card + disabled **Open order entry** styling, italic ET copy line. Done 2026-05-02 (with B9 polish). |
 
 ---
 

@@ -13,6 +13,8 @@
   --color-text-muted: #94a3b8;
   --color-text-tertiary: #64748b;
   --color-border: #1e293b;
+  --color-border-tertiary: rgba(100, 116, 139, 0.45);
+  --color-background-secondary: #17223d;
   --color-accent: #3b82f6;
   --color-bullish: #22c55e;
   --color-bearish: #ef4444;
@@ -28,6 +30,8 @@
   --color-text-muted: #94a3b8;
   --color-text-tertiary: #64748b;
   --color-border: #1e293b;
+  --color-border-tertiary: rgba(100, 116, 139, 0.45);
+  --color-background-secondary: #17223d;
   --color-accent: #3b82f6;
   --color-bullish: #22c55e;
   --color-bearish: #ef4444;
@@ -43,6 +47,8 @@
   --color-text-muted: #475569;
   --color-text-tertiary: #64748b;
   --color-border: #cbd5e1;
+  --color-border-tertiary: rgba(71, 85, 105, 0.35);
+  --color-background-secondary: #f1f5f9;
   --color-accent: #2563eb;
   --color-bullish: #16a34a;
   --color-bearish: #dc2626;
