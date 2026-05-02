@@ -79,7 +79,7 @@ export async function fetchScannerOverview(pdtStatus: PDTStatusPayload | null): 
       }),
       apiFetch<IntradaySetupPayload[]>("/v1/signals/day/setups", {
         method: "POST",
-        body: JSON.stringify({ bars_by_symbol: cleanBarsBySymbol, limit: 5, min_score: 0.35 })
+        body: JSON.stringify({ bars_by_symbol: cleanBarsBySymbol, limit: 10, min_score: 0.35 })
       })
     ]);
 

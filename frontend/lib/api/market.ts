@@ -19,6 +19,7 @@ export interface SnapshotPayload {
   day_volume?: number | null;
   /** Session VWAP from Polygon `day.vw` when present. */
   day_vwap?: number | null;
+  pre_market_price?: number | null;
 }
 
 export interface NewsPayload {
