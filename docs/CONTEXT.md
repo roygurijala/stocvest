@@ -43,7 +43,17 @@ App router pages (dashboard incl. **`/dashboard/performance`**, scanner, signals
 
 ## 3. Pending (near-term ops / engineering)
 
-1. **Infrastructure:** Run Terraform apply for target env; configure GitHub secrets (`AWS_*`, `VERCEL_DEPLOY_HOOK_URL`, Lambda S3 bucket variable per root README); confirm Lambdas and API Gateway URLs.
+**Deploy checklist (after you push to `main`):** GitHub Actions runs tests, then **`deploy-lambda`** (zip → S3 → `update-function-code` for every `stocvest-development-api-*` module, including **`signal_resolution`**) and optionally **`deploy-vercel`** (production deploy hook). Full secret/variable names and IAM needs: [root `README.md` § CI/CD](../README.md#cicd-github-actions).
+
+| Step | Action |
+|------|--------|
+| 1 | **Terraform:** `cd infra && terraform apply` for the target env so DynamoDB (incl. **`SignalHistory`**), Lambdas, API Gateway, and Lambda env (e.g. `DYNAMODB_SIGNAL_HISTORY_TABLE`) exist. CI updates **code** only, not infra. |
+| 2 | **GitHub:** Repository **variable** `STOCVEST_LAMBDA_S3_BUCKET`; **secrets** `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`; optional `VERCEL_DEPLOY_HOOK_URL`. |
+| 3 | **Push `main`:** Open **Actions** → confirm backend, frontend, `deploy-lambda`, and `deploy-vercel` (or skip if hook unset). |
+| 4 | **Smoke:** `GET /v1/health` on the HTTP API base URL; optional `GET /v1/signals/recent` if D1 table is applied. |
+| 5 | **Scheduled resolution (optional):** EventBridge → `stocvest-development-api-signal_resolution` is **not** wired in Terraform in-repo; see [`docs/D1_SIGNAL_RESOLUTION_SCHEDULE.md`](./D1_SIGNAL_RESOLUTION_SCHEDULE.md). |
+
+1. **Infrastructure:** Same as checklist rows 1–2; keep API Gateway URLs and Cognito/Vercel env aligned with the deployed stage.
 2. **Broker runtime:** IBKR path needs ECS/Fargate + TWS/ibeam where applicable; E*TRADE OAuth is wired in app but production tokens/env must match deployment.
 3. **CI hardening (if not done):** setuptools upgrade in CI before `pip install -e .`; optional skip for Vercel deploy when hook secret missing.
 4. **Legal / launch:** Terms at `/terms` are a **draft** — attorney review before paid subscribers; onboarding acknowledgment screen still listed as a future item.
@@ -161,7 +171,7 @@ Frontend: `cd frontend && npm ci && npm run build && npm run test`
 
 ### Every prompt must end with ALL of these steps
 
-**STEP 1 — Tests**  
+ **STEP 1 — Tests**  
 Run `pytest tests/ -q`  
 Run `cd frontend && npm run test`  
 Run `cd frontend && npm run build`  
