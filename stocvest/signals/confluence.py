@@ -1,0 +1,328 @@
+"""Multi-signal confluence scoring for intraday and swing contexts."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+
+CONFLUENCE_DISCLAIMER = (
+    "Signal confluence data for informational purposes only. Not investment advice."
+)
+
+
+@dataclass(frozen=True)
+class ConfluenceResult:
+    symbol: str
+    direction: str
+    confluence_score: int
+    tier: str
+    confirming_signals: list[dict[str, Any]]
+    conflicting_signals: list[dict[str, Any]]
+    n_confirming: int
+    n_conflicting: int
+    is_confluence_alert: bool
+    historical_note: str
+    disclaimer: str
+
+
+class ConfluenceDetector:
+    """Score how many independent signal sources align on a symbol/direction."""
+
+    SIGNAL_SOURCES = [
+        "orb_breakout",
+        "vwap_position",
+        "ema_9_position",
+        "market_regime",
+        "sector_alignment",
+        "volume_confirm",
+        "news_catalyst",
+        "gap_confirm",
+    ]
+
+    def calculate_confluence(
+        self,
+        symbol: str,
+        direction: str,
+        signal_data: dict[str, Any],
+        snapshot: dict[str, Any],
+        news_catalyst: dict[str, Any] | None,
+        regime: str,
+        sector_signal: str,
+    ) -> ConfluenceResult:
+        confirming: list[dict[str, Any]] = []
+        conflicting: list[dict[str, Any]] = []
+        direction = (direction or "").strip().lower()
+        regime_l = (regime or "neutral").strip().lower()
+        sector_l = (sector_signal or "neutral").strip().lower()
+
+        pattern = str(signal_data.get("pattern", "") or "").lower()
+
+        # 1. ORB pattern
+        if direction == "long" and "long" in pattern:
+            confirming.append(
+                {
+                    "source": "orb_breakout",
+                    "label": "ORB Breakout Long",
+                    "detail": "Price broke above opening range high",
+                }
+            )
+        elif direction == "short" and "short" in pattern:
+            confirming.append(
+                {
+                    "source": "orb_breakout",
+                    "label": "ORB Breakout Short",
+                    "detail": "Price broke below opening range low",
+                }
+            )
+
+        # 2. VWAP position
+        price = float(snapshot.get("last_trade_price", 0) or signal_data.get("last_trade_price", 0) or 0)
+        vwap = float(snapshot.get("day_vwap", 0) or 0)
+        if price > 0 and vwap > 0:
+            if direction == "long" and price > vwap:
+                confirming.append(
+                    {
+                        "source": "vwap_position",
+                        "label": "Above VWAP",
+                        "detail": f"Price ${price:.2f} above VWAP ${vwap:.2f}",
+                    }
+                )
+            elif direction == "short" and price < vwap:
+                confirming.append(
+                    {
+                        "source": "vwap_position",
+                        "label": "Below VWAP",
+                        "detail": f"Price ${price:.2f} below VWAP ${vwap:.2f}",
+                    }
+                )
+            elif direction in ("long", "short"):
+                conflicting.append(
+                    {
+                        "source": "vwap_position",
+                        "label": "VWAP conflict",
+                        "detail": "Price on wrong side of VWAP for this setup",
+                    }
+                )
+
+        # 3. EMA9 vs price (uses signal_data / snapshot)
+        ema_raw = signal_data.get("ema9")
+        if ema_raw is not None and price > 0:
+            try:
+                ema9 = float(ema_raw)
+            except (TypeError, ValueError):
+                ema9 = 0.0
+            if ema9 > 0:
+                if direction == "long" and price > ema9:
+                    confirming.append(
+                        {
+                            "source": "ema_9_position",
+                            "label": "Above 9 EMA",
+                            "detail": f"Price ${price:.2f} above 9 EMA ${ema9:.2f}",
+                        }
+                    )
+                elif direction == "short" and price < ema9:
+                    confirming.append(
+                        {
+                            "source": "ema_9_position",
+                            "label": "Below 9 EMA",
+                            "detail": f"Price ${price:.2f} below 9 EMA ${ema9:.2f}",
+                        }
+                    )
+                elif direction in ("long", "short"):
+                    conflicting.append(
+                        {
+                            "source": "ema_9_position",
+                            "label": "EMA conflict",
+                            "detail": "Price on wrong side of 9 EMA for this setup",
+                        }
+                    )
+
+        # 4. Market regime
+        if direction == "long" and regime_l == "bullish":
+            confirming.append(
+                {
+                    "source": "market_regime",
+                    "label": "Bullish Regime",
+                    "detail": "Macro conditions support long setups",
+                }
+            )
+        elif direction == "short" and regime_l == "bearish":
+            confirming.append(
+                {
+                    "source": "market_regime",
+                    "label": "Bearish Regime",
+                    "detail": "Macro conditions support short setups",
+                }
+            )
+        elif regime_l in ("bullish", "bearish") and direction in ("long", "short"):
+            conflicting.append(
+                {
+                    "source": "market_regime",
+                    "label": "Regime conflict",
+                    "detail": f"Market regime is {regime_l} — opposes this setup",
+                }
+            )
+
+        # 5. Sector alignment
+        if direction == "long" and sector_l == "bullish":
+            confirming.append(
+                {
+                    "source": "sector_alignment",
+                    "label": "Sector Bullish",
+                    "detail": "Sector trending with this setup",
+                }
+            )
+        elif direction == "short" and sector_l == "bearish":
+            confirming.append(
+                {
+                    "source": "sector_alignment",
+                    "label": "Sector Bearish",
+                    "detail": "Sector trending with this setup",
+                }
+            )
+        elif sector_l in ("bullish", "bearish") and direction in ("long", "short"):
+            conflicting.append(
+                {
+                    "source": "sector_alignment",
+                    "label": "Sector conflict",
+                    "detail": f"Sector is {sector_l} — opposes this setup",
+                }
+            )
+
+        # 6. Volume confirmation
+        vol_vs_avg = float(signal_data.get("volume_vs_avg", 0) or 0)
+        if vol_vs_avg >= 1.5:
+            confirming.append(
+                {
+                    "source": "volume_confirm",
+                    "label": f"Strong Volume ({vol_vs_avg:.1f}x avg)",
+                    "detail": "Above average volume confirms participation",
+                }
+            )
+        elif vol_vs_avg < 0.8 and vol_vs_avg > 0:
+            conflicting.append(
+                {
+                    "source": "volume_confirm",
+                    "label": f"Weak Volume ({vol_vs_avg:.1f}x avg)",
+                    "detail": "Below average volume reduces conviction",
+                }
+            )
+
+        # 7. News catalyst
+        if news_catalyst:
+            sentiment = str(news_catalyst.get("sentiment", "mixed") or "mixed").lower()
+            headline = str(news_catalyst.get("headline", "") or "")[:80]
+            if direction == "long" and sentiment == "bullish":
+                confirming.append(
+                    {
+                        "source": "news_catalyst",
+                        "label": "Bullish Catalyst",
+                        "detail": headline,
+                    }
+                )
+            elif direction == "short" and sentiment == "bearish":
+                confirming.append(
+                    {
+                        "source": "news_catalyst",
+                        "label": "Bearish Catalyst",
+                        "detail": headline,
+                    }
+                )
+            elif sentiment == "mixed":
+                conflicting.append(
+                    {
+                        "source": "news_catalyst",
+                        "label": "Mixed News",
+                        "detail": "News sentiment unclear for this direction",
+                    }
+                )
+            elif sentiment == "bearish" and direction == "long":
+                conflicting.append(
+                    {
+                        "source": "news_catalyst",
+                        "label": "Bearish Catalyst",
+                        "detail": headline or "News opposes long direction",
+                    }
+                )
+            elif sentiment == "bullish" and direction == "short":
+                conflicting.append(
+                    {
+                        "source": "news_catalyst",
+                        "label": "Bullish Catalyst",
+                        "detail": headline or "News opposes short direction",
+                    }
+                )
+
+        # 8. Gap confirmation
+        gap_pct = float(signal_data.get("gap_pct", 0) or 0)
+        if direction == "long" and gap_pct >= 1.0:
+            confirming.append(
+                {
+                    "source": "gap_confirm",
+                    "label": f"Gap Up +{gap_pct:.1f}%",
+                    "detail": "Pre-market gap supports long momentum",
+                }
+            )
+        elif direction == "short" and gap_pct <= -1.0:
+            confirming.append(
+                {
+                    "source": "gap_confirm",
+                    "label": f"Gap Down {gap_pct:.1f}%",
+                    "detail": "Pre-market gap supports short momentum",
+                }
+            )
+
+        n_confirming = len(confirming)
+        n_conflicting = len(conflicting)
+        denom = max(1, len(self.SIGNAL_SOURCES))
+        raw = (n_confirming / denom) * 100.0
+        penalty = n_conflicting * 8
+        score = max(0, min(100, int(raw - penalty)))
+
+        if score >= 80 and n_confirming >= 5:
+            tier = "exceptional"
+        elif score >= 65 and n_confirming >= 4:
+            tier = "strong"
+        elif score >= 50 and n_confirming >= 3:
+            tier = "moderate"
+        else:
+            tier = "weak"
+
+        return ConfluenceResult(
+            symbol=symbol,
+            direction=direction,
+            confluence_score=score,
+            tier=tier,
+            confirming_signals=confirming,
+            conflicting_signals=conflicting,
+            n_confirming=n_confirming,
+            n_conflicting=n_conflicting,
+            is_confluence_alert=(n_confirming >= 3 and score >= 60),
+            historical_note=self._historical_note(n_confirming),
+            disclaimer=CONFLUENCE_DISCLAIMER,
+        )
+
+    def _historical_note(self, n: int) -> str:
+        return {
+            7: "7 signals aligning: strongest possible multi-layer confirmation",
+            6: "6 confirming signals: very high conviction setup",
+            5: "5 confirming signals: strong multi-layer confirmation",
+            4: "4 confirming signals: solid confluence detected",
+            3: "3 confirming signals: moderate confluence",
+        }.get(n, "")
+
+
+def confluence_result_to_response_fields(result: ConfluenceResult) -> dict[str, Any]:
+    """Subset of ConfluenceResult for JSON APIs (excludes duplicate disclaimer when parent carries legal copy)."""
+    return {
+        "confluence_score": result.confluence_score,
+        "confluence_tier": result.tier,
+        "is_confluence_alert": result.is_confluence_alert,
+        "confirming_signals": result.confirming_signals,
+        "conflicting_signals": result.conflicting_signals,
+        "n_confirming": result.n_confirming,
+        "n_conflicting": result.n_conflicting,
+        "historical_note": result.historical_note,
+        "confluence_disclaimer": result.disclaimer,
+    }

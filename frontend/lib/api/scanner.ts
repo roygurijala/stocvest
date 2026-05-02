@@ -37,14 +37,32 @@ export interface GapIntelligenceItem {
   no_catalyst_warning: string | null;
 }
 
+export interface ConfluenceSignalChip {
+  source?: string;
+  label: string;
+  detail?: string;
+}
+
 export interface IntradaySetupPayload {
   symbol: string;
   direction: string;
   score: number;
   triggers: string[];
   timestamp_iso: string;
+  last_price?: number;
+  vwap?: number | null;
+  ema9?: number | null;
   disclaimer?: string;
   company_name?: string;
+  confluence_score?: number;
+  confluence_tier?: string;
+  is_confluence_alert?: boolean;
+  confirming_signals?: ConfluenceSignalChip[];
+  conflicting_signals?: ConfluenceSignalChip[];
+  n_confirming?: number;
+  n_conflicting?: number;
+  historical_note?: string;
+  confluence_disclaimer?: string;
 }
 
 export interface MorningBriefPayload {
@@ -155,13 +173,39 @@ export async function fetchScannerOverview(
       };
     });
 
+    const snapPct = (snap: Record<string, unknown> | null | undefined): number | null => {
+      if (!snap || typeof snap !== "object") return null;
+      const c = snap.change_percent ?? snap.pre_market_change_percent;
+      return typeof c === "number" && Number.isFinite(c) ? c : null;
+    };
+    const spyIdx = universe.indexOf("SPY");
+    const qqqIdx = universe.indexOf("QQQ");
+    const spySnap = spyIdx >= 0 ? snapshotRows[spyIdx] : null;
+    const qqqSnap = qqqIdx >= 0 ? snapshotRows[qqqIdx] : null;
+    const spyPct = snapPct(spySnap as Record<string, unknown> | null);
+    const qqqPct = snapPct(qqqSnap as Record<string, unknown> | null);
+    let regimeLabel = "Neutral";
+    if (spyPct != null && qqqPct != null) {
+      if (spyPct > 0.2 && qqqPct > 0.15) regimeLabel = "Bullish";
+      else if (spyPct < -0.2 || qqqPct < -0.25) regimeLabel = "Bearish";
+    }
+    const regimeForSetups = regimeLabel.toLowerCase();
+
+    const snapshots_by_symbol: Record<string, Record<string, unknown>> = {};
+    universe.forEach((sym, i) => {
+      const s = snapshotRows[i];
+      if (s && typeof s === "object") snapshots_by_symbol[sym] = s as Record<string, unknown>;
+    });
+
     const setups = await apiFetch<IntradaySetupPayload[]>("/v1/signals/day/setups", {
       method: "POST",
       body: JSON.stringify({
         bars_by_symbol: cleanBarsBySymbol,
         limit: 10,
         min_score: 0.55,
-        liquidity_by_symbol: liquidity_by_symbol
+        liquidity_by_symbol: liquidity_by_symbol,
+        snapshots_by_symbol,
+        regime: regimeForSetups
       })
     });
     if (setups == null) {
@@ -186,7 +230,18 @@ export async function fetchScannerOverview(
               pdt_exempt: pdtAssessment.pdt_exempt,
               allow_next_day_trade: pdtAssessment.allow_next_day_trade
             }
-          : undefined
+          : undefined,
+        morning_brief_context: {
+          futures_spy_pct: spyPct,
+          futures_qqq_pct: qqqPct,
+          vix_level: null,
+          vix_direction: "flat",
+          regime: regimeLabel,
+          economic_events: [],
+          earnings_today: [],
+          gap_intelligence_items: gapItems,
+          intraday_setups: setups
+        }
       })
     });
 

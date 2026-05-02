@@ -13,6 +13,7 @@ from stocvest.signals import (
     PDTAssessment,
     PremarketGapCandidate,
 )
+from stocvest.signals.confluence import ConfluenceDetector, confluence_result_to_response_fields
 
 
 def parse_bar(item: dict[str, Any], symbol: str) -> Bar:
@@ -87,7 +88,18 @@ def parse_catalyst(item: dict[str, Any]) -> NewsCatalystCandidate:
     )
 
 
-def serialize_intraday_setup(candidate: IntradaySetupCandidate) -> dict[str, Any]:
+def _norm_axis(value: str) -> str:
+    return str(value or "neutral").strip().lower()
+
+
+def serialize_intraday_setup(
+    candidate: IntradaySetupCandidate,
+    *,
+    snapshot: dict[str, Any] | None = None,
+    news_catalyst: dict[str, Any] | None = None,
+    regime: str = "neutral",
+    sector_signal: str = "neutral",
+) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "symbol": candidate.symbol,
         "direction": candidate.direction,
@@ -101,7 +113,56 @@ def serialize_intraday_setup(candidate: IntradaySetupCandidate) -> dict[str, Any
     }
     if candidate.company_name:
         payload["company_name"] = candidate.company_name
+
+    snap = dict(snapshot or {})
+    if not snap.get("last_trade_price"):
+        snap["last_trade_price"] = candidate.last_price
+    if snap.get("day_vwap") in (None, 0) and candidate.vwap is not None:
+        snap["day_vwap"] = float(candidate.vwap)
+
+    signal_data: dict[str, Any] = {
+        "pattern": " ".join(candidate.triggers),
+        "volume_vs_avg": candidate.volume_vs_avg,
+        "gap_pct": candidate.gap_pct,
+        "ema9": candidate.ema9,
+        "last_trade_price": candidate.last_price,
+    }
+    det = ConfluenceDetector()
+    cf = det.calculate_confluence(
+        symbol=candidate.symbol,
+        direction=candidate.direction,
+        signal_data=signal_data,
+        snapshot=snap,
+        news_catalyst=news_catalyst,
+        regime=_norm_axis(regime),
+        sector_signal=_norm_axis(sector_signal),
+    )
+    payload.update(confluence_result_to_response_fields(cf))
     return payload
+
+
+def serialize_intraday_setups_with_confluence(
+    candidates: list[IntradaySetupCandidate],
+    payload: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Serialize intraday setups with optional per-symbol snapshot/news maps from request body."""
+    regime = _norm_axis(str(payload.get("market_regime") or payload.get("regime") or "neutral"))
+    sector = _norm_axis(str(payload.get("sector_signal") or "neutral"))
+    snap_map = payload.get("snapshots_by_symbol") or {}
+    news_map = payload.get("news_catalysts_by_symbol") or {}
+    if not isinstance(snap_map, dict):
+        snap_map = {}
+    if not isinstance(news_map, dict):
+        news_map = {}
+    out: list[dict[str, Any]] = []
+    for c in candidates:
+        sym = c.symbol.upper()
+        raw_snap = snap_map.get(sym)
+        snap = dict(raw_snap) if isinstance(raw_snap, dict) else {}
+        raw_news = news_map.get(sym)
+        nc = dict(raw_news) if isinstance(raw_news, dict) else None
+        out.append(serialize_intraday_setup(c, snapshot=snap, news_catalyst=nc, regime=regime, sector_signal=sector))
+    return out
 
 
 def serialize_gap_candidate(candidate: PremarketGapCandidate) -> dict[str, Any]:

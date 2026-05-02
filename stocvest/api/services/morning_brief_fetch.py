@@ -129,6 +129,7 @@ async def fetch_morning_brief_context_live(
         earnings_today=earn_today,
         gap_intelligence_items=gap_items,
         pdt=pdt,
+        intraday_setups=[],
     )
 
 
@@ -158,6 +159,8 @@ def morning_brief_context_from_payload_dict(raw: dict[str, Any], briefing_date: 
     gap_items = list(raw.get("gap_intelligence_items") or [])
     if gap_items and isinstance(gap_items[0], dict):
         pass
+    intra_raw = raw.get("intraday_setups") or []
+    intra_list = [x for x in intra_raw if isinstance(x, dict)] if isinstance(intra_raw, list) else []
     return MorningBriefContext(
         briefing_date=briefing_date,
         futures_spy_pct=_f(raw.get("futures_spy_pct")),
@@ -169,6 +172,7 @@ def morning_brief_context_from_payload_dict(raw: dict[str, Any], briefing_date: 
         earnings_today=earn,
         gap_intelligence_items=gap_items,
         pdt=pdt,
+        intraday_setups=intra_list,
     )
 
 

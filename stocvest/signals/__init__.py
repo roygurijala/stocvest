@@ -24,6 +24,7 @@ from stocvest.signals.daily_briefing import (
     DailyBriefingGenerator,
     DailyBriefingInput,
 )
+from stocvest.signals.confluence import ConfluenceDetector, ConfluenceResult, confluence_result_to_response_fields
 from stocvest.signals.composite_score import (
     CompositeScoreEngine,
     CompositeSignal,
@@ -57,6 +58,8 @@ from stocvest.signals.trade_journal import (
 
 __all__ = [
     "AISynthesis",
+    "ConfluenceDetector",
+    "ConfluenceResult",
     "CompositeScoreEngine",
     "CompositeSignal",
     "CompositeVerdict",
@@ -102,4 +105,5 @@ __all__ = [
     "close_trade_journal_entry",
     "validate_trade_journal_entry",
     "VWAPUpdate",
+    "confluence_result_to_response_fields",
 ]

@@ -38,6 +38,7 @@ class MorningBriefContext:
     earnings_today: list[EarningsBriefRow] = field(default_factory=list)
     gap_intelligence_items: list[dict[str, Any]] = field(default_factory=list)
     pdt: PDTAssessment | None = None
+    intraday_setups: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _trading_conditions_label(regime: str, vix: float | None, spy_pct: float | None) -> str:
@@ -125,7 +126,7 @@ def _pdt_section(pdt: PDTAssessment | None) -> dict[str, Any]:
     }
 
 
-def _top_watch(items: list[dict[str, Any]]) -> dict[str, Any] | None:
+def _top_watch(items: list[dict[str, Any]], intraday_setups: list[dict[str, Any]]) -> dict[str, Any] | None:
     with_cat = [x for x in items if x.get("has_catalyst")]
     pool = with_cat if with_cat else []
     if not pool:
@@ -133,7 +134,12 @@ def _top_watch(items: list[dict[str, Any]]) -> dict[str, Any] | None:
     pool.sort(key=lambda x: int(x.get("gap_quality_score") or 0), reverse=True)
     best = pool[0]
     cat = best.get("catalyst") or {}
-    return {
+    sym = str(best.get("symbol") or "").strip().upper()
+    setup_match = next(
+        (s for s in intraday_setups if str(s.get("symbol") or "").strip().upper() == sym),
+        None,
+    )
+    out: dict[str, Any] = {
         "symbol": best["symbol"],
         "company_name": best.get("company_name") or "",
         "gap_pct": best["gap_pct"],
@@ -144,6 +150,14 @@ def _top_watch(items: list[dict[str, Any]]) -> dict[str, Any] | None:
             "sentiment": cat.get("sentiment"),
         },
     }
+    if setup_match and setup_match.get("is_confluence_alert"):
+        out["is_confluence_alert"] = True
+        out["confluence_score"] = int(setup_match.get("confluence_score") or 0)
+        out["n_confirming"] = int(setup_match.get("n_confirming") or 0)
+        out["confluence_label"] = "Confluence Alert"
+    else:
+        out["confluence_label"] = "Top Pre-Market Watch"
+    return out
 
 
 def build_morning_brief_payload(ctx: MorningBriefContext) -> dict[str, Any]:
@@ -174,7 +188,7 @@ def build_morning_brief_payload(ctx: MorningBriefContext) -> dict[str, Any]:
     else:
         earnings_out = {"message": "No earnings today"}
 
-    top = _top_watch(ctx.gap_intelligence_items)
+    top = _top_watch(ctx.gap_intelligence_items, ctx.intraday_setups)
     top_out: dict[str, Any] | None
     if top is not None:
         top_out = top

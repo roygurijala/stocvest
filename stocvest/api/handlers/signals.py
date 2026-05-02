@@ -12,7 +12,7 @@ from stocvest.api.response import bad_request, internal_error, ok
 from stocvest.api.services.signal_dto import (
     parse_bar,
     parse_pdt_assessment,
-    serialize_intraday_setup,
+    serialize_intraday_setups_with_confluence,
 )
 from stocvest.api.shared import build_request_context, parse_json_body
 from stocvest.api.types import LambdaContext, LambdaEvent
@@ -25,10 +25,12 @@ from stocvest.data.models import Bar, SignalRecord
 from stocvest.signals import (
     AISynthesis,
     CompositeScoreEngine,
+    CompositeVerdict,
     IntradaySetupScanner,
     LayerSignal,
     parse_liquidity_by_symbol_payload,
 )
+from stocvest.signals.confluence import ConfluenceDetector, confluence_result_to_response_fields
 from stocvest.signals.morning_brief import build_morning_brief_payload
 from stocvest.utils.logging import get_logger
 
@@ -78,6 +80,48 @@ def swing_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[
         symbol = str(payload.get("symbol") or "").strip().upper()
         price_raw = payload.get("price_at_signal")
         pattern = str(payload.get("pattern") or "swing_composite")
+        direction_out = ""
+        if composite.verdict == CompositeVerdict.BULLISH:
+            direction_out = "long"
+        elif composite.verdict == CompositeVerdict.BEARISH:
+            direction_out = "short"
+        if direction_out:
+            symbol_c = symbol or "PORTFOLIO"
+            snap_raw = payload.get("symbol_snapshot") or payload.get("snapshot") or {}
+            snap = dict(snap_raw) if isinstance(snap_raw, dict) else {}
+            nc_raw = payload.get("news_catalyst")
+            nc = dict(nc_raw) if isinstance(nc_raw, dict) else None
+            regime_c = str(regime or "neutral").lower()
+            sector_c = str(payload.get("sector_signal") or "neutral").lower()
+            price_at_f = None
+            try:
+                price_at_f = float(price_raw) if price_raw is not None else None
+            except (TypeError, ValueError):
+                price_at_f = None
+            last_px = snap.get("last_trade_price")
+            try:
+                last_f = float(last_px) if last_px is not None else 0.0
+            except (TypeError, ValueError):
+                last_f = 0.0
+            if not last_f and price_at_f is not None:
+                last_f = float(price_at_f)
+            sig_data = {
+                "pattern": pattern,
+                "volume_vs_avg": float(payload.get("volume_vs_avg", 1.0) or 1.0),
+                "gap_pct": float(payload.get("gap_pct", 0) or 0),
+                "ema9": payload.get("ema9"),
+                "last_trade_price": last_f,
+            }
+            cf = ConfluenceDetector().calculate_confluence(
+                symbol=symbol_c,
+                direction=direction_out,
+                signal_data=sig_data,
+                snapshot=snap,
+                news_catalyst=nc,
+                regime=regime_c,
+                sector_signal=sector_c,
+            )
+            response_body.update(confluence_result_to_response_fields(cf))
         request_context = build_request_context(event)
         if symbol and price_raw is not None:
             try:
@@ -170,7 +214,7 @@ def day_setups_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, 
         setups = IntradaySetupScanner(min_score=min_score).scan(
             bars_by_symbol, liquidity_by_symbol=liq, limit=limit
         )
-        return ok([serialize_intraday_setup(c) for c in setups])
+        return ok(serialize_intraday_setups_with_confluence(setups, payload))
     except (KeyError, TypeError, ValueError) as exc:
         return bad_request(f"Invalid day setup request: {exc}")
     except Exception as exc:
@@ -190,7 +234,11 @@ def day_briefing_handler(event: LambdaEvent, context: LambdaContext) -> dict[str
         pdt = parse_pdt_assessment(pdt_raw) if isinstance(pdt_raw, dict) else None
         ctx_raw = payload.get("morning_brief_context")
         if isinstance(ctx_raw, dict):
-            ctx = morning_brief_context_from_payload_dict(ctx_raw, briefing_date, pdt)
+            merged_ctx = dict(ctx_raw)
+            intra = payload.get("intraday_setups")
+            if isinstance(intra, list):
+                merged_ctx["intraday_setups"] = intra
+            ctx = morning_brief_context_from_payload_dict(merged_ctx, briefing_date, pdt)
         else:
             ctx = asyncio.run(fetch_morning_brief_context_live(briefing_date, pdt))
         brief = build_morning_brief_payload(ctx)

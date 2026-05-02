@@ -1,6 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  type CSSProperties
+} from "react";
 import { motion } from "framer-motion";
 import { RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -40,6 +49,17 @@ interface ScannerPageClientProps {
 }
 
 const MONO = typography.fontFamilyMono;
+
+const CONFLUENCE_BADGE_STYLE: CSSProperties = {
+  background: "linear-gradient(135deg, #b8860b, #f5c542)",
+  color: "#1a1200",
+  fontSize: "10px",
+  fontWeight: 700,
+  letterSpacing: "2px",
+  padding: "3px 10px",
+  borderRadius: "4px",
+  textTransform: "uppercase"
+};
 
 function isLongDirection(direction: string): boolean {
   return ["bullish", "long"].includes(direction.toLowerCase());
@@ -101,6 +121,14 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
       .filter((s) => typeof s.score === "number" && Number.isFinite(s.score))
       .sort((a, b) => b.score - a.score)
       .slice(0, 10);
+  }, [initialOverview.setups]);
+
+  const confluenceAlertSymbols = useMemo(() => {
+    const s = new Set<string>();
+    for (const setup of initialOverview.setups) {
+      if (setup.is_confluence_alert && setup.symbol) s.add(setup.symbol.trim().toUpperCase());
+    }
+    return s;
   }, [initialOverview.setups]);
 
   const gapSymbolsKey = useMemo(
@@ -218,6 +246,9 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
               {item.gap_pct > 0 ? "+" : ""}
               {item.gap_pct.toFixed(2)}%
             </span>
+            {confluenceAlertSymbols.has(item.symbol.trim().toUpperCase()) ? (
+              <span style={CONFLUENCE_BADGE_STYLE}>CONFLUENCE</span>
+            ) : null}
           </div>
         </div>
         <div style={{ marginTop: spacing[2] }}>
@@ -603,6 +634,14 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                 const expiryNote = setupExpiryNote(patternRaw);
                 const orbExpired = patternRaw.toLowerCase().startsWith("orb_") && isAfterOrbCloseEt();
                 const longOrShort = isLongDirection(setup.direction) ? "Long" : "Short";
+                const isConfluence = setup.is_confluence_alert === true;
+                const nConf =
+                  typeof setup.n_confirming === "number" ? setup.n_confirming : (setup.confirming_signals?.length ?? 0);
+                const nConfl =
+                  typeof setup.n_conflicting === "number" ? setup.n_conflicting : (setup.conflicting_signals?.length ?? 0);
+                const confirming = setup.confirming_signals ?? [];
+                const conflicting = setup.conflicting_signals ?? [];
+                const histNote = (setup.historical_note ?? "").trim();
 
                 return (
                   <motion.article
@@ -612,6 +651,7 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                     transition={{ delay: idx * 0.05 }}
                     style={{
                       border: `1px solid ${colors.border}`,
+                      ...(isConfluence ? { borderLeft: "3px solid #f5c542", background: "rgba(245, 197, 66, 0.04)" } : {}),
                       borderRadius: borderRadius.lg,
                       padding: spacing[3],
                       display: "grid",
@@ -647,68 +687,145 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                           width: "100%"
                         }}
                       >
-                        {(() => {
-                          const b = earningsBadgeFor(setup.symbol);
-                          if (!b) return null;
-                          return (
-                            <span
-                              style={{
-                                borderRadius: borderRadius.full,
-                                padding: "2px 8px",
-                                background: "rgba(245,158,11,.18)",
-                                color: colors.caution,
-                                fontSize: typography.scale.xs,
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: 4
-                              }}
-                            >
-                              {b.label}
-                              <InfoTip text={b.tip} label="Earnings risk" />
-                            </span>
-                          );
-                        })()}
-                        <span
+                        <div
                           style={{
-                            borderRadius: borderRadius.full,
-                            padding: "2px 8px",
-                            background: isLongDirection(setup.direction) ? "rgba(34,197,94,.15)" : "rgba(239,68,68,.15)",
-                            color: isLongDirection(setup.direction) ? colors.bullish : colors.bearish,
-                            fontSize: typography.scale.xs,
-                            fontWeight: 600
-                          }}
-                        >
-                          {longOrShort}
-                        </span>
-                        <span
-                          style={{
-                            display: "inline-flex",
+                            display: "flex",
                             alignItems: "center",
-                            gap: 6,
-                            fontSize: typography.scale.sm,
-                            color: colors.textMuted,
-                            fontFamily: MONO
+                            gap: "8px",
+                            flexWrap: "wrap",
+                            flex: 1,
+                            minWidth: 0
                           }}
                         >
-                          {Math.round(setup.score * 100)}%
-                          <InfoTip text={CONFIDENCE_PERCENT_TIP} label="About signal strength" />
-                        </span>
-                        {orbExpired ? (
+                          {(() => {
+                            const b = earningsBadgeFor(setup.symbol);
+                            if (!b) return null;
+                            return (
+                              <span
+                                style={{
+                                  borderRadius: borderRadius.full,
+                                  padding: "2px 8px",
+                                  background: "rgba(245,158,11,.18)",
+                                  color: colors.caution,
+                                  fontSize: typography.scale.xs,
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 4
+                                }}
+                              >
+                                {b.label}
+                                <InfoTip text={b.tip} label="Earnings risk" />
+                              </span>
+                            );
+                          })()}
                           <span
                             style={{
-                              marginLeft: "auto",
+                              borderRadius: borderRadius.full,
+                              padding: "2px 8px",
+                              background: isLongDirection(setup.direction) ? "rgba(34,197,94,.15)" : "rgba(239,68,68,.15)",
+                              color: isLongDirection(setup.direction) ? colors.bullish : colors.bearish,
                               fontSize: typography.scale.xs,
-                              fontWeight: 700,
-                              color: colors.caution,
-                              background: "rgba(245,158,11,.2)",
-                              borderRadius: borderRadius.md,
-                              padding: "2px 8px"
+                              fontWeight: 600
                             }}
                           >
-                            ORB EXPIRED
+                            {longOrShort}
                           </span>
-                        ) : null}
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                              fontSize: typography.scale.sm,
+                              color: colors.textMuted,
+                              fontFamily: MONO
+                            }}
+                          >
+                            {Math.round(setup.score * 100)}%
+                            <InfoTip text={CONFIDENCE_PERCENT_TIP} label="About signal strength" />
+                          </span>
+                        </div>
+                        <div style={{ display: "inline-flex", alignItems: "center", gap: 8, flexShrink: 0, marginLeft: "auto" }}>
+                          {isConfluence ? <span style={CONFLUENCE_BADGE_STYLE}>CONFLUENCE</span> : null}
+                          {orbExpired ? (
+                            <span
+                              style={{
+                                fontSize: typography.scale.xs,
+                                fontWeight: 700,
+                                color: colors.caution,
+                                background: "rgba(245,158,11,.2)",
+                                borderRadius: borderRadius.md,
+                                padding: "2px 8px"
+                              }}
+                            >
+                              ORB EXPIRED
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
+                      {isConfluence ? (
+                        <>
+                          <p
+                            style={{
+                              margin: 0,
+                              fontSize: "11px",
+                              color: "var(--color-text-tertiary)"
+                            }}
+                          >
+                            {nConf} signals confirming · {nConfl} conflicting
+                          </p>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+                            {confirming.slice(0, 3).map((c, i) => (
+                              <span
+                                key={`cf-${i}-${c.label}`}
+                                style={{
+                                  fontSize: "10px",
+                                  border: "0.5px solid var(--color-border-tertiary)",
+                                  borderRadius: "4px",
+                                  padding: "2px 8px",
+                                  color: "var(--color-text-secondary)",
+                                  background: "var(--color-background-secondary)"
+                                }}
+                              >
+                                {c.label}
+                              </span>
+                            ))}
+                            {nConf > 3 ? (
+                              <span
+                                style={{
+                                  fontSize: "10px",
+                                  color: "var(--color-text-tertiary)",
+                                  padding: "2px 4px"
+                                }}
+                              >
+                                + {nConf - 3} more
+                              </span>
+                            ) : null}
+                          </div>
+                          {nConfl >= 2 && conflicting[0]?.label ? (
+                            <p
+                              style={{
+                                margin: 0,
+                                fontSize: "11px",
+                                color: "var(--color-text-warning)"
+                              }}
+                            >
+                              ! {nConfl} conflicting: {conflicting[0].label}
+                            </p>
+                          ) : null}
+                          {histNote ? (
+                            <p
+                              style={{
+                                margin: 0,
+                                fontSize: "11px",
+                                fontStyle: "italic",
+                                color: "var(--color-text-tertiary)"
+                              }}
+                            >
+                              {histNote}
+                            </p>
+                          ) : null}
+                        </>
+                      ) : null}
                       {orbExpired ? (
                         <p
                           style={{

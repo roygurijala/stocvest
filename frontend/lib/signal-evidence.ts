@@ -17,6 +17,18 @@ export interface EvidenceLayer {
   freshnessLabel: string;
 }
 
+export interface SignalEvidenceConfluence {
+  confluence_score: number;
+  confluence_tier: string;
+  is_confluence_alert: boolean;
+  confirming_signals: Array<{ label: string; detail?: string }>;
+  conflicting_signals: Array<{ label: string; detail?: string }>;
+  n_confirming: number;
+  n_conflicting: number;
+  historical_note: string;
+  confluence_disclaimer: string;
+}
+
 export interface SignalEvidenceData {
   symbol: string;
   direction: EvidenceDirection;
@@ -41,6 +53,7 @@ export interface SignalEvidenceData {
     daysUntil: number;
     reportTime: "before_market" | "after_market" | "during_market" | "unknown";
   } | null;
+  confluence?: SignalEvidenceConfluence | null;
 }
 
 function clamp(v: number, min: number, max: number): number {
@@ -239,12 +252,34 @@ export function buildEvidenceFromSetup(
         ? last * 0.997
         : null;
 
+  const confluence =
+    typeof setup.confluence_score === "number" && Number.isFinite(setup.confluence_score)
+      ? {
+          confluence_score: Math.round(setup.confluence_score),
+          confluence_tier: String(setup.confluence_tier ?? "weak"),
+          is_confluence_alert: Boolean(setup.is_confluence_alert),
+          confirming_signals: (setup.confirming_signals ?? []).map((c) => ({
+            label: String(c.label ?? ""),
+            detail: c.detail ? String(c.detail) : undefined
+          })),
+          conflicting_signals: (setup.conflicting_signals ?? []).map((c) => ({
+            label: String(c.label ?? ""),
+            detail: c.detail ? String(c.detail) : undefined
+          })),
+          n_confirming: typeof setup.n_confirming === "number" ? setup.n_confirming : 0,
+          n_conflicting: typeof setup.n_conflicting === "number" ? setup.n_conflicting : 0,
+          historical_note: String(setup.historical_note ?? ""),
+          confluence_disclaimer: String(setup.confluence_disclaimer ?? "")
+        }
+      : null;
+
   return {
     symbol: setup.symbol,
     direction,
     directionBadgeLabel,
     confidencePercent,
     layers,
+    confluence,
     aiVerdict:
       direction === "bullish"
         ? "Strong technical pattern with supportive internals; geopolitical noise is the main risk to continuation."

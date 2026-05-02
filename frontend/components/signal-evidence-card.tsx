@@ -229,6 +229,122 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
         </div>
       </section>
 
+      {evidence.confluence ? (
+        <section
+          style={{
+            border: `1px solid ${colors.border}`,
+            borderRadius: borderRadius.lg,
+            padding: spacing[3],
+            display: "grid",
+            gap: spacing[3]
+          }}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 style={{ margin: 0 }}>Signal Confluence</h3>
+            <span
+              style={{
+                borderRadius: borderRadius.full,
+                padding: "4px 10px",
+                fontSize: typography.scale.xs,
+                fontWeight: 600,
+                background: "rgba(59,130,246,0.12)",
+                color: colors.textMuted
+              }}
+            >
+              Not investment advice
+            </span>
+          </div>
+          {evidence.confluence.is_confluence_alert ? (
+            <>
+              {(() => {
+                const sc = evidence.confluence.confluence_score;
+                const scoreColor =
+                  sc >= 80 ? "var(--color-text-success)" : sc >= 60 ? "var(--color-text-warning)" : "var(--color-text-danger)";
+                const tier = evidence.confluence.confluence_tier.toUpperCase();
+                return (
+                  <>
+                    <div style={{ fontSize: "42px", fontWeight: 500, color: scoreColor, lineHeight: 1.1 }}>
+                      {sc}
+                      <span style={{ fontSize: "18px", color: colors.textMuted, fontWeight: 500 }}> / 100</span>
+                    </div>
+                    <span
+                      style={{
+                        display: "inline-block",
+                        width: "fit-content",
+                        fontSize: typography.scale.xs,
+                        fontWeight: 800,
+                        letterSpacing: "0.06em",
+                        color: scoreColor
+                      }}
+                    >
+                      {tier}
+                    </span>
+                  </>
+                );
+              })()}
+              <div
+                className="grid gap-4 sm:grid-cols-2"
+                style={{ alignItems: "start" }}
+              >
+                <div style={{ display: "grid", gap: spacing[2] }}>
+                  <h4 style={{ margin: 0, fontSize: typography.scale.sm, color: colors.bullish, fontWeight: 700 }}>Confirming</h4>
+                  <ul style={{ margin: 0, paddingInlineStart: 0, listStyle: "none", display: "grid", gap: spacing[2] }}>
+                    {evidence.confluence.confirming_signals.map((c, i) => (
+                      <li key={`cf-yes-${i}`} style={{ display: "grid", gap: 4 }}>
+                        <span style={{ fontWeight: 600, color: colors.text }}>
+                          <span style={{ color: colors.bullish, marginRight: 6 }} aria-hidden>
+                            ✓
+                          </span>
+                          {c.label}
+                        </span>
+                        {c.detail ? (
+                          <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, paddingLeft: 18 }}>{c.detail}</span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div style={{ display: "grid", gap: spacing[2] }}>
+                  <h4 style={{ margin: 0, fontSize: typography.scale.sm, color: colors.bearish, fontWeight: 700 }}>Conflicting</h4>
+                  {evidence.confluence.conflicting_signals.length === 0 ? (
+                    <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted }}>No conflicting signals</p>
+                  ) : (
+                    <ul style={{ margin: 0, paddingInlineStart: 0, listStyle: "none", display: "grid", gap: spacing[2] }}>
+                      {evidence.confluence.conflicting_signals.map((c, i) => (
+                        <li key={`cf-no-${i}`} style={{ display: "grid", gap: 4 }}>
+                          <span style={{ fontWeight: 600, color: colors.text }}>
+                            <span style={{ color: colors.bearish, marginRight: 6 }} aria-hidden>
+                              ✗
+                            </span>
+                            {c.label}
+                          </span>
+                          {c.detail ? (
+                            <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, paddingLeft: 18 }}>{c.detail}</span>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+              {evidence.confluence.historical_note.trim() ? (
+                <p style={{ margin: 0, fontSize: "12px", fontStyle: "italic", color: colors.textMuted }}>
+                  {evidence.confluence.historical_note}
+                </p>
+              ) : null}
+            </>
+          ) : (
+            <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted, lineHeight: 1.45 }}>
+              Confluence: {evidence.confluence.confluence_score}/100 — {evidence.confluence.n_confirming} signals confirming (minimum 3
+              required for alert)
+            </p>
+          )}
+          {evidence.confluence.confluence_disclaimer.trim() ? (
+            <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted }}>{evidence.confluence.confluence_disclaimer}</p>
+          ) : null}
+        </section>
+      ) : null}
+
       <section style={{ border: `1px solid ${colors.border}`, borderRadius: borderRadius.lg, padding: spacing[3], display: "grid", gap: spacing[2] }}>
         <h3 style={{ margin: 0, display: "flex", alignItems: "center", gap: spacing[2] }}>
           <Brain size={18} />

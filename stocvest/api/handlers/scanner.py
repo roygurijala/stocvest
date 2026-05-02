@@ -22,7 +22,7 @@ from stocvest.api.services.signal_dto import (
     parse_pdt_assessment,
     serialize_catalyst,
     serialize_gap_candidate,
-    serialize_intraday_setup,
+    serialize_intraday_setups_with_confluence,
 )
 from stocvest.api.shared import parse_json_body
 from stocvest.api.types import LambdaContext, LambdaEvent
@@ -194,7 +194,7 @@ def scanner_intraday_handler(event: LambdaEvent, context: LambdaContext) -> dict
         setups = IntradaySetupScanner(min_score=min_score).scan(
             bars_by_symbol, liquidity_by_symbol=liq, limit=limit
         )
-        return cache_set(key, ok([serialize_intraday_setup(c) for c in setups]), ttl_seconds=300)
+        return cache_set(key, ok(serialize_intraday_setups_with_confluence(setups, payload)), ttl_seconds=300)
     except (TypeError, ValueError, KeyError) as exc:
         return bad_request(f"Invalid intraday scanner request: {exc}")
     except Exception as exc:
@@ -214,7 +214,11 @@ def scanner_briefing_handler(event: LambdaEvent, context: LambdaContext) -> dict
         pdt = parse_pdt_assessment(pdt_raw) if isinstance(pdt_raw, dict) else None
         ctx_raw = payload.get("morning_brief_context")
         if isinstance(ctx_raw, dict):
-            ctx = morning_brief_context_from_payload_dict(ctx_raw, briefing_date, pdt)
+            merged_ctx = dict(ctx_raw)
+            intra = payload.get("intraday_setups")
+            if isinstance(intra, list):
+                merged_ctx["intraday_setups"] = intra
+            ctx = morning_brief_context_from_payload_dict(merged_ctx, briefing_date, pdt)
         else:
             ctx = asyncio.run(fetch_morning_brief_context_live(briefing_date, pdt))
         brief = build_morning_brief_payload(ctx)

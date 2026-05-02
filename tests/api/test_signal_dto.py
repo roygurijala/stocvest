@@ -113,6 +113,8 @@ def test_serialize_intraday_setup_returns_expected_shape() -> None:
     assert payload["direction"] == "long"
     assert payload["triggers"] == ["or_breakout_up", "vwap_reclaim"]
     assert payload["company_name"] == "Apple Inc."
+    assert "confluence_score" in payload
+    assert "is_confluence_alert" in payload
 
 
 def test_serialize_gap_candidate_returns_expected_shape() -> None:

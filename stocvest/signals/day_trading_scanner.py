@@ -468,6 +468,8 @@ class IntradaySetupCandidate:
     ema9: float | None
     timestamp_iso: str
     company_name: str | None = None
+    volume_vs_avg: float = 1.0
+    gap_pct: float = 0.0
 
 
 class IntradaySetupScanner:
@@ -627,6 +629,7 @@ class IntradaySetupScanner:
                 short_score += 0.1
 
         company = liq.company_name if liq and liq.company_name else None
+        vol_ratio = float(latest.volume) / max(1e-9, float(avg_recent_volume))
 
         if long_score >= short_score:
             score = round(min(1.0, long_score), 4)
@@ -642,6 +645,8 @@ class IntradaySetupScanner:
                 ema9=latest_ema,
                 timestamp_iso=latest.timestamp.isoformat(),
                 company_name=company,
+                volume_vs_avg=vol_ratio,
+                gap_pct=0.0,
             )
 
         score = round(min(1.0, short_score), 4)
@@ -657,4 +662,6 @@ class IntradaySetupScanner:
             ema9=latest_ema,
             timestamp_iso=latest.timestamp.isoformat(),
             company_name=company,
+            volume_vs_avg=vol_ratio,
+            gap_pct=0.0,
         )

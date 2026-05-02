@@ -571,6 +571,12 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview, 
                 const earnEmpty = !Array.isArray(earn) && typeof earn === "object" && earn && "message" in earn;
                 const tw = mb.top_watch;
                 const twSym = tw && typeof tw === "object" && "symbol" in tw ? String((tw as { symbol: string }).symbol) : null;
+                const twObj = tw && typeof tw === "object" && twSym ? (tw as Record<string, unknown>) : null;
+                const twAlert = Boolean(twObj?.is_confluence_alert);
+                const twSectionTitle =
+                  twObj && typeof twObj.confluence_label === "string" && String(twObj.confluence_label).trim()
+                    ? String(twObj.confluence_label)
+                    : "Top pre-market watch";
                 const setupBorder =
                   cond === "FAVORABLE" ? colors.bullish : cond === "CHOPPY" ? colors.caution : colors.bearish;
                 return (
@@ -673,12 +679,21 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview, 
                       )}
                     </section>
                     <section>
-                      <h4 style={{ margin: 0, fontSize: typography.scale.sm }}>Top pre-market watch</h4>
+                      <h4
+                        style={{
+                          margin: 0,
+                          fontSize: typography.scale.sm,
+                          ...(twAlert ? { color: "#f5c542", fontWeight: 800 } : {})
+                        }}
+                      >
+                        {twSectionTitle}
+                      </h4>
                       {twSym ? (
                         <div
                           style={{
                             marginTop: spacing[2],
                             border: `1px solid ${colors.border}`,
+                            ...(twAlert ? { borderLeft: "3px solid #f5c542" } : {}),
                             borderRadius: borderRadius.lg,
                             padding: spacing[3]
                           }}
@@ -688,6 +703,15 @@ export function DashboardRedesign({ marketOverview, pdtStatus, scannerOverview, 
                             <span style={{ marginLeft: 8, color: colors.textMuted, fontSize: 13 }}>
                               {(tw as { company_name: string }).company_name}
                             </span>
+                          ) : null}
+                          {twAlert ? (
+                            <p style={{ margin: spacing[2] + " 0 0", fontSize: typography.scale.sm, color: colors.textMuted }}>
+                              <span style={{ color: "#f5c542", fontWeight: 700, fontFamily: typography.fontFamilyMono }}>
+                                {Number(twObj?.confluence_score ?? 0)}
+                              </span>{" "}
+                              confluence ·{" "}
+                              <span style={{ fontWeight: 600 }}>{Number(twObj?.n_confirming ?? 0)}</span> signals confirming
+                            </p>
                           ) : null}
                           <p style={{ margin: spacing[1] + " 0 0", fontSize: typography.scale.xs, color: colors.textMuted }}>
                             Gap {(tw as { gap_pct: number }).gap_pct?.toFixed?.(2)}% · Vol{" "}
