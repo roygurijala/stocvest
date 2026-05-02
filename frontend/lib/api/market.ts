@@ -56,20 +56,6 @@ function barClose(bar: Record<string, unknown>): number | null {
   return null;
 }
 
-/** Single-ticker snapshot for symbols not included in the dashboard overview (SPY/QQQ/IWM). */
-export async function fetchSymbolSnapshot(symbol: string): Promise<SnapshotPayload | null> {
-  const sym = symbol.trim().toUpperCase();
-  if (!sym) {
-    return null;
-  }
-  try {
-    const row = await apiFetch<SnapshotPayload>(`/v1/market/snapshot?symbol=${encodeURIComponent(sym)}`);
-    return row ?? null;
-  } catch {
-    return null;
-  }
-}
-
 export async function fetchMarketOverview(symbols: string[] = DEFAULT_SYMBOLS): Promise<MarketOverview> {
   const cleanSymbols = symbols.map((s) => s.trim().toUpperCase()).filter(Boolean);
   try {

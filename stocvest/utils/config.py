@@ -65,6 +65,7 @@ class Settings(BaseSettings):
     pdt_state_table: str = Field("", alias="STOCVEST_PDT_STATE_TABLE")
     dynamodb_day_trading_setups: str = Field("", alias="DYNAMODB_DAY_TRADING_SETUPS")
     dynamodb_alerts: str = Field("", alias="DYNAMODB_ALERTS")
+    dynamodb_signal_history_table: str = Field("", alias="DYNAMODB_SIGNAL_HISTORY_TABLE")
 
     # ── Scanner schedule + WebSocket broadcast ────────────────────
     scanner_symbols: str = Field("AAPL,MSFT,NVDA", alias="STOCVEST_SCANNER_SYMBOLS")

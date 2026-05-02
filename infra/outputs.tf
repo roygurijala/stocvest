@@ -37,6 +37,7 @@ output "dynamodb_table_names" {
     alerts             = aws_dynamodb_table.alerts.name
     orders             = aws_dynamodb_table.orders.name
     day_trading_setups = aws_dynamodb_table.day_trading_setups.name
+    signal_history     = aws_dynamodb_table.signal_history.name
   }
 }
 
@@ -49,6 +50,7 @@ output "dynamodb_table_arns" {
     alerts             = aws_dynamodb_table.alerts.arn
     orders             = aws_dynamodb_table.orders.arn
     day_trading_setups = aws_dynamodb_table.day_trading_setups.arn
+    signal_history     = aws_dynamodb_table.signal_history.arn
   }
 }
 

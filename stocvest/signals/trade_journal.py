@@ -40,6 +40,9 @@ class TradeJournalEntry:
     exit_notes: str | None = None
     pnl_realized_usd: float | None = None
     broker_order_ids: tuple[str, ...] = ()
+    signal_id: str | None = None
+    signal_direction: str | None = None
+    signal_generated_at: str | None = None
 
     def to_dynamo_item(self) -> dict[str, Any]:
         item: dict[str, Any] = {
@@ -62,6 +65,12 @@ class TradeJournalEntry:
             item["exitNotes"] = self.exit_notes
         if self.pnl_realized_usd is not None:
             item["pnlRealizedUsd"] = self.pnl_realized_usd
+        if self.signal_id:
+            item["signalId"] = self.signal_id
+        if self.signal_direction:
+            item["signalDirection"] = self.signal_direction
+        if self.signal_generated_at:
+            item["signalGeneratedAt"] = self.signal_generated_at
         return item
 
     @staticmethod
@@ -78,6 +87,9 @@ class TradeJournalEntry:
             closed_at = closed_at.replace(tzinfo=timezone.utc)
 
         pnl = item.get("pnlRealizedUsd")
+        sid = item.get("signalId")
+        sdir = item.get("signalDirection")
+        sgen = item.get("signalGeneratedAt")
         return TradeJournalEntry(
             entry_id=str(item["entryId"]),
             user_id=str(item["userId"]),
@@ -93,6 +105,9 @@ class TradeJournalEntry:
             exit_notes=item.get("exitNotes"),
             pnl_realized_usd=float(pnl) if pnl is not None else None,
             broker_order_ids=tuple(str(x) for x in (item.get("brokerOrderIds") or [])),
+            signal_id=str(sid) if sid else None,
+            signal_direction=str(sdir) if sdir else None,
+            signal_generated_at=str(sgen) if sgen else None,
         )
 
 

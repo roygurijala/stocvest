@@ -120,3 +120,36 @@ resource "aws_dynamodb_table" "day_trading_setups" {
     Name = "stocvest-development-ddb-day-trading-setups"
   })
 }
+
+# D1 — platform signal history (public + per-user scope via GSI).
+resource "aws_dynamodb_table" "signal_history" {
+  name         = "SignalHistory"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "signal_id"
+
+  attribute {
+    name = "signal_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "scope_key"
+    type = "S"
+  }
+
+  attribute {
+    name = "generated_at"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name            = "scope_generated_at"
+    hash_key        = "scope_key"
+    range_key       = "generated_at"
+    projection_type = "ALL"
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "stocvest-development-ddb-signal-history"
+  })
+}

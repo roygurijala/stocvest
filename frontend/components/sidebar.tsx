@@ -14,7 +14,8 @@ import {
   CalendarDays,
   Settings,
   TrendingUp,
-  Zap
+  Zap,
+  Percent
 } from "lucide-react";
 import { logoutAction } from "@/app/login/actions";
 import { openCrispChat } from "@/components/crisp-chat";
@@ -35,6 +36,7 @@ export const DASHBOARD_NAV_ITEMS = [
   { href: "/dashboard/crypto", label: "Crypto", icon: TrendingUp },
   { href: "/dashboard/futures", label: "Futures", icon: BarChart2 },
   { href: "/dashboard/journal", label: "Journal", icon: BookOpen },
+  { href: "/dashboard/performance", label: "Performance", icon: Percent },
   { href: "/dashboard/settings", label: "Settings", icon: Settings }
 ] as const;
 

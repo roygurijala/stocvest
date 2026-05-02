@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { Brain } from "lucide-react";
 import {
@@ -12,7 +13,8 @@ import {
   ResponsiveContainer
 } from "recharts";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
-import { fetchSymbolSnapshot, type MarketOverview, type SnapshotPayload } from "@/lib/api/market";
+import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
+import type { MarketOverview, SnapshotPayload } from "@/lib/api/market";
 import type { ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
 import { InfoTip } from "@/components/info-tip";
@@ -22,6 +24,7 @@ import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { buildEvidenceFromSetup, type SignalEvidenceData } from "@/lib/signal-evidence";
+import { fetchLiveSignals, formatHorizonOutcome, type PublicSignal } from "@/lib/api/public-signals";
 import { LAYER_NAME_HINTS } from "@/lib/ui-tooltips";
 
 type LayerStatus = "Bullish" | "Bearish" | "Neutral" | "Unavailable";
@@ -56,7 +59,7 @@ function statusColor(status: LayerStatus, colors: ThemeColors): string {
   return colors.textMuted;
 }
 
-function deriveFromSnapshot(snapshot?: SnapshotPayload): { bullishBias: number; support: number; resistance: number } {
+function deriveFromSnapshot(snapshot?: SnapshotPayload | null): { bullishBias: number; support: number; resistance: number } {
   if (!snapshot || typeof snapshot.last_trade_price !== "number") {
     return { bullishBias: 0.5, support: 0, resistance: 0 };
   }
@@ -70,10 +73,18 @@ function deriveFromSnapshot(snapshot?: SnapshotPayload): { bullishBias: number; 
 
 export function SignalsPageClient({ marketOverview, scannerOverview, earningsBySymbol }: SignalsPageClientProps) {
   const { colors } = useTheme();
+  const [tab, setTab] = useState<"layers" | "history">("layers");
   const [symbol, setSymbol] = useState("AAPL");
   const [evidence, setEvidence] = useState<SignalEvidenceData | null>(null);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [symbolSnapshot, setSymbolSnapshot] = useState<SnapshotPayload | null>(null);
+  const [historyRows, setHistoryRows] = useState<PublicSignal[]>([]);
+  const [histLoading, setHistLoading] = useState(false);
+  const [histSymbolFilter, setHistSymbolFilter] = useState("");
+  const [histDirectionFilter, setHistDirectionFilter] = useState<"all" | "bullish" | "bearish" | "neutral">("all");
+  const [histOutcomeFilter, setHistOutcomeFilter] = useState<
+    "all" | "correct" | "incorrect" | "neutral" | "pending"
+  >("all");
 
   const snapshot = useMemo(() => {
     const sym = symbol.toUpperCase();
@@ -102,6 +113,40 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
       cancelled = true;
     };
   }, [symbol, marketOverview.snapshots]);
+
+  useEffect(() => {
+    if (tab !== "history") return;
+    let cancelled = false;
+    setHistLoading(true);
+    void fetchLiveSignals().then((rows) => {
+      if (!cancelled) {
+        setHistoryRows(rows);
+        setHistLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab]);
+
+  const filteredHistory = useMemo(() => {
+    const cutoff = Date.now() - 30 * 86400000;
+    const sym = histSymbolFilter.trim().toUpperCase();
+    return historyRows.filter((r) => {
+      if (Number.isFinite(Date.parse(r.timestamp_iso)) && Date.parse(r.timestamp_iso) < cutoff) {
+        return false;
+      }
+      if (sym && r.symbol.toUpperCase() !== sym) return false;
+      if (histDirectionFilter !== "all" && r.bias !== histDirectionFilter) return false;
+      const o = r.outcome_1d ?? r.outcome_1h;
+      if (histOutcomeFilter !== "all") {
+        if (histOutcomeFilter === "pending" && o != null) return false;
+        if (histOutcomeFilter !== "pending" && o !== histOutcomeFilter) return false;
+      }
+      return true;
+    });
+  }, [historyRows, histSymbolFilter, histDirectionFilter, histOutcomeFilter]);
+
   const setup = useMemo(
     () => scannerOverview.setups.find((s) => s.symbol === symbol.toUpperCase()) || scannerOverview.setups[0],
     [scannerOverview.setups, symbol]
@@ -143,8 +188,141 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
     hist: Math.max(22, Math.min(88, row.score - 7 + ((idx * 7) % 14)))
   }));
 
+  function directionChipStyle(bias: PublicSignal["bias"]): CSSProperties {
+    if (bias === "bullish") {
+      return { background: "rgba(34,197,94,.2)", color: colors.bullish, border: `1px solid rgba(34,197,94,.35)` };
+    }
+    if (bias === "bearish") {
+      return { background: "rgba(239,68,68,.2)", color: colors.bearish, border: `1px solid rgba(239,68,68,.35)` };
+    }
+    return { background: "rgba(245,158,11,.15)", color: colors.caution, border: `1px solid rgba(245,158,11,.35)` };
+  }
+
   return (
     <section style={{ display: "grid", gap: spacing[4] }}>
+      <div className="flex flex-wrap gap-2">
+        {(
+          [
+            ["layers", "Layer analysis"],
+            ["history", "Signal history"]
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            className="min-h-11 rounded-md px-4 text-sm"
+            onClick={() => setTab(key)}
+            style={{
+              border: `1px solid ${colors.border}`,
+              background: tab === key ? "rgba(59,130,246,.2)" : "transparent",
+              color: tab === key ? colors.accent : colors.text
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "history" ? (
+        <article style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
+          <h3 style={{ marginTop: 0 }}>Signal History</h3>
+          <p style={{ margin: `0 0 ${spacing[3]} 0`, color: colors.textMuted, fontSize: typography.scale.sm }}>
+            Default: last 30 days, all symbols. Filter by symbol, direction, or 1d outcome.
+          </p>
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <input
+              value={histSymbolFilter}
+              onChange={(e) => setHistSymbolFilter(e.target.value.toUpperCase())}
+              placeholder="Symbol filter"
+              className="min-h-11 min-w-[140px] flex-1 text-base"
+              style={{ borderRadius: borderRadius.md, border: `1px solid ${colors.border}`, padding: spacing[2] }}
+            />
+            <select
+              value={histDirectionFilter}
+              onChange={(e) => setHistDirectionFilter(e.target.value as typeof histDirectionFilter)}
+              className="min-h-11 text-base"
+              style={{ borderRadius: borderRadius.md, border: `1px solid ${colors.border}`, padding: spacing[2] }}
+            >
+              <option value="all">All directions</option>
+              <option value="bullish">Bullish</option>
+              <option value="bearish">Bearish</option>
+              <option value="neutral">Neutral</option>
+            </select>
+            <select
+              value={histOutcomeFilter}
+              onChange={(e) => setHistOutcomeFilter(e.target.value as typeof histOutcomeFilter)}
+              className="min-h-11 text-base"
+              style={{ borderRadius: borderRadius.md, border: `1px solid ${colors.border}`, padding: spacing[2] }}
+            >
+              <option value="all">All 1d outcomes</option>
+              <option value="pending">Pending</option>
+              <option value="correct">Correct</option>
+              <option value="incorrect">Incorrect</option>
+              <option value="neutral">Neutral</option>
+            </select>
+          </div>
+          {histLoading ? (
+            <p style={{ color: colors.textMuted }}>Loading…</p>
+          ) : filteredHistory.length === 0 ? (
+            <p style={{ color: colors.textMuted, margin: 0 }}>
+              Signal history builds automatically as signals are generated. Check back after market hours.
+            </p>
+          ) : (
+            <div className="-mx-1 overflow-x-auto px-1 sm:mx-0 sm:px-0" style={{ WebkitOverflowScrolling: "touch" }}>
+              <table className="min-w-[880px]" style={{ width: "100%", borderCollapse: "collapse", fontSize: typography.scale.sm }}>
+                <thead>
+                  <tr style={{ color: colors.textMuted, textAlign: "left" }}>
+                    <th style={{ padding: spacing[2] }}>Time</th>
+                    <th style={{ padding: spacing[2] }}>Symbol</th>
+                    <th style={{ padding: spacing[2] }}>Direction</th>
+                    <th style={{ padding: spacing[2] }}>Strength</th>
+                    <th style={{ padding: spacing[2] }}>Pattern</th>
+                    <th style={{ padding: spacing[2] }}>Price at Signal</th>
+                    <th style={{ padding: spacing[2] }}>1h Outcome</th>
+                    <th style={{ padding: spacing[2] }}>1d Outcome</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredHistory.map((row) => {
+                    const h1 = formatHorizonOutcome(row.outcome_1h);
+                    const h1d = formatHorizonOutcome(row.outcome_1d);
+                    return (
+                      <tr key={row.signal_id ?? `${row.symbol}-${row.timestamp_iso}`} style={{ borderTop: `1px solid ${colors.border}` }}>
+                        <td style={{ padding: spacing[2], whiteSpace: "nowrap" }}>{new Date(row.timestamp_iso).toLocaleString()}</td>
+                        <td style={{ padding: spacing[2] }}>{row.symbol}</td>
+                        <td style={{ padding: spacing[2] }}>
+                          <span
+                            style={{
+                              ...directionChipStyle(row.bias),
+                              borderRadius: borderRadius.full,
+                              padding: "2px 10px",
+                              fontSize: typography.scale.xs,
+                              textTransform: "capitalize",
+                              display: "inline-block"
+                            }}
+                          >
+                            {row.bias}
+                          </span>
+                        </td>
+                        <td style={{ padding: spacing[2] }}>{Math.round(row.signal_strength)}%</td>
+                        <td style={{ padding: spacing[2] }}>{row.pattern ?? "—"}</td>
+                        <td style={{ padding: spacing[2] }}>
+                          {typeof row.price_at_signal === "number" ? `$${row.price_at_signal.toFixed(2)}` : "—"}
+                        </td>
+                        <td style={{ padding: spacing[2] }}>{h1.label}</td>
+                        <td style={{ padding: spacing[2] }}>{h1d.label}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </article>
+      ) : null}
+
+      {tab === "layers" ? (
+        <>
       <div className="flex w-full min-w-0 flex-col gap-2 sm:max-w-md sm:flex-row sm:items-center">
         <label htmlFor="signal-symbol" className="text-sm" style={{ color: colors.textMuted }}>
           Symbol
@@ -343,7 +521,7 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
                 ? Math.floor((Date.parse(`${event.report_date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000)
                 : undefined;
             setEvidence(
-              buildEvidenceFromSetup(setupLike, snapshot, {
+              buildEvidenceFromSetup(setupLike, snapshot ?? undefined, {
                 symbolNewsArticles,
                 earningsRiskDays: daysUntil,
                 earningsReportTime: event?.report_time
@@ -407,6 +585,8 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
           <SignalDisclaimerChip />
         </div>
       </article>
+        </>
+      ) : null}
       <SignalEvidenceModal open={evidenceOpen} evidence={evidence} onClose={() => setEvidenceOpen(false)} />
     </section>
   );

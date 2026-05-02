@@ -4,7 +4,7 @@
 
 **Last updated:** 2026-05-02  
 **Repo:** https://github.com/roygurijala/stocvest  
-**Test baseline (regression gate — must match §13):** Backend `pytest tests/ -q` → **338 passed**, **3 skipped**. Frontend `npm run test` → **46 passed** (17 test files). **`npm run build`** last verified: success.
+**Test baseline (regression gate — must match §13):** Backend `pytest tests/ -q` → **348 passed**, **3 skipped**. Frontend `npm run test` → **46 passed** (17 test files). **`npm run build`** last verified: success.
 
 ---
 
@@ -19,6 +19,7 @@
 | Frontend (Next.js) | ✅ | Auth, dashboard redesign, scanner/signals/portfolio/journal/options/crypto/futures, landing, legal pages |
 | Order safety (Step 8) | ✅ | `order_safety.py`, validate/submit BFF, confirmation modal, paper/live mode |
 | Legal compliance pass | ✅ | `GlobalDisclaimer`, `SignalDisclaimerChip`, signal-oriented copy, public API field names + `disclaimer` |
+| D1 Signal outcome pipeline | 🚧 | `SignalRecord`, `SignalHistory` table + `signal_recorder`, composite persistence, resolution Lambda module, recent/summary + UI; EventBridge schedule **documented only** — see `docs/D1_SIGNAL_RESOLUTION_SCHEDULE.md` |
 | Terraform / AWS apply | 🚧 | Modules in `infra/`; **apply**, secrets, S3 artifact bucket, Cognito/Vercel hook wiring **pending** |
 | Phase 7 (E2E, audits, paper validation) | 🔜 | Not started as a program |
 
@@ -27,16 +28,16 @@
 ## 2. Implemented (where to look)
 
 **Backend (`stocvest/`)**  
-`data/` (models, Polygon), `indicators/`, `signals/` (sentiment, macro, geo, composite, AI synthesis, day-trading scanner, briefing, journal, PDT), `brokers/` (adapters, gateways, OAuth), `api/` (handlers, auth, `legal_copy.py`, order safety integration).
+`data/` (models incl. **`SignalRecord`**, Polygon), `indicators/`, `signals/` (sentiment, macro, geo, composite, AI synthesis, day-trading scanner, briefing, journal, PDT), `brokers/` (adapters, gateways, OAuth), `api/` (handlers incl. **`signal_resolution`**, **`services/signal_recorder.py`**, auth, `legal_copy.py`, order safety integration).
 
 **Frontend (`frontend/`)**  
-App router pages (dashboard, scanner, signals, portfolio, journal, settings, earnings, performance, terms, etc.), design system + theme, API clients under `lib/api/`, Crisp when `NEXT_PUBLIC_CRISP_WEBSITE_ID` is set.
+App router pages (dashboard incl. **`/dashboard/performance`**, scanner, signals with **Signal history** tab, portfolio, journal, settings, earnings, public `/performance`, terms, etc.), design system + theme, API clients under `lib/api/` (incl. client-safe **`fetch-symbol-snapshot.ts`**), Crisp when `NEXT_PUBLIC_CRISP_WEBSITE_ID` is set.
 
 **Docs**  
 `docs/API_CONTRACTS.md` — HTTP + broker contracts. **`docs/BACKLOG.md`** — detailed planned work (no duplicate of this file’s status tables). **Detailed file-by-file history was removed from this file** to avoid drift; use README + git.
 
 **Public signal API (trust)**  
-`GET /v1/signals/recent`, `GET /v1/signals/performance/summary` — responses use `signal_strength`, `disclaimer`, etc. (see Legal section).
+`GET /v1/signals/recent` (last **50** public `SignalRecord` rows, outcome fields when resolved), `GET /v1/signals/performance/summary` — directional accuracy from **1d** outcomes (`correct` / `incorrect` / `neutral`; accuracy = correct ÷ (correct + incorrect)). Responses use `signal_strength`, `disclaimer`, etc. (see Legal section).
 
 ---
 
@@ -88,7 +89,7 @@ Do **not** change without discussion and coordinated updates:
 
 - **`BrokerAdapter`** — eight methods, types, exceptions (`docs/API_CONTRACTS.md` §1).  
 - **HTTP paths** — versioned under `/v1/`; breaking changes need `/v2/` or migration.  
-- **DynamoDB table names** — `Users`, `BrokerConnections`, `Watchlists`, `Alerts`, `Orders`, etc.  
+- **DynamoDB table names** — `Users`, `BrokerConnections`, `Watchlists`, `Alerts`, `Orders`, **`SignalHistory`**, etc.  
 - **Secrets path** — `/stocvest/{userId}/brokers/{brokerId}`.  
 - **Canonical types** — `stocvest/data/models.py` (no raw Polygon dicts in core logic).
 
@@ -205,7 +206,7 @@ Report exact counts. If any count dropped, fix before proceeding to documentatio
 
 | Suite | Command | Last verified |
 |-------|---------|---------------|
-| Backend | `pytest tests/ -q` | **338 passed**, **3 skipped** |
+| Backend | `pytest tests/ -q` | **348 passed**, **3 skipped** |
 | Frontend tests | `cd frontend && npm run test` | **46 passed** (17 files) |
 | Frontend build | `cd frontend && npm run build` | **success** |
 

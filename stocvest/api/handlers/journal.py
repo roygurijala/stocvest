@@ -53,6 +53,9 @@ def _parse_create_entry(payload: dict[str, Any], *, user_id: str) -> TradeJourna
         tuple(str(x) for x in broker_order_ids_raw) if isinstance(broker_order_ids_raw, list) else ()
     )
 
+    sig_id = payload.get("signal_id")
+    sig_dir = payload.get("signal_direction")
+    sig_at = payload.get("signal_generated_at")
     return TradeJournalEntry(
         entry_id=str(payload["entry_id"]),
         user_id=user_id,
@@ -65,6 +68,9 @@ def _parse_create_entry(payload: dict[str, Any], *, user_id: str) -> TradeJourna
         is_day_trade=bool(payload.get("is_day_trade", False)),
         entry_notes=str(payload["entry_notes"]) if payload.get("entry_notes") is not None else None,
         broker_order_ids=broker_order_ids,
+        signal_id=str(sig_id).strip() if sig_id else None,
+        signal_direction=str(sig_dir).strip().lower() if sig_dir else None,
+        signal_generated_at=str(sig_at).strip() if sig_at else None,
     )
 
 
@@ -84,4 +90,7 @@ def _serialize_entry(entry: TradeJournalEntry) -> dict[str, Any]:
         "exit_notes": entry.exit_notes,
         "pnl_realized_usd": entry.pnl_realized_usd,
         "broker_order_ids": list(entry.broker_order_ids),
+        "signal_id": entry.signal_id,
+        "signal_direction": entry.signal_direction,
+        "signal_generated_at": entry.signal_generated_at,
     }

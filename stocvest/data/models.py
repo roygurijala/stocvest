@@ -9,11 +9,11 @@ requires updating polygon_client.py.
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -216,3 +216,72 @@ class OrderAttemptLog(BaseModel):
     quantity: float
     order_type: str
     execution_mode: str  # "paper" | "live"
+
+
+class SignalRecord(BaseModel):
+    """Persisted signal row for outcome tracking (D1 pipeline)."""
+
+    signal_id: str
+    symbol: str
+    direction: str  # bullish | bearish | neutral
+    signal_strength: int = Field(ge=0, le=100)
+    pattern: str = "swing_composite"
+    layer_scores: dict[str, float] = Field(default_factory=dict)
+    price_at_signal: float
+    generated_at: datetime
+    resolved_1h: bool = False
+    resolved_1d: bool = False
+    price_1h_after: float | None = None
+    price_1d_after: float | None = None
+    outcome_1h: str | None = None  # correct | incorrect | neutral
+    outcome_1d: str | None = None
+    user_id: str | None = None  # None = public / platform signal
+
+    @field_validator("direction")
+    @classmethod
+    def _norm_direction(cls, v: str) -> str:
+        d = str(v).strip().lower()
+        if d not in {"bullish", "bearish", "neutral"}:
+            raise ValueError("direction must be bullish, bearish, or neutral")
+        return d
+
+    @staticmethod
+    def from_dynamo_item(item: dict) -> "SignalRecord":
+        """Hydrate from DynamoDB document (numeric types may be Decimal)."""
+
+        def _f(key: str) -> float | None:
+            raw = item.get(key)
+            if raw is None:
+                return None
+            return float(raw)
+
+        def _bool(key: str) -> bool:
+            return bool(item.get(key))
+
+        gen_raw = item.get("generated_at")
+        if not gen_raw:
+            raise ValueError("missing generated_at")
+        gen = datetime.fromisoformat(str(gen_raw).replace("Z", "+00:00"))
+        if gen.tzinfo is None:
+            gen = gen.replace(tzinfo=timezone.utc)
+
+        layer_raw = item.get("layer_scores") or {}
+        layer_scores = {str(k): float(v) for k, v in layer_raw.items()} if isinstance(layer_raw, dict) else {}
+
+        return SignalRecord(
+            signal_id=str(item["signal_id"]),
+            symbol=str(item["symbol"]).upper(),
+            direction=str(item["direction"]).lower(),
+            signal_strength=int(item["signal_strength"]),
+            pattern=str(item.get("pattern") or "swing_composite"),
+            layer_scores=layer_scores,
+            price_at_signal=float(item["price_at_signal"]),
+            generated_at=gen,
+            resolved_1h=_bool("resolved_1h"),
+            resolved_1d=_bool("resolved_1d"),
+            price_1h_after=_f("price_1h_after"),
+            price_1d_after=_f("price_1d_after"),
+            outcome_1h=str(item["outcome_1h"]) if item.get("outcome_1h") is not None else None,
+            outcome_1d=str(item["outcome_1d"]) if item.get("outcome_1d") is not None else None,
+            user_id=str(item["user_id"]) if item.get("user_id") else None,
+        )

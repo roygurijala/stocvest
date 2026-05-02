@@ -1,0 +1,427 @@
+"""D1: persist signals and resolve outcomes against later prices (DynamoDB or in-memory)."""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
+from typing import Any, Protocol, runtime_checkable
+from uuid import uuid4
+
+from botocore.exceptions import ClientError
+
+from stocvest.data.models import SignalRecord
+from stocvest.utils.config import get_settings
+from stocvest.utils.logging import get_logger
+
+log = get_logger(__name__)
+
+NEUTRAL_MOVE_PCT = 0.1
+GSI_NAME = "scope_generated_at"
+
+
+def outcome_from_prices(direction: str, price_at: float, price_after: float | None) -> str:
+    if price_after is None or price_at <= 0:
+        return "neutral"
+    move_pct = abs((price_after - price_at) / price_at) * 100.0
+    if move_pct <= NEUTRAL_MOVE_PCT:
+        return "neutral"
+    d = direction.lower()
+    if d == "bullish":
+        return "correct" if price_after > price_at else "incorrect"
+    if d == "bearish":
+        return "correct" if price_after < price_at else "incorrect"
+    return "neutral"
+
+
+def _scope_key(user_id: str | None) -> str:
+    return f"USER#{user_id}" if user_id else "PUBLIC"
+
+
+def _to_decimals(obj: Any) -> Any:
+    if isinstance(obj, float):
+        return Decimal(str(obj))
+    if isinstance(obj, dict):
+        return {k: _to_decimals(v) for k, v in obj.items()}
+    return obj
+
+
+def _record_to_item(rec: SignalRecord) -> dict[str, Any]:
+    layer = _to_decimals(rec.layer_scores)
+    item: dict[str, Any] = {
+        "signal_id": rec.signal_id,
+        "scope_key": _scope_key(rec.user_id),
+        "generated_at": rec.generated_at.astimezone(timezone.utc).isoformat(),
+        "symbol": rec.symbol.upper(),
+        "direction": rec.direction,
+        "signal_strength": rec.signal_strength,
+        "pattern": rec.pattern,
+        "layer_scores": layer,
+        "price_at_signal": Decimal(str(rec.price_at_signal)),
+        "resolved_1h": rec.resolved_1h,
+        "resolved_1d": rec.resolved_1d,
+    }
+    if rec.user_id:
+        item["user_id"] = rec.user_id
+    if rec.price_1h_after is not None:
+        item["price_1h_after"] = Decimal(str(rec.price_1h_after))
+    if rec.price_1d_after is not None:
+        item["price_1d_after"] = Decimal(str(rec.price_1d_after))
+    if rec.outcome_1h is not None:
+        item["outcome_1h"] = rec.outcome_1h
+    if rec.outcome_1d is not None:
+        item["outcome_1d"] = rec.outcome_1d
+    return item
+
+
+def _item_to_record(item: dict[str, Any]) -> SignalRecord:
+    return SignalRecord.from_dynamo_item(item)
+
+
+@runtime_checkable
+class PolygonSnapshotClient(Protocol):
+    async def get_snapshot(self, symbol: str) -> Any: ...
+
+
+class InMemorySignalRecorder:
+    def __init__(self) -> None:
+        self._items: dict[str, dict[str, Any]] = {}
+
+    def record_signal(self, record: SignalRecord) -> str:
+        sid = record.signal_id.strip() or str(uuid4())
+        rec = record.model_copy(update={"signal_id": sid})
+        self._items[sid] = _record_to_item(rec)
+        return sid
+
+    def get_public_recent(self, *, limit: int = 50) -> list[dict[str, Any]]:
+        rows = [it for it in self._items.values() if it.get("scope_key") == "PUBLIC"]
+        rows.sort(key=lambda x: str(x.get("generated_at") or ""), reverse=True)
+        return [_public_api_shape(_item_to_record(r)) for r in rows[:limit]]
+
+    def get_signal_history(
+        self,
+        *,
+        user_id: str | None = None,
+        symbol: str | None = None,
+        days: int = 30,
+        limit: int = 100,
+    ) -> list[SignalRecord]:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=max(1, days))
+        sym_filter = symbol.strip().upper() if symbol else None
+        scope = _scope_key(user_id)
+        out: list[SignalRecord] = []
+        for it in self._items.values():
+            if it.get("scope_key") != scope:
+                continue
+            rec = _item_to_record(it)
+            if rec.generated_at < cutoff:
+                continue
+            if sym_filter and rec.symbol.upper() != sym_filter:
+                continue
+            out.append(rec)
+        out.sort(key=lambda r: r.generated_at, reverse=True)
+        return out[:limit]
+
+    def iter_public_records(self) -> list[SignalRecord]:
+        return [
+            _item_to_record(it) for it in self._items.values() if it.get("scope_key") == "PUBLIC"
+        ]
+
+    async def resolve_signals(
+        self,
+        cutoff_minutes: int,
+        polygon: PolygonSnapshotClient,
+        *,
+        horizon: str,
+    ) -> int:
+        if horizon not in {"1h", "1d"}:
+            raise ValueError("horizon must be 1h or 1d")
+        now = datetime.now(timezone.utc)
+        cutoff_time = now - timedelta(minutes=cutoff_minutes)
+        resolved_attr = "resolved_1h" if horizon == "1h" else "resolved_1d"
+        price_attr = "price_1h_after" if horizon == "1h" else "price_1d_after"
+        outcome_attr = "outcome_1h" if horizon == "1h" else "outcome_1d"
+        updated = 0
+        for sid, it in list(self._items.items()):
+            if it.get(resolved_attr):
+                continue
+            gen = datetime.fromisoformat(str(it["generated_at"]).replace("Z", "+00:00"))
+            if gen.tzinfo is None:
+                gen = gen.replace(tzinfo=timezone.utc)
+            if gen > cutoff_time:
+                continue
+            sym = str(it["symbol"]).upper()
+            snap = await polygon.get_snapshot(sym)
+            price_after = getattr(snap, "last_trade_price", None)
+            if price_after is None:
+                continue
+            price_at = float(it["price_at_signal"])
+            direction = str(it["direction"])
+            outcome = outcome_from_prices(direction, price_at, float(price_after))
+            it[price_attr] = Decimal(str(float(price_after)))
+            it[outcome_attr] = outcome
+            it[resolved_attr] = True
+            self._items[sid] = it
+            updated += 1
+        return updated
+
+
+class DynamoDBSignalRecorder:
+    def __init__(self, *, table: Any) -> None:
+        self._table = table
+
+    @classmethod
+    def from_settings(cls) -> DynamoDBSignalRecorder:
+        import boto3
+
+        settings = get_settings()
+        name = settings.dynamodb_signal_history_table.strip()
+        if not name:
+            raise ValueError("DYNAMODB_SIGNAL_HISTORY_TABLE is not set")
+        kwargs: dict[str, Any] = {}
+        if settings.dynamodb_endpoint_url:
+            kwargs["endpoint_url"] = settings.dynamodb_endpoint_url
+        dynamodb = boto3.resource("dynamodb", **kwargs)
+        return cls(table=dynamodb.Table(name))
+
+    def record_signal(self, record: SignalRecord) -> str:
+        sid = record.signal_id.strip() or str(uuid4())
+        rec = record.model_copy(update={"signal_id": sid})
+        self._table.put_item(Item=_record_to_item(rec))
+        return sid
+
+    def get_public_recent(self, *, limit: int = 50) -> list[dict[str, Any]]:
+        try:
+            from boto3.dynamodb.conditions import Key
+
+            resp = self._table.query(
+                IndexName=GSI_NAME,
+                KeyConditionExpression=Key("scope_key").eq("PUBLIC"),
+                ScanIndexForward=False,
+                Limit=limit,
+            )
+        except ClientError as exc:
+            code = str((exc.response or {}).get("Error", {}).get("Code", ""))
+            if code in {"ResourceNotFoundException", "ValidationException"}:
+                log.warning("signal history query failed: %s", code)
+                return []
+            raise
+        items = resp.get("Items") or []
+        records = [_item_to_record(x) for x in items if isinstance(x, dict)]
+        return [_public_api_shape(r) for r in records]
+
+    def get_signal_history(
+        self,
+        *,
+        user_id: str | None = None,
+        symbol: str | None = None,
+        days: int = 30,
+        limit: int = 100,
+    ) -> list[SignalRecord]:
+        scope = _scope_key(user_id)
+        try:
+            from boto3.dynamodb.conditions import Key
+
+            resp = self._table.query(
+                IndexName=GSI_NAME,
+                KeyConditionExpression=Key("scope_key").eq(scope),
+                ScanIndexForward=False,
+                Limit=min(500, max(limit, 1) * 5),
+            )
+        except ClientError as exc:
+            code = str((exc.response or {}).get("Error", {}).get("Code", ""))
+            if code in {"ResourceNotFoundException", "ValidationException"}:
+                return []
+            raise
+        cutoff = datetime.now(timezone.utc) - timedelta(days=max(1, days))
+        sym_filter = symbol.strip().upper() if symbol else None
+        out: list[SignalRecord] = []
+        for raw in resp.get("Items") or []:
+            if not isinstance(raw, dict):
+                continue
+            rec = _item_to_record(raw)
+            if rec.generated_at < cutoff:
+                continue
+            if sym_filter and rec.symbol.upper() != sym_filter:
+                continue
+            out.append(rec)
+            if len(out) >= limit:
+                break
+        return out
+
+    def iter_public_records(self) -> list[SignalRecord]:
+        return [
+            _item_to_record(x)
+            for x in self._scan_all()
+            if isinstance(x, dict) and x.get("scope_key") == "PUBLIC"
+        ]
+
+    def _scan_all(self) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        scan_kwargs: dict[str, Any] = {}
+        while True:
+            try:
+                result = self._table.scan(**scan_kwargs)
+            except ClientError as exc:
+                code = str((exc.response or {}).get("Error", {}).get("Code", ""))
+                if code in {"ResourceNotFoundException", "ValidationException"}:
+                    return []
+                raise
+            batch = result.get("Items") or []
+            items.extend(x for x in batch if isinstance(x, dict))
+            lek = result.get("LastEvaluatedKey")
+            if not lek:
+                break
+            scan_kwargs["ExclusiveStartKey"] = lek
+        return items
+
+    async def resolve_signals(
+        self,
+        cutoff_minutes: int,
+        polygon: PolygonSnapshotClient,
+        *,
+        horizon: str,
+    ) -> int:
+        if horizon not in {"1h", "1d"}:
+            raise ValueError("horizon must be 1h or 1d")
+        now = datetime.now(timezone.utc)
+        cutoff_time = now - timedelta(minutes=cutoff_minutes)
+        resolved_attr = "resolved_1h" if horizon == "1h" else "resolved_1d"
+        price_attr = "price_1h_after" if horizon == "1h" else "price_1d_after"
+        outcome_attr = "outcome_1h" if horizon == "1h" else "outcome_1d"
+        updated = 0
+        for item in self._scan_all():
+            if not item.get("signal_id"):
+                continue
+            if item.get(resolved_attr):
+                continue
+            gen = datetime.fromisoformat(str(item["generated_at"]).replace("Z", "+00:00"))
+            if gen.tzinfo is None:
+                gen = gen.replace(tzinfo=timezone.utc)
+            if gen > cutoff_time:
+                continue
+            sym = str(item["symbol"]).upper()
+            snap = await polygon.get_snapshot(sym)
+            price_after = getattr(snap, "last_trade_price", None)
+            if price_after is None:
+                continue
+            price_at = float(item["price_at_signal"])
+            direction = str(item["direction"])
+            outcome = outcome_from_prices(direction, price_at, float(price_after))
+            try:
+                self._table.update_item(
+                    Key={"signal_id": item["signal_id"]},
+                    UpdateExpression=(
+                        f"SET #{price_attr} = :p, #{outcome_attr} = :o, #{resolved_attr} = :r"
+                    ),
+                    ExpressionAttributeNames={
+                        f"#{price_attr}": price_attr,
+                        f"#{outcome_attr}": outcome_attr,
+                        f"#{resolved_attr}": resolved_attr,
+                    },
+                    ExpressionAttributeValues={
+                        ":p": Decimal(str(float(price_after))),
+                        ":o": outcome,
+                        ":r": True,
+                    },
+                )
+            except ClientError as exc:
+                log.warning("resolve update failed signal_id=%s: %s", item.get("signal_id"), exc)
+                continue
+            updated += 1
+        return updated
+
+
+def _legacy_outcome(outcome_1d: str | None, outcome_1h: str | None) -> str:
+    def _map(o: str | None) -> str | None:
+        if o == "correct":
+            return "win"
+        if o == "incorrect":
+            return "loss"
+        if o == "neutral":
+            return "neutral"
+        return None
+
+    if outcome_1d is not None:
+        m = _map(outcome_1d)
+        return m if m is not None else "pending"
+    if outcome_1h is not None:
+        m = _map(outcome_1h)
+        return m if m is not None else "pending"
+    return "pending"
+
+
+def _public_api_shape(rec: SignalRecord) -> dict[str, Any]:
+    from stocvest.api.legal_copy import API_SIGNAL_DISCLAIMER
+
+    ts = rec.generated_at.astimezone(timezone.utc).isoformat()
+    strength = float(rec.signal_strength)
+    return {
+        "signal_id": rec.signal_id,
+        "symbol": rec.symbol.upper(),
+        "direction": rec.direction,
+        "signal_strength": strength,
+        "pattern": rec.pattern,
+        "layer_scores": dict(rec.layer_scores),
+        "price_at_signal": rec.price_at_signal,
+        "timestamp_iso": ts,
+        "generated_at": ts,
+        "resolved_1h": rec.resolved_1h,
+        "resolved_1d": rec.resolved_1d,
+        "price_1h_after": rec.price_1h_after,
+        "price_1d_after": rec.price_1d_after,
+        "outcome_1h": rec.outcome_1h,
+        "outcome_1d": rec.outcome_1d,
+        "outcome": _legacy_outcome(rec.outcome_1d, rec.outcome_1h),
+        "disclaimer": API_SIGNAL_DISCLAIMER,
+    }
+
+
+def performance_summary_from_records(records: list[SignalRecord]) -> dict[str, Any]:
+    from stocvest.api.legal_copy import API_SIGNAL_DISCLAIMER
+
+    launch_date = datetime.now(timezone.utc).date()
+    if records:
+        launch_date = min(r.generated_at.date() for r in records)
+
+    evaluated: list[SignalRecord] = [r for r in records if r.outcome_1d is not None]
+    correct = sum(1 for r in evaluated if r.outcome_1d == "correct")
+    incorrect = sum(1 for r in evaluated if r.outcome_1d == "incorrect")
+    neutral = sum(1 for r in evaluated if r.outcome_1d == "neutral")
+    denom = correct + incorrect
+    accuracy = round((correct / denom) * 100.0, 1) if denom > 0 else 0.0
+    days = max(0, (datetime.now(timezone.utc).date() - launch_date).days)
+
+    return {
+        "total_signals_tracked": len(records),
+        "signals_evaluated": len(evaluated),
+        "win_count": correct,
+        "loss_count": incorrect,
+        "neutral_count": neutral,
+        "directional_accuracy_percent": accuracy,
+        "launch_date": launch_date.isoformat(),
+        "date_range_days": days,
+        "disclaimer": API_SIGNAL_DISCLAIMER,
+    }
+
+
+_recorder: InMemorySignalRecorder | DynamoDBSignalRecorder | None = None
+
+
+def get_signal_recorder() -> InMemorySignalRecorder | DynamoDBSignalRecorder:
+    global _recorder
+    if _recorder is not None:
+        return _recorder
+    settings = get_settings()
+    if settings.dynamodb_signal_history_table.strip():
+        _recorder = DynamoDBSignalRecorder.from_settings()
+    else:
+        if settings.is_production:
+            raise ValueError("DYNAMODB_SIGNAL_HISTORY_TABLE must be set in production.")
+        _recorder = InMemorySignalRecorder()
+        log.warning("Using in-memory signal recorder (no DYNAMODB_SIGNAL_HISTORY_TABLE).")
+    return _recorder
+
+
+def reset_signal_recorder_for_tests() -> None:
+    global _recorder
+    _recorder = None

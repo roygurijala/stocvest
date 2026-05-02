@@ -17,6 +17,7 @@ locals {
     "health",
     "market_data",
     "signals",
+    "signal_resolution",
     "brokers",
     "portfolio",
     "scanner",
@@ -40,6 +41,7 @@ locals {
     DYNAMODB_WATCHLISTS_TABLE         = aws_dynamodb_table.watchlists.name
     DYNAMODB_BROKER_CONNECTIONS_TABLE = aws_dynamodb_table.broker_connections.name
     DYNAMODB_DAY_TRADING_SETUPS_TABLE = aws_dynamodb_table.day_trading_setups.name
+    DYNAMODB_SIGNAL_HISTORY_TABLE     = aws_dynamodb_table.signal_history.name
   }
 
   lambda_dynamodb_resources = flatten([
@@ -50,6 +52,7 @@ locals {
       aws_dynamodb_table.alerts,
       aws_dynamodb_table.orders,
       aws_dynamodb_table.day_trading_setups,
+      aws_dynamodb_table.signal_history,
     ] : [t.arn, "${t.arn}/index/*"]
   ])
 }
@@ -193,7 +196,7 @@ resource "aws_lambda_function" "api" {
   role          = aws_iam_role.lambda_api_execution.arn
   handler       = "handler.lambda_handler"
   runtime       = "python3.11"
-  timeout       = each.key == "scanner" ? 120 : 60
+  timeout       = each.key == "scanner" ? 120 : each.key == "signal_resolution" ? 120 : 60
   memory_size   = 512
 
   filename         = data.archive_file.api_lambda_placeholder.output_path

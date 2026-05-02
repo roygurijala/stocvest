@@ -183,6 +183,11 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
 
         return scanner_handler(event, context)
 
+    if module == "signal_resolution":
+        from stocvest.api.handlers.signal_resolution import signal_resolution_scheduled_handler
+
+        return signal_resolution_scheduled_handler(event, context)
+
     if module == "websocket":
         from stocvest.api.handlers.websocket import (
             websocket_connect_handler,

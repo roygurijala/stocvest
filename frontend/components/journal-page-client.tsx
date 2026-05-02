@@ -1,15 +1,26 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { Fragment, useMemo, useState, useTransition } from "react";
 import type { JournalEntryPayload } from "@/lib/api/contracts";
 import { Area, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { InfoTip } from "@/components/info-tip";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { AVG_LOSER_TIP, AVG_WINNER_TIP, EXPECTANCY_TIP, STREAK_TIP, WIN_RATE_TIP } from "@/lib/ui-tooltips";
+import { fetchLiveSignals, formatHorizonOutcome, type PublicSignal } from "@/lib/api/public-signals";
 
 interface JournalPageClientProps {
   initialEntries: JournalEntryPayload[];
+}
+
+function signalChipLabel(entry: JournalEntryPayload): string {
+  if (!entry.signal_id) return "Manual entry";
+  const raw = (entry.signal_direction || "signal").toLowerCase();
+  const dir = raw === "bullish" || raw === "bearish" || raw === "neutral" ? raw : "signal";
+  const t = entry.signal_generated_at
+    ? new Date(entry.signal_generated_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+    : "";
+  return `${entry.symbol} ${dir}${t ? ` ${t}` : ""}`;
 }
 
 export function JournalPageClient({ initialEntries }: JournalPageClientProps) {
@@ -19,6 +30,8 @@ export function JournalPageClient({ initialEntries }: JournalPageClientProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [signalDetail, setSignalDetail] = useState<PublicSignal | null>(null);
+  const [signalDetailOpen, setSignalDetailOpen] = useState(false);
 
   const sorted = useMemo(() => {
     return [...entries].sort((a, b) =>
@@ -89,7 +102,10 @@ export function JournalPageClient({ initialEntries }: JournalPageClientProps) {
         is_day_trade: true,
         broker_order_ids: [],
         entry_notes: "Manual entry (UI placeholder)",
-        pnl_realized_usd: null
+        pnl_realized_usd: null,
+        signal_id: null,
+        signal_direction: null,
+        signal_generated_at: null
       };
       setEntries((prev) => [created, ...prev]);
       setShowModal(false);
@@ -187,14 +203,14 @@ export function JournalPageClient({ initialEntries }: JournalPageClientProps) {
                 <th align="left">Entry Price</th>
                 <th align="left">Exit Price</th>
                 <th align="left">P&L</th>
+                <th align="left">Signal</th>
                 <th align="left">Setup Type</th>
               </tr>
             </thead>
             <tbody>
               {sorted.map((entry) => (
-                <>
+                <Fragment key={entry.entry_id}>
                   <tr
-                    key={entry.entry_id}
                     onClick={() => setExpandedId(expandedId === entry.entry_id ? null : entry.entry_id)}
                     style={{ borderTop: `1px solid ${colors.border}`, cursor: "pointer" }}
                   >
@@ -207,16 +223,36 @@ export function JournalPageClient({ initialEntries }: JournalPageClientProps) {
                     <td style={{ color: (entry.pnl_realized_usd || 0) >= 0 ? colors.bullish : colors.bearish }}>
                       {(entry.pnl_realized_usd || 0).toFixed(2)}
                     </td>
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        className="min-h-9 max-w-[200px] truncate rounded-full border px-2 text-left text-xs"
+                        style={{
+                          borderColor: entry.signal_id ? colors.accent : colors.border,
+                          color: entry.signal_id ? colors.accent : colors.textMuted,
+                          background: entry.signal_id ? "rgba(59,130,246,.1)" : "transparent"
+                        }}
+                        onClick={async () => {
+                          if (!entry.signal_id) return;
+                          const rows = await fetchLiveSignals();
+                          const found = rows.find((r) => r.signal_id === entry.signal_id) || null;
+                          setSignalDetail(found);
+                          setSignalDetailOpen(true);
+                        }}
+                      >
+                        {signalChipLabel(entry)}
+                      </button>
+                    </td>
                     <td>{entry.strategy_tags[0] || "manual"}</td>
                   </tr>
                   {expandedId === entry.entry_id ? (
                     <tr style={{ borderTop: `1px dashed ${colors.border}` }}>
-                      <td colSpan={8} style={{ color: colors.textMuted, fontSize: typography.scale.sm, padding: spacing[2] }}>
+                      <td colSpan={9} style={{ color: colors.textMuted, fontSize: typography.scale.sm, padding: spacing[2] }}>
                         Signal context: {entry.entry_notes || "No signal context attached."}
                       </td>
                     </tr>
                   ) : null}
-                </>
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -225,6 +261,58 @@ export function JournalPageClient({ initialEntries }: JournalPageClientProps) {
           <p style={{ color: colors.textMuted }}>No trades yet. Connect a broker to enable automatic capture.</p>
         ) : null}
       </article>
+
+      {signalDetailOpen ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.5)", display: "grid", placeItems: "center", zIndex: 60 }}
+        >
+          <div
+            style={{
+              width: "min(420px, 92vw)",
+              background: colors.surface,
+              borderRadius: borderRadius.xl,
+              padding: spacing[4],
+              border: `1px solid ${colors.border}`
+            }}
+          >
+            <h3 style={{ marginTop: 0 }}>Linked signal</h3>
+            {signalDetail ? (
+              <div style={{ display: "grid", gap: spacing[2], fontSize: typography.scale.sm }}>
+                <p style={{ margin: 0 }}>
+                  <strong>{signalDetail.symbol}</strong> · {signalDetail.bias} · {Math.round(signalDetail.signal_strength)}% strength
+                </p>
+                <p style={{ margin: 0, color: colors.textMuted }}>
+                  Pattern: {signalDetail.pattern ?? "—"}
+                  <br />
+                  Price at signal:{" "}
+                  {typeof signalDetail.price_at_signal === "number" ? `$${signalDetail.price_at_signal.toFixed(2)}` : "—"}
+                </p>
+                <p style={{ margin: 0 }}>
+                  1h: {formatHorizonOutcome(signalDetail.outcome_1h).label}
+                  <br />
+                  1d: {formatHorizonOutcome(signalDetail.outcome_1d).label}
+                </p>
+                <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>{signalDetail.disclaimer}</p>
+              </div>
+            ) : (
+              <p style={{ color: colors.textMuted }}>
+                This trade references a signal that is not in the recent public list. Signal id is preserved on the entry for future
+                lookup.
+              </p>
+            )}
+            <button
+              type="button"
+              className="mt-3 min-h-11"
+              onClick={() => setSignalDetailOpen(false)}
+              style={{ border: `1px solid ${colors.border}`, borderRadius: borderRadius.md, padding: spacing[2] }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {showModal ? (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.5)", display: "grid", placeItems: "center", zIndex: 60 }}>

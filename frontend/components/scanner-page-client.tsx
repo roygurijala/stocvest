@@ -11,7 +11,7 @@ import type { EarningsEvent } from "@/lib/api/earnings";
 import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
-import { fetchSymbolSnapshot } from "@/lib/api/market";
+import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
 import { buildEvidenceFromSetup, type SignalEvidenceData } from "@/lib/signal-evidence";
 import {
   CONFIDENCE_PERCENT_TIP,

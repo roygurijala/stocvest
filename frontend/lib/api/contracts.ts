@@ -25,4 +25,7 @@ export interface JournalEntryPayload {
   exit_notes?: string | null;
   pnl_realized_usd?: number | null;
   broker_order_ids: string[];
+  signal_id?: string | null;
+  signal_direction?: string | null;
+  signal_generated_at?: string | null;
 }

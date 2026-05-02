@@ -34,11 +34,11 @@ const outcomeText: Record<PublicSignalOutcome, string> = {
 };
 
 const demoTickerSignals: PublicSignal[] = [
-  { symbol: "AAPL", direction: "long", signal_strength: 65, timestamp_iso: "just-now", outcome: "pending" },
-  { symbol: "TSLA", direction: "short", signal_strength: 71, timestamp_iso: "2m-ago", outcome: "pending" },
-  { symbol: "NVDA", direction: "long", signal_strength: 78, timestamp_iso: "5m-ago", outcome: "pending" },
-  { symbol: "SPY", direction: "neutral", signal_strength: 52, timestamp_iso: "8m-ago", outcome: "pending" },
-  { symbol: "MSFT", direction: "long", signal_strength: 68, timestamp_iso: "12m-ago", outcome: "pending" }
+  { symbol: "AAPL", direction: "long", bias: "bullish", signal_strength: 65, timestamp_iso: "just-now", outcome: "pending" },
+  { symbol: "TSLA", direction: "short", bias: "bearish", signal_strength: 71, timestamp_iso: "2m-ago", outcome: "pending" },
+  { symbol: "NVDA", direction: "long", bias: "bullish", signal_strength: 78, timestamp_iso: "5m-ago", outcome: "pending" },
+  { symbol: "SPY", direction: "neutral", bias: "neutral", signal_strength: 52, timestamp_iso: "8m-ago", outcome: "pending" },
+  { symbol: "MSFT", direction: "long", bias: "bullish", signal_strength: 68, timestamp_iso: "12m-ago", outcome: "pending" }
 ];
 
 function timeAgo(iso: string): string {
