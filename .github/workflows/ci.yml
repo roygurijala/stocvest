@@ -112,7 +112,7 @@ jobs:
           BUCKET: ${{ vars.STOCVEST_LAMBDA_S3_BUCKET }}
           LAMBDA_S3_KEY: ${{ steps.lambda_pkg.outputs.s3_key }}
         run: |
-          for mod in health market_data signals brokers portfolio journal pdt scanner authorizer websocket; do
+          for mod in health market_data signals signal_resolution brokers portfolio journal pdt scanner authorizer websocket; do
             aws lambda update-function-code \
               --function-name "stocvest-development-api-${mod}" \
               --s3-bucket "${BUCKET}" \
