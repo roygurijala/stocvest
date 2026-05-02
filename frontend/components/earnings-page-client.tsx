@@ -7,54 +7,232 @@ import type { EarningsEvent } from "@/lib/api/earnings";
 
 interface EarningsPageClientProps {
   events: EarningsEvent[];
-  watchlistSymbols: string[];
   notice?: string | null;
 }
 
-type Filter = "all" | "today" | "week" | "watchlist";
+type Filter = "upcoming" | "today" | "week" | "all";
 
-export function EarningsPageClient({ events, watchlistSymbols, notice }: EarningsPageClientProps) {
+const MONO = `'DM Mono', 'IBM Plex Mono', ${typography.fontFamilyMono}`;
+
+function localTodayIso(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** Monday (YYYY-MM-DD) of the week containing `ref`, local calendar; week starts Monday. */
+function mondayOfWeekContaining(refIso: string): string {
+  const [y, mo, da] = refIso.split("-").map(Number);
+  const d = new Date(y, mo - 1, da);
+  const day = d.getDay(); // 0 Sun … 6 Sat
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  const yy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}
+
+function addDays(iso: string, delta: number): string {
+  const [y, mo, da] = iso.split("-").map(Number);
+  const d = new Date(y, mo - 1, da);
+  d.setDate(d.getDate() + delta);
+  const yy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}
+
+function fridayOfSameWeek(mondayIso: string): string {
+  return addDays(mondayIso, 4);
+}
+
+function formatSectionDate(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  return dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function formatMonthDayUpper(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  const mon = dt.toLocaleDateString("en-US", { month: "short" }).toUpperCase();
+  return `${mon} ${d}`;
+}
+
+function timingShort(t: EarningsEvent["report_time"]): string {
+  if (t === "before_market") return "BMO";
+  if (t === "after_market") return "AMC";
+  if (t === "during_market") return "DURING";
+  return "TBD";
+}
+
+function sortRows(list: EarningsEvent[]): EarningsEvent[] {
+  return [...list].sort((a, b) => a.report_date.localeCompare(b.report_date) || a.symbol.localeCompare(b.symbol));
+}
+
+function beatMissBarPercent(actual: number, est: number): { width: number; beat: boolean | null } {
+  if (!Number.isFinite(est) || est === 0) return { width: 0, beat: null };
+  const pct = ((actual - est) / Math.abs(est)) * 100;
+  const width = Math.min(Math.abs(pct) * 2, 100);
+  if (actual > est) return { width, beat: true };
+  if (actual < est) return { width, beat: false };
+  return { width: 0, beat: null };
+}
+
+type RowGroup = { key: string; label: string; rows: EarningsEvent[] };
+
+function buildRowGroups(filter: Filter, source: EarningsEvent[], today: string, weekMon: string, weekFri: string): RowGroup[] {
+  if (filter === "today") {
+    const rows = sortRows(source);
+    return rows.length ? [{ key: "today", label: "Today", rows }] : [];
+  }
+
+  if (filter === "week") {
+    const rows = sortRows(source);
+    const byDate = new Map<string, EarningsEvent[]>();
+    for (const e of rows) {
+      const list = byDate.get(e.report_date) ?? [];
+      list.push(e);
+      byDate.set(e.report_date, list);
+    }
+    const dates = [...byDate.keys()].sort();
+    return dates.map((d) => ({
+      key: d,
+      label: formatSectionDate(d),
+      rows: sortRows(byDate.get(d)!)
+    }));
+  }
+
+  if (filter === "all") {
+    const rows = sortRows(source);
+    const byDate = new Map<string, EarningsEvent[]>();
+    for (const e of rows) {
+      const list = byDate.get(e.report_date) ?? [];
+      list.push(e);
+      byDate.set(e.report_date, list);
+    }
+    const dates = [...byDate.keys()].sort();
+    return dates.map((d) => ({
+      key: d,
+      label: formatSectionDate(d),
+      rows: sortRows(byDate.get(d)!)
+    }));
+  }
+
+  // upcoming
+  const rows = sortRows(source);
+  const todayRows = rows.filter((r) => r.report_date === today);
+  const weekRest = rows.filter((r) => r.report_date !== today && r.report_date >= weekMon && r.report_date <= weekFri);
+  const beyond = rows.filter((r) => r.report_date !== today && !(r.report_date >= weekMon && r.report_date <= weekFri));
+  const groups: RowGroup[] = [];
+  if (todayRows.length) groups.push({ key: "g-today", label: "Today", rows: todayRows });
+  if (weekRest.length) groups.push({ key: "g-week", label: "This Week", rows: weekRest });
+  if (beyond.length) groups.push({ key: "g-upcoming", label: "Upcoming", rows: beyond });
+  return groups;
+}
+
+export function EarningsPageClient({ events, notice }: EarningsPageClientProps) {
   const { colors } = useTheme();
-  const [filter, setFilter] = useState<Filter>("all");
-  const today = new Date().toISOString().slice(0, 10);
-  const endWeek = new Date(Date.now() + 7 * 86400 * 1000).toISOString().slice(0, 10);
-  const watch = new Set(watchlistSymbols.map((s) => s.toUpperCase()));
+  const [filter, setFilter] = useState<Filter>("upcoming");
+  const today = localTodayIso();
+  const weekMon = mondayOfWeekContaining(today);
+  const weekFri = fridayOfSameWeek(weekMon);
 
-  const rows = useMemo(() => {
-    const merged = [...events].sort((a, b) => a.report_date.localeCompare(b.report_date) || a.symbol.localeCompare(b.symbol));
-    return merged.filter((e) => {
-      if (filter === "today") return e.report_date === today;
-      if (filter === "week") return e.report_date >= today && e.report_date <= endWeek;
-      if (filter === "watchlist") return watch.has(e.symbol.toUpperCase());
-      return true;
-    });
-  }, [events, filter, today, endWeek, watch]);
+  const filtered = useMemo(() => {
+    const merged = [...events];
+    if (filter === "upcoming") {
+      return merged.filter((e) => e.report_date >= today);
+    }
+    if (filter === "today") {
+      return merged.filter((e) => e.report_date === today);
+    }
+    if (filter === "week") {
+      return merged.filter((e) => e.report_date >= today && e.report_date >= weekMon && e.report_date <= weekFri);
+    }
+    return merged;
+  }, [events, filter, today, weekMon, weekFri]);
+
+  const groups = useMemo(
+    () => buildRowGroups(filter, filtered, today, weekMon, weekFri),
+    [filter, filtered, today, weekMon, weekFri]
+  );
+
+  const emptyCopy =
+    filter === "today"
+      ? "No earnings reports today."
+      : filter === "upcoming"
+        ? "No earnings in the next 30 days."
+        : filter === "week"
+          ? "No earnings reports this week."
+          : "No earnings to display.";
+
+  const showEmpty = filtered.length === 0;
+
+  const filterIds: { id: Filter; label: string }[] = [
+    { id: "upcoming", label: "Upcoming" },
+    { id: "today", label: "Today" },
+    { id: "week", label: "This Week" },
+    { id: "all", label: "All" }
+  ];
+
+  const gridCols = "52px minmax(0,1fr) 60px 80px 80px 90px";
 
   return (
     <section style={{ display: "grid", gap: spacing[4] }}>
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2], flexWrap: "wrap" }}>
-        <h2 style={{ margin: 0 }}>Earnings Calendar (30 Days)</h2>
-        <div style={{ display: "inline-flex", gap: spacing[2] }}>
-          {(["all", "today", "week", "watchlist"] as const).map((id) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setFilter(id)}
-              style={{
-                borderRadius: borderRadius.full,
-                border: `1px solid ${colors.border}`,
-                background: filter === id ? "rgba(59,130,246,.15)" : "transparent",
-                color: filter === id ? colors.accent : colors.text,
-                padding: "4px 10px",
-                cursor: "pointer",
-                fontSize: typography.scale.xs
-              }}
-            >
-              {id === "all" ? "All" : id === "today" ? "Today" : id === "week" ? "This Week" : "Watchlist only"}
-            </button>
-          ))}
+      <header
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: spacing[3],
+          flexWrap: "wrap"
+        }}
+      >
+        <span
+          style={{
+            fontSize: "11px",
+            textTransform: "uppercase",
+            letterSpacing: "3px",
+            color: colors.textMuted,
+            fontFamily: typography.fontFamilySans
+          }}
+        >
+          Earnings · 30 days
+        </span>
+        <div style={{ display: "inline-flex", gap: spacing[2], flexWrap: "wrap" }}>
+          {filterIds.map(({ id, label }) => {
+            const active = filter === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setFilter(id)}
+                style={{
+                  borderRadius: borderRadius.full,
+                  border: `1px solid ${colors.border}`,
+                  background: active ? colors.surfaceMuted : "transparent",
+                  color: active ? colors.text : colors.textMuted,
+                  padding: "6px 12px",
+                  cursor: "pointer",
+                  fontSize: "10px",
+                  textTransform: "uppercase",
+                  letterSpacing: "1.5px",
+                  fontFamily: typography.fontFamilySans,
+                  boxShadow: active ? "0 1px 3px rgba(0,0,0,.12)" : "none",
+                  opacity: active ? 1 : 0.75,
+                  transition: "background 0.1s ease, box-shadow 0.1s ease"
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
       </header>
+
       {notice ? (
         <p
           role="status"
@@ -71,56 +249,200 @@ export function EarningsPageClient({ events, watchlistSymbols, notice }: Earning
           {notice}
         </p>
       ) : null}
-      <div style={{ overflowX: "auto", background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: typography.scale.sm }}>
-          <thead>
-            <tr style={{ color: colors.textMuted }}>
-              <th align="left">Date</th>
-              <th align="left">Symbol</th>
-              <th align="left">Company</th>
-              <th align="left">Time</th>
-              <th align="left">Est EPS</th>
-              <th align="left">Actual EPS</th>
-              <th align="left">Surprise %</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={7} style={{ padding: spacing[4], color: colors.textMuted, borderTop: `1px solid ${colors.border}` }}>
-                  No earnings events found for the next 30 days. Data updates daily before market open.
-                </td>
-              </tr>
-            ) : (
-              rows.map((row, idx) => {
-                const surprise = row.surprise_percent ?? null;
-                const tone =
-                  row.actual_eps == null
-                    ? colors.textMuted
-                    : (surprise ?? 0) > 0.2
-                      ? colors.bullish
-                      : (surprise ?? 0) < -0.2
-                        ? colors.bearish
-                        : colors.textMuted;
-                return (
-                  <tr key={`${row.symbol}-${row.report_date}-${idx}`} style={{ borderTop: `1px solid ${colors.border}` }}>
-                    <td>{row.report_date}</td>
-                    <td>{row.symbol}</td>
-                    <td>{row.company_name}</td>
-                    <td>{row.report_time === "before_market" ? "BMO" : row.report_time === "after_market" ? "AMC" : row.report_time}</td>
-                    <td>{typeof row.estimated_eps === "number" ? row.estimated_eps.toFixed(2) : "-"}</td>
-                    <td style={{ color: tone }}>{typeof row.actual_eps === "number" ? row.actual_eps.toFixed(2) : "Upcoming"}</td>
-                    <td style={{ color: tone }}>
-                      {typeof row.surprise_percent === "number"
-                        ? `${row.surprise_percent >= 0 ? "+" : ""}${row.surprise_percent.toFixed(1)}%`
-                        : "-"}
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+
+      <div style={{ minWidth: 0 }}>
+        {!showEmpty ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: gridCols,
+              gap: "0 8px",
+              alignItems: "center",
+              marginBottom: spacing[2],
+              padding: "0 8px",
+              fontSize: "9px",
+              textTransform: "uppercase",
+              letterSpacing: "0.5px",
+              color: colors.textMuted,
+              fontFamily: typography.fontFamilySans
+            }}
+          >
+            <span>Symbol</span>
+            <span>Company</span>
+            <span>Time</span>
+            <span style={{ textAlign: "right" }}>Est EPS</span>
+            <span style={{ textAlign: "right" }}>Actual</span>
+            <span style={{ textAlign: "right" }}>Surprise %</span>
+          </div>
+        ) : null}
+
+        {showEmpty ? (
+          <p
+            style={{
+              margin: 0,
+              padding: spacing[4],
+              color: colors.textMuted,
+              fontSize: typography.scale.sm
+            }}
+          >
+            {emptyCopy}
+          </p>
+        ) : (
+          groups.map((g) => (
+            <div key={g.key} style={{ marginBottom: spacing[5] }}>
+              <div
+                style={{
+                  fontSize: "10px",
+                  textTransform: "uppercase",
+                  letterSpacing: "2px",
+                  color: colors.textMuted,
+                  borderBottom: "0.5px solid " + colors.border,
+                  marginBottom: "4px",
+                  paddingBottom: spacing[2],
+                  fontFamily: typography.fontFamilySans
+                }}
+              >
+                {g.label}
+              </div>
+              <div style={{ display: "grid", gap: spacing[1] }}>
+                {g.rows.map((row, idx) => {
+                  const est = row.estimated_eps;
+                  const act = row.actual_eps;
+                  const surprise = row.surprise_percent;
+                  const isUpcoming = typeof act !== "number";
+                  let bar: { width: number; beat: boolean | null } = { width: 0, beat: null };
+                  if (!isUpcoming && typeof est === "number") {
+                    bar = beatMissBarPercent(act, est);
+                  }
+                  const beatGreen = "#22c55e";
+                  const missRed = "#ef4444";
+
+                  let surpriseText = "—";
+                  let surpriseColor = colors.textMuted;
+                  if (typeof surprise === "number") {
+                    surpriseText = `${surprise >= 0 ? "+" : ""}${surprise.toFixed(1)}%`;
+                    surpriseColor = surprise >= 0 ? beatGreen : missRed;
+                  }
+
+                  let actualColor = colors.text;
+                  if (!isUpcoming && typeof est === "number") {
+                    if (act > est) actualColor = beatGreen;
+                    else if (act < est) actualColor = missRed;
+                  }
+
+                  return (
+                    <div
+                      key={`${row.symbol}-${row.report_date}-${idx}`}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: gridCols,
+                        gap: "0 8px",
+                        alignItems: "center",
+                        padding: "10px 8px",
+                        borderRadius: "6px",
+                        transition: "background 0.1s ease",
+                        fontFamily: typography.fontFamilySans
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = colors.surfaceMuted + "66";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = "transparent";
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: "13px",
+                          fontWeight: 600,
+                          color: colors.accent,
+                          letterSpacing: "0.5px"
+                        }}
+                      >
+                        {row.symbol}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: "12px",
+                          color: colors.textMuted,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          minWidth: 0
+                        }}
+                        title={row.company_name}
+                      >
+                        {row.company_name}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: "10px",
+                          textTransform: "uppercase",
+                          color: colors.textMuted
+                        }}
+                      >
+                        {timingShort(row.report_time)}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: "12px",
+                          fontFamily: MONO,
+                          textAlign: "right",
+                          color: colors.textMuted
+                        }}
+                      >
+                        {typeof est === "number" ? est.toFixed(2) : "—"}
+                      </span>
+                      <div style={{ textAlign: "right", minWidth: 0 }}>
+                        {isUpcoming ? (
+                          <span
+                            style={{
+                              fontSize: "10px",
+                              textTransform: "uppercase",
+                              color: colors.textMuted,
+                              fontFamily: typography.fontFamilySans
+                            }}
+                          >
+                            {formatMonthDayUpper(row.report_date)}
+                          </span>
+                        ) : (
+                          <>
+                            <span style={{ fontSize: "12px", fontFamily: MONO, color: actualColor, display: "block" }}>
+                              {act.toFixed(2)}
+                            </span>
+                            {bar.beat !== null && bar.width > 0 ? (
+                              <div
+                                style={{
+                                  marginTop: "4px",
+                                  width: "100%",
+                                  height: "2px",
+                                  borderRadius: "1px",
+                                  background: colors.border
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    width: `${bar.width}%`,
+                                    height: "2px",
+                                    borderRadius: "1px",
+                                    background: bar.beat ? beatGreen : missRed,
+                                    transition: "width 0.1s ease"
+                                  }}
+                                />
+                              </div>
+                            ) : null}
+                          </>
+                        )}
+                      </div>
+                      <span style={{ fontSize: "11px", fontFamily: MONO, textAlign: "right", color: surpriseColor }}>
+                        {surpriseText}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </section>
   );
