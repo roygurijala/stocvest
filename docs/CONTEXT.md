@@ -4,7 +4,7 @@
 
 **Last updated:** 2026-05-02  
 **Repo:** https://github.com/roygurijala/stocvest  
-**Test baseline (regression gate — must match §13):** Backend `pytest tests/ -q` → **351 passed**, **3 skipped**. Frontend `npm run test` → **46 passed** (17 test files). **`npm run build`** last verified: success.
+**Test baseline (regression gate — must match §13):** Backend `pytest tests/ -q` → **352 passed**, **3 skipped**. Frontend `npm run test` → **46 passed** (17 test files). **`npm run build`** last verified: success.
 
 ---
 
@@ -28,10 +28,10 @@
 ## 2. Implemented (where to look)
 
 **Backend (`stocvest/`)**  
-`data/` (models incl. **`SignalRecord`**, Polygon — snapshot parser **drops mismatched `day` vs last trade** for reference-safe OHLC/VWAP), `indicators/`, `signals/` (sentiment, macro, geo, composite, AI synthesis, day-trading scanner, briefing, journal, PDT), `brokers/` (adapters, gateways, OAuth), `api/` (handlers incl. **`signal_resolution`**, **`services/signal_recorder.py`**, auth, `legal_copy.py`, order safety integration).
+`data/` (models incl. **`SignalRecord`**, Polygon — snapshot parser may drop `day` OHLC/VWAP vs **`lastTrade.p` only when last is a positive price and any session field is **>5×** off; missing last keeps session bar), `indicators/`, `signals/` (sentiment, macro, geo, composite, AI synthesis, day-trading scanner, briefing, journal, PDT), `brokers/` (adapters, gateways, OAuth), `api/` (handlers incl. **`signal_resolution`**, **`services/signal_recorder.py`**, auth, `legal_copy.py`, order safety integration).
 
 **Frontend (`frontend/`)**  
-App router pages (dashboard incl. **`/dashboard/performance`**, scanner, signals with **Signal history** tab, portfolio, journal, settings, earnings, public `/performance`, terms, etc.), design system + theme, API clients under `lib/api/` (incl. client-safe **`fetch-symbol-snapshot.ts`**), **`lib/snapshot-reference-levels.ts`** (drops mismatched Polygon session OHLC vs last for reference levels), Crisp when `NEXT_PUBLIC_CRISP_WEBSITE_ID` is set.
+App router pages (dashboard incl. **`/dashboard/performance`**, scanner, signals with **Signal history** tab, portfolio, journal, settings, earnings, public `/performance`, terms, etc.), design system + theme, API clients under `lib/api/` (incl. client-safe **`fetch-symbol-snapshot.ts`**), **`lib/snapshot-reference-levels.ts`** (same **5×** + valid-last guard as backend), Crisp when `NEXT_PUBLIC_CRISP_WEBSITE_ID` is set.
 
 **Docs**  
 `docs/API_CONTRACTS.md` — HTTP + broker contracts. **`docs/BACKLOG.md`** — detailed planned work (no duplicate of this file’s status tables). **Detailed file-by-file history was removed from this file** to avoid drift; use README + git.
@@ -216,7 +216,7 @@ Report exact counts. If any count dropped, fix before proceeding to documentatio
 
 | Suite | Command | Last verified |
 |-------|---------|---------------|
-| Backend | `pytest tests/ -q` | **351 passed**, **3 skipped** |
+| Backend | `pytest tests/ -q` | **352 passed**, **3 skipped** |
 | Frontend tests | `cd frontend && npm run test` | **46 passed** (17 files) |
 | Frontend build | `cd frontend && npm run build` | **success** |
 

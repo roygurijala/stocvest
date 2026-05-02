@@ -53,8 +53,10 @@ _POLYGON_REST_BASE = "https://api.polygon.io"
 _POLYGON_WS_BASE   = "wss://socket.polygon.io"
 
 # Polygon occasionally returns a `day` OHLC/VWAP block on a different price scale than
-# `lastTrade.p` (bad aggregate / stale session). Reference levels must not mix the two.
-_DAY_VS_LAST_MAX_RATIO = 2.5
+# `lastTrade.p` (bad aggregate / stale session). Only compare when `last_trade_price` is a
+# positive number; otherwise keep the session bar. Ratio uses a loose bound to avoid
+# false positives on valid tape (2.5× was too tight in production).
+_DAY_VS_LAST_MAX_RATIO = 5.0
 
 
 # ─── timeframe → Polygon multiplier + timespan ────────────────────────────────
@@ -280,7 +282,11 @@ class PolygonClient:
         day_close: float | None,
         day_vwap: float | None,
     ) -> bool:
-        """True if session OHLC/VWAP are on the same scale as last trade (or last is unknown)."""
+        """True if session OHLC/VWAP are on the same scale as last trade.
+
+        If `last_trade_price` is missing or non-positive, we cannot validate scale — keep
+        the session bar (reference levels from `day` beat n/a).
+        """
         if last_price is None or last_price <= 0:
             return True
         for m in (day_open, day_high, day_low, day_close, day_vwap):
@@ -343,13 +349,16 @@ class PolygonClient:
         day_close = day.get("c")
         day_volume = day.get("v")
         day_vwap = day.get("vw")
-        if not PolygonClient._session_day_prices_align_with_last(
+        should_validate = last_price is not None and last_price > 0
+        if should_validate and not PolygonClient._session_day_prices_align_with_last(
             last_price, day_open, day_high, day_low, day_close, day_vwap
         ):
             log.warning(
-                "snapshot %s: dropping session OHLC/VWAP (mismatched scale vs last_trade=%s)",
+                "snapshot %s: dropping session OHLC/VWAP (mismatched scale vs last_trade=%s; "
+                "threshold ratio=%s)",
                 symbol,
                 last_price,
+                _DAY_VS_LAST_MAX_RATIO,
             )
             day_open = day_high = day_low = day_close = day_volume = day_vwap = None
 

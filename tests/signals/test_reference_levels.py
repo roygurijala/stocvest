@@ -39,11 +39,11 @@ async def test_polygon_snapshot_called_with_correct_symbol() -> None:
     assert snap.last_trade_price == pytest.approx(187)
 
 
-def test_vwap_uses_real_price_not_fallback() -> None:
-    """When `day` is on a bogus scale vs last trade, VWAP must be dropped (not ~718 vs ~200)."""
+def test_vwap_dropped_when_session_scale_exceeds_5x_vs_last() -> None:
+    """When `day` is wildly off vs last trade (>5×), session OHLC/VWAP must be dropped."""
     ticker = {
         "ticker": "AAPL",
-        "day": {"o": 718, "h": 724, "l": 720, "c": 722, "v": 1, "vw": 718},
+        "day": {"o": 1100, "h": 1120, "l": 1080, "c": 1110, "v": 1, "vw": 1100},
         "prevDay": {"c": 200},
         "lastTrade": {"p": 200.5, "s": 100},
         "lastQuote": {"P": 200, "p": 200.5},
@@ -53,6 +53,22 @@ def test_vwap_uses_real_price_not_fallback() -> None:
     assert snap.day_vwap is None
     assert snap.day_high is None
     assert snap.day_low is None
+
+
+def test_session_bar_kept_when_last_trade_missing() -> None:
+    """No last print: cannot validate scale — keep session bar for reference levels."""
+    ticker = {
+        "ticker": "AAPL",
+        "day": {"o": 198, "h": 202, "l": 196, "c": 201, "v": 1, "vw": 199},
+        "prevDay": {"c": 197},
+        "lastTrade": {},
+        "lastQuote": {"P": 199.9, "p": 200.1},
+    }
+    snap = PolygonClient._parse_snapshot("AAPL", ticker)
+    assert snap.last_trade_price is None
+    assert snap.day_vwap == pytest.approx(199)
+    assert snap.day_low == pytest.approx(196)
+    assert snap.day_high == pytest.approx(202)
 
 
 def test_reference_levels_within_10pct_of_current_price() -> None:

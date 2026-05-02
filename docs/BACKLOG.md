@@ -4,7 +4,7 @@
 `CONTEXT.md` holds **status-at-a-glance**, **what’s implemented**, **near-term ops** (Terraform, secrets, CI, legal), **legal rules**, and **session rules**.  
 **This file** holds **planned work only**: themes, sub-items, and notes—**without** repeating the CONTEXT status table or §3 pending list.
 
-**Last updated:** 2026-05-02 (reference levels + Greeks formatting)
+**Last updated:** 2026-05-02 (reference levels sanity 5× + null guard)
 
 ---
 
@@ -58,7 +58,8 @@ Tracked in **`CONTEXT.md` §3** only (Terraform apply, GitHub/AWS/Vercel secrets
 | P2 | **Secrets-managed prompts** | Not done | Claude system/user prompts loaded from AWS Secrets Manager; version field on API calls; cache on cold start. |
 | P3 | **Mobile / PWA** | Not done | Responsive web exists; native or PWA shell, push for alerts when B3 exists. |
 | P4 | **Enhanced auth** | Not done | Optional SMS OTP, WebAuthn, magic link—Cognito capabilities; cost/compliance review. |
-| PF1 | **Production: reference levels wrong vs spot** | Resolved | **Cause:** Polygon snapshot sometimes returned `day` OHLC/VWAP on a different price scale than `lastTrade.p`; UI preferred `day_*` so VWAP/Support/Resistance could show ~$700s while last was ~$200. **Fix:** `PolygonClient._parse_snapshot` drops session OHLC/VWAP/volume when any price field disagrees with last by **>2.5×**; mirror in `frontend/lib/snapshot-reference-levels.ts`. **Tests:** `tests/signals/test_reference_levels.py`. **Not** a missing `POLYGON_API_KEY` (client fails fast if absent). Done 2026-05-02 (commit message: *Fix reference level prices + Greeks precision*). |
+| PF1 | **Production: reference levels wrong vs spot** | Resolved | **Cause:** Polygon snapshot sometimes returned `day` OHLC/VWAP on a different price scale than `lastTrade.p`; UI preferred `day_*` so VWAP/Support/Resistance could show ~$700s while last was ~$200. **Original fix:** drop session bar when scale off vs last (initially **2.5×**). **Superseded by PF2** (looser **5×**, keep session when last missing). Done 2026-05-02 (commit message: *Fix reference level prices + Greeks precision*). |
+| PF2 | **Regression: reference levels all n/a (9f80282)** | Resolved | **Cause:** **2.5×** check too aggressive and/or compared against missing/stale `lastTrade.p`, stripping valid `day` → UI n/a. **Fix:** Only run ratio check when `last_trade_price` is **> 0**; if last missing, **keep** session bar; threshold **5×**; warning log includes ratio when dropping. Frontend `snapshot-reference-levels.ts` mirrors. **Tests:** `tests/signals/test_reference_levels.py`. Done 2026-05-02 (PF2; see git history). |
 
 ---
 
