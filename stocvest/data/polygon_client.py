@@ -7,6 +7,7 @@ Polygon.io data client — covers everything STOCVEST needs:
     • News (with pagination)
     • Options chain + Greeks
     • Market status / calendar
+    • Benzinga earnings calendar (partner REST)
 
   WebSocket (websockets):
     • Real-time trades  (T.*)
@@ -571,7 +572,7 @@ class PolygonClient:
         to_date: date | str,
     ) -> list[EarningsEvent]:
         """
-        Fetch earnings events from Polygon reference endpoint.
+        Fetch earnings events from Polygon's Benzinga partner endpoint.
 
         Uses Redis cache for 1 hour by (symbols, from_date, to_date).
         """
@@ -580,7 +581,10 @@ class PolygonClient:
             return []
         from_iso = from_date.isoformat() if isinstance(from_date, date) else str(from_date)
         to_iso = to_date.isoformat() if isinstance(to_date, date) else str(to_date)
-        cache_key = f"stocvest:earnings:v1:{','.join(normalized_symbols)}:{from_iso}:{to_iso}"
+        cache_key = f"stocvest:earnings:v2:{','.join(normalized_symbols)}:{from_iso}:{to_iso}"
+        symbol_set = set(normalized_symbols)
+        from_bound = date.fromisoformat(from_iso)
+        to_bound = date.fromisoformat(to_iso)
 
         r = get_sync_redis()
         if r is not None:
@@ -593,47 +597,74 @@ class PolygonClient:
             except Exception:
                 pass
 
-        params = {
-            "active": "true",
-            "limit": "1000",
-            "sort": "ticker",
-            "order": "asc",
+        params: dict[str, str] = {
             "ticker.any_of": ",".join(normalized_symbols),
+            "date.gte": from_iso,
+            "date.lte": to_iso,
+            "limit": "1000",
+            "sort": "date.asc",
         }
-        data = await self._get("/vX/reference/tickers", params)
-
+        path = "/benzinga/v1/earnings"
         events: list[EarningsEvent] = []
-        for row in data.get("results", []) or []:
-            if not isinstance(row, dict):
-                continue
-            ticker = str(row.get("ticker") or "").strip().upper()
-            if not ticker:
-                continue
-            earnings = row.get("earnings") or {}
-            if not isinstance(earnings, dict):
-                continue
-            report_date_raw = earnings.get("report_date") or earnings.get("date")
-            if not report_date_raw:
-                continue
-            try:
-                report_dt = date.fromisoformat(str(report_date_raw))
-            except ValueError:
-                continue
-            if report_dt < date.fromisoformat(from_iso) or report_dt > date.fromisoformat(to_iso):
-                continue
+        seen: set[tuple[str, str, str | None, int | None]] = set()
+        page_idx = 0
 
-            events.append(
-                EarningsEvent(
-                    symbol=ticker,
-                    company_name=str(row.get("name") or ticker),
-                    report_date=report_dt,
-                    report_time=self._normalize_report_time(earnings.get("time") or earnings.get("timing")),
-                    estimated_eps=self._safe_float(earnings.get("eps_estimate") or earnings.get("estimated_eps")),
-                    actual_eps=self._safe_float(earnings.get("eps_actual") or earnings.get("actual_eps")),
-                    surprise_percent=self._safe_float(earnings.get("surprise_percent")),
-                    market_cap=self._safe_float(row.get("market_cap")),
-                )
+        while True:
+            data = await self._get(path, params)
+            log.debug(
+                "Polygon Benzinga earnings raw (page=%s): %s",
+                page_idx,
+                json.dumps(data, default=str)[:8192],
             )
+
+            for row in data.get("results", []) or []:
+                if not isinstance(row, dict):
+                    continue
+                ticker = str(row.get("ticker") or "").strip().upper()
+                if not ticker or ticker not in symbol_set:
+                    continue
+                report_date_raw = row.get("date")
+                if not report_date_raw:
+                    continue
+                try:
+                    report_dt = date.fromisoformat(str(report_date_raw))
+                except ValueError:
+                    continue
+                if report_dt < from_bound or report_dt > to_bound:
+                    continue
+
+                fiscal_period = row.get("fiscal_period")
+                fiscal_year = row.get("fiscal_year")
+                dedupe_key = (
+                    ticker,
+                    report_dt.isoformat(),
+                    str(fiscal_period) if fiscal_period is not None else None,
+                    int(fiscal_year) if fiscal_year is not None else None,
+                )
+                if dedupe_key in seen:
+                    continue
+                seen.add(dedupe_key)
+
+                events.append(
+                    EarningsEvent(
+                        symbol=ticker,
+                        company_name=str(row.get("company_name") or ticker),
+                        report_date=report_dt,
+                        report_time=self._report_time_from_benzinga(row.get("time")),
+                        estimated_eps=self._safe_float(row.get("estimated_eps")),
+                        actual_eps=self._safe_float(row.get("actual_eps")),
+                        surprise_percent=self._safe_float(row.get("eps_surprise_percent")),
+                        market_cap=None,
+                    )
+                )
+
+            next_url = data.get("next_url")
+            if not next_url:
+                break
+            path, params = self._extract_path_and_params(next_url)
+            page_idx += 1
+            if page_idx >= 20:
+                break
 
         events.sort(key=lambda e: (e.report_date, e.symbol))
         if r is not None:
@@ -837,3 +868,31 @@ class PolygonClient:
         if text in {"dmh", "during", "during_market", "during market"}:
             return "during_market"
         return "unknown"
+
+    @classmethod
+    def _report_time_from_benzinga(cls, raw: object) -> str:
+        """
+        Map Benzinga `time` (24h HH:MM:SS in US/Eastern per Polygon docs) to report_time bucket.
+        """
+        text = str(raw or "").strip()
+        if not text:
+            return "unknown"
+        keyword = cls._normalize_report_time(text)
+        if keyword != "unknown":
+            return keyword
+        parts = text.split(":")
+        if len(parts) < 2:
+            return "unknown"
+        try:
+            hour = int(parts[0])
+            minute = int(parts[1])
+            second = int(parts[2]) if len(parts) > 2 else 0
+        except ValueError:
+            return "unknown"
+        if hour == 0 and minute == 0 and second == 0:
+            return "unknown"
+        if hour >= 16:
+            return "after_market"
+        if hour < 9 or (hour == 9 and minute < 30):
+            return "before_market"
+        return "during_market"

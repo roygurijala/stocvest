@@ -445,19 +445,18 @@ class TestAdditionalRestEndpoints:
             "results": [
                 {
                     "ticker": "AAPL",
-                    "name": "Apple Inc.",
-                    "market_cap": 3000000000000,
-                    "earnings": {
-                        "report_date": "2026-05-05",
-                        "time": "bmo",
-                        "eps_estimate": 1.55,
-                        "eps_actual": 1.65,
-                        "surprise_percent": 6.5,
-                    },
+                    "company_name": "Apple Inc.",
+                    "date": "2026-05-05",
+                    "time": "07:00:00",
+                    "estimated_eps": 1.55,
+                    "actual_eps": 1.65,
+                    "eps_surprise_percent": 6.5,
+                    "fiscal_period": "Q2",
+                    "fiscal_year": 2026,
                 }
             ],
         }
-        respx.get("https://api.polygon.io/vX/reference/tickers").mock(
+        respx.get("https://api.polygon.io/benzinga/v1/earnings").mock(
             return_value=httpx.Response(200, json=payload)
         )
 
@@ -468,6 +467,52 @@ class TestAdditionalRestEndpoints:
         assert rows[0].symbol == "AAPL"
         assert rows[0].report_time == "before_market"
         assert rows[0].actual_eps == pytest.approx(1.65)
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_get_earnings_calendar_follows_next_url(self):
+        page1 = {
+            "status": "OK",
+            "next_url": "https://api.polygon.io/benzinga/v1/earnings?cursor=abc&apiKey=poly-test",
+            "results": [
+                {
+                    "ticker": "AAPL",
+                    "company_name": "Apple Inc.",
+                    "date": "2026-05-05",
+                    "time": "16:00:00",
+                    "fiscal_period": "Q2",
+                    "fiscal_year": 2026,
+                }
+            ],
+        }
+        page2 = {
+            "status": "OK",
+            "results": [
+                {
+                    "ticker": "MSFT",
+                    "company_name": "Microsoft Corp",
+                    "date": "2026-05-06",
+                    "time": "bmo",
+                    "fiscal_period": "Q3",
+                    "fiscal_year": 2026,
+                }
+            ],
+        }
+        route = respx.get("https://api.polygon.io/benzinga/v1/earnings")
+        route.side_effect = [
+            httpx.Response(200, json=page1),
+            httpx.Response(200, json=page2),
+        ]
+
+        async with PolygonClient(FAKE_KEY) as client:
+            rows = await client.get_earnings_calendar(
+                ["AAPL", "MSFT"], from_date="2026-05-01", to_date="2026-05-10"
+            )
+
+        assert len(rows) == 2
+        assert rows[0].symbol == "AAPL"
+        assert rows[0].report_time == "after_market"
+        assert rows[1].symbol == "MSFT"
 
 
 class TestRetries:

@@ -220,6 +220,26 @@ def earnings_calendar_handler(
     try:
         return asyncio.run(_run())
     except PolygonError as exc:
+        msg_l = str(exc).lower()
+        if (
+            "403" in str(exc)
+            or "401" in str(exc)
+            or "forbidden" in msg_l
+            or "not entitled" in msg_l
+            or "subscription" in msg_l
+        ):
+            return ok(
+                {
+                    "symbols": symbols,
+                    "days": days,
+                    "upcoming": [],
+                    "recent": [],
+                    "notice": (
+                        "Earnings data requires a Polygon Stocks Developer plan or Benzinga earnings add-on. "
+                        "Upgrade at polygon.io to enable this feature."
+                    ),
+                }
+            )
         return internal_error(str(exc))
 
 

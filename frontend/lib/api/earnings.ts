@@ -16,16 +16,18 @@ export interface EarningsResponse {
   days: number;
   upcoming: EarningsEvent[];
   recent: EarningsEvent[];
+  /** Set when Polygon denies earnings/Benzinga access (plan tier). */
+  notice?: string | null;
 }
 
 export const DEFAULT_EARNINGS_SYMBOLS = [
-  "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "BRK", "UNH", "JNJ",
+  "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "BRK.B", "UNH", "JNJ",
   "V", "MA", "JPM", "HD", "PG", "XOM", "CVX", "LLY", "AVGO", "MRK"
 ];
 
 export async function fetchEarningsCalendar(symbols: string[], days = 7): Promise<EarningsResponse> {
   const cleanSymbols = symbols.map((s) => s.trim().toUpperCase()).filter(Boolean);
-  const fallback: EarningsResponse = { symbols: cleanSymbols, days, upcoming: [], recent: [] };
+  const fallback: EarningsResponse = { symbols: cleanSymbols, days, upcoming: [], recent: [], notice: null };
   if (cleanSymbols.length === 0) {
     return fallback;
   }
@@ -39,7 +41,8 @@ export async function fetchEarningsCalendar(symbols: string[], days = 7): Promis
     symbols: payload.symbols || cleanSymbols,
     days: payload.days || days,
     upcoming: Array.isArray(payload.upcoming) ? payload.upcoming : [],
-    recent: Array.isArray(payload.recent) ? payload.recent : []
+    recent: Array.isArray(payload.recent) ? payload.recent : [],
+    notice: typeof payload.notice === "string" && payload.notice.trim() ? payload.notice.trim() : null
   };
 }
 

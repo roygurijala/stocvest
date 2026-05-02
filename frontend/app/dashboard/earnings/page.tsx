@@ -12,7 +12,11 @@ export default async function DashboardEarningsPage() {
   const earnings = await fetchEarningsCalendar(DEFAULT_EARNINGS_SYMBOLS, 30);
   return (
     <AppShell session={session}>
-      <EarningsPageClient events={[...earnings.upcoming, ...earnings.recent]} watchlistSymbols={DEFAULT_EARNINGS_SYMBOLS} />
+      <EarningsPageClient
+        events={[...earnings.upcoming, ...earnings.recent]}
+        watchlistSymbols={DEFAULT_EARNINGS_SYMBOLS}
+        notice={earnings.notice ?? null}
+      />
     </AppShell>
   );
 }

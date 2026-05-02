@@ -8,11 +8,12 @@ import type { EarningsEvent } from "@/lib/api/earnings";
 interface EarningsPageClientProps {
   events: EarningsEvent[];
   watchlistSymbols: string[];
+  notice?: string | null;
 }
 
 type Filter = "all" | "today" | "week" | "watchlist";
 
-export function EarningsPageClient({ events, watchlistSymbols }: EarningsPageClientProps) {
+export function EarningsPageClient({ events, watchlistSymbols, notice }: EarningsPageClientProps) {
   const { colors } = useTheme();
   const [filter, setFilter] = useState<Filter>("all");
   const today = new Date().toISOString().slice(0, 10);
@@ -54,6 +55,22 @@ export function EarningsPageClient({ events, watchlistSymbols }: EarningsPageCli
           ))}
         </div>
       </header>
+      {notice ? (
+        <p
+          role="status"
+          style={{
+            margin: 0,
+            padding: spacing[3],
+            borderRadius: borderRadius.lg,
+            background: "rgba(234,179,8,.12)",
+            border: `1px solid ${colors.border}`,
+            color: colors.text,
+            fontSize: typography.scale.sm
+          }}
+        >
+          {notice}
+        </p>
+      ) : null}
       <div style={{ overflowX: "auto", background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: typography.scale.sm }}>
           <thead>
@@ -68,25 +85,40 @@ export function EarningsPageClient({ events, watchlistSymbols }: EarningsPageCli
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, idx) => {
-              const surprise = row.surprise_percent ?? null;
-              const tone = row.actual_eps == null ? colors.textMuted : (surprise ?? 0) > 0.2 ? colors.bullish : (surprise ?? 0) < -0.2 ? colors.bearish : colors.textMuted;
-              return (
-                <tr key={`${row.symbol}-${row.report_date}-${idx}`} style={{ borderTop: `1px solid ${colors.border}` }}>
-                  <td>{row.report_date}</td>
-                  <td>{row.symbol}</td>
-                  <td>{row.company_name}</td>
-                  <td>{row.report_time === "before_market" ? "BMO" : row.report_time === "after_market" ? "AMC" : row.report_time}</td>
-                  <td>{typeof row.estimated_eps === "number" ? row.estimated_eps.toFixed(2) : "-"}</td>
-                  <td style={{ color: tone }}>{typeof row.actual_eps === "number" ? row.actual_eps.toFixed(2) : "Upcoming"}</td>
-                  <td style={{ color: tone }}>
-                    {typeof row.surprise_percent === "number"
-                      ? `${row.surprise_percent >= 0 ? "+" : ""}${row.surprise_percent.toFixed(1)}%`
-                      : "-"}
-                  </td>
-                </tr>
-              );
-            })}
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={7} style={{ padding: spacing[4], color: colors.textMuted, borderTop: `1px solid ${colors.border}` }}>
+                  No earnings events found for the next 30 days. Data updates daily before market open.
+                </td>
+              </tr>
+            ) : (
+              rows.map((row, idx) => {
+                const surprise = row.surprise_percent ?? null;
+                const tone =
+                  row.actual_eps == null
+                    ? colors.textMuted
+                    : (surprise ?? 0) > 0.2
+                      ? colors.bullish
+                      : (surprise ?? 0) < -0.2
+                        ? colors.bearish
+                        : colors.textMuted;
+                return (
+                  <tr key={`${row.symbol}-${row.report_date}-${idx}`} style={{ borderTop: `1px solid ${colors.border}` }}>
+                    <td>{row.report_date}</td>
+                    <td>{row.symbol}</td>
+                    <td>{row.company_name}</td>
+                    <td>{row.report_time === "before_market" ? "BMO" : row.report_time === "after_market" ? "AMC" : row.report_time}</td>
+                    <td>{typeof row.estimated_eps === "number" ? row.estimated_eps.toFixed(2) : "-"}</td>
+                    <td style={{ color: tone }}>{typeof row.actual_eps === "number" ? row.actual_eps.toFixed(2) : "Upcoming"}</td>
+                    <td style={{ color: tone }}>
+                      {typeof row.surprise_percent === "number"
+                        ? `${row.surprise_percent >= 0 ? "+" : ""}${row.surprise_percent.toFixed(1)}%`
+                        : "-"}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
       </div>

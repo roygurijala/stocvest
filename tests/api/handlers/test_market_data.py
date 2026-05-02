@@ -14,6 +14,7 @@ from stocvest.api.handlers.market_data import (
     snapshot_handler,
 )
 from stocvest.data.models import Bar, EarningsEvent, MarketStatus, NewsArticle, OptionContract, Snapshot, Timeframe
+from stocvest.data.polygon_client import PolygonError
 from stocvest.utils.config import get_settings
 
 
@@ -208,4 +209,32 @@ def test_earnings_calendar_handler_returns_upcoming_and_recent() -> None:
     assert body["symbols"] == ["AAPL", "MSFT"]
     assert isinstance(body["upcoming"], list)
     assert isinstance(body["recent"], list)
+
+
+class _ForbiddenPolygonClient:
+    def __init__(self, api_key: str) -> None:
+        _ = api_key
+
+    async def __aenter__(self) -> "_ForbiddenPolygonClient":
+        return self
+
+    async def __aexit__(self, *_) -> None:
+        return None
+
+    async def get_earnings_calendar(self, symbols: list[str], from_date: str, to_date: str) -> list[EarningsEvent]:
+        _ = symbols
+        _ = from_date
+        _ = to_date
+        raise PolygonError("Polygon 403 on /benzinga/v1/earnings: forbidden")
+
+
+def test_earnings_calendar_handler_returns_notice_on_polygon_forbidden() -> None:
+    event = {"queryStringParameters": {"symbols": "aapl", "days": "7"}}
+    response = earnings_calendar_handler(event, {}, client_factory=_ForbiddenPolygonClient)
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["upcoming"] == []
+    assert body["recent"] == []
+    assert isinstance(body.get("notice"), str)
+    assert "polygon" in body["notice"].lower()
 
