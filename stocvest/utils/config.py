@@ -61,8 +61,8 @@ class Settings(BaseSettings):
     dynamodb_users_table: str = Field("", alias="DYNAMODB_USERS_TABLE")
 
     # ── Journal + PDT persistence ────────────────────────────────
-    trade_journal_table: str = Field("", alias="STOCVEST_TRADE_JOURNAL_TABLE")
-    pdt_state_table: str = Field("", alias="STOCVEST_PDT_STATE_TABLE")
+    trade_journal_table: str = Field("TradeJournal", alias="STOCVEST_TRADE_JOURNAL_TABLE")
+    pdt_state_table: str = Field("PDTState", alias="STOCVEST_PDT_STATE_TABLE")
     dynamodb_day_trading_setups: str = Field("", alias="DYNAMODB_DAY_TRADING_SETUPS")
     dynamodb_alerts: str = Field("", alias="DYNAMODB_ALERTS")
     dynamodb_signal_history_table: str = Field("", alias="DYNAMODB_SIGNAL_HISTORY_TABLE")

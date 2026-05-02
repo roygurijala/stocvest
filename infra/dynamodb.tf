@@ -153,3 +153,40 @@ resource "aws_dynamodb_table" "signal_history" {
     Name = "stocvest-development-ddb-signal-history"
   })
 }
+
+# Trade journal — one item per user; keys match DynamoDBJournalStore (userId + entries).
+resource "aws_dynamodb_table" "trade_journal" {
+  name         = "TradeJournal"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "userId"
+
+  attribute {
+    name = "userId"
+    type = "S"
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "stocvest-development-ddb-trade-journal"
+  })
+}
+
+# PDT rolling state per user; keys match DynamoDBPDTStateStore (userId, dayTradeDates, pdtExempt).
+resource "aws_dynamodb_table" "pdt_state" {
+  name         = "PDTState"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "userId"
+
+  attribute {
+    name = "userId"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "expires_at"
+    enabled        = true
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "stocvest-development-ddb-pdt-state"
+  })
+}

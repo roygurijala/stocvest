@@ -38,6 +38,8 @@ output "dynamodb_table_names" {
     orders             = aws_dynamodb_table.orders.name
     day_trading_setups = aws_dynamodb_table.day_trading_setups.name
     signal_history     = aws_dynamodb_table.signal_history.name
+    trade_journal      = aws_dynamodb_table.trade_journal.name
+    pdt_state          = aws_dynamodb_table.pdt_state.name
   }
 }
 
@@ -51,6 +53,8 @@ output "dynamodb_table_arns" {
     orders             = aws_dynamodb_table.orders.arn
     day_trading_setups = aws_dynamodb_table.day_trading_setups.arn
     signal_history     = aws_dynamodb_table.signal_history.arn
+    trade_journal      = aws_dynamodb_table.trade_journal.arn
+    pdt_state          = aws_dynamodb_table.pdt_state.arn
   }
 }
 
