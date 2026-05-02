@@ -32,6 +32,7 @@ from stocvest.signals import (
     IntradaySetupScanner,
     NewsCatalystDetector,
     PremarketGapScanner,
+    parse_liquidity_by_symbol_payload,
 )
 from stocvest.signals.day_trading_scanner import dynamic_gap_candidates_from_snapshots
 from stocvest.utils.config import get_settings
@@ -179,13 +180,16 @@ def scanner_intraday_handler(event: LambdaEvent, context: LambdaContext) -> dict
         if not isinstance(bars_by_symbol_raw, dict):
             return bad_request("Body field 'bars_by_symbol' must be an object.")
         limit = int(payload.get("limit", 8))
-        min_score = float(payload.get("min_score", 0.35))
+        min_score = float(payload.get("min_score", 0.5))
         bars_by_symbol: dict[str, list[Bar]] = {}
         for symbol, bars in bars_by_symbol_raw.items():
             if not isinstance(symbol, str) or not isinstance(bars, list):
                 return bad_request("bars_by_symbol entries must map symbol strings to bar arrays.")
             bars_by_symbol[symbol.upper()] = [parse_bar(item, symbol.upper()) for item in bars]
-        setups = IntradaySetupScanner(min_score=min_score).scan(bars_by_symbol, limit=limit)
+        liq = parse_liquidity_by_symbol_payload(payload.get("liquidity_by_symbol"))
+        setups = IntradaySetupScanner(min_score=min_score).scan(
+            bars_by_symbol, liquidity_by_symbol=liq, limit=limit
+        )
         return cache_set(key, ok([serialize_intraday_setup(c) for c in setups]), ttl_seconds=300)
     except (TypeError, ValueError, KeyError) as exc:
         return bad_request(f"Invalid intraday scanner request: {exc}")

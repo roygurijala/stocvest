@@ -120,15 +120,29 @@ def test_scanner_catalysts_handler_returns_candidates() -> None:
 
 
 def test_scanner_intraday_handler_returns_setups() -> None:
-    start = datetime(2026, 4, 28, 9, 30, tzinfo=timezone.utc)
+    from zoneinfo import ZoneInfo
+
+    et = ZoneInfo("America/New_York")
+    start = datetime(2026, 4, 28, 9, 30, tzinfo=et)
     bars = []
     for i in range(15):
         close = 100.0 + ((i % 3) * 0.1)
-        bars.append(_bar(start + timedelta(minutes=i), close=close, volume=120_000))
+        bars.append(_bar(start + timedelta(minutes=i), close=close, volume=350_000))
     bars.append(_bar(start + timedelta(minutes=15), close=100.2, volume=100_000))
-    bars.append(_bar(start + timedelta(minutes=16), close=102.2, volume=350_000))
+    bars.append(_bar(start + timedelta(minutes=16), close=102.2, volume=400_000))
 
-    event = {"body": json.dumps({"bars_by_symbol": {"GAP1": bars}, "limit": 5, "min_score": 0.35})}
+    event = {
+        "body": json.dumps(
+            {
+                "bars_by_symbol": {"GAP1": bars},
+                "limit": 5,
+                "min_score": 0.5,
+                "liquidity_by_symbol": {
+                    "GAP1": {"avg_daily_volume": 8_000_000, "last_price": 100.0, "company_name": "Gap1 Inc"}
+                },
+            }
+        )
+    }
     response = scanner_intraday_handler(event, {})
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
@@ -204,8 +218,20 @@ def test_scanner_gaps_handler_dynamic_empty_snapshots(monkeypatch: pytest.Monkey
         async def get_us_stocks_market_snapshots(self, *, include_otc: bool = False) -> list[Snapshot]:
             _ = include_otc
             return [
-                Snapshot(symbol="BIG", prev_close=100.0, last_trade_price=104.0, day_volume=600_000.0),
-                Snapshot(symbol="FLAT", prev_close=50.0, last_trade_price=50.2, day_volume=600_000.0),
+                Snapshot(
+                    symbol="BIG",
+                    prev_close=100.0,
+                    last_trade_price=104.0,
+                    day_volume=600_000.0,
+                    prev_day_volume=2_000_000.0,
+                ),
+                Snapshot(
+                    symbol="FLAT",
+                    prev_close=50.0,
+                    last_trade_price=50.2,
+                    day_volume=600_000.0,
+                    prev_day_volume=2_000_000.0,
+                ),
             ]
 
         async def get_snapshots_many(self, symbols: list[str], chunk_size: int = 50) -> list[Snapshot]:
@@ -246,7 +272,13 @@ def test_scanner_gaps_handler_dynamic_falls_back_on_polygon_403(monkeypatch: pyt
             _ = chunk_size
             assert "AAPL" in symbols
             return [
-                Snapshot(symbol="FALL1", prev_close=50.0, last_trade_price=52.0, day_volume=600_000.0),
+                Snapshot(
+                    symbol="FALL1",
+                    prev_close=50.0,
+                    last_trade_price=52.0,
+                    day_volume=600_000.0,
+                    prev_day_volume=2_000_000.0,
+                ),
             ]
 
     monkeypatch.setattr("stocvest.api.handlers.scanner.PolygonClient", _FakePoly403)

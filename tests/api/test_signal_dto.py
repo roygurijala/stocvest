@@ -101,16 +101,18 @@ def test_serialize_intraday_setup_returns_expected_shape() -> None:
         symbol="AAPL",
         direction="long",
         score=0.74,
-        triggers=("or_breakout_up", "vwap_reclaim"),
+        triggers=["or_breakout_up", "vwap_reclaim"],
         last_price=101.2,
         vwap=100.6,
         ema9=100.8,
         timestamp_iso=datetime(2026, 4, 28, 14, 45, tzinfo=timezone.utc).isoformat(),
+        company_name="Apple Inc.",
     )
     payload = serialize_intraday_setup(setup)
     assert payload["symbol"] == "AAPL"
     assert payload["direction"] == "long"
-    assert payload["triggers"] == ("or_breakout_up", "vwap_reclaim")
+    assert payload["triggers"] == ["or_breakout_up", "vwap_reclaim"]
+    assert payload["company_name"] == "Apple Inc."
 
 
 def test_serialize_gap_candidate_returns_expected_shape() -> None:

@@ -508,17 +508,18 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                       <div
                         style={{
                           display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
+                          alignItems: "baseline",
                           gap: spacing[2],
-                          flexWrap: "wrap"
+                          flexWrap: "wrap",
+                          minWidth: 0
                         }}
                       >
-                        <div style={{ display: "flex", alignItems: "center", gap: spacing[2], minWidth: 0 }}>
-                          <strong style={{ fontSize: typography.scale.base }}>{setup.symbol}</strong>
-                          <span style={{ color: colors.textMuted, fontSize: typography.scale.sm }}>{patternLabel}</span>
-                        </div>
+                        <strong style={{ fontSize: typography.scale.base }}>{setup.symbol}</strong>
+                        {setup.company_name ? (
+                          <span style={{ color: colors.textMuted, fontSize: "13px" }}>{setup.company_name}</span>
+                        ) : null}
                       </div>
+                      <span style={{ color: colors.textMuted, fontSize: typography.scale.sm }}>{patternLabel}</span>
                       <div
                         style={{
                           display: "flex",

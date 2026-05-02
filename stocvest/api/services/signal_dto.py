@@ -86,7 +86,7 @@ def parse_catalyst(item: dict[str, Any]) -> NewsCatalystCandidate:
 
 
 def serialize_intraday_setup(candidate: IntradaySetupCandidate) -> dict[str, Any]:
-    return {
+    payload: dict[str, Any] = {
         "symbol": candidate.symbol,
         "direction": candidate.direction,
         "score": candidate.score,
@@ -97,6 +97,9 @@ def serialize_intraday_setup(candidate: IntradaySetupCandidate) -> dict[str, Any
         "timestamp_iso": candidate.timestamp_iso,
         "disclaimer": API_SIGNAL_DISCLAIMER,
     }
+    if candidate.company_name:
+        payload["company_name"] = candidate.company_name
+    return payload
 
 
 def serialize_gap_candidate(candidate: PremarketGapCandidate) -> dict[str, Any]:

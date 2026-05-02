@@ -17,9 +17,13 @@ export interface SnapshotPayload {
   day_high?: number | null;
   day_low?: number | null;
   day_volume?: number | null;
+  /** Prior regular-session volume from Polygon `prevDay.v` — ADV proxy for liquidity gates. */
+  prev_day_volume?: number | null;
   /** Session VWAP from Polygon `day.vw` when present. */
   day_vwap?: number | null;
   pre_market_price?: number | null;
+  /** Issuer name when Polygon includes `name` on the ticker snapshot. */
+  company_name?: string | null;
 }
 
 export interface NewsPayload {

@@ -10,6 +10,8 @@ from __future__ import annotations
 from collections import deque
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from stocvest.data.models import Bar, Snapshot, Timeframe
 from stocvest.indicators.core import OpeningRange, gap_percent, opening_range
@@ -58,6 +60,9 @@ def dynamic_gap_candidates_from_snapshots(
             continue
         vol = float(snap.day_volume or 0.0)
         if vol < min_day_volume:
+            continue
+        prev_vol = snap.prev_day_volume
+        if prev_vol is not None and float(prev_vol) < 1_000_000.0:
             continue
         gap_pct = (price - float(prev)) / float(prev) * 100.0
         if abs(gap_pct) < min_abs_gap_percent:
@@ -374,6 +379,84 @@ class IntradayEMA9Calculator:
         return round(ema, 4)
 
 
+_ET = ZoneInfo("America/New_York")
+_REGULAR_SESSION_MINUTES = 390.0
+_LIQUID_MIN_ADV = 1_000_000.0
+_MIN_TRADE_PRICE = 5.0
+_MIN_SESSION_VOL_FALLBACK = 500_000.0
+_ORB_CUTOFF_ET = (10, 0, 0)  # exclusive: ORB valid when breakout strictly before 10:00:00 ET
+
+
+def _utc_if_naive(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def _to_et(dt: datetime) -> datetime:
+    return _utc_if_naive(dt).astimezone(_ET)
+
+
+def _is_before_orb_cutoff_et(dt: datetime) -> bool:
+    et = _to_et(dt)
+    return (et.hour, et.minute, et.second) < _ORB_CUTOFF_ET
+
+
+def _minutes_since_regular_open_et(dt: datetime) -> int:
+    """Minutes from 09:30 ET through current bar minute (inclusive), capped at session length."""
+    et = _to_et(dt)
+    cur = et.hour * 60 + et.minute
+    open_m = 9 * 60 + 30
+    return max(1, min(int(_REGULAR_SESSION_MINUTES), cur - open_m + 1))
+
+
+def _sum_volume_et_window(bars: list[Bar], *, start_h: int, start_m: int, end_h: int, end_m: int) -> float:
+    """Sum bar volume where bar start falls in [start, end) in America/New_York clock time."""
+    start_tot = start_h * 60 + start_m
+    end_tot = end_h * 60 + end_m
+    total = 0.0
+    for b in bars:
+        et = _to_et(b.timestamp)
+        m = et.hour * 60 + et.minute
+        if start_tot <= m < end_tot:
+            total += float(b.volume)
+    return total
+
+
+@dataclass(frozen=True)
+class SymbolLiquidityContext:
+    """Optional per-symbol liquidity from Polygon snapshot (ADV proxy + reference price + name)."""
+
+    avg_daily_volume: float | None  # use prior full-day volume as ADV proxy when available
+    last_price: float | None
+    company_name: str | None = None
+
+
+def parse_liquidity_by_symbol_payload(raw: object) -> dict[str, SymbolLiquidityContext] | None:
+    """Parse optional ``liquidity_by_symbol`` body field from API JSON."""
+    if not isinstance(raw, dict):
+        return None
+    out: dict[str, SymbolLiquidityContext] = {}
+    for sym, row in raw.items():
+        if not isinstance(sym, str) or not isinstance(row, dict):
+            continue
+        key = sym.strip().upper()
+        adv_r = row.get("avg_daily_volume")
+        lp_r = row.get("last_price")
+        nm = row.get("company_name")
+        try:
+            adv = float(adv_r) if adv_r is not None else None
+        except (TypeError, ValueError):
+            adv = None
+        try:
+            lp = float(lp_r) if lp_r is not None else None
+        except (TypeError, ValueError):
+            lp = None
+        cn = str(nm).strip() if nm is not None and str(nm).strip() else None
+        out[key] = SymbolLiquidityContext(avg_daily_volume=adv, last_price=lp, company_name=cn)
+    return out or None
+
+
 @dataclass(frozen=True)
 class IntradaySetupCandidate:
     symbol: str
@@ -384,6 +467,7 @@ class IntradaySetupCandidate:
     vwap: float | None
     ema9: float | None
     timestamp_iso: str
+    company_name: str | None = None
 
 
 class IntradaySetupScanner:
@@ -391,11 +475,11 @@ class IntradaySetupScanner:
     Scan intraday bars and rank actionable setups every cycle (e.g. every 5 min).
 
     Signals considered:
-      - Opening range breakout direction
+      - Opening range breakout direction (only if breakout before 10:00 ET and ORB volume rules pass)
       - VWAP reclaim / rejection
       - 9 EMA bounce / rejection
       - High-of-day / low-of-day breakout
-      - Volume surge confirmation
+      - Volume surge confirmation (after session RVOL gate)
     """
 
     def __init__(
@@ -403,7 +487,7 @@ class IntradaySetupScanner:
         *,
         opening_range_minutes: int = 15,
         breakout_buffer_pct: float = 0.05,
-        min_score: float = 0.35,
+        min_score: float = 0.5,
     ) -> None:
         self._min_score = min_score
         self._orb = OpeningRangeBreakoutDetector(
@@ -415,18 +499,23 @@ class IntradaySetupScanner:
         self,
         bars_by_symbol: dict[str, list[Bar]],
         *,
+        liquidity_by_symbol: dict[str, SymbolLiquidityContext] | None = None,
         limit: int = 8,
     ) -> list[IntradaySetupCandidate]:
         results: list[IntradaySetupCandidate] = []
+        liq_map = liquidity_by_symbol or {}
         for symbol, bars in bars_by_symbol.items():
-            candidate = self._scan_symbol(symbol, bars)
+            liq = liq_map.get(symbol.upper())
+            candidate = self._scan_symbol(symbol, bars, liq)
             if candidate is not None:
                 results.append(candidate)
 
         results.sort(key=lambda c: c.score, reverse=True)
         return results[: max(0, limit)]
 
-    def _scan_symbol(self, symbol: str, bars: list[Bar]) -> IntradaySetupCandidate | None:
+    def _scan_symbol(
+        self, symbol: str, bars: list[Bar], liq: SymbolLiquidityContext | None
+    ) -> IntradaySetupCandidate | None:
         if len(bars) < 10:
             return None
         if any(bar.symbol != symbol for bar in bars):
@@ -436,10 +525,29 @@ class IntradaySetupScanner:
 
         latest = bars[-1]
         prev = bars[-2]
+        adv = liq.avg_daily_volume if liq and liq.avg_daily_volume is not None else None
+        ref_price = None
+        if liq and liq.last_price is not None and liq.last_price > 0:
+            ref_price = float(liq.last_price)
+        price_gate = ref_price if ref_price is not None else float(latest.close)
+
+        if liq is not None and adv is not None and adv < _LIQUID_MIN_ADV:
+            return None
+        if price_gate < _MIN_TRADE_PRICE:
+            return None
+
+        session_vol = sum(float(b.volume) for b in bars)
+        if adv is not None:
+            mins = _minutes_since_regular_open_et(latest.timestamp)
+            expected_session = adv * (mins / _REGULAR_SESSION_MINUTES)
+            if session_vol + 1e-9 < expected_session:
+                return None
+        elif session_vol < _MIN_SESSION_VOL_FALLBACK:
+            return None
+
         avg_recent_volume = sum(bar.volume for bar in bars[-10:]) / min(10, len(bars))
         volume_surge = latest.volume >= max(1.0, avg_recent_volume * 1.5)
 
-        # Run per-symbol intraday indicators on this bar slice only.
         vwap_calc = IntradayVWAPCalculator()
         prev_vwap: float | None = None
         latest_vwap: float | None = None
@@ -456,7 +564,22 @@ class IntradaySetupScanner:
             if bar is prev:
                 prev_ema = latest_ema
 
-        orb = self._orb.detect(bars)
+        orb_sig = self._orb.detect(bars)
+        orb_long = False
+        orb_short = False
+        if orb_sig is not None:
+            try:
+                bt = datetime.fromisoformat(orb_sig.breakout_time_iso.replace("Z", "+00:00"))
+            except ValueError:
+                bt = latest.timestamp
+            first30 = _sum_volume_et_window(bars, start_h=9, start_m=30, end_h=10, end_m=0)
+            orb_vol_ok = True if adv is None else (first30 + 1e-9 >= 0.5 * adv)
+            if _is_before_orb_cutoff_et(bt) and orb_vol_ok:
+                if orb_sig.direction == "long":
+                    orb_long = True
+                elif orb_sig.direction == "short":
+                    orb_short = True
+
         prior_high = max(bar.high for bar in bars[:-1])
         prior_low = min(bar.low for bar in bars[:-1])
 
@@ -465,13 +588,12 @@ class IntradaySetupScanner:
         long_score = 0.0
         short_score = 0.0
 
-        if orb is not None:
-            if orb.direction == "long":
-                long_triggers.append("orb_breakout_long")
-                long_score += 0.35
-            elif orb.direction == "short":
-                short_triggers.append("orb_breakout_short")
-                short_score += 0.35
+        if orb_long:
+            long_triggers.append("orb_breakout_long")
+            long_score += 0.35
+        if orb_short:
+            short_triggers.append("orb_breakout_short")
+            short_score += 0.35
 
         if prev_vwap is not None and latest_vwap is not None:
             if prev.close < prev_vwap and latest.close > latest_vwap:
@@ -504,6 +626,8 @@ class IntradaySetupScanner:
                 short_triggers.append("volume_surge")
                 short_score += 0.1
 
+        company = liq.company_name if liq and liq.company_name else None
+
         if long_score >= short_score:
             score = round(min(1.0, long_score), 4)
             if score < self._min_score:
@@ -517,6 +641,7 @@ class IntradaySetupScanner:
                 vwap=latest_vwap,
                 ema9=latest_ema,
                 timestamp_iso=latest.timestamp.isoformat(),
+                company_name=company,
             )
 
         score = round(min(1.0, short_score), 4)
@@ -531,4 +656,5 @@ class IntradaySetupScanner:
             vwap=latest_vwap,
             ema9=latest_ema,
             timestamp_iso=latest.timestamp.isoformat(),
+            company_name=company,
         )

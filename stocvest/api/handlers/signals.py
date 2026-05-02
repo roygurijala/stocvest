@@ -26,6 +26,7 @@ from stocvest.signals import (
     DailyBriefingInput,
     IntradaySetupScanner,
     LayerSignal,
+    parse_liquidity_by_symbol_payload,
 )
 from stocvest.utils.logging import get_logger
 
@@ -152,7 +153,7 @@ def day_setups_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, 
 
     try:
         limit = int(payload.get("limit", 8))
-        min_score = float(payload.get("min_score", 0.35))
+        min_score = float(payload.get("min_score", 0.5))
     except ValueError:
         return bad_request("Invalid 'limit' or 'min_score'.")
 
@@ -163,7 +164,10 @@ def day_setups_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, 
                 return bad_request("bars_by_symbol entries must map symbol strings to bar arrays.")
             bars_by_symbol[symbol.upper()] = [parse_bar(item, symbol.upper()) for item in bars]
 
-        setups = IntradaySetupScanner(min_score=min_score).scan(bars_by_symbol, limit=limit)
+        liq = parse_liquidity_by_symbol_payload(payload.get("liquidity_by_symbol"))
+        setups = IntradaySetupScanner(min_score=min_score).scan(
+            bars_by_symbol, liquidity_by_symbol=liq, limit=limit
+        )
         return ok([serialize_intraday_setup(c) for c in setups])
     except (KeyError, TypeError, ValueError) as exc:
         return bad_request(f"Invalid day setup request: {exc}")

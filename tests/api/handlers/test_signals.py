@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -64,15 +65,27 @@ def test_swing_synthesis_parse_handler_parses_json_signal_payload() -> None:
 
 
 def test_day_setups_handler_returns_ranked_candidates() -> None:
-    start = datetime(2026, 4, 28, 9, 30, tzinfo=timezone.utc)
+    et = ZoneInfo("America/New_York")
+    start = datetime(2026, 4, 28, 9, 30, tzinfo=et)
     bars = []
     for i in range(15):
         close = 100.0 + ((i % 3) * 0.1)
-        bars.append(_bar_payload(start + timedelta(minutes=i), close=close, volume=120_000))
+        bars.append(_bar_payload(start + timedelta(minutes=i), close=close, volume=350_000))
     bars.append(_bar_payload(start + timedelta(minutes=15), close=100.2, volume=100_000))
-    bars.append(_bar_payload(start + timedelta(minutes=16), close=102.2, volume=350_000))
+    bars.append(_bar_payload(start + timedelta(minutes=16), close=102.2, volume=400_000))
 
-    event = {"body": json.dumps({"bars_by_symbol": {"GAP1": bars}, "limit": 5, "min_score": 0.35})}
+    event = {
+        "body": json.dumps(
+            {
+                "bars_by_symbol": {"GAP1": bars},
+                "limit": 5,
+                "min_score": 0.5,
+                "liquidity_by_symbol": {
+                    "GAP1": {"avg_daily_volume": 8_000_000, "last_price": 100.0, "company_name": "Gap1 Inc"}
+                },
+            }
+        )
+    }
     response = day_setups_handler(event, {})
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
@@ -80,6 +93,7 @@ def test_day_setups_handler_returns_ranked_candidates() -> None:
     assert body[0]["symbol"] == "GAP1"
     assert body[0]["direction"] in {"long", "short"}
     assert body[0].get("disclaimer")
+    assert body[0].get("company_name") == "Gap1 Inc"
 
 
 def test_day_briefing_handler_renders_markdown() -> None:

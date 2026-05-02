@@ -352,6 +352,7 @@ class PolygonClient:
         after_hours = ticker.get("afterHours", {}) or ticker.get("afterhours", {}) or {}
 
         prev_close = prev.get("c")
+        prev_day_volume = prev.get("v")
         last_price = last.get("p")
         change = None
         change_pct = None
@@ -405,6 +406,9 @@ class PolygonClient:
             )
             day_open = day_high = day_low = day_close = day_volume = day_vwap = None
 
+        name_raw = ticker.get("name")
+        company_name = str(name_raw).strip() if name_raw else None
+
         return Snapshot(
             symbol=symbol,
             last_trade_price=last_price,
@@ -425,6 +429,8 @@ class PolygonClient:
             after_hours_price=after_hours_price,
             after_hours_change_percent=after_hours_change_pct,
             market_status=ticker.get("market"),
+            company_name=company_name or None,
+            prev_day_volume=float(prev_day_volume) if prev_day_volume is not None else None,
         )
 
     # ──────────────────────────────────────────────────────────────────────────

@@ -39,6 +39,7 @@ export interface IntradaySetupPayload {
   triggers: string[];
   timestamp_iso: string;
   disclaimer?: string;
+  company_name?: string;
 }
 
 export interface ScannerBriefingPayload {
@@ -88,12 +89,15 @@ export async function fetchScannerOverview(
       universe = [...INTRADAY_FALLBACK_SYMBOLS];
     }
 
-    const [articles, barsBySymbol] = await Promise.all([
+    const [articles, snapshotRows, barsBySymbol] = await Promise.all([
       apiFetch<Record<string, unknown>[]>("/v1/market/news?limit=20"),
+      Promise.all(
+        universe.map((symbol) => apiFetch<Record<string, unknown>>(`/v1/market/snapshot?symbol=${symbol}`))
+      ),
       Promise.all(
         universe.map(async (symbol) => {
           const bars = await apiFetch<Record<string, unknown>[]>(
-            `/v1/market/bars?symbol=${symbol}&timeframe=1min&limit=30`
+            `/v1/market/bars?symbol=${symbol}&timeframe=1min&limit=120`
           );
           return [symbol, bars] as const;
         })
@@ -105,6 +109,28 @@ export async function fetchScannerOverview(
       Object.entries(barsBySymbol).map(([k, v]) => [k, (v || []) as Record<string, unknown>[]])
     );
 
+    const liquidity_by_symbol: Record<
+      string,
+      { avg_daily_volume: number | null; last_price: number | null; company_name?: string }
+    > = {};
+    universe.forEach((sym, i) => {
+      const snap = snapshotRows[i];
+      if (!snap || typeof snap !== "object") return;
+      const prevVol = snap.prev_day_volume;
+      const adv =
+        typeof prevVol === "number" && Number.isFinite(prevVol) ? prevVol : null;
+      const lastRaw = snap.last_trade_price ?? snap.day_open;
+      const last =
+        typeof lastRaw === "number" && Number.isFinite(lastRaw) ? lastRaw : null;
+      const cn = snap.company_name;
+      const name = typeof cn === "string" && cn.trim().length ? cn.trim() : undefined;
+      liquidity_by_symbol[sym] = {
+        avg_daily_volume: adv,
+        last_price: last,
+        ...(name ? { company_name: name } : {})
+      };
+    });
+
     const [catalysts, setups] = await Promise.all([
       apiFetch<CatalystPayload[]>("/v1/scanner/catalysts", {
         method: "POST",
@@ -112,7 +138,12 @@ export async function fetchScannerOverview(
       }),
       apiFetch<IntradaySetupPayload[]>("/v1/signals/day/setups", {
         method: "POST",
-        body: JSON.stringify({ bars_by_symbol: cleanBarsBySymbol, limit: 10, min_score: 0.35 })
+        body: JSON.stringify({
+          bars_by_symbol: cleanBarsBySymbol,
+          limit: 10,
+          min_score: 0.5,
+          liquidity_by_symbol: liquidity_by_symbol
+        })
       })
     ]);
     if (catalysts == null || setups == null) {

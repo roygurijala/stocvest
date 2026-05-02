@@ -121,6 +121,9 @@ class Snapshot(BaseModel):
     after_hours_price:  Optional[float] = None
     after_hours_change_percent: Optional[float] = None
     market_status:      Optional[str]   = None   # "open" | "extended-hours" | "closed"
+    # Enrichment from Polygon ticker object when present (liquidity / UI)
+    company_name:       Optional[str]   = None
+    prev_day_volume:    Optional[float] = None   # prior full session volume — proxy for typical ADV
 
 
 # ──────────────────────────────────────────────────────────────────────────────

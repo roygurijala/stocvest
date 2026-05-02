@@ -15,7 +15,7 @@ from stocvest.api.services.signal_dto import (
 )
 from stocvest.api.services.websocket_broadcast import broadcast_scanner_payload
 from stocvest.data import PolygonClient, PolygonError
-from stocvest.data.models import Bar, Timeframe
+from stocvest.data.models import Bar, Snapshot, Timeframe
 from stocvest.signals import (
     DailyBriefingGenerator,
     DailyBriefingInput,
@@ -23,6 +23,7 @@ from stocvest.signals import (
     NewsCatalystDetector,
     PremarketGapScanner,
 )
+from stocvest.signals.day_trading_scanner import SymbolLiquidityContext
 from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
 
@@ -54,6 +55,17 @@ async def _fetch_bars_by_symbol(client: PolygonClient, symbols: list[str]) -> di
     return out
 
 
+def _liquidity_from_snapshots(snaps: list[Snapshot]) -> dict[str, SymbolLiquidityContext]:
+    out: dict[str, SymbolLiquidityContext] = {}
+    for s in snaps:
+        adv = float(s.prev_day_volume) if s.prev_day_volume is not None else None
+        px = s.last_trade_price or s.day_open
+        lp = float(px) if px is not None and float(px) > 0 else None
+        nm = (s.company_name or "").strip() or None
+        out[s.symbol.upper()] = SymbolLiquidityContext(avg_daily_volume=adv, last_price=lp, company_name=nm)
+    return out
+
+
 async def run_scheduled_scan(scan_type: str) -> dict[str, Any]:
     """Run a full scheduled pipeline for ``premarket`` | ``intraday`` | ``eod_summary``."""
     settings = get_settings()
@@ -78,7 +90,11 @@ async def run_scheduled_scan(scan_type: str) -> dict[str, Any]:
                 document["data"]["gaps"] = [serialize_gap_candidate(c) for c in gaps]
             elif scan_type == "intraday":
                 bars_by_symbol = await _fetch_bars_by_symbol(client, symbols)
-                setups = IntradaySetupScanner(min_score=0.35).scan(bars_by_symbol, limit=8)
+                snaps = await _fetch_snapshots(client, symbols)
+                liq = _liquidity_from_snapshots(snaps)
+                setups = IntradaySetupScanner(min_score=0.5).scan(
+                    bars_by_symbol, liquidity_by_symbol=liq, limit=8
+                )
                 document["data"]["setups"] = [serialize_intraday_setup(s) for s in setups]
             elif scan_type == "eod_summary":
                 snaps = await _fetch_snapshots(client, symbols)
@@ -88,7 +104,10 @@ async def run_scheduled_scan(scan_type: str) -> dict[str, Any]:
                 articles = await client.get_news(limit=25)
                 catalyst_objs = NewsCatalystDetector(min_score=0.35).detect(articles, limit=8)
                 bars_by_symbol = await _fetch_bars_by_symbol(client, symbols)
-                setup_objs = IntradaySetupScanner(min_score=0.35).scan(bars_by_symbol, limit=8)
+                liq_eod = _liquidity_from_snapshots(snaps)
+                setup_objs = IntradaySetupScanner(min_score=0.5).scan(
+                    bars_by_symbol, liquidity_by_symbol=liq_eod, limit=8
+                )
                 briefing = DailyBriefingGenerator().generate(
                     DailyBriefingInput(
                         briefing_date=date.today(),

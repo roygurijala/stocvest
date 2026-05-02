@@ -99,6 +99,7 @@ def test_dynamic_gap_candidates_prefers_last_trade_then_open():
             last_trade_price=103.0,
             day_open=102.0,
             day_volume=600_000.0,
+            prev_day_volume=2_000_000.0,
         ),
         Snapshot(
             symbol="OPENONLY",
@@ -106,6 +107,7 @@ def test_dynamic_gap_candidates_prefers_last_trade_then_open():
             last_trade_price=None,
             day_open=104.0,
             day_volume=600_000.0,
+            prev_day_volume=2_000_000.0,
         ),
     ]
     out = dynamic_gap_candidates_from_snapshots(snaps, limit=10, min_abs_gap_percent=2.0)
@@ -119,7 +121,13 @@ def test_dynamic_gap_candidates_filters_penny_and_volume():
     snaps = [
         Snapshot(symbol="PENNY", prev_close=2.0, last_trade_price=2.2, day_volume=600_000.0),
         Snapshot(symbol="LOWVOL", prev_close=100.0, last_trade_price=110.0, day_volume=100_000.0),
-        Snapshot(symbol="OK", prev_close=10.0, last_trade_price=11.0, day_volume=600_000.0),
+        Snapshot(
+            symbol="OK",
+            prev_close=10.0,
+            last_trade_price=11.0,
+            day_volume=600_000.0,
+            prev_day_volume=2_000_000.0,
+        ),
     ]
     out = dynamic_gap_candidates_from_snapshots(snaps, limit=10, min_abs_gap_percent=2.0, min_day_volume=500_000.0)
     assert len(out) == 1
