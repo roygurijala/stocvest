@@ -157,9 +157,12 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                         style={{
                           borderRadius: borderRadius.full,
                           padding: "2px 8px",
-                          background: "rgba(59,130,246,0.14)",
-                          color: colors.accent,
-                          fontSize: typography.scale.xs
+                          fontSize: typography.scale.xs,
+                          ...(gap.gap_percent > 0
+                            ? { background: "rgba(34,197,94,0.18)", color: colors.bullish }
+                            : gap.gap_percent < 0
+                              ? { background: "rgba(239,68,68,0.18)", color: colors.bearish }
+                              : { background: colors.surfaceMuted, color: colors.textMuted })
                         }}
                       >
                         {gap.gap_percent > 0 ? "+" : ""}
