@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 from typing import Any
 
 from stocvest.api.broker_gateway_provider import (
@@ -27,7 +28,13 @@ from stocvest.brokers import (
     BrokerRateLimitError,
     BrokerRejectedError,
     BrokerUnavailableError,
+    InsufficientFundsError,
+    MarketClosedError,
+    OrderQuantityLimitError,
+    OrderRejectedError,
+    PDTViolationError,
     PlaceOrderRequest,
+    UnknownSymbolError,
 )
 
 
@@ -271,6 +278,21 @@ def _run_with_broker_error_mapping(fn: Any) -> dict[str, Any]:
         return not_found(str(exc))
     except BrokerRateLimitError as exc:
         return json_response(429, {"error": "rate_limited", "message": str(exc)})
+    except PDTViolationError as exc:
+        return json_response(403, {"error": "pdt_violation", "message": str(exc)})
+    except InsufficientFundsError as exc:
+        return json_response(403, {"error": "insufficient_funds", "message": str(exc)})
+    except MarketClosedError as exc:
+        return json_response(403, {"error": "market_closed", "message": str(exc)})
+    except UnknownSymbolError as exc:
+        return bad_request(str(exc))
+    except OrderQuantityLimitError as exc:
+        return bad_request(str(exc))
+    except OrderRejectedError as exc:
+        payload: dict[str, Any] = {"error": "order_rejected", "message": str(exc)}
+        if exc.validation_result is not None and dataclasses.is_dataclass(exc.validation_result):
+            payload["validation"] = dataclasses.asdict(exc.validation_result)
+        return json_response(400, payload)
     except BrokerRejectedError as exc:
         return forbidden(str(exc))
     except BrokerUnavailableError as exc:

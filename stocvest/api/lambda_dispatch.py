@@ -111,6 +111,17 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
             broker_place_order_handler,
             broker_positions_handler,
         )
+        from stocvest.api.handlers.etrade_auth import (
+            etrade_oauth_callback_handler,
+            etrade_oauth_start_handler,
+        )
+        from stocvest.api.handlers.orders import (
+            orders_status_handler,
+            orders_submit_handler,
+            orders_validate_handler,
+            profile_trading_mode_get_handler,
+            profile_trading_mode_post_handler,
+        )
 
         return _dispatch_http_routes(
             event,
@@ -123,6 +134,13 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
                 "POST /v1/brokers/orders": broker_place_order_handler,
                 "GET /v1/brokers/orders": broker_get_order_handler,
                 "DELETE /v1/brokers/orders": broker_cancel_order_handler,
+                "POST /v1/orders/validate": orders_validate_handler,
+                "POST /v1/orders/submit": orders_submit_handler,
+                "GET /v1/orders/{order_id}/status": orders_status_handler,
+                "GET /v1/profile/trading-mode": profile_trading_mode_get_handler,
+                "POST /v1/profile/trading-mode": profile_trading_mode_post_handler,
+                "GET /v1/auth/etrade/start": etrade_oauth_start_handler,
+                "POST /v1/auth/etrade/callback": etrade_oauth_callback_handler,
             },
         )
 

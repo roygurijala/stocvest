@@ -11,7 +11,15 @@ and what must never be changed without explicit discussion.
 
 **Phase:** 1 — Complete ✅ / Phase 2 — Complete ✅ / Phase 2.5 — Complete ✅ / Phase 3 — Complete ✅ / Phase 4 — Complete ✅ / Phase 5 — Complete ✅ / Phase 6 — In Progress 🚧 (6a–6i: Terraform + Vercel config + GitHub Actions CI/CD ✅ / cloud apply + hook wiring pending)
 **Last Updated:** 2026-05-01
-**Last Session:** Priority 9 earnings integration completed: Polygon earnings endpoint + Redis cache, authenticated market earnings API, dashboard earnings widget/page, scanner badges, signal evidence warnings, portfolio earnings alerts
+**Last Session:** Step 8 — Order execution safety gates (backend + frontend), paper/live trading mode, confirmation modal, E*TRADE OAuth BFF routes, legal footer + signal chip; API routes on `brokers` Lambda; `tests/api/test_order_safety.py` + `tests/api/handlers/test_orders.py`; frontend Vitest 45 tests
+
+**Step 8 — Order execution safety gates:** ✅ COMPLETE
+- Backend: `stocvest/api/services/order_safety.py` (`OrderSafetyGate`, `OrderAccountState`, `ValidationResult`); broker adapters call gate + structured order-attempt logging (no dollar amounts or account numbers) when `order_safety_*` keys are present in `connect` config
+- New API (same `brokers` Lambda / Terraform routes): `POST /v1/orders/validate`, `POST /v1/orders/submit` (requires `confirmed: true`), `GET /v1/orders/{order_id}/status`, `GET`/`POST /v1/profile/trading-mode`, `GET /v1/auth/etrade/start`, `POST /v1/auth/etrade/callback`
+- Models: `TradingMode`, `UserProfile`, `OrderAttemptLog` in `stocvest/data/models.py`; `user_profile_store` (Dynamo Users table or in-memory); exceptions: `PDTViolationError`, `InsufficientFundsError`, `MarketClosedError`, `UnknownSymbolError`, `OrderQuantityLimitError`, `OrderRejectedError`
+- Frontend: `OrderEntryPanel`, `OrderConfirmationModal`, `OrderStatusTracker`, `TradingModeBadge`, `TradingModeModal`, `DisclaimerFooter`; Next.js BFF under `app/api/stocvest/*` and `app/api/auth/etrade/*`; portfolio embeds order entry; top bar shows mode badge; layout footer disclaimer; signal evidence “Not investment advice” chip; settings E*TRADE connect + masked account placeholder
+- Tests: backend 341 collected (338 passed + 3 skipped); frontend 45 Vitest tests
+**Last Session (previous):** Priority 9 earnings integration completed: Polygon earnings endpoint + Redis cache, authenticated market earnings API, dashboard earnings widget/page, scanner badges, signal evidence warnings, portfolio earnings alerts
 
 **Trust-building features:** ✅ COMPLETE
 - Public endpoints added (no JWT): `GET /v1/signals/recent` and `GET /v1/signals/performance/summary`
@@ -28,7 +36,7 @@ and what must never be changed without explicit discussion.
 - App shell: hidden sidebar below `lg`; hamburger + Framer Motion slide-in drawer with full nav labels; overlay and close (X / outside tap); main content `px-4` on small screens, no sidebar gutter on mobile
 - InfoTip: 16px circular “i” control with 44×44px touch target wrapper on mobile; desktop hover tooltip + mobile tap with outside dismiss and in-tooltip close
 - Dashboard, scanner, signals, portfolio, journal, options (narrow table columns on small screens), settings, signal evidence modal (full-screen on mobile), landing, login/signup, how-it-works, performance, and about: responsive grids, stacked layouts, horizontal scroll for wide tables, minimum 14px body text on narrow viewports where adjusted
-- Verified: `npm run build` and `npm run test` in `frontend/` (33 tests)
+- Verified: `npm run build` and `npm run test` in `frontend/` (45 tests)
 
 **Crisp chat (beta feedback):** ✅ INTEGRATED
 - `frontend/components/crisp-chat.tsx`: loads Crisp asynchronously when `NEXT_PUBLIC_CRISP_WEBSITE_ID` is set; skips cleanly when unset
@@ -90,7 +98,7 @@ Claude in Cursor should always read this file before writing any code.
 ✅ tests/utils/test_logging.py         Logger factory
 ✅ tests/test_package_smoke.py         Package import / export smoke tests
 
-TEST STATUS: 310/310 backend tests passing ✅ + 33/33 frontend unit tests passing ✅
+TEST STATUS: 341 backend tests collected (338 passed + 3 skipped) ✅ + 45/45 frontend unit tests passing ✅
 
 ✅ stocvest/signals/   — Phase 2 complete
                          ✅ 2a News sentiment scorer (Claude API) implemented
@@ -921,6 +929,17 @@ Securities lawyer review complete
 Stripe subscription configured
 
 Future Features Backlog
+POST-BETA PRIORITY 1 — Complete Trade Brief
+6-level verdict: Strong Buy / Buy / Hold / Wait / Sell / Strong Sell
+Key Levels: Entry zone, Target 1, Target 2, Stop Loss calculated from ATR
+Risk/Reward ratio with visual bar
+Trade Plan: specific entry trigger, scale-in plan, exit plan, invalidation
+Technical signals grid: VWAP, EMA, RSI, trend, momentum, volume
+Catalysts and Risks two-column layout
+Requires: 30 days of real signal outcome data to validate key level accuracy
+Requires: Securities lawyer review of specific price target language
+Requires: Paper trading validation of ATR-based calculations
+Build after: beta launch, first 30 days of data, legal review complete
 PRIORITY 1 — Automatic Journal Capture
 Auto-capture on every order fill via broker layer hook
 Signal context captured when Trade This Setup clicked

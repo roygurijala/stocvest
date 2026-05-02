@@ -26,6 +26,14 @@ locals {
     "GET /v1/brokers/orders"    = { module_key = "brokers", authorizer = true }
     "DELETE /v1/brokers/orders" = { module_key = "brokers", authorizer = true }
 
+    "POST /v1/orders/validate"              = { module_key = "brokers", authorizer = true }
+    "POST /v1/orders/submit"                = { module_key = "brokers", authorizer = true }
+    "GET /v1/orders/{order_id}/status"      = { module_key = "brokers", authorizer = true }
+    "GET /v1/profile/trading-mode"          = { module_key = "brokers", authorizer = true }
+    "POST /v1/profile/trading-mode"         = { module_key = "brokers", authorizer = true }
+    "GET /v1/auth/etrade/start"             = { module_key = "brokers", authorizer = true }
+    "POST /v1/auth/etrade/callback"         = { module_key = "brokers", authorizer = true }
+
     "POST /v1/portfolio/holdings"   = { module_key = "portfolio", authorizer = true }
     "POST /v1/portfolio/summary"    = { module_key = "portfolio", authorizer = true }
     "POST /v1/portfolio/allocation" = { module_key = "portfolio", authorizer = true }

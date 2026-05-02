@@ -46,6 +46,7 @@ class ETradeBrokerAdapter(BrokerAdapter):
 
     async def connect(self, config: dict[str, Any]) -> None:
         self._configure_pdt_enforcer(config)
+        self._configure_order_safety(config)
         gateway = config.get("gateway")
         if gateway is None:
             raise BrokerUnavailableError(

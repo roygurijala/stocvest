@@ -192,3 +192,27 @@ class EarningsEvent(BaseModel):
     actual_eps: Optional[float] = None
     surprise_percent: Optional[float] = None
     market_cap: Optional[float] = None
+
+
+class TradingMode(str, Enum):
+    """Paper vs live execution preference (stored per user)."""
+
+    PAPER = "paper"
+    LIVE = "live"
+
+
+class UserProfile(BaseModel):
+    user_id: str
+    trading_mode: TradingMode = TradingMode.PAPER
+
+
+class OrderAttemptLog(BaseModel):
+    """Audit metadata for an order attempt (no dollar amounts or account numbers)."""
+
+    user_id: str
+    timestamp: datetime
+    symbol: str
+    side: str
+    quantity: float
+    order_type: str
+    execution_mode: str  # "paper" | "live"

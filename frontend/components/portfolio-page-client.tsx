@@ -3,6 +3,7 @@
 import type { BrokerOverview } from "@/lib/api/brokers";
 import type { PortfolioMultiBrokerOverview } from "@/lib/api/portfolio";
 import type { EarningsEvent } from "@/lib/api/earnings";
+import { OrderEntryPanel } from "@/components/order-entry-panel";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -45,6 +46,7 @@ export function PortfolioPageClient({ brokerOverviews, overview, earningsBySymbo
 
   return (
     <section style={{ display: "grid", gap: spacing[4] }}>
+      <OrderEntryPanel brokerOverviews={brokerOverviews} />
       <article
         className="grid grid-cols-1 gap-3 sm:grid-cols-3"
         style={{

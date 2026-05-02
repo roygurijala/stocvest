@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { type ThemeName, colorTokens } from "@/lib/design-system";
 
 const STORAGE_KEY = "stocvest-theme";

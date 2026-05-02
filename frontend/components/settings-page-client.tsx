@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
@@ -11,9 +13,22 @@ interface SettingsPageClientProps {
 
 export function SettingsPageClient({ email }: SettingsPageClientProps) {
   const { colors } = useTheme();
+  const search = useSearchParams();
   const [confirmText, setConfirmText] = useState("");
   const [emailNotif, setEmailNotif] = useState(true);
   const [pushNotif, setPushNotif] = useState(false);
+  const [etradeConnected, setEtradeConnected] = useState(false);
+  const [etradeLastSync, setEtradeLastSync] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (search.get("connected") === "etrade") {
+      setEtradeConnected(true);
+      setEtradeLastSync(new Date().toISOString());
+    }
+    if (search.get("error") === "etrade_auth_failed") {
+      setEtradeConnected(false);
+    }
+  }, [search]);
 
   return (
     <section style={{ display: "grid", gap: spacing[4] }}>
@@ -31,7 +46,7 @@ export function SettingsPageClient({ email }: SettingsPageClientProps) {
       </article>
 
       <article style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
-        <h3 style={{ marginTop: 0 }}>Broker Connections</h3>
+        <h3 style={{ marginTop: 0 }}>Connected Brokers</h3>
         <div style={{ display: "grid", gap: spacing[2] }}>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <span>IBKR</span>
@@ -40,10 +55,39 @@ export function SettingsPageClient({ email }: SettingsPageClientProps) {
             </button>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <span>ETrade</span>
-            <button type="button" className="min-h-11 w-full rounded-md border px-3 sm:w-auto" style={{ borderColor: colors.border }}>
-              Connect ETrade
-            </button>
+            <span className="flex items-center gap-2">
+              E*TRADE
+              {etradeConnected ? (
+                <span className="inline-flex h-2 w-2 rounded-full" style={{ background: colors.bullish }} aria-hidden />
+              ) : null}
+            </span>
+            {etradeConnected ? (
+              <div className="flex flex-col items-stretch gap-1 text-sm sm:items-end" style={{ color: colors.textMuted }}>
+                <span>
+                  Account <span style={{ color: colors.text }}>****1234</span>
+                </span>
+                {etradeLastSync ? <span>Last sync: {new Date(etradeLastSync).toLocaleString()}</span> : null}
+                <button
+                  type="button"
+                  className="text-left sm:text-right"
+                  style={{ color: colors.bearish, background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                  onClick={() => {
+                    setEtradeConnected(false);
+                    setEtradeLastSync(null);
+                  }}
+                >
+                  Disconnect
+                </button>
+              </div>
+            ) : (
+              <Link
+                href="/api/auth/etrade/start"
+                className="inline-flex min-h-11 items-center justify-center rounded-md border px-3 sm:w-auto"
+                style={{ borderColor: colors.border, color: colors.accent }}
+              >
+                Connect E*TRADE
+              </Link>
+            )}
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", color: colors.bullish }}>
             <span>MOCK</span>

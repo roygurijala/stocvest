@@ -10,6 +10,12 @@ from stocvest.brokers.exceptions import (
     BrokerRateLimitError,
     BrokerRejectedError,
     BrokerUnavailableError,
+    InsufficientFundsError,
+    MarketClosedError,
+    OrderQuantityLimitError,
+    OrderRejectedError,
+    PDTViolationError,
+    UnknownSymbolError,
 )
 from stocvest.brokers.factory import BrokerAdapterFactory, BrokerKind
 from stocvest.brokers.ibkr_adapter import IBKRBrokerAdapter
@@ -46,6 +52,12 @@ __all__ = [
     "BrokerRateLimitError",
     "BrokerRejectedError",
     "BrokerUnavailableError",
+    "InsufficientFundsError",
+    "MarketClosedError",
+    "OrderQuantityLimitError",
+    "OrderRejectedError",
+    "PDTViolationError",
+    "UnknownSymbolError",
     "ETradeBrokerAdapter",
     "ETradeHttpGateway",
     "ETradeOAuthClient",

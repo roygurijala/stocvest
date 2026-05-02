@@ -5,6 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, Protocol
 
+from stocvest.brokers.exceptions import OrderRejectedError
 from stocvest.brokers.models import (
     BrokerAccount,
     BrokerHealth,
@@ -50,11 +51,20 @@ class BrokerAdapter(ABC):
 
     def __init__(self) -> None:
         self._pdt_enforcer: BrokerPDTEnforcer | None = None
+        self._order_safety_gate: Any | None = None
+        self._order_safety_user_id: str | None = None
+        self._order_safety_account_state: Any | None = None
 
     def _configure_pdt_enforcer(self, config: dict[str, Any]) -> None:
         """Optional pdt_enforcer in connect() config for hard pre-submit checks."""
         enforcer = config.get("pdt_enforcer")
         self._pdt_enforcer = enforcer
+
+    def _configure_order_safety(self, config: dict[str, Any]) -> None:
+        """Optional OrderSafetyGate + account snapshot (set by API handlers)."""
+        self._order_safety_gate = config.get("order_safety_gate")
+        self._order_safety_user_id = config.get("order_safety_user_id")
+        self._order_safety_account_state = config.get("order_safety_account_state")
 
     async def place_order(self, account_id: str, request: PlaceOrderRequest) -> OrderAck:
         """
@@ -62,6 +72,26 @@ class BrokerAdapter(ABC):
 
         Every adapter routes here and only implements `_place_order_impl`.
         """
+        if self._order_safety_gate is not None and self._order_safety_account_state is not None:
+            from stocvest.utils.logging import get_logger
+
+            log = get_logger(__name__)
+            paper = bool(getattr(self._order_safety_account_state, "trading_mode_is_paper", False))
+            log.info(
+                "order_attempt user=%s symbol=%s side=%s qty=%s paper_live=%s",
+                self._order_safety_user_id or "",
+                request.symbol,
+                request.side.value,
+                request.quantity,
+                "paper" if paper else "live",
+            )
+            result = await self._order_safety_gate.validate_order(
+                self._order_safety_user_id or "",
+                request,
+                self._order_safety_account_state,
+            )
+            if not result.is_valid:
+                raise OrderRejectedError("Order failed pre-trade validation.", result)
         if self._pdt_enforcer is not None:
             await self._pdt_enforcer.assert_can_place_order(account_id, request)
         return await self._place_order_impl(account_id, request)

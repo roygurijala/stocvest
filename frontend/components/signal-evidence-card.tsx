@@ -122,6 +122,18 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
           >
             {evidence.directionBadgeLabel}
           </span>
+          <span
+            style={{
+              borderRadius: borderRadius.full,
+              padding: "4px 10px",
+              fontSize: typography.scale.xs,
+              fontWeight: 600,
+              background: "rgba(59,130,246,0.12)",
+              color: colors.textMuted
+            }}
+          >
+            Not investment advice
+          </span>
         </div>
         <div className="flex justify-start sm:justify-end">
           <div style={{ display: "grid", justifyItems: "center", gap: spacing[1] }}>

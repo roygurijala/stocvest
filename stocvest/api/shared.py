@@ -49,10 +49,13 @@ def get_bearer_token(event: LambdaEvent) -> str | None:
 def build_request_context(event: LambdaEvent) -> RequestContext:
     request_context = event.get("requestContext") or {}
     request_id = str(request_context.get("requestId") or "")
-    method = str(event.get("httpMethod") or "")
-    path = str(event.get("path") or "")
+    http = request_context.get("http") or {}
+    method = str(event.get("httpMethod") or http.get("method") or "")
+    path = str(event.get("path") or http.get("path") or "")
     authorizer = request_context.get("authorizer") or {}
     claims = authorizer.get("claims") or {}
+    if not claims and isinstance(authorizer.get("jwt"), dict):
+        claims = authorizer["jwt"].get("claims") or {}
     user_id = claims.get("sub")
     return RequestContext(
         request_id=request_id,

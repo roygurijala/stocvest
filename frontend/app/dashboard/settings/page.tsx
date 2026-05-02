@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { SettingsPageClient } from "@/components/settings-page-client";
@@ -10,7 +11,9 @@ export default async function DashboardSettingsPage() {
   }
   return (
     <AppShell session={session}>
-      <SettingsPageClient email={session.email ?? "unknown@stocvest.local"} />
+      <Suspense fallback={<p>Loading settings…</p>}>
+        <SettingsPageClient email={session.email ?? "unknown@stocvest.local"} />
+      </Suspense>
     </AppShell>
   );
 }

@@ -37,6 +37,7 @@ class MockBrokerAdapter(BrokerAdapter):
 
     async def connect(self, config: dict[str, Any]) -> None:
         self._configure_pdt_enforcer(config)
+        self._configure_order_safety(config)
         if config.get("fail_auth"):
             raise BrokerAuthError("Mock auth failure")
         raw_accounts = config.get("accounts") or [{"account_id": "MOCK-1", "display_name": "Paper"}]

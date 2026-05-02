@@ -30,6 +30,20 @@ def test_get_bearer_token_returns_none_for_invalid_scheme() -> None:
     assert get_bearer_token(event) is None
 
 
+def test_build_request_context_reads_jwt_claims_for_http_api() -> None:
+    event = {
+        "requestContext": {
+            "requestId": "req-2",
+            "http": {"method": "GET", "path": "/v1/profile/trading-mode"},
+            "authorizer": {"jwt": {"claims": {"sub": "jwt-user", "scope": "openid"}}},
+        },
+    }
+    ctx = build_request_context(event)
+    assert ctx.user_id == "jwt-user"
+    assert ctx.method == "GET"
+    assert ctx.path == "/v1/profile/trading-mode"
+
+
 def test_build_request_context_extracts_authorizer_claims() -> None:
     event = {
         "path": "/v1/health",
