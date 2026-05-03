@@ -6,6 +6,7 @@ Ranks market news items by likely intraday catalyst strength.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from stocvest.data.models import NewsArticle, Newssentiment
@@ -51,6 +52,10 @@ class NewsCatalystDetector:
         "$10,000 into",
         "soared along with",
         "slumped this week",
+        "growth stocks to invest",
+        "stocks to invest",
+        "right now",
+        "to invest $",
     )
 
     _CATEGORY_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -70,19 +75,19 @@ class NewsCatalystDetector:
             ),
         ),
         (
-            "fda",
+            "merger",
             (
-                "fda",
-                "pdufa",
-                "nda",
-                "clinical trial",
-                "phase 2",
-                "phase 3",
-                "breakthrough designation",
-                "fast track",
+                "merger",
+                "acquisition",
+                "buyout",
+                "takeover",
+                "deal",
+                "acquired",
+                "m&a",
+                "eyes ebay",
+                "chases valuation",
             ),
         ),
-        ("merger", ("merger", "acquisition", "buyout", "takeover", "deal", "acquired")),
         ("earnings", ("earnings", "eps", "guidance", "revenue", "quarterly", "q1 ", "q2 ", "q3 ", "q4 ")),
         ("macro", ("fomc", "federal reserve", "cpi", "inflation", "jobs report", "nonfarm", "nfp")),
     )
@@ -153,17 +158,36 @@ class NewsCatalystDetector:
         h = title.lower()
         return any(sub in h for sub in cls._HEADLINE_NOISE_SUBSTRINGS)
 
+    def _matches_fda_category(self, text: str) -> bool:
+        """FDA only when regulatory / drug context — not before merger (e.g. 'takeover' headlines)."""
+        if "fda" in text or "pdufa" in text:
+            return True
+        if re.search(r"\bnda\b", text):
+            return True
+        trial_markers = (
+            "clinical trial",
+            "phase 2",
+            "phase 3",
+            "breakthrough designation",
+            "fast track",
+        )
+        if any(k in text for k in trial_markers):
+            return True
+        if any(k in text for k in self._FDA_EXTRA) and any(
+            k in text for k in ("fda", "drug", "therapy", "treatment", "pdufa", "clinical")
+        ):
+            return True
+        return False
+
     def _classify_category(self, text: str) -> str:
         for cat, keywords in self._CATEGORY_RULES:
-            if cat == "fda":
-                if any(k in text for k in keywords) or any(k in text for k in self._FDA_EXTRA):
-                    return cat
-            elif cat == "earnings":
+            if cat == "earnings":
                 if any(k in text for k in keywords):
                     return cat
-            else:
-                if any(k in text for k in keywords):
-                    return cat
+            elif any(k in text for k in keywords):
+                return cat
+        if self._matches_fda_category(text):
+            return "fda"
         return "macro"
 
     def _narrative_score(self, text: str) -> int:

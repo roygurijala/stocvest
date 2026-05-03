@@ -43,6 +43,18 @@ def test_merger_news_tagged_merger() -> None:
     assert c and c[0].catalyst_type == "merger"
 
 
+def test_takeover_headline_tagged_merger_not_fda() -> None:
+    d = NewsCatalystDetector(min_score=0.2)
+    c = d.detect([_a("GameStop Eyes eBay Takeover", ["GME"])], limit=1)
+    assert c and c[0].catalyst_type == "merger"
+
+
+def test_listicle_growth_stocks_headline_filtered() -> None:
+    d = NewsCatalystDetector(min_score=0.2)
+    title = "2 Growth Stocks to Invest $500 in Right Now"
+    assert d.detect([_a(title, ["VEEV"])], limit=1) == []
+
+
 def test_noise_patterns_filtered() -> None:
     d = NewsCatalystDetector(min_score=0.2)
     assert d.detect([_a("Here's what that means if you'd invested $10,000 into ZZZ")], limit=1) == []

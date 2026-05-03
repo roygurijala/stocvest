@@ -189,67 +189,67 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
           borderLeft: noCatSection ? `4px solid ${colors.caution}` : undefined
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "flex-start",
-            gap: spacing[2],
-            flexWrap: "wrap"
-          }}
-        >
-          <div style={{ display: "flex", flexDirection: "column", gap: "4px", minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "baseline", gap: spacing[2], flexWrap: "wrap" }}>
-              <strong style={{ fontSize: typography.scale.base }}>{item.symbol}</strong>
-              {item.company_name ? (
-                <span style={{ color: colors.textMuted, fontSize: "13px" }}>{item.company_name}</span>
+        <div style={{ display: "flex", flexDirection: "column", gap: "4px", minWidth: 0, width: "100%" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "baseline",
+              justifyContent: "space-between",
+              gap: spacing[2],
+              flexWrap: "wrap",
+              width: "100%",
+              minWidth: 0
+            }}
+          >
+            <strong style={{ fontSize: typography.scale.base }}>{item.symbol}</strong>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: spacing[1], flexShrink: 0, marginLeft: "auto" }}>
+              {(() => {
+                const b = earningsBadgeFor(item.symbol);
+                if (!b) return null;
+                return (
+                  <span
+                    style={{
+                      borderRadius: borderRadius.full,
+                      padding: "2px 8px",
+                      background: "rgba(245,158,11,.18)",
+                      color: colors.caution,
+                      fontSize: typography.scale.xs,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4
+                    }}
+                  >
+                    {b.label}
+                    <InfoTip text={b.tip} label="Earnings risk" />
+                  </span>
+                );
+              })()}
+              <span
+                style={{
+                  borderRadius: borderRadius.full,
+                  padding: "2px 8px",
+                  fontSize: typography.scale.xs,
+                  fontFamily: MONO,
+                  fontWeight: 700,
+                  ...(item.gap_pct > 0
+                    ? { background: "rgba(34,197,94,0.18)", color: colors.bullish }
+                    : item.gap_pct < 0
+                      ? { background: "rgba(239,68,68,0.18)", color: colors.bearish }
+                      : { background: colors.surfaceMuted, color: colors.textMuted })
+                }}
+              >
+                {item.gap_pct > 0 ? "+" : ""}
+                {item.gap_pct.toFixed(2)}%
+              </span>
+              {confluenceAlertSymbols.has(item.symbol.trim().toUpperCase()) ? (
+                <span style={CONFLUENCE_BADGE_STYLE}>CONFLUENCE</span>
               ) : null}
             </div>
-            <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>Pre-market gap</span>
           </div>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: spacing[1], flexShrink: 0 }}>
-            {(() => {
-              const b = earningsBadgeFor(item.symbol);
-              if (!b) return null;
-              return (
-                <span
-                  style={{
-                    borderRadius: borderRadius.full,
-                    padding: "2px 8px",
-                    background: "rgba(245,158,11,.18)",
-                    color: colors.caution,
-                    fontSize: typography.scale.xs,
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 4
-                  }}
-                >
-                  {b.label}
-                  <InfoTip text={b.tip} label="Earnings risk" />
-                </span>
-              );
-            })()}
-            <span
-              style={{
-                borderRadius: borderRadius.full,
-                padding: "2px 8px",
-                fontSize: typography.scale.xs,
-                fontFamily: MONO,
-                fontWeight: 700,
-                ...(item.gap_pct > 0
-                  ? { background: "rgba(34,197,94,0.18)", color: colors.bullish }
-                  : item.gap_pct < 0
-                    ? { background: "rgba(239,68,68,0.18)", color: colors.bearish }
-                    : { background: colors.surfaceMuted, color: colors.textMuted })
-              }}
-            >
-              {item.gap_pct > 0 ? "+" : ""}
-              {item.gap_pct.toFixed(2)}%
-            </span>
-            {confluenceAlertSymbols.has(item.symbol.trim().toUpperCase()) ? (
-              <span style={CONFLUENCE_BADGE_STYLE}>CONFLUENCE</span>
-            ) : null}
-          </div>
+          {item.company_name?.trim() ? (
+            <span style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>{item.company_name.trim()}</span>
+          ) : null}
+          <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>Pre-market gap</span>
         </div>
         <div style={{ marginTop: spacing[2] }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2] }}>

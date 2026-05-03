@@ -7,6 +7,7 @@ import { logoutAction } from "@/app/login/actions";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { DASHBOARD_NAV_ITEMS } from "@/components/sidebar";
+import { isDashboardNavItemActive } from "@/lib/dashboard-nav-active";
 import { usePathname } from "next/navigation";
 
 interface MobileNavDrawerProps {
@@ -86,7 +87,7 @@ export function MobileNavDrawer({ open, onClose, userLabel }: MobileNavDrawerPro
             >
               {DASHBOARD_NAV_ITEMS.map((item) => {
                 const Icon = item.icon;
-                const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+                const isActive = isDashboardNavItemActive(pathname, item.href);
                 return (
                   <Link
                     key={item.href}

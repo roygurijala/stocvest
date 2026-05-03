@@ -9,7 +9,6 @@ import {
   Layers,
   LayoutDashboard,
   LogOut,
-  MessageCircle,
   Radio,
   CalendarDays,
   Settings,
@@ -19,6 +18,7 @@ import {
 } from "lucide-react";
 import { logoutAction } from "@/app/login/actions";
 import { openCrispChat } from "@/components/crisp-chat";
+import { isDashboardNavItemActive } from "@/lib/dashboard-nav-active";
 import { spacing, borderRadius, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -46,7 +46,7 @@ export function Sidebar({ userLabel }: SidebarProps) {
 
   return (
     <aside
-      className="hidden h-screen w-[248px] shrink-0 flex-col lg:flex lg:flex-col"
+      className="relative hidden h-screen w-[248px] shrink-0 flex-col lg:flex lg:flex-col"
       style={{
         background: colors.surface,
         borderRight: `1px solid ${colors.border}`
@@ -79,7 +79,7 @@ export function Sidebar({ userLabel }: SidebarProps) {
       >
         {DASHBOARD_NAV_ITEMS.map((item) => {
           const Icon = item.icon;
-          const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+          const isActive = isDashboardNavItemActive(pathname, item.href);
           return (
             <Link
               key={item.href}
@@ -106,8 +106,10 @@ export function Sidebar({ userLabel }: SidebarProps) {
       </nav>
 
       <div
+        className="sidebar-footer relative"
         style={{
           padding: spacing[4],
+          paddingBottom: `calc(${spacing[6]} + 22px)`,
           borderTop: `1px solid ${colors.border}`,
           display: "grid",
           gap: spacing[3],
@@ -120,23 +122,6 @@ export function Sidebar({ userLabel }: SidebarProps) {
         >
           {userLabel}
         </p>
-        <button
-          type="button"
-          onClick={() => openCrispChat()}
-          title="Share feedback or report issues"
-          className="sidebar-feedback-btn flex w-full min-h-11 items-center justify-center gap-2 rounded-md border font-medium"
-          style={{
-            borderColor: "rgba(245,158,11,0.55)",
-            background: "rgba(245,158,11,0.12)",
-            color: "#f59e0b",
-            padding: `${spacing[2]} ${spacing[3]}`,
-            cursor: "pointer",
-            fontSize: typography.scale.sm
-          }}
-        >
-          <MessageCircle size={18} />
-          <span className="sidebar-feedback-label">Send Feedback</span>
-        </button>
         <form action={logoutAction}>
           <button
             type="submit"
@@ -160,6 +145,31 @@ export function Sidebar({ userLabel }: SidebarProps) {
             <span className="sidebar-signout-label">Sign out</span>
           </button>
         </form>
+        <button
+          type="button"
+          onClick={() => openCrispChat()}
+          title="Share feedback or report issues"
+          className="sidebar-feedback-link transition-colors hover:[color:var(--color-text-secondary)]"
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            bottom: 0,
+            margin: 0,
+            border: "none",
+            background: "none",
+            cursor: "pointer",
+            textAlign: "left",
+            fontSize: "11px",
+            color: "var(--color-text-tertiary)",
+            textDecoration: "none",
+            padding: "4px 16px",
+            display: "block",
+            letterSpacing: "0.3px"
+          }}
+        >
+          Send feedback
+        </button>
       </div>
     </aside>
   );
