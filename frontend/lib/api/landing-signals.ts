@@ -106,13 +106,89 @@ export async function fetchLandingSignals(): Promise<LandingSignal[]> {
 
 const FALLBACK_DISCLAIMER = "Signal data for informational purposes only. Not investment advice.";
 
+const ET_TZ = "America/New_York";
+
+/** Calendar YYYY-MM-DD in Eastern for a given instant. */
+function dateStrEt(ms: number): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: ET_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(new Date(ms));
+}
+
+/** Yesterday's calendar date string (en-CA) in America/New_York. */
+function yesterdayDateStrEt(): string {
+  const now = Date.now();
+  const todayStr = dateStrEt(now);
+  let best = "";
+  for (let t = now - 72 * 3600 * 1000; t <= now; t += 15 * 60 * 1000) {
+    const s = dateStrEt(t);
+    if (s < todayStr && s > best) best = s;
+  }
+  return best || dateStrEt(now - 24 * 3600 * 1000);
+}
+
+/**
+ * ISO timestamp for yesterday at hourEt:minuteEt in America/New_York (DST-aware).
+ * Used so the landing explorer shows e.g. "Yesterday · 9:42 AM" in ET year-round.
+ */
+function yesterdayEtWallTimeToIso(hourEt: number, minuteEt: number): string {
+  const targetDay = yesterdayDateStrEt();
+  const dateFmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: ET_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  });
+  const timeFmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: ET_TZ,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  });
+  const now = Date.now();
+  for (let t = now - 120 * 3600 * 1000; t <= now + 2 * 3600 * 1000; t += 60 * 1000) {
+    const d = new Date(t);
+    if (dateFmt.format(d) !== targetDay) continue;
+    const parts = Object.fromEntries(
+      timeFmt.formatToParts(d).filter((p) => p.type !== "literal").map((p) => [p.type, p.value])
+    ) as { hour: string; minute: string };
+    if (Number(parts.hour) === hourEt && Number(parts.minute) === minuteEt) return d.toISOString();
+  }
+  const d = new Date(now - 24 * 3600 * 1000);
+  return d.toISOString();
+}
+
 export const FALLBACK_SIGNALS: LandingSignal[] = [
+  {
+    symbol: "TSLA",
+    direction: "bullish",
+    signal_strength: 91,
+    pattern: "confluence_alert",
+    generated_at: yesterdayEtWallTimeToIso(9, 38),
+    layer_scores: {
+      technical: 94,
+      news: 88,
+      macro: 70,
+      sector: 85,
+      geopolitical: 72,
+      internals: 90
+    },
+    outcome_1h: "correct",
+    price_at_signal: 248.3,
+    price_1h_after: 254.1,
+    ai_summary:
+      "Rare confluence of 6 confirming signals. ORB breakout with bullish regime and strong catalyst alignment.",
+    disclaimer: FALLBACK_DISCLAIMER
+  },
   {
     symbol: "NVDA",
     direction: "bullish",
     signal_strength: 82,
     pattern: "orb_breakout_long",
-    generated_at: new Date(Date.now() - 86400000).toISOString(),
+    generated_at: yesterdayEtWallTimeToIso(9, 42),
     layer_scores: {
       technical: 88,
       news: 91,
@@ -133,7 +209,7 @@ export const FALLBACK_SIGNALS: LandingSignal[] = [
     direction: "bullish",
     signal_strength: 74,
     pattern: "vwap_reclaim",
-    generated_at: new Date(Date.now() - 82800000).toISOString(),
+    generated_at: yesterdayEtWallTimeToIso(10, 8),
     layer_scores: {
       technical: 76,
       news: 68,
@@ -150,24 +226,45 @@ export const FALLBACK_SIGNALS: LandingSignal[] = [
     disclaimer: FALLBACK_DISCLAIMER
   },
   {
-    symbol: "TSLA",
+    symbol: "AMD",
     direction: "bullish",
-    signal_strength: 91,
-    pattern: "confluence_alert",
-    generated_at: new Date(Date.now() - 79200000).toISOString(),
+    signal_strength: 68,
+    pattern: "vwap_reclaim",
+    generated_at: yesterdayEtWallTimeToIso(10, 24),
     layer_scores: {
-      technical: 94,
-      news: 88,
-      macro: 70,
-      sector: 85,
-      geopolitical: 72,
-      internals: 90
+      technical: 72,
+      news: 65,
+      macro: 58,
+      sector: 74,
+      geopolitical: 60,
+      internals: 68
     },
     outcome_1h: "correct",
-    price_at_signal: 248.3,
-    price_1h_after: 254.1,
+    price_at_signal: 178.2,
+    price_1h_after: 180.4,
     ai_summary:
-      "Rare confluence of 6 confirming signals. ORB breakout with bullish regime and strong catalyst alignment.",
+      "VWAP reclaim with sector tailwind. Semiconductor momentum supporting continuation.",
+    disclaimer: FALLBACK_DISCLAIMER
+  },
+  {
+    symbol: "SPY",
+    direction: "bullish",
+    signal_strength: 61,
+    pattern: "9ema_bounce",
+    generated_at: yesterdayEtWallTimeToIso(11, 15),
+    layer_scores: {
+      technical: 65,
+      news: 55,
+      macro: 62,
+      sector: 60,
+      geopolitical: 58,
+      internals: 64
+    },
+    outcome_1h: "incorrect",
+    price_at_signal: 524.8,
+    price_1h_after: 522.1,
+    ai_summary:
+      "9 EMA bounce setup with mixed macro signals. Lower conviction — macro headwinds present.",
     disclaimer: FALLBACK_DISCLAIMER
   }
 ];

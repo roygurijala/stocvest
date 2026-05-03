@@ -192,7 +192,7 @@ export function LandingSignalExplorer({
           </div>
         </div>
 
-        <div className={`flex flex-wrap gap-2 ${usedApiFallback ? "mb-2" : "mb-4"}`} role="tablist" aria-label="Signals">
+        <div className="mb-2 flex flex-wrap gap-2" role="tablist" aria-label="Signals">
           {signals.map((sig, i) => {
             const isActive = i === active;
             const dotColor =
@@ -225,11 +225,13 @@ export function LandingSignalExplorer({
             );
           })}
         </div>
-        {usedApiFallback ? (
-          <p className="mb-4 text-[10px] italic text-slate-500" style={{ fontFamily: MONO }}>
-            Example signals from fallback data · Live history builds from market open
-          </p>
-        ) : null}
+        <p className="mb-4 text-[10px] italic" style={{ fontFamily: MONO, color: "#4a6080" }}>
+          {usedApiFallback
+            ? "Showing 5 example signals — 4 correct, 1 incorrect. Live history builds from market open."
+            : `Showing ${signals.length} signals from yesterday · ${
+                accuracyPct != null ? `${accuracyPct}% directional accuracy` : "— directional accuracy"
+              }`}
+        </p>
 
         <div className="landing-glow-card mb-6 p-6">
           <div className="mb-4 flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
