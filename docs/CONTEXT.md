@@ -4,7 +4,7 @@
 
 **Last updated:** 2026-05-02  
 **Repo:** https://github.com/roygurijala/stocvest  
-**Test baseline (regression gate — must match §13):** Backend `pytest tests/ -q` → **410 passed**, **3 skipped**. Frontend `npm run test` → **46 passed** (17 test files). **`npm run build`** last verified: success.
+**Test baseline (regression gate — must match §13):** Backend `pytest tests/ -q` → **416 passed**, **3 skipped**. Frontend `npm run test` → **46 passed** (17 test files). **`npm run build`** last verified: success.
 
 ---
 
@@ -31,13 +31,13 @@
 `data/` (models incl. **`SignalRecord`**, **`EconomicCalendarEvent`**, Polygon — snapshot parser may drop `day` OHLC/VWAP vs **`lastTrade.p` only when last is a positive price and any session field is **>5×** off; missing last keeps session bar; **`get_economic_calendar_for_day`** on Benzinga economics when tier allows), `indicators/`, `signals/` (sentiment, macro, geo, composite, AI synthesis, day-trading scanner, **`confluence`** multi-signal alignment score in `confluence.py`, **`gap_intelligence`**, **`morning_brief`**, **`news_catalyst_detector`** categories + narrative sentiment, briefing markdown generator still in `daily_briefing.py` for legacy tests), `brokers/` (adapters, gateways, OAuth), `api/` (handlers incl. **`signal_resolution`**, **`services/signal_recorder.py`**, **`services/morning_brief_fetch.py`**, **`POST /v1/scanner/gap-intelligence`**, structured **`POST /v1/signals/day/briefing`** / **`POST /v1/scanner/briefing`**, auth, `legal_copy.py`, order safety integration).
 
 **Frontend (`frontend/`)**  
-App router pages (dashboard incl. **`/dashboard/performance`**, scanner, signals with **Signal history** tab, portfolio, journal, settings, earnings, public `/performance`, terms, etc.), **landing** (`LandingHowItWorksSection`, `LandingPerformanceSection` + optional **`pattern_breakdown`** from `GET /v1/signals/performance/summary`), design system + theme, API clients under `lib/api/` (incl. **`public-signals.ts`**, client-safe **`fetch-symbol-snapshot.ts`**), **`lib/snapshot-reference-levels.ts`** (same **5×** + valid-last guard as backend), Crisp when `NEXT_PUBLIC_CRISP_WEBSITE_ID` is set. **Sign out** redirects to **`/`** (landing). Scanner: **`fetchScannerOverview`** uses **`POST /v1/scanner/gap-intelligence`**, **`POST /v1/signals/day/setups`** (with snapshots + regime for confluence), structured **`POST /v1/signals/day/briefing`** (context includes gap items + intraday setups); intraday setup cards, signal evidence modal, gap cards, and dashboard morning brief show **confluence** when `is_confluence_alert`.
+App router pages (dashboard incl. **`/dashboard/performance`**, scanner, signals with **Signal history** tab, portfolio, journal, settings, earnings, public `/performance`, terms, etc.), **landing** (server **`app/page.tsx`** fetches **`GET /v1/signals/recent?landing=true`** + performance summary with **30m** revalidate; **`landing-signals.ts`**, **`LandingSignalExplorer`**, **`LandingBeforeAfterSection`**, **`LandingActivityFeedSection`**, `LandingHowItWorksSection`, `LandingPerformanceSection` + optional **`pattern_breakdown`**; no client polling on `/`), design system + theme, API clients under `lib/api/` (incl. **`public-signals.ts`**, client-safe **`fetch-symbol-snapshot.ts`**), **`lib/snapshot-reference-levels.ts`** (same **5×** + valid-last guard as backend), Crisp when `NEXT_PUBLIC_CRISP_WEBSITE_ID` is set. **Sign out** redirects to **`/`** (landing). Scanner: **`fetchScannerOverview`** uses **`POST /v1/scanner/gap-intelligence`**, **`POST /v1/signals/day/setups`** (with snapshots + regime for confluence), structured **`POST /v1/signals/day/briefing`** (context includes gap items + intraday setups); intraday setup cards, signal evidence modal, gap cards, and dashboard morning brief show **confluence** when `is_confluence_alert`.
 
 **Docs**  
 `docs/API_CONTRACTS.md` — HTTP + broker contracts. **`docs/BACKLOG.md`** — detailed planned work (no duplicate of this file’s status tables). **Detailed file-by-file history was removed from this file** to avoid drift; use README + git.
 
 **Public signal API (trust)**  
-`GET /v1/signals/recent` (last **50** public `SignalRecord` rows, outcome fields when resolved), `GET /v1/signals/performance/summary` — directional accuracy from **1d** outcomes (`correct` / `incorrect` / `neutral`; accuracy = correct ÷ (correct + incorrect)). Responses use `signal_strength`, `disclaimer`, etc. (see Legal section).
+`GET /v1/signals/recent` (last **50** public `SignalRecord` rows as JSON array when `landing` is absent; **`?landing=true`** returns **`{ "items": [...] }`** with up to **5** rows where **`outcome_1h`** is set — allowlisted fields for marketing only, **`ai_summary`** truncated to **120** chars), `GET /v1/signals/performance/summary` — directional accuracy from **1d** outcomes (`correct` / `incorrect` / `neutral`; accuracy = correct ÷ (correct + incorrect)). Responses use `signal_strength`, `disclaimer`, etc. (see Legal section).
 
 ---
 
@@ -216,7 +216,7 @@ Report exact counts. If any count dropped, fix before proceeding to documentatio
 
 | Suite | Command | Last verified |
 |-------|---------|---------------|
-| Backend | `pytest tests/ -q` | **410 passed**, **3 skipped** |
+| Backend | `pytest tests/ -q` | **416 passed**, **3 skipped** |
 | Frontend tests | `cd frontend && npm run test` | **46 passed** (17 files) |
 | Frontend build | `cd frontend && npm run build` | **success** |
 

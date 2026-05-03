@@ -33,7 +33,7 @@ function Dot({ color }: { color: string }) {
 
 export function LandingHowItWorksSection() {
   return (
-    <section className="mx-auto max-w-7xl px-4 py-20 md:px-8">
+    <section id="how-it-works" className="mx-auto max-w-7xl px-4 py-20 md:px-8">
       <div className="mx-auto max-w-3xl text-center">
         <p
           className="mb-3 uppercase"

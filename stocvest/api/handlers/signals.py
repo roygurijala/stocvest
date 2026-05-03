@@ -258,9 +258,14 @@ def day_briefing_handler(event: LambdaEvent, context: LambdaContext) -> dict[str
 
 
 def public_recent_signals_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
-    _ = event
     _ = context
     try:
+        qs = event.get("queryStringParameters") or {}
+        landing_raw = qs.get("landing")
+        landing = str(landing_raw or "").lower() == "true"
+        if landing:
+            rows = get_signal_recorder().get_public_landing_items(limit=5)
+            return ok({"items": rows})
         rows = get_signal_recorder().get_public_recent(limit=50)
         return ok(rows)
     except Exception as exc:

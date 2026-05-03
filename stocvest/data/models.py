@@ -247,6 +247,7 @@ class SignalRecord(BaseModel):
     outcome_1h: str | None = None  # correct | incorrect | neutral
     outcome_1d: str | None = None
     user_id: str | None = None  # None = public / platform signal
+    ai_summary: str | None = None  # optional; public landing payload truncates to 120 chars
 
     @field_validator("direction")
     @classmethod
@@ -295,4 +296,5 @@ class SignalRecord(BaseModel):
             outcome_1h=str(item["outcome_1h"]) if item.get("outcome_1h") is not None else None,
             outcome_1d=str(item["outcome_1d"]) if item.get("outcome_1d") is not None else None,
             user_id=str(item["user_id"]) if item.get("user_id") else None,
+            ai_summary=str(item["ai_summary"]).strip() if isinstance(item.get("ai_summary"), str) else None,
         )

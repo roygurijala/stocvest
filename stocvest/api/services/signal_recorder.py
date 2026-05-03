@@ -70,6 +70,8 @@ def _record_to_item(rec: SignalRecord) -> dict[str, Any]:
         item["outcome_1h"] = rec.outcome_1h
     if rec.outcome_1d is not None:
         item["outcome_1d"] = rec.outcome_1d
+    if rec.ai_summary:
+        item["ai_summary"] = rec.ai_summary
     return item
 
 
@@ -96,6 +98,13 @@ class InMemorySignalRecorder:
         rows = [it for it in self._items.values() if it.get("scope_key") == "PUBLIC"]
         rows.sort(key=lambda x: str(x.get("generated_at") or ""), reverse=True)
         return [_public_api_shape(_item_to_record(r)) for r in rows[:limit]]
+
+    def get_public_landing_items(self, *, limit: int = 5) -> list[dict[str, Any]]:
+        rows = [it for it in self._items.values() if it.get("scope_key") == "PUBLIC"]
+        records = [_item_to_record(r) for r in rows]
+        resolved = [r for r in records if r.outcome_1h is not None]
+        resolved.sort(key=lambda r: r.generated_at, reverse=True)
+        return [_landing_api_shape(r) for r in resolved[:limit]]
 
     def get_signal_history(
         self,
@@ -208,6 +217,33 @@ class DynamoDBSignalRecorder:
         items = resp.get("Items") or []
         records = [_item_to_record(x) for x in items if isinstance(x, dict)]
         return [_public_api_shape(r) for r in records]
+
+    def get_public_landing_items(self, *, limit: int = 5) -> list[dict[str, Any]]:
+        try:
+            from boto3.dynamodb.conditions import Key
+
+            resp = self._table.query(
+                IndexName=GSI_NAME,
+                KeyConditionExpression=Key("scope_key").eq("PUBLIC"),
+                ScanIndexForward=False,
+                Limit=200,
+            )
+        except ClientError as exc:
+            code = str((exc.response or {}).get("Error", {}).get("Code", ""))
+            if code in {"ResourceNotFoundException", "ValidationException"}:
+                log.warning("signal history landing query failed: %s", code)
+                return []
+            raise
+        items = resp.get("Items") or []
+        resolved: list[SignalRecord] = []
+        for raw in items:
+            if not isinstance(raw, dict):
+                continue
+            rec = _item_to_record(raw)
+            if rec.outcome_1h is not None:
+                resolved.append(rec)
+        resolved.sort(key=lambda r: r.generated_at, reverse=True)
+        return [_landing_api_shape(r) for r in resolved[:limit]]
 
     def get_signal_history(
         self,
@@ -372,6 +408,60 @@ def _public_api_shape(rec: SignalRecord) -> dict[str, Any]:
         "outcome_1h": rec.outcome_1h,
         "outcome_1d": rec.outcome_1d,
         "outcome": _legacy_outcome(rec.outcome_1d, rec.outcome_1h),
+        "disclaimer": API_SIGNAL_DISCLAIMER,
+    }
+
+
+_LANDING_LAYER_KEYS: tuple[str, ...] = (
+    "technical",
+    "news",
+    "macro",
+    "sector",
+    "geopolitical",
+    "internals",
+)
+
+
+def _normalize_landing_layer_scores(rec: SignalRecord) -> dict[str, int]:
+    raw = {str(k).lower(): float(v) for k, v in rec.layer_scores.items()}
+    out: dict[str, int] = {}
+    for key in _LANDING_LAYER_KEYS:
+        v = raw.get(key)
+        if v is None and key == "geopolitical":
+            v = raw.get("geo")
+        if v is None:
+            v = 50.0
+        n = int(round(max(0.0, min(100.0, v))))
+        out[key] = n
+    return out
+
+
+def _truncate_landing_ai_summary(text: str | None, *, max_len: int = 120) -> str | None:
+    if text is None:
+        return None
+    t = str(text).strip()
+    if not t:
+        return None
+    if len(t) <= max_len:
+        return t
+    return t[: max_len - 3].rstrip() + "..."
+
+
+def _landing_api_shape(rec: SignalRecord) -> dict[str, Any]:
+    from stocvest.api.legal_copy import API_SIGNAL_DISCLAIMER
+
+    ts = rec.generated_at.astimezone(timezone.utc).isoformat()
+    return {
+        "symbol": rec.symbol.upper(),
+        "direction": rec.direction,
+        "signal_strength": int(rec.signal_strength),
+        "pattern": rec.pattern,
+        "generated_at": ts,
+        "layer_scores": _normalize_landing_layer_scores(rec),
+        "outcome_1h": rec.outcome_1h,
+        "price_at_signal": float(rec.price_at_signal),
+        "price_1h_after": float(rec.price_1h_after) if rec.price_1h_after is not None else None,
+        "ai_summary": _truncate_landing_ai_summary(rec.ai_summary, max_len=120),
         "disclaimer": API_SIGNAL_DISCLAIMER,
     }
 

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from stocvest.api.handlers.signals import swing_composite_handler
+from stocvest.api.handlers.signals import public_recent_signals_handler, swing_composite_handler
 from stocvest.api.services.signal_recorder import (
     InMemorySignalRecorder,
     get_signal_recorder,
@@ -201,3 +202,188 @@ def test_get_signal_recorder_returns_memory_when_no_table(monkeypatch: pytest.Mo
     r = get_signal_recorder()
     assert isinstance(r, InMemorySignalRecorder)
     get_settings.cache_clear()
+
+
+def _landing_mem(monkeypatch: pytest.MonkeyPatch) -> InMemorySignalRecorder:
+    mem = InMemorySignalRecorder()
+    monkeypatch.setattr("stocvest.api.handlers.signals.get_signal_recorder", lambda: mem)
+    return mem
+
+
+def test_landing_param_returns_resolved_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    mem = _landing_mem(monkeypatch)
+    now = datetime.now(timezone.utc)
+    mem.record_signal(
+        SignalRecord(
+            signal_id="r1",
+            symbol="AAA",
+            direction="bullish",
+            signal_strength=70,
+            pattern="orb_breakout_long",
+            layer_scores={"technical": 80.0},
+            price_at_signal=100.0,
+            generated_at=now - timedelta(hours=1),
+            outcome_1h="correct",
+            price_1h_after=101.0,
+            resolved_1h=True,
+        )
+    )
+    mem.record_signal(
+        SignalRecord(
+            signal_id="r2",
+            symbol="BBB",
+            direction="bearish",
+            signal_strength=60,
+            pattern="p2",
+            layer_scores={},
+            price_at_signal=50.0,
+            generated_at=now,
+            outcome_1h=None,
+        )
+    )
+    response = public_recent_signals_handler({"queryStringParameters": {"landing": "true"}}, {})
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert list(body.keys()) == ["items"]
+    assert len(body["items"]) == 1
+    assert body["items"][0]["symbol"] == "AAA"
+
+
+def test_landing_param_max_5_results(monkeypatch: pytest.MonkeyPatch) -> None:
+    mem = _landing_mem(monkeypatch)
+    now = datetime.now(timezone.utc)
+    for i in range(7):
+        mem.record_signal(
+            SignalRecord(
+                signal_id=f"x{i}",
+                symbol=f"S{i}",
+                direction="neutral",
+                signal_strength=50,
+                pattern="p",
+                layer_scores={},
+                price_at_signal=10.0,
+                generated_at=now - timedelta(minutes=i),
+                outcome_1h="neutral",
+                price_1h_after=10.0,
+                resolved_1h=True,
+            )
+        )
+    response = public_recent_signals_handler({"queryStringParameters": {"landing": "true"}}, {})
+    body = json.loads(response["body"])
+    assert len(body["items"]) == 5
+
+
+def test_landing_param_excludes_user_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    mem = _landing_mem(monkeypatch)
+    now = datetime.now(timezone.utc)
+    mem.record_signal(
+        SignalRecord(
+            signal_id="u1",
+            symbol="ZZZ",
+            direction="bullish",
+            signal_strength=55,
+            pattern="p",
+            layer_scores={},
+            price_at_signal=1.0,
+            generated_at=now,
+            outcome_1h="correct",
+            price_1h_after=1.1,
+            resolved_1h=True,
+        )
+    )
+    response = public_recent_signals_handler({"queryStringParameters": {"landing": "true"}}, {})
+    body = json.loads(response["body"])
+    item = body["items"][0]
+    assert "user_id" not in item
+    assert "user_id" not in json.dumps(body)
+
+
+def test_landing_param_excludes_private_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    mem = _landing_mem(monkeypatch)
+    now = datetime.now(timezone.utc)
+    mem.record_signal(
+        SignalRecord(
+            signal_id="p1",
+            symbol="QQQ",
+            direction="neutral",
+            signal_strength=40,
+            pattern="p",
+            layer_scores={},
+            price_at_signal=400.0,
+            generated_at=now,
+            outcome_1h="neutral",
+            price_1h_after=400.0,
+            resolved_1h=True,
+        )
+    )
+    response = public_recent_signals_handler({"queryStringParameters": {"landing": "true"}}, {})
+    body = json.loads(response["body"])
+    item = body["items"][0]
+    for forbidden in ("user_id", "internal_weights", "prompt_version", "raw_polygon_data", "signal_id"):
+        assert forbidden not in item
+
+
+def test_landing_param_includes_layer_scores(monkeypatch: pytest.MonkeyPatch) -> None:
+    mem = _landing_mem(monkeypatch)
+    now = datetime.now(timezone.utc)
+    mem.record_signal(
+        SignalRecord(
+            signal_id="ls",
+            symbol="M1",
+            direction="bullish",
+            signal_strength=90,
+            pattern="confluence_alert",
+            layer_scores={
+                "technical": 88.0,
+                "news": 77.0,
+                "macro": 66.0,
+                "sector": 55.0,
+                "geopolitical": 44.0,
+                "internals": 33.0,
+            },
+            price_at_signal=100.0,
+            generated_at=now,
+            outcome_1h="correct",
+            price_1h_after=102.0,
+            resolved_1h=True,
+        )
+    )
+    response = public_recent_signals_handler({"queryStringParameters": {"landing": "true"}}, {})
+    item = json.loads(response["body"])["items"][0]
+    ls = item["layer_scores"]
+    assert set(ls.keys()) == {
+        "technical",
+        "news",
+        "macro",
+        "sector",
+        "geopolitical",
+        "internals",
+    }
+
+
+def test_landing_param_ai_summary_truncated(monkeypatch: pytest.MonkeyPatch) -> None:
+    mem = _landing_mem(monkeypatch)
+    now = datetime.now(timezone.utc)
+    long_text = "x" * 200
+    mem.record_signal(
+        SignalRecord(
+            signal_id="ai",
+            symbol="SUM",
+            direction="bullish",
+            signal_strength=80,
+            pattern="p",
+            layer_scores={},
+            price_at_signal=10.0,
+            generated_at=now,
+            outcome_1h="correct",
+            price_1h_after=10.5,
+            resolved_1h=True,
+            ai_summary=long_text,
+        )
+    )
+    response = public_recent_signals_handler({"queryStringParameters": {"landing": "true"}}, {})
+    item = json.loads(response["body"])["items"][0]
+    summary = item.get("ai_summary")
+    assert isinstance(summary, str)
+    assert len(summary) <= 120
+    assert summary.endswith("...")

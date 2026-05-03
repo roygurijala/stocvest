@@ -1,13 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Bot, ChartColumnIncreasing, Newspaper, ShieldCheck } from "lucide-react";
-import { useScrollPosition } from "@/lib/hooks/use-scroll-position";
-import { fetchLiveSignals, fetchPerformanceSummary, type PublicSignal, type PerformanceSummary } from "@/lib/api/public-signals";
+import { LandingActivityFeedSection } from "@/components/landing-activity-feed";
+import { LandingBeforeAfterSection } from "@/components/landing-before-after";
 import { LandingHowItWorksSection } from "@/components/landing-how-it-works-section";
 import { LandingPerformanceSection } from "@/components/landing-performance-section";
+import { LandingSignalExplorer } from "@/components/landing-signal-explorer";
+import type { LandingSignal } from "@/lib/api/landing-signals";
+import { useScrollPosition } from "@/lib/hooks/use-scroll-position";
+import type { PerformanceSummary } from "@/lib/api/public-signals";
 
 const comparisonRows = [
   "AI Signal Synthesis",
@@ -18,51 +21,20 @@ const comparisonRows = [
   "Day and Swing Trading Combined"
 ];
 
-const demoTickerSignals: PublicSignal[] = [
-  { symbol: "AAPL", direction: "long", bias: "bullish", signal_strength: 65, timestamp_iso: "just-now", outcome: "pending" },
-  { symbol: "TSLA", direction: "short", bias: "bearish", signal_strength: 71, timestamp_iso: "2m-ago", outcome: "pending" },
-  { symbol: "NVDA", direction: "long", bias: "bullish", signal_strength: 78, timestamp_iso: "5m-ago", outcome: "pending" },
-  { symbol: "SPY", direction: "neutral", bias: "neutral", signal_strength: 52, timestamp_iso: "8m-ago", outcome: "pending" },
-  { symbol: "MSFT", direction: "long", bias: "bullish", signal_strength: 68, timestamp_iso: "12m-ago", outcome: "pending" }
-];
+export type LandingPageProps = {
+  explorerSignals: LandingSignal[];
+  activitySignals: LandingSignal[];
+  usedApiFallback: boolean;
+  performanceSummary: PerformanceSummary;
+};
 
-function timeAgo(iso: string): string {
-  const ms = Date.parse(iso);
-  if (!Number.isFinite(ms)) return "just now";
-  const deltaSec = Math.max(0, Math.floor((Date.now() - ms) / 1000));
-  if (deltaSec < 60) return `${deltaSec}s ago`;
-  if (deltaSec < 3600) return `${Math.floor(deltaSec / 60)}m ago`;
-  if (deltaSec < 86400) return `${Math.floor(deltaSec / 3600)}h ago`;
-  return `${Math.floor(deltaSec / 86400)}d ago`;
-}
-
-export function LandingPage() {
+export function LandingPage({
+  explorerSignals,
+  activitySignals,
+  usedApiFallback,
+  performanceSummary
+}: LandingPageProps) {
   const isScrolled = useScrollPosition(24);
-  const [signals, setSignals] = useState<PublicSignal[]>([]);
-  const [summary, setSummary] = useState<PerformanceSummary | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    const load = async () => {
-      const [recent, perf] = await Promise.all([fetchLiveSignals(), fetchPerformanceSummary()]);
-      if (!active) return;
-      setSignals(recent);
-      setSummary(perf);
-    };
-    void load();
-    const id = window.setInterval(load, 30_000);
-    return () => {
-      active = false;
-      window.clearInterval(id);
-    };
-  }, []);
-
-  const tickerSignals = useMemo(() => {
-    if (signals.length === 0) {
-      return [...demoTickerSignals, ...demoTickerSignals];
-    }
-    return [...signals, ...signals];
-  }, [signals]);
 
   return (
     <main className="bg-[#0a0e1a] text-slate-100">
@@ -73,14 +45,6 @@ export function LandingPage() {
       >
         <nav className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-4 md:px-8">
           <p className="text-lg font-extrabold tracking-tight text-[#3b82f6] sm:text-xl">STOCVEST</p>
-          <div className="hidden items-center gap-5 text-sm text-slate-300 md:flex">
-            <Link href="/how-it-works" className="hover:text-white">
-              How It Works
-            </Link>
-            <Link href="/performance" className="hover:text-white">
-              Performance
-            </Link>
-          </div>
           <div className="flex items-center gap-2 md:gap-3">
             <Link href="/login" className="rounded-md border border-white/20 px-4 py-2 text-sm hover:border-white/40">
               Login
@@ -176,46 +140,56 @@ export function LandingPage() {
         </motion.div>
       </section>
 
-      <section id="live-signals" className="mx-auto max-w-7xl px-4 pb-8 md:px-8">
-        <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-          <p className="mb-1 text-xs text-slate-400">Example signals shown — live signals appear as they are generated</p>
-          <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-wide text-slate-300">
-            <span>Live Signals — Updated in real time</span>
-          </div>
-          <div className="ticker-mask overflow-hidden rounded-lg border border-white/10 bg-black/20">
-            <div className="ticker-track flex gap-2 px-2 py-2">
-              {tickerSignals.map((signal, idx) => {
-                const dir =
-                  signal.direction === "long"
-                    ? "bg-[#22c55e]/15 text-[#22c55e]"
-                    : signal.direction === "short"
-                      ? "bg-[#ef4444]/15 text-[#ef4444]"
-                      : "bg-slate-500/20 text-slate-300";
-                const isPlaceholder = signals.length === 0;
-                return (
-                  <div
-                    key={`${signal.symbol}-${idx}`}
-                    className={`inline-flex min-w-[250px] items-center gap-2 rounded-md border border-white/10 px-3 py-2 text-sm ${isPlaceholder ? "animate-pulse opacity-90" : ""}`}
-                  >
-                    <span className="font-semibold">{signal.symbol}</span>
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${dir}`}>{signal.direction}</span>
-                    <span className="text-slate-300">{`${Math.round(signal.signal_strength)}%`}</span>
-                    <span className="ml-auto text-xs text-slate-400">
-                      {isPlaceholder
-                        ? signal.timestamp_iso === "just-now"
-                          ? "Just now"
-                          : signal.timestamp_iso.replace("-", " ")
-                        : timeAgo(signal.timestamp_iso)}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+      <LandingHowItWorksSection />
+
+      <LandingSignalExplorer signals={explorerSignals} usedApiFallback={usedApiFallback} />
+
+      <LandingBeforeAfterSection />
+
+      <LandingActivityFeedSection
+        signals={activitySignals}
+        performanceSummary={performanceSummary}
+        showPlaceholderList={usedApiFallback}
+      />
+
+      <LandingPerformanceSection summary={performanceSummary} />
+
+      <section className="mx-auto max-w-7xl px-4 py-20 md:px-8">
+        <motion.h2 initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="mb-8 text-center text-3xl font-bold md:text-4xl">
+          Finally built for serious traders.
+        </motion.h2>
+        <div className="overflow-x-auto rounded-xl border border-white/10">
+          <table className="w-full min-w-[720px] bg-white/5 text-sm">
+            <thead>
+              <tr className="border-b border-white/10 text-left">
+                <th className="px-4 py-3">Capability</th>
+                <th className="bg-[#3b82f6]/20 px-4 py-3">STOCVEST</th>
+                <th className="px-4 py-3">ThinkorSwim</th>
+                <th className="px-4 py-3">Unusual Whales</th>
+                <th className="px-4 py-3">Finviz</th>
+              </tr>
+            </thead>
+            <tbody>
+              {comparisonRows.map((row, idx) => (
+                <motion.tr
+                  key={row}
+                  initial={{ opacity: 0, x: -12 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: idx * 0.08 }}
+                  className="border-b border-white/10"
+                >
+                  <td className="px-4 py-3">{row}</td>
+                  <td className="bg-[#3b82f6]/15 px-4 py-3 text-[#22c55e]">✓</td>
+                  <td className="px-4 py-3 text-slate-400">✕</td>
+                  <td className="px-4 py-3 text-slate-400">✕</td>
+                  <td className="px-4 py-3 text-slate-400">✕</td>
+                </motion.tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </section>
-
-      <LandingPerformanceSection summary={summary} />
 
       <section id="the-problem" className="mx-auto max-w-7xl px-4 py-20 md:px-8">
         <motion.div initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="mb-10 text-center">
@@ -242,8 +216,6 @@ export function LandingPage() {
           ))}
         </div>
       </section>
-
-      <LandingHowItWorksSection />
 
       <section className="mx-auto max-w-7xl px-4 py-20 md:px-8">
         <motion.h2 initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="mb-3 text-center text-3xl font-bold md:text-4xl">
@@ -281,43 +253,6 @@ export function LandingPage() {
         <p className="mt-4 text-center text-slate-300">
           Every trading day at 8 AM ET, STOCVEST delivers your pre-market intelligence briefing automatically. No manual research required.
         </p>
-      </section>
-
-      <section className="mx-auto max-w-7xl px-4 py-20 md:px-8">
-        <motion.h2 initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="mb-8 text-center text-3xl font-bold md:text-4xl">
-          Finally built for serious traders.
-        </motion.h2>
-        <div className="overflow-x-auto rounded-xl border border-white/10">
-          <table className="w-full min-w-[720px] bg-white/5 text-sm">
-            <thead>
-              <tr className="border-b border-white/10 text-left">
-                <th className="px-4 py-3">Capability</th>
-                <th className="bg-[#3b82f6]/20 px-4 py-3">STOCVEST</th>
-                <th className="px-4 py-3">ThinkorSwim</th>
-                <th className="px-4 py-3">Unusual Whales</th>
-                <th className="px-4 py-3">Finviz</th>
-              </tr>
-            </thead>
-            <tbody>
-              {comparisonRows.map((row, idx) => (
-                <motion.tr
-                  key={row}
-                  initial={{ opacity: 0, x: -12 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: idx * 0.08 }}
-                  className="border-b border-white/10"
-                >
-                  <td className="px-4 py-3">{row}</td>
-                  <td className="bg-[#3b82f6]/15 px-4 py-3 text-[#22c55e]">✓</td>
-                  <td className="px-4 py-3 text-slate-400">✕</td>
-                  <td className="px-4 py-3 text-slate-400">✕</td>
-                  <td className="px-4 py-3 text-slate-400">✕</td>
-                </motion.tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       </section>
 
       <section className="mx-auto max-w-7xl px-4 py-20 text-center md:px-8">
@@ -409,23 +344,6 @@ export function LandingPage() {
           <span>Not investment advice</span>
         </div>
       </footer>
-      <style jsx>{`
-        .ticker-mask {
-          position: relative;
-        }
-        .ticker-track {
-          width: max-content;
-          animation: stocvestTicker 28s linear infinite;
-        }
-        @keyframes stocvestTicker {
-          from {
-            transform: translateX(0);
-          }
-          to {
-            transform: translateX(-50%);
-          }
-        }
-      `}</style>
     </main>
   );
 }
