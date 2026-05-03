@@ -48,9 +48,6 @@ function Sparkline({ values }: { values: number[] }) {
         </defs>
         <rect x={padX} y={y} width={w - padX * 2} height={4} fill="url(#landingSparkFlat)" rx={1} />
         <line x1={padX} y1={y + 2} x2={w - padX} y2={y + 2} stroke="#00e87a" strokeWidth={1.5} />
-        <text x={w / 2} y={16} fill="#64748b" fontSize={10} textAnchor="middle">
-          Building accuracy record from launch
-        </text>
         <text x={padX} y={h - 2} fill="#64748b" fontSize={9}>
           launch
         </text>
@@ -107,6 +104,9 @@ export function LandingActivityFeedSection({
     return [Math.max(0, acc * 0.6), Math.max(0, acc * 0.85), acc];
   }, [hasPerf, performanceSummary.directional_accuracy_percent]);
 
+  const trackingSince =
+    performanceSummary.launch_date?.trim() || new Date().toISOString().slice(0, 10);
+
   const rows = signals.slice(0, 5);
 
   return (
@@ -128,20 +128,26 @@ export function LandingActivityFeedSection({
             <p className="mb-3 text-[9px] font-medium uppercase tracking-wide text-slate-500" style={{ fontFamily: MONO }}>
               RECENT SIGNALS
             </p>
-            <div className="rounded-xl border border-white/10 bg-[#0c1828]/60">
+            <div className="landing-glow-card overflow-hidden">
               {showPlaceholderList ? (
-                <div className="divide-y divide-white/5 p-2">
-                  {[0, 1, 2].map((i) => (
-                    <div key={i} className="flex items-center gap-3 px-2 py-3">
-                      <div
-                        className="h-2 w-2 shrink-0 rounded-full bg-slate-600/50"
-                        style={{ animation: `pulse 1.2s ease-in-out ${i * 0.15}s infinite` }}
-                      />
-                      <div className="h-3 flex-1 rounded bg-white/5" />
-                      <div className="h-3 w-14 rounded bg-white/5" />
-                    </div>
-                  ))}
-                  <p className="px-3 py-2 text-center text-xs text-slate-500">Signals generating from market open</p>
+                <div className="p-5">
+                  <div
+                    className="rounded-[10px] border border-[rgba(0,180,255,0.1)] p-5"
+                    style={{ background: "rgba(0,180,255,0.03)" }}
+                  >
+                    <p className="text-[20px] leading-none text-[#00d4ff]" aria-hidden>
+                      ◈
+                    </p>
+                    <p className="mt-3 text-sm font-medium" style={{ color: "#8aa0bf" }}>
+                      Signal engine active
+                    </p>
+                    <p className="mt-2 text-xs leading-[1.6] text-slate-500">
+                      Signals generate automatically during market hours (9:30 AM – 4:00 PM ET).
+                    </p>
+                    <p className="mt-2 text-xs leading-[1.6] text-slate-500">
+                      Check back after market open to see live signal activity.
+                    </p>
+                  </div>
                 </div>
               ) : (
                 <ul className="divide-y divide-white/5">
@@ -179,10 +185,7 @@ export function LandingActivityFeedSection({
             <p className="mb-3 text-[9px] font-medium uppercase tracking-wide text-slate-500" style={{ fontFamily: MONO }}>
               TODAY&apos;S ACCURACY
             </p>
-            <div
-              className="rounded-xl border p-4"
-              style={{ background: "#0c1828", borderColor: "rgba(0,180,255,0.1)" }}
-            >
+            <div className="landing-glow-card p-4">
               <div className="mb-4 grid grid-cols-2 gap-3">
                 <div>
                   <p className="text-[22px] font-semibold text-[#00d4ff]" style={{ fontFamily: MONO }}>
@@ -210,7 +213,14 @@ export function LandingActivityFeedSection({
                 </div>
               </div>
               {!hasPerf ? (
-                <p className="mb-2 text-center text-[10px] text-slate-500">Tracking since launch</p>
+                <p className="mb-2 text-center text-[11px] leading-relaxed text-slate-500">
+                  Signal accuracy data accumulates automatically from market open. Tracking since {trackingSince}.
+                </p>
+              ) : null}
+              {!hasPerf ? (
+                <p className="mb-2 text-center text-[10px] text-slate-500">
+                  First accuracy data appears after signals are evaluated (24h window)
+                </p>
               ) : null}
               <Sparkline values={sparkValues} />
 

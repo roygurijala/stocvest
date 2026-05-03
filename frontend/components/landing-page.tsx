@@ -255,7 +255,7 @@ export function LandingPage({
       <LandingActivityFeedSection
         signals={activitySignals}
         performanceSummary={performanceSummary}
-        showPlaceholderList={usedApiFallback}
+        showPlaceholderList={activitySignals.length === 0}
       />
 
       <LandingPerformanceSection summary={performanceSummary} />
@@ -373,7 +373,7 @@ export function LandingPage({
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: i * 0.08 }}
-              className="rounded-xl border border-white/10 border-l-2 border-l-[#3b82f6] bg-[#111827] p-6"
+              className="landing-glow-card border-l-2 border-l-[#3b82f6] p-6"
             >
               <item.icon className="mb-3 h-8 w-8 text-[#3b82f6]" />
               <p className="text-sm text-[#6b7280]">{item.a}</p>
@@ -387,7 +387,12 @@ export function LandingPage({
         <motion.h2 initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="mb-3 text-center text-3xl font-bold md:text-4xl">
           Every morning at 8 AM. Before the market opens.
         </motion.h2>
-        <motion.article initial={{ opacity: 0, y: 28 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="mx-auto max-w-3xl rounded-xl border border-white/10 bg-white/5 p-6">
+        <motion.article
+          initial={{ opacity: 0, y: 28 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          className="landing-glow-card mx-auto max-w-3xl p-6"
+        >
           <h3 className="text-lg font-semibold">Sample Intelligence Briefing</h3>
           <p className="mb-4 text-xs italic text-slate-400">Real briefings delivered daily at 8 AM ET to logged-in users</p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -433,7 +438,7 @@ export function LandingPage({
           <ShieldCheck className="h-12 w-12 text-[#22c55e]" />
         </motion.div>
         <p className="mb-6 text-slate-300">PDT rule enforced at the broker layer. Hard block not a suggestion.</p>
-        <div className="mx-auto max-w-md rounded-xl border border-white/10 bg-white/5 p-4 text-left">
+        <div className="landing-glow-card mx-auto max-w-md p-4 text-left">
           <p className="text-[#22c55e]">Day trades used: 0 of 3</p>
           <p>Status: Clear to trade</p>
         </div>
@@ -463,7 +468,7 @@ export function LandingPage({
               initial={{ opacity: 0, y: 24 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              className={`relative flex flex-col rounded-xl border bg-white/5 p-6 ${plan.recommended ? "border-2 border-[#3b82f6] bg-[#0f172a] shadow-[0_0_20px_rgba(59,130,246,0.4)] lg:scale-105" : "border-white/10"}`}
+              className={`landing-glow-card relative flex flex-col p-6 ${plan.recommended ? "ring-2 ring-[#3b82f6] ring-offset-2 ring-offset-[#0a0e1a] lg:scale-105" : ""}`}
             >
               {plan.recommended ? <p className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-bold uppercase tracking-wide text-[#3b82f6]">Most Popular</p> : null}
               <div className="mb-2 flex items-center justify-between">

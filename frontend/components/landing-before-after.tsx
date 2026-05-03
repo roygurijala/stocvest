@@ -57,13 +57,7 @@ export function LandingBeforeAfterSection() {
               className="space-y-2 md:space-y-0"
             >
               <div className="grid gap-2 md:grid-cols-[1fr_auto_1fr] md:items-stretch md:gap-3">
-                <div
-                  className="rounded-lg border px-4 py-3.5 md:rounded-lg"
-                  style={{
-                    background: "rgba(255,61,90,0.03)",
-                    borderColor: "rgba(255,61,90,0.08)"
-                  }}
-                >
+                <div className="landing-before-without px-4 py-3.5">
                   <span className="mb-1 block font-mono text-[10px] font-semibold text-[#ff3d5a]/70">{row.time}</span>
                   <p className="text-xs leading-relaxed text-[#4a6080] md:text-[12px] md:leading-[1.6]">{row.without}</p>
                 </div>
@@ -75,13 +69,7 @@ export function LandingBeforeAfterSection() {
                   <span className="hidden text-xs text-slate-500 md:inline">vs</span>
                 </div>
 
-                <div
-                  className="rounded-lg border px-4 py-3.5"
-                  style={{
-                    background: "rgba(0,180,255,0.03)",
-                    borderColor: "rgba(0,180,255,0.1)"
-                  }}
-                >
+                <div className="landing-before-with px-4 py-3.5">
                   <span className="mb-1 block font-mono text-[10px] font-semibold text-[#00d4ff]">{row.time}</span>
                   <p className="text-xs leading-relaxed text-[#c8dff0] md:text-[12px] md:leading-[1.6]">{row.with}</p>
                 </div>

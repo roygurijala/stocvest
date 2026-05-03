@@ -7,13 +7,6 @@ import type { PerformanceSummary, PatternAccuracyRow } from "@/lib/api/public-si
 const MONO =
   "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace";
 
-const CARD = {
-  background: "#0c1828",
-  border: "1px solid rgba(0,180,255,0.1)",
-  borderRadius: 10,
-  padding: "20px 24px"
-} as const;
-
 const DEFAULT_PATTERN_SLOTS: { pattern_key: string; label: string }[] = [
   { pattern_key: "orb_long", label: "ORB Long" },
   { pattern_key: "vwap_reclaim", label: "VWAP Reclaim" },
@@ -172,8 +165,7 @@ export function LandingPerformanceSection({ summary }: { summary: PerformanceSum
               initial={{ opacity: 0, y: 12 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              className="flex items-center gap-5"
-              style={CARD}
+              className="landing-glow-card flex items-center gap-5 px-6 py-5"
             >
               <div
                 className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg"
@@ -198,7 +190,12 @@ export function LandingPerformanceSection({ summary }: { summary: PerformanceSum
         </div>
 
         {/* Right: accuracy card */}
-        <motion.div initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} style={CARD}>
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          className="landing-glow-card px-6 py-5"
+        >
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500" style={{ fontSize: 12 }}>
               Signal accuracy by type
@@ -273,8 +270,7 @@ export function LandingPerformanceSection({ summary }: { summary: PerformanceSum
         initial={{ opacity: 0, y: 10 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
-        className="mx-auto mt-10 grid max-w-6xl grid-cols-2 gap-4 rounded-lg border border-[rgba(0,180,255,0.1)] bg-[rgba(0,180,255,0.04)] p-6 sm:grid-cols-4"
-        style={{ borderRadius: 10, padding: "20px 24px" }}
+        className="landing-glow-pledge mx-auto mt-10 grid max-w-6xl grid-cols-2 gap-4 bg-[rgba(0,180,255,0.04)] p-6 sm:grid-cols-4"
       >
         {[
           { n: "100%", l: "Signals published — wins and losses" },

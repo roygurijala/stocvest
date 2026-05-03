@@ -122,10 +122,10 @@ export const FALLBACK_SIGNALS: LandingSignal[] = [
       internals: 83
     },
     outcome_1h: "correct",
-    price_at_signal: 875.4,
-    price_1h_after: 889.2,
+    price_at_signal: 112.4,
+    price_1h_after: 113.9,
     ai_summary:
-      "Strong technical momentum backed by hyperscaler earnings catalyst. Macro uncertainty from Fed meeting is primary risk.",
+      "Strong technical momentum backed by AI infrastructure demand catalyst. Macro uncertainty from Fed meeting is primary risk.",
     disclaimer: FALLBACK_DISCLAIMER
   },
   {

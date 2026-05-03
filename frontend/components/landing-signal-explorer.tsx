@@ -39,6 +39,13 @@ function pctMove(from: number, to: number | null): number | null {
   return ((to - from) / from) * 100;
 }
 
+/** Display string for 1h % move from signal vs follow-up price (always 2 decimals). */
+function formatOneHourPctLabel(priceAt: number, priceAfter: number | null): string | null {
+  const p = pctMove(priceAt, priceAfter);
+  if (p == null) return null;
+  return `${p >= 0 ? "+" : ""}${p.toFixed(2)}`;
+}
+
 function displaySummary(s: string | null, max = 120): string | null {
   if (!s) return null;
   if (s.length <= max) return s;
@@ -98,10 +105,6 @@ export function LandingSignalExplorer({
   }, [active]);
 
   const current = signals[active] ?? signals[0];
-  const movePct = useMemo(
-    () => (current ? pctMove(current.price_at_signal, current.price_1h_after) : null),
-    [current]
-  );
 
   const stripDots = useMemo(() => signals.slice(0, 20), [signals]);
   const moreCount = Math.max(0, signals.length - 20);
@@ -115,6 +118,8 @@ export function LandingSignalExplorer({
   }, [performanceSummary.directional_accuracy_percent, performanceSummary.signals_evaluated, signals]);
 
   if (!current) return null;
+
+  const oneHourPctLabel = formatOneHourPctLabel(current.price_at_signal, current.price_1h_after);
 
   const tabButtonBase: CSSProperties = {
     fontFamily: MONO,
@@ -226,15 +231,7 @@ export function LandingSignalExplorer({
           </p>
         ) : null}
 
-        <div
-          className="mb-6 rounded-xl border p-6"
-          style={{
-            background: "#0c1828",
-            borderColor: "rgba(0,180,255,0.12)",
-            borderRadius: 12,
-            padding: 24
-          }}
-        >
+        <div className="landing-glow-card mb-6 p-6">
           <div className="mb-4 flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
             <div>
               <p className="text-2xl font-bold tracking-[2px] text-slate-50">{current.symbol}</p>
@@ -300,8 +297,11 @@ export function LandingSignalExplorer({
                 <p className="mt-1 text-xs text-slate-300">
                   ${current.price_at_signal.toFixed(2)} → $
                   {current.price_1h_after != null ? current.price_1h_after.toFixed(2) : "—"}
-                  {movePct != null ? ` · ${movePct >= 0 ? "+" : ""}${movePct.toFixed(2)}% in 1h` : null}
+                  {oneHourPctLabel != null ? ` · ${oneHourPctLabel}% in 1h` : null}
                 </p>
+                {usedApiFallback ? (
+                  <p className="mt-1 text-[10px] italic text-slate-500">(example data)</p>
+                ) : null}
               </div>
             ) : null}
             {current.outcome_1h === "incorrect" ? (
@@ -317,7 +317,7 @@ export function LandingSignalExplorer({
                 <p className="mt-1 text-xs text-slate-300">
                   ${current.price_at_signal.toFixed(2)} → $
                   {current.price_1h_after != null ? current.price_1h_after.toFixed(2) : "—"}
-                  {movePct != null ? ` · ${movePct >= 0 ? "+" : ""}${movePct.toFixed(2)}% in 1h` : null}
+                  {oneHourPctLabel != null ? ` · ${oneHourPctLabel}% in 1h` : null}
                 </p>
               </div>
             ) : null}
@@ -334,6 +334,7 @@ export function LandingSignalExplorer({
                 <p className="mt-1 text-xs text-slate-300">
                   ${current.price_at_signal.toFixed(2)} → $
                   {current.price_1h_after != null ? current.price_1h_after.toFixed(2) : "—"}
+                  {oneHourPctLabel != null ? ` · ${oneHourPctLabel}% in 1h` : null}
                 </p>
               </div>
             ) : null}
@@ -381,13 +382,7 @@ export function LandingSignalExplorer({
           </p>
         </div>
 
-        <div
-          className="flex flex-col gap-4 rounded-[10px] border p-5 md:flex-row md:items-center md:justify-between md:px-6"
-          style={{
-            background: "linear-gradient(135deg, rgba(0,119,204,0.1), rgba(0,180,255,0.05))",
-            borderColor: "rgba(0,180,255,0.2)"
-          }}
-        >
+        <div className="landing-glow-card-gate flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between md:px-6">
           <div>
             <p className="font-bold text-slate-100">Today&apos;s signals are generating live</p>
             <p className="mt-1 max-w-xl text-sm text-slate-400">

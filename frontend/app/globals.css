@@ -120,3 +120,68 @@ a {
     grid-template-columns: 1fr !important;
   }
 }
+
+/* ── Landing page: shared glow cards (marketing home only) ─────────────── */
+.landing-glow-card {
+  background: #0c1828;
+  border: 1px solid rgba(0, 180, 255, 0.15);
+  border-radius: 12px;
+  box-shadow:
+    0 0 0 1px rgba(0, 180, 255, 0.08),
+    0 4px 24px rgba(0, 0, 0, 0.4),
+    0 0 40px rgba(0, 180, 255, 0.04);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.landing-glow-card:hover {
+  border-color: rgba(0, 180, 255, 0.3);
+  box-shadow:
+    0 0 0 1px rgba(0, 180, 255, 0.15),
+    0 4px 32px rgba(0, 0, 0, 0.5),
+    0 0 60px rgba(0, 180, 255, 0.08);
+}
+
+.landing-glow-card-gate {
+  background: linear-gradient(135deg, rgba(0, 119, 204, 0.1), rgba(0, 180, 255, 0.05));
+  border: 1px solid rgba(0, 180, 255, 0.2);
+  border-radius: 10px;
+  box-shadow: 0 0 30px rgba(0, 180, 255, 0.05);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.landing-glow-card-gate:hover {
+  border-color: rgba(0, 180, 255, 0.3);
+  box-shadow:
+    0 0 0 1px rgba(0, 180, 255, 0.12),
+    0 4px 28px rgba(0, 0, 0, 0.45),
+    0 0 48px rgba(0, 180, 255, 0.08);
+}
+
+.landing-glow-pledge {
+  border: 1px solid rgba(0, 180, 255, 0.12);
+  border-radius: 12px;
+  box-shadow: 0 0 30px rgba(0, 180, 255, 0.04);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.landing-glow-pledge:hover {
+  border-color: rgba(0, 180, 255, 0.22);
+  box-shadow:
+    0 0 0 1px rgba(0, 180, 255, 0.1),
+    0 4px 28px rgba(0, 0, 0, 0.45),
+    0 0 48px rgba(0, 180, 255, 0.07);
+}
+
+.landing-before-without {
+  background: rgba(255, 61, 90, 0.03);
+  border: 1px solid rgba(255, 61, 90, 0.15);
+  border-radius: 12px;
+  box-shadow: 0 0 20px rgba(255, 61, 90, 0.03);
+}
+
+.landing-before-with {
+  background: rgba(0, 180, 255, 0.04);
+  border: 1px solid rgba(0, 180, 255, 0.18);
+  border-radius: 12px;
+  box-shadow: 0 0 20px rgba(0, 180, 255, 0.05);
+}

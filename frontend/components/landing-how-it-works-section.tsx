@@ -142,13 +142,7 @@ export function LandingHowItWorksSection() {
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
-        className="mx-auto mt-12 w-full max-w-[560px]"
-        style={{
-          background: "#0c1828",
-          border: "1px solid rgba(0,180,255,0.2)",
-          borderRadius: 12,
-          padding: "20px 24px"
-        }}
+        className="landing-glow-card mx-auto mt-12 w-full max-w-[560px] px-6 py-5"
       >
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
           <div>
