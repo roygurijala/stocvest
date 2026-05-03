@@ -42,6 +42,16 @@ jobs:
         run: terraform fmt -check
         working-directory: infra
 
+      - name: Terraform init (validate only, no remote state)
+        working-directory: infra
+        run: terraform init -backend=false -input=false
+
+      - name: Terraform validate (infra)
+        working-directory: infra
+        env:
+          AWS_DEFAULT_REGION: us-east-1
+        run: terraform validate
+
   frontend:
     runs-on: ubuntu-latest
     steps:

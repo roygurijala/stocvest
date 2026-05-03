@@ -44,6 +44,7 @@ Preview deployments use Vercel’s default Git integration (every PR gets a prev
 - `outputs.tf` - exported infra IDs
 - `backend.hcl.example` - backend settings template for `terraform init`
 - `terraform.tfvars.example` - example variable values
+- `validate.ps1` / `validate.sh` — `terraform fmt -check`, `init -backend=false`, and `validate` with a default region when `AWS_*` is unset (same reason as CI)
 
 ## Setup
 
@@ -54,8 +55,8 @@ Preview deployments use Vercel’s default Git integration (every PR gets a prev
 3. Initialize backend:
    - `terraform init -backend-config backend.hcl`
 4. Validate configuration:
-   - **Syntax / consistency (no variable values):** `terraform validate`  
-     Terraform intentionally does **not** apply `terraform.tfvars` during `validate`, so the AWS provider still needs a region from the environment: set `AWS_REGION` or `AWS_DEFAULT_REGION` (match your intended `aws_region`, e.g. `us-east-1`) before this command, **or** skip to step 5 and rely on plan.
+   - **Recommended (fmt + validate, no tfvars):** from `infra/`, run **`./validate.sh`** (Unix/macOS/Git Bash) or **`powershell -File validate.ps1`** (Windows). These set `AWS_DEFAULT_REGION` to **`us-east-1`** when unset (matches the `aws_region` default in `variables.tf`), run `terraform init -backend=false`, then `terraform validate`.
+   - **Manual:** set `AWS_REGION` or `AWS_DEFAULT_REGION` (e.g. `us-east-1`) **before** `terraform validate`, then run it after `terraform init` (local or remote backend). Without that env var, the AWS provider often errors with **Missing region value** because provider config is evaluated before full variable defaults are applied the same way as in `plan`.
    - **Full check with real inputs:** `terraform plan "-var-file=terraform.tfvars"` (implies validation and uses your tfvars; requires AWS credentials).
 5. Apply (when ready):
    - `terraform apply "-var-file=terraform.tfvars"`
