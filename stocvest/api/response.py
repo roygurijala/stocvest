@@ -8,7 +8,6 @@ from typing import Any
 
 DEFAULT_HEADERS = {
     "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
 }
 
 

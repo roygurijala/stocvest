@@ -9,7 +9,7 @@ def test_json_response_includes_default_headers() -> None:
     response = json_response(200, {"ok": True})
     assert response["statusCode"] == 200
     assert response["headers"]["Content-Type"] == "application/json"
-    assert response["headers"]["Access-Control-Allow-Origin"] == "*"
+    assert "Access-Control-Allow-Origin" not in response["headers"]
     assert json.loads(response["body"]) == {"ok": True}
 
 

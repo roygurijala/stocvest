@@ -79,8 +79,11 @@ resource "aws_apigatewayv2_api" "http" {
   cors_configuration {
     allow_headers = ["authorization", "content-type", "x-requested-with"]
     allow_methods = ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
-    allow_origins = ["*"]
-    max_age       = 3600
+    allow_origins = [
+      "https://stocvest.app",
+      "https://www.stocvest.app",
+    ]
+    max_age = 3600
   }
 
   tags = merge(local.common_tags, {

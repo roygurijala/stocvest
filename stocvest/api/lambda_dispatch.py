@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from typing import Any, Callable
 
+from stocvest.api.cors import apply_cors_to_http_proxy_response
 from stocvest.api.http_route import http_route_descriptor
 from stocvest.api.response import not_found
 from stocvest.api.types import LambdaContext, LambdaEvent
@@ -43,12 +44,12 @@ def _websocket_route(event: LambdaEvent) -> str:
 def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
     module = os.environ.get("STOCVEST_LAMBDA_MODULE", "").strip()
     if not module:
-        return not_found("STOCVEST_LAMBDA_MODULE is not set.")
+        return apply_cors_to_http_proxy_response(not_found("STOCVEST_LAMBDA_MODULE is not set."), event)
 
     if module == "health":
         from stocvest.api.handlers.health import handler as h
 
-        return h(event, context)
+        return apply_cors_to_http_proxy_response(h(event, context), event)
 
     if module == "authorizer":
         from stocvest.api.handlers.authorizer import handler as h
@@ -65,17 +66,20 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
             snapshot_handler,
         )
 
-        return _dispatch_http_routes(
+        return apply_cors_to_http_proxy_response(
+            _dispatch_http_routes(
+                event,
+                context,
+                {
+                    "GET /v1/market/status": market_status_handler,
+                    "GET /v1/market/snapshot": snapshot_handler,
+                    "GET /v1/market/bars": bars_handler,
+                    "GET /v1/market/news": news_handler,
+                    "GET /v1/market/options": options_chain_handler,
+                    "GET /v1/market/earnings": earnings_calendar_handler,
+                },
+            ),
             event,
-            context,
-            {
-                "GET /v1/market/status": market_status_handler,
-                "GET /v1/market/snapshot": snapshot_handler,
-                "GET /v1/market/bars": bars_handler,
-                "GET /v1/market/news": news_handler,
-                "GET /v1/market/options": options_chain_handler,
-                "GET /v1/market/earnings": earnings_calendar_handler,
-            },
         )
 
     if module == "signals":
@@ -88,17 +92,20 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
             swing_synthesis_parse_handler,
         )
 
-        return _dispatch_http_routes(
+        return apply_cors_to_http_proxy_response(
+            _dispatch_http_routes(
+                event,
+                context,
+                {
+                    "POST /v1/signals/swing/composite": swing_composite_handler,
+                    "POST /v1/signals/swing/synthesis/parse": swing_synthesis_parse_handler,
+                    "POST /v1/signals/day/setups": day_setups_handler,
+                    "POST /v1/signals/day/briefing": day_briefing_handler,
+                    "GET /v1/signals/recent": public_recent_signals_handler,
+                    "GET /v1/signals/performance/summary": public_performance_summary_handler,
+                },
+            ),
             event,
-            context,
-            {
-                "POST /v1/signals/swing/composite": swing_composite_handler,
-                "POST /v1/signals/swing/synthesis/parse": swing_synthesis_parse_handler,
-                "POST /v1/signals/day/setups": day_setups_handler,
-                "POST /v1/signals/day/briefing": day_briefing_handler,
-                "GET /v1/signals/recent": public_recent_signals_handler,
-                "GET /v1/signals/performance/summary": public_performance_summary_handler,
-            },
         )
 
     if module == "brokers":
@@ -113,11 +120,11 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
         ):
             from stocvest.api.handlers.watchlists import watchlists_dispatch_handler
 
-            return watchlists_dispatch_handler(event, context)
+            return apply_cors_to_http_proxy_response(watchlists_dispatch_handler(event, context), event)
         if route.startswith("GET /v1/alerts") or route.startswith("PATCH /v1/alerts"):
             from stocvest.api.handlers.alerts import alerts_dispatch_handler
 
-            return alerts_dispatch_handler(event, context)
+            return apply_cors_to_http_proxy_response(alerts_dispatch_handler(event, context), event)
 
         from stocvest.api.handlers.brokers import (
             broker_accounts_handler,
@@ -142,27 +149,30 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
             users_me_patch_handler,
         )
 
-        return _dispatch_http_routes(
+        return apply_cors_to_http_proxy_response(
+            _dispatch_http_routes(
+                event,
+                context,
+                {
+                    "GET /v1/brokers/health": broker_health_handler,
+                    "GET /v1/brokers/accounts": broker_accounts_handler,
+                    "GET /v1/brokers/positions": broker_positions_handler,
+                    "GET /v1/brokers/overview": broker_overview_handler,
+                    "POST /v1/brokers/orders": broker_place_order_handler,
+                    "GET /v1/brokers/orders": broker_get_order_handler,
+                    "DELETE /v1/brokers/orders": broker_cancel_order_handler,
+                    "POST /v1/orders/validate": orders_validate_handler,
+                    "POST /v1/orders/submit": orders_submit_handler,
+                    "GET /v1/orders/{order_id}/status": orders_status_handler,
+                    "GET /v1/profile/trading-mode": profile_trading_mode_get_handler,
+                    "POST /v1/profile/trading-mode": profile_trading_mode_post_handler,
+                    "GET /v1/users/me": users_me_get_handler,
+                    "PATCH /v1/users/me": users_me_patch_handler,
+                    "GET /v1/auth/etrade/start": etrade_oauth_start_handler,
+                    "POST /v1/auth/etrade/callback": etrade_oauth_callback_handler,
+                },
+            ),
             event,
-            context,
-            {
-                "GET /v1/brokers/health": broker_health_handler,
-                "GET /v1/brokers/accounts": broker_accounts_handler,
-                "GET /v1/brokers/positions": broker_positions_handler,
-                "GET /v1/brokers/overview": broker_overview_handler,
-                "POST /v1/brokers/orders": broker_place_order_handler,
-                "GET /v1/brokers/orders": broker_get_order_handler,
-                "DELETE /v1/brokers/orders": broker_cancel_order_handler,
-                "POST /v1/orders/validate": orders_validate_handler,
-                "POST /v1/orders/submit": orders_submit_handler,
-                "GET /v1/orders/{order_id}/status": orders_status_handler,
-                "GET /v1/profile/trading-mode": profile_trading_mode_get_handler,
-                "POST /v1/profile/trading-mode": profile_trading_mode_post_handler,
-                "GET /v1/users/me": users_me_get_handler,
-                "PATCH /v1/users/me": users_me_patch_handler,
-                "GET /v1/auth/etrade/start": etrade_oauth_start_handler,
-                "POST /v1/auth/etrade/callback": etrade_oauth_callback_handler,
-            },
         )
 
     if module == "portfolio":
@@ -172,35 +182,41 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
             portfolio_summary_handler,
         )
 
-        return _dispatch_http_routes(
+        return apply_cors_to_http_proxy_response(
+            _dispatch_http_routes(
+                event,
+                context,
+                {
+                    "POST /v1/portfolio/holdings": portfolio_holdings_handler,
+                    "POST /v1/portfolio/summary": portfolio_summary_handler,
+                    "POST /v1/portfolio/allocation": portfolio_allocation_handler,
+                },
+            ),
             event,
-            context,
-            {
-                "POST /v1/portfolio/holdings": portfolio_holdings_handler,
-                "POST /v1/portfolio/summary": portfolio_summary_handler,
-                "POST /v1/portfolio/allocation": portfolio_allocation_handler,
-            },
         )
 
     if module == "journal":
         from stocvest.api.handlers.journal import journal_dispatch_handler
 
-        return journal_dispatch_handler(event, context)
+        return apply_cors_to_http_proxy_response(journal_dispatch_handler(event, context), event)
 
     if module == "pdt":
         from stocvest.api.handlers.pdt import pdt_status_handler
 
-        return _dispatch_http_routes(event, context, {"GET /v1/pdt/status": pdt_status_handler})
+        return apply_cors_to_http_proxy_response(
+            _dispatch_http_routes(event, context, {"GET /v1/pdt/status": pdt_status_handler}),
+            event,
+        )
 
     if module == "scanner":
         from stocvest.api.handlers.scanner import handler as scanner_handler
 
-        return scanner_handler(event, context)
+        return apply_cors_to_http_proxy_response(scanner_handler(event, context), event)
 
     if module == "signal_resolution":
         from stocvest.api.handlers.signal_resolution import signal_resolution_scheduled_handler
 
-        return signal_resolution_scheduled_handler(event, context)
+        return apply_cors_to_http_proxy_response(signal_resolution_scheduled_handler(event, context), event)
 
     if module == "websocket":
         from stocvest.api.handlers.websocket import (
@@ -216,4 +232,4 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
             return websocket_disconnect_handler(event, context)
         return websocket_default_handler(event, context)
 
-    return not_found(f"Unknown STOCVEST_LAMBDA_MODULE: {module}.")
+    return apply_cors_to_http_proxy_response(not_found(f"Unknown STOCVEST_LAMBDA_MODULE: {module}."), event)
