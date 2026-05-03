@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any
 
-from stocvest.api.response import internal_error, ok
+from stocvest.api.response import ok
 from stocvest.api.services.signal_recorder import get_signal_recorder
 from stocvest.api.types import LambdaContext, LambdaEvent
 from stocvest.data.polygon_client import PolygonClient
@@ -16,21 +17,38 @@ _LOG = get_logger(__name__)
 
 
 def signal_resolution_scheduled_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
-    """EventBridge-scheduled entrypoint (no HTTP route)."""
+    """EventBridge-scheduled entrypoint (no HTTP route). Always returns HTTP 200 to avoid EventBridge retry storms."""
     _ = context
-    if isinstance(event, dict) and event.get("source") == "aws.events":
-        _LOG.info("signal resolution tick: %s", event.get("id", ""))
+    if isinstance(event, dict):
+        src = event.get("source")
+        _LOG.info("Signal resolution triggered by EventBridge: %s", src or "(unknown)")
 
     async def _run() -> dict[str, int]:
         settings = get_settings()
         rec = get_signal_recorder()
         async with PolygonClient(api_key=settings.polygon_api_key) as client:
-            n1h = await rec.resolve_signals(60, client, horizon="1h")
-            n1d = await rec.resolve_signals(1440, client, horizon="1d")
-        return {"updated_1h": n1h, "updated_1d": n1d}
+            resolved_1h = await rec.resolve_signals(60, client, horizon="1h")
+            resolved_24h = await rec.resolve_signals(1440, client, horizon="1d")
+        return {"resolved_1h": resolved_1h, "resolved_24h": resolved_24h}
 
     try:
         result = asyncio.run(_run())
-        return ok(result)
+        n1h = int(result["resolved_1h"])
+        n24h = int(result["resolved_24h"])
+        _LOG.info("Resolved: %s (1h), %s (24h)", n1h, n24h)
+        # Keep legacy keys for callers that expect updated_1h / updated_1d
+        payload = {
+            "resolved_1h": n1h,
+            "resolved_24h": n24h,
+            "updated_1h": n1h,
+            "updated_1d": n24h,
+        }
+        return ok(payload)
     except Exception as exc:
-        return internal_error(str(exc))
+        _LOG.exception("Signal resolution error: %s", exc)
+        body = {"error": str(exc), "resolved_1h": 0, "resolved_24h": 0}
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps(body, separators=(",", ":")),
+        }

@@ -2,7 +2,7 @@
 
 The `SignalHistory` DynamoDB table and `DYNAMODB_SIGNAL_HISTORY_TABLE` env var are defined in Terraform (`infra/dynamodb.tf`, `infra/lambda_6e.tf`). A separate Lambda alias **`signal_resolution`** is included in `local.api_handler_modules` with handler `stocvest.api.handlers.signal_resolution:signal_resolution_scheduled_handler` (dispatched when `STOCVEST_LAMBDA_MODULE=signal_resolution`).
 
-**Schedule:** `infra/eventbridge_signal_resolution.tf` defines the EventBridge rule (**`stocvest-signal-resolution`**, `rate(30 minutes)`), target, and Lambda invoke permission. Run **`terraform apply`** in `infra/` to create them in AWS (not applied automatically by CI).
+**Schedule:** `infra/eventbridge.tf` defines the EventBridge rule (**`stocvest-signal-resolution`**, `rate(30 minutes)`), target, and Lambda invoke permission. Run **`terraform apply`** in `infra/` to create or update them in AWS (not applied automatically by CI).
 
 ## What the job does
 
@@ -18,21 +18,24 @@ Outcomes use a **0.1%** neutral band; bullish/bearish correctness is price vs `p
 ```hcl
 resource "aws_cloudwatch_event_rule" "signal_resolution" {
   name                = "stocvest-signal-resolution"
+  description         = "Resolve signal outcomes every 30 minutes"
   schedule_expression = "rate(30 minutes)"
+  state               = "ENABLED"
+  tags                = merge(local.common_tags, { Name = "stocvest-development-eventbridge-signal-resolution" })
 }
 
 resource "aws_cloudwatch_event_target" "signal_resolution" {
   rule      = aws_cloudwatch_event_rule.signal_resolution.name
-  target_id = "SignalResolution"
+  target_id = "signal-resolution-lambda"
   arn       = aws_lambda_function.api["signal_resolution"].arn
 }
 
-resource "aws_lambda_permission" "signal_resolution_events" {
-  statement_id  = "AllowExecutionFromEventBridge"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.api["signal_resolution"].function_name
-  principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.signal_resolution.arn
+resource "aws_lambda_permission" "eventbridge_signal_resolution" {
+  statement_id  = "AllowEventBridgeInvoke"
+  action          = "lambda:InvokeFunction"
+  function_name   = aws_lambda_function.api["signal_resolution"].function_name
+  principal       = "events.amazonaws.com"
+  source_arn      = aws_cloudwatch_event_rule.signal_resolution.arn
 }
 ```
 
