@@ -121,123 +121,127 @@ a {
   }
 }
 
-/* ── Card glow: landing marketing + dashboard (`.stocvest-glow-surface`) ─ */
+/* ── Landing / auth: thick accent line on left + bottom only (no full halo) ─ */
 .landing-glow-card,
 .stocvest-glow-card {
   background: #0c1828;
-  border: 1px solid rgba(56, 189, 248, 0.35);
   border-radius: 12px;
-  box-shadow:
-    0 0 0 1px rgba(56, 189, 248, 0.28),
-    0 0 28px rgba(14, 165, 233, 0.35),
-    0 0 72px rgba(59, 130, 246, 0.28),
-    0 8px 36px rgba(0, 0, 0, 0.55);
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+  border-bottom: 3px solid rgba(56, 189, 248, 0.82);
+  border-left: 3px solid rgba(56, 189, 248, 0.82);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.38);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .landing-glow-card:hover,
 .stocvest-glow-card:hover {
-  border-color: rgba(103, 232, 249, 0.55);
-  box-shadow:
-    0 0 0 1px rgba(103, 232, 249, 0.4),
-    0 0 40px rgba(34, 211, 238, 0.45),
-    0 0 96px rgba(59, 130, 246, 0.38),
-    0 12px 44px rgba(0, 0, 0, 0.62);
+  border-bottom-color: rgba(103, 232, 249, 0.95);
+  border-left-color: rgba(103, 232, 249, 0.95);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45);
+}
+
+/* Login / signup / password panels (solid bg, same edge treatment) */
+.stocvest-edge-line-card {
+  border-radius: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 3px solid rgba(56, 189, 248, 0.82);
+  border-left: 3px solid rgba(56, 189, 248, 0.82);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.38);
 }
 
 .landing-glow-card-gate {
   background: linear-gradient(135deg, rgba(0, 119, 204, 0.12), rgba(0, 180, 255, 0.08));
-  border: 1px solid rgba(56, 189, 248, 0.38);
   border-radius: 10px;
-  box-shadow:
-    0 0 0 1px rgba(56, 189, 248, 0.22),
-    0 0 32px rgba(14, 165, 233, 0.25),
-    0 0 64px rgba(59, 130, 246, 0.2),
-    0 6px 28px rgba(0, 0, 0, 0.5);
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+  border-bottom: 3px solid rgba(56, 189, 248, 0.78);
+  border-left: 3px solid rgba(56, 189, 248, 0.78);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .landing-glow-card-gate:hover {
-  border-color: rgba(103, 232, 249, 0.55);
-  box-shadow:
-    0 0 0 1px rgba(103, 232, 249, 0.35),
-    0 0 44px rgba(34, 211, 238, 0.35),
-    0 0 88px rgba(59, 130, 246, 0.3),
-    0 10px 36px rgba(0, 0, 0, 0.55);
+  border-bottom-color: rgba(103, 232, 249, 0.95);
+  border-left-color: rgba(103, 232, 249, 0.95);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.48);
 }
 
 .landing-glow-pledge {
-  border: 1px solid rgba(56, 189, 248, 0.32);
   border-radius: 12px;
-  box-shadow:
-    0 0 0 1px rgba(56, 189, 248, 0.18),
-    0 0 28px rgba(14, 165, 233, 0.22),
-    0 0 64px rgba(59, 130, 246, 0.18),
-    0 6px 28px rgba(0, 0, 0, 0.48);
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+  border-bottom: 3px solid rgba(56, 189, 248, 0.75);
+  border-left: 3px solid rgba(56, 189, 248, 0.75);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.38);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .landing-glow-pledge:hover {
-  border-color: rgba(103, 232, 249, 0.45);
-  box-shadow:
-    0 0 0 1px rgba(103, 232, 249, 0.28),
-    0 0 40px rgba(34, 211, 238, 0.3),
-    0 0 80px rgba(59, 130, 246, 0.26),
-    0 10px 34px rgba(0, 0, 0, 0.55);
+  border-bottom-color: rgba(103, 232, 249, 0.92);
+  border-left-color: rgba(103, 232, 249, 0.92);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
+/* Before/after row cells */
 .landing-before-without {
-  background: rgba(255, 61, 90, 0.04);
-  border: 1px solid rgba(255, 91, 110, 0.35);
+  background: rgba(255, 61, 90, 0.05);
   border-radius: 12px;
-  box-shadow:
-    0 0 0 1px rgba(255, 91, 110, 0.15),
-    0 0 32px rgba(255, 61, 90, 0.12),
-    0 6px 24px rgba(0, 0, 0, 0.45);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 3px solid rgba(255, 91, 110, 0.88);
+  border-left: 3px solid rgba(255, 91, 110, 0.88);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.32);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.landing-before-without:hover {
+  border-bottom-color: rgba(255, 140, 150, 0.95);
+  border-left-color: rgba(255, 140, 150, 0.95);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.38);
 }
 
 .landing-before-with {
   background: rgba(0, 180, 255, 0.06);
-  border: 1px solid rgba(56, 189, 248, 0.38);
   border-radius: 12px;
-  box-shadow:
-    0 0 0 1px rgba(56, 189, 248, 0.2),
-    0 0 32px rgba(14, 165, 233, 0.22),
-    0 0 64px rgba(59, 130, 246, 0.18),
-    0 6px 28px rgba(0, 0, 0, 0.45);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 3px solid rgba(56, 189, 248, 0.85);
+  border-left: 3px solid rgba(56, 189, 248, 0.85);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.32);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-/* Dashboard / app shell: outer glow only (inline styles keep surface + border). */
+.landing-before-with:hover {
+  border-bottom-color: rgba(103, 232, 249, 0.95);
+  border-left-color: rgba(103, 232, 249, 0.95);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.38);
+}
+
+/* Dashboard: inset accent bars (left + bottom) — works with inline 1px border */
 .theme-dark .stocvest-glow-surface {
   box-shadow:
-    0 0 0 1px rgba(56, 189, 248, 0.22),
-    0 0 26px rgba(14, 165, 233, 0.24),
-    0 0 72px rgba(59, 130, 246, 0.22),
-    0 8px 32px rgba(0, 0, 0, 0.48);
+    inset 3px 0 0 0 rgba(14, 165, 233, 0.38),
+    inset 0 -3px 0 0 rgba(59, 130, 246, 0.32);
   transition: box-shadow 0.2s ease;
 }
 
 .theme-dark .stocvest-glow-surface:hover {
   box-shadow:
-    0 0 0 1px rgba(103, 232, 249, 0.32),
-    0 0 36px rgba(34, 211, 238, 0.28),
-    0 0 88px rgba(59, 130, 246, 0.28),
-    0 10px 40px rgba(0, 0, 0, 0.55);
+    inset 3px 0 0 0 rgba(103, 232, 249, 0.48),
+    inset 0 -3px 0 0 rgba(59, 130, 246, 0.42);
 }
 
 .theme-light .stocvest-glow-surface {
   box-shadow:
-    0 0 0 1px rgba(37, 99, 235, 0.2),
-    0 0 22px rgba(37, 99, 235, 0.14),
-    0 0 56px rgba(59, 130, 246, 0.12),
-    0 8px 28px rgba(15, 23, 42, 0.08);
+    inset 3px 0 0 0 rgba(37, 99, 235, 0.28),
+    inset 0 -3px 0 0 rgba(37, 99, 235, 0.22);
   transition: box-shadow 0.2s ease;
 }
 
 .theme-light .stocvest-glow-surface:hover {
   box-shadow:
-    0 0 0 1px rgba(37, 99, 235, 0.28),
-    0 0 32px rgba(37, 99, 235, 0.18),
-    0 0 72px rgba(59, 130, 246, 0.16),
-    0 10px 32px rgba(15, 23, 42, 0.1);
+    inset 3px 0 0 0 rgba(37, 99, 235, 0.38),
+    inset 0 -3px 0 0 rgba(37, 99, 235, 0.32);
 }

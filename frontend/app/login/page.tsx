@@ -13,7 +13,7 @@ export default function LoginPage({ searchParams }: { searchParams?: { message?:
 
   return (
     <main className="grid min-h-screen place-items-center overflow-x-hidden bg-[#0a0e1a] px-4 py-8 sm:py-10">
-      <section className="w-full max-w-full rounded-xl border border-white/10 bg-[#111827] p-4 shadow-[0_0_30px_rgba(0,0,0,0.35)] sm:max-w-md sm:p-6">
+      <section className="stocvest-edge-line-card w-full max-w-full bg-[#111827] p-4 sm:max-w-md sm:p-6">
         <Link href="/" className="mb-4 inline-flex items-center gap-1 text-sm text-[#6b7280] transition hover:text-white">
           <ChevronLeft size={14} />
           Back to home

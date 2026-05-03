@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import type { CSSProperties } from "react";
+import { useState } from "react";
 import { Bot, ChartColumnIncreasing, Newspaper, ShieldCheck } from "lucide-react";
 import { LandingActivityFeedSection } from "@/components/landing-activity-feed";
 import { LandingBeforeAfterSection } from "@/components/landing-before-after";
@@ -27,6 +28,26 @@ type ComparisonRowDef = {
 };
 
 type ComparisonGroupDef = { title: string; rows: ComparisonRowDef[] };
+
+type LandingPlanTier = "Free" | "Pro" | "Institutional";
+
+const LANDING_PRICING_PLANS: Array<{
+  tier: LandingPlanTier;
+  price: string;
+  features: string[];
+}> = [
+  { tier: "Free", price: "$0/month", features: ["3 signals per day", "Basic scanner", "1 broker"] },
+  {
+    tier: "Pro",
+    price: "$49/month",
+    features: ["Unlimited signals", "All signal layers", "Backtesting", "Alerts", "3 brokers"]
+  },
+  {
+    tier: "Institutional",
+    price: "$199/month",
+    features: ["Everything in Pro", "API access", "Webhooks", "Priority support"]
+  }
+];
 
 const LANDING_COMPARISON_GROUPS: ComparisonGroupDef[] = [
   {
@@ -137,6 +158,7 @@ export function LandingPage({
   performanceSummary
 }: LandingPageProps) {
   const isScrolled = useScrollPosition(24);
+  const [selectedPlanTier, setSelectedPlanTier] = useState<LandingPlanTier>("Pro");
 
   return (
     <main className="bg-[#0a0e1a] text-slate-100">
@@ -373,7 +395,7 @@ export function LandingPage({
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: i * 0.08 }}
-              className="landing-glow-card border-l-2 border-l-[#3b82f6] p-6"
+              className="landing-glow-card p-6"
             >
               <item.icon className="mb-3 h-8 w-8 text-[#3b82f6]" />
               <p className="text-sm text-[#6b7280]">{item.a}</p>
@@ -449,46 +471,54 @@ export function LandingPage({
           Simple pricing. No hidden fees.
         </motion.h2>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          {[
-            { tier: "Free", price: "$0/month", features: ["3 signals per day", "Basic scanner", "1 broker"] },
-            {
-              tier: "Pro",
-              price: "$49/month",
-              features: ["Unlimited signals", "All signal layers", "Backtesting", "Alerts", "3 brokers"],
-              recommended: true
-            },
-            {
-              tier: "Institutional",
-              price: "$199/month",
-              features: ["Everything in Pro", "API access", "Webhooks", "Priority support"]
-            }
-          ].map((plan) => (
-            <motion.article
-              key={plan.tier}
-              initial={{ opacity: 0, y: 24 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className={`landing-glow-card relative flex flex-col p-6 ${plan.recommended ? "ring-2 ring-[#3b82f6] ring-offset-2 ring-offset-[#0a0e1a] lg:scale-105" : ""}`}
-            >
-              {plan.recommended ? <p className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-bold uppercase tracking-wide text-[#3b82f6]">Most Popular</p> : null}
-              <div className="mb-2 flex items-center justify-between">
-                <h3 className="text-xl font-semibold">{plan.tier}</h3>
-                {plan.recommended ? <span className="rounded-full bg-[#3b82f6] px-3 py-1 text-sm font-bold text-white">Popular</span> : null}
-              </div>
-              <p className={`mb-3 text-2xl font-bold ${plan.recommended ? "text-[#3b82f6]" : ""}`}>{plan.price}</p>
-              <ul className="mb-4 space-y-1 text-slate-300">
-                {plan.features.map((f) => (
-                  <li key={f}>• {f}</li>
-                ))}
-              </ul>
-              <Link
-                href="/login"
-                className="mt-auto inline-flex min-h-11 w-full items-center justify-center rounded-md bg-[#3b82f6] px-4 py-2 text-sm font-semibold sm:w-auto"
+          {LANDING_PRICING_PLANS.map((plan) => {
+            const isSelected = plan.tier === selectedPlanTier;
+            const isPro = plan.tier === "Pro";
+            return (
+              <motion.article
+                key={plan.tier}
+                role="button"
+                tabIndex={0}
+                aria-pressed={isSelected}
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                onClick={() => setSelectedPlanTier(plan.tier)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setSelectedPlanTier(plan.tier);
+                  }
+                }}
+                className={`landing-glow-card relative flex flex-col p-6 cursor-pointer outline-none transition-transform focus-visible:ring-2 focus-visible:ring-[#3b82f6] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0e1a] ${
+                  isSelected ? "ring-2 ring-[#3b82f6] ring-offset-2 ring-offset-[#0a0e1a] lg:scale-[1.03]" : "ring-0 ring-offset-0 lg:scale-100"
+                }`}
               >
-                Get Started
-              </Link>
-            </motion.article>
-          ))}
+                {isPro ? (
+                  <p className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-bold uppercase tracking-wide text-[#3b82f6]">
+                    Most Popular
+                  </p>
+                ) : null}
+                <div className="mb-2 flex items-center justify-between">
+                  <h3 className="text-xl font-semibold">{plan.tier}</h3>
+                  {isPro ? <span className="rounded-full bg-[#3b82f6] px-3 py-1 text-sm font-bold text-white">Popular</span> : null}
+                </div>
+                <p className={`mb-3 text-2xl font-bold ${isSelected ? "text-[#3b82f6]" : ""}`}>{plan.price}</p>
+                <ul className="mb-4 space-y-1 text-slate-300">
+                  {plan.features.map((f) => (
+                    <li key={f}>• {f}</li>
+                  ))}
+                </ul>
+                <Link
+                  href="/login"
+                  onClick={(e) => e.stopPropagation()}
+                  className="mt-auto inline-flex min-h-11 w-full items-center justify-center rounded-md bg-[#3b82f6] px-4 py-2 text-sm font-semibold sm:w-auto"
+                >
+                  Get Started
+                </Link>
+              </motion.article>
+            );
+          })}
         </div>
       </section>
 

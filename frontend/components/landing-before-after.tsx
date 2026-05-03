@@ -41,7 +41,7 @@ export function LandingBeforeAfterSection() {
           className="mb-2 grid grid-cols-[1fr_auto_1fr] items-end gap-3 text-[10px] font-semibold uppercase tracking-[2px]"
           style={{ marginTop: 0, marginBottom: 8 }}
         >
-          <p className="text-[#4a6080]">WITHOUT STOCVEST</p>
+          <p className="text-[#ff6b7d]/90">WITHOUT STOCVEST</p>
           <span className="pb-1 text-center text-slate-500">vs</span>
           <p className="text-right text-[#00d4ff]">WITH STOCVEST</p>
         </div>
