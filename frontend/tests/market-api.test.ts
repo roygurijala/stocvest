@@ -18,9 +18,9 @@ describe("market API overview fetch", () => {
       exchanges: { nyse: "open" },
       currencies: { usd: "open" }
     });
+    apiFetchMock.mockResolvedValueOnce([{ article_id: "n1", title: "Headline", tickers: [], published_at: "x", url: "u" }]);
     apiFetchMock.mockResolvedValueOnce({ symbol: "SPY", last_trade_price: 501.2 });
     apiFetchMock.mockResolvedValueOnce({ symbol: "QQQ", last_trade_price: 432.1 });
-    apiFetchMock.mockResolvedValueOnce([{ article_id: "n1", title: "Headline", tickers: [], published_at: "x", url: "u" }]);
     apiFetchMock.mockResolvedValueOnce([{ close: 500 }, { close: 501 }]);
     apiFetchMock.mockResolvedValueOnce([{ close: 430 }, { close: 432 }]);
 
