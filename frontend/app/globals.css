@@ -151,6 +151,39 @@ a {
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.38);
 }
 
+/* Pricing grid: idle cards muted; selected tier gets strong brand-blue L+B + glow */
+.landing-pricing-card {
+  border-radius: 12px;
+  background: #0a1018;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 2px solid rgba(51, 65, 85, 0.65);
+  border-left: 2px solid rgba(51, 65, 85, 0.65);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.32);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease,
+    transform 0.2s ease;
+}
+
+.landing-pricing-card:hover:not(.landing-pricing-card--selected) {
+  border-bottom-color: rgba(71, 85, 105, 0.85);
+  border-left-color: rgba(71, 85, 105, 0.85);
+}
+
+.landing-pricing-card--selected {
+  background: linear-gradient(165deg, rgba(59, 130, 246, 0.14) 0%, #0c1828 42%, #0c1828 100%);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 4px solid rgba(59, 130, 246, 0.95);
+  border-left: 4px solid rgba(59, 130, 246, 0.95);
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(59, 130, 246, 0.4),
+    0 0 28px rgba(59, 130, 246, 0.22);
+}
+
 .landing-glow-card-gate {
   background: linear-gradient(135deg, rgba(0, 119, 204, 0.12), rgba(0, 180, 255, 0.08));
   border-radius: 10px;

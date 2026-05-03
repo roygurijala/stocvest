@@ -654,10 +654,11 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
             style={{
               border: `1px solid ${colors.border}`,
               borderRadius: borderRadius.md,
-              background: "transparent",
+              background: colors.surfaceMuted,
               color: colors.text,
               padding: `${spacing[2]} ${spacing[3]}`,
-              cursor: "pointer"
+              cursor: "pointer",
+              fontWeight: 500
             }}
           >
             View Evidence

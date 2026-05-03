@@ -122,12 +122,13 @@ export function LandingSignalExplorer({
   const oneHourPctLabel = formatOneHourPctLabel(current.price_at_signal, current.price_1h_after);
 
   const tabButtonBase: CSSProperties = {
-    fontFamily: MONO,
-    fontSize: 12,
-    letterSpacing: 1,
-    padding: "7px 16px",
-    borderRadius: 6,
-    border: "1px solid rgba(0,180,255,0.15)"
+    fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
+    fontSize: 14,
+    letterSpacing: "0.06em",
+    padding: "10px 18px",
+    borderRadius: 10,
+    border: "1px solid transparent",
+    transition: "border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease, color 0.15s ease"
   };
 
   return (
@@ -192,7 +193,7 @@ export function LandingSignalExplorer({
           </div>
         </div>
 
-        <div className="mb-2 flex flex-wrap gap-2" role="tablist" aria-label="Signals">
+        <div className="mb-2 flex flex-wrap gap-2.5" role="tablist" aria-label="Signals">
           {signals.map((sig, i) => {
             const isActive = i === active;
             const dotColor =
@@ -204,20 +205,25 @@ export function LandingSignalExplorer({
                 role="tab"
                 aria-selected={isActive}
                 onClick={() => setActive(i)}
-                className="inline-flex items-center gap-2 transition-colors"
+                className="inline-flex items-center gap-2.5 tabular-nums"
                 style={{
                   ...tabButtonBase,
-                  background: isActive ? "rgba(0,180,255,0.1)" : "transparent",
-                  color: isActive ? "#00d4ff" : "#4a6080",
-                  borderColor: isActive ? "rgba(0,180,255,0.4)" : "rgba(0,180,255,0.15)"
+                  background: isActive
+                    ? "linear-gradient(165deg, rgba(0,212,255,0.16) 0%, rgba(15,23,42,0.92) 55%)"
+                    : "rgba(15,23,42,0.55)",
+                  color: isActive ? "#f1f5f9" : "#94a3b8",
+                  borderColor: isActive ? "rgba(0,212,255,0.55)" : "rgba(71,85,105,0.5)",
+                  boxShadow: isActive ? "0 0 0 1px rgba(0,212,255,0.35), 0 10px 28px rgba(0,0,0,0.35)" : "none",
+                  fontWeight: isActive ? 800 : 600
                 }}
               >
                 <span
-                  className="shrink-0 rounded-full"
+                  className="shrink-0 rounded-full ring-1 ring-white/10"
                   style={{
-                    width: 6,
-                    height: 6,
-                    background: dotColor
+                    width: 7,
+                    height: 7,
+                    background: dotColor,
+                    boxShadow: isActive ? `0 0 10px ${dotColor}88` : "none"
                   }}
                 />
                 {sig.symbol}

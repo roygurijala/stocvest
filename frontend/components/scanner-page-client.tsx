@@ -415,11 +415,12 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
             style={{
               border: `1px solid ${colors.border}`,
               borderRadius: borderRadius.md,
-              background: "transparent",
+              background: colors.surfaceMuted,
               color: colors.text,
               padding: `${spacing[1]} ${spacing[2]}`,
               cursor: "pointer",
-              fontSize: typography.scale.xs
+              fontSize: typography.scale.xs,
+              fontWeight: 500
             }}
           >
             View Signal
@@ -445,11 +446,14 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
               style={{
                 border: `1px solid ${colors.accent}`,
                 borderRadius: borderRadius.md,
-                background: "rgba(59,130,246,0.15)",
+                background: "rgba(59,130,246,0.22)",
                 color: colors.accent,
-                padding: `${spacing[1]} ${spacing[2]}`,
+                padding: `${spacing[2]} ${spacing[3]}`,
                 cursor: "pointer",
-                fontSize: typography.scale.xs
+                fontSize: typography.scale.sm,
+                fontWeight: 700,
+                letterSpacing: "0.02em",
+                boxShadow: "0 0 14px rgba(59,130,246,0.18)"
               }}
             >
               Open order entry
@@ -969,11 +973,14 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                           style={{
                             border: `1px solid ${orbExpired ? "var(--color-border)" : colors.accent}`,
                             borderRadius: borderRadius.md,
-                            background: orbExpired ? "var(--color-background-secondary)" : "rgba(59,130,246,0.15)",
+                            background: orbExpired ? "var(--color-background-secondary)" : "rgba(59,130,246,0.22)",
                             color: orbExpired ? "var(--color-text-tertiary)" : colors.accent,
-                            padding: `${spacing[1]} ${spacing[2]}`,
+                            padding: `${spacing[2]} ${spacing[3]}`,
                             cursor: orbExpired ? "not-allowed" : "pointer",
-                            fontSize: typography.scale.xs,
+                            fontSize: typography.scale.sm,
+                            fontWeight: orbExpired ? 500 : 700,
+                            letterSpacing: orbExpired ? undefined : "0.02em",
+                            boxShadow: orbExpired ? undefined : "0 0 14px rgba(59,130,246,0.18)",
                             opacity: orbExpired ? 0.4 : 1
                           }}
                         >
@@ -1004,11 +1011,12 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                         style={{
                           border: `1px solid ${colors.border}`,
                           borderRadius: borderRadius.md,
-                          background: "transparent",
+                          background: colors.surfaceMuted,
                           color: colors.text,
                           padding: `${spacing[1]} ${spacing[2]}`,
                           cursor: "pointer",
-                          fontSize: typography.scale.xs
+                          fontSize: typography.scale.xs,
+                          fontWeight: 500
                         }}
                       >
                         View Evidence

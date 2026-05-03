@@ -64,14 +64,17 @@ function barClose(bar: Record<string, unknown>): number | null {
 export async function fetchMarketOverview(symbols: string[] = DEFAULT_SYMBOLS): Promise<MarketOverview> {
   const cleanSymbols = symbols.map((s) => s.trim().toUpperCase()).filter(Boolean);
   try {
-    const status = await apiFetch<MarketStatusPayload>("/v1/market/status");
+    const parallel = await Promise.all([
+      apiFetch<MarketStatusPayload>("/v1/market/status"),
+      apiFetch<NewsPayload[]>("/v1/market/news?limit=5"),
+      ...cleanSymbols.map((symbol) => apiFetch<SnapshotPayload>(`/v1/market/snapshot?symbol=${symbol}`))
+    ]);
+    const status = parallel[0] as MarketStatusPayload | null;
+    const news = (parallel[1] as NewsPayload[] | null) || [];
+    const snapshots = parallel.slice(2) as (SnapshotPayload | null)[];
     if (!status) {
       return { snapshots: [], news: [], error: "Service temporarily unavailable. Please try again." };
     }
-    const snapshots = await Promise.all(
-      cleanSymbols.map((symbol) => apiFetch<SnapshotPayload>(`/v1/market/snapshot?symbol=${symbol}`))
-    );
-    const news = await apiFetch<NewsPayload[]>("/v1/market/news?limit=5");
     const sparklinesEntries = await Promise.all(
       cleanSymbols.map(async (symbol) => {
         const bars = await apiFetch<Record<string, unknown>[]>(

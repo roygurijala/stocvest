@@ -55,10 +55,10 @@ export function AddToWatchlistButton({ symbol }: Props) {
         type="button"
         onClick={() => void onAdd()}
         style={{
-          border: `1px solid ${colors.border}`,
+          border: `1px dashed ${phase === "added" ? colors.bullish : colors.accent}`,
           borderRadius: borderRadius.md,
-          background: phase === "added" ? "rgba(34,197,94,0.12)" : "transparent",
-          color: phase === "added" ? colors.bullish : colors.textMuted,
+          background: phase === "added" ? "rgba(34,197,94,0.12)" : "rgba(59,130,246,0.08)",
+          color: phase === "added" ? colors.bullish : colors.text,
           padding: `${spacing[1]} ${spacing[2]}`,
           cursor: "pointer",
           fontSize: typography.scale.xs,

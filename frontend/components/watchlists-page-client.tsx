@@ -1,6 +1,5 @@
 "use client";
 
-import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
@@ -14,22 +13,8 @@ type WatchlistRow = {
 
 const QUICK = ["SPY", "QQQ", "AAPL", "NVDA", "TSLA"];
 
-const chipStyle: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 6,
-  background: "rgba(0,180,255,0.08)",
-  border: "1px solid rgba(0,180,255,0.15)",
-  borderRadius: 6,
-  padding: "6px 10px",
-  fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-  fontSize: 13,
-  fontWeight: 600,
-  color: "#c8dff0"
-};
-
 export function WatchlistsPageClient() {
-  const { colors } = useTheme();
+  const { colors, theme } = useTheme();
   const [rows, setRows] = useState<WatchlistRow[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -305,7 +290,19 @@ export function WatchlistsPageClient() {
             </div>
           </div>
 
-          <div style={{ marginTop: spacing[4], display: "flex", flexWrap: "wrap", gap: spacing[2], alignItems: "center" }}>
+          <div
+            style={{
+              marginTop: spacing[3],
+              display: "flex",
+              flexWrap: "wrap",
+              gap: spacing[2],
+              alignItems: "center",
+              padding: spacing[3],
+              borderRadius: borderRadius.lg,
+              background: colors.surfaceMuted,
+              border: `1px solid ${colors.border}`
+            }}
+          >
             <input
               value={addInput}
               onChange={(e) => setAddInput(e.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 6))}
@@ -313,69 +310,130 @@ export function WatchlistsPageClient() {
                 if (e.key === "Enter") void addSymbol(addInput);
               }}
               placeholder="Add ticker…"
-              className="min-h-11 rounded-md border px-3"
-              style={{ borderColor: colors.border, maxWidth: 160, fontFamily: "monospace", letterSpacing: "0.04em" }}
+              className="min-h-11 flex-1 rounded-md border px-3"
+              style={{
+                borderColor: colors.border,
+                minWidth: 120,
+                maxWidth: 280,
+                background: colors.surface,
+                color: colors.text,
+                fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                letterSpacing: "0.06em",
+                fontWeight: 600
+              }}
             />
-            <button type="button" className="min-h-11 rounded-md px-3" style={{ background: colors.accent, color: "#041018", border: "none", fontWeight: 600 }} onClick={() => void addSymbol(addInput)}>
+            <button
+              type="button"
+              className="min-h-11 shrink-0 rounded-md px-4"
+              style={{
+                background: colors.accent,
+                color: theme === "light" ? "#ffffff" : "#041018",
+                border: "none",
+                fontWeight: 700,
+                cursor: "pointer"
+              }}
+              onClick={() => void addSymbol(addInput)}
+            >
               Add
             </button>
             {symErr ? (
-              <span style={{ color: colors.bearish, fontSize: typography.scale.sm }}>{symErr}</span>
+              <span style={{ color: colors.bearish, fontSize: typography.scale.sm, width: "100%" }}>{symErr}</span>
             ) : null}
           </div>
 
-          <div style={{ marginTop: spacing[4], display: "flex", flexWrap: "wrap", gap: spacing[2] }}>
-            {active.symbols.length === 0 ? (
-              <div style={{ width: "100%" }}>
-                <p style={{ color: colors.textMuted, marginBottom: spacing[2] }}>
-                  No symbols yet. Add a ticker above to start building your watchlist.
-                </p>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: spacing[2] }}>
-                  {QUICK.map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => void addSymbol(s)}
-                      style={{
-                        ...chipStyle,
-                        cursor: "pointer",
-                        border: "1px solid rgba(0,180,255,0.25)"
-                      }}
-                    >
-                      {s}
-                    </button>
-                  ))}
+          <div style={{ marginTop: spacing[4] }}>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: spacing[2], marginBottom: spacing[2] }}>
+              <p style={{ margin: 0, fontSize: typography.scale.xs, fontWeight: 700, letterSpacing: "0.12em", color: colors.textMuted }}>
+                SYMBOLS
+              </p>
+              <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>{active.symbols.length} total</span>
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(104px, 1fr))",
+                gap: spacing[2],
+                padding: spacing[3],
+                borderRadius: borderRadius.lg,
+                background: colors.background,
+                border: `1px solid ${colors.border}`,
+                minHeight: active.symbols.length === 0 ? 120 : undefined
+              }}
+            >
+              {active.symbols.length === 0 ? (
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <p style={{ color: colors.textMuted, margin: `0 0 ${spacing[3]}`, fontSize: typography.scale.sm }}>
+                    No symbols yet. Type a ticker above or tap a popular name to add it.
+                  </p>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: spacing[2] }}>
+                    {QUICK.map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => void addSymbol(s)}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          minHeight: 40,
+                          padding: `0 ${spacing[3]}`,
+                          borderRadius: borderRadius.md,
+                          border: `1px dashed ${colors.accent}`,
+                          background: "rgba(59,130,246,0.08)",
+                          color: colors.text,
+                          cursor: "pointer",
+                          fontSize: typography.scale.sm,
+                          fontWeight: 700,
+                          letterSpacing: "0.08em"
+                        }}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ) : (
-              active.symbols.map((s) => (
-                <span key={s} style={chipStyle}>
-                  {s}
-                  <button
-                    type="button"
-                    aria-label={`Remove ${s}`}
-                    onClick={() => void removeSymbol(s)}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.color = "#ef4444";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.color = "#6b8799";
-                    }}
+              ) : (
+                active.symbols.map((s) => (
+                  <div
+                    key={s}
+                    className="tabular-nums"
                     style={{
-                      background: "transparent",
-                      border: "none",
-                      color: "#6b8799",
-                      cursor: "pointer",
-                      fontSize: 14,
-                      lineHeight: 1,
-                      padding: 0
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: spacing[2],
+                      padding: `${spacing[2]} ${spacing[3]}`,
+                      borderRadius: borderRadius.md,
+                      background: colors.surface,
+                      border: `1px solid ${colors.border}`,
+                      fontSize: typography.scale.base,
+                      fontWeight: 700,
+                      letterSpacing: "0.06em",
+                      color: colors.text
                     }}
                   >
-                    ×
-                  </button>
-                </span>
-              ))
-            )}
+                    <span>{s}</span>
+                    <button
+                      type="button"
+                      aria-label={`Remove ${s}`}
+                      onClick={() => void removeSymbol(s)}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        color: colors.textMuted,
+                        cursor: "pointer",
+                        fontSize: 18,
+                        lineHeight: 1,
+                        padding: 2,
+                        borderRadius: borderRadius.sm
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </article>
       ) : (

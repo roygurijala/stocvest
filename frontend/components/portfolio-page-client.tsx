@@ -19,7 +19,7 @@ function money(n: number): string {
 }
 
 export function PortfolioPageClient({ brokerOverviews, overview, earningsBySymbol, orderFromSignal = null }: PortfolioPageClientProps) {
-  const { colors } = useTheme();
+  const { colors, theme } = useTheme();
   const brokerCards = brokerOverviews.map((broker) => {
     const healthy = broker.health?.ok ?? !broker.error;
     const accountType = broker.broker === "mock" ? "paper" : "live";
@@ -99,9 +99,9 @@ export function PortfolioPageClient({ brokerOverviews, overview, earningsBySymbo
                 className="min-h-11 w-full sm:w-auto"
                 style={{
                   marginTop: spacing[2],
-                  border: `1px solid ${colors.bearish}`,
-                  background: "rgba(239,68,68,0.12)",
-                  color: colors.bearish,
+                  border: `1px solid ${colors.bullish}`,
+                  background: theme === "dark" ? "rgba(34, 197, 94, 0.14)" : "rgba(22, 163, 74, 0.14)",
+                  color: colors.bullish,
                   borderRadius: borderRadius.md,
                   padding: `${spacing[2]} ${spacing[3]}`
                 }}

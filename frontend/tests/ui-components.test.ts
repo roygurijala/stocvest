@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { PDTStatusWidget } from "@/components/pdt-status-widget";
 import { OptionsChainPanel } from "@/components/options-chain-panel";
 import { FuturesDashboardPanel } from "@/components/futures-dashboard-panel";
+import { ThemeProvider } from "@/lib/theme-provider";
 import { PortfolioMultiBrokerPanel } from "@/components/portfolio-multi-broker-panel";
 import { BrokerConnectivityPanel } from "@/components/broker-connectivity-panel";
 
@@ -70,14 +71,18 @@ describe("dashboard UI rendering obligations", () => {
 
   test("futures panel renders disconnected guidance when TWS unavailable", () => {
     const html = renderToStaticMarkup(
-      createElement(FuturesDashboardPanel, {
-        overview: {
-          connected: false,
-          statusMessage: "IBKR TWS unavailable: disconnected",
-          accounts: [],
-          positionsByAccount: {}
-        }
-      })
+      createElement(
+        ThemeProvider,
+        null,
+        createElement(FuturesDashboardPanel, {
+          overview: {
+            connected: false,
+            statusMessage: "IBKR TWS unavailable: disconnected",
+            accounts: [],
+            positionsByAccount: {}
+          }
+        })
+      )
     );
     expect(html).toContain("IBKR TWS unavailable");
     expect(html).toContain("Connect TWS/IB Gateway");

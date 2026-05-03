@@ -10,6 +10,7 @@ import {
   Layers,
   LayoutDashboard,
   LogOut,
+  MessageCircle,
   Radio,
   CalendarDays,
   Settings,
@@ -20,7 +21,7 @@ import {
 import { logoutAction } from "@/app/login/actions";
 import { openCrispChat } from "@/components/crisp-chat";
 import { isDashboardNavItemActive } from "@/lib/dashboard-nav-active";
-import { spacing, borderRadius, typography } from "@/lib/design-system";
+import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
 interface SidebarProps {
@@ -108,70 +109,81 @@ export function Sidebar({ userLabel }: SidebarProps) {
       </nav>
 
       <div
-        className="sidebar-footer relative"
+        className="sidebar-footer"
         style={{
           padding: spacing[4],
-          paddingBottom: `calc(${spacing[6]} + 22px)`,
           borderTop: `1px solid ${colors.border}`,
-          display: "grid",
-          gap: spacing[3],
           flexShrink: 0
         }}
       >
-        <p
-          className="sidebar-user-label"
-          style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.sm, overflowWrap: "anywhere" }}
+        <div
+          className={surfaceGlowClassName}
+          style={{
+            display: "grid",
+            gap: spacing[3],
+            padding: spacing[3],
+            borderRadius: borderRadius.lg,
+            background: colors.surfaceMuted,
+            border: `1px solid ${colors.border}`
+          }}
         >
-          {userLabel}
-        </p>
-        <form action={logoutAction}>
+          <p
+            className="sidebar-user-label"
+            style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.sm, overflowWrap: "anywhere", lineHeight: 1.4 }}
+          >
+            {userLabel}
+          </p>
+          <form action={logoutAction}>
+            <button
+              type="submit"
+              className="sidebar-signout-btn"
+              style={{
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: spacing[2],
+                minHeight: 44,
+                borderRadius: borderRadius.md,
+                border: `1px solid ${colors.border}`,
+                padding: `${spacing[2]} ${spacing[3]}`,
+                background: colors.surface,
+                color: colors.text,
+                cursor: "pointer",
+                fontSize: typography.scale.sm,
+                fontWeight: 600
+              }}
+            >
+              <LogOut size={18} strokeWidth={2} />
+              <span className="sidebar-signout-label">Sign out</span>
+            </button>
+          </form>
           <button
-            type="submit"
-            className="sidebar-signout-btn"
+            type="button"
+            onClick={() => openCrispChat()}
+            title="Share feedback or report issues"
+            className="sidebar-feedback-link"
             style={{
               width: "100%",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               gap: spacing[2],
+              minHeight: 40,
               borderRadius: borderRadius.md,
-              border: `1px solid ${colors.border}`,
+              border: `1px dashed ${colors.border}`,
               padding: `${spacing[2]} ${spacing[3]}`,
               background: "transparent",
-              color: colors.text,
               cursor: "pointer",
-              fontSize: typography.scale.sm
+              fontSize: typography.scale.sm,
+              fontWeight: 500,
+              color: colors.textMuted
             }}
           >
-            <LogOut size={16} />
-            <span className="sidebar-signout-label">Sign out</span>
+            <MessageCircle size={16} strokeWidth={2} aria-hidden />
+            Send feedback
           </button>
-        </form>
-        <button
-          type="button"
-          onClick={() => openCrispChat()}
-          title="Share feedback or report issues"
-          className="sidebar-feedback-link transition-colors hover:[color:var(--color-text-secondary)]"
-          style={{
-            position: "absolute",
-            left: 0,
-            right: 0,
-            bottom: 0,
-            margin: 0,
-            border: "none",
-            background: "none",
-            cursor: "pointer",
-            textAlign: "left",
-            fontSize: "11px",
-            color: "var(--color-text-tertiary)",
-            textDecoration: "none",
-            padding: "4px 16px",
-            display: "block",
-            letterSpacing: "0.3px"
-          }}
-        >
-          Send feedback
-        </button>
+        </div>
       </div>
     </aside>
   );

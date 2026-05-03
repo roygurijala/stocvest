@@ -10,6 +10,7 @@ import { MiniSparkline } from "@/components/mini-sparkline";
 import { MarketSentimentScoreWidget } from "@/components/market-sentiment-score-widget";
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import { MorningBriefCollapse } from "@/components/morning-brief-collapse";
+import { NewsHeadlineDrawer } from "@/components/news-headline-drawer";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
@@ -114,6 +115,7 @@ export function DashboardRedesign({
   const { colors } = useTheme();
   const [evidence, setEvidence] = useState<SignalEvidenceData | null>(null);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
+  const [headlineArticle, setHeadlineArticle] = useState<NewsPayload | null>(null);
   const snapshotsBySymbol = new Map(marketOverview.snapshots.map((s) => [s.symbol, s]));
   const statSymbols = ["SPY", "QQQ", "IWM"] as const;
   const morningVisible =
@@ -439,20 +441,25 @@ export function DashboardRedesign({
                       <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>
                         {article.source || "Unknown source"} - {timeAgo(article.published_at)}
                       </p>
-                      <a
-                        href={article.url}
-                        target="_blank"
-                        rel="noreferrer"
+                      <button
+                        type="button"
+                        onClick={() => setHeadlineArticle(article)}
                         style={{
-                          display: "inline-block",
+                          display: "block",
+                          width: "100%",
                           marginTop: spacing[1],
+                          padding: 0,
+                          border: "none",
+                          background: "transparent",
+                          textAlign: "left",
+                          cursor: "pointer",
                           color: colors.text,
                           fontSize: typography.scale.sm,
                           lineHeight: 1.35
                         }}
                       >
                         {article.title.length > 110 ? `${article.title.slice(0, 107)}...` : article.title}
-                      </a>
+                      </button>
                     </li>
                   ))}
                 </ul>
@@ -467,6 +474,11 @@ export function DashboardRedesign({
         ) : null)
       ) : null}
       <SignalEvidenceModal open={evidenceOpen} evidence={evidence} onClose={() => setEvidenceOpen(false)} />
+      <NewsHeadlineDrawer
+        open={headlineArticle != null}
+        article={headlineArticle}
+        onClose={() => setHeadlineArticle(null)}
+      />
     </section>
   );
 }

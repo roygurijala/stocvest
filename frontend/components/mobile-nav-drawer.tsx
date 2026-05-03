@@ -2,9 +2,10 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
-import { X } from "lucide-react";
+import { MessageCircle, X } from "lucide-react";
 import { logoutAction } from "@/app/login/actions";
-import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { openCrispChat } from "@/components/crisp-chat";
+import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { DASHBOARD_NAV_ITEMS } from "@/components/sidebar";
 import { isDashboardNavItemActive } from "@/lib/dashboard-nav-active";
@@ -118,27 +119,57 @@ export function MobileNavDrawer({ open, onClose, userLabel }: MobileNavDrawerPro
               className="shrink-0"
               style={{
                 padding: spacing[4],
-                borderTop: `1px solid ${colors.border}`,
-                display: "grid",
-                gap: spacing[3]
+                borderTop: `1px solid ${colors.border}`
               }}
             >
-              <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.sm, overflowWrap: "anywhere" }}>{userLabel}</p>
-              <form action={logoutAction}>
+              <div
+                className={surfaceGlowClassName}
+                style={{
+                  display: "grid",
+                  gap: spacing[3],
+                  padding: spacing[3],
+                  borderRadius: borderRadius.lg,
+                  background: colors.surfaceMuted,
+                  border: `1px solid ${colors.border}`
+                }}
+              >
+                <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.sm, overflowWrap: "anywhere", lineHeight: 1.4 }}>
+                  {userLabel}
+                </p>
+                <form action={logoutAction}>
+                  <button
+                    type="submit"
+                    className="flex w-full min-h-11 items-center justify-center gap-2 rounded-md border text-sm font-semibold"
+                    style={{
+                      borderColor: colors.border,
+                      background: colors.surface,
+                      color: colors.text,
+                      cursor: "pointer",
+                      padding: `${spacing[2]} ${spacing[3]}`
+                    }}
+                  >
+                    Sign out
+                  </button>
+                </form>
                 <button
-                  type="submit"
-                  className="flex w-full min-h-11 items-center justify-center gap-2 rounded-md border text-sm font-medium"
+                  type="button"
+                  className="flex w-full min-h-10 items-center justify-center gap-2 rounded-md border border-dashed text-sm font-medium"
                   style={{
                     borderColor: colors.border,
                     background: "transparent",
-                    color: colors.text,
+                    color: colors.textMuted,
                     cursor: "pointer",
                     padding: `${spacing[2]} ${spacing[3]}`
                   }}
+                  onClick={() => {
+                    openCrispChat();
+                    onClose();
+                  }}
                 >
-                  Sign out
+                  <MessageCircle size={16} strokeWidth={2} aria-hidden />
+                  Send feedback
                 </button>
-              </form>
+              </div>
             </div>
           </motion.aside>
         </>

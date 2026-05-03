@@ -490,8 +490,8 @@ export function LandingPage({
                     setSelectedPlanTier(plan.tier);
                   }
                 }}
-                className={`landing-glow-card relative flex flex-col p-6 cursor-pointer outline-none transition-transform focus-visible:ring-2 focus-visible:ring-[#3b82f6] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0e1a] ${
-                  isSelected ? "ring-2 ring-[#3b82f6] ring-offset-2 ring-offset-[#0a0e1a] lg:scale-[1.03]" : "ring-0 ring-offset-0 lg:scale-100"
+                className={`landing-pricing-card relative flex flex-col p-6 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[#3b82f6] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0e1a] ${
+                  isSelected ? "landing-pricing-card--selected z-[1] lg:scale-[1.02]" : "lg:scale-100"
                 }`}
               >
                 {isPro ? (
@@ -500,10 +500,10 @@ export function LandingPage({
                   </p>
                 ) : null}
                 <div className="mb-2 flex items-center justify-between">
-                  <h3 className="text-xl font-semibold">{plan.tier}</h3>
+                  <h3 className={`text-xl font-semibold ${isSelected ? "text-white" : "text-slate-300"}`}>{plan.tier}</h3>
                   {isPro ? <span className="rounded-full bg-[#3b82f6] px-3 py-1 text-sm font-bold text-white">Popular</span> : null}
                 </div>
-                <p className={`mb-3 text-2xl font-bold ${isSelected ? "text-[#3b82f6]" : ""}`}>{plan.price}</p>
+                <p className={`mb-3 text-2xl font-bold ${isSelected ? "text-[#3b82f6]" : "text-slate-100"}`}>{plan.price}</p>
                 <ul className="mb-4 space-y-1 text-slate-300">
                   {plan.features.map((f) => (
                     <li key={f}>• {f}</li>
