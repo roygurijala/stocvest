@@ -33,6 +33,15 @@ class NewsCatalystDetector:
     Uses deterministic heuristics so behavior is transparent and testable.
     """
 
+    _LISTICLE_PATTERNS: tuple[str, ...] = (
+        r"\b\d+ (stocks|ways|reasons)\b",
+        r"\b(top|best) \d+ stocks\b",
+        r"\bwhy (you should|investors should)\b",
+        r"\bshould you buy\b",
+        r"\bis it time to\b",
+        r"\bhere's why .{0,30} (could|might|may)\b",
+    )
+
     _HEADLINE_NOISE_SUBSTRINGS: tuple[str, ...] = (
         "rosen",
         "national trial lawyers",
@@ -43,7 +52,6 @@ class NewsCatalystDetector:
         "securities fraud",
         "if you'd invested",
         "here's how much",
-        "this week",
         "what could happen if",
         "here's what that means",
         "ceo pay",
@@ -53,9 +61,9 @@ class NewsCatalystDetector:
         "soared along with",
         "slumped this week",
         "growth stocks to invest",
-        "stocks to invest",
-        "right now",
         "to invest $",
+        "the great rotation",
+        "back to crypto",
     )
 
     _CATEGORY_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -154,18 +162,77 @@ class NewsCatalystDetector:
         candidates.sort(key=lambda item: item.catalyst_score, reverse=True)
         return candidates[: max(0, limit)]
 
-    def candidate_for_symbol(self, article: NewsArticle, symbol: str) -> NewsCatalystCandidate | None:
-        """Score one article for a specific ticker (symbol must appear in article.tickers)."""
+    def candidate_for_symbol(
+        self,
+        article: NewsArticle,
+        symbol: str,
+        company_name: str | None = None,
+    ) -> NewsCatalystCandidate | None:
+        """
+        Score one article for a specific ticker.
+
+        Prefer Polygon ``tickers`` match; optional ``company_name`` fallback when the
+        headline names the company but tickers are missing or incomplete.
+        """
         sym = symbol.strip().upper()
-        if not sym or not article.tickers:
+        if not sym:
             return None
-        if sym not in {t.strip().upper() for t in article.tickers}:
+        tick_set = {t.strip().upper() for t in article.tickers} if article.tickers else set()
+        ticker_hit = sym in tick_set
+        company_hit = False
+        if not ticker_hit and company_name:
+            company_hit = self._matches_by_company_name(article.title, company_name)
+        if not ticker_hit and not company_hit:
             return None
-        return self._to_candidate_for_symbol(article, sym)
+        narrative_scale = 0.8 if company_hit and not ticker_hit else 1.0
+        return self._to_candidate_for_symbol(article, sym, narrative_scale=narrative_scale)
+
+    @classmethod
+    def article_relevant_for_gap(
+        cls,
+        article: NewsArticle,
+        symbol: str,
+        company_name: str | None,
+    ) -> bool:
+        """True if the article is tied to ``symbol`` via tickers or company-name headline match."""
+        sym = symbol.strip().upper()
+        if not sym:
+            return False
+        if article.tickers and sym in {t.strip().upper() for t in article.tickers}:
+            return True
+        if company_name:
+            return cls._matches_by_company_name(article.title, company_name)
+        return False
+
+    @staticmethod
+    def _matches_by_company_name(headline: str, company_name: str) -> bool:
+        if not company_name or len(company_name.strip()) <= 4:
+            return False
+        headline_lower = headline.lower()
+        full = company_name.strip().lower()
+        if len(full) > 4 and full in headline_lower:
+            return True
+        for part in re.split(r"[\s,]+", company_name.strip()):
+            p = part.strip().lower()
+            if len(p) <= 4:
+                continue
+            for suf in ("inc.", "inc", "corp.", "corp", "corporation", "plc", "llc", "ltd.", "ltd"):
+                if p.endswith(suf) and len(p) > len(suf):
+                    p = p[: -len(suf)].strip()
+                    break
+            if len(p) > 4 and p in headline_lower:
+                return True
+        return False
+
+    @classmethod
+    def _is_generic_advice_article(cls, headline_lower: str) -> bool:
+        return any(re.search(p, headline_lower) for p in cls._LISTICLE_PATTERNS)
 
     @classmethod
     def _headline_is_noise(cls, title: str) -> bool:
         h = title.lower()
+        if cls._is_generic_advice_article(h):
+            return True
         return any(sub in h for sub in cls._HEADLINE_NOISE_SUBSTRINGS)
 
     def _matches_fda_category(self, text: str) -> bool:
@@ -246,13 +313,21 @@ class NewsCatalystDetector:
         sym = article.tickers[0].strip().upper()
         return self._to_candidate_for_symbol(article, sym)
 
-    def _to_candidate_for_symbol(self, article: NewsArticle, symbol: str) -> NewsCatalystCandidate | None:
+    def _to_candidate_for_symbol(
+        self,
+        article: NewsArticle,
+        symbol: str,
+        *,
+        narrative_scale: float = 1.0,
+    ) -> NewsCatalystCandidate | None:
         if self._headline_is_noise(article.title):
             return None
 
         text = f"{article.title} {article.description or ''} {' '.join(article.keywords)}".lower()
         category = self._classify_category(text)
         narrative_score = self._narrative_score(text)
+        if narrative_scale != 1.0:
+            narrative_score = int(max(22, min(88, round(narrative_score * narrative_scale))))
         sentiment_label = self._label_from_narrative(narrative_score)
 
         source_bonus = 0.0

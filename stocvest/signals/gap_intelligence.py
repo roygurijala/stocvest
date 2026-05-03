@@ -9,10 +9,14 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from stocvest.data.models import NewsArticle, Snapshot
 from stocvest.signals.day_trading_scanner import PremarketGapCandidate
 from stocvest.signals.news_catalyst_detector import NewsCatalystCandidate, NewsCatalystDetector
+from stocvest.utils.logging import get_logger
+
+_LOG = get_logger(__name__)
 
 NO_CATALYST_WARNING = (
     "No catalyst found — momentum gap only. Price-only gaps carry higher reversal risk."
@@ -56,7 +60,28 @@ def _volume_vs_adv(day_volume: float, prev_day_volume: float | None) -> float:
     return 1.0
 
 
-def _filter_articles_last_hours(articles: list[NewsArticle], *, hours: int = 24) -> list[NewsArticle]:
+def _catalyst_lookback_hours_at(ny: datetime) -> int:
+    """
+    Regular session Mon–Fri 9:30–16:00 America/New_York → 24h news lookback; else 48h
+    (evenings/weekends catch prior session catalyst headlines).
+    """
+    wd = ny.weekday()
+    if wd >= 5:
+        return 48
+    mins = ny.hour * 60 + ny.minute
+    open_mins = 9 * 60 + 30
+    close_mins = 16 * 60
+    if open_mins <= mins < close_mins:
+        return 24
+    return 48
+
+
+def _get_catalyst_lookback_hours() -> int:
+    ny = datetime.now(timezone.utc).astimezone(ZoneInfo("America/New_York"))
+    return _catalyst_lookback_hours_at(ny)
+
+
+def _filter_articles_last_hours(articles: list[NewsArticle], *, hours: int) -> list[NewsArticle]:
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
     return [a for a in articles if a.published_at >= cutoff]
 
@@ -138,10 +163,11 @@ def build_gap_intelligence_items(
     articles: list[NewsArticle],
     *,
     detector: NewsCatalystDetector | None = None,
-    news_lookback_hours: int = 24,
+    news_lookback_hours: int | None = None,
 ) -> list[dict[str, Any]]:
     det = detector or NewsCatalystDetector(min_score=0.35)
-    arts = _filter_articles_last_hours(articles, hours=news_lookback_hours)
+    lookback_hours = news_lookback_hours if news_lookback_hours is not None else _get_catalyst_lookback_hours()
+    arts = _filter_articles_last_hours(articles, hours=lookback_hours)
     work = _prepare_work_items(gaps, snapshot_by_symbol)
     items: list[dict[str, Any]] = []
 
@@ -158,8 +184,9 @@ def build_gap_intelligence_items(
 
         best: NewsCatalystCandidate | None = None
         best_article: NewsArticle | None = None
+        company = (w.company_name or "").strip() or None
         for art in arts:
-            c = det.candidate_for_symbol(art, g.symbol)
+            c = det.candidate_for_symbol(art, g.symbol, company_name=company)
             if c is None:
                 continue
             if best is None or c.catalyst_score > best.catalyst_score:
@@ -167,6 +194,25 @@ def build_gap_intelligence_items(
                 best_article = art
 
         has_cat = best is not None
+        if not has_cat:
+            mismatch = 0
+            noise_c = 0
+            for art in arts:
+                if not NewsCatalystDetector.article_relevant_for_gap(art, g.symbol, company):
+                    mismatch += 1
+                    continue
+                if NewsCatalystDetector._headline_is_noise(art.title):
+                    noise_c += 1
+            _LOG.debug(
+                "No catalyst for %s: articles_checked=%s after_time_filter=%s lookback_hours=%s "
+                "ticker_mismatch_or_no_company_hint=%s noise_filtered=%s",
+                g.symbol,
+                len(articles),
+                len(arts),
+                lookback_hours,
+                mismatch,
+                noise_c,
+            )
         gqs = calculate_gap_quality_score(g.gap_percent, w.volume_vs_avg, has_cat, price)
         if gqs < 40:
             continue

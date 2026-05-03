@@ -6,6 +6,7 @@ import asyncio
 from datetime import date
 from typing import Any
 
+from stocvest.api.services.gap_intelligence_news import collect_news_for_gap_intelligence
 from stocvest.data import PolygonClient, PolygonError
 from stocvest.data.models import EarningsEvent, Snapshot
 from stocvest.data.scanner_universe import LIQUID_SYMBOLS_FALLBACK
@@ -85,7 +86,6 @@ async def fetch_morning_brief_context_live(
             from_date=briefing_date,
             to_date=briefing_date,
         )
-        news = await client.get_news(limit=400)
 
     snaps = await _load_snapshots_for_dynamic_gaps()
     gaps = dynamic_gap_candidates_from_snapshots(
@@ -96,6 +96,15 @@ async def fetch_morning_brief_context_live(
         min_trade_price=5.0,
     )
     sym_map = {s.symbol: s for s in snaps}
+    gap_symbols = [g.symbol for g in gaps]
+    async with PolygonClient(api_key=settings.polygon_api_key) as client:
+        news = await collect_news_for_gap_intelligence(
+            client,
+            gap_symbols,
+            global_limit=280,
+            per_symbol_limit=5,
+            max_symbols=10,
+        )
     gap_items = build_gap_intelligence_items(gaps, sym_map, news)
 
     spy_pct = _pct_from_snapshot(spy)

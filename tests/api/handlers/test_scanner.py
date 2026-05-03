@@ -214,6 +214,8 @@ def test_scanner_gap_intelligence_handler_merges_news(monkeypatch: pytest.Monkey
     scanner_response_cache._MEMORY.clear()
 
     class _FakePoly:
+        calls: list[tuple[str | None, int]] = []
+
         def __init__(self, api_key: str) -> None:
             _ = api_key
 
@@ -224,8 +226,7 @@ def test_scanner_gap_intelligence_handler_merges_news(monkeypatch: pytest.Monkey
             _ = args
 
         async def get_news(self, symbol=None, limit: int = 50):
-            _ = symbol
-            _ = limit
+            _FakePoly.calls.append((symbol, limit))
             return [
                 NewsArticle(
                     article_id="n1",
@@ -234,11 +235,12 @@ def test_scanner_gap_intelligence_handler_merges_news(monkeypatch: pytest.Monkey
                     description="",
                     url="https://example.com",
                     source="Reuters",
-                    tickers=["GAP1"],
+                    tickers=["GAP1"] if symbol is None else [symbol],
                     keywords=[],
                 )
             ]
 
+    _FakePoly.calls.clear()
     monkeypatch.setattr("stocvest.api.handlers.scanner.PolygonClient", _FakePoly)
     monkeypatch.setattr("stocvest.api.handlers.scanner.get_settings", lambda: SimpleNamespace(polygon_api_key="k"))
 
@@ -263,6 +265,9 @@ def test_scanner_gap_intelligence_handler_merges_news(monkeypatch: pytest.Monkey
     body = json.loads(response["body"])
     assert body["items"][0]["symbol"] == "GAP1"
     assert body["items"][0]["has_catalyst"] is True
+    syms = [c[0] for c in _FakePoly.calls]
+    assert None in syms
+    assert "GAP1" in syms
 
 
 def test_scanner_handlers_validate_inputs() -> None:

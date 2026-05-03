@@ -109,7 +109,7 @@ def test_excludes_law_firm_and_retrospective_headline_noise():
         "ROSEN LAW FIRM Encourages AAPL Investors to Contact Before Deadline: May 1",
         "NATIONAL TRIAL LAWYERS reminds shareholders of CLASS ACTION deadline",
         "If You'd Invested $1000 in AAPL Five Years Ago, Here's How Much You'd Have",
-        "Top Stocks This Week: What Wall Street Says",
+        "Why you should sell AAPL before the next Fed meeting",
     ]
     articles = [
         article(f"n{i}", title, sentiment_score=0.9, keywords=["earnings"]) for i, title in enumerate(noise_titles)

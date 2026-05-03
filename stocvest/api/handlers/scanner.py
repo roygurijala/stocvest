@@ -9,6 +9,7 @@ from typing import Any
 from stocvest.api.http_route import http_route_descriptor
 from stocvest.api.legal_copy import API_SIGNAL_DISCLAIMER
 from stocvest.api.response import bad_request, internal_error, not_found, ok
+from stocvest.api.services.gap_intelligence_news import collect_news_for_gap_intelligence
 from stocvest.api.services.scanner_response_cache import build_cache_key, cache_get, cache_set
 from stocvest.api.services.scanner_scheduled_pipeline import run_scheduled_scan_sync
 from stocvest.api.services.morning_brief_fetch import (
@@ -289,8 +290,16 @@ async def _gap_intelligence_async(payload: dict[str, Any]) -> dict[str, Any]:
         min_trade_price=5.0,
     )
     settings = get_settings()
+    gap_symbols = [g.symbol for g in gaps]
+    global_cap = max(50, min(news_limit, 500))
     async with PolygonClient(api_key=settings.polygon_api_key) as client:
-        news = await client.get_news(limit=news_limit)
+        news = await collect_news_for_gap_intelligence(
+            client,
+            gap_symbols,
+            global_limit=global_cap,
+            per_symbol_limit=5,
+            max_symbols=10,
+        )
         sym_map = {s.symbol: s for s in snapshots}
         items = build_gap_intelligence_items(gaps, sym_map, news)
         await _enrich_gap_company_names(client, items)
