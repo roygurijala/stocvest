@@ -21,7 +21,7 @@ const ROWS = [
   {
     time: "After close",
     without: "No record of why trades worked or didn't. Start over tomorrow.",
-    with: "Signal replay shows every call — correct and incorrect. Engine improves."
+    with: "Signal replay shows every call. Journal auto-captures P&L. Start tomorrow better informed."
   }
 ] as const;
 
@@ -37,10 +37,13 @@ export function LandingBeforeAfterSection() {
           Every serious trader does the same research every morning. STOCVEST does it for you.
         </p>
 
-        <div className="mb-2 hidden grid-cols-[1fr_auto_1fr] items-end gap-3 text-[10px] font-semibold uppercase tracking-[2px] md:grid">
-          <p className="text-[#4a6080]">Without STOCVEST</p>
+        <div
+          className="mb-2 grid grid-cols-[1fr_auto_1fr] items-end gap-3 text-[10px] font-semibold uppercase tracking-[2px]"
+          style={{ marginTop: 0, marginBottom: 8 }}
+        >
+          <p className="text-[#4a6080]">WITHOUT STOCVEST</p>
           <span className="pb-1 text-center text-slate-500">vs</span>
-          <p className="text-right text-[#00d4ff]">With STOCVEST</p>
+          <p className="text-right text-[#00d4ff]">WITH STOCVEST</p>
         </div>
 
         <div className="space-y-2 md:space-y-2">

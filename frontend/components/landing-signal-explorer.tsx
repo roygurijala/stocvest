@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { LandingSignal } from "@/lib/api/landing-signals";
+import type { PerformanceSummary } from "@/lib/api/public-signals";
 
 const MONO =
   '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
@@ -59,12 +60,27 @@ function barGradient(score: number): string {
   return "linear-gradient(90deg, #f87171, #dc2626)";
 }
 
+function dotFill(outcome: LandingSignal["outcome_1h"]): { bg: string; shadow: string } {
+  if (outcome === "correct") return { bg: "#00e87a", shadow: "0 0 4px rgba(0,232,122,0.5)" };
+  if (outcome === "incorrect") return { bg: "#ff3d5a", shadow: "0 0 4px rgba(255,61,90,0.5)" };
+  return { bg: "#f5c542", shadow: "none" };
+}
+
+function directionalAccuracyFromSignals(list: LandingSignal[]): number | null {
+  const material = list.filter((s) => s.outcome_1h === "correct" || s.outcome_1h === "incorrect");
+  if (material.length === 0) return null;
+  const wins = material.filter((s) => s.outcome_1h === "correct").length;
+  return Math.round((100 * wins) / material.length);
+}
+
 export function LandingSignalExplorer({
   signals,
-  usedApiFallback
+  usedApiFallback,
+  performanceSummary
 }: {
   signals: LandingSignal[];
   usedApiFallback: boolean;
+  performanceSummary: PerformanceSummary;
 }) {
   const [active, setActive] = useState(0);
   const [barReveal, setBarReveal] = useState(0);
@@ -87,7 +103,27 @@ export function LandingSignalExplorer({
     [current]
   );
 
+  const stripDots = useMemo(() => signals.slice(0, 20), [signals]);
+  const moreCount = Math.max(0, signals.length - 20);
+
+  const accuracyPct = useMemo(() => {
+    if (performanceSummary.signals_evaluated > 0) {
+      return Math.round(performanceSummary.directional_accuracy_percent);
+    }
+    const local = directionalAccuracyFromSignals(signals);
+    return local != null ? local : null;
+  }, [performanceSummary.directional_accuracy_percent, performanceSummary.signals_evaluated, signals]);
+
   if (!current) return null;
+
+  const tabButtonBase: CSSProperties = {
+    fontFamily: MONO,
+    fontSize: 12,
+    letterSpacing: 1,
+    padding: "7px 16px",
+    borderRadius: 6,
+    border: "1px solid rgba(0,180,255,0.15)"
+  };
 
   return (
     <section className="border-b border-[rgba(0,180,255,0.06)] px-5 py-12 md:px-10 md:py-20">
@@ -105,40 +141,90 @@ export function LandingSignalExplorer({
           Every signal we generated yesterday, tracked against what actually happened
         </p>
 
-        <div
-          className="mb-4 flex flex-wrap gap-1 border-b border-[rgba(0,180,255,0.12)]"
-          role="tablist"
-          aria-label="Signals"
-        >
-          {signals.map((sig, i) => (
-            <button
-              key={`${sig.symbol}-${i}`}
-              type="button"
-              role="tab"
-              aria-selected={i === active}
-              onClick={() => setActive(i)}
-              className="relative px-3 py-2 transition-transform"
-              style={{
-                fontFamily: MONO,
-                fontSize: 12,
-                letterSpacing: "1px",
-                color: i === active ? "#e2e8f0" : "#64748b",
-                transform: i === active ? "translateY(-2px)" : undefined
-              }}
-            >
-              [{sig.symbol}]
-              {usedApiFallback ? (
-                <span className="ml-1 rounded bg-white/10 px-1 text-[9px] font-normal text-slate-400">Example</span>
-              ) : null}
-              {i === active ? (
-                <span
-                  className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full"
-                  style={{ background: "#00d4ff", boxShadow: "0 0 12px rgba(0,212,255,0.6)" }}
-                />
-              ) : null}
-            </button>
-          ))}
+        {/* Track record strip */}
+        <div className="mb-4">
+          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+            <p className="text-[11px] text-slate-500" style={{ fontFamily: MONO }}>
+              Yesterday · {signals.length} signal{signals.length === 1 ? "" : "s"} generated
+            </p>
+            <p className="text-[11px]" style={{ fontFamily: MONO, color: accuracyPct != null ? "#00e87a" : "#64748b" }}>
+              {accuracyPct != null ? `${accuracyPct}% directional accuracy` : "— directional accuracy"}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-[3px]">
+            {stripDots.map((sig, i) => {
+              const { bg, shadow } = dotFill(sig.outcome_1h);
+              const selected = i === active;
+              return (
+                <button
+                  key={`${sig.symbol}-${sig.generated_at}-${i}`}
+                  type="button"
+                  aria-label={`Signal ${i + 1} ${sig.symbol}`}
+                  aria-pressed={selected}
+                  onClick={() => setActive(i)}
+                  className="flex h-[18px] w-[18px] shrink-0 items-center justify-center border-0 bg-transparent p-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                >
+                  <span
+                    className="block rounded-full"
+                    style={{
+                      width: 10,
+                      height: 10,
+                      background: bg,
+                      boxShadow: shadow,
+                      transform: selected ? "scale(1.4)" : undefined,
+                      outline: selected ? "2px solid #fff" : undefined,
+                      outlineOffset: selected ? 1 : undefined
+                    }}
+                  />
+                </button>
+              );
+            })}
+            {moreCount > 0 ? (
+              <span className="pl-1 text-[10px] text-slate-500" style={{ fontFamily: MONO }}>
+                +{moreCount} more
+              </span>
+            ) : null}
+          </div>
         </div>
+
+        <div className={`flex flex-wrap gap-2 ${usedApiFallback ? "mb-2" : "mb-4"}`} role="tablist" aria-label="Signals">
+          {signals.map((sig, i) => {
+            const isActive = i === active;
+            const dotColor =
+              sig.direction === "bearish" ? "#ff3d5a" : sig.direction === "neutral" ? "#f5c542" : "#00e87a";
+            return (
+              <button
+                key={`${sig.symbol}-${i}`}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => setActive(i)}
+                className="inline-flex items-center gap-2 transition-colors"
+                style={{
+                  ...tabButtonBase,
+                  background: isActive ? "rgba(0,180,255,0.1)" : "transparent",
+                  color: isActive ? "#00d4ff" : "#4a6080",
+                  borderColor: isActive ? "rgba(0,180,255,0.4)" : "rgba(0,180,255,0.15)"
+                }}
+              >
+                <span
+                  className="shrink-0 rounded-full"
+                  style={{
+                    width: 6,
+                    height: 6,
+                    background: dotColor
+                  }}
+                />
+                {sig.symbol}
+              </button>
+            );
+          })}
+        </div>
+        {usedApiFallback ? (
+          <p className="mb-4 text-[10px] italic text-slate-500" style={{ fontFamily: MONO }}>
+            Example signals from fallback data · Live history builds from market open
+          </p>
+        ) : null}
 
         <div
           className="mb-6 rounded-xl border p-6"
@@ -152,7 +238,9 @@ export function LandingSignalExplorer({
           <div className="mb-4 flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
             <div>
               <p className="text-2xl font-bold tracking-[2px] text-slate-50">{current.symbol}</p>
-              <p className="mt-1 text-sm text-slate-400">{formatSignalWhen(current.generated_at)}</p>
+              <p className="mt-1 text-sm text-slate-500" style={{ fontFamily: MONO }}>
+                {formatSignalWhen(current.generated_at)} · {current.pattern}
+              </p>
             </div>
             <div className="flex flex-wrap items-center gap-4 sm:justify-end">
               <span
@@ -292,12 +380,6 @@ export function LandingSignalExplorer({
             Signal data for informational purposes only · Not investment advice
           </p>
         </div>
-
-        {usedApiFallback ? (
-          <p className="mb-6 text-center text-xs text-slate-500">
-            Live signal history begins building from market open today
-          </p>
-        ) : null}
 
         <div
           className="flex flex-col gap-4 rounded-[10px] border p-5 md:flex-row md:items-center md:justify-between md:px-6"

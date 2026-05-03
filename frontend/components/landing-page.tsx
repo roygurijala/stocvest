@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
+import type { CSSProperties } from "react";
 import { Bot, ChartColumnIncreasing, Newspaper, ShieldCheck } from "lucide-react";
 import { LandingActivityFeedSection } from "@/components/landing-activity-feed";
 import { LandingBeforeAfterSection } from "@/components/landing-before-after";
@@ -12,14 +13,115 @@ import type { LandingSignal } from "@/lib/api/landing-signals";
 import { useScrollPosition } from "@/lib/hooks/use-scroll-position";
 import type { PerformanceSummary } from "@/lib/api/public-signals";
 
-const comparisonRows = [
-  "AI Signal Synthesis",
-  "Multi-Broker Execution",
-  "Signal Reasoning Transparency",
-  "Pre-Market Intelligence Briefing",
-  "PDT Guardian",
-  "Day and Swing Trading Combined"
+const MONO_TABLE =
+  '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
+
+type ComparisonCell = { kind: "check" } | { kind: "dash" } | { kind: "note"; text: string };
+
+type ComparisonRowDef = {
+  capability: string;
+  stocvest: ComparisonCell;
+  webull: ComparisonCell;
+  tradingview: ComparisonCell;
+  unusualWhales: ComparisonCell;
+};
+
+type ComparisonGroupDef = { title: string; rows: ComparisonRowDef[] };
+
+const LANDING_COMPARISON_GROUPS: ComparisonGroupDef[] = [
+  {
+    title: "INTELLIGENCE",
+    rows: [
+      {
+        capability: "AI signal synthesis with reasoning",
+        stocvest: { kind: "check" },
+        webull: { kind: "dash" },
+        tradingview: { kind: "dash" },
+        unusualWhales: { kind: "dash" }
+      },
+      {
+        capability: "Pre-market gap intelligence + catalyst",
+        stocvest: { kind: "check" },
+        webull: { kind: "note", text: "partial" },
+        tradingview: { kind: "note", text: "screener" },
+        unusualWhales: { kind: "dash" }
+      },
+      {
+        capability: "Confluence detection (multi-signal)",
+        stocvest: { kind: "check" },
+        webull: { kind: "dash" },
+        tradingview: { kind: "dash" },
+        unusualWhales: { kind: "dash" }
+      },
+      {
+        capability: "Market regime detection",
+        stocvest: { kind: "check" },
+        webull: { kind: "dash" },
+        tradingview: { kind: "dash" },
+        unusualWhales: { kind: "dash" }
+      }
+    ]
+  },
+  {
+    title: "EXECUTION",
+    rows: [
+      {
+        capability: "Works with your existing broker",
+        stocvest: { kind: "check" },
+        webull: { kind: "note", text: "own broker" },
+        tradingview: { kind: "dash" },
+        unusualWhales: { kind: "dash" }
+      },
+      {
+        capability: "PDT Guardian (hard block)",
+        stocvest: { kind: "check" },
+        webull: { kind: "note", text: "warning only" },
+        tradingview: { kind: "dash" },
+        unusualWhales: { kind: "dash" }
+      }
+    ]
+  },
+  {
+    title: "TRANSPARENCY",
+    rows: [
+      {
+        capability: "Published signal accuracy (wins + losses)",
+        stocvest: { kind: "check" },
+        webull: { kind: "dash" },
+        tradingview: { kind: "dash" },
+        unusualWhales: { kind: "note", text: "partial" }
+      },
+      {
+        capability: "Automatic trade journal",
+        stocvest: { kind: "check" },
+        webull: { kind: "note", text: "basic" },
+        tradingview: { kind: "dash" },
+        unusualWhales: { kind: "dash" }
+      }
+    ]
+  }
 ];
+
+function ComparisonCellView({ cell }: { cell: ComparisonCell }) {
+  if (cell.kind === "check") {
+    return <span style={{ color: "#00e87a", fontSize: 14 }}>✓</span>;
+  }
+  if (cell.kind === "dash") {
+    return (
+      <span style={{ color: "#2a4060", fontSize: 13 }} className="select-none">
+        —
+      </span>
+    );
+  }
+  return (
+    <span
+      className="italic"
+      style={{ color: "#f5c542", fontSize: 10, fontFamily: MONO_TABLE }}
+    >
+      {cell.text}
+    </span>
+  );
+}
 
 export type LandingPageProps = {
   explorerSignals: LandingSignal[];
@@ -142,7 +244,11 @@ export function LandingPage({
 
       <LandingHowItWorksSection />
 
-      <LandingSignalExplorer signals={explorerSignals} usedApiFallback={usedApiFallback} />
+      <LandingSignalExplorer
+        signals={explorerSignals}
+        usedApiFallback={usedApiFallback}
+        performanceSummary={performanceSummary}
+      />
 
       <LandingBeforeAfterSection />
 
@@ -159,33 +265,93 @@ export function LandingPage({
           Finally built for serious traders.
         </motion.h2>
         <div className="overflow-x-auto rounded-xl border border-white/10">
-          <table className="w-full min-w-[720px] bg-white/5 text-sm">
+          <table className="w-full min-w-[880px] bg-white/[0.03] text-left text-sm">
             <thead>
-              <tr className="border-b border-white/10 text-left">
-                <th className="px-4 py-3">Capability</th>
-                <th className="bg-[#3b82f6]/20 px-4 py-3">STOCVEST</th>
-                <th className="px-4 py-3">ThinkorSwim</th>
-                <th className="px-4 py-3">Unusual Whales</th>
-                <th className="px-4 py-3">Finviz</th>
+              <tr className="border-b border-white/10">
+                <th
+                  className="px-4 py-3 font-normal"
+                  style={{ fontFamily: MONO_TABLE, color: "#4a6080" }}
+                >
+                  Capability
+                </th>
+                <th
+                  className="px-4 py-3 text-center font-normal"
+                  style={{
+                    fontFamily: MONO_TABLE,
+                    color: "#00d4ff",
+                    background: "rgba(0,180,255,0.08)"
+                  }}
+                >
+                  STOCVEST
+                </th>
+                <th className="px-4 py-3 text-center font-normal" style={{ fontFamily: MONO_TABLE, color: "#4a6080" }}>
+                  Webull
+                </th>
+                <th className="px-4 py-3 text-center font-normal" style={{ fontFamily: MONO_TABLE, color: "#4a6080" }}>
+                  TradingView
+                </th>
+                <th className="px-4 py-3 text-center font-normal" style={{ fontFamily: MONO_TABLE, color: "#4a6080" }}>
+                  Unusual Whales
+                </th>
               </tr>
             </thead>
             <tbody>
-              {comparisonRows.map((row, idx) => (
-                <motion.tr
-                  key={row}
-                  initial={{ opacity: 0, x: -12 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: idx * 0.08 }}
-                  className="border-b border-white/10"
-                >
-                  <td className="px-4 py-3">{row}</td>
-                  <td className="bg-[#3b82f6]/15 px-4 py-3 text-[#22c55e]">✓</td>
-                  <td className="px-4 py-3 text-slate-400">✕</td>
-                  <td className="px-4 py-3 text-slate-400">✕</td>
-                  <td className="px-4 py-3 text-slate-400">✕</td>
-                </motion.tr>
-              ))}
+              {LANDING_COMPARISON_GROUPS.flatMap((group, gi) => {
+                const categoryRow = (
+                  <tr key={`cat-${group.title}`} className="bg-transparent">
+                    <td
+                      colSpan={5}
+                      className="px-[14px] pb-1 pt-[10px] font-normal uppercase"
+                      style={{
+                        fontFamily: MONO_TABLE,
+                        fontSize: 9,
+                        color: "#2a4060",
+                        letterSpacing: "0.06em"
+                      }}
+                    >
+                      {group.title}
+                    </td>
+                  </tr>
+                );
+                const dataRows = group.rows.map((row, ri) => {
+                  const isLast =
+                    gi === LANDING_COMPARISON_GROUPS.length - 1 && ri === group.rows.length - 1;
+                  const stCellStyle: CSSProperties = {
+                    background: "rgba(0,180,255,0.04)",
+                    borderLeft: "1px solid rgba(0,180,255,0.1)",
+                    borderRight: "1px solid rgba(0,180,255,0.1)"
+                  };
+                  if (isLast) {
+                    stCellStyle.borderBottomLeftRadius = 8;
+                    stCellStyle.borderBottomRightRadius = 8;
+                  }
+                  return (
+                    <motion.tr
+                      key={`${group.title}-${row.capability}`}
+                      initial={{ opacity: 0, x: -12 }}
+                      whileInView={{ opacity: 1, x: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: (gi * 4 + ri) * 0.05 }}
+                      className="border-b border-white/[0.06] transition-colors duration-100 hover:bg-[rgba(255,255,255,0.01)]"
+                    >
+                      <td className="px-4 py-3 text-slate-200">{row.capability}</td>
+                      <td className="px-4 py-3 text-center align-middle" style={stCellStyle}>
+                        <ComparisonCellView cell={row.stocvest} />
+                      </td>
+                      <td className="px-4 py-3 text-center align-middle">
+                        <ComparisonCellView cell={row.webull} />
+                      </td>
+                      <td className="px-4 py-3 text-center align-middle">
+                        <ComparisonCellView cell={row.tradingview} />
+                      </td>
+                      <td className="px-4 py-3 text-center align-middle">
+                        <ComparisonCellView cell={row.unusualWhales} />
+                      </td>
+                    </motion.tr>
+                  );
+                });
+                return [categoryRow, ...dataRows];
+              })}
             </tbody>
           </table>
         </div>
