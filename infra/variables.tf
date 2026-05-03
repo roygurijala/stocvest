@@ -68,3 +68,31 @@ variable "anthropic_api_key" {
   type        = string
   sensitive   = true
 }
+
+variable "http_api_throttling_rate_limit" {
+  description = <<-EOT
+    API Gateway HTTP API ($default stage) steady-state request rate limit (requests per second) via default_route_settings.
+    Applies per route unless overridden. Cannot exceed account-level API Gateway quota for the Region.
+  EOT
+  type    = number
+  default = 2000
+
+  validation {
+    condition     = var.http_api_throttling_rate_limit >= 100 && var.http_api_throttling_rate_limit <= 10000
+    error_message = "http_api_throttling_rate_limit must be between 100 and 10000 (HTTP API stage default route)."
+  }
+}
+
+variable "http_api_throttling_burst_limit" {
+  description = <<-EOT
+    API Gateway HTTP API ($default stage) burst limit (concurrent request submissions / token bucket capacity) via default_route_settings.
+    Should typically be >= http_api_throttling_rate_limit. AWS enforces upper bounds per API type.
+  EOT
+  type    = number
+  default = 4000
+
+  validation {
+    condition     = var.http_api_throttling_burst_limit >= 500 && var.http_api_throttling_burst_limit <= 5000
+    error_message = "http_api_throttling_burst_limit must be between 500 and 5000 (HTTP API stage default route)."
+  }
+}

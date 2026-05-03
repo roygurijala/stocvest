@@ -131,6 +131,11 @@ resource "aws_apigatewayv2_stage" "http_default" {
   name        = "$default"
   auto_deploy = true
 
+  default_route_settings {
+    throttling_rate_limit  = var.http_api_throttling_rate_limit
+    throttling_burst_limit = var.http_api_throttling_burst_limit
+  }
+
   tags = merge(local.common_tags, {
     Name = "stocvest-development-http-stage"
   })

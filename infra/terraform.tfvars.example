@@ -26,3 +26,7 @@ allowed_ingress_cidrs = [
 # Phase 6f — optional JWT overrides for HTTP API (leave empty to use Cognito from Terraform)
 cognito_jwt_issuer   = ""
 cognito_jwt_audience = ""
+
+# Optional: HTTP API stage throttling ($default). Omitted = Terraform defaults (2000 RPS / 4000 burst).
+# http_api_throttling_rate_limit  = 1000
+# http_api_throttling_burst_limit = 2000
