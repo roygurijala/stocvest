@@ -22,6 +22,7 @@ from stocvest.api.services.morning_brief_fetch import (
     morning_brief_context_from_payload_dict,
 )
 from stocvest.api.services.signal_recorder import get_signal_recorder, performance_summary_from_records
+from stocvest.api.services.swing_composite_evidence import build_swing_composite_evidence_fields
 from stocvest.data.models import Bar, SignalRecord
 from stocvest.signals import (
     AISynthesis,
@@ -108,6 +109,8 @@ def swing_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[
             for p in available_layers
         ]
         composite = CompositeScoreEngine().compute(signals, regime=regime)
+        snap_raw = payload.get("symbol_snapshot") or payload.get("snapshot") or {}
+        snap = dict(snap_raw) if isinstance(snap_raw, dict) else {}
         request_context = build_request_context(event)
         response_body = {
             "score": composite.score,
@@ -136,8 +139,6 @@ def swing_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[
             direction_out = "short"
         if direction_out:
             symbol_c = symbol or "PORTFOLIO"
-            snap_raw = payload.get("symbol_snapshot") or payload.get("snapshot") or {}
-            snap = dict(snap_raw) if isinstance(snap_raw, dict) else {}
             nc_raw = payload.get("news_catalyst")
             nc = dict(nc_raw) if isinstance(nc_raw, dict) else None
             regime_c = str(regime or "neutral").lower()
@@ -207,6 +208,23 @@ def swing_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[
                     run_alert_background(_fire_alert)
             except Exception as exc:
                 _LOG.warning("record_signal skipped: %s", exc)
+        cf_subset: dict[str, Any] | None = None
+        if direction_out:
+            cf_subset = {
+                "confirming_signals": response_body.get("confirming_signals"),
+                "conflicting_signals": response_body.get("conflicting_signals"),
+                "n_confirming": response_body.get("n_confirming"),
+                "n_conflicting": response_body.get("n_conflicting"),
+            }
+        response_body.update(
+            build_swing_composite_evidence_fields(
+                composite=composite,
+                regime=regime,
+                payload=payload,
+                confluence=cf_subset,
+                snapshot=snap,
+            )
+        )
         return ok(response_body)
     except (KeyError, TypeError, ValueError) as exc:
         return bad_request(f"Invalid composite request: {exc}")

@@ -94,6 +94,14 @@ def test_swing_composite_handler_returns_bullish_signal_summary() -> None:
         "body": json.dumps(
             {
                 "regime": "bull",
+                "symbol": "AAPL",
+                "symbol_snapshot": {
+                    "last_trade_price": 180.0,
+                    "day_low": 175.0,
+                    "day_high": 182.0,
+                    "day_vwap": 179.0,
+                },
+                "news_catalyst": {"headline": "Supplier beat raises outlook", "sentiment": "positive"},
                 "signals": [
                     {"layer": "technical", "score": 0.7, "confidence": 0.9},
                     {"layer": "news", "score": 0.5, "confidence": 0.8},
@@ -110,6 +118,18 @@ def test_swing_composite_handler_returns_bullish_signal_summary() -> None:
     assert body["score"] > 0
     assert len(body["contributions"]) == 3
     assert "signal_strength" in body["contributions"][0]
+    assert isinstance(body.get("signal_score"), int)
+    assert 0 <= body["signal_score"] <= 100
+    assert body["trend_strength"] in {"Strong", "Moderate", "Weak"}
+    assert body["trend_direction"] in {"Uptrend", "Downtrend", "Sideways", "Reversing"}
+    assert isinstance(body.get("risk_reward"), (int, float))
+    assert body["market_regime"] == "Bullish"
+    assert isinstance(body.get("catalysts"), list)
+    assert isinstance(body.get("risk_factors"), list)
+    assert len(body["risk_factors"]) >= 1
+    assert isinstance(body.get("signal_parameters"), str) and body["signal_parameters"]
+    assert body["historical_entry_zone"]["low"] == 175.0
+    assert body["historical_entry_zone"]["high"] == 182.0
 
 
 def test_swing_synthesis_parse_handler_parses_json_signal_payload() -> None:

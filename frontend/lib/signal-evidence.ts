@@ -29,6 +29,24 @@ export interface SignalEvidenceConfluence {
   confluence_disclaimer: string;
 }
 
+/** Actionable insight block (swing composite API + deterministic fallbacks). Not investment advice. */
+export interface SignalEvidenceInsight {
+  signal_score: number;
+  trend_strength: string;
+  trend_direction: string;
+  risk_reward: number;
+  market_regime: string;
+  confirming_signals: Array<{ label: string; detail?: string }>;
+  conflicting_signals: Array<{ label: string; detail?: string }>;
+  catalysts: Array<{ text: string; sentiment: string }>;
+  risk_factors: string[];
+  signal_parameters: string;
+  historical_entry_zone: { low: number; high: number } | null;
+  reference_target_1: number | null;
+  reference_target_2: number | null;
+  reference_stop_level: number | null;
+}
+
 export interface SignalEvidenceData {
   symbol: string;
   direction: EvidenceDirection;
@@ -54,6 +72,8 @@ export interface SignalEvidenceData {
     reportTime: "before_market" | "after_market" | "during_market" | "unknown";
   } | null;
   confluence?: SignalEvidenceConfluence | null;
+  /** Populated from swing composite JSON or derived locally for consistent evidence UI. */
+  insight?: SignalEvidenceInsight | null;
 }
 
 function clamp(v: number, min: number, max: number): number {
@@ -306,4 +326,203 @@ export function buildEvidenceFromSetup(
           }
         : null
   };
+}
+
+function mapConfluenceChipList(raw: unknown): Array<{ label: string; detail?: string }> {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((x): x is Record<string, unknown> => Boolean(x) && typeof x === "object")
+    .map((c) => ({
+      label: String(c.label ?? c.name ?? "").trim(),
+      detail: c.detail != null ? String(c.detail).trim() : undefined
+    }))
+    .filter((c) => c.label.length > 0);
+}
+
+function numOrNull(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && v.trim() !== "") {
+    const n = Number.parseFloat(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+function parseHistoricalZone(raw: unknown): { low: number; high: number } | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const low = numOrNull(o.low);
+  const high = numOrNull(o.high);
+  if (low == null || high == null || !(high > low)) return null;
+  return { low, high };
+}
+
+/**
+ * Parse swing-composite POST JSON into a structured insight. Returns null if core fields are missing.
+ */
+export function parseSwingCompositeInsight(body: Record<string, unknown>): SignalEvidenceInsight | null {
+  const signal_score = numOrNull(body.signal_score);
+  if (signal_score == null) return null;
+  const trend_strength = String(body.trend_strength ?? "").trim() || "Moderate";
+  const trend_direction = String(body.trend_direction ?? "").trim() || "Sideways";
+  const risk_reward = numOrNull(body.risk_reward) ?? 1.5;
+  const market_regime = String(body.market_regime ?? "Neutral").trim() || "Neutral";
+  const confirming_signals = mapConfluenceChipList(body.confirming_signals);
+  const conflicting_signals = mapConfluenceChipList(body.conflicting_signals);
+  const catalystsRaw = body.catalysts;
+  const catalysts: Array<{ text: string; sentiment: string }> = [];
+  if (Array.isArray(catalystsRaw)) {
+    for (const c of catalystsRaw.slice(0, 4)) {
+      if (c && typeof c === "object") {
+        const o = c as Record<string, unknown>;
+        const text = String(o.text ?? "").trim();
+        if (text) {
+          const sent = String(o.sentiment ?? "neutral").toLowerCase();
+          const sentiment =
+            sent === "positive" || sent === "negative" || sent === "neutral" ? sent : "neutral";
+          catalysts.push({ text: text.slice(0, 240), sentiment });
+        }
+      }
+    }
+  }
+  const riskRaw = body.risk_factors;
+  const risk_factors: string[] = [];
+  if (Array.isArray(riskRaw)) {
+    for (const r of riskRaw.slice(0, 4)) {
+      if (typeof r === "string" && r.trim()) risk_factors.push(r.trim());
+    }
+  }
+  const signal_parameters =
+    typeof body.signal_parameters === "string" && body.signal_parameters.trim()
+      ? body.signal_parameters.trim()
+      : "Observe how price behaves versus the Historical Entry Zone on a closing basis. Signal data only — not investment advice.";
+  const historical_entry_zone = parseHistoricalZone(body.historical_entry_zone);
+  return {
+    signal_score: clamp(Math.round(signal_score), 0, 100),
+    trend_strength,
+    trend_direction,
+    risk_reward: Math.round(risk_reward * 10) / 10,
+    market_regime,
+    confirming_signals,
+    conflicting_signals,
+    catalysts,
+    risk_factors,
+    signal_parameters,
+    historical_entry_zone,
+    reference_target_1: numOrNull(body.reference_target_1),
+    reference_target_2: numOrNull(body.reference_target_2),
+    reference_stop_level: numOrNull(body.reference_stop_level)
+  };
+}
+
+export function deriveEvidenceInsightFallback(evidence: SignalEvidenceData): SignalEvidenceInsight {
+  const signal_score = clamp(evidence.confidencePercent, 0, 100);
+  const trend_strength = signal_score >= 72 ? "Strong" : signal_score >= 48 ? "Moderate" : "Weak";
+  const trend_direction =
+    evidence.direction === "bullish" ? "Uptrend" : evidence.direction === "bearish" ? "Downtrend" : "Sideways";
+  const { support, resistance, vwap } = evidence.keyLevels;
+  const mid =
+    typeof support === "number" && typeof resistance === "number"
+      ? (support + resistance) / 2
+      : typeof vwap === "number"
+        ? vwap
+        : 100;
+  let risk_reward = 1.8;
+  if (
+    typeof support === "number" &&
+    typeof resistance === "number" &&
+    resistance > support &&
+    mid > support &&
+    mid < resistance
+  ) {
+    if (evidence.direction === "bullish") {
+      risk_reward = (resistance - mid) / Math.max(0.01, mid - support);
+    } else if (evidence.direction === "bearish") {
+      risk_reward = (mid - support) / Math.max(0.01, resistance - mid);
+    }
+  }
+  risk_reward = Math.round(clamp(risk_reward, 0.8, 3.5) * 10) / 10;
+  const macroLayer = evidence.layers.find((l) => l.key === "macro");
+  const market_regime =
+    macroLayer?.status === "Bullish" ? "Bullish" : macroLayer?.status === "Bearish" ? "Bearish" : "Neutral";
+  const confirming_signals = evidence.confluence?.confirming_signals ?? [];
+  const conflicting_signals = evidence.confluence?.conflicting_signals ?? [];
+  const newsLayer = evidence.layers.find((l) => l.key === "news");
+  const catalysts: Array<{ text: string; sentiment: string }> = [];
+  const kp = newsLayer?.keyPoints?.[2];
+  if (kp && !kp.startsWith("No recent")) {
+    const sentiment =
+      newsLayer.status === "Bearish" ? "negative" : newsLayer.status === "Bullish" ? "positive" : "neutral";
+    catalysts.push({ text: kp.slice(0, 240), sentiment });
+  }
+  const risk_factors: string[] = [];
+  for (const c of conflicting_signals.slice(0, 4)) {
+    if (c.label) risk_factors.push(c.label);
+  }
+  if (risk_factors.length < 3) {
+    risk_factors.push("Layer scores reflect submitted snapshots; confirm live prices and liquidity before acting.");
+  }
+  if (risk_factors.length < 4 && evidence.direction === "neutral") {
+    risk_factors.push("Neutral read: layers disagree — treat follow-through as unconfirmed.");
+  }
+  const sym = evidence.symbol.trim().toUpperCase() || "SYMBOL";
+  const historical_entry_zone =
+    typeof support === "number" && typeof resistance === "number" && resistance > support
+      ? { low: Math.round(support * 10000) / 10000, high: Math.round(resistance * 10000) / 10000 }
+      : typeof vwap === "number" && vwap > 0
+        ? { low: Math.round(vwap * 0.99 * 10000) / 10000, high: Math.round(vwap * 1.01 * 10000) / 10000 }
+        : null;
+  const reference_target_1 =
+    typeof resistance === "number" ? Math.round(resistance * 1.008 * 10000) / 10000 : null;
+  const reference_target_2 =
+    typeof resistance === "number" ? Math.round(resistance * 1.018 * 10000) / 10000 : null;
+  const reference_stop_level = typeof support === "number" ? Math.round(support * 0.995 * 10000) / 10000 : null;
+  const zoneTxt = historical_entry_zone
+    ? `$${historical_entry_zone.low.toFixed(2)}–$${historical_entry_zone.high.toFixed(2)}`
+    : "the Historical Entry Zone in the reference strip";
+  const vwTxt = typeof vwap === "number" && vwap > 0 ? `$${vwap.toFixed(2)}` : "VWAP in the reference strip";
+  const signal_parameters = `Consider observing how ${sym} behaves versus ${zoneTxt} on a closing basis before sizing any follow-up. Scale participation down when confirming layers diverge or when price cannot hold ${vwTxt}. Invalidate the constructive read on a decisive close back through the lower bound of the Historical Entry Zone for this horizon. Signal data only — not investment advice.`;
+  return {
+    signal_score,
+    trend_strength,
+    trend_direction,
+    risk_reward,
+    market_regime,
+    confirming_signals,
+    conflicting_signals,
+    catalysts: catalysts.slice(0, 4),
+    risk_factors: risk_factors.slice(0, 4),
+    signal_parameters,
+    historical_entry_zone,
+    reference_target_1,
+    reference_target_2,
+    reference_stop_level
+  };
+}
+
+export function applySwingCompositeEnrichment(
+  evidence: SignalEvidenceData,
+  body: Record<string, unknown> | null | undefined
+): SignalEvidenceData {
+  if (body == null || body.status === "insufficient_data") {
+    return { ...evidence, insight: deriveEvidenceInsightFallback(evidence) };
+  }
+  const insight = parseSwingCompositeInsight(body) ?? deriveEvidenceInsightFallback(evidence);
+  let confluence = evidence.confluence;
+  const cs = body.confluence_score;
+  if (typeof cs === "number" && Number.isFinite(cs)) {
+    confluence = {
+      confluence_score: Math.round(cs),
+      confluence_tier: String(body.confluence_tier ?? "weak"),
+      is_confluence_alert: Boolean(body.is_confluence_alert),
+      confirming_signals: mapConfluenceChipList(body.confirming_signals),
+      conflicting_signals: mapConfluenceChipList(body.conflicting_signals),
+      n_confirming: typeof body.n_confirming === "number" ? body.n_confirming : mapConfluenceChipList(body.confirming_signals).length,
+      n_conflicting:
+        typeof body.n_conflicting === "number" ? body.n_conflicting : mapConfluenceChipList(body.conflicting_signals).length,
+      historical_note: String(body.historical_note ?? ""),
+      confluence_disclaimer: String(body.confluence_disclaimer ?? "")
+    };
+  }
+  return { ...evidence, insight, confluence };
 }

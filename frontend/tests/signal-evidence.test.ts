@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vitest";
 
-import { buildEvidenceFromSetup } from "@/lib/signal-evidence";
+import {
+  applySwingCompositeEnrichment,
+  buildEvidenceFromSetup,
+  parseSwingCompositeInsight
+} from "@/lib/signal-evidence";
 import type { NewsPayload } from "@/lib/api/market";
 import type { IntradaySetupPayload } from "@/lib/api/scanner";
 
@@ -87,5 +91,75 @@ describe("buildEvidenceFromSetup key levels", () => {
     expect(data.keyLevels.vwap).toBe(199.5);
     expect(data.keyLevels.support).toBe(198);
     expect(data.keyLevels.resistance).toBe(202);
+  });
+});
+
+describe("parseSwingCompositeInsight", () => {
+  test("maps swing-composite JSON into structured insight", () => {
+    const insight = parseSwingCompositeInsight({
+      signal_score: 82,
+      trend_strength: "Strong",
+      trend_direction: "Uptrend",
+      risk_reward: 2.3,
+      market_regime: "Bullish",
+      confirming_signals: [{ label: "ORB Breakout", detail: "ok" }],
+      conflicting_signals: [],
+      catalysts: [{ text: "Beat", sentiment: "positive" }],
+      risk_factors: ["Gap risk", "Liquidity", "Macro"],
+      signal_parameters: "Observe vs zone.",
+      historical_entry_zone: { low: 100, high: 102 },
+      reference_target_1: 105,
+      reference_target_2: 108,
+      reference_stop_level: 99
+    });
+    expect(insight).not.toBeNull();
+    expect(insight!.signal_score).toBe(82);
+    expect(insight!.risk_reward).toBe(2.3);
+    expect(insight!.confirming_signals[0]?.label).toBe("ORB Breakout");
+    expect(insight!.historical_entry_zone?.low).toBe(100);
+  });
+
+  test("returns null when signal_score missing", () => {
+    expect(parseSwingCompositeInsight({ trend_strength: "Weak" })).toBeNull();
+  });
+});
+
+describe("applySwingCompositeEnrichment", () => {
+  test("uses fallback insight for insufficient_data body", () => {
+    const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
+    const enriched = applySwingCompositeEnrichment(base, {
+      status: "insufficient_data",
+      message: "x",
+      market_status: { is_market_open: true, next_open: null, market_session: "rth" }
+    });
+    expect(enriched.insight?.signal_score).toBeGreaterThanOrEqual(0);
+    expect(enriched.insight?.trend_strength).toMatch(/Strong|Moderate|Weak/);
+  });
+
+  test("parses composite body and merges confluence when present", () => {
+    const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
+    const enriched = applySwingCompositeEnrichment(base, {
+      signal_score: 71,
+      trend_strength: "Moderate",
+      trend_direction: "Uptrend",
+      risk_reward: 2.1,
+      market_regime: "Bullish",
+      catalysts: [],
+      risk_factors: ["A", "B", "C"],
+      signal_parameters: "Test parameters prose.",
+      historical_entry_zone: { low: 10, high: 11 },
+      confluence_score: 72,
+      confluence_tier: "moderate",
+      is_confluence_alert: true,
+      confirming_signals: [{ label: "Above VWAP" }],
+      conflicting_signals: [],
+      n_confirming: 3,
+      n_conflicting: 0,
+      historical_note: "",
+      confluence_disclaimer: ""
+    });
+    expect(enriched.insight?.signal_score).toBe(71);
+    expect(enriched.confluence?.confluence_score).toBe(72);
+    expect(enriched.confluence?.confirming_signals[0]?.label).toBe("Above VWAP");
   });
 });

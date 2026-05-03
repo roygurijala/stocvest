@@ -25,7 +25,7 @@ import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { coerceSnapshotForReferenceLevels } from "@/lib/snapshot-reference-levels";
-import { buildEvidenceFromSetup, type SignalEvidenceData } from "@/lib/signal-evidence";
+import { applySwingCompositeEnrichment, buildEvidenceFromSetup, type SignalEvidenceData } from "@/lib/signal-evidence";
 import { fetchLiveSignals, formatHorizonOutcome, type PublicSignal } from "@/lib/api/public-signals";
 import { LAYER_NAME_HINTS } from "@/lib/ui-tooltips";
 import {
@@ -201,28 +201,50 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
     let cancelled = false;
     const regime =
       layerSignalSummary === "Bullish" ? "bull" : layerSignalSummary === "Bearish" ? "bear" : "sideways";
-    const body = buildSwingCompositeRequestBody({
-      symbol: sym,
-      regime,
-      rows: rows.map((r) => ({ status: r.status, score: r.score })),
-      snapshot
-    });
-    void fetch("/api/stocvest/signals/swing-composite", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-      credentials: "same-origin"
-    })
-      .then(async (res) => {
-        if (!res.ok) return null;
-        return res.json() as Promise<Record<string, unknown>>;
-      })
-      .then((j) => {
-        if (!cancelled) setCompositeCheck(j);
-      })
-      .catch(() => {
-        if (!cancelled) setCompositeCheck(null);
+    const run = async () => {
+      let newsCatalyst: { headline: string; sentiment: "positive" | "negative" | "neutral" } | null = null;
+      try {
+        const articles = await fetchSymbolNews(sym, 5);
+        const first = articles[0];
+        if (first?.title?.trim()) {
+          const sc = first.sentiment_score;
+          let sentiment: "positive" | "negative" | "neutral" = "neutral";
+          if (typeof sc === "number" && Number.isFinite(sc)) {
+            if (sc > 0.1) sentiment = "positive";
+            else if (sc < -0.1) sentiment = "negative";
+          }
+          newsCatalyst = { headline: first.title.trim(), sentiment };
+        }
+      } catch {
+        newsCatalyst = null;
+      }
+      if (cancelled) return;
+      const body = buildSwingCompositeRequestBody({
+        symbol: sym,
+        regime,
+        rows: rows.map((r) => ({ status: r.status, score: r.score })),
+        snapshot,
+        newsCatalyst
       });
+      try {
+        const res = await fetch("/api/stocvest/signals/swing-composite", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+          credentials: "same-origin"
+        });
+        if (cancelled) return;
+        if (!res.ok) {
+          setCompositeCheck(null);
+          return;
+        }
+        const j = (await res.json()) as Record<string, unknown>;
+        if (!cancelled) setCompositeCheck(j);
+      } catch {
+        if (!cancelled) setCompositeCheck(null);
+      }
+    };
+    void run();
     return () => {
       cancelled = true;
     };
@@ -643,11 +665,14 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
                   ? Math.floor((Date.parse(`${event.report_date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000)
                   : undefined;
               setEvidence(
-                buildEvidenceFromSetup(setupLike, snapshot ?? undefined, {
-                  symbolNewsArticles,
-                  earningsRiskDays: daysUntil,
-                  earningsReportTime: event?.report_time
-                })
+                applySwingCompositeEnrichment(
+                  buildEvidenceFromSetup(setupLike, snapshot ?? undefined, {
+                    symbolNewsArticles,
+                    earningsRiskDays: daysUntil,
+                    earningsReportTime: event?.report_time
+                  }),
+                  compositeCheck
+                )
               );
               setEvidenceOpen(true);
             }}
