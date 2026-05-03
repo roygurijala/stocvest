@@ -27,6 +27,7 @@ allowed_ingress_cidrs = [
 cognito_jwt_issuer   = ""
 cognito_jwt_audience = ""
 
-# Optional: HTTP API stage throttling ($default). Omitted = Terraform defaults (2000 RPS / 4000 burst).
+# Optional: HTTP API stage throttling ($default). Omitted = Terraform variable defaults (2000 RPS / 4000 burst).
+# Example (strict): http_api_throttling_rate_limit = 100, http_api_throttling_burst_limit = 200
 # http_api_throttling_rate_limit  = 1000
 # http_api_throttling_burst_limit = 2000

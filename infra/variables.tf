@@ -92,7 +92,7 @@ variable "http_api_throttling_burst_limit" {
   default = 4000
 
   validation {
-    condition     = var.http_api_throttling_burst_limit >= 500 && var.http_api_throttling_burst_limit <= 5000
-    error_message = "http_api_throttling_burst_limit must be between 500 and 5000 (HTTP API stage default route)."
+    condition     = var.http_api_throttling_burst_limit >= 100 && var.http_api_throttling_burst_limit <= 5000
+    error_message = "http_api_throttling_burst_limit must be between 100 and 5000 (HTTP API stage default route)."
   }
 }
