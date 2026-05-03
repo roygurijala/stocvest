@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-05-03
 
-**Ops note (2026-05-03):** In AWS, rule **`stocvest-signal-resolution`** is **`ENABLED`** at **`rate(30 minutes)`** (CLI `describe-rule`). A full **`terraform plan -var-file=terraform.tfvars`** on the same date produced **19 add, 14 change, 2 destroy** — broader than an EventBridge-only delta — so **`terraform apply` was not run** under a strict plan-count gate. Reconcile the plan with intent (API routes, SES, env vars, permission resource rename) before applying.
+**Ops note (2026-05-03):** **`terraform apply -var-file=terraform.tfvars -input=false -auto-approve`** completed successfully (**Apply complete! Resources: 19 added, 14 changed, 2 destroyed.**), including EventBridge rule/target/permission alignment, new API Gateway HTTP routes, Lambda environment updates, and SES IAM on the API execution role.
 
 The `SignalHistory` DynamoDB table and `DYNAMODB_SIGNAL_HISTORY_TABLE` env var are defined in Terraform (`infra/dynamodb.tf`, `infra/lambda_6e.tf`). A separate Lambda alias **`signal_resolution`** is included in `local.api_handler_modules` with handler `stocvest.api.handlers.signal_resolution:signal_resolution_scheduled_handler` (dispatched when `STOCVEST_LAMBDA_MODULE=signal_resolution`).
 
