@@ -7,7 +7,7 @@ import { DashboardRealtime } from "@/components/dashboard-realtime";
 import { EarningsCalendar } from "@/components/earnings-calendar";
 import { InfoTip } from "@/components/info-tip";
 import { MiniSparkline } from "@/components/mini-sparkline";
-import { SentimentGauge } from "@/components/sentiment-gauge";
+import { MarketSentimentScoreWidget } from "@/components/market-sentiment-score-widget";
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import { MorningBriefCollapse } from "@/components/morning-brief-collapse";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
@@ -24,7 +24,6 @@ import {
   CONFIDENCE_PERCENT_TIP,
   IWM_CARD_TIP,
   LATEST_HEADLINES_TIP,
-  MARKET_SENTIMENT_SCORE_TIP,
   PDT_GUARDIAN_TIP,
   QQQ_CARD_TIP,
   SPY_CARD_TIP,
@@ -75,29 +74,6 @@ function computeSnapshotChange(snapshot: SnapshotPayload): { amount: number; per
   return { amount, percent };
 }
 
-function marketRegimeLabel(overview: MarketOverview): string {
-  const market = (overview.status?.market || "unknown").toLowerCase();
-  const avgMove =
-    overview.snapshots.length > 0
-      ? overview.snapshots
-          .map((s) => Math.abs(computeSnapshotChange(s).percent))
-          .reduce((sum, v) => sum + v, 0) / overview.snapshots.length
-      : 0;
-  if (market === "open" && avgMove > 1.5) return "High Volatility";
-  if (market === "open") return "Bull Trending";
-  if (market === "closed") return "After Hours";
-  return "Neutral";
-}
-
-function sentimentFromSnapshots(snapshots: SnapshotPayload[]): { score: number; tone: "bullish" | "bearish" | "neutral" } {
-  if (snapshots.length === 0) return { score: 50, tone: "neutral" };
-  const avgPct = snapshots.map((s) => computeSnapshotChange(s).percent).reduce((a, b) => a + b, 0) / snapshots.length;
-  const score = Math.max(0, Math.min(100, Math.round(50 + avgPct * 10)));
-  if (avgPct > 0.2) return { score, tone: "bullish" };
-  if (avgPct < -0.2) return { score, tone: "bearish" };
-  return { score, tone: "neutral" };
-}
-
 function isMorningBriefingWindowNow(): boolean {
   const formatter = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York",
@@ -138,11 +114,6 @@ export function DashboardRedesign({
   const { colors } = useTheme();
   const [evidence, setEvidence] = useState<SignalEvidenceData | null>(null);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
-  const sentiment = sentimentFromSnapshots(marketOverview.snapshots);
-  const regime = marketRegimeLabel(marketOverview);
-  const sentimentColor =
-    sentiment.tone === "bullish" ? colors.bullish : sentiment.tone === "bearish" ? colors.bearish : colors.caution;
-
   const snapshotsBySymbol = new Map(marketOverview.snapshots.map((s) => [s.symbol, s]));
   const statSymbols = ["SPY", "QQQ", "IWM"] as const;
   const morningVisible =
@@ -259,54 +230,12 @@ export function DashboardRedesign({
       </article>
 
       <div className="dashboard-grid grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr] [&>*]:min-w-0">
-          <article
-            className="order-1 grid grid-cols-1 items-center gap-4 sm:grid-cols-[auto_1fr] lg:col-start-1 lg:row-start-1"
-            style={{
-              background: colors.surface,
-              border: `1px solid ${colors.border}`,
-              borderRadius: borderRadius.xl,
-              padding: spacing[6]
-            }}
-          >
-            <div
-              style={{
-                gridColumn: "1 / -1",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: spacing[2]
-              }}
-            >
-              <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.sm }}>Market Sentiment Score</p>
-              <InfoTip text={MARKET_SENTIMENT_SCORE_TIP} label="About market sentiment score" />
-            </div>
-            <div>
-              {marketOverview.snapshots.length === 0 && !marketOverview.error ? (
-                <div style={{ marginTop: spacing[3], display: "grid", gap: spacing[2] }}>
-                  <SkeletonLine width="95px" height={38} />
-                  <SkeletonLine width="200px" />
-                </div>
-              ) : (
-                <>
-                  <SentimentGauge
-                    score={sentiment.score}
-                    textColor={colors.text}
-                    zoneColors={{
-                      red: "#ef4444",
-                      amber: "#f59e0b",
-                      grey: "#64748b",
-                      green: "#22c55e",
-                      bright: "#4ade80"
-                    }}
-                  />
-                  <p style={{ margin: `${spacing[2]} 0 0 0`, color: sentimentColor, fontWeight: 600 }}>{regime}</p>
-                </>
-              )}
-            </div>
-            <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.sm, alignSelf: "center" }}>
+          <div className="order-1 min-w-0 lg:col-start-1 lg:row-start-1">
+            <MarketSentimentScoreWidget marketOverview={marketOverview} />
+            <p style={{ margin: `${spacing[2]} 0 0`, color: colors.textMuted, fontSize: typography.scale.sm }}>
               Blend of tape tone from SPY, QQQ, and IWM snapshots. Use as a quick pulse, not trade advice.
             </p>
-          </article>
+          </div>
 
           <article
             className="order-4 w-full lg:col-start-2 lg:row-start-1"
