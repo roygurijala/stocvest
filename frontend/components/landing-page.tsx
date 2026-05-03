@@ -4,18 +4,10 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Bot, ChartColumnIncreasing, Newspaper, ShieldCheck } from "lucide-react";
-import { PolarAngleAxis, PolarGrid, Radar, RadarChart, ResponsiveContainer } from "recharts";
 import { useScrollPosition } from "@/lib/hooks/use-scroll-position";
-import { fetchLiveSignals, fetchPerformanceSummary, type PublicSignal, type PublicSignalOutcome, type PerformanceSummary } from "@/lib/api/public-signals";
-
-const radarData = [
-  { layer: "Technical", score: 84 },
-  { layer: "News Sentiment", score: 78 },
-  { layer: "Macro", score: 58 },
-  { layer: "Sector", score: 73 },
-  { layer: "Geopolitical", score: 49 },
-  { layer: "Internals", score: 86 }
-];
+import { fetchLiveSignals, fetchPerformanceSummary, type PublicSignal, type PerformanceSummary } from "@/lib/api/public-signals";
+import { LandingHowItWorksSection } from "@/components/landing-how-it-works-section";
+import { LandingPerformanceSection } from "@/components/landing-performance-section";
 
 const comparisonRows = [
   "AI Signal Synthesis",
@@ -25,13 +17,6 @@ const comparisonRows = [
   "PDT Guardian",
   "Day and Swing Trading Combined"
 ];
-
-const outcomeText: Record<PublicSignalOutcome, string> = {
-  pending: "⏳ Pending",
-  win: "✅ Win",
-  loss: "❌ Loss",
-  neutral: "➖ Neutral"
-};
 
 const demoTickerSignals: PublicSignal[] = [
   { symbol: "AAPL", direction: "long", bias: "bullish", signal_strength: 65, timestamp_iso: "just-now", outcome: "pending" },
@@ -78,13 +63,6 @@ export function LandingPage() {
     }
     return [...signals, ...signals];
   }, [signals]);
-
-  const winRateTone =
-    (summary?.directional_accuracy_percent ?? 0) > 60
-      ? "text-[#22c55e]"
-      : (summary?.directional_accuracy_percent ?? 0) >= 50
-        ? "text-[#f59e0b]"
-        : "text-[#ef4444]";
 
   return (
     <main className="bg-[#0a0e1a] text-slate-100">
@@ -237,63 +215,7 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-4 pb-16 md:px-8">
-        <motion.div initial={{ opacity: 0, y: 18 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
-          <h2 className="text-3xl font-bold md:text-4xl">Every signal. Tracked and published.</h2>
-          <p className="mt-2 text-slate-300">We show our winners and our losses. No cherry-picking.</p>
-        </motion.div>
-        {signals.length === 0 ? (
-          <div className="mt-6 rounded-xl border border-white/10 bg-white/5 p-6 text-slate-300">
-            Signal history tracking begins at launch. Our first signals are being generated now. Check back soon.
-          </div>
-        ) : (
-          <div className="mt-6 overflow-x-auto rounded-xl border border-white/10">
-            <table className="w-full min-w-[780px] bg-white/5 text-sm">
-              <thead>
-                <tr className="border-b border-white/10 text-left text-slate-300">
-                  <th className="px-4 py-3">Symbol</th>
-                  <th className="px-4 py-3">Direction</th>
-                  <th className="px-4 py-3">Signal Strength</th>
-                  <th className="px-4 py-3">Date and Time</th>
-                  <th className="px-4 py-3">Outcome</th>
-                </tr>
-              </thead>
-              <motion.tbody
-                initial="hidden"
-                whileInView="visible"
-                viewport={{ once: true }}
-                variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.08 } } }}
-              >
-                {signals.map((row) => (
-                  <motion.tr
-                    key={`${row.symbol}-${row.timestamp_iso}`}
-                    variants={{ hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0 } }}
-                    className="border-b border-white/10"
-                  >
-                    <td className="px-4 py-3 font-semibold">{row.symbol}</td>
-                    <td className="px-4 py-3 capitalize text-slate-300">{row.direction}</td>
-                    <td className="px-4 py-3">{Math.round(row.signal_strength)}%</td>
-                    <td className="px-4 py-3 text-slate-300">{new Date(row.timestamp_iso).toLocaleString()}</td>
-                    <td className="px-4 py-3">{outcomeText[row.outcome]}</td>
-                  </motion.tr>
-                ))}
-              </motion.tbody>
-            </table>
-          </div>
-        )}
-        {signals.length > 0 ? (
-          <>
-            <p className={`mt-4 text-sm font-semibold ${winRateTone}`}>
-              {summary?.win_count ?? 0} directionally correct out of {summary?.signals_evaluated ?? 0} evaluated signals ={" "}
-              {(summary?.directional_accuracy_percent ?? 0).toFixed(1)}% directional accuracy
-            </p>
-            <p className="mt-2 text-xs text-slate-400">
-              Based on {summary?.total_signals_tracked ?? 0} signals since {summary?.launch_date ?? new Date().toISOString().slice(0, 10)}. Small sample size — accuracy improves as
-              our history grows. Past performance does not guarantee future results.
-            </p>
-          </>
-        ) : null}
-      </section>
+      <LandingPerformanceSection summary={summary} />
 
       <section id="the-problem" className="mx-auto max-w-7xl px-4 py-20 md:px-8">
         <motion.div initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="mb-10 text-center">
@@ -321,68 +243,7 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-4 py-20 md:px-8">
-        <motion.h2 initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="mb-10 text-center text-3xl font-bold md:text-4xl">
-          Six layers of intelligence. One synthesized signal readout.
-        </motion.h2>
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <motion.article
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="order-1 rounded-xl border border-white/10 bg-transparent p-4 lg:order-none md:p-6"
-          >
-            <div className="mx-auto h-56 max-w-full sm:h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <RadarChart data={radarData}>
-                  <PolarGrid stroke="#1e3a5f" />
-                  <PolarAngleAxis dataKey="layer" tick={{ fill: "#ffffff", fontSize: 12 }} />
-                  <Radar dataKey="score" stroke="rgba(59,130,246,0.8)" fill="rgba(59,130,246,0.2)" fillOpacity={1} />
-                </RadarChart>
-              </ResponsiveContainer>
-            </div>
-            <motion.div
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true }}
-              variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.08 } } }}
-              className="mt-4 flex flex-wrap gap-2 text-xs text-slate-300"
-            >
-              {radarData.map((d) => (
-                <motion.span key={d.layer} variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0 } }} className="rounded-full border border-white/20 px-2 py-1">
-                  {d.layer}
-                </motion.span>
-              ))}
-            </motion.div>
-          </motion.article>
-          <motion.article
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="order-2 rounded-xl border border-white/10 bg-white/5 p-6 lg:order-none"
-          >
-            <div className="mb-4 flex items-center gap-2">
-              <span className="text-xl font-bold">AAPL</span>
-              <span className="rounded-full bg-[#22c55e]/20 px-2 py-1 text-xs font-semibold text-[#22c55e]">Bullish</span>
-              <span className="text-sm text-slate-300">82% signal strength</span>
-            </div>
-            <div className="mb-4">
-              <div className="h-2 w-full rounded-full bg-slate-800">
-                <motion.div
-                  initial={{ width: 0 }}
-                  whileInView={{ width: "82%" }}
-                  viewport={{ once: true }}
-                  transition={{ duration: 1.1 }}
-                  className="h-2 rounded-full bg-[#3b82f6]"
-                />
-              </div>
-            </div>
-            <p className="italic text-slate-300">
-              Strong technical pattern with supportive catalyst data. Macro uncertainty is the primary risk factor in the signal layers.
-            </p>
-          </motion.article>
-        </div>
-      </section>
+      <LandingHowItWorksSection />
 
       <section className="mx-auto max-w-7xl px-4 py-20 md:px-8">
         <motion.h2 initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="mb-3 text-center text-3xl font-bold md:text-4xl">

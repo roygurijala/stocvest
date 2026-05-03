@@ -81,5 +81,5 @@ export async function loginAsDevUser(
 
 export async function logoutAction(): Promise<void> {
   clearSessionTokenCookies();
-  redirect("/login");
+  redirect("/");
 }

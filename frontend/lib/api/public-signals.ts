@@ -25,6 +25,14 @@ export interface PublicSignal {
   price_1d_after?: number | null;
 }
 
+/** When API adds per-pattern stats, map them here for the landing accuracy bars. */
+export interface PatternAccuracyRow {
+  pattern_key: string;
+  label: string;
+  accuracy_percent: number;
+  tone?: "long" | "short" | "amber" | "green";
+}
+
 export interface PerformanceSummary {
   total_signals_tracked: number;
   signals_evaluated: number;
@@ -35,6 +43,8 @@ export interface PerformanceSummary {
   launch_date: string;
   date_range_days: number;
   disclaimer?: string;
+  /** Optional: populated when GET /v1/signals/performance/summary includes per-pattern breakdown. */
+  pattern_breakdown?: PatternAccuracyRow[];
 }
 
 const DEFAULT_BASE_URL = "http://localhost:3001";
@@ -146,6 +156,30 @@ export async function fetchPerformanceSummary(): Promise<PerformanceSummary> {
     const data = (await response.json()) as Record<string, unknown>;
     const evaluated = data.signals_evaluated ?? data.total_resolved;
     const accuracy = data.directional_accuracy_percent ?? data.win_rate_percent;
+    const rawPb = data.pattern_breakdown;
+    let pattern_breakdown: PatternAccuracyRow[] | undefined;
+    if (Array.isArray(rawPb)) {
+      const rows: PatternAccuracyRow[] = [];
+      for (const item of rawPb) {
+        if (typeof item !== "object" || item === null) continue;
+        const o = item as Record<string, unknown>;
+        const label = typeof o.label === "string" ? o.label : typeof o.pattern === "string" ? o.pattern : "";
+        const pct = o.accuracy_percent ?? o.accuracy;
+        const n = typeof pct === "number" ? pct : pct != null ? Number(pct) : Number.NaN;
+        const key = typeof o.pattern_key === "string" ? o.pattern_key : label;
+        if (!label.trim() || !Number.isFinite(n)) continue;
+        const tone = o.tone;
+        const t =
+          tone === "long" || tone === "short" || tone === "amber" || tone === "green" ? tone : undefined;
+        rows.push({
+          pattern_key: key || label,
+          label: label.trim(),
+          accuracy_percent: Math.round(Math.max(0, Math.min(100, n)) * 10) / 10,
+          tone: t
+        });
+      }
+      if (rows.length > 0) pattern_breakdown = rows;
+    }
     return {
       ...fallback,
       total_signals_tracked: typeof data.total_signals_tracked === "number" ? data.total_signals_tracked : fallback.total_signals_tracked,
@@ -156,7 +190,8 @@ export async function fetchPerformanceSummary(): Promise<PerformanceSummary> {
       directional_accuracy_percent: typeof accuracy === "number" ? accuracy : fallback.directional_accuracy_percent,
       launch_date: typeof data.launch_date === "string" ? data.launch_date : fallback.launch_date,
       date_range_days: typeof data.date_range_days === "number" ? data.date_range_days : fallback.date_range_days,
-      disclaimer: typeof data.disclaimer === "string" ? data.disclaimer : undefined
+      disclaimer: typeof data.disclaimer === "string" ? data.disclaimer : undefined,
+      pattern_breakdown
     };
   } catch {
     return fallback;
