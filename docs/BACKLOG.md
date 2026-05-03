@@ -27,7 +27,7 @@ Tracked in **`CONTEXT.md` §3** only (Terraform apply, GitHub/AWS/Vercel secrets
 
 | ID | Theme | Status | Notes |
 |----|--------|--------|--------|
-| B1 | **Journal automation** | Done 2026-05-02 · commit: fe3f671 | Auto-capture on fill, auto-close on exit, optional `signal_id` / `pattern` / `confluence_score` / `signal_strength` / `signal_direction` on `POST /v1/orders/submit`, `GET /v1/journal/analytics`, entry GET/PATCH, journal page wired to API + scanner → portfolio order prefill + confirmation modal signal block. |
+| B1 | **Journal automation** | Done 2026-05-02 · commit: 3602db38c839209d3bae3d67fa2d50eee0f93022 | Auto-capture on fill, auto-close on exit, optional `signal_id` / `pattern` / `confluence_score` / `signal_strength` / `signal_direction` on `POST /v1/orders/submit`, `GET /v1/journal/analytics`, entry GET/PATCH, journal page wired to API + scanner → portfolio order prefill + confirmation modal signal block. |
 | B2 | **Onboarding** | Not done | Wizard: value prop, broker connect, first-signal walkthrough, empty states. **Mandatory** legal acknowledgment (separate from generic ToS view) before trading features. |
 | B3 | **Alerts delivery** | Not done | `Alerts` table exists; implement channels: email, push (later), SMS for critical PDT, webhooks for power users; tie to scanner/signal triggers. |
 | B4 | **Watchlists** | Not done | CRUD named lists; scanner + briefing inputs use user watchlist instead of hardcoded symbols where applicable; wire existing Dynamo watchlist contract. |
