@@ -1,22 +1,26 @@
-# STOCVEST Frontend (Phase 5a)
+# STOCVEST Frontend
 
-This directory contains the Phase 5 frontend foundation:
+Next.js **14** app (`app/` router): marketing **landing** (`/`), auth (`/login`, `/signup`, …), **dashboard** (scanner, signals, watchlists, portfolio, journal, settings, …), BFF routes under `/api/stocvest/**`, and static/legal pages.
 
-- Next.js app scaffold
-- Auth/session cookie handling
-- Protected dashboard route shell
-- Shared API client bootstrap
+**Session context & test baselines:** [`docs/CONTEXT.md`](../docs/CONTEXT.md)
 
 ## Local setup
 
-1. Copy `.env.example` to `.env.local`
-2. Install dependencies:
-   - `npm install`
-3. Start dev server:
-   - `npm run dev`
+1. Copy `.env.example` to `.env.local` (set `NEXT_PUBLIC_STOCVEST_API_BASE_URL`, Cognito IDs from Terraform outputs, etc.).
+2. `npm ci` (or `npm install`)
+3. `npm run dev`
 
-## Current auth flow
+## Quality gates
 
-- Login accepts a valid Cognito ID token and stores it as an HTTP-only cookie.
-- Middleware protects `/dashboard`.
-- Server API requests automatically forward `Authorization: Bearer <token>`.
+```bash
+npm run build
+npm run test
+```
+
+Exact counts for releases live in **CONTEXT.md §13**.
+
+## Auth (summary)
+
+- Login stores Cognito ID token as an **httpOnly** cookie (BFF verifies session).
+- Middleware protects `/dashboard/**`.
+- Server components and route handlers forward `Authorization: Bearer <token>` to the STOCVEST API where required.

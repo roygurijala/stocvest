@@ -1,5 +1,7 @@
 # D1 — Signal resolution Lambda (EventBridge)
 
+**Last updated:** 2026-05-03
+
 The `SignalHistory` DynamoDB table and `DYNAMODB_SIGNAL_HISTORY_TABLE` env var are defined in Terraform (`infra/dynamodb.tf`, `infra/lambda_6e.tf`). A separate Lambda alias **`signal_resolution`** is included in `local.api_handler_modules` with handler `stocvest.api.handlers.signal_resolution:signal_resolution_scheduled_handler` (dispatched when `STOCVEST_LAMBDA_MODULE=signal_resolution`).
 
 **Schedule:** `infra/eventbridge.tf` defines the EventBridge rule (**`stocvest-signal-resolution`**, `rate(30 minutes)`), target, and Lambda invoke permission. Run **`terraform apply`** in `infra/` to create or update them in AWS (not applied automatically by CI).

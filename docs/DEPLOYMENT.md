@@ -1,5 +1,7 @@
 # Deployment notes
 
+**Last updated:** 2026-05-03 · See also [`docs/CONTEXT.md`](./CONTEXT.md) §3 (full deploy checklist).
+
 ## AWS SES (email alerts)
 
 Before alerts work in production:

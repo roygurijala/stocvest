@@ -3,14 +3,12 @@
 You are working on STOCVEST, a multi-broker swing + day trading signal platform.
 
 ## Before writing any code
-Always read `docs/CONTEXT.md` first. It contains the full build history,
-key decisions, immutable contracts, and phase order. Never assume — check it.
+Always read **`docs/CONTEXT.md`** and **`docs/BACKLOG.md`** in full. CONTEXT holds shipped vs pending status, legal rules, immutable contracts, and **session rules (§13)** including exact test baselines. Never assume — check it.
 
-## Phase discipline
-- Current phase: **Phase 2 — Swing Trading Signal Engine**
-- Complete the current phase fully before touching the next
-- Every phase must have passing tests before moving on
-- If asked to skip ahead, flag it and ask for confirmation
+## Phase / scope discipline
+- **Source of truth:** `docs/CONTEXT.md` §1 (status table) and §3 (ops / blockers), not the historical “Phase N” labels below.
+- Complete the **user-agreed** slice (or backlog item) before expanding scope; every change should keep **`pytest tests/ -q`** and **`cd frontend && npm run test`** green when touching those trees.
+- If asked to skip tests or contracts, flag it and ask for confirmation.
 
 ## Code rules
 - Never hardcode credentials — always use `stocvest/utils/config.py` (reads from env)
@@ -24,7 +22,7 @@ key decisions, immutable contracts, and phase order. Never assume — check it.
 - Every new module gets a corresponding test file in `tests/`
 - Tests are marked `@pytest.mark.unit` (no network) or `@pytest.mark.integration`
 - Mock all HTTP calls with `respx`, all AWS calls with `pytest-mock`
-- Run `pytest tests/ -v` before saying a phase is complete
+- Run `pytest tests/ -q` (or `python -m pytest tests/ -q` on Windows) and frontend tests before calling work complete; match counts to **CONTEXT.md §13**.
 
 ## Architecture
 - Backend: Python async (httpx, asyncio) — Lambda-compatible, no Django/Flask

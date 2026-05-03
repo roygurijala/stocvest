@@ -1,6 +1,8 @@
 # STOCVEST — API contracts (immutable sections)
 
-Sections referenced from `docs/CONTEXT.md` must not change without explicit review.
+**Last reviewed:** 2026-05-03
+
+Sections referenced from **`docs/CONTEXT.md`** §7 must not change without explicit review and coordinated code updates.
 
 ---
 

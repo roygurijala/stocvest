@@ -45,8 +45,10 @@ cp .env.example .env
 ## Run tests
 
 ```bash
-pytest tests/ -v
+pytest tests/ -q
 ```
+
+On Windows, if `pytest` is not on `PATH`, use `python -m pytest tests/ -q`. Current regression baseline: **`docs/CONTEXT.md` §13** (exact passed/skipped counts).
 
 ## CI/CD (GitHub Actions)
 
@@ -74,18 +76,18 @@ Configure these in the GitHub repository (**Settings → Secrets and variables**
 
 The IAM principal behind `AWS_*` needs at least: `s3:PutObject` on `arn:aws:s3:::STOCVEST_LAMBDA_S3_BUCKET/lambda/*`, and `lambda:UpdateFunctionCode` (and `lambda:GetFunction`) on `arn:aws:lambda:REGION:ACCOUNT:function:stocvest-development-api-*`.
 
-## Build phases
+## Project status (high level)
 
-| Phase | Status |
-|-------|--------|
-| 1 — Core infrastructure (Polygon client, indicators) | ✅ Complete |
-| 2 — Swing trading signal engine | 🔜 Next |
-| 2.5 — Day trading scanner | 🔜 |
-| 3 — Broker layer (IBKR, ETrade) | 🔜 |
-| 4 — API layer (Lambda + API Gateway) | 🔜 |
-| 5 — Frontend (Next.js) | 🔜 |
-| 6 — Infrastructure (Terraform) | 🔜 |
-| 7 — Testing & hardening | 🔜 |
+**Source of truth:** [`docs/CONTEXT.md`](docs/CONTEXT.md) §1–§3 — shipped tracks, implemented areas, and near-term ops (Terraform apply, secrets, CI).
+
+| Area | Notes |
+|------|--------|
+| Core signals, scanner, brokers, HTTP API | Shipped (see CONTEXT §1) |
+| Next.js frontend (dashboard, landing, legal, BFF) | Shipped |
+| Terraform / AWS | Modules in `infra/`; **apply** and production wiring may still be pending (CONTEXT §3) |
+| Phase 7 (E2E, audits, extended paper validation) | Planned — BACKLOG **P1** |
+
+Historical phase labels in older READMEs are obsolete; use **git `main`** + **CONTEXT** for what exists today.
 
 ## Rules
 
