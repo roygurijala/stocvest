@@ -137,6 +137,7 @@ class NewsArticle(BaseModel):
     published_at: datetime
     title:       str
     description: Optional[str] = None
+    image_url:   Optional[str] = None
     url:         str
     source:      Optional[str] = None
     tickers:     list[str] = Field(default_factory=list)

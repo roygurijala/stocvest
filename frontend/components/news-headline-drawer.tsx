@@ -23,6 +23,32 @@ function timeAgo(iso: string): string {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
+function nonEmpty(s: string | null | undefined): string | null {
+  const t = (s ?? "").trim();
+  return t.length > 0 ? t : null;
+}
+
+/** Badge next to source/time: Bullish / Bearish / Mixed (amber). Uses `sentiment` or infers from `sentiment_score`. */
+function sentimentBadge(article: NewsPayload): { label: string; tone: "bullish" | "bearish" | "mixed" } | null {
+  const raw = (article.sentiment ?? "").trim().toLowerCase();
+  if (raw === "bullish" || raw === "positive") {
+    return { label: "Bullish", tone: "bullish" };
+  }
+  if (raw === "bearish" || raw === "negative") {
+    return { label: "Bearish", tone: "bearish" };
+  }
+  if (raw === "mixed" || raw === "neutral") {
+    return { label: raw === "neutral" ? "Neutral" : "Mixed", tone: "mixed" };
+  }
+  const sc = article.sentiment_score;
+  if (typeof sc === "number" && Number.isFinite(sc)) {
+    if (sc > 0.15) return { label: "Bullish", tone: "bullish" };
+    if (sc < -0.15) return { label: "Bearish", tone: "bearish" };
+    return { label: "Mixed", tone: "mixed" };
+  }
+  return null;
+}
+
 export function NewsHeadlineDrawer({ open, article, onClose }: NewsHeadlineDrawerProps) {
   const { colors } = useTheme();
 
@@ -48,12 +74,23 @@ export function NewsHeadlineDrawer({ open, article, onClose }: NewsHeadlineDrawe
     return null;
   }
 
-  const sentimentLabel =
-    article.sentiment && article.sentiment.trim()
-      ? article.sentiment.trim()
-      : article.sentiment_score != null && Number.isFinite(article.sentiment_score)
-        ? `Score ${article.sentiment_score > 0 ? "+" : ""}${article.sentiment_score.toFixed(2)}`
-        : null;
+  const description = nonEmpty(article.description);
+  const imageUrl = nonEmpty(article.image_url);
+  const badge = sentimentBadge(article);
+  const badgeBg =
+    badge?.tone === "bullish"
+      ? "rgba(34,197,94,0.18)"
+      : badge?.tone === "bearish"
+        ? "rgba(239,68,68,0.18)"
+        : "rgba(245,158,11,0.2)";
+  const badgeColor =
+    badge?.tone === "bullish" ? colors.bullish : badge?.tone === "bearish" ? colors.bearish : colors.caution;
+  const badgeBorder =
+    badge?.tone === "bullish"
+      ? "rgba(34,197,94,0.45)"
+      : badge?.tone === "bearish"
+        ? "rgba(239,68,68,0.45)"
+        : "rgba(245,158,11,0.45)";
 
   return createPortal(
     <div
@@ -83,6 +120,7 @@ export function NewsHeadlineDrawer({ open, article, onClose }: NewsHeadlineDrawe
           boxShadow: "-8px 0 32px rgba(0,0,0,0.25)",
           display: "flex",
           flexDirection: "column",
+          minHeight: 0,
           animation: "stocvest-news-drawer-in 0.24s ease-out"
         }}
         onMouseDown={(e) => e.stopPropagation()}
@@ -119,28 +157,70 @@ export function NewsHeadlineDrawer({ open, article, onClose }: NewsHeadlineDrawe
             <X size={20} />
           </button>
         </div>
-        <div style={{ flex: 1, overflowY: "auto", padding: spacing[4], display: "grid", gap: spacing[3] }}>
-          <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>
-            {(article.source || "News").trim()} · {timeAgo(article.published_at)}
-          </p>
+        <div
+          style={{
+            flex: "0 1 auto",
+            minHeight: 0,
+            maxHeight: "calc(100dvh - 200px)",
+            overflowY: "auto",
+            padding: spacing[4],
+            display: "flex",
+            flexDirection: "column",
+            gap: spacing[3]
+          }}
+        >
+          {imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- remote Polygon CDN URL
+            <img
+              src={imageUrl}
+              alt=""
+              style={{
+                width: "100%",
+                maxHeight: 200,
+                objectFit: "cover",
+                borderRadius: 8,
+                marginBottom: 0,
+                display: "block"
+              }}
+            />
+          ) : null}
+          <div className="flex flex-wrap items-center justify-between gap-2" style={{ rowGap: spacing[2] }}>
+            <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs, flex: "1 1 auto" }}>
+              {(article.source || "News").trim()} · {timeAgo(article.published_at)}
+            </p>
+            {badge ? (
+              <span
+                style={{
+                  flexShrink: 0,
+                  borderRadius: borderRadius.full,
+                  padding: "4px 10px",
+                  fontSize: typography.scale.xs,
+                  fontWeight: 700,
+                  background: badgeBg,
+                  color: badgeColor,
+                  border: `1px solid ${badgeBorder}`
+                }}
+              >
+                {badge.label}
+              </span>
+            ) : null}
+          </div>
+          {description ? (
+            <p
+              style={{
+                fontSize: 13,
+                lineHeight: 1.7,
+                color: "var(--color-text-secondary)",
+                margin: 0,
+                marginBottom: 16
+              }}
+            >
+              {description}
+            </p>
+          ) : null}
           <h2 style={{ margin: 0, fontSize: typography.scale.lg, lineHeight: 1.35, color: colors.text, fontWeight: 700 }}>
             {article.title}
           </h2>
-          {sentimentLabel ? (
-            <span
-              style={{
-                justifySelf: "start",
-                borderRadius: borderRadius.full,
-                padding: "4px 10px",
-                fontSize: typography.scale.xs,
-                fontWeight: 600,
-                background: "rgba(59,130,246,0.12)",
-                color: colors.accent
-              }}
-            >
-              {sentimentLabel}
-            </span>
-          ) : null}
           {article.tickers?.length ? (
             <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted }}>
               Tickers:{" "}
@@ -155,7 +235,8 @@ export function NewsHeadlineDrawer({ open, article, onClose }: NewsHeadlineDrawe
             display: "flex",
             flexDirection: "column",
             gap: spacing[2],
-            flexShrink: 0
+            flexShrink: 0,
+            marginTop: "auto"
           }}
         >
           <a

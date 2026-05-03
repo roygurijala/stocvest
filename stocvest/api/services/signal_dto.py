@@ -35,11 +35,16 @@ def parse_bar(item: dict[str, Any], symbol: str) -> Bar:
 def parse_article(item: dict[str, Any]) -> NewsArticle:
     sentiment_raw = item.get("sentiment")
     sentiment = Newssentiment(str(sentiment_raw)) if sentiment_raw is not None else None
+    img_raw = item.get("image_url")
+    image_url = str(img_raw).strip() if img_raw is not None else None
+    if image_url == "":
+        image_url = None
     return NewsArticle(
         article_id=str(item["article_id"]),
         published_at=datetime.fromisoformat(str(item["published_at"])),
         title=str(item["title"]),
         description=str(item["description"]) if item.get("description") is not None else None,
+        image_url=image_url,
         url=str(item["url"]),
         source=str(item["source"]) if item.get("source") is not None else None,
         tickers=[str(x) for x in item.get("tickers", [])],

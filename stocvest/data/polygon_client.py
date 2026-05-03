@@ -467,6 +467,10 @@ class PolygonClient:
                 if len(articles) >= limit:
                     break
                 try:
+                    img_raw = r.get("image_url")
+                    image_url = str(img_raw).strip() if img_raw not in (None, "") else None
+                    if image_url == "":
+                        image_url = None
                     articles.append(NewsArticle(
                         article_id=r.get("id", ""),
                         published_at=datetime.fromisoformat(
@@ -474,6 +478,7 @@ class PolygonClient:
                         ),
                         title=r.get("title", ""),
                         description=r.get("description"),
+                        image_url=image_url,
                         url=r.get("article_url", ""),
                         source=r.get("publisher", {}).get("name"),
                         tickers=r.get("tickers", []),

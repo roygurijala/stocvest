@@ -29,6 +29,10 @@ export interface SnapshotPayload {
 export interface NewsPayload {
   article_id: string;
   title: string;
+  /** Polygon article summary when present. */
+  description?: string | null;
+  /** Polygon `image_url` when present. */
+  image_url?: string | null;
   source?: string | null;
   tickers: string[];
   published_at: string;
