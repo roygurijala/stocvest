@@ -13,6 +13,7 @@ import {
 import { motion } from "framer-motion";
 import { RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { AddToWatchlistButton } from "@/components/add-to-watchlist-button";
 import { GapCatalystNewsDrawer } from "@/components/gap-catalyst-news-drawer";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
@@ -421,6 +422,7 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
           >
             View Signal
           </button>
+          <AddToWatchlistButton symbol={item.symbol} />
           <span title="ORB window has closed for today" style={{ display: "inline-flex" }}>
             <button
               type="button"

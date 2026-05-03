@@ -16,6 +16,7 @@ class RequestContext:
     method: str
     user_id: str | None
     claims: dict[str, Any]
+    email: str | None = None
 
 
 def parse_json_body(event: LambdaEvent) -> dict[str, Any]:
@@ -57,11 +58,14 @@ def build_request_context(event: LambdaEvent) -> RequestContext:
     if not claims and isinstance(authorizer.get("jwt"), dict):
         claims = authorizer["jwt"].get("claims") or {}
     user_id = claims.get("sub")
+    raw_email = claims.get("email")
+    email = str(raw_email).strip() if raw_email else None
     return RequestContext(
         request_id=request_id,
         path=path,
         method=method,
         user_id=str(user_id) if user_id is not None else None,
         claims=claims if isinstance(claims, dict) else {},
+        email=email,
     )
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -11,14 +11,62 @@ interface SettingsPageClientProps {
   email: string;
 }
 
+type AlertPrefs = {
+  email_enabled: boolean;
+  on_signal_fired: boolean;
+  on_confluence_alert: boolean;
+  on_pdt_warning: boolean;
+  on_pdt_blocked: boolean;
+  on_gap_detected: boolean;
+  watchlist_only: boolean;
+  quiet_hours_enabled: boolean;
+  quiet_hours_start: string;
+  quiet_hours_end: string;
+};
+
+type AlertRow = { title: string; created_at: string; status: string };
+
 export function SettingsPageClient({ email }: SettingsPageClientProps) {
   const { colors } = useTheme();
   const search = useSearchParams();
   const [confirmText, setConfirmText] = useState("");
-  const [emailNotif, setEmailNotif] = useState(true);
-  const [pushNotif, setPushNotif] = useState(false);
   const [etradeConnected, setEtradeConnected] = useState(false);
   const [etradeLastSync, setEtradeLastSync] = useState<string | null>(null);
+  const [prefs, setPrefs] = useState<AlertPrefs | null>(null);
+  const [history, setHistory] = useState<AlertRow[]>([]);
+  const [savedFlash, setSavedFlash] = useState(false);
+
+  const patchPref = useCallback(async (partial: Partial<AlertPrefs>) => {
+    const res = await fetch("/api/stocvest/alerts/preferences", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(partial)
+    });
+    const body = (await res.json().catch(() => ({}))) as AlertPrefs;
+    if (res.ok) {
+      setPrefs(body);
+      setSavedFlash(true);
+      window.setTimeout(() => setSavedFlash(false), 1400);
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [pr, hi] = await Promise.all([
+        fetch("/api/stocvest/alerts/preferences", { cache: "no-store" }),
+        fetch("/api/stocvest/alerts/history?limit=10", { cache: "no-store" })
+      ]);
+      const pj = (await pr.json().catch(() => ({}))) as AlertPrefs;
+      const hj = (await hi.json().catch(() => ({}))) as { alerts?: AlertRow[] };
+      if (cancelled) return;
+      if (pr.ok) setPrefs(pj);
+      if (hi.ok) setHistory(hj.alerts ?? []);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (search.get("connected") === "etrade") {
@@ -96,16 +144,152 @@ export function SettingsPageClient({ email }: SettingsPageClientProps) {
         </div>
       </article>
 
-      <article style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
-        <h3 style={{ marginTop: 0 }}>Notifications</h3>
-        <label className="flex min-h-11 items-center justify-between gap-3">
-          Email Alerts
-          <input type="checkbox" className="h-6 w-6 shrink-0" checked={emailNotif} onChange={(e) => setEmailNotif(e.target.checked)} />
-        </label>
-        <label className="mt-2 flex min-h-11 items-center justify-between gap-3">
-          Push Alerts
-          <input type="checkbox" className="h-6 w-6 shrink-0" checked={pushNotif} onChange={(e) => setPushNotif(e.target.checked)} />
-        </label>
+      <article
+        id="alerts"
+        style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing[2], flexWrap: "wrap" }}>
+          <h3 style={{ marginTop: 0 }}>Alert Preferences</h3>
+          {savedFlash ? (
+            <span style={{ color: colors.bullish, fontSize: typography.scale.sm, fontWeight: 600 }}>Saved ✓</span>
+          ) : null}
+        </div>
+        <p style={{ margin: `0 0 ${spacing[2]} 0`, color: colors.textMuted, fontSize: typography.scale.sm }}>Current email: {email}</p>
+        {prefs ? (
+          <div style={{ display: "grid", gap: spacing[3] }}>
+            <label className="flex min-h-11 items-center justify-between gap-3">
+              <span>Email alerts</span>
+              <input
+                type="checkbox"
+                className="h-6 w-6 shrink-0"
+                checked={prefs.email_enabled}
+                onChange={(e) => void patchPref({ email_enabled: e.target.checked })}
+              />
+            </label>
+            <label className={`flex min-h-11 items-center justify-between gap-3 ${!prefs.email_enabled ? "opacity-50" : ""}`}>
+              <span>Signal fired on watchlist</span>
+              <input
+                type="checkbox"
+                className="h-6 w-6 shrink-0"
+                disabled={!prefs.email_enabled}
+                checked={prefs.on_signal_fired}
+                onChange={(e) => void patchPref({ on_signal_fired: e.target.checked })}
+              />
+            </label>
+            <p className="text-xs" style={{ margin: `-${spacing[2]} 0 0`, color: colors.textMuted }}>
+              Get notified when a signal fires on any symbol in your watchlist.
+            </p>
+            <label className={`flex min-h-11 items-center justify-between gap-3 ${!prefs.email_enabled ? "opacity-50" : ""}`}>
+              <span>Confluence alert</span>
+              <input
+                type="checkbox"
+                className="h-6 w-6 shrink-0"
+                disabled={!prefs.email_enabled}
+                checked={prefs.on_confluence_alert}
+                onChange={(e) => void patchPref({ on_confluence_alert: e.target.checked })}
+              />
+            </label>
+            <p className="text-xs" style={{ margin: `-${spacing[2]} 0 0`, color: colors.textMuted }}>
+              High-priority — multiple signals aligning simultaneously.
+            </p>
+            <label className={`flex min-h-11 items-center justify-between gap-3 ${!prefs.email_enabled ? "opacity-50" : ""}`}>
+              <span>PDT warning</span>
+              <input
+                type="checkbox"
+                className="h-6 w-6 shrink-0"
+                disabled={!prefs.email_enabled}
+                checked={prefs.on_pdt_warning}
+                onChange={(e) => void patchPref({ on_pdt_warning: e.target.checked })}
+              />
+            </label>
+            <p className="text-xs" style={{ margin: `-${spacing[2]} 0 0`, color: colors.textMuted }}>
+              When 2 of 3 day trades are used.
+            </p>
+            <label className={`flex min-h-11 items-center justify-between gap-3 ${!prefs.email_enabled ? "opacity-50" : ""}`}>
+              <span>PDT limit reached</span>
+              <input
+                type="checkbox"
+                className="h-6 w-6 shrink-0"
+                disabled={!prefs.email_enabled}
+                checked={prefs.on_pdt_blocked}
+                onChange={(e) => void patchPref({ on_pdt_blocked: e.target.checked })}
+              />
+            </label>
+            <label className={`flex min-h-11 items-center justify-between gap-3 ${!prefs.email_enabled ? "opacity-50" : ""}`}>
+              <span>Pre-market gap detected</span>
+              <input
+                type="checkbox"
+                className="h-6 w-6 shrink-0"
+                disabled={!prefs.email_enabled}
+                checked={prefs.on_gap_detected}
+                onChange={(e) => void patchPref({ on_gap_detected: e.target.checked })}
+              />
+            </label>
+            <p className="text-xs" style={{ margin: `-${spacing[2]} 0 0`, color: colors.textMuted }}>
+              When a quality gap is detected on your watchlist (off by default — noisy).
+            </p>
+            <label className={`flex min-h-11 items-center justify-between gap-3 ${!prefs.email_enabled ? "opacity-50" : ""}`}>
+              <span>
+                Watchlist symbols only <span style={{ color: colors.accent, fontSize: 10 }}>Recommended</span>
+              </span>
+              <input
+                type="checkbox"
+                className="h-6 w-6 shrink-0"
+                disabled={!prefs.email_enabled}
+                checked={prefs.watchlist_only}
+                onChange={(e) => void patchPref({ watchlist_only: e.target.checked })}
+              />
+            </label>
+            <label className={`flex min-h-11 items-center justify-between gap-3 ${!prefs.email_enabled ? "opacity-50" : ""}`}>
+              <span>Enable quiet hours</span>
+              <input
+                type="checkbox"
+                className="h-6 w-6 shrink-0"
+                disabled={!prefs.email_enabled}
+                checked={prefs.quiet_hours_enabled}
+                onChange={(e) => void patchPref({ quiet_hours_enabled: e.target.checked })}
+              />
+            </label>
+            {prefs.quiet_hours_enabled ? (
+              <div className="flex flex-wrap items-center gap-2" style={{ color: colors.textMuted }}>
+                <span>From</span>
+                <input
+                  type="time"
+                  className="rounded border px-2 py-1"
+                  style={{ borderColor: colors.border, color: colors.text }}
+                  value={prefs.quiet_hours_start.slice(0, 5)}
+                  onChange={(e) => void patchPref({ quiet_hours_start: e.target.value })}
+                />
+                <span>To</span>
+                <input
+                  type="time"
+                  className="rounded border px-2 py-1"
+                  style={{ borderColor: colors.border, color: colors.text }}
+                  value={prefs.quiet_hours_end.slice(0, 5)}
+                  onChange={(e) => void patchPref({ quiet_hours_end: e.target.value })}
+                />
+                <span className="text-xs">No alerts during these hours (US/Eastern).</span>
+              </div>
+            ) : null}
+            <div style={{ marginTop: spacing[2] }}>
+              <h4 style={{ margin: `0 0 ${spacing[2]} 0`, fontSize: typography.scale.base }}>Recent Alerts</h4>
+              {history.length === 0 ? (
+                <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.sm }}>No alerts sent yet.</p>
+              ) : (
+                <ul style={{ margin: 0, paddingLeft: spacing[4], color: colors.text, fontSize: typography.scale.sm }}>
+                  {history.map((h, i) => (
+                    <li key={`${h.title}-${i}`} style={{ marginBottom: spacing[1] }}>
+                      {h.title}{" "}
+                      <span style={{ color: colors.textMuted }}>· {h.created_at?.slice(0, 16) || ""}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        ) : (
+          <p style={{ color: colors.textMuted }}>Loading alert preferences…</p>
+        )}
       </article>
 
       <article style={{ background: "rgba(239,68,68,.08)", border: `1px solid rgba(239,68,68,.45)`, borderRadius: borderRadius.xl, padding: spacing[4] }}>

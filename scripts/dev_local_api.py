@@ -41,6 +41,14 @@ def _module_for_path(method: str, path_only: str) -> str | None:
         return "brokers"
     if p.startswith("/v1/users"):
         return "brokers"
+    if p.startswith("/v1/orders"):
+        return "brokers"
+    if p.startswith("/v1/profile"):
+        return "brokers"
+    if p.startswith("/v1/watchlists"):
+        return "brokers"
+    if p.startswith("/v1/alerts"):
+        return "brokers"
     if p.startswith("/v1/portfolio"):
         return "portfolio"
     if p.startswith("/v1/journal"):
@@ -78,6 +86,7 @@ def _build_event(
     headers: dict[str, str],
     body: str | None,
     dev_sub: str,
+    dev_email: str,
 ) -> dict[str, Any]:
     route_key = f"{method.upper()} {path_only}"
     qs = _query_string_parameters(raw_query)
@@ -94,7 +103,13 @@ def _build_event(
         "isBase64Encoded": False,
         "requestContext": {
             "requestId": f"local-{uuid.uuid4()}",
-            "authorizer": {"claims": {"sub": dev_sub, "scope": "openid email profile"}},
+            "authorizer": {
+                "claims": {
+                    "sub": dev_sub,
+                    "email": dev_email,
+                    "scope": "openid email profile",
+                }
+            },
             "http": {"method": method.upper(), "path": path_only},
         },
     }
@@ -144,6 +159,7 @@ class _Handler(BaseHTTPRequestHandler):
         path_only = unquote(parsed.path)
         raw_q = parsed.query or ""
         dev_sub = os.environ.get("STOCVEST_DEV_USER_SUB", _DEFAULT_DEV_SUB).strip() or _DEFAULT_DEV_SUB
+        dev_email = os.environ.get("STOCVEST_DEV_USER_EMAIL", "dev@stocvest.local").strip() or "dev@stocvest.local"
 
         module = _module_for_path(method, path_only)
         if module is None:
@@ -169,6 +185,7 @@ class _Handler(BaseHTTPRequestHandler):
             headers=_headers_from_handler(self),
             body=body,
             dev_sub=dev_sub,
+            dev_email=dev_email,
         )
 
         with _ENV_LOCK:

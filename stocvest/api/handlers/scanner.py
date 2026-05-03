@@ -25,11 +25,10 @@ from stocvest.api.services.signal_dto import (
     serialize_gap_candidate,
     serialize_intraday_setups_with_confluence,
 )
-from stocvest.api.shared import parse_json_body
+from stocvest.api.shared import build_request_context, parse_json_body
 from stocvest.api.types import LambdaContext, LambdaEvent
 from stocvest.data import PolygonClient, PolygonError
 from stocvest.data.models import Bar, Snapshot
-from stocvest.data.scanner_universe import LIQUID_SYMBOLS_FALLBACK
 from stocvest.signals import (
     IntradaySetupScanner,
     NewsCatalystDetector,
@@ -73,13 +72,16 @@ async def _enrich_gap_company_names(client: PolygonClient, items: list[dict[str,
             row["company_name"] = nm
 
 
-async def _load_snapshots_for_dynamic_gaps() -> list[Snapshot]:
+async def _load_snapshots_for_dynamic_gaps(user_id: str | None = None) -> list[Snapshot]:
     """
     Prefer Polygon's full US equities snapshot (one paginated REST feed).
 
     If the API key's tier returns 401/403 on that aggregate route, batch-fetch
-    :data:`LIQUID_SYMBOLS_FALLBACK` instead (~50–100 liquid names).
+    watchlist + system default symbols (see :func:`stocvest.data.scan_symbols.get_scan_symbols`).
     """
+    from stocvest.data.scan_symbols import get_scan_symbols
+    from stocvest.data.watchlist_store import get_watchlist_store
+
     settings = get_settings()
     async with PolygonClient(api_key=settings.polygon_api_key) as client:
         try:
@@ -87,12 +89,19 @@ async def _load_snapshots_for_dynamic_gaps() -> list[Snapshot]:
         except PolygonError as exc:
             msg = str(exc)
             if "Polygon 403" in msg or "Polygon 401" in msg:
+                try:
+                    wl_store = get_watchlist_store()
+                except Exception as w_exc:  # noqa: BLE001 — never break scanner on Dynamo/boto init
+                    _LOG.warning("watchlist store unavailable; using system defaults only: %s", w_exc)
+                    wl_store = None
+                merged = get_scan_symbols(user_id, wl_store)
                 _LOG.warning(
                     "Polygon aggregate US snapshot unavailable for this tier; "
-                    "using batched liquid fallback universe: %s",
+                    "using watchlist+default merged universe (%s symbols): %s",
+                    len(merged),
                     msg[:200],
                 )
-                return await client.get_snapshots_many(list(LIQUID_SYMBOLS_FALLBACK), chunk_size=50)
+                return await client.get_snapshots_many(merged, chunk_size=50)
             raise
 
 
@@ -155,7 +164,8 @@ def scanner_gaps_handler(event: LambdaEvent, context: LambdaContext) -> dict[str
         if len(snapshots_raw) == 0:
             out_limit = max(1, min(limit, 20))
             dyn_min_vol = max(500_000.0, min_day_volume)
-            snapshots = asyncio.run(_load_snapshots_for_dynamic_gaps())
+            rc = build_request_context(event)
+            snapshots = asyncio.run(_load_snapshots_for_dynamic_gaps(rc.user_id))
             candidates = dynamic_gap_candidates_from_snapshots(
                 snapshots,
                 limit=20,
@@ -247,7 +257,8 @@ def scanner_briefing_handler(event: LambdaEvent, context: LambdaContext) -> dict
                 merged_ctx["intraday_setups"] = intra
             ctx = morning_brief_context_from_payload_dict(merged_ctx, briefing_date, pdt)
         else:
-            ctx = asyncio.run(fetch_morning_brief_context_live(briefing_date, pdt))
+            rc = build_request_context(event)
+            ctx = asyncio.run(fetch_morning_brief_context_live(briefing_date, pdt, user_id=rc.user_id))
         brief = build_morning_brief_payload(ctx)
         title = f"Morning Brief — {briefing_date.isoformat()}"
         return cache_set(
@@ -268,7 +279,7 @@ def scanner_briefing_handler(event: LambdaEvent, context: LambdaContext) -> dict
         return internal_error(str(exc))
 
 
-async def _gap_intelligence_async(payload: dict[str, Any]) -> dict[str, Any]:
+async def _gap_intelligence_async(payload: dict[str, Any], user_id: str | None) -> dict[str, Any]:
     snapshots_raw = payload.get("snapshots")
     if not isinstance(snapshots_raw, list):
         raise TypeError("Body field 'snapshots' must be a list.")
@@ -277,7 +288,7 @@ async def _gap_intelligence_async(payload: dict[str, Any]) -> dict[str, Any]:
     news_limit = min(1000, max(50, int(payload.get("news_limit", 400))))
 
     if len(snapshots_raw) == 0:
-        snapshots = await _load_snapshots_for_dynamic_gaps()
+        snapshots = await _load_snapshots_for_dynamic_gaps(user_id)
     else:
         snapshots = [Snapshot.model_validate(item) for item in snapshots_raw]
 
@@ -314,7 +325,8 @@ def scanner_gap_intelligence_handler(event: LambdaEvent, context: LambdaContext)
         cached = cache_get(key)
         if cached is not None:
             return cached
-        out = asyncio.run(_gap_intelligence_async(payload))
+        rc = build_request_context(event)
+        out = asyncio.run(_gap_intelligence_async(payload, rc.user_id))
         return cache_set(key, out, ttl_seconds=60)
     except TypeError as exc:
         return bad_request(str(exc))

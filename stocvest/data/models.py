@@ -222,6 +222,53 @@ class UserProfile(BaseModel):
     legal_acknowledged_version: str | None = None
 
 
+class AlertType(str, Enum):
+    SIGNAL_FIRED = "signal_fired"
+    PDT_WARNING = "pdt_warning"
+    PDT_BLOCKED = "pdt_blocked"
+    CONFLUENCE_ALERT = "confluence_alert"
+    GAP_DETECTED = "gap_detected"
+    SIGNAL_EXPIRED = "signal_expired"
+
+
+class AlertChannel(str, Enum):
+    EMAIL = "email"
+
+
+class AlertStatus(str, Enum):
+    PENDING = "pending"
+    SENT = "sent"
+    FAILED = "failed"
+
+
+class AlertPreferences(BaseModel):
+    user_id: str
+    email_enabled: bool = True
+    on_signal_fired: bool = True
+    on_confluence_alert: bool = True
+    on_pdt_warning: bool = True
+    on_pdt_blocked: bool = True
+    on_gap_detected: bool = False
+    watchlist_only: bool = True
+    quiet_hours_enabled: bool = False
+    quiet_hours_start: str = "22:00"
+    quiet_hours_end: str = "07:00"
+
+
+class AlertRecord(BaseModel):
+    alert_id: str
+    user_id: str
+    alert_type: AlertType
+    channel: AlertChannel
+    symbol: str | None = None
+    title: str
+    body: str
+    status: AlertStatus
+    created_at: str
+    sent_at: str | None = None
+    error: str | None = None
+
+
 class OrderAttemptLog(BaseModel):
     """Audit metadata for an order attempt (no dollar amounts or account numbers)."""
 

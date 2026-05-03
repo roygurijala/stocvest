@@ -102,6 +102,23 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
         )
 
     if module == "brokers":
+        route = http_route_descriptor(event)
+        if route.startswith(
+            (
+                "GET /v1/watchlists",
+                "POST /v1/watchlists",
+                "PATCH /v1/watchlists",
+                "DELETE /v1/watchlists",
+            )
+        ):
+            from stocvest.api.handlers.watchlists import watchlists_dispatch_handler
+
+            return watchlists_dispatch_handler(event, context)
+        if route.startswith("GET /v1/alerts") or route.startswith("PATCH /v1/alerts"):
+            from stocvest.api.handlers.alerts import alerts_dispatch_handler
+
+            return alerts_dispatch_handler(event, context)
+
         from stocvest.api.handlers.brokers import (
             broker_accounts_handler,
             broker_cancel_order_handler,

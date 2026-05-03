@@ -59,6 +59,7 @@ def swing_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[
             if isinstance(item, dict)
         ]
         composite = CompositeScoreEngine().compute(signals, regime=regime)
+        request_context = build_request_context(event)
         response_body = {
             "score": composite.score,
             "signal_strength": composite.confidence,
@@ -122,7 +123,6 @@ def swing_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[
                 sector_signal=sector_c,
             )
             response_body.update(confluence_result_to_response_fields(cf))
-        request_context = build_request_context(event)
         if symbol and price_raw is not None:
             try:
                 price_at = float(price_raw)
@@ -140,6 +140,23 @@ def swing_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[
                     user_id=request_context.user_id,
                 )
                 get_signal_recorder().record_signal(record)
+                if request_context.user_id and request_context.email and direction_out:
+                    from stocvest.api.services.alert_tasks import run_alert_background
+                    from stocvest.services.alert_trigger import get_alert_trigger
+
+                    def _fire_alert() -> None:
+                        get_alert_trigger().trigger_signal_alert(
+                            user_id=request_context.user_id or "",
+                            user_email=request_context.email or "",
+                            symbol=symbol,
+                            direction=direction_out,
+                            signal_strength=strength,
+                            pattern=pattern,
+                            is_confluence=bool(response_body.get("is_confluence_alert")),
+                            confluence_score=int(response_body.get("confluence_score") or 0),
+                        )
+
+                    run_alert_background(_fire_alert)
             except Exception as exc:
                 _LOG.warning("record_signal skipped: %s", exc)
         return ok(response_body)
@@ -240,7 +257,8 @@ def day_briefing_handler(event: LambdaEvent, context: LambdaContext) -> dict[str
                 merged_ctx["intraday_setups"] = intra
             ctx = morning_brief_context_from_payload_dict(merged_ctx, briefing_date, pdt)
         else:
-            ctx = asyncio.run(fetch_morning_brief_context_live(briefing_date, pdt))
+            rc = build_request_context(event)
+            ctx = asyncio.run(fetch_morning_brief_context_live(briefing_date, pdt, user_id=rc.user_id))
         brief = build_morning_brief_payload(ctx)
         title = f"Morning Brief — {briefing_date.isoformat()}"
         return ok(

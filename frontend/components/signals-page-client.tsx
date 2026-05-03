@@ -17,6 +17,7 @@ import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
 import type { MarketOverview, SnapshotPayload } from "@/lib/api/market";
 import type { ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
+import { AddToWatchlistButton } from "@/components/add-to-watchlist-button";
 import { InfoTip } from "@/components/info-tip";
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
@@ -500,50 +501,52 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
           This analysis surfaces technical patterns and signal data for informational purposes. It is not investment advice. Reference
           levels shown are derived from historical patterns — not predictions. You are solely responsible for all trading decisions.
         </div>
-        <button
-          type="button"
-          className="min-h-11 text-sm"
-          onClick={async () => {
-            const setupLike = setup || {
-              symbol: symbol.toUpperCase(),
-              direction: setupDirectionForEvidence,
-              score: overall / 100,
-              triggers: ["Multi-layer synthesis"],
-              timestamp_iso: new Date().toISOString()
-            };
-            let symbolNewsArticles: Awaited<ReturnType<typeof fetchSymbolNews>> = [];
-            try {
-              symbolNewsArticles = await fetchSymbolNews(symbol.toUpperCase(), 10);
-            } catch {
-              symbolNewsArticles = [];
-            }
-            const event = earningsBySymbol[symbol.toUpperCase()];
-            const today = new Date().toISOString().slice(0, 10);
-            const daysUntil =
-              event != null
-                ? Math.floor((Date.parse(`${event.report_date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000)
-                : undefined;
-            setEvidence(
-              buildEvidenceFromSetup(setupLike, snapshot ?? undefined, {
-                symbolNewsArticles,
-                earningsRiskDays: daysUntil,
-                earningsReportTime: event?.report_time
-              })
-            );
-            setEvidenceOpen(true);
-          }}
-          style={{
-            marginTop: spacing[3],
-            border: `1px solid ${colors.border}`,
-            borderRadius: borderRadius.md,
-            background: "transparent",
-            color: colors.text,
-            padding: `${spacing[2]} ${spacing[3]}`,
-            cursor: "pointer"
-          }}
-        >
-          View Evidence
-        </button>
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: spacing[2], marginTop: spacing[3] }}>
+          <button
+            type="button"
+            className="min-h-11 text-sm"
+            onClick={async () => {
+              const setupLike = setup || {
+                symbol: symbol.toUpperCase(),
+                direction: setupDirectionForEvidence,
+                score: overall / 100,
+                triggers: ["Multi-layer synthesis"],
+                timestamp_iso: new Date().toISOString()
+              };
+              let symbolNewsArticles: Awaited<ReturnType<typeof fetchSymbolNews>> = [];
+              try {
+                symbolNewsArticles = await fetchSymbolNews(symbol.toUpperCase(), 10);
+              } catch {
+                symbolNewsArticles = [];
+              }
+              const event = earningsBySymbol[symbol.toUpperCase()];
+              const today = new Date().toISOString().slice(0, 10);
+              const daysUntil =
+                event != null
+                  ? Math.floor((Date.parse(`${event.report_date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000)
+                  : undefined;
+              setEvidence(
+                buildEvidenceFromSetup(setupLike, snapshot ?? undefined, {
+                  symbolNewsArticles,
+                  earningsRiskDays: daysUntil,
+                  earningsReportTime: event?.report_time
+                })
+              );
+              setEvidenceOpen(true);
+            }}
+            style={{
+              border: `1px solid ${colors.border}`,
+              borderRadius: borderRadius.md,
+              background: "transparent",
+              color: colors.text,
+              padding: `${spacing[2]} ${spacing[3]}`,
+              cursor: "pointer"
+            }}
+          >
+            View Evidence
+          </button>
+          <AddToWatchlistButton symbol={symbol} />
+        </div>
         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: spacing[2] }}>
           <SignalDisclaimerChip />
         </div>

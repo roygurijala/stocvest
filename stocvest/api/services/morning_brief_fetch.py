@@ -9,7 +9,9 @@ from typing import Any
 from stocvest.api.services.gap_intelligence_news import collect_news_for_gap_intelligence
 from stocvest.data import PolygonClient, PolygonError
 from stocvest.data.models import EarningsEvent, Snapshot
+from stocvest.data.scan_symbols import get_scan_symbols
 from stocvest.data.scanner_universe import LIQUID_SYMBOLS_FALLBACK
+from stocvest.data.watchlist_store import get_watchlist_store
 from stocvest.signals.day_trading_scanner import dynamic_gap_candidates_from_snapshots
 from stocvest.signals.gap_intelligence import build_gap_intelligence_items
 from stocvest.signals.morning_brief import (
@@ -26,16 +28,20 @@ from stocvest.utils.logging import get_logger
 _LOG = get_logger(__name__)
 
 
-async def _load_snapshots_for_dynamic_gaps() -> list[Snapshot]:
+async def _load_snapshots_for_dynamic_gaps(user_id: str | None = None) -> list[Snapshot]:
     settings = get_settings()
+    merged = get_scan_symbols(user_id, get_watchlist_store())
     async with PolygonClient(api_key=settings.polygon_api_key) as client:
         try:
             return await client.get_us_stocks_market_snapshots(include_otc=False)
         except PolygonError as exc:
             msg = str(exc)
             if "Polygon 403" in msg or "Polygon 401" in msg:
-                _LOG.warning("US snapshot aggregate unavailable; using fallback universe")
-                return await client.get_snapshots_many(list(LIQUID_SYMBOLS_FALLBACK), chunk_size=50)
+                _LOG.warning(
+                    "US snapshot aggregate unavailable; using watchlist+default merged universe (%s symbols)",
+                    len(merged),
+                )
+                return await client.get_snapshots_many(merged, chunk_size=50)
             raise
 
 
@@ -62,9 +68,12 @@ def _earnings_time_label(ev: EarningsEvent) -> str:
 async def fetch_morning_brief_context_live(
     briefing_date: date,
     pdt: PDTAssessment | None,
+    *,
+    user_id: str | None = None,
 ) -> MorningBriefContext:
     settings = get_settings()
-    symbols_earn = list(LIQUID_SYMBOLS_FALLBACK)
+    merged = get_scan_symbols(user_id, get_watchlist_store())
+    symbols_earn = list(dict.fromkeys([*merged, *list(LIQUID_SYMBOLS_FALLBACK)]))[:60]
 
     async with PolygonClient(api_key=settings.polygon_api_key) as client:
         spy, qqq = await asyncio.gather(
@@ -87,7 +96,7 @@ async def fetch_morning_brief_context_live(
             to_date=briefing_date,
         )
 
-    snaps = await _load_snapshots_for_dynamic_gaps()
+    snaps = await _load_snapshots_for_dynamic_gaps(user_id)
     gaps = dynamic_gap_candidates_from_snapshots(
         snaps,
         limit=40,

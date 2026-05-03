@@ -4,7 +4,7 @@
 `CONTEXT.md` holds **status-at-a-glance**, **what’s implemented**, **near-term ops** (Terraform, secrets, CI, legal), **legal rules**, and **session rules**.  
 **This file** holds **planned work only**: themes, sub-items, and notes—**without** repeating the CONTEXT status table or §3 pending list.
 
-**Last updated:** 2026-05-03 (B13 phone/SMS backlog, P5 infra naming)
+**Last updated:** 2026-05-03 (B3/B4 shipped — see table; B13 phone/SMS backlog, P5 infra naming)
 
 ---
 
@@ -29,8 +29,8 @@ Tracked in **`CONTEXT.md` §3** only (Terraform apply, GitHub/AWS/Vercel secrets
 |----|--------|--------|--------|
 | B1 | **Journal automation** | Done 2026-05-02 · commit: 3602db38c839209d3bae3d67fa2d50eee0f93022 | Auto-capture on fill, auto-close on exit, optional `signal_id` / `pattern` / `confluence_score` / `signal_strength` / `signal_direction` on `POST /v1/orders/submit`, `GET /v1/journal/analytics`, entry GET/PATCH, journal page wired to API + scanner → portfolio order prefill + confirmation modal signal block. |
 | B2 | **Onboarding** | Done 2026-05-02 (feat(B2) commit on `main`; `git log --oneline -5` for hash) | **Legal:** mandatory full-screen acknowledgment (5 checkboxes + ToS link) before any dashboard interaction; `PATCH /v1/users/me` with `legal_acknowledged_version` **1.0**. **Onboarding:** optional wizard after legal ack; “Remind me later” hides for session until next login; `PATCH` sets `onboarding_completed`. **Backend:** `UserProfile` fields + Dynamo merge via `user_profile_store.put_profile`. **Routes:** `GET`/`PATCH /v1/users/me` (brokers Lambda), API Gateway + `dev_local_api` PATCH. **Frontend:** `app/dashboard/layout.tsx`, `DashboardComplianceClient`, `legal-acknowledgment-modal`, `onboarding-wizard-modal`, BFF `/api/stocvest/users/me`. |
-| B3 | **Alerts delivery** | Not done | `Alerts` table exists; implement channels: email, push (later), SMS for critical PDT, webhooks for power users; tie to scanner/signal triggers. |
-| B4 | **Watchlists** | Not done | CRUD named lists; scanner + briefing inputs use user watchlist instead of hardcoded symbols where applicable; wire existing Dynamo watchlist contract. |
+| B3 | **Alerts delivery** | Done 2026-05-03 (B3/B4 on `main`; `git log -1 --oneline` for hash) | **Phase 1 shipped:** SES email via `stocvest/services/email_service.py`, prefs + history in `alert_store` (`preferences` + `hist#` SK), `AlertTriggerService`, non-blocking hooks on swing composite record + order validate (2 trades) / submit PDT 403; `GET`/`PATCH /v1/alerts/preferences`, `GET /v1/alerts/history`; settings Alert Preferences UI; Lambda IAM SES send; `STOCVEST_EMAIL_SENDER` / `STOCVEST_PUBLIC_APP_URL` in `lambda_common_env`; `docs/DEPLOYMENT.md`. **Phase 2 / still pending:** push, webhooks, **SMS (B13)** when phone collection exists. |
+| B4 | **Watchlists** | Done 2026-05-03 (B3/B4 on `main`; `git log -1 --oneline` for hash) | **Shipped:** `watchlist_store` + API under brokers Lambda + API Gateway routes; `get_scan_symbols` / scanner defers Dynamo until Polygon aggregate 401/403 fallback; dashboard `/dashboard/watchlists`, sidebar **Watchlists**, BFF routes, **Add to watchlist** on signals + gap cards; limits 5 lists / 50 symbols. |
 | B5 | **Subscriptions** | Not done | Stripe (Atlas-linked), tier gating (Free / Pro / Institutional), usage limits; **after** attorney-reviewed ToS and entity readiness (`CONTEXT.md` §14). |
 | B6 | **Sector & market internals** | Not done | Sector rotation view, breadth (A/D, highs/lows), VIX regime, optional put/call—**data-only** copy per legal framing. |
 | B7 | **Risk management UX** | Not done | Position sizing helper (% of portfolio), optional max daily loss guardrails, concentration / correlation hints—**never** framed as advice; copy reviewed with counsel. |

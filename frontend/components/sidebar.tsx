@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   BarChart2,
   BookOpen,
+  Bookmark,
   Briefcase,
   Layers,
   LayoutDashboard,
@@ -29,8 +30,9 @@ interface SidebarProps {
 export const DASHBOARD_NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/scanner", label: "Scanner", icon: Radio },
-  { href: "/dashboard/earnings", label: "Earnings", icon: CalendarDays },
+  { href: "/dashboard/watchlists", label: "Watchlists", icon: Bookmark },
   { href: "/dashboard/signals", label: "Signals", icon: Zap },
+  { href: "/dashboard/earnings", label: "Earnings", icon: CalendarDays },
   { href: "/dashboard/portfolio", label: "Portfolio", icon: Briefcase },
   { href: "/dashboard/options", label: "Options", icon: Layers },
   { href: "/dashboard/crypto", label: "Crypto", icon: TrendingUp },

@@ -44,6 +44,8 @@ locals {
     DYNAMODB_SIGNAL_HISTORY_TABLE     = aws_dynamodb_table.signal_history.name
     STOCVEST_TRADE_JOURNAL_TABLE      = aws_dynamodb_table.trade_journal.name
     STOCVEST_PDT_STATE_TABLE          = aws_dynamodb_table.pdt_state.name
+    STOCVEST_EMAIL_SENDER             = "signals@stocvest.app"
+    STOCVEST_PUBLIC_APP_URL           = "https://stocvest.app"
   }
 
   lambda_dynamodb_resources = flatten([
@@ -188,6 +190,12 @@ resource "aws_iam_role_policy" "lambda_api_data_access" {
         Resource = [
           "arn:aws:execute-api:${var.aws_region}:${data.aws_caller_identity.current.account_id}:${aws_apigatewayv2_api.websocket.id}/*/@connections/*",
         ]
+      },
+      {
+        Sid      = "SESSendUserAlerts"
+        Effect   = "Allow"
+        Action   = ["ses:SendEmail", "ses:SendRawEmail"]
+        Resource = "*"
       },
     ]
   })

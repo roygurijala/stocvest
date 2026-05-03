@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import json
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -119,7 +120,30 @@ def orders_validate_handler(
             result = await gate.validate_order(request_context.user_id, request, account_state)
         return ok(_validation_dict(result))
 
-    return _run_order_op(_run)
+    resp = _run_order_op(_run)
+    if resp.get("statusCode") == 200 and request_context.email and request_context.user_id:
+        try:
+            payload = json.loads(resp.get("body") or "{}")
+        except json.JSONDecodeError:
+            payload = {}
+        try:
+            used = int(payload.get("pdt_trades_used") or 0)
+        except (TypeError, ValueError):
+            used = 0
+        if used == 2:
+            from stocvest.api.services.alert_tasks import run_alert_background
+            from stocvest.services.alert_trigger import get_alert_trigger
+
+            uid = request_context.user_id
+            em = request_context.email
+            run_alert_background(
+                lambda: get_alert_trigger().trigger_pdt_alert(
+                    user_id=uid or "",
+                    user_email=em or "",
+                    trades_used=2,
+                )
+            )
+    return resp
 
 
 def orders_submit_handler(
@@ -191,7 +215,26 @@ def orders_submit_handler(
         )
         return ok(ack.model_dump(mode="json"))
 
-    return _run_order_op(_run)
+    resp = _run_order_op(_run)
+    if resp.get("statusCode") == 403 and request_context.email and request_context.user_id:
+        try:
+            body = json.loads(resp.get("body") or "{}")
+        except json.JSONDecodeError:
+            body = {}
+        if body.get("error") == "pdt_violation":
+            from stocvest.api.services.alert_tasks import run_alert_background
+            from stocvest.services.alert_trigger import get_alert_trigger
+
+            uid = request_context.user_id
+            em = request_context.email
+            run_alert_background(
+                lambda: get_alert_trigger().trigger_pdt_alert(
+                    user_id=uid or "",
+                    user_email=em or "",
+                    trades_used=3,
+                )
+            )
+    return resp
 
 
 def orders_status_handler(

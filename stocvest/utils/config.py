@@ -59,6 +59,7 @@ class Settings(BaseSettings):
 
     # ── DynamoDB table names (Lambda env) ───────────────────────
     dynamodb_users_table: str = Field("", alias="DYNAMODB_USERS_TABLE")
+    dynamodb_watchlists_table: str = Field("", alias="DYNAMODB_WATCHLISTS_TABLE")
 
     # ── Journal + PDT persistence ────────────────────────────────
     trade_journal_table: str = Field("", alias="STOCVEST_TRADE_JOURNAL_TABLE")
@@ -66,6 +67,10 @@ class Settings(BaseSettings):
     dynamodb_day_trading_setups: str = Field("", alias="DYNAMODB_DAY_TRADING_SETUPS")
     dynamodb_alerts: str = Field("", alias="DYNAMODB_ALERTS")
     dynamodb_signal_history_table: str = Field("", alias="DYNAMODB_SIGNAL_HISTORY_TABLE")
+
+    # ── Email (SES) for user alerts ───────────────────────────────
+    stocvest_email_sender: str = Field("signals@stocvest.app", alias="STOCVEST_EMAIL_SENDER")
+    stocvest_public_app_url: str = Field("https://stocvest.app", alias="STOCVEST_PUBLIC_APP_URL")
 
     # ── Scanner schedule + WebSocket broadcast ────────────────────
     scanner_symbols: str = Field("AAPL,MSFT,NVDA", alias="STOCVEST_SCANNER_SYMBOLS")
