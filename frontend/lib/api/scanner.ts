@@ -21,6 +21,10 @@ export interface GapIntelligenceCatalyst {
   category: string;
   sentiment: string;
   score: number;
+  article_url?: string;
+  article_description?: string;
+  published_at?: string;
+  source?: string;
 }
 
 export interface GapIntelligenceItem {
@@ -102,12 +106,47 @@ export interface ScannerOverview {
   error?: string;
 }
 
-export async function fetchScannerOverview(
-  pdtStatus: PDTStatusPayload | null,
-  watchlistSymbols: string[] = []
-): Promise<ScannerOverview> {
-  const pdtAssessment = pdtStatus?.assessment;
+/** Snapshot + gap pipeline through intraday setups (no morning briefing). */
+export type ScannerCoreData = {
+  gapIntelligence: GapIntelligenceItem[];
+  setups: IntradaySetupPayload[];
+  spyPct: number | null;
+  qqqPct: number | null;
+  regimeLabel: string;
+  error?: string;
+};
 
+function companyNameFromSnapshot(snap: Record<string, unknown> | null | undefined): string {
+  if (!snap || typeof snap !== "object") return "";
+  const a = snap.company_name;
+  const b = (snap as { companyName?: unknown }).companyName;
+  for (const v of [a, b]) {
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return "";
+}
+
+function mergeCompanyNameFromSnapshots(
+  gapItems: GapIntelligenceItem[],
+  universe: string[],
+  snapshotRows: (Record<string, unknown> | null)[]
+): GapIntelligenceItem[] {
+  return gapItems.map((g) => {
+    const sym = g.symbol.trim().toUpperCase();
+    const idx = universe.indexOf(sym);
+    const snap = idx >= 0 ? snapshotRows[idx] : null;
+    const fromApi = (typeof g.company_name === "string" && g.company_name.trim()) || "";
+    const camel = (g as { companyName?: string }).companyName;
+    const fromCamel = typeof camel === "string" ? camel.trim() : "";
+    const fromSnap = companyNameFromSnapshot(snap as Record<string, unknown> | null);
+    return { ...g, company_name: fromApi || fromCamel || fromSnap };
+  });
+}
+
+export async function loadScannerDataWithoutBrief(
+  _pdtStatus: PDTStatusPayload | null,
+  watchlistSymbols: string[] = []
+): Promise<ScannerCoreData> {
   try {
     const gapIntelResp = await apiFetch<{ items: GapIntelligenceItem[]; disclaimer?: string }>(
       "/v1/scanner/gap-intelligence",
@@ -124,11 +163,14 @@ export async function fetchScannerOverview(
       return {
         gapIntelligence: [],
         setups: [],
+        spyPct: null,
+        qqqPct: null,
+        regimeLabel: "Neutral",
         error: "Service temporarily unavailable. Please try again."
       };
     }
 
-    const gapItems = gapIntelResp.items;
+    let gapItems = gapIntelResp.items;
     const gapSyms = gapItems.map((g) => g.symbol.trim().toUpperCase()).filter(Boolean);
     const watchUpper = watchlistSymbols.map((s) => s.trim().toUpperCase()).filter(Boolean);
     let universe = [...new Set([...gapSyms, ...watchUpper])];
@@ -150,6 +192,8 @@ export async function fetchScannerOverview(
       ).then((rows) => Object.fromEntries(rows))
     ]);
 
+    gapItems = mergeCompanyNameFromSnapshots(gapItems, universe, snapshotRows);
+
     const cleanBarsBySymbol = Object.fromEntries(
       Object.entries(barsBySymbol).map(([k, v]) => [k, (v || []) as Record<string, unknown>[]])
     );
@@ -165,8 +209,7 @@ export async function fetchScannerOverview(
       const adv = typeof prevVol === "number" && Number.isFinite(prevVol) ? prevVol : null;
       const lastRaw = snap.last_trade_price ?? snap.day_open;
       const last = typeof lastRaw === "number" && Number.isFinite(lastRaw) ? lastRaw : null;
-      const cn = snap.company_name;
-      const name = typeof cn === "string" && cn.trim().length ? cn.trim() : undefined;
+      const name = companyNameFromSnapshot(snap as Record<string, unknown>);
       liquidity_by_symbol[sym] = {
         avg_daily_volume: adv,
         last_price: last,
@@ -213,45 +256,97 @@ export async function fetchScannerOverview(
       return {
         gapIntelligence: [],
         setups: [],
+        spyPct,
+        qqqPct,
+        regimeLabel,
         error: "Service temporarily unavailable. Please try again."
       };
     }
 
-    const morningBrief = await apiFetch<MorningBriefPayload>("/v1/signals/day/briefing", {
-      method: "POST",
-      body: JSON.stringify({
-        briefing_date: new Date().toISOString().slice(0, 10),
-        pdt_assessment: pdtAssessment
-          ? {
-              day_trades_in_window: pdtAssessment.day_trades_in_window,
-              max_non_exempt: pdtAssessment.max_non_exempt,
-              rolling_business_days: pdtAssessment.rolling_business_days,
-              warn_near_limit: pdtAssessment.warn_near_limit,
-              at_limit: pdtAssessment.at_limit,
-              pdt_exempt: pdtAssessment.pdt_exempt,
-              allow_next_day_trade: pdtAssessment.allow_next_day_trade
-            }
-          : undefined,
-        morning_brief_context: {
-          futures_spy_pct: spyPct,
-          futures_qqq_pct: qqqPct,
-          vix_level: null,
-          vix_direction: "flat",
-          regime: regimeLabel,
-          economic_events: [],
-          earnings_today: [],
-          gap_intelligence_items: gapItems,
-          intraday_setups: setups
-        }
-      })
-    });
-
-    return { gapIntelligence: gapItems, setups, morningBrief: morningBrief || undefined };
+    return {
+      gapIntelligence: gapItems,
+      setups,
+      spyPct,
+      qqqPct,
+      regimeLabel
+    };
   } catch (error: unknown) {
     return {
       gapIntelligence: [],
       setups: [],
+      spyPct: null,
+      qqqPct: null,
+      regimeLabel: "Neutral",
       error: error instanceof Error ? error.message : "Unable to connect. Check your connection."
     };
   }
+}
+
+export async function fetchMorningBriefPost(
+  pdtStatus: PDTStatusPayload | null,
+  core: ScannerCoreData
+): Promise<MorningBriefPayload | null> {
+  if (core.error) {
+    return null;
+  }
+  const pdtAssessment = pdtStatus?.assessment;
+  return await apiFetch<MorningBriefPayload>("/v1/signals/day/briefing", {
+    method: "POST",
+    body: JSON.stringify({
+      briefing_date: new Date().toISOString().slice(0, 10),
+      pdt_assessment: pdtAssessment
+        ? {
+            day_trades_in_window: pdtAssessment.day_trades_in_window,
+            max_non_exempt: pdtAssessment.max_non_exempt,
+            rolling_business_days: pdtAssessment.rolling_business_days,
+            warn_near_limit: pdtAssessment.warn_near_limit,
+            at_limit: pdtAssessment.at_limit,
+            pdt_exempt: pdtAssessment.pdt_exempt,
+            allow_next_day_trade: pdtAssessment.allow_next_day_trade
+          }
+        : undefined,
+      morning_brief_context: {
+        futures_spy_pct: core.spyPct,
+        futures_qqq_pct: core.qqqPct,
+        vix_level: null,
+        vix_direction: "flat",
+        regime: core.regimeLabel,
+        economic_events: [],
+        earnings_today: [],
+        gap_intelligence_items: core.gapIntelligence,
+        intraday_setups: core.setups
+      }
+    })
+  });
+}
+
+export type FetchScannerOptions = {
+  /** When true, blocks on `/v1/signals/day/briefing` (slower). Default false — use Suspense + `fetchMorningBriefPost` on dashboard. */
+  includeMorningBrief?: boolean;
+};
+
+export async function fetchScannerOverview(
+  pdtStatus: PDTStatusPayload | null,
+  watchlistSymbols: string[] = [],
+  options: FetchScannerOptions = {}
+): Promise<ScannerOverview> {
+  const { includeMorningBrief = false } = options;
+  const core = await loadScannerDataWithoutBrief(pdtStatus, watchlistSymbols);
+  if (core.error) {
+    return {
+      gapIntelligence: [],
+      setups: [],
+      error: core.error
+    };
+  }
+  let morningBrief: MorningBriefPayload | undefined;
+  if (includeMorningBrief) {
+    morningBrief = (await fetchMorningBriefPost(pdtStatus, core)) ?? undefined;
+  }
+  return {
+    gapIntelligence: core.gapIntelligence,
+    setups: core.setups,
+    morningBrief,
+    error: undefined
+  };
 }

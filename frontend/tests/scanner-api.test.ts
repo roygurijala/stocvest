@@ -85,7 +85,7 @@ describe("scanner API overview", () => {
       throw new Error(`Unhandled path ${path}`);
     });
 
-    const result = await fetchScannerOverview(null);
+    const result = await fetchScannerOverview(null, [], { includeMorningBrief: true });
     expect(result.error).toBeUndefined();
     expect(result.gapIntelligence).toHaveLength(1);
     expect(result.morningBrief?.conditions.label).toBe("CHOPPY");
@@ -94,7 +94,7 @@ describe("scanner API overview", () => {
   test("fetchScannerOverview handles scanner failures", async () => {
     const { fetchScannerOverview } = await import("@/lib/api/scanner");
     apiFetchMock.mockRejectedValueOnce(new Error("API request failed (500): scanner"));
-    const result = await fetchScannerOverview(null);
+    const result = await fetchScannerOverview(null, [], { includeMorningBrief: true });
     expect(result.error).toContain("500");
     expect(result.gapIntelligence).toHaveLength(0);
   });

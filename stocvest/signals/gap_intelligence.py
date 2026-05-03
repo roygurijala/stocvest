@@ -157,12 +157,14 @@ def build_gap_intelligence_items(
             continue
 
         best: NewsCatalystCandidate | None = None
+        best_article: NewsArticle | None = None
         for art in arts:
             c = det.candidate_for_symbol(art, g.symbol)
             if c is None:
                 continue
             if best is None or c.catalyst_score > best.catalyst_score:
                 best = c
+                best_article = art
 
         has_cat = best is not None
         gqs = calculate_gap_quality_score(g.gap_percent, w.volume_vs_avg, has_cat, price)
@@ -171,7 +173,20 @@ def build_gap_intelligence_items(
 
         gap_dollars = round(price - float(g.prev_close), 4)
         catalyst_payload: dict[str, Any] | None = None
-        if best is not None:
+        if best is not None and best_article is not None:
+            pub = best_article.published_at.isoformat() if best_article.published_at else ""
+            catalyst_payload = {
+                "article_id": best.article_id,
+                "headline": best.title,
+                "category": best.catalyst_type,
+                "sentiment": best.sentiment_label,
+                "score": best.narrative_score,
+                "article_url": best_article.url,
+                "article_description": (best_article.description or "").strip(),
+                "published_at": pub,
+                "source": (best_article.source or "").strip(),
+            }
+        elif best is not None:
             catalyst_payload = {
                 "article_id": best.article_id,
                 "headline": best.title,

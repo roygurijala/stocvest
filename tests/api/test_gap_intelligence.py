@@ -63,6 +63,10 @@ def test_gap_with_news_combined_correctly() -> None:
     assert items[0]["has_catalyst"] is True
     assert items[0]["catalyst"] is not None
     assert items[0]["catalyst"]["category"] == "analyst"
+    cat = items[0]["catalyst"]
+    assert cat.get("article_url") == "https://example.com"
+    assert cat.get("source") == "Reuters"
+    assert "published_at" in cat
 
 
 def test_gap_without_news_shows_warning() -> None:

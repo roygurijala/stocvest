@@ -13,6 +13,7 @@ import {
 import { motion } from "framer-motion";
 import { RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { GapCatalystNewsDrawer } from "@/components/gap-catalyst-news-drawer";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import type { GapIntelligenceItem, IntradaySetupPayload, ScannerOverview } from "@/lib/api/scanner";
@@ -50,6 +51,12 @@ interface ScannerPageClientProps {
 
 const MONO = typography.fontFamilyMono;
 
+function gapItemDisplayCompany(item: GapIntelligenceItem): string {
+  const a = item.company_name;
+  const b = (item as { companyName?: string }).companyName;
+  return (typeof a === "string" && a.trim() ? a : typeof b === "string" ? b : "").trim();
+}
+
 const CONFLUENCE_BADGE_STYLE: CSSProperties = {
   background: "linear-gradient(135deg, #b8860b, #f5c542)",
   color: "#1a1200",
@@ -81,6 +88,7 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
   const [isPending, startTransition] = useTransition();
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
+  const [gapNewsDrawerItem, setGapNewsDrawerItem] = useState<GapIntelligenceItem | null>(null);
   const [evidence, setEvidence] = useState<SignalEvidenceData | null>(null);
   const router = useRouter();
   const [, forceTick] = useState(0);
@@ -246,8 +254,8 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
               ) : null}
             </div>
           </div>
-          {item.company_name?.trim() ? (
-            <span style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>{item.company_name.trim()}</span>
+          {gapItemDisplayCompany(item) ? (
+            <span style={{ fontSize: "12px", color: "var(--color-text-secondary)" }}>{gapItemDisplayCompany(item)}</span>
           ) : null}
           <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>Pre-market gap</span>
         </div>
@@ -289,7 +297,36 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
           <p style={{ margin: `${spacing[1]} 0 0`, color: colors.text, fontSize: typography.scale.xs }}>{ctx}</p>
         ) : null}
         {item.has_catalyst && item.catalyst ? (
-          <div style={{ marginTop: spacing[2] }}>
+          <div
+            role="button"
+            tabIndex={0}
+            aria-label="Open news article"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setGapNewsDrawerItem(item);
+              }
+            }}
+            onClick={() => setGapNewsDrawerItem(item)}
+            style={{
+              marginTop: spacing[2],
+              cursor: "pointer",
+              borderRadius: borderRadius.md,
+              padding: spacing[1],
+              marginLeft: `-${spacing[1]}`,
+              marginRight: `-${spacing[1]}`,
+              outline: "none",
+              border: `1px solid transparent`
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = colors.border;
+              e.currentTarget.style.background = colors.surfaceMuted;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = "transparent";
+              e.currentTarget.style.background = "transparent";
+            }}
+          >
             <p style={{ margin: 0, fontSize: typography.scale.xs, fontWeight: 700, color: colors.textMuted }}>WITH CATALYST</p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: spacing[2], marginTop: spacing[1] }}>
               <span
@@ -330,6 +367,7 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
             >
               {item.catalyst.headline}
             </p>
+            <p style={{ margin: `${spacing[1]} 0 0`, fontSize: 10, color: colors.textMuted }}>Tap to read full article</p>
           </div>
         ) : (
           <div style={{ marginTop: spacing[2] }}>
@@ -360,25 +398,7 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
         <div style={{ marginTop: spacing[2], display: "inline-flex", flexWrap: "wrap", gap: spacing[2], alignItems: "center" }}>
           <button
             type="button"
-            onClick={async () => {
-              let symbolNewsArticles: Awaited<ReturnType<typeof fetchSymbolNews>> = [];
-              try {
-                symbolNewsArticles = await fetchSymbolNews(item.symbol, 10);
-              } catch {
-                symbolNewsArticles = [];
-              }
-              const risk = earningsRiskFor(item.symbol);
-              const sym = item.symbol.trim().toUpperCase();
-              const s = (await fetchSymbolSnapshot(sym)) ?? undefined;
-              setEvidence(
-                buildEvidenceFromSetup(gapSyntheticSetup(item), s, {
-                  symbolNewsArticles,
-                  earningsRiskDays: risk?.daysUntil,
-                  earningsReportTime: risk?.reportTime
-                })
-              );
-              setEvidenceOpen(true);
-            }}
+            onClick={() => void openGapEvidence(item)}
             style={{
               border: `1px solid ${colors.border}`,
               borderRadius: borderRadius.md,
@@ -524,6 +544,29 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
     if (dayDelta < 0 || dayDelta > 3) return null;
     return { daysUntil: dayDelta, reportTime: event.report_time };
   };
+
+  const openGapEvidence = useCallback(
+    async (item: GapIntelligenceItem) => {
+      let symbolNewsArticles: Awaited<ReturnType<typeof fetchSymbolNews>> = [];
+      try {
+        symbolNewsArticles = await fetchSymbolNews(item.symbol, 10);
+      } catch {
+        symbolNewsArticles = [];
+      }
+      const risk = earningsRiskFor(item.symbol);
+      const sym = item.symbol.trim().toUpperCase();
+      const s = (await fetchSymbolSnapshot(sym)) ?? undefined;
+      setEvidence(
+        buildEvidenceFromSetup(gapSyntheticSetup(item), s, {
+          symbolNewsArticles,
+          earningsRiskDays: risk?.daysUntil,
+          earningsReportTime: risk?.reportTime
+        })
+      );
+      setEvidenceOpen(true);
+    },
+    [earningsBySymbol]
+  );
 
   return (
     <section style={{ display: "grid", gap: spacing[4] }}>
@@ -973,6 +1016,20 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
           </div>
         </div>
       ) : null}
+      <GapCatalystNewsDrawer
+        open={gapNewsDrawerItem != null && !!gapNewsDrawerItem.catalyst}
+        payload={
+          gapNewsDrawerItem?.catalyst
+            ? { symbol: gapNewsDrawerItem.symbol, catalyst: gapNewsDrawerItem.catalyst }
+            : null
+        }
+        onClose={() => setGapNewsDrawerItem(null)}
+        onViewSignal={() => {
+          const it = gapNewsDrawerItem;
+          setGapNewsDrawerItem(null);
+          if (it) void openGapEvidence(it);
+        }}
+      />
       <SignalEvidenceModal open={evidenceOpen} evidence={evidence} onClose={() => setEvidenceOpen(false)} />
     </section>
   );

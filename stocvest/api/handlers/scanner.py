@@ -46,6 +46,32 @@ _LOG = get_logger(__name__)
 _SCHEDULED_SCAN_TYPES = frozenset({"premarket", "intraday", "eod_summary"})
 
 
+async def _enrich_gap_company_names(client: PolygonClient, items: list[dict[str, Any]]) -> None:
+    """Polygon aggregate snapshots often omit ticker name; fill from v3 reference/tickers."""
+    missing = [str(row["symbol"]).strip().upper() for row in items if not str(row.get("company_name") or "").strip()]
+    if not missing:
+        return
+
+    async def one(sym: str) -> tuple[str, str]:
+        try:
+            raw = await client.get_ticker_details(sym)
+            name = str(raw.get("name") or "").strip()
+            return sym, name
+        except (PolygonError, Exception) as exc:  # noqa: BLE001 — best-effort enrichment
+            _LOG.debug("ticker details for %s: %s", sym, exc)
+            return sym, ""
+
+    pairs = await asyncio.gather(*[one(s) for s in missing[:12]])
+    by_sym = dict(pairs)
+    for row in items:
+        sym = str(row["symbol"]).strip().upper()
+        if str(row.get("company_name") or "").strip():
+            continue
+        nm = by_sym.get(sym, "")
+        if nm:
+            row["company_name"] = nm
+
+
 async def _load_snapshots_for_dynamic_gaps() -> list[Snapshot]:
     """
     Prefer Polygon's full US equities snapshot (one paginated REST feed).
@@ -265,8 +291,9 @@ async def _gap_intelligence_async(payload: dict[str, Any]) -> dict[str, Any]:
     settings = get_settings()
     async with PolygonClient(api_key=settings.polygon_api_key) as client:
         news = await client.get_news(limit=news_limit)
-    sym_map = {s.symbol: s for s in snapshots}
-    items = build_gap_intelligence_items(gaps, sym_map, news)
+        sym_map = {s.symbol: s for s in snapshots}
+        items = build_gap_intelligence_items(gaps, sym_map, news)
+        await _enrich_gap_company_names(client, items)
     return ok({"items": items, "disclaimer": API_SIGNAL_DISCLAIMER})
 
 
