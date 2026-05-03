@@ -129,7 +129,7 @@ export function LandingPerformanceSection({ summary }: { summary: PerformanceSum
             color: "#00d4ff"
           }}
         >
-          Transparency
+          TRANSPARENCY
         </p>
         <h2 className="text-3xl font-extrabold tracking-tight text-[#e8f4ff] md:text-4xl">Every signal. Published.</h2>
         <p className="mx-auto mt-3 max-w-lg text-sm text-slate-400">

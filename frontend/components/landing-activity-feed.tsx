@@ -116,11 +116,12 @@ export function LandingActivityFeedSection({
           className="mb-2 text-center uppercase tracking-[0.2em] text-[#00b4ff]/80"
           style={{ fontFamily: MONO, fontSize: 11 }}
         >
-          TRANSPARENCY
+          LIVE ENGINE
         </p>
-        <h2 className="mb-10 text-center text-2xl font-bold text-slate-50 md:text-3xl">
-          Every signal published. Wins and losses.
-        </h2>
+        <h2 className="mb-3 text-center text-2xl font-bold text-slate-50 md:text-3xl">Signals generating right now</h2>
+        <p className="mx-auto mb-10 max-w-lg text-center text-sm text-slate-400">
+          Every signal tracked from the moment it fires — publicly, permanently
+        </p>
 
         <div className="grid gap-8 md:grid-cols-2">
           <div>

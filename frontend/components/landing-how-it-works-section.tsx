@@ -20,15 +20,21 @@ function StepCircle() {
       style={{
         width: 56,
         height: 56,
-        border: "1px solid rgba(0,180,255,0.25)",
-        background: "rgba(0,180,255,0.08)"
+        border: "1.5px solid rgba(0,180,255,0.5)",
+        background: "rgba(0,180,255,0.1)",
+        boxShadow: "0 0 20px rgba(0,180,255,0.15), 0 0 40px rgba(0,180,255,0.05)"
       }}
     />
   );
 }
 
 function Dot({ color }: { color: string }) {
-  return <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: color }} />;
+  const isGreen = color === "#00e87a";
+  const isAmber = color === "#f59e0b" || color === "#f5c542";
+  const boxShadow = isGreen ? "0 0 6px #00e87a" : isAmber ? "0 0 6px #f5c542" : undefined;
+  return (
+    <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: color, boxShadow }} />
+  );
 }
 
 export function LandingHowItWorksSection() {
@@ -68,9 +74,10 @@ export function LandingHowItWorksSection() {
           <div key={step.title} className="flex min-w-0 flex-1 items-start">
             {i > 0 ? (
               <div
-                className="mt-7 h-px min-w-[6px] flex-1"
+                className="mt-7 min-w-[6px] flex-1"
                 style={{
-                  background: "linear-gradient(90deg, rgba(0,180,255,0.4), rgba(0,180,255,0.1))"
+                  height: "1px",
+                  background: "linear-gradient(90deg, rgba(0,180,255,0.5), rgba(0,180,255,0.15))"
                 }}
                 aria-hidden
               />
@@ -81,14 +88,17 @@ export function LandingHowItWorksSection() {
                 className="mt-3 uppercase"
                 style={{
                   fontSize: 11,
-                  letterSpacing: 1.5,
+                  letterSpacing: 2,
                   color: "#00d4ff",
-                  fontFamily: MONO
+                  fontFamily: MONO,
+                  fontWeight: 600
                 }}
               >
                 {step.title}
               </p>
-              <p className="mt-1 max-w-[150px] text-center text-xs leading-snug text-slate-500">{step.desc}</p>
+              <p className="mt-1 max-w-[150px] text-center text-xs leading-snug" style={{ color: "#6080a0" }}>
+                {step.desc}
+              </p>
             </div>
           </div>
         ))}
@@ -111,14 +121,17 @@ export function LandingHowItWorksSection() {
                 className="uppercase"
                 style={{
                   fontSize: 11,
-                  letterSpacing: 1.5,
+                  letterSpacing: 2,
                   color: "#00d4ff",
-                  fontFamily: MONO
+                  fontFamily: MONO,
+                  fontWeight: 600
                 }}
               >
                 {step.title}
               </p>
-              <p className="mt-1 text-xs leading-snug text-slate-500">{step.desc}</p>
+              <p className="mt-1 text-xs leading-snug" style={{ color: "#6080a0" }}>
+                {step.desc}
+              </p>
             </div>
           </motion.div>
         ))}
@@ -132,17 +145,17 @@ export function LandingHowItWorksSection() {
         className="mx-auto mt-12 w-full max-w-[560px]"
         style={{
           background: "#0c1828",
-          border: "1px solid rgba(0,180,255,0.12)",
+          border: "1px solid rgba(0,180,255,0.2)",
           borderRadius: 12,
           padding: "20px 24px"
         }}
       >
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
           <div>
-            <p className="mb-3 uppercase text-slate-500" style={{ fontSize: 9, fontFamily: MONO, letterSpacing: 1 }}>
+            <p className="mb-3 uppercase" style={{ fontSize: 9, fontFamily: MONO, letterSpacing: 1, color: "#6080a0" }}>
               Technical
             </p>
-            <ul className="space-y-2 text-xs text-slate-300" style={{ fontFamily: MONO }}>
+            <ul className="space-y-2 text-xs" style={{ fontFamily: MONO, color: "#8aa0bf" }}>
               <li className="flex items-center gap-2">
                 <Dot color="#00e87a" /> ORB breakout
               </li>
@@ -155,10 +168,10 @@ export function LandingHowItWorksSection() {
             </ul>
           </div>
           <div>
-            <p className="mb-3 uppercase text-slate-500" style={{ fontSize: 9, fontFamily: MONO, letterSpacing: 1 }}>
+            <p className="mb-3 uppercase" style={{ fontSize: 9, fontFamily: MONO, letterSpacing: 1, color: "#6080a0" }}>
               Macro · Sector
             </p>
-            <ul className="space-y-2 text-xs text-slate-300" style={{ fontFamily: MONO }}>
+            <ul className="space-y-2 text-xs" style={{ fontFamily: MONO, color: "#8aa0bf" }}>
               <li className="flex items-center gap-2">
                 <Dot color="#00e87a" /> Bullish regime
               </li>
@@ -171,10 +184,10 @@ export function LandingHowItWorksSection() {
             </ul>
           </div>
           <div>
-            <p className="mb-3 uppercase text-slate-500" style={{ fontSize: 9, fontFamily: MONO, letterSpacing: 1 }}>
+            <p className="mb-3 uppercase" style={{ fontSize: 9, fontFamily: MONO, letterSpacing: 1, color: "#6080a0" }}>
               News · Internals
             </p>
-            <ul className="space-y-2 text-xs text-slate-300" style={{ fontFamily: MONO }}>
+            <ul className="space-y-2 text-xs" style={{ fontFamily: MONO, color: "#8aa0bf" }}>
               <li className="flex items-center gap-2">
                 <Dot color="#00e87a" /> Earnings beat
               </li>
@@ -190,7 +203,7 @@ export function LandingHowItWorksSection() {
         <div
           className="mt-5 flex flex-col gap-3 border-t border-white/10 pt-4 sm:flex-row sm:items-center sm:justify-between"
         >
-          <p className="max-w-md text-xs italic text-slate-500">
+          <p className="max-w-md text-xs italic" style={{ color: "#6080a0" }}>
             Strong technical setup. Macro uncertainty is the primary risk.
           </p>
           <span
