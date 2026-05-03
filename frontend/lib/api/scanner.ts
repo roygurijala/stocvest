@@ -16,6 +16,7 @@ const INTRADAY_FALLBACK_SYMBOLS = [
 ] as const;
 
 export interface GapIntelligenceCatalyst {
+  article_id?: string;
   headline: string;
   category: string;
   sentiment: string;

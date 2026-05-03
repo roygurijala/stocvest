@@ -4,6 +4,8 @@ Gap intelligence: merge pre-market gap candidates with news catalyst context.
 
 from __future__ import annotations
 
+import re
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -15,6 +17,8 @@ from stocvest.signals.news_catalyst_detector import NewsCatalystCandidate, NewsC
 NO_CATALYST_WARNING = (
     "No catalyst found — momentum gap only. Price-only gaps carry higher reversal risk."
 )
+
+SECONDARY_SHARED_CATALYST_HEADLINE = "Referenced in related news — see primary ticker"
 
 
 def calculate_gap_quality_score(
@@ -64,6 +68,54 @@ class _GapWork:
     company_name: str
     volume_vs_avg: float
     adv: float | None
+
+
+def _first_ticker_position_in_title(title: str, symbol: str) -> int | None:
+    sym = symbol.strip()
+    if not sym:
+        return None
+    m = re.search(rf"\b{re.escape(sym)}\b", title, re.IGNORECASE)
+    return m.start() if m else None
+
+
+def _pick_primary_gap_index(items: list[dict[str, Any]], indices: list[int]) -> int:
+    """Prefer ticker appearing earliest in the headline; tie-break on higher gap_quality_score."""
+    cat0 = items[indices[0]].get("catalyst")
+    headline = str(cat0.get("headline") or "") if isinstance(cat0, dict) else ""
+    scored: list[tuple[int, int, int]] = []
+    for i in indices:
+        sym = str(items[i].get("symbol") or "").strip().upper()
+        pos = _first_ticker_position_in_title(headline, sym)
+        pos_key = pos if pos is not None else 9999
+        gqs = int(items[i].get("gap_quality_score") or 0)
+        scored.append((pos_key, -gqs, i))
+    scored.sort()
+    return scored[0][2]
+
+
+def _dedupe_shared_catalyst_headlines(items: list[dict[str, Any]]) -> None:
+    """Same article/headline on multiple gap cards: keep primary headline on one symbol only."""
+    groups: dict[str, list[int]] = defaultdict(list)
+    for i, row in enumerate(items):
+        cat = row.get("catalyst")
+        if not isinstance(cat, dict):
+            continue
+        hid = str(cat.get("article_id") or "").strip()
+        hl = str(cat.get("headline") or "").strip().lower()
+        if not hl:
+            continue
+        key = hid if hid else f"headline:{hl}"
+        groups[key].append(i)
+    for idxs in groups.values():
+        if len(idxs) < 2:
+            continue
+        primary_i = _pick_primary_gap_index(items, idxs)
+        for i in idxs:
+            if i == primary_i:
+                continue
+            cat = items[i].get("catalyst")
+            if isinstance(cat, dict):
+                cat["headline"] = SECONDARY_SHARED_CATALYST_HEADLINE
 
 
 def _prepare_work_items(
@@ -121,6 +173,7 @@ def build_gap_intelligence_items(
         catalyst_payload: dict[str, Any] | None = None
         if best is not None:
             catalyst_payload = {
+                "article_id": best.article_id,
                 "headline": best.title,
                 "category": best.catalyst_type,
                 "sentiment": best.sentiment_label,
@@ -144,5 +197,6 @@ def build_gap_intelligence_items(
             }
         )
 
+    _dedupe_shared_catalyst_headlines(items)
     items.sort(key=lambda row: (row["has_catalyst"], row["gap_quality_score"]), reverse=True)
     return items[:10]

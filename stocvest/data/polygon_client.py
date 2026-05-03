@@ -407,7 +407,7 @@ class PolygonClient:
             )
             day_open = day_high = day_low = day_close = day_volume = day_vwap = None
 
-        name_raw = ticker.get("name")
+        name_raw = ticker.get("name") or ticker.get("company_name")
         company_name = str(name_raw).strip() if name_raw else None
 
         return Snapshot(

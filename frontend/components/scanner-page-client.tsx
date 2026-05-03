@@ -189,7 +189,7 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
           borderLeft: noCatSection ? `4px solid ${colors.caution}` : undefined
         }}
       >
-        <div style={{ display: "flex", flexDirection: "column", gap: "4px", minWidth: 0, width: "100%" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "2px", minWidth: 0, width: "100%" }}>
           <div
             style={{
               display: "flex",
@@ -201,7 +201,7 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
               minWidth: 0
             }}
           >
-            <strong style={{ fontSize: typography.scale.base }}>{item.symbol}</strong>
+            <span style={{ fontWeight: 600, fontSize: "15px", color: colors.text }}>{item.symbol}</span>
             <div style={{ display: "inline-flex", alignItems: "center", gap: spacing[1], flexShrink: 0, marginLeft: "auto" }}>
               {(() => {
                 const b = earningsBadgeFor(item.symbol);

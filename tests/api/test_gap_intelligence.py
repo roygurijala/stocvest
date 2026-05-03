@@ -6,6 +6,7 @@ from stocvest.data.models import NewsArticle, Snapshot
 from stocvest.signals.day_trading_scanner import PremarketGapCandidate
 from stocvest.signals.gap_intelligence import (
     NO_CATALYST_WARNING,
+    SECONDARY_SHARED_CATALYST_HEADLINE,
     build_gap_intelligence_items,
     calculate_gap_quality_score,
 )
@@ -171,3 +172,89 @@ def test_sorted_catalyst_first_then_none() -> None:
 def test_quality_score_calculation_correct() -> None:
     assert calculate_gap_quality_score(10.0, 2.0, True, 15.0) == 100
     assert calculate_gap_quality_score(2.0, 1.0, False, 5.0) == 30
+
+
+def test_duplicate_catalyst_headline_primary_first_in_title() -> None:
+    """Same article on two gaps: headline stays on ticker that appears first in the title."""
+    title = "GME and EBAY surge on merger talk"
+    art = NewsArticle(
+        article_id="dup-shared",
+        published_at=datetime.now(timezone.utc) - timedelta(hours=1),
+        title=title,
+        description="",
+        url="https://example.com",
+        source="Reuters",
+        tickers=["GME", "EBAY"],
+        keywords=[],
+    )
+    gaps = [
+        PremarketGapCandidate(
+            symbol="GME",
+            prev_close=100.0,
+            premarket_price=110.0,
+            gap_percent=10.0,
+            day_volume=900_000.0,
+            direction="up",
+            rank_score=10.0,
+        ),
+        PremarketGapCandidate(
+            symbol="EBAY",
+            prev_close=50.0,
+            premarket_price=55.0,
+            gap_percent=10.0,
+            day_volume=900_000.0,
+            direction="up",
+            rank_score=10.0,
+        ),
+    ]
+    snaps = {
+        "GME": _snap("GME", prev_close=100, price=110, vol=900_000, adv=900_000),
+        "EBAY": _snap("EBAY", prev_close=50, price=55, vol=900_000, adv=900_000),
+    }
+    items = build_gap_intelligence_items(gaps, snaps, [art])
+    by_sym = {row["symbol"]: row for row in items}
+    assert by_sym["GME"]["catalyst"]["headline"] == title
+    assert by_sym["EBAY"]["catalyst"]["headline"] == SECONDARY_SHARED_CATALYST_HEADLINE
+    assert by_sym["EBAY"]["catalyst"]["category"] == by_sym["GME"]["catalyst"]["category"]
+
+
+def test_duplicate_catalyst_headline_primary_by_gap_quality_when_no_ticker_in_title() -> None:
+    title = "Merger talks lift related names"
+    art = NewsArticle(
+        article_id="dup-q",
+        published_at=datetime.now(timezone.utc) - timedelta(hours=1),
+        title=title,
+        description="",
+        url="https://example.com",
+        source="Reuters",
+        tickers=["GME", "EBAY"],
+        keywords=[],
+    )
+    gaps = [
+        PremarketGapCandidate(
+            symbol="EBAY",
+            prev_close=50.0,
+            premarket_price=55.0,
+            gap_percent=10.0,
+            day_volume=900_000.0,
+            direction="up",
+            rank_score=10.0,
+        ),
+        PremarketGapCandidate(
+            symbol="GME",
+            prev_close=100.0,
+            premarket_price=110.0,
+            gap_percent=10.0,
+            day_volume=900_000.0,
+            direction="up",
+            rank_score=10.0,
+        ),
+    ]
+    snaps = {
+        "EBAY": _snap("EBAY", prev_close=50, price=55, vol=900_000, adv=900_000),
+        "GME": _snap("GME", prev_close=100, price=110, vol=900_000, adv=400_000),
+    }
+    items = build_gap_intelligence_items(gaps, snaps, [art])
+    by_sym = {row["symbol"]: row for row in items}
+    assert by_sym["GME"]["catalyst"]["headline"] == title
+    assert by_sym["EBAY"]["catalyst"]["headline"] == SECONDARY_SHARED_CATALYST_HEADLINE

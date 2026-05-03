@@ -47,6 +47,21 @@ def test_takeover_headline_tagged_merger_not_fda() -> None:
     d = NewsCatalystDetector(min_score=0.2)
     c = d.detect([_a("GameStop Eyes eBay Takeover", ["GME"])], limit=1)
     assert c and c[0].catalyst_type == "merger"
+    assert c[0].sentiment_label == "bullish"
+
+
+def test_acquisition_target_headline_stays_mixed() -> None:
+    d = NewsCatalystDetector(min_score=0.2)
+    c = d.detect([_a("ZZZ seen as acquisition target in sector rollup", ["Z"])], limit=1)
+    assert c and c[0].catalyst_type == "merger"
+    assert c[0].sentiment_label == "mixed"
+
+
+def test_agrees_to_buy_merger_acquirer_bullish() -> None:
+    d = NewsCatalystDetector(min_score=0.2)
+    c = d.detect([_a("Acme to acquire BetaCo in merger deal", ["A"])], limit=1)
+    assert c and c[0].catalyst_type == "merger"
+    assert c[0].sentiment_label == "bullish"
 
 
 def test_listicle_growth_stocks_headline_filtered() -> None:

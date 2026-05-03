@@ -106,7 +106,17 @@ class NewsCatalystDetector:
         "upgrade",
         "outperform",
         "breakthrough",
+        "eyes takeover",
+        "eyes acquisition",
+        "chases valuation",
+        "to acquire",
+        "agrees to buy",
+        "takeover bid",
+        "merger deal",
+        "buyout offer",
     )
+
+    _MERGER_TARGET_HINTS: tuple[str, ...] = ("acquisition target", "takeover target")
 
     _BEARISH: tuple[str, ...] = (
         "missed",
@@ -193,7 +203,16 @@ class NewsCatalystDetector:
     def _narrative_score(self, text: str) -> int:
         bull = sum(1 for k in self._BULLISH if k in text)
         bear = sum(1 for k in self._BEARISH if k in text)
+        # "Eyes … takeover" / "eyes … acquisition" (ticker often between words)
+        if re.search(r"\beyes\b.+\btakeover\b", text):
+            bull += 2
+        if re.search(r"\beyes\b.+\bacquisition\b", text):
+            bull += 2
         raw = 50 + 8 * bull - 8 * bear
+        if any(p in text for p in self._MERGER_TARGET_HINTS):
+            raw -= 10
+            # Target-of-deal language: dampen but stay out of bearish band
+            raw = max(46, min(64, raw))
         return max(22, min(88, raw))
 
     @staticmethod
