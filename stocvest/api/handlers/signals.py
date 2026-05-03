@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from stocvest.api.legal_copy import API_SIGNAL_DISCLAIMER
 from stocvest.api.response import bad_request, internal_error, ok
+from stocvest.api.services.composite_market_context import fetch_composite_market_status_payload_sync
 from stocvest.api.services.signal_dto import (
     parse_bar,
     parse_pdt_assessment,
@@ -36,6 +37,39 @@ from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
 
+MIN_COMPOSITE_LAYERS_REQUIRED = 3
+_COMPOSITE_INSUFFICIENT_MESSAGE = (
+    "Insufficient market data to generate a reliable signal. "
+    "Real-time data is required for at least 3 of 6 layers."
+)
+
+
+def _parse_composite_signal_item(item: object) -> dict[str, Any] | None:
+    if not isinstance(item, dict):
+        return None
+    layer_raw = item.get("layer")
+    if not isinstance(layer_raw, str) or not layer_raw.strip():
+        return None
+    layer = layer_raw.strip().lower()
+    status = str(item.get("status") or "").strip().lower()
+    score_raw = item.get("score")
+    score_f: float | None
+    try:
+        score_f = float(score_raw) if score_raw is not None else None
+    except (TypeError, ValueError):
+        score_f = None
+    try:
+        conf_f = float(item.get("confidence", 0.5))
+    except (TypeError, ValueError):
+        conf_f = 0.5
+    return {"layer": layer, "status": status, "score": score_f, "confidence": conf_f}
+
+
+def _composite_layer_available(parsed: dict[str, Any]) -> bool:
+    if parsed.get("status") == "unavailable":
+        return False
+    return parsed.get("score") is not None
+
 
 def swing_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
     _ = context
@@ -49,14 +83,29 @@ def swing_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[
         if not isinstance(signals_raw, list):
             return bad_request("Body field 'signals' must be a list.")
         regime = str(payload.get("regime") or "sideways")
+        symbol = str(payload.get("symbol") or "").strip().upper()
+        parsed_items = [p for p in (_parse_composite_signal_item(x) for x in signals_raw) if p is not None]
+        available_layers = [p for p in parsed_items if _composite_layer_available(p)]
+        if len(available_layers) < MIN_COMPOSITE_LAYERS_REQUIRED:
+            market_status = fetch_composite_market_status_payload_sync()
+            return ok(
+                {
+                    "symbol": symbol,
+                    "status": "insufficient_data",
+                    "available_layers": len(available_layers),
+                    "required_layers": MIN_COMPOSITE_LAYERS_REQUIRED,
+                    "message": _COMPOSITE_INSUFFICIENT_MESSAGE,
+                    "market_status": market_status,
+                    "disclaimer": API_SIGNAL_DISCLAIMER,
+                }
+            )
         signals = [
             LayerSignal(
-                layer=str(item["layer"]),
-                score=float(item["score"]),
-                confidence=float(item["confidence"]),
+                layer=str(p["layer"]),
+                score=float(p["score"]),
+                confidence=float(p["confidence"]),
             )
-            for item in signals_raw
-            if isinstance(item, dict)
+            for p in available_layers
         ]
         composite = CompositeScoreEngine().compute(signals, regime=regime)
         request_context = build_request_context(event)
@@ -78,7 +127,6 @@ def swing_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[
             ],
             "disclaimer": API_SIGNAL_DISCLAIMER,
         }
-        symbol = str(payload.get("symbol") or "").strip().upper()
         price_raw = payload.get("price_at_signal")
         pattern = str(payload.get("pattern") or "swing_composite")
         direction_out = ""

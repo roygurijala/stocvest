@@ -59,6 +59,7 @@ def test_signal_recorded_on_composite_generation(monkeypatch: pytest.MonkeyPatch
                 "signals": [
                     {"layer": "technical", "score": 0.7, "confidence": 0.9},
                     {"layer": "news", "score": 0.5, "confidence": 0.8},
+                    {"layer": "macro", "score": 0.45, "confidence": 0.75},
                 ],
             }
         )

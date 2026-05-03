@@ -14,8 +14,79 @@ from stocvest.api.handlers.signals import (
     swing_composite_handler,
     swing_synthesis_parse_handler,
 )
-from stocvest.api.services.signal_recorder import InMemorySignalRecorder, reset_signal_recorder_for_tests
+from stocvest.api.services.signal_recorder import (
+    InMemorySignalRecorder,
+    reset_signal_recorder_for_tests,
+)
 from stocvest.data.models import SignalRecord
+
+
+def test_swing_composite_insufficient_data_returns_200_without_recording(monkeypatch: pytest.MonkeyPatch) -> None:
+    reset_signal_recorder_for_tests()
+    mem = InMemorySignalRecorder()
+    monkeypatch.setattr("stocvest.api.handlers.signals.get_signal_recorder", lambda: mem)
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.fetch_composite_market_status_payload_sync",
+        lambda: {
+            "is_market_open": False,
+            "next_open": "Monday 09:30 AM ET",
+            "market_session": "closed",
+        },
+    )
+    event = {
+        "body": json.dumps(
+            {
+                "regime": "bull",
+                "symbol": "ZZZ",
+                "price_at_signal": 100.0,
+                "signals": [
+                    {"layer": "technical", "score": 0.7, "confidence": 0.9},
+                    {"layer": "news", "score": 0.5, "confidence": 0.8},
+                ],
+            }
+        )
+    }
+    response = swing_composite_handler(event, {})
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["status"] == "insufficient_data"
+    assert body["available_layers"] == 2
+    assert body["required_layers"] == 3
+    assert body["message"]
+    assert body["market_status"]["market_session"] == "closed"
+    assert body["market_status"]["is_market_open"] is False
+    assert body["disclaimer"]
+    assert mem.get_public_recent(limit=50) == []
+
+
+def test_swing_composite_unavailable_layers_reduce_available_count(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.fetch_composite_market_status_payload_sync",
+        lambda: {
+            "is_market_open": True,
+            "next_open": None,
+            "market_session": "regular",
+        },
+    )
+    event = {
+        "body": json.dumps(
+            {
+                "regime": "sideways",
+                "symbol": "X",
+                "signals": [
+                    {"layer": "technical", "score": 0.2, "confidence": 0.9},
+                    {"layer": "news", "status": "unavailable", "score": 0.5},
+                    {"layer": "macro", "status": "unavailable"},
+                    {"layer": "sector", "score": None, "confidence": 0.8},
+                ],
+            }
+        )
+    }
+    response = swing_composite_handler(event, {})
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["status"] == "insufficient_data"
+    assert body["available_layers"] == 1
 
 
 def test_swing_composite_handler_returns_bullish_signal_summary() -> None:

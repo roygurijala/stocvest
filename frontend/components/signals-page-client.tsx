@@ -2,7 +2,7 @@
 
 import type { CSSProperties } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { Brain } from "lucide-react";
+import { Brain, Clock } from "lucide-react";
 import {
   Legend,
   PolarAngleAxis,
@@ -28,6 +28,11 @@ import { coerceSnapshotForReferenceLevels } from "@/lib/snapshot-reference-level
 import { buildEvidenceFromSetup, type SignalEvidenceData } from "@/lib/signal-evidence";
 import { fetchLiveSignals, formatHorizonOutcome, type PublicSignal } from "@/lib/api/public-signals";
 import { LAYER_NAME_HINTS } from "@/lib/ui-tooltips";
+import {
+  buildSwingCompositeRequestBody,
+  isInsufficientCompositeResponse,
+  type SwingCompositeMarketStatus
+} from "@/lib/api/swing-composite";
 
 type LayerStatus = "Bullish" | "Bearish" | "Neutral" | "Unavailable";
 
@@ -87,6 +92,7 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
   const [histOutcomeFilter, setHistOutcomeFilter] = useState<
     "all" | "correct" | "incorrect" | "neutral" | "pending"
   >("all");
+  const [compositeCheck, setCompositeCheck] = useState<Record<string, unknown> | null>(null);
 
   const rawSnapshot = useMemo(() => {
     const sym = symbol.toUpperCase();
@@ -185,6 +191,48 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
     layerSignalSummary === "Bullish" ? colors.bullish : layerSignalSummary === "Bearish" ? colors.bearish : colors.caution;
   const setupDirectionForEvidence =
     layerSignalSummary === "Bullish" ? "long" : layerSignalSummary === "Bearish" ? "short" : "neutral";
+
+  useEffect(() => {
+    const sym = symbol.trim().toUpperCase();
+    if (!sym || tab !== "layers") {
+      setCompositeCheck(null);
+      return;
+    }
+    let cancelled = false;
+    const regime =
+      layerSignalSummary === "Bullish" ? "bull" : layerSignalSummary === "Bearish" ? "bear" : "sideways";
+    const body = buildSwingCompositeRequestBody({
+      symbol: sym,
+      regime,
+      rows: rows.map((r) => ({ status: r.status, score: r.score })),
+      snapshot
+    });
+    void fetch("/api/stocvest/signals/swing-composite", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+      credentials: "same-origin"
+    })
+      .then(async (res) => {
+        if (!res.ok) return null;
+        return res.json() as Promise<Record<string, unknown>>;
+      })
+      .then((j) => {
+        if (!cancelled) setCompositeCheck(j);
+      })
+      .catch(() => {
+        if (!cancelled) setCompositeCheck(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [symbol, tab, snapshot, rows, layerSignalSummary]);
+
+  const insufficientComposite: SwingCompositeMarketStatus | null = isInsufficientCompositeResponse(
+    compositeCheck
+  )
+    ? compositeCheck.market_status
+    : null;
 
   const radarData = rows.map((row, idx) => ({
     layer: row.name,
@@ -350,50 +398,107 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
       <div className="signals-grid grid grid-cols-1 gap-4 lg:grid-cols-[1.35fr_1fr] [&>*]:min-w-0">
         <section className="order-2 min-w-0 lg:order-1" style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
           <h3 style={{ marginTop: 0, marginBottom: spacing[2] }}>6-Layer Signal Breakdown</h3>
-          <div style={{ display: "grid", gap: spacing[2] }}>
-            {rows.map((row, rowIdx) => (
-              <article
-                key={row.name}
-                style={{
-                  display: "grid",
-                  gap: spacing[2],
-                  borderBottom: `1px solid ${colors.border}`,
-                  paddingBottom: spacing[2]
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2] }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: spacing[2], minWidth: 0 }}>
-                    <span>{row.icon}</span>
-                    <strong style={{ margin: 0 }}>{row.name}</strong>
-                  </div>
-                  <InfoTip
-                    text={(() => {
-                      const keys = ["technical", "news", "macro", "sector", "geopolitical", "internals"] as const;
-                      const k = keys[rowIdx];
-                      return k ? LAYER_NAME_HINTS[k] : "Layer readout for this symbol.";
-                    })()}
-                    label={row.name}
-                  />
-                </div>
-                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-                  <span
-                    className="text-sm"
+          {insufficientComposite ? (
+            <div
+              style={{
+                background: "rgba(245,197,66,0.06)",
+                border: "1px solid rgba(245,197,66,0.2)",
+                borderRadius: 12,
+                padding: 24
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "flex-start", gap: spacing[3] }}>
+                <Clock size={22} color="#f5c542" strokeWidth={2} style={{ flexShrink: 0, marginTop: 2 }} aria-hidden />
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "#f5c542" }}>Market Data Unavailable</p>
+                  <p
                     style={{
-                      borderRadius: borderRadius.full,
-                      padding: "2px 8px",
-                      background: "rgba(148,163,184,0.12)",
-                      color: statusColor(row.status, colors)
+                      margin: `${spacing[2]} 0 0 0`,
+                      fontSize: 13,
+                      lineHeight: 1.55,
+                      color: colors.textMuted
                     }}
                   >
-                    {row.status}
-                  </span>
-                  <span className="min-w-0 flex-1 text-sm leading-snug sm:text-sm" style={{ color: colors.textMuted }}>
-                    {row.explanation}
-                  </span>
+                    Real-time data is needed to generate a reliable signal. At least 3 of 6 layers must have live data.
+                  </p>
+                  {insufficientComposite.market_session === "closed" ? (
+                    <p
+                      style={{
+                        margin: `${spacing[2]} 0 0 0`,
+                        fontSize: 13,
+                        lineHeight: 1.55,
+                        color: colors.textMuted
+                      }}
+                    >
+                      Market is closed right now.
+                      {insufficientComposite.next_open ? ` Next session: ${insufficientComposite.next_open}.` : null}
+                    </p>
+                  ) : null}
+                  {insufficientComposite.market_session === "pre_market" ||
+                  insufficientComposite.market_session === "after_hours" ? (
+                    <p
+                      style={{
+                        margin: `${spacing[2]} 0 0 0`,
+                        fontSize: 13,
+                        lineHeight: 1.55,
+                        color: colors.textMuted
+                      }}
+                    >
+                      {insufficientComposite.market_session === "pre_market"
+                        ? "Pre-market data is limited."
+                        : "After-hours data is limited."}{" "}
+                      Full signals are available at market open 9:30 AM ET.
+                    </p>
+                  ) : null}
                 </div>
-              </article>
-            ))}
-          </div>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: spacing[2] }}>
+              {rows.map((row, rowIdx) => (
+                <article
+                  key={row.name}
+                  style={{
+                    display: "grid",
+                    gap: spacing[2],
+                    borderBottom: `1px solid ${colors.border}`,
+                    paddingBottom: spacing[2]
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2] }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: spacing[2], minWidth: 0 }}>
+                      <span>{row.icon}</span>
+                      <strong style={{ margin: 0 }}>{row.name}</strong>
+                    </div>
+                    <InfoTip
+                      text={(() => {
+                        const keys = ["technical", "news", "macro", "sector", "geopolitical", "internals"] as const;
+                        const k = keys[rowIdx];
+                        return k ? LAYER_NAME_HINTS[k] : "Layer readout for this symbol.";
+                      })()}
+                      label={row.name}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                    <span
+                      className="text-sm"
+                      style={{
+                        borderRadius: borderRadius.full,
+                        padding: "2px 8px",
+                        background: "rgba(148,163,184,0.12)",
+                        color: statusColor(row.status, colors)
+                      }}
+                    >
+                      {row.status}
+                    </span>
+                    <span className="min-w-0 flex-1 text-sm leading-snug sm:text-sm" style={{ color: colors.textMuted }}>
+                      {row.explanation}
+                    </span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="order-1 min-w-0 lg:order-2" style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>

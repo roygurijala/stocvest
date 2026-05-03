@@ -4,7 +4,7 @@
 `CONTEXT.md` holds **status-at-a-glance**, **what’s implemented**, **near-term ops** (Terraform, secrets, CI, legal), **legal rules**, and **session rules**.  
 **This file** holds **planned work only**: themes, sub-items, and notes—**without** repeating the CONTEXT status table or §3 pending list.
 
-**Last updated:** 2026-05-03 (B3/B4 shipped; landing polish `313db1e`; **infra:** `terraform plan` 19/14/2 vs gate 7/2/2 — apply skipped 2026-05-03; EventBridge rule verified ENABLED in AWS; B13, P5)
+**Last updated:** 2026-05-02 (swing composite insufficient-data gate + signals UI; PF6)
 
 ---
 
@@ -69,6 +69,7 @@ Tracked in **`CONTEXT.md` §3** only (Terraform apply, GitHub/AWS/Vercel secrets
 | PF3 | **Scanner: ORB EXPIRED badge overlap** | Resolved | Intraday setup card: badge row layout (`flex-wrap`, `margin-left: auto` on amber badge), dimmed card + disabled **Open order entry** styling, italic ET copy line. Done 2026-05-02 (with B9 polish). |
 | PF4 | **Scanner: low-quality intraday / micro-cap gaps** | Resolved | Backend: RVOL vs prior-day volume, min score 0.5 (50%), ORB only before 10:00 ET + first-30m volume vs ADV, optional `liquidity_by_symbol` + `company_name` on setups; gap scan requires `prev_day_volume` ≥ 1M when present. Frontend: snapshots → liquidity, 120×1m bars, company on card. Done 2026-05-02. |
 | PF5 | **Gap Intelligence: catalyst matching** | Done 2026-05-03 | **Cause:** Tight 24h lookback vs evening/weekend views, global-only Polygon news missing per-ticker articles, broad substring noise (e.g. “this week”). **Fix:** `_catalyst_lookback_hours_at` / `_get_catalyst_lookback_hours` (24h RTH Mon–Fri 9:30–16:00 ET, else 48h); `collect_news_for_gap_intelligence` merges global + per-symbol `get_news(ticker=)` with dedupe; `NewsCatalystDetector` listicle regexes + trimmed noise list + optional `company_name` headline fallback (0.8× narrative penalty vs ticker match); debug log when no catalyst. **Tests:** `tests/signals/test_gap_intelligence.py`, scanner handler assertion on per-symbol fetches. |
+| PF6 | **Swing composite: minimum live layers + insufficient UI** | Done 2026-05-02 | **`POST /v1/signals/swing/composite`:** require **3** layers with `score` set and `status` ≠ `unavailable` before composite/confluence/record/alert; otherwise HTTP **200** with `status: insufficient_data`, counts, message, `market_status` (`is_market_open`, `next_open`, `market_session` from Polygon via `composite_market_context.py`). **Frontend:** `POST /api/stocvest/signals/swing-composite`, `lib/api/swing-composite.ts`, signals page amber callout (Lucide clock). **Tests:** `tests/api/handlers/test_signals.py`, `test_signal_recorder` composite payload uses three layers. |
 
 ---
 
