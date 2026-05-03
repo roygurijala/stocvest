@@ -4,7 +4,7 @@
 `CONTEXT.md` holds **status-at-a-glance**, **what’s implemented**, **near-term ops** (Terraform, secrets, CI, legal), **legal rules**, and **session rules**.  
 **This file** holds **planned work only**: themes, sub-items, and notes—**without** repeating the CONTEXT status table or §3 pending list.
 
-**Last updated:** 2026-05-03 (Gap Intelligence catalyst PF5)
+**Last updated:** 2026-05-02 (B1 Journal automation)
 
 ---
 
@@ -27,7 +27,7 @@ Tracked in **`CONTEXT.md` §3** only (Terraform apply, GitHub/AWS/Vercel secrets
 
 | ID | Theme | Status | Notes |
 |----|--------|--------|--------|
-| B1 | **Journal automation** | Not done | On fill (all adapters): create entry with symbol, side, qty, fill price, time, broker, day-trade flag, optional `signal_id` / context from order flow. Exit updates when position flat; link to signal when user acted from scanner/signals UI. |
+| B1 | **Journal automation** | Done 2026-05-02 · commit: fe3f671 | Auto-capture on fill, auto-close on exit, optional `signal_id` / `pattern` / `confluence_score` / `signal_strength` / `signal_direction` on `POST /v1/orders/submit`, `GET /v1/journal/analytics`, entry GET/PATCH, journal page wired to API + scanner → portfolio order prefill + confirmation modal signal block. |
 | B2 | **Onboarding** | Not done | Wizard: value prop, broker connect, first-signal walkthrough, empty states. **Mandatory** legal acknowledgment (separate from generic ToS view) before trading features. |
 | B3 | **Alerts delivery** | Not done | `Alerts` table exists; implement channels: email, push (later), SMS for critical PDT, webhooks for power users; tie to scanner/signal triggers. |
 | B4 | **Watchlists** | Not done | CRUD named lists; scanner + briefing inputs use user watchlist instead of hardcoded symbols where applicable; wire existing Dynamo watchlist contract. |
@@ -46,7 +46,7 @@ Tracked in **`CONTEXT.md` §3** only (Terraform apply, GitHub/AWS/Vercel secrets
 
 | ID | Theme | Status | Notes |
 |----|--------|--------|--------|
-| D1 | **Signal outcome pipeline** | In progress | **Shipped in repo:** `SignalRecord` + DynamoDB `SignalHistory` (GSI `scope_generated_at`), `signal_recorder.record_signal` / `resolve_signals` / `get_signal_history`, auto-record on `POST /v1/signals/swing/composite` when `symbol` + `price_at_signal` present, `GET /v1/signals/recent` (50 public rows + outcome fields), summary from 1d outcomes, Lambda module `signal_resolution`, journal optional `signal_id` / `signal_direction` / `signal_generated_at`, dashboard Signal history tab + `/dashboard/performance` + journal signal chip. **Terraform:** EventBridge **`stocvest-signal-resolution`** `rate(30 minutes)` → resolution Lambda in `infra/eventbridge_signal_resolution.tf` — **apply in AWS** per `docs/D1_SIGNAL_RESOLUTION_SCHEDULE.md`. **DynamoDB journal + PDT:** `TradeJournal` / `PDTState` tables in `infra/dynamodb.tf`, Lambda env `STOCVEST_TRADE_JOURNAL_TABLE` / `STOCVEST_PDT_STATE_TABLE`, IAM + outputs; `config.py` defaults `TradeJournal` / `PDTState`. **Still open:** auto-attach `signal_id` from order flow (tie to B1), optional `GET` by `signal_id`, weekly horizon if desired. |
+| D1 | **Signal outcome pipeline** | In progress | **Shipped in repo:** `SignalRecord` + DynamoDB `SignalHistory` (GSI `scope_generated_at`), `signal_recorder.record_signal` / `resolve_signals` / `get_signal_history`, auto-record on `POST /v1/signals/swing/composite` when `symbol` + `price_at_signal` present, `GET /v1/signals/recent` (50 public rows + outcome fields), summary from 1d outcomes, Lambda module `signal_resolution`, journal optional `signal_id` / `signal_direction` / `signal_generated_at`, dashboard Signal history tab + `/dashboard/performance` + journal signal chip. **Terraform:** EventBridge **`stocvest-signal-resolution`** `rate(30 minutes)` → resolution Lambda in `infra/eventbridge_signal_resolution.tf` — **apply in AWS** per `docs/D1_SIGNAL_RESOLUTION_SCHEDULE.md`. **DynamoDB journal + PDT:** `TradeJournal` / `PDTState` tables in `infra/dynamodb.tf`, Lambda env `STOCVEST_TRADE_JOURNAL_TABLE` / `STOCVEST_PDT_STATE_TABLE`, IAM + outputs; `config.py` defaults `TradeJournal` / `PDTState`. **B1:** order submit passes optional signal fields → journal rows. **Still open:** optional `GET` by `signal_id`, weekly horizon if desired. |
 | D2 | **Backtesting** | Not done | Historical Polygon bars; per-setup and per-regime stats; no promise of future performance in UI. |
 | D3 | **Weight / prompt iteration** | Not done | Optional: weekly analytics, suggested layer weight or prompt changes, **human approve** before apply; store `prompt_version` on generations; move prompts toward Secrets Manager (`CONTEXT.md` already flags this under platform). |
 | D4 | **Audit trail** | Not done | Immutable order/PDT/admin logs to durable storage (e.g. S3 Glacier-class); retention policy to align with counsel. |

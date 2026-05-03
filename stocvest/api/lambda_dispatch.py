@@ -162,16 +162,9 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
         )
 
     if module == "journal":
-        from stocvest.api.handlers.journal import journal_create_entry_handler, journal_list_entries_handler
+        from stocvest.api.handlers.journal import journal_dispatch_handler
 
-        return _dispatch_http_routes(
-            event,
-            context,
-            {
-                "GET /v1/journal/entries": journal_list_entries_handler,
-                "POST /v1/journal/entries": journal_create_entry_handler,
-            },
-        )
+        return journal_dispatch_handler(event, context)
 
     if module == "pdt":
         from stocvest.api.handlers.pdt import pdt_status_handler

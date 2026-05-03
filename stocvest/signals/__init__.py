@@ -48,11 +48,13 @@ from stocvest.signals.pdt_tracker import (
     PDTUserState,
 )
 from stocvest.signals.trade_journal import (
+    JournalAnalytics,
     TradeJournal,
     TradeJournalEntry,
     TradeJournalEntryStatus,
     TradeOpeningSide,
     close_trade_journal_entry,
+    compute_journal_analytics,
     validate_trade_journal_entry,
 )
 
@@ -98,11 +100,13 @@ __all__ = [
     "SynthesisVerdict",
     "SentimentResult",
     "TradeAction",
+    "JournalAnalytics",
     "TradeJournal",
     "TradeJournalEntry",
     "TradeJournalEntryStatus",
     "TradeOpeningSide",
     "close_trade_journal_entry",
+    "compute_journal_analytics",
     "validate_trade_journal_entry",
     "VWAPUpdate",
     "confluence_result_to_response_fields",

@@ -6,6 +6,15 @@ import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import type { BrokerKind, OrderType, TimeInForce } from "@/lib/api/brokers";
 
+/** Optional context when the user opens order entry from a scanner / signal card. */
+export interface OrderSignalContext {
+  signal_id?: string | null;
+  signal_strength?: number | null;
+  confluence_score?: number | null;
+  pattern?: string | null;
+  signal_direction?: string | null;
+}
+
 export interface OrderDraft {
   broker: BrokerKind;
   accountId: string;
@@ -19,6 +28,7 @@ export interface OrderDraft {
   clientOrderId: string;
   availableCash: number;
   isDayTrade: boolean;
+  signalContext?: OrderSignalContext | null;
 }
 
 interface ValidationShape {
@@ -84,9 +94,37 @@ export function OrderConfirmationModal({ open, draft, tradingMode, onClose, onAc
   const canConfirm = readyMs >= 2000;
   const waitLabel = canConfirm ? "Confirm Order" : `Confirm Order (${Math.ceil((2000 - readyMs) / 1000)}s)`;
 
+  function signalPayloadFromDraft(d: OrderDraft): Record<string, string | number> {
+    const sc = d.signalContext;
+    if (!sc) return {};
+    const out: Record<string, string | number> = {};
+    if (sc.signal_id) out.signal_id = sc.signal_id;
+    if (typeof sc.signal_strength === "number" && Number.isFinite(sc.signal_strength)) {
+      out.signal_strength = Math.round(sc.signal_strength);
+    }
+    if (typeof sc.confluence_score === "number" && Number.isFinite(sc.confluence_score)) {
+      out.confluence_score = Math.round(sc.confluence_score);
+    }
+    if (sc.pattern && String(sc.pattern).trim()) out.pattern = String(sc.pattern).trim();
+    if (sc.signal_direction && String(sc.signal_direction).trim()) {
+      out.signal_direction = String(sc.signal_direction).trim().toLowerCase();
+    }
+    return out;
+  }
+
+  const showSignalCallout =
+    !!draft.signalContext &&
+    !!(
+      draft.signalContext.signal_id ||
+      draft.signalContext.pattern ||
+      typeof draft.signalContext.signal_strength === "number" ||
+      typeof draft.signalContext.confluence_score === "number"
+    );
+
   async function runConfirm() {
     if (!draft) return;
     setInlineError(null);
+    const signalExtra = signalPayloadFromDraft(draft);
     const body = {
       symbol: draft.symbol,
       side: draft.side,
@@ -99,7 +137,8 @@ export function OrderConfirmationModal({ open, draft, tradingMode, onClose, onAc
       account_id: draft.accountId,
       broker: draft.broker,
       available_cash: draft.availableCash,
-      is_day_trade: draft.isDayTrade
+      is_day_trade: draft.isDayTrade,
+      ...signalExtra
     };
     const v = await fetch("/api/stocvest/orders/validate", {
       method: "POST",
@@ -173,6 +212,37 @@ export function OrderConfirmationModal({ open, draft, tradingMode, onClose, onAc
           <p style={{ color: colors.caution, marginTop: spacing[2] }}>⚠️ PDT: 2 of 3 day trades used</p>
         ) : null}
         {pdtUsed >= 3 ? <p style={{ color: colors.bearish, marginTop: spacing[2] }}>🔴 PDT: Limit reached — blocked</p> : null}
+        {showSignalCallout ? (
+          <div
+            style={{
+              marginTop: spacing[3],
+              fontSize: "12px",
+              lineHeight: 1.45,
+              padding: 12,
+              borderRadius: 8,
+              background: "rgba(0,180,255,0.04)",
+              border: "1px solid rgba(0,180,255,0.1)"
+            }}
+          >
+            <p style={{ margin: 0, fontWeight: 700, color: colors.text }}>📊 Acting on signal</p>
+            <p style={{ margin: `${spacing[1]} 0 0`, color: colors.text }}>
+              {draft.symbol}
+              {draft.signalContext?.signal_direction ? ` · ${draft.signalContext.signal_direction}` : ""}
+              {typeof draft.signalContext?.signal_strength === "number"
+                ? ` · ${Math.round(draft.signalContext.signal_strength)}% strength`
+                : ""}
+            </p>
+            <p style={{ margin: `${spacing[1]} 0 0`, color: colors.textMuted }}>
+              {draft.signalContext?.pattern ?? "—"}
+              {typeof draft.signalContext?.confluence_score === "number"
+                ? ` · Confluence ${Math.round(draft.signalContext.confluence_score)}`
+                : ""}
+            </p>
+            <p style={{ margin: `${spacing[2]} 0 0`, color: colors.textMuted }}>
+              This trade will be linked to this signal in your journal.
+            </p>
+          </div>
+        ) : null}
         <hr style={{ borderColor: colors.border, margin: `${spacing[3]} 0` }} />
         <p style={{ fontSize: typography.scale.sm, color: colors.textMuted, lineHeight: 1.5 }}>
           This order will be placed directly in your personal brokerage account. STOCVEST does not provide investment advice and is not

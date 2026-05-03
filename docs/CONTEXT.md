@@ -2,9 +2,9 @@
 
 **Read this file at the start of each session.** It summarizes what exists, what is pending, and what is planned—without duplicating the whole repo tree.
 
-**Last updated:** 2026-05-03  
+**Last updated:** 2026-05-02  
 **Repo:** https://github.com/roygurijala/stocvest  
-**Test baseline (regression gate — must match §13):** Backend `pytest tests/ -q` → **426 passed**, **3 skipped**. Frontend `npm run test` → **46 passed** (17 test files). **`npm run build`** last verified: success.
+**Test baseline (regression gate — must match §13):** Backend `pytest tests/ -q` → **434 passed**, **3 skipped**. Frontend `npm run test` → **49 passed** (17 test files). **`npm run build`** last verified: success.
 
 ---
 
@@ -17,6 +17,7 @@
 | Brokers | ✅ | Mock, IBKR, E*TRADE adapters; factory; PDT hook |
 | HTTP API (Lambdas) | ✅ | Market, signals, brokers, portfolio, scanner, journal, PDT, orders, auth routes |
 | Frontend (Next.js) | ✅ | Auth, dashboard redesign, **Gap Intelligence** scanner panel + structured **morning brief** (7:45–10:00 ET); scanner/signals/portfolio/journal/options/crypto/futures, landing, legal pages |
+| Journal automation (B1) | ✅ | `journal_order_hooks` on order submit (open/close rows, optional signal fields), `GET /v1/journal/analytics`, entry GET/PATCH, journal UI + scanner → portfolio order prefill |
 | Order safety (Step 8) | ✅ | `order_safety.py`, validate/submit BFF, confirmation modal, paper/live mode |
 | Legal compliance pass | ✅ | `GlobalDisclaimer`, `SignalDisclaimerChip`, signal-oriented copy, public API field names + `disclaimer` |
 | D1 Signal outcome pipeline | 🚧 | `SignalRecord`, `SignalHistory` table + `signal_recorder`, composite persistence, resolution Lambda module, recent/summary + UI; EventBridge **rate(30 minutes)** → `signal_resolution` in `infra/eventbridge_signal_resolution.tf` (**`terraform apply`** to enable) — see `docs/D1_SIGNAL_RESOLUTION_SCHEDULE.md` |
@@ -28,10 +29,10 @@
 ## 2. Implemented (where to look)
 
 **Backend (`stocvest/`)**  
-`data/` (models incl. **`SignalRecord`**, **`EconomicCalendarEvent`**, Polygon — snapshot parser may drop `day` OHLC/VWAP vs **`lastTrade.p` only when last is a positive price and any session field is **>5×** off; missing last keeps session bar; **`get_economic_calendar_for_day`** on Benzinga economics when tier allows), `indicators/`, `signals/` (sentiment, macro, geo, composite, AI synthesis, day-trading scanner, **`confluence`** multi-signal alignment score in `confluence.py`, **`gap_intelligence`** + dynamic news lookback + **`news_catalyst_detector`** listicle-aware noise + company-name headline fallback, **`morning_brief`**, briefing markdown generator still in `daily_briefing.py` for legacy tests), `brokers/` (adapters, gateways, OAuth), `api/` (handlers incl. **`signal_resolution`**, **`services/signal_recorder.py`**, **`services/morning_brief_fetch.py`**, **`services/gap_intelligence_news.py`** global + per-ticker Polygon news merge, **`POST /v1/scanner/gap-intelligence`**, structured **`POST /v1/signals/day/briefing`** / **`POST /v1/scanner/briefing`**, auth, `legal_copy.py`, order safety integration).
+`data/` (models incl. **`SignalRecord`**, **`EconomicCalendarEvent`**, Polygon — snapshot parser may drop `day` OHLC/VWAP vs **`lastTrade.p` only when last is a positive price and any session field is **>5×** off; missing last keeps session bar; **`get_economic_calendar_for_day`** on Benzinga economics when tier allows), `indicators/`, `signals/` (sentiment, macro, geo, composite, AI synthesis, day-trading scanner, **`confluence`** multi-signal alignment score in `confluence.py`, **`gap_intelligence`** + dynamic news lookback + **`news_catalyst_detector`** listicle-aware noise + company-name headline fallback, **`morning_brief`**, **`trade_journal`** + **`compute_journal_analytics`**, briefing markdown generator still in `daily_briefing.py` for legacy tests), `brokers/` (adapters, gateways, OAuth), `api/` (handlers incl. **`signal_resolution`**, **`services/signal_recorder.py`**, **`services/morning_brief_fetch.py`**, **`services/journal_order_hooks.py`** (auto journal on fill/close; swallowed errors), **`services/gap_intelligence_news.py`** global + per-ticker Polygon news merge, **`POST /v1/scanner/gap-intelligence`**, structured **`POST /v1/signals/day/briefing`** / **`POST /v1/scanner/briefing`**, journal **`GET /v1/journal/analytics`** + entry by id + PATCH notes, auth, `legal_copy.py`, order safety integration).
 
 **Frontend (`frontend/`)**  
-App router pages (dashboard incl. **`/dashboard/performance`**, scanner, signals with **Signal history** tab, portfolio, journal, settings, earnings, public `/performance`, terms, etc.), **landing** (server **`app/page.tsx`** fetches **`GET /v1/signals/recent?landing=true`** + performance summary with **30m** revalidate; **`landing-signals.ts`**, **`LandingSignalExplorer`**, **`LandingBeforeAfterSection`**, **`LandingActivityFeedSection`**, `LandingHowItWorksSection`, `LandingPerformanceSection` + optional **`pattern_breakdown`**; no client polling on `/`), design system + theme, API clients under `lib/api/` (incl. **`public-signals.ts`**, client-safe **`fetch-symbol-snapshot.ts`**), **`lib/snapshot-reference-levels.ts`** (same **5×** + valid-last guard as backend), Crisp when `NEXT_PUBLIC_CRISP_WEBSITE_ID` is set. **Sign out** redirects to **`/`** (landing). Scanner: **`fetchScannerOverview`** uses **`POST /v1/scanner/gap-intelligence`**, **`POST /v1/signals/day/setups`** (with snapshots + regime for confluence), structured **`POST /v1/signals/day/briefing`** (context includes gap items + intraday setups); intraday setup cards, signal evidence modal, gap cards, and dashboard morning brief show **confluence** when `is_confluence_alert`.
+App router pages (dashboard incl. **`/dashboard/performance`**, scanner, signals with **Signal history** tab, portfolio, **journal** with analytics + cumulative P&amp;L + trade table, settings, earnings, public `/performance`, terms, etc.), **landing** (server **`app/page.tsx`** fetches **`GET /v1/signals/recent?landing=true`** + performance summary with **30m** revalidate; **`landing-signals.ts`**, **`LandingSignalExplorer`**, **`LandingBeforeAfterSection`**, **`LandingActivityFeedSection`**, `LandingHowItWorksSection`, `LandingPerformanceSection` + optional **`pattern_breakdown`**; no client polling on `/`), design system + theme, API clients under `lib/api/` (incl. **`public-signals.ts`**, client-safe **`fetch-symbol-snapshot.ts`**), **`lib/snapshot-reference-levels.ts`** (same **5×** + valid-last guard as backend), BFF **`POST /api/stocvest/journal/entries`** for client-side manual journal rows, Crisp when `NEXT_PUBLIC_CRISP_WEBSITE_ID` is set. **Sign out** redirects to **`/`** (landing). Scanner: **`fetchScannerOverview`** uses **`POST /v1/scanner/gap-intelligence`**, **`POST /v1/signals/day/setups`** (with snapshots + regime for confluence), structured **`POST /v1/signals/day/briefing`** (context includes gap items + intraday setups); intraday setup cards, signal evidence modal, gap cards, and dashboard morning brief show **confluence** when `is_confluence_alert`; **Open order entry** deep-links to **`/dashboard/portfolio`** with symbol + optional signal query params.
 
 **Docs**  
 `docs/API_CONTRACTS.md` — HTTP + broker contracts. **`docs/BACKLOG.md`** — detailed planned work (no duplicate of this file’s status tables). **Detailed file-by-file history was removed from this file** to avoid drift; use README + git.
@@ -74,7 +75,7 @@ App router pages (dashboard incl. **`/dashboard/performance`**, scanner, signals
 
 **Full prioritized themes, sub-tasks, and IDs:** [`docs/BACKLOG.md`](./BACKLOG.md) — **single source** for planned work so this file stays short.
 
-**Directional summary:** After infra/broker production readiness (`§3`), focus shifts to **journal automation**, **onboarding + legal ack**, **alerts**, **watchlist-driven scanner**, **subscriptions**, **sector/internals**, **signal outcome pipeline + backtesting**, **Phase 7 hardening**, and the post-beta **trade brief** UI (`BACKLOG.md` sections B, D, P, G, M, T).
+**Directional summary:** After infra/broker production readiness (`§3`), focus shifts to **onboarding + legal ack**, **alerts**, **watchlist-driven scanner**, **subscriptions**, **sector/internals**, **signal outcome pipeline + backtesting**, **Phase 7 hardening**, and the post-beta **trade brief** UI (`BACKLOG.md` sections B, D, P, G, M, T). **B1 journal automation** is shipped (see status table).
 
 ---
 
@@ -216,8 +217,8 @@ Report exact counts. If any count dropped, fix before proceeding to documentatio
 
 | Suite | Command | Last verified |
 |-------|---------|---------------|
-| Backend | `pytest tests/ -q` | **426 passed**, **3 skipped** |
-| Frontend tests | `cd frontend && npm run test` | **46 passed** (17 files) |
+| Backend | `pytest tests/ -q` | **434 passed**, **3 skipped** |
+| Frontend tests | `cd frontend && npm run test` | **49 passed** (17 files) |
 | Frontend build | `cd frontend && npm run build` | **success** |
 
 ---

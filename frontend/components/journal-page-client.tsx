@@ -1,116 +1,187 @@
 "use client";
 
-import { Fragment, useMemo, useState, useTransition } from "react";
-import type { JournalEntryPayload } from "@/lib/api/contracts";
+import Link from "next/link";
+import { Fragment, useEffect, useMemo, useState, useTransition } from "react";
+import type { CreateJournalEntryRequest, JournalAnalyticsPayload, JournalEntryPayload } from "@/lib/api/contracts";
+import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
 import { Area, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { InfoTip } from "@/components/info-tip";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { AVG_LOSER_TIP, AVG_WINNER_TIP, EXPECTANCY_TIP, STREAK_TIP, WIN_RATE_TIP } from "@/lib/ui-tooltips";
-import { fetchLiveSignals, formatHorizonOutcome, type PublicSignal } from "@/lib/api/public-signals";
 
 interface JournalPageClientProps {
   initialEntries: JournalEntryPayload[];
+  initialAnalytics: JournalAnalyticsPayload;
+  connectedBroker: string | null;
 }
 
-function signalChipLabel(entry: JournalEntryPayload): string {
-  if (!entry.signal_id) return "Manual entry";
-  const raw = (entry.signal_direction || "signal").toLowerCase();
-  const dir = raw === "bullish" || raw === "bearish" || raw === "neutral" ? raw : "signal";
-  const t = entry.signal_generated_at
-    ? new Date(entry.signal_generated_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
-    : "";
-  return `${entry.symbol} ${dir}${t ? ` ${t}` : ""}`;
+function setupChipMeta(setupType: string | null | undefined, strategyTags: string[]): { label: string; gold?: boolean } {
+  const raw = (setupType || strategyTags[0] || "").trim().toLowerCase();
+  if (!raw) return { label: "Manual" };
+  if (raw.includes("confluence")) return { label: "CONFLUENCE", gold: true };
+  const map: Record<string, string> = {
+    orb_breakout_long: "ORB Long",
+    orb_breakout_short: "ORB Short",
+    vwap_reclaim: "VWAP",
+    pre_market_gap: "Gap",
+    gap_intelligence: "Gap",
+    intraday_pattern: "Intraday",
+    intraday_setup: "Intraday"
+  };
+  return { label: map[raw] || raw.replace(/_/g, " ").slice(0, 18) };
 }
 
-export function JournalPageClient({ initialEntries }: JournalPageClientProps) {
+function positionSideLabel(openingSide: "buy" | "sell"): string {
+  return openingSide === "buy" ? "Long" : "Short";
+}
+
+function statusChip(
+  entry: JournalEntryPayload,
+  colors: { bullish: string; bearish: string; caution: string; textMuted: string; border: string }
+): { label: string; bg: string; fg: string; border: string } {
+  if (entry.status === "open") {
+    return { label: "OPEN", bg: "rgba(245,158,11,0.15)", fg: colors.caution, border: "rgba(245,158,11,0.45)" };
+  }
+  if (entry.status === "cancelled") {
+    return { label: "CXL", bg: "transparent", fg: colors.textMuted, border: colors.border };
+  }
+  const o = entry.outcome;
+  if (o === "win") return { label: "WIN", bg: "rgba(34,197,94,0.15)", fg: colors.bullish, border: "rgba(34,197,94,0.45)" };
+  if (o === "loss") return { label: "LOSS", bg: "rgba(239,68,68,0.12)", fg: colors.bearish, border: "rgba(239,68,68,0.45)" };
+  return { label: "B/E", bg: "rgba(148,163,184,0.12)", fg: colors.textMuted, border: colors.border };
+}
+
+function unrealizedPnlUsd(entry: JournalEntryPayload, last: number | null | undefined): number | null {
+  if (entry.status !== "open" || typeof entry.entry_price_avg !== "number" || last == null || !Number.isFinite(last)) {
+    return null;
+  }
+  const q = entry.quantity;
+  if (entry.opening_side === "buy") {
+    return (last - entry.entry_price_avg) * q;
+  }
+  return (entry.entry_price_avg - last) * q;
+}
+
+export function JournalPageClient({ initialEntries, initialAnalytics, connectedBroker }: JournalPageClientProps) {
   const { colors } = useTheme();
   const [entries, setEntries] = useState(initialEntries);
+  const [analytics, setAnalytics] = useState(initialAnalytics);
   const [sortDesc, setSortDesc] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const [signalDetail, setSignalDetail] = useState<PublicSignal | null>(null);
-  const [signalDetailOpen, setSignalDetailOpen] = useState(false);
+  const [quoteBySymbol, setQuoteBySymbol] = useState<Record<string, number | null>>({});
+
+  useEffect(() => {
+    setEntries(initialEntries);
+  }, [initialEntries]);
+
+  useEffect(() => {
+    setAnalytics(initialAnalytics);
+  }, [initialAnalytics]);
 
   const sorted = useMemo(() => {
     return [...entries].sort((a, b) =>
-      sortDesc
-        ? Date.parse(b.opened_at) - Date.parse(a.opened_at)
-        : Date.parse(a.opened_at) - Date.parse(b.opened_at)
+      sortDesc ? Date.parse(b.opened_at) - Date.parse(a.opened_at) : Date.parse(a.opened_at) - Date.parse(b.opened_at)
     );
   }, [entries, sortDesc]);
 
-  const stats = useMemo(() => {
-    const closed = entries.filter((e) => typeof e.pnl_realized_usd === "number");
-    const winners = closed.filter((e) => (e.pnl_realized_usd || 0) > 0);
-    const losers = closed.filter((e) => (e.pnl_realized_usd || 0) < 0);
-    const winRate = closed.length ? (winners.length / closed.length) * 100 : 0;
-    const avgWinner = winners.length ? winners.reduce((s, e) => s + (e.pnl_realized_usd || 0), 0) / winners.length : 0;
-    const avgLoser = losers.length ? losers.reduce((s, e) => s + (e.pnl_realized_usd || 0), 0) / losers.length : 0;
-    const expectancy = (winRate / 100) * avgWinner + (1 - winRate / 100) * avgLoser;
-    return { winRate, totalTrades: entries.length, avgWinner, avgLoser, expectancy };
+  const openSymbolsKey = useMemo(() => {
+    const syms = new Set<string>();
+    for (const e of entries) {
+      if (e.status === "open" && typeof e.entry_price_avg === "number") {
+        syms.add(e.symbol.trim().toUpperCase());
+      }
+    }
+    return [...syms].sort().join(",");
   }, [entries]);
 
+  useEffect(() => {
+    if (!openSymbolsKey) return;
+    const openSymbols = openSymbolsKey.split(",").filter(Boolean);
+    let cancelled = false;
+    void (async () => {
+      const next: Record<string, number | null> = {};
+      await Promise.all(
+        openSymbols.map(async (sym) => {
+          const snap = await fetchSymbolSnapshot(sym);
+          if (cancelled) return;
+          const p = snap?.last_trade_price;
+          next[sym] = typeof p === "number" && Number.isFinite(p) ? p : null;
+        })
+      );
+      if (!cancelled) setQuoteBySymbol((prev) => ({ ...prev, ...next }));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [openSymbolsKey]);
+
   const chartData = useMemo(() => {
-    const withPnl = sorted.filter((e) => typeof e.pnl_realized_usd === "number");
-    if (withPnl.length === 0) {
+    const closed = entries
+      .filter((e) => e.status === "closed" && typeof e.pnl_realized_usd === "number" && e.closed_at)
+      .sort((a, b) => Date.parse(a.closed_at!) - Date.parse(b.closed_at!));
+    if (closed.length === 0) {
       const d = new Date().toISOString().slice(0, 10);
       return [{ date: d, pnl: 0 }];
     }
     let running = 0;
-    return [...withPnl].reverse().map((entry) => {
+    return closed.map((entry) => {
       running += entry.pnl_realized_usd || 0;
-      return { date: entry.opened_at.slice(0, 10), pnl: Number(running.toFixed(2)) };
+      return { date: (entry.closed_at || "").slice(0, 10), pnl: Number(running.toFixed(2)) };
     });
-  }, [sorted]);
+  }, [entries]);
 
-  const hasRealizedCurve = sorted.some((e) => typeof e.pnl_realized_usd === "number");
+  const hasRealizedCurve = entries.some((e) => e.status === "closed" && typeof e.pnl_realized_usd === "number");
   const lastPnl = chartData.length ? chartData[chartData.length - 1].pnl : 0;
   const lineStroke = lastPnl >= 0 ? colors.bullish : colors.bearish;
 
-  const streak = useMemo(() => {
-    const realized = sorted.filter((e) => typeof e.pnl_realized_usd === "number");
-    if (realized.length === 0) return { label: "Streak", value: "0" };
-    let count = 0;
-    const firstSign = (realized[0].pnl_realized_usd || 0) >= 0 ? 1 : -1;
-    for (const entry of realized) {
-      const sign = (entry.pnl_realized_usd || 0) >= 0 ? 1 : -1;
-      if (sign !== firstSign) break;
-      count += 1;
-    }
-    return { label: "Streak", value: `${firstSign > 0 ? "W" : "L"}${count}` };
-  }, [sorted]);
+  const streakDisplay = useMemo(() => {
+    const s = analytics.current_streak;
+    if (s > 0) return { text: `+${s}`, color: colors.bullish };
+    if (s < 0) return { text: String(s), color: colors.bearish };
+    return { text: "0", color: colors.textMuted };
+  }, [analytics.current_streak, colors.bearish, colors.bullish, colors.textMuted]);
 
   async function handleCreateEntry(formData: FormData) {
     const symbol = String(formData.get("symbol") || "").toUpperCase().trim();
     const quantity = Number(formData.get("quantity") || 0);
-    const side = (String(formData.get("side") || "buy") as "buy" | "sell");
+    const side = String(formData.get("side") || "buy") as "buy" | "sell";
     if (!symbol || quantity <= 0) {
       return;
     }
     startTransition(async () => {
-      const created: JournalEntryPayload = {
-        entry_id: `manual-${Date.now()}`,
-        user_id: "local-user",
-        symbol,
-        opening_side: side,
-        quantity,
-        opened_at: new Date().toISOString(),
-        status: "open",
-        strategy_tags: ["manual"],
-        is_day_trade: true,
-        broker_order_ids: [],
-        entry_notes: "Manual entry (UI placeholder)",
-        pnl_realized_usd: null,
-        signal_id: null,
-        signal_direction: null,
-        signal_generated_at: null
-      };
-      setEntries((prev) => [created, ...prev]);
-      setShowModal(false);
+      try {
+        const entry_id = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `manual-${Date.now()}`;
+        const reqBody: CreateJournalEntryRequest = {
+          entry_id,
+          symbol,
+          opening_side: side,
+          quantity,
+          is_day_trade: true,
+          entry_notes: "Manual entry",
+          strategy_tags: ["manual"]
+        };
+        const res = await fetch("/api/stocvest/journal/entries", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(reqBody)
+        });
+        const created = (await res.json()) as JournalEntryPayload;
+        if (!res.ok || !created?.entry_id) {
+          throw new Error("create failed");
+        }
+        setEntries((prev) => [created, ...prev]);
+        setShowModal(false);
+      } catch {
+        /* surface via alert minimal */
+        window.alert("Could not save journal entry. Try again.");
+      }
     });
   }
+
+  const showSetupInsight = analytics.total_trades >= 5 && (analytics.best_setup_type || analytics.worst_setup_type);
 
   return (
     <section style={{ display: "grid", gap: spacing[4] }}>
@@ -136,22 +207,68 @@ export function JournalPageClient({ initialEntries }: JournalPageClientProps) {
 
       <div className="journal-stats-grid grid grid-cols-2 gap-3 lg:grid-cols-6">
         {[
-          ["Win Rate", `${stats.winRate.toFixed(1)}%`, WIN_RATE_TIP],
-          ["Total Trades", String(stats.totalTrades), ""],
-          ["Avg Winner", `$${stats.avgWinner.toFixed(2)}`, AVG_WINNER_TIP],
-          ["Avg Loser", `$${stats.avgLoser.toFixed(2)}`, AVG_LOSER_TIP],
-          ["Expectancy", `$${stats.expectancy.toFixed(2)}`, EXPECTANCY_TIP],
-          [streak.label, streak.value, STREAK_TIP]
-        ].map(([k, v, tip]) => (
-          <article key={k} style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.lg, padding: spacing[3] }}>
+          ["Win Rate", `${(analytics.win_rate * 100).toFixed(1)}%`, WIN_RATE_TIP],
+          ["Total Trades", String(analytics.total_trades), ""],
+          ["Avg Winner", `$${analytics.avg_winner_dollars.toFixed(2)}`, AVG_WINNER_TIP],
+          ["Avg Loser", `-$${analytics.avg_loser_dollars.toFixed(2)}`, AVG_LOSER_TIP],
+          ["Expectancy", `$${analytics.expectancy.toFixed(2)}`, EXPECTANCY_TIP],
+          ["Streak", streakDisplay.text, STREAK_TIP]
+        ].map(([k, v, tip], idx) => (
+          <article
+            key={k}
+            style={{
+              background: colors.surface,
+              border: `1px solid ${colors.border}`,
+              borderRadius: borderRadius.lg,
+              padding: spacing[3]
+            }}
+          >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2], marginBottom: spacing[1] }}>
               <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>{k}</p>
               {tip ? <InfoTip text={String(tip)} label={`About ${k}`} /> : null}
             </div>
-            <strong>{v}</strong>
+            <strong style={idx === 5 ? { color: streakDisplay.color } : undefined}>{v}</strong>
           </article>
         ))}
       </div>
+
+      {showSetupInsight ? (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {analytics.best_setup_type ? (
+            <div
+              style={{
+                borderRadius: borderRadius.lg,
+                padding: spacing[3],
+                background: "rgba(34,197,94,0.1)",
+                border: "1px solid rgba(34,197,94,0.35)",
+                fontSize: typography.scale.sm
+              }}
+            >
+              <strong>Best setup:</strong> {analytics.best_setup_type.replace(/_/g, " ")}
+              {typeof analytics.best_setup_sample_size === "number" && analytics.best_setup_sample_size > 0
+                ? ` — based on ${analytics.best_setup_sample_size} trades`
+                : null}
+            </div>
+          ) : null}
+          {analytics.worst_setup_type ? (
+            <div
+              style={{
+                borderRadius: borderRadius.lg,
+                padding: spacing[3],
+                background: "rgba(239,68,68,0.08)",
+                border: "1px solid rgba(239,68,68,0.25)",
+                fontSize: typography.scale.sm,
+                color: colors.text
+              }}
+            >
+              <strong>Weakest:</strong> {analytics.worst_setup_type.replace(/_/g, " ")}
+              {typeof analytics.worst_setup_sample_size === "number" && analytics.worst_setup_sample_size > 0
+                ? ` — based on ${analytics.worst_setup_sample_size} trades`
+                : null}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       <article style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
         <h3 style={{ marginTop: 0 }}>Cumulative P&L</h3>
@@ -175,7 +292,7 @@ export function JournalPageClient({ initialEntries }: JournalPageClientProps) {
         </div>
         {!hasRealizedCurve ? (
           <p style={{ margin: `${spacing[2]} 0 0 0`, color: colors.textMuted, fontSize: typography.scale.sm }}>
-            Start trading to build your performance chart — line stays at $0 until closed trades include realized P&L.
+            Start trading to build your performance chart — line stays at $0 until closed trades include realized P&amp;L.
           </p>
         ) : null}
       </article>
@@ -193,132 +310,150 @@ export function JournalPageClient({ initialEntries }: JournalPageClientProps) {
           </button>
         </div>
         <div className="-mx-1 overflow-x-auto px-1 sm:mx-0 sm:px-0" style={{ WebkitOverflowScrolling: "touch" }}>
-          <table className="min-w-[640px]" style={{ width: "100%", borderCollapse: "collapse", fontSize: typography.scale.sm }}>
+          <table className="min-w-[860px]" style={{ width: "100%", borderCollapse: "collapse", fontSize: typography.scale.sm }}>
             <thead>
               <tr style={{ color: colors.textMuted }}>
                 <th align="left">Date</th>
                 <th align="left">Symbol</th>
                 <th align="left">Side</th>
-                <th align="left">Quantity</th>
-                <th align="left">Entry Price</th>
-                <th align="left">Exit Price</th>
-                <th align="left">P&L</th>
+                <th align="left">Qty</th>
+                <th align="left">Entry</th>
+                <th align="left">Exit</th>
+                <th align="left">P&amp;L</th>
+                <th align="left">Setup</th>
                 <th align="left">Signal</th>
-                <th align="left">Setup Type</th>
+                <th align="left">Status</th>
               </tr>
             </thead>
             <tbody>
-              {sorted.map((entry) => (
-                <Fragment key={entry.entry_id}>
-                  <tr
-                    onClick={() => setExpandedId(expandedId === entry.entry_id ? null : entry.entry_id)}
-                    style={{ borderTop: `1px solid ${colors.border}`, cursor: "pointer" }}
-                  >
-                    <td>{entry.opened_at.slice(0, 10)}</td>
-                    <td>{entry.symbol}</td>
-                    <td>{entry.opening_side}</td>
-                    <td>{entry.quantity}</td>
-                    <td>{entry.entry_notes ? "—" : "n/a"}</td>
-                    <td>{entry.closed_at ? "set" : "n/a"}</td>
-                    <td style={{ color: (entry.pnl_realized_usd || 0) >= 0 ? colors.bullish : colors.bearish }}>
-                      {(entry.pnl_realized_usd || 0).toFixed(2)}
-                    </td>
-                    <td onClick={(e) => e.stopPropagation()}>
-                      <button
-                        type="button"
-                        className="min-h-9 max-w-[200px] truncate rounded-full border px-2 text-left text-xs"
-                        style={{
-                          borderColor: entry.signal_id ? colors.accent : colors.border,
-                          color: entry.signal_id ? colors.accent : colors.textMuted,
-                          background: entry.signal_id ? "rgba(59,130,246,.1)" : "transparent"
-                        }}
-                        onClick={async () => {
-                          if (!entry.signal_id) return;
-                          const rows = await fetchLiveSignals();
-                          const found = rows.find((r) => r.signal_id === entry.signal_id) || null;
-                          setSignalDetail(found);
-                          setSignalDetailOpen(true);
-                        }}
-                      >
-                        {signalChipLabel(entry)}
-                      </button>
-                    </td>
-                    <td>{entry.strategy_tags[0] || "manual"}</td>
-                  </tr>
-                  {expandedId === entry.entry_id ? (
-                    <tr style={{ borderTop: `1px dashed ${colors.border}` }}>
-                      <td colSpan={9} style={{ color: colors.textMuted, fontSize: typography.scale.sm, padding: spacing[2] }}>
-                        Signal context: {entry.entry_notes || "No signal context attached."}
+              {sorted.map((entry) => {
+                const setupMeta = setupChipMeta(entry.setup_type ?? null, entry.strategy_tags || []);
+                const st = statusChip(entry, colors);
+                const last = quoteBySymbol[entry.symbol.trim().toUpperCase()];
+                const unreal = unrealizedPnlUsd(entry, last);
+                return (
+                  <Fragment key={entry.entry_id}>
+                    <tr
+                      onClick={() => setExpandedId(expandedId === entry.entry_id ? null : entry.entry_id)}
+                      style={{ borderTop: `1px solid ${colors.border}`, cursor: "pointer" }}
+                    >
+                      <td>{entry.opened_at.slice(0, 10)}</td>
+                      <td>{entry.symbol}</td>
+                      <td>{positionSideLabel(entry.opening_side)}</td>
+                      <td>{entry.quantity}</td>
+                      <td style={{ fontFamily: typography.fontFamilyMono }}>
+                        {typeof entry.entry_price_avg === "number" ? `$${entry.entry_price_avg.toFixed(2)}` : "—"}
+                      </td>
+                      <td style={{ fontFamily: typography.fontFamilyMono }}>
+                        {typeof entry.exit_price_avg === "number" ? `$${entry.exit_price_avg.toFixed(2)}` : "—"}
+                      </td>
+                      <td style={{ fontFamily: typography.fontFamilyMono }}>
+                        {entry.status === "closed" && typeof entry.pnl_realized_usd === "number" ? (
+                          <span style={{ color: entry.pnl_realized_usd >= 0 ? colors.bullish : colors.bearish }}>
+                            ${entry.pnl_realized_usd.toFixed(2)}
+                          </span>
+                        ) : entry.status === "open" && unreal != null ? (
+                          <span style={{ color: unreal >= 0 ? colors.bullish : colors.bearish }}>~${unreal.toFixed(0)}</span>
+                        ) : entry.status === "open" ? (
+                          <span style={{ color: colors.textMuted }}>~</span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <span
+                          className="inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                          style={{
+                            background: setupMeta.gold ? "linear-gradient(135deg, #b8860b, #f5c542)" : "rgba(148,163,184,0.15)",
+                            color: setupMeta.gold ? "#1a1200" : setupMeta.label === "Manual" ? colors.textMuted : colors.text,
+                            border: setupMeta.gold ? "none" : `1px solid ${colors.border}`
+                          }}
+                        >
+                          {setupMeta.label}
+                        </span>
+                      </td>
+                      <td onClick={(e) => e.stopPropagation()}>
+                        {entry.signal_id || entry.signal_strength != null ? (
+                          <div className="flex flex-wrap items-center gap-1">
+                            {typeof entry.signal_strength === "number" ? (
+                              <Link
+                                href={entry.signal_id ? `/dashboard/signals?signal_id=${encodeURIComponent(entry.signal_id)}` : "/dashboard/signals"}
+                                className="inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold no-underline"
+                                style={{
+                                  border: `1px solid ${colors.border}`,
+                                  color:
+                                    (entry.signal_direction || "").toLowerCase() === "bearish" ? colors.bearish : colors.bullish,
+                                  background: "rgba(59,130,246,0.08)"
+                                }}
+                              >
+                                {entry.signal_strength}% signal
+                              </Link>
+                            ) : (
+                              <Link
+                                href={entry.signal_id ? `/dashboard/signals?signal_id=${encodeURIComponent(entry.signal_id)}` : "/dashboard/signals"}
+                                className="text-[11px] no-underline"
+                                style={{ color: colors.accent }}
+                              >
+                                Linked
+                              </Link>
+                            )}
+                          </div>
+                        ) : (
+                          <span style={{ color: colors.textMuted }}>—</span>
+                        )}
+                      </td>
+                      <td>
+                        <span
+                          className="inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+                          style={{ background: st.bg, color: st.fg, border: `1px solid ${st.border}` }}
+                        >
+                          {st.label}
+                        </span>
                       </td>
                     </tr>
-                  ) : null}
-                </Fragment>
-              ))}
+                    {expandedId === entry.entry_id ? (
+                      <tr style={{ borderTop: `1px dashed ${colors.border}` }}>
+                        <td colSpan={10} style={{ color: colors.textMuted, fontSize: typography.scale.sm, padding: spacing[2] }}>
+                          {entry.entry_notes || "No notes on this entry."}
+                          {analytics.disclaimer ? (
+                            <>
+                              <br />
+                              <span style={{ fontSize: typography.scale.xs }}>{analytics.disclaimer}</span>
+                            </>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>
         {entries.length === 0 ? (
-          <p style={{ color: colors.textMuted }}>No trades yet. Connect a broker to enable automatic capture.</p>
+          <div style={{ color: colors.textMuted, marginTop: spacing[2] }}>
+            <p style={{ margin: 0 }}>No trades yet. Connect a broker to enable automatic capture.</p>
+            {connectedBroker ? (
+              <p style={{ margin: `${spacing[2]} 0 0` }}>
+                Connected to <strong style={{ color: colors.text }}>{connectedBroker}</strong>. Your first trade will appear here automatically after it fills.
+              </p>
+            ) : null}
+          </div>
         ) : null}
       </article>
-
-      {signalDetailOpen ? (
-        <div
-          role="dialog"
-          aria-modal="true"
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.5)", display: "grid", placeItems: "center", zIndex: 60 }}
-        >
-          <div
-            style={{
-              width: "min(420px, 92vw)",
-              background: colors.surface,
-              borderRadius: borderRadius.xl,
-              padding: spacing[4],
-              border: `1px solid ${colors.border}`
-            }}
-          >
-            <h3 style={{ marginTop: 0 }}>Linked signal</h3>
-            {signalDetail ? (
-              <div style={{ display: "grid", gap: spacing[2], fontSize: typography.scale.sm }}>
-                <p style={{ margin: 0 }}>
-                  <strong>{signalDetail.symbol}</strong> · {signalDetail.bias} · {Math.round(signalDetail.signal_strength)}% strength
-                </p>
-                <p style={{ margin: 0, color: colors.textMuted }}>
-                  Pattern: {signalDetail.pattern ?? "—"}
-                  <br />
-                  Price at signal:{" "}
-                  {typeof signalDetail.price_at_signal === "number" ? `$${signalDetail.price_at_signal.toFixed(2)}` : "—"}
-                </p>
-                <p style={{ margin: 0 }}>
-                  1h: {formatHorizonOutcome(signalDetail.outcome_1h).label}
-                  <br />
-                  1d: {formatHorizonOutcome(signalDetail.outcome_1d).label}
-                </p>
-                <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>{signalDetail.disclaimer}</p>
-              </div>
-            ) : (
-              <p style={{ color: colors.textMuted }}>
-                This trade references a signal that is not in the recent public list. Signal id is preserved on the entry for future
-                lookup.
-              </p>
-            )}
-            <button
-              type="button"
-              className="mt-3 min-h-11"
-              onClick={() => setSignalDetailOpen(false)}
-              style={{ border: `1px solid ${colors.border}`, borderRadius: borderRadius.md, padding: spacing[2] }}
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      ) : null}
 
       {showModal ? (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.5)", display: "grid", placeItems: "center", zIndex: 60 }}>
           <form
             action={handleCreateEntry}
-            style={{ width: "min(460px,92vw)", background: colors.surface, borderRadius: borderRadius.xl, padding: spacing[4], display: "grid", gap: spacing[2] }}
+            style={{
+              width: "min(460px,92vw)",
+              background: colors.surface,
+              borderRadius: borderRadius.xl,
+              padding: spacing[4],
+              display: "grid",
+              gap: spacing[2]
+            }}
           >
             <h3 style={{ marginTop: 0 }}>Manual Journal Entry</h3>
             <input name="symbol" placeholder="Symbol" required style={{ padding: spacing[2] }} />

@@ -9,6 +9,7 @@ from typing import Any
 
 from stocvest.api.broker_gateway_provider import DEFAULT_BROKER_GATEWAY_PROVIDER, BrokerGatewayProvider
 from stocvest.api.response import bad_request, json_response, ok, unauthorized
+from stocvest.api.services.journal_order_hooks import apply_journal_after_order_submit
 from stocvest.api.services.order_safety import OrderAccountState, OrderSafetyGate
 from stocvest.api.services.pdt_store import get_pdt_state_store
 from stocvest.api.services.user_profile_store import get_user_profile_store
@@ -134,6 +135,11 @@ def orders_submit_handler(
         body = parse_json_body(event)
         if body.get("confirmed") is not True:
             return bad_request("confirmed must be true to submit an order.")
+        signal_context = {
+            k: body.get(k)
+            for k in ("signal_id", "signal_strength", "confluence_score", "pattern", "signal_direction")
+            if body.get(k) is not None
+        }
         request = _parse_order_body(body)
         broker = str(body.get("broker") or "mock").strip().lower()
         account_id = str(body.get("account_id") or "").strip()
@@ -162,6 +168,16 @@ def orders_submit_handler(
             try:
                 await adapter.connect(connect_config)
                 ack = await adapter.place_order(account_id, request)
+                await apply_journal_after_order_submit(
+                    user_id=request_context.user_id,
+                    broker=broker,
+                    account_id=account_id,
+                    request=request,
+                    ack=ack,
+                    adapter=adapter,
+                    signal_context=signal_context or None,
+                    is_day_trade=account_state.is_day_trade,
+                )
             finally:
                 await adapter.disconnect()
         _LOG.info(

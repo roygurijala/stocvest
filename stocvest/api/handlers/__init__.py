@@ -44,6 +44,7 @@ from stocvest.api.handlers.portfolio import (
 )
 from stocvest.api.handlers.journal import (
     journal_create_entry_handler,
+    journal_dispatch_handler,
     journal_list_entries_handler,
 )
 from stocvest.api.handlers.pdt import pdt_status_handler
@@ -68,6 +69,7 @@ __all__ = [
     "portfolio_holdings_handler",
     "portfolio_summary_handler",
     "journal_create_entry_handler",
+    "journal_dispatch_handler",
     "journal_list_entries_handler",
     "pdt_status_handler",
     "scanner_briefing_handler",

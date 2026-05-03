@@ -157,4 +157,51 @@ describe("OrderConfirmationModal", () => {
     expect(JSON.parse(String(init.body)).confirmed).toBe(true);
     expect(onAccepted).toHaveBeenCalledWith("c-test");
   });
+
+  test("shows acting-on-signal callout and passes signal fields on submit", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/pdt/status")) {
+        return new Response(JSON.stringify({ assessment: { day_trades_in_window: 0 } }), { status: 200 });
+      }
+      if (url.includes("/validate")) {
+        return new Response(JSON.stringify({ is_valid: true, estimated_cost: 100 }), { status: 200 });
+      }
+      if (url.includes("/submit")) {
+        return new Response(JSON.stringify({ client_order_id: "c-sig" }), { status: 200 });
+      }
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock as typeof fetch);
+
+    const draftWithSignal: OrderDraft = {
+      ...draft,
+      signalContext: {
+        signal_id: "sig-abc",
+        signal_strength: 82,
+        confluence_score: 91,
+        pattern: "orb_breakout_long",
+        signal_direction: "bullish"
+      }
+    };
+
+    wrap(
+      <OrderConfirmationModal open draft={draftWithSignal} tradingMode="paper" onClose={() => {}} onAccepted={() => {}} />
+    );
+    expect(screen.getByText(/Acting on signal/i)).toBeTruthy();
+    act(() => {
+      vi.advanceTimersByTime(2100);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^Confirm Order$/i }));
+    });
+    const submitCall = fetchMock.mock.calls.find(([u]) => String(u).includes("/submit"));
+    const init = submitCall?.[1] as RequestInit;
+    const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+    expect(body.confirmed).toBe(true);
+    expect(body.signal_id).toBe("sig-abc");
+    expect(body.signal_strength).toBe(82);
+    expect(body.confluence_score).toBe(91);
+    expect(body.pattern).toBe("orb_breakout_long");
+    expect(body.signal_direction).toBe("bullish");
+  });
 });

@@ -129,7 +129,7 @@ class _Handler(BaseHTTPRequestHandler):
     def _cors_preflight(self) -> None:
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "authorization, content-type")
         self.send_header("Access-Control-Max-Age", "86400")
         self.end_headers()

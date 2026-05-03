@@ -34,4 +34,19 @@ describe("journal API client", () => {
       expect.objectContaining({ method: "POST" })
     );
   });
+
+  test("fetchJournalAnalytics requests analytics endpoint", async () => {
+    const { fetchJournalAnalytics } = await import("@/lib/api/journal");
+    apiFetchMock.mockResolvedValueOnce({ user_id: "u1", total_trades: 0, win_rate: 0, disclaimer: "x" });
+    const row = await fetchJournalAnalytics();
+    expect(apiFetchMock).toHaveBeenCalledWith("/v1/journal/analytics");
+    expect(row?.user_id).toBe("u1");
+  });
+
+  test("fetchJournalEntries passes status query", async () => {
+    const { fetchJournalEntries } = await import("@/lib/api/journal");
+    apiFetchMock.mockResolvedValueOnce([]);
+    await fetchJournalEntries({ status: "closed", limit: 50 });
+    expect(apiFetchMock).toHaveBeenCalledWith("/v1/journal/entries?status=closed&limit=50");
+  });
 });

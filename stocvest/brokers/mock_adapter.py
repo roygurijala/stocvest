@@ -86,9 +86,16 @@ class MockBrokerAdapter(BrokerAdapter):
             raise BrokerRejectedError("stop order requires stop_price")
         if request.client_order_id in self._orders:
             existing = self._orders[request.client_order_id]
-            return OrderAck(client_order_id=request.client_order_id, broker_order_id=existing.broker_order_id)
+            return OrderAck(
+                client_order_id=request.client_order_id,
+                broker_order_id=existing.broker_order_id,
+                average_fill_price=existing.average_fill_price,
+                quantity_filled=existing.quantity_filled,
+            )
 
         broker_id = f"B-{uuid.uuid4().hex[:12]}"
+        fill_px = 100.0 if request.order_type == OrderType.MARKET else None
+        q_filled = float(request.quantity) if request.order_type == OrderType.MARKET else 0.0
         self._orders[request.client_order_id] = OrderStatus(
             client_order_id=request.client_order_id,
             broker_order_id=broker_id,
@@ -96,12 +103,17 @@ class MockBrokerAdapter(BrokerAdapter):
             symbol=request.symbol.upper(),
             side=request.side,
             quantity_ordered=request.quantity,
-            quantity_filled=request.quantity if request.order_type == OrderType.MARKET else 0.0,
-            average_fill_price=100.0 if request.order_type == OrderType.MARKET else None,
+            quantity_filled=q_filled,
+            average_fill_price=fill_px,
         )
         if request.order_type == OrderType.MARKET:
             self._apply_fill(account_id, request)
-        return OrderAck(client_order_id=request.client_order_id, broker_order_id=broker_id)
+        return OrderAck(
+            client_order_id=request.client_order_id,
+            broker_order_id=broker_id,
+            average_fill_price=fill_px,
+            quantity_filled=q_filled if request.order_type == OrderType.MARKET else None,
+        )
 
     async def cancel_order(self, account_id: str, client_order_id: str) -> None:
         self._require_connected()

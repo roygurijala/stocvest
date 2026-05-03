@@ -86,13 +86,23 @@ function formatSignalFiredTimeEt(iso: string): string {
 export function ScannerPageClient({ initialOverview, initialTimestampIso, earningsBySymbol }: ScannerPageClientProps) {
   const { colors } = useTheme();
   const [isPending, startTransition] = useTransition();
-  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [gapNewsDrawerItem, setGapNewsDrawerItem] = useState<GapIntelligenceItem | null>(null);
   const [evidence, setEvidence] = useState<SignalEvidenceData | null>(null);
   const router = useRouter();
   const [, forceTick] = useState(0);
   const nextScanRef = useRef(0);
+
+  const goToPortfolioOrder = useCallback(
+    (params: Record<string, string | undefined>) => {
+      const p = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) {
+        if (v != null && v !== "") p.set(k, v);
+      }
+      router.push(`/dashboard/portfolio?${p.toString()}`);
+    },
+    [router]
+  );
 
   const [snapBySymbol, setSnapBySymbol] = useState<Record<string, SnapshotPayload | null>>({});
   const [pmhBySymbol, setPmhBySymbol] = useState<Record<string, number | null>>({});
@@ -414,7 +424,20 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
           <span title="ORB window has closed for today" style={{ display: "inline-flex" }}>
             <button
               type="button"
-              onClick={() => setSelectedSymbol(item.symbol)}
+              onClick={() => {
+                const sym = item.symbol.trim().toUpperCase();
+                const setupFor = initialOverview.setups.find((s) => s.symbol.trim().toUpperCase() === sym);
+                goToPortfolioOrder({
+                  symbol: sym,
+                  side: item.gap_pct >= 0 ? "buy" : "sell",
+                  pattern: "pre_market_gap",
+                  signal_strength: String(Math.min(100, Math.max(0, Math.round(item.gap_quality_score)))),
+                  signal_direction: item.gap_pct >= 0 ? "bullish" : "bearish",
+                  ...(setupFor?.confluence_score != null
+                    ? { confluence_score: String(Math.round(setupFor.confluence_score)) }
+                    : {})
+                });
+              }}
               style={{
                 border: `1px solid ${colors.accent}`,
                 borderRadius: borderRadius.md,
@@ -919,7 +942,17 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                           disabled={orbExpired}
                           onClick={() => {
                             if (orbExpired) return;
-                            setSelectedSymbol(setup.symbol);
+                            const sym = setup.symbol.trim().toUpperCase();
+                            goToPortfolioOrder({
+                              symbol: sym,
+                              side: isLongDirection(setup.direction) ? "buy" : "sell",
+                              pattern: setup.triggers[0] || "intraday_setup",
+                              signal_strength: String(Math.min(100, Math.max(0, Math.round(setup.score * 100)))),
+                              signal_direction: setup.direction,
+                              ...(setup.confluence_score != null
+                                ? { confluence_score: String(Math.round(setup.confluence_score)) }
+                                : {})
+                            });
                           }}
                           style={{
                             border: `1px solid ${orbExpired ? "var(--color-border)" : colors.accent}`,
@@ -981,41 +1014,6 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
         </section>
       </div>
 
-      {selectedSymbol ? (
-        <div
-          role="dialog"
-          aria-modal="true"
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.5)",
-            display: "grid",
-            placeItems: "center",
-            zIndex: 60
-          }}
-        >
-          <div style={{ width: "min(460px, 92vw)", background: colors.surface, borderRadius: borderRadius.xl, padding: spacing[5] }}>
-            <h3 style={{ marginTop: 0 }}>Order modal placeholder</h3>
-            <p style={{ margin: `${spacing[2]} 0`, color: colors.textMuted }}>
-              Trade flow for <strong>{selectedSymbol}</strong> will be wired in a later phase.
-            </p>
-            <button
-              type="button"
-              onClick={() => setSelectedSymbol(null)}
-              style={{
-                border: `1px solid ${colors.border}`,
-                borderRadius: borderRadius.md,
-                background: "transparent",
-                color: colors.text,
-                padding: `${spacing[2]} ${spacing[3]}`,
-                cursor: "pointer"
-              }}
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      ) : null}
       <GapCatalystNewsDrawer
         open={gapNewsDrawerItem != null && !!gapNewsDrawerItem.catalyst}
         payload={

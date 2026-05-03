@@ -1,19 +1,18 @@
 import { apiFetch } from "@/lib/api/client";
-import type { JournalEntryPayload } from "@/lib/api/contracts";
+import type { CreateJournalEntryRequest, JournalAnalyticsPayload, JournalEntryPayload } from "@/lib/api/contracts";
 
-export interface CreateJournalEntryRequest {
-  entry_id: string;
-  symbol: string;
-  opening_side: "buy" | "sell";
-  quantity: number;
-  is_day_trade: boolean;
-  entry_notes?: string;
-  strategy_tags?: string[];
-  broker_order_ids?: string[];
+export type { CreateJournalEntryRequest } from "@/lib/api/contracts";
+
+export async function fetchJournalEntries(params?: { status?: "open" | "closed" | "all"; limit?: number }): Promise<JournalEntryPayload[]> {
+  const qs = new URLSearchParams();
+  if (params?.status && params.status !== "all") qs.set("status", params.status);
+  if (params?.limit != null) qs.set("limit", String(params.limit));
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return (await apiFetch<JournalEntryPayload[]>(`/v1/journal/entries${suffix}`)) || [];
 }
 
-export async function fetchJournalEntries(): Promise<JournalEntryPayload[]> {
-  return (await apiFetch<JournalEntryPayload[]>("/v1/journal/entries")) || [];
+export async function fetchJournalAnalytics(): Promise<JournalAnalyticsPayload | null> {
+  return apiFetch<JournalAnalyticsPayload>("/v1/journal/analytics");
 }
 
 export async function createJournalEntry(

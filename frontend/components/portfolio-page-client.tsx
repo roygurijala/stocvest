@@ -3,7 +3,7 @@
 import type { BrokerOverview } from "@/lib/api/brokers";
 import type { PortfolioMultiBrokerOverview } from "@/lib/api/portfolio";
 import type { EarningsEvent } from "@/lib/api/earnings";
-import { OrderEntryPanel } from "@/components/order-entry-panel";
+import { OrderEntryPanel, type PortfolioOrderPrefill } from "@/components/order-entry-panel";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -11,13 +11,14 @@ interface PortfolioPageClientProps {
   brokerOverviews: BrokerOverview[];
   overview: PortfolioMultiBrokerOverview;
   earningsBySymbol: Record<string, EarningsEvent>;
+  orderFromSignal?: PortfolioOrderPrefill | null;
 }
 
 function money(n: number): string {
   return `$${n.toFixed(2)}`;
 }
 
-export function PortfolioPageClient({ brokerOverviews, overview, earningsBySymbol }: PortfolioPageClientProps) {
+export function PortfolioPageClient({ brokerOverviews, overview, earningsBySymbol, orderFromSignal = null }: PortfolioPageClientProps) {
   const { colors } = useTheme();
   const brokerCards = brokerOverviews.map((broker) => {
     const healthy = broker.health?.ok ?? !broker.error;
@@ -46,7 +47,7 @@ export function PortfolioPageClient({ brokerOverviews, overview, earningsBySymbo
 
   return (
     <section style={{ display: "grid", gap: spacing[4] }}>
-      <OrderEntryPanel brokerOverviews={brokerOverviews} />
+      <OrderEntryPanel brokerOverviews={brokerOverviews} orderFromSignal={orderFromSignal} />
       <article
         className="grid grid-cols-1 gap-3 sm:grid-cols-3"
         style={{

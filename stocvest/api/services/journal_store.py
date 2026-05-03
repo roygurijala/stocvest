@@ -16,7 +16,9 @@ class DynamoTableLike(Protocol):
 
 class JournalStore(Protocol):
     def add(self, entry: TradeJournalEntry) -> None: ...
+    def replace_entry(self, entry: TradeJournalEntry) -> None: ...
     def entries_for_user(self, user_id: str) -> tuple[TradeJournalEntry, ...]: ...
+    def get_entry(self, user_id: str, entry_id: str) -> TradeJournalEntry | None: ...
 
 
 @dataclass
@@ -26,8 +28,15 @@ class InMemoryJournalStore:
     def add(self, entry: TradeJournalEntry) -> None:
         self.journal.add(entry)
 
+    def replace_entry(self, entry: TradeJournalEntry) -> None:
+        self.journal.replace_entry(entry)
+
     def entries_for_user(self, user_id: str) -> tuple[TradeJournalEntry, ...]:
         return self.journal.entries_for_user(user_id)
+
+    def get_entry(self, user_id: str, entry_id: str) -> TradeJournalEntry | None:
+        e = self.journal.get(entry_id)
+        return e if e and e.user_id == user_id else None
 
 
 @dataclass
@@ -63,6 +72,26 @@ class DynamoDBJournalStore:
                 self.entries_key: rows,
             }
         )
+
+    def replace_entry(self, entry: TradeJournalEntry) -> None:
+        current = self.entries_for_user(entry.user_id)
+        rows_out: list[dict[str, Any]] = []
+        found = False
+        for x in current:
+            if x.entry_id == entry.entry_id:
+                rows_out.append(entry.to_dynamo_item())
+                found = True
+            else:
+                rows_out.append(x.to_dynamo_item())
+        if not found:
+            raise ValueError(f"Unknown entry_id: {entry.entry_id}")
+        self.table.put_item(Item={self.user_key: entry.user_id, self.entries_key: rows_out})
+
+    def get_entry(self, user_id: str, entry_id: str) -> TradeJournalEntry | None:
+        for e in self.entries_for_user(user_id):
+            if e.entry_id == entry_id:
+                return e
+        return None
 
     def entries_for_user(self, user_id: str) -> tuple[TradeJournalEntry, ...]:
         resp = self.table.get_item(Key={self.user_key: user_id})

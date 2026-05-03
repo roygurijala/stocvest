@@ -6,7 +6,10 @@ from typing import Any
 
 import pytest
 
+import stocvest.api.services.journal_order_hooks as journal_order_hooks_mod
 from stocvest.api.handlers.orders import orders_submit_handler, orders_validate_handler
+from stocvest.api.services.journal_store import InMemoryJournalStore
+from stocvest.signals.trade_journal import TradeJournal
 from stocvest.brokers.models import (
     BrokerAccount,
     BrokerHealth,
@@ -41,7 +44,12 @@ class _FakeAdapter:
         return []
 
     async def place_order(self, account_id: str, request: PlaceOrderRequest) -> OrderAck:
-        return OrderAck(client_order_id=request.client_order_id, broker_order_id="B-1")
+        return OrderAck(
+            client_order_id=request.client_order_id,
+            broker_order_id="B-1",
+            average_fill_price=100.0,
+            quantity_filled=float(request.quantity),
+        )
 
     async def get_order(self, account_id: str, client_order_id: str) -> OrderStatus:
         return OrderStatus(
@@ -133,6 +141,11 @@ def test_live_mode_requires_confirmation_flag(monkeypatch: pytest.MonkeyPatch) -
 
 def test_paper_mode_routes_to_mock(monkeypatch: pytest.MonkeyPatch) -> None:
     _RecordingFactory.last_kind = None
+    monkeypatch.setattr(
+        journal_order_hooks_mod,
+        "get_trade_journal_store",
+        lambda: InMemoryJournalStore(TradeJournal()),
+    )
     store = ups_mod.InMemoryUserProfileStore()
     store.set_trading_mode("user-1", TradingMode.PAPER)
     monkeypatch.setattr(ups_mod, "get_user_profile_store", lambda: store)

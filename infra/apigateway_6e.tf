@@ -38,8 +38,11 @@ locals {
     "POST /v1/portfolio/summary"    = { module_key = "portfolio", authorizer = true }
     "POST /v1/portfolio/allocation" = { module_key = "portfolio", authorizer = true }
 
-    "GET /v1/journal/entries"  = { module_key = "journal", authorizer = true }
-    "POST /v1/journal/entries" = { module_key = "journal", authorizer = true }
+    "GET /v1/journal/entries"                = { module_key = "journal", authorizer = true }
+    "GET /v1/journal/entries/{entry_id}"     = { module_key = "journal", authorizer = true }
+    "PATCH /v1/journal/entries/{entry_id}" = { module_key = "journal", authorizer = true }
+    "GET /v1/journal/analytics"              = { module_key = "journal", authorizer = true }
+    "POST /v1/journal/entries"               = { module_key = "journal", authorizer = true }
 
     "GET /v1/pdt/status" = { module_key = "pdt", authorizer = true }
 
@@ -59,7 +62,7 @@ resource "aws_apigatewayv2_api" "http" {
 
   cors_configuration {
     allow_headers = ["authorization", "content-type", "x-requested-with"]
-    allow_methods = ["GET", "POST", "DELETE", "OPTIONS"]
+    allow_methods = ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
     allow_origins = ["*"]
     max_age       = 3600
   }

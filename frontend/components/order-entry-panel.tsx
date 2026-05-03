@@ -2,18 +2,30 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { BrokerOverview, OrderType, TimeInForce } from "@/lib/api/brokers";
-import { OrderConfirmationModal, type OrderDraft } from "@/components/order-confirmation-modal";
+import { OrderConfirmationModal, type OrderDraft, type OrderSignalContext } from "@/components/order-confirmation-modal";
 import { OrderStatusTracker } from "@/components/order-status-tracker";
 import { TradingModeBadge, type TradingModeUi } from "@/components/trading-mode-badge";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
+/** Deep-link from scanner → portfolio: query params parsed on the server. */
+export interface PortfolioOrderPrefill {
+  symbol: string;
+  side: "buy" | "sell";
+  signal_id?: string;
+  signal_strength?: number;
+  confluence_score?: number;
+  pattern?: string;
+  signal_direction?: string;
+}
+
 interface OrderEntryPanelProps {
   brokerOverviews: BrokerOverview[];
   defaultAvailableCash?: number;
+  orderFromSignal?: PortfolioOrderPrefill | null;
 }
 
-export function OrderEntryPanel({ brokerOverviews, defaultAvailableCash = 1_000_000 }: OrderEntryPanelProps) {
+export function OrderEntryPanel({ brokerOverviews, defaultAvailableCash = 1_000_000, orderFromSignal = null }: OrderEntryPanelProps) {
   const { colors } = useTheme();
   const accountOptions = brokerOverviews.flatMap((overview) =>
     (overview.accounts || []).map((account) => ({
@@ -37,6 +49,7 @@ export function OrderEntryPanel({ brokerOverviews, defaultAvailableCash = 1_000_
   const [tracker, setTracker] = useState<{ clientOrderId: string; broker: typeof broker; accountId: string } | null>(
     null
   );
+  const [signalContext, setSignalContext] = useState<OrderSignalContext | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -50,6 +63,26 @@ export function OrderEntryPanel({ brokerOverviews, defaultAvailableCash = 1_000_
       }
     })();
   }, []);
+
+  useEffect(() => {
+    if (!orderFromSignal?.symbol) {
+      setSignalContext(null);
+      return;
+    }
+    setSymbol(orderFromSignal.symbol);
+    setSide(orderFromSignal.side);
+    const ctx: OrderSignalContext = {};
+    if (orderFromSignal.signal_id) ctx.signal_id = orderFromSignal.signal_id;
+    if (typeof orderFromSignal.signal_strength === "number" && Number.isFinite(orderFromSignal.signal_strength)) {
+      ctx.signal_strength = orderFromSignal.signal_strength;
+    }
+    if (typeof orderFromSignal.confluence_score === "number" && Number.isFinite(orderFromSignal.confluence_score)) {
+      ctx.confluence_score = orderFromSignal.confluence_score;
+    }
+    if (orderFromSignal.pattern) ctx.pattern = orderFromSignal.pattern;
+    if (orderFromSignal.signal_direction) ctx.signal_direction = orderFromSignal.signal_direction;
+    setSignalContext(Object.values(ctx).some((v) => v != null && v !== "") ? ctx : null);
+  }, [orderFromSignal]);
 
   const openConfirmation = useCallback(() => {
     const qty = Number(quantity);
@@ -68,11 +101,12 @@ export function OrderEntryPanel({ brokerOverviews, defaultAvailableCash = 1_000_
       stopPrice: stp,
       clientOrderId: `web-${Date.now()}`,
       availableCash: defaultAvailableCash,
-      isDayTrade: true
+      isDayTrade: true,
+      signalContext: signalContext && Object.keys(signalContext).length ? signalContext : null
     };
     setDraft(d);
     setConfirmOpen(true);
-  }, [accountId, broker, defaultAvailableCash, limitPrice, orderType, quantity, side, stopPrice, symbol, tif]);
+  }, [accountId, broker, defaultAvailableCash, limitPrice, orderType, quantity, side, signalContext, stopPrice, symbol, tif]);
 
   return (
     <section style={{ marginTop: 18, background: colors.surface, borderRadius: 12, padding: 16, border: `1px solid ${colors.border}` }}>

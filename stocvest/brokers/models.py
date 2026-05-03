@@ -77,6 +77,8 @@ class PlaceOrderRequest(BaseModel):
 class OrderAck(BaseModel):
     client_order_id: str
     broker_order_id: str | None = None
+    average_fill_price: float | None = None
+    quantity_filled: float | None = None
 
 
 class OrderStatus(BaseModel):
