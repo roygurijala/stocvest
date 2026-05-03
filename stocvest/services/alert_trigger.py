@@ -9,6 +9,7 @@ from stocvest.data.alert_store import DynamoDBAlertStore, new_history_alert_id
 from stocvest.data.models import AlertChannel, AlertPreferences, AlertRecord, AlertStatus, AlertType
 from stocvest.data.watchlist_store import WatchlistStore
 from stocvest.services.email_service import EmailService, preview_context_json
+from stocvest.utils.log_privacy import user_ref_for_logs
 from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
@@ -44,10 +45,10 @@ class AlertTriggerService:
         if prefs.watchlist_only:
             wl = self.watchlist_store.get_default_watchlist(user_id)
             if wl and sym_u not in {s.upper() for s in wl.symbols}:
-                _LOG.debug("alert skipped: %s not on default watchlist for %s", sym_u, user_id)
+                _LOG.debug("alert skipped: %s not on default watchlist for %s", sym_u, user_ref_for_logs(user_id))
                 return
         if self._in_quiet_hours(prefs):
-            _LOG.debug("alert skipped: quiet hours user=%s", user_id)
+            _LOG.debug("alert skipped: quiet hours user=%s", user_ref_for_logs(user_id))
             return
         if is_confluence and prefs.on_confluence_alert:
             alert_type = AlertType.CONFLUENCE_ALERT
@@ -95,7 +96,7 @@ class AlertTriggerService:
         else:
             return
         if self._in_quiet_hours(prefs):
-            _LOG.debug("pdt alert skipped: quiet hours user=%s", user_id)
+            _LOG.debug("pdt alert skipped: quiet hours user=%s", user_ref_for_logs(user_id))
             return
         ctx = {"trades_used": trades_used}
         success = self.email_service.send_alert_email(

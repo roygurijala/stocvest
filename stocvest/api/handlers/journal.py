@@ -12,6 +12,14 @@ from stocvest.api.response import bad_request, not_found, ok, unauthorized
 from stocvest.api.services.journal_store import get_trade_journal_store
 from stocvest.api.services.pdt_store import get_pdt_state_store
 from stocvest.api.shared import build_request_context, parse_json_body
+from stocvest.api.text_sanitize import (
+    DEFAULT_FREE_TEXT_MAX,
+    SETUP_TYPE_MAX,
+    SIGNAL_META_MAX,
+    sanitize_free_text,
+    sanitize_optional_free_text,
+    sanitize_strategy_tags,
+)
 from stocvest.api.types import LambdaContext, LambdaEvent
 from stocvest.signals.trade_journal import (
     TradeJournalEntry,
@@ -92,7 +100,10 @@ def journal_patch_entry_handler(event: LambdaEvent, context: LambdaContext) -> d
         notes = payload.get("notes")
         if notes is None:
             return bad_request("notes field is required.")
-        updated = replace(entry, entry_notes=str(notes))
+        cleaned = sanitize_free_text(notes, max_len=DEFAULT_FREE_TEXT_MAX)
+        if not cleaned:
+            return bad_request("notes must contain non-whitespace text.")
+        updated = replace(entry, entry_notes=cleaned)
         store.replace_entry(updated)
         return ok(_serialize_entry(updated))
     except (TypeError, ValueError, KeyError) as exc:
@@ -163,6 +174,8 @@ def journal_dispatch_handler(event: LambdaEvent, context: LambdaContext) -> dict
 
 
 def _parse_create_entry(payload: dict[str, Any], *, user_id: str) -> TradeJournalEntry:
+    if payload.get("user_id") is not None:
+        raise ValueError("Do not submit user_id; identity is taken from your session.")
     opened_at_raw = payload.get("opened_at")
     if opened_at_raw is None:
         opened_at = datetime.now(timezone.utc)
@@ -171,18 +184,34 @@ def _parse_create_entry(payload: dict[str, Any], *, user_id: str) -> TradeJourna
         if opened_at.tzinfo is None:
             opened_at = opened_at.replace(tzinfo=timezone.utc)
 
-    strategy_tags_raw = payload.get("strategy_tags", [])
-    strategy_tags = tuple(str(x) for x in strategy_tags_raw) if isinstance(strategy_tags_raw, list) else ()
+    strategy_tags = sanitize_strategy_tags(payload.get("strategy_tags", []))
     broker_order_ids_raw = payload.get("broker_order_ids", [])
-    broker_order_ids = (
-        tuple(str(x) for x in broker_order_ids_raw) if isinstance(broker_order_ids_raw, list) else ()
-    )
+    broker_order_ids: tuple[str, ...] = ()
+    if isinstance(broker_order_ids_raw, list):
+        _oids: list[str] = []
+        for x in broker_order_ids_raw[:32]:
+            oid = sanitize_free_text(x, max_len=128)
+            if oid:
+                _oids.append(oid)
+        broker_order_ids = tuple(_oids)
 
     sig_id = payload.get("signal_id")
     sig_dir = payload.get("signal_direction")
     sig_at = payload.get("signal_generated_at")
     ep = payload.get("entry_price_avg")
-    setup_type = payload.get("setup_type")
+    setup_type_raw = payload.get("setup_type")
+    setup_type = (
+        sanitize_optional_free_text(setup_type_raw, max_len=SETUP_TYPE_MAX) if setup_type_raw is not None else None
+    )
+    entry_notes = (
+        sanitize_optional_free_text(payload["entry_notes"], max_len=DEFAULT_FREE_TEXT_MAX)
+        if payload.get("entry_notes") is not None
+        else None
+    )
+    sig_id_s = sanitize_optional_free_text(sig_id, max_len=SIGNAL_META_MAX) if sig_id else None
+    sig_dir_raw = sanitize_optional_free_text(sig_dir, max_len=64) if sig_dir else None
+    sig_dir_s = sig_dir_raw.lower() if sig_dir_raw else None
+    sig_at_s = sanitize_optional_free_text(sig_at, max_len=SIGNAL_META_MAX) if sig_at else None
     return TradeJournalEntry(
         entry_id=str(payload["entry_id"]),
         user_id=user_id,
@@ -193,13 +222,13 @@ def _parse_create_entry(payload: dict[str, Any], *, user_id: str) -> TradeJourna
         status=TradeJournalEntryStatus.OPEN,
         strategy_tags=strategy_tags,
         is_day_trade=bool(payload.get("is_day_trade", False)),
-        entry_notes=str(payload["entry_notes"]) if payload.get("entry_notes") is not None else None,
+        entry_notes=entry_notes,
         broker_order_ids=broker_order_ids,
-        signal_id=str(sig_id).strip() if sig_id else None,
-        signal_direction=str(sig_dir).strip().lower() if sig_dir else None,
-        signal_generated_at=str(sig_at).strip() if sig_at else None,
+        signal_id=sig_id_s,
+        signal_direction=sig_dir_s,
+        signal_generated_at=sig_at_s,
         entry_price_avg=float(ep) if ep is not None else None,
-        setup_type=str(setup_type).strip() if setup_type else None,
+        setup_type=setup_type,
     )
 
 

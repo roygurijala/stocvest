@@ -48,6 +48,7 @@ def get_bearer_token(event: LambdaEvent) -> str | None:
 
 
 def build_request_context(event: LambdaEvent) -> RequestContext:
+    """Resolve `user_id` (`sub`) and optional `email` from the authorizer JWT claims only, not from the body."""
     request_context = event.get("requestContext") or {}
     request_id = str(request_context.get("requestId") or "")
     http = request_context.get("http") or {}

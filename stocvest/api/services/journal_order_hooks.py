@@ -15,6 +15,7 @@ from stocvest.signals.trade_journal import (
     TradeOpeningSide,
     close_trade_journal_entry,
 )
+from stocvest.utils.log_privacy import user_ref_for_logs
 from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
@@ -94,7 +95,12 @@ async def apply_journal_after_order_submit(
                     exit_order_id=exit_oid,
                 )
                 store.replace_entry(closed)
-                _LOG.info("journal closed short entry_id=%s user=%s symbol=%s", closed.entry_id, user_id, request.symbol)
+                _LOG.info(
+                    "journal closed short entry_id=%s user=%s symbol=%s",
+                    closed.entry_id,
+                    user_ref_for_logs(user_id),
+                    request.symbol,
+                )
                 return
             entry = TradeJournalEntry(
                 entry_id=str(uuid.uuid4()),
@@ -121,7 +127,12 @@ async def apply_journal_after_order_submit(
             store.add(entry)
             if is_day_trade:
                 get_pdt_state_store().record_day_trade(user_id, now.date())
-            _LOG.info("journal open long entry_id=%s user=%s symbol=%s", entry.entry_id, user_id, request.symbol)
+            _LOG.info(
+                "journal open long entry_id=%s user=%s symbol=%s",
+                entry.entry_id,
+                user_ref_for_logs(user_id),
+                request.symbol,
+            )
             return
 
         # SELL
@@ -134,7 +145,12 @@ async def apply_journal_after_order_submit(
                 exit_order_id=exit_oid,
             )
             store.replace_entry(closed)
-            _LOG.info("journal closed long entry_id=%s user=%s symbol=%s", closed.entry_id, user_id, request.symbol)
+            _LOG.info(
+                "journal closed long entry_id=%s user=%s symbol=%s",
+                closed.entry_id,
+                user_ref_for_logs(user_id),
+                request.symbol,
+            )
             return
 
         entry = TradeJournalEntry(
@@ -162,6 +178,16 @@ async def apply_journal_after_order_submit(
         store.add(entry)
         if is_day_trade:
             get_pdt_state_store().record_day_trade(user_id, now.date())
-        _LOG.info("journal open short entry_id=%s user=%s symbol=%s", entry.entry_id, user_id, request.symbol)
+        _LOG.info(
+            "journal open short entry_id=%s user=%s symbol=%s",
+            entry.entry_id,
+            user_ref_for_logs(user_id),
+            request.symbol,
+        )
     except Exception as exc:  # noqa: BLE001
-        _LOG.exception("journal automation failed user=%s symbol=%s: %s", user_id, request.symbol, exc)
+        _LOG.exception(
+            "journal automation failed user=%s symbol=%s: %s",
+            user_ref_for_logs(user_id),
+            request.symbol,
+            exc,
+        )

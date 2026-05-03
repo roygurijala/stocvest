@@ -7,6 +7,7 @@ from typing import Any
 from stocvest.api.http_route import http_route_descriptor
 from stocvest.api.response import bad_request, json_response, not_found, ok, unauthorized
 from stocvest.api.shared import build_request_context, parse_json_body
+from stocvest.api.text_sanitize import WATCHLIST_NAME_MAX, sanitize_free_text
 from stocvest.api.types import LambdaContext, LambdaEvent
 from stocvest.data.scan_symbols import SYSTEM_DEFAULTS
 from stocvest.data.watchlist_store import WatchlistItem, get_watchlist_store
@@ -70,7 +71,7 @@ def watchlists_create_handler(event: LambdaEvent, context: LambdaContext) -> dic
         body = parse_json_body(event)
     except ValueError as exc:
         return bad_request(str(exc))
-    name = str(body.get("name") or "").strip()
+    name = sanitize_free_text(body.get("name") or "", max_len=WATCHLIST_NAME_MAX)
     if not name:
         return bad_request("name is required.")
     symbols_raw = body.get("symbols")
@@ -115,10 +116,11 @@ def watchlists_patch_handler(event: LambdaEvent, context: LambdaContext) -> dict
     name = body.get("name")
     symbols = body.get("symbols")
     is_default = body.get("is_default")
+    name_clean = sanitize_free_text(name, max_len=WATCHLIST_NAME_MAX) if name is not None else None
     out = get_watchlist_store().update_watchlist(
         rc.user_id,
         wid,
-        name=str(name).strip() if name is not None else None,
+        name=name_clean if name_clean else None,
         symbols=[str(s) for s in symbols] if isinstance(symbols, list) else None,
         is_default=bool(is_default) if is_default is not None else None,
     )

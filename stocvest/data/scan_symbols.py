@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from stocvest.utils.log_privacy import user_ref_for_logs
 from stocvest.utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -39,5 +40,5 @@ def get_scan_symbols(user_id: str | None, watchlist_store: WatchlistStore | None
             merged = list(dict.fromkeys([s.upper() for s in wl.symbols if s] + SYSTEM_DEFAULTS))
             return merged[:20]
     except Exception as exc:  # noqa: BLE001 — never break scanner on watchlist errors
-        _LOG.warning("Watchlist fetch failed for scan symbols user=%s: %s", user_id, exc)
+        _LOG.warning("Watchlist fetch failed for scan symbols user=%s: %s", user_ref_for_logs(user_id), exc)
     return list(SYSTEM_DEFAULTS)

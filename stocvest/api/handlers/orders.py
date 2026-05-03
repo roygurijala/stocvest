@@ -16,6 +16,7 @@ from stocvest.api.services.order_safety import OrderAccountState, OrderSafetyGat
 from stocvest.api.services.pdt_store import get_pdt_state_store
 from stocvest.api.services.user_profile_store import get_user_profile_store
 from stocvest.api.shared import build_request_context, parse_json_body
+from stocvest.api.text_sanitize import sanitize_free_text
 from stocvest.api.types import LambdaContext, LambdaEvent
 from stocvest.brokers import (
     BrokerAdapterFactory,
@@ -35,6 +36,7 @@ from stocvest.brokers import (
 from stocvest.data import PolygonClient
 from stocvest.data.models import TradingMode, UserProfile
 from stocvest.utils.config import get_settings
+from stocvest.utils.log_privacy import user_ref_for_logs
 from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
@@ -207,7 +209,7 @@ def orders_submit_handler(
                 await adapter.disconnect()
         _LOG.info(
             "order_submit_ok user=%s symbol=%s side=%s qty=%s mode=%s",
-            request_context.user_id,
+            user_ref_for_logs(request_context.user_id),
             request.symbol,
             request.side.value,
             request.quantity,
@@ -329,9 +331,10 @@ def users_me_patch_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
         updates["legal_acknowledged"] = ack
         if ack:
             ver = body.get("legal_acknowledged_version")
-            if not ver or not str(ver).strip():
+            ver_clean = sanitize_free_text(ver, max_len=64) if ver is not None else ""
+            if not ver_clean:
                 return bad_request("legal_acknowledged_version is required when acknowledging.")
-            updates["legal_acknowledged_version"] = str(ver).strip()
+            updates["legal_acknowledged_version"] = ver_clean
             raw_at = body.get("legal_acknowledged_at")
             updates["legal_acknowledged_at"] = (
                 str(raw_at).strip()
