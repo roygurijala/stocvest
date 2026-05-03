@@ -215,6 +215,11 @@ class TradingMode(str, Enum):
 class UserProfile(BaseModel):
     user_id: str
     trading_mode: TradingMode = TradingMode.PAPER
+    onboarding_completed: bool = False
+    onboarding_completed_at: str | None = None
+    legal_acknowledged: bool = False
+    legal_acknowledged_at: str | None = None
+    legal_acknowledged_version: str | None = None
 
 
 class OrderAttemptLog(BaseModel):

@@ -1,4 +1,4 @@
-"""User profile fields (trading mode) — DynamoDB or in-memory."""
+"""User profile fields (trading mode, onboarding, legal ack) — DynamoDB or in-memory."""
 
 from __future__ import annotations
 
@@ -17,6 +17,49 @@ class DynamoTableLike(Protocol):
 class UserProfileStore(Protocol):
     def get_profile(self, user_id: str) -> UserProfile: ...
     def set_trading_mode(self, user_id: str, mode: TradingMode) -> None: ...
+    def put_profile(self, profile: UserProfile) -> None: ...
+
+
+def _item_to_profile(user_id: str, item: dict[str, Any]) -> UserProfile:
+    raw_tm = item.get("tradingMode")
+    mode = TradingMode.PAPER
+    if raw_tm is not None:
+        try:
+            mode = TradingMode(str(raw_tm).lower())
+        except ValueError:
+            mode = TradingMode.PAPER
+    return UserProfile(
+        user_id=user_id,
+        trading_mode=mode,
+        onboarding_completed=bool(item.get("onboardingCompleted")),
+        onboarding_completed_at=_s(item.get("onboardingCompletedAt")),
+        legal_acknowledged=bool(item.get("legalAcknowledged")),
+        legal_acknowledged_at=_s(item.get("legalAcknowledgedAt")),
+        legal_acknowledged_version=_s(item.get("legalAcknowledgedVersion")),
+    )
+
+
+def _s(v: Any) -> str | None:
+    if v is None:
+        return None
+    t = str(v).strip()
+    return t or None
+
+
+def _profile_to_item(profile: UserProfile) -> dict[str, Any]:
+    item: dict[str, Any] = {
+        "userId": profile.user_id,
+        "tradingMode": profile.trading_mode.value,
+        "onboardingCompleted": profile.onboarding_completed,
+        "legalAcknowledged": profile.legal_acknowledged,
+    }
+    if profile.onboarding_completed_at:
+        item["onboardingCompletedAt"] = profile.onboarding_completed_at
+    if profile.legal_acknowledged_at:
+        item["legalAcknowledgedAt"] = profile.legal_acknowledged_at
+    if profile.legal_acknowledged_version:
+        item["legalAcknowledgedVersion"] = profile.legal_acknowledged_version
+    return item
 
 
 @dataclass
@@ -28,7 +71,10 @@ class InMemoryUserProfileStore:
 
     def set_trading_mode(self, user_id: str, mode: TradingMode) -> None:
         cur = self.get_profile(user_id)
-        self._profiles[user_id] = UserProfile(user_id=user_id, trading_mode=mode)
+        self.put_profile(cur.model_copy(update={"trading_mode": mode}))
+
+    def put_profile(self, profile: UserProfile) -> None:
+        self._profiles[profile.user_id] = profile
 
 
 @dataclass
@@ -53,23 +99,19 @@ class DynamoDBUserProfileStore:
 
     def get_profile(self, user_id: str) -> UserProfile:
         resp = self.table.get_item(Key={self.user_key: user_id})
-        item = resp.get("Item")
+        item = resp.get("Item") or {}
         if not item:
             return UserProfile(user_id=user_id)
-        raw = item.get(self.trading_mode_attr)
-        mode = TradingMode.PAPER
-        if raw is not None:
-            try:
-                mode = TradingMode(str(raw).lower())
-            except ValueError:
-                mode = TradingMode.PAPER
-        return UserProfile(user_id=user_id, trading_mode=mode)
+        return _item_to_profile(user_id, item)
 
     def set_trading_mode(self, user_id: str, mode: TradingMode) -> None:
-        existing = self.table.get_item(Key={self.user_key: user_id}).get("Item") or {}
-        existing[self.user_key] = user_id
-        existing[self.trading_mode_attr] = mode.value
-        self.table.put_item(Item=existing)
+        cur = self.get_profile(user_id)
+        self.put_profile(cur.model_copy(update={"trading_mode": mode}))
+
+    def put_profile(self, profile: UserProfile) -> None:
+        existing = self.table.get_item(Key={self.user_key: profile.user_id}).get("Item") or {}
+        merged = {**existing, **_profile_to_item(profile)}
+        self.table.put_item(Item=merged)
 
 
 def build_default_user_profile_store() -> UserProfileStore:

@@ -121,6 +121,8 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
             orders_validate_handler,
             profile_trading_mode_get_handler,
             profile_trading_mode_post_handler,
+            users_me_get_handler,
+            users_me_patch_handler,
         )
 
         return _dispatch_http_routes(
@@ -139,6 +141,8 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
                 "GET /v1/orders/{order_id}/status": orders_status_handler,
                 "GET /v1/profile/trading-mode": profile_trading_mode_get_handler,
                 "POST /v1/profile/trading-mode": profile_trading_mode_post_handler,
+                "GET /v1/users/me": users_me_get_handler,
+                "PATCH /v1/users/me": users_me_patch_handler,
                 "GET /v1/auth/etrade/start": etrade_oauth_start_handler,
                 "POST /v1/auth/etrade/callback": etrade_oauth_callback_handler,
             },

@@ -6,6 +6,8 @@ from stocvest.api.handlers.orders import (
     orders_validate_handler,
     profile_trading_mode_get_handler,
     profile_trading_mode_post_handler,
+    users_me_get_handler,
+    users_me_patch_handler,
 )
 
 __all__ = [
@@ -14,4 +16,6 @@ __all__ = [
     "orders_validate_handler",
     "profile_trading_mode_get_handler",
     "profile_trading_mode_post_handler",
+    "users_me_get_handler",
+    "users_me_patch_handler",
 ]

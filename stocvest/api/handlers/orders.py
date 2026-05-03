@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 from stocvest.api.broker_gateway_provider import DEFAULT_BROKER_GATEWAY_PROVIDER, BrokerGatewayProvider
@@ -31,7 +32,7 @@ from stocvest.brokers import (
     UnknownSymbolError,
 )
 from stocvest.data import PolygonClient
-from stocvest.data.models import TradingMode
+from stocvest.data.models import TradingMode, UserProfile
 from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
 
@@ -228,6 +229,84 @@ def orders_status_handler(
     return _run_order_op(_run)
 
 
+def _serialize_user_profile(profile: UserProfile) -> dict[str, Any]:
+    return {
+        "user_id": profile.user_id,
+        "trading_mode": profile.trading_mode.value,
+        "onboarding_completed": profile.onboarding_completed,
+        "onboarding_completed_at": profile.onboarding_completed_at,
+        "legal_acknowledged": profile.legal_acknowledged,
+        "legal_acknowledged_at": profile.legal_acknowledged_at,
+        "legal_acknowledged_version": profile.legal_acknowledged_version,
+    }
+
+
+def users_me_get_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    _ = context
+    request_context = build_request_context(event)
+    if not request_context.user_id:
+        return unauthorized("Authenticated user is required.")
+    profile = get_user_profile_store().get_profile(request_context.user_id)
+    return ok(_serialize_user_profile(profile))
+
+
+def users_me_patch_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    _ = context
+    request_context = build_request_context(event)
+    if not request_context.user_id:
+        return unauthorized("Authenticated user is required.")
+    try:
+        body = parse_json_body(event)
+    except (TypeError, ValueError, KeyError):
+        return bad_request("Invalid JSON body.")
+    store = get_user_profile_store()
+    cur = store.get_profile(request_context.user_id)
+    updates: dict[str, Any] = {}
+
+    if "trading_mode" in body:
+        try:
+            updates["trading_mode"] = TradingMode(str(body["trading_mode"]).strip().lower())
+        except ValueError:
+            return bad_request("trading_mode must be 'paper' or 'live'.")
+
+    if "onboarding_completed" in body:
+        updates["onboarding_completed"] = bool(body["onboarding_completed"])
+        if updates["onboarding_completed"]:
+            raw_at = body.get("onboarding_completed_at")
+            updates["onboarding_completed_at"] = (
+                str(raw_at).strip()
+                if raw_at
+                else datetime.now(timezone.utc).isoformat()
+            )
+        else:
+            updates["onboarding_completed_at"] = None
+
+    if "legal_acknowledged" in body:
+        ack = bool(body["legal_acknowledged"])
+        updates["legal_acknowledged"] = ack
+        if ack:
+            ver = body.get("legal_acknowledged_version")
+            if not ver or not str(ver).strip():
+                return bad_request("legal_acknowledged_version is required when acknowledging.")
+            updates["legal_acknowledged_version"] = str(ver).strip()
+            raw_at = body.get("legal_acknowledged_at")
+            updates["legal_acknowledged_at"] = (
+                str(raw_at).strip()
+                if raw_at
+                else datetime.now(timezone.utc).isoformat()
+            )
+        else:
+            updates["legal_acknowledged_at"] = None
+            updates["legal_acknowledged_version"] = None
+
+    if not updates:
+        return bad_request("No supported fields to update.")
+
+    merged = cur.model_copy(update=updates)
+    store.put_profile(merged)
+    return ok(_serialize_user_profile(merged))
+
+
 def profile_trading_mode_get_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
     _ = context
     request_context = build_request_context(event)
@@ -248,7 +327,9 @@ def profile_trading_mode_post_handler(event: LambdaEvent, context: LambdaContext
         mode = TradingMode(raw)
     except ValueError:
         return bad_request("trading_mode must be 'paper' or 'live'.")
-    get_user_profile_store().set_trading_mode(request_context.user_id, mode)
+    store = get_user_profile_store()
+    cur = store.get_profile(request_context.user_id)
+    store.put_profile(cur.model_copy(update={"trading_mode": mode}))
     return ok({"trading_mode": mode.value})
 
 

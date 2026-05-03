@@ -10,6 +10,16 @@ export interface BrokerHealthResponse {
   health: string;
 }
 
+export interface UserMePayload {
+  user_id: string;
+  trading_mode: "paper" | "live";
+  onboarding_completed: boolean;
+  onboarding_completed_at?: string | null;
+  legal_acknowledged: boolean;
+  legal_acknowledged_at?: string | null;
+  legal_acknowledged_version?: string | null;
+}
+
 export interface JournalEntryPayload {
   entry_id: string;
   user_id: string;

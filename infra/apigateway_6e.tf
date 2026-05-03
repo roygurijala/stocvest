@@ -31,6 +31,8 @@ locals {
     "GET /v1/orders/{order_id}/status" = { module_key = "brokers", authorizer = true }
     "GET /v1/profile/trading-mode"     = { module_key = "brokers", authorizer = true }
     "POST /v1/profile/trading-mode"    = { module_key = "brokers", authorizer = true }
+    "GET /v1/users/me"                 = { module_key = "brokers", authorizer = true }
+    "PATCH /v1/users/me"               = { module_key = "brokers", authorizer = true }
     "GET /v1/auth/etrade/start"        = { module_key = "brokers", authorizer = true }
     "POST /v1/auth/etrade/callback"    = { module_key = "brokers", authorizer = true }
 

@@ -39,6 +39,8 @@ def _module_for_path(method: str, path_only: str) -> str | None:
         return "signals"
     if p.startswith("/v1/brokers"):
         return "brokers"
+    if p.startswith("/v1/users"):
+        return "brokers"
     if p.startswith("/v1/portfolio"):
         return "portfolio"
     if p.startswith("/v1/journal"):
@@ -190,6 +192,9 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_DELETE(self) -> None:  # noqa: N802
         self._dispatch("DELETE")
+
+    def do_PATCH(self) -> None:  # noqa: N802
+        self._dispatch("PATCH")
 
 
 def main() -> None:
