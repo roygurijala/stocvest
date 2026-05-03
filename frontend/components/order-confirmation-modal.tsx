@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { TradingModeUi } from "@/components/trading-mode-badge";
-import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import type { BrokerKind, OrderType, TimeInForce } from "@/lib/api/brokers";
 
@@ -178,7 +178,7 @@ export function OrderConfirmationModal({ open, draft, tradingMode, onClose, onAc
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.55)" }}>
       <div
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto p-4"
+        className={`max-h-[90vh] w-full max-w-lg overflow-y-auto p-4 ${surfaceGlowClassName}`}
         style={{ background: colors.surface, borderRadius: borderRadius.xl, border: `1px solid ${colors.border}` }}
       >
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

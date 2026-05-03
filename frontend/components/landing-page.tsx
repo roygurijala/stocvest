@@ -264,7 +264,7 @@ export function LandingPage({
         <motion.h2 initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="mb-8 text-center text-3xl font-bold md:text-4xl">
           Finally built for serious traders.
         </motion.h2>
-        <div className="overflow-x-auto rounded-xl border border-white/10">
+        <div className="landing-glow-card overflow-x-auto">
           <table className="w-full min-w-[880px] bg-white/[0.03] text-left text-sm">
             <thead>
               <tr className="border-b border-white/10">

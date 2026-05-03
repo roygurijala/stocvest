@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import type { MorningBriefPayload } from "@/lib/api/scanner";
 import type { PDTAssessmentPayload } from "@/lib/api/pdt";
@@ -17,6 +17,7 @@ export function MorningBriefCollapse({ mb, pdt }: MorningBriefCollapseProps) {
 
   return (
     <article
+      className={surfaceGlowClassName}
       style={{
         border: `1px solid ${colors.border}`,
         borderRadius: borderRadius.xl,

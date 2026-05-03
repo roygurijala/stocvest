@@ -22,7 +22,7 @@ import { InfoTip } from "@/components/info-tip";
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import type { ThemeColors } from "@/lib/design-system";
-import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { coerceSnapshotForReferenceLevels } from "@/lib/snapshot-reference-levels";
 import { buildEvidenceFromSetup, type SignalEvidenceData } from "@/lib/signal-evidence";
@@ -276,7 +276,10 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
       </div>
 
       {tab === "history" ? (
-        <article style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
+        <article
+          className={surfaceGlowClassName}
+          style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
+        >
           <h3 style={{ marginTop: 0 }}>Signal History</h3>
           <p style={{ margin: `0 0 ${spacing[3]} 0`, color: colors.textMuted, fontSize: typography.scale.sm }}>
             Default: last 30 days, all symbols. Filter by symbol, direction, or 1d outcome.
@@ -396,7 +399,10 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
       </div>
 
       <div className="signals-grid grid grid-cols-1 gap-4 lg:grid-cols-[1.35fr_1fr] [&>*]:min-w-0">
-        <section className="order-2 min-w-0 lg:order-1" style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
+        <section
+          className={`order-2 min-w-0 lg:order-1 ${surfaceGlowClassName}`}
+          style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
+        >
           <h3 style={{ marginTop: 0, marginBottom: spacing[2] }}>6-Layer Signal Breakdown</h3>
           {insufficientComposite ? (
             <div
@@ -501,7 +507,10 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
           )}
         </section>
 
-        <section className="order-1 min-w-0 lg:order-2" style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
+        <section
+          className={`order-1 min-w-0 lg:order-2 ${surfaceGlowClassName}`}
+          style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
+        >
           <h3 style={{ marginTop: 0 }}>Signal Radar</h3>
           <p className="text-sm" style={{ margin: `0 0 ${spacing[2]} 0`, color: colors.textMuted }}>
             Current vs Historical Average — dashed outline is a typical baseline; solid fill is today.
@@ -569,7 +578,10 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
         </section>
       </div>
 
-      <article style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
+      <article
+        className={surfaceGlowClassName}
+        style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
+      >
         <h3 style={{ marginTop: 0, display: "flex", alignItems: "center", gap: spacing[2] }}>
           <Brain size={18} />
           AI Signal Analysis
@@ -657,7 +669,17 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
         </div>
       </article>
 
-      <article style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4], position: "relative", paddingBottom: spacing[5] }}>
+      <article
+        className={surfaceGlowClassName}
+        style={{
+          background: colors.surface,
+          border: `1px solid ${colors.border}`,
+          borderRadius: borderRadius.xl,
+          padding: spacing[4],
+          position: "relative",
+          paddingBottom: spacing[5]
+        }}
+      >
         <h3 style={{ marginTop: 0 }}>Reference Levels</h3>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
           <div>

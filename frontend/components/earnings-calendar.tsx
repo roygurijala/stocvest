@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import type { EarningsEvent } from "@/lib/api/earnings";
 
@@ -51,7 +51,7 @@ export function EarningsCalendar({ events, title = "Earnings Calendar", maxDays 
 
   return (
     <section
-      className={className}
+      className={className ? `${className} ${surfaceGlowClassName}` : surfaceGlowClassName}
       style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
     >
       <h3 style={{ marginTop: 0 }}>{title}</h3>
@@ -61,6 +61,7 @@ export function EarningsCalendar({ events, title = "Earnings Calendar", maxDays 
           return (
             <article
               key={date}
+              className={surfaceGlowClassName}
               style={{
                 border: `1px solid ${isToday ? "rgba(245,158,11,.5)" : colors.border}`,
                 background: isToday ? "rgba(245,158,11,.1)" : "transparent",

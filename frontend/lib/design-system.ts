@@ -98,3 +98,6 @@ export const animationDurations = {
   normal: 240,
   slow: 360
 } as const;
+
+/** Accent outer glow for panels; paired styles in `app/globals.css` (`.theme-dark` / `.theme-light`). */
+export const surfaceGlowClassName = "stocvest-glow-surface";

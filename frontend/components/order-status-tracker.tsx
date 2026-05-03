@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Check, Loader2, X } from "lucide-react";
-import { borderRadius, typography } from "@/lib/design-system";
+import { borderRadius, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import type { BrokerKind } from "@/lib/api/brokers";
 
@@ -125,7 +125,7 @@ export function OrderStatusTracker({ broker, accountId, clientOrderId, onDone }:
 
   return (
     <div
-      className="flex items-start gap-3 p-4"
+      className={`flex items-start gap-3 p-4 ${surfaceGlowClassName}`}
       style={{
         background: colors.surface,
         border: `1px solid ${colors.border}`,

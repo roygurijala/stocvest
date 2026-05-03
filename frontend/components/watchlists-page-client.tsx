@@ -2,7 +2,7 @@
 
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
 type WatchlistRow = {
@@ -207,6 +207,7 @@ export function WatchlistsPageClient() {
 
       {newOpen ? (
         <div
+          className={surfaceGlowClassName}
           style={{
             background: colors.surface,
             border: `1px solid ${colors.border}`,
@@ -259,7 +260,10 @@ export function WatchlistsPageClient() {
       ) : null}
 
       {active ? (
-        <article style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
+        <article
+          className={surfaceGlowClassName}
+          style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
+        >
           <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: spacing[3], alignItems: "flex-start" }}>
             <div>
               {rename === active.watchlist_id ? (

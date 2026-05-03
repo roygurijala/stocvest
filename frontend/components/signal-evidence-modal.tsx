@@ -3,7 +3,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
 import { SignalEvidenceCard } from "@/components/signal-evidence-card";
-import { spacing } from "@/lib/design-system";
+import { spacing, surfaceGlowClassName } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import type { SignalEvidenceData } from "@/lib/signal-evidence";
 
@@ -33,7 +33,7 @@ export function SignalEvidenceModal({ evidence, open, onClose }: SignalEvidenceM
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.98 }}
             transition={{ duration: 0.2 }}
-            className="flex max-h-none min-h-screen w-full max-w-none flex-col overflow-y-auto rounded-none lg:max-h-[95vh] lg:min-h-0 lg:w-[min(1000px,100vw-1.5rem)] lg:rounded-xl"
+            className={`flex max-h-none min-h-screen w-full max-w-none flex-col overflow-y-auto rounded-none lg:max-h-[95vh] lg:min-h-0 lg:w-[min(1000px,100vw-1.5rem)] lg:rounded-xl ${surfaceGlowClassName}`}
             onClick={(e) => e.stopPropagation()}
             style={{
               background: colors.surface,

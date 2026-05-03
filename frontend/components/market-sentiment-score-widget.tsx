@@ -1,7 +1,7 @@
 "use client";
 
 import type { MarketOverview, MarketStatusPayload, SnapshotPayload } from "@/lib/api/market";
-import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { getEtClock } from "@/lib/market-hours-et";
 import { InfoTip } from "@/components/info-tip";
@@ -266,6 +266,7 @@ export function MarketSentimentScoreWidget({ marketOverview }: Props) {
 
   return (
     <div
+      className={surfaceGlowClassName}
       style={{
         background: "var(--color-background-secondary)",
         border: "0.5px solid var(--color-border-tertiary)",

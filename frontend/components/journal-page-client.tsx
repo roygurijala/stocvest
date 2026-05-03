@@ -6,7 +6,7 @@ import type { CreateJournalEntryRequest, JournalAnalyticsPayload, JournalEntryPa
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
 import { Area, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { InfoTip } from "@/components/info-tip";
-import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { AVG_LOSER_TIP, AVG_WINNER_TIP, EXPECTANCY_TIP, STREAK_TIP, WIN_RATE_TIP } from "@/lib/ui-tooltips";
 
@@ -216,6 +216,7 @@ export function JournalPageClient({ initialEntries, initialAnalytics, connectedB
         ].map(([k, v, tip], idx) => (
           <article
             key={k}
+            className={surfaceGlowClassName}
             style={{
               background: colors.surface,
               border: `1px solid ${colors.border}`,
@@ -270,7 +271,10 @@ export function JournalPageClient({ initialEntries, initialAnalytics, connectedB
         </div>
       ) : null}
 
-      <article style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
+      <article
+        className={surfaceGlowClassName}
+        style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
+      >
         <h3 style={{ marginTop: 0 }}>Cumulative P&L</h3>
         <div className="h-[200px] lg:h-[260px]">
           <ResponsiveContainer width="100%" height="100%">
@@ -297,7 +301,10 @@ export function JournalPageClient({ initialEntries, initialAnalytics, connectedB
         ) : null}
       </article>
 
-      <article style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
+      <article
+        className={surfaceGlowClassName}
+        style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
+      >
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h3 style={{ marginTop: 0 }}>Trade History</h3>
           <button
@@ -446,9 +453,11 @@ export function JournalPageClient({ initialEntries, initialAnalytics, connectedB
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.5)", display: "grid", placeItems: "center", zIndex: 60 }}>
           <form
             action={handleCreateEntry}
+            className={surfaceGlowClassName}
             style={{
               width: "min(460px,92vw)",
               background: colors.surface,
+              border: `1px solid ${colors.border}`,
               borderRadius: borderRadius.xl,
               padding: spacing[4],
               display: "grid",

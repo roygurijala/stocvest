@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
 interface SettingsPageClientProps {
@@ -80,7 +80,10 @@ export function SettingsPageClient({ email }: SettingsPageClientProps) {
 
   return (
     <section style={{ display: "grid", gap: spacing[4] }}>
-      <article style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
+      <article
+        className={surfaceGlowClassName}
+        style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
+      >
         <h3 style={{ marginTop: 0 }}>Account</h3>
         <p style={{ margin: 0, color: colors.textMuted }}>Email: {email}</p>
         <span style={{ display: "inline-block", marginTop: spacing[2], borderRadius: borderRadius.full, background: "rgba(59,130,246,.15)", color: colors.accent, padding: "2px 8px", fontSize: typography.scale.xs }}>
@@ -88,12 +91,18 @@ export function SettingsPageClient({ email }: SettingsPageClientProps) {
         </span>
       </article>
 
-      <article style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
+      <article
+        className={surfaceGlowClassName}
+        style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
+      >
         <h3 style={{ marginTop: 0 }}>Theme</h3>
         <ThemeToggle />
       </article>
 
-      <article style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
+      <article
+        className={surfaceGlowClassName}
+        style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
+      >
         <h3 style={{ marginTop: 0 }}>Connected Brokers</h3>
         <div style={{ display: "grid", gap: spacing[2] }}>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -146,6 +155,7 @@ export function SettingsPageClient({ email }: SettingsPageClientProps) {
 
       <article
         id="alerts"
+        className={surfaceGlowClassName}
         style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing[2], flexWrap: "wrap" }}>

@@ -5,7 +5,7 @@ import type { BrokerOverview, OrderType, TimeInForce } from "@/lib/api/brokers";
 import { OrderConfirmationModal, type OrderDraft, type OrderSignalContext } from "@/components/order-confirmation-modal";
 import { OrderStatusTracker } from "@/components/order-status-tracker";
 import { TradingModeBadge, type TradingModeUi } from "@/components/trading-mode-badge";
-import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
 /** Deep-link from scanner → portfolio: query params parsed on the server. */
@@ -109,7 +109,10 @@ export function OrderEntryPanel({ brokerOverviews, defaultAvailableCash = 1_000_
   }, [accountId, broker, defaultAvailableCash, limitPrice, orderType, quantity, side, signalContext, stopPrice, symbol, tif]);
 
   return (
-    <section style={{ marginTop: 18, background: colors.surface, borderRadius: 12, padding: 16, border: `1px solid ${colors.border}` }}>
+    <section
+      className={surfaceGlowClassName}
+      style={{ marginTop: 18, background: colors.surface, borderRadius: 12, padding: 16, border: `1px solid ${colors.border}` }}
+    >
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 style={{ margin: 0 }}>Order Entry</h2>
         <TradingModeBadge />

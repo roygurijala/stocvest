@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import type { TradingModeUi } from "@/components/trading-mode-badge";
 
@@ -53,7 +53,7 @@ export function TradingModeModal({ open, initialMode, onClose, onModeChange }: T
       aria-modal
     >
       <div
-        className="max-h-[90vh] w-full max-w-md overflow-y-auto p-4"
+        className={`max-h-[90vh] w-full max-w-md overflow-y-auto p-4 ${surfaceGlowClassName}`}
         style={{ background: colors.surface, borderRadius: borderRadius.xl, border: `1px solid ${colors.border}` }}
       >
         {step === "pick" ? (

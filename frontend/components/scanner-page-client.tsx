@@ -20,7 +20,7 @@ import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import type { GapIntelligenceItem, IntradaySetupPayload, ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
 import type { ThemeColors } from "@/lib/design-system";
-import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
 import { fetchSymbolMinuteBars } from "@/lib/fetch-symbol-bars";
@@ -198,10 +198,12 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
     return (
       <motion.article
         key={`${item.symbol}-${noCatSection ? "nc" : "c"}-${idx}`}
+        className={surfaceGlowClassName}
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: idx * 0.05 }}
         style={{
+          background: colors.surface,
           border: `1px solid ${colors.border}`,
           borderRadius: borderRadius.lg,
           padding: spacing[3],
@@ -629,7 +631,10 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
       </header>
 
       <div className="scanner-grid grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <section className="min-w-0" style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
+        <section
+          className={`min-w-0 ${surfaceGlowClassName}`}
+          style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
+        >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2], marginBottom: spacing[2] }}>
             <h3 style={{ margin: 0 }}>Gap Intelligence</h3>
             <InfoTip text={GAP_INTELLIGENCE_TIP} label="About gap intelligence" />
@@ -667,7 +672,10 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
           </div>
         </section>
 
-        <section className="min-w-0" style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}>
+        <section
+          className={`min-w-0 ${surfaceGlowClassName}`}
+          style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
+        >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2], marginBottom: spacing[2] }}>
             <h3 style={{ margin: 0 }}>Intraday Setups</h3>
             <InfoTip text={INTRADAY_SETUPS_TIP} label="About intraday setups" />
@@ -714,12 +722,14 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                 return (
                   <motion.article
                     key={`${setup.symbol}-${setup.timestamp_iso}-${idx}`}
+                    className={surfaceGlowClassName}
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: idx * 0.05 }}
                     style={{
+                      background: isConfluence ? "rgba(245, 197, 66, 0.04)" : colors.surface,
                       border: `1px solid ${colors.border}`,
-                      ...(isConfluence ? { borderLeft: "3px solid #f5c542", background: "rgba(245, 197, 66, 0.04)" } : {}),
+                      ...(isConfluence ? { borderLeft: "3px solid #f5c542" } : {}),
                       borderRadius: borderRadius.lg,
                       padding: spacing[3],
                       display: "grid",

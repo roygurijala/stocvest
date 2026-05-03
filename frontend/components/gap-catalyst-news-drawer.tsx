@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
-import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import type { GapIntelligenceCatalyst } from "@/lib/api/scanner";
 
@@ -75,6 +75,7 @@ export function GapCatalystNewsDrawer({ open, payload, onClose, onViewSignal }: 
         role="dialog"
         aria-modal="true"
         aria-labelledby="gap-news-drawer-title"
+        className={surfaceGlowClassName}
         style={{
           width: "min(440px, 100vw)",
           height: "100%",

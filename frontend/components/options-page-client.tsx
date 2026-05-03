@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { OptionChainOverview } from "@/lib/api/options";
-import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
 interface OptionsPageClientProps {
@@ -104,7 +104,7 @@ export function OptionsPageClient({ overview }: OptionsPageClientProps) {
       </div>
 
       <section
-        className="-mx-1 overflow-x-auto px-1 sm:mx-0 sm:px-0"
+        className={`-mx-1 overflow-x-auto px-1 sm:mx-0 sm:px-0 ${surfaceGlowClassName}`}
         style={{
           background: colors.surface,
           border: `1px solid ${colors.border}`,

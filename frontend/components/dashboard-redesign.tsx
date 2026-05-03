@@ -17,7 +17,7 @@ import type { MarketOverview, NewsPayload, SnapshotPayload } from "@/lib/api/mar
 import type { PDTStatusPayload } from "@/lib/api/pdt";
 import type { ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
-import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { buildEvidenceFromSetup, type SignalEvidenceData } from "@/lib/signal-evidence";
 import {
@@ -157,6 +157,7 @@ export function DashboardRedesign({
                 return (
                   <article
                     key={symbol}
+                    className={surfaceGlowClassName}
                     style={{
                       border: `1px solid ${colors.border}`,
                       borderRadius: borderRadius.lg,
@@ -178,6 +179,7 @@ export function DashboardRedesign({
               return (
                 <article
                   key={symbol}
+                  className={surfaceGlowClassName}
                   style={{
                     border: `1px solid ${colors.border}`,
                     borderRadius: borderRadius.lg,
@@ -238,7 +240,7 @@ export function DashboardRedesign({
           </div>
 
           <article
-            className="order-4 w-full lg:col-start-2 lg:row-start-1"
+            className={`order-4 w-full lg:col-start-2 lg:row-start-1 ${surfaceGlowClassName}`}
             style={{
               background: colors.surface,
               border: `1px solid ${colors.border}`,
@@ -288,7 +290,10 @@ export function DashboardRedesign({
             </div>
             <div style={{ display: "grid", gap: spacing[3] }}>
               {topSignals.length === 0 ? (
-                <article style={{ background: colors.surface, borderRadius: borderRadius.lg, padding: spacing[4] }}>
+                <article
+                  className={surfaceGlowClassName}
+                  style={{ background: colors.surface, borderRadius: borderRadius.lg, padding: spacing[4] }}
+                >
                   {scannerOverview.error ? (
                     <p style={{ margin: 0, color: colors.textMuted }}>Unable to connect. Check your connection.</p>
                   ) : (
@@ -301,6 +306,7 @@ export function DashboardRedesign({
                 topSignals.map((signal, idx) => (
                   <motion.article
                     key={`${signal.symbol}-${idx}`}
+                    className={surfaceGlowClassName}
                     initial={{ opacity: 0, x: -8 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: idx * 0.08 }}
@@ -396,7 +402,7 @@ export function DashboardRedesign({
           />
 
           <article
-            className="order-3 flex min-h-0 flex-col lg:col-start-2 lg:row-start-2"
+            className={`order-3 flex min-h-0 flex-col lg:col-start-2 lg:row-start-2 ${surfaceGlowClassName}`}
             style={{
               background: colors.surface,
               border: `1px solid ${colors.border}`,
