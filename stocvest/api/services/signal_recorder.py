@@ -80,8 +80,10 @@ def _item_to_record(item: dict[str, Any]) -> SignalRecord:
 
 
 @runtime_checkable
-class PolygonSnapshotClient(Protocol):
-    async def get_snapshot(self, symbol: str) -> Any: ...
+class SignalOutcomePriceSource(Protocol):
+    """Historical minute-bar pricing for signal outcome tracking (1h / 1d horizons)."""
+
+    async def get_evaluated_price_after_signal(self, symbol: str, generated_at: datetime, *, horizon: str) -> float | None: ...
 
 
 class InMemorySignalRecorder:
@@ -135,10 +137,16 @@ class InMemorySignalRecorder:
             _item_to_record(it) for it in self._items.values() if it.get("scope_key") == "PUBLIC"
         ]
 
+    def get_signal_record_raw(self, signal_id: str) -> SignalRecord | None:
+        raw = self._items.get(signal_id.strip())
+        if not raw:
+            return None
+        return _item_to_record(raw)
+
     async def resolve_signals(
         self,
         cutoff_minutes: int,
-        polygon: PolygonSnapshotClient,
+        polygon: SignalOutcomePriceSource,
         *,
         horizon: str,
     ) -> int:
@@ -159,8 +167,7 @@ class InMemorySignalRecorder:
             if gen > cutoff_time:
                 continue
             sym = str(it["symbol"]).upper()
-            snap = await polygon.get_snapshot(sym)
-            price_after = getattr(snap, "last_trade_price", None)
+            price_after = await polygon.get_evaluated_price_after_signal(sym, gen, horizon=horizon)
             if price_after is None:
                 continue
             price_at = float(it["price_at_signal"])
@@ -291,6 +298,20 @@ class DynamoDBSignalRecorder:
             if isinstance(x, dict) and x.get("scope_key") == "PUBLIC"
         ]
 
+    def get_signal_record_raw(self, signal_id: str) -> SignalRecord | None:
+        sid = signal_id.strip()
+        if not sid:
+            return None
+        try:
+            resp = self._table.get_item(Key={"signal_id": sid})
+        except ClientError as exc:
+            log.warning("signal get_item failed: %s", exc)
+            return None
+        item = resp.get("Item")
+        if not isinstance(item, dict):
+            return None
+        return _item_to_record(item)
+
     def _scan_all(self) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
         scan_kwargs: dict[str, Any] = {}
@@ -313,7 +334,7 @@ class DynamoDBSignalRecorder:
     async def resolve_signals(
         self,
         cutoff_minutes: int,
-        polygon: PolygonSnapshotClient,
+        polygon: SignalOutcomePriceSource,
         *,
         horizon: str,
     ) -> int:
@@ -336,8 +357,7 @@ class DynamoDBSignalRecorder:
             if gen > cutoff_time:
                 continue
             sym = str(item["symbol"]).upper()
-            snap = await polygon.get_snapshot(sym)
-            price_after = getattr(snap, "last_trade_price", None)
+            price_after = await polygon.get_evaluated_price_after_signal(sym, gen, horizon=horizon)
             if price_after is None:
                 continue
             price_at = float(item["price_at_signal"])
@@ -367,22 +387,11 @@ class DynamoDBSignalRecorder:
         return updated
 
 
-def _legacy_outcome(outcome_1d: str | None, outcome_1h: str | None) -> str:
-    def _map(o: str | None) -> str | None:
-        if o == "correct":
-            return "win"
-        if o == "incorrect":
-            return "loss"
-        if o == "neutral":
-            return "neutral"
-        return None
-
-    if outcome_1d is not None:
-        m = _map(outcome_1d)
-        return m if m is not None else "pending"
-    if outcome_1h is not None:
-        m = _map(outcome_1h)
-        return m if m is not None else "pending"
+def _tracked_outcome_summary(outcome_1d: str | None, outcome_1h: str | None) -> str:
+    """Single summary label for API consumers: prefer 1d horizon, then 1h; values are correct|incorrect|neutral|pending."""
+    o = outcome_1d if outcome_1d is not None else outcome_1h
+    if o in ("correct", "incorrect", "neutral"):
+        return o
     return "pending"
 
 
@@ -407,9 +416,16 @@ def _public_api_shape(rec: SignalRecord) -> dict[str, Any]:
         "price_1d_after": rec.price_1d_after,
         "outcome_1h": rec.outcome_1h,
         "outcome_1d": rec.outcome_1d,
-        "outcome": _legacy_outcome(rec.outcome_1d, rec.outcome_1h),
+        "outcome": _tracked_outcome_summary(rec.outcome_1d, rec.outcome_1h),
         "disclaimer": API_SIGNAL_DISCLAIMER,
     }
+
+
+def public_signal_detail_dict(rec: SignalRecord) -> dict[str, Any]:
+    """API payload for a single signal row (outcome tracking transparency)."""
+    out = _public_api_shape(rec)
+    out["signal_scope"] = "platform" if rec.user_id is None else "user"
+    return out
 
 
 _LANDING_LAYER_KEYS: tuple[str, ...] = (
@@ -484,9 +500,9 @@ def performance_summary_from_records(records: list[SignalRecord]) -> dict[str, A
     return {
         "total_signals_tracked": len(records),
         "signals_evaluated": len(evaluated),
-        "win_count": correct,
-        "loss_count": incorrect,
-        "neutral_count": neutral,
+        "correct_direction_count": correct,
+        "incorrect_direction_count": incorrect,
+        "neutral_direction_count": neutral,
         "directional_accuracy_percent": accuracy,
         "launch_date": launch_date.isoformat(),
         "date_range_days": days,

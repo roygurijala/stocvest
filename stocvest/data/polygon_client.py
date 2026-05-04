@@ -25,7 +25,7 @@ Rate limits:
 from __future__ import annotations
 
 import asyncio
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Awaitable, Callable, Optional
 
 import httpx
@@ -230,6 +230,52 @@ class PolygonClient:
             ))
         log.debug("get_bars(%s, %s) → %d bars", symbol, timeframe.value, len(bars))
         return bars
+
+    async def get_evaluated_price_after_signal(
+        self,
+        symbol: str,
+        generated_at: datetime,
+        *,
+        horizon: str,
+    ) -> float | None:
+        """
+        Close of the last completed 1-minute bar whose start is at or before the evaluation
+        instant (``generated_at`` + 1h or + 24h rolling wall-clock). Used for signal outcome
+        tracking (not live snapshot).
+        """
+        if horizon not in ("1h", "1d"):
+            raise ValueError("horizon must be '1h' or '1d'")
+        if generated_at.tzinfo is None:
+            generated_at = generated_at.replace(tzinfo=timezone.utc)
+        gen = generated_at.astimezone(timezone.utc)
+        offset_minutes = 60 if horizon == "1h" else 1440
+        target = gen + timedelta(minutes=offset_minutes)
+        # Cover weekends / thin tape: extend query window forward.
+        window_end = target + timedelta(days=7)
+        from_ms = int(gen.timestamp() * 1000)
+        to_ms = int(window_end.timestamp() * 1000)
+        sym = symbol.strip().upper()
+        path = f"/v2/aggs/ticker/{sym}/range/1/minute/{from_ms}/{to_ms}"
+        params = {"adjusted": "true", "sort": "asc", "limit": "50000"}
+        data = await self._get(path, params)
+        results = data.get("results") or []
+        if not isinstance(results, list) or not results:
+            return None
+        target_ms = int(target.timestamp() * 1000)
+        best_close: float | None = None
+        best_t = -1
+        for r in results:
+            if not isinstance(r, dict) or "t" not in r or "c" not in r:
+                continue
+            try:
+                t0 = int(r["t"])
+                close = float(r["c"])
+            except (TypeError, ValueError):
+                continue
+            if t0 <= target_ms and t0 >= best_t:
+                best_t = t0
+                best_close = close
+        return best_close
 
     # ──────────────────────────────────────────────────────────────────────────
     # REST — Snapshot (intraday scanner + pre-market gaps)

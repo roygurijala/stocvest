@@ -52,6 +52,11 @@ All REST routes are versioned under `/v1/`.
 - `POST /v1/signals/swing/synthesis/parse` — parse AI JSON verdict to normalized action payload
 - `POST /v1/signals/day/setups` — rank intraday setup candidates from 1-minute bars
 - `POST /v1/signals/day/briefing` — render daily briefing markdown from structured inputs
+- `GET /v1/signals/recent` — public historical signal data (last 50 platform rows); optional `?landing=true`
+- `GET /v1/signals/performance/summary` — directional accuracy over evaluated platform signals (1d horizon); JSON uses `correct_direction_count`, `incorrect_direction_count`, `neutral_direction_count` (legacy `win_count` / `loss_count` accepted on read in clients only)
+- `GET /v1/signals/records/{signal_id}` — single **platform** signal (404 if row is user-scoped)
+- `GET /v1/signals/me/history` — authenticated user’s evaluated signals; query `symbol`, `days` (1–365), `limit` (1–200)
+- `GET /v1/signals/me/records/{signal_id}` — single signal for the signed-in user only
 
 ### 4.4 Brokers (Phase 4e)
 

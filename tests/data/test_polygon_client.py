@@ -7,7 +7,7 @@ No real API key or network needed.  Marked pytest.mark.unit.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone, date
+from datetime import datetime, timedelta, timezone, date
 
 import pytest
 import respx
@@ -96,6 +96,34 @@ class TestGetBars:
             bars = await client.get_bars("AAPL", Timeframe.DAY_1, to_date="2024-01-02")
 
         assert bars[0].timestamp.tzinfo is not None
+
+
+class TestGetEvaluatedPriceAfterSignal:
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_1h_horizon_uses_last_bar_close_at_or_before_target(self) -> None:
+        gen = datetime(2024, 1, 2, 14, 0, 0, tzinfo=timezone.utc)
+        window_end = gen + timedelta(hours=1) + timedelta(days=7)
+        from_ms = int(gen.timestamp() * 1000)
+        to_ms = int(window_end.timestamp() * 1000)
+        url = f"https://api.polygon.io/v2/aggs/ticker/SPY/range/1/minute/{from_ms}/{to_ms}"
+        t1 = from_ms
+        t2 = from_ms + 3_600_000
+        respx.get(url).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "status": "OK",
+                    "results": [
+                        agg_bar(t1, c=100.0),
+                        agg_bar(t2, c=105.25),
+                    ],
+                },
+            )
+        )
+        async with PolygonClient(FAKE_KEY) as client:
+            px = await client.get_evaluated_price_after_signal("SPY", gen, horizon="1h")
+        assert px == 105.25
 
 
 # ──────────────────────────────────────────────────────────────────────────────

@@ -21,7 +21,7 @@ const ROWS = [
   {
     time: "After close",
     without: "No record of why trades worked or didn't. Start over tomorrow.",
-    with: "Signal replay shows every call. Journal auto-captures P&L. Start tomorrow better informed."
+    with: "Signal outcome tracking shows each evaluated signal. Journal auto-captures P&L. Start tomorrow better informed."
   }
 ] as const;
 

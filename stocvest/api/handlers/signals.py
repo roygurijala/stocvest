@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import asyncio
 from datetime import date, datetime, timezone
-from typing import Any
+from typing import Any, Callable
 from uuid import uuid4
 
 from stocvest.api.legal_copy import API_SIGNAL_DISCLAIMER
-from stocvest.api.response import bad_request, internal_error, ok
+from stocvest.api.http_route import http_route_descriptor
+from stocvest.api.response import bad_request, internal_error, not_found, ok, unauthorized
 from stocvest.api.services.composite_market_context import fetch_composite_market_status_payload_sync
 from stocvest.api.services.signal_dto import (
     parse_bar,
@@ -21,7 +22,11 @@ from stocvest.api.services.morning_brief_fetch import (
     fetch_morning_brief_context_live,
     morning_brief_context_from_payload_dict,
 )
-from stocvest.api.services.signal_recorder import get_signal_recorder, performance_summary_from_records
+from stocvest.api.services.signal_recorder import (
+    get_signal_recorder,
+    performance_summary_from_records,
+    public_signal_detail_dict,
+)
 from stocvest.api.services.swing_composite_evidence import build_swing_composite_evidence_fields
 from stocvest.data.models import Bar, SignalRecord
 from stocvest.signals import (
@@ -364,4 +369,91 @@ def public_performance_summary_handler(event: LambdaEvent, context: LambdaContex
         return ok(performance_summary_from_records(records))
     except Exception as exc:
         return internal_error(str(exc))
+
+
+def _signal_id_from_path(event: LambdaEvent, *, path_prefix: str) -> str | None:
+    """Resolve ``signal_id`` from API Gateway ``{signal_id}`` param or raw path (local tests)."""
+    pp = event.get("pathParameters") or {}
+    raw = pp.get("signal_id")
+    if raw and str(raw).strip() and not str(raw).startswith("{"):
+        return str(raw).strip()
+    http = (event.get("requestContext") or {}).get("http") or {}
+    path = str(http.get("path") or event.get("path") or "")
+    if not path.startswith(path_prefix):
+        return None
+    rest = path[len(path_prefix) :].split("?")[0].strip().strip("/")
+    return rest or None
+
+
+def public_platform_signal_record_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    """GET /v1/signals/records/{signal_id} — platform (non-user) signals only."""
+    _ = context
+    sid = _signal_id_from_path(event, path_prefix="/v1/signals/records/")
+    if not sid:
+        return bad_request("signal_id is required.")
+    rec = get_signal_recorder().get_signal_record_raw(sid)
+    if rec is None:
+        return not_found("Signal not found.")
+    if rec.user_id is not None:
+        return not_found("Signal not found.")
+    return ok(public_signal_detail_dict(rec))
+
+
+def user_signal_record_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    """GET /v1/signals/me/records/{signal_id} — authenticated user's evaluated signals only."""
+    _ = context
+    rc = build_request_context(event)
+    if not rc.user_id:
+        return unauthorized("Authenticated user is required.")
+    sid = _signal_id_from_path(event, path_prefix="/v1/signals/me/records/")
+    if not sid:
+        return bad_request("signal_id is required.")
+    rec = get_signal_recorder().get_signal_record_raw(sid)
+    if rec is None or rec.user_id != rc.user_id:
+        return not_found("Signal not found.")
+    return ok(public_signal_detail_dict(rec))
+
+
+def user_signal_history_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    """GET /v1/signals/me/history — historical signal data for the signed-in user."""
+    _ = context
+    rc = build_request_context(event)
+    if not rc.user_id:
+        return unauthorized("Authenticated user is required.")
+    qs = event.get("queryStringParameters") or {}
+    symbol = str(qs.get("symbol") or "").strip().upper() or None
+    try:
+        days = max(1, min(365, int(str(qs.get("days") or "30"))))
+    except (TypeError, ValueError):
+        days = 30
+    try:
+        limit = max(1, min(200, int(str(qs.get("limit") or "100"))))
+    except (TypeError, ValueError):
+        limit = 100
+    rows = get_signal_recorder().get_signal_history(user_id=rc.user_id, symbol=symbol, days=days, limit=limit)
+    return ok([public_signal_detail_dict(r) for r in rows])
+
+
+def signals_http_dispatch(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    """Route signals module requests including parameterized outcome-tracking paths."""
+    route = http_route_descriptor(event)
+    if route.startswith("GET /v1/signals/records/"):
+        return public_platform_signal_record_handler(event, context)
+    if route.startswith("GET /v1/signals/me/records/"):
+        return user_signal_record_handler(event, context)
+    if route == "GET /v1/signals/me/history" or route.startswith("GET /v1/signals/me/history?"):
+        return user_signal_history_handler(event, context)
+
+    routes: dict[str, Callable[[LambdaEvent, LambdaContext], dict[str, Any]]] = {
+        "POST /v1/signals/swing/composite": swing_composite_handler,
+        "POST /v1/signals/swing/synthesis/parse": swing_synthesis_parse_handler,
+        "POST /v1/signals/day/setups": day_setups_handler,
+        "POST /v1/signals/day/briefing": day_briefing_handler,
+        "GET /v1/signals/recent": public_recent_signals_handler,
+        "GET /v1/signals/performance/summary": public_performance_summary_handler,
+    }
+    target = routes.get(route)
+    if target is None:
+        return not_found(f"Unknown route: {route or '(empty)'}")
+    return target(event, context)
 

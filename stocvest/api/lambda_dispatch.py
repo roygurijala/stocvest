@@ -83,30 +83,9 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
         )
 
     if module == "signals":
-        from stocvest.api.handlers.signals import (
-            day_briefing_handler,
-            day_setups_handler,
-            public_performance_summary_handler,
-            public_recent_signals_handler,
-            swing_composite_handler,
-            swing_synthesis_parse_handler,
-        )
+        from stocvest.api.handlers.signals import signals_http_dispatch
 
-        return apply_cors_to_http_proxy_response(
-            _dispatch_http_routes(
-                event,
-                context,
-                {
-                    "POST /v1/signals/swing/composite": swing_composite_handler,
-                    "POST /v1/signals/swing/synthesis/parse": swing_synthesis_parse_handler,
-                    "POST /v1/signals/day/setups": day_setups_handler,
-                    "POST /v1/signals/day/briefing": day_briefing_handler,
-                    "GET /v1/signals/recent": public_recent_signals_handler,
-                    "GET /v1/signals/performance/summary": public_performance_summary_handler,
-                },
-            ),
-            event,
-        )
+        return apply_cors_to_http_proxy_response(signals_http_dispatch(event, context), event)
 
     if module == "brokers":
         route = http_route_descriptor(event)

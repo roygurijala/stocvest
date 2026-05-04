@@ -126,7 +126,7 @@ export function LandingPerformanceSection({ summary }: { summary: PerformanceSum
         </p>
         <h2 className="text-3xl font-extrabold tracking-tight text-[#e8f4ff] md:text-4xl">Every signal. Published.</h2>
         <p className="mx-auto mt-3 max-w-lg text-sm text-slate-400">
-          We track every signal against real market outcomes. Wins and losses.
+          Signal outcome tracking: we compare each call to subsequent price movement. Directional accuracy is not trading performance.
         </p>
       </div>
 

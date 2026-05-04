@@ -74,8 +74,8 @@ variable "http_api_throttling_rate_limit" {
     API Gateway HTTP API ($default stage) steady-state request rate limit (requests per second) via default_route_settings.
     Applies per route unless overridden. Cannot exceed account-level API Gateway quota for the Region.
   EOT
-  type    = number
-  default = 2000
+  type        = number
+  default     = 2000
 
   validation {
     condition     = var.http_api_throttling_rate_limit >= 100 && var.http_api_throttling_rate_limit <= 10000
@@ -88,8 +88,8 @@ variable "http_api_throttling_burst_limit" {
     API Gateway HTTP API ($default stage) burst limit (concurrent request submissions / token bucket capacity) via default_route_settings.
     Should typically be >= http_api_throttling_rate_limit. AWS enforces upper bounds per API type.
   EOT
-  type    = number
-  default = 4000
+  type        = number
+  default     = 4000
 
   validation {
     condition     = var.http_api_throttling_burst_limit >= 100 && var.http_api_throttling_burst_limit <= 5000

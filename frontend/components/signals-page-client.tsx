@@ -26,7 +26,12 @@ import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/d
 import { useTheme } from "@/lib/theme-provider";
 import { coerceSnapshotForReferenceLevels } from "@/lib/snapshot-reference-levels";
 import { applySwingCompositeEnrichment, buildEvidenceFromSetup, type SignalEvidenceData } from "@/lib/signal-evidence";
-import { fetchLiveSignals, formatHorizonOutcome, type PublicSignal } from "@/lib/api/public-signals";
+import {
+  fetchLiveSignals,
+  fetchUserEvaluatedSignals,
+  formatHorizonOutcome,
+  type PublicSignal
+} from "@/lib/api/public-signals";
 import { LAYER_NAME_HINTS } from "@/lib/ui-tooltips";
 import {
   buildSwingCompositeRequestBody,
@@ -92,6 +97,7 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
   const [histOutcomeFilter, setHistOutcomeFilter] = useState<
     "all" | "correct" | "incorrect" | "neutral" | "pending"
   >("all");
+  const [historySource, setHistorySource] = useState<"user" | "public">("public");
   const [compositeCheck, setCompositeCheck] = useState<Record<string, unknown> | null>(null);
 
   const rawSnapshot = useMemo(() => {
@@ -128,12 +134,18 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
     if (tab !== "history") return;
     let cancelled = false;
     setHistLoading(true);
-    void fetchLiveSignals().then((rows) => {
-      if (!cancelled) {
-        setHistoryRows(rows);
-        setHistLoading(false);
+    void (async () => {
+      const mine = await fetchUserEvaluatedSignals({ days: 30, limit: 200 });
+      if (cancelled) return;
+      if (mine !== null) {
+        setHistorySource("user");
+        setHistoryRows(mine);
+      } else {
+        setHistorySource("public");
+        setHistoryRows(await fetchLiveSignals());
       }
-    });
+      setHistLoading(false);
+    })();
     return () => {
       cancelled = true;
     };
@@ -278,7 +290,7 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
         {(
           [
             ["layers", "Layer analysis"],
-            ["history", "Signal history"]
+            ["history", "Historical signal data"]
           ] as const
         ).map(([key, label]) => (
           <button
@@ -302,9 +314,11 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
           className={surfaceGlowClassName}
           style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
         >
-          <h3 style={{ marginTop: 0 }}>Signal History</h3>
+          <h3 style={{ marginTop: 0 }}>Signal outcome tracking</h3>
           <p style={{ margin: `0 0 ${spacing[3]} 0`, color: colors.textMuted, fontSize: typography.scale.sm }}>
-            Default: last 30 days, all symbols. Filter by symbol, direction, or 1d outcome.
+            {historySource === "user"
+              ? "Your evaluated signals (signed in): last 30 days by default. Filter by symbol, direction, or 1d outcome."
+              : "Platform historical signal data (public feed). Sign in to include your personal evaluated signals in this list."}
           </p>
           <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
             <input

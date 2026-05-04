@@ -10,9 +10,12 @@ from stocvest.api.handlers.signals import (
     day_briefing_handler,
     day_setups_handler,
     public_performance_summary_handler,
+    public_platform_signal_record_handler,
     public_recent_signals_handler,
     swing_composite_handler,
     swing_synthesis_parse_handler,
+    user_signal_history_handler,
+    user_signal_record_handler,
 )
 from stocvest.api.services.signal_recorder import (
     InMemorySignalRecorder,
@@ -342,11 +345,141 @@ def test_public_performance_summary_aggregates_outcomes(monkeypatch) -> None:
     body = json.loads(response["body"])
     assert body["total_signals_tracked"] == 3
     assert body["signals_evaluated"] == 3
-    assert body["win_count"] == 1
-    assert body["loss_count"] == 1
-    assert body["neutral_count"] == 1
+    assert body["correct_direction_count"] == 1
+    assert body["incorrect_direction_count"] == 1
+    assert body["neutral_direction_count"] == 1
     assert body["directional_accuracy_percent"] == 50.0
     assert body["disclaimer"]
+
+
+def test_public_platform_signal_record_ok(monkeypatch: pytest.MonkeyPatch) -> None:
+    reset_signal_recorder_for_tests()
+    mem = InMemorySignalRecorder()
+    monkeypatch.setattr("stocvest.api.handlers.signals.get_signal_recorder", lambda: mem)
+    now = datetime.now(timezone.utc)
+    mem.record_signal(
+        SignalRecord(
+            signal_id="pub1",
+            symbol="SPY",
+            direction="bullish",
+            signal_strength=70,
+            pattern="swing_composite",
+            layer_scores={"technical": 0.6},
+            price_at_signal=400.0,
+            generated_at=now,
+            user_id=None,
+        )
+    )
+    event = {
+        "requestContext": {"http": {"method": "GET", "path": "/v1/signals/records/pub1"}},
+    }
+    resp = public_platform_signal_record_handler(event, {})
+    assert resp["statusCode"] == 200
+    body = json.loads(resp["body"])
+    assert body["signal_id"] == "pub1"
+    assert body["signal_scope"] == "platform"
+
+
+def test_public_platform_signal_record_hides_user_scoped(monkeypatch: pytest.MonkeyPatch) -> None:
+    reset_signal_recorder_for_tests()
+    mem = InMemorySignalRecorder()
+    monkeypatch.setattr("stocvest.api.handlers.signals.get_signal_recorder", lambda: mem)
+    now = datetime.now(timezone.utc)
+    mem.record_signal(
+        SignalRecord(
+            signal_id="u1",
+            symbol="QQQ",
+            direction="bearish",
+            signal_strength=60,
+            pattern="swing_composite",
+            layer_scores={},
+            price_at_signal=300.0,
+            generated_at=now,
+            user_id="cognito-sub-xyz",
+        )
+    )
+    event = {
+        "requestContext": {"http": {"method": "GET", "path": "/v1/signals/records/u1"}},
+    }
+    resp = public_platform_signal_record_handler(event, {})
+    assert resp["statusCode"] == 404
+
+
+def test_user_signal_record_requires_auth(monkeypatch: pytest.MonkeyPatch) -> None:
+    reset_signal_recorder_for_tests()
+    mem = InMemorySignalRecorder()
+    monkeypatch.setattr("stocvest.api.handlers.signals.get_signal_recorder", lambda: mem)
+    event = {"requestContext": {"http": {"method": "GET", "path": "/v1/signals/me/records/x"}}}
+    resp = user_signal_record_handler(event, {})
+    assert resp["statusCode"] == 401
+
+
+def test_user_signal_record_ok(monkeypatch: pytest.MonkeyPatch) -> None:
+    reset_signal_recorder_for_tests()
+    mem = InMemorySignalRecorder()
+    monkeypatch.setattr("stocvest.api.handlers.signals.get_signal_recorder", lambda: mem)
+    now = datetime.now(timezone.utc)
+    mem.record_signal(
+        SignalRecord(
+            signal_id="mine",
+            symbol="AAPL",
+            direction="bullish",
+            signal_strength=55,
+            pattern="swing_composite",
+            layer_scores={},
+            price_at_signal=150.0,
+            generated_at=now,
+            user_id="user-42",
+        )
+    )
+    event = {
+        "requestContext": {
+            "http": {"method": "GET", "path": "/v1/signals/me/records/mine"},
+            "authorizer": {"claims": {"sub": "user-42"}},
+        },
+    }
+    resp = user_signal_record_handler(event, {})
+    assert resp["statusCode"] == 200
+    assert json.loads(resp["body"])["signal_scope"] == "user"
+
+
+def test_user_signal_history_requires_auth(monkeypatch: pytest.MonkeyPatch) -> None:
+    reset_signal_recorder_for_tests()
+    mem = InMemorySignalRecorder()
+    monkeypatch.setattr("stocvest.api.handlers.signals.get_signal_recorder", lambda: mem)
+    resp = user_signal_history_handler({"requestContext": {"http": {"method": "GET", "path": "/v1/signals/me/history"}}}, {})
+    assert resp["statusCode"] == 401
+
+
+def test_user_signal_history_returns_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    reset_signal_recorder_for_tests()
+    mem = InMemorySignalRecorder()
+    monkeypatch.setattr("stocvest.api.handlers.signals.get_signal_recorder", lambda: mem)
+    now = datetime.now(timezone.utc)
+    mem.record_signal(
+        SignalRecord(
+            signal_id="h1",
+            symbol="XOM",
+            direction="neutral",
+            signal_strength=50,
+            pattern="swing_composite",
+            layer_scores={},
+            price_at_signal=90.0,
+            generated_at=now,
+            user_id="user-99",
+        )
+    )
+    event = {
+        "requestContext": {
+            "http": {"method": "GET", "path": "/v1/signals/me/history"},
+            "authorizer": {"claims": {"sub": "user-99"}},
+        },
+    }
+    resp = user_signal_history_handler(event, {})
+    assert resp["statusCode"] == 200
+    rows = json.loads(resp["body"])
+    assert len(rows) == 1
+    assert rows[0]["symbol"] == "XOM"
 
 
 def _bar_payload(ts: datetime, *, close: float, volume: float) -> dict[str, object]:

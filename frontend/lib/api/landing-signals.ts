@@ -273,15 +273,33 @@ function parsePerformanceSummaryJson(data: Record<string, unknown>): Performance
   const fallback: PerformanceSummary = {
     total_signals_tracked: 0,
     signals_evaluated: 0,
-    win_count: 0,
-    loss_count: 0,
-    neutral_count: 0,
+    correct_direction_count: 0,
+    incorrect_direction_count: 0,
+    neutral_direction_count: 0,
     directional_accuracy_percent: 0,
     launch_date: new Date().toISOString().slice(0, 10),
     date_range_days: 0
   };
   const evaluated = data.signals_evaluated ?? data.total_resolved;
   const accuracy = data.directional_accuracy_percent ?? data.win_rate_percent;
+  const correctDir =
+    typeof data.correct_direction_count === "number"
+      ? data.correct_direction_count
+      : typeof data.win_count === "number"
+        ? data.win_count
+        : fallback.correct_direction_count;
+  const incorrectDir =
+    typeof data.incorrect_direction_count === "number"
+      ? data.incorrect_direction_count
+      : typeof data.loss_count === "number"
+        ? data.loss_count
+        : fallback.incorrect_direction_count;
+  const neutralDir =
+    typeof data.neutral_direction_count === "number"
+      ? data.neutral_direction_count
+      : typeof data.neutral_count === "number"
+        ? data.neutral_count
+        : fallback.neutral_direction_count;
   const rawPb = data.pattern_breakdown;
   let pattern_breakdown: PatternAccuracyRow[] | undefined;
   if (Array.isArray(rawPb)) {
@@ -309,9 +327,9 @@ function parsePerformanceSummaryJson(data: Record<string, unknown>): Performance
     ...fallback,
     total_signals_tracked: typeof data.total_signals_tracked === "number" ? data.total_signals_tracked : fallback.total_signals_tracked,
     signals_evaluated: typeof evaluated === "number" ? evaluated : fallback.signals_evaluated,
-    win_count: typeof data.win_count === "number" ? data.win_count : fallback.win_count,
-    loss_count: typeof data.loss_count === "number" ? data.loss_count : fallback.loss_count,
-    neutral_count: typeof data.neutral_count === "number" ? data.neutral_count : fallback.neutral_count,
+    correct_direction_count: correctDir,
+    incorrect_direction_count: incorrectDir,
+    neutral_direction_count: neutralDir,
     directional_accuracy_percent: typeof accuracy === "number" ? accuracy : fallback.directional_accuracy_percent,
     launch_date: typeof data.launch_date === "string" ? data.launch_date : fallback.launch_date,
     date_range_days: typeof data.date_range_days === "number" ? data.date_range_days : fallback.date_range_days,
@@ -324,9 +342,9 @@ export async function fetchLandingPerformanceSummary(): Promise<PerformanceSumma
   const empty: PerformanceSummary = {
     total_signals_tracked: 0,
     signals_evaluated: 0,
-    win_count: 0,
-    loss_count: 0,
-    neutral_count: 0,
+    correct_direction_count: 0,
+    incorrect_direction_count: 0,
+    neutral_direction_count: 0,
     directional_accuracy_percent: 0,
     launch_date: new Date().toISOString().slice(0, 10),
     date_range_days: 0

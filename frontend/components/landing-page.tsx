@@ -106,7 +106,7 @@ const LANDING_COMPARISON_GROUPS: ComparisonGroupDef[] = [
     title: "TRANSPARENCY",
     rows: [
       {
-        capability: "Published signal accuracy (wins + losses)",
+        capability: "Published directional accuracy from historical signal data",
         stocvest: { kind: "check" },
         webull: { kind: "dash" },
         tradingview: { kind: "dash" },

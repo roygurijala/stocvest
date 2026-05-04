@@ -76,8 +76,8 @@ function dotFill(outcome: LandingSignal["outcome_1h"]): { bg: string; shadow: st
 function directionalAccuracyFromSignals(list: LandingSignal[]): number | null {
   const material = list.filter((s) => s.outcome_1h === "correct" || s.outcome_1h === "incorrect");
   if (material.length === 0) return null;
-  const wins = material.filter((s) => s.outcome_1h === "correct").length;
-  return Math.round((100 * wins) / material.length);
+  const correctCount = material.filter((s) => s.outcome_1h === "correct").length;
+  return Math.round((100 * correctCount) / material.length);
 }
 
 export function LandingSignalExplorer({
@@ -141,10 +141,10 @@ export function LandingSignalExplorer({
           YESTERDAY&apos;S SIGNALS
         </p>
         <h2 className="mb-3 text-center text-2xl font-bold leading-tight text-slate-50 md:text-3xl">
-          The engine in action — real signals, real outcomes
+          Signal outcome tracking — evaluated signals from yesterday
         </h2>
         <p className="mx-auto mb-10 max-w-2xl text-center text-sm text-slate-400 md:text-base">
-          Every signal we generated yesterday, tracked against what actually happened
+          Historical signal data: each row is compared to subsequent price movement (1h window in this view).
         </p>
 
         {/* Track record strip */}
@@ -301,7 +301,7 @@ export function LandingSignalExplorer({
                   color: "#86efac"
                 }}
               >
-                <span className="font-semibold">✓ CORRECT — price moved as signaled</span>
+                <span className="font-semibold">Outcome: Correct — price moved as signaled</span>
                 <p className="mt-1 text-xs text-slate-300">
                   ${current.price_at_signal.toFixed(2)} → $
                   {current.price_1h_after != null ? current.price_1h_after.toFixed(2) : "—"}
@@ -321,7 +321,7 @@ export function LandingSignalExplorer({
                   color: "#fecaca"
                 }}
               >
-                <span className="font-semibold">✗ MISSED — price moved opposite</span>
+                <span className="font-semibold">Price moved opposite the signal direction</span>
                 <p className="mt-1 text-xs text-slate-300">
                   ${current.price_at_signal.toFixed(2)} → $
                   {current.price_1h_after != null ? current.price_1h_after.toFixed(2) : "—"}

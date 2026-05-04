@@ -91,14 +91,12 @@ def test_resolve_signals_marks_correct_outcome() -> None:
     )
     assert sid == "s1"
 
-    class _FakeSnap:
-        def __init__(self, p: float) -> None:
-            self.last_trade_price = p
-
     class _FakePoly:
-        async def get_snapshot(self, symbol: str) -> _FakeSnap:
+        async def get_evaluated_price_after_signal(self, symbol: str, generated_at: datetime, *, horizon: str) -> float:
             _ = symbol
-            return _FakeSnap(102.0)
+            _ = generated_at
+            _ = horizon
+            return 102.0
 
     async def _run() -> int:
         return await rec.resolve_signals(60, _FakePoly(), horizon="1h")
@@ -126,14 +124,12 @@ def test_resolve_signals_marks_incorrect_outcome() -> None:
         )
     )
 
-    class _FakeSnap:
-        def __init__(self, p: float) -> None:
-            self.last_trade_price = p
-
     class _FakePoly:
-        async def get_snapshot(self, symbol: str) -> _FakeSnap:
+        async def get_evaluated_price_after_signal(self, symbol: str, generated_at: datetime, *, horizon: str) -> float:
             _ = symbol
-            return _FakeSnap(98.0)
+            _ = generated_at
+            _ = horizon
+            return 98.0
 
     async def _run() -> None:
         await rec.resolve_signals(60, _FakePoly(), horizon="1h")

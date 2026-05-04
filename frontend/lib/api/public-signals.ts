@@ -1,6 +1,6 @@
 "use client";
 
-export type PublicSignalOutcome = "pending" | "win" | "loss" | "neutral";
+export type PublicSignalOutcome = "pending" | "correct" | "incorrect" | "neutral";
 export type PublicSignalDirection = "long" | "short" | "neutral";
 export type SignalBias = "bullish" | "bearish" | "neutral";
 
@@ -36,9 +36,9 @@ export interface PatternAccuracyRow {
 export interface PerformanceSummary {
   total_signals_tracked: number;
   signals_evaluated: number;
-  win_count: number;
-  loss_count: number;
-  neutral_count: number;
+  correct_direction_count: number;
+  incorrect_direction_count: number;
+  neutral_direction_count: number;
   directional_accuracy_percent: number;
   launch_date: string;
   date_range_days: number;
@@ -73,10 +73,13 @@ function normalizePublicSignal(raw: Record<string, unknown>): PublicSignal | nul
   if (!Number.isFinite(strength)) {
     return null;
   }
-  const outcome = raw.outcome;
-  if (outcome !== "pending" && outcome !== "win" && outcome !== "loss" && outcome !== "neutral") {
-    return null;
-  }
+  const outcomeRaw = raw.outcome;
+  let outcome: PublicSignalOutcome;
+  if (outcomeRaw === "pending") outcome = "pending";
+  else if (outcomeRaw === "correct" || outcomeRaw === "win") outcome = "correct";
+  else if (outcomeRaw === "incorrect" || outcomeRaw === "loss") outcome = "incorrect";
+  else if (outcomeRaw === "neutral") outcome = "neutral";
+  else return null;
   const { direction, bias } = mapDirectionAndBias(raw.direction);
   const sid = raw.signal_id;
   const pat = raw.pattern;
@@ -113,6 +116,41 @@ function normalizePublicSignal(raw: Record<string, unknown>): PublicSignal | nul
   };
 }
 
+/** Authenticated user's evaluated signals (platform + user-scoped rows for that account). Returns null if not signed in. */
+export async function fetchUserEvaluatedSignals(params?: {
+  days?: number;
+  limit?: number;
+  symbol?: string;
+}): Promise<PublicSignal[] | null> {
+  const qs = new URLSearchParams();
+  if (params?.days != null) qs.set("days", String(params.days));
+  if (params?.limit != null) qs.set("limit", String(params.limit));
+  if (params?.symbol?.trim()) qs.set("symbol", params.symbol.trim().toUpperCase());
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  try {
+    const response = await fetch(`/api/stocvest/signals/me/history${suffix}`, {
+      method: "GET",
+      credentials: "include",
+      cache: "no-store"
+    });
+    if (response.status === 401) {
+      return null;
+    }
+    if (!response.ok) {
+      return [];
+    }
+    const data = (await response.json()) as unknown;
+    if (!Array.isArray(data)) {
+      return [];
+    }
+    return data
+      .map((x) => (typeof x === "object" && x !== null ? normalizePublicSignal(x as Record<string, unknown>) : null))
+      .filter((x): x is PublicSignal => x !== null);
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchLiveSignals(): Promise<PublicSignal[]> {
   try {
     const response = await fetch(`${apiBaseUrl()}/v1/signals/recent`, {
@@ -138,9 +176,9 @@ export async function fetchPerformanceSummary(): Promise<PerformanceSummary> {
   const fallback: PerformanceSummary = {
     total_signals_tracked: 0,
     signals_evaluated: 0,
-    win_count: 0,
-    loss_count: 0,
-    neutral_count: 0,
+    correct_direction_count: 0,
+    incorrect_direction_count: 0,
+    neutral_direction_count: 0,
     directional_accuracy_percent: 0,
     launch_date: new Date().toISOString().slice(0, 10),
     date_range_days: 0
@@ -156,6 +194,24 @@ export async function fetchPerformanceSummary(): Promise<PerformanceSummary> {
     const data = (await response.json()) as Record<string, unknown>;
     const evaluated = data.signals_evaluated ?? data.total_resolved;
     const accuracy = data.directional_accuracy_percent ?? data.win_rate_percent;
+    const correctDir =
+      typeof data.correct_direction_count === "number"
+        ? data.correct_direction_count
+        : typeof data.win_count === "number"
+          ? data.win_count
+          : fallback.correct_direction_count;
+    const incorrectDir =
+      typeof data.incorrect_direction_count === "number"
+        ? data.incorrect_direction_count
+        : typeof data.loss_count === "number"
+          ? data.loss_count
+          : fallback.incorrect_direction_count;
+    const neutralDir =
+      typeof data.neutral_direction_count === "number"
+        ? data.neutral_direction_count
+        : typeof data.neutral_count === "number"
+          ? data.neutral_count
+          : fallback.neutral_direction_count;
     const rawPb = data.pattern_breakdown;
     let pattern_breakdown: PatternAccuracyRow[] | undefined;
     if (Array.isArray(rawPb)) {
@@ -184,9 +240,9 @@ export async function fetchPerformanceSummary(): Promise<PerformanceSummary> {
       ...fallback,
       total_signals_tracked: typeof data.total_signals_tracked === "number" ? data.total_signals_tracked : fallback.total_signals_tracked,
       signals_evaluated: typeof evaluated === "number" ? evaluated : fallback.signals_evaluated,
-      win_count: typeof data.win_count === "number" ? data.win_count : fallback.win_count,
-      loss_count: typeof data.loss_count === "number" ? data.loss_count : fallback.loss_count,
-      neutral_count: typeof data.neutral_count === "number" ? data.neutral_count : fallback.neutral_count,
+      correct_direction_count: correctDir,
+      incorrect_direction_count: incorrectDir,
+      neutral_direction_count: neutralDir,
       directional_accuracy_percent: typeof accuracy === "number" ? accuracy : fallback.directional_accuracy_percent,
       launch_date: typeof data.launch_date === "string" ? data.launch_date : fallback.launch_date,
       date_range_days: typeof data.date_range_days === "number" ? data.date_range_days : fallback.date_range_days,
@@ -198,12 +254,12 @@ export async function fetchPerformanceSummary(): Promise<PerformanceSummary> {
   }
 }
 
-/** Row label for 1h / 1d outcome chips in history tables. */
+/** Row label for 1h / 1d outcome chips (signal outcome tracking terminology). */
 export function formatHorizonOutcome(
   o: string | null | undefined
 ): { label: string; kind: "ok" | "bad" | "mid" | "pending" } {
-  if (o === "correct") return { label: "✅ Correct", kind: "ok" };
-  if (o === "incorrect") return { label: "❌ Incorrect", kind: "bad" };
-  if (o === "neutral") return { label: "~ Neutral", kind: "mid" };
-  return { label: "— Pending", kind: "pending" };
+  if (o === "correct") return { label: "Outcome: Correct", kind: "ok" };
+  if (o === "incorrect") return { label: "Price moved opposite", kind: "bad" };
+  if (o === "neutral") return { label: "Neutral move", kind: "mid" };
+  return { label: "Pending evaluation", kind: "pending" };
 }
