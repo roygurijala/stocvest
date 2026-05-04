@@ -10,6 +10,55 @@ CONFLUENCE_DISCLAIMER = (
     "Signal confluence data for informational purposes only. Not investment advice."
 )
 
+BULLISH_TERMS = frozenset(
+    {
+        "bullish",
+        "bull",
+        "positive",
+        "risk_on",
+        "favorable",
+        "up",
+        "long",
+    }
+)
+BEARISH_TERMS = frozenset(
+    {
+        "bearish",
+        "bear",
+        "negative",
+        "risk_off",
+        "unfavorable",
+        "down",
+        "short",
+    }
+)
+
+
+def normalize_direction(value: str | None) -> str:
+    """Map heterogeneous direction labels to bullish | bearish | neutral | mixed."""
+    if not value:
+        return "neutral"
+    v = str(value).lower().strip()
+    if v == "mixed":
+        return "mixed"
+    if v in ("avoid",):
+        return "bearish"
+    if v in BULLISH_TERMS:
+        return "bullish"
+    if v in BEARISH_TERMS:
+        return "bearish"
+    return "neutral"
+
+
+def is_orb_long_pattern(pattern: str) -> bool:
+    p = (pattern or "").lower()
+    return "orb" in p and ("long" in p or "breakout" in p) and "short" not in p
+
+
+def is_orb_short_pattern(pattern: str) -> bool:
+    p = (pattern or "").lower()
+    return "orb" in p and "short" in p
+
 
 @dataclass(frozen=True)
 class ConfluenceResult:
@@ -53,13 +102,13 @@ class ConfluenceDetector:
         confirming: list[dict[str, Any]] = []
         conflicting: list[dict[str, Any]] = []
         direction = (direction or "").strip().lower()
-        regime_l = (regime or "neutral").strip().lower()
-        sector_l = (sector_signal or "neutral").strip().lower()
+        regime_l = normalize_direction(regime)
+        sector_l = normalize_direction(sector_signal)
 
         pattern = str(signal_data.get("pattern", "") or "").lower()
 
         # 1. ORB pattern
-        if direction == "long" and "long" in pattern:
+        if direction == "long" and is_orb_long_pattern(pattern):
             confirming.append(
                 {
                     "source": "orb_breakout",
@@ -67,7 +116,7 @@ class ConfluenceDetector:
                     "detail": "Price broke above opening range high",
                 }
             )
-        elif direction == "short" and "short" in pattern:
+        elif direction == "short" and is_orb_short_pattern(pattern):
             confirming.append(
                 {
                     "source": "orb_breakout",
@@ -211,7 +260,8 @@ class ConfluenceDetector:
 
         # 7. News catalyst
         if news_catalyst:
-            sentiment = str(news_catalyst.get("sentiment", "mixed") or "mixed").lower()
+            sentiment_raw = str(news_catalyst.get("sentiment", "mixed") or "mixed").lower()
+            sentiment = normalize_direction(sentiment_raw)
             headline = str(news_catalyst.get("headline", "") or "")[:80]
             if direction == "long" and sentiment == "bullish":
                 confirming.append(
