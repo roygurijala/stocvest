@@ -10,6 +10,7 @@ import {
   type PublicSignal
 } from "@/lib/api/public-signals";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
+import { isoDateInNewYork } from "@/lib/market-hours-et";
 import { useTheme } from "@/lib/theme-provider";
 
 function outcomeLabel(outcome: PublicSignal["outcome"]): string {
@@ -42,7 +43,7 @@ export function PerformanceTrackingContent({ showHomeLink = false }: Performance
     };
   }, []);
 
-  const launchDate = summary?.launch_date ?? new Date().toISOString().slice(0, 10);
+  const launchDate = summary?.launch_date ?? isoDateInNewYork();
   const resolvedCount = summary?.signals_evaluated ?? 0;
   const showTable = signals.length > 0;
 
@@ -104,6 +105,9 @@ export function PerformanceTrackingContent({ showHomeLink = false }: Performance
             Tracking Since
           </p>
           <p className="mt-2 text-2xl font-bold">{launchDate}</p>
+          <p className="mt-1 text-[11px] leading-snug" style={{ color: colors.textMuted }}>
+            US/Eastern market calendar
+          </p>
         </div>
       </section>
 
@@ -118,7 +122,8 @@ export function PerformanceTrackingContent({ showHomeLink = false }: Performance
         <section className={`${surfaceGlowClassName} ${showHomeLink ? "mt-8" : "mt-6"}`} style={bodyPanelStyle}>
           <h2 className="text-2xl font-bold">Accuracy Tracking Starts Now</h2>
           <p className="mt-3" style={{ color: colors.textMuted }}>
-            We launched on {launchDate}. Signal accuracy data accumulates as composite signals are recorded with symbol and price.
+            We launched on {launchDate} (US/Eastern). Signal accuracy data accumulates as composite signals are recorded with
+            symbol and price.
             <br />
             Every signal is evaluated for directional accuracy only (not dollar P&amp;L).
             <br />

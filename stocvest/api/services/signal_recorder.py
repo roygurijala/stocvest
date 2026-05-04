@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from decimal import Decimal
 from typing import Any, Protocol, runtime_checkable
 from uuid import uuid4
@@ -17,6 +18,19 @@ log = get_logger(__name__)
 
 NEUTRAL_MOVE_PCT = 0.1
 GSI_NAME = "scope_generated_at"
+_ET = ZoneInfo("America/New_York")
+
+
+def _et_today() -> date:
+    return datetime.now(_ET).date()
+
+
+def _signal_calendar_date_et(rec: SignalRecord) -> date:
+    """Calendar date in US/Eastern for ``generated_at`` (display aligns with market day)."""
+    ga = rec.generated_at
+    if ga.tzinfo is None:
+        ga = ga.replace(tzinfo=timezone.utc)
+    return ga.astimezone(_ET).date()
 
 
 def outcome_from_prices(direction: str, price_at: float, price_after: float | None) -> str:
@@ -485,9 +499,9 @@ def _landing_api_shape(rec: SignalRecord) -> dict[str, Any]:
 def performance_summary_from_records(records: list[SignalRecord]) -> dict[str, Any]:
     from stocvest.api.legal_copy import API_SIGNAL_DISCLAIMER
 
-    launch_date = datetime.now(timezone.utc).date()
+    launch_date = _et_today()
     if records:
-        launch_date = min(r.generated_at.date() for r in records)
+        launch_date = min(_signal_calendar_date_et(r) for r in records)
 
     evaluated: list[SignalRecord] = [r for r in records if r.outcome_1d is not None]
     correct = sum(1 for r in evaluated if r.outcome_1d == "correct")
@@ -495,7 +509,7 @@ def performance_summary_from_records(records: list[SignalRecord]) -> dict[str, A
     neutral = sum(1 for r in evaluated if r.outcome_1d == "neutral")
     denom = correct + incorrect
     accuracy = round((correct / denom) * 100.0, 1) if denom > 0 else 0.0
-    days = max(0, (datetime.now(timezone.utc).date() - launch_date).days)
+    days = max(0, (_et_today() - launch_date).days)
 
     return {
         "total_signals_tracked": len(records),

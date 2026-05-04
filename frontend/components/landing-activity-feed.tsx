@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import type { LandingSignal } from "@/lib/api/landing-signals";
 import type { PerformanceSummary } from "@/lib/api/public-signals";
+import { isoDateInNewYork } from "@/lib/market-hours-et";
 
 const MONO =
   '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
@@ -54,7 +55,7 @@ function Sparkline({ values }: { values: number[] }) {
           <line x1={padX} y1={y + 2} x2={w - padX} y2={y + 2} stroke="#00e87a" strokeWidth={1.5} />
         </svg>
         <div
-          className="mt-1 flex justify-between font-mono text-[10px] font-medium uppercase tracking-wide text-slate-400"
+          className="mt-2 flex justify-between font-mono text-[10px] font-medium uppercase tracking-wide text-slate-400"
           aria-hidden
         >
           <span>launch</span>
@@ -86,7 +87,7 @@ function Sparkline({ values }: { values: number[] }) {
         <path d={d} fill="none" stroke="#00e87a" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
       </svg>
       <div
-        className="mt-1 flex justify-between font-mono text-[10px] font-medium uppercase tracking-wide text-slate-400"
+        className="mt-2 flex justify-between font-mono text-[10px] font-medium uppercase tracking-wide text-slate-400"
         aria-hidden
       >
         <span>launch</span>
@@ -113,8 +114,7 @@ export function LandingActivityFeedSection({
     return [Math.max(0, acc * 0.6), Math.max(0, acc * 0.85), acc];
   }, [hasPerf, performanceSummary.directional_accuracy_percent]);
 
-  const trackingSince =
-    performanceSummary.launch_date?.trim() || new Date().toISOString().slice(0, 10);
+  const trackingSince = performanceSummary.launch_date?.trim() || isoDateInNewYork();
 
   const rows = signals.slice(0, 5);
 
@@ -223,7 +223,8 @@ export function LandingActivityFeedSection({
               </div>
               {!hasPerf ? (
                 <p className="mb-2 text-center text-[11px] leading-relaxed text-slate-500">
-                  Signal accuracy data accumulates automatically from market open. Tracking since {trackingSince}.
+                  Signal accuracy data accumulates automatically from market open. Tracking since {trackingSince}{" "}
+                  <span className="whitespace-nowrap">(US/Eastern).</span>
                 </p>
               ) : null}
               {!hasPerf ? (

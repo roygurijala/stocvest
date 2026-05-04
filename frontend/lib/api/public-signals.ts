@@ -1,5 +1,7 @@
 "use client";
 
+import { isoDateInNewYork } from "@/lib/market-hours-et";
+
 export type PublicSignalOutcome = "pending" | "correct" | "incorrect" | "neutral";
 export type PublicSignalDirection = "long" | "short" | "neutral";
 export type SignalBias = "bullish" | "bearish" | "neutral";
@@ -180,7 +182,7 @@ export async function fetchPerformanceSummary(): Promise<PerformanceSummary> {
     incorrect_direction_count: 0,
     neutral_direction_count: 0,
     directional_accuracy_percent: 0,
-    launch_date: new Date().toISOString().slice(0, 10),
+    launch_date: isoDateInNewYork(),
     date_range_days: 0
   };
   try {

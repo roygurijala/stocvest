@@ -3,21 +3,14 @@
 import type { CSSProperties } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { Brain, Clock } from "lucide-react";
-import {
-  Legend,
-  PolarAngleAxis,
-  PolarGrid,
-  PolarRadiusAxis,
-  Radar,
-  RadarChart,
-  ResponsiveContainer
-} from "recharts";
+import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer } from "recharts";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
 import type { MarketOverview, SnapshotPayload } from "@/lib/api/market";
 import type { ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
 import { AddToWatchlistButton } from "@/components/add-to-watchlist-button";
+import { SignalLayerDivergenceChart } from "@/components/signal-layer-divergence-chart";
 import { InfoTip } from "@/components/info-tip";
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
@@ -549,9 +542,37 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
         >
           <h3 style={{ marginTop: 0 }}>Signal Radar</h3>
           <p className="text-sm" style={{ margin: `0 0 ${spacing[2]} 0`, color: colors.textMuted }}>
-            Current vs Historical Average — dashed outline is a typical baseline; solid fill is today.
+            At-a-glance shape vs a typical baseline — dashed ring is historical average, solid fill is today.
           </p>
-          <div className="mx-auto max-w-full" style={{ height: 220 }}>
+          <div
+            className="flex flex-wrap items-center gap-x-4 gap-y-2"
+            style={{ margin: `0 0 ${spacing[3]} 0`, fontSize: 12, color: colors.textMuted }}
+            aria-label="Radar chart legend"
+          >
+            <span className="inline-flex items-center gap-2">
+              <span
+                className="inline-block shrink-0 rounded-sm"
+                style={{ width: 12, height: 12, background: "#0ea5e9", opacity: 0.85, border: "1px solid #38bdf8" }}
+                aria-hidden
+              />
+              Current
+            </span>
+            <span className="inline-flex items-center gap-2">
+              <span
+                className="inline-block shrink-0 rounded-sm"
+                style={{
+                  width: 12,
+                  height: 12,
+                  border: `2px dashed ${colors.text}`,
+                  background: "transparent",
+                  opacity: 0.85
+                }}
+                aria-hidden
+              />
+              Historical avg
+            </span>
+          </div>
+          <div className="mx-auto max-w-full overflow-hidden" style={{ height: 220 }}>
             <div className="lg:hidden" style={{ height: 220 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <RadarChart data={radarData}>
@@ -577,11 +598,10 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
                     fillOpacity={0.38}
                     dot={false}
                   />
-                  <Legend wrapperStyle={{ color: colors.textMuted, fontSize: 11 }} />
                 </RadarChart>
               </ResponsiveContainer>
             </div>
-            <div className="hidden lg:block" style={{ height: 280 }}>
+            <div className="hidden max-w-full overflow-hidden lg:block" style={{ height: 280 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <RadarChart data={radarData}>
                   <PolarGrid stroke={colors.border} />
@@ -606,11 +626,19 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
                     fillOpacity={0.38}
                     dot={false}
                   />
-                  <Legend wrapperStyle={{ color: colors.textMuted, fontSize: 12 }} />
                 </RadarChart>
               </ResponsiveContainer>
             </div>
           </div>
+
+          <h4 style={{ margin: `${spacing[4]} 0 ${spacing[1]} 0`, fontSize: 13, fontWeight: 600, color: colors.text }}>
+            Today vs typical (per layer)
+          </h4>
+          <p className="text-xs leading-snug" style={{ margin: `0 0 ${spacing[2]} 0`, color: colors.textMuted }}>
+            Point gap vs the dashed baseline on the radar — bars right are hotter than usual today, left are cooler. Use this
+            for where attention diverges most.
+          </p>
+          <SignalLayerDivergenceChart data={radarData} colors={colors} height={208} />
         </section>
       </div>
 

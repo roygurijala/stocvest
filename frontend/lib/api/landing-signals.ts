@@ -1,4 +1,5 @@
 import type { PerformanceSummary, PatternAccuracyRow } from "@/lib/api/public-signals";
+import { isoDateInNewYork } from "@/lib/market-hours-et";
 
 const DEFAULT_BASE_URL = "http://localhost:3001";
 
@@ -277,7 +278,7 @@ function parsePerformanceSummaryJson(data: Record<string, unknown>): Performance
     incorrect_direction_count: 0,
     neutral_direction_count: 0,
     directional_accuracy_percent: 0,
-    launch_date: new Date().toISOString().slice(0, 10),
+    launch_date: isoDateInNewYork(),
     date_range_days: 0
   };
   const evaluated = data.signals_evaluated ?? data.total_resolved;
@@ -346,7 +347,7 @@ export async function fetchLandingPerformanceSummary(): Promise<PerformanceSumma
     incorrect_direction_count: 0,
     neutral_direction_count: 0,
     directional_accuracy_percent: 0,
-    launch_date: new Date().toISOString().slice(0, 10),
+    launch_date: isoDateInNewYork(),
     date_range_days: 0
   };
   try {
