@@ -76,6 +76,16 @@ class WatchlistItem:
 class WatchlistStore(Protocol):
     def get_watchlists(self, user_id: str) -> list[WatchlistItem]: ...
     def get_default_watchlist(self, user_id: str) -> WatchlistItem | None: ...
+    def scan_default_watchlists(self, limit: int) -> list[WatchlistItem]:
+        """Scan storage for default watchlists (scheduled jobs only — not for hot request paths)."""
+        ...
+
+    def find_users_with_default_watchlist_symbol(
+        self, symbol: str, *, max_items_evaluated: int = 500
+    ) -> list[str]:
+        """User IDs whose default watchlist contains ``symbol`` (deduped order)."""
+        ...
+
     def create_watchlist(
         self, user_id: str, name: str, symbols: list[str], *, is_default: bool = False
     ) -> WatchlistItem: ...
@@ -196,6 +206,36 @@ class InMemoryWatchlistStore:
         w.symbols = [s for s in w.symbols if s != sym]
         w.updated_at = _utc_now()
         return w
+
+    def scan_default_watchlists(self, limit: int) -> list[WatchlistItem]:
+        cap = max(0, min(int(limit), 500))
+        out: list[WatchlistItem] = []
+        for _uid, wmap in sorted(self._by_user.items()):
+            for w in sorted(wmap.values(), key=lambda x: x.created_at):
+                if w.is_default:
+                    out.append(w)
+                    if len(out) >= cap:
+                        return out
+        return out
+
+    def find_users_with_default_watchlist_symbol(
+        self, symbol: str, *, max_items_evaluated: int = 500
+    ) -> list[str]:
+        sym = str(symbol or "").strip().upper()
+        if not sym:
+            return []
+        out: list[str] = []
+        n = 0
+        for uid in sorted(self._by_user.keys()):
+            n += 1
+            if n > max_items_evaluated:
+                break
+            wmap = self._by_user[uid]
+            rows = sorted(wmap.values(), key=lambda x: (not x.is_default, x.created_at))
+            default = next((w for w in rows if w.is_default), None) or (rows[0] if rows else None)
+            if default and sym in {s.upper() for s in default.symbols}:
+                out.append(uid)
+        return out
 
 
 @dataclass
@@ -354,6 +394,67 @@ class DynamoDBWatchlistStore:
         )
         out = self.table.get_item(Key={"userId": user_id, "watchlistId": watchlist_id})
         return WatchlistItem.from_item(user_id, out["Item"])
+
+    def scan_default_watchlists(self, limit: int) -> list[WatchlistItem]:
+        from boto3.dynamodb.conditions import Attr
+
+        cap = max(0, min(int(limit), 500))
+        out: list[WatchlistItem] = []
+        eks: dict[str, Any] | None = None
+        pages = 0
+        while len(out) < cap and pages < 25:
+            pages += 1
+            kw: dict[str, Any] = {
+                "FilterExpression": Attr("isDefault").eq(True),
+                "Limit": 100,
+            }
+            if eks:
+                kw["ExclusiveStartKey"] = eks
+            resp = self.table.scan(**kw)
+            for it in resp.get("Items") or []:
+                uid = str(it.get("userId") or "")
+                wid = str(it.get("watchlistId") or "")
+                if uid and wid:
+                    out.append(WatchlistItem.from_item(uid, it))
+                    if len(out) >= cap:
+                        return out
+            eks = resp.get("LastEvaluatedKey")
+            if not eks:
+                break
+        return out
+
+    def find_users_with_default_watchlist_symbol(
+        self, symbol: str, *, max_items_evaluated: int = 500
+    ) -> list[str]:
+        from boto3.dynamodb.conditions import Attr
+
+        sym = str(symbol or "").strip().upper()
+        if not sym:
+            return []
+        out: list[str] = []
+        seen: set[str] = set()
+        scanned = 0
+        eks: dict[str, Any] | None = None
+        pages = 0
+        while scanned < max_items_evaluated and pages < 25:
+            pages += 1
+            kw: dict[str, Any] = {
+                "FilterExpression": Attr("isDefault").eq(True) & Attr("symbols").contains(sym),
+                "Limit": min(100, max(1, max_items_evaluated - scanned)),
+            }
+            if eks:
+                kw["ExclusiveStartKey"] = eks
+            resp = self.table.scan(**kw)
+            scanned += int(resp.get("ScannedCount") or 0)
+            for it in resp.get("Items") or []:
+                uid = str(it.get("userId") or "")
+                if uid and uid not in seen:
+                    seen.add(uid)
+                    out.append(uid)
+            eks = resp.get("LastEvaluatedKey")
+            if not eks:
+                break
+        return out
 
 
 _in_memory_store: InMemoryWatchlistStore | None = None

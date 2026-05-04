@@ -4,6 +4,7 @@ import { ScannerPageClient } from "@/components/scanner-page-client";
 import { fetchScannerOverview } from "@/lib/api/scanner";
 import { fetchPdtStatus } from "@/lib/api/pdt";
 import { fetchEarningsCalendar } from "@/lib/api/earnings";
+import { fetchDefaultWatchlistSymbols } from "@/lib/api/watchlists";
 import { getServerSession } from "@/lib/auth/session";
 
 export default async function DashboardScannerPage() {
@@ -11,8 +12,11 @@ export default async function DashboardScannerPage() {
   if (!session) {
     redirect("/login");
   }
-  const pdtStatus = await fetchPdtStatus().catch(() => null);
-  const overview = await fetchScannerOverview(pdtStatus);
+  const [pdtStatus, watchlistSymbols] = await Promise.all([
+    fetchPdtStatus().catch(() => null),
+    fetchDefaultWatchlistSymbols().catch(() => [] as string[])
+  ]);
+  const overview = await fetchScannerOverview(pdtStatus, watchlistSymbols);
   const scannerSymbols = Array.from(
     new Set([...overview.gapIntelligence.map((g) => g.symbol), ...overview.setups.map((s) => s.symbol)])
   );

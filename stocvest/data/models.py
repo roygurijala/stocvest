@@ -215,6 +215,8 @@ class TradingMode(str, Enum):
 
 class UserProfile(BaseModel):
     user_id: str
+    """Optional email mirrored from Cognito / Users row — used for scheduled job alerts when present."""
+    email: str | None = None
     trading_mode: TradingMode = TradingMode.PAPER
     onboarding_completed: bool = False
     onboarding_completed_at: str | None = None

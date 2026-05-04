@@ -28,8 +28,11 @@ def _item_to_profile(user_id: str, item: dict[str, Any]) -> UserProfile:
             mode = TradingMode(str(raw_tm).lower())
         except ValueError:
             mode = TradingMode.PAPER
+    raw_email = item.get("email")
+    email = str(raw_email).strip() if raw_email is not None and str(raw_email).strip() else None
     return UserProfile(
         user_id=user_id,
+        email=email,
         trading_mode=mode,
         onboarding_completed=bool(item.get("onboardingCompleted")),
         onboarding_completed_at=_s(item.get("onboardingCompletedAt")),
@@ -53,6 +56,8 @@ def _profile_to_item(profile: UserProfile) -> dict[str, Any]:
         "onboardingCompleted": profile.onboarding_completed,
         "legalAcknowledged": profile.legal_acknowledged,
     }
+    if profile.email:
+        item["email"] = profile.email
     if profile.onboarding_completed_at:
         item["onboardingCompletedAt"] = profile.onboarding_completed_at
     if profile.legal_acknowledged_at:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 import uuid
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -22,11 +23,27 @@ def _defaults(user_id: str) -> AlertPreferences:
     return AlertPreferences(user_id=user_id)
 
 
+def _parse_alert_created_at(created_at: str) -> datetime | None:
+    if not created_at or not str(created_at).strip():
+        return None
+    raw = str(created_at).strip().replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 class DynamoDBAlertStore(Protocol):
     def get_preferences(self, user_id: str) -> AlertPreferences: ...
     def save_preferences(self, user_id: str, prefs: AlertPreferences) -> AlertPreferences: ...
     def create_alert_record(self, record: AlertRecord) -> AlertRecord: ...
     def get_recent_alerts(self, user_id: str, limit: int = 20) -> list[AlertRecord]: ...
+    def had_signal_email_for_symbol_within_hours(
+        self, user_id: str, symbol: str, *, hours: float = 4.0
+    ) -> bool: ...
 
 
 @dataclass
@@ -49,6 +66,21 @@ class InMemoryAlertStore:
 
     def get_recent_alerts(self, user_id: str, limit: int = 20) -> list[AlertRecord]:
         return list(self.history.get(user_id, [])[:limit])
+
+    def had_signal_email_for_symbol_within_hours(
+        self, user_id: str, symbol: str, *, hours: float = 4.0
+    ) -> bool:
+        sym_u = symbol.strip().upper()
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+        for rec in self.history.get(user_id, [])[:50]:
+            if rec.symbol != sym_u:
+                continue
+            if rec.alert_type not in (AlertType.SIGNAL_FIRED, AlertType.CONFLUENCE_ALERT):
+                continue
+            ts = _parse_alert_created_at(rec.created_at)
+            if ts is not None and ts >= cutoff:
+                return True
+        return False
 
 
 @dataclass
@@ -141,6 +173,22 @@ class DynamoDBUserAlertStore:
             except (TypeError, ValueError):
                 continue
         return out[:limit]
+
+    def had_signal_email_for_symbol_within_hours(
+        self, user_id: str, symbol: str, *, hours: float = 4.0
+    ) -> bool:
+        sym_u = symbol.strip().upper()
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+        recent = self.get_recent_alerts(user_id, limit=50)
+        for rec in recent:
+            if rec.symbol != sym_u:
+                continue
+            if rec.alert_type not in (AlertType.SIGNAL_FIRED, AlertType.CONFLUENCE_ALERT):
+                continue
+            ts = _parse_alert_created_at(rec.created_at)
+            if ts is not None and ts >= cutoff:
+                return True
+        return False
 
 
 _in_memory_alerts: InMemoryAlertStore | None = None

@@ -8,6 +8,7 @@ from typing import Any
 
 from stocvest.api.services.alerts_store import put_scanner_alert
 from stocvest.api.services.day_trading_setups_store import SCANNER_SYSTEM_ACCOUNT_ID, get_day_trading_setups_store
+from stocvest.api.services.watchlist_scanner_alerts import notify_intraday_setups_for_watchlist_users
 from stocvest.api.services.signal_dto import (
     serialize_catalyst,
     serialize_gap_candidate,
@@ -15,6 +16,8 @@ from stocvest.api.services.signal_dto import (
 )
 from stocvest.api.services.websocket_broadcast import broadcast_scanner_payload
 from stocvest.data import PolygonClient, PolygonError
+from stocvest.data.scan_symbols import SYSTEM_DEFAULTS
+from stocvest.data.watchlist_store import get_watchlist_store
 from stocvest.data.models import Bar, Snapshot, Timeframe
 from stocvest.signals import (
     DailyBriefingGenerator,
@@ -38,6 +41,37 @@ def _setup_key(scan_type: str) -> str:
 def _parse_scanner_symbols() -> list[str]:
     raw = get_settings().scanner_symbols
     return [s.strip().upper() for s in raw.split(",") if s.strip()]
+
+
+def merge_scheduled_scan_symbol_universe(
+    configured: list[str], platform: list[str], *, cap: int = 40
+) -> list[str]:
+    """Dedupe configured symbols, aggregated default-watchlist symbols, and ``SYSTEM_DEFAULTS`` (caps total)."""
+    return list(dict.fromkeys([*configured, *platform, *SYSTEM_DEFAULTS]))[:cap]
+
+
+async def _resolve_scheduled_scan_symbols() -> list[str]:
+    """Merge Lambda ``scanner_symbols`` config, platform default-watchlist aggregation, and system defaults."""
+    configured = _parse_scanner_symbols()
+    platform_syms: list[str] = []
+    try:
+        wl_store = get_watchlist_store()
+        items = await asyncio.to_thread(wl_store.scan_default_watchlists, 100)
+        seen: set[str] = set()
+        for it in items:
+            for s in it.symbols or []:
+                su = str(s).strip().upper()
+                if not su or su in seen:
+                    continue
+                seen.add(su)
+                platform_syms.append(su)
+                if len(platform_syms) >= 30:
+                    break
+            if len(platform_syms) >= 30:
+                break
+    except Exception as exc:  # noqa: BLE001 — includes get_watchlist_store failures; never block scheduled scan
+        _LOG.warning("scheduled scan: platform watchlist aggregation failed: %s", exc)
+    return merge_scheduled_scan_symbol_universe(configured, platform_syms, cap=40)
 
 
 async def _fetch_snapshots(client: PolygonClient, symbols: list[str]) -> list[Any]:
@@ -69,7 +103,7 @@ def _liquidity_from_snapshots(snaps: list[Snapshot]) -> dict[str, SymbolLiquidit
 async def run_scheduled_scan(scan_type: str) -> dict[str, Any]:
     """Run a full scheduled pipeline for ``premarket`` | ``intraday`` | ``eod_summary``."""
     settings = get_settings()
-    symbols = _parse_scanner_symbols()
+    symbols = await _resolve_scheduled_scan_symbols()
     setup_key = _setup_key(scan_type)
     store = get_day_trading_setups_store()
 
@@ -96,6 +130,16 @@ async def run_scheduled_scan(scan_type: str) -> dict[str, Any]:
                     bars_by_symbol, liquidity_by_symbol=liq, limit=8
                 )
                 document["data"]["setups"] = [serialize_intraday_setup(s) for s in setups]
+                if setups:
+                    try:
+                        await asyncio.wait_for(
+                            asyncio.to_thread(notify_intraday_setups_for_watchlist_users, setups),
+                            timeout=2.0,
+                        )
+                    except asyncio.TimeoutError:
+                        _LOG.warning("watchlist notify timed out after 2s (intraday)")
+                    except Exception:
+                        _LOG.exception("watchlist notify failed (intraday)")
             elif scan_type == "eod_summary":
                 snaps = await _fetch_snapshots(client, symbols)
                 gap_objs = PremarketGapScanner(min_abs_gap_percent=2.0, min_day_volume=0.0).scan_snapshots(
@@ -120,6 +164,16 @@ async def run_scheduled_scan(scan_type: str) -> dict[str, Any]:
                 document["data"]["gaps"] = [serialize_gap_candidate(c) for c in gap_objs]
                 document["data"]["catalysts"] = [serialize_catalyst(c) for c in catalyst_objs]
                 document["data"]["setups"] = [serialize_intraday_setup(s) for s in setup_objs]
+                if setup_objs:
+                    try:
+                        await asyncio.wait_for(
+                            asyncio.to_thread(notify_intraday_setups_for_watchlist_users, setup_objs),
+                            timeout=2.0,
+                        )
+                    except asyncio.TimeoutError:
+                        _LOG.warning("watchlist notify timed out after 2s (eod)")
+                    except Exception:
+                        _LOG.exception("watchlist notify failed (eod)")
                 document["data"]["briefing"] = {
                     "date_iso": briefing.date_iso,
                     "title": briefing.title,
