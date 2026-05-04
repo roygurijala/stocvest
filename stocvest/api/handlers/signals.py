@@ -10,6 +10,9 @@ from uuid import uuid4
 from stocvest.api.legal_copy import API_SIGNAL_DISCLAIMER
 from stocvest.api.http_route import http_route_descriptor
 from stocvest.api.response import bad_request, internal_error, not_found, ok, unauthorized
+from stocvest.api.services.signal_analysis import analysis_authorized, build_signal_analysis_payload
+from stocvest.api.services.signal_snapshot_builders import build_swing_composite_snapshot_payload
+from stocvest.config.parameter_store import ParameterStore
 from stocvest.api.services.composite_market_context import fetch_composite_market_status_payload_sync
 from stocvest.api.services.signal_dto import (
     parse_bar,
@@ -255,6 +258,12 @@ def swing_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[
                 price_at = float(price_raw)
                 layer_scores = {str(s.layer): float(s.score) for s in signals}
                 strength = int(round(max(0.0, min(1.0, composite.confidence)) * 100))
+                snap_blobs = build_swing_composite_snapshot_payload(
+                    payload=payload,
+                    response_body=response_body if direction_out else None,
+                    layer_scores=layer_scores,
+                )
+                param_ver = ParameterStore.get_parameters_sync().version
                 record = SignalRecord(
                     signal_id=str(uuid4()),
                     symbol=symbol,
@@ -265,6 +274,13 @@ def swing_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[
                     price_at_signal=price_at,
                     generated_at=datetime.now(timezone.utc),
                     user_id=request_context.user_id,
+                    parameter_version=param_ver,
+                    technical_snapshot_json=snap_blobs.get("technical_snapshot_json"),
+                    news_snapshot_json=snap_blobs.get("news_snapshot_json"),
+                    macro_snapshot_json=snap_blobs.get("macro_snapshot_json"),
+                    sector_snapshot_json=snap_blobs.get("sector_snapshot_json"),
+                    internals_snapshot_json=snap_blobs.get("internals_snapshot_json"),
+                    layer_scores_json=snap_blobs.get("layer_scores_json"),
                 )
                 get_signal_recorder().record_signal(record)
                 if request_context.user_id and request_context.email and direction_out:
@@ -487,6 +503,21 @@ def user_signal_record_handler(event: LambdaEvent, context: LambdaContext) -> di
     return ok(public_signal_detail_dict(rec))
 
 
+def signals_analysis_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    """GET /v1/signals/analysis — admin / internal only; aggregates stored signals for tuning."""
+    _ = context
+    rc = build_request_context(event)
+    headers = event.get("headers") if isinstance(event.get("headers"), dict) else {}
+    if not analysis_authorized(user_id=rc.user_id, claims=rc.claims, headers=headers):
+        return unauthorized("Signal analysis requires admin authorization.")
+    qs = event.get("queryStringParameters") or {}
+    period = str(qs.get("period") or "30d").strip() or "30d"
+    rows = get_signal_recorder().scan_all_records()
+    body = build_signal_analysis_payload(records=rows, period=period)
+    body["disclaimer"] = API_SIGNAL_DISCLAIMER
+    return ok(body)
+
+
 def user_signal_history_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
     """GET /v1/signals/me/history — historical signal data for the signed-in user."""
     _ = context
@@ -516,6 +547,8 @@ def signals_http_dispatch(event: LambdaEvent, context: LambdaContext) -> dict[st
         return user_signal_record_handler(event, context)
     if route == "GET /v1/signals/me/history" or route.startswith("GET /v1/signals/me/history?"):
         return user_signal_history_handler(event, context)
+    if route == "GET /v1/signals/analysis" or route.startswith("GET /v1/signals/analysis?"):
+        return signals_analysis_handler(event, context)
 
     routes: dict[str, Callable[[LambdaEvent, LambdaContext], dict[str, Any]]] = {
         "POST /v1/signals/swing/composite": swing_composite_handler,

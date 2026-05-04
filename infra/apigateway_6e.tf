@@ -22,6 +22,7 @@ locals {
     "GET /v1/signals/records/{signal_id}"    = { module_key = "signals", authorizer = false }
     "GET /v1/signals/me/history"             = { module_key = "signals", authorizer = true }
     "GET /v1/signals/me/records/{signal_id}" = { module_key = "signals", authorizer = true }
+    "GET /v1/signals/analysis"               = { module_key = "signals", authorizer = true }
 
     "GET /v1/brokers/health"    = { module_key = "brokers", authorizer = true }
     "GET /v1/brokers/accounts"  = { module_key = "brokers", authorizer = true }

@@ -67,6 +67,11 @@ class Settings(BaseSettings):
     dynamodb_day_trading_setups: str = Field("", alias="DYNAMODB_DAY_TRADING_SETUPS")
     dynamodb_alerts: str = Field("", alias="DYNAMODB_ALERTS")
     dynamodb_signal_history_table: str = Field("", alias="DYNAMODB_SIGNAL_HISTORY_TABLE")
+    dynamodb_parameter_history_table: str = Field("", alias="DYNAMODB_PARAMETER_HISTORY_TABLE")
+
+    # ── Signal tuning / analysis (optional) ───────────────────────
+    stocvest_internal_analysis_key: str = Field("", alias="STOCVEST_INTERNAL_ANALYSIS_KEY")
+    stocvest_analysis_admin_subs: str = Field("", alias="STOCVEST_ANALYSIS_ADMIN_SUBS")
 
     # ── Email (SES) for user alerts ───────────────────────────────
     stocvest_email_sender: str = Field("signals@stocvest.app", alias="STOCVEST_EMAIL_SENDER")

@@ -154,6 +154,22 @@ resource "aws_dynamodb_table" "signal_history" {
   })
 }
 
+# Versioned SignalParameters JSON + audit metadata (monthly tuning).
+resource "aws_dynamodb_table" "parameter_history" {
+  name         = "ParameterHistory"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "version"
+
+  attribute {
+    name = "version"
+    type = "S"
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "stocvest-development-ddb-parameter-history"
+  })
+}
+
 # Trade journal — one item per user; keys match DynamoDBJournalStore (userId + entries).
 resource "aws_dynamodb_table" "trade_journal" {
   name         = "TradeJournal"

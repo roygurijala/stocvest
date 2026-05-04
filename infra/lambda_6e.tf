@@ -41,7 +41,8 @@ locals {
     DYNAMODB_WATCHLISTS_TABLE         = aws_dynamodb_table.watchlists.name
     DYNAMODB_BROKER_CONNECTIONS_TABLE = aws_dynamodb_table.broker_connections.name
     DYNAMODB_DAY_TRADING_SETUPS       = aws_dynamodb_table.day_trading_setups.name
-    DYNAMODB_SIGNAL_HISTORY_TABLE     = aws_dynamodb_table.signal_history.name
+    DYNAMODB_SIGNAL_HISTORY_TABLE          = aws_dynamodb_table.signal_history.name
+    DYNAMODB_PARAMETER_HISTORY_TABLE       = aws_dynamodb_table.parameter_history.name
     STOCVEST_TRADE_JOURNAL_TABLE      = aws_dynamodb_table.trade_journal.name
     STOCVEST_PDT_STATE_TABLE          = aws_dynamodb_table.pdt_state.name
     STOCVEST_EMAIL_SENDER             = "signals@stocvest.app"
@@ -57,6 +58,7 @@ locals {
       aws_dynamodb_table.orders,
       aws_dynamodb_table.day_trading_setups,
       aws_dynamodb_table.signal_history,
+      aws_dynamodb_table.parameter_history,
       aws_dynamodb_table.trade_journal,
       aws_dynamodb_table.pdt_state,
     ] : [t.arn, "${t.arn}/index/*"]
@@ -135,6 +137,15 @@ resource "aws_iam_role_policy" "lambda_api_data_access" {
           "secretsmanager:DescribeSecret",
         ]
         Resource = "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:*"
+      },
+      {
+        Sid    = "SecretsManagerSignalParametersWrite"
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:CreateSecret",
+          "secretsmanager:UpdateSecret",
+        ]
+        Resource = "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:stocvest/signal-parameters*"
       },
       {
         Sid    = "ElastiCacheDescribe"

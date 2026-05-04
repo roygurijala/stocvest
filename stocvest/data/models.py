@@ -303,6 +303,14 @@ class SignalRecord(BaseModel):
     outcome_1d: str | None = None
     user_id: str | None = None  # None = public / platform signal
     ai_summary: str | None = None  # optional; public landing payload truncates to 120 chars
+    # Tuning / analysis (JSON strings; optional)
+    technical_snapshot_json: str | None = None
+    news_snapshot_json: str | None = None
+    macro_snapshot_json: str | None = None
+    sector_snapshot_json: str | None = None
+    internals_snapshot_json: str | None = None
+    layer_scores_json: str | None = None
+    parameter_version: str | None = None
 
     @field_validator("direction")
     @classmethod
@@ -335,6 +343,13 @@ class SignalRecord(BaseModel):
         layer_raw = item.get("layer_scores") or {}
         layer_scores = {str(k): float(v) for k, v in layer_raw.items()} if isinstance(layer_raw, dict) else {}
 
+        def _s(key: str) -> str | None:
+            raw = item.get(key)
+            if raw is None:
+                return None
+            s = str(raw).strip()
+            return s or None
+
         return SignalRecord(
             signal_id=str(item["signal_id"]),
             symbol=str(item["symbol"]).upper(),
@@ -352,4 +367,11 @@ class SignalRecord(BaseModel):
             outcome_1d=str(item["outcome_1d"]) if item.get("outcome_1d") is not None else None,
             user_id=str(item["user_id"]) if item.get("user_id") else None,
             ai_summary=str(item["ai_summary"]).strip() if isinstance(item.get("ai_summary"), str) else None,
+            technical_snapshot_json=_s("technical_snapshot_json"),
+            news_snapshot_json=_s("news_snapshot_json"),
+            macro_snapshot_json=_s("macro_snapshot_json"),
+            sector_snapshot_json=_s("sector_snapshot_json"),
+            internals_snapshot_json=_s("internals_snapshot_json"),
+            layer_scores_json=_s("layer_scores_json"),
+            parameter_version=_s("parameter_version"),
         )

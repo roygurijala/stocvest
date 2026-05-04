@@ -86,6 +86,20 @@ def _record_to_item(rec: SignalRecord) -> dict[str, Any]:
         item["outcome_1d"] = rec.outcome_1d
     if rec.ai_summary:
         item["ai_summary"] = rec.ai_summary
+    if rec.technical_snapshot_json:
+        item["technical_snapshot_json"] = rec.technical_snapshot_json
+    if rec.news_snapshot_json:
+        item["news_snapshot_json"] = rec.news_snapshot_json
+    if rec.macro_snapshot_json:
+        item["macro_snapshot_json"] = rec.macro_snapshot_json
+    if rec.sector_snapshot_json:
+        item["sector_snapshot_json"] = rec.sector_snapshot_json
+    if rec.internals_snapshot_json:
+        item["internals_snapshot_json"] = rec.internals_snapshot_json
+    if rec.layer_scores_json:
+        item["layer_scores_json"] = rec.layer_scores_json
+    if rec.parameter_version:
+        item["parameter_version"] = rec.parameter_version
     return item
 
 
@@ -156,6 +170,10 @@ class InMemorySignalRecorder:
         if not raw:
             return None
         return _item_to_record(raw)
+
+    def scan_all_records(self) -> list[SignalRecord]:
+        """Full table scan (admin / analysis only)."""
+        return [_item_to_record(it) for it in self._items.values() if isinstance(it, dict)]
 
     async def resolve_signals(
         self,
@@ -325,6 +343,10 @@ class DynamoDBSignalRecorder:
         if not isinstance(item, dict):
             return None
         return _item_to_record(item)
+
+    def scan_all_records(self) -> list[SignalRecord]:
+        """Full table scan (admin / analysis only)."""
+        return [_item_to_record(x) for x in self._scan_all() if isinstance(x, dict)]
 
     def _scan_all(self) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
