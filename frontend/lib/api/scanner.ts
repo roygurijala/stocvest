@@ -1,5 +1,6 @@
 import { apiFetch } from "@/lib/api/client";
 import type { PDTStatusPayload } from "@/lib/api/pdt";
+import { fetchDefaultWatchlistSymbols } from "@/lib/api/watchlists";
 
 /** When the scanner has no gap symbols and no user watchlist, intraday bars use this liquid floor. */
 const INTRADAY_FALLBACK_SYMBOLS = [
@@ -147,6 +148,10 @@ function mergeCompanyNameFromSnapshots(
 export type ScannerLoadTuning = {
   maxUniverseSymbols?: number;
   intradayBarLimit?: number;
+  /** When true, fetches default watchlist in parallel with gap-intelligence (saves one RTT on the critical path). */
+  parallelDefaultWatchlist?: boolean;
+  /** Max setups returned by `POST /v1/signals/day/setups` (default 10). Lower = less compute and smaller payload. */
+  daySetupsLimit?: number;
 };
 
 const BARS_BATCH_MAX = 24;
@@ -251,7 +256,7 @@ export async function loadScannerDataWithoutBrief(
   tuning: ScannerLoadTuning | null = null
 ): Promise<ScannerCoreData> {
   try {
-    const gapIntelResp = await apiFetch<{ items: GapIntelligenceItem[]; disclaimer?: string }>(
+    const gapIntelPromise = apiFetch<{ items: GapIntelligenceItem[]; disclaimer?: string }>(
       "/v1/scanner/gap-intelligence",
       {
         method: "POST",
@@ -262,6 +267,11 @@ export async function loadScannerDataWithoutBrief(
         })
       }
     );
+    const watchlistPromise =
+      tuning?.parallelDefaultWatchlist === true
+        ? fetchDefaultWatchlistSymbols().catch(() => [] as string[])
+        : Promise.resolve(watchlistSymbols);
+    const [gapIntelResp, resolvedWatchlist] = await Promise.all([gapIntelPromise, watchlistPromise]);
     if (gapIntelResp == null || !Array.isArray(gapIntelResp.items)) {
       return {
         gapIntelligence: [],
@@ -275,7 +285,8 @@ export async function loadScannerDataWithoutBrief(
 
     let gapItems = gapIntelResp.items;
     const gapSyms = gapItems.map((g) => g.symbol.trim().toUpperCase()).filter(Boolean);
-    const watchUpper = watchlistSymbols.map((s) => s.trim().toUpperCase()).filter(Boolean);
+    const wlSource = tuning?.parallelDefaultWatchlist === true ? resolvedWatchlist : watchlistSymbols;
+    const watchUpper = wlSource.map((s) => s.trim().toUpperCase()).filter(Boolean);
     let universe = [...new Set([...gapSyms, ...watchUpper])];
     if (universe.length === 0) {
       universe = [...INTRADAY_FALLBACK_SYMBOLS];
@@ -340,11 +351,12 @@ export async function loadScannerDataWithoutBrief(
       if (s && typeof s === "object") snapshots_by_symbol[sym] = s as Record<string, unknown>;
     });
 
+    const setupsLimit = tuning?.daySetupsLimit ?? 10;
     const setups = await apiFetch<IntradaySetupPayload[]>("/v1/signals/day/setups", {
       method: "POST",
       body: JSON.stringify({
         bars_by_symbol: cleanBarsBySymbol,
-        limit: 10,
+        limit: setupsLimit,
         min_score: 0.55,
         liquidity_by_symbol: liquidity_by_symbol,
         snapshots_by_symbol,

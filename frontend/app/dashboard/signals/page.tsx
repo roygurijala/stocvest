@@ -12,10 +12,10 @@ export default async function DashboardSignalsPage() {
   if (!session) {
     redirect("/login");
   }
-  const pdtStatus = await fetchPdtStatus().catch(() => null);
-  const [marketOverview, scannerOverview] = await Promise.all([
+  const [pdtStatus, marketOverview, scannerOverview] = await Promise.all([
+    fetchPdtStatus().catch(() => null),
     fetchMarketOverview(undefined, { sparklineBarLimit: 12 }),
-    fetchScannerOverview(pdtStatus)
+    fetchScannerOverview(null, [], { loadTuning: { parallelDefaultWatchlist: true } })
   ]);
   const symbols = Array.from(new Set(scannerOverview.setups.map((s) => s.symbol)));
   const earnings = await fetchEarningsCalendar(symbols, 3);

@@ -5,10 +5,14 @@ import { fetchMarketOverview } from "@/lib/api/market";
 import { fetchPdtStatus } from "@/lib/api/pdt";
 import { loadScannerDataWithoutBrief } from "@/lib/api/scanner";
 import { DEFAULT_EARNINGS_SYMBOLS, fetchEarningsCalendar } from "@/lib/api/earnings";
-import { fetchDefaultWatchlistSymbols } from "@/lib/api/watchlists";
 
-/** Tighter than the full scanner page: fewer symbols, shorter 1m history, faster day/setups. */
-const DASHBOARD_SCANNER_TUNING = { maxUniverseSymbols: 32, intradayBarLimit: 72 } as const;
+/** Tighter than the full scanner page; default watchlist loads in parallel with gap-intelligence inside the scanner loader. */
+const DASHBOARD_SCANNER_TUNING = {
+  maxUniverseSymbols: 24,
+  intradayBarLimit: 60,
+  parallelDefaultWatchlist: true,
+  daySetupsLimit: 6
+} as const;
 
 function MorningBriefSkeleton() {
   return (
@@ -43,10 +47,7 @@ export async function DashboardPageContent() {
   const [marketOverview, pdtStatus, scannerCore, earnings] = await Promise.all([
     fetchMarketOverview(undefined, { sparklineBarLimit: 12 }),
     fetchPdtStatus().catch(() => null),
-    (async () => {
-      const wl = await fetchDefaultWatchlistSymbols().catch(() => [] as string[]);
-      return loadScannerDataWithoutBrief(null, wl, DASHBOARD_SCANNER_TUNING);
-    })(),
+    loadScannerDataWithoutBrief(null, [], DASHBOARD_SCANNER_TUNING),
     fetchEarningsCalendar(earningsSymbols, 5)
   ]);
 
