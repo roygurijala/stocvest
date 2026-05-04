@@ -17,6 +17,7 @@ import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
+import { useIsMobileLayout } from "@/lib/hooks/use-is-mobile-layout";
 import { coerceSnapshotForReferenceLevels } from "@/lib/snapshot-reference-levels";
 import { applySwingCompositeEnrichment, buildEvidenceFromSetup, type SignalEvidenceData } from "@/lib/signal-evidence";
 import {
@@ -78,6 +79,7 @@ function deriveFromSnapshot(snapshot?: SnapshotPayload | null): { bullishBias: n
 
 export function SignalsPageClient({ marketOverview, scannerOverview, earningsBySymbol }: SignalsPageClientProps) {
   const { colors } = useTheme();
+  const isMobileLayout = useIsMobileLayout();
   const [tab, setTab] = useState<"layers" | "history">("layers");
   const [symbol, setSymbol] = useState("AAPL");
   const [evidence, setEvidence] = useState<SignalEvidenceData | null>(null);
@@ -427,7 +429,7 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
         />
       </div>
 
-      <div className="signals-grid grid grid-cols-1 gap-4 lg:grid-cols-[1.35fr_1fr] [&>*]:min-w-0">
+      <div className="signals-grid grid grid-cols-1 items-start gap-4 lg:grid-cols-[1.35fr_1fr] [&>*]:min-w-0">
         <section
           className={`order-2 min-w-0 lg:order-1 ${surfaceGlowClassName}`}
           style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
@@ -572,8 +574,8 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
               Historical avg
             </span>
           </div>
-          <div className="mx-auto max-w-full overflow-hidden" style={{ height: 220 }}>
-            <div className="lg:hidden" style={{ height: 220 }}>
+          <div className="mx-auto min-w-0 max-w-full overflow-x-auto overscroll-x-contain touch-pan-x">
+            <div className="mx-auto max-w-full min-w-[260px] lg:hidden" style={{ height: 256 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <RadarChart data={radarData} margin={{ top: 16, right: 18, bottom: 22, left: 18 }}>
                   <PolarGrid stroke={colors.border} />
@@ -605,7 +607,7 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
                 </RadarChart>
               </ResponsiveContainer>
             </div>
-            <div className="hidden max-w-full overflow-hidden lg:block" style={{ height: 280 }}>
+            <div className="mx-auto hidden max-w-full overflow-hidden lg:block" style={{ height: 288 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <RadarChart data={radarData} margin={{ top: 18, right: 20, bottom: 26, left: 20 }}>
                   <PolarGrid stroke={colors.border} />
@@ -643,9 +645,10 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
             Today vs typical (per layer)
           </h4>
           <p className="text-xs leading-snug" style={{ margin: `0 0 ${spacing[2]} 0`, color: colors.textMuted }}>
-            Point gap vs the dashed &quot;historical avg&quot; ring on the radar (today − typical). Color key is on the chart.
+            Point gap vs the dashed &quot;historical avg&quot; ring on the radar (today − typical). Color key is directly above the
+            bars.
           </p>
-          <SignalLayerDivergenceChart data={radarData} colors={colors} height={248} />
+          <SignalLayerDivergenceChart data={radarData} colors={colors} height={isMobileLayout ? 348 : 312} />
         </section>
       </div>
 

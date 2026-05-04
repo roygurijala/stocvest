@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { CrispChat } from "@/components/crisp-chat";
 import { GlobalDisclaimer } from "@/components/global-disclaimer";
@@ -9,6 +9,12 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "STOCVEST",
   description: "Multi-broker swing and day trading platform"
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover"
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

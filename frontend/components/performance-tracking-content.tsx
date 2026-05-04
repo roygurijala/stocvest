@@ -77,7 +77,9 @@ export function PerformanceTrackingContent({ showHomeLink = false }: Performance
         signal accuracy does not guarantee future results.
       </p>
 
-      <section className={`grid grid-cols-2 gap-3 ${showHomeLink ? "mt-8 lg:grid-cols-4" : "mt-6 lg:grid-cols-4"}`}>
+      <section
+        className={`grid grid-cols-1 gap-3 sm:grid-cols-2 ${showHomeLink ? "mt-8 lg:grid-cols-4" : "mt-6 lg:grid-cols-4"}`}
+      >
         <div className={surfaceGlowClassName} style={metricCardStyle}>
           <p className="text-xs uppercase tracking-wide" style={{ color: colors.textMuted }}>
             Total Signals
@@ -144,7 +146,7 @@ export function PerformanceTrackingContent({ showHomeLink = false }: Performance
         </section>
       ) : (
         <section
-          className={`overflow-x-auto ${surfaceGlowClassName} ${showHomeLink ? "mt-8" : "mt-6"}`}
+          className={`overflow-x-auto overscroll-x-contain touch-pan-x ${surfaceGlowClassName} ${showHomeLink ? "mt-8" : "mt-6"}`}
           style={{
             background: colors.surface,
             border: `1px solid ${colors.border}`,

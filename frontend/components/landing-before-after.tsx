@@ -40,14 +40,14 @@ export function LandingBeforeAfterSection() {
         </p>
 
         <div
-          className="mb-2 grid grid-cols-[1fr_auto_1fr] items-end gap-3 text-[11px] font-semibold uppercase tracking-[0.12em] md:text-xs"
+          className="mb-2 grid min-w-0 grid-cols-[1fr_auto_1fr] items-end gap-2 text-[10px] font-semibold uppercase leading-tight tracking-[0.08em] sm:gap-3 sm:text-[11px] sm:tracking-[0.12em] md:text-xs"
           style={{ marginTop: 0, marginBottom: 8 }}
         >
-          <p className="text-[#ff6b7d]/90">WITHOUT STOCVEST</p>
-          <span className="pb-1 text-center text-sm font-bold text-slate-300 md:text-base" aria-hidden>
+          <p className="min-w-0 break-words text-[#ff6b7d]/90">WITHOUT STOCVEST</p>
+          <span className="shrink-0 pb-1 text-center text-sm font-bold text-slate-300 md:text-base" aria-hidden>
             vs
           </span>
-          <p className="text-right text-[#00d4ff]">WITH STOCVEST</p>
+          <p className="min-w-0 break-words text-right text-[#00d4ff]">WITH STOCVEST</p>
         </div>
 
         <div className="space-y-2 md:space-y-2">

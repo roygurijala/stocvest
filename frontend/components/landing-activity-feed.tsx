@@ -163,7 +163,7 @@ export function LandingActivityFeedSection({
                   {rows.map((sig) => (
                     <li
                       key={`${sig.symbol}-${sig.generated_at}`}
-                      className="flex cursor-default items-center justify-between gap-3 px-3 py-2.5 transition-colors hover:bg-[rgba(0,180,255,0.04)]"
+                      className="flex min-h-[44px] cursor-default items-center justify-between gap-3 px-3 py-3 transition-colors hover:bg-[rgba(0,180,255,0.04)] sm:min-h-0 sm:py-2.5"
                     >
                       <div className="flex min-w-0 items-center gap-2">
                         <span
