@@ -33,28 +33,34 @@ function confluenceCount(pb: PerformanceSummary["pattern_breakdown"]): string {
 
 function Sparkline({ values }: { values: number[] }) {
   const w = 400;
-  const h = 60;
+  /** Chart-only height; axis labels render in HTML below so the stroke never crosses text. */
+  const hChart = 44;
   const padX = 4;
   const padY = 6;
+  const chartBottom = hChart - padY;
+
   if (values.length < 2) {
-    const y = h - padY - 4;
+    const y = chartBottom - 8;
     return (
-      <svg viewBox={`0 0 ${w} ${h}`} className="h-[60px] w-full" preserveAspectRatio="none" aria-hidden>
-        <defs>
-          <linearGradient id="landingSparkFlat" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#00e87a" stopOpacity="0.12" />
-            <stop offset="100%" stopColor="#00e87a" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <rect x={padX} y={y} width={w - padX * 2} height={4} fill="url(#landingSparkFlat)" rx={1} />
-        <line x1={padX} y1={y + 2} x2={w - padX} y2={y + 2} stroke="#00e87a" strokeWidth={1.5} />
-        <text x={padX} y={h - 2} fill="#64748b" fontSize={9}>
-          launch
-        </text>
-        <text x={w - 36} y={h - 2} fill="#64748b" fontSize={9} textAnchor="end">
-          today
-        </text>
-      </svg>
+      <div className="w-full">
+        <svg viewBox={`0 0 ${w} ${hChart}`} className="h-11 w-full" preserveAspectRatio="none" aria-hidden>
+          <defs>
+            <linearGradient id="landingSparkFlat" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#00e87a" stopOpacity="0.12" />
+              <stop offset="100%" stopColor="#00e87a" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <rect x={padX} y={y} width={w - padX * 2} height={4} fill="url(#landingSparkFlat)" rx={1} />
+          <line x1={padX} y1={y + 2} x2={w - padX} y2={y + 2} stroke="#00e87a" strokeWidth={1.5} />
+        </svg>
+        <div
+          className="mt-1 flex justify-between font-mono text-[10px] font-medium uppercase tracking-wide text-slate-400"
+          aria-hidden
+        >
+          <span>launch</span>
+          <span>today</span>
+        </div>
+      </div>
     );
   }
   const minV = Math.min(...values);
@@ -62,28 +68,31 @@ function Sparkline({ values }: { values: number[] }) {
   const span = Math.max(1e-6, maxV - minV);
   const pts = values.map((v, i) => {
     const x = padX + (i / (values.length - 1)) * (w - padX * 2);
-    const y = padY + (1 - (v - minV) / span) * (h - padY * 2);
+    const y = padY + (1 - (v - minV) / span) * (chartBottom - padY - 4);
     return `${x},${y}`;
   });
   const d = `M ${pts.join(" L ")}`;
-  const areaD = `${d} L ${w - padX},${h - padY} L ${padX},${h - padY} Z`;
+  const areaD = `${d} L ${w - padX},${chartBottom} L ${padX},${chartBottom} Z`;
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="h-[60px] w-full" preserveAspectRatio="none" aria-hidden>
-      <defs>
-        <linearGradient id="landingSparkFill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#00e87a" stopOpacity="0.25" />
-          <stop offset="100%" stopColor="#00e87a" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={areaD} fill="url(#landingSparkFill)" />
-      <path d={d} fill="none" stroke="#00e87a" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-      <text x={padX} y={h - 2} fill="#64748b" fontSize={9}>
-        launch
-      </text>
-      <text x={w - 36} y={h - 2} fill="#64748b" fontSize={9} textAnchor="end">
-        today
-      </text>
-    </svg>
+    <div className="w-full">
+      <svg viewBox={`0 0 ${w} ${hChart}`} className="h-11 w-full" preserveAspectRatio="none" aria-hidden>
+        <defs>
+          <linearGradient id="landingSparkFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#00e87a" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="#00e87a" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={areaD} fill="url(#landingSparkFill)" />
+        <path d={d} fill="none" stroke="#00e87a" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      <div
+        className="mt-1 flex justify-between font-mono text-[10px] font-medium uppercase tracking-wide text-slate-400"
+        aria-hidden
+      >
+        <span>launch</span>
+        <span>today</span>
+      </div>
+    </div>
   );
 }
 
@@ -191,25 +200,25 @@ export function LandingActivityFeedSection({
                   <p className="text-[22px] font-semibold text-[#00d4ff]" style={{ fontFamily: MONO }}>
                     {hasPerf ? performanceSummary.total_signals_tracked : "—"}
                   </p>
-                  <p className="text-[9px] uppercase tracking-wide text-slate-500">Total Signals</p>
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Total Signals</p>
                 </div>
                 <div>
                   <p className="text-[22px] font-semibold text-[#00d4ff]" style={{ fontFamily: MONO }}>
                     {hasPerf ? `${performanceSummary.directional_accuracy_percent}%` : "—"}
                   </p>
-                  <p className="text-[9px] uppercase tracking-wide text-slate-500">Directional Accuracy</p>
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Directional Accuracy</p>
                 </div>
                 <div>
                   <p className="text-[22px] font-semibold text-[#00d4ff]" style={{ fontFamily: MONO }}>
                     {hasPerf ? confluenceCount(performanceSummary.pattern_breakdown) : "—"}
                   </p>
-                  <p className="text-[9px] uppercase tracking-wide text-slate-500">Confluence Alerts</p>
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Confluence Alerts</p>
                 </div>
                 <div>
                   <p className="text-[22px] font-semibold text-[#00d4ff]" style={{ fontFamily: MONO }}>
                     —
                   </p>
-                  <p className="text-[9px] uppercase tracking-wide text-slate-500">Active Right Now</p>
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Active Right Now</p>
                 </div>
               </div>
               {!hasPerf ? (
@@ -235,7 +244,7 @@ export function LandingActivityFeedSection({
                     <p className="text-[13px] font-medium text-[#00d4ff]" style={{ fontFamily: MONO }}>
                       {x.v}
                     </p>
-                    <p className="text-[9px] uppercase tracking-wide text-slate-500">{x.l}</p>
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">{x.l}</p>
                   </div>
                 ))}
               </div>
