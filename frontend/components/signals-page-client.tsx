@@ -575,9 +575,13 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
           <div className="mx-auto max-w-full overflow-hidden" style={{ height: 220 }}>
             <div className="lg:hidden" style={{ height: 220 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <RadarChart data={radarData}>
+                <RadarChart data={radarData} margin={{ top: 16, right: 18, bottom: 22, left: 18 }}>
                   <PolarGrid stroke={colors.border} />
-                  <PolarAngleAxis dataKey="layer" tick={{ fill: colors.textMuted, fontSize: 10 }} />
+                  <PolarAngleAxis
+                    dataKey="layer"
+                    tick={{ fill: colors.textMuted, fontSize: 10 }}
+                    tickLine={false}
+                  />
                   <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: colors.textMuted, fontSize: 9 }} />
                   <Radar
                     name="Historical avg"
@@ -603,9 +607,13 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
             </div>
             <div className="hidden max-w-full overflow-hidden lg:block" style={{ height: 280 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <RadarChart data={radarData}>
+                <RadarChart data={radarData} margin={{ top: 18, right: 20, bottom: 26, left: 20 }}>
                   <PolarGrid stroke={colors.border} />
-                  <PolarAngleAxis dataKey="layer" tick={{ fill: colors.textMuted, fontSize: 11 }} />
+                  <PolarAngleAxis
+                    dataKey="layer"
+                    tick={{ fill: colors.textMuted, fontSize: 11 }}
+                    tickLine={false}
+                  />
                   <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: colors.textMuted, fontSize: 10 }} />
                   <Radar
                     name="Historical avg"
@@ -635,10 +643,9 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
             Today vs typical (per layer)
           </h4>
           <p className="text-xs leading-snug" style={{ margin: `0 0 ${spacing[2]} 0`, color: colors.textMuted }}>
-            Point gap vs the dashed baseline on the radar — bars right are hotter than usual today, left are cooler. Use this
-            for where attention diverges most.
+            Point gap vs the dashed &quot;historical avg&quot; ring on the radar (today − typical). Color key is on the chart.
           </p>
-          <SignalLayerDivergenceChart data={radarData} colors={colors} height={208} />
+          <SignalLayerDivergenceChart data={radarData} colors={colors} height={248} />
         </section>
       </div>
 
