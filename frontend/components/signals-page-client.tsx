@@ -6,11 +6,12 @@ import { Brain, Clock } from "lucide-react";
 import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer } from "recharts";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
-import type { MarketOverview, SnapshotPayload } from "@/lib/api/market";
+import type { MarketOverview, NewsPayload, SnapshotPayload } from "@/lib/api/market";
 import type { ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
 import { AddToWatchlistButton } from "@/components/add-to-watchlist-button";
 import { SignalLayerDivergenceChart } from "@/components/signal-layer-divergence-chart";
+import { SignalsAfterHoursPanel } from "@/components/signals-after-hours-panel";
 import { InfoTip } from "@/components/info-tip";
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
@@ -82,7 +83,7 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
   const isMobileLayout = useIsMobileLayout();
   const [tab, setTab] = useState<"layers" | "history">("layers");
   const [symbol, setSymbol] = useState("AAPL");
-  const [evidence, setEvidence] = useState<SignalEvidenceData | null>(null);
+  const [signalEvidence, setSignalEvidence] = useState<SignalEvidenceData | null>(null);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [symbolSnapshot, setSymbolSnapshot] = useState<SnapshotPayload | null>(null);
   const [historyRows, setHistoryRows] = useState<PublicSignal[]>([]);
@@ -93,7 +94,11 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
     "all" | "correct" | "incorrect" | "neutral" | "pending"
   >("all");
   const [historySource, setHistorySource] = useState<"user" | "public">("public");
-  const [compositeCheck, setCompositeCheck] = useState<Record<string, unknown> | null>(null);
+  const [compositeResult, setCompositeResult] = useState<Record<string, unknown> | null>(null);
+  const [radarData, setRadarData] = useState<Array<{ layer: string; score: number; hist: number }> | null>(null);
+  const [afterHoursNews, setAfterHoursNews] = useState<NewsPayload[]>([]);
+  const [afterHoursInWatchlist, setAfterHoursInWatchlist] = useState(false);
+  const [afterHoursWatchlistKnown, setAfterHoursWatchlistKnown] = useState(false);
 
   const rawSnapshot = useMemo(() => {
     const sym = symbol.toUpperCase();
@@ -170,27 +175,41 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
   );
 
   const { bullishBias, support, resistance } = deriveFromSnapshot(snapshot);
+  const layerReasoning = useMemo(() => {
+    const out = new Map<string, string>();
+    const raw = compositeResult?.contributions;
+    if (!Array.isArray(raw)) return out;
+    for (const item of raw) {
+      if (!item || typeof item !== "object") continue;
+      const row = item as { layer?: unknown; reasoning?: unknown };
+      if (typeof row.layer !== "string" || typeof row.reasoning !== "string") continue;
+      out.set(row.layer.trim().toLowerCase(), row.reasoning.trim());
+    }
+    return out;
+  }, [compositeResult]);
   const rows: LayerRow[] = useMemo(() => {
     return layerMeta.map(([icon, name], idx) => {
       const score = Math.max(0, Math.min(100, Math.round((bullishBias * 100 + idx * 7) % 100)));
       const status: LayerStatus =
         !snapshot ? "Unavailable" : score >= 60 ? "Bullish" : score <= 40 ? "Bearish" : "Neutral";
+      const dynamicReasoning = layerReasoning.get(name.toLowerCase());
       return {
         icon,
         name,
         status,
         explanation:
-          status === "Bullish"
+          dynamicReasoning ??
+          (status === "Bullish"
             ? `${name} signals align with upside continuation.`
             : status === "Bearish"
               ? `${name} signals show downside pressure.`
               : status === "Neutral"
                 ? `${name} is mixed without strong direction.`
-                : `${name} data is unavailable right now.`,
+                : `${name} data is unavailable right now.`),
         score
       };
     });
-  }, [bullishBias, snapshot]);
+  }, [bullishBias, layerReasoning, snapshot]);
 
   const overall = rows.reduce((sum, row) => sum + row.score, 0) / Math.max(1, rows.length);
   const layerSignalSummary = overall >= 58 ? "Bullish" : overall <= 42 ? "Bearish" : "Neutral";
@@ -202,7 +221,9 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
   useEffect(() => {
     const sym = symbol.trim().toUpperCase();
     if (!sym || tab !== "layers") {
-      setCompositeCheck(null);
+      setCompositeResult(null);
+      setSignalEvidence(null);
+      setRadarData(null);
       return;
     }
     let cancelled = false;
@@ -242,13 +263,33 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
         });
         if (cancelled) return;
         if (!res.ok) {
-          setCompositeCheck(null);
+          setCompositeResult(null);
+          setSignalEvidence(null);
+          setRadarData(null);
           return;
         }
         const j = (await res.json()) as Record<string, unknown>;
-        if (!cancelled) setCompositeCheck(j);
+        if (cancelled) return;
+        if (isInsufficientCompositeResponse(j)) {
+          setCompositeResult(null);
+          setSignalEvidence(null);
+          setRadarData(null);
+          return;
+        }
+        setCompositeResult(j);
+        setRadarData(
+          rows.map((row, idx) => ({
+            layer: row.name,
+            score: row.score,
+            hist: Math.max(22, Math.min(88, row.score - 7 + ((idx * 7) % 14)))
+          }))
+        );
       } catch {
-        if (!cancelled) setCompositeCheck(null);
+        if (!cancelled) {
+          setCompositeResult(null);
+          setSignalEvidence(null);
+          setRadarData(null);
+        }
       }
     };
     void run();
@@ -257,17 +298,42 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
     };
   }, [symbol, tab, snapshot, rows, layerSignalSummary]);
 
-  const insufficientComposite: SwingCompositeMarketStatus | null = isInsufficientCompositeResponse(
-    compositeCheck
-  )
-    ? compositeCheck.market_status
+  const insufficientComposite: SwingCompositeMarketStatus | null = isInsufficientCompositeResponse(compositeResult)
+    ? compositeResult.market_status
     : null;
+  const hasValidSignal = compositeResult !== null && !isInsufficientCompositeResponse(compositeResult);
+  const showAfterHoursPanel = insufficientComposite?.market_session === "closed";
 
-  const radarData = rows.map((row, idx) => ({
-    layer: row.name,
-    score: row.score,
-    hist: Math.max(22, Math.min(88, row.score - 7 + ((idx * 7) % 14)))
-  }));
+  useEffect(() => {
+    const sym = symbol.trim().toUpperCase();
+    if (!sym || !showAfterHoursPanel) {
+      setAfterHoursNews([]);
+      setAfterHoursInWatchlist(false);
+      setAfterHoursWatchlistKnown(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const [news, watchlistSymbols] = await Promise.all([
+        fetchSymbolNews(sym, 5).catch(() => [] as NewsPayload[]),
+        fetch("/api/stocvest/watchlists/default/symbols", { method: "GET" })
+          .then(async (res) => {
+            if (!res.ok) return [] as string[];
+            const data = (await res.json().catch(() => ({}))) as { symbols?: string[] };
+            if (!Array.isArray(data.symbols)) return [] as string[];
+            return data.symbols.map((row) => String(row).trim().toUpperCase()).filter(Boolean);
+          })
+          .catch(() => [] as string[])
+      ]);
+      if (cancelled) return;
+      setAfterHoursNews(news);
+      setAfterHoursInWatchlist(watchlistSymbols.includes(sym));
+      setAfterHoursWatchlistKnown(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [showAfterHoursPanel, symbol]);
 
   function directionChipStyle(bias: PublicSignal["bias"]): CSSProperties {
     if (bias === "bullish") {
@@ -428,6 +494,9 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
           }}
         />
       </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <AddToWatchlistButton symbol={symbol} />
+      </div>
 
       <div className="signals-grid grid grid-cols-1 items-start gap-4 lg:grid-cols-[1.35fr_1fr] [&>*]:min-w-0">
         <section
@@ -538,120 +607,123 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
           )}
         </section>
 
-        <section
-          className={`order-1 min-w-0 lg:order-2 ${surfaceGlowClassName}`}
-          style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
-        >
-          <h3 style={{ marginTop: 0 }}>Signal Radar</h3>
-          <p className="text-sm" style={{ margin: `0 0 ${spacing[2]} 0`, color: colors.textMuted }}>
-            At-a-glance shape vs a typical baseline — dashed ring is historical average, solid fill is today.
-          </p>
-          <div
-            className="flex flex-wrap items-center gap-x-4 gap-y-2"
-            style={{ margin: `0 0 ${spacing[3]} 0`, fontSize: 12, color: colors.textMuted }}
-            aria-label="Radar chart legend"
+        {hasValidSignal && radarData ? (
+          <section
+            className={`order-1 min-w-0 lg:order-2 ${surfaceGlowClassName}`}
+            style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
           >
-            <span className="inline-flex items-center gap-2">
-              <span
-                className="inline-block shrink-0 rounded-sm"
-                style={{ width: 12, height: 12, background: "#0ea5e9", opacity: 0.85, border: "1px solid #38bdf8" }}
-                aria-hidden
-              />
-              Current
-            </span>
-            <span className="inline-flex items-center gap-2">
-              <span
-                className="inline-block shrink-0 rounded-sm"
-                style={{
-                  width: 12,
-                  height: 12,
-                  border: `2px dashed ${colors.text}`,
-                  background: "transparent",
-                  opacity: 0.85
-                }}
-                aria-hidden
-              />
-              Historical avg
-            </span>
-          </div>
-          <div className="mx-auto min-w-0 max-w-full overflow-x-auto overscroll-x-contain touch-pan-x">
-            <div className="mx-auto max-w-full min-w-[260px] lg:hidden" style={{ height: 256 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <RadarChart data={radarData} margin={{ top: 16, right: 18, bottom: 22, left: 18 }}>
-                  <PolarGrid stroke={colors.border} />
-                  <PolarAngleAxis
-                    dataKey="layer"
-                    tick={{ fill: colors.textMuted, fontSize: 10 }}
-                    tickLine={false}
-                  />
-                  <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: colors.textMuted, fontSize: 9 }} />
-                  <Radar
-                    name="Historical avg"
-                    dataKey="hist"
-                    stroke={colors.text}
-                    strokeWidth={2}
-                    strokeDasharray="5 4"
-                    fill="none"
-                    dot={false}
-                    isAnimationActive={false}
-                  />
-                  <Radar
-                    name="Current"
-                    dataKey="score"
-                    stroke="#38bdf8"
-                    strokeWidth={2}
-                    fill="#0ea5e9"
-                    fillOpacity={0.38}
-                    dot={false}
-                  />
-                </RadarChart>
-              </ResponsiveContainer>
+            <h3 style={{ marginTop: 0 }}>Signal Radar</h3>
+            <p className="text-sm" style={{ margin: `0 0 ${spacing[2]} 0`, color: colors.textMuted }}>
+              At-a-glance shape vs a typical baseline — dashed ring is historical average, solid fill is today.
+            </p>
+            <div
+              className="flex flex-wrap items-center gap-x-4 gap-y-2"
+              style={{ margin: `0 0 ${spacing[3]} 0`, fontSize: 12, color: colors.textMuted }}
+              aria-label="Radar chart legend"
+            >
+              <span className="inline-flex items-center gap-2">
+                <span
+                  className="inline-block shrink-0 rounded-sm"
+                  style={{ width: 12, height: 12, background: "#0ea5e9", opacity: 0.85, border: "1px solid #38bdf8" }}
+                  aria-hidden
+                />
+                Current
+              </span>
+              <span className="inline-flex items-center gap-2">
+                <span
+                  className="inline-block shrink-0 rounded-sm"
+                  style={{
+                    width: 12,
+                    height: 12,
+                    border: `2px dashed ${colors.text}`,
+                    background: "transparent",
+                    opacity: 0.85
+                  }}
+                  aria-hidden
+                />
+                Historical avg
+              </span>
             </div>
-            <div className="mx-auto hidden max-w-full overflow-hidden lg:block" style={{ height: 288 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <RadarChart data={radarData} margin={{ top: 18, right: 20, bottom: 26, left: 20 }}>
-                  <PolarGrid stroke={colors.border} />
-                  <PolarAngleAxis
-                    dataKey="layer"
-                    tick={{ fill: colors.textMuted, fontSize: 11 }}
-                    tickLine={false}
-                  />
-                  <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: colors.textMuted, fontSize: 10 }} />
-                  <Radar
-                    name="Historical avg"
-                    dataKey="hist"
-                    stroke={colors.text}
-                    strokeWidth={2}
-                    strokeDasharray="5 4"
-                    fill="none"
-                    dot={false}
-                    isAnimationActive={false}
-                  />
-                  <Radar
-                    name="Current"
-                    dataKey="score"
-                    stroke="#38bdf8"
-                    strokeWidth={2}
-                    fill="#0ea5e9"
-                    fillOpacity={0.38}
-                    dot={false}
-                  />
-                </RadarChart>
-              </ResponsiveContainer>
+            <div className="mx-auto min-w-0 max-w-full overflow-x-auto overscroll-x-contain touch-pan-x">
+              <div className="mx-auto max-w-full min-w-[260px] lg:hidden" style={{ height: 256 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <RadarChart data={radarData} margin={{ top: 16, right: 18, bottom: 22, left: 18 }}>
+                    <PolarGrid stroke={colors.border} />
+                    <PolarAngleAxis
+                      dataKey="layer"
+                      tick={{ fill: colors.textMuted, fontSize: 10 }}
+                      tickLine={false}
+                    />
+                    <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: colors.textMuted, fontSize: 9 }} />
+                    <Radar
+                      name="Historical avg"
+                      dataKey="hist"
+                      stroke={colors.text}
+                      strokeWidth={2}
+                      strokeDasharray="5 4"
+                      fill="none"
+                      dot={false}
+                      isAnimationActive={false}
+                    />
+                    <Radar
+                      name="Current"
+                      dataKey="score"
+                      stroke="#38bdf8"
+                      strokeWidth={2}
+                      fill="#0ea5e9"
+                      fillOpacity={0.38}
+                      dot={false}
+                    />
+                  </RadarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="mx-auto hidden max-w-full overflow-hidden lg:block" style={{ height: 288 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <RadarChart data={radarData} margin={{ top: 18, right: 20, bottom: 26, left: 20 }}>
+                    <PolarGrid stroke={colors.border} />
+                    <PolarAngleAxis
+                      dataKey="layer"
+                      tick={{ fill: colors.textMuted, fontSize: 11 }}
+                      tickLine={false}
+                    />
+                    <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: colors.textMuted, fontSize: 10 }} />
+                    <Radar
+                      name="Historical avg"
+                      dataKey="hist"
+                      stroke={colors.text}
+                      strokeWidth={2}
+                      strokeDasharray="5 4"
+                      fill="none"
+                      dot={false}
+                      isAnimationActive={false}
+                    />
+                    <Radar
+                      name="Current"
+                      dataKey="score"
+                      stroke="#38bdf8"
+                      strokeWidth={2}
+                      fill="#0ea5e9"
+                      fillOpacity={0.38}
+                      dot={false}
+                    />
+                  </RadarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
-          </div>
 
-          <h4 style={{ margin: `${spacing[4]} 0 ${spacing[1]} 0`, fontSize: 13, fontWeight: 600, color: colors.text }}>
-            Today vs typical (per layer)
-          </h4>
-          <p className="text-xs leading-snug" style={{ margin: `0 0 ${spacing[2]} 0`, color: colors.textMuted }}>
-            Point gap vs the dashed &quot;historical avg&quot; ring on the radar (today − typical). Color key is directly above the
-            bars.
-          </p>
-          <SignalLayerDivergenceChart data={radarData} colors={colors} height={isMobileLayout ? 348 : 312} />
-        </section>
+            <h4 style={{ margin: `${spacing[4]} 0 ${spacing[1]} 0`, fontSize: 13, fontWeight: 600, color: colors.text }}>
+              Today vs typical (per layer)
+            </h4>
+            <p className="text-xs leading-snug" style={{ margin: `0 0 ${spacing[2]} 0`, color: colors.textMuted }}>
+              Point gap vs the dashed &quot;historical avg&quot; ring on the radar (today − typical). Color key is directly above the
+              bars.
+            </p>
+            <SignalLayerDivergenceChart data={radarData} colors={colors} height={isMobileLayout ? 348 : 312} />
+          </section>
+        ) : null}
       </div>
 
+      {hasValidSignal ? (
       <article
         className={surfaceGlowClassName}
         style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
@@ -716,14 +788,14 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
                 event != null
                   ? Math.floor((Date.parse(`${event.report_date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000)
                   : undefined;
-              setEvidence(
+              setSignalEvidence(
                 applySwingCompositeEnrichment(
                   buildEvidenceFromSetup(setupLike, snapshot ?? undefined, {
                     symbolNewsArticles,
                     earningsRiskDays: daysUntil,
                     earningsReportTime: event?.report_time
                   }),
-                  compositeCheck
+                  compositeResult
                 )
               );
               setEvidenceOpen(true);
@@ -740,13 +812,14 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
           >
             View Evidence
           </button>
-          <AddToWatchlistButton symbol={symbol} />
         </div>
         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: spacing[2] }}>
           <SignalDisclaimerChip />
         </div>
       </article>
+      ) : null}
 
+      {hasValidSignal ? (
       <article
         className={surfaceGlowClassName}
         style={{
@@ -796,9 +869,21 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
           <SignalDisclaimerChip />
         </div>
       </article>
+      ) : null}
+      {showAfterHoursPanel ? (
+        <SignalsAfterHoursPanel
+          symbol={symbol}
+          snapshot={snapshot}
+          marketStatus={insufficientComposite}
+          earningsEvent={earningsBySymbol[symbol.toUpperCase()] ?? null}
+          newsArticles={afterHoursNews}
+          isInDefaultWatchlist={afterHoursInWatchlist}
+          watchlistCheckComplete={afterHoursWatchlistKnown}
+        />
+      ) : null}
         </>
       ) : null}
-      <SignalEvidenceModal open={evidenceOpen} evidence={evidence} onClose={() => setEvidenceOpen(false)} />
+      <SignalEvidenceModal open={evidenceOpen} evidence={signalEvidence} onClose={() => setEvidenceOpen(false)} />
     </section>
   );
 }

@@ -121,6 +121,7 @@ def test_swing_composite_handler_returns_bullish_signal_summary() -> None:
     assert body["score"] > 0
     assert len(body["contributions"]) == 3
     assert "signal_strength" in body["contributions"][0]
+    assert isinstance(body["contributions"][0].get("reasoning"), str) and body["contributions"][0]["reasoning"]
     assert isinstance(body.get("signal_score"), int)
     assert 0 <= body["signal_score"] <= 100
     assert body["trend_strength"] in {"Strong", "Moderate", "Weak"}

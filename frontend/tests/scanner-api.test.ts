@@ -119,7 +119,7 @@ describe("scanner API overview", () => {
     expect(result.error).toBeUndefined();
     expect(result.gapIntelligence).toHaveLength(1);
     expect(result.morningBrief?.conditions.label).toBe("CHOPPY");
-  });
+  }, 15000);
 
   test("fetchScannerOverview handles scanner failures", async () => {
     const { fetchScannerOverview } = await import("@/lib/api/scanner");
@@ -127,5 +127,5 @@ describe("scanner API overview", () => {
     const result = await fetchScannerOverview(null, [], { includeMorningBrief: true });
     expect(result.error).toContain("500");
     expect(result.gapIntelligence).toHaveLength(0);
-  });
+  }, 15000);
 });

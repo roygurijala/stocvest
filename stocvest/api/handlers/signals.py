@@ -77,6 +77,72 @@ def _composite_layer_available(parsed: dict[str, Any]) -> bool:
     return parsed.get("score") is not None
 
 
+def _layer_verdict(raw_score: float) -> str:
+    if raw_score >= 0.2:
+        return "bullish"
+    if raw_score <= -0.2:
+        return "bearish"
+    return "neutral"
+
+
+def _generate_layer_reasoning(
+    *,
+    layer: str,
+    raw_score: float,
+    verdict: str,
+    payload: dict[str, Any],
+    snapshot: dict[str, Any],
+) -> str:
+    layer_l = layer.strip().lower()
+    if layer_l == "technical":
+        vwap = snapshot.get("day_vwap")
+        last = snapshot.get("last_trade_price")
+        if isinstance(vwap, (int, float)) and isinstance(last, (int, float)):
+            relation = "above VWAP" if last >= vwap else "below VWAP"
+            return (
+                f"Technical signals are {verdict}: price is {relation} "
+                f"({last:.2f} vs VWAP {vwap:.2f}) with score {raw_score:+.2f}."
+            )
+        return f"Technical signals are {verdict} with score {raw_score:+.2f} from current trend structure."
+
+    if layer_l == "news":
+        nc_raw = payload.get("news_catalyst")
+        nc = dict(nc_raw) if isinstance(nc_raw, dict) else {}
+        headline = str(nc.get("headline") or "").strip()
+        sentiment = str(nc.get("sentiment") or "neutral").strip().lower()
+        if headline:
+            return (
+                f"News layer is {verdict}: catalyst sentiment is {sentiment} "
+                f"from '{headline[:120]}'."
+            )
+        return f"News layer is {verdict} with score {raw_score:+.2f}; no strong fresh catalyst was provided."
+
+    if layer_l == "macro":
+        regime = str(payload.get("regime") or "sideways").strip().lower()
+        return f"Macro is {verdict}: current regime is '{regime}' with macro score {raw_score:+.2f}."
+
+    if layer_l == "sector":
+        sector_signal = str(payload.get("sector_signal") or "neutral").strip().lower()
+        return (
+            f"Sector context is {verdict}: sector input is '{sector_signal}' "
+            f"and contributes score {raw_score:+.2f}."
+        )
+
+    if layer_l == "geopolitical":
+        return (
+            f"Geopolitical layer is {verdict} with score {raw_score:+.2f}; "
+            "current headline risk is reflected in composite weighting."
+        )
+
+    if layer_l == "internals":
+        return (
+            f"Internals are {verdict} with score {raw_score:+.2f}; "
+            "breadth/volatility inputs support this weighting."
+        )
+
+    return f"{layer.title()} is {verdict} with score {raw_score:+.2f}."
+
+
 def swing_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
     _ = context
     try:
@@ -125,6 +191,13 @@ def swing_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[
                 {
                     "layer": c.layer,
                     "raw_score": c.raw_score,
+                    "reasoning": _generate_layer_reasoning(
+                        layer=c.layer,
+                        raw_score=c.raw_score,
+                        verdict=_layer_verdict(c.raw_score),
+                        payload=payload,
+                        snapshot=snap,
+                    ),
                     "signal_strength": c.confidence,
                     "base_weight": c.base_weight,
                     "regime_multiplier": c.regime_multiplier,
