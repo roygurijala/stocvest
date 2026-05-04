@@ -27,6 +27,7 @@ export interface SnapshotPayload {
 }
 
 export interface NewsPayload {
+  id?: string;
   article_id: string;
   title: string;
   /** Polygon article summary when present. */
@@ -34,12 +35,23 @@ export interface NewsPayload {
   /** Polygon `image_url` when present. */
   image_url?: string | null;
   source?: string | null;
+  publisher?: { name?: string; tier?: number } | null;
   tickers: string[];
+  published_utc?: string;
   published_at: string;
+  article_url?: string;
   url: string;
   /** Present when backend has run sentiment enrichment (e.g. Claude). */
   sentiment?: string | null;
   sentiment_score?: number | null;
+  affected_stocks?: Array<{
+    symbol: string;
+    impact: "bullish" | "bearish" | "neutral";
+    reason: string;
+    is_direct: boolean;
+    is_watchlist: boolean;
+  }>;
+  impact_summary?: string | null;
 }
 
 export interface MarketOverview {
@@ -145,11 +157,12 @@ export async function fetchMarketOverview(
   const sparklineBarLimit = options.sparklineBarLimit ?? 20;
   const cleanSymbols = symbols.map((s) => s.trim().toUpperCase()).filter(Boolean);
   try {
-    const [status, news, snapshots] = await Promise.all([
+    const [status, newsResp, snapshots] = await Promise.all([
       apiFetch<MarketStatusPayload>("/v1/market/status"),
-      apiFetch<NewsPayload[]>("/v1/market/news?limit=5"),
+      apiFetch<NewsPayload[] | { headlines?: NewsPayload[] }>("/v1/market/news?limit=8"),
       fetchOverviewSnapshots(cleanSymbols)
     ]);
+    const news = Array.isArray(newsResp) ? newsResp : (newsResp?.headlines ?? []);
     if (!status) {
       return { snapshots: [], news: [], error: "Service temporarily unavailable. Please try again." };
     }

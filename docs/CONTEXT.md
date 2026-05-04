@@ -2,9 +2,9 @@
 
 **Read this file at the start of each session.** It summarizes what exists, what is pending, and what is planned—without duplicating the whole repo tree.
 
-**Last updated:** 2026-05-03  
+**Last updated:** 2026-05-04  
 **Repo:** https://github.com/roygurijala/stocvest  
-**Test baseline (regression gate — must match §13):** Backend `pytest tests/ -q` → **496 passed**, **3 skipped**. Frontend `npm run test` → **54 passed** (18 test files). **`npm run build`** last verified: success.
+**Test baseline (regression gate — must match §13):** Backend `pytest tests/ -q` → **516 passed**, **3 skipped**. Frontend `npm run test` → **54 passed** (18 test files). **`npm run build`** last verified: success.
 
 ---
 

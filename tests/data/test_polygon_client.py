@@ -249,6 +249,28 @@ NEWS_PAYLOAD = {
 class TestGetNews:
     @pytest.mark.asyncio
     @respx.mock
+    async def test_get_market_news_with_ticker_any_of_and_time_filter(self):
+        route = respx.get("https://api.polygon.io/v2/reference/news").mock(
+            return_value=httpx.Response(200, json=NEWS_PAYLOAD)
+        )
+        since = datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
+
+        async with PolygonClient(FAKE_KEY) as client:
+            rows = await client.get_market_news(
+                tickers=["SPY", "QQQ"],
+                limit=50,
+                published_utc_gte=since,
+            )
+
+        assert len(rows) == 1
+        req = route.calls[0].request
+        assert req.url.params.get("ticker.any_of") == "SPY,QQQ"
+        assert req.url.params.get("limit") == "50"
+        assert req.url.params.get("order") == "desc"
+        assert req.url.params.get("published_utc.gte", "").endswith("Z")
+
+    @pytest.mark.asyncio
+    @respx.mock
     async def test_returns_articles(self):
         respx.get("https://api.polygon.io/v2/reference/news").mock(
             return_value=httpx.Response(200, json=NEWS_PAYLOAD)

@@ -3,6 +3,7 @@
 import { type ReactNode, useState } from "react";
 import { motion } from "framer-motion";
 import { ShieldCheck } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { DashboardRealtime } from "@/components/dashboard-realtime";
 import { EarningsCalendar } from "@/components/earnings-calendar";
 import { InfoTip } from "@/components/info-tip";
@@ -113,6 +114,7 @@ export function DashboardRedesign({
   morningBriefSlot
 }: DashboardRedesignProps) {
   const { colors } = useTheme();
+  const router = useRouter();
   const [evidence, setEvidence] = useState<SignalEvidenceData | null>(null);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [headlineArticle, setHeadlineArticle] = useState<NewsPayload | null>(null);
@@ -424,7 +426,12 @@ export function DashboardRedesign({
                 marginBottom: spacing[2]
               }}
             >
-              <h3 style={{ margin: 0 }}>Latest Headlines</h3>
+              <div style={{ display: "grid", gap: 2 }}>
+                <h3 style={{ margin: 0 }}>Market Intelligence</h3>
+                <p style={{ margin: 0, fontSize: 10, color: colors.textMuted, fontStyle: "italic" }}>
+                  News filtered to stocks that move markets
+                </p>
+              </div>
               <InfoTip text={LATEST_HEADLINES_TIP} label="About latest headlines" />
             </div>
             <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
@@ -432,15 +439,42 @@ export function DashboardRedesign({
                 marketOverview.error ? (
                   <p style={{ color: colors.textMuted, margin: 0 }}>Unable to connect. Check your connection.</p>
                 ) : (
-                  <p style={{ color: colors.textMuted, margin: 0 }}>No recent market news.</p>
+                  <p style={{ color: colors.textMuted, margin: 0, textAlign: "center", fontSize: typography.scale.sm }}>
+                    No major market-moving headlines in the last 4 hours.
+                  </p>
                 )
               ) : (
                 <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: spacing[3] }}>
                   {marketOverview.news.slice(0, 5).map((article) => (
-                    <li key={article.article_id} style={{ borderBottom: `1px solid ${colors.border}`, paddingBottom: spacing[3] }}>
-                      <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>
-                        {article.source || "Unknown source"} - {timeAgo(article.published_at)}
-                      </p>
+                    <li
+                      key={article.id || article.article_id}
+                      style={{
+                        borderBottom: `1px solid ${colors.border}`,
+                        paddingBottom: spacing[3],
+                        display: "grid",
+                        gap: spacing[2]
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing[2] }}>
+                        <p style={{ margin: 0, color: article.publisher?.tier === 1 ? "#00d4ff" : "#4a6080", fontSize: 11 }}>
+                          {(article.publisher?.name || article.source || "Unknown source").trim()} ·{" "}
+                          {timeAgo(article.published_utc || article.published_at)}
+                        </p>
+                        <span
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 700,
+                            color:
+                              (article.sentiment || "neutral").toLowerCase() === "positive"
+                                ? colors.bullish
+                                : (article.sentiment || "neutral").toLowerCase() === "negative"
+                                  ? colors.bearish
+                                  : colors.caution
+                          }}
+                        >
+                          {((article.sentiment || "neutral").toLowerCase() || "neutral").toUpperCase()}
+                        </span>
+                      </div>
                       <button
                         type="button"
                         onClick={() => setHeadlineArticle(article)}
@@ -453,13 +487,110 @@ export function DashboardRedesign({
                           background: "transparent",
                           textAlign: "left",
                           cursor: "pointer",
-                          color: colors.text,
-                          fontSize: typography.scale.sm,
-                          lineHeight: 1.35
+                          color: "#e8f4ff",
+                          fontSize: 13,
+                          lineHeight: 1.5,
+                          fontWeight: 600
                         }}
                       >
                         {article.title.length > 110 ? `${article.title.slice(0, 107)}...` : article.title}
                       </button>
+                      {article.affected_stocks && article.affected_stocks.length > 0 ? (
+                        <>
+                          <p
+                            style={{
+                              margin: 0,
+                              fontSize: 9,
+                              letterSpacing: 0.6,
+                              textTransform: "uppercase",
+                              color: colors.textMuted,
+                              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace"
+                            }}
+                          >
+                            Affected Stocks
+                          </p>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: spacing[1] }}>
+                            {article.affected_stocks.map((stock) => {
+                              const tone = stock.impact;
+                              const toneColor = tone === "bullish" ? "#00e87a" : tone === "bearish" ? "#ff3d5a" : "#f5c542";
+                              const borderColor =
+                                tone === "bullish"
+                                  ? "rgba(0,232,122,0.2)"
+                                  : tone === "bearish"
+                                    ? "rgba(255,61,90,0.2)"
+                                    : "rgba(245,197,66,0.2)";
+                              const bgColor =
+                                tone === "bullish"
+                                  ? "rgba(0,232,122,0.04)"
+                                  : tone === "bearish"
+                                    ? "rgba(255,61,90,0.04)"
+                                    : "rgba(245,197,66,0.04)";
+                              return (
+                                <button
+                                  key={`${article.article_id}-${stock.symbol}`}
+                                  type="button"
+                                  title={stock.is_watchlist ? "On your watchlist" : undefined}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    router.push(`/dashboard/signals?symbol=${encodeURIComponent(stock.symbol)}`);
+                                  }}
+                                  style={{
+                                    border: `1px solid ${stock.is_watchlist ? "rgba(255,255,255,0.25)" : borderColor}`,
+                                    background: bgColor,
+                                    borderRadius: 999,
+                                    color: colors.text,
+                                    padding: "4px 8px",
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: 6,
+                                    cursor: "pointer"
+                                  }}
+                                >
+                                  <span
+                                    style={{
+                                      width: 6,
+                                      height: 6,
+                                      borderRadius: 999,
+                                      background: toneColor,
+                                      boxShadow: `0 0 8px ${toneColor}`
+                                    }}
+                                  />
+                                  <span style={{ fontSize: 10, fontWeight: 700 }}>
+                                    {stock.is_watchlist ? "★ " : ""}
+                                    {stock.symbol}
+                                  </span>
+                                  <span style={{ fontSize: 10, color: toneColor }}>{stock.reason}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </>
+                      ) : null}
+                      {article.impact_summary ? (
+                        <p
+                          style={{
+                            margin: 0,
+                            paddingTop: 8,
+                            borderTop: "0.5px solid rgba(0,180,255,0.06)",
+                            fontSize: 11,
+                            fontStyle: "italic",
+                            color: "#4a6080",
+                            lineHeight: 1.5
+                          }}
+                        >
+                          {article.impact_summary}
+                        </p>
+                      ) : null}
+                      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                        <a
+                          href={article.article_url || article.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ fontSize: 10, color: colors.textMuted, textDecoration: "none" }}
+                        >
+                          Open article ↗
+                        </a>
+                      </div>
                     </li>
                   ))}
                 </ul>

@@ -1,0 +1,76 @@
+from __future__ import annotations
+
+from typing import Any
+
+BLOCKED_PUBLISHERS = [
+    "globenewswire",
+    "prnewswire",
+    "businesswire",
+    "accesswire",
+    "einpresswire",
+    "globenewswire inc",
+    "pr newswire",
+]
+
+TIER_1_PUBLISHERS = [
+    "reuters",
+    "bloomberg",
+    "cnbc",
+    "wall street journal",
+    "wsj",
+    "financial times",
+    "marketwatch",
+    "barrons",
+    "the motley fool",
+    "seeking alpha",
+]
+
+NOISE_SUBSTRINGS = [
+    "cagr",
+    "market size",
+    "market research",
+    "industry report",
+    "research report",
+    "market forecast",
+    "projected to reach",
+    "billion by 20",
+    "million by 20",
+    "compound annual",
+    "market is expected",
+    "global market",
+    "market overview",
+]
+
+
+def _publisher_name(article: dict[str, Any]) -> str:
+    pub = article.get("publisher")
+    if isinstance(pub, dict):
+        raw = pub.get("name")
+        return str(raw or "").strip()
+    return ""
+
+
+def is_quality_article(article: dict[str, Any]) -> bool:
+    """Return True when the article is relevant for active traders."""
+    publisher = _publisher_name(article).lower()
+    if any(blocked in publisher for blocked in BLOCKED_PUBLISHERS):
+        return False
+
+    title = str(article.get("title") or "").lower()
+    description = str(article.get("description") or "").lower()
+    combined = f"{title} {description}"
+    if any(noise in combined for noise in NOISE_SUBSTRINGS):
+        return False
+
+    tickers = article.get("tickers")
+    if not isinstance(tickers, list) or not any(str(t).strip() for t in tickers):
+        return False
+    return True
+
+
+def get_publisher_tier(publisher_name: str) -> int:
+    """Return 1 for top-tier publishers, else 2."""
+    name = (publisher_name or "").strip().lower()
+    if any(tier in name for tier in TIER_1_PUBLISHERS):
+        return 1
+    return 2

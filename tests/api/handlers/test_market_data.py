@@ -72,18 +72,37 @@ class _FakePolygonClient:
             )
         ]
 
-    async def get_news(self, symbol: str | None = None, limit: int = 20, order: str = "desc") -> list[NewsArticle]:
+    async def get_market_news(
+        self,
+        *,
+        tickers: list[str] | None = None,
+        limit: int = 50,
+        order: str = "desc",
+        published_utc_gte: datetime | None = None,
+    ) -> list[dict]:
+        _ = limit
         _ = order
+        _ = published_utc_gte
+        sym = "SPY"
+        if tickers:
+            for candidate in tickers:
+                up = str(candidate).upper()
+                if up == "MSFT":
+                    sym = "MSFT"
+                    break
+            else:
+                sym = str(tickers[0]).upper()
         return [
-            NewsArticle(
-                article_id="a1",
-                published_at=datetime(2026, 1, 2, 13, 0, tzinfo=timezone.utc),
-                title=f"Headline {symbol or 'MARKET'}",
-                url="https://example.com/news/1",
-                tickers=[symbol] if symbol else [],
-                keywords=[],
-            )
-            for _ in range(min(limit, 1))
+            {
+                "id": "a1",
+                "published_utc": "2026-01-02T13:00:00Z",
+                "title": f"Headline {sym}",
+                "description": "Market moving update",
+                "article_url": "https://example.com/news/1",
+                "publisher": {"name": "Reuters"},
+                "tickers": [sym],
+                "insights": [{"sentiment": "positive"}],
+            }
         ]
 
     async def get_options_chain(
@@ -219,8 +238,11 @@ def test_news_handler_returns_filtered_news() -> None:
     response = news_handler(event, {}, client_factory=_FakePolygonClient)
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
-    assert len(body) == 1
-    assert body[0]["title"] == "Headline MSFT"
+    assert "headlines" in body
+    assert len(body["headlines"]) == 1
+    assert body["headlines"][0]["title"] == "Headline MSFT"
+    assert body["headlines"][0]["publisher"]["tier"] == 1
+    assert body["headlines"][0]["affected_stocks"][0]["symbol"] == "MSFT"
 
 
 def test_options_chain_handler_returns_contracts_with_greeks() -> None:

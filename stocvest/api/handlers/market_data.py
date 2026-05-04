@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from stocvest.api.response import bad_request, internal_error, ok
-from stocvest.api.shared import parse_json_body
+from stocvest.api.services.news_impact_analyzer import analyze_news_impact, generate_impact_summary
+from stocvest.api.services.news_quality_filter import get_publisher_tier, is_quality_article
+from stocvest.api.shared import build_request_context, parse_json_body
 from stocvest.api.types import LambdaContext, LambdaEvent
 from stocvest.data import PolygonClient, PolygonError, Timeframe
+from stocvest.data.polygon_client import LIQUID_NEWS_TICKERS
+from stocvest.data.watchlist_store import get_watchlist_store
 from stocvest.utils.config import get_settings
 
 
@@ -205,20 +209,90 @@ def news_handler(
 ) -> dict[str, Any]:
     _ = context
     query = _query_params(event)
-    symbol_raw = str(query.get("symbol") or "").strip()
-    symbol = symbol_raw.upper() if symbol_raw else None
     try:
         limit = int(query.get("limit") or 20)
     except ValueError:
         return bad_request("Invalid limit.")
     if limit < 1 or limit > 1000:
         return bad_request("Limit must be between 1 and 1000.")
+    symbol_raw = str(query.get("symbol") or "").strip()
+    symbol = symbol_raw.upper() if symbol_raw else None
+    rc = build_request_context(event)
+
+    merged_tickers: list[str] = []
+    seen: set[str] = set()
+    for sym in LIQUID_NEWS_TICKERS:
+        if sym not in seen:
+            seen.add(sym)
+            merged_tickers.append(sym)
+    if symbol and symbol not in seen:
+        seen.add(symbol)
+        merged_tickers.append(symbol)
+    watchlist_symbols: list[str] = []
+    if rc.user_id:
+        default = get_watchlist_store().get_default_watchlist(rc.user_id)
+        if default:
+            watchlist_symbols = [str(s).strip().upper() for s in default.symbols if str(s).strip()]
+            for sym in watchlist_symbols:
+                if sym not in seen and len(merged_tickers) < 30:
+                    seen.add(sym)
+                    merged_tickers.append(sym)
+    merged_tickers = merged_tickers[:30]
 
     async def _run() -> dict[str, Any]:
         settings = get_settings()
+        since = datetime.now(timezone.utc) - timedelta(hours=4)
         async with client_factory(api_key=settings.polygon_api_key) as client:
-            news = await client.get_news(symbol=symbol, limit=limit)
-        return ok([article.model_dump(mode="json") for article in news])
+            raw_articles = await client.get_market_news(
+                tickers=merged_tickers,
+                limit=50,
+                order="desc",
+                published_utc_gte=since,
+            )
+
+        headlines: list[dict[str, Any]] = []
+        for article in raw_articles:
+            if not is_quality_article(article):
+                continue
+            tickers = [str(t).strip().upper() for t in article.get("tickers", []) if str(t).strip()]
+            publisher_name = str((article.get("publisher") or {}).get("name") or "").strip()
+            affected = analyze_news_impact(article, watchlist_symbols=watchlist_symbols)
+            sentiment = "neutral"
+            insights = article.get("insights")
+            if isinstance(insights, list) and insights:
+                first = insights[0]
+                if isinstance(first, dict):
+                    raw_sent = str(first.get("sentiment") or "").strip().lower()
+                    if raw_sent in {"positive", "negative", "neutral"}:
+                        sentiment = raw_sent
+            raw_sent2 = str(article.get("sentiment") or "").strip().lower()
+            if raw_sent2 in {"positive", "negative", "neutral"}:
+                sentiment = raw_sent2
+            headline = {
+                "id": str(article.get("id") or ""),
+                "title": str(article.get("title") or ""),
+                "published_utc": str(article.get("published_utc") or ""),
+                "publisher": {
+                    "name": publisher_name or "Unknown source",
+                    "tier": get_publisher_tier(publisher_name),
+                },
+                "tickers": tickers,
+                "article_url": str(article.get("article_url") or ""),
+                "sentiment": sentiment,
+                "affected_stocks": affected,
+                "impact_summary": generate_impact_summary(article, affected),
+                # Back-compat for existing frontend fields.
+                "article_id": str(article.get("id") or ""),
+                "published_at": str(article.get("published_utc") or ""),
+                "url": str(article.get("article_url") or ""),
+                "source": publisher_name or "Unknown source",
+                "description": article.get("description"),
+                "image_url": article.get("image_url"),
+            }
+            headlines.append(headline)
+            if len(headlines) >= min(limit, 8):
+                break
+        return ok({"headlines": headlines})
 
     try:
         return asyncio.run(_run())

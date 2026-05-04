@@ -60,6 +60,29 @@ _POLYGON_WS_BASE   = "wss://socket.polygon.io"
 # false positives on valid tape (2.5× was too tight in production).
 _DAY_VS_LAST_MAX_RATIO = 5.0
 
+LIQUID_NEWS_TICKERS = [
+    "SPY",
+    "QQQ",
+    "AAPL",
+    "NVDA",
+    "TSLA",
+    "MSFT",
+    "AMZN",
+    "META",
+    "AMD",
+    "GOOGL",
+    "NFLX",
+    "UBER",
+    "COIN",
+    "GS",
+    "JPM",
+    "BAC",
+    "XLF",
+    "XLK",
+    "XLE",
+    "SOFI",
+]
+
 
 # ─── timeframe → Polygon multiplier + timespan ────────────────────────────────
 
@@ -484,44 +507,67 @@ class PolygonClient:
     # REST — News
     # ──────────────────────────────────────────────────────────────────────────
 
-    async def get_news(
+    async def get_market_news(
         self,
-        symbol:   Optional[str] = None,
-        limit:    int = 50,
-        order:    str = "desc",  # "desc" = newest first
-    ) -> list[NewsArticle]:
-        """
-        Fetch news articles.
-
-        Args:
-            symbol:  Filter by ticker (optional — omit for all market news).
-            limit:   Max articles (Polygon max: 1000).
-            order:   "desc" (newest first) or "asc".
-        """
-        params: dict = {"limit": str(limit), "order": order}
-        if symbol:
-            params["ticker"] = symbol
-        articles: list[NewsArticle] = []
+        *,
+        tickers: list[str] | None = None,
+        limit: int = 50,
+        order: str = "desc",
+        published_utc_gte: datetime | None = None,
+    ) -> list[dict]:
+        """Fetch raw Polygon market news rows with optional multi-ticker filter."""
+        params: dict[str, str] = {"limit": str(limit), "order": order}
+        if tickers:
+            clean = [str(t).strip().upper() for t in tickers if str(t).strip()]
+            if clean:
+                params["ticker.any_of"] = ",".join(clean)
+        if published_utc_gte is not None:
+            params["published_utc.gte"] = (
+                published_utc_gte.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+            )
+        rows_out: list[dict] = []
         path = "/v2/reference/news"
         page_count = 0
-
-        while len(articles) < limit:
+        while len(rows_out) < limit:
             data = await self._get(path, params)
             page_count += 1
-
-            for r in data.get("results", []):
-                if len(articles) >= limit:
+            rows = data.get("results", []) if isinstance(data, dict) else []
+            for row in rows:
+                if len(rows_out) >= limit:
                     break
-                try:
-                    img_raw = r.get("image_url")
-                    image_url = str(img_raw).strip() if img_raw not in (None, "") else None
-                    if image_url == "":
-                        image_url = None
-                    articles.append(NewsArticle(
+                if isinstance(row, dict):
+                    rows_out.append(row)
+            next_url = data.get("next_url") if isinstance(data, dict) else None
+            if not next_url:
+                break
+            path, params = self._extract_path_and_params(next_url)
+            if page_count >= 20:
+                break
+        return rows_out
+
+    async def get_news(
+        self,
+        symbol: Optional[str] = None,
+        limit: int = 50,
+        order: str = "desc",  # "desc" = newest first
+    ) -> list[NewsArticle]:
+        """Fetch parsed news articles for existing callers."""
+        rows = await self.get_market_news(
+            tickers=[symbol] if symbol else None,
+            limit=limit,
+            order=order,
+        )
+        articles: list[NewsArticle] = []
+        for r in rows:
+            try:
+                img_raw = r.get("image_url")
+                image_url = str(img_raw).strip() if img_raw not in (None, "") else None
+                if image_url == "":
+                    image_url = None
+                articles.append(
+                    NewsArticle(
                         article_id=r.get("id", ""),
-                        published_at=datetime.fromisoformat(
-                            r["published_utc"].replace("Z", "+00:00")
-                        ),
+                        published_at=datetime.fromisoformat(r["published_utc"].replace("Z", "+00:00")),
                         title=r.get("title", ""),
                         description=r.get("description"),
                         image_url=image_url,
@@ -529,18 +575,10 @@ class PolygonClient:
                         source=r.get("publisher", {}).get("name"),
                         tickers=r.get("tickers", []),
                         keywords=r.get("keywords", []),
-                    ))
-                except Exception as exc:
-                    log.warning("Skipping malformed news article: %s", exc)
-
-            next_url = data.get("next_url")
-            if not next_url:
-                break
-            path, params = self._extract_path_and_params(next_url)
-            if page_count >= 20:
-                # Safety cap to prevent infinite pagination loops if API misbehaves.
-                break
-
+                    )
+                )
+            except Exception as exc:
+                log.warning("Skipping malformed news article: %s", exc)
         log.debug("get_news(symbol=%s) → %d articles", symbol, len(articles))
         return articles
 
