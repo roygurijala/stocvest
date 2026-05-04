@@ -11,6 +11,14 @@ from stocvest.api.legal_copy import API_SIGNAL_DISCLAIMER
 from stocvest.api.http_route import http_route_descriptor
 from stocvest.api.response import bad_request, internal_error, not_found, ok, unauthorized
 from stocvest.api.services.signal_analysis import analysis_authorized, build_signal_analysis_payload
+from stocvest.api.handlers.model_portfolio import (
+    model_portfolio_close_post_handler,
+    model_portfolio_history_handler,
+    model_portfolio_open_positions_handler,
+    model_portfolio_open_post_handler,
+    model_portfolio_performance_handler,
+    model_portfolio_summary_handler,
+)
 from stocvest.api.services.real_composite_engine import real_composite_body_sync
 from stocvest.api.services.signal_snapshot_builders import build_swing_composite_snapshot_payload
 from stocvest.config.parameter_store import ParameterStore
@@ -565,6 +573,19 @@ def signals_http_dispatch(event: LambdaEvent, context: LambdaContext) -> dict[st
         return user_signal_history_handler(event, context)
     if route == "GET /v1/signals/analysis" or route.startswith("GET /v1/signals/analysis?"):
         return signals_analysis_handler(event, context)
+
+    if route == "GET /v1/portfolio/summary" or route.startswith("GET /v1/portfolio/summary?"):
+        return model_portfolio_summary_handler(event, context)
+    if route == "GET /v1/portfolio/positions/open" or route.startswith("GET /v1/portfolio/positions/open?"):
+        return model_portfolio_open_positions_handler(event, context)
+    if route == "GET /v1/portfolio/positions/history" or route.startswith("GET /v1/portfolio/positions/history?"):
+        return model_portfolio_history_handler(event, context)
+    if route == "GET /v1/portfolio/performance" or route.startswith("GET /v1/portfolio/performance?"):
+        return model_portfolio_performance_handler(event, context)
+    if route == "POST /v1/portfolio/positions/open":
+        return model_portfolio_open_post_handler(event, context)
+    if route == "POST /v1/portfolio/positions/close":
+        return model_portfolio_close_post_handler(event, context)
 
     routes: dict[str, Callable[[LambdaEvent, LambdaContext], dict[str, Any]]] = {
         "POST /v1/signals/composite/real": real_composite_handler,

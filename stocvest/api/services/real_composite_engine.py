@@ -10,6 +10,7 @@ from uuid import uuid4
 from stocvest.api.legal_copy import API_SIGNAL_DISCLAIMER
 from stocvest.api.services.composite_market_context import fetch_composite_market_status_payload_sync
 from stocvest.api.services.morning_brief_fetch import get_vix_snapshot_with_fallback
+from stocvest.api.services.portfolio_auto_log import schedule_model_portfolio_log_from_composite
 from stocvest.api.services.sector_cache_dynamo import DynamoSectorCache
 from stocvest.api.services.signal_snapshot_builders import build_real_composite_snapshot_payload
 from stocvest.api.services.signal_recorder import get_signal_recorder
@@ -307,6 +308,24 @@ async def build_real_composite_response(
                         )
 
                     run_alert_background(_fire_alert)
+
+                score_0_100 = int(round((float(composite.score) + 1.0) * 50.0))
+                score_0_100 = max(0, min(100, score_0_100))
+                schedule_model_portfolio_log_from_composite(
+                    symbol=sym,
+                    composite_verdict=composite.verdict,
+                    composite_score=score_0_100,
+                    entry_price=price_at,
+                    layer_results=layer_results,
+                    macro_regime=str(macro.market_regime or "neutral"),
+                    confluence_fired=bool(response_body.get("is_confluence_alert")),
+                    confluence_score=int(response_body.get("confluence_score") or 0),
+                    vix_at_entry=float(internals.vix_price) if internals.vix_price is not None else None,
+                    spy_day_pct=float(macro.spy_day_pct) if macro.spy_day_pct is not None else None,
+                    sector_etf=(str(sector.sector_etf).strip().upper() if getattr(sector, "sector_etf", None) else None),
+                    sector_day_pct=float(sector.sector_day_pct) if sector.sector_day_pct is not None else None,
+                    parameter_version=str(params.version or "1.0.0"),
+                )
             except Exception as exc:
                 _LOG.warning("record_signal skipped: %s", exc)
 

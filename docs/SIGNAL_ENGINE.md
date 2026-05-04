@@ -58,6 +58,14 @@ This document describes the **server-side** multi-layer stack behind `POST /v1/s
 - After `POST /v1/signals/composite/real`, `applySwingCompositeEnrichment()` (`frontend/lib/signal-evidence.ts`) maps each `body.layers[]` entry to the evidence card by `layer` key (`technical`, `news`, …).
 - **Key points**: Prefer `chips` from the API; if empty, split `reasoning` on sentence boundaries; if still empty, show `—` (no fabricated macro/sector/VIX strings).
 
+## Model portfolio (signal tracking)
+
+- **Purpose**: Log notional “tracked positions” when a **bullish** real composite clears gates, for transparency and parameter tuning — **not** trade instructions.
+- **DynamoDB**: Table **`ModelPortfolio`** (`pk=PORTFOLIO#v1`, `sk=POSITION#…` or `SUMMARY`), GSIs **`status-entry-index`** and **`symbol-entry-index`**.
+- **Auto-open**: After a successful **`composite/real`** response with price, background thread calls `PortfolioRecorder.open_position` when verdict is **bullish**, mapped **0–100 score** `round((composite_score_float + 1) * 50)` is **≥ 72**, and macro `market_regime` ≠ **`avoid`**.
+- **Exits**: Scheduled **`signal_resolution`** Lambda uses Polygon **`get_snapshots`** for stop / target / 20-session-day time exit; separate EventBridge rule (weekday cron) invokes the same Lambda with `{"stocvest_job":"portfolio_reversal"}` to close rows when a fresh composite is **bearish** or mapped score **≤ 35**.
+- **API**: Public reads under **`GET /v1/portfolio/*`**; writes under **`POST /v1/portfolio/positions/open|close`** require the same internal header as **`GET /v1/signals/analysis`** (`analysis_authorized`).
+
 ## Related routes
 
 - **Legacy client-scored path (unchanged)**: `POST /v1/signals/swing/composite`.

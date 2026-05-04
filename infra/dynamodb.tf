@@ -226,3 +226,50 @@ resource "aws_dynamodb_table" "sector_cache" {
     Name = "stocvest-development-ddb-sector-cache"
   })
 }
+
+# Model portfolio — notional signal positions + summary (signal tracking / validation).
+resource "aws_dynamodb_table" "model_portfolio" {
+  name         = "ModelPortfolio"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+  attribute {
+    name = "status"
+    type = "S"
+  }
+  attribute {
+    name = "entry_date"
+    type = "S"
+  }
+  attribute {
+    name = "symbol"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name            = "status-entry-index"
+    hash_key        = "status"
+    range_key       = "entry_date"
+    projection_type = "ALL"
+  }
+
+  global_secondary_index {
+    name            = "symbol-entry-index"
+    hash_key        = "symbol"
+    range_key       = "entry_date"
+    projection_type = "ALL"
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "stocvest-development-ddb-model-portfolio"
+  })
+}

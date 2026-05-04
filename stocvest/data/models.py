@@ -375,3 +375,101 @@ class SignalRecord(BaseModel):
             layer_scores_json=_s("layer_scores_json"),
             parameter_version=_s("parameter_version"),
         )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Model portfolio — signal tracking / validation (notional positions, outcomes)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class SignalStrength(str, Enum):
+    """Composite score tier at position entry (for performance bucketing)."""
+
+    MODERATE = "moderate"  # 72–79
+    STRONG = "strong"  # 80–89
+    VERY_STRONG = "very_strong"  # 90+
+
+
+class PositionStatus(str, Enum):
+    OPEN = "open"
+    CLOSED = "closed"
+
+
+class ExitReason(str, Enum):
+    SIGNAL_REVERSED = "signal_reversed"
+    STOP_LOSS = "stop_loss"
+    TARGET_REACHED = "target_reached"
+    TIME_EXIT = "time_exit"
+    REGIME_CHANGE = "regime_change"
+    MANUAL = "manual"
+
+
+class PositionOutcome(str, Enum):
+    PROFIT = "profit"
+    LOSS = "loss"
+    BREAKEVEN = "breakeven"
+
+
+class ModelPortfolioPosition(BaseModel):
+    """A single tracked signal position (notional) with full entry context for analysis."""
+
+    position_id: str
+    symbol: str
+    status: PositionStatus = PositionStatus.OPEN
+    entry_date: datetime
+    entry_price: float
+    notional_size: float
+    shares_equivalent: float
+    signal_score: int
+    signal_strength: SignalStrength
+    entry_reason: str
+    layer_scores_json: str
+    layer_verdicts_json: str
+    layer_chips_json: str
+    confluence_fired: bool = False
+    confluence_score: int = 0
+    market_regime: str = "neutral"
+    vix_at_entry: Optional[float] = None
+    spy_day_pct_at_entry: Optional[float] = None
+    sector_etf: Optional[str] = None
+    sector_day_pct: Optional[float] = None
+    parameter_version: str
+    stop_loss_price: float
+    target_price: float
+    exit_date: Optional[datetime] = None
+    exit_price: Optional[float] = None
+    exit_reason: Optional[ExitReason] = None
+    pnl_dollars: Optional[float] = None
+    pnl_percent: Optional[float] = None
+    hold_days: Optional[int] = None
+    outcome: Optional[PositionOutcome] = None
+    signal_was_correct: Optional[bool] = None
+    r_multiple: Optional[float] = None
+
+
+class PortfolioSummary(BaseModel):
+    """Aggregated model-portfolio stats (single SUMMARY item per portfolio version)."""
+
+    portfolio_version: str = "v1"
+    started_at: datetime
+    last_updated: datetime
+    total_positions: int = 0
+    open_positions: int = 0
+    closed_positions: int = 0
+    winning_positions: int = 0
+    losing_positions: int = 0
+    breakeven_positions: int = 0
+    total_return_dollars: float = 0.0
+    total_return_pct: float = 0.0
+    win_rate: float = 0.0
+    avg_win_pct: float = 0.0
+    avg_loss_pct: float = 0.0
+    profit_factor: float = 0.0
+    avg_r_multiple: float = 0.0
+    moderate_win_rate: float = 0.0
+    strong_win_rate: float = 0.0
+    very_strong_win_rate: float = 0.0
+    avg_hold_days: float = 0.0
+    max_drawdown_pct: float = 0.0
+    current_drawdown_pct: float = 0.0
+    value_history_json: str = "[]"

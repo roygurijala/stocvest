@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Activity,
   BarChart2,
   BookOpen,
   Bookmark,
@@ -33,6 +34,7 @@ export const DASHBOARD_NAV_ITEMS = [
   { href: "/dashboard/scanner", label: "Scanner", icon: Radio },
   { href: "/dashboard/watchlists", label: "Watchlists", icon: Bookmark },
   { href: "/dashboard/signals", label: "Signals", icon: Zap },
+  { href: "/portfolio", label: "Signal portfolio", icon: Activity },
   { href: "/dashboard/earnings", label: "Earnings", icon: CalendarDays },
   { href: "/dashboard/portfolio", label: "Portfolio", icon: Briefcase },
   { href: "/dashboard/options", label: "Options", icon: Layers },
