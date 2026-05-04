@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import date
-from typing import Any
+from typing import Any, Protocol
 
 from stocvest.api.services.gap_intelligence_news import collect_news_for_gap_intelligence
 from stocvest.data import PolygonClient, PolygonError
@@ -26,6 +26,33 @@ from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
+
+# Fixed order — do not replace with a single configurable ticker; Polygon coverage varies by symbol.
+VIX_SNAPSHOT_FALLBACK_SYMBOLS: tuple[str, ...] = ("I:VIX", "^VIX", "VIX")
+
+
+class SupportsPolygonSnapshotFetch(Protocol):
+    """Minimal surface for :func:`get_vix_snapshot_with_fallback` (``PolygonClient`` satisfies this)."""
+
+    async def get_snapshot(self, symbol: str) -> Snapshot:
+        ...
+
+
+async def get_vix_snapshot_with_fallback(client: SupportsPolygonSnapshotFetch) -> Snapshot | None:
+    """Return the first VIX snapshot that has a usable last trade price.
+
+    Tries ``VIX_SNAPSHOT_FALLBACK_SYMBOLS`` in order. Callers needing VIX for regime
+    or macro context should import this instead of duplicating symbol lists or
+    ad-hoc ``get_snapshot`` loops.
+    """
+    for vix_sym in VIX_SNAPSHOT_FALLBACK_SYMBOLS:
+        try:
+            vix_snap = await client.get_snapshot(vix_sym)
+            if vix_snap and vix_snap.last_trade_price:
+                return vix_snap
+        except PolygonError:
+            continue
+    return None
 
 
 async def _load_snapshots_for_dynamic_gaps(user_id: str | None = None) -> list[Snapshot]:
@@ -80,14 +107,7 @@ async def fetch_morning_brief_context_live(
             client.get_snapshot("SPY"),
             client.get_snapshot("QQQ"),
         )
-        vix_snap = None
-        for vix_sym in ("I:VIX", "^VIX", "VIX"):
-            try:
-                vix_snap = await client.get_snapshot(vix_sym)
-                if vix_snap and vix_snap.last_trade_price:
-                    break
-            except PolygonError:
-                continue
+        vix_snap = await get_vix_snapshot_with_fallback(client)
 
         econ_rows = await client.get_economic_calendar_for_day(briefing_date)
         earn_rows = await client.get_earnings_calendar(

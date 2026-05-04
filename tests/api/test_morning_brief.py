@@ -2,7 +2,15 @@ from __future__ import annotations
 
 from datetime import date
 
-from stocvest.api.services.morning_brief_fetch import morning_brief_context_from_payload_dict
+import pytest
+
+from stocvest.api.services.morning_brief_fetch import (
+    VIX_SNAPSHOT_FALLBACK_SYMBOLS,
+    get_vix_snapshot_with_fallback,
+    morning_brief_context_from_payload_dict,
+)
+from stocvest.data.models import Snapshot
+from stocvest.data.polygon_client import PolygonError
 from stocvest.signals.morning_brief import MorningBriefContext, build_morning_brief_payload
 from stocvest.signals.pdt_tracker import PDTAssessment
 
@@ -132,3 +140,25 @@ def test_morning_brief_context_from_payload_dict_roundtrip() -> None:
     ctx = morning_brief_context_from_payload_dict(raw, date(2026, 5, 2), None)
     assert ctx.regime == "Neutral"
     assert len(ctx.gap_intelligence_items) == 1
+
+
+@pytest.mark.asyncio
+async def test_vix_fallback_order_skips_unusable_then_errors() -> None:
+    """Design: try I:VIX then ^VIX then VIX; empty last price and PolygonError do not stop the chain."""
+
+    class _FakeClient:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        async def get_snapshot(self, sym: str) -> Snapshot:
+            self.calls.append(sym)
+            if sym == "I:VIX":
+                return Snapshot(symbol="I:VIX", last_trade_price=None)
+            if sym == "^VIX":
+                raise PolygonError("Polygon 404")
+            return Snapshot(symbol="VIX", last_trade_price=19.5)
+
+    c = _FakeClient()
+    out = await get_vix_snapshot_with_fallback(c)
+    assert out is not None and out.symbol == "VIX" and out.last_trade_price == 19.5
+    assert c.calls == list(VIX_SNAPSHOT_FALLBACK_SYMBOLS)
