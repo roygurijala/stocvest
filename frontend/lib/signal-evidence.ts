@@ -191,11 +191,7 @@ export function buildEvidenceFromSetup(
       status: statusFromScore(technical),
       weightPercent: 30,
       explanation: "Price action and trend structure are evaluated against intraday momentum.",
-      keyPoints: [
-        `RSI ${Math.round(clamp(40 + momentum * 4, 18, 82))}`,
-        `VWAP ${momentum >= 0 ? "Above" : "Below"}`,
-        `EMA9 ${momentum >= 0 ? "Crossed up" : "Crossed down"}`
-      ],
+      keyPoints: ["—", "—", "—"],
       contributionScore: technical,
       freshnessLabel: layerFreshnessFromIso(setup.timestamp_iso)
     },
@@ -224,7 +220,7 @@ export function buildEvidenceFromSetup(
       status: statusFromScore(macro),
       weightPercent: 14,
       explanation: "Rates and macro event pressure influence signal alignment and risk appetite.",
-      keyPoints: ["Fed Watch: Steady", "Yield Curve: Flat", "Event: CPI pending"],
+      keyPoints: ["—", "—", "—"],
       contributionScore: macro,
       freshnessLabel: "Updated 30m ago"
     },
@@ -235,7 +231,7 @@ export function buildEvidenceFromSetup(
       status: statusFromScore(sector),
       weightPercent: 14,
       explanation: "Relative sector leadership versus SPX confirms or weakens setup quality.",
-      keyPoints: ["Sector: Technology", "vs SPX: +0.7%", "Leadership: Positive"],
+      keyPoints: ["—", "—", "—"],
       contributionScore: sector,
       freshnessLabel: "Updated 10m ago"
     },
@@ -246,7 +242,7 @@ export function buildEvidenceFromSetup(
       status: statusFromScore(geopolitical),
       weightPercent: 10,
       explanation: "External risk events are monitored to discount fragile long/short signals.",
-      keyPoints: ["Risk Level: Moderate", "Flags: 1", "Region: Global"],
+      keyPoints: ["—", "—", "—"],
       contributionScore: geopolitical,
       freshnessLabel: "Updated 1h ago"
     },
@@ -257,7 +253,7 @@ export function buildEvidenceFromSetup(
       status: statusFromScore(internals),
       weightPercent: 14,
       explanation: "Breadth, VIX trend, and A/D line provide market participation confirmation.",
-      keyPoints: ["VIX: Lower", "Breadth: Positive", "A/D: Rising"],
+      keyPoints: ["—", "—", "—"],
       contributionScore: internals,
       freshnessLabel: "Updated 5m ago"
     }
@@ -524,5 +520,38 @@ export function applySwingCompositeEnrichment(
       confluence_disclaimer: String(body.confluence_disclaimer ?? "")
     };
   }
-  return { ...evidence, insight, confluence };
+
+  const rawLayers = body.layers;
+  let layers = evidence.layers;
+  if (Array.isArray(rawLayers)) {
+    layers = evidence.layers.map((layer) => {
+      const match = (rawLayers as Array<Record<string, unknown>>).find(
+        (x) => String(x.layer ?? "").toLowerCase() === layer.key
+      );
+      if (!match) {
+        return { ...layer, keyPoints: ["—", "—", "—"] };
+      }
+      const chips = match.chips;
+      if (Array.isArray(chips) && chips.length > 0) {
+        return {
+          ...layer,
+          keyPoints: chips.map((c) => String(c).trim()).filter(Boolean).slice(0, 4)
+        };
+      }
+      const reasoning = typeof match.reasoning === "string" ? match.reasoning.trim() : "";
+      if (reasoning) {
+        const parts = reasoning
+          .split(".")
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .slice(0, 3);
+        if (parts.length) {
+          return { ...layer, keyPoints: parts };
+        }
+      }
+      return { ...layer, keyPoints: ["—", "—", "—"] };
+    });
+  }
+
+  return { ...evidence, layers, insight, confluence };
 }

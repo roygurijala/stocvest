@@ -162,4 +162,28 @@ describe("applySwingCompositeEnrichment", () => {
     expect(enriched.confluence?.confluence_score).toBe(72);
     expect(enriched.confluence?.confirming_signals[0]?.label).toBe("Above VWAP");
   });
+
+  test("replaces layer keyPoints from composite chips when layers array present", () => {
+    const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
+    const enriched = applySwingCompositeEnrichment(base, {
+      signal_score: 71,
+      trend_strength: "Moderate",
+      trend_direction: "Uptrend",
+      risk_reward: 2.1,
+      market_regime: "Bullish",
+      catalysts: [],
+      risk_factors: [],
+      signal_parameters: "",
+      historical_entry_zone: { low: 10, high: 11 },
+      layers: [
+        { layer: "technical", chips: ["RSI 55", "VWAP Above"], reasoning: "" },
+        { layer: "macro", chips: ["SPY +0.4%"], reasoning: "" }
+      ]
+    });
+    const tech = enriched.layers.find((l) => l.key === "technical");
+    const macro = enriched.layers.find((l) => l.key === "macro");
+    expect(tech?.keyPoints[0]).toBe("RSI 55");
+    expect(tech?.keyPoints[1]).toBe("VWAP Above");
+    expect(macro?.keyPoints[0]).toBe("SPY +0.4%");
+  });
 });

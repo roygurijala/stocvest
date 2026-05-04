@@ -53,6 +53,11 @@ This document describes the **server-side** multi-layer stack behind `POST /v1/s
 
 - **Normalization**: `normalize_direction()` and ORB helpers in `stocvest/signals/confluence.py` align payload variants (`bull`, `positive`, `risk_on`, …) with internal `bullish`/`bearish`/`mixed` checks.
 
+## Frontend evidence modal
+
+- After `POST /v1/signals/composite/real`, `applySwingCompositeEnrichment()` (`frontend/lib/signal-evidence.ts`) maps each `body.layers[]` entry to the evidence card by `layer` key (`technical`, `news`, …).
+- **Key points**: Prefer `chips` from the API; if empty, split `reasoning` on sentence boundaries; if still empty, show `—` (no fabricated macro/sector/VIX strings).
+
 ## Related routes
 
 - **Legacy client-scored path (unchanged)**: `POST /v1/signals/swing/composite`.
