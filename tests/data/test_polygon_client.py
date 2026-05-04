@@ -125,6 +125,62 @@ class TestGetEvaluatedPriceAfterSignal:
             px = await client.get_evaluated_price_after_signal("SPY", gen, horizon="1h")
         assert px == 105.25
 
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_1d_horizon_uses_same_day_rth_close_when_generated_before_close(self) -> None:
+        # 2024-01-02 15:00 ET (20:00 UTC) => next session close is same day 16:00 ET (21:00 UTC)
+        gen = datetime(2024, 1, 2, 20, 0, 0, tzinfo=timezone.utc)
+        target = datetime(2024, 1, 2, 21, 0, 0, tzinfo=timezone.utc)
+        window_end = target + timedelta(days=7)
+        from_ms = int(gen.timestamp() * 1000)
+        to_ms = int(window_end.timestamp() * 1000)
+        url = f"https://api.polygon.io/v2/aggs/ticker/SPY/range/1/minute/{from_ms}/{to_ms}"
+        t_before_close = int(datetime(2024, 1, 2, 20, 59, 0, tzinfo=timezone.utc).timestamp() * 1000)
+        t_after_close = int(datetime(2024, 1, 2, 21, 1, 0, tzinfo=timezone.utc).timestamp() * 1000)
+        respx.get(url).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "status": "OK",
+                    "results": [
+                        agg_bar(t_before_close, c=501.0),
+                        agg_bar(t_after_close, c=505.0),
+                    ],
+                },
+            )
+        )
+        async with PolygonClient(FAKE_KEY) as client:
+            px = await client.get_evaluated_price_after_signal("SPY", gen, horizon="1d")
+        assert px == 501.0
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_1d_horizon_uses_next_weekday_close_when_generated_after_close(self) -> None:
+        # 2024-01-02 16:30 ET (21:30 UTC) => next session close is 2024-01-03 16:00 ET (21:00 UTC)
+        gen = datetime(2024, 1, 2, 21, 30, 0, tzinfo=timezone.utc)
+        target = datetime(2024, 1, 3, 21, 0, 0, tzinfo=timezone.utc)
+        window_end = target + timedelta(days=7)
+        from_ms = int(gen.timestamp() * 1000)
+        to_ms = int(window_end.timestamp() * 1000)
+        url = f"https://api.polygon.io/v2/aggs/ticker/SPY/range/1/minute/{from_ms}/{to_ms}"
+        t_prev_day = int(datetime(2024, 1, 2, 21, 0, 0, tzinfo=timezone.utc).timestamp() * 1000)
+        t_next_close = int(datetime(2024, 1, 3, 20, 59, 0, tzinfo=timezone.utc).timestamp() * 1000)
+        respx.get(url).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "status": "OK",
+                    "results": [
+                        agg_bar(t_prev_day, c=495.0),
+                        agg_bar(t_next_close, c=510.0),
+                    ],
+                },
+            )
+        )
+        async with PolygonClient(FAKE_KEY) as client:
+            px = await client.get_evaluated_price_after_signal("SPY", gen, horizon="1d")
+        assert px == 510.0
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # get_snapshot

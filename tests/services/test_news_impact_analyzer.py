@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from stocvest.api.services.news_impact_analyzer import analyze_news_impact
+from stocvest.api.services.news_impact_analyzer import analyze_news_impact, generate_impact_summary
 
 
 def _article(
@@ -58,3 +58,28 @@ def test_max_5_chips_returned() -> None:
 def test_watchlist_symbol_flagged() -> None:
     out = analyze_news_impact(_article(tickers=["AAPL"]), watchlist_symbols=["AAPL"])
     assert out[0]["is_watchlist"] is True
+
+
+def test_dedupes_ticker_aliases() -> None:
+    out = analyze_news_impact(_article(tickers=["GOOG", "GOOGL"], sentiment="positive"))
+    syms = [x["symbol"] for x in out]
+    assert syms.count("GOOGL") == 1
+
+
+def test_filters_obscure_tickers_from_chips() -> None:
+    out = analyze_news_impact(_article(tickers=["ZZZZQ"], sentiment="positive"))
+    assert out == []
+
+
+def test_macro_summary_template() -> None:
+    article = _article(tickers=["SPY"], title="Fed signals rate hold", sentiment="neutral")
+    out = analyze_news_impact(article)
+    summary = generate_impact_summary(article, out)
+    assert summary == "Macro catalyst — broad market impact on SPY/QQQ/TLT."
+
+
+def test_earnings_positive_summary_template() -> None:
+    article = _article(tickers=["AAPL"], title="AAPL EPS beat and revenue beat", sentiment="positive")
+    out = analyze_news_impact(article)
+    summary = generate_impact_summary(article, out)
+    assert summary == "Earnings beat — direct catalyst, watch sector lift."

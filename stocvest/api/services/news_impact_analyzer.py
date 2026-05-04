@@ -2,6 +2,32 @@ from __future__ import annotations
 
 from typing import Any
 
+from stocvest.data.polygon_client import LIQUID_NEWS_TICKERS
+
+TICKER_ALIASES = {
+    "GOOG": "GOOGL",
+    "BRK.A": "BRK.B",
+}
+
+# Approximate "top liquid names" allowlist for chip relevance.
+KNOWN_LIQUID_SYMBOLS = {
+    "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "TSLA", "AMD", "NFLX", "AVGO",
+    "JPM", "BAC", "WFC", "GS", "MS", "C", "V", "MA", "PYPL", "SQ",
+    "SPY", "QQQ", "DIA", "IWM", "TLT", "XLF", "XLK", "XLE", "XLI", "XLY", "XLV",
+    "BRK.B", "UNH", "JNJ", "LLY", "PFE", "MRK", "ABBV", "TMO", "ABT",
+    "XOM", "CVX", "COP", "SLB", "EOG", "OXY",
+    "WMT", "COST", "HD", "LOW", "NKE", "MCD", "SBUX", "TGT",
+    "DIS", "CMCSA", "TMUS", "VZ", "T", "CHTR",
+    "CAT", "DE", "BA", "GE", "HON", "UPS", "FDX",
+    "ORCL", "CRM", "ADBE", "INTC", "QCOM", "MU", "CSCO", "IBM", "NOW", "PANW",
+    "SHOP", "UBER", "ABNB", "SNOW", "PLTR",
+    "KO", "PEP", "PG", "CL", "KMB", "MDLZ",
+    "GS", "BLK", "BX", "KKR",
+    "RIVN", "LCID", "NIO", "F", "GM",
+    "MSTR", "COIN", "RIOT", "MARA",
+    "TSM", "ASML", "NVO", "BABA", "PDD", "JD",
+}
+
 
 def _sentiment_from_article(article: dict[str, Any]) -> str:
     insights = article.get("insights")
@@ -45,7 +71,19 @@ def analyze_news_impact(
     """Build affected stock chips for dashboard market intelligence cards."""
     affected: list[dict[str, Any]] = []
     tickers_raw = article.get("tickers")
-    tickers = [str(t).strip().upper() for t in tickers_raw or [] if str(t).strip()]
+    watchlist_set = {s.strip().upper() for s in (watchlist_symbols or []) if s.strip()}
+    eligible_liquid = {s.upper() for s in LIQUID_NEWS_TICKERS} | KNOWN_LIQUID_SYMBOLS
+    seen_symbols: set[str] = set()
+    tickers = []
+    for raw_ticker in tickers_raw or []:
+        ticker = str(raw_ticker).strip().upper()
+        if not ticker:
+            continue
+        canonical = TICKER_ALIASES.get(ticker, ticker)
+        if canonical in seen_symbols:
+            continue
+        seen_symbols.add(canonical)
+        tickers.append(canonical)
     title = str(article.get("title") or "").lower()
 
     sentiment = _sentiment_from_article(article)
@@ -55,9 +93,14 @@ def analyze_news_impact(
     elif sentiment == "negative":
         base_impact = "bearish"
 
-    for i, ticker in enumerate(tickers[:5]):
+    def _eligible(symbol: str) -> bool:
+        return symbol in eligible_liquid or symbol in watchlist_set
+
+    for i, ticker in enumerate(tickers):
+        if not _eligible(ticker):
+            continue
         impact = _title_override_impact(title, base_impact)
-        watch = ticker in {s.upper() for s in (watchlist_symbols or [])}
+        watch = ticker in watchlist_set
         affected.append(
             {
                 "symbol": ticker,
@@ -71,7 +114,7 @@ def analyze_news_impact(
     if any(word in title for word in ["fed", "federal reserve", "rate", "inflation", "cpi", "gdp", "jobs"]):
         existing = {a["symbol"] for a in affected}
         for sym in ["SPY", "QQQ", "TLT"]:
-            if sym not in existing:
+            if sym not in existing and _eligible(sym):
                 affected.append(
                     {
                         "symbol": sym,
@@ -84,7 +127,7 @@ def analyze_news_impact(
 
     if any(sym in tickers for sym in ["AAPL", "MSFT", "GOOGL", "META", "AMZN", "NVDA"]):
         existing = {a["symbol"] for a in affected}
-        if "QQQ" not in existing:
+        if "QQQ" not in existing and _eligible("QQQ"):
             fallback_impact = affected[0]["impact"] if affected else "neutral"
             affected.append(
                 {
@@ -96,15 +139,17 @@ def analyze_news_impact(
                 }
             )
 
-    if watchlist_symbols:
+    if watchlist_set:
         existing = {a["symbol"] for a in affected}
-        wl = [s.strip().upper() for s in watchlist_symbols if s.strip()]
-        for sym in wl:
-            if sym in tickers and sym not in existing:
+        for sym in watchlist_set:
+            canonical = TICKER_ALIASES.get(sym, sym)
+            if not _eligible(canonical):
+                continue
+            if canonical in tickers and canonical not in existing:
                 fallback_impact = affected[0]["impact"] if affected else "neutral"
                 affected.append(
                     {
-                        "symbol": sym,
+                        "symbol": canonical,
                         "impact": fallback_impact,
                         "reason": "Watchlist",
                         "is_direct": True,
@@ -121,14 +166,31 @@ def generate_impact_summary(
     affected_stocks: list[dict[str, Any]],
 ) -> str | None:
     """Return short template explanation of likely market impact."""
-    _ = article.get("title")
+    title = str(article.get("title") or "").lower()
     direct = [a["symbol"] for a in affected_stocks if a.get("is_direct")][:2]
     if not direct:
         return None
 
     sentiment = _sentiment_from_article(article)
-    if sentiment == "positive":
-        return f"Positive catalyst for {', '.join(direct)}; watch for sympathy across related names."
-    if sentiment == "negative":
-        return f"Negative catalyst for {', '.join(direct)}; watch for sector spillover pressure."
-    return None
+    is_positive = sentiment == "positive"
+    is_negative = sentiment == "negative"
+    has_earnings = any(k in title for k in ["beat", "miss", "eps", "revenue"])
+    has_analyst = any(k in title for k in ["upgrade", "downgrade", "price target", "raises", "cuts"])
+    has_macro = any(k in title for k in ["fed", "rate", "inflation", "jobs"])
+
+    if has_macro:
+        return "Macro catalyst — broad market impact on SPY/QQQ/TLT."
+
+    if has_earnings:
+        if is_positive:
+            return "Earnings beat — direct catalyst, watch sector lift."
+        if is_negative:
+            return "Earnings miss — expect sector pressure."
+
+    if has_analyst:
+        if is_positive:
+            return f"Analyst upgrade — momentum signal for {direct[0]}."
+        if is_negative:
+            return "Analyst downgrade — sentiment headwind."
+
+    return f"Catalyst for {', '.join(direct)}; monitor for sector follow-through."

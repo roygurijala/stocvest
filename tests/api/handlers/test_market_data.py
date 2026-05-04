@@ -245,6 +245,37 @@ def test_news_handler_returns_filtered_news() -> None:
     assert body["headlines"][0]["affected_stocks"][0]["symbol"] == "MSFT"
 
 
+class _DiversityPolygonClient(_FakePolygonClient):
+    async def get_market_news(
+        self,
+        *,
+        tickers: list[str] | None = None,
+        limit: int = 50,
+        order: str = "desc",
+        published_utc_gte: datetime | None = None,
+    ) -> list[dict]:
+        _ = tickers
+        _ = limit
+        _ = order
+        _ = published_utc_gte
+        return [
+            {"id": "r1", "published_utc": "2026-01-02T13:05:00Z", "title": "R one", "description": "x", "article_url": "https://e/r1", "publisher": {"name": "Reuters"}, "tickers": ["AAPL"], "insights": [{"sentiment": "positive"}]},
+            {"id": "r2", "published_utc": "2026-01-02T13:04:00Z", "title": "R two", "description": "x", "article_url": "https://e/r2", "publisher": {"name": "Reuters"}, "tickers": ["MSFT"], "insights": [{"sentiment": "positive"}]},
+            {"id": "r3", "published_utc": "2026-01-02T13:03:00Z", "title": "R three", "description": "x", "article_url": "https://e/r3", "publisher": {"name": "Reuters"}, "tickers": ["NVDA"], "insights": [{"sentiment": "positive"}]},
+            {"id": "b1", "published_utc": "2026-01-02T13:02:00Z", "title": "B one", "description": "x", "article_url": "https://e/b1", "publisher": {"name": "Bloomberg"}, "tickers": ["TSLA"], "insights": [{"sentiment": "neutral"}]},
+            {"id": "c1", "published_utc": "2026-01-02T13:01:00Z", "title": "C one", "description": "x", "article_url": "https://e/c1", "publisher": {"name": "CNBC"}, "tickers": ["AMZN"], "insights": [{"sentiment": "negative"}]},
+        ]
+
+
+def test_news_handler_applies_publisher_diversity_cap() -> None:
+    event = {"queryStringParameters": {"limit": "8"}}
+    response = news_handler(event, {}, client_factory=_DiversityPolygonClient)
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    pubs = [h["publisher"]["name"] for h in body["headlines"]]
+    assert pubs.count("Reuters") == 2
+
+
 def test_options_chain_handler_returns_contracts_with_greeks() -> None:
     event = {"queryStringParameters": {"symbol": "aapl", "limit": "10"}}
     response = options_chain_handler(event, {}, client_factory=_FakePolygonClient)

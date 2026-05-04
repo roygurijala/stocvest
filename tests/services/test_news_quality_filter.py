@@ -40,6 +40,14 @@ def test_requires_tickers() -> None:
     assert is_quality_article(_article(publisher="Reuters", tickers=[])) is False
 
 
+def test_blocks_historical_returns_content() -> None:
+    assert is_quality_article(_article(publisher="Reuters", title="Best performing stock in 10 years of returns")) is False
+
+
+def test_blocks_since_ipo_content() -> None:
+    assert is_quality_article(_article(publisher="Reuters", description="Historical returns since IPO")) is False
+
+
 def test_tier_1_publisher_identified() -> None:
     assert get_publisher_tier("Reuters") == 1
     assert get_publisher_tier("Unknown Blog") == 2

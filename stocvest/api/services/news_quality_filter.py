@@ -39,6 +39,13 @@ NOISE_SUBSTRINGS = [
     "market is expected",
     "global market",
     "market overview",
+    "all time best",
+    "all-time best",
+    "best performing stock",
+    "worst performing stock",
+    "years of returns",
+    "historical returns",
+    "since ipo",
 ]
 
 

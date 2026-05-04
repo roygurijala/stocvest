@@ -4,7 +4,7 @@
 
 **Last updated:** 2026-05-04  
 **Repo:** https://github.com/roygurijala/stocvest  
-**Test baseline (regression gate — must match §13):** Backend `pytest tests/ -q` → **516 passed**, **3 skipped**. Frontend `npm run test` → **56 passed** (19 test files). **`npm run build`** last verified: success.
+**Test baseline (regression gate — must match §13):** Backend `pytest tests/ -q` → **525 passed**, **3 skipped**. Frontend `npm run test` → **56 passed** (19 test files). **`npm run build`** last verified: success.
 
 ---
 
@@ -23,7 +23,7 @@
 | **Watchlists (B4)** | ✅ | `stocvest/data/watchlist_store.py` (**`scan_default_watchlists`**, **`find_users_with_default_watchlist_symbol`** for scheduled jobs only), `scan_symbols.get_scan_symbols`, `GET`/`POST`/`PATCH`/`DELETE` watchlists + default symbols API (brokers Lambda), dashboard **Watchlists** page, BFF `/api/stocvest/watchlists/**`, **dashboard scanner** loads default symbols in parallel with PDT and passes them into **`fetchScannerOverview`** / **`loadScannerDataWithoutBrief`**; scanner gap path defers Dynamo until Polygon 401/403 fallback; **B14** scheduled scan merges platform default-watchlist symbols (cap 30) + config + **`SYSTEM_DEFAULTS`** (cap 40 total); **`watchlist_scanner_alerts`** + **`UserProfile.email`** (optional Dynamo mirror) for best-effort signal emails within **2s** `asyncio.wait_for` + **4h** dedupe via **`had_signal_email_for_symbol_within_hours`** |
 | **Alerts email (B3)** | ✅ | `stocvest/data/models.py` alert enums + prefs/record, `alert_store.py`, `stocvest/services/email_service.py` (SES), `alert_trigger.py`, `GET`/`PATCH /v1/alerts/preferences`, `GET /v1/alerts/history`, non-blocking signal + PDT emails; settings **Alert Preferences** + `docs/DEPLOYMENT.md` SES notes; Lambda IAM `ses:SendEmail` |
 | Legal compliance pass | ✅ | `GlobalDisclaimer`, `SignalDisclaimerChip`, signal-oriented copy, public API field names + `disclaimer` |
-| D1 Signal outcome pipeline | ✅ | `SignalRecord` / `SignalHistory`, `signal_recorder` (record + **`resolve_signals`** using Polygon **1m aggregates** at T+1h / T+24h via **`get_evaluated_price_after_signal`**), `GET /v1/signals/recent` + performance summary (**`correct_direction_count`** / **`incorrect_direction_count`** / **`neutral_direction_count`**), **`GET /v1/signals/records/{id}`**, **`GET /v1/signals/me/history`**, **`GET /v1/signals/me/records/{id}`**; resolution Lambda + EventBridge **`stocvest-signal-resolution`** **`ENABLED`**, **`rate(30 minutes)`** → **`stocvest-development-api-signal_resolution`**. Apply **2026-05-03** (see `docs/D1_SIGNAL_RESOLUTION_SCHEDULE.md`). **Optional later:** weekly horizon, extra analytics. |
+| D1 Signal outcome pipeline | ✅ | `SignalRecord` / `SignalHistory`, `signal_recorder` (record + **`resolve_signals`** using Polygon **1m aggregates** at T+1h and next RTH 4:00 PM ET close for 1d via **`get_evaluated_price_after_signal`**), `GET /v1/signals/recent` + performance summary (**`correct_direction_count`** / **`incorrect_direction_count`** / **`neutral_direction_count`**), **`GET /v1/signals/records/{id}`**, **`GET /v1/signals/me/history`**, **`GET /v1/signals/me/records/{id}`**; resolution Lambda + EventBridge **`stocvest-signal-resolution`** **`ENABLED`**, **`rate(30 minutes)`** → **`stocvest-development-api-signal_resolution`**. Apply **2026-05-03** (see `docs/D1_SIGNAL_RESOLUTION_SCHEDULE.md`). **Optional later:** weekly horizon, extra analytics. |
 | Terraform / AWS apply | 🚧 | **Development** matches applied `infra/` (incl. D1 rule + API routes). **Still pending:** production/stage promotion, secret rotation, S3 artifact bucket policy review, Cognito/Vercel env alignment per environment. |
 | Phase 7 (E2E, audits, paper validation) | 🔜 | Not started as a program |
 
@@ -221,7 +221,7 @@ Report exact counts. If any count dropped, fix before proceeding to documentatio
 
 | Suite | Command | Last verified |
 |-------|---------|---------------|
-| Backend | `pytest tests/ -q` | **516 passed**, **3 skipped** |
+| Backend | `pytest tests/ -q` | **525 passed**, **3 skipped** |
 | Frontend tests | `cd frontend && npm run test` | **56 passed** (19 files) |
 | Frontend build | `cd frontend && npm run build` | **success** |
 

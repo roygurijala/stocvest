@@ -27,6 +27,7 @@ from __future__ import annotations
 import asyncio
 from datetime import date, datetime, timedelta, timezone
 from typing import Awaitable, Callable, Optional
+from zoneinfo import ZoneInfo
 
 import httpx
 import websockets
@@ -53,6 +54,7 @@ log = get_logger(__name__)
 
 _POLYGON_REST_BASE = "https://api.polygon.io"
 _POLYGON_WS_BASE   = "wss://socket.polygon.io"
+_US_EASTERN = ZoneInfo("America/New_York")
 
 # Polygon occasionally returns a `day` OHLC/VWAP block on a different price scale than
 # `lastTrade.p` (bad aggregate / stale session). Only compare when `last_trade_price` is a
@@ -263,7 +265,12 @@ class PolygonClient:
     ) -> float | None:
         """
         Close of the last completed 1-minute bar whose start is at or before the evaluation
-        instant (``generated_at`` + 1h or + 24h rolling wall-clock). Used for signal outcome
+        instant.
+
+        - ``1h``: generated_at + 60 minutes
+        - ``1d``: next US equities RTH close (4:00 PM ET), not rolling +24h
+
+        Used for signal outcome
         tracking (not live snapshot).
         """
         if horizon not in ("1h", "1d"):
@@ -271,8 +278,10 @@ class PolygonClient:
         if generated_at.tzinfo is None:
             generated_at = generated_at.replace(tzinfo=timezone.utc)
         gen = generated_at.astimezone(timezone.utc)
-        offset_minutes = 60 if horizon == "1h" else 1440
-        target = gen + timedelta(minutes=offset_minutes)
+        if horizon == "1h":
+            target = gen + timedelta(minutes=60)
+        else:
+            target = self._next_rth_session_close_utc(gen)
         # Cover weekends / thin tape: extend query window forward.
         window_end = target + timedelta(days=7)
         from_ms = int(gen.timestamp() * 1000)
@@ -299,6 +308,23 @@ class PolygonClient:
                 best_t = t0
                 best_close = close
         return best_close
+
+    @staticmethod
+    def _next_rth_session_close_utc(generated_at_utc: datetime) -> datetime:
+        """
+        Next regular-session close timestamp (4:00 PM ET) strictly after ``generated_at_utc``.
+        Weekday-only approximation; exchange holidays are not modeled here.
+        """
+        et = generated_at_utc.astimezone(_US_EASTERN)
+        close_et = et.replace(hour=16, minute=0, second=0, microsecond=0)
+        if et.weekday() < 5 and et < close_et:
+            target_et = close_et
+        else:
+            next_day = et + timedelta(days=1)
+            while next_day.weekday() >= 5:
+                next_day += timedelta(days=1)
+            target_et = next_day.replace(hour=16, minute=0, second=0, microsecond=0)
+        return target_et.astimezone(timezone.utc)
 
     # ──────────────────────────────────────────────────────────────────────────
     # REST — Snapshot (intraday scanner + pre-market gaps)

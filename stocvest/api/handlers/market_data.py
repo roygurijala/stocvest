@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from collections import defaultdict, deque
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
@@ -16,6 +17,40 @@ from stocvest.data import PolygonClient, PolygonError, Timeframe
 from stocvest.data.polygon_client import LIQUID_NEWS_TICKERS
 from stocvest.data.watchlist_store import get_watchlist_store
 from stocvest.utils.config import get_settings
+
+
+def _published_utc_sort_key(article: dict[str, Any]) -> str:
+    return str(article.get("published_utc") or "")
+
+
+def _publisher_diversity_ranked(articles: list[dict[str, Any]], *, max_per_publisher: int = 2) -> list[dict[str, Any]]:
+    """
+    Rank by publisher diversity first, then recency:
+    - cap each publisher to ``max_per_publisher``
+    - round-robin newest-per-publisher so no single source dominates top slots
+    """
+    by_pub: dict[str, deque[dict[str, Any]]] = defaultdict(deque)
+    for article in sorted(articles, key=_published_utc_sort_key, reverse=True):
+        publisher = str(((article.get("publisher") or {}).get("name") or "unknown")).strip().lower()
+        bucket = by_pub[publisher]
+        if len(bucket) < max_per_publisher:
+            bucket.append(article)
+    ordered: list[dict[str, Any]] = []
+    pubs = sorted(
+        by_pub.keys(),
+        key=lambda p: _published_utc_sort_key(by_pub[p][0]) if by_pub[p] else "",
+        reverse=True,
+    )
+    while pubs:
+        next_round: list[str] = []
+        for pub in pubs:
+            bucket = by_pub[pub]
+            if bucket:
+                ordered.append(bucket.popleft())
+            if bucket:
+                next_round.append(pub)
+        pubs = next_round
+    return ordered
 
 
 def market_status_handler(
@@ -250,7 +285,7 @@ def news_handler(
                 published_utc_gte=since,
             )
 
-        headlines: list[dict[str, Any]] = []
+        candidates: list[dict[str, Any]] = []
         for article in raw_articles:
             if not is_quality_article(article):
                 continue
@@ -268,7 +303,8 @@ def news_handler(
             raw_sent2 = str(article.get("sentiment") or "").strip().lower()
             if raw_sent2 in {"positive", "negative", "neutral"}:
                 sentiment = raw_sent2
-            headline = {
+            candidates.append(
+                {
                 "id": str(article.get("id") or ""),
                 "title": str(article.get("title") or ""),
                 "published_utc": str(article.get("published_utc") or ""),
@@ -288,10 +324,10 @@ def news_handler(
                 "source": publisher_name or "Unknown source",
                 "description": article.get("description"),
                 "image_url": article.get("image_url"),
-            }
-            headlines.append(headline)
-            if len(headlines) >= min(limit, 8):
-                break
+                }
+            )
+        ranked = _publisher_diversity_ranked(candidates, max_per_publisher=2)
+        headlines = ranked[: min(limit, 8)]
         return ok({"headlines": headlines})
 
     try:
