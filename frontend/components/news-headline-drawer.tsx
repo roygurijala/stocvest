@@ -110,7 +110,7 @@ export function NewsHeadlineDrawer({ open, article, onClose }: NewsHeadlineDrawe
       <aside
         role="dialog"
         aria-modal="true"
-        aria-labelledby="news-headline-drawer-title"
+        aria-labelledby="news-headline-drawer-title news-headline-drawer-article-title"
         className={surfaceGlowClassName}
         style={{
           width: "min(440px, 100vw)",
@@ -205,6 +205,18 @@ export function NewsHeadlineDrawer({ open, article, onClose }: NewsHeadlineDrawe
               </span>
             ) : null}
           </div>
+          <h2
+            id="news-headline-drawer-article-title"
+            style={{ margin: 0, fontSize: typography.scale.lg, lineHeight: 1.35, color: colors.text, fontWeight: 700 }}
+          >
+            {article.title}
+          </h2>
+          {article.tickers?.length ? (
+            <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted }}>
+              Tickers:{" "}
+              <span style={{ color: colors.text, fontWeight: 600 }}>{article.tickers.join(", ")}</span>
+            </p>
+          ) : null}
           {description ? (
             <p
               style={{
@@ -212,19 +224,12 @@ export function NewsHeadlineDrawer({ open, article, onClose }: NewsHeadlineDrawe
                 lineHeight: 1.7,
                 color: "var(--color-text-secondary)",
                 margin: 0,
-                marginBottom: 16
+                marginTop: spacing[1],
+                paddingTop: spacing[3],
+                borderTop: `1px solid ${colors.border}`
               }}
             >
               {description}
-            </p>
-          ) : null}
-          <h2 style={{ margin: 0, fontSize: typography.scale.lg, lineHeight: 1.35, color: colors.text, fontWeight: 700 }}>
-            {article.title}
-          </h2>
-          {article.tickers?.length ? (
-            <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted }}>
-              Tickers:{" "}
-              <span style={{ color: colors.text, fontWeight: 600 }}>{article.tickers.join(", ")}</span>
             </p>
           ) : null}
         </div>

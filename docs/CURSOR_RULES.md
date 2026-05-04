@@ -12,7 +12,7 @@ Always read **`docs/CONTEXT.md`** and **`docs/BACKLOG.md`** in full. CONTEXT hol
 
 ## Code rules
 - Never hardcode credentials — always use `stocvest/utils/config.py` (reads from env)
-- Never log prices, account numbers, or credentials
+- Never log prices, account numbers, or credentials; sanitize user-supplied free text before persistence (`stocvest/api/text_sanitize.py`); use `stocvest/utils/log_privacy.py` where logs might include PII or large payloads
 - All market data must flow through canonical types in `stocvest/data/models.py`
 - No raw Polygon dicts outside of `stocvest/data/polygon_client.py`
 - All indicator math lives in `stocvest/indicators/core.py` — pure functions only

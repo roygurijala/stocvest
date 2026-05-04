@@ -1,6 +1,10 @@
 # Deployment notes
 
-**Last updated:** 2026-05-03 · See also [`docs/CONTEXT.md`](./CONTEXT.md) §3 (full deploy checklist).
+**Last updated:** 2026-05-03 (Vercel security headers section) · See also [`docs/CONTEXT.md`](./CONTEXT.md) §3 (full deploy checklist).
+
+## Vercel (frontend)
+
+`frontend/vercel.json` sets baseline **security headers** (frame protection, MIME sniffing, referrer policy, etc.) and **HSTS** on the primary production host **`stocvest.app`**. Adjust there if counsel or security review requires stricter CSP.
 
 ## AWS SES (email alerts)
 

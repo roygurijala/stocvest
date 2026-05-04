@@ -1,6 +1,6 @@
 # STOCVEST Frontend
 
-Next.js **14** app (`app/` router): marketing **landing** (`/`), auth (`/login`, `/signup`, …), **dashboard** (scanner, signals, watchlists, portfolio, journal, settings, …), BFF routes under `/api/stocvest/**`, and static/legal pages.
+Next.js **14** app (`app/` router): marketing **landing** (`/`), auth (`/login`, `/signup`, …), **dashboard** (scanner, signals, watchlists, portfolio, journal, settings, …), BFF routes under `/api/stocvest/**` (including **`/api/stocvest/signals/swing-composite`**, **`/api/stocvest/signals/me/history`**, **`/api/stocvest/signals/me/records/[signalId]`**, journal, users, watchlists, alerts), and static/legal pages. **`vercel.json`** configures production security headers.
 
 **Session context & test baselines:** [`docs/CONTEXT.md`](../docs/CONTEXT.md)
 

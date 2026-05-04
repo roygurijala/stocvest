@@ -92,6 +92,7 @@ Historical phase labels in older READMEs are obsolete; use **git `main`** + **CO
 ## Rules
 
 - Never hardcode credentials — always AWS Secrets Manager
-- Never log prices, accounts, or credentials
+- Never log prices, accounts, or credentials; use structured logging and redaction helpers where user-supplied text or tokens could reach logs (`stocvest/utils/log_privacy.py`)
+- Treat API **`user_id`** as server-derived from the JWT on protected routes — do not trust client body fields for identity
 - PDT rule is non-negotiable — always enforced, never bypassed
 - Paper trading required (minimum 2 weeks) before live trading

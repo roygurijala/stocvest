@@ -44,3 +44,5 @@ resource "aws_lambda_permission" "eventbridge_signal_resolution" {
 ```
 
 Deploy the real Lambda artifact (not the placeholder zip) before scheduling in production.
+
+**Reads:** Public and user-scoped signal rows and performance summary are served by the **`signals`** Lambda (HTTP routes in [`docs/API_CONTRACTS.md`](./API_CONTRACTS.md) §4.3); this scheduled job only **writes** resolution fields.

@@ -48,8 +48,8 @@ All REST routes are versioned under `/v1/`.
 
 ### 4.3 Signals (Phase 4d)
 
-- `POST /v1/signals/swing/composite` — build composite score/verdict from layer signals
-- `POST /v1/signals/swing/synthesis/parse` — parse AI JSON verdict to normalized action payload
+- `POST /v1/signals/swing/composite` — build structured composite score and signal parameters from layer signals
+- `POST /v1/signals/swing/synthesis/parse` — parse AI JSON synthesis output to normalized action payload
 - `POST /v1/signals/day/setups` — rank intraday setup candidates from 1-minute bars
 - `POST /v1/signals/day/briefing` — render daily briefing markdown from structured inputs
 - `GET /v1/signals/recent` — public historical signal data (last 50 platform rows); optional `?landing=true`

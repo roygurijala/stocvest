@@ -54,31 +54,31 @@ const LANDING_COMPARISON_GROUPS: ComparisonGroupDef[] = [
     title: "INTELLIGENCE",
     rows: [
       {
-        capability: "AI signal synthesis with reasoning",
+        capability: "Layered AI signal synthesis (this product)",
         stocvest: { kind: "check" },
         webull: { kind: "dash" },
         tradingview: { kind: "dash" },
         unusualWhales: { kind: "dash" }
       },
       {
-        capability: "Pre-market gap intelligence + catalyst",
+        capability: "Pre-market gap scan + catalyst context (built-in)",
         stocvest: { kind: "check" },
         webull: { kind: "note", text: "partial" },
         tradingview: { kind: "note", text: "screener" },
-        unusualWhales: { kind: "dash" }
+        unusualWhales: { kind: "note", text: "partial" }
       },
       {
-        capability: "Confluence detection (multi-signal)",
+        capability: "Multi-layer confluence score (STOCVEST)",
         stocvest: { kind: "check" },
         webull: { kind: "dash" },
         tradingview: { kind: "dash" },
         unusualWhales: { kind: "dash" }
       },
       {
-        capability: "Market regime detection",
+        capability: "Regime / context inside swing composite flow",
         stocvest: { kind: "check" },
         webull: { kind: "dash" },
-        tradingview: { kind: "dash" },
+        tradingview: { kind: "note", text: "Pine / scripts" },
         unusualWhales: { kind: "dash" }
       }
     ]
@@ -87,17 +87,17 @@ const LANDING_COMPARISON_GROUPS: ComparisonGroupDef[] = [
     title: "EXECUTION",
     rows: [
       {
-        capability: "Works with your existing broker",
+        capability: "Linked-broker trading (IBKR & E*TRADE)",
         stocvest: { kind: "check" },
-        webull: { kind: "note", text: "own broker" },
-        tradingview: { kind: "dash" },
-        unusualWhales: { kind: "dash" }
+        webull: { kind: "note", text: "Webull only" },
+        tradingview: { kind: "note", text: "partner brokers" },
+        unusualWhales: { kind: "note", text: "not a broker" }
       },
       {
-        capability: "PDT Guardian (hard block)",
+        capability: "Pre-submit PDT day-trade cap (in-app gate)",
         stocvest: { kind: "check" },
-        webull: { kind: "note", text: "warning only" },
-        tradingview: { kind: "dash" },
+        webull: { kind: "note", text: "FINRA at broker" },
+        tradingview: { kind: "note", text: "via broker" },
         unusualWhales: { kind: "dash" }
       }
     ]
@@ -106,18 +106,18 @@ const LANDING_COMPARISON_GROUPS: ComparisonGroupDef[] = [
     title: "TRANSPARENCY",
     rows: [
       {
-        capability: "Published directional accuracy from historical signal data",
+        capability: "Published signal accuracy (evaluated history)",
         stocvest: { kind: "check" },
         webull: { kind: "dash" },
         tradingview: { kind: "dash" },
-        unusualWhales: { kind: "note", text: "partial" }
+        unusualWhales: { kind: "note", text: "varies by tool" }
       },
       {
-        capability: "Automatic trade journal",
+        capability: "Auto trade journal on fills",
         stocvest: { kind: "check" },
-        webull: { kind: "note", text: "basic" },
-        tradingview: { kind: "dash" },
-        unusualWhales: { kind: "dash" }
+        webull: { kind: "note", text: "order history" },
+        tradingview: { kind: "note", text: "broker-dependent" },
+        unusualWhales: { kind: "note", text: "portfolio journal" }
       }
     ]
   }
@@ -136,8 +136,15 @@ function ComparisonCellView({ cell }: { cell: ComparisonCell }) {
   }
   return (
     <span
-      className="italic"
-      style={{ color: "#f5c542", fontSize: 10, fontFamily: MONO_TABLE }}
+      className="not-italic"
+      style={{
+        color: "#fcd34d",
+        fontSize: 13,
+        fontWeight: 600,
+        fontFamily: MONO_TABLE,
+        letterSpacing: "0.02em",
+        lineHeight: 1.35
+      }}
     >
       {cell.text}
     </span>
@@ -323,12 +330,12 @@ export function LandingPage({
                   <tr key={`cat-${group.title}`} className="bg-transparent">
                     <td
                       colSpan={5}
-                      className="px-[14px] pb-1 pt-[10px] font-normal uppercase"
+                      className="px-[14px] pb-1.5 pt-3 font-semibold uppercase"
                       style={{
                         fontFamily: MONO_TABLE,
-                        fontSize: 9,
-                        color: "#2a4060",
-                        letterSpacing: "0.06em"
+                        fontSize: 12,
+                        color: "#94a3b8",
+                        letterSpacing: "0.08em"
                       }}
                     >
                       {group.title}
@@ -377,6 +384,9 @@ export function LandingPage({
             </tbody>
           </table>
         </div>
+        <p className="mx-auto mt-4 max-w-3xl px-2 text-center text-xs leading-relaxed text-slate-500 md:text-sm">
+          Competitor cells are informal summaries; verify on each vendor&apos;s site before relying on them.
+        </p>
       </section>
 
       <section id="the-problem" className="mx-auto max-w-7xl px-4 py-20 md:px-8">

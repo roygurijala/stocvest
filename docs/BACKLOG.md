@@ -4,7 +4,7 @@
 `CONTEXT.md` holds **status-at-a-glance**, **what’s implemented**, **near-term ops** (Terraform, secrets, CI, legal), **legal rules**, and **session rules**.  
 **This file** holds **planned work only**: themes, sub-items, and notes—**without** repeating the CONTEXT status table or §3 pending list.
 
-**Last updated:** 2026-05-02 (swing composite insufficient-data gate + signals UI; PF6)
+**Last updated:** 2026-05-02 (D1 shipped + security/docs sweep; PF6)
 
 ---
 
@@ -47,7 +47,7 @@ Tracked in **`CONTEXT.md` §3** only (Terraform apply, GitHub/AWS/Vercel secrets
 
 | ID | Theme | Status | Notes |
 |----|--------|--------|--------|
-| D1 | **Signal outcome pipeline** | In progress | **Shipped in repo:** `SignalRecord` + DynamoDB `SignalHistory` (GSI `scope_generated_at`), `signal_recorder.record_signal` / `resolve_signals` / `get_signal_history`, auto-record on `POST /v1/signals/swing/composite` when `symbol` + `price_at_signal` present, `GET /v1/signals/recent` (50 public rows + outcome fields), summary from 1d outcomes, Lambda module `signal_resolution`, journal optional `signal_id` / `signal_direction` / `signal_generated_at`, dashboard Signal history tab + `/dashboard/performance` + journal signal chip. **Terraform / AWS (2026-05-03):** **`terraform apply -var-file=terraform.tfvars -input=false -auto-approve`** completed — **19 added, 14 changed, 2 destroyed** (API Gateway routes incl. watchlists/alerts/users/journal, Lambda env `STOCVEST_EMAIL_SENDER` / `STOCVEST_PUBLIC_APP_URL`, SES IAM, EventBridge target + permission). Rule **`stocvest-signal-resolution`** **ENABLED**, `rate(30 minutes)` → **`stocvest-development-api-signal_resolution`**. See `docs/D1_SIGNAL_RESOLUTION_SCHEDULE.md` + **CONTEXT** §3 row 5. **DynamoDB journal + PDT:** `TradeJournal` / `PDTState` tables in `infra/dynamodb.tf`, Lambda env `STOCVEST_TRADE_JOURNAL_TABLE` / `STOCVEST_PDT_STATE_TABLE`, IAM + outputs; `config.py` defaults `TradeJournal` / `PDTState`. **B1:** order submit passes optional signal fields → journal rows. **Still open:** optional `GET` by `signal_id`, weekly horizon if desired. |
+| D1 | **Signal outcome pipeline** | Done 2026-05-02 · commit: 62b7e65 | **Shipped:** `SignalRecord` + DynamoDB `SignalHistory` (GSI `scope_generated_at`), `signal_recorder.record_signal` / **`resolve_signals`** (Polygon **1m bar** close at T+1h / T+24h, **`get_evaluated_price_after_signal`**), `get_signal_history` / `get_by_id` / `public_signal_detail_dict`, auto-record on `POST /v1/signals/swing/composite` when `symbol` + `price_at_signal` present, `GET /v1/signals/recent`, `GET /v1/signals/performance/summary` (**`correct_direction_count`** / **`incorrect_direction_count`** / **`neutral_direction_count`**), **`GET /v1/signals/records/{signal_id}`**, **`GET /v1/signals/me/history`**, **`GET /v1/signals/me/records/{signal_id}`** (signals Lambda + API Gateway), BFF under **`/api/stocvest/signals/**`**, dashboard Signal history + landing/performance copy. **Scheduled resolution:** EventBridge **`stocvest-signal-resolution`** → **`stocvest-development-api-signal_resolution`** (`infra/eventbridge.tf`); dev apply **2026-05-03** — see `docs/D1_SIGNAL_RESOLUTION_SCHEDULE.md`. Journal optional signal fields (B1). **Optional later:** weekly horizon, richer analytics. |
 | D2 | **Backtesting** | Not done | Historical Polygon bars; per-setup and per-regime stats; no promise of future performance in UI. |
 | D3 | **Weight / prompt iteration** | Not done | Optional: weekly analytics, suggested layer weight or prompt changes, **human approve** before apply; store `prompt_version` on generations; move prompts toward Secrets Manager (`CONTEXT.md` already flags this under platform). |
 | D4 | **Audit trail** | Not done | Immutable order/PDT/admin logs to durable storage (e.g. S3 Glacier-class); retention policy to align with counsel. |
@@ -59,7 +59,7 @@ Tracked in **`CONTEXT.md` §3** only (Terraform apply, GitHub/AWS/Vercel secrets
 
 | ID | Theme | Status | Notes |
 |----|--------|--------|--------|
-| P1 | **Phase 7 hardening** | Not done | E2E suite; security review (tenant isolation, PII); load tests; **minimum 2 weeks paper** per trading mode; staged real-money rollout. **Infra note:** D1 scheduled resolution — `infra/eventbridge.tf` (rule + target + Lambda permission) is **ready to apply**; not a substitute for Phase 7 E2E. |
+| P1 | **Phase 7 hardening** | Not done | E2E suite; security review (tenant isolation, PII); load tests; **minimum 2 weeks paper** per trading mode; staged real-money rollout. **Infra note:** D1 EventBridge rule is **applied** in development (`CONTEXT.md` §3); still not a substitute for Phase 7 E2E. |
 | P2 | **Secrets-managed prompts** | Not done | Claude system/user prompts loaded from AWS Secrets Manager; version field on API calls; cache on cold start. |
 | P3 | **Mobile / PWA** | Not done | Responsive web exists; native or PWA shell, push for alerts when B3 exists. |
 | P4 | **Enhanced auth** | Not done | Optional SMS OTP, WebAuthn, magic link—Cognito capabilities; cost/compliance review. |
