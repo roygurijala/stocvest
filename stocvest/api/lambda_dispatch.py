@@ -58,12 +58,14 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
 
     if module == "market_data":
         from stocvest.api.handlers.market_data import (
+            bars_batch_handler,
             bars_handler,
             earnings_calendar_handler,
             market_status_handler,
             news_handler,
             options_chain_handler,
             snapshot_handler,
+            snapshots_batch_handler,
         )
 
         return apply_cors_to_http_proxy_response(
@@ -73,7 +75,9 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
                 {
                     "GET /v1/market/status": market_status_handler,
                     "GET /v1/market/snapshot": snapshot_handler,
+                    "GET /v1/market/snapshots": snapshots_batch_handler,
                     "GET /v1/market/bars": bars_handler,
+                    "POST /v1/market/bars-batch": bars_batch_handler,
                     "GET /v1/market/news": news_handler,
                     "GET /v1/market/options": options_chain_handler,
                     "GET /v1/market/earnings": earnings_calendar_handler,

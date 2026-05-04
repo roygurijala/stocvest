@@ -46,12 +46,17 @@ export interface MarketOverview {
   status?: MarketStatusPayload;
   snapshots: SnapshotPayload[];
   news: NewsPayload[];
-  /** Last 20 five-minute closes per symbol (for dashboard sparklines). */
+  /** Last N five-minute closes per symbol (for dashboard sparklines). */
   sparklinesBySymbol?: Record<string, number[]>;
   error?: string;
 }
 
 const DEFAULT_SYMBOLS = ["SPY", "QQQ", "IWM"];
+
+export type FetchMarketOverviewOptions = {
+  /** Fewer bars = faster Polygon calls; default 20. */
+  sparklineBarLimit?: number;
+};
 
 function barClose(bar: Record<string, unknown>): number | null {
   const c = bar.close ?? bar.c;
@@ -65,33 +70,90 @@ function barClose(bar: Record<string, unknown>): number | null {
   return null;
 }
 
-export async function fetchMarketOverview(symbols: string[] = DEFAULT_SYMBOLS): Promise<MarketOverview> {
+async function fetchOverviewSnapshots(symbols: string[]): Promise<(SnapshotPayload | null)[]> {
+  if (symbols.length === 0) return [];
+  if (symbols.length === 1) {
+    const row = await apiFetch<SnapshotPayload>(
+      `/v1/market/snapshot?symbol=${encodeURIComponent(symbols[0])}`
+    );
+    return [row];
+  }
+  const batch = await apiFetch<{ snapshots?: SnapshotPayload[] }>(
+    `/v1/market/snapshots?symbols=${encodeURIComponent(symbols.join(","))}`
+  );
+  if (batch?.snapshots && Array.isArray(batch.snapshots) && batch.snapshots.length > 0) {
+    const by = new Map<string, SnapshotPayload>();
+    for (const row of batch.snapshots) {
+      if (row && typeof row === "object" && row.symbol) {
+        by.set(String(row.symbol).trim().toUpperCase(), row);
+      }
+    }
+    return symbols.map((s) => by.get(s) ?? null);
+  }
+  return Promise.all(
+    symbols.map((symbol) =>
+      apiFetch<SnapshotPayload>(`/v1/market/snapshot?symbol=${encodeURIComponent(symbol)}`)
+    )
+  );
+}
+
+async function fetchOverviewSparklines(
+  symbols: string[],
+  sparklineBarLimit: number
+): Promise<[string, number[]][]> {
+  if (symbols.length === 0) return [];
+  const requests = symbols.map((symbol) => ({
+    symbol,
+    timeframe: "5min",
+    limit: sparklineBarLimit
+  }));
+  const batch = await apiFetch<{ bars_by_symbol?: Record<string, Record<string, unknown>[]> }>(
+    "/v1/market/bars-batch",
+    { method: "POST", body: JSON.stringify({ requests }) }
+  );
+  if (batch?.bars_by_symbol && typeof batch.bars_by_symbol === "object") {
+    return symbols.map((symbol) => {
+      const rows =
+        batch.bars_by_symbol![symbol] ?? batch.bars_by_symbol![symbol.toUpperCase()] ?? [];
+      const arr = Array.isArray(rows) ? rows : [];
+      const closes = arr
+        .map((b) => barClose(b))
+        .filter((n): n is number => n !== null)
+        .slice(-sparklineBarLimit);
+      return [symbol, closes] as const;
+    });
+  }
+  return Promise.all(
+    symbols.map(async (symbol) => {
+      const bars = await apiFetch<Record<string, unknown>[]>(
+        `/v1/market/bars?symbol=${encodeURIComponent(symbol)}&timeframe=5min&limit=${sparklineBarLimit}`
+      );
+      const rows = Array.isArray(bars) ? bars : [];
+      const closes = rows
+        .map((b) => barClose(b))
+        .filter((n): n is number => n !== null)
+        .slice(-sparklineBarLimit);
+      return [symbol, closes] as const;
+    })
+  );
+}
+
+export async function fetchMarketOverview(
+  symbols: string[] = DEFAULT_SYMBOLS,
+  options: FetchMarketOverviewOptions = {}
+): Promise<MarketOverview> {
+  const sparklineBarLimit = options.sparklineBarLimit ?? 20;
   const cleanSymbols = symbols.map((s) => s.trim().toUpperCase()).filter(Boolean);
   try {
-    const parallel = await Promise.all([
+    const [status, news, snapshots] = await Promise.all([
       apiFetch<MarketStatusPayload>("/v1/market/status"),
       apiFetch<NewsPayload[]>("/v1/market/news?limit=5"),
-      ...cleanSymbols.map((symbol) => apiFetch<SnapshotPayload>(`/v1/market/snapshot?symbol=${symbol}`))
+      fetchOverviewSnapshots(cleanSymbols)
     ]);
-    const status = parallel[0] as MarketStatusPayload | null;
-    const news = (parallel[1] as NewsPayload[] | null) || [];
-    const snapshots = parallel.slice(2) as (SnapshotPayload | null)[];
     if (!status) {
       return { snapshots: [], news: [], error: "Service temporarily unavailable. Please try again." };
     }
-    const sparklinesEntries = await Promise.all(
-      cleanSymbols.map(async (symbol) => {
-        const bars = await apiFetch<Record<string, unknown>[]>(
-          `/v1/market/bars?symbol=${encodeURIComponent(symbol)}&timeframe=5min&limit=20`
-        );
-        const rows = Array.isArray(bars) ? bars : [];
-        const closes = rows
-          .map((b) => barClose(b))
-          .filter((n): n is number => n !== null)
-          .slice(-20);
-        return [symbol, closes] as const;
-      })
-    );
+    const sparklinesEntries = await fetchOverviewSparklines(cleanSymbols, sparklineBarLimit);
     return {
       status,
       snapshots: snapshots.filter((s): s is SnapshotPayload => Boolean(s)),

@@ -14,7 +14,7 @@ export default async function DashboardSignalsPage() {
   }
   const pdtStatus = await fetchPdtStatus().catch(() => null);
   const [marketOverview, scannerOverview] = await Promise.all([
-    fetchMarketOverview(),
+    fetchMarketOverview(undefined, { sparklineBarLimit: 12 }),
     fetchScannerOverview(pdtStatus)
   ]);
   const symbols = Array.from(new Set(scannerOverview.setups.map((s) => s.symbol)));

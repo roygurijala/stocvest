@@ -122,3 +122,7 @@ output "cognito_jwt_issuer" {
   description = "JWT issuer URL for API Gateway / OIDC clients (same as wired into HTTP API when tfvars overrides are empty)."
   value       = "https://cognito-idp.${var.aws_region}.amazonaws.com/${aws_cognito_user_pool.main.id}"
 }
+
+output "lambda_artifacts_bucket" {
+  value = aws_s3_bucket.lambda_artifacts.bucket
+}

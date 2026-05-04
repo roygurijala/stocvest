@@ -6,12 +6,14 @@ from datetime import datetime, timezone
 import pytest
 
 from stocvest.api.handlers.market_data import (
+    bars_batch_handler,
     bars_handler,
     earnings_calendar_handler,
     market_status_handler,
     news_handler,
     options_chain_handler,
     snapshot_handler,
+    snapshots_batch_handler,
 )
 from stocvest.data.models import Bar, EarningsEvent, MarketStatus, NewsArticle, OptionContract, Snapshot, Timeframe
 from stocvest.data.polygon_client import PolygonError
@@ -40,6 +42,10 @@ class _FakePolygonClient:
 
     async def get_snapshot(self, symbol: str) -> Snapshot:
         return Snapshot(symbol=symbol, last_trade_price=101.5, day_volume=1_000_000)
+
+    async def get_snapshots_many(self, symbols: list[str], *, chunk_size: int = 50) -> list[Snapshot]:
+        _ = chunk_size
+        return [await self.get_snapshot(s) for s in symbols]
 
     async def get_bars(
         self,
@@ -160,6 +166,35 @@ def test_snapshot_handler_returns_symbol_snapshot() -> None:
     body = json.loads(response["body"])
     assert body["symbol"] == "AAPL"
     assert body["last_trade_price"] == 101.5
+
+
+def test_snapshots_batch_handler_requires_symbols() -> None:
+    response = snapshots_batch_handler({"queryStringParameters": {}}, {}, client_factory=_FakePolygonClient)
+    assert response["statusCode"] == 400
+
+
+def test_snapshots_batch_handler_returns_snapshots() -> None:
+    event = {"queryStringParameters": {"symbols": "aapl,msft"}}
+    response = snapshots_batch_handler(event, {}, client_factory=_FakePolygonClient)
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert len(body["snapshots"]) == 2
+    syms = {s["symbol"] for s in body["snapshots"]}
+    assert syms == {"AAPL", "MSFT"}
+
+
+def test_bars_batch_handler_returns_bars_by_symbol() -> None:
+    event = {
+        "body": json.dumps(
+            {"requests": [{"symbol": "AAPL", "timeframe": "1min", "limit": 3}, {"symbol": "MSFT", "timeframe": "5min", "limit": 2}]}
+        )
+    }
+    response = bars_batch_handler(event, {}, client_factory=_FakePolygonClient)
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert set(body["bars_by_symbol"].keys()) == {"AAPL", "MSFT"}
+    assert body["bars_by_symbol"]["AAPL"][0]["timeframe"] == "1min"
+    assert body["bars_by_symbol"]["MSFT"][0]["timeframe"] == "5min"
 
 
 def test_bars_handler_validates_timeframe() -> None:

@@ -37,6 +37,18 @@ describe("scanner API overview", () => {
           ]
         };
       }
+      if (path.startsWith("/v1/market/snapshots?")) {
+        const q = path.includes("?") ? path.split("?")[1] : "";
+        const syms = (new URLSearchParams(q).get("symbols") ?? "").split(",").filter(Boolean);
+        return {
+          snapshots: syms.map((sym) => ({
+            symbol: sym,
+            prev_close: 100,
+            pre_market_price: 104,
+            day_volume: 1_000_000
+          }))
+        };
+      }
       if (path.startsWith("/v1/market/snapshot?symbol=")) {
         const q = path.includes("?") ? path.split("?")[1] : "";
         const sym = new URLSearchParams(q).get("symbol") ?? "UNK";
@@ -46,6 +58,24 @@ describe("scanner API overview", () => {
           pre_market_price: 104,
           day_volume: 1_000_000
         };
+      }
+      if (path === "/v1/market/bars-batch") {
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          requests?: Array<{ symbol?: string }>;
+        };
+        const syms = (body.requests ?? []).map((r) => String(r.symbol ?? "").toUpperCase());
+        const bar = {
+          timestamp: "2026-04-29T10:00:00+00:00",
+          timeframe: "1min",
+          open: 100,
+          high: 101,
+          low: 99,
+          close: 100.5,
+          volume: 120000
+        };
+        const bars_by_symbol: Record<string, typeof bar[]> = {};
+        for (const s of syms) bars_by_symbol[s] = [bar];
+        return { bars_by_symbol };
       }
       if (path.includes("/v1/market/bars?")) {
         return [

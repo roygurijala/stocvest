@@ -143,9 +143,112 @@ function mergeCompanyNameFromSnapshots(
   });
 }
 
+/** Optional caps for scanner load (dashboard vs full scanner page). */
+export type ScannerLoadTuning = {
+  maxUniverseSymbols?: number;
+  intradayBarLimit?: number;
+};
+
+const BARS_BATCH_MAX = 24;
+const SNAPSHOTS_BATCH_MAX = 40;
+
+function capScannerUniverse(universe: string[], max: number): string[] {
+  if (universe.length <= max) return universe;
+  const priority = ["SPY", "QQQ"];
+  const out: string[] = [];
+  for (const p of priority) {
+    if (universe.includes(p) && !out.includes(p)) out.push(p);
+  }
+  for (const s of universe) {
+    if (out.length >= max) break;
+    if (!out.includes(s)) out.push(s);
+  }
+  return out;
+}
+
+async function fetchSnapshotsMatrix(universe: string[]): Promise<(Record<string, unknown> | null)[]> {
+  if (universe.length === 0) return [];
+  if (universe.length === 1) {
+    const row = await apiFetch<Record<string, unknown>>(
+      `/v1/market/snapshot?symbol=${encodeURIComponent(universe[0])}`
+    );
+    return [row && typeof row === "object" ? row : null];
+  }
+  const bySym = new Map<string, Record<string, unknown>>();
+  for (let i = 0; i < universe.length; i += SNAPSHOTS_BATCH_MAX) {
+    const slice = universe.slice(i, i + SNAPSHOTS_BATCH_MAX);
+    const batch = await apiFetch<{ snapshots?: Record<string, unknown>[] }>(
+      `/v1/market/snapshots?symbols=${encodeURIComponent(slice.join(","))}`
+    );
+    if (batch?.snapshots && Array.isArray(batch.snapshots)) {
+      for (const row of batch.snapshots) {
+        if (!row || typeof row !== "object") continue;
+        const sym = String((row as { symbol?: string }).symbol || "")
+          .trim()
+          .toUpperCase();
+        if (sym) bySym.set(sym, row as Record<string, unknown>);
+      }
+    } else {
+      const rows = await Promise.all(
+        slice.map((symbol) =>
+          apiFetch<Record<string, unknown>>(`/v1/market/snapshot?symbol=${encodeURIComponent(symbol)}`)
+        )
+      );
+      slice.forEach((s, j) => {
+        const row = rows[j];
+        if (row && typeof row === "object") bySym.set(s, row);
+      });
+    }
+  }
+  return universe.map((s) => bySym.get(s) ?? null);
+}
+
+async function fetchBarsMatrix(
+  universe: string[],
+  barLimit: number
+): Promise<Record<string, Record<string, unknown>[]>> {
+  const tf = "1min";
+  const merge: Record<string, Record<string, unknown>[]> = {};
+  if (universe.length === 0) return merge;
+
+  const fillFromBatch = (
+    syms: string[],
+    batch: { bars_by_symbol?: Record<string, Record<string, unknown>[]> } | null
+  ): boolean => {
+    const raw = batch?.bars_by_symbol;
+    if (!raw || typeof raw !== "object") return false;
+    for (const sym of syms) {
+      const row = raw[sym] ?? raw[sym.toUpperCase()];
+      merge[sym] = Array.isArray(row) ? row : [];
+    }
+    return true;
+  };
+
+  for (let i = 0; i < universe.length; i += BARS_BATCH_MAX) {
+    const syms = universe.slice(i, i + BARS_BATCH_MAX);
+    const payload = { requests: syms.map((symbol) => ({ symbol, timeframe: tf, limit: barLimit })) };
+    const batch = await apiFetch<{ bars_by_symbol?: Record<string, Record<string, unknown>[]> }>(
+      "/v1/market/bars-batch",
+      { method: "POST", body: JSON.stringify(payload) }
+    );
+    if (!fillFromBatch(syms, batch)) {
+      await Promise.all(
+        syms.map(async (symbol) => {
+          const bars = await apiFetch<Record<string, unknown>[]>(
+            `/v1/market/bars?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(tf)}&limit=${barLimit}`
+          );
+          merge[symbol] = Array.isArray(bars) ? bars : [];
+        })
+      );
+    }
+  }
+  return merge;
+}
+
 export async function loadScannerDataWithoutBrief(
   _pdtStatus: PDTStatusPayload | null,
-  watchlistSymbols: string[] = []
+  watchlistSymbols: string[] = [],
+  tuning: ScannerLoadTuning | null = null
 ): Promise<ScannerCoreData> {
   try {
     const gapIntelResp = await apiFetch<{ items: GapIntelligenceItem[]; disclaimer?: string }>(
@@ -177,19 +280,15 @@ export async function loadScannerDataWithoutBrief(
     if (universe.length === 0) {
       universe = [...INTRADAY_FALLBACK_SYMBOLS];
     }
+    const barLimit = tuning?.intradayBarLimit ?? 120;
+    const maxU = tuning?.maxUniverseSymbols;
+    if (typeof maxU === "number" && maxU > 0) {
+      universe = capScannerUniverse(universe, maxU);
+    }
 
     const [snapshotRows, barsBySymbol] = await Promise.all([
-      Promise.all(
-        universe.map((symbol) => apiFetch<Record<string, unknown>>(`/v1/market/snapshot?symbol=${symbol}`))
-      ),
-      Promise.all(
-        universe.map(async (symbol) => {
-          const bars = await apiFetch<Record<string, unknown>[]>(
-            `/v1/market/bars?symbol=${symbol}&timeframe=1min&limit=120`
-          );
-          return [symbol, bars] as const;
-        })
-      ).then((rows) => Object.fromEntries(rows))
+      fetchSnapshotsMatrix(universe),
+      fetchBarsMatrix(universe, barLimit)
     ]);
 
     gapItems = mergeCompanyNameFromSnapshots(gapItems, universe, snapshotRows);
@@ -323,6 +422,7 @@ export async function fetchMorningBriefPost(
 export type FetchScannerOptions = {
   /** When true, blocks on `/v1/signals/day/briefing` (slower). Default false — use Suspense + `fetchMorningBriefPost` on dashboard. */
   includeMorningBrief?: boolean;
+  loadTuning?: ScannerLoadTuning | null;
 };
 
 export async function fetchScannerOverview(
@@ -330,8 +430,8 @@ export async function fetchScannerOverview(
   watchlistSymbols: string[] = [],
   options: FetchScannerOptions = {}
 ): Promise<ScannerOverview> {
-  const { includeMorningBrief = false } = options;
-  const core = await loadScannerDataWithoutBrief(pdtStatus, watchlistSymbols);
+  const { includeMorningBrief = false, loadTuning = null } = options;
+  const core = await loadScannerDataWithoutBrief(pdtStatus, watchlistSymbols, loadTuning);
   if (core.error) {
     return {
       gapIntelligence: [],

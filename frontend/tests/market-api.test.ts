@@ -19,10 +19,18 @@ describe("market API overview fetch", () => {
       currencies: { usd: "open" }
     });
     apiFetchMock.mockResolvedValueOnce([{ article_id: "n1", title: "Headline", tickers: [], published_at: "x", url: "u" }]);
-    apiFetchMock.mockResolvedValueOnce({ symbol: "SPY", last_trade_price: 501.2 });
-    apiFetchMock.mockResolvedValueOnce({ symbol: "QQQ", last_trade_price: 432.1 });
-    apiFetchMock.mockResolvedValueOnce([{ close: 500 }, { close: 501 }]);
-    apiFetchMock.mockResolvedValueOnce([{ close: 430 }, { close: 432 }]);
+    apiFetchMock.mockResolvedValueOnce({
+      snapshots: [
+        { symbol: "SPY", last_trade_price: 501.2 },
+        { symbol: "QQQ", last_trade_price: 432.1 }
+      ]
+    });
+    apiFetchMock.mockResolvedValueOnce({
+      bars_by_symbol: {
+        SPY: [{ close: 500 }, { close: 501 }],
+        QQQ: [{ close: 430 }, { close: 432 }]
+      }
+    });
 
     const result = await fetchMarketOverview(["SPY", "QQQ"]);
     expect(result.error).toBeUndefined();

@@ -96,3 +96,9 @@ variable "http_api_throttling_burst_limit" {
     error_message = "http_api_throttling_burst_limit must be between 100 and 5000 (HTTP API stage default route)."
   }
 }
+
+variable "lambda_artifacts_bucket" {
+  description = "S3 bucket for Lambda deployment zips"
+  type        = string
+  default     = "stocvest-development-lambda-artifacts-000504292517"
+}

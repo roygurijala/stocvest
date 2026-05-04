@@ -8,6 +8,7 @@ from datetime import date, timedelta
 from typing import Any
 
 from stocvest.api.response import bad_request, internal_error, ok
+from stocvest.api.shared import parse_json_body
 from stocvest.api.types import LambdaContext, LambdaEvent
 from stocvest.data import PolygonClient, PolygonError, Timeframe
 from stocvest.utils.config import get_settings
@@ -49,6 +50,102 @@ def snapshot_handler(
         async with client_factory(api_key=settings.polygon_api_key) as client:
             snapshot = await client.get_snapshot(symbol)
         return ok(snapshot.model_dump(mode="json"))
+
+    try:
+        return asyncio.run(_run())
+    except PolygonError as exc:
+        return internal_error(str(exc))
+
+
+def snapshots_batch_handler(
+    event: LambdaEvent,
+    context: LambdaContext,
+    client_factory: Callable[..., PolygonClient] = PolygonClient,
+) -> dict[str, Any]:
+    """GET ``symbols=A,B,C`` — one Polygon session; caps at 40 tickers (dashboard / scanner batching)."""
+    _ = context
+    query = _query_params(event)
+    raw = str(query.get("symbols") or "").strip()
+    if not raw:
+        return bad_request("Query param 'symbols' is required (comma-separated).")
+    symbols = []
+    seen: set[str] = set()
+    for part in raw.split(","):
+        s = str(part).strip().upper()
+        if s and s not in seen and len(s) <= 10:
+            seen.add(s)
+            symbols.append(s)
+    if not symbols:
+        return bad_request("No valid symbols in 'symbols'.")
+    if len(symbols) > 40:
+        symbols = symbols[:40]
+
+    async def _run() -> dict[str, Any]:
+        settings = get_settings()
+        async with client_factory(api_key=settings.polygon_api_key) as client:
+            snaps = await client.get_snapshots_many(symbols, chunk_size=50)
+        return ok({"snapshots": [snap.model_dump(mode="json") for snap in snaps]})
+
+    try:
+        return asyncio.run(_run())
+    except PolygonError as exc:
+        return internal_error(str(exc))
+
+
+def bars_batch_handler(
+    event: LambdaEvent,
+    context: LambdaContext,
+    client_factory: Callable[..., PolygonClient] = PolygonClient,
+) -> dict[str, Any]:
+    """POST JSON ``{ "requests": [ {"symbol","timeframe","limit"}, ... ] }`` — max 24 rows, one Polygon session."""
+    _ = context
+    body = parse_json_body(event)
+    if not isinstance(body, dict):
+        return bad_request("JSON body object required.")
+    raw_reqs = body.get("requests")
+    if not isinstance(raw_reqs, list) or not raw_reqs:
+        return bad_request("Field 'requests' must be a non-empty array.")
+
+    parsed: list[tuple[str, Timeframe, int]] = []
+    for i, row in enumerate(raw_reqs[:24]):
+        if not isinstance(row, dict):
+            return bad_request(f"requests[{i}] must be an object.")
+        sym = str(row.get("symbol") or "").strip().upper()
+        if not sym:
+            return bad_request(f"requests[{i}].symbol is required.")
+        tf_raw = str(row.get("timeframe") or Timeframe.DAY_1.value)
+        try:
+            tf = Timeframe(tf_raw)
+        except ValueError:
+            return bad_request(f"requests[{i}].invalid timeframe.")
+        try:
+            lim = int(row.get("limit") or 200)
+        except (TypeError, ValueError):
+            return bad_request(f"requests[{i}].invalid limit.")
+        if lim < 1 or lim > 50000:
+            return bad_request(f"requests[{i}].limit out of range.")
+        parsed.append((sym, tf, lim))
+
+    async def _run() -> dict[str, Any]:
+        settings = get_settings()
+        out: dict[str, list[dict[str, Any]]] = {}
+
+        async with client_factory(api_key=settings.polygon_api_key) as client:
+
+            async def inner(sym: str, tf: Timeframe, lim: int) -> tuple[str, list[dict[str, Any]]]:
+                bars = await client.get_bars(
+                    symbol=sym,
+                    timeframe=tf,
+                    from_date=None,
+                    to_date=None,
+                    limit=lim,
+                )
+                return sym, [b.model_dump(mode="json") for b in bars]
+
+            pairs = await asyncio.gather(*[inner(s, tf, lim) for s, tf, lim in parsed])
+        for sym, rows in pairs:
+            out[sym] = rows
+        return ok({"bars_by_symbol": out})
 
     try:
         return asyncio.run(_run())
