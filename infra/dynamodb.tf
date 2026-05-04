@@ -206,3 +206,23 @@ resource "aws_dynamodb_table" "pdt_state" {
     Name = "stocvest-development-ddb-pdt-state"
   })
 }
+
+resource "aws_dynamodb_table" "sector_cache" {
+  name         = "SectorCache"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "symbol"
+
+  attribute {
+    name = "symbol"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "expires_at"
+    enabled        = true
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "stocvest-development-ddb-sector-cache"
+  })
+}

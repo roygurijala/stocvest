@@ -4,7 +4,7 @@
 `CONTEXT.md` holds **status-at-a-glance**, **what’s implemented**, **near-term ops** (Terraform, secrets, CI, legal), **legal rules**, and **session rules**.  
 **This file** holds **planned work only**: themes, sub-items, and notes—**without** repeating the CONTEXT status table or §3 pending list.
 
-**Last updated:** 2026-05-04 (PF9 market-data contracts + session checklist)
+**Last updated:** 2026-05-04 (real composite engine + PF9)
 
 ---
 
@@ -77,6 +77,7 @@ Tracked in **`CONTEXT.md` §3** only (Terraform apply, GitHub/AWS/Vercel secrets
 | PF7 | **Signals stale data leak on insufficient state** | Done 2026-05-04 | Fixed `frontend/components/signals-page-client.tsx` stale rendering by introducing `hasValidSignal` gating and clearing `compositeResult`, `signalEvidence`, and `radarData` on insufficient-data responses; kept watchlist CTA visible. |
 | PF8 | **Scanner API test timeout flake (local/CI variance)** | Done 2026-05-04 | Increased explicit timeout in `frontend/tests/scanner-api.test.ts` from default 5s to 15s for both scanner overview cases to stabilize intermittently slow runs. |
 | PF9 | **CONTEXT market-data invariants + reusable VIX snapshot helper** | Done 2026-05-04 (PF9 on `main`; `git log -1 --oneline` for hash) | **`docs/CONTEXT.md` §7 / §13:** codified `Snapshot` + `_parse_snapshot` contract (field names, no raw dicts), `IntradaySetupScanner` bar-fetch boundary + calculator reuse guidance, extended-hours on `Snapshot` only, no duplicate day/last scale check. **`morning_brief_fetch`:** `VIX_SNAPSHOT_FALLBACK_SYMBOLS`, `SupportsPolygonSnapshotFetch`, `get_vix_snapshot_with_fallback` (replace ad-hoc VIX loops). **`tests/api/test_morning_brief.py`:** VIX fallback order / empty last / `PolygonError` chain. Test baseline **536** backend / **56** frontend. |
+| PF10 | **Real 6-layer engine + `POST /v1/signals/composite/real`** | Done 2026-05-04 | Server-side analyzers (`technical_analyzer`, `news_analyzer`, `macro_analyzer`, `sector_analyzer` + `sector_mapper`, `geo_analyzer`, `internals_analyzer`), `real_composite_engine.py`, DynamoDB **`SectorCache`** + **`DYNAMODB_SECTOR_CACHE_TABLE`**, API Gateway route, BFF `composite/real`, signals UI uses real endpoint (removed `bullishBias` / `buildSwingCompositeRequestBody` heuristic). **`confluence.py`:** `normalize_direction`, ORB pattern helpers. **`docs/SIGNAL_ENGINE.md`**. **`sector_etf_defaults`**, extended `SectorParameters.sector_to_etf`, `TechnicalParameters` ATR/PDH fields. Tests: `tests/signals/*`, `tests/api/test_real_composite.py`. Baseline **587** backend / **56** frontend. |
 
 ---
 

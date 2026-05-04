@@ -11,6 +11,7 @@ from stocvest.api.legal_copy import API_SIGNAL_DISCLAIMER
 from stocvest.api.http_route import http_route_descriptor
 from stocvest.api.response import bad_request, internal_error, not_found, ok, unauthorized
 from stocvest.api.services.signal_analysis import analysis_authorized, build_signal_analysis_payload
+from stocvest.api.services.real_composite_engine import real_composite_body_sync
 from stocvest.api.services.signal_snapshot_builders import build_swing_composite_snapshot_payload
 from stocvest.config.parameter_store import ParameterStore
 from stocvest.api.services.composite_market_context import fetch_composite_market_status_payload_sync
@@ -144,6 +145,21 @@ def _generate_layer_reasoning(
         )
 
     return f"{layer.title()} is {verdict} with score {raw_score:+.2f}."
+
+
+def real_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    """POST /v1/signals/composite/real — server-side layer stack from symbol only."""
+    _ = context
+    try:
+        payload = parse_json_body(event)
+    except ValueError as exc:
+        return bad_request(str(exc))
+    symbol = str(payload.get("symbol") or "").strip().upper()
+    if not symbol:
+        return bad_request("Body field 'symbol' is required.")
+    rc = build_request_context(event)
+    body = real_composite_body_sync(symbol=symbol, user_id=rc.user_id, user_email=rc.email)
+    return ok(body)
 
 
 def swing_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
@@ -551,6 +567,7 @@ def signals_http_dispatch(event: LambdaEvent, context: LambdaContext) -> dict[st
         return signals_analysis_handler(event, context)
 
     routes: dict[str, Callable[[LambdaEvent, LambdaContext], dict[str, Any]]] = {
+        "POST /v1/signals/composite/real": real_composite_handler,
         "POST /v1/signals/swing/composite": swing_composite_handler,
         "POST /v1/signals/swing/synthesis/parse": swing_synthesis_parse_handler,
         "POST /v1/signals/day/setups": day_setups_handler,

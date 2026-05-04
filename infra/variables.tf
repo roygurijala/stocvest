@@ -69,6 +69,13 @@ variable "anthropic_api_key" {
   sensitive   = true
 }
 
+variable "internal_analysis_key" {
+  description = "Key for internal signal analysis endpoint (X-Stocvest-Internal-Analysis header). Set via terraform.tfvars or TF_VAR_internal_analysis_key; never commit the real value."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "http_api_throttling_rate_limit" {
   description = <<-EOT
     API Gateway HTTP API ($default stage) steady-state request rate limit (requests per second) via default_route_settings.

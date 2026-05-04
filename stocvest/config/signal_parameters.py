@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 
+from stocvest.config.sector_etf_defaults import DEFAULT_SECTOR_TO_ETF
+
 
 @dataclass
 class TechnicalParameters:
@@ -46,6 +48,10 @@ class TechnicalParameters:
 
     # ATR
     atr_period: int = 14
+    orb_atr_qualification_ratio: float = 0.3
+
+    # Previous session levels (when upstream provides prior OHLC)
+    pdh_pdl_score_delta: int = 8
 
     # Verdict thresholds
     bullish_threshold: int = 65
@@ -135,6 +141,9 @@ class SectorParameters:
     # Verdict thresholds
     bullish_threshold: int = 65
     bearish_threshold: int = 35
+
+    # Bucket → ETF (overridable via Secrets Manager JSON)
+    sector_to_etf: dict[str, str] = field(default_factory=lambda: dict(DEFAULT_SECTOR_TO_ETF))
 
 
 @dataclass

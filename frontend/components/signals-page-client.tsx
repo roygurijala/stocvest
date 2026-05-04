@@ -28,11 +28,7 @@ import {
   type PublicSignal
 } from "@/lib/api/public-signals";
 import { LAYER_NAME_HINTS } from "@/lib/ui-tooltips";
-import {
-  buildSwingCompositeRequestBody,
-  isInsufficientCompositeResponse,
-  type SwingCompositeMarketStatus
-} from "@/lib/api/swing-composite";
+import { isInsufficientCompositeResponse, type SwingCompositeMarketStatus } from "@/lib/api/swing-composite";
 
 type LayerStatus = "Bullish" | "Bearish" | "Neutral" | "Unavailable";
 
@@ -59,6 +55,17 @@ const layerMeta = [
   ["📈", "Internals"]
 ] as const;
 
+const SIGNAL_LAYER_KEYS = ["technical", "news", "macro", "sector", "geopolitical", "internals"] as const;
+
+const RADAR_LAYER_LABEL: Record<string, string> = {
+  technical: "Technical",
+  news: "News",
+  macro: "Macro",
+  sector: "Sector",
+  geopolitical: "Geopolitical",
+  internals: "Internals"
+};
+
 function statusColor(status: LayerStatus, colors: ThemeColors): string {
   if (status === "Bullish") return colors.bullish;
   if (status === "Bearish") return colors.bearish;
@@ -66,16 +73,13 @@ function statusColor(status: LayerStatus, colors: ThemeColors): string {
   return colors.textMuted;
 }
 
-function deriveFromSnapshot(snapshot?: SnapshotPayload | null): { bullishBias: number; support: number; resistance: number } {
-  if (!snapshot || typeof snapshot.last_trade_price !== "number") {
-    return { bullishBias: 0.5, support: 0, resistance: 0 };
-  }
-  const last = snapshot.last_trade_price;
-  const prev = snapshot.prev_close ?? last;
-  const bias = Math.max(0, Math.min(1, 0.5 + (last - prev) / Math.max(1, prev) * 5));
-  const support = snapshot.day_low ?? last * 0.985;
-  const resistance = snapshot.day_high ?? last * 1.015;
-  return { bullishBias: bias, support, resistance };
+function verdictToLayerStatus(verdict: string, status: string): LayerStatus {
+  const s = status.toLowerCase();
+  if (s === "unavailable") return "Unavailable";
+  const v = verdict.toLowerCase();
+  if (v === "bullish") return "Bullish";
+  if (v === "bearish") return "Bearish";
+  return "Neutral";
 }
 
 export function SignalsPageClient({ marketOverview, scannerOverview, earningsBySymbol }: SignalsPageClientProps) {
@@ -174,45 +178,63 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
     [scannerOverview.setups, symbol]
   );
 
-  const { bullishBias, support, resistance } = deriveFromSnapshot(snapshot);
-  const layerReasoning = useMemo(() => {
-    const out = new Map<string, string>();
-    const raw = compositeResult?.contributions;
-    if (!Array.isArray(raw)) return out;
-    for (const item of raw) {
-      if (!item || typeof item !== "object") continue;
-      const row = item as { layer?: unknown; reasoning?: unknown };
-      if (typeof row.layer !== "string" || typeof row.reasoning !== "string") continue;
-      out.set(row.layer.trim().toLowerCase(), row.reasoning.trim());
+  const { support, resistance } = useMemo(() => {
+    if (!snapshot || typeof snapshot.last_trade_price !== "number") {
+      return { support: 0, resistance: 0 };
     }
-    return out;
-  }, [compositeResult]);
-  const rows: LayerRow[] = useMemo(() => {
-    return layerMeta.map(([icon, name], idx) => {
-      const score = Math.max(0, Math.min(100, Math.round((bullishBias * 100 + idx * 7) % 100)));
-      const status: LayerStatus =
-        !snapshot ? "Unavailable" : score >= 60 ? "Bullish" : score <= 40 ? "Bearish" : "Neutral";
-      const dynamicReasoning = layerReasoning.get(name.toLowerCase());
-      return {
-        icon,
-        name,
-        status,
-        explanation:
-          dynamicReasoning ??
-          (status === "Bullish"
-            ? `${name} signals align with upside continuation.`
-            : status === "Bearish"
-              ? `${name} signals show downside pressure.`
-              : status === "Neutral"
-                ? `${name} is mixed without strong direction.`
-                : `${name} data is unavailable right now.`),
-        score
-      };
-    });
-  }, [bullishBias, layerReasoning, snapshot]);
+    const last = snapshot.last_trade_price;
+    return {
+      support: snapshot.day_low ?? last * 0.985,
+      resistance: snapshot.day_high ?? last * 1.015
+    };
+  }, [snapshot]);
 
-  const overall = rows.reduce((sum, row) => sum + row.score, 0) / Math.max(1, rows.length);
-  const layerSignalSummary = overall >= 58 ? "Bullish" : overall <= 42 ? "Bearish" : "Neutral";
+  const rows: LayerRow[] = useMemo(() => {
+    const rawLayers = compositeResult?.layers;
+    const ok = compositeResult && !isInsufficientCompositeResponse(compositeResult) && Array.isArray(rawLayers);
+    return layerMeta.map(([icon, name], idx) => {
+      const key = SIGNAL_LAYER_KEYS[idx];
+      const entry = ok
+        ? (rawLayers as Array<Record<string, unknown>>).find((x) => String(x.layer ?? "").toLowerCase() === key)
+        : undefined;
+      const score =
+        typeof entry?.score === "number" && Number.isFinite(entry.score)
+          ? Math.max(0, Math.min(100, Math.round(entry.score)))
+          : 0;
+      const verdict = typeof entry?.verdict === "string" ? entry.verdict : "neutral";
+      const st = typeof entry?.status === "string" ? entry.status : "unavailable";
+      const status = verdictToLayerStatus(verdict, st);
+      const reasoning =
+        typeof entry?.reasoning === "string" && entry.reasoning.trim()
+          ? entry.reasoning.trim()
+          : status === "Unavailable"
+            ? `${name} data is unavailable right now.`
+            : status === "Bullish"
+              ? `${name} signals align with upside continuation.`
+              : status === "Bearish"
+                ? `${name} signals show downside pressure.`
+                : `${name} is mixed without strong direction.`;
+      return { icon, name, status, explanation: reasoning, score };
+    });
+  }, [compositeResult]);
+
+  const overall = useMemo(() => {
+    if (compositeResult && !isInsufficientCompositeResponse(compositeResult) && Array.isArray(compositeResult.layers)) {
+      const nums = (compositeResult.layers as Array<{ score?: unknown }>)
+        .map((x) => (typeof x.score === "number" && Number.isFinite(x.score) ? x.score : null))
+        .filter((x): x is number => x != null);
+      if (nums.length) return nums.reduce((a, b) => a + b, 0) / nums.length;
+    }
+    return rows.reduce((sum, row) => sum + row.score, 0) / Math.max(1, rows.length);
+  }, [compositeResult, rows]);
+
+  const layerSignalSummary = useMemo(() => {
+    if (compositeResult && !isInsufficientCompositeResponse(compositeResult) && typeof compositeResult.signal_summary === "string") {
+      const s = String(compositeResult.signal_summary);
+      return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+    }
+    return overall >= 58 ? "Bullish" : overall <= 42 ? "Bearish" : "Neutral";
+  }, [compositeResult, overall]);
   const summaryTone =
     layerSignalSummary === "Bullish" ? colors.bullish : layerSignalSummary === "Bearish" ? colors.bearish : colors.caution;
   const setupDirectionForEvidence =
@@ -227,38 +249,12 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
       return;
     }
     let cancelled = false;
-    const regime =
-      layerSignalSummary === "Bullish" ? "bull" : layerSignalSummary === "Bearish" ? "bear" : "sideways";
     const run = async () => {
-      let newsCatalyst: { headline: string; sentiment: "positive" | "negative" | "neutral" } | null = null;
       try {
-        const articles = await fetchSymbolNews(sym, 5);
-        const first = articles[0];
-        if (first?.title?.trim()) {
-          const sc = first.sentiment_score;
-          let sentiment: "positive" | "negative" | "neutral" = "neutral";
-          if (typeof sc === "number" && Number.isFinite(sc)) {
-            if (sc > 0.1) sentiment = "positive";
-            else if (sc < -0.1) sentiment = "negative";
-          }
-          newsCatalyst = { headline: first.title.trim(), sentiment };
-        }
-      } catch {
-        newsCatalyst = null;
-      }
-      if (cancelled) return;
-      const body = buildSwingCompositeRequestBody({
-        symbol: sym,
-        regime,
-        rows: rows.map((r) => ({ status: r.status, score: r.score })),
-        snapshot,
-        newsCatalyst
-      });
-      try {
-        const res = await fetch("/api/stocvest/signals/swing-composite", {
+        const res = await fetch("/api/stocvest/signals/composite/real", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
+          body: JSON.stringify({ symbol: sym }),
           credentials: "same-origin"
         });
         if (cancelled) return;
@@ -271,19 +267,28 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
         const j = (await res.json()) as Record<string, unknown>;
         if (cancelled) return;
         if (isInsufficientCompositeResponse(j)) {
-          setCompositeResult(null);
+          setCompositeResult(j);
           setSignalEvidence(null);
           setRadarData(null);
           return;
         }
         setCompositeResult(j);
-        setRadarData(
-          rows.map((row, idx) => ({
-            layer: row.name,
-            score: row.score,
-            hist: Math.max(22, Math.min(88, row.score - 7 + ((idx * 7) % 14)))
-          }))
-        );
+        const raw = j.layers;
+        const baseline = 50;
+        if (Array.isArray(raw)) {
+          setRadarData(
+            (raw as Array<Record<string, unknown>>).map((layer) => {
+              const k = String(layer.layer ?? "").toLowerCase();
+              return {
+                layer: RADAR_LAYER_LABEL[k] ?? k,
+                score: typeof layer.score === "number" && Number.isFinite(layer.score) ? Math.round(layer.score) : 0,
+                hist: baseline
+              };
+            })
+          );
+        } else {
+          setRadarData(null);
+        }
       } catch {
         if (!cancelled) {
           setCompositeResult(null);
@@ -296,7 +301,7 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
     return () => {
       cancelled = true;
     };
-  }, [symbol, tab, snapshot, rows, layerSignalSummary]);
+  }, [symbol, tab]);
 
   const insufficientComposite: SwingCompositeMarketStatus | null = isInsufficientCompositeResponse(compositeResult)
     ? compositeResult.market_status
@@ -578,8 +583,7 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
                     </div>
                     <InfoTip
                       text={(() => {
-                        const keys = ["technical", "news", "macro", "sector", "geopolitical", "internals"] as const;
-                        const k = keys[rowIdx];
+                        const k = SIGNAL_LAYER_KEYS[rowIdx];
                         return k ? LAYER_NAME_HINTS[k] : "Layer readout for this symbol.";
                       })()}
                       label={row.name}
@@ -734,13 +738,22 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
         </h3>
         <p style={{ margin: 0, fontStyle: "italic" }}>
           “{symbol.toUpperCase()} currently shows a <strong style={{ color: summaryTone }}>{layerSignalSummary}</strong> profile with{" "}
-          {Math.round(overall)}% signal strength based on layered confirmation.”
+          {Math.round(
+            hasValidSignal && typeof compositeResult?.signal_strength === "number"
+              ? (compositeResult.signal_strength as number) * 100
+              : overall
+          )}
+          % signal strength based on layered confirmation.”
         </p>
         <div style={{ marginTop: spacing[3], height: 10, background: colors.surfaceMuted, borderRadius: borderRadius.full }}>
           <div
             style={{
               height: "100%",
-              width: `${Math.round(overall)}%`,
+              width: `${Math.round(
+                hasValidSignal && typeof compositeResult?.signal_strength === "number"
+                  ? (compositeResult.signal_strength as number) * 100
+                  : overall
+              )}%`,
               borderRadius: borderRadius.full,
               background: summaryTone
             }}
