@@ -7,7 +7,6 @@ import { useRouter } from "next/navigation";
 import { DashboardRealtime } from "@/components/dashboard-realtime";
 import { EarningsCalendar } from "@/components/earnings-calendar";
 import { InfoTip } from "@/components/info-tip";
-import { MiniSparkline } from "@/components/mini-sparkline";
 import { MarketSentimentScoreWidget } from "@/components/market-sentiment-score-widget";
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import { MorningBriefCollapse } from "@/components/morning-brief-collapse";
@@ -22,15 +21,7 @@ import type { EarningsEvent } from "@/lib/api/earnings";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { buildEvidenceFromSetup, enrichEvidenceWithRealComposite, type SignalEvidenceData } from "@/lib/signal-evidence";
-import {
-  CONFIDENCE_PERCENT_TIP,
-  IWM_CARD_TIP,
-  LATEST_HEADLINES_TIP,
-  PDT_GUARDIAN_TIP,
-  QQQ_CARD_TIP,
-  SPY_CARD_TIP,
-  TOP_SIGNALS_TIP
-} from "@/lib/ui-tooltips";
+import { CONFIDENCE_PERCENT_TIP, LATEST_HEADLINES_TIP, PDT_GUARDIAN_TIP, TOP_SIGNALS_TIP } from "@/lib/ui-tooltips";
 
 interface DashboardRedesignProps {
   marketOverview: MarketOverview;
@@ -56,24 +47,9 @@ function SkeletonLine({ width = "100%", height = 14 }: { width?: string; height?
   );
 }
 
-function toPercent(change: number): string {
-  return `${change >= 0 ? "+" : ""}${change.toFixed(2)}%`;
-}
-
 function toPrice(n: number | null | undefined): string {
   if (typeof n !== "number" || Number.isNaN(n)) return "";
   return `$${n.toFixed(2)}`;
-}
-
-function computeSnapshotChange(snapshot: SnapshotPayload): { amount: number; percent: number } {
-  const last = snapshot.last_trade_price ?? null;
-  const prev = snapshot.prev_close ?? null;
-  if (typeof last !== "number" || typeof prev !== "number" || prev === 0) {
-    return { amount: 0, percent: 0 };
-  }
-  const amount = last - prev;
-  const percent = (amount / prev) * 100;
-  return { amount, percent };
 }
 
 function isMorningBriefingWindowNow(): boolean {
@@ -100,12 +76,6 @@ function timeAgo(iso: string): string {
   return `${Math.floor(delta / 86400)}d ago`;
 }
 
-const SYMBOL_CARD_TIPS: Record<string, string> = {
-  SPY: SPY_CARD_TIP,
-  QQQ: QQQ_CARD_TIP,
-  IWM: IWM_CARD_TIP
-};
-
 export function DashboardRedesign({
   marketOverview,
   pdtStatus,
@@ -119,7 +89,6 @@ export function DashboardRedesign({
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [headlineArticle, setHeadlineArticle] = useState<NewsPayload | null>(null);
   const snapshotsBySymbol = new Map(marketOverview.snapshots.map((s) => [s.symbol, s]));
-  const statSymbols = ["SPY", "QQQ", "IWM"] as const;
   const morningVisible =
     isMorningBriefingWindowNow() && (!!scannerOverview.morningBrief || morningBriefSlot != null);
   const topSignals = scannerOverview.setups.slice(0, 3);
@@ -148,64 +117,6 @@ export function DashboardRedesign({
         }}
       >
         <div className="min-w-0" style={{ display: "grid", gap: spacing[3] }}>
-          <div
-            className="grid grid-cols-1 gap-3 sm:grid-cols-3"
-            style={{
-              fontSize: typography.scale.sm
-            }}
-          >
-            {statSymbols.map((symbol) => {
-              const snapshot = snapshotsBySymbol.get(symbol);
-              const spark = marketOverview.sparklinesBySymbol?.[symbol] ?? [];
-              if (!snapshot && !marketOverview.error) {
-                return (
-                  <article
-                    key={symbol}
-                    className={surfaceGlowClassName}
-                    style={{
-                      border: `1px solid ${colors.border}`,
-                      borderRadius: borderRadius.lg,
-                      padding: spacing[3],
-                      background: colors.surfaceMuted
-                    }}
-                  >
-                    <SkeletonLine width="80%" />
-                    <div style={{ marginTop: spacing[2] }}>
-                      <SkeletonLine width="100%" height={36} />
-                    </div>
-                  </article>
-                );
-              }
-              if (!snapshot) {
-                return null;
-              }
-              const { percent } = computeSnapshotChange(snapshot);
-              return (
-                <article
-                  key={symbol}
-                  className={surfaceGlowClassName}
-                  style={{
-                    border: `1px solid ${colors.border}`,
-                    borderRadius: borderRadius.lg,
-                    padding: spacing[3],
-                    background: colors.surface,
-                    display: "grid",
-                    gap: spacing[2]
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2] }}>
-                    <strong style={{ color: colors.text, margin: 0 }}>{symbol}</strong>
-                    <InfoTip text={SYMBOL_CARD_TIPS[symbol]} label={`${symbol} explanation`} />
-                  </div>
-                  <div style={{ color: colors.textMuted }}>
-                    <span style={{ color: colors.text }}>{toPrice(snapshot.last_trade_price)}</span>
-                  </div>
-                  <div style={{ color: percent >= 0 ? colors.bullish : colors.bearish, fontWeight: 600 }}>{toPercent(percent)}</div>
-                  <MiniSparkline closes={spark} upColor={colors.bullish} downColor={colors.bearish} height={36} />
-                </article>
-              );
-            })}
-          </div>
           <div
             className="min-w-0 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             style={{ display: "flex", gap: spacing[3], flexWrap: "nowrap", alignItems: "center", fontSize: typography.scale.sm }}

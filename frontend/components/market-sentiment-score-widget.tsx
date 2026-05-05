@@ -26,6 +26,11 @@ function computeSnapshotChange(snapshot: SnapshotPayload): { percent: number } {
   return { percent: ((last - prev) / prev) * 100 };
 }
 
+function formatLastPrice(n: number | null | undefined): string {
+  if (typeof n !== "number" || !Number.isFinite(n)) return "—";
+  return `$${n.toFixed(2)}`;
+}
+
 function scoreFromChangePercent(pct: number): number {
   return Math.max(0, Math.min(100, Math.round(50 + pct * 10)));
 }
@@ -148,7 +153,7 @@ export type MarketSentimentModel = {
   sentiment_score: number;
   sentiment_label: string;
   change_from_open: number | null;
-  components: Array<{ symbol: string; score: number; change_pct: number }>;
+  components: Array<{ symbol: string; score: number; change_pct: number; last_price: number | null }>;
   interpretation: { line1: string; line2: string };
   favor_today: { text: string; color: string };
   market_status: string;
@@ -161,12 +166,14 @@ export function buildMarketSentimentModel(overview: MarketOverview): MarketSenti
   if (snaps.length === 0) return null;
 
   const bySym = new Map(snaps.map((s) => [s.symbol.trim().toUpperCase(), s] as const));
-  const components: Array<{ symbol: string; score: number; change_pct: number }> = [];
+  const components: Array<{ symbol: string; score: number; change_pct: number; last_price: number | null }> = [];
   for (const sym of STAT_SYMBOLS) {
     const s = bySym.get(sym);
     if (!s) continue;
     const { percent } = computeSnapshotChange(s);
-    components.push({ symbol: sym, score: scoreFromChangePercent(percent), change_pct: percent });
+    const lp = s.last_trade_price;
+    const last_price = typeof lp === "number" && Number.isFinite(lp) ? lp : null;
+    components.push({ symbol: sym, score: scoreFromChangePercent(percent), change_pct: percent, last_price });
   }
   if (components.length === 0) return null;
 
@@ -465,6 +472,9 @@ export function MarketSentimentScoreWidget({ marketOverview }: Props) {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 6 }}>
                 <strong style={{ fontSize: 13, color: colors.text }}>{c.symbol}</strong>
                 <span style={{ fontSize: 11, color: "var(--color-text-muted)" }}>{c.score}</span>
+              </div>
+              <div style={{ marginTop: 2, fontSize: 12, fontWeight: 600, color: colors.text, letterSpacing: "-0.02em" }}>
+                {formatLastPrice(c.last_price)}
               </div>
               <div style={{ marginTop: 4, fontSize: 16, fontWeight: 600, color: pctColor }}>{pctStr}</div>
               <div
