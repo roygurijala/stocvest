@@ -1,40 +1,90 @@
-# STOCVEST — Cursor AI Rules
+# STOCVEST — Cursor AI rules (canonical)
 
-You are working on STOCVEST, a multi-broker swing + day trading signal platform.
+You are working on **STOCVEST**: a multi-broker swing + day-trading signal platform (Next.js frontend, Python Lambdas, Polygon, DynamoDB, optional Redis/ECS workers).
 
-## Before writing any code
-Always read `docs/CONTEXT.md` first. It contains the full build history,
-key decisions, immutable contracts, and phase order. Never assume — check it.
+**This file is the single source of truth for repo AI rules.** Cursor loads it automatically for new agents. Do not duplicate long rule bodies elsewhere; update this file only.
 
-## Phase discipline
-- Current phase: **Phase 2 — Swing Trading Signal Engine**
-- Complete the current phase fully before touching the next
-- Every phase must have passing tests before moving on
-- If asked to skip ahead, flag it and ask for confirmation
+---
 
-## Code rules
-- Never hardcode credentials — always use `stocvest/utils/config.py` (reads from env)
-- Never log prices, account numbers, or credentials
-- All market data must flow through canonical types in `stocvest/data/models.py`
-- No raw Polygon dicts outside of `stocvest/data/polygon_client.py`
-- All indicator math lives in `stocvest/indicators/core.py` — pure functions only
-- PDT rule (max 3 day trades in 5 days under $25k) is non-negotiable — always enforce
+## 1. Read first (no guessing)
 
-## Testing rules
-- Every new module gets a corresponding test file in `tests/`
-- Tests are marked `@pytest.mark.unit` (no network) or `@pytest.mark.integration`
-- Mock all HTTP calls with `respx`, all AWS calls with `pytest-mock`
-- Run `pytest tests/ -v` before saying a phase is complete
+| Doc | Purpose |
+|-----|---------|
+| **`docs/CONTEXT.md`** | Shipped vs pending, legal framing, **immutable contracts (§7)**, **session rules (§13)** including **exact pytest / Vitest baselines**, ops checklist. Read at session start. |
+| **`docs/BACKLOG.md`** | Planned work IDs; never delete rows — mark DONE + date + commit. |
+| **`docs/API_CONTRACTS.md`** | HTTP + broker contracts — **do not change** without explicit instruction and coordinated updates. |
 
-## Architecture
-- Backend: Python async (httpx, asyncio) — Lambda-compatible, no Django/Flask
-- Data: Pydantic v2 models throughout — no plain dicts crossing module boundaries
-- Config: pydantic-settings via `get_settings()` — never `os.getenv()` directly
-- Logging: always use `get_logger(__name__)` from `stocvest/utils/logging.py`
+**Market Intelligence / ranked news (dashboard):** see CONTEXT §2 — `news_relevance.py`, `passes_market_intelligence_gate`, BFF `GET /v1/market/news`.
 
-## When uncertain
-- Flag it explicitly rather than guessing, especially for:
-  - Financial math (RSI, ATR, options Greeks)
-  - Broker API behaviour (IBKR TWS quirks, ETrade OAuth)
-  - AWS service limits or DynamoDB design
-  - PDT rule edge cases
+**Signal engine / layers:** see `docs/SIGNAL_ENGINE.md` and CONTEXT §2 (`real_composite_engine`, `swing_composite_engine`, six layers).
+
+---
+
+## 2. Scope and phase discipline
+
+- **Source of truth for “what phase / what’s shipped”:** `docs/CONTEXT.md` §1 (status table) and §3 (ops / blockers) — **not** ad-hoc “Phase N” labels from older docs.
+- Finish the **user-agreed** slice or backlog item before expanding scope.
+- If asked to skip tests, weaken contracts, or ship without updating CONTEXT/BACKLOG when session rules require it — **flag it** and ask for confirmation.
+
+---
+
+## 3. Code rules
+
+- **Secrets:** never hardcode credentials — use **`stocvest/utils/config.py`** / `get_settings()` (env-backed). Do not use raw `os.getenv()` for app config in new code.
+- **Privacy / logs:** never log prices, account numbers, or credentials. Sanitize user free text before persistence (`stocvest/api/text_sanitize.py`). Use `stocvest/utils/log_privacy.py` when logs could include PII or huge payloads.
+- **Market data:** canonical types in **`stocvest/data/models.py`** (`Snapshot`, `Bar`, etc.). **No raw Polygon dicts** outside **`stocvest/data/polygon_client.py`** (and explicit parsers there).
+- **Indicators:** core math in **`stocvest/indicators/`** — prefer pure, testable functions; follow existing module layout (`core.py` patterns).
+- **PDT:** max 3 day trades in 5 business days under $25k (non-exempt) — **non-negotiable**; preserve existing enforcement and tests.
+
+---
+
+## 4. Testing rules
+
+- New backend behavior → tests under **`tests/`** (mirror package layout where possible).
+- Mark tests **`@pytest.mark.unit`** (no network) or **`@pytest.mark.integration`** as appropriate.
+- Mock HTTP with **`respx`**; mock AWS with **`pytest-mock`** where needed.
+- Before calling work complete on backend/frontend touches:
+  - **`pytest tests/ -q`** or **`python -m pytest tests/ -q`** (Windows-friendly).
+  - **`cd frontend && npm run test`** — Vitest; **do not** pass Jest’s `--watchAll=false` (unsupported).
+- **Regression gate:** match **passed** counts to **`docs/CONTEXT.md` §13**; if counts drop, fix before claiming done.
+
+---
+
+## 5. Architecture (expectations)
+
+- **Backend:** Python, asyncio-friendly, **Lambda-compatible** — no Django/Flask as app server.
+- **Data:** **Pydantic v2** at boundaries — avoid plain dicts crossing module APIs.
+- **Config:** **`get_settings()`** with cache awareness; clear cache in tests when env is patched (`get_settings.cache_clear()`).
+- **Logging:** **`get_logger(__name__)`** from **`stocvest/utils/logging.py`**.
+
+---
+
+## 6. Frontend (when relevant)
+
+- Next.js App Router; BFF routes under **`frontend/app/api/stocvest/`**.
+- Match existing components, design tokens, and patterns; avoid drive-by refactors.
+- After UI/API changes, run **`npm run test`** and **`npm run build`** when CONTEXT session rules apply.
+
+---
+
+## 7. Git / docs hygiene (when user expects session close)
+
+If the user’s workflow references CONTEXT §13 **end-of-session** steps:
+
+- Update **`docs/CONTEXT.md`** (§1–3, §13 baselines, “Last updated”).
+- Update **`docs/BACKLOG.md`** (mark items DONE; **never delete rows**).
+- Commit code and docs together; use the user’s requested commit message format if they specify one.
+
+---
+
+## 8. When uncertain — stop and flag
+
+Do **not** guess on:
+
+- Financial / indicator math (RSI, ATR, options Greeks, VWAP/session rules).
+- Broker APIs (IBKR TWS / ib_insync, E*TRADE OAuth quirks).
+- AWS limits, DynamoDB keys, or Terraform naming vs runtime.
+- PDT edge cases (holidays, exempt accounts, timing).
+- **Immutable contracts** in CONTEXT §7 / API_CONTRACTS (Snapshot fields, scanner bar-fetch boundaries, VIX fallback list, etc.).
+
+Prefer reading the real implementation and existing tests over inventing behavior.
