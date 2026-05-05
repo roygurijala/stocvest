@@ -250,6 +250,34 @@ function synthKeyPointsFromLayerApi(match: Record<string, unknown>): string[] {
   return out.slice(0, 4);
 }
 
+/**
+ * Real-composite `layers[]` rows carry authoritative verdict/score; chips were merged into keyPoints
+ * but the badge still came from `buildEvidenceFromSetup` heuristics — keep badge + bar chart aligned.
+ */
+function evidencePatchFromApiLayer(match: Record<string, unknown>): Partial<EvidenceLayer> {
+  const patch: Partial<EvidenceLayer> = {};
+  const raw = match.score;
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    patch.contributionScore = clamp(Math.round(raw), 0, 100);
+  }
+  const layerStatus = String(match.status ?? "").trim().toLowerCase();
+  if (layerStatus === "unavailable") {
+    patch.status = "Unavailable";
+    return patch;
+  }
+  const verdict = String(match.verdict ?? "").trim().toLowerCase();
+  if (verdict === "bullish") {
+    patch.status = "Bullish";
+  } else if (verdict === "bearish") {
+    patch.status = "Bearish";
+  } else if (verdict === "neutral") {
+    patch.status = "Neutral";
+  } else if (patch.contributionScore !== undefined) {
+    patch.status = statusFromScore(patch.contributionScore);
+  }
+  return patch;
+}
+
 export function buildEvidenceFromSetup(
   setup: IntradaySetupPayload,
   snapshot?: SnapshotPayload,
@@ -644,10 +672,12 @@ export function applySwingCompositeEnrichment(
         }
         return layer;
       }
+      const apiLayer = evidencePatchFromApiLayer(match);
       const chips = match.chips;
       if (Array.isArray(chips) && chips.length > 0) {
         return {
           ...layer,
+          ...apiLayer,
           keyPoints: chips.map((c) => String(c).trim()).filter(Boolean).slice(0, 4)
         };
       }
@@ -655,20 +685,20 @@ export function applySwingCompositeEnrichment(
       if (reasoning) {
         const parts = reasoningToKeyPoints(reasoning, 4);
         if (parts.length) {
-          return { ...layer, keyPoints: parts };
+          return { ...layer, ...apiLayer, keyPoints: parts };
         }
       }
       const contrib = findContributionRow(body, layer.key);
       const contribR = typeof contrib?.reasoning === "string" ? contrib.reasoning.trim() : "";
       if (contribR) {
         const parts = reasoningToKeyPoints(contribR, 4);
-        if (parts.length) return { ...layer, keyPoints: parts };
+        if (parts.length) return { ...layer, ...apiLayer, keyPoints: parts };
       }
       const synth = synthKeyPointsFromLayerApi(match);
       if (synth.length) {
-        return { ...layer, keyPoints: synth };
+        return { ...layer, ...apiLayer, keyPoints: synth };
       }
-      return layer;
+      return { ...layer, ...apiLayer };
     });
   }
 

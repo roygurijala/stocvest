@@ -213,4 +213,39 @@ describe("applySwingCompositeEnrichment", () => {
     expect(tech?.keyPoints[1]).toBe("VWAP Above");
     expect(macro?.keyPoints[0]).toBe("SPY +0.4%");
   });
+
+  test("syncs layer badge and contribution score from API verdict (chips vs heuristic mismatch)", () => {
+    const base = buildEvidenceFromSetup(
+      { ...baseSetup, direction: "long", score: 0.85 },
+      { symbol: "AAPL", last_trade_price: 200, prev_close: 198, day_vwap: 199 },
+      { symbolNewsArticles: [] }
+    );
+    const techBefore = base.layers.find((l) => l.key === "technical");
+    expect(techBefore?.status).toBe("Bullish");
+    const enriched = applySwingCompositeEnrichment(base, {
+      signal_score: 50,
+      trend_strength: "Weak",
+      trend_direction: "Sideways",
+      risk_reward: 1.2,
+      market_regime: "Neutral",
+      catalysts: [],
+      risk_factors: [],
+      signal_parameters: "x",
+      historical_entry_zone: { low: 10, high: 11 },
+      layers: [
+        {
+          layer: "technical",
+          chips: ["RSI 43", "VWAP Below", "EMA Stack Bearish"],
+          verdict: "bearish",
+          score: 32,
+          status: "available",
+          reasoning: ""
+        }
+      ]
+    });
+    const tech = enriched.layers.find((l) => l.key === "technical");
+    expect(tech?.status).toBe("Bearish");
+    expect(tech?.contributionScore).toBe(32);
+    expect(tech?.keyPoints[0]).toBe("RSI 43");
+  });
 });
