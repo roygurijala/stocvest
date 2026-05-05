@@ -2,6 +2,8 @@
 
 **Read this file at the start of each session.** It summarizes what exists, what is pending, and what is planned—without duplicating the whole repo tree.
 
+**Cursor AI rules** for agents live in **`.cursorrules`** at the repo root (see **`docs/CURSOR_RULES.md`** for a short pointer—do not duplicate the full rules there).
+
 **Last updated:** 2026-05-05  
 **Repo:** https://github.com/roygurijala/stocvest  
 **Test baseline (regression gate — must match §13):** Backend `pytest tests/ -q` → **678 passed**, **3 skipped**. Frontend `npm run test` → **65 passed** (19 test files). **`npm run build`** last verified: success.
