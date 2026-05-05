@@ -1,6 +1,7 @@
 "use client";
 
 import type { MarketOverview, MarketStatusPayload, SnapshotPayload } from "@/lib/api/market";
+import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { getEtClock } from "@/lib/market-hours-et";
@@ -16,6 +17,67 @@ const INDEX_META: Record<(typeof STAT_SYMBOLS)[number], { cap: string }> = {
   QQQ: { cap: "Tech / growth" },
   IWM: { cap: "Small cap" }
 };
+
+/** #rrggbb → rgba(r,g,b,a) for theme-aware borders/fills */
+function withAlpha(hex: string, a: number): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+export type IndexSentimentStyle = {
+  text: string;
+  border: string;
+  background: string;
+  label: string;
+  dot: string;
+};
+
+function sentimentTierLabel(score: number): "Bullish" | "Bearish" | "Neutral" {
+  if (score >= 65) return "Bullish";
+  if (score <= 35) return "Bearish";
+  return "Neutral";
+}
+
+/** Green / amber / red bands for index sub-scores and headline gauge (uses theme tokens). */
+export function getSentimentStyle(score: number, colors: ThemeColors): IndexSentimentStyle {
+  const label = sentimentTierLabel(score);
+  if (label === "Bullish") {
+    return {
+      text: colors.bullish,
+      border: withAlpha(colors.bullish, 0.25),
+      background: withAlpha(colors.bullish, 0.06),
+      label,
+      dot: colors.bullish
+    };
+  }
+  if (label === "Bearish") {
+    return {
+      text: colors.bearish,
+      border: withAlpha(colors.bearish, 0.25),
+      background: withAlpha(colors.bearish, 0.06),
+      label,
+      dot: colors.bearish
+    };
+  }
+  return {
+    text: colors.caution,
+    border: withAlpha(colors.caution, 0.25),
+    background: withAlpha(colors.caution, 0.08),
+    label,
+    dot: colors.caution
+  };
+}
+
+export function getChangeColor(pct: number, colors: ThemeColors): string {
+  if (pct > 0.1) return colors.bullish;
+  if (pct < -0.1) return colors.bearish;
+  return colors.textMuted;
+}
 
 function computeSnapshotChange(snapshot: SnapshotPayload): { percent: number } {
   const last = snapshot.last_trade_price ?? null;
@@ -41,32 +103,6 @@ function scoreFromOpen(snapshot: SnapshotPayload): number | null {
   if (typeof open !== "number" || typeof prev !== "number" || prev === 0) return null;
   const pct = ((open - prev) / prev) * 100;
   return scoreFromChangePercent(pct);
-}
-
-function mainReading(score: number): { label: string; color: string } {
-  if (score <= 25) return { label: "Extreme Fear", color: "#ff3d5a" };
-  if (score <= 45) return { label: "Fear", color: "#ff8c42" };
-  if (score <= 60) return { label: "Neutral", color: "#f5c542" };
-  if (score <= 80) return { label: "Greed", color: "#00e87a" };
-  return { label: "Extreme Greed", color: "#00b4d8" };
-}
-
-function componentReading(score: number): "bullish" | "neutral" | "weak" {
-  if (score >= 60) return "bullish";
-  if (score >= 45) return "neutral";
-  return "weak";
-}
-
-function borderAccentForScore(score: number): string {
-  if (score >= 60) return "rgba(0,232,122,0.4)";
-  if (score >= 45) return "rgba(245,197,66,0.4)";
-  return "rgba(255,61,90,0.4)";
-}
-
-function barFillForScore(score: number): string {
-  if (score >= 60) return "#00e87a";
-  if (score >= 45) return "#f5c542";
-  return "#ff3d5a";
 }
 
 function marketSessionBadge(status: MarketStatusPayload | undefined): { label: string; tone: "open" | "pre" | "after" } {
@@ -179,7 +215,7 @@ export function buildMarketSentimentModel(overview: MarketOverview): MarketSenti
 
   const avgPct = components.reduce((a, c) => a + c.change_pct, 0) / components.length;
   const sentiment_score = Math.max(0, Math.min(100, Math.round(50 + avgPct * 10)));
-  const sentiment_label = mainReading(sentiment_score).label;
+  const sentiment_label = sentimentTierLabel(sentiment_score);
 
   const deltas: number[] = [];
   for (const c of components) {
@@ -251,7 +287,7 @@ export function MarketSentimentScoreWidget({ marketOverview }: Props) {
     );
   }
 
-  const reading = mainReading(model.sentiment_score);
+  const mainStyle = getSentimentStyle(model.sentiment_score, colors);
   const badgeBg =
     model.session_badge.tone === "open"
       ? "rgba(34,197,94,0.2)"
@@ -261,8 +297,9 @@ export function MarketSentimentScoreWidget({ marketOverview }: Props) {
   const badgeFg =
     model.session_badge.tone === "open" ? colors.bullish : model.session_badge.tone === "pre" ? colors.caution : colors.textMuted;
 
-  const changeColor =
-    model.change_from_open != null ? (model.change_from_open > 0 ? "#00e87a" : model.change_from_open < 0 ? "#ff3d5a" : colors.textMuted) : colors.textMuted;
+  const fromOpen = model.change_from_open;
+  const fromOpenColor =
+    fromOpen == null ? colors.textMuted : fromOpen < 0 ? colors.bearish : fromOpen > 0 ? colors.bullish : colors.textMuted;
 
   const blurb = narrativeBlurb(
     model.components.find((c) => c.symbol === "SPY")?.score ?? 50,
@@ -326,25 +363,41 @@ export function MarketSentimentScoreWidget({ marketOverview }: Props) {
         <div style={{ minWidth: 100, flex: "0 0 auto" }}>
           <div
             style={{
-              fontSize: 56,
-              fontWeight: 600,
+              fontSize: "3.5rem",
+              fontWeight: 800,
               letterSpacing: -2,
               lineHeight: 1,
-              color: colors.text
+              color: mainStyle.text
             }}
           >
             {model.sentiment_score}
           </div>
-          <div style={{ marginTop: 6, fontSize: 10, textTransform: "uppercase", letterSpacing: 1, color: reading.color, fontWeight: 600 }}>
-            {reading.label}
-          </div>
-          {model.change_from_open != null ? (
-            <div style={{ marginTop: 8, fontSize: 10, color: "var(--color-text-muted)" }}>
-              <span style={{ color: changeColor, fontWeight: 600 }}>
-                {model.change_from_open > 0 ? "+" : ""}
-                {model.change_from_open} from open
-              </span>
-            </div>
+          <span
+            style={{
+              color: mainStyle.text,
+              fontSize: "0.9rem",
+              fontWeight: 700,
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+              marginTop: 4,
+              display: "block"
+            }}
+          >
+            {mainStyle.label}
+          </span>
+          {fromOpen != null ? (
+            <span
+              style={{
+                color: fromOpenColor,
+                fontSize: "0.8rem",
+                fontWeight: 600,
+                marginTop: 4,
+                display: "block"
+              }}
+            >
+              {fromOpen > 0 ? "+" : ""}
+              {fromOpen} from open
+            </span>
           ) : null}
         </div>
 
@@ -433,27 +486,34 @@ export function MarketSentimentScoreWidget({ marketOverview }: Props) {
 
       <div style={{ height: 0.5, background: "var(--color-border-tertiary)" }} />
 
-      {/* Section 3 */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+      {/* Section 3 — index cards */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+          gap: 10
+        }}
+      >
         {model.components.map((c) => {
           const meta = INDEX_META[c.symbol as keyof typeof INDEX_META];
-          const word = componentReading(c.score);
+          const style = getSentimentStyle(c.score, colors);
           const path = sparklinePath(sparkBy[c.symbol] ?? []);
           const trend = sparklineTrend(c.score, sparkBy[c.symbol] ?? []);
           const stroke =
             trend === "up" ? "rgba(0,232,122,0.9)" : trend === "down" ? "rgba(255,61,90,0.9)" : "rgba(148,163,184,0.8)";
           const pctStr = `${c.change_pct >= 0 ? "+" : ""}${c.change_pct.toFixed(2)}%`;
-          const pctColor = c.change_pct > 0 ? colors.bullish : c.change_pct < 0 ? colors.bearish : colors.textMuted;
+          const lp = c.last_price;
+          const priceLabel = typeof lp === "number" && Number.isFinite(lp) ? `$${lp.toFixed(2)}` : "—";
           return (
             <div
               key={c.symbol}
               style={{
                 position: "relative",
-                background: "var(--color-surface)",
                 border: "0.5px solid var(--color-border-tertiary)",
-                borderRadius: 8,
-                padding: "12px 14px",
-                borderLeft: `2px solid ${borderAccentForScore(c.score)}`,
+                borderRadius: borderRadius.lg,
+                padding: 12,
+                borderLeft: `3px solid ${style.text}`,
+                backgroundColor: style.background,
                 overflow: "hidden",
                 minWidth: 0
               }}
@@ -469,34 +529,82 @@ export function MarketSentimentScoreWidget({ marketOverview }: Props) {
                   <path d={path} fill="none" stroke={stroke} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
                 </svg>
               ) : null}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 6 }}>
-                <strong style={{ fontSize: 13, color: colors.text }}>{c.symbol}</strong>
-                <span style={{ fontSize: 11, color: "var(--color-text-muted)" }}>{c.score}</span>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
+                <span className="font-semibold" style={{ fontSize: 13, color: colors.text }}>
+                  {c.symbol}
+                </span>
+                <span
+                  style={{
+                    color: style.text,
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: "50%",
+                      backgroundColor: style.dot,
+                      display: "inline-block",
+                      flexShrink: 0
+                    }}
+                  />
+                  {style.label}
+                </span>
               </div>
-              <div style={{ marginTop: 2, fontSize: 12, fontWeight: 600, color: colors.text, letterSpacing: "-0.02em" }}>
-                {formatLastPrice(c.last_price)}
-              </div>
-              <div style={{ marginTop: 4, fontSize: 16, fontWeight: 600, color: pctColor }}>{pctStr}</div>
               <div
                 style={{
-                  marginTop: 8,
-                  height: 2,
-                  borderRadius: 1,
-                  background: "rgba(100,116,139,0.25)"
+                  display: "flex",
+                  alignItems: "baseline",
+                  gap: 8,
+                  marginTop: 6,
+                  flexWrap: "wrap"
                 }}
               >
-                <div
+                <span
                   style={{
-                    width: `${c.score}%`,
-                    height: "100%",
-                    borderRadius: 1,
-                    background: barFillForScore(c.score)
+                    color: colors.text,
+                    fontSize: "1.1rem",
+                    fontWeight: 700,
+                    fontVariantNumeric: "tabular-nums"
                   }}
-                />
+                >
+                  {priceLabel}
+                </span>
+                <span
+                  style={{
+                    color: getChangeColor(c.change_pct, colors),
+                    fontSize: "0.85rem",
+                    fontWeight: 600,
+                    fontVariantNumeric: "tabular-nums"
+                  }}
+                >
+                  {pctStr}
+                </span>
               </div>
-              <div style={{ marginTop: 6, fontSize: 9, color: "var(--color-text-tertiary)" }}>
-                {meta.cap} · {word}
-              </div>
+              <p
+                style={{
+                  color: colors.textMuted,
+                  fontSize: "0.75rem",
+                  marginTop: 4,
+                  marginBottom: 0
+                }}
+              >
+                {meta.cap}
+              </p>
+              <div
+                style={{
+                  height: 2,
+                  background: style.text,
+                  opacity: 0.5,
+                  borderRadius: 1,
+                  marginTop: 10
+                }}
+              />
             </div>
           );
         })}
@@ -505,7 +613,7 @@ export function MarketSentimentScoreWidget({ marketOverview }: Props) {
       {/* Section 4 */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
         <div style={{ flex: "1 1 200px", minWidth: 0, fontSize: 11, lineHeight: 1.45 }}>
-          <p style={{ margin: 0, fontWeight: 700, color: colors.text }}>{model.interpretation.line1}</p>
+          <p style={{ margin: 0, fontWeight: 800, color: mainStyle.text }}>{model.interpretation.line1}</p>
           <p style={{ margin: "6px 0 0", fontWeight: 400, color: "var(--color-text-muted)" }}>{model.interpretation.line2}</p>
         </div>
         <div style={{ flexShrink: 0, textAlign: "right" }}>
