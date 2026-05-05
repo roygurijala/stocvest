@@ -51,6 +51,8 @@ def parse_article(item: dict[str, Any]) -> NewsArticle:
         keywords=[str(x) for x in item.get("keywords", [])],
         sentiment=sentiment,
         sentiment_score=float(item["sentiment_score"]) if item.get("sentiment_score") is not None else None,
+        company_name=str(item["company_name"]) if item.get("company_name") else None,
+        categories=[str(x) for x in item.get("categories", [])],
     )
 
 

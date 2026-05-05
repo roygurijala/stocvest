@@ -25,6 +25,7 @@ locals {
     "pdt",
     "authorizer",
     "websocket",
+    "news_consumer",
   ])
 
   lambda_common_env = {
@@ -224,7 +225,7 @@ resource "aws_lambda_function" "api" {
   role          = aws_iam_role.lambda_api_execution.arn
   handler       = "handler.lambda_handler"
   runtime       = "python3.11"
-  timeout       = each.key == "scanner" ? 120 : each.key == "signal_resolution" ? 120 : 60
+  timeout       = each.key == "scanner" ? 120 : each.key == "signal_resolution" ? 120 : each.key == "news_consumer" ? 120 : 60
   memory_size   = 512
 
   filename         = data.archive_file.api_lambda_placeholder.output_path
@@ -243,6 +244,9 @@ resource "aws_lambda_function" "api" {
       },
       each.key == "scanner" ? {
         STOCVEST_WS_MANAGEMENT_API_URL = local.websocket_management_api_url
+      } : {},
+      each.key == "news_consumer" ? {
+        STOCVEST_DISABLE_REDIS = "0"
       } : {},
     )
   }

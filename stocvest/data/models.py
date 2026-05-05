@@ -142,6 +142,9 @@ class NewsArticle(BaseModel):
     source:      Optional[str] = None
     tickers:     list[str] = Field(default_factory=list)
     keywords:    list[str] = Field(default_factory=list)
+    # Optional enrichment (ingestion / triage / multi-source)
+    company_name: Optional[str] = None
+    categories: list[str] = Field(default_factory=list)
     # sentiment is filled in by our Claude-based scorer (Phase 2), not Polygon
     sentiment:   Optional[Newssentiment] = None
     sentiment_score: Optional[float] = None  # -1.0 to +1.0

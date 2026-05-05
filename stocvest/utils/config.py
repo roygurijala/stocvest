@@ -9,7 +9,10 @@ Never hardcodes credentials. Never logs sensitive values.
 from __future__ import annotations
 
 from functools import lru_cache
+import json
+import os
 
+import boto3
 from dotenv import load_dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings  # pydantic v2
@@ -20,6 +23,15 @@ load_dotenv()  # no-op in Lambda; harmless locally
 class Settings(BaseSettings):
     # ── Polygon ──────────────────────────────────────────────────
     polygon_api_key: str = Field(..., alias="POLYGON_API_KEY")
+    benzinga_api_key: str = Field("", alias="BENZINGA_API_KEY")
+    benzinga_news_ws_url: str = Field(
+        "wss://api.benzinga.com/api/v1/news/stream",
+        alias="BENZINGA_NEWS_WS_URL",
+    )
+    stocvest_external_api_keys_secret: str = Field(
+        "stocvest/external-api-keys",
+        alias="STOCVEST_EXTERNAL_API_KEYS_SECRET",
+    )
 
     # ── AWS ──────────────────────────────────────────────────────
     aws_region: str = Field("us-east-1", alias="AWS_REGION")
@@ -83,6 +95,25 @@ class Settings(BaseSettings):
     scanner_symbols: str = Field("AAPL,MSFT,NVDA", alias="STOCVEST_SCANNER_SYMBOLS")
     websocket_management_api_url: str = Field("", alias="STOCVEST_WS_MANAGEMENT_API_URL")
 
+    # ── News worker + triage pipeline (ECS worker → SQS → Lambda) ─
+    stocvest_news_triage_queue_url: str = Field("", alias="STOCVEST_NEWS_TRIAGE_QUEUE_URL")
+    stocvest_active_signal_tickers_key: str = Field(
+        "stocvest:active_signal_tickers",
+        alias="STOCVEST_ACTIVE_SIGNAL_TICKERS_KEY",
+    )
+    stocvest_news_scored_redis_list_key: str = Field(
+        "stocvest:news_scored",
+        alias="STOCVEST_NEWS_SCORED_REDIS_LIST_KEY",
+    )
+    stocvest_news_worker_cloudwatch_namespace: str = Field(
+        "Stocvest/NewsWorker",
+        alias="STOCVEST_NEWS_WORKER_CLOUDWATCH_NAMESPACE",
+    )
+    stocvest_news_worker_heartbeat_key: str = Field(
+        "stocvest:news_worker:heartbeat",
+        alias="STOCVEST_NEWS_WORKER_HEARTBEAT_KEY",
+    )
+
     model_config = {"populate_by_name": True}
 
     @property
@@ -97,4 +128,25 @@ class Settings(BaseSettings):
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """Return cached Settings instance. Call this everywhere instead of reading env directly."""
-    return Settings()
+    settings = Settings()
+    if settings.benzinga_api_key:
+        return settings
+    if not os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+        return settings
+    secret_name = settings.stocvest_external_api_keys_secret.strip()
+    if not secret_name:
+        return settings
+    try:
+        client = boto3.client("secretsmanager", region_name=settings.aws_region)
+        resp = client.get_secret_value(SecretId=secret_name)
+        payload = json.loads(str(resp.get("SecretString") or "{}"))
+        if not settings.benzinga_api_key:
+            settings.benzinga_api_key = str(
+                payload.get("BENZINGA_API_KEY")
+                or payload.get("benzinga_api_key")
+                or ""
+            ).strip()
+    except Exception:
+        # Best-effort fallback for local dev / non-AWS contexts.
+        pass
+    return settings

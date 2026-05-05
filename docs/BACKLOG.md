@@ -4,7 +4,7 @@
 `CONTEXT.md` holds **status-at-a-glance**, **what’s implemented**, **near-term ops** (Terraform, secrets, CI, legal), **legal rules**, and **session rules**.  
 **This file** holds **planned work only**: themes, sub-items, and notes—**without** repeating the CONTEXT status table or §3 pending list.
 
-**Last updated:** 2026-05-05 (swing composite Phase 1 + Market Intelligence / PDT)
+**Last updated:** 2026-05-05 (news ingestion pipeline + Terraform queue/consumer apply)
 
 ---
 
@@ -57,6 +57,7 @@ Tracked in **`CONTEXT.md` §3** only (Terraform apply, GitHub/AWS/Vercel secrets
 | D4 | **Audit trail** | Not done | Immutable order/PDT/admin logs to durable storage (e.g. S3 Glacier-class); retention policy to align with counsel. |
 | D5 | **Anonymized behavioral data policy** | Not done | Operationalize user deletion → anonymize behavioral rows; document in Privacy; engineering checklist only—**no** duplicate of legal disclaimers in `CONTEXT.md` §4. |
 | D6 | **Dynamic per-layer reasoning in swing composite** | Done 2026-05-04 | Added backend per-layer `reasoning` generation in `swing_composite_handler` contributions and wired frontend layer breakdown to consume dynamic reasoning when present instead of static generic text. |
+| D7 | **Multi-source news ingestion (Benzinga + SEC EDGAR)** | Done 2026-05-05 · commit: pending | **Combined pipeline shipped:** `stocvest/data/edgar_client.py` polls SEC 8-K Atom feed with SEC-compliant User-Agent, resolves CIK→ticker via cached `company_tickers.json`, and maps filings into canonical `NewsArticle`; `stocvest/data/news_triage.py` performs fast keyword/category/watchlist/duplicate filtering before Claude; `stocvest/data/polygon_client.py` now includes `BenzingaNewsStream`; `stocvest/workers/news_worker.py` runs Benzinga + EDGAR together as one long-running ECS process; `stocvest/workers/news_consumer_lambda.py` consumes `stocvest-news-triage-queue`, scores via Claude, and best-effort stores scored rows in Redis. **Infra:** `infra/news_pipeline.tf`, `infra/ecs_news_worker.tf`, `infra/lambda_6e.tf`, `stocvest/api/lambda_dispatch.py`, Docker entrypoint under `docker/news_worker/Dockerfile`. **Acceptance:** one worker process, EDGAR bypasses triage, Benzinga passes triage, SQS decouples ingestion from scoring. |
 
 ---
 

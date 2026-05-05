@@ -46,6 +46,18 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
     if not module:
         return apply_cors_to_http_proxy_response(not_found("STOCVEST_LAMBDA_MODULE is not set."), event)
 
+    records = event.get("Records") if isinstance(event, dict) else None
+    if (
+        module == "news_consumer"
+        and isinstance(records, list)
+        and records
+        and isinstance(records[0], dict)
+        and str(records[0].get("eventSource") or "").startswith("aws:sqs")
+    ):
+        from stocvest.workers.news_consumer_lambda import sqs_lambda_handler
+
+        return sqs_lambda_handler(event, context)
+
     if module == "health":
         from stocvest.api.handlers.health import handler as h
 

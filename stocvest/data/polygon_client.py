@@ -25,8 +25,11 @@ Rate limits:
 from __future__ import annotations
 
 import asyncio
+import re
 from datetime import date, datetime, timedelta, timezone
-from typing import Awaitable, Callable, Optional
+from email.utils import parsedate_to_datetime
+from typing import Awaitable, Callable, Optional, Union
+from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -54,6 +57,7 @@ log = get_logger(__name__)
 
 _POLYGON_REST_BASE = "https://api.polygon.io"
 _POLYGON_WS_BASE   = "wss://socket.polygon.io"
+_BENZINGA_NEWS_WS_BASE = "wss://api.benzinga.com/api/v1/news/stream"
 _US_EASTERN = ZoneInfo("America/New_York")
 
 # Polygon occasionally returns a `day` OHLC/VWAP block on a different price scale than
@@ -116,13 +120,26 @@ class PolygonClient:
     def __init__(
         self,
         api_key: str,
+        benzinga_api_key: str | None = None,
+        benzinga_news_ws_url: str = _BENZINGA_NEWS_WS_BASE,
         timeout: float = 30.0,
         max_retries: int = 3,
         retry_backoff_seconds: float = 0.5,
     ) -> None:
         if not api_key:
             raise ValueError("POLYGON_API_KEY is required")
+        if benzinga_api_key is None:
+            try:
+                from stocvest.utils.config import get_settings
+
+                cfg = get_settings()
+                benzinga_api_key = cfg.benzinga_api_key
+                benzinga_news_ws_url = cfg.benzinga_news_ws_url or benzinga_news_ws_url
+            except Exception:
+                benzinga_api_key = ""
         self._api_key = api_key
+        self._benzinga_api_key = (benzinga_api_key or "").strip()
+        self._benzinga_news_ws_url = str(benzinga_news_ws_url or _BENZINGA_NEWS_WS_BASE).strip() or _BENZINGA_NEWS_WS_BASE
         self._timeout = timeout
         self._max_retries = max_retries
         self._retry_backoff_seconds = retry_backoff_seconds
@@ -541,7 +558,16 @@ class PolygonClient:
         order: str = "desc",
         published_utc_gte: datetime | None = None,
     ) -> list[dict]:
-        """Fetch raw Polygon market news rows with optional multi-ticker filter."""
+        """Fetch raw market news rows with optional multi-ticker filter.
+
+        Uses Benzinga websocket replay when configured; falls back to Polygon REST.
+        """
+        if self._benzinga_api_key:
+            return await self._get_benzinga_market_news(
+                tickers=tickers,
+                limit=limit,
+                published_utc_gte=published_utc_gte,
+            )
         params: dict[str, str] = {"limit": str(limit), "order": order}
         if tickers:
             clean = [str(t).strip().upper() for t in tickers if str(t).strip()]
@@ -562,6 +588,110 @@ class PolygonClient:
                 if len(rows_out) >= limit:
                     break
                 if isinstance(row, dict):
+                    row.setdefault("source", "polygon")
+                    rows_out.append(row)
+            next_url = data.get("next_url") if isinstance(data, dict) else None
+            if not next_url:
+                break
+            path, params = self._extract_path_and_params(next_url)
+            if page_count >= 20:
+                break
+        return rows_out
+
+    async def _get_benzinga_market_news(
+        self,
+        *,
+        tickers: list[str] | None = None,
+        limit: int = 50,
+        published_utc_gte: datetime | None = None,
+    ) -> list[dict]:
+        clean = [str(t).strip().upper() for t in (tickers or []) if str(t).strip()]
+        query = {"token": self._benzinga_api_key}
+        if clean:
+            query["tickers"] = ",".join(clean)
+        ws_url = f"{self._benzinga_news_ws_url}?{urlencode(query)}"
+        out: list[dict] = []
+        seen_ids: set[str] = set()
+        deadline = asyncio.get_running_loop().time() + 3.0
+        try:
+            async with websockets.connect(
+                ws_url,
+                ping_interval=30,
+                ping_timeout=20,
+                close_timeout=2,
+            ) as ws:
+                await ws.send("replay")
+                while len(out) < max(10, int(limit)):
+                    remaining = deadline - asyncio.get_running_loop().time()
+                    if remaining <= 0:
+                        break
+                    try:
+                        raw = await asyncio.wait_for(ws.recv(), timeout=min(1.0, remaining))
+                    except TimeoutError:
+                        break
+                    except websockets.ConnectionClosed:
+                        break
+                    try:
+                        payload = json.loads(raw)
+                    except json.JSONDecodeError:
+                        continue
+                    messages = payload if isinstance(payload, list) else [payload]
+                    for msg in messages:
+                        row = PolygonClient._parse_benzinga_ws_news_row(msg)
+                        if row is None:
+                            continue
+                        aid = str(row.get("id") or "").strip()
+                        if aid and aid in seen_ids:
+                            continue
+                        if aid:
+                            seen_ids.add(aid)
+                        if published_utc_gte is not None:
+                            ts = self._parse_news_datetime(str(row.get("published_utc") or ""))
+                            if ts is None or ts < published_utc_gte.astimezone(timezone.utc):
+                                continue
+                        out.append(row)
+                        if len(out) >= max(10, int(limit)):
+                            break
+        except Exception as exc:
+            log.warning("Benzinga websocket news fetch failed, using Polygon fallback: %s", exc)
+            return await self.get_market_news_polygon_fallback(
+                tickers=tickers,
+                limit=limit,
+                published_utc_gte=published_utc_gte,
+            )
+        out.sort(key=lambda r: str(r.get("published_utc") or ""), reverse=True)
+        return out[: max(1, int(limit))]
+
+    async def get_market_news_polygon_fallback(
+        self,
+        *,
+        tickers: list[str] | None = None,
+        limit: int = 50,
+        order: str = "desc",
+        published_utc_gte: datetime | None = None,
+    ) -> list[dict]:
+        """Force Polygon REST news path (used as a fallback from Benzinga websocket)."""
+        params: dict[str, str] = {"limit": str(limit), "order": order}
+        if tickers:
+            clean = [str(t).strip().upper() for t in tickers if str(t).strip()]
+            if clean:
+                params["ticker.any_of"] = ",".join(clean)
+        if published_utc_gte is not None:
+            params["published_utc.gte"] = (
+                published_utc_gte.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+            )
+        rows_out: list[dict] = []
+        path = "/v2/reference/news"
+        page_count = 0
+        while len(rows_out) < limit:
+            data = await self._get(path, params)
+            page_count += 1
+            rows = data.get("results", []) if isinstance(data, dict) else []
+            for row in rows:
+                if len(rows_out) >= limit:
+                    break
+                if isinstance(row, dict):
+                    row.setdefault("source", "polygon")
                     rows_out.append(row)
             next_url = data.get("next_url") if isinstance(data, dict) else None
             if not next_url:
@@ -590,6 +720,9 @@ class PolygonClient:
                 image_url = str(img_raw).strip() if img_raw not in (None, "") else None
                 if image_url == "":
                     image_url = None
+                src = str(r.get("source") or "").strip()
+                if not src:
+                    src = str((r.get("publisher") or {}).get("name") or "").strip()
                 articles.append(
                     NewsArticle(
                         article_id=r.get("id", ""),
@@ -598,15 +731,122 @@ class PolygonClient:
                         description=r.get("description"),
                         image_url=image_url,
                         url=r.get("article_url", ""),
-                        source=r.get("publisher", {}).get("name"),
+                        source=src or None,
                         tickers=r.get("tickers", []),
                         keywords=r.get("keywords", []),
+                        company_name=r.get("company_name"),
+                        categories=list(r.get("categories") or []),
                     )
                 )
             except Exception as exc:
                 log.warning("Skipping malformed news article: %s", exc)
         log.debug("get_news(symbol=%s) → %d articles", symbol, len(articles))
         return articles
+
+    @staticmethod
+    def _parse_news_datetime(raw: str) -> datetime | None:
+        text = str(raw or "").strip()
+        if not text:
+            return None
+        try:
+            iso = text.replace("Z", "+00:00")
+            dt = datetime.fromisoformat(iso)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc)
+        except ValueError:
+            pass
+        try:
+            dt = parsedate_to_datetime(text)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _parse_benzinga_ws_news_row(msg: object) -> dict | None:
+        if not isinstance(msg, dict):
+            return None
+        if str(msg.get("kind") or "").strip().lower() != "news":
+            return None
+        data = msg.get("data")
+        if not isinstance(data, dict):
+            return None
+        action = str(data.get("action") or "").strip().lower()
+        if action not in {"created", "updated"}:
+            return None
+        content = data.get("content")
+        if not isinstance(content, dict):
+            return None
+        title = str(content.get("title") or "").strip()
+        if not title:
+            return None
+        article_id = content.get("id") or data.get("id")
+        pub_dt = (
+            PolygonClient._parse_news_datetime(str(data.get("timestamp") or ""))
+            or PolygonClient._parse_news_datetime(str(content.get("updated") or ""))
+            or PolygonClient._parse_news_datetime(str(content.get("created") or ""))
+            or datetime.now(timezone.utc)
+        )
+        pub_iso = pub_dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        stocks = content.get("stocks")
+        tickers: list[str] = []
+        if isinstance(stocks, list):
+            for row in stocks:
+                if not isinstance(row, dict):
+                    continue
+                sym = str(row.get("name") or "").strip().upper()
+                if sym and sym not in tickers:
+                    tickers.append(sym)
+        tags = content.get("tags")
+        keywords: list[str] = []
+        if isinstance(tags, list):
+            for tag in tags:
+                if not isinstance(tag, dict):
+                    continue
+                nm = str(tag.get("name") or "").strip()
+                if nm:
+                    keywords.append(nm)
+        image_url: str | None = None
+        images = content.get("image")
+        if isinstance(images, list) and images:
+            first = images[0]
+            if isinstance(first, dict):
+                raw_img = str(first.get("url") or "").strip()
+                if raw_img:
+                    image_url = raw_img
+        teaser = str(content.get("teaser") or "").strip()
+        body = str(content.get("body") or "").strip()
+        description = teaser or (body[:500] if body else None)
+        categories: list[str] = []
+        channels = content.get("channels")
+        if isinstance(channels, list):
+            for ch in channels:
+                if not isinstance(ch, dict):
+                    continue
+                nm = str(ch.get("name") or "").strip()
+                if not nm:
+                    continue
+                slug = nm.lower().replace("&", " and ").replace("'", "")
+                slug = re.sub(r"[^a-z0-9]+", "-", slug).strip("-")
+                if slug:
+                    categories.append(slug)
+        author = str(content.get("author") or "").strip()
+        return {
+            "id": str(article_id or ""),
+            "published_utc": pub_iso,
+            "title": title,
+            "description": description,
+            "article_url": str(content.get("url") or ""),
+            "image_url": image_url,
+            "tickers": tickers,
+            "keywords": keywords,
+            "publisher": {"name": "Benzinga"},
+            "source": "benzinga",
+            "categories": categories,
+            "company_name": author or None,
+        }
 
     # ──────────────────────────────────────────────────────────────────────────
     # REST — Options
@@ -1146,3 +1386,107 @@ class PolygonClient:
         if hour < 9 or (hour == 9 and minute < 30):
             return "before_market"
         return "during_market"
+
+
+def benzinga_market_dict_to_news_article(row: dict) -> NewsArticle | None:
+    """Normalize Benzinga websocket/REST-shaped dict to :class:`NewsArticle`."""
+    try:
+        pub = str(row.get("published_utc") or "").replace("Z", "+00:00")
+        img_raw = row.get("image_url")
+        image_url = str(img_raw).strip() if img_raw not in (None, "") else None
+        if image_url == "":
+            image_url = None
+        cats = row.get("categories")
+        if not isinstance(cats, list):
+            cats = []
+        return NewsArticle(
+            article_id=str(row.get("id") or ""),
+            published_at=datetime.fromisoformat(pub),
+            title=str(row.get("title") or ""),
+            description=row.get("description"),
+            image_url=image_url,
+            url=str(row.get("article_url") or ""),
+            source=str(row.get("source") or "benzinga"),
+            tickers=list(row.get("tickers") or []),
+            keywords=list(row.get("keywords") or []),
+            company_name=row.get("company_name"),
+            categories=[str(c) for c in cats if str(c).strip()],
+        )
+    except Exception as exc:
+        log.debug("benzinga_market_dict_to_news_article skip: %s", exc)
+        return None
+
+
+class BenzingaNewsStream:
+    """Long-running Benzinga news websocket (replay + live); reconnect with backoff."""
+
+    def __init__(
+        self,
+        token: str,
+        ws_base: str = _BENZINGA_NEWS_WS_BASE,
+        *,
+        stop_event: asyncio.Event | None = None,
+    ) -> None:
+        self._token = token.strip()
+        self._ws_base = ws_base.rstrip("/")
+        self._stop = stop_event or asyncio.Event()
+        self._backoff_seconds = 1.0
+
+    def stop(self) -> None:
+        self._stop.set()
+
+    async def run(self, on_article: Callable[[NewsArticle], Union[Awaitable[None], None]]) -> None:
+        if not self._token:
+            log.error("BenzingaNewsStream: missing API token")
+            return
+        query = urlencode({"token": self._token})
+        ws_url = f"{self._ws_base}?{query}"
+        while not self._stop.is_set():
+            try:
+                log.info("Benzinga websocket connecting")
+                async with websockets.connect(
+                    ws_url,
+                    ping_interval=20,
+                    ping_timeout=25,
+                    close_timeout=5,
+                ) as ws:
+                    await ws.send("replay")
+                    self._backoff_seconds = 1.0
+                    while not self._stop.is_set():
+                        try:
+                            raw = await asyncio.wait_for(ws.recv(), timeout=120.0)
+                        except TimeoutError:
+                            try:
+                                await ws.send("ping")
+                            except Exception:
+                                break
+                            continue
+                        try:
+                            payload = json.loads(raw)
+                        except json.JSONDecodeError:
+                            continue
+                        messages = payload if isinstance(payload, list) else [payload]
+                        for msg in messages:
+                            row = PolygonClient._parse_benzinga_ws_news_row(msg)
+                            if row is None:
+                                continue
+                            art = benzinga_market_dict_to_news_article(row)
+                            if art is None:
+                                continue
+                            out = on_article(art)
+                            if asyncio.iscoroutine(out):
+                                await out
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                log.warning(
+                    "Benzinga websocket error (%s); reconnecting in %.1fs",
+                    exc,
+                    min(self._backoff_seconds, 60.0),
+                )
+                try:
+                    await asyncio.wait_for(self._stop.wait(), timeout=min(self._backoff_seconds, 60.0))
+                    break
+                except TimeoutError:
+                    pass
+                self._backoff_seconds = min(self._backoff_seconds * 2, 60.0)
