@@ -282,7 +282,11 @@ export function MarketSentimentScoreWidget({ marketOverview }: Props) {
   if (!model) {
     return (
       <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.sm, fontFamily: MONO }}>
-        {marketOverview.error ? "Unable to load market snapshots." : "Not enough index data for sentiment."}
+        {marketOverview.error
+          ? marketOverview.error.includes("timed out")
+            ? "Market data timed out — try refreshing the page."
+            : marketOverview.error
+          : "Not enough index data for sentiment."}
       </p>
     );
   }

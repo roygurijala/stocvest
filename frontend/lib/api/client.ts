@@ -3,7 +3,8 @@ import { clearSessionTokenCookies } from "@/lib/auth/session-cookies";
 import { redirect } from "next/navigation";
 
 const DEFAULT_BASE_URL = "http://localhost:3001";
-const DEFAULT_API_TIMEOUT_MS = 8000;
+/** Cold VPC Lambdas + Polygon can exceed a few seconds; dashboard batches several calls. */
+const DEFAULT_API_TIMEOUT_MS = 25_000;
 
 export function apiBaseUrl(): string {
   return process.env.NEXT_PUBLIC_STOCVEST_API_BASE_URL || DEFAULT_BASE_URL;

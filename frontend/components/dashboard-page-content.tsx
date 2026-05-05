@@ -17,8 +17,9 @@ const DASHBOARD_SCANNER_TUNING = {
   daySetupsLimit: 6
 } as const;
 
-const DASHBOARD_MARKET_TIMEOUT_MS = 6000;
-const DASHBOARD_SCANNER_TIMEOUT_MS = 6000;
+/** VPC Lambdas + Secrets Manager cold start can exceed a few seconds; keep under typical serverless route budgets. */
+const DASHBOARD_MARKET_TIMEOUT_MS = 28_000;
+const DASHBOARD_SCANNER_TIMEOUT_MS = 28_000;
 const DASHBOARD_EARNINGS_TIMEOUT_MS = 5000;
 
 function timeoutFallback<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {

@@ -154,6 +154,26 @@ function relativeNewsTime(iso: string | null | undefined): string {
   return `${Math.floor(delta / 86400)}d ago`;
 }
 
+/** Relative time for catalyst headlines; "—" when timestamp missing or invalid. */
+export function catalystPublishedAgo(iso: string | null | undefined): string {
+  if (iso == null || String(iso).trim() === "") {
+    return "—";
+  }
+  const ts = Date.parse(String(iso));
+  if (!Number.isFinite(ts)) {
+    return "—";
+  }
+  const deltaSec = Math.floor((Date.now() - ts) / 1000);
+  if (deltaSec < 0) {
+    return "—";
+  }
+  const delta = Math.max(1, deltaSec);
+  if (delta < 60) return `${delta}s ago`;
+  if (delta < 3600) return `${Math.floor(delta / 60)}m ago`;
+  if (delta < 86400) return `${Math.floor(delta / 3600)}h ago`;
+  return `${Math.floor(delta / 86400)}d ago`;
+}
+
 /** First usable headline line for evidence chips (Polygon sometimes omits `title`). */
 function firstNewsSnippetForEvidence(articles: NewsPayload[]): string | undefined {
   for (const a of articles) {
@@ -531,6 +551,91 @@ function parseHistoricalZone(raw: unknown): { low: number; high: number } | null
   return { low, high };
 }
 
+type ParsedCatalystRow = {
+  text: string;
+  sentiment: string;
+  source?: string;
+  published_at?: string;
+  sentiment_score?: number;
+};
+
+function parseOneCatalystObject(o: Record<string, unknown>): ParsedCatalystRow | null {
+  const text = String(o.text ?? o.title ?? "").trim();
+  if (!text) return null;
+  const ss = numOrNull(o.sentiment_score);
+  const sent = String(o.sentiment ?? (ss != null ? (ss > 0 ? "positive" : ss < 0 ? "negative" : "neutral") : "neutral")).toLowerCase();
+  const sentiment = sent === "positive" || sent === "negative" || sent === "neutral" ? sent : "neutral";
+  const source = String(o.source ?? "").trim() || undefined;
+  const publishedRaw = o.published_at ?? o.published_utc;
+  const published_at = publishedRaw != null && String(publishedRaw).trim() !== "" ? String(publishedRaw).trim() : undefined;
+  return {
+    text: text.slice(0, 240),
+    sentiment,
+    source,
+    published_at,
+    sentiment_score: ss ?? undefined
+  };
+}
+
+function parseCatalystArray(raw: unknown, maxScan: number): ParsedCatalystRow[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ParsedCatalystRow[] = [];
+  for (const c of raw.slice(0, maxScan)) {
+    if (c && typeof c === "object") {
+      const p = parseOneCatalystObject(c as Record<string, unknown>);
+      if (p) out.push(p);
+    } else if (typeof c === "string" && c.trim()) {
+      out.push({ text: c.trim().slice(0, 240), sentiment: "neutral" });
+    }
+  }
+  return out;
+}
+
+function catalystDedupeKey(text: string): string {
+  return text.trim().toLowerCase().slice(0, 160);
+}
+
+function mergeCatalystRowParsed(a: ParsedCatalystRow, b: ParsedCatalystRow): ParsedCatalystRow {
+  const sentiment = b.sentiment !== "neutral" ? b.sentiment : a.sentiment;
+  const scoreA = a.sentiment_score;
+  const scoreB = b.sentiment_score;
+  return {
+    text: a.text || b.text,
+    sentiment,
+    source: a.source || b.source,
+    published_at: a.published_at || b.published_at,
+    sentiment_score: scoreA != null ? scoreA : scoreB
+  };
+}
+
+function mergeCatalystListsParsed(primary: ParsedCatalystRow[], secondary: ParsedCatalystRow[], limit: number): ParsedCatalystRow[] {
+  const map = new Map<string, ParsedCatalystRow>();
+  const keys: string[] = [];
+  const add = (row: ParsedCatalystRow) => {
+    const k = catalystDedupeKey(row.text);
+    if (!k) return;
+    const prev = map.get(k);
+    if (!prev) {
+      map.set(k, { ...row });
+      keys.push(k);
+    } else {
+      map.set(k, mergeCatalystRowParsed(prev, row));
+    }
+  };
+  for (const row of primary) add(row);
+  for (const row of secondary) add(row);
+  return keys.slice(0, limit).map((k) => map.get(k)!);
+}
+
+function catalystsFromCompositeBody(body: Record<string, unknown>): ParsedCatalystRow[] {
+  const fromHeadlines = parseCatalystArray(body.catalyst_headlines, 8);
+  const fromCatalysts = parseCatalystArray(body.catalysts, 8);
+  if (fromHeadlines.length > 0) {
+    return mergeCatalystListsParsed(fromHeadlines, fromCatalysts, 4);
+  }
+  return fromCatalysts.slice(0, 4);
+}
+
 /**
  * Parse swing-composite POST JSON into a structured insight. Returns null if core fields are missing.
  */
@@ -549,28 +654,7 @@ export function parseSwingCompositeInsight(body: Record<string, unknown>): Signa
   const market_regime = String(body.market_regime ?? "Neutral").trim() || "Neutral";
   const confirming_signals = mapConfluenceChipList(body.confirming_signals);
   const conflicting_signals = mapConfluenceChipList(body.conflicting_signals);
-  const catalystsRaw = body.catalysts;
-  const catalysts: Array<{ text: string; sentiment: string; source?: string; published_at?: string; sentiment_score?: number }> = [];
-  if (Array.isArray(catalystsRaw)) {
-    for (const c of catalystsRaw.slice(0, 4)) {
-      if (c && typeof c === "object") {
-        const o = c as Record<string, unknown>;
-        const text = String(o.text ?? o.title ?? "").trim();
-        if (text) {
-          const ss = numOrNull(o.sentiment_score);
-          const sent = String(o.sentiment ?? (ss != null ? (ss > 0 ? "positive" : ss < 0 ? "negative" : "neutral") : "neutral")).toLowerCase();
-          const sentiment = sent === "positive" || sent === "negative" || sent === "neutral" ? sent : "neutral";
-          catalysts.push({
-            text: text.slice(0, 240),
-            sentiment,
-            source: String(o.source ?? "").trim() || undefined,
-            published_at: String(o.published_at ?? "").trim() || undefined,
-            sentiment_score: ss ?? undefined
-          });
-        }
-      }
-    }
-  }
+  const catalysts = catalystsFromCompositeBody(body);
   const riskRaw = body.risk_factors;
   const riskDetailedRaw = body.risk_factors_detailed;
   const risk_factors_detailed: Array<{ label: string; severity: "high" | "medium" | "low"; detail: string }> = [];

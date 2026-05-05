@@ -214,6 +214,60 @@ describe("parseSwingCompositeInsight", () => {
     expect(insight?.risk_factors_detailed?.[0]?.severity).toBe("high");
   });
 
+  test("prefers catalyst_headlines when non-empty and preserves metadata", () => {
+    const insight = parseSwingCompositeInsight({
+      signal_score: 70,
+      risk_reward: 2.0,
+      market_regime: "Bullish",
+      catalysts: [],
+      catalyst_headlines: [
+        {
+          text: "Fed minutes spark rally",
+          source: "polygon",
+          published_at: "2026-01-10T15:00:00.000Z",
+          sentiment_score: 0.85,
+          sentiment: "positive"
+        }
+      ],
+      risk_factors: [],
+      signal_parameters: "x"
+    });
+    expect(insight?.catalysts).toHaveLength(1);
+    expect(insight?.catalysts[0]?.text).toContain("Fed minutes");
+    expect(insight?.catalysts[0]?.source).toBe("polygon");
+    expect(insight?.catalysts[0]?.published_at).toBe("2026-01-10T15:00:00.000Z");
+    expect(insight?.catalysts[0]?.sentiment).toBe("positive");
+    expect(insight?.catalysts[0]?.sentiment_score).toBe(0.85);
+  });
+
+  test("merges catalyst_headlines first then extra catalyst rows up to limit", () => {
+    const insight = parseSwingCompositeInsight({
+      signal_score: 70,
+      risk_reward: 2.0,
+      market_regime: "Neutral",
+      catalyst_headlines: [{ text: "Headline A", sentiment: "positive" }],
+      catalysts: [{ text: "Headline B", sentiment: "negative" }],
+      risk_factors: [],
+      signal_parameters: "x"
+    });
+    expect(insight?.catalysts).toHaveLength(2);
+    expect(insight?.catalysts[0]?.text).toBe("Headline A");
+    expect(insight?.catalysts[1]?.text).toBe("Headline B");
+  });
+
+  test("uses catalysts when catalyst_headlines is empty array", () => {
+    const insight = parseSwingCompositeInsight({
+      signal_score: 70,
+      risk_reward: 2.0,
+      market_regime: "Neutral",
+      catalysts: [{ text: "Earnings beat", sentiment: "positive" }],
+      catalyst_headlines: [],
+      risk_factors: [],
+      signal_parameters: "x"
+    });
+    expect(insight?.catalysts[0]?.text).toBe("Earnings beat");
+  });
+
   test("marks incomplete signal state from payload", () => {
     const insight = parseSwingCompositeInsight({
       signal_score: 55,

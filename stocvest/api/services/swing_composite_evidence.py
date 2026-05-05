@@ -8,6 +8,57 @@ from typing import Any
 from stocvest.signals.composite_score import CompositeSignal, CompositeVerdict
 
 
+def _float_or_none(v: Any) -> float | None:
+    if v is None:
+        return None
+    try:
+        x = float(v)
+    except (TypeError, ValueError):
+        return None
+    return x if math.isfinite(x) else None
+
+
+def _merge_catalyst_row(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
+    """Merge two catalyst dicts; prefer non-empty fields and stronger sentiment from b."""
+    out = dict(a)
+    for key in ("text", "sentiment", "source", "published_at", "sentiment_score"):
+        if key not in b:
+            continue
+        bv = b[key]
+        if bv is None or (isinstance(bv, str) and not str(bv).strip()):
+            continue
+        av = out.get(key)
+        if key == "sentiment":
+            ac = str(av or "neutral").lower()
+            bc = str(bv).lower()
+            if ac == "neutral" and bc in ("positive", "negative"):
+                out[key] = _sentiment_bucket(str(bv))
+            elif av in (None, ""):
+                out[key] = _sentiment_bucket(str(bv))
+        elif key == "sentiment_score":
+            if _float_or_none(bv) is not None and _float_or_none(av) is None:
+                out[key] = float(bv)
+        elif av in (None, ""):
+            out[key] = bv
+    return out
+
+
+def _dedupe_catalyst_rows_ordered(rows: list[dict[str, Any]], limit: int = 3) -> list[dict[str, Any]]:
+    by_key: dict[str, dict[str, Any]] = {}
+    order: list[str] = []
+    for r in rows:
+        t = str(r.get("text") or "").strip()
+        if not t:
+            continue
+        k = t.lower()[:160]
+        if k not in by_key:
+            by_key[k] = dict(r)
+            order.append(k)
+        else:
+            by_key[k] = _merge_catalyst_row(by_key[k], r)
+    return [by_key[k] for k in order[:limit]]
+
+
 def _snap_float(snap: dict[str, Any], key: str) -> float | None:
     raw = snap.get(key)
     if raw is None:
@@ -149,30 +200,46 @@ def build_swing_composite_evidence_fields(
     elif last is not None and last > 0:
         reference_stop_level = round(last * 0.98, 4)
 
-    catalysts: list[dict[str, str]] = []
+    catalyst_rows: list[dict[str, Any]] = []
+    extras = payload.get("catalyst_headlines")
+    if isinstance(extras, list):
+        for item in extras[:6]:
+            if isinstance(item, dict) and item.get("text"):
+                row: dict[str, Any] = {
+                    "text": str(item["text"]).strip()[:240],
+                    "sentiment": _sentiment_bucket(str(item.get("sentiment") or "neutral")),
+                }
+                src = str(item.get("source") or "").strip()
+                if src:
+                    row["source"] = src
+                pub = str(item.get("published_at") or item.get("published_utc") or "").strip()
+                if pub:
+                    row["published_at"] = pub
+                ss = _float_or_none(item.get("sentiment_score"))
+                if ss is not None:
+                    row["sentiment_score"] = ss
+                catalyst_rows.append(row)
+            elif isinstance(item, str) and item.strip():
+                catalyst_rows.append({"text": item.strip()[:240], "sentiment": "neutral"})
     nc = payload.get("news_catalyst")
     if isinstance(nc, dict):
         headline = nc.get("headline") or nc.get("title") or nc.get("text")
         if headline:
-            catalysts.append(
-                {
-                    "text": str(headline).strip()[:240],
-                    "sentiment": _sentiment_bucket(str(nc.get("sentiment") or "neutral")),
-                }
-            )
-    extras = payload.get("catalyst_headlines")
-    if isinstance(extras, list):
-        for item in extras[:3]:
-            if isinstance(item, dict) and item.get("text"):
-                catalysts.append(
-                    {
-                        "text": str(item["text"]).strip()[:240],
-                        "sentiment": _sentiment_bucket(str(item.get("sentiment") or "neutral")),
-                    }
-                )
-            elif isinstance(item, str) and item.strip():
-                catalysts.append({"text": item.strip()[:240], "sentiment": "neutral"})
-    catalysts = catalysts[:3]
+            row_nc: dict[str, Any] = {
+                "text": str(headline).strip()[:240],
+                "sentiment": _sentiment_bucket(str(nc.get("sentiment") or "neutral")),
+            }
+            src_nc = str(nc.get("source") or "").strip()
+            if src_nc:
+                row_nc["source"] = src_nc
+            pub_nc = str(nc.get("published_at") or nc.get("published_utc") or "").strip()
+            if pub_nc:
+                row_nc["published_at"] = pub_nc
+            ss_nc = _float_or_none(nc.get("sentiment_score"))
+            if ss_nc is not None:
+                row_nc["sentiment_score"] = ss_nc
+            catalyst_rows.append(row_nc)
+    catalysts = _dedupe_catalyst_rows_ordered(catalyst_rows, 3)
 
     risk_factors_detailed: list[dict[str, str]] = []
     geo_verdict = str(payload.get("geopolitical_verdict") or "").strip().lower()

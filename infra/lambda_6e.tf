@@ -29,11 +29,11 @@ locals {
   ])
 
   lambda_common_env = {
-    POLYGON_API_KEY        = var.polygon_api_key
-    ANTHROPIC_API_KEY      = var.anthropic_api_key
-    REDIS_URL              = "redis://${aws_elasticache_replication_group.redis.primary_endpoint_address}:${aws_elasticache_replication_group.redis.port}/0"
-    STOCVEST_DISABLE_REDIS = "1"
-    ECS_CLUSTER_ARN        = aws_ecs_cluster.development.arn
+    # API keys: loaded at cold start from Secrets Manager (see stocvest/utils/config.py).
+    STOCVEST_LAMBDA_RUNTIME_SECRET = aws_secretsmanager_secret.lambda_runtime.name
+    REDIS_URL                      = "redis://${aws_elasticache_replication_group.redis.primary_endpoint_address}:${aws_elasticache_replication_group.redis.port}/0"
+    STOCVEST_DISABLE_REDIS         = "1"
+    ECS_CLUSTER_ARN                = aws_ecs_cluster.development.arn
     # Do not set AWS_REGION — Lambda reserves it; runtime still exposes it to the handler.
     STOCVEST_ENV                      = "development"
     DYNAMODB_USERS_TABLE              = aws_dynamodb_table.users.name
@@ -50,7 +50,6 @@ locals {
     STOCVEST_PDT_STATE_TABLE          = aws_dynamodb_table.pdt_state.name
     STOCVEST_EMAIL_SENDER             = "signals@stocvest.app"
     STOCVEST_PUBLIC_APP_URL           = "https://stocvest.app"
-    STOCVEST_INTERNAL_ANALYSIS_KEY    = var.internal_analysis_key
   }
 
   lambda_dynamodb_resources = flatten([

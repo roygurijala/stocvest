@@ -264,7 +264,7 @@ export function DashboardRedesign({
                   style={{ background: colors.surface, borderRadius: borderRadius.lg, padding: spacing[4] }}
                 >
                   {scannerOverview.error ? (
-                    <p style={{ margin: 0, color: colors.textMuted }}>Unable to connect. Check your connection.</p>
+                    <p style={{ margin: 0, color: colors.textMuted }}>{scannerOverview.error}</p>
                   ) : (
                     <p style={{ margin: 0, color: colors.textMuted }}>
                       Intelligence engine is warming up. Check back at market open.
@@ -432,7 +432,7 @@ export function DashboardRedesign({
             <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
               {marketOverview.news.length === 0 ? (
                 marketOverview.error ? (
-                  <p style={{ color: colors.textMuted, margin: 0 }}>Unable to connect. Check your connection.</p>
+                  <p style={{ color: colors.textMuted, margin: 0 }}>{marketOverview.error}</p>
                 ) : (
                   <p style={{ color: colors.textMuted, margin: 0, textAlign: "center", fontSize: typography.scale.sm }}>
                     No major market-moving headlines in the last 4 hours.

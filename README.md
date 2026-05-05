@@ -76,6 +76,10 @@ Configure these in the GitHub repository (**Settings → Secrets and variables**
 
 The IAM principal behind `AWS_*` needs at least: `s3:PutObject` on `arn:aws:s3:::STOCVEST_LAMBDA_S3_BUCKET/lambda/*`, and `lambda:UpdateFunctionCode` (and `lambda:GetFunction`) on `arn:aws:lambda:REGION:ACCOUNT:function:stocvest-development-api-*`.
 
+### Lambda secrets (Terraform)
+
+API keys are **not** set on the Lambda environment. Terraform creates **`stocvest/lambda-runtime`** in Secrets Manager (JSON: `POLYGON_API_KEY`, `ANTHROPIC_API_KEY`, `STOCVEST_INTERNAL_ANALYSIS_KEY`) and sets **`STOCVEST_LAMBDA_RUNTIME_SECRET`** on each function to that secret’s name. `get_settings()` loads the JSON at cold start (`stocvest/utils/config.py`). Rotate keys with **`aws secretsmanager put-secret-value`** (or the console); if you manage secret values only outside Terraform, add `lifecycle { ignore_changes = [secret_string] }` to `aws_secretsmanager_secret_version.lambda_runtime` so `terraform apply` does not overwrite them.
+
 ## Project status (high level)
 
 **Source of truth:** [`docs/CONTEXT.md`](docs/CONTEXT.md) §1–§3 — shipped tracks, implemented areas, and near-term ops (Terraform apply, secrets, CI).

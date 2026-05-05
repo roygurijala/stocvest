@@ -53,3 +53,37 @@ def test_evidence_fields_neutral_regime_label() -> None:
     )
     assert fields["market_regime"] == "Neutral"
     assert fields["trend_strength"] == "Weak"
+
+
+def test_catalyst_headlines_preserve_source_and_scores() -> None:
+    comp = _composite(
+        [
+            LayerSignal(layer="technical", score=0.8, confidence=0.9),
+            LayerSignal(layer="news", score=0.6, confidence=0.85),
+            LayerSignal(layer="macro", score=0.5, confidence=0.8),
+        ],
+        "bull",
+    )
+    fields = build_swing_composite_evidence_fields(
+        composite=comp,
+        regime="bull",
+        payload={
+            "symbol": "SPY",
+            "catalyst_headlines": [
+                {
+                    "text": "Fed holds rates steady",
+                    "source": "polygon",
+                    "published_at": "2026-01-15T14:00:00.000Z",
+                    "sentiment_score": 0.72,
+                    "sentiment": "positive",
+                }
+            ],
+        },
+        confluence={"confirming_signals": [], "conflicting_signals": [], "n_confirming": 2, "n_conflicting": 0},
+        snapshot={"last_trade_price": 500.0, "day_low": 495.0, "day_high": 505.0, "day_vwap": 499.0},
+    )
+    cat = fields["catalysts"][0]
+    assert cat["text"].startswith("Fed holds")
+    assert cat.get("source") == "polygon"
+    assert cat.get("published_at") == "2026-01-15T14:00:00.000Z"
+    assert cat.get("sentiment_score") == 0.72

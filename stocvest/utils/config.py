@@ -2,7 +2,13 @@
 Centralised configuration loader.
 
 Reads from environment variables (populated by .env locally,
-or by AWS Secrets Manager / Lambda env vars in production).
+or by Lambda env + AWS Secrets Manager in production).
+
+In AWS Lambda, `STOCVEST_LAMBDA_RUNTIME_SECRET` names a JSON secret whose keys are
+merged into the process environment before Settings is built (Polygon, Anthropic,
+internal analysis key). Benzinga may still load from `stocvest/external-api-keys`
+when `BENZINGA_API_KEY` is unset.
+
 Never hardcodes credentials. Never logs sensitive values.
 """
 
@@ -18,6 +24,35 @@ from pydantic import Field
 from pydantic_settings import BaseSettings  # pydantic v2
 
 load_dotenv()  # no-op in Lambda; harmless locally
+
+
+def _apply_lambda_runtime_secret_to_environ() -> None:
+    """Merge stocvest/lambda-runtime JSON into os.environ (Lambda only)."""
+    if not os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+        return
+    secret_id = (os.environ.get("STOCVEST_LAMBDA_RUNTIME_SECRET") or "").strip()
+    if not secret_id:
+        return
+    region = (
+        os.environ.get("AWS_REGION")
+        or os.environ.get("AWS_DEFAULT_REGION")
+        or "us-east-1"
+    )
+    client = boto3.client("secretsmanager", region_name=region)
+    resp = client.get_secret_value(SecretId=secret_id)
+    raw = resp.get("SecretString")
+    if not raw:
+        return
+    payload = json.loads(str(raw))
+    if not isinstance(payload, dict):
+        return
+    for key, val in payload.items():
+        if val is None:
+            continue
+        s = str(val).strip()
+        if not s:
+            continue
+        os.environ[str(key)] = s
 
 
 class Settings(BaseSettings):
@@ -128,6 +163,7 @@ class Settings(BaseSettings):
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """Return cached Settings instance. Call this everywhere instead of reading env directly."""
+    _apply_lambda_runtime_secret_to_environ()
     settings = Settings()
     if settings.benzinga_api_key:
         return settings

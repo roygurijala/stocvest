@@ -58,19 +58,19 @@ variable "cognito_jwt_audience" {
 }
 
 variable "polygon_api_key" {
-  description = "Polygon API key injected into Lambda environment (set via terraform.tfvars or TF_VAR_polygon_api_key)."
+  description = "Polygon API key stored in Secrets Manager (stocvest/lambda-runtime) and loaded by Lambdas at runtime; set via terraform.tfvars or TF_VAR_polygon_api_key."
   type        = string
   sensitive   = true
 }
 
 variable "anthropic_api_key" {
-  description = "Anthropic API key injected into Lambda environment (set via terraform.tfvars or TF_VAR_anthropic_api_key)."
+  description = "Anthropic API key stored in Secrets Manager (stocvest/lambda-runtime); set via terraform.tfvars or TF_VAR_anthropic_api_key."
   type        = string
   sensitive   = true
 }
 
 variable "internal_analysis_key" {
-  description = "Key for internal signal analysis endpoint (X-Stocvest-Internal-Analysis header). Set via terraform.tfvars or TF_VAR_internal_analysis_key; never commit the real value."
+  description = "Internal signal analysis header key; stored in Secrets Manager (stocvest/lambda-runtime). Set via terraform.tfvars or TF_VAR_internal_analysis_key; never commit the real value."
   type        = string
   sensitive   = true
   default     = ""

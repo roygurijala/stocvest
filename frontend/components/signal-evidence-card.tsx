@@ -8,6 +8,7 @@ import { useTheme } from "@/lib/theme-provider";
 import { InfoTip } from "@/components/info-tip";
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import {
+  catalystPublishedAgo,
   deriveEvidenceInsightFallback,
   layerFreshnessFromIso,
   type EvidenceLayer,
@@ -105,6 +106,25 @@ function confluenceChips(evidence: SignalEvidenceData, insight: SignalEvidenceIn
   const no =
     evidence.confluence?.conflicting_signals?.length ? evidence.confluence.conflicting_signals : insight.conflicting_signals;
   return { yes, no };
+}
+
+const CATALYST_TITLE_MAX = 80;
+
+function truncateCatalystTitle(text: string): string {
+  const t = text.trim();
+  if (t.length <= CATALYST_TITLE_MAX) return t;
+  return `${t.slice(0, CATALYST_TITLE_MAX).trimEnd()}…`;
+}
+
+function formatCatalystSource(source: string | undefined): string {
+  const s = source?.trim();
+  if (!s) return "News";
+  return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+}
+
+function formatSentimentScore(score: number): string {
+  if (!Number.isFinite(score)) return "";
+  return score > 0 ? `+${score.toFixed(2)}` : score.toFixed(2);
 }
 
 export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
@@ -519,18 +539,69 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
             {insight.catalysts.length === 0 ? (
               <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted }}>No significant catalysts detected</p>
             ) : (
-              <ul style={{ margin: 0, paddingInlineStart: 0, listStyle: "none", display: "grid", gap: spacing[2] }}>
+              <ul style={{ margin: 0, paddingInlineStart: 0, listStyle: "none", display: "grid", gap: spacing[3] }}>
                 {insight.catalysts.slice(0, 3).map((c, i) => {
-                  const dot =
-                    c.sentiment === "positive"
-                      ? colors.bullish
-                      : c.sentiment === "negative"
-                        ? colors.bearish
-                        : colors.caution;
+                  const sent = c.sentiment.toLowerCase();
+                  const sentimentChip =
+                    sent === "positive"
+                      ? {
+                          label: "Bullish",
+                          fg: colors.bullish,
+                          bg: "rgba(34,197,94,0.12)",
+                          border: "1px solid rgba(34,197,94,0.45)"
+                        }
+                      : sent === "negative"
+                        ? {
+                            label: "Bearish",
+                            fg: colors.bearish,
+                            bg: "rgba(239,68,68,0.12)",
+                            border: "1px solid rgba(239,68,68,0.45)"
+                          }
+                        : {
+                            label: "Neutral",
+                            fg: colors.caution,
+                            bg: "rgba(245,158,11,0.1)",
+                            border: "1px solid rgba(245,158,11,0.35)"
+                          };
+                  const scoreStr =
+                    typeof c.sentiment_score === "number" && Number.isFinite(c.sentiment_score)
+                      ? formatSentimentScore(c.sentiment_score)
+                      : "";
                   return (
-                    <li key={`cat-${i}`} className="flex gap-2 text-sm" style={{ color: colors.text }}>
-                      <span style={{ marginTop: 6, width: 8, height: 8, borderRadius: "50%", background: dot, flexShrink: 0 }} />
-                      <span>{c.text.slice(0, 80)}</span>
+                    <li key={`cat-${i}`} style={{ display: "grid", gap: spacing[1] }}>
+                      <span className="text-sm leading-snug" style={{ color: colors.text, fontWeight: 600 }}>
+                        {truncateCatalystTitle(c.text)}
+                      </span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          style={{
+                            borderRadius: borderRadius.full,
+                            padding: "2px 8px",
+                            fontSize: typography.scale.xs,
+                            fontWeight: 600,
+                            border: `1px solid ${colors.border}`,
+                            background: "rgba(148,163,184,0.12)",
+                            color: colors.textMuted
+                          }}
+                        >
+                          {formatCatalystSource(c.source)}
+                        </span>
+                        <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>{catalystPublishedAgo(c.published_at)}</span>
+                        <span
+                          style={{
+                            borderRadius: borderRadius.full,
+                            padding: "2px 8px",
+                            fontSize: typography.scale.xs,
+                            fontWeight: 700,
+                            border: sentimentChip.border,
+                            background: sentimentChip.bg,
+                            color: sentimentChip.fg
+                          }}
+                        >
+                          {sentimentChip.label}
+                          {scoreStr ? ` ${scoreStr}` : ""}
+                        </span>
+                      </div>
                     </li>
                   );
                 })}

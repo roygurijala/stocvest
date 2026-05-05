@@ -6,7 +6,7 @@
 
 **Last updated:** 2026-05-05  
 **Repo:** https://github.com/roygurijala/stocvest  
-**Test baseline (regression gate — must match §13):** Backend `pytest tests/ -q` → **681 passed**, **3 skipped**. Frontend `npm run test` → **70 passed** (20 test files). **`npm run build`** last verified: success.
+**Test baseline (regression gate — must match §13):** Backend `pytest tests/ -q` → **683 passed**, **3 skipped**. Frontend `npm run test` → **73 passed** (20 test files). **`npm run build`** last verified: success.
 
 ---
 
@@ -241,8 +241,8 @@ Report exact counts. If any count dropped, fix before proceeding to documentatio
 
 | Suite | Command | Last verified |
 |-------|---------|---------------|
-| Backend | `pytest tests/ -q` | **681 passed**, **3 skipped** |
-| Frontend tests | `cd frontend && npm run test` | **70 passed** (20 test files) |
+| Backend | `pytest tests/ -q` | **683 passed**, **3 skipped** |
+| Frontend tests | `cd frontend && npm run test` | **73 passed** (20 test files) |
 | Frontend build | `cd frontend && npm run build` | **success** |
 
 ---

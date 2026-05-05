@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from unittest.mock import MagicMock, patch
+
 import pytest
 from pydantic import ValidationError
 
@@ -11,6 +14,33 @@ def clear_settings_cache() -> None:
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
+
+
+@pytest.mark.unit
+def test_lambda_runtime_secret_hydrates_env_in_lambda(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AWS_LAMBDA_FUNCTION_NAME", "stocvest-development-api-health")
+    monkeypatch.setenv("STOCVEST_LAMBDA_RUNTIME_SECRET", "stocvest/lambda-runtime")
+    monkeypatch.setenv("BENZINGA_API_KEY", "bz-test")
+    monkeypatch.delenv("POLYGON_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("STOCVEST_INTERNAL_ANALYSIS_KEY", raising=False)
+    fake = {
+        "POLYGON_API_KEY": "poly-from-sm",
+        "ANTHROPIC_API_KEY": "anth-from-sm",
+        "STOCVEST_INTERNAL_ANALYSIS_KEY": "internal-from-sm",
+    }
+    mock_sm = MagicMock()
+    mock_sm.get_secret_value.return_value = {"SecretString": json.dumps(fake)}
+    get_settings.cache_clear()
+    with patch("stocvest.utils.config.boto3.client", return_value=mock_sm):
+        s = get_settings()
+    assert s.polygon_api_key == "poly-from-sm"
+    assert s.anthropic_api_key == "anth-from-sm"
+    assert s.stocvest_internal_analysis_key == "internal-from-sm"
+    mock_sm.get_secret_value.assert_called_once()
+    get_settings.cache_clear()
+    for k in fake:
+        monkeypatch.delenv(k, raising=False)
 
 
 @pytest.mark.unit

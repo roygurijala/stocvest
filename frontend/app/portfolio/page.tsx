@@ -63,6 +63,10 @@ export default function ModelPortfolioPage() {
   const su = summary?.summary || {};
   const closedCount = num(su.closed_positions);
   const winRatePct = num(su.win_rate) * 100;
+  const winRateLabel =
+    closedCount <= 0
+      ? "0% (0 closed)"
+      : `${winRatePct.toFixed(0)}% (${num(su.winning_positions)}/${closedCount} closed)`;
   const totalRet = num(su.total_return_dollars);
   const totalRetPct = num(su.total_return_pct);
   const profitFactor = num(su.profit_factor);
@@ -112,7 +116,7 @@ export default function ModelPortfolioPage() {
         >
           {[
             { label: "Total return", value: `${fmtMoney(totalRet, true)} (${totalRetPct >= 0 ? "+" : ""}${totalRetPct.toFixed(1)}%)` },
-            { label: "Win rate", value: `${winRatePct.toFixed(0)}% (${num(su.winning_positions)}/${Math.max(1, closedCount)} closed)` },
+            { label: "Win rate", value: winRateLabel },
             { label: "Active signals", value: `${openSlots} / 10 slots` },
             { label: "Profit factor", value: profitFactor > 0 ? profitFactor.toFixed(2) : "—" }
           ].map((c) => (
@@ -257,21 +261,33 @@ export default function ModelPortfolioPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredClosed.map((r) => {
-                  const outcome = String(r.outcome || "").toLowerCase();
-                  const borderLeft =
-                    outcome === "profit" ? `3px solid ${colors.bullish}` : outcome === "loss" ? `3px solid ${colors.bearish}` : "3px solid transparent";
-                  return (
-                    <tr key={String(r.position_id)} style={{ borderLeft }}>
-                      <td style={{ padding: spacing[3] }}>{String(r.symbol)}</td>
-                      <td style={{ padding: spacing[3] }}>{fmtMoney(num(r.entry_price))}</td>
-                      <td style={{ padding: spacing[3] }}>{r.exit_price != null ? fmtMoney(num(r.exit_price)) : "—"}</td>
-                      <td style={{ padding: spacing[3] }}>{String(r.signal_score)}%</td>
-                      <td style={{ padding: spacing[3] }}>{r.outcome != null ? String(r.outcome) : "—"}</td>
-                      <td style={{ padding: spacing[3] }}>{r.exit_reason != null ? String(r.exit_reason) : "—"}</td>
-                    </tr>
-                  );
-                })}
+                {filteredClosed.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} style={{ padding: spacing[4], color: colors.textMuted }}>
+                      {closed.length === 0
+                        ? "No closed positions in the selected window yet."
+                        : filter === "profit"
+                          ? "No profitable closed positions match this filter."
+                          : "No unprofitable closed positions match this filter."}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredClosed.map((r) => {
+                    const outcome = String(r.outcome || "").toLowerCase();
+                    const borderLeft =
+                      outcome === "profit" ? `3px solid ${colors.bullish}` : outcome === "loss" ? `3px solid ${colors.bearish}` : "3px solid transparent";
+                    return (
+                      <tr key={String(r.position_id)} style={{ borderLeft }}>
+                        <td style={{ padding: spacing[3] }}>{String(r.symbol)}</td>
+                        <td style={{ padding: spacing[3] }}>{fmtMoney(num(r.entry_price))}</td>
+                        <td style={{ padding: spacing[3] }}>{r.exit_price != null ? fmtMoney(num(r.exit_price)) : "—"}</td>
+                        <td style={{ padding: spacing[3] }}>{String(r.signal_score)}%</td>
+                        <td style={{ padding: spacing[3] }}>{r.outcome != null ? String(r.outcome) : "—"}</td>
+                        <td style={{ padding: spacing[3] }}>{r.exit_reason != null ? String(r.exit_reason) : "—"}</td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
