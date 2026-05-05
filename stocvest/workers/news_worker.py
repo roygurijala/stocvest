@@ -54,7 +54,8 @@ class NewsWorker:
         attrs = {
             "source": {"DataType": "String", "StringValue": str(article.source or "unknown")},
             "priority": {"DataType": "String", "StringValue": priority},
-            "tickers": {"DataType": "String", "StringValue": tickers_csv[:1024]},
+            # SQS String attributes must be non-empty; use "-" when no ticker is present.
+            "tickers": {"DataType": "String", "StringValue": (tickers_csv[:1024] if tickers_csv else "-")},
         }
         sqs = self._get_sqs()
         last_exc: Exception | None = None

@@ -1426,14 +1426,26 @@ class BenzingaNewsStream:
         ws_base: str = _BENZINGA_NEWS_WS_BASE,
         *,
         stop_event: asyncio.Event | None = None,
+        max_auth_failures: int = 3,
     ) -> None:
         self._token = token.strip()
         self._ws_base = ws_base.rstrip("/")
         self._stop = stop_event or asyncio.Event()
         self._backoff_seconds = 1.0
+        self._max_auth_failures = max(1, int(max_auth_failures))
+        self._auth_failures = 0
 
     def stop(self) -> None:
         self._stop.set()
+
+    @staticmethod
+    def _is_auth_failure(exc: Exception) -> bool:
+        response = getattr(exc, "response", None)
+        status_code = getattr(response, "status_code", None)
+        if status_code == 401:
+            return True
+        text = str(exc).lower()
+        return "auth_failed" in text or "status_code=401" in text
 
     async def run(self, on_article: Callable[[NewsArticle], Union[Awaitable[None], None]]) -> None:
         if not self._token:
@@ -1479,6 +1491,18 @@ class BenzingaNewsStream:
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
+                if self._is_auth_failure(exc):
+                    self._auth_failures += 1
+                    if self._auth_failures >= self._max_auth_failures:
+                        log.error(
+                            "Benzinga websocket auth failed %d times; disabling Benzinga stream "
+                            "until worker restart or key update",
+                            self._auth_failures,
+                        )
+                        await self._stop.wait()
+                        break
+                else:
+                    self._auth_failures = 0
                 log.warning(
                     "Benzinga websocket error (%s); reconnecting in %.1fs",
                     exc,
