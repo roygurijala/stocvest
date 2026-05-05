@@ -20,7 +20,12 @@ import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/d
 import { useTheme } from "@/lib/theme-provider";
 import { useIsMobileLayout } from "@/lib/hooks/use-is-mobile-layout";
 import { coerceSnapshotForReferenceLevels, deriveSessionReferenceLevels } from "@/lib/snapshot-reference-levels";
-import { applySwingCompositeEnrichment, buildEvidenceFromSetup, type SignalEvidenceData } from "@/lib/signal-evidence";
+import {
+  applySwingCompositeEnrichment,
+  buildEvidenceFromSetup,
+  parseSwingCompositeInsight,
+  type SignalEvidenceData
+} from "@/lib/signal-evidence";
 import {
   fetchLiveSignals,
   fetchUserEvaluatedSignals,
@@ -285,6 +290,15 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
     }
     return Math.round(overall);
   }, [layerAgreementPercent, compositeResult, overall]);
+
+  /** Same 0–100 signal score as the evidence modal (API `signal_score` / strength / score map, not layer agreement). */
+  const aiStripSignalScore = useMemo(() => {
+    if (!compositeResult || isInsufficientCompositeResponse(compositeResult)) return null;
+    const insight = parseSwingCompositeInsight(compositeResult as Record<string, unknown>);
+    return insight?.signal_score ?? null;
+  }, [compositeResult]);
+
+  const aiStripBarPct = useMemo(() => aiStripSignalScore ?? aiStripAgreementPct, [aiStripSignalScore, aiStripAgreementPct]);
   const summaryTone =
     layerSignalSummary === "Bullish" ? colors.bullish : layerSignalSummary === "Bearish" ? colors.bearish : colors.caution;
   const setupDirectionForEvidence =
@@ -838,14 +852,36 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
           AI Signal Analysis
         </h3>
         <p style={{ margin: 0, fontStyle: "italic" }}>
-          “{symbol.toUpperCase()} currently shows a <strong style={{ color: summaryTone }}>{layerSignalSummary}</strong> profile with{" "}
-          {aiStripAgreementPct}% six-layer agreement (by weighted direction).”
+          “{symbol.toUpperCase()} currently shows a <strong style={{ color: summaryTone }}>{layerSignalSummary}</strong> profile
+          {aiStripSignalScore != null ? (
+            <>
+              {" "}
+              with signal score <strong style={{ color: summaryTone }}>{aiStripSignalScore}/100</strong>
+              {layerAgreementPercent != null ? (
+                <>
+                  {" "}
+                  and <strong>{layerAgreementPercent}%</strong> six-layer agreement (by weighted direction)
+                </>
+              ) : null}
+              .”
+            </>
+          ) : (
+            <>
+              {" "}
+              with <strong>{aiStripAgreementPct}%</strong> six-layer agreement (by weighted direction).”
+            </>
+          )}
         </p>
+        {aiStripSignalScore != null && layerAgreementPercent != null ? (
+          <p className="text-xs" style={{ margin: `${spacing[2]} 0 0 0`, color: colors.textMuted }}>
+            Bar width follows signal score (matches View Evidence), not the agreement %.
+          </p>
+        ) : null}
         <div style={{ marginTop: spacing[3], height: 10, background: colors.surfaceMuted, borderRadius: borderRadius.full }}>
           <div
             style={{
               height: "100%",
-              width: `${aiStripAgreementPct}%`,
+              width: `${aiStripBarPct}%`,
               borderRadius: borderRadius.full,
               background: summaryTone
             }}
