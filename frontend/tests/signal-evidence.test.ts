@@ -75,6 +75,33 @@ describe("buildEvidenceFromSetup news layer", () => {
   });
 });
 
+describe("buildEvidenceFromSetup layer key points", () => {
+  test("technical uses last / change / VWAP from snapshot when present", () => {
+    const data = buildEvidenceFromSetup(
+      baseSetup,
+      {
+        symbol: "AAPL",
+        last_trade_price: 100,
+        prev_close: 99,
+        day_vwap: 99.5,
+        day_low: 98.5,
+        day_high: 101
+      },
+      { symbolNewsArticles: [] }
+    );
+    const tech = data.layers.find((l) => l.key === "technical");
+    expect(tech?.keyPoints[0]).toContain("$100.00");
+    expect(tech?.keyPoints[1]).toContain("prev close");
+    expect(tech?.keyPoints[2]).toContain("VWAP");
+  });
+
+  test("macro layer shows descriptive bullets not em dashes", () => {
+    const data = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
+    const macro = data.layers.find((l) => l.key === "macro");
+    expect(macro?.keyPoints.every((p) => p !== "—")).toBe(true);
+  });
+});
+
 describe("buildEvidenceFromSetup key levels", () => {
   test("uses Polygon day_vwap for VWAP when provided", () => {
     const data = buildEvidenceFromSetup(

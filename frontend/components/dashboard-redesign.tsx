@@ -21,7 +21,7 @@ import type { ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
-import { buildEvidenceFromSetup, type SignalEvidenceData } from "@/lib/signal-evidence";
+import { buildEvidenceFromSetup, enrichEvidenceWithRealComposite, type SignalEvidenceData } from "@/lib/signal-evidence";
 import {
   CONFIDENCE_PERCENT_TIP,
   IWM_CARD_TIP,
@@ -368,13 +368,12 @@ export function DashboardRedesign({
                           event != null
                             ? Math.floor((Date.parse(`${event.report_date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000)
                             : undefined;
-                        setEvidence(
-                          buildEvidenceFromSetup(signal, snapshot, {
-                            symbolNewsArticles,
-                            earningsRiskDays: typeof daysUntil === "number" ? daysUntil : undefined,
-                            earningsReportTime: event?.report_time
-                          })
-                        );
+                        const base = buildEvidenceFromSetup(signal, snapshot, {
+                          symbolNewsArticles,
+                          earningsRiskDays: typeof daysUntil === "number" ? daysUntil : undefined,
+                          earningsReportTime: event?.report_time
+                        });
+                        setEvidence(await enrichEvidenceWithRealComposite(base));
                         setEvidenceOpen(true);
                       }}
                       style={{

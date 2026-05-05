@@ -24,7 +24,7 @@ import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/d
 import { useTheme } from "@/lib/theme-provider";
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
 import { fetchSymbolMinuteBars } from "@/lib/fetch-symbol-bars";
-import { buildEvidenceFromSetup, type SignalEvidenceData } from "@/lib/signal-evidence";
+import { buildEvidenceFromSetup, enrichEvidenceWithRealComposite, type SignalEvidenceData } from "@/lib/signal-evidence";
 import {
   CONFIDENCE_PERCENT_TIP,
   GAP_INTELLIGENCE_TIP,
@@ -587,13 +587,12 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
       const risk = earningsRiskFor(item.symbol);
       const sym = item.symbol.trim().toUpperCase();
       const s = (await fetchSymbolSnapshot(sym)) ?? undefined;
-      setEvidence(
-        buildEvidenceFromSetup(gapSyntheticSetup(item), s, {
-          symbolNewsArticles,
-          earningsRiskDays: risk?.daysUntil,
-          earningsReportTime: risk?.reportTime
-        })
-      );
+      const base = buildEvidenceFromSetup(gapSyntheticSetup(item), s, {
+        symbolNewsArticles,
+        earningsRiskDays: risk?.daysUntil,
+        earningsReportTime: risk?.reportTime
+      });
+      setEvidence(await enrichEvidenceWithRealComposite(base));
       setEvidenceOpen(true);
     },
     [earningsBySymbol]
@@ -999,13 +998,12 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                           const risk = earningsRiskFor(setup.symbol);
                           const sym = setup.symbol.trim().toUpperCase();
                           const s = (await fetchSymbolSnapshot(sym)) ?? undefined;
-                          setEvidence(
-                            buildEvidenceFromSetup(setup, s, {
-                              symbolNewsArticles,
-                              earningsRiskDays: risk?.daysUntil,
-                              earningsReportTime: risk?.reportTime
-                            })
-                          );
+                          const base = buildEvidenceFromSetup(setup, s, {
+                            symbolNewsArticles,
+                            earningsRiskDays: risk?.daysUntil,
+                            earningsReportTime: risk?.reportTime
+                          });
+                          setEvidence(await enrichEvidenceWithRealComposite(base));
                           setEvidenceOpen(true);
                         }}
                         style={{

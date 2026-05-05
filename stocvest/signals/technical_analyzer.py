@@ -192,6 +192,7 @@ class TechnicalAnalyzer:
                 score=None,
                 verdict="neutral",
                 bars_analyzed=len(bars),
+                reasoning="Bars returned but no valid closes in the window — cannot score RSI/VWAP stack.",
                 error="no_valid_closes",
             )
 

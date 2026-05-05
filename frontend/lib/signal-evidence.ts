@@ -151,6 +151,105 @@ export interface BuildEvidenceOptions {
   earningsReportTime?: "before_market" | "after_market" | "during_market" | "unknown";
 }
 
+function fmtUsd(n: number): string {
+  return `$${n.toFixed(2)}`;
+}
+
+/** Snapshot-backed bullets so the evidence modal is never placeholder-only (dashboard / scanner paths). */
+function keyPointsTechnicalFromSnapshot(
+  snap: SnapshotPayload | null,
+  technicalScore: number,
+  symbolUpper: string
+): string[] {
+  const last = snap?.last_trade_price;
+  const prev = snap?.prev_close;
+  const pts: string[] = [];
+  if (typeof last === "number" && Number.isFinite(last)) {
+    pts.push(`Last ${fmtUsd(last)}`);
+  }
+  if (typeof last === "number" && typeof prev === "number" && prev > 0) {
+    const chg = ((last - prev) / prev) * 100;
+    pts.push(`vs prev close ${chg >= 0 ? "+" : ""}${chg.toFixed(2)}%`);
+  }
+  const vwap = snap?.day_vwap;
+  if (typeof vwap === "number" && Number.isFinite(vwap)) {
+    pts.push(`Day VWAP ${fmtUsd(vwap)}`);
+  } else if (typeof snap?.day_low === "number" && typeof snap?.day_high === "number") {
+    pts.push(`Session range ${fmtUsd(snap.day_low)}–${fmtUsd(snap.day_high)}`);
+  }
+  if (pts.length === 0) {
+    return [
+      `Quote pending for ${symbolUpper}`,
+      "Full intraday stack needs regular-session data",
+      `Model tilt ~${Math.round(technicalScore)} / 100`
+    ];
+  }
+  if (pts.length < 3) {
+    pts.push(`Snapshot tilt ~${Math.round(technicalScore)} / 100`);
+  }
+  return pts.slice(0, 3);
+}
+
+function keyPointsMacroFallback(macroScore: number): string[] {
+  return [
+    "SPY / QQQ trend and VIX tone when live",
+    "Economic calendar weight on server pass",
+    `Layer blend ~${Math.round(macroScore)} / 100`
+  ];
+}
+
+function keyPointsSectorFallback(sectorScore: number, symbolUpper: string): string[] {
+  return [
+    "Sector ETF vs SPX from classification",
+    `Context: ${symbolUpper}`,
+    `Layer blend ~${Math.round(sectorScore)} / 100`
+  ];
+}
+
+function keyPointsGeoFallback(geoScore: number): string[] {
+  return [
+    "Geo headline stress vs baseline",
+    "Elevated risk discounts fragile squeezes",
+    `Layer blend ~${Math.round(geoScore)} / 100`
+  ];
+}
+
+function keyPointsInternalsFallback(internalsScore: number): string[] {
+  return [
+    "Breadth and VIX participation",
+    "A/D when tape data is available",
+    `Layer blend ~${Math.round(internalsScore)} / 100`
+  ];
+}
+
+function reasoningToKeyPoints(reasoning: string, max = 3): string[] {
+  const parts = reasoning
+    .split(/\.(?:\s|$)/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, max);
+  return parts.length ? parts : [reasoning.trim()].filter(Boolean);
+}
+
+function synthKeyPointsFromLayerApi(match: Record<string, unknown>): string[] {
+  const out: string[] = [];
+  const score = match.score;
+  if (typeof score === "number" && Number.isFinite(score)) {
+    out.push(`Layer score ${Math.round(score)}`);
+  }
+  const verdict = typeof match.verdict === "string" ? match.verdict.trim() : "";
+  if (verdict) {
+    out.push(`${verdict.charAt(0).toUpperCase()}${verdict.slice(1)} verdict`);
+  }
+  const st = typeof match.status === "string" ? match.status.trim() : "";
+  if (st === "unavailable") {
+    out.push("Live layer data unavailable");
+  } else if (st && st !== "available") {
+    out.push(`Status: ${st}`);
+  }
+  return out.slice(0, 4);
+}
+
 export function buildEvidenceFromSetup(
   setup: IntradaySetupPayload,
   snapshot?: SnapshotPayload,
@@ -183,6 +282,8 @@ export function buildEvidenceFromSetup(
   const geopolitical = clamp(base - 11, 0, 100);
   const internals = clamp(base + 8, 0, 100);
 
+  const techPoints = keyPointsTechnicalFromSnapshot(snap, technical, symbolUpper);
+
   const layers: EvidenceLayer[] = [
     {
       key: "technical",
@@ -191,7 +292,7 @@ export function buildEvidenceFromSetup(
       status: statusFromScore(technical),
       weightPercent: 30,
       explanation: "Price action and trend structure are evaluated against intraday momentum.",
-      keyPoints: ["—", "—", "—"],
+      keyPoints: techPoints,
       contributionScore: technical,
       freshnessLabel: layerFreshnessFromIso(setup.timestamp_iso)
     },
@@ -220,7 +321,7 @@ export function buildEvidenceFromSetup(
       status: statusFromScore(macro),
       weightPercent: 14,
       explanation: "Rates and macro event pressure influence signal alignment and risk appetite.",
-      keyPoints: ["—", "—", "—"],
+      keyPoints: keyPointsMacroFallback(macro),
       contributionScore: macro,
       freshnessLabel: "Updated 30m ago"
     },
@@ -231,7 +332,7 @@ export function buildEvidenceFromSetup(
       status: statusFromScore(sector),
       weightPercent: 14,
       explanation: "Relative sector leadership versus SPX confirms or weakens setup quality.",
-      keyPoints: ["—", "—", "—"],
+      keyPoints: keyPointsSectorFallback(sector, symbolUpper),
       contributionScore: sector,
       freshnessLabel: "Updated 10m ago"
     },
@@ -242,7 +343,7 @@ export function buildEvidenceFromSetup(
       status: statusFromScore(geopolitical),
       weightPercent: 10,
       explanation: "External risk events are monitored to discount fragile long/short signals.",
-      keyPoints: ["—", "—", "—"],
+      keyPoints: keyPointsGeoFallback(geopolitical),
       contributionScore: geopolitical,
       freshnessLabel: "Updated 1h ago"
     },
@@ -253,7 +354,7 @@ export function buildEvidenceFromSetup(
       status: statusFromScore(internals),
       weightPercent: 14,
       explanation: "Breadth, VIX trend, and A/D line provide market participation confirmation.",
-      keyPoints: ["—", "—", "—"],
+      keyPoints: keyPointsInternalsFallback(internals),
       contributionScore: internals,
       freshnessLabel: "Updated 5m ago"
     }
@@ -496,6 +597,12 @@ export function deriveEvidenceInsightFallback(evidence: SignalEvidenceData): Sig
   };
 }
 
+function findContributionRow(body: Record<string, unknown>, layerKey: string): Record<string, unknown> | undefined {
+  const raw = body.contributions;
+  if (!Array.isArray(raw)) return undefined;
+  return (raw as Array<Record<string, unknown>>).find((c) => String(c.layer ?? "").toLowerCase() === layerKey);
+}
+
 export function applySwingCompositeEnrichment(
   evidence: SignalEvidenceData,
   body: Record<string, unknown> | null | undefined
@@ -529,7 +636,13 @@ export function applySwingCompositeEnrichment(
         (x) => String(x.layer ?? "").toLowerCase() === layer.key
       );
       if (!match) {
-        return { ...layer, keyPoints: ["—", "—", "—"] };
+        const contribOnly = findContributionRow(body, layer.key);
+        const cr = typeof contribOnly?.reasoning === "string" ? contribOnly.reasoning.trim() : "";
+        if (cr) {
+          const parts = reasoningToKeyPoints(cr, 4);
+          if (parts.length) return { ...layer, keyPoints: parts };
+        }
+        return layer;
       }
       const chips = match.chips;
       if (Array.isArray(chips) && chips.length > 0) {
@@ -540,18 +653,48 @@ export function applySwingCompositeEnrichment(
       }
       const reasoning = typeof match.reasoning === "string" ? match.reasoning.trim() : "";
       if (reasoning) {
-        const parts = reasoning
-          .split(".")
-          .map((s) => s.trim())
-          .filter(Boolean)
-          .slice(0, 3);
+        const parts = reasoningToKeyPoints(reasoning, 4);
         if (parts.length) {
           return { ...layer, keyPoints: parts };
         }
       }
-      return { ...layer, keyPoints: ["—", "—", "—"] };
+      const contrib = findContributionRow(body, layer.key);
+      const contribR = typeof contrib?.reasoning === "string" ? contrib.reasoning.trim() : "";
+      if (contribR) {
+        const parts = reasoningToKeyPoints(contribR, 4);
+        if (parts.length) return { ...layer, keyPoints: parts };
+      }
+      const synth = synthKeyPointsFromLayerApi(match);
+      if (synth.length) {
+        return { ...layer, keyPoints: synth };
+      }
+      return layer;
     });
   }
 
   return { ...evidence, layers, insight, confluence };
+}
+
+/**
+ * Merges real-composite API layer chips / reasoning into evidence (same-origin BFF).
+ * Use from dashboard or scanner after `buildEvidenceFromSetup` so the modal matches the Signals page.
+ */
+export async function enrichEvidenceWithRealComposite(evidence: SignalEvidenceData): Promise<SignalEvidenceData> {
+  const sym = evidence.symbol.trim().toUpperCase();
+  if (!sym) return evidence;
+  try {
+    const res = await fetch("/api/stocvest/signals/composite/real", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ symbol: sym })
+    });
+    if (!res.ok) {
+      return { ...evidence, insight: evidence.insight ?? deriveEvidenceInsightFallback(evidence) };
+    }
+    const j = (await res.json()) as Record<string, unknown>;
+    return applySwingCompositeEnrichment(evidence, j);
+  } catch {
+    return { ...evidence, insight: evidence.insight ?? deriveEvidenceInsightFallback(evidence) };
+  }
 }
