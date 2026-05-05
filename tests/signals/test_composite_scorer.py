@@ -61,3 +61,21 @@ def test_score_100_impossible_when_majority_layers_conflict() -> None:
     )
     score_0_100 = int(round((result.score + 1.0) * 50.0))
     assert score_0_100 < 100
+
+
+def test_neutral_net_score_uses_plurality_alignment_not_perfect() -> None:
+    """Neutral verdict must not imply 100% layer agreement when directions split."""
+    result = CompositeScoreEngine().compute(
+        [
+            LayerSignal("technical", 1.0, 1.0),
+            LayerSignal("news", 1.0, 1.0),
+            LayerSignal("macro", -1.0, 1.0),
+            LayerSignal("sector", -1.0, 1.0),
+            LayerSignal("geopolitical", 0.0, 1.0),
+            LayerSignal("internals", 0.0, 1.0),
+        ],
+        regime="sideways",
+    )
+    assert result.verdict.value == "neutral"
+    assert result.alignment_ratio < 0.55
+    assert len(result.conflicted_layers) >= 3

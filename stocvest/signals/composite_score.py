@@ -170,7 +170,7 @@ class CompositeScoreEngine:
             final_confidence = self._clamp(confidence_sum / total_confidence_weight, 0.0, 1.0)
 
         raw_verdict = self._to_verdict(final_score)
-        alignment = self._alignment_meta(signals, raw_verdict)
+        alignment = self._alignment_meta(signals, raw_verdict, regime)
         final_score = self._apply_contradiction_penalty(final_score, alignment["ratio"])
         verdict = self._to_verdict(final_score)
         return CompositeSignal(
@@ -203,9 +203,9 @@ class CompositeScoreEngine:
             return CompositeVerdict.BEARISH
         return CompositeVerdict.NEUTRAL
 
-    def _alignment_meta(self, signals: list[LayerSignal], verdict: CompositeVerdict) -> dict[str, object]:
+    def _alignment_meta(self, signals: list[LayerSignal], verdict: CompositeVerdict, regime: str) -> dict[str, object]:
         if verdict == CompositeVerdict.NEUTRAL:
-            return {"ratio": 1.0, "conflicted_layers": [], "aligned_weight": 0.0, "conflicted_weight": 0.0}
+            return self._neutral_plurality_alignment(signals, regime)
         aligned_weight = 0.0
         conflicted_weight = 0.0
         conflicted_layers: list[str] = []
@@ -224,6 +224,51 @@ class CompositeScoreEngine:
             return {"ratio": 1.0, "conflicted_layers": [], "aligned_weight": 0.0, "conflicted_weight": 0.0}
         return {
             "ratio": aligned_weight / total_weight,
+            "conflicted_layers": conflicted_layers,
+            "aligned_weight": aligned_weight,
+            "conflicted_weight": conflicted_weight,
+        }
+
+    def _neutral_plurality_alignment(self, signals: list[LayerSignal], regime: str) -> dict[str, object]:
+        """When the net score is neutral, measure agreement as the strongest directional bucket share (weighted)."""
+        multipliers = self._regime_weights.get(regime, self._regime_weights["sideways"])
+        bull_w = bear_w = neutral_w = 0.0
+        bull_layers: list[str] = []
+        bear_layers: list[str] = []
+        neutral_layers: list[str] = []
+        for signal in signals:
+            w = (
+                self._base_weights.get(signal.layer, 0.0)
+                * multipliers.get(signal.layer, 1.0)
+                * self._clamp(signal.confidence, 0.0, 1.0)
+            )
+            layer_dir = self._layer_direction(float(signal.score))
+            if layer_dir == CompositeVerdict.BULLISH:
+                bull_w += w
+                bull_layers.append(signal.layer)
+            elif layer_dir == CompositeVerdict.BEARISH:
+                bear_w += w
+                bear_layers.append(signal.layer)
+            else:
+                neutral_w += w
+                neutral_layers.append(signal.layer)
+        total = bull_w + bear_w + neutral_w
+        if total <= 0:
+            return {"ratio": 1.0, "conflicted_layers": [], "aligned_weight": 0.0, "conflicted_weight": 0.0}
+
+        best = max(bull_w, bear_w, neutral_w)
+        if bull_w == best:
+            conflicted_layers = bear_layers + neutral_layers
+        elif bear_w == best:
+            conflicted_layers = bull_layers + neutral_layers
+        else:
+            conflicted_layers = bull_layers + bear_layers
+
+        ratio = best / total
+        aligned_weight = best
+        conflicted_weight = total - best
+        return {
+            "ratio": ratio,
             "conflicted_layers": conflicted_layers,
             "aligned_weight": aligned_weight,
             "conflicted_weight": conflicted_weight,

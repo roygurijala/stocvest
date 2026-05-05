@@ -263,6 +263,28 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
     }
     return overall >= 58 ? "Bullish" : overall <= 42 ? "Bearish" : "Neutral";
   }, [compositeResult, overall]);
+
+  /** 0–100: weighted share of layers in the dominant direction (not per-layer data confidence). */
+  const layerAgreementPercent = useMemo(() => {
+    if (!compositeResult || isInsufficientCompositeResponse(compositeResult)) return null;
+    const ar = compositeResult.alignment_ratio;
+    if (typeof ar === "number" && Number.isFinite(ar)) {
+      return Math.round(Math.max(0, Math.min(1, ar)) * 100);
+    }
+    const ss = compositeResult.signal_strength;
+    if (typeof ss === "number" && Number.isFinite(ss)) {
+      return Math.round(Math.max(0, Math.min(1, ss)) * 100);
+    }
+    return null;
+  }, [compositeResult]);
+
+  const aiStripAgreementPct = useMemo(() => {
+    if (layerAgreementPercent != null) return layerAgreementPercent;
+    if (compositeResult && !isInsufficientCompositeResponse(compositeResult) && typeof compositeResult.signal_strength === "number") {
+      return Math.round(Math.max(0, Math.min(1, compositeResult.signal_strength as number)) * 100);
+    }
+    return Math.round(overall);
+  }, [layerAgreementPercent, compositeResult, overall]);
   const summaryTone =
     layerSignalSummary === "Bullish" ? colors.bullish : layerSignalSummary === "Bearish" ? colors.bearish : colors.caution;
   const setupDirectionForEvidence =
@@ -817,22 +839,13 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
         </h3>
         <p style={{ margin: 0, fontStyle: "italic" }}>
           “{symbol.toUpperCase()} currently shows a <strong style={{ color: summaryTone }}>{layerSignalSummary}</strong> profile with{" "}
-          {Math.round(
-            hasValidSignal && typeof compositeResult?.signal_strength === "number"
-              ? (compositeResult.signal_strength as number) * 100
-              : overall
-          )}
-          % signal strength based on layered confirmation.”
+          {aiStripAgreementPct}% six-layer agreement (by weighted direction).”
         </p>
         <div style={{ marginTop: spacing[3], height: 10, background: colors.surfaceMuted, borderRadius: borderRadius.full }}>
           <div
             style={{
               height: "100%",
-              width: `${Math.round(
-                hasValidSignal && typeof compositeResult?.signal_strength === "number"
-                  ? (compositeResult.signal_strength as number) * 100
-                  : overall
-              )}%`,
+              width: `${aiStripAgreementPct}%`,
               borderRadius: borderRadius.full,
               background: summaryTone
             }}
