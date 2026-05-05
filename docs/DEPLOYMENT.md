@@ -1,6 +1,6 @@
 # Deployment notes
 
-**Last updated:** 2026-05-03 (Vercel security headers section) · See also [`docs/CONTEXT.md`](./CONTEXT.md) §3 (full deploy checklist).
+**Last updated:** 2026-05-05 · See also [`docs/CONTEXT.md`](./CONTEXT.md) §3 (full deploy checklist). Recent dashboard work (PDT pill, Market Intelligence) is frontend/API-contract only; no new deploy steps here beyond normal Vercel + API Gateway.
 
 ## Vercel (frontend)
 

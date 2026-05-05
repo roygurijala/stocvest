@@ -1,6 +1,6 @@
 # STOCVEST — API contracts (immutable sections)
 
-**Last reviewed:** 2026-05-03
+**Last reviewed:** 2026-05-05
 
 Sections referenced from **`docs/CONTEXT.md`** §7 must not change without explicit review and coordinated code updates.
 
@@ -40,7 +40,7 @@ All REST routes are versioned under `/v1/`.
 - `GET /v1/market/status` — current market status (stocks/exchanges/currencies)
 - `GET /v1/market/snapshot?symbol={ticker}` — point-in-time snapshot for one symbol
 - `GET /v1/market/bars?symbol={ticker}&timeframe={tf}&limit={n}&from={yyyy-mm-dd}&to={yyyy-mm-dd}`
-- `GET /v1/market/news?symbol={ticker?}&limit={n}`
+- `GET /v1/market/news?symbol={ticker?}&limit={n}` — JSON **`{ "headlines": [ ... ] }`** (not a bare array). Authenticated users merge default-watchlist tickers into the Polygon query (cap 30 merged symbols). Server fetches up to **50** Polygon rows (4h lookback), scores and dedupes, returns at most **`min(limit, 20)`** items by default client usage (`limit=20`). Each headline includes at least: **`id`**, **`title`**, **`published_utc`**, **`publisher`** (`name`, **`tier`**), **`tickers`**, **`article_url`**, **`sentiment`**, **`affected_stocks`**, **`impact_summary`**, **`relevance_score`** (0–100), **`category`** (`earnings` \| `analyst` \| `macro` \| `sector` \| `merger` \| `breaking` \| `general`), **`catalyst_category`** (legacy buckets incl. `ma` / `fda`), **`credibility`** (`label`, `band`), **`matches_watchlist`**, plus back-compat **`article_id`**, **`published_at`**, **`url`**, **`source`**, optional **`description`**, **`image_url`**.
 - `GET /v1/market/options?symbol={ticker}&limit={n}[&expiration={yyyy-mm-dd}&option_type={call|put}&strike_gte={x}&strike_lte={y}]`
 
 `timeframe` values are fixed to `Timeframe` enum values:

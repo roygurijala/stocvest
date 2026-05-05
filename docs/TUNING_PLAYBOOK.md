@@ -1,5 +1,7 @@
 # STOCVEST — Monthly signal tuning playbook
 
+**Last reviewed:** 2026-05-05 — playbook unchanged; product surface updates are in [`docs/CONTEXT.md`](./CONTEXT.md) §1–§2.
+
 Use with **`stocvest/config/signal_parameters.py`** (defaults), **Secrets Manager** secret `stocvest/signal-parameters`, **DynamoDB** `ParameterHistory`, and **`GET /v1/signals/analysis`**.
 
 ---

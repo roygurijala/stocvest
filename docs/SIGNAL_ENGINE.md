@@ -21,6 +21,7 @@ This document describes the **server-side** multi-layer stack behind `POST /v1/s
 - **Inputs**: Polygon `/v2/reference/news` rows (dicts), `NewsParameters`.
 - **Sentiment**: Prefers `insights[0].sentiment`; quality gate via `is_quality_article()` (`news_quality_filter.py`).
 - **Unavailable**: Zero quality articles after filtering (distinct from neutral verdict).
+- **Dashboard Market Intelligence** (`GET /v1/market/news` in `market_data.py`) uses a **different** path: `passes_market_intelligence_gate()` (PR wires may enter the pool) plus **`news_relevance.py`** scoring, deduplication, and `categorize_article()` — do not assume the same filter as the composite news layer.
 
 ### Macro (`macro_analyzer.py`)
 

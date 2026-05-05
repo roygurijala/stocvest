@@ -83,7 +83,7 @@ The IAM principal behind `AWS_*` needs at least: `s3:PutObject` on `arn:aws:s3::
 | Area | Notes |
 |------|--------|
 | Core signals, scanner, brokers, HTTP API | Shipped (see CONTEXT §1) |
-| Next.js frontend (dashboard, landing, legal, BFF) | Shipped |
+| Next.js frontend (dashboard, landing, legal, BFF) | Shipped — compact **PDT** pill, **Market Intelligence** (ranked news, tabs); see CONTEXT §1–§2 |
 | Terraform / AWS | Modules in `infra/`; **apply** and production wiring may still be pending (CONTEXT §3) |
 | Phase 7 (E2E, audits, extended paper validation) | Planned — BACKLOG **P1** |
 

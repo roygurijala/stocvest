@@ -3,7 +3,7 @@
 You are working on STOCVEST, a multi-broker swing + day trading signal platform.
 
 ## Before writing any code
-Always read **`docs/CONTEXT.md`** and **`docs/BACKLOG.md`** in full. CONTEXT holds shipped vs pending status, legal rules, immutable contracts, and **session rules (§13)** including exact test baselines. Never assume — check it.
+Always read **`docs/CONTEXT.md`** and **`docs/BACKLOG.md`** in full. CONTEXT holds shipped vs pending status, legal rules, immutable contracts, and **session rules (§13)** including exact test baselines. Never assume — check it. For **Market Intelligence** / ranked news (dashboard), see CONTEXT §2 (`news_relevance.py`, `passes_market_intelligence_gate`, BFF `GET /v1/market/news`).
 
 ## Phase / scope discipline
 - **Source of truth:** `docs/CONTEXT.md` §1 (status table) and §3 (ops / blockers), not the historical “Phase N” labels below.

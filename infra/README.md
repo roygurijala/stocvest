@@ -1,6 +1,6 @@
 # STOCVEST Terraform
 
-**Last updated:** 2026-05-03 (align with [`docs/CONTEXT.md`](../docs/CONTEXT.md) §3 for apply/pending items.)
+**Last updated:** 2026-05-05 (align with [`docs/CONTEXT.md`](../docs/CONTEXT.md) §3 for apply/pending items; no infra change required for dashboard news/PDT UI — API remains `market_data` Lambda.)
 
 This directory contains AWS infrastructure as code:
 
