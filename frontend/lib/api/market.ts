@@ -26,6 +26,16 @@ export interface SnapshotPayload {
   company_name?: string | null;
 }
 
+/** Primary tab category from API (`/v1/market/news`). */
+export type NewsIntelCategory =
+  | "general"
+  | "earnings"
+  | "analyst"
+  | "macro"
+  | "sector"
+  | "merger"
+  | "breaking";
+
 export type NewsCatalystCategory =
   | "general"
   | "earnings"
@@ -65,6 +75,8 @@ export interface NewsPayload {
   impact_summary?: string | null;
   /** Backend relevance rank (0–100). */
   relevance_score?: number;
+  /** Tab category for Market Intelligence filters. */
+  category?: NewsIntelCategory;
   catalyst_category?: NewsCatalystCategory;
   credibility?: { label: string; band: NewsCredibilityBand };
   /** True when headline tickers overlap the user default watchlist. */

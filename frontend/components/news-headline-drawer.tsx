@@ -5,7 +5,16 @@ import { createPortal } from "react-dom";
 import { ExternalLink, X } from "lucide-react";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
-import type { NewsPayload } from "@/lib/api/market";
+import type { NewsIntelCategory, NewsPayload } from "@/lib/api/market";
+
+function drawerCategory(article: NewsPayload): NewsIntelCategory {
+  if (article.category) return article.category;
+  const c = article.catalyst_category;
+  if (c === "ma") return "merger";
+  if (c === "fda" || c === "sector") return "sector";
+  if (c === "earnings" || c === "analyst" || c === "macro" || c === "general") return c;
+  return "general";
+}
 
 type NewsHeadlineDrawerProps = {
   open: boolean;
@@ -76,6 +85,7 @@ export function NewsHeadlineDrawer({ open, article, onClose }: NewsHeadlineDrawe
 
   const description = nonEmpty(article.description);
   const imageUrl = nonEmpty(article.image_url);
+  const intelCat = drawerCategory(article);
   const badge = sentimentBadge(article);
   const badgeBg =
     badge?.tone === "bullish"
@@ -186,6 +196,21 @@ export function NewsHeadlineDrawer({ open, article, onClose }: NewsHeadlineDrawe
           ) : null}
           <div className="flex flex-wrap items-center justify-between gap-2" style={{ rowGap: spacing[2] }}>
             <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs, flex: "1 1 auto" }}>
+              <span style={{ marginRight: 6 }} aria-hidden>
+                {intelCat === "earnings"
+                  ? "📊"
+                  : intelCat === "analyst"
+                    ? "🏦"
+                    : intelCat === "breaking"
+                      ? "🔴"
+                      : intelCat === "macro"
+                        ? "🌍"
+                        : intelCat === "merger"
+                          ? "🤝"
+                          : intelCat === "sector"
+                            ? "⚙️"
+                            : "📰"}
+              </span>
               {(article.source || "News").trim()} · {timeAgo(article.published_at)}
             </p>
             {badge ? (

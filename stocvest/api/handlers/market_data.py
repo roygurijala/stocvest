@@ -14,6 +14,7 @@ from stocvest.api.services.news_quality_filter import get_publisher_tier, passes
 from stocvest.api.services.news_relevance import (
     calculate_article_relevance,
     catalyst_category_for_text,
+    categorize_article,
     deduplicate_articles,
     source_credibility_meta,
 )
@@ -316,7 +317,7 @@ def news_handler(
         async with client_factory(api_key=settings.polygon_api_key) as client:
             raw_articles = await client.get_market_news(
                 tickers=merged_tickers,
-                limit=120,
+                limit=50,
                 order="desc",
                 published_utc_gte=since,
             )
@@ -334,7 +335,7 @@ def news_handler(
         deduped_polygon = deduplicate_articles(scored_polygon, score_key="_relevance_score")
         diversity_polygon = _publisher_diversity_cap_preserving_order(deduped_polygon, max_per_publisher=2)
 
-        out_cap = min(limit, 25)
+        out_cap = min(limit, 20)
         candidates: list[dict[str, Any]] = []
         for article in diversity_polygon[:out_cap]:
             relevance_score = int(article.pop("_relevance_score", 0))
@@ -342,6 +343,7 @@ def news_handler(
             publisher_name = str((article.get("publisher") or {}).get("name") or "").strip()
             title_lower = str(article.get("title") or "").lower()
             desc_lower = str(article.get("description") or "").lower()
+            category = categorize_article(article)
             catalyst_category = catalyst_category_for_text(title_lower, desc_lower)
             credibility = source_credibility_meta(publisher_name)
             watchlist_upper = {s.strip().upper() for s in watchlist_symbols if s.strip()}
@@ -373,6 +375,7 @@ def news_handler(
                     "affected_stocks": affected,
                     "impact_summary": generate_impact_summary(article, affected),
                     "relevance_score": relevance_score,
+                    "category": category,
                     "catalyst_category": catalyst_category,
                     "credibility": credibility,
                     "matches_watchlist": matches_watchlist,

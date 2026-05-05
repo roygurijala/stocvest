@@ -332,6 +332,7 @@ def test_news_handler_includes_relevance_enrichment() -> None:
     h = body["headlines"][0]
     assert "relevance_score" in h
     assert "credibility" in h and "label" in h["credibility"]
+    assert "category" in h
     assert "catalyst_category" in h
     assert "matches_watchlist" in h
 

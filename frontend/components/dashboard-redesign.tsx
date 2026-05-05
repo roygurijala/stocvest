@@ -14,7 +14,7 @@ import { NewsHeadlineDrawer } from "@/components/news-headline-drawer";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
-import type { MarketOverview, NewsCredibilityBand, NewsPayload, SnapshotPayload } from "@/lib/api/market";
+import type { MarketOverview, NewsCredibilityBand, NewsIntelCategory, NewsPayload, SnapshotPayload } from "@/lib/api/market";
 import type { PDTStatusPayload } from "@/lib/api/pdt";
 import type { ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
@@ -76,29 +76,71 @@ function timeAgo(iso: string): string {
   return `${Math.floor(delta / 86400)}d ago`;
 }
 
-type MiTab = "all" | "watchlist" | "earnings" | "analyst" | "macro" | "ma" | "other";
+type MiTab = "all" | "watchlist" | "earnings" | "analyst" | "macro";
 
 const MI_TAB_DEFS: { id: MiTab; label: string }[] = [
   { id: "all", label: "All" },
   { id: "watchlist", label: "Watchlist" },
   { id: "earnings", label: "Earnings" },
   { id: "analyst", label: "Analyst" },
-  { id: "macro", label: "Macro" },
-  { id: "ma", label: "M&A" },
-  { id: "other", label: "Other" }
+  { id: "macro", label: "Macro" }
 ];
 
+const CATEGORY_ICONS: Record<string, { icon: string; color: string }> = {
+  earnings: { icon: "📊", color: "#00E07A" },
+  analyst: { icon: "🏦", color: "#00C8DC" },
+  macro: { icon: "🌍", color: "#F5B800" },
+  merger: { icon: "🤝", color: "#A855F7" },
+  breaking: { icon: "🔴", color: "#FF3358" },
+  sector: { icon: "⚙️", color: "#94A3B8" },
+  general: { icon: "📰", color: "#64748B" }
+};
+
+function articleIntelCategory(article: NewsPayload): NewsIntelCategory {
+  if (article.category) return article.category;
+  const c = article.catalyst_category;
+  if (c === "ma") return "merger";
+  if (c === "fda" || c === "sector") return "sector";
+  if (c === "earnings" || c === "analyst" || c === "macro" || c === "general") return c;
+  return "general";
+}
+
 function articleMatchesMiTab(article: NewsPayload, tab: MiTab): boolean {
-  const cat = article.catalyst_category ?? "general";
+  const cat = articleIntelCategory(article);
   if (tab === "all") return true;
   if (tab === "watchlist") {
-    return Boolean(article.matches_watchlist || article.affected_stocks?.some((s) => s.is_watchlist));
+    return Boolean(article.affected_stocks?.some((s) => s.is_watchlist));
   }
-  if (tab === "other") {
-    return cat === "general" || cat === "fda" || cat === "sector";
+  if (tab === "earnings") return cat === "earnings";
+  if (tab === "analyst") return cat === "analyst";
+  if (tab === "macro") return cat === "macro" || cat === "breaking";
+  return false;
+}
+
+function miEmptyMessage(tab: MiTab): string {
+  switch (tab) {
+    case "earnings":
+      return "No earnings news in the last 8 hours.";
+    case "analyst":
+      return "No analyst action headlines in the last 8 hours.";
+    case "macro":
+      return "No macro headlines in the last 8 hours.";
+    case "watchlist":
+      return "Add stocks to your default watchlist to see personalized news in this feed.";
+    default:
+      return "No headlines in this category right now. Try another tab.";
   }
-  if (tab === "ma") return cat === "ma";
-  return cat === tab;
+}
+
+function sourceLineStyle(article: NewsPayload, colors: { textMuted: string }) {
+  const band = article.credibility?.band;
+  if (band === "pr_wire") {
+    return { color: colors.textMuted, opacity: 0.72 } as const;
+  }
+  if (band === "elite" || band === "major") {
+    return { color: "#00d4ff", opacity: 1 } as const;
+  }
+  return { color: article.publisher?.tier === 1 ? "#00d4ff" : "#4a6080", opacity: 1 } as const;
 }
 
 function credibilityChipStyle(
@@ -194,7 +236,7 @@ export function DashboardRedesign({
         <DashboardRealtime />
       </article>
 
-      <div className="dashboard-grid grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr] [&>*]:min-w-0">
+      <div className="dashboard-grid grid grid-cols-1 gap-4 lg:grid-cols-[13fr_7fr] [&>*]:min-w-0">
           <div className="order-1 min-w-0 lg:col-span-2 lg:col-start-1 lg:row-start-1">
             <MarketSentimentScoreWidget marketOverview={marketOverview} />
             <p style={{ margin: `${spacing[2]} 0 0`, color: colors.textMuted, fontSize: typography.scale.sm }}>
@@ -334,8 +376,8 @@ export function DashboardRedesign({
               border: `1px solid ${colors.border}`,
               borderRadius: borderRadius.xl,
               padding: spacing[4],
-              height: 460,
-              maxHeight: 460
+              height: 420,
+              maxHeight: 420
             }}
           >
             <div
@@ -398,7 +440,7 @@ export function DashboardRedesign({
                 )
               ) : filteredMiNews.length === 0 ? (
                 <p style={{ color: colors.textMuted, margin: 0, textAlign: "center", fontSize: typography.scale.sm }}>
-                  No headlines in this category right now. Try another tab.
+                  {miEmptyMessage(miTab)}
                 </p>
               ) : (
                 <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: spacing[3] }}>
@@ -407,9 +449,9 @@ export function DashboardRedesign({
                       key={article.id || article.article_id}
                       style={{
                         borderBottom: `1px solid ${colors.border}`,
-                        paddingBottom: spacing[3],
+                        paddingBottom: spacing[2],
                         display: "grid",
-                        gap: spacing[2]
+                        gap: spacing[1]
                       }}
                     >
                       <div
@@ -422,7 +464,20 @@ export function DashboardRedesign({
                         }}
                       >
                         <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0, flex: "1 1 140px" }}>
-                          <p style={{ margin: 0, color: article.publisher?.tier === 1 ? "#00d4ff" : "#4a6080", fontSize: 11 }}>
+                          <p style={{ margin: 0, fontSize: 11, ...sourceLineStyle(article, colors) }}>
+                            <span
+                              style={{
+                                marginRight: 4,
+                                color: (CATEGORY_ICONS[articleIntelCategory(article)] ?? CATEGORY_ICONS.general).color
+                              }}
+                            >
+                              {(CATEGORY_ICONS[articleIntelCategory(article)] ?? CATEGORY_ICONS.general).icon}
+                            </span>
+                            {article.credibility?.band === "elite" || article.credibility?.band === "major" ? (
+                              <span style={{ marginRight: 3 }} aria-hidden>
+                                ✓
+                              </span>
+                            ) : null}
                             {(article.publisher?.name || article.source || "Unknown source").trim()} ·{" "}
                             {timeAgo(article.published_utc || article.published_at)}
                           </p>
@@ -465,19 +520,19 @@ export function DashboardRedesign({
                         style={{
                           display: "block",
                           width: "100%",
-                          marginTop: spacing[1],
+                          marginTop: 2,
                           padding: 0,
                           border: "none",
                           background: "transparent",
                           textAlign: "left",
                           cursor: "pointer",
                           color: "#e8f4ff",
-                          fontSize: 13,
-                          lineHeight: 1.5,
+                          fontSize: 12,
+                          lineHeight: 1.45,
                           fontWeight: 600
                         }}
                       >
-                        {article.title.length > 110 ? `${article.title.slice(0, 107)}...` : article.title}
+                        {article.title.length > 100 ? `${article.title.slice(0, 97)}...` : article.title}
                       </button>
                       {article.affected_stocks && article.affected_stocks.length > 0 ? (
                         <>

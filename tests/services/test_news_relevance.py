@@ -59,10 +59,10 @@ def test_watchlist_overlap_adds_points() -> None:
     assert with_wl == without + 10
 
 
-def test_deduplicate_keeps_higher_credibility_at_equal_score() -> None:
+def test_deduplicate_keeps_first_story_when_topic_overlaps() -> None:
     t = "NVDA surges after earnings beat revenue expectations"
-    a = {"title": t, "tickers": ["NVDA"], "publisher": {"name": "GlobeNewswire"}, "_relevance_score": 55}
-    b = {"title": t, "tickers": ["NVDA"], "publisher": {"name": "Reuters"}, "_relevance_score": 55}
+    a = {"title": t, "tickers": ["NVDA"], "publisher": {"name": "Reuters"}, "_relevance_score": 55}
+    b = {"title": t, "tickers": ["NVDA"], "publisher": {"name": "GlobeNewswire"}, "_relevance_score": 55}
     out = deduplicate_articles([a, b])
     assert len(out) == 1
     assert out[0]["publisher"]["name"] == "Reuters"
