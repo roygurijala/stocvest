@@ -254,6 +254,11 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
           {insight.rr_warning ? (
             <span style={{ color: colors.caution, fontSize: typography.scale.xs, fontWeight: 700 }}>Low R/R - below 2:1</span>
           ) : null}
+          {insight.rr_quality ? (
+            <span style={{ color: colors.textMuted, fontSize: typography.scale.xs, textTransform: "capitalize" }}>
+              R/R quality: {insight.rr_quality}
+            </span>
+          ) : null}
           <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Entry R/R</span>
           <div
             style={{
@@ -296,6 +301,58 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
           <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Macro / regime layer</span>
         </div>
       </section>
+
+      {(insight.alignment_ratio != null && Number.isFinite(insight.alignment_ratio)) ||
+      (insight.conflicted_layers != null && insight.conflicted_layers.length > 0) ? (
+        <section
+          style={{
+            border: `1px solid ${colors.border}`,
+            borderRadius: borderRadius.lg,
+            padding: spacing[3],
+            display: "grid",
+            gap: spacing[2]
+          }}
+        >
+          <h3
+            style={{
+              margin: 0,
+              fontSize: typography.scale.sm,
+              fontWeight: 700,
+              letterSpacing: "0.06em",
+              color: colors.textMuted
+            }}
+          >
+            LAYER ALIGNMENT
+          </h3>
+          {insight.alignment_ratio != null && Number.isFinite(insight.alignment_ratio) ? (
+            <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.text }}>
+              <strong style={{ color: colors.text }}>Agreement:</strong>{" "}
+              {Math.round(insight.alignment_ratio * 100)}% of weighted layers align with the composite direction.
+            </p>
+          ) : null}
+          {insight.conflicted_layers && insight.conflicted_layers.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {insight.conflicted_layers.map((key) => (
+                <span
+                  key={key}
+                  style={{
+                    borderRadius: borderRadius.full,
+                    padding: "4px 10px",
+                    fontSize: typography.scale.xs,
+                    border: `1px solid ${colors.caution}`,
+                    background: "rgba(245,158,11,0.1)",
+                    color: colors.caution,
+                    fontWeight: 600,
+                    textTransform: "lowercase"
+                  }}
+                >
+                  {key}: divergent
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       <section>
         <h3 style={{ marginTop: 0 }}>Signal Layer Breakdown</h3>

@@ -240,17 +240,20 @@ async def build_swing_composite_response(
         "conflicted_layers": list(composite.conflicted_layers or []),
     }
 
+    nc: dict[str, Any] | None = None
+    if news.catalyst_headline:
+        nc = {
+            "headline": str(news.catalyst_headline),
+            "sentiment": "positive"
+            if news.verdict == "bullish"
+            else ("negative" if news.verdict == "bearish" else "neutral"),
+        }
+    last_px = float(sym_snap.last_trade_price) if sym_snap and sym_snap.last_trade_price else 0.0
+    pattern = str(getattr(tech, "confluence_pattern", None) or "swing_composite")
+
+    cf: Any = None
+    cf_subset: dict[str, Any] | None = None
     if direction_out:
-        nc: dict[str, Any] | None = None
-        if news.catalyst_headline:
-            nc = {
-                "headline": str(news.catalyst_headline),
-                "sentiment": "positive"
-                if news.verdict == "bullish"
-                else ("negative" if news.verdict == "bearish" else "neutral"),
-            }
-        last_px = float(sym_snap.last_trade_price) if sym_snap and sym_snap.last_trade_price else 0.0
-        pattern = str(getattr(tech, "confluence_pattern", None) or "swing_composite")
         sig_data = {
             "pattern": pattern,
             "volume_vs_avg": 1.0,
@@ -268,40 +271,42 @@ async def build_swing_composite_response(
             sector_signal=normalize_direction(sector.sector_signal),
         )
         response_body.update(confluence_result_to_response_fields(cf))
-
         cf_subset = {
             "confirming_signals": response_body.get("confirming_signals"),
             "conflicting_signals": response_body.get("conflicting_signals"),
             "n_confirming": response_body.get("n_confirming"),
             "n_conflicting": response_body.get("n_conflicting"),
         }
-        payload_stub = {
-            "regime": regime,
-            "sector_signal": sector.sector_signal,
-            "news_catalyst": nc,
-            "catalyst_headlines": _build_catalyst_headlines(news_rows),
-            "news_verdict": news.verdict,
-            "news_sentiment_score": float(news.weighted_sentiment or 0.0),
-            "geopolitical_verdict": geo.verdict,
-            "geo_high_impact_count": int(getattr(geo, "high_impact_count", 0) or 0),
-            "market_open": _market_open_now(),
-        }
-        response_body.update(
-            build_swing_composite_evidence_fields(
-                composite=composite,
-                regime=regime,
-                payload=payload_stub,
-                confluence=cf_subset,
-                snapshot=snap_dict,
-            )
-        )
-        if response_body.get("status") == "incomplete":
-            _LOG.warning(
-                "incomplete swing signal %s missing=%s",
-                sym,
-                ",".join(response_body.get("missing_fields") or []),
-            )
 
+    payload_stub: dict[str, Any] = {
+        "symbol": sym,
+        "regime": regime,
+        "sector_signal": sector.sector_signal,
+        "news_catalyst": nc,
+        "catalyst_headlines": _build_catalyst_headlines(news_rows),
+        "news_verdict": news.verdict,
+        "news_sentiment_score": float(news.weighted_sentiment or 0.0),
+        "geopolitical_verdict": geo.verdict,
+        "geo_high_impact_count": int(getattr(geo, "high_impact_count", 0) or 0),
+        "market_open": _market_open_now(),
+    }
+    response_body.update(
+        build_swing_composite_evidence_fields(
+            composite=composite,
+            regime=regime,
+            payload=payload_stub,
+            confluence=cf_subset,
+            snapshot=snap_dict,
+        )
+    )
+    if response_body.get("status") == "incomplete":
+        _LOG.warning(
+            "incomplete swing signal %s missing=%s",
+            sym,
+            ",".join(response_body.get("missing_fields") or []),
+        )
+
+    if direction_out:
         price_at = last_px
         if price_at:
             try:

@@ -701,6 +701,12 @@ function mergeParsedInsightWithFallback(
   parsed: SignalEvidenceInsight,
   fallback: SignalEvidenceInsight
 ): SignalEvidenceInsight {
+  const catalysts = parsed.catalysts.length > 0 ? parsed.catalysts : fallback.catalysts;
+  const risk_factors = parsed.risk_factors.length > 0 ? parsed.risk_factors : fallback.risk_factors;
+  const risk_factors_detailed =
+    parsed.risk_factors_detailed && parsed.risk_factors_detailed.length > 0
+      ? parsed.risk_factors_detailed
+      : fallback.risk_factors_detailed;
   return {
     ...fallback,
     ...parsed,
@@ -708,7 +714,10 @@ function mergeParsedInsightWithFallback(
     reference_target_1: parsed.reference_target_1 ?? fallback.reference_target_1,
     reference_target_2: parsed.reference_target_2 ?? fallback.reference_target_2,
     reference_stop_level: parsed.reference_stop_level ?? fallback.reference_stop_level,
-    vwap: parsed.vwap ?? fallback.vwap
+    vwap: parsed.vwap ?? fallback.vwap,
+    catalysts,
+    risk_factors,
+    risk_factors_detailed
   };
 }
 
