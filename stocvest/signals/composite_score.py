@@ -131,6 +131,7 @@ class CompositeScoreEngine:
         total_effective_weight = 0.0
         confidence_sum = 0.0
         total_confidence_weight = 0.0
+        layer_effective_weights: dict[str, float] = {}
 
         for signal in signals:
             score = self._clamp(signal.score, -1.0, 1.0)
@@ -139,6 +140,7 @@ class CompositeScoreEngine:
             regime_multiplier = multipliers.get(signal.layer, 1.0)
 
             effective_weight = base_weight * regime_multiplier * confidence
+            layer_effective_weights[signal.layer] = effective_weight
             weighted_value = score * effective_weight
             confidence_weight = base_weight * regime_multiplier
 
@@ -170,7 +172,7 @@ class CompositeScoreEngine:
             final_confidence = self._clamp(confidence_sum / total_confidence_weight, 0.0, 1.0)
 
         raw_verdict = self._to_verdict(final_score)
-        alignment = self._alignment_meta(signals, raw_verdict, regime)
+        alignment = self._alignment_meta(signals, raw_verdict, regime, layer_effective_weights)
         final_score = self._apply_contradiction_penalty(final_score, alignment["ratio"])
         verdict = self._to_verdict(final_score)
         return CompositeSignal(
@@ -203,7 +205,13 @@ class CompositeScoreEngine:
             return CompositeVerdict.BEARISH
         return CompositeVerdict.NEUTRAL
 
-    def _alignment_meta(self, signals: list[LayerSignal], verdict: CompositeVerdict, regime: str) -> dict[str, object]:
+    def _alignment_meta(
+        self,
+        signals: list[LayerSignal],
+        verdict: CompositeVerdict,
+        regime: str,
+        layer_effective_weights: dict[str, float],
+    ) -> dict[str, object]:
         if verdict == CompositeVerdict.NEUTRAL:
             return self._neutral_plurality_alignment(signals, regime)
         aligned_weight = 0.0
@@ -213,7 +221,7 @@ class CompositeScoreEngine:
             layer_verdict = self._layer_direction(float(signal.score))
             if layer_verdict == CompositeVerdict.NEUTRAL:
                 continue
-            layer_weight = 1.5 if signal.layer == "technical" else 1.0
+            layer_weight = layer_effective_weights.get(signal.layer, 0.0)
             if layer_verdict == verdict:
                 aligned_weight += layer_weight
             else:
