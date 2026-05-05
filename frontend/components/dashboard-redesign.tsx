@@ -2,7 +2,6 @@
 
 import { type ReactNode, useState } from "react";
 import { motion } from "framer-motion";
-import { ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { DashboardRealtime } from "@/components/dashboard-realtime";
 import { EarningsCalendar } from "@/components/earnings-calendar";
@@ -10,6 +9,7 @@ import { InfoTip } from "@/components/info-tip";
 import { MarketSentimentScoreWidget } from "@/components/market-sentiment-score-widget";
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import { MorningBriefCollapse } from "@/components/morning-brief-collapse";
+import { PdtStatusPill } from "@/components/pdt-status-pill";
 import { NewsHeadlineDrawer } from "@/components/news-headline-drawer";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
@@ -21,7 +21,7 @@ import type { EarningsEvent } from "@/lib/api/earnings";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { buildEvidenceFromSetup, enrichEvidenceWithRealComposite, type SignalEvidenceData } from "@/lib/signal-evidence";
-import { CONFIDENCE_PERCENT_TIP, LATEST_HEADLINES_TIP, PDT_GUARDIAN_TIP, TOP_SIGNALS_TIP } from "@/lib/ui-tooltips";
+import { CONFIDENCE_PERCENT_TIP, LATEST_HEADLINES_TIP, TOP_SIGNALS_TIP } from "@/lib/ui-tooltips";
 
 interface DashboardRedesignProps {
   marketOverview: MarketOverview;
@@ -93,14 +93,6 @@ export function DashboardRedesign({
     isMorningBriefingWindowNow() && (!!scannerOverview.morningBrief || morningBriefSlot != null);
   const topSignals = scannerOverview.setups.slice(0, 3);
   const pdt = pdtStatus?.assessment;
-  const pdtColor = !pdt
-    ? colors.textMuted
-    : pdt.at_limit
-      ? colors.bearish
-      : pdt.warn_near_limit
-        ? colors.caution
-        : colors.bullish;
-  const pdtLabel = !pdt ? "Unavailable" : pdt.at_limit ? "Blocked" : pdt.warn_near_limit ? "Warning" : "Clear";
   const vixSnapshot = snapshotsBySymbol.get("VIX") || snapshotsBySymbol.get("^VIX");
   const earningsBySymbol = new Map(earningsEvents.map((e) => [e.symbol.toUpperCase(), e] as const));
 
@@ -141,54 +133,19 @@ export function DashboardRedesign({
                 <strong style={{ color: colors.text }}>VIX</strong> {toPrice(vixSnapshot.last_trade_price)}
               </span>
             ) : null}
+            <PdtStatusPill assessment={pdt ?? null} />
           </div>
         </div>
         <DashboardRealtime />
       </article>
 
       <div className="dashboard-grid grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr] [&>*]:min-w-0">
-          <div className="order-1 min-w-0 lg:col-start-1 lg:row-start-1">
+          <div className="order-1 min-w-0 lg:col-span-2 lg:col-start-1 lg:row-start-1">
             <MarketSentimentScoreWidget marketOverview={marketOverview} />
             <p style={{ margin: `${spacing[2]} 0 0`, color: colors.textMuted, fontSize: typography.scale.sm }}>
               Blend of tape tone from SPY, QQQ, and IWM snapshots. Use as a quick pulse, not trade advice.
             </p>
           </div>
-
-          <article
-            className={`order-4 w-full lg:col-start-2 lg:row-start-1 ${surfaceGlowClassName}`}
-            style={{
-              background: colors.surface,
-              border: `1px solid ${colors.border}`,
-              borderRadius: borderRadius.xl,
-              padding: spacing[4]
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: spacing[2],
-                flexShrink: 0
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: spacing[2], minWidth: 0 }}>
-                <ShieldCheck color={pdtColor} size={20} />
-                <strong style={{ color: pdtColor, fontSize: typography.scale.sm, margin: 0 }}>PDT Guardian: {pdtLabel}</strong>
-              </div>
-              <InfoTip text={PDT_GUARDIAN_TIP} label="About pattern day trader rules" />
-            </div>
-            {!pdt ? (
-              <p style={{ margin: `${spacing[2]} 0 0 0`, color: colors.textMuted, fontSize: typography.scale.sm }}>
-                Connect a broker to enable PDT tracking.
-              </p>
-            ) : (
-              <p style={{ margin: `${spacing[2]} 0 0 0`, color: colors.textMuted, fontSize: typography.scale.sm }}>
-                Day trades used {pdt.current_day_trade_count} of {pdt.max_non_exempt} - resets in {pdt.days_until_reset} day
-                {pdt.days_until_reset === 1 ? "" : "s"}.
-              </p>
-            )}
-          </article>
 
           <section className="order-2 lg:col-start-1 lg:row-start-2">
             <div
