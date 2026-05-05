@@ -147,6 +147,39 @@ class SectorParameters:
 
 
 @dataclass
+class SwingTechnicalParameters:
+    """Daily-bar technical tuning for swing / position-style composite."""
+
+    sma_fast_period: int = 50
+    sma_slow_period: int = 200
+    ema_period: int = 21
+
+    rsi_period: int = 14
+    rsi_bullish_zone: float = 50.0
+    rsi_overbought: float = 70.0
+    rsi_oversold: float = 30.0
+    rsi_score_delta: int = 15
+
+    above_sma50_score: int = 20
+    above_sma200_score: int = 15
+    higher_highs_lows_score: int = 15
+    volume_accumulation_score: int = 15
+    near_52w_high_score: int = 10
+    base_formation_score: int = 10
+
+    base_min_days: int = 15
+    base_max_days: int = 40
+    base_max_range_pct: float = 0.08
+
+    volume_lookback_days: int = 20
+
+    bullish_threshold: int = 60
+    bearish_threshold: int = 40
+
+    daily_bars_lookback: int = 210
+
+
+@dataclass
 class CompositeParameters:
     # Layer weights (must sum to 1.0)
     technical_weight: float = 0.30
@@ -181,6 +214,12 @@ class SignalParameters:
     macro: MacroParameters = field(default_factory=MacroParameters)
     sector: SectorParameters = field(default_factory=SectorParameters)
     composite: CompositeParameters = field(default_factory=CompositeParameters)
+
+    swing_technical: SwingTechnicalParameters = field(default_factory=SwingTechnicalParameters)
+    swing_news_lookback_hours: int = 168
+    swing_macro_events_days: int = 14
+    swing_geo_lookback_hours: int = 168
+    swing_sector_use_weekly: bool = True
 
 
 def default_signal_parameters() -> SignalParameters:

@@ -36,6 +36,9 @@ class SectorAnalyzer:
         params: SectorParameters,
         *,
         sector_display_name: str | None = None,
+        use_weekly: bool = False,
+        weekly_sector_pct: float | None = None,
+        weekly_spy_pct: float | None = None,
     ) -> SectorLayerResult:
         _ = symbol
         if sector_etf_snapshot is None or spy_snapshot is None:
@@ -46,17 +49,28 @@ class SectorAnalyzer:
                 reasoning="Sector or SPY snapshot missing.",
                 chips=[],
             )
-        if sector_etf_snapshot.change_percent is None or spy_snapshot.change_percent is None:
-            return SectorLayerResult(
-                status="unavailable",
-                score=None,
-                verdict="neutral",
-                reasoning="Change percent unavailable on sector or SPY snapshot.",
-                chips=[],
-            )
-
-        sector_pct = float(sector_etf_snapshot.change_percent)
-        spy_pct = float(spy_snapshot.change_percent)
+        if use_weekly:
+            if weekly_sector_pct is None or weekly_spy_pct is None:
+                return SectorLayerResult(
+                    status="unavailable",
+                    score=None,
+                    verdict="neutral",
+                    reasoning="Weekly sector/SPY performance not available for relative strength.",
+                    chips=[],
+                )
+            sector_pct = float(weekly_sector_pct)
+            spy_pct = float(weekly_spy_pct)
+        else:
+            if sector_etf_snapshot.change_percent is None or spy_snapshot.change_percent is None:
+                return SectorLayerResult(
+                    status="unavailable",
+                    score=None,
+                    verdict="neutral",
+                    reasoning="Change percent unavailable on sector or SPY snapshot.",
+                    chips=[],
+                )
+            sector_pct = float(sector_etf_snapshot.change_percent)
+            spy_pct = float(spy_snapshot.change_percent)
         relative = sector_pct - spy_pct
 
         if relative > params.strong_outperform:
@@ -92,7 +106,8 @@ class SectorAnalyzer:
             verdict = "neutral"
 
         etf = sector_etf_snapshot.symbol
-        chips = [f"{etf} {sector_pct:+.2f}%", f"vs SPY {relative:+.2f}%"]
+        period = "5d" if use_weekly else "1d"
+        chips = [f"{etf} {sector_pct:+.2f}% ({period})", f"vs SPY {relative:+.2f}%"]
 
         return SectorLayerResult(
             status="available",
@@ -106,7 +121,7 @@ class SectorAnalyzer:
             sector_signal=sector_signal,
             reasoning=(
                 f"Sector {etf} {sector_pct:+.2f}% vs SPY {spy_pct:+.2f}% "
-                f"(rel {relative:+.2f}%) → score {final}."
+                f"({period} rel {relative:+.2f}%) → score {final}."
             ),
             chips=chips,
         )

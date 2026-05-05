@@ -52,6 +52,8 @@ class MacroAnalyzer:
         vix_snapshot: Snapshot | None,
         economic_events: list[EconomicCalendarEvent],
         params: MacroParameters,
+        *,
+        events_lookback_days: int = 1,
     ) -> MacroLayerResult:
         spy_pct = float(spy_snapshot.change_percent) if spy_snapshot and spy_snapshot.change_percent is not None else None
         qqq_pct = float(qqq_snapshot.change_percent) if qqq_snapshot and qqq_snapshot.change_percent is not None else None
@@ -136,6 +138,15 @@ class MacroAnalyzer:
             chips.append(f"QQQ {qqq_pct:+.2f}%")
         if vix_price is not None:
             chips.append(f"VIX {vix_price:.1f}")
+        if events_lookback_days > 1:
+            chips.append(f"Calendar {events_lookback_days}d")
+
+        reason = (
+            f"Macro {macro_score}/100 — momentum {momentum_score:.0f}, "
+            f"volatility {vol_score:.0f}, event-risk {event_score:.0f}."
+        )
+        if events_lookback_days > 1:
+            reason += f" Economic window: {events_lookback_days} days."
 
         return MacroLayerResult(
             status="available",
@@ -148,9 +159,6 @@ class MacroAnalyzer:
             vix_trend=vix_trend,
             event_today=event_today,
             event_name=event_name,
-            reasoning=(
-                f"Macro {macro_score}/100 — momentum {momentum_score:.0f}, "
-                f"volatility {vol_score:.0f}, event-risk {event_score:.0f}."
-            ),
+            reasoning=reason,
             chips=chips,
         )

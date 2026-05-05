@@ -48,6 +48,8 @@ All REST routes are versioned under `/v1/`.
 
 ### 4.3 Signals (Phase 4d)
 
+- `POST /v1/signals/composite/real` — JSON body `{ "symbol": "AAPL" }`; server runs six analyzers on **intraday** data; success payload includes **`mode": "day"`**, **`signal_valid_until`** (next US RTH close, ISO UTC), plus composite fields (`layers`, `score`, …). **`insufficient_data`** still HTTP 200 with `market_status`.
+- `POST /v1/signals/composite/swing` — same body; **daily** bars + swing parameters (extended news/macro/geo, optional weekly sector rel. strength); success includes **`mode": "swing"`**, **`signal_valid_days`**, **`signal_expires`** (ISO UTC).
 - `POST /v1/signals/swing/composite` — build structured composite score and signal parameters from layer signals
 - `POST /v1/signals/swing/synthesis/parse` — parse AI JSON synthesis output to normalized action payload
 - `POST /v1/signals/day/setups` — rank intraday setup candidates from 1-minute bars

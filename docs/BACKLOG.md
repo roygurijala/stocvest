@@ -4,7 +4,7 @@
 `CONTEXT.md` holds **status-at-a-glance**, **what’s implemented**, **near-term ops** (Terraform, secrets, CI, legal), **legal rules**, and **session rules**.  
 **This file** holds **planned work only**: themes, sub-items, and notes—**without** repeating the CONTEXT status table or §3 pending list.
 
-**Last updated:** 2026-05-05 (Market Intelligence ranking + PDT pill UX)
+**Last updated:** 2026-05-05 (swing composite Phase 1 + Market Intelligence / PDT)
 
 ---
 
@@ -80,6 +80,14 @@ Tracked in **`CONTEXT.md` §3** only (Terraform apply, GitHub/AWS/Vercel secrets
 | PF9 | **CONTEXT market-data invariants + reusable VIX snapshot helper** | Done 2026-05-04 (PF9 on `main`; `git log -1 --oneline` for hash) | **`docs/CONTEXT.md` §7 / §13:** codified `Snapshot` + `_parse_snapshot` contract (field names, no raw dicts), `IntradaySetupScanner` bar-fetch boundary + calculator reuse guidance, extended-hours on `Snapshot` only, no duplicate day/last scale check. **`morning_brief_fetch`:** `VIX_SNAPSHOT_FALLBACK_SYMBOLS`, `SupportsPolygonSnapshotFetch`, `get_vix_snapshot_with_fallback` (replace ad-hoc VIX loops). **`tests/api/test_morning_brief.py`:** VIX fallback order / empty last / `PolygonError` chain. *(Row once recorded 536/56 tests; use `CONTEXT.md` §13 for current baselines.)* |
 | PF10 | **Real 6-layer engine + `POST /v1/signals/composite/real`** | Done 2026-05-04 | Server-side analyzers (`technical_analyzer`, `news_analyzer`, `macro_analyzer`, `sector_analyzer` + `sector_mapper`, `geo_analyzer`, `internals_analyzer`), `real_composite_engine.py`, DynamoDB **`SectorCache`** + **`DYNAMODB_SECTOR_CACHE_TABLE`**, API Gateway route, BFF `composite/real`, signals UI uses real endpoint (removed `bullishBias` / `buildSwingCompositeRequestBody` heuristic). **`confluence.py`:** `normalize_direction`, ORB pattern helpers. **`docs/SIGNAL_ENGINE.md`**. **`sector_etf_defaults`**, extended `SectorParameters.sector_to_etf`, `TechnicalParameters` ATR/PDH fields. Tests: `tests/signals/*`, `tests/api/test_real_composite.py`. Evidence modal: `applySwingCompositeEnrichment` merges `layers[].chips` from composite; placeholders until enriched. *(Row once recorded 587/57 tests; use `CONTEXT.md` §13 for current baselines.)* |
 | MP1 | **Model portfolio (signal tracking / notional)** | Done 2026-05-04 | DynamoDB **`ModelPortfolio`** + GSIs, `portfolio_recorder.py`, `portfolio_auto_log.py` + hook from **`composite/real`** (bullish, score ≥72 on 0–100 scale mapped from composite float, regime ≠ `avoid`), public **`GET /v1/portfolio/*`**, internal **`POST .../positions/open|close`**, **`signal_resolution`** extended (stop/target/time + EventBridge **`stocvest-portfolio-reversal`** weekday payload `stocvest_job=portfolio_reversal`), BFF routes, **`/portfolio`** UI + sidebar, **`scripts/portfolio_status.py`**, **`tests/api/test_portfolio_recorder.py`**. CORS: **`x-stocvest-internal-analysis`**. |
+
+---
+
+## ST — Swing trading (multi-day)
+
+| ID | Theme | Status | Notes |
+|----|--------|--------|-------|
+| ST1 | **Swing composite Phase 1 (six layers, daily data)** | Done 2026-05-05 | **`SwingTechnicalAnalyzer`** (`stocvest/signals/swing_technical_analyzer.py`), **`SwingTechnicalParameters`** + swing lookback fields on **`SignalParameters`**, **`POST /v1/signals/composite/swing`** + BFF **`/api/stocvest/signals/composite/swing`**, Terraform API route, **`swing_composite_engine.py`**: daily **`get_bars`**, 7d news / 14d econ calendar / weekly sector vs SPY / geo lookback; response **`mode`**, **`signal_expires`**; day **`composite/real`** adds **`mode: day`**, **`signal_valid_until`**. Analyzers: **`NewsAnalyzer`** / **`GeoAnalyzer`** time window kwargs; **`MacroAnalyzer`** `events_lookback_days`; **`SectorAnalyzer`** `use_weekly` + weekly % overrides. **`PolygonClient.get_economic_calendar_range`**. Tests: **`tests/signals/test_swing_technical_analyzer.py`**, **`tests/api/test_swing_composite.py`**. |
 
 ---
 

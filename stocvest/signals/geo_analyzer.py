@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 GEO_HIGH_RISK = (
@@ -64,7 +65,25 @@ def _digest(articles: list[dict[str, Any]]) -> str:
 
 
 class GeoAnalyzer:
-    def analyze(self, articles: list[dict[str, Any]]) -> GeoLayerResult:
+    def analyze(self, articles: list[dict[str, Any]], *, lookback_hours: int = 8) -> GeoLayerResult:
+        now_utc = datetime.now(timezone.utc)
+        cutoff = now_utc - timedelta(hours=float(lookback_hours))
+        filtered: list[dict[str, Any]] = []
+        for a in articles:
+            if not isinstance(a, dict):
+                continue
+            pr = a.get("published_utc")
+            try:
+                pub = datetime.fromisoformat(str(pr).replace("Z", "+00:00"))
+                if pub.tzinfo is None:
+                    pub = pub.replace(tzinfo=timezone.utc)
+            except (TypeError, ValueError):
+                filtered.append(a)
+                continue
+            if pub.astimezone(timezone.utc) >= cutoff:
+                filtered.append(a)
+        articles = filtered
+
         digest = _digest(articles)
         now = time.monotonic()
         hit = _CACHE.get(digest)

@@ -15,6 +15,7 @@ locals {
 
     "POST /v1/signals/swing/composite"       = { module_key = "signals", authorizer = true }
     "POST /v1/signals/composite/real"        = { module_key = "signals", authorizer = true }
+    "POST /v1/signals/composite/swing"     = { module_key = "signals", authorizer = true }
     "POST /v1/signals/swing/synthesis/parse" = { module_key = "signals", authorizer = true }
     "POST /v1/signals/day/setups"            = { module_key = "signals", authorizer = true }
     "POST /v1/signals/day/briefing"          = { module_key = "signals", authorizer = true }

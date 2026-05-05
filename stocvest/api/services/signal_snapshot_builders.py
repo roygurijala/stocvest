@@ -124,32 +124,76 @@ def build_real_composite_snapshot_payload(
     from stocvest.signals.macro_analyzer import MacroLayerResult
     from stocvest.signals.news_analyzer import NewsLayerResult
     from stocvest.signals.sector_analyzer import SectorLayerResult
+    from stocvest.signals.swing_technical_analyzer import SwingTechnicalLayerResult
     from stocvest.signals.technical_analyzer import TechnicalLayerResult
 
     t = technical if isinstance(technical, TechnicalLayerResult) else None
+    st = technical if isinstance(technical, SwingTechnicalLayerResult) else None
     n = news if isinstance(news, NewsLayerResult) else None
     m = macro if isinstance(macro, MacroLayerResult) else None
     s = sector if isinstance(sector, SectorLayerResult) else None
     i = internals if isinstance(internals, InternalsLayerResult) else None
 
-    tech_snap = TechnicalSnapshot(
-        rsi=t.rsi if t else None,
-        vwap=t.vwap_from_bars if t else None,
-        ema9=t.ema9 if t else None,
-        ema20=t.ema20 if t else None,
-        price_vs_vwap=t.price_vs_vwap if t else None,
-        price_vs_ema9=None,
-        price_vs_ema20=None,
-        orb_signal=t.orb_signal if t else None,
-        orb_high=t.orb_high if t else None,
-        orb_low=t.orb_low if t else None,
-        volume_ratio=t.volume_vs_adv if t else None,
-        volume_vs_adv=t.volume_vs_adv if t else None,
-        atr=t.atr if t else None,
-        prev_day_high=t.prev_day_high if t else None,
-        prev_day_low=t.prev_day_low if t else None,
-        bars_analyzed=t.bars_analyzed if t else 0,
-    )
+    if t:
+        tech_snap = TechnicalSnapshot(
+            rsi=t.rsi,
+            vwap=t.vwap_from_bars,
+            ema9=t.ema9,
+            ema20=t.ema20,
+            price_vs_vwap=t.price_vs_vwap,
+            price_vs_ema9=None,
+            price_vs_ema20=None,
+            orb_signal=t.orb_signal,
+            orb_high=t.orb_high,
+            orb_low=t.orb_low,
+            volume_ratio=t.volume_vs_adv,
+            volume_vs_adv=t.volume_vs_adv,
+            atr=t.atr,
+            prev_day_high=t.prev_day_high,
+            prev_day_low=t.prev_day_low,
+            bars_analyzed=t.bars_analyzed,
+        )
+    elif st:
+        orb_sig = "golden_cross" if st.golden_cross else None
+        if st.sma50 is not None and st.sma200 is not None and st.sma50 < st.sma200:
+            orb_sig = "death_cross"
+        tech_snap = TechnicalSnapshot(
+            rsi=st.daily_rsi,
+            vwap=None,
+            ema9=st.sma50,
+            ema20=st.sma200,
+            price_vs_vwap=None,
+            price_vs_ema9=None,
+            price_vs_ema20=None,
+            orb_signal=orb_sig,
+            orb_high=None,
+            orb_low=None,
+            volume_ratio=None,
+            volume_vs_adv=None,
+            atr=None,
+            prev_day_high=None,
+            prev_day_low=None,
+            bars_analyzed=st.bars_analyzed,
+        )
+    else:
+        tech_snap = TechnicalSnapshot(
+            rsi=None,
+            vwap=None,
+            ema9=None,
+            ema20=None,
+            price_vs_vwap=None,
+            price_vs_ema9=None,
+            price_vs_ema20=None,
+            orb_signal=None,
+            orb_high=None,
+            orb_low=None,
+            volume_ratio=None,
+            volume_vs_adv=None,
+            atr=None,
+            prev_day_high=None,
+            prev_day_low=None,
+            bars_analyzed=0,
+        )
 
     news_snap = NewsSnapshot(
         article_count=n.article_count if n else 0,

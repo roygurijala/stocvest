@@ -17,6 +17,7 @@ from stocvest.config.signal_parameters import (
     NewsParameters,
     SectorParameters,
     SignalParameters,
+    SwingTechnicalParameters,
     TechnicalParameters,
     default_signal_parameters,
     signal_parameters_to_dict,
@@ -59,6 +60,7 @@ def signal_parameters_from_dict(data: dict[str, Any]) -> SignalParameters:
     macro = _coerce_dataclass(MacroParameters, data.get("macro") or {})
     sector = _coerce_dataclass(SectorParameters, data.get("sector") or {})
     comp = _coerce_dataclass(CompositeParameters, data.get("composite") or {})
+    swing_t = _coerce_dataclass(SwingTechnicalParameters, data.get("swing_technical") or {})
     return SignalParameters(
         version=str(data.get("version") or base.version),
         created_at=str(data.get("created_at") or ""),
@@ -68,6 +70,11 @@ def signal_parameters_from_dict(data: dict[str, Any]) -> SignalParameters:
         macro=macro,
         sector=sector,
         composite=comp,
+        swing_technical=swing_t,
+        swing_news_lookback_hours=int(data.get("swing_news_lookback_hours", base.swing_news_lookback_hours)),
+        swing_macro_events_days=int(data.get("swing_macro_events_days", base.swing_macro_events_days)),
+        swing_geo_lookback_hours=int(data.get("swing_geo_lookback_hours", base.swing_geo_lookback_hours)),
+        swing_sector_use_weekly=bool(data.get("swing_sector_use_weekly", base.swing_sector_use_weekly)),
     )
 
 

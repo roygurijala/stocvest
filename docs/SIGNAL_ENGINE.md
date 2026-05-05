@@ -1,6 +1,6 @@
 # Signal engine (real composite)
 
-This document describes the **server-side** multi-layer stack behind `POST /v1/signals/composite/real`. Tunables live in `SignalParameters` (Secrets Manager JSON); defaults in `stocvest/config/signal_parameters.py` and `stocvest/config/sector_etf_defaults.py`.
+This document describes the **server-side** multi-layer stacks behind **`POST /v1/signals/composite/real`** (intraday / day-trade mode) and **`POST /v1/signals/composite/swing`** (daily-bar swing mode). Both reuse the same six layer *types*, `CompositeScoreEngine`, and confluence/evidence plumbing; data fetch windows and the technical implementation differ (`technical_analyzer` vs `swing_technical_analyzer`). Tunables live in `SignalParameters` (Secrets Manager JSON); defaults in `stocvest/config/signal_parameters.py` and `stocvest/config/sector_etf_defaults.py`.
 
 ## Data contracts
 
@@ -9,23 +9,28 @@ This document describes the **server-side** multi-layer stack behind `POST /v1/s
 
 ## Layers
 
-### Technical (`technical_analyzer.py`)
+### Technical — day (`technical_analyzer.py`)
 
 - **Inputs**: 1-minute `Bar` list (caller/Lambda fetch), `Snapshot`, `TechnicalParameters`, optional `adv` (otherwise volume ratio uses recent-bar average vs `Snapshot.prev_day_volume` when provided as ADV proxy).
 - **Outputs**: RSI (Wilder), session VWAP from bars, EMA9/EMA20 stack, ORB over `orb_period_minutes` with expiry at `orb_expiry_hour_et`, ATR-qualified breakout via `orb_atr_qualification_ratio`, volume surge vs `volume_surge_multiplier`.
 - **Unavailable**: Fewer than five bars or no valid closes.
 - **Limitation**: No dedicated prior-session OHLC on `Snapshot`; PDH/PDL slots on `TechnicalLayerResult` stay `None` until a prior session feed is wired.
 
+### Technical — swing (`swing_technical_analyzer.py`)
+
+- **Inputs**: Daily `Bar` list (`Timeframe.DAY_1`), `Snapshot`, `SwingTechnicalParameters`.
+- **Outputs**: SMA50/SMA200 stack, daily RSI, MACD vs signal, higher-high/higher-low heuristic, base-range detection, volume accumulation/distribution regime, range-high proximity; chips are **not** VWAP/ORB (swing-specific labels).
+
 ### News (`news_analyzer.py`)
 
-- **Inputs**: Polygon `/v2/reference/news` rows (dicts), `NewsParameters`.
+- **Inputs**: Polygon `/v2/reference/news` rows (dicts), `NewsParameters`, optional **`lookback_hours`** (defaults to `NewsParameters.lookback_hours`, **8**). Rows older than the window are dropped before scoring.
 - **Sentiment**: Prefers `insights[0].sentiment`; quality gate via `is_quality_article()` (`news_quality_filter.py`).
 - **Unavailable**: Zero quality articles after filtering (distinct from neutral verdict).
 - **Dashboard Market Intelligence** (`GET /v1/market/news` in `market_data.py`) uses a **different** path: `passes_market_intelligence_gate()` (PR wires may enter the pool) plus **`news_relevance.py`** scoring, deduplication, and `categorize_article()` — do not assume the same filter as the composite news layer.
 
 ### Macro (`macro_analyzer.py`)
 
-- **Inputs**: SPY/QQQ/VIX `Snapshot`, Benzinga economics rows (`EconomicCalendarEvent`), `MacroParameters`.
+- **Inputs**: SPY/QQQ/VIX `Snapshot`, Benzinga economics rows (`EconomicCalendarEvent`), `MacroParameters`, optional **`events_lookback_days`** (caller fetches a multi-day calendar via `PolygonClient.get_economic_calendar_range` for swing).
 - **Scoring**: Weighted blend of momentum (change %), VIX level/trend (`vix_direction_from_change`), and event-risk keywords on event titles.
 - **Regime labels**: `risk_on` / `risk_off` / `avoid` / `neutral` for UI and confluence normalization.
 
@@ -33,11 +38,11 @@ This document describes the **server-side** multi-layer stack behind `POST /v1/s
 
 - **Mapper**: `PolygonClient.get_ticker_details()` → `sic_code` → internal `SIC_TO_SECTOR` → `SectorParameters.sector_to_etf` benchmark ticker.
 - **Cache**: Optional DynamoDB `SectorCache` (`DYNAMODB_SECTOR_CACHE_TABLE`) with TTL attribute `expires_at`.
-- **Analyzer**: Relative strength = sector ETF `change_percent` minus SPY `change_percent`; thresholds from `SectorParameters`.
+- **Analyzer**: Relative strength = sector ETF `change_percent` minus SPY `change_percent` (day mode), or optional **`use_weekly`** with caller-supplied **`weekly_sector_pct`** and **`weekly_spy_pct`** (typically ~5 sessions from daily closes) minus SPY weekly %.
 
 ### Geopolitical (`geo_analyzer.py`)
 
-- **Keyword tiers** on last 20 article titles/descriptions; 30-minute in-process memo keyed by content hash.
+- **Keyword tiers** on last 20 article titles/descriptions (after optional **`lookback_hours`** filter); 30-minute in-process memo keyed by content hash.
 - **Limitation**: Not a dedicated geopolitical data feed; coverage depends on headlines and keyword lists.
 
 ### Internals (`internals_analyzer.py`)

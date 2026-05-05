@@ -872,12 +872,57 @@ class PolygonClient:
                     imp = "low"
                 t = str(r.get("time") or r.get("event_time") or "")
                 nm = str(r.get("event_name") or r.get("title") or r.get("description") or "Economic indicator")
-                out.append(EconomicCalendarEvent(time_et=t, event_name=nm, impact=imp))
+                out.append(EconomicCalendarEvent(time_et=t, event_name=nm, impact=imp, event_date=on_date))
             except Exception:
                 continue
         rank = {"high": 0, "medium": 1, "low": 2}
         out.sort(key=lambda e: (rank.get(e.impact, 3), e.time_et))
         return out[:10]
+
+    async def get_economic_calendar_range(self, start: date, end: date) -> list[EconomicCalendarEvent]:
+        """Macro calendar rows between ``start`` and ``end`` (inclusive), best-effort."""
+        if end < start:
+            return []
+        try:
+            data = await self._get(
+                "/benzinga/v1/economics",
+                {
+                    "date.gte": start.isoformat(),
+                    "date.lte": end.isoformat(),
+                    "limit": "500",
+                    "sort": "date.asc",
+                },
+            )
+        except (PolygonError, Exception) as exc:
+            log.debug("get_economic_calendar_range: %s", exc)
+            return []
+        out: list[EconomicCalendarEvent] = []
+        for r in data.get("results") or []:
+            if not isinstance(r, dict):
+                continue
+            try:
+                raw_imp = str(r.get("importance") or r.get("impact") or "").lower()
+                if raw_imp in ("high", "1", "3"):
+                    imp = "high"
+                elif raw_imp in ("medium", "2", "med"):
+                    imp = "medium"
+                else:
+                    imp = "low"
+                t = str(r.get("time") or r.get("event_time") or "")
+                nm = str(r.get("event_name") or r.get("title") or r.get("description") or "Economic indicator")
+                ev_dt: date | None = None
+                raw_d = r.get("date") or r.get("event_date")
+                if isinstance(raw_d, str) and len(raw_d) >= 10:
+                    try:
+                        ev_dt = date.fromisoformat(raw_d[:10])
+                    except ValueError:
+                        ev_dt = None
+                out.append(EconomicCalendarEvent(time_et=t, event_name=nm, impact=imp, event_date=ev_dt))
+            except Exception:
+                continue
+        rank = {"high": 0, "medium": 1, "low": 2}
+        out.sort(key=lambda e: (e.event_date or date.min, rank.get(e.impact, 3), e.time_et))
+        return out[:50]
 
     # ──────────────────────────────────────────────────────────────────────────
     # WebSocket — Real-time streaming

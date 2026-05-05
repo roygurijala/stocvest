@@ -204,6 +204,7 @@ class EconomicCalendarEvent(BaseModel):
     time_et: str
     event_name: str
     impact: str  # high | medium | low
+    event_date: date | None = None
 
 
 class TradingMode(str, Enum):

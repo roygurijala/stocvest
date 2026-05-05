@@ -2,7 +2,7 @@
 
 import type { CSSProperties } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { Brain, Clock } from "lucide-react";
+import { Brain, Clock, Zap } from "lucide-react";
 import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer } from "recharts";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
@@ -57,6 +57,9 @@ const layerMeta = [
 
 const SIGNAL_LAYER_KEYS = ["technical", "news", "macro", "sector", "geopolitical", "internals"] as const;
 
+const TRADING_MODE_STORAGE_KEY = "stocvest_trading_mode";
+type TradingMode = "day" | "swing";
+
 const RADAR_LAYER_LABEL: Record<string, string> = {
   technical: "Technical",
   news: "News",
@@ -86,6 +89,7 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
   const { colors } = useTheme();
   const isMobileLayout = useIsMobileLayout();
   const [tab, setTab] = useState<"layers" | "history">("layers");
+  const [tradingMode, setTradingMode] = useState<TradingMode>("day");
   const [symbol, setSymbol] = useState("AAPL");
   const [signalEvidence, setSignalEvidence] = useState<SignalEvidenceData | null>(null);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
@@ -110,6 +114,24 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
   }, [marketOverview.snapshots, symbol, symbolSnapshot]);
 
   const snapshot = useMemo(() => coerceSnapshotForReferenceLevels(rawSnapshot), [rawSnapshot]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(TRADING_MODE_STORAGE_KEY);
+      if (raw === "swing" || raw === "day") setTradingMode(raw);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const updateTradingMode = (m: TradingMode) => {
+    setTradingMode(m);
+    try {
+      localStorage.setItem(TRADING_MODE_STORAGE_KEY, m);
+    } catch {
+      /* ignore */
+    }
+  };
 
   useEffect(() => {
     const sym = symbol.trim().toUpperCase();
@@ -251,7 +273,9 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
     let cancelled = false;
     const run = async () => {
       try {
-        const res = await fetch("/api/stocvest/signals/composite/real", {
+        const path =
+          tradingMode === "swing" ? "/api/stocvest/signals/composite/swing" : "/api/stocvest/signals/composite/real";
+        const res = await fetch(path, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ symbol: sym }),
@@ -301,13 +325,14 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
     return () => {
       cancelled = true;
     };
-  }, [symbol, tab]);
+  }, [symbol, tab, tradingMode]);
 
   const insufficientComposite: SwingCompositeMarketStatus | null = isInsufficientCompositeResponse(compositeResult)
     ? compositeResult.market_status
     : null;
   const hasValidSignal = compositeResult !== null && !isInsufficientCompositeResponse(compositeResult);
-  const showAfterHoursPanel = insufficientComposite?.market_session === "closed";
+  const showAfterHoursPanel =
+    tradingMode === "day" && insufficientComposite?.market_session === "closed";
 
   useEffect(() => {
     const sym = symbol.trim().toUpperCase();
@@ -501,6 +526,54 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <AddToWatchlistButton symbol={symbol} />
+      </div>
+
+      <div className="flex max-w-lg flex-col gap-2">
+        <div
+          className="grid grid-cols-2 gap-1 rounded-lg p-1"
+          style={{ border: `1px solid ${colors.border}`, background: colors.background }}
+          role="tablist"
+          aria-label="Trading mode"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tradingMode === "day"}
+            className="min-h-10 rounded-md px-3 text-sm font-medium transition-colors"
+            onClick={() => updateTradingMode("day")}
+            style={{
+              background: tradingMode === "day" ? "rgba(0,200,220,0.25)" : "transparent",
+              color: tradingMode === "day" ? "#00C8DC" : colors.textMuted,
+              border: tradingMode === "day" ? "1px solid rgba(0,200,220,0.45)" : "1px solid transparent"
+            }}
+          >
+            <span className="inline-flex items-center justify-center gap-1.5">
+              <Zap size={16} aria-hidden />
+              Day trade
+            </span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tradingMode === "swing"}
+            className="min-h-10 rounded-md px-3 text-sm font-medium transition-colors"
+            onClick={() => updateTradingMode("swing")}
+            style={{
+              background: tradingMode === "swing" ? "rgba(168,85,247,0.22)" : "transparent",
+              color: tradingMode === "swing" ? "#A855F7" : colors.textMuted,
+              border: tradingMode === "swing" ? "1px solid rgba(168,85,247,0.45)" : "1px solid transparent"
+            }}
+          >
+            <span className="inline-flex items-center justify-center gap-1.5" aria-hidden>
+              📈 Swing trade
+            </span>
+          </button>
+        </div>
+        <p className="m-0 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
+          {tradingMode === "day"
+            ? "Intraday setups · VWAP · ORB · Valid through regular session close (see signal_valid_until in API)."
+            : "Multi-day setups · Daily SMA / MACD · Valid ~5 calendar days (signal_expires on API response)."}
+        </p>
       </div>
 
       <div className="signals-grid grid grid-cols-1 items-start gap-4 lg:grid-cols-[1.35fr_1fr] [&>*]:min-w-0">

@@ -20,6 +20,7 @@ from stocvest.api.handlers.model_portfolio import (
     model_portfolio_summary_handler,
 )
 from stocvest.api.services.real_composite_engine import real_composite_body_sync
+from stocvest.api.services.swing_composite_engine import swing_composite_body_sync
 from stocvest.api.services.signal_snapshot_builders import build_swing_composite_snapshot_payload
 from stocvest.config.parameter_store import ParameterStore
 from stocvest.api.services.composite_market_context import fetch_composite_market_status_payload_sync
@@ -167,6 +168,21 @@ def real_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
         return bad_request("Body field 'symbol' is required.")
     rc = build_request_context(event)
     body = real_composite_body_sync(symbol=symbol, user_id=rc.user_id, user_email=rc.email)
+    return ok(body)
+
+
+def swing_real_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    """POST /v1/signals/composite/swing — six-layer composite on daily data + swing parameters."""
+    _ = context
+    try:
+        payload = parse_json_body(event)
+    except ValueError as exc:
+        return bad_request(str(exc))
+    symbol = str(payload.get("symbol") or "").strip().upper()
+    if not symbol:
+        return bad_request("Body field 'symbol' is required.")
+    rc = build_request_context(event)
+    body = swing_composite_body_sync(symbol=symbol, user_id=rc.user_id, user_email=rc.email)
     return ok(body)
 
 
@@ -589,6 +605,7 @@ def signals_http_dispatch(event: LambdaEvent, context: LambdaContext) -> dict[st
 
     routes: dict[str, Callable[[LambdaEvent, LambdaContext], dict[str, Any]]] = {
         "POST /v1/signals/composite/real": real_composite_handler,
+        "POST /v1/signals/composite/swing": swing_real_composite_handler,
         "POST /v1/signals/swing/composite": swing_composite_handler,
         "POST /v1/signals/swing/synthesis/parse": swing_synthesis_parse_handler,
         "POST /v1/signals/day/setups": day_setups_handler,

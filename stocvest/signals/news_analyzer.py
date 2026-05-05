@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from stocvest.api.services.news_quality_filter import is_quality_article
@@ -54,10 +54,32 @@ def _detect_catalyst(title: str, desc: str) -> tuple[str | None, str | None]:
 
 
 class NewsAnalyzer:
-    def analyze(self, symbol: str, articles: list[dict[str, Any]], params: NewsParameters) -> NewsLayerResult:
+    def analyze(
+        self,
+        symbol: str,
+        articles: list[dict[str, Any]],
+        params: NewsParameters,
+        *,
+        lookback_hours: int | None = None,
+    ) -> NewsLayerResult:
         sym = symbol.upper().strip()
         now = datetime.now(timezone.utc)
-        rows = [a for a in articles if isinstance(a, dict)][: params.max_articles]
+        lb_h = float(lookback_hours if lookback_hours is not None else params.lookback_hours)
+        cutoff = now - timedelta(hours=lb_h)
+        raw_rows = [a for a in articles if isinstance(a, dict)]
+        time_filtered: list[dict[str, Any]] = []
+        for a in raw_rows:
+            pub_raw = a.get("published_utc")
+            try:
+                pub = datetime.fromisoformat(str(pub_raw).replace("Z", "+00:00"))
+                if pub.tzinfo is None:
+                    pub = pub.replace(tzinfo=timezone.utc)
+            except (TypeError, ValueError):
+                time_filtered.append(a)
+                continue
+            if pub.astimezone(timezone.utc) >= cutoff:
+                time_filtered.append(a)
+        rows = time_filtered[: params.max_articles]
         quality = [a for a in rows if is_quality_article(a)]
         if not quality:
             return NewsLayerResult(
