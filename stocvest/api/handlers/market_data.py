@@ -10,7 +10,13 @@ from typing import Any
 
 from stocvest.api.response import bad_request, internal_error, ok
 from stocvest.api.services.news_impact_analyzer import analyze_news_impact, generate_impact_summary
-from stocvest.api.services.news_quality_filter import get_publisher_tier, is_quality_article
+from stocvest.api.services.news_quality_filter import get_publisher_tier, passes_market_intelligence_gate
+from stocvest.api.services.news_relevance import (
+    calculate_article_relevance,
+    catalyst_category_for_text,
+    deduplicate_articles,
+    source_credibility_meta,
+)
 from stocvest.api.shared import build_request_context, parse_json_body
 from stocvest.api.types import LambdaContext, LambdaEvent
 from stocvest.data import PolygonClient, PolygonError, Timeframe
@@ -21,6 +27,19 @@ from stocvest.utils.config import get_settings
 
 def _published_utc_sort_key(article: dict[str, Any]) -> str:
     return str(article.get("published_utc") or "")
+
+
+def _news_relevance_sort_key(article: dict[str, Any]) -> tuple[int, float]:
+    score = int(article.get("_relevance_score") or 0)
+    raw = str(article.get("published_utc") or "").replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(raw)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        ts = dt.timestamp()
+    except (TypeError, ValueError, OSError):
+        ts = 0.0
+    return (-score, -ts)
 
 
 def _publisher_diversity_ranked(articles: list[dict[str, Any]], *, max_per_publisher: int = 2) -> list[dict[str, Any]]:
@@ -51,6 +70,23 @@ def _publisher_diversity_ranked(articles: list[dict[str, Any]], *, max_per_publi
                 next_round.append(pub)
         pubs = next_round
     return ordered
+
+
+def _publisher_diversity_cap_preserving_order(
+    articles: list[dict[str, Any]],
+    *,
+    max_per_publisher: int = 2,
+) -> list[dict[str, Any]]:
+    """Keep input order (e.g. relevance-sorted); drop extras beyond ``max_per_publisher`` per source."""
+    counts: dict[str, int] = {}
+    out: list[dict[str, Any]] = []
+    for article in articles:
+        publisher = str(((article.get("publisher") or {}).get("name") or "unknown")).strip().lower()
+        if counts.get(publisher, 0) >= max_per_publisher:
+            continue
+        counts[publisher] = counts.get(publisher, 0) + 1
+        out.append(article)
+    return out
 
 
 def market_status_handler(
@@ -280,17 +316,36 @@ def news_handler(
         async with client_factory(api_key=settings.polygon_api_key) as client:
             raw_articles = await client.get_market_news(
                 tickers=merged_tickers,
-                limit=50,
+                limit=120,
                 order="desc",
                 published_utc_gte=since,
             )
 
-        candidates: list[dict[str, Any]] = []
+        scored_polygon: list[dict[str, Any]] = []
         for article in raw_articles:
-            if not is_quality_article(article):
+            if not passes_market_intelligence_gate(article):
                 continue
+            rel = calculate_article_relevance(article, watchlist_symbols)
+            if rel < 10:
+                continue
+            scored_polygon.append({**article, "_relevance_score": rel})
+
+        scored_polygon.sort(key=_news_relevance_sort_key)
+        deduped_polygon = deduplicate_articles(scored_polygon, score_key="_relevance_score")
+        diversity_polygon = _publisher_diversity_cap_preserving_order(deduped_polygon, max_per_publisher=2)
+
+        out_cap = min(limit, 25)
+        candidates: list[dict[str, Any]] = []
+        for article in diversity_polygon[:out_cap]:
+            relevance_score = int(article.pop("_relevance_score", 0))
             tickers = [str(t).strip().upper() for t in article.get("tickers", []) if str(t).strip()]
             publisher_name = str((article.get("publisher") or {}).get("name") or "").strip()
+            title_lower = str(article.get("title") or "").lower()
+            desc_lower = str(article.get("description") or "").lower()
+            catalyst_category = catalyst_category_for_text(title_lower, desc_lower)
+            credibility = source_credibility_meta(publisher_name)
+            watchlist_upper = {s.strip().upper() for s in watchlist_symbols if s.strip()}
+            matches_watchlist = bool(watchlist_upper and any(t in watchlist_upper for t in tickers))
             affected = analyze_news_impact(article, watchlist_symbols=watchlist_symbols)
             sentiment = "neutral"
             insights = article.get("insights")
@@ -305,30 +360,32 @@ def news_handler(
                 sentiment = raw_sent2
             candidates.append(
                 {
-                "id": str(article.get("id") or ""),
-                "title": str(article.get("title") or ""),
-                "published_utc": str(article.get("published_utc") or ""),
-                "publisher": {
-                    "name": publisher_name or "Unknown source",
-                    "tier": get_publisher_tier(publisher_name),
-                },
-                "tickers": tickers,
-                "article_url": str(article.get("article_url") or ""),
-                "sentiment": sentiment,
-                "affected_stocks": affected,
-                "impact_summary": generate_impact_summary(article, affected),
-                # Back-compat for existing frontend fields.
-                "article_id": str(article.get("id") or ""),
-                "published_at": str(article.get("published_utc") or ""),
-                "url": str(article.get("article_url") or ""),
-                "source": publisher_name or "Unknown source",
-                "description": article.get("description"),
-                "image_url": article.get("image_url"),
+                    "id": str(article.get("id") or ""),
+                    "title": str(article.get("title") or ""),
+                    "published_utc": str(article.get("published_utc") or ""),
+                    "publisher": {
+                        "name": publisher_name or "Unknown source",
+                        "tier": get_publisher_tier(publisher_name),
+                    },
+                    "tickers": tickers,
+                    "article_url": str(article.get("article_url") or ""),
+                    "sentiment": sentiment,
+                    "affected_stocks": affected,
+                    "impact_summary": generate_impact_summary(article, affected),
+                    "relevance_score": relevance_score,
+                    "catalyst_category": catalyst_category,
+                    "credibility": credibility,
+                    "matches_watchlist": matches_watchlist,
+                    # Back-compat for existing frontend fields.
+                    "article_id": str(article.get("id") or ""),
+                    "published_at": str(article.get("published_utc") or ""),
+                    "url": str(article.get("article_url") or ""),
+                    "source": publisher_name or "Unknown source",
+                    "description": article.get("description"),
+                    "image_url": article.get("image_url"),
                 }
             )
-        ranked = _publisher_diversity_ranked(candidates, max_per_publisher=2)
-        headlines = ranked[: min(limit, 8)]
-        return ok({"headlines": headlines})
+        return ok({"headlines": candidates})
 
     try:
         return asyncio.run(_run())

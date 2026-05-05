@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from stocvest.api.services.news_quality_filter import get_publisher_tier, is_quality_article
+from stocvest.api.services.news_quality_filter import get_publisher_tier, is_quality_article, passes_market_intelligence_gate
 
 
 def _article(*, publisher: str, title: str = "Headline", description: str = "desc", tickers: list[str] | None = None):
@@ -51,3 +51,8 @@ def test_blocks_since_ipo_content() -> None:
 def test_tier_1_publisher_identified() -> None:
     assert get_publisher_tier("Reuters") == 1
     assert get_publisher_tier("Unknown Blog") == 2
+
+
+def test_intel_gate_allows_pr_wire_when_tickers_clean() -> None:
+    assert passes_market_intelligence_gate(_article(publisher="GlobeNewswire")) is True
+    assert is_quality_article(_article(publisher="GlobeNewswire")) is False

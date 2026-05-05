@@ -205,6 +205,30 @@ export function NewsHeadlineDrawer({ open, article, onClose }: NewsHeadlineDrawe
               </span>
             ) : null}
           </div>
+          {article.credibility?.label || typeof article.relevance_score === "number" ? (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: spacing[2], alignItems: "center" }}>
+              {article.credibility?.label ? (
+                <span
+                  style={{
+                    borderRadius: borderRadius.full,
+                    padding: "4px 10px",
+                    fontSize: typography.scale.xs,
+                    fontWeight: 700,
+                    border: `1px solid ${colors.border}`,
+                    background: colors.surfaceMuted,
+                    color: colors.text
+                  }}
+                >
+                  {article.credibility.label}
+                </span>
+              ) : null}
+              {typeof article.relevance_score === "number" ? (
+                <span style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted }}>
+                  Relevance score {article.relevance_score}/100
+                </span>
+              ) : null}
+            </div>
+          ) : null}
           <h2
             id="news-headline-drawer-article-title"
             style={{ margin: 0, fontSize: typography.scale.lg, lineHeight: 1.35, color: colors.text, fontWeight: 700 }}

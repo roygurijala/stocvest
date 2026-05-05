@@ -57,12 +57,11 @@ def _publisher_name(article: dict[str, Any]) -> str:
     return ""
 
 
-def is_quality_article(article: dict[str, Any]) -> bool:
-    """Return True when the article is relevant for active traders."""
-    publisher = _publisher_name(article).lower()
-    if any(blocked in publisher for blocked in BLOCKED_PUBLISHERS):
-        return False
-
+def passes_market_intelligence_gate(article: dict[str, Any]) -> bool:
+    """
+    Polygon market-news pipeline: require tickers + block listicle noise.
+    PR wires are *not* hard-dropped here — relevance scoring penalizes them instead.
+    """
     title = str(article.get("title") or "").lower()
     description = str(article.get("description") or "").lower()
     combined = f"{title} {description}"
@@ -73,6 +72,15 @@ def is_quality_article(article: dict[str, Any]) -> bool:
     if not isinstance(tickers, list) or not any(str(t).strip() for t in tickers):
         return False
     return True
+
+
+def is_quality_article(article: dict[str, Any]) -> bool:
+    """Return True when the article is relevant for active traders."""
+    publisher = _publisher_name(article).lower()
+    if any(blocked in publisher for blocked in BLOCKED_PUBLISHERS):
+        return False
+
+    return passes_market_intelligence_gate(article)
 
 
 def get_publisher_tier(publisher_name: str) -> int:

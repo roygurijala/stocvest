@@ -276,6 +276,66 @@ def test_news_handler_applies_publisher_diversity_cap() -> None:
     assert pubs.count("Reuters") == 2
 
 
+class _RankNewsClient(_FakePolygonClient):
+    async def get_market_news(
+        self,
+        *,
+        tickers: list[str] | None = None,
+        limit: int = 50,
+        order: str = "desc",
+        published_utc_gte: datetime | None = None,
+    ) -> list[dict]:
+        _ = tickers
+        _ = limit
+        _ = order
+        _ = published_utc_gte
+        ts = "2026-05-04T18:00:00Z"
+        return [
+            {
+                "id": "g1",
+                "published_utc": ts,
+                "title": "MSFT stock moves in Tuesday session",
+                "description": "Trading desk notes",
+                "article_url": "https://e/g1",
+                "publisher": {"name": "Reuters"},
+                "tickers": ["MSFT"],
+                "insights": [{"sentiment": "neutral"}],
+            },
+            {
+                "id": "e1",
+                "published_utc": ts,
+                "title": "MSFT Q2 earnings beat revenue expectations",
+                "description": "Cloud strength",
+                "article_url": "https://e/e1",
+                "publisher": {"name": "Reuters"},
+                "tickers": ["MSFT"],
+                "insights": [{"sentiment": "positive"}],
+            },
+        ]
+
+
+def test_news_handler_ranks_catalyst_above_generic() -> None:
+    event = {"queryStringParameters": {"limit": "10"}}
+    response = news_handler(event, {}, client_factory=_RankNewsClient)
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["headlines"][0]["title"].startswith("MSFT Q2 earnings")
+    assert body["headlines"][0]["catalyst_category"] == "earnings"
+    assert body["headlines"][0]["credibility"]["band"] == "elite"
+
+
+def test_news_handler_includes_relevance_enrichment() -> None:
+    event = {"queryStringParameters": {"symbol": "msft", "limit": "5"}}
+    response = news_handler(event, {}, client_factory=_FakePolygonClient)
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    h = body["headlines"][0]
+    assert "relevance_score" in h
+    assert "credibility" in h and "label" in h["credibility"]
+    assert "catalyst_category" in h
+    assert "matches_watchlist" in h
+
+
 def test_options_chain_handler_returns_contracts_with_greeks() -> None:
     event = {"queryStringParameters": {"symbol": "aapl", "limit": "10"}}
     response = options_chain_handler(event, {}, client_factory=_FakePolygonClient)

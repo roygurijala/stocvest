@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { DashboardRealtime } from "@/components/dashboard-realtime";
@@ -14,7 +14,7 @@ import { NewsHeadlineDrawer } from "@/components/news-headline-drawer";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
-import type { MarketOverview, NewsPayload, SnapshotPayload } from "@/lib/api/market";
+import type { MarketOverview, NewsCredibilityBand, NewsPayload, SnapshotPayload } from "@/lib/api/market";
 import type { PDTStatusPayload } from "@/lib/api/pdt";
 import type { ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
@@ -76,6 +76,55 @@ function timeAgo(iso: string): string {
   return `${Math.floor(delta / 86400)}d ago`;
 }
 
+type MiTab = "all" | "watchlist" | "earnings" | "analyst" | "macro" | "ma" | "other";
+
+const MI_TAB_DEFS: { id: MiTab; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "watchlist", label: "Watchlist" },
+  { id: "earnings", label: "Earnings" },
+  { id: "analyst", label: "Analyst" },
+  { id: "macro", label: "Macro" },
+  { id: "ma", label: "M&A" },
+  { id: "other", label: "Other" }
+];
+
+function articleMatchesMiTab(article: NewsPayload, tab: MiTab): boolean {
+  const cat = article.catalyst_category ?? "general";
+  if (tab === "all") return true;
+  if (tab === "watchlist") {
+    return Boolean(article.matches_watchlist || article.affected_stocks?.some((s) => s.is_watchlist));
+  }
+  if (tab === "other") {
+    return cat === "general" || cat === "fda" || cat === "sector";
+  }
+  if (tab === "ma") return cat === "ma";
+  return cat === tab;
+}
+
+function credibilityChipStyle(
+  band: NewsCredibilityBand | undefined,
+  colors: { border: string; textMuted: string; caution: string; surfaceMuted: string }
+) {
+  switch (band) {
+    case "elite":
+      return { backgroundColor: "rgba(0,212,255,0.1)", border: "1px solid rgba(0,212,255,0.35)", color: "#00d4ff" };
+    case "major":
+      return { backgroundColor: "rgba(59,130,246,0.12)", border: "1px solid rgba(59,130,246,0.35)", color: "#60a5fa" };
+    case "trade":
+      return { backgroundColor: "rgba(168,85,247,0.1)", border: "1px solid rgba(168,85,247,0.3)", color: "#c084fc" };
+    case "research":
+      return { backgroundColor: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.35)", color: colors.caution };
+    case "pr_wire":
+      return { backgroundColor: "rgba(251,113,133,0.1)", border: "1px solid rgba(251,113,133,0.35)", color: "#fb7185" };
+    default:
+      return {
+        backgroundColor: colors.surfaceMuted,
+        border: `1px solid ${colors.border}`,
+        color: colors.textMuted
+      };
+  }
+}
+
 export function DashboardRedesign({
   marketOverview,
   pdtStatus,
@@ -88,6 +137,7 @@ export function DashboardRedesign({
   const [evidence, setEvidence] = useState<SignalEvidenceData | null>(null);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [headlineArticle, setHeadlineArticle] = useState<NewsPayload | null>(null);
+  const [miTab, setMiTab] = useState<MiTab>("all");
   const snapshotsBySymbol = new Map(marketOverview.snapshots.map((s) => [s.symbol, s]));
   const morningVisible =
     isMorningBriefingWindowNow() && (!!scannerOverview.morningBrief || morningBriefSlot != null);
@@ -95,6 +145,11 @@ export function DashboardRedesign({
   const pdt = pdtStatus?.assessment;
   const vixSnapshot = snapshotsBySymbol.get("VIX") || snapshotsBySymbol.get("^VIX");
   const earningsBySymbol = new Map(earningsEvents.map((e) => [e.symbol.toUpperCase(), e] as const));
+
+  const filteredMiNews = useMemo(
+    () => marketOverview.news.filter((a) => articleMatchesMiTab(a, miTab)),
+    [marketOverview.news, miTab]
+  );
 
   return (
     <section style={{ display: "grid", gap: spacing[4] }}>
@@ -279,8 +334,8 @@ export function DashboardRedesign({
               border: `1px solid ${colors.border}`,
               borderRadius: borderRadius.xl,
               padding: spacing[4],
-              height: 390,
-              maxHeight: 390
+              height: 460,
+              maxHeight: 460
             }}
           >
             <div
@@ -301,6 +356,37 @@ export function DashboardRedesign({
               </div>
               <InfoTip text={LATEST_HEADLINES_TIP} label="About latest headlines" />
             </div>
+            {marketOverview.news.length > 0 ? (
+              <div
+                className="min-w-0 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                style={{ display: "flex", gap: spacing[1], flexShrink: 0, marginBottom: spacing[2] }}
+              >
+                {MI_TAB_DEFS.map((t) => {
+                  const active = miTab === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setMiTab(t.id)}
+                      style={{
+                        flex: "0 0 auto",
+                        padding: "5px 10px",
+                        borderRadius: 999,
+                        border: `1px solid ${active ? colors.accent : colors.border}`,
+                        background: active ? `color-mix(in srgb, ${colors.accent} 22%, transparent)` : "transparent",
+                        color: active ? colors.text : colors.textMuted,
+                        fontSize: 11,
+                        fontWeight: active ? 700 : 500,
+                        cursor: "pointer",
+                        whiteSpace: "nowrap"
+                      }}
+                    >
+                      {t.label}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
             <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
               {marketOverview.news.length === 0 ? (
                 marketOverview.error ? (
@@ -310,9 +396,13 @@ export function DashboardRedesign({
                     No major market-moving headlines in the last 4 hours.
                   </p>
                 )
+              ) : filteredMiNews.length === 0 ? (
+                <p style={{ color: colors.textMuted, margin: 0, textAlign: "center", fontSize: typography.scale.sm }}>
+                  No headlines in this category right now. Try another tab.
+                </p>
               ) : (
                 <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: spacing[3] }}>
-                  {marketOverview.news.slice(0, 5).map((article) => (
+                  {filteredMiNews.map((article) => (
                     <li
                       key={article.id || article.article_id}
                       style={{
@@ -322,11 +412,38 @@ export function DashboardRedesign({
                         gap: spacing[2]
                       }}
                     >
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing[2] }}>
-                        <p style={{ margin: 0, color: article.publisher?.tier === 1 ? "#00d4ff" : "#4a6080", fontSize: 11 }}>
-                          {(article.publisher?.name || article.source || "Unknown source").trim()} ·{" "}
-                          {timeAgo(article.published_utc || article.published_at)}
-                        </p>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "flex-start",
+                          justifyContent: "space-between",
+                          gap: spacing[2],
+                          flexWrap: "wrap"
+                        }}
+                      >
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0, flex: "1 1 140px" }}>
+                          <p style={{ margin: 0, color: article.publisher?.tier === 1 ? "#00d4ff" : "#4a6080", fontSize: 11 }}>
+                            {(article.publisher?.name || article.source || "Unknown source").trim()} ·{" "}
+                            {timeAgo(article.published_utc || article.published_at)}
+                          </p>
+                          {article.credibility?.label ? (
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignSelf: "flex-start",
+                                padding: "2px 8px",
+                                borderRadius: 999,
+                                fontSize: 9,
+                                fontWeight: 700,
+                                letterSpacing: 0.3,
+                                textTransform: "uppercase",
+                                ...credibilityChipStyle(article.credibility.band, colors)
+                              }}
+                            >
+                              {article.credibility.label}
+                            </span>
+                          ) : null}
+                        </div>
                         <span
                           style={{
                             fontSize: 10,

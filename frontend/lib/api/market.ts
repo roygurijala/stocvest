@@ -26,6 +26,17 @@ export interface SnapshotPayload {
   company_name?: string | null;
 }
 
+export type NewsCatalystCategory =
+  | "general"
+  | "earnings"
+  | "analyst"
+  | "ma"
+  | "fda"
+  | "macro"
+  | "sector";
+
+export type NewsCredibilityBand = "elite" | "major" | "trade" | "research" | "pr_wire" | "other";
+
 export interface NewsPayload {
   id?: string;
   article_id: string;
@@ -52,6 +63,12 @@ export interface NewsPayload {
     is_watchlist: boolean;
   }>;
   impact_summary?: string | null;
+  /** Backend relevance rank (0–100). */
+  relevance_score?: number;
+  catalyst_category?: NewsCatalystCategory;
+  credibility?: { label: string; band: NewsCredibilityBand };
+  /** True when headline tickers overlap the user default watchlist. */
+  matches_watchlist?: boolean;
 }
 
 export interface MarketOverview {
@@ -159,7 +176,7 @@ export async function fetchMarketOverview(
   try {
     const [status, newsResp, snapshots] = await Promise.all([
       apiFetch<MarketStatusPayload>("/v1/market/status"),
-      apiFetch<NewsPayload[] | { headlines?: NewsPayload[] }>("/v1/market/news?limit=8"),
+      apiFetch<NewsPayload[] | { headlines?: NewsPayload[] }>("/v1/market/news?limit=20"),
       fetchOverviewSnapshots(cleanSymbols)
     ]);
     const news = Array.isArray(newsResp) ? newsResp : (newsResp?.headlines ?? []);
