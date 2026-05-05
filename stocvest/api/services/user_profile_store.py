@@ -126,8 +126,18 @@ def build_default_user_profile_store() -> UserProfileStore:
     return InMemoryUserProfileStore()
 
 
-_USER_PROFILE_STORE: UserProfileStore = build_default_user_profile_store()
+_USER_PROFILE_STORE: UserProfileStore | None = None
 
 
 def get_user_profile_store() -> UserProfileStore:
+    """Lazily construct the store so importing handlers does not call boto3 (Windows WMI / Py3.14 noise in pytest)."""
+    global _USER_PROFILE_STORE
+    if _USER_PROFILE_STORE is None:
+        _USER_PROFILE_STORE = build_default_user_profile_store()
     return _USER_PROFILE_STORE
+
+
+def reset_user_profile_store_for_tests() -> None:
+    """Drop cached store after env/settings change (tests)."""
+    global _USER_PROFILE_STORE
+    _USER_PROFILE_STORE = None

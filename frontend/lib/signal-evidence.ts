@@ -35,11 +35,14 @@ export interface SignalEvidenceInsight {
   trend_strength: string;
   trend_direction: string;
   risk_reward: number;
+  rr_warning?: boolean;
+  rr_quality?: "low" | "acceptable" | "good" | "strong";
   market_regime: string;
   confirming_signals: Array<{ label: string; detail?: string }>;
   conflicting_signals: Array<{ label: string; detail?: string }>;
-  catalysts: Array<{ text: string; sentiment: string }>;
+  catalysts: Array<{ text: string; sentiment: string; source?: string; published_at?: string; sentiment_score?: number }>;
   risk_factors: string[];
+  risk_factors_detailed?: Array<{ label: string; severity: "high" | "medium" | "low"; detail: string }>;
   signal_parameters: string;
   historical_entry_zone: { low: number; high: number } | null;
   reference_target_1: number | null;
@@ -47,6 +50,10 @@ export interface SignalEvidenceInsight {
   reference_stop_level: number | null;
   /** Session VWAP when available; modal uses this before `keyLevels.vwap`. */
   vwap: number | null;
+  is_complete?: boolean;
+  missing_fields?: string[];
+  alignment_ratio?: number;
+  conflicted_layers?: string[];
 }
 
 export interface SignalEvidenceData {
@@ -510,26 +517,52 @@ export function parseSwingCompositeInsight(body: Record<string, unknown>): Signa
   const trend_strength = String(body.trend_strength ?? "").trim() || "Moderate";
   const trend_direction = String(body.trend_direction ?? "").trim() || "Sideways";
   const risk_reward = numOrNull(body.risk_reward) ?? 1.5;
+  const rr_warning = Boolean(body.rr_warning) || risk_reward < 2.0;
+  const rr_qualityRaw = String(body.rr_quality ?? "").trim().toLowerCase();
+  const rr_quality =
+    rr_qualityRaw === "low" || rr_qualityRaw === "acceptable" || rr_qualityRaw === "good" || rr_qualityRaw === "strong"
+      ? rr_qualityRaw
+      : undefined;
   const market_regime = String(body.market_regime ?? "Neutral").trim() || "Neutral";
   const confirming_signals = mapConfluenceChipList(body.confirming_signals);
   const conflicting_signals = mapConfluenceChipList(body.conflicting_signals);
   const catalystsRaw = body.catalysts;
-  const catalysts: Array<{ text: string; sentiment: string }> = [];
+  const catalysts: Array<{ text: string; sentiment: string; source?: string; published_at?: string; sentiment_score?: number }> = [];
   if (Array.isArray(catalystsRaw)) {
     for (const c of catalystsRaw.slice(0, 4)) {
       if (c && typeof c === "object") {
         const o = c as Record<string, unknown>;
-        const text = String(o.text ?? "").trim();
+        const text = String(o.text ?? o.title ?? "").trim();
         if (text) {
-          const sent = String(o.sentiment ?? "neutral").toLowerCase();
-          const sentiment =
-            sent === "positive" || sent === "negative" || sent === "neutral" ? sent : "neutral";
-          catalysts.push({ text: text.slice(0, 240), sentiment });
+          const ss = numOrNull(o.sentiment_score);
+          const sent = String(o.sentiment ?? (ss != null ? (ss > 0 ? "positive" : ss < 0 ? "negative" : "neutral") : "neutral")).toLowerCase();
+          const sentiment = sent === "positive" || sent === "negative" || sent === "neutral" ? sent : "neutral";
+          catalysts.push({
+            text: text.slice(0, 240),
+            sentiment,
+            source: String(o.source ?? "").trim() || undefined,
+            published_at: String(o.published_at ?? "").trim() || undefined,
+            sentiment_score: ss ?? undefined
+          });
         }
       }
     }
   }
   const riskRaw = body.risk_factors;
+  const riskDetailedRaw = body.risk_factors_detailed;
+  const risk_factors_detailed: Array<{ label: string; severity: "high" | "medium" | "low"; detail: string }> = [];
+  if (Array.isArray(riskDetailedRaw)) {
+    for (const item of riskDetailedRaw.slice(0, 6)) {
+      if (!item || typeof item !== "object") continue;
+      const row = item as Record<string, unknown>;
+      const label = String(row.label ?? "").trim();
+      const detail = String(row.detail ?? "").trim();
+      const sev = String(row.severity ?? "").trim().toLowerCase();
+      if (!label || !detail) continue;
+      if (sev !== "high" && sev !== "medium" && sev !== "low") continue;
+      risk_factors_detailed.push({ label, severity: sev, detail });
+    }
+  }
   const risk_factors: string[] = [];
   if (Array.isArray(riskRaw)) {
     for (const r of riskRaw.slice(0, 4)) {
@@ -547,17 +580,24 @@ export function parseSwingCompositeInsight(body: Record<string, unknown>): Signa
     trend_strength,
     trend_direction,
     risk_reward: Math.round(risk_reward * 10) / 10,
+    rr_warning,
+    rr_quality,
     market_regime,
     confirming_signals,
     conflicting_signals,
     catalysts,
     risk_factors,
+    risk_factors_detailed,
     signal_parameters,
     historical_entry_zone,
     reference_target_1: numOrNull(body.reference_target_1),
     reference_target_2: numOrNull(body.reference_target_2),
     reference_stop_level: numOrNull(body.reference_stop_level),
-    vwap: vwapRaw != null && vwapRaw > 0 ? Math.round(vwapRaw * 10000) / 10000 : null
+    vwap: vwapRaw != null && vwapRaw > 0 ? Math.round(vwapRaw * 10000) / 10000 : null,
+    is_complete: body.is_complete === false ? false : true,
+    missing_fields: Array.isArray(body.missing_fields) ? body.missing_fields.map((x) => String(x)) : [],
+    alignment_ratio: numOrNull(body.alignment_ratio) ?? undefined,
+    conflicted_layers: Array.isArray(body.conflicted_layers) ? body.conflicted_layers.map((x) => String(x)) : []
   };
 }
 

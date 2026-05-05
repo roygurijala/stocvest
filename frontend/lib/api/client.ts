@@ -3,6 +3,7 @@ import { clearSessionTokenCookies } from "@/lib/auth/session-cookies";
 import { redirect } from "next/navigation";
 
 const DEFAULT_BASE_URL = "http://localhost:3001";
+const DEFAULT_API_TIMEOUT_MS = 8000;
 
 export function apiBaseUrl(): string {
   return process.env.NEXT_PUBLIC_STOCVEST_API_BASE_URL || DEFAULT_BASE_URL;
@@ -16,10 +17,13 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T |
     headers.set("authorization", `Bearer ${session.token}`);
   }
 
+  const timeoutSignal = AbortSignal.timeout(DEFAULT_API_TIMEOUT_MS);
   const response = await fetch(`${apiBaseUrl()}${path}`, {
     ...init,
     headers,
-    cache: "no-store"
+    cache: "no-store",
+    // Keep caller signal if provided; otherwise apply default request timeout.
+    signal: init?.signal ?? timeoutSignal
   }).catch((error: unknown) => {
     console.error("Unable to connect. Check your connection.", error);
     return null;

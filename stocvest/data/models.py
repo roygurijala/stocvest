@@ -315,6 +315,7 @@ class SignalRecord(BaseModel):
     internals_snapshot_json: str | None = None
     layer_scores_json: str | None = None
     parameter_version: str | None = None
+    status: str = "active"  # active | incomplete
 
     @field_validator("direction")
     @classmethod
@@ -323,6 +324,14 @@ class SignalRecord(BaseModel):
         if d not in {"bullish", "bearish", "neutral"}:
             raise ValueError("direction must be bullish, bearish, or neutral")
         return d
+
+    @field_validator("status")
+    @classmethod
+    def _norm_status(cls, v: str) -> str:
+        s = str(v or "").strip().lower()
+        if s not in {"active", "incomplete"}:
+            raise ValueError("status must be active or incomplete")
+        return s
 
     @staticmethod
     def from_dynamo_item(item: dict) -> "SignalRecord":
@@ -378,6 +387,7 @@ class SignalRecord(BaseModel):
             internals_snapshot_json=_s("internals_snapshot_json"),
             layer_scores_json=_s("layer_scores_json"),
             parameter_version=_s("parameter_version"),
+            status=str(item.get("status") or "active"),
         )
 
 

@@ -100,6 +100,8 @@ def _record_to_item(rec: SignalRecord) -> dict[str, Any]:
         item["layer_scores_json"] = rec.layer_scores_json
     if rec.parameter_version:
         item["parameter_version"] = rec.parameter_version
+    if rec.status != "active":
+        item["status"] = rec.status
     return item
 
 
@@ -126,11 +128,13 @@ class InMemorySignalRecorder:
 
     def get_public_recent(self, *, limit: int = 50) -> list[dict[str, Any]]:
         rows = [it for it in self._items.values() if it.get("scope_key") == "PUBLIC"]
+        rows = [it for it in rows if str(it.get("status") or "active") == "active"]
         rows.sort(key=lambda x: str(x.get("generated_at") or ""), reverse=True)
         return [_public_api_shape(_item_to_record(r)) for r in rows[:limit]]
 
     def get_public_landing_items(self, *, limit: int = 5) -> list[dict[str, Any]]:
         rows = [it for it in self._items.values() if it.get("scope_key") == "PUBLIC"]
+        rows = [it for it in rows if str(it.get("status") or "active") == "active"]
         records = [_item_to_record(r) for r in rows]
         resolved = [r for r in records if r.outcome_1h is not None]
         resolved.sort(key=lambda r: r.generated_at, reverse=True)
@@ -255,6 +259,7 @@ class DynamoDBSignalRecorder:
             raise
         items = resp.get("Items") or []
         records = [_item_to_record(x) for x in items if isinstance(x, dict)]
+        records = [r for r in records if r.status == "active"]
         return [_public_api_shape(r) for r in records]
 
     def get_public_landing_items(self, *, limit: int = 5) -> list[dict[str, Any]]:
@@ -279,6 +284,8 @@ class DynamoDBSignalRecorder:
             if not isinstance(raw, dict):
                 continue
             rec = _item_to_record(raw)
+            if rec.status != "active":
+                continue
             if rec.outcome_1h is not None:
                 resolved.append(rec)
         resolved.sort(key=lambda r: r.generated_at, reverse=True)
@@ -327,7 +334,7 @@ class DynamoDBSignalRecorder:
         return [
             _item_to_record(x)
             for x in self._scan_all()
-            if isinstance(x, dict) and x.get("scope_key") == "PUBLIC"
+            if isinstance(x, dict) and x.get("scope_key") == "PUBLIC" and str(x.get("status") or "active") == "active"
         ]
 
     def get_signal_record_raw(self, signal_id: str) -> SignalRecord | None:
@@ -454,6 +461,7 @@ def _public_api_shape(rec: SignalRecord) -> dict[str, Any]:
         "outcome_1d": rec.outcome_1d,
         "outcome": _tracked_outcome_summary(rec.outcome_1d, rec.outcome_1h),
         "disclaimer": API_SIGNAL_DISCLAIMER,
+        "status": rec.status,
     }
 
 

@@ -76,6 +76,50 @@ def _regime_for_engine(market_regime: str) -> str:
     return "sideways"
 
 
+def _market_open_now() -> bool:
+    et = ZoneInfo("America/New_York")
+    now = datetime.now(et)
+    if now.weekday() >= 5:
+        return False
+    hhmm = now.hour * 100 + now.minute
+    return 930 <= hhmm <= 1600
+
+
+def _build_catalyst_headlines(news_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for row in news_rows:
+        if not isinstance(row, dict):
+            continue
+        title = str(row.get("title") or "").strip()
+        if not title:
+            continue
+        sent = 0.0
+        insights = row.get("insights")
+        if isinstance(insights, list) and insights:
+            first = insights[0]
+            if isinstance(first, dict):
+                s = str(first.get("sentiment") or "").strip().lower()
+                if s in {"positive", "bullish"}:
+                    sent = 1.0
+                elif s in {"negative", "bearish"}:
+                    sent = -1.0
+        if abs(sent) < 0.3:
+            continue
+        out.append(
+            {
+                "text": title[:80],
+                "source": str(row.get("source") or "polygon").strip().lower() or "polygon",
+                "published_at": str(row.get("published_utc") or ""),
+                "sentiment_score": sent,
+                "sentiment": "positive" if sent > 0 else "negative",
+                "catalyst_type": "macro" if "fed" in title.lower() else "news",
+                "url": row.get("article_url"),
+            }
+        )
+    out.sort(key=lambda x: abs(float(x.get("sentiment_score") or 0.0)), reverse=True)
+    return out[:3]
+
+
 async def build_real_composite_response(
     *,
     symbol: str,
@@ -222,6 +266,8 @@ async def build_real_composite_response(
         "disclaimer": API_SIGNAL_DISCLAIMER,
         "mode": "day",
         "signal_valid_until": _next_rth_close_utc_iso(),
+        "alignment_ratio": composite.alignment_ratio,
+        "conflicted_layers": list(composite.conflicted_layers or []),
     }
 
     if direction_out:
@@ -262,6 +308,16 @@ async def build_real_composite_response(
             "regime": regime,
             "sector_signal": sector.sector_signal,
             "news_catalyst": nc,
+            "catalyst_headlines": _build_catalyst_headlines(news_rows),
+            "news_verdict": news.verdict,
+            "news_sentiment_score": float(news.weighted_sentiment or 0.0),
+            "geopolitical_verdict": geo.verdict,
+            "geo_high_impact_count": int(getattr(geo, "high_impact_count", 0) or 0),
+            "market_open": _market_open_now(),
+            "intraday_bars": [
+                {"high": b.high, "low": b.low, "close": b.close, "volume": b.volume}
+                for b in bars
+            ],
         }
         response_body.update(
             build_swing_composite_evidence_fields(
@@ -272,6 +328,12 @@ async def build_real_composite_response(
                 snapshot=snap_dict,
             )
         )
+        if response_body.get("status") == "incomplete":
+            _LOG.warning(
+                "incomplete signal %s missing=%s",
+                sym,
+                ",".join(response_body.get("missing_fields") or []),
+            )
 
         price_at = last_px
         if price_at:
@@ -307,8 +369,11 @@ async def build_real_composite_response(
                     sector_snapshot_json=blobs.get("sector_snapshot_json"),
                     internals_snapshot_json=blobs.get("internals_snapshot_json"),
                     layer_scores_json=blobs.get("layer_scores_json"),
+                    status=str(response_body.get("status") or "active"),
                 )
                 get_signal_recorder().record_signal(record)
+                if record.status != "active":
+                    return response_body
                 if user_id and user_email and direction_out:
                     from stocvest.api.services.alert_tasks import run_alert_background
                     from stocvest.services.alert_trigger import get_alert_trigger

@@ -80,7 +80,9 @@ function trendStrengthColor(strength: string, colors: ThemeColors): string {
 }
 
 function rrChipColor(rr: number, colors: ThemeColors): string {
-  if (rr >= 2) return colors.bullish;
+  if (rr >= 4) return colors.bullish;
+  if (rr >= 3) return "#86efac";
+  if (rr >= 2) return colors.text;
   if (rr >= 1.5) return colors.caution;
   return colors.bearish;
 }
@@ -121,6 +123,7 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
   const rt2 = insight.reference_target_2 ?? (typeof evidence.keyLevels.resistance === "number" ? evidence.keyLevels.resistance * 1.012 : null);
   const stopLvl = insight.reference_stop_level ?? evidence.keyLevels.support ?? null;
   const vwap = insight.vwap ?? evidence.keyLevels.vwap ?? null;
+  const levelsComplete = Boolean(entryZone && rt1 != null && stopLvl != null && vwap != null);
 
   return (
     <article style={{ display: "grid", gap: spacing[4], position: "relative", paddingBottom: spacing[4] }}>
@@ -212,6 +215,9 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
             Composite read
             <InfoTip text={CONFIDENCE_PERCENT_TIP} label="About signal score" />
           </span>
+          {insight.is_complete === false ? (
+            <span style={{ color: colors.caution, fontSize: typography.scale.xs, fontWeight: 700 }}>Incomplete</span>
+          ) : null}
         </div>
         <div
           style={{
@@ -245,6 +251,9 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
           <span className="text-xl font-bold tabular-nums sm:text-2xl" style={{ color: rrChipColor(insight.risk_reward, colors) }}>
             {insight.risk_reward.toFixed(1)}:1
           </span>
+          {insight.rr_warning ? (
+            <span style={{ color: colors.caution, fontSize: typography.scale.xs, fontWeight: 700 }}>Low R/R - below 2:1</span>
+          ) : null}
           <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Entry R/R</span>
           <div
             style={{
@@ -359,6 +368,11 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
             }}
           >
             <h3 style={{ margin: 0 }}>Reference Levels</h3>
+            {!levelsComplete ? (
+              <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.caution }}>
+                Signal data incomplete - levels unavailable
+              </p>
+            ) : null}
             <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted }}>
               <strong style={{ color: colors.text }}>Historical Entry Zone: </strong>
               {entryZone ? `${formatLevel(entryZone.low)}–${formatLevel(entryZone.high)}` : "—"}
@@ -446,10 +460,10 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
           >
             <h3 style={{ margin: 0 }}>Catalysts &amp; Context</h3>
             {insight.catalysts.length === 0 ? (
-              <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted }}>No catalyst headlines attached.</p>
+              <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted }}>No significant catalysts detected</p>
             ) : (
               <ul style={{ margin: 0, paddingInlineStart: 0, listStyle: "none", display: "grid", gap: spacing[2] }}>
-                {insight.catalysts.slice(0, 4).map((c, i) => {
+                {insight.catalysts.slice(0, 3).map((c, i) => {
                   const dot =
                     c.sentiment === "positive"
                       ? colors.bullish
@@ -459,7 +473,7 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
                   return (
                     <li key={`cat-${i}`} className="flex gap-2 text-sm" style={{ color: colors.text }}>
                       <span style={{ marginTop: 6, width: 8, height: 8, borderRadius: "50%", background: dot, flexShrink: 0 }} />
-                      <span>{c.text}</span>
+                      <span>{c.text.slice(0, 80)}</span>
                     </li>
                   );
                 })}
@@ -477,8 +491,11 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
             }}
           >
             <h3 style={{ margin: 0 }}>Risk Factors</h3>
+            {insight.risk_factors.length === 0 ? (
+              <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted }}>No significant risk factors detected</p>
+            ) : (
             <ul style={{ margin: 0, paddingInlineStart: 0, listStyle: "none", display: "grid", gap: spacing[2] }}>
-              {insight.risk_factors.slice(0, 4).map((r, i) => (
+              {insight.risk_factors.slice(0, 6).map((r, i) => (
                 <li key={`risk-${i}`} className="flex gap-2 text-sm" style={{ color: colors.text }}>
                   <span
                     style={{
@@ -494,6 +511,7 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
                 </li>
               ))}
             </ul>
+            )}
           </div>
         </div>
       </section>

@@ -7,7 +7,7 @@ portfolio-level verdict.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 
@@ -48,6 +48,10 @@ class CompositeSignal:
     confidence: float
     verdict: CompositeVerdict
     contributions: list[LayerContribution]
+    alignment_ratio: float = 1.0
+    conflicted_layers: list[str] = field(default_factory=list)
+    aligned_weight: float = 0.0
+    conflicted_weight: float = 0.0
 
 
 # Phase-2 layer set from project decisions:
@@ -114,6 +118,10 @@ class CompositeScoreEngine:
                 confidence=0.0,
                 verdict=CompositeVerdict.NEUTRAL,
                 contributions=[],
+                alignment_ratio=1.0,
+                conflicted_layers=[],
+                aligned_weight=0.0,
+                conflicted_weight=0.0,
             )
 
         multipliers = self._regime_weights.get(regime, self._regime_weights["sideways"])
@@ -161,12 +169,19 @@ class CompositeScoreEngine:
         else:
             final_confidence = self._clamp(confidence_sum / total_confidence_weight, 0.0, 1.0)
 
+        raw_verdict = self._to_verdict(final_score)
+        alignment = self._alignment_meta(signals, raw_verdict)
+        final_score = self._apply_contradiction_penalty(final_score, alignment["ratio"])
         verdict = self._to_verdict(final_score)
         return CompositeSignal(
             score=round(final_score, 4),
             confidence=round(final_confidence, 4),
             verdict=verdict,
             contributions=contributions,
+            alignment_ratio=round(float(alignment["ratio"]), 4),
+            conflicted_layers=list(alignment["conflicted_layers"]),
+            aligned_weight=round(float(alignment["aligned_weight"]), 4),
+            conflicted_weight=round(float(alignment["conflicted_weight"]), 4),
         )
 
     def _to_verdict(self, score: float) -> CompositeVerdict:
@@ -179,3 +194,47 @@ class CompositeScoreEngine:
     @staticmethod
     def _clamp(value: float, lower: float, upper: float) -> float:
         return max(lower, min(upper, value))
+
+    @staticmethod
+    def _layer_direction(score: float) -> CompositeVerdict:
+        if score > 0:
+            return CompositeVerdict.BULLISH
+        if score < 0:
+            return CompositeVerdict.BEARISH
+        return CompositeVerdict.NEUTRAL
+
+    def _alignment_meta(self, signals: list[LayerSignal], verdict: CompositeVerdict) -> dict[str, object]:
+        if verdict == CompositeVerdict.NEUTRAL:
+            return {"ratio": 1.0, "conflicted_layers": [], "aligned_weight": 0.0, "conflicted_weight": 0.0}
+        aligned_weight = 0.0
+        conflicted_weight = 0.0
+        conflicted_layers: list[str] = []
+        for signal in signals:
+            layer_verdict = self._layer_direction(float(signal.score))
+            if layer_verdict == CompositeVerdict.NEUTRAL:
+                continue
+            layer_weight = 1.5 if signal.layer == "technical" else 1.0
+            if layer_verdict == verdict:
+                aligned_weight += layer_weight
+            else:
+                conflicted_weight += layer_weight
+                conflicted_layers.append(signal.layer)
+        total_weight = aligned_weight + conflicted_weight
+        if total_weight <= 0:
+            return {"ratio": 1.0, "conflicted_layers": [], "aligned_weight": 0.0, "conflicted_weight": 0.0}
+        return {
+            "ratio": aligned_weight / total_weight,
+            "conflicted_layers": conflicted_layers,
+            "aligned_weight": aligned_weight,
+            "conflicted_weight": conflicted_weight,
+        }
+
+    @staticmethod
+    def _apply_contradiction_penalty(score: float, alignment_ratio: float) -> float:
+        if alignment_ratio < 0.5:
+            return score * 0.4
+        if alignment_ratio < 0.67:
+            return score * 0.65
+        if alignment_ratio < 0.85:
+            return score * 0.85
+        return score

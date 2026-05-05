@@ -12,6 +12,8 @@ from stocvest.api.services.composite_market_context import fetch_composite_marke
 from stocvest.api.services.morning_brief_fetch import get_vix_snapshot_with_fallback
 from stocvest.api.services.portfolio_auto_log import schedule_model_portfolio_log_from_composite
 from stocvest.api.services.real_composite_engine import (
+    _build_catalyst_headlines,
+    _market_open_now,
     _regime_for_engine,
     _safe_result,
     _score_to_layer_signal,
@@ -234,6 +236,8 @@ async def build_swing_composite_response(
         "mode": "swing",
         "signal_valid_days": 5,
         "signal_expires": expires_at.replace(microsecond=0).isoformat(),
+        "alignment_ratio": composite.alignment_ratio,
+        "conflicted_layers": list(composite.conflicted_layers or []),
     }
 
     if direction_out:
@@ -275,6 +279,12 @@ async def build_swing_composite_response(
             "regime": regime,
             "sector_signal": sector.sector_signal,
             "news_catalyst": nc,
+            "catalyst_headlines": _build_catalyst_headlines(news_rows),
+            "news_verdict": news.verdict,
+            "news_sentiment_score": float(news.weighted_sentiment or 0.0),
+            "geopolitical_verdict": geo.verdict,
+            "geo_high_impact_count": int(getattr(geo, "high_impact_count", 0) or 0),
+            "market_open": _market_open_now(),
         }
         response_body.update(
             build_swing_composite_evidence_fields(
@@ -285,6 +295,12 @@ async def build_swing_composite_response(
                 snapshot=snap_dict,
             )
         )
+        if response_body.get("status") == "incomplete":
+            _LOG.warning(
+                "incomplete swing signal %s missing=%s",
+                sym,
+                ",".join(response_body.get("missing_fields") or []),
+            )
 
         price_at = last_px
         if price_at:
@@ -320,8 +336,11 @@ async def build_swing_composite_response(
                     sector_snapshot_json=blobs.get("sector_snapshot_json"),
                     internals_snapshot_json=blobs.get("internals_snapshot_json"),
                     layer_scores_json=blobs.get("layer_scores_json"),
+                    status=str(response_body.get("status") or "active"),
                 )
                 get_signal_recorder().record_signal(record)
+                if record.status != "active":
+                    return response_body
                 if user_id and user_email and direction_out:
                     from stocvest.api.services.alert_tasks import run_alert_background
                     from stocvest.services.alert_trigger import get_alert_trigger

@@ -166,6 +166,35 @@ describe("parseSwingCompositeInsight", () => {
     expect(insight).not.toBeNull();
     expect(insight!.signal_score).toBe(82);
   });
+
+  test("sets rr warning badge flag when below 2", () => {
+    const insight = parseSwingCompositeInsight({ signal_score: 60, risk_reward: 1.7, market_regime: "Neutral" });
+    expect(insight?.rr_warning).toBe(true);
+  });
+
+  test("parses catalyst headlines and structured risk factors", () => {
+    const insight = parseSwingCompositeInsight({
+      signal_score: 66,
+      risk_reward: 2.2,
+      market_regime: "Neutral",
+      catalysts: [{ title: "Macro catalyst headline", source: "benzinga", sentiment_score: -0.62 }],
+      risk_factors_detailed: [{ label: "Conflicted Signal", severity: "high", detail: "4/6 layers conflict" }]
+    });
+    expect(insight?.catalysts[0]?.text).toContain("Macro");
+    expect(insight?.risk_factors_detailed?.[0]?.severity).toBe("high");
+  });
+
+  test("marks incomplete signal state from payload", () => {
+    const insight = parseSwingCompositeInsight({
+      signal_score: 55,
+      risk_reward: 2.1,
+      market_regime: "Neutral",
+      is_complete: false,
+      missing_fields: ["vwap"]
+    });
+    expect(insight?.is_complete).toBe(false);
+    expect(insight?.missing_fields).toContain("vwap");
+  });
 });
 
 describe("applySwingCompositeEnrichment", () => {
