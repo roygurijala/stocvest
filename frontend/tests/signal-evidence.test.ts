@@ -73,6 +73,36 @@ describe("buildEvidenceFromSetup news layer", () => {
     expect(newsLayer?.freshnessLabel).toBe("No recent news for AAPL");
     expect(data.newsFreshnessLabel).toBe("No recent news for AAPL");
   });
+
+  test("does not show No recent news when articles exist but first row lacks title", () => {
+    const articles: NewsPayload[] = Array.from({ length: 9 }, (_, i) => ({
+      article_id: `x${i}`,
+      title: i === 3 ? "Fed minutes lift tech sentiment into close" : "",
+      tickers: ["AAPL"],
+      published_at: new Date().toISOString(),
+      url: "https://example.com"
+    }));
+    const data = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: articles });
+    const newsLayer = data.layers.find((l) => l.key === "news");
+    expect(newsLayer?.keyPoints[0]).toBe("Articles 9");
+    expect(newsLayer?.keyPoints[2]).toContain("Fed minutes");
+    expect(newsLayer?.freshnessLabel).not.toContain("No recent news");
+  });
+
+  test("uses count line when articles exist but no snippet text on any row", () => {
+    const articles: NewsPayload[] = Array.from({ length: 9 }, (_, i) => ({
+      article_id: `y${i}`,
+      title: "   ",
+      description: null,
+      tickers: ["AAPL"],
+      published_at: "2026-01-15T14:00:00.000Z",
+      url: "https://example.com"
+    }));
+    const data = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: articles });
+    const newsLayer = data.layers.find((l) => l.key === "news");
+    expect(newsLayer?.keyPoints[2]).toBe("9 recent articles");
+    expect(newsLayer?.freshnessLabel).toMatch(/^News /);
+  });
 });
 
 describe("buildEvidenceFromSetup layer key points", () => {

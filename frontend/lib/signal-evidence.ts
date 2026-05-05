@@ -154,6 +154,27 @@ function relativeNewsTime(iso: string | null | undefined): string {
   return `${Math.floor(delta / 86400)}d ago`;
 }
 
+/** First usable headline line for evidence chips (Polygon sometimes omits `title`). */
+function firstNewsSnippetForEvidence(articles: NewsPayload[]): string | undefined {
+  for (const a of articles) {
+    const t = a.title?.trim();
+    if (t) return t.slice(0, 40);
+    const d = a.description?.trim();
+    if (d) return d.slice(0, 40);
+    const imp = a.impact_summary?.trim();
+    if (imp) return imp.slice(0, 40);
+  }
+  return undefined;
+}
+
+function firstArticlePublishedAt(articles: NewsPayload[]): string | undefined {
+  for (const a of articles) {
+    const p = a.published_at ?? a.published_utc;
+    if (p != null && String(p).trim() !== "") return String(p);
+  }
+  return undefined;
+}
+
 export interface BuildEvidenceOptions {
   symbolNewsArticles?: NewsPayload[];
   earningsRiskDays?: number;
@@ -295,10 +316,11 @@ export function buildEvidenceFromSetup(
   const symbolUpper = setup.symbol.trim().toUpperCase();
   const articles = options?.symbolNewsArticles ?? [];
   const first = articles[0];
-  const headline = first?.title?.trim() || undefined;
   const articleCount = articles.length;
+  const newsSnippet = firstNewsSnippetForEvidence(articles);
   const sentimentScore = first?.sentiment_score;
   const hasNumericSentiment = typeof sentimentScore === "number" && Number.isFinite(sentimentScore);
+  const newsPublishedAt = firstArticlePublishedAt(articles);
 
   const snap = coerceSnapshotForReferenceLevels(snapshot ?? null);
 
@@ -312,7 +334,7 @@ export function buildEvidenceFromSetup(
   const base = clamp(50 + momentum * 6, 0, 100);
 
   const technical = clamp(base + 18, 0, 100);
-  const newsDelta = hasNumericSentiment ? sentimentScore * 12 : headline ? 10 : -8;
+  const newsDelta = hasNumericSentiment ? sentimentScore * 12 : newsSnippet ? 10 : -8;
   const news = clamp(base + newsDelta, 0, 100);
   const macro = clamp(base - 6, 0, 100);
   const sector = clamp(base + 4, 0, 100);
@@ -345,11 +367,12 @@ export function buildEvidenceFromSetup(
         hasNumericSentiment
           ? `Sentiment score ${sentimentScore >= 0 ? "+" : ""}${sentimentScore.toFixed(2)}`
           : "Sentiment score n/a",
-        headline ? headline.slice(0, 40) : `No recent news for ${symbolUpper}`
+        newsSnippet ??
+          (articleCount > 0 ? `${articleCount} recent articles` : `No recent news for ${symbolUpper}`)
       ],
       contributionScore: news,
       freshnessLabel:
-        articleCount > 0 ? `News ${relativeNewsTime(first?.published_at)}` : `No recent news for ${symbolUpper}`
+        articleCount > 0 ? `News ${relativeNewsTime(newsPublishedAt)}` : `No recent news for ${symbolUpper}`
     },
     {
       key: "macro",
@@ -451,7 +474,7 @@ export function buildEvidenceFromSetup(
     updatedLabel: timeAgoLabelFromIso(setup.timestamp_iso),
     updatedAtIso: setup.timestamp_iso,
     newsFreshnessLabel:
-      articleCount > 0 ? `News ${relativeNewsTime(first?.published_at)}` : `No recent news for ${symbolUpper}`,
+      articleCount > 0 ? `News ${relativeNewsTime(newsPublishedAt)}` : `No recent news for ${symbolUpper}`,
     earningsRisk:
       typeof options?.earningsRiskDays === "number" && options.earningsRiskDays >= 0 && options.earningsRiskDays <= 3
         ? {
