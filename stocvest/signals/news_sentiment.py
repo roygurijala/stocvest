@@ -23,7 +23,7 @@ logger = get_logger(__name__)
 
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
-DEFAULT_MODEL = "claude-sonnet-4-6"
+DEFAULT_MODEL = "claude-sonnet-4-6"  # Claude Sonnet 4.6 (Anthropic Messages API id)
 REQUEST_TIMEOUT_SECONDS = 20.0
 DEFAULT_MAX_RETRIES = 2
 DEFAULT_MAX_CONCURRENCY = 5

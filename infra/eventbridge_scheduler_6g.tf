@@ -60,8 +60,9 @@ resource "aws_scheduler_schedule" "scanner_premarket" {
     arn      = aws_lambda_function.api["scanner"].arn
     role_arn = aws_iam_role.eventbridge_scanner_invoke.arn
     input = jsonencode({
-      source    = "eventbridge"
-      scan_type = "premarket"
+      source                  = "eventbridge"
+      scan_type               = "premarket"
+      run_portfolio_composite = true
     })
   }
 }
@@ -84,8 +85,9 @@ resource "aws_scheduler_schedule" "scanner_intraday_morning" {
     arn      = aws_lambda_function.api["scanner"].arn
     role_arn = aws_iam_role.eventbridge_scanner_invoke.arn
     input = jsonencode({
-      source    = "eventbridge"
-      scan_type = "intraday"
+      source                  = "eventbridge"
+      scan_type               = "intraday"
+      run_portfolio_composite = true
     })
   }
 }
@@ -168,4 +170,75 @@ resource "aws_lambda_permission" "scanner_eventbridge_scheduler" {
   function_name = aws_lambda_function.api["scanner"].function_name
   principal     = "scheduler.amazonaws.com"
   source_arn    = "arn:aws:scheduler:${var.aws_region}:${data.aws_caller_identity.current.account_id}:schedule/${aws_scheduler_schedule_group.scanner.name}/*"
+}
+
+# ── Portfolio reversal (9:35 AM America/New_York Mon–Fri) → signal_resolution Lambda ─────────
+
+resource "aws_scheduler_schedule_group" "portfolio_reversal" {
+  name = "stocvest-development-portfolio-reversal"
+
+  tags = merge(local.common_tags, {
+    Name = "stocvest-development-portfolio-reversal-schedule-group"
+  })
+}
+
+resource "aws_iam_role" "eventbridge_portfolio_reversal_invoke" {
+  name = "stocvest-development-eventbridge-portfolio-reversal-invoke"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Service = "scheduler.amazonaws.com"
+      }
+      Action = "sts:AssumeRole"
+    }]
+  })
+
+  tags = merge(local.common_tags, {
+    Name = "stocvest-development-eventbridge-portfolio-reversal-invoke-role"
+  })
+}
+
+resource "aws_iam_role_policy" "eventbridge_portfolio_reversal_invoke_lambda" {
+  name = "stocvest-development-invoke-signal-resolution-portfolio-reversal"
+  role = aws_iam_role.eventbridge_portfolio_reversal_invoke.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["lambda:InvokeFunction"]
+      Resource = aws_lambda_function.api["signal_resolution"].arn
+    }]
+  })
+}
+
+resource "aws_scheduler_schedule" "portfolio_reversal" {
+  name       = "stocvest-development-portfolio-reversal"
+  group_name = aws_scheduler_schedule_group.portfolio_reversal.name
+
+  state = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  schedule_expression          = "cron(35 9 ? * MON-FRI *)"
+  schedule_expression_timezone = "America/New_York"
+
+  target {
+    arn      = aws_lambda_function.api["signal_resolution"].arn
+    role_arn = aws_iam_role.eventbridge_portfolio_reversal_invoke.arn
+    input    = jsonencode({ stocvest_job = "portfolio_reversal" })
+  }
+}
+
+resource "aws_lambda_permission" "portfolio_reversal_eventbridge_scheduler" {
+  statement_id  = "AllowExecutionFromEventBridgeSchedulerPortfolioReversal"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.api["signal_resolution"].function_name
+  principal     = "scheduler.amazonaws.com"
+  source_arn    = "arn:aws:scheduler:${var.aws_region}:${data.aws_caller_identity.current.account_id}:schedule/${aws_scheduler_schedule_group.portfolio_reversal.name}/*"
 }

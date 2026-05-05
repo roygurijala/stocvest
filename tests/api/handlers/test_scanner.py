@@ -20,7 +20,7 @@ from stocvest.api.handlers.scanner import (
 
 
 def test_handler_routes_eventbridge_schedule_payload(monkeypatch: pytest.MonkeyPatch) -> None:
-    def _fake_scan(st: str) -> dict:
+    def _fake_scan(st: str, **kwargs: object) -> dict:
         return {
             "invocation": "schedule",
             "source": "eventbridge",

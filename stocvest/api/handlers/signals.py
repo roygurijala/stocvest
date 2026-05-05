@@ -167,7 +167,9 @@ def real_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     if not symbol:
         return bad_request("Body field 'symbol' is required.")
     rc = build_request_context(event)
-    body = real_composite_body_sync(symbol=symbol, user_id=rc.user_id, user_email=rc.email)
+    body = real_composite_body_sync(
+        symbol=symbol, user_id=rc.user_id, user_email=rc.email, enable_portfolio_log=False
+    )
     return ok(body)
 
 
@@ -182,7 +184,9 @@ def swing_real_composite_handler(event: LambdaEvent, context: LambdaContext) -> 
     if not symbol:
         return bad_request("Body field 'symbol' is required.")
     rc = build_request_context(event)
-    body = swing_composite_body_sync(symbol=symbol, user_id=rc.user_id, user_email=rc.email)
+    body = swing_composite_body_sync(
+        symbol=symbol, user_id=rc.user_id, user_email=rc.email, enable_portfolio_log=False
+    )
     return ok(body)
 
 

@@ -64,6 +64,7 @@ async def build_swing_composite_response(
     user_id: str | None,
     user_email: str | None,
     params: SignalParameters,
+    enable_portfolio_log: bool = False,
 ) -> dict[str, Any]:
     sym = symbol.strip().upper()
     settings = get_settings()
@@ -306,6 +307,19 @@ async def build_swing_composite_response(
             ",".join(response_body.get("missing_fields") or []),
         )
 
+    _score_0_100_preview = int(round((float(composite.score) + 1.0) * 50.0))
+    _score_0_100_preview = max(0, min(100, _score_0_100_preview))
+    _is_complete = response_body.get("status") != "incomplete"
+    _LOG.info(
+        "composite scored symbol=%s score=%s verdict=%s alignment=%.2f complete=%s portfolio_log=%s",
+        sym,
+        _score_0_100_preview,
+        composite.verdict.value,
+        float(composite.alignment_ratio),
+        _is_complete,
+        enable_portfolio_log,
+    )
+
     if direction_out:
         price_at = last_px
         if price_at:
@@ -366,21 +380,22 @@ async def build_swing_composite_response(
 
                 score_0_100 = int(round((float(composite.score) + 1.0) * 50.0))
                 score_0_100 = max(0, min(100, score_0_100))
-                schedule_model_portfolio_log_from_composite(
-                    symbol=sym,
-                    composite_verdict=composite.verdict,
-                    composite_score=score_0_100,
-                    entry_price=price_at,
-                    layer_results=layer_results,
-                    macro_regime=str(macro.market_regime or "neutral"),
-                    confluence_fired=bool(response_body.get("is_confluence_alert")),
-                    confluence_score=int(response_body.get("confluence_score") or 0),
-                    vix_at_entry=float(internals.vix_price) if internals.vix_price is not None else None,
-                    spy_day_pct=float(macro.spy_day_pct) if macro.spy_day_pct is not None else None,
-                    sector_etf=(str(sector.sector_etf).strip().upper() if getattr(sector, "sector_etf", None) else None),
-                    sector_day_pct=float(sector.sector_day_pct) if sector.sector_day_pct is not None else None,
-                    parameter_version=str(params.version or "1.0.0"),
-                )
+                if enable_portfolio_log:
+                    schedule_model_portfolio_log_from_composite(
+                        symbol=sym,
+                        composite_verdict=composite.verdict,
+                        composite_score=score_0_100,
+                        entry_price=price_at,
+                        layer_results=layer_results,
+                        macro_regime=str(macro.market_regime or "neutral"),
+                        confluence_fired=bool(response_body.get("is_confluence_alert")),
+                        confluence_score=int(response_body.get("confluence_score") or 0),
+                        vix_at_entry=float(internals.vix_price) if internals.vix_price is not None else None,
+                        spy_day_pct=float(macro.spy_day_pct) if macro.spy_day_pct is not None else None,
+                        sector_etf=(str(sector.sector_etf).strip().upper() if getattr(sector, "sector_etf", None) else None),
+                        sector_day_pct=float(sector.sector_day_pct) if sector.sector_day_pct is not None else None,
+                        parameter_version=str(params.version or "1.0.0"),
+                    )
             except Exception as exc:
                 _LOG.warning("swing record_signal skipped: %s", exc)
 
@@ -393,8 +408,15 @@ def swing_composite_body_sync(
     user_id: str | None,
     user_email: str | None = None,
     params: SignalParameters | None = None,
+    enable_portfolio_log: bool = False,
 ) -> dict[str, Any]:
     p = params or ParameterStore.get_parameters_sync()
     return asyncio.run(
-        build_swing_composite_response(symbol=symbol, user_id=user_id, user_email=user_email, params=p)
+        build_swing_composite_response(
+            symbol=symbol,
+            user_id=user_id,
+            user_email=user_email,
+            params=p,
+            enable_portfolio_log=enable_portfolio_log,
+        )
     )

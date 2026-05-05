@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -21,7 +22,7 @@ from stocvest.config.signal_parameters import SignalParameters
 from stocvest.data.models import Bar, SignalRecord, Snapshot, Timeframe
 from stocvest.data.polygon_client import PolygonClient, PolygonError
 from stocvest.signals.confluence import ConfluenceDetector, confluence_result_to_response_fields, normalize_direction
-from stocvest.signals.composite_score import CompositeScoreEngine, CompositeVerdict, LayerSignal
+from stocvest.signals.composite_score import CompositeScoreEngine, CompositeSignal, CompositeVerdict, LayerSignal
 from stocvest.signals.geo_analyzer import GeoAnalyzer
 from stocvest.signals.internals_analyzer import InternalsAnalyzer
 from stocvest.signals.macro_analyzer import MacroAnalyzer
@@ -120,13 +121,31 @@ def _build_catalyst_headlines(news_rows: list[dict[str, Any]]) -> list[dict[str,
     return out[:3]
 
 
-async def build_real_composite_response(
-    *,
-    symbol: str,
-    user_id: str | None,
-    user_email: str | None,
-    params: SignalParameters,
-) -> dict[str, Any]:
+@dataclass(frozen=True)
+class RealCompositeEnginePhase:
+    """Polygon + layer analyzers + :class:`CompositeScoreEngine` output (no HTTP payload, no side effects)."""
+
+    sym: str
+    sym_snap: Snapshot | None
+    bars: list[Bar]
+    news_rows: list[dict[str, Any]]
+    layer_results: list[Any]
+    layer_ids: list[str]
+    signals: list[LayerSignal]
+    regime: str
+    composite: CompositeSignal
+
+
+async def run_real_composite_engine_phase(
+    *, symbol: str, params: SignalParameters
+) -> dict[str, Any] | RealCompositeEnginePhase:
+    """
+    Shared scoring path for real composite: data fetch → six layers → engine.compute.
+
+    Returns either the standard ``insufficient_data`` response dict or a
+    :class:`RealCompositeEnginePhase` for callers that build a full HTTP body or
+    a narrow verdict read.
+    """
     sym = symbol.strip().upper()
     settings = get_settings()
     sector_cache = DynamoSectorCache(settings.dynamodb_sector_cache_table)
@@ -213,6 +232,43 @@ async def build_real_composite_response(
         bearish_threshold=float(params.composite.bearish_threshold),
     )
     composite = engine.compute(signals, regime=regime)
+
+    return RealCompositeEnginePhase(
+        sym=sym,
+        sym_snap=sym_snap,
+        bars=bars,
+        news_rows=news_rows,
+        layer_results=layer_results,
+        layer_ids=layer_ids,
+        signals=signals,
+        regime=regime,
+        composite=composite,
+    )
+
+
+async def build_real_composite_response(
+    *,
+    symbol: str,
+    user_id: str | None,
+    user_email: str | None,
+    params: SignalParameters,
+    enable_portfolio_log: bool = False,
+) -> dict[str, Any]:
+    sym = symbol.strip().upper()
+    phase = await run_real_composite_engine_phase(symbol=sym, params=params)
+    if isinstance(phase, dict):
+        return phase
+
+    sym = phase.sym
+    sym_snap = phase.sym_snap
+    bars = phase.bars
+    news_rows = phase.news_rows
+    layer_results = phase.layer_results
+    layer_ids = phase.layer_ids
+    signals = phase.signals
+    regime = phase.regime
+    composite = phase.composite
+    tech, news, macro, sector, geo, internals = layer_results
 
     contributions: list[dict[str, Any]] = []
     for c in composite.contributions:
@@ -338,6 +394,19 @@ async def build_real_composite_response(
             ",".join(response_body.get("missing_fields") or []),
         )
 
+    _score_0_100_preview = int(round((float(composite.score) + 1.0) * 50.0))
+    _score_0_100_preview = max(0, min(100, _score_0_100_preview))
+    _is_complete = response_body.get("status") != "incomplete"
+    _LOG.info(
+        "composite scored symbol=%s score=%s verdict=%s alignment=%.2f complete=%s portfolio_log=%s",
+        sym,
+        _score_0_100_preview,
+        composite.verdict.value,
+        float(composite.alignment_ratio),
+        _is_complete,
+        enable_portfolio_log,
+    )
+
     if direction_out:
         price_at = last_px
         if price_at:
@@ -398,21 +467,22 @@ async def build_real_composite_response(
 
                 score_0_100 = int(round((float(composite.score) + 1.0) * 50.0))
                 score_0_100 = max(0, min(100, score_0_100))
-                schedule_model_portfolio_log_from_composite(
-                    symbol=sym,
-                    composite_verdict=composite.verdict,
-                    composite_score=score_0_100,
-                    entry_price=price_at,
-                    layer_results=layer_results,
-                    macro_regime=str(macro.market_regime or "neutral"),
-                    confluence_fired=bool(response_body.get("is_confluence_alert")),
-                    confluence_score=int(response_body.get("confluence_score") or 0),
-                    vix_at_entry=float(internals.vix_price) if internals.vix_price is not None else None,
-                    spy_day_pct=float(macro.spy_day_pct) if macro.spy_day_pct is not None else None,
-                    sector_etf=(str(sector.sector_etf).strip().upper() if getattr(sector, "sector_etf", None) else None),
-                    sector_day_pct=float(sector.sector_day_pct) if sector.sector_day_pct is not None else None,
-                    parameter_version=str(params.version or "1.0.0"),
-                )
+                if enable_portfolio_log:
+                    schedule_model_portfolio_log_from_composite(
+                        symbol=sym,
+                        composite_verdict=composite.verdict,
+                        composite_score=score_0_100,
+                        entry_price=price_at,
+                        layer_results=layer_results,
+                        macro_regime=str(macro.market_regime or "neutral"),
+                        confluence_fired=bool(response_body.get("is_confluence_alert")),
+                        confluence_score=int(response_body.get("confluence_score") or 0),
+                        vix_at_entry=float(internals.vix_price) if internals.vix_price is not None else None,
+                        spy_day_pct=float(macro.spy_day_pct) if macro.spy_day_pct is not None else None,
+                        sector_etf=(str(sector.sector_etf).strip().upper() if getattr(sector, "sector_etf", None) else None),
+                        sector_day_pct=float(sector.sector_day_pct) if sector.sector_day_pct is not None else None,
+                        parameter_version=str(params.version or "1.0.0"),
+                    )
             except Exception as exc:
                 _LOG.warning("record_signal skipped: %s", exc)
 
@@ -425,9 +495,16 @@ def real_composite_body_sync(
     user_id: str | None,
     user_email: str | None = None,
     params: SignalParameters | None = None,
+    enable_portfolio_log: bool = False,
 ) -> dict[str, Any]:
     """Sync entry for Lambda handler (isolated event loop per invocation)."""
     p = params or ParameterStore.get_parameters_sync()
     return asyncio.run(
-        build_real_composite_response(symbol=symbol, user_id=user_id, user_email=user_email, params=p)
+        build_real_composite_response(
+            symbol=symbol,
+            user_id=user_id,
+            user_email=user_email,
+            params=p,
+            enable_portfolio_log=enable_portfolio_log,
+        )
     )

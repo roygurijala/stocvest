@@ -231,12 +231,12 @@ class PortfolioRecorder:
             self.table.put_item(Item=item)
             self._increment_open_summary()
             log.info(
-                "Portfolio: position logged %s at %s score=%s notional=%s id=%s",
+                "Portfolio: opened symbol=%s score=%s entry=%s stop=%s target=%s",
                 sym,
-                entry_price,
                 signal_score,
-                notional,
-                position_id,
+                entry_price,
+                position.stop_loss_price,
+                position.target_price,
             )
             return position_id
         except Exception as exc:

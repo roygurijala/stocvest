@@ -36,7 +36,7 @@ def test_market_data_unknown_route(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_scanner_schedule_through_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("STOCVEST_LAMBDA_MODULE", "scanner")
 
-    def _fake(st: str) -> dict:
+    def _fake(st: str, **kwargs: object) -> dict:
         return {"invocation": "schedule", "scan_type": st, "status": "completed", "setup_key": "k"}
 
     monkeypatch.setattr("stocvest.api.handlers.scanner.run_scheduled_scan_sync", _fake)

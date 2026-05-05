@@ -30,13 +30,19 @@ def schedule_model_portfolio_log_from_composite(
     parameter_version: str,
 ) -> None:
     """Fire-and-forget: open a notional tracked position when gates pass (never blocks HTTP)."""
+    sym = symbol.strip().upper()
     if composite_verdict != CompositeVerdict.BULLISH:
         return
     if int(composite_score) < 72:
+        _LOG.info(
+            "Portfolio: skipped symbol=%s score=%s reason=below_threshold threshold=72",
+            sym,
+            int(composite_score),
+        )
         return
     if (macro_regime or "").strip().lower() == "avoid":
+        _LOG.info("Portfolio: skipped symbol=%s reason=avoid_regime", sym)
         return
-    sym = symbol.strip().upper()
 
     layer_ids = ["technical", "news", "macro", "sector", "geopolitical", "internals"]
     layer_scores: dict[str, Any] = {}
