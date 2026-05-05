@@ -63,7 +63,7 @@ This document describes the **server-side** multi-layer stack behind `POST /v1/s
 - **Purpose**: Log notional “tracked positions” when a **bullish** real composite clears gates, for transparency and parameter tuning — **not** trade instructions.
 - **DynamoDB**: Table **`ModelPortfolio`** (`pk=PORTFOLIO#v1`, `sk=POSITION#…` or `SUMMARY`), GSIs **`status-entry-index`** and **`symbol-entry-index`**.
 - **Auto-open**: After a successful **`composite/real`** response with price, background thread calls `PortfolioRecorder.open_position` when verdict is **bullish**, mapped **0–100 score** `round((composite_score_float + 1) * 50)` is **≥ 72**, and macro `market_regime` ≠ **`avoid`**.
-- **Exits**: Scheduled **`signal_resolution`** Lambda uses Polygon **`get_snapshots`** for stop / target / 20-session-day time exit; separate EventBridge rule (weekday cron) invokes the same Lambda with `{"stocvest_job":"portfolio_reversal"}` to close rows when a fresh composite is **bearish** or mapped score **≤ 35**.
+- **Exits**: Scheduled **`signal_resolution`** Lambda uses Polygon **`get_snapshots`** for stop / target / 20-session-day time exit; separate EventBridge rule (**`cron(35 14 ? * MON-FRI *)`** = **14:35 UTC** weekdays) invokes the same Lambda with `{"stocvest_job":"portfolio_reversal"}` to close rows when a fresh composite is **bearish** or mapped score **≤ 35**. That wall-clock is **9:35 AM Eastern** in EST and **10:35 AM Eastern** in EDT (single UTC cron cannot match both without a second rule or seasonal change).
 - **API**: Public reads under **`GET /v1/portfolio/*`**; writes under **`POST /v1/portfolio/positions/open|close`** require the same internal header as **`GET /v1/signals/analysis`** (`analysis_authorized`).
 
 ## Related routes

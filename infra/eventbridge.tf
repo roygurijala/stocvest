@@ -25,10 +25,17 @@ resource "aws_lambda_permission" "eventbridge_signal_resolution" {
   source_arn    = aws_cloudwatch_event_rule.signal_resolution.arn
 }
 
-# Model portfolio — weekday check (~9:35 AM US/Eastern during standard-time window; tune for DST if needed).
+# Model portfolio — weekday reversal check (EventBridge cron is always UTC; US/Eastern shifts with DST).
+#
+#   cron(35 14 ? * MON-FRI *)  →  14:35 UTC Mon–Fri
+#     • During EST (roughly Nov–Mar): 14:35 UTC = 9:35 AM Eastern  ✓
+#     • During EDT (roughly Mar–Nov): 14:35 UTC = 10:35 AM Eastern (one hour later wall-clock)
+#
+# For exactly 9:35 AM Eastern year-round you would need two rules or a different UTC hour per season
+# (e.g. 13:35 UTC hits 9:35 AM EDT but 8:35 AM EST). We keep a single expression and accept EDT drift.
 resource "aws_cloudwatch_event_rule" "portfolio_reversal" {
   name                = "stocvest-portfolio-reversal"
-  description         = "Re-evaluate open model-portfolio positions vs fresh composite (weekdays)"
+  description         = "Re-evaluate open model-portfolio positions vs fresh composite (weekdays 14:35 UTC)"
   schedule_expression = "cron(35 14 ? * MON-FRI *)"
   state               = "ENABLED"
 
