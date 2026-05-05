@@ -53,3 +53,81 @@ export function coerceSnapshotForReferenceLevels(snapshot: SnapshotPayload | nul
     day_vwap: undefined
   };
 }
+
+export interface SessionReferenceLevels {
+  vwap: number | null;
+  support: number | null;
+  resistance: number | null;
+}
+
+function positiveNum(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v) && v > 0) {
+    return v;
+  }
+  return null;
+}
+
+/**
+ * VWAP / support / resistance for dashboard strips. Uses snapshot session fields when last is missing;
+ * fills gaps from composite API evidence (`historical_entry_zone`, targets, `vwap`) when present.
+ */
+export function deriveSessionReferenceLevels(
+  snapshot: SnapshotPayload | null | undefined,
+  composite: Record<string, unknown> | null | undefined
+): SessionReferenceLevels {
+  let support: number | null = null;
+  let resistance: number | null = null;
+  let vwap: number | null = null;
+
+  if (snapshot) {
+    const last = positiveNum(snapshot.last_trade_price);
+    const dh = positiveNum(snapshot.day_high);
+    const dl = positiveNum(snapshot.day_low);
+    const dVwap = positiveNum(snapshot.day_vwap);
+    if (last != null) {
+      support = dl ?? last * 0.985;
+      resistance = dh ?? last * 1.015;
+      vwap = dVwap ?? last * 0.997;
+    } else if (dl != null && dh != null) {
+      const lo = Math.min(dl, dh);
+      const hi = Math.max(dl, dh);
+      if (hi > lo) {
+        support = lo;
+        resistance = hi;
+        vwap = dVwap ?? (lo + hi) / 2;
+      }
+    } else {
+      vwap = dVwap;
+    }
+  }
+
+  if (composite && typeof composite === "object") {
+    const zone = composite["historical_entry_zone"];
+    if (zone && typeof zone === "object") {
+      const z = zone as Record<string, unknown>;
+      const lo = positiveNum(z["low"]);
+      const hi = positiveNum(z["high"]);
+      if (lo != null && hi != null && hi > lo) {
+        if (support == null) support = lo;
+        if (resistance == null) resistance = hi;
+      }
+    }
+    const stop = positiveNum(composite["reference_stop_level"]);
+    const t1 = positiveNum(composite["reference_target_1"]);
+    if (support == null && stop != null) {
+      support = stop;
+    }
+    if (resistance == null && t1 != null) {
+      resistance = t1;
+    }
+    const cv = positiveNum(composite["vwap"] ?? composite["day_vwap"]);
+    if (vwap == null && cv != null) {
+      vwap = cv;
+    }
+    if (vwap == null && support != null && resistance != null && resistance > support) {
+      vwap = (support + resistance) / 2;
+    }
+  }
+
+  return { vwap, support, resistance };
+}

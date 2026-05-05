@@ -19,7 +19,7 @@ import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { useIsMobileLayout } from "@/lib/hooks/use-is-mobile-layout";
-import { coerceSnapshotForReferenceLevels } from "@/lib/snapshot-reference-levels";
+import { coerceSnapshotForReferenceLevels, deriveSessionReferenceLevels } from "@/lib/snapshot-reference-levels";
 import { applySwingCompositeEnrichment, buildEvidenceFromSetup, type SignalEvidenceData } from "@/lib/signal-evidence";
 import {
   fetchLiveSignals,
@@ -209,16 +209,13 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
     [scannerOverview.setups, symbol]
   );
 
-  const { support, resistance } = useMemo(() => {
-    if (!snapshot || typeof snapshot.last_trade_price !== "number") {
-      return { support: 0, resistance: 0 };
-    }
-    const last = snapshot.last_trade_price;
-    return {
-      support: snapshot.day_low ?? last * 0.985,
-      resistance: snapshot.day_high ?? last * 1.015
-    };
-  }, [snapshot]);
+  const referenceLevels = useMemo(() => {
+    const comp =
+      compositeResult != null && !isInsufficientCompositeResponse(compositeResult)
+        ? (compositeResult as Record<string, unknown>)
+        : null;
+    return deriveSessionReferenceLevels(snapshot, comp);
+  }, [snapshot, compositeResult]);
 
   const rows: LayerRow[] = useMemo(() => {
     const rawLayers = compositeResult?.layers;
@@ -945,28 +942,28 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
           <div>
             <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>VWAP</p>
             <strong>
-              {typeof snapshot?.day_vwap === "number" && Number.isFinite(snapshot.day_vwap)
-                ? `$${snapshot.day_vwap.toFixed(2)}`
-                : snapshot?.last_trade_price
-                  ? `$${(snapshot.last_trade_price * 0.997).toFixed(2)}`
-                  : "n/a"}
+              {referenceLevels.vwap != null ? `$${referenceLevels.vwap.toFixed(2)}` : "n/a"}
             </strong>
           </div>
           <div>
             <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>Support</p>
-            <strong>{support ? `$${support.toFixed(2)}` : "n/a"}</strong>
+            <strong>{referenceLevels.support != null ? `$${referenceLevels.support.toFixed(2)}` : "n/a"}</strong>
           </div>
           <div>
             <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>Resistance</p>
-            <strong>{resistance ? `$${resistance.toFixed(2)}` : "n/a"}</strong>
+            <strong>{referenceLevels.resistance != null ? `$${referenceLevels.resistance.toFixed(2)}` : "n/a"}</strong>
           </div>
           <div>
             <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>OR High</p>
-            <strong>{resistance ? `$${(resistance * 1.003).toFixed(2)}` : "n/a"}</strong>
+            <strong>
+              {referenceLevels.resistance != null ? `$${(referenceLevels.resistance * 1.003).toFixed(2)}` : "n/a"}
+            </strong>
           </div>
           <div>
             <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>OR Low</p>
-            <strong>{support ? `$${(support * 0.997).toFixed(2)}` : "n/a"}</strong>
+            <strong>
+              {referenceLevels.support != null ? `$${(referenceLevels.support * 0.997).toFixed(2)}` : "n/a"}
+            </strong>
           </div>
         </div>
         {setup ? (
