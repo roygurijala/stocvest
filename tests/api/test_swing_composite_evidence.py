@@ -31,6 +31,7 @@ def test_evidence_fields_strong_uptrend_bull_regime() -> None:
     assert fields["market_regime"] == "Bullish"
     assert fields["trend_strength"] == "Strong"
     assert len(fields["catalysts"]) >= 1
+    assert fields.get("vwap") == 499.0
 
 
 def test_evidence_fields_neutral_regime_label() -> None:

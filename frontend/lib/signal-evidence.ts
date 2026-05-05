@@ -45,6 +45,8 @@ export interface SignalEvidenceInsight {
   reference_target_1: number | null;
   reference_target_2: number | null;
   reference_stop_level: number | null;
+  /** Session VWAP when available; modal uses this before `keyLevels.vwap`. */
+  vwap: number | null;
 }
 
 export interface SignalEvidenceData {
@@ -473,6 +475,23 @@ function numOrNull(v: unknown): number | null {
   return null;
 }
 
+/** Map composite JSON to 0–100 for insight; supports `signal_score`, `signal_strength` (0–1), or `score` (−1..1). */
+function compositeSignalScoreFromBody(body: Record<string, unknown>): number | null {
+  const explicit = numOrNull(body.signal_score);
+  if (explicit != null) {
+    return clamp(Math.round(explicit), 0, 100);
+  }
+  const strength = numOrNull(body.signal_strength);
+  if (strength != null) {
+    return clamp(Math.round(strength * 100), 0, 100);
+  }
+  const sc = numOrNull(body.score);
+  if (sc != null) {
+    return clamp(Math.round(((sc + 1) / 2) * 100), 0, 100);
+  }
+  return null;
+}
+
 function parseHistoricalZone(raw: unknown): { low: number; high: number } | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
@@ -486,7 +505,7 @@ function parseHistoricalZone(raw: unknown): { low: number; high: number } | null
  * Parse swing-composite POST JSON into a structured insight. Returns null if core fields are missing.
  */
 export function parseSwingCompositeInsight(body: Record<string, unknown>): SignalEvidenceInsight | null {
-  const signal_score = numOrNull(body.signal_score);
+  const signal_score = compositeSignalScoreFromBody(body);
   if (signal_score == null) return null;
   const trend_strength = String(body.trend_strength ?? "").trim() || "Moderate";
   const trend_direction = String(body.trend_direction ?? "").trim() || "Sideways";
@@ -522,8 +541,9 @@ export function parseSwingCompositeInsight(body: Record<string, unknown>): Signa
       ? body.signal_parameters.trim()
       : "Observe how price behaves versus the Historical Entry Zone on a closing basis. Signal data only — not investment advice.";
   const historical_entry_zone = parseHistoricalZone(body.historical_entry_zone);
+  const vwapRaw = numOrNull(body.vwap ?? body.day_vwap);
   return {
-    signal_score: clamp(Math.round(signal_score), 0, 100),
+    signal_score,
     trend_strength,
     trend_direction,
     risk_reward: Math.round(risk_reward * 10) / 10,
@@ -536,7 +556,8 @@ export function parseSwingCompositeInsight(body: Record<string, unknown>): Signa
     historical_entry_zone,
     reference_target_1: numOrNull(body.reference_target_1),
     reference_target_2: numOrNull(body.reference_target_2),
-    reference_stop_level: numOrNull(body.reference_stop_level)
+    reference_stop_level: numOrNull(body.reference_stop_level),
+    vwap: vwapRaw != null && vwapRaw > 0 ? Math.round(vwapRaw * 10000) / 10000 : null
   };
 }
 
@@ -607,6 +628,10 @@ export function deriveEvidenceInsightFallback(evidence: SignalEvidenceData): Sig
     : "the Historical Entry Zone in the reference strip";
   const vwTxt = typeof vwap === "number" && vwap > 0 ? `$${vwap.toFixed(2)}` : "VWAP in the reference strip";
   const signal_parameters = `Consider observing how ${sym} behaves versus ${zoneTxt} on a closing basis before sizing any follow-up. Scale participation down when confirming layers diverge or when price cannot hold ${vwTxt}. Invalidate the constructive read on a decisive close back through the lower bound of the Historical Entry Zone for this horizon. Signal data only — not investment advice.`;
+  const vwapLvl =
+    typeof evidence.keyLevels.vwap === "number" && Number.isFinite(evidence.keyLevels.vwap) && evidence.keyLevels.vwap > 0
+      ? Math.round(evidence.keyLevels.vwap * 10000) / 10000
+      : null;
   return {
     signal_score,
     trend_strength,
@@ -621,7 +646,8 @@ export function deriveEvidenceInsightFallback(evidence: SignalEvidenceData): Sig
     historical_entry_zone,
     reference_target_1,
     reference_target_2,
-    reference_stop_level
+    reference_stop_level,
+    vwap: vwapLvl
   };
 }
 
@@ -631,14 +657,31 @@ function findContributionRow(body: Record<string, unknown>, layerKey: string): R
   return (raw as Array<Record<string, unknown>>).find((c) => String(c.layer ?? "").toLowerCase() === layerKey);
 }
 
+function mergeParsedInsightWithFallback(
+  parsed: SignalEvidenceInsight,
+  fallback: SignalEvidenceInsight
+): SignalEvidenceInsight {
+  return {
+    ...fallback,
+    ...parsed,
+    historical_entry_zone: parsed.historical_entry_zone ?? fallback.historical_entry_zone,
+    reference_target_1: parsed.reference_target_1 ?? fallback.reference_target_1,
+    reference_target_2: parsed.reference_target_2 ?? fallback.reference_target_2,
+    reference_stop_level: parsed.reference_stop_level ?? fallback.reference_stop_level,
+    vwap: parsed.vwap ?? fallback.vwap
+  };
+}
+
 export function applySwingCompositeEnrichment(
   evidence: SignalEvidenceData,
   body: Record<string, unknown> | null | undefined
 ): SignalEvidenceData {
+  const fallback = deriveEvidenceInsightFallback(evidence);
   if (body == null || body.status === "insufficient_data") {
-    return { ...evidence, insight: deriveEvidenceInsightFallback(evidence) };
+    return { ...evidence, insight: fallback };
   }
-  const insight = parseSwingCompositeInsight(body) ?? deriveEvidenceInsightFallback(evidence);
+  const parsed = parseSwingCompositeInsight(body);
+  const insight = parsed == null ? fallback : mergeParsedInsightWithFallback(parsed, fallback);
   let confluence = evidence.confluence;
   const cs = body.confluence_score;
   if (typeof cs === "number" && Number.isFinite(cs)) {

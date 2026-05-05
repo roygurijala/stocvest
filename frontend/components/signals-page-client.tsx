@@ -69,6 +69,15 @@ const RADAR_LAYER_LABEL: Record<string, string> = {
   internals: "Internals"
 };
 
+function snapshotHasTradeableLast(s: SnapshotPayload | null | undefined): boolean {
+  return (
+    s != null &&
+    typeof s.last_trade_price === "number" &&
+    Number.isFinite(s.last_trade_price) &&
+    s.last_trade_price > 0
+  );
+}
+
 function statusColor(status: LayerStatus, colors: ThemeColors): string {
   if (status === "Bullish") return colors.bullish;
   if (status === "Bearish") return colors.bearish;
@@ -862,6 +871,20 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
                 triggers: ["Multi-layer synthesis"],
                 timestamp_iso: new Date().toISOString()
               };
+              let snapForEvidence: SnapshotPayload | undefined = snapshot ?? undefined;
+              if (!snapshotHasTradeableLast(rawSnapshot)) {
+                try {
+                  const row = await fetchSymbolSnapshot(symbol.toUpperCase());
+                  if (row && row.symbol.toUpperCase() === symbol.toUpperCase()) {
+                    const coerced = coerceSnapshotForReferenceLevels(row);
+                    if (snapshotHasTradeableLast(coerced)) {
+                      snapForEvidence = coerced ?? undefined;
+                    }
+                  }
+                } catch {
+                  /* keep snapForEvidence */
+                }
+              }
               let symbolNewsArticles: Awaited<ReturnType<typeof fetchSymbolNews>> = [];
               try {
                 symbolNewsArticles = await fetchSymbolNews(symbol.toUpperCase(), 10);
@@ -876,7 +899,7 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
                   : undefined;
               setSignalEvidence(
                 applySwingCompositeEnrichment(
-                  buildEvidenceFromSetup(setupLike, snapshot ?? undefined, {
+                  buildEvidenceFromSetup(setupLike, snapForEvidence, {
                     symbolNewsArticles,
                     earningsRiskDays: daysUntil,
                     earningsReportTime: event?.report_time

@@ -137,17 +137,34 @@ describe("parseSwingCompositeInsight", () => {
       historical_entry_zone: { low: 100, high: 102 },
       reference_target_1: 105,
       reference_target_2: 108,
-      reference_stop_level: 99
+      reference_stop_level: 99,
+      day_vwap: 101.25
     });
     expect(insight).not.toBeNull();
     expect(insight!.signal_score).toBe(82);
     expect(insight!.risk_reward).toBe(2.3);
     expect(insight!.confirming_signals[0]?.label).toBe("ORB Breakout");
     expect(insight!.historical_entry_zone?.low).toBe(100);
+    expect(insight!.vwap).toBe(101.25);
   });
 
-  test("returns null when signal_score missing", () => {
+  test("returns null when no scorable field present", () => {
     expect(parseSwingCompositeInsight({ trend_strength: "Weak" })).toBeNull();
+  });
+
+  test("derives signal_score from signal_strength when signal_score omitted", () => {
+    const insight = parseSwingCompositeInsight({
+      signal_strength: 0.82,
+      trend_strength: "Strong",
+      trend_direction: "Uptrend",
+      risk_reward: 2.0,
+      market_regime: "Bullish",
+      catalysts: [],
+      risk_factors: [],
+      signal_parameters: "x"
+    });
+    expect(insight).not.toBeNull();
+    expect(insight!.signal_score).toBe(82);
   });
 });
 
@@ -247,5 +264,39 @@ describe("applySwingCompositeEnrichment", () => {
     expect(tech?.status).toBe("Bearish");
     expect(tech?.contributionScore).toBe(32);
     expect(tech?.keyPoints[0]).toBe("RSI 43");
+  });
+
+  test("fills reference levels from client snapshot when composite omits them but signal_score present", () => {
+    const base = buildEvidenceFromSetup(
+      baseSetup,
+      {
+        symbol: "AAPL",
+        last_trade_price: 100,
+        prev_close: 99,
+        day_low: 98,
+        day_high: 102,
+        day_vwap: 99.5
+      },
+      { symbolNewsArticles: [] }
+    );
+    const enriched = applySwingCompositeEnrichment(base, {
+      signal_score: 71,
+      trend_strength: "Moderate",
+      trend_direction: "Uptrend",
+      risk_reward: 2.1,
+      market_regime: "Bullish",
+      catalysts: [],
+      risk_factors: ["A", "B", "C"],
+      signal_parameters: "Server copy.",
+      historical_entry_zone: null,
+      reference_target_1: null,
+      reference_target_2: null,
+      reference_stop_level: null
+    });
+    expect(enriched.insight?.historical_entry_zone?.low).toBe(98);
+    expect(enriched.insight?.historical_entry_zone?.high).toBe(102);
+    expect(enriched.insight?.reference_target_1).not.toBeNull();
+    expect(enriched.insight?.reference_stop_level).not.toBeNull();
+    expect(enriched.insight?.vwap).toBe(99.5);
   });
 });

@@ -134,6 +134,7 @@ def test_swing_composite_handler_returns_bullish_signal_summary() -> None:
     assert isinstance(body.get("signal_parameters"), str) and body["signal_parameters"]
     assert body["historical_entry_zone"]["low"] == 175.0
     assert body["historical_entry_zone"]["high"] == 182.0
+    assert body.get("vwap") == 179.0
 
 
 def test_swing_synthesis_parse_handler_parses_json_signal_payload() -> None:

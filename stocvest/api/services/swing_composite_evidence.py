@@ -152,7 +152,7 @@ def build_swing_composite_evidence_fields(
         "for this horizon. Signal data only — not investment advice."
     )
 
-    return {
+    out: dict[str, Any] = {
         "signal_score": signal_score,
         "trend_strength": trend_strength,
         "trend_direction": trend_direction,
@@ -166,3 +166,6 @@ def build_swing_composite_evidence_fields(
         "reference_target_2": reference_target_2,
         "reference_stop_level": reference_stop_level,
     }
+    if vwap is not None and vwap > 0:
+        out["vwap"] = round(vwap, 4)
+    return out
