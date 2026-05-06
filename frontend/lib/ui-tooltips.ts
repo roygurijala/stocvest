@@ -28,13 +28,13 @@ export const PDT_GUARDIAN_TIP =
   "The Pattern Day Trader rule limits brokerage accounts under $25,000 to 3 day trades within any 5 business days. STOCVEST enforces this automatically at the broker layer so your account is never restricted by accident.";
 
 export const CONFIDENCE_PERCENT_TIP =
-  "When present, this is confluence (0–100): how many independent context checks align with this direction (structure, regime, sector, news, gaps), minus conflict penalties. Otherwise it is the intraday pattern score from price and volume triggers; many marginal setups share the same gateway value (for example 55%) because that is the minimum score to pass the scanner.";
+  "When confluence is available, this number is mostly that score (0–100) with a small contribution from the intraday pattern score so similar confluence does not always print as an identical percent. Confluence reflects how many independent context checks align (structure, regime, sector, news, gaps), minus conflict penalties. Without confluence, this is pattern-only; many marginal setups share the same gateway value (for example 55%) because that is the minimum score to pass the scanner.";
 
 export const SETUP_RELATIVE_VOLUME_TIP =
   "How today's trading volume compares to the 20-day average. 2x means twice the normal activity. Higher volume confirms stronger price moves and more reliable signals.";
 
 export const TOP_SIGNALS_TIP =
-  "The strongest active intraday candidates from the scanner right now. The percentage prefers confluence (broader context agreement) when the API includes it; otherwise it reflects the pattern score from triggers only.";
+  "The strongest active intraday candidates from the scanner right now. The percentage weights confluence heavily when the API includes it, with a small blend from the pattern score so ties are less common; otherwise it is pattern-only.";
 
 export const LATEST_HEADLINES_TIP =
   "Real-time market news from Polygon.io. Headlines are scored for sentiment and used as one of the six signal layers.";

@@ -116,6 +116,19 @@ class GeoAnalyzer:
             return hit[1]
 
         if not articles:
+            impact_key_raw = normalize_sector_for_geo(sector_bucket) if sector_bucket else ""
+            if impact_key_raw in ("", "default"):
+                impact_key = ""
+            else:
+                impact_key = impact_key_raw
+            sector_human = impact_key.replace("_", " ").title() if impact_key else ""
+            summary = (
+                f"No geopolitical headlines matched in the last {lookback_hours}h; baseline exposure is low."
+                + (f" Equity maps to {sector_human} for sector-relative read-through." if sector_human else "")
+            )
+            chips = ["Geo: calm"]
+            if sector_human:
+                chips.append(f"Sector: {sector_human}")
             result = GeoLayerResult(
                 status="available",
                 score=60,
@@ -123,14 +136,14 @@ class GeoAnalyzer:
                 risk_level="low",
                 risk_score=0.0,
                 reasoning="No headlines — geo risk assumed low.",
-                chips=["Geo: calm"],
+                chips=chips,
                 high_impact_count=0,
                 geo_active_events=[],
-                geo_impact_sector_key="",
+                geo_impact_sector_key=impact_key,
                 geo_stock_exposure_score=None,
-                geo_exposure_summary=None,
+                geo_exposure_summary=summary,
                 geo_event_details=[],
-                geo_exposure_band="",
+                geo_exposure_band="low",
             )
             _CACHE[digest] = (now, result)
             return result

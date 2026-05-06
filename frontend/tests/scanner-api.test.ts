@@ -131,7 +131,7 @@ describe("scanner API overview", () => {
 });
 
 describe("topSignalStrengthPercent", () => {
-  test("prefers confluence over pattern score", async () => {
+  test("blends confluence with pattern score when both exist", async () => {
     const { topSignalStrengthPercent } = await import("@/lib/api/scanner");
     expect(
       topSignalStrengthPercent({
@@ -142,7 +142,7 @@ describe("topSignalStrengthPercent", () => {
         timestamp_iso: "",
         confluence_score: 72
       })
-    ).toBe(72);
+    ).toBe(68);
   });
 
   test("falls back to pattern score when confluence is absent", async () => {

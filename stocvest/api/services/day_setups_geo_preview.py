@@ -31,6 +31,33 @@ def normalize_geo_scan_articles(raw: Any) -> list[dict[str, Any]]:
     return out
 
 
+def _theme_tags_from_geo(geo: GeoLayerResult) -> list[str]:
+    tags: list[str] = []
+    for c in geo.chips or []:
+        if not isinstance(c, str):
+            continue
+        if c.startswith("Themes:"):
+            rest = c.split(":", 1)[1].strip()
+            return [t.strip() for t in rest.split(",") if t.strip()][:6]
+    for c in geo.chips or []:
+        if isinstance(c, str) and c.startswith("Sector:"):
+            rest = c.split(":", 1)[1].strip()
+            if rest:
+                tags.append(rest)
+    if tags:
+        return tags[:6]
+    for e in geo.geo_active_events[:4]:
+        et = str(e.get("event_type") or "").replace("_", " ").strip()
+        if et and et != "?":
+            tags.append(et)
+    if tags:
+        return tags[:6]
+    for c in geo.chips or []:
+        if isinstance(c, str) and c and not c.startswith("H/M/L"):
+            tags.append(c)
+    return tags[:6]
+
+
 def geo_preview_dict(geo: GeoLayerResult) -> dict[str, Any]:
     raw_key = (geo.geo_impact_sector_key or "").strip()
     norm_key = raw_key.lower()
@@ -54,6 +81,7 @@ def geo_preview_dict(geo: GeoLayerResult) -> dict[str, Any]:
         "exposure_band": band,
         "weighted_score": round(float(score), 3) if isinstance(score, (int, float)) and score is not None else None,
         "summary": summary or None,
+        "theme_tags": _theme_tags_from_geo(geo),
     }
 
 
@@ -127,9 +155,9 @@ async def _attach_geo_preview_async(rows: list[dict[str, Any]], payload: dict[st
 
 
 def attach_geo_preview_to_intraday_rows(rows: list[dict[str, Any]], payload: dict[str, Any]) -> None:
-    articles = normalize_geo_scan_articles(payload.get("geo_scan_articles"))
-    if not articles or not rows:
+    if not rows:
         return
+    articles = normalize_geo_scan_articles(payload.get("geo_scan_articles"))
     try:
         asyncio.run(_attach_geo_preview_async(rows, payload, articles))
     except RuntimeError:

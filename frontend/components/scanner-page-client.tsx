@@ -74,11 +74,16 @@ function isLongDirection(direction: string): boolean {
 }
 
 function topSignalStrengthPercent(setup: IntradaySetupPayload): number {
+  const patPct =
+    typeof setup.score === "number" && Number.isFinite(setup.score)
+      ? Math.max(0, Math.min(100, setup.score * 100))
+      : 0;
   if (typeof setup.confluence_score === "number" && Number.isFinite(setup.confluence_score)) {
-    return Math.max(0, Math.min(100, Math.round(setup.confluence_score)));
+    const conf = Math.max(0, Math.min(100, setup.confluence_score));
+    const blended = conf * 0.78 + patPct * 0.22;
+    return Math.max(0, Math.min(100, Math.round(blended)));
   }
-  const raw = typeof setup.score === "number" && Number.isFinite(setup.score) ? setup.score : 0;
-  return Math.max(0, Math.min(100, Math.round(raw * 100)));
+  return Math.max(0, Math.min(100, Math.round(patPct)));
 }
 
 function formatSignalFiredTimeEt(iso: string): string {

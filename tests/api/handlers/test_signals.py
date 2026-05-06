@@ -203,6 +203,43 @@ def test_day_setups_handler_geo_preview_with_market_headlines() -> None:
     assert preview.get("exposure_band") in ("low", "moderate", "high")
 
 
+def test_day_setups_handler_geo_preview_without_headlines() -> None:
+    from stocvest.signals.geo_analyzer import clear_geo_cache
+
+    clear_geo_cache()
+    et = ZoneInfo("America/New_York")
+    start = datetime(2026, 4, 28, 9, 30, tzinfo=et)
+    bars = []
+    for i in range(15):
+        close = 100.0 + ((i % 3) * 0.1)
+        bars.append(_bar_payload(start + timedelta(minutes=i), close=close, volume=350_000))
+    bars.append(_bar_payload(start + timedelta(minutes=15), close=100.2, volume=100_000))
+    bars.append(_bar_payload(start + timedelta(minutes=16), close=102.2, volume=400_000))
+
+    event = {
+        "body": json.dumps(
+            {
+                "bars_by_symbol": {"GAP1": bars},
+                "limit": 5,
+                "min_score": 0.5,
+                "liquidity_by_symbol": {
+                    "GAP1": {"avg_daily_volume": 8_000_000, "last_price": 100.0, "company_name": "Gap1 Inc"}
+                },
+                "sector_buckets_by_symbol": {"GAP1": "semiconductors"},
+            }
+        )
+    }
+    response = day_setups_handler(event, {})
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    preview = body[0].get("geo_preview")
+    assert isinstance(preview, dict)
+    assert preview.get("impact_sector_label")
+    assert preview.get("exposure_band") == "low"
+    tags = preview.get("theme_tags")
+    assert isinstance(tags, list) and tags
+
+
 def test_day_setups_handler_returns_ranked_candidates() -> None:
     et = ZoneInfo("America/New_York")
     start = datetime(2026, 4, 28, 9, 30, tzinfo=et)

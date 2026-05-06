@@ -93,6 +93,26 @@ function TopSignalGeoStrip({ preview, colors }: { preview: IntradayGeoPreview; c
           Weighted exposure {scoreStr}
         </span>
       ) : null}
+      {preview.theme_tags && preview.theme_tags.length > 0 ? (
+        <div className="flex flex-wrap gap-1">
+          {preview.theme_tags.map((t, ti) => (
+            <span
+              key={`${ti}-${t}`}
+              style={{
+                fontSize: 10,
+                fontWeight: 600,
+                color: colors.textMuted,
+                padding: "2px 6px",
+                borderRadius: borderRadius.sm,
+                border: `1px solid ${colors.border}`,
+                background: "rgba(255,255,255,0.04)"
+              }}
+            >
+              {t}
+            </span>
+          ))}
+        </div>
+      ) : null}
       {preview.summary ? (
         <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45 }}>{preview.summary}</p>
       ) : null}
@@ -101,11 +121,16 @@ function TopSignalGeoStrip({ preview, colors }: { preview: IntradayGeoPreview; c
 }
 
 function topSignalStrengthPercent(setup: IntradaySetupPayload): number {
+  const patPct =
+    typeof setup.score === "number" && Number.isFinite(setup.score)
+      ? Math.max(0, Math.min(100, setup.score * 100))
+      : 0;
   if (typeof setup.confluence_score === "number" && Number.isFinite(setup.confluence_score)) {
-    return Math.max(0, Math.min(100, Math.round(setup.confluence_score)));
+    const conf = Math.max(0, Math.min(100, setup.confluence_score));
+    const blended = conf * 0.78 + patPct * 0.22;
+    return Math.max(0, Math.min(100, Math.round(blended)));
   }
-  const raw = typeof setup.score === "number" && Number.isFinite(setup.score) ? setup.score : 0;
-  return Math.max(0, Math.min(100, Math.round(raw * 100)));
+  return Math.max(0, Math.min(100, Math.round(patPct)));
 }
 
 function toPrice(n: number | null | undefined): string {
@@ -306,7 +331,7 @@ export function DashboardRedesign({
           </div>
 
           <article
-            className={`order-2 flex w-full min-h-[260px] flex-col overflow-hidden lg:self-start lg:col-start-1 lg:row-start-2 ${surfaceGlowClassName}`}
+            className={`order-2 flex w-full min-h-[200px] flex-col overflow-hidden lg:self-start lg:col-start-1 lg:row-start-2 ${surfaceGlowClassName}`}
             style={{
               background: colors.surface,
               border: `1px solid ${colors.border}`,
@@ -501,7 +526,7 @@ export function DashboardRedesign({
           />
 
           <article
-            className={`order-3 flex h-full min-h-[260px] flex-col overflow-hidden lg:col-start-2 lg:row-start-2 ${surfaceGlowClassName}`}
+            className={`order-3 flex min-h-[200px] flex-col overflow-hidden lg:col-start-2 lg:row-start-2 lg:self-start ${surfaceGlowClassName}`}
             style={{
               background: colors.surface,
               border: `1px solid ${colors.border}`,

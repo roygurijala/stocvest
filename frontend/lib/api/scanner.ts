@@ -75,15 +75,20 @@ export function geoScanArticlesFromMarketNews(articles: NewsPayload[] | undefine
 }
 
 /**
- * Percent shown on setup rows: **confluence** (0–100) when the API attached it, else intraday **pattern**
- * score from price/volume triggers. Pattern scores often cluster at the scanner gateway (e.g. 0.55 → 55%).
+ * Percent on setup rows: when **confluence** exists, blend it (~78%) with the intraday **pattern** score (~22%)
+ * so tickers with the same rounded confluence still differ when triggers disagree. Otherwise pattern-only (0–100).
  */
 export function topSignalStrengthPercent(setup: IntradaySetupPayload): number {
+  const patPct =
+    typeof setup.score === "number" && Number.isFinite(setup.score)
+      ? Math.max(0, Math.min(100, setup.score * 100))
+      : 0;
   if (typeof setup.confluence_score === "number" && Number.isFinite(setup.confluence_score)) {
-    return Math.max(0, Math.min(100, Math.round(setup.confluence_score)));
+    const conf = Math.max(0, Math.min(100, setup.confluence_score));
+    const blended = conf * 0.78 + patPct * 0.22;
+    return Math.max(0, Math.min(100, Math.round(blended)));
   }
-  const raw = typeof setup.score === "number" && Number.isFinite(setup.score) ? setup.score : 0;
-  return Math.max(0, Math.min(100, Math.round(raw * 100)));
+  return Math.max(0, Math.min(100, Math.round(patPct)));
 }
 
 export interface IntradayGeoPreview {
@@ -92,6 +97,8 @@ export interface IntradayGeoPreview {
   exposure_band: string;
   weighted_score: number | null;
   summary: string | null;
+  /** Short labels from headline themes or sector baseline chips. */
+  theme_tags?: string[];
 }
 
 export interface IntradaySetupPayload {
