@@ -10,6 +10,7 @@ import type { MarketOverview, NewsPayload, SnapshotPayload } from "@/lib/api/mar
 import type { ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
 import { AddToWatchlistButton } from "@/components/add-to-watchlist-button";
+import { CuteLoader } from "@/components/cute-loader";
 import { SignalLayerDivergenceChart } from "@/components/signal-layer-divergence-chart";
 import { SignalsAfterHoursPanel } from "@/components/signals-after-hours-panel";
 import { InfoTip } from "@/components/info-tip";
@@ -486,7 +487,7 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
             </select>
           </div>
           {histLoading ? (
-            <p style={{ color: colors.textMuted }}>Loading…</p>
+            <CuteLoader label="Loading signal history" sublabel="Computing recent outcomes" compact />
           ) : filteredHistory.length === 0 ? (
             <p style={{ color: colors.textMuted, margin: 0 }}>
               Signal history builds automatically as signals are generated. Check back after market hours.

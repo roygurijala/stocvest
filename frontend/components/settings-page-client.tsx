@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { CuteLoader } from "@/components/cute-loader";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
@@ -298,7 +299,7 @@ export function SettingsPageClient({ email }: SettingsPageClientProps) {
             </div>
           </div>
         ) : (
-          <p style={{ color: colors.textMuted }}>Loading alert preferences…</p>
+          <CuteLoader label="Loading alert preferences" sublabel="Fetching notification settings" compact />
         )}
       </article>
 

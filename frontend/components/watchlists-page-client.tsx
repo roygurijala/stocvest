@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { CuteLoader } from "@/components/cute-loader";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -170,7 +171,7 @@ export function WatchlistsPageClient() {
   }
 
   if (loading) {
-    return <p style={{ color: colors.textMuted }}>Loading watchlists…</p>;
+    return <CuteLoader label="Loading watchlists" sublabel="Syncing your symbols and groups" compact />;
   }
   if (error && !rows.length) {
     return <p style={{ color: colors.bearish }}>{error}</p>;

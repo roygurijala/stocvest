@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { CuteLoader } from "@/components/cute-loader";
 import { DashboardRedesign } from "@/components/dashboard-redesign";
 import { MorningBriefFromCore } from "@/components/morning-brief-from-core";
 import { fetchMarketOverview } from "@/lib/api/market";
@@ -40,33 +41,6 @@ function timeoutFallback<T>(promise: Promise<T>, ms: number, fallback: T): Promi
         resolve(fallback);
       });
   });
-}
-
-function MorningBriefSkeleton() {
-  return (
-    <article
-      style={{
-        border: "1px solid rgba(148,163,184,0.25)",
-        borderRadius: 16,
-        padding: 24,
-        minHeight: 56,
-        maxWidth: 900,
-        background: "rgba(148,163,184,0.06)"
-      }}
-    >
-      <style>{`@keyframes stocvest-skeleton { 0% { background-position: 0% 0; } 100% { background-position: 200% 0; } }`}</style>
-      <div
-        style={{
-          height: 14,
-          width: "42%",
-          borderRadius: 6,
-          background: "linear-gradient(90deg, rgba(148,163,184,0.12), rgba(148,163,184,0.22), rgba(148,163,184,0.12))",
-          backgroundSize: "200% 100%",
-          animation: "stocvest-skeleton 1.2s ease-in-out infinite"
-        }}
-      />
-    </article>
-  );
 }
 
 /** Server component: all dashboard API work runs here inside Suspense so the shell can paint first. */
@@ -117,7 +91,7 @@ export async function DashboardPageContent() {
 
   const morningBriefSlot =
     !scannerCore.error ? (
-      <Suspense fallback={<MorningBriefSkeleton />}>
+      <Suspense fallback={<CuteLoader label="Loading morning brief" sublabel="Preparing today's quick read" compact />}>
         <MorningBriefFromCore core={scannerCore} pdtStatus={pdtStatus} />
       </Suspense>
     ) : null;
