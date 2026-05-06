@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api/client";
+import { isNextRedirect } from "@/lib/next-errors";
 import type { NewsPayload } from "@/lib/api/market";
 import type { PDTStatusPayload } from "@/lib/api/pdt";
 import { fetchDefaultWatchlistSymbols } from "@/lib/api/watchlists";
@@ -437,6 +438,7 @@ export async function loadScannerDataWithoutBrief(
       regimeLabel
     };
   } catch (error: unknown) {
+    if (isNextRedirect(error)) throw error;
     return {
       gapIntelligence: [],
       setups: [],

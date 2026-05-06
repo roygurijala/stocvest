@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api/client";
+import { isNextRedirect } from "@/lib/next-errors";
 
 /** Symbol-scoped news for Client Components lives in `./fetch-symbol-news` (this file’s `apiFetch` pulls server-only auth). */
 
@@ -203,6 +204,7 @@ export async function fetchMarketOverview(
       sparklinesBySymbol: Object.fromEntries(sparklinesEntries)
     };
   } catch (error: unknown) {
+    if (isNextRedirect(error)) throw error;
     return {
       snapshots: [],
       news: [],

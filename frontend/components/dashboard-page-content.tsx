@@ -8,6 +8,7 @@ import { DEFAULT_EARNINGS_SYMBOLS, fetchEarningsCalendar } from "@/lib/api/earni
 import type { MarketOverview } from "@/lib/api/market";
 import type { ScannerCoreData } from "@/lib/api/scanner";
 import type { EarningsResponse } from "@/lib/api/earnings";
+import { isNextRedirect } from "@/lib/next-errors";
 
 /** Tighter than the full scanner page; default watchlist loads in parallel with gap-intelligence inside the scanner loader. */
 const DASHBOARD_SCANNER_TUNING = {
@@ -23,15 +24,19 @@ const DASHBOARD_SCANNER_TIMEOUT_MS = 28_000;
 const DASHBOARD_EARNINGS_TIMEOUT_MS = 5000;
 
 function timeoutFallback<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const timer = setTimeout(() => resolve(fallback), ms);
     promise
       .then((value) => {
         clearTimeout(timer);
         resolve(value);
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         clearTimeout(timer);
+        if (isNextRedirect(err)) {
+          reject(err);
+          return;
+        }
         resolve(fallback);
       });
   });
