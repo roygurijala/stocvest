@@ -293,7 +293,7 @@ export function DashboardRedesign({
             <DashboardCard
               eyebrow="Decision desk"
               title="Tape & sentiment"
-              subtitle="SPY, QQQ, and IWM in one view—how the session is leaning before you open setups or run the full composite on a symbol."
+              subtitle="SPY, QQQ, and IWM in one view—a fast tape read for swing context. Pair it with multi-day structure when you open Evidence or run the full composite on a symbol."
               cardTip={DASHBOARD_MARKET_SENTIMENT_CARD_TIP}
             >
               <MarketSentimentScoreWidget marketOverview={marketOverview} embedded />
@@ -304,7 +304,7 @@ export function DashboardRedesign({
             className={`order-2 flex w-full min-h-[200px] flex-col overflow-hidden lg:self-start lg:col-start-1 lg:row-start-2`}
             title="Top signals"
             eyebrow="Scanner"
-            subtitle="Highest-ranked intraday candidates right now. Open Evidence for the six-layer read on any row."
+            subtitle="Highest-ranked scanner names right now (swing-first list). Open Evidence for news, levels, and the six-layer read on any row."
             cardTip={TOP_SIGNALS_CARD_TIP}
           >
             <div className="flex flex-col gap-3">
@@ -314,7 +314,7 @@ export function DashboardRedesign({
                     <p style={{ margin: 0, color: colors.textMuted }}>{scannerOverview.error}</p>
                   ) : (
                     <p style={{ margin: 0, color: colors.textMuted }}>
-                      Intelligence engine is warming up. Check back at market open.
+                      No ranked setups on the board yet. The scanner refreshes on a short cadence—check back after the next run.
                     </p>
                   )}
                 </div>
@@ -518,7 +518,7 @@ export function DashboardRedesign({
             className={`order-3 flex min-h-[200px] flex-col overflow-hidden lg:col-start-2 lg:row-start-2 lg:self-start`}
             eyebrow="Tape"
             title="Market pulse"
-            subtitle="SPY · QQQ · VIX session change and regime — aligned with the scanner when it completes; otherwise from your overview snapshots."
+            subtitle="SPY · QQQ · VIX session change and regime — today’s tape versus your swing read. Numbers match the scanner when it completes; otherwise they come from your overview snapshots."
             cardTip={MARKET_PULSE_CARD_TIP}
           >
             <div className="flex flex-col gap-3 text-sm" style={{ color: colors.text }}>

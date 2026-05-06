@@ -28,13 +28,13 @@ export const PDT_GUARDIAN_TIP =
   "The Pattern Day Trader rule limits brokerage accounts under $25,000 to 3 day trades within any 5 business days. STOCVEST enforces this automatically at the broker layer so your account is never restricted by accident.";
 
 export const CONFIDENCE_PERCENT_TIP =
-  "When confluence is available, this number is mostly that score (0–100) with a small contribution from the intraday pattern score so similar confluence does not always print as an identical percent. Confluence reflects how many independent context checks align (structure, regime, sector, news, gaps), minus conflict penalties. Without confluence, this is pattern-only; many marginal setups share the same gateway value (for example 55%) because that is the minimum score to pass the scanner.";
+  "When confluence is available, this number is mostly that score (0–100) with a small contribution from the active pattern score (swing or day path, depending on mode) so similar confluence does not always print as an identical percent. Confluence reflects how many independent context checks align (structure, regime, sector, news, gaps), minus conflict penalties. Without confluence, this is pattern-only; many marginal setups share the same gateway value (for example 55%) because that is the minimum score to pass the scanner.";
 
 export const SETUP_RELATIVE_VOLUME_TIP =
   "How today's trading volume compares to the 20-day average. 2x means twice the normal activity. Higher volume confirms stronger price moves and more reliable signals.";
 
 export const TOP_SIGNALS_TIP =
-  "The strongest active intraday candidates from the scanner right now. The percentage weights confluence heavily when the API includes it, with a small blend from the pattern score so ties are less common; otherwise it is pattern-only.";
+  "The strongest active scanner names on the board right now, ranked with swing-first defaults. The percentage weights confluence heavily when the API includes it, with a small blend from the pattern score so ties are less common; otherwise it is pattern-only.";
 
 export const LATEST_HEADLINES_TIP =
   "Real-time market news from Polygon.io. Headlines are scored for sentiment and used as one of the six signal layers.";
@@ -71,16 +71,16 @@ export const LAYER_NAME_HINTS: Record<string, string> = {
 /** ─── Dashboard cards (umbrella copy for circled i on each panel) ─── */
 
 export const DASHBOARD_MARKET_SENTIMENT_CARD_TIP =
-  "This panel summarizes how large-cap, tech, and small-cap indices are moving versus yesterday’s close. STOCVEST uses it as a fast read on risk appetite before you open scanner setups or run the six-layer composite on a symbol. It is not a trade signal by itself.";
+  "This panel summarizes how large-cap, tech, and small-cap indices are moving versus yesterday’s close. STOCVEST uses it as a fast tape read for swing workflow—risk appetite and breadth—before you drill into a symbol’s Evidence or six-layer composite. It is not a trade signal by itself.";
 
 export const MARKET_PULSE_CARD_TIP =
-  "SPY, QQQ, and VIX session change plus a simple regime label. When the scanner finishes, these numbers match the same tape inputs used in gap and setup context; otherwise they come from your market overview snapshots. They inform macro-style context in the engine, not individual entry prices.";
+  "SPY, QQQ, and VIX session change plus a simple regime label—useful context for how today’s session sits next to a swing thesis. When the scanner finishes, these numbers match the same tape inputs used in gap and setup context; otherwise they come from your market overview snapshots. They inform macro-style context in the engine, not individual entry prices.";
 
 export const TOP_SIGNALS_CARD_TIP =
-  "The highest-ranked intraday candidates from your scanner right now. Each row is a starting point: open Evidence to fetch news, levels, and the full server-side composite for that ticker. Rankings come from the scanner API (pattern + confluence when available).";
+  "The highest-ranked names from your scanner right now (swing-first ranking in the product). Each row is a starting point: open Evidence to fetch news, levels, and the full server-side composite for that ticker. Rankings come from the scanner API (pattern + confluence when available).";
 
 export const TOP_SIGNAL_ROW_CARD_TIP =
-  "A single scanner candidate. Use signal strength and confluence lines to prioritize which names to research first; the composite engine on the evidence screen decides how layers align for that symbol at open time.";
+  "A single scanner candidate. Use signal strength and confluence lines to prioritize which names to research first; the composite engine on the evidence screen decides how layers align for that symbol when you open it.";
 
 export const EARNINGS_CALENDAR_CARD_TIP =
   "Earnings dates for symbols on your dashboard list. Reporting days add event risk: STOCVEST surfaces them so you can weigh gap risk and news volatility before acting on a setup.";
@@ -91,10 +91,10 @@ export const MORNING_BRIEF_CARD_TIP =
 /** ─── Decision metric tooltips (how a number feeds the product) ─── */
 
 export const SENTIMENT_SCORE_NUMBER_TIP =
-  "This headline score averages a simple 0–100 translation of SPY, QQQ, and IWM session change. It only drives this dashboard gauge and copy like “favor today”—it is not the same math as the per-stock composite score.";
+  "This headline score averages a simple 0–100 translation of SPY, QQQ, and IWM session change. It only drives this dashboard gauge and copy like “favor today”—a tape tilt for planning, not the same math as the per-stock composite score.";
 
 export const SENTIMENT_FROM_OPEN_TIP =
-  "Shows how today’s opening gap versus prior close shifted the same 0–100 index sub-scores on average. A negative read means the open was weaker than prior close; use it alongside the headline score to see intraday give-back or recovery.";
+  "Shows how today’s opening gap versus prior close shifted the same 0–100 index sub-scores on average. A negative read means the open was weaker than prior close; use it alongside the headline score to see session give-back or recovery versus the open.";
 
 export const INDEX_SUBSCORE_TIP =
   "A 0–100 shorthand from that index’s session change versus prior close. It colors the small index tile and feeds the headline gauge; the swing or real composite for an individual stock uses its own bars and layers.";
