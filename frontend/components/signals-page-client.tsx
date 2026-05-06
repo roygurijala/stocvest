@@ -36,7 +36,7 @@ import {
 import { LAYER_NAME_HINTS } from "@/lib/ui-tooltips";
 import { isInsufficientCompositeResponse, type SwingCompositeMarketStatus } from "@/lib/api/swing-composite";
 
-type LayerStatus = "Bullish" | "Bearish" | "Neutral" | "Unavailable";
+type LayerStatus = "Bullish" | "Bearish" | "Neutral" | "Unavailable" | "As of close";
 
 interface LayerRow {
   icon: string;
@@ -88,12 +88,19 @@ function statusColor(status: LayerStatus, colors: ThemeColors): string {
   if (status === "Bullish") return colors.bullish;
   if (status === "Bearish") return colors.bearish;
   if (status === "Neutral") return colors.caution;
+  if (status === "As of close") return colors.text;
   return colors.textMuted;
 }
 
 function verdictToLayerStatus(verdict: string, status: string): LayerStatus {
   const s = status.toLowerCase();
-  if (s === "unavailable") return "Unavailable";
+  if (s === "unavailable") {
+    const v = verdict.toLowerCase();
+    if (v === "bullish" || v === "bearish" || v === "neutral") {
+      return "As of close";
+    }
+    return "Unavailable";
+  }
   const v = verdict.toLowerCase();
   if (v === "bullish") return "Bullish";
   if (v === "bearish") return "Bearish";
@@ -243,6 +250,8 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
           ? entry.reasoning.trim()
           : status === "Unavailable"
             ? `${name} data is unavailable right now.`
+            : status === "As of close"
+              ? `${name} shows the most recent close-state reading.`
             : status === "Bullish"
               ? `${name} signals align with upside continuation.`
               : status === "Bearish"

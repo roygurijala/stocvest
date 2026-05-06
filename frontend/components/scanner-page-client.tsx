@@ -25,6 +25,7 @@ import { useTheme } from "@/lib/theme-provider";
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
 import { fetchSymbolMinuteBars } from "@/lib/fetch-symbol-bars";
 import { buildEvidenceFromSetup, enrichEvidenceWithRealComposite, type SignalEvidenceData } from "@/lib/signal-evidence";
+import { topSignalStrengthPercent } from "@/lib/top-signal-strength";
 import {
   CONFIDENCE_PERCENT_TIP,
   GAP_INTELLIGENCE_TIP,
@@ -71,19 +72,6 @@ const CONFLUENCE_BADGE_STYLE: CSSProperties = {
 
 function isLongDirection(direction: string): boolean {
   return ["bullish", "long"].includes(direction.toLowerCase());
-}
-
-function topSignalStrengthPercent(setup: IntradaySetupPayload): number {
-  const patPct =
-    typeof setup.score === "number" && Number.isFinite(setup.score)
-      ? Math.max(0, Math.min(100, setup.score * 100))
-      : 0;
-  if (typeof setup.confluence_score === "number" && Number.isFinite(setup.confluence_score)) {
-    const conf = Math.max(0, Math.min(100, setup.confluence_score));
-    const blended = conf * 0.78 + patPct * 0.22;
-    return Math.max(0, Math.min(100, Math.round(blended)));
-  }
-  return Math.max(0, Math.min(100, Math.round(patPct)));
 }
 
 function formatSignalFiredTimeEt(iso: string): string {

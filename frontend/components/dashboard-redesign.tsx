@@ -14,6 +14,7 @@ import { NewsHeadlineDrawer } from "@/components/news-headline-drawer";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
+import { topSignalStrengthPercent } from "@/lib/top-signal-strength";
 import type { MarketOverview, NewsCredibilityBand, NewsIntelCategory, NewsPayload, SnapshotPayload } from "@/lib/api/market";
 import type { PDTStatusPayload } from "@/lib/api/pdt";
 import type { IntradayGeoPreview, IntradaySetupPayload, ScannerOverview } from "@/lib/api/scanner";
@@ -118,19 +119,6 @@ function TopSignalGeoStrip({ preview, colors }: { preview: IntradayGeoPreview; c
       ) : null}
     </div>
   );
-}
-
-function topSignalStrengthPercent(setup: IntradaySetupPayload): number {
-  const patPct =
-    typeof setup.score === "number" && Number.isFinite(setup.score)
-      ? Math.max(0, Math.min(100, setup.score * 100))
-      : 0;
-  if (typeof setup.confluence_score === "number" && Number.isFinite(setup.confluence_score)) {
-    const conf = Math.max(0, Math.min(100, setup.confluence_score));
-    const blended = conf * 0.78 + patPct * 0.22;
-    return Math.max(0, Math.min(100, Math.round(blended)));
-  }
-  return Math.max(0, Math.min(100, Math.round(patPct)));
 }
 
 function toPrice(n: number | null | undefined): string {

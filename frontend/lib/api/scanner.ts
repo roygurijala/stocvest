@@ -3,6 +3,7 @@ import { isNextRedirect } from "@/lib/next-errors";
 import type { NewsPayload } from "@/lib/api/market";
 import type { PDTStatusPayload } from "@/lib/api/pdt";
 import { fetchDefaultWatchlistSymbols } from "@/lib/api/watchlists";
+import { topSignalStrengthPercent } from "@/lib/top-signal-strength";
 
 /** When the scanner has no gap symbols and no user watchlist, intraday bars use this liquid floor. */
 const INTRADAY_FALLBACK_SYMBOLS = [
@@ -74,22 +75,7 @@ export function geoScanArticlesFromMarketNews(articles: NewsPayload[] | undefine
   return out;
 }
 
-/**
- * Percent on setup rows: when **confluence** exists, blend it (~78%) with the intraday **pattern** score (~22%)
- * so tickers with the same rounded confluence still differ when triggers disagree. Otherwise pattern-only (0–100).
- */
-export function topSignalStrengthPercent(setup: IntradaySetupPayload): number {
-  const patPct =
-    typeof setup.score === "number" && Number.isFinite(setup.score)
-      ? Math.max(0, Math.min(100, setup.score * 100))
-      : 0;
-  if (typeof setup.confluence_score === "number" && Number.isFinite(setup.confluence_score)) {
-    const conf = Math.max(0, Math.min(100, setup.confluence_score));
-    const blended = conf * 0.78 + patPct * 0.22;
-    return Math.max(0, Math.min(100, Math.round(blended)));
-  }
-  return Math.max(0, Math.min(100, Math.round(patPct)));
-}
+export { topSignalStrengthPercent };
 
 export interface IntradayGeoPreview {
   impact_sector_key: string;
