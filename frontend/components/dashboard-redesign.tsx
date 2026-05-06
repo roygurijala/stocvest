@@ -322,7 +322,7 @@ export function DashboardRedesign({
         <DashboardRealtime />
       </article>
 
-      <div className="dashboard-grid grid grid-cols-1 gap-4 lg:grid-cols-[13fr_7fr] lg:items-stretch [&>*]:min-w-0">
+      <div className="dashboard-grid grid grid-cols-1 gap-4 lg:grid-cols-[7fr_13fr] lg:items-stretch [&>*]:min-w-0">
           <div className="order-1 min-w-0 lg:col-span-2 lg:col-start-1 lg:row-start-1">
             <MarketSentimentScoreWidget marketOverview={marketOverview} />
             <p style={{ margin: `${spacing[2]} 0 0`, color: colors.textMuted, fontSize: typography.scale.sm }}>
@@ -466,7 +466,7 @@ export function DashboardRedesign({
                       >
                         <button
                           type="button"
-                          className="min-h-11 w-full text-sm sm:w-auto"
+                          className="min-h-11 w-full text-sm font-semibold sm:w-auto"
                           onClick={async () => {
                             const sym = signal.symbol.trim().toUpperCase();
                             let snapshot = snapshotsBySymbol.get(sym);
@@ -496,13 +496,14 @@ export function DashboardRedesign({
                             setEvidenceOpen(true);
                           }}
                           style={{
-                            border: `1px solid ${colors.border}`,
+                            border: `1px solid color-mix(in srgb, ${colors.accent} 55%, ${colors.border})`,
                             borderRadius: borderRadius.md,
-                            background: "transparent",
-                            color: colors.text,
+                            background: `linear-gradient(135deg, color-mix(in srgb, ${colors.accent} 28%, transparent), color-mix(in srgb, ${colors.accent} 12%, transparent))`,
+                            color: colors.accent,
                             padding: `${spacing[2]} ${spacing[3]}`,
                             cursor: "pointer",
-                            alignSelf: "flex-start"
+                            alignSelf: "flex-start",
+                            boxShadow: `0 0 0 1px color-mix(in srgb, ${colors.accent} 18%, transparent)`
                           }}
                         >
                           View Evidence
@@ -588,8 +589,18 @@ export function DashboardRedesign({
                 marketOverview.error ? (
                   <p style={{ color: colors.textMuted, margin: 0 }}>{marketOverview.error}</p>
                 ) : (
-                  <p style={{ color: colors.textMuted, margin: 0, textAlign: "center", fontSize: typography.scale.sm }}>
-                    No major market-moving headlines in the last 4 hours.
+                  <p
+                    style={{
+                      color: colors.textMuted,
+                      margin: 0,
+                      textAlign: "center",
+                      fontSize: typography.scale.sm,
+                      lineHeight: 1.55
+                    }}
+                  >
+                    No headlines passed the feed filters: stories must tag tickers, beat a relevance cutoff, and usually sit in
+                    a short lookback—quiet markets or a failed upstream fetch can look empty here. The service retries a wider
+                    window when the last few hours have nothing.
                   </p>
                 )
               ) : filteredMiNews.length === 0 ? (

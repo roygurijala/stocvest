@@ -318,25 +318,40 @@ def news_handler(
 
     async def _run() -> dict[str, Any]:
         settings = get_settings()
-        since = datetime.now(timezone.utc) - timedelta(hours=4)
+        since_4h = datetime.now(timezone.utc) - timedelta(hours=4)
+        since_24h = datetime.now(timezone.utc) - timedelta(hours=24)
         async with client_factory(api_key=settings.polygon_api_key) as client:
             raw_articles = await client.get_market_news(
                 tickers=news_query_tickers,
                 limit=50,
                 order="desc",
-                published_utc_gte=since,
+                published_utc_gte=since_4h,
             )
+            # Quiet sessions often have zero Polygon rows in a 4h window; widen once so MI is not blank.
+            if not raw_articles and not symbol:
+                raw_articles = await client.get_market_news(
+                    tickers=news_query_tickers,
+                    limit=50,
+                    order="desc",
+                    published_utc_gte=since_24h,
+                )
 
-        scored_polygon: list[dict[str, Any]] = []
-        for article in raw_articles:
-            if not passes_market_intelligence_gate(article):
-                continue
-            if symbol and symbol not in _article_tickers_upper(article):
-                continue
-            rel = calculate_article_relevance(article, watchlist_symbols)
-            if rel < 10:
-                continue
-            scored_polygon.append({**article, "_relevance_score": rel})
+        def collect_scored(min_relevance: int) -> list[dict[str, Any]]:
+            rows: list[dict[str, Any]] = []
+            for article in raw_articles:
+                if not passes_market_intelligence_gate(article):
+                    continue
+                if symbol and symbol not in _article_tickers_upper(article):
+                    continue
+                rel = calculate_article_relevance(article, watchlist_symbols)
+                if rel < min_relevance:
+                    continue
+                rows.append({**article, "_relevance_score": rel})
+            return rows
+
+        scored_polygon = collect_scored(10)
+        if not scored_polygon:
+            scored_polygon = collect_scored(0)
 
         scored_polygon.sort(key=_news_relevance_sort_key)
         deduped_polygon = deduplicate_articles(scored_polygon, score_key="_relevance_score")
