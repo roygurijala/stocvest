@@ -5,6 +5,9 @@ import type { PDTStatusPayload } from "@/lib/api/pdt";
 import { fetchDefaultWatchlistSymbols } from "@/lib/api/watchlists";
 import { topSignalStrengthPercent } from "@/lib/top-signal-strength";
 
+/** Always load tape anchors so Market Pulse (spy/qqq %) and regime are populated even when gaps omit indices. */
+const MARKET_PULSE_ANCHORS = ["SPY", "QQQ"] as const;
+
 /** When the scanner has no gap symbols and no user watchlist, intraday bars use this liquid floor. */
 const INTRADAY_FALLBACK_SYMBOLS = [
   "SPY",
@@ -336,7 +339,7 @@ export async function loadScannerDataWithoutBrief(
     const gapSyms = gapItems.map((g) => g.symbol.trim().toUpperCase()).filter(Boolean);
     const wlSource = tuning?.parallelDefaultWatchlist === true ? resolvedWatchlist : watchlistSymbols;
     const watchUpper = wlSource.map((s) => s.trim().toUpperCase()).filter(Boolean);
-    let universe = [...new Set([...gapSyms, ...watchUpper])];
+    let universe = [...new Set([...MARKET_PULSE_ANCHORS, ...gapSyms, ...watchUpper])];
     if (universe.length === 0) {
       universe = [...INTRADAY_FALLBACK_SYMBOLS];
     }

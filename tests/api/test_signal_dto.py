@@ -113,8 +113,25 @@ def test_serialize_intraday_setup_returns_expected_shape() -> None:
     assert payload["direction"] == "long"
     assert payload["triggers"] == ["or_breakout_up", "vwap_reclaim"]
     assert payload["company_name"] == "Apple Inc."
+    assert payload["last_price"] == 101.2
     assert "confluence_score" in payload
     assert "is_confluence_alert" in payload
+
+
+def test_serialize_intraday_setup_prefers_snapshot_last_trade_price() -> None:
+    setup = IntradaySetupCandidate(
+        symbol="AAPL",
+        direction="long",
+        score=0.74,
+        triggers=["or_breakout_up", "vwap_reclaim"],
+        last_price=0.41,
+        vwap=100.6,
+        ema9=100.8,
+        timestamp_iso=datetime(2026, 4, 28, 14, 45, tzinfo=timezone.utc).isoformat(),
+        company_name="Apple Inc.",
+    )
+    payload = serialize_intraday_setup(setup, snapshot={"last_trade_price": 185.32})
+    assert payload["last_price"] == 185.32
 
 
 def test_serialize_gap_candidate_returns_expected_shape() -> None:

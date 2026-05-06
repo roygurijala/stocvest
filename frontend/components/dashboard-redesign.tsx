@@ -150,6 +150,26 @@ function findVixSnapshot(snapshots: SnapshotPayload[]): SnapshotPayload | undefi
   return undefined;
 }
 
+/** Session change % for pulse widgets when API omits `change_percent` (e.g. some index snapshots). */
+function snapshotSessionChangePct(s: SnapshotPayload | null | undefined): number | null {
+  if (!s) return null;
+  if (typeof s.change_percent === "number" && Number.isFinite(s.change_percent)) {
+    return s.change_percent;
+  }
+  const last = s.last_trade_price;
+  const prev = s.prev_close;
+  if (
+    typeof last === "number" &&
+    typeof prev === "number" &&
+    Number.isFinite(last) &&
+    Number.isFinite(prev) &&
+    prev !== 0
+  ) {
+    return ((last - prev) / prev) * 100;
+  }
+  return null;
+}
+
 function pulseRegimeColor(regime: string, colors: ThemeColors): string {
   const r = regime.trim().toLowerCase();
   if (r === "bullish") return colors.bullish;
@@ -181,10 +201,7 @@ export function DashboardRedesign({
   const spyPct = scannerOverview.spyPct ?? null;
   const qqqPct = scannerOverview.qqqPct ?? null;
   const regimeLabel = scannerOverview.regimeLabel ?? "Neutral";
-  const vixPct =
-    typeof vixSnapshot?.change_percent === "number" && Number.isFinite(vixSnapshot.change_percent)
-      ? vixSnapshot.change_percent
-      : null;
+  const vixPct = snapshotSessionChangePct(vixSnapshot);
 
   const newsLabels = useMemo(() => {
     const m = new Map<string, string>();

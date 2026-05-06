@@ -4,7 +4,7 @@ import { DashboardRedesign } from "@/components/dashboard-redesign";
 import { MorningBriefFromCore } from "@/components/morning-brief-from-core";
 import { fetchMarketOverview } from "@/lib/api/market";
 import { fetchPdtStatus } from "@/lib/api/pdt";
-import { geoScanArticlesFromMarketNews, loadScannerDataWithoutBrief } from "@/lib/api/scanner";
+import { loadScannerDataWithoutBrief } from "@/lib/api/scanner";
 import { DEFAULT_EARNINGS_SYMBOLS, fetchEarningsCalendar } from "@/lib/api/earnings";
 import type { MarketOverview } from "@/lib/api/market";
 import type { ScannerCoreData } from "@/lib/api/scanner";
@@ -63,19 +63,16 @@ export async function DashboardPageContent() {
     notice: "Earnings feed timed out."
   };
 
-  const marketOverview = await timeoutFallback(
-    fetchMarketOverview(["SPY", "QQQ", "IWM", "I:VIX"], { sparklineBarLimit: 12 }),
-    DASHBOARD_MARKET_TIMEOUT_MS,
-    marketFallback
-  );
-  const geoScanArticles = geoScanArticlesFromMarketNews(marketOverview.news);
-
-  const [pdtStatus, scannerCore, earnings] = await Promise.all([
+  // Market overview does not prefetch `/v1/market/news`; day/setups geo extras are omitted here.
+  const [marketOverview, pdtStatus, scannerCore, earnings] = await Promise.all([
+    timeoutFallback(
+      fetchMarketOverview(["SPY", "QQQ", "IWM", "I:VIX"], { sparklineBarLimit: 12 }),
+      DASHBOARD_MARKET_TIMEOUT_MS,
+      marketFallback
+    ),
     fetchPdtStatus().catch(() => null),
     timeoutFallback(
-      loadScannerDataWithoutBrief(null, [], DASHBOARD_SCANNER_TUNING, {
-        geoScanArticles: geoScanArticles.length ? geoScanArticles : undefined
-      }),
+      loadScannerDataWithoutBrief(null, [], DASHBOARD_SCANNER_TUNING, null),
       DASHBOARD_SCANNER_TIMEOUT_MS,
       scannerFallback
     ),

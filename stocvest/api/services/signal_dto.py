@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from datetime import datetime
 from typing import Any
 
@@ -107,12 +108,20 @@ def serialize_intraday_setup(
     regime: str = "neutral",
     sector_signal: str = "neutral",
 ) -> dict[str, Any]:
+    snap = dict(snapshot or {})
+    raw_lt = snap.get("last_trade_price")
+    if isinstance(raw_lt, (int, float)) and math.isfinite(float(raw_lt)) and float(raw_lt) > 0:
+        display_last = float(raw_lt)
+    else:
+        display_last = candidate.last_price
+        snap["last_trade_price"] = candidate.last_price
+
     payload: dict[str, Any] = {
         "symbol": candidate.symbol,
         "direction": candidate.direction,
         "score": candidate.score,
         "triggers": candidate.triggers,
-        "last_price": candidate.last_price,
+        "last_price": display_last,
         "vwap": candidate.vwap,
         "ema9": candidate.ema9,
         "timestamp_iso": candidate.timestamp_iso,
@@ -121,9 +130,6 @@ def serialize_intraday_setup(
     if candidate.company_name:
         payload["company_name"] = candidate.company_name
 
-    snap = dict(snapshot or {})
-    if not snap.get("last_trade_price"):
-        snap["last_trade_price"] = candidate.last_price
     if snap.get("day_vwap") in (None, 0) and candidate.vwap is not None:
         snap["day_vwap"] = float(candidate.vwap)
 
@@ -132,7 +138,7 @@ def serialize_intraday_setup(
         "volume_vs_avg": candidate.volume_vs_avg,
         "gap_pct": candidate.gap_pct,
         "ema9": candidate.ema9,
-        "last_trade_price": candidate.last_price,
+        "last_trade_price": display_last,
     }
     det = ConfluenceDetector()
     cf = det.calculate_confluence(
