@@ -423,7 +423,7 @@ describe("applySwingCompositeEnrichment", () => {
     expect(tech?.keyPoints[0]).toBe("RSI 43");
   });
 
-  test("forces unavailable API layer score to zero so card and breakdown stay aligned", () => {
+  test("maps unavailable layer with score to as-of-close state and keeps numeric score", () => {
     const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
     const enriched = applySwingCompositeEnrichment(base, {
       signal_score: 50,
@@ -447,9 +447,28 @@ describe("applySwingCompositeEnrichment", () => {
       ]
     });
     const news = enriched.layers.find((l) => l.key === "news");
+    expect(news?.status).toBe("As of close");
+    expect(news?.contributionScore).toBe(42);
+    expect(news?.keyPoints[0]).toContain("No qualifying news");
+  });
+
+  test("keeps unavailable layer at zero when API does not provide a score", () => {
+    const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
+    const enriched = applySwingCompositeEnrichment(base, {
+      signal_score: 50,
+      trend_strength: "Weak",
+      trend_direction: "Sideways",
+      risk_reward: 1.2,
+      market_regime: "Neutral",
+      catalysts: [],
+      risk_factors: [],
+      signal_parameters: "x",
+      historical_entry_zone: { low: 10, high: 11 },
+      layers: [{ layer: "news", chips: ["No qualifying news articles in lookback"], status: "unavailable", reasoning: "" }]
+    });
+    const news = enriched.layers.find((l) => l.key === "news");
     expect(news?.status).toBe("Unavailable");
     expect(news?.contributionScore).toBe(0);
-    expect(news?.keyPoints[0]).toContain("No qualifying news");
   });
 
   test("fills reference levels from client snapshot when composite omits them but signal_score present", () => {

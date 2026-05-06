@@ -3,7 +3,7 @@ import type { IntradaySetupPayload } from "@/lib/api/scanner";
 import { coerceSnapshotForReferenceLevels } from "@/lib/snapshot-reference-levels";
 
 export type EvidenceDirection = "bullish" | "bearish" | "neutral";
-export type EvidenceStatus = "Bullish" | "Bearish" | "Neutral" | "Unavailable";
+export type EvidenceStatus = "Bullish" | "Bearish" | "Neutral" | "Unavailable" | "As of close";
 
 /** Per-theme sector multiplier row from composite `layers[].geo_event_details`. */
 export interface GeoEventDetailRow {
@@ -332,7 +332,12 @@ function evidencePatchFromApiLayer(match: Record<string, unknown>): Partial<Evid
   const raw = match.score;
   const layerStatus = String(match.status ?? "").trim().toLowerCase();
   if (layerStatus === "unavailable") {
-    // Keep cards + breakdown consistent: unavailable layers should not show a numeric strength bar.
+    // Closed-session convention: keep last computed layer score, but mark it explicitly as stale close data.
+    if (typeof raw === "number" && Number.isFinite(raw)) {
+      patch.contributionScore = clamp(Math.round(raw), 0, 100);
+      patch.status = "As of close";
+      return patch;
+    }
     patch.contributionScore = 0;
     patch.status = "Unavailable";
     return patch;

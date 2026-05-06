@@ -28,6 +28,7 @@ function statusColor(status: EvidenceStatus, colors: ThemeColors): string {
   if (status === "Bullish") return colors.bullish;
   if (status === "Bearish") return colors.bearish;
   if (status === "Neutral") return colors.caution;
+  if (status === "As of close") return colors.text;
   return colors.textMuted;
 }
 
@@ -875,7 +876,11 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
                     >
                       <div style={{ fontWeight: 600 }}>{row.layer}</div>
                       <div style={{ color: colors.textMuted, marginTop: 4 }}>
-                        {row.status === "Unavailable" ? "Unavailable" : `Score: ${row.score}`}
+                        {row.status === "Unavailable"
+                          ? "Unavailable"
+                          : row.status === "As of close"
+                            ? `As of close: ${row.score}`
+                            : `Score: ${row.score}`}
                       </div>
                     </div>
                   );
