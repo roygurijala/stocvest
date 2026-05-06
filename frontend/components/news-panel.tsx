@@ -100,7 +100,7 @@ function panelSummary(data: TickerNewsPanelResponse | null): string {
   if (!data || data.articles.length === 0) return "";
   const n = data.total_found;
   if (!data.has_recent_news) {
-    return "No recent news · Historical view";
+    return `No articles in last ${data.recent_cutoff_hours}h · 20-day archive`;
   }
   const labels = new Set(data.articles.map((a) => a.sentiment_label));
   if (labels.has("bullish") && labels.has("bearish")) {
@@ -145,7 +145,7 @@ export function NewsPanel({ symbol, isOpen, onClose, onLoaded }: NewsPanelProps)
     }
     setLoading(true);
     try {
-      const row = await fetchTickerNewsPanel(sym, { days: 20, limit: 20 });
+      const row = await fetchTickerNewsPanel(sym, { days: 20, limit: 20, recentHours: 8 });
       setData(row);
       onLoadedRef.current?.();
     } finally {
@@ -237,8 +237,11 @@ export function NewsPanel({ symbol, isOpen, onClose, onLoaded }: NewsPanelProps)
               color: colors.text
             }}
           >
-            <div className="font-semibold">ℹ️ No news in the last 4h</div>
-            <div style={{ color: colors.textMuted }}>Showing most recent available</div>
+            <div className="font-semibold">Recent window: no articles in the last {data.recent_cutoff_hours} hours</div>
+            <div style={{ color: colors.textMuted }}>
+              <strong style={{ color: colors.caution }}>20-day archive</strong> — below are the newest items Polygon returned
+              within the last 20 days for this symbol. Timestamps may be days old; read labels in each group.
+            </div>
           </div>
         ) : null}
 
@@ -248,7 +251,8 @@ export function NewsPanel({ symbol, isOpen, onClose, onLoaded }: NewsPanelProps)
               📰
             </span>
             <p className="max-w-sm text-sm leading-relaxed" style={{ color: colors.textMuted }}>
-              No news found for {sym} in the last 20 trading days. This may be a less-covered ticker.
+              No qualifying news for {sym} in the last 20 calendar days (after quality filters). Less-covered tickers may
+              have sparse headlines.
             </p>
           </div>
         ) : null}

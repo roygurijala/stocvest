@@ -11,7 +11,8 @@ _NY = ZoneInfo("America/New_York")
 NewsPanelSource = Literal["benzinga", "sec_edgar", "polygon"]
 NewsSentimentLabel = Literal["bullish", "bearish", "neutral"]
 
-RECENT_NEWS_HOURS = 4
+# “Recent” window for per-symbol news panel (`GET /v1/market/news?symbol=`); overridable via `recent_hours` query (1–168).
+RECENT_NEWS_HOURS = 8
 
 
 def parse_published_utc(raw: str) -> datetime | None:

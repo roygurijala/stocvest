@@ -41,7 +41,7 @@ describe("fetchSymbolNews", () => {
       json: async () => ({
         symbol: "NVDA",
         has_recent_news: true,
-        recent_cutoff_hours: 4,
+        recent_cutoff_hours: 8,
         articles: [panelArticle({ id: "a1", title: "NVDA item" })],
         total_found: 1,
         oldest_included: "2026-01-01T00:00:00Z"
@@ -56,6 +56,7 @@ describe("fetchSymbolNews", () => {
     expect(url).toContain("symbol=NVDA");
     expect(url).toContain("limit=10");
     expect(url).toContain("days=20");
+    expect(url).toContain("recent_hours=8");
     expect(rows).toHaveLength(1);
     expect(rows[0].title).toBe("NVDA item");
   });
@@ -66,7 +67,7 @@ describe("fetchSymbolNews", () => {
       json: async () => ({
         symbol: "PINS",
         has_recent_news: false,
-        recent_cutoff_hours: 4,
+        recent_cutoff_hours: 8,
         articles: [panelArticle({ id: "p1", title: "PINS engagement", sentiment_label: "bullish", sentiment_score: 0.5 })],
         total_found: 1,
         oldest_included: null

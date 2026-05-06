@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { CuteLoader } from "@/components/cute-loader";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
+import { DEFAULT_UI_PLAN, PLAN_TIERS, planTierById } from "@/lib/subscription-plans";
 import { useTheme } from "@/lib/theme-provider";
 
 interface SettingsPageClientProps {
@@ -79,6 +80,8 @@ export function SettingsPageClient({ email }: SettingsPageClientProps) {
     }
   }, [search]);
 
+  const activePlan = planTierById(DEFAULT_UI_PLAN) ?? PLAN_TIERS[1];
+
   return (
     <section style={{ display: "grid", gap: spacing[4] }}>
       <article
@@ -87,9 +90,65 @@ export function SettingsPageClient({ email }: SettingsPageClientProps) {
       >
         <h3 style={{ marginTop: 0 }}>Account</h3>
         <p style={{ margin: 0, color: colors.textMuted }}>Email: {email}</p>
-        <span style={{ display: "inline-block", marginTop: spacing[2], borderRadius: borderRadius.full, background: "rgba(59,130,246,.15)", color: colors.accent, padding: "2px 8px", fontSize: typography.scale.xs }}>
-          Pro
+        <span
+          style={{
+            display: "inline-block",
+            marginTop: spacing[2],
+            borderRadius: borderRadius.full,
+            background: "rgba(59,130,246,.15)",
+            color: colors.accent,
+            padding: "2px 10px",
+            fontSize: typography.scale.xs,
+            fontWeight: 700
+          }}
+        >
+          Plan: {activePlan.name}
         </span>
+        <p style={{ margin: `${spacing[2]} 0 0`, fontSize: typography.scale.sm, color: colors.textMuted, lineHeight: 1.55 }}>
+          STOCVEST is <strong style={{ color: colors.text }}>swing-first</strong>: the six-layer composite is the same engine for swing and day
+          horizons; billing tiers only change limits and which surfaces are unlocked. Checkout will land here when subscriptions go live.
+        </p>
+      </article>
+
+      <article
+        className={surfaceGlowClassName}
+        style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
+      >
+        <h3 style={{ marginTop: 0 }}>Plans (preview)</h3>
+        <p style={{ margin: `0 0 ${spacing[3]}`, color: colors.textMuted, fontSize: typography.scale.sm, lineHeight: 1.55 }}>
+          Three tiers: free swing with a peek at day mode, full swing, then swing + day together. Names and limits can move—structure matches
+          how we will gate features.
+        </p>
+        <div style={{ display: "grid", gap: spacing[3] }}>
+          {PLAN_TIERS.map((p) => (
+            <div
+              key={p.id}
+              style={{
+                border: `1px solid ${p.id === activePlan.id ? colors.accent : colors.border}`,
+                borderRadius: borderRadius.lg,
+                padding: spacing[3],
+                background: p.id === activePlan.id ? "rgba(59,130,246,0.06)" : "transparent"
+              }}
+            >
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <strong style={{ color: colors.text }}>{p.name}</strong>
+                {p.id === activePlan.id ? (
+                  <span style={{ fontSize: typography.scale.xs, fontWeight: 700, color: colors.accent }}>Current (UI default)</span>
+                ) : null}
+              </div>
+              <p style={{ margin: `${spacing[1]} 0`, fontSize: typography.scale.sm, color: colors.textMuted }}>{p.tagline}</p>
+              <ul style={{ margin: 0, paddingLeft: "1.1rem", color: colors.textMuted, fontSize: typography.scale.sm, lineHeight: 1.5 }}>
+                {p.highlights.map((h, i) => (
+                  <li key={`${p.id}-h-${i}`}>{h}</li>
+                ))}
+              </ul>
+              <p style={{ margin: `${spacing[2]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted }}>
+                Swing depth: <strong style={{ color: colors.text }}>{p.swing}</strong> · Day trading:{" "}
+                <strong style={{ color: colors.text }}>{p.dayTrading}</strong>
+              </p>
+            </div>
+          ))}
+        </div>
       </article>
 
       <article

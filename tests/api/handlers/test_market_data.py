@@ -452,6 +452,19 @@ def test_news_symbol_panel_rejects_days_over_20() -> None:
     assert response["statusCode"] == 400
 
 
+def test_news_symbol_panel_rejects_recent_hours_out_of_range() -> None:
+    event = {"queryStringParameters": {"symbol": "AAPL", "recent_hours": "200"}}
+    response = news_handler(event, {}, client_factory=_FakePolygonClient)
+    assert response["statusCode"] == 400
+
+
+def test_news_symbol_panel_returns_requested_recent_cutoff_hours() -> None:
+    event = {"queryStringParameters": {"symbol": "AAPL", "limit": "5", "recent_hours": "12"}}
+    response = news_handler(event, {}, client_factory=_make_has_recent_news_client(True))
+    body = json.loads(response["body"])
+    assert body["recent_cutoff_hours"] == 12
+
+
 def _make_has_recent_news_client(recent: bool):
     class _HasRecentNewsClient(_FakePolygonClient):
         async def get_market_news(
@@ -467,7 +480,7 @@ def _make_has_recent_news_client(recent: bool):
             _ = published_utc_gte
             sym = str(tickers[0]).upper() if tickers else "SPY"
             now = datetime.now(timezone.utc)
-            pub = now - timedelta(hours=2) if recent else now - timedelta(hours=6)
+            pub = now - timedelta(hours=2) if recent else now - timedelta(hours=12)
             return [
                 {
                     "id": "n1",

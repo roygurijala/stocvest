@@ -4,22 +4,28 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from
 import { createPortal } from "react-dom";
 import { useIsMobileLayout } from "@/lib/hooks/use-is-mobile-layout";
 
-const DEFAULT_MAX_WIDTH_PX = 260;
 const VIEW_MARGIN = 8;
 const GAP_PX = 8;
-
 const TIP_BG = "#1e293b";
 const TIP_BORDER = "#334155";
-const ICON_GREY = "#6b7280";
-const ICON_BLUE = "#3b82f6";
 
-export function InfoTip({ text, label, maxWidth }: { text: string; label?: string; maxWidth?: number }) {
-  const maxW = maxWidth ?? DEFAULT_MAX_WIDTH_PX;
+type DecisionMetricProps = {
+  /** Plain English: how this value feeds scanner / composite / your workflow. */
+  explanation: string;
+  children: React.ReactNode;
+  /** Accessible label for the trigger. */
+  label?: string;
+  maxWidth?: number;
+};
+
+/**
+ * Wraps a numeric (or short) display with a dotted underline; hover / focus / tap shows how the value is used in decision-making.
+ */
+export function DecisionMetric({ explanation, children, label = "How this number is used", maxWidth = 280 }: DecisionMetricProps) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const tooltipId = useId();
   const isMobile = useIsMobileLayout();
-
   const [open, setOpen] = useState(false);
   const [hover, setHover] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -35,46 +41,36 @@ export function InfoTip({ text, label, maxWidth }: { text: string; label?: strin
     const trigger = triggerRef.current;
     const tip = tooltipRef.current;
     if (!trigger) return;
-
     const rect = trigger.getBoundingClientRect();
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-
-    let tipW = maxW;
-    let tipH = 72;
+    let tipW = maxWidth;
+    let tipH = 80;
     if (tip) {
       const tr = tip.getBoundingClientRect();
-      tipW = Math.min(maxW, tr.width > 0 ? tr.width : maxW);
-      tipH = tr.height > 0 ? tr.height : 72;
+      tipW = Math.min(maxWidth, tr.width > 0 ? tr.width : maxWidth);
+      tipH = tr.height > 0 ? tr.height : 80;
     }
-
     let left = rect.left + rect.width / 2 - tipW / 2;
     left = Math.max(VIEW_MARGIN, Math.min(left, vw - tipW - VIEW_MARGIN));
-
     const spaceAbove = rect.top - VIEW_MARGIN;
     const spaceBelow = vh - rect.bottom - VIEW_MARGIN;
     const preferAbove = spaceAbove >= tipH + GAP_PX || spaceAbove >= spaceBelow;
-
     let top: number;
     if (preferAbove) {
       top = rect.top - GAP_PX - tipH;
-      if (top < VIEW_MARGIN) {
-        top = rect.bottom + GAP_PX;
-      }
+      if (top < VIEW_MARGIN) top = rect.bottom + GAP_PX;
     } else {
       top = rect.bottom + GAP_PX;
-      if (top + tipH > vh - VIEW_MARGIN) {
-        top = rect.top - GAP_PX - tipH;
-      }
+      if (top + tipH > vh - VIEW_MARGIN) top = rect.top - GAP_PX - tipH;
     }
-
     if (top < VIEW_MARGIN) top = VIEW_MARGIN;
-    if (top + tipH > vh - VIEW_MARGIN) {
-      top = Math.max(VIEW_MARGIN, vh - VIEW_MARGIN - tipH);
-    }
-
+    if (top + tipH > vh - VIEW_MARGIN) top = Math.max(VIEW_MARGIN, vh - VIEW_MARGIN - tipH);
     setCoords({ left, top });
-  }, [maxW]);
+  }, [maxWidth]);
+
+  const active = hover || focused;
+  const showTooltip = mounted && open;
 
   useLayoutEffect(() => {
     if (!open || !mounted) {
@@ -95,7 +91,7 @@ export function InfoTip({ text, label, maxWidth }: { text: string; label?: strin
       window.removeEventListener("scroll", onReposition, true);
       window.removeEventListener("resize", onReposition);
     };
-  }, [open, mounted, placeTooltip, text, maxW]);
+  }, [open, mounted, placeTooltip, explanation]);
 
   useEffect(() => {
     if (!isMobile || !open) return;
@@ -115,12 +111,6 @@ export function InfoTip({ text, label, maxWidth }: { text: string; label?: strin
     };
   }, [isMobile, open]);
 
-  const active = hover || focused;
-  const borderColor = active ? ICON_BLUE : ICON_GREY;
-  const fg = active ? ICON_BLUE : ICON_GREY;
-
-  const showTooltip = mounted && open;
-
   const tooltip = showTooltip ? (
     <div
       ref={tooltipRef}
@@ -131,7 +121,7 @@ export function InfoTip({ text, label, maxWidth }: { text: string; label?: strin
         position: "fixed",
         left: coords.left,
         top: coords.top,
-        maxWidth: maxW,
+        maxWidth,
         zIndex: 9999,
         background: TIP_BG,
         color: "#ffffff",
@@ -175,10 +165,10 @@ export function InfoTip({ text, label, maxWidth }: { text: string; label?: strin
           >
             ×
           </button>
-          {text}
+          {explanation}
         </div>
       ) : (
-        text
+        explanation
       )}
     </div>
   ) : null;
@@ -188,9 +178,18 @@ export function InfoTip({ text, label, maxWidth }: { text: string; label?: strin
       <button
         ref={triggerRef}
         type="button"
-        aria-label={label ?? "More information"}
+        aria-label={label}
         aria-expanded={open}
         aria-describedby={open ? tooltipId : undefined}
+        className="group inline border-0 bg-transparent p-0 leading-none"
+        style={{
+          cursor: "help",
+          borderBottom: active ? "1px dashed rgba(59,130,246,0.85)" : "1px dashed rgba(148,163,184,0.45)",
+          color: "inherit",
+          textDecoration: "none",
+          maxWidth: "100%",
+          font: "inherit"
+        }}
         onMouseEnter={() => {
           if (isMobile) return;
           setHover(true);
@@ -216,23 +215,8 @@ export function InfoTip({ text, label, maxWidth }: { text: string; label?: strin
           e.stopPropagation();
           setOpen((v) => !v);
         }}
-        className="inline-flex h-11 w-11 shrink-0 items-center justify-center border-0 bg-transparent p-0 leading-none"
-        style={{ cursor: "pointer" }}
       >
-        <span
-          className="inline-flex items-center justify-center font-bold transition-[color,border-color] duration-150 ease-out"
-          style={{
-            width: 16,
-            height: 16,
-            borderRadius: "50%",
-            border: `1.5px solid ${borderColor}`,
-            background: "transparent",
-            color: fg,
-            fontSize: 10
-          }}
-        >
-          i
-        </span>
+        {children}
       </button>
       {tooltip ? createPortal(tooltip, document.body) : null}
     </>

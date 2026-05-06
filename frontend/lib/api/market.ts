@@ -27,6 +27,8 @@ export interface SnapshotPayload {
   company_name?: string | null;
   /** Session change vs prior close when present on snapshot payload. */
   change_percent?: number | null;
+  pre_market_change_percent?: number | null;
+  after_hours_change_percent?: number | null;
 }
 
 /** Primary tab category from API (`/v1/market/news`). */

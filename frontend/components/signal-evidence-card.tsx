@@ -6,6 +6,7 @@ import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useIsMobileLayout } from "@/lib/hooks/use-is-mobile-layout";
 import { useTheme } from "@/lib/theme-provider";
+import { DecisionMetric } from "@/components/decision-metric";
 import { InfoTip } from "@/components/info-tip";
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import {
@@ -18,6 +19,12 @@ import {
   type SignalEvidenceData,
   type SignalEvidenceInsight
 } from "@/lib/signal-evidence";
+import {
+  compositeSignalScoreTooltip,
+  marketRegimeDecisionTooltip,
+  riskRewardEntryDecisionTooltip,
+  trendStrengthDecisionTooltip
+} from "@/lib/metric-decision-copy";
 import { AI_VERDICT_TIP, CONFIDENCE_PERCENT_TIP, LAYER_NAME_HINTS } from "@/lib/ui-tooltips";
 
 interface SignalEvidenceCardProps {
@@ -355,12 +362,16 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
             className="text-3xl font-bold tabular-nums sm:text-4xl"
             style={{ color: scoreHeaderColor(insight.signal_score, colors), lineHeight: 1.1 }}
           >
-            {insight.signal_score}
-            <span style={{ fontSize: typography.scale.sm, color: colors.textMuted, fontWeight: 600 }}> / 100</span>
+            <DecisionMetric explanation={compositeSignalScoreTooltip(insight.signal_score)} label="How signal score is used" maxWidth={300}>
+              <span>
+                {insight.signal_score}
+                <span style={{ fontSize: typography.scale.sm, color: colors.textMuted, fontWeight: 600 }}> / 100</span>
+              </span>
+            </DecisionMetric>
           </span>
           <span className="inline-flex items-center gap-1 text-xs" style={{ color: colors.textMuted }}>
             Composite read
-            <InfoTip text={CONFIDENCE_PERCENT_TIP} label="About signal score" />
+            <InfoTip text={CONFIDENCE_PERCENT_TIP} label="Scanner vs composite score detail" />
           </span>
           {insight.is_complete === false ? (
             <span style={{ color: colors.caution, fontSize: typography.scale.xs, fontWeight: 700 }}>Incomplete</span>
@@ -379,7 +390,9 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
             TREND STRENGTH
           </span>
           <span className="text-xl font-bold sm:text-2xl" style={{ color: trendStrengthColor(insight.trend_strength, colors) }}>
-            {insight.trend_strength}
+            <DecisionMetric explanation={trendStrengthDecisionTooltip(insight.trend_strength)} label="How trend strength is used" maxWidth={300}>
+              <span>{insight.trend_strength}</span>
+            </DecisionMetric>
           </span>
           <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>{insight.trend_direction}</span>
         </div>
@@ -396,7 +409,13 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
             RISK / REWARD
           </span>
           <span className="text-xl font-bold tabular-nums sm:text-2xl" style={{ color: rrChipColor(insight.risk_reward, colors) }}>
-            {insight.risk_reward.toFixed(1)}:1
+            <DecisionMetric
+              explanation={riskRewardEntryDecisionTooltip(insight.risk_reward, { incomplete: insight.is_complete === false })}
+              label="How entry risk/reward is used"
+              maxWidth={320}
+            >
+              <span>{insight.risk_reward.toFixed(1)}:1</span>
+            </DecisionMetric>
           </span>
           {insight.rr_warning ? (
             <span style={{ color: colors.caution, fontSize: typography.scale.xs, fontWeight: 700 }}>Low R/R - below 2:1</span>
@@ -443,7 +462,9 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
             MARKET REGIME
           </span>
           <span className="text-xl font-bold sm:text-2xl" style={{ color: regimeColor(insight.market_regime, colors) }}>
-            {insight.market_regime}
+            <DecisionMetric explanation={marketRegimeDecisionTooltip(insight.market_regime)} label="How market regime is used" maxWidth={300}>
+              <span>{insight.market_regime}</span>
+            </DecisionMetric>
           </span>
           <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Macro / regime layer</span>
         </div>
@@ -707,8 +728,27 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
                     typeof c.sentiment_score === "number" && Number.isFinite(c.sentiment_score)
                       ? formatSentimentScore(c.sentiment_score)
                       : "";
+                  const openNews = () => onOpenNewsPanel?.(evidence.symbol);
                   return (
                     <li key={`cat-${i}`} style={{ display: "grid", gap: spacing[1] }}>
+                      <button
+                        type="button"
+                        className="text-left"
+                        disabled={!onOpenNewsPanel}
+                        onClick={openNews}
+                        style={{
+                          border: "none",
+                          background: onOpenNewsPanel ? "rgba(59,130,246,0.08)" : "transparent",
+                          borderRadius: borderRadius.md,
+                          padding: spacing[2],
+                          margin: 0,
+                          cursor: onOpenNewsPanel ? "pointer" : "default",
+                          display: "grid",
+                          gap: spacing[1],
+                          width: "100%"
+                        }}
+                        aria-label={onOpenNewsPanel ? `Open news drawer for ${evidence.symbol}` : undefined}
+                      >
                       <span className="text-sm leading-snug" style={{ color: colors.text, fontWeight: 600 }}>
                         {truncateCatalystTitle(c.text)}
                       </span>
@@ -742,6 +782,10 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
                           {scoreStr ? ` ${scoreStr}` : ""}
                         </span>
                       </div>
+                      {onOpenNewsPanel ? (
+                        <span style={{ fontSize: 10, fontWeight: 600, color: colors.accent }}>Tap to open news →</span>
+                      ) : null}
+                      </button>
                     </li>
                   );
                 })}

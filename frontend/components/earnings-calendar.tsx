@@ -1,15 +1,20 @@
 "use client";
 
 import { useMemo } from "react";
+import { DecisionMetric } from "@/components/decision-metric";
+import { InfoTip } from "@/components/info-tip";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import type { EarningsEvent } from "@/lib/api/earnings";
+import { EARNINGS_CALENDAR_CARD_TIP, EARNINGS_EPS_SURPRISE_TIP, EARNINGS_IMPACT_BADGE_TIP } from "@/lib/ui-tooltips";
 
 interface EarningsCalendarProps {
   events: EarningsEvent[];
   title?: string;
   maxDays?: number;
   className?: string;
+  /** Circled (i) top-right — what this calendar is for on the dashboard. */
+  infoTip?: string;
 }
 
 function dayKey(isoDate: string): string {
@@ -30,7 +35,13 @@ function earningsTimingLabel(reportTime: EarningsEvent["report_time"]): "BMO" | 
   return "TBD";
 }
 
-export function EarningsCalendar({ events, title = "Earnings Calendar", maxDays = 7, className }: EarningsCalendarProps) {
+export function EarningsCalendar({
+  events,
+  title = "Earnings Calendar",
+  maxDays = 7,
+  className,
+  infoTip = EARNINGS_CALENDAR_CARD_TIP
+}: EarningsCalendarProps) {
   const { colors } = useTheme();
   const today = new Date().toISOString().slice(0, 10);
   const grouped = useMemo(() => {
@@ -54,7 +65,10 @@ export function EarningsCalendar({ events, title = "Earnings Calendar", maxDays 
       className={className ? `${className} ${surfaceGlowClassName}` : surfaceGlowClassName}
       style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
     >
-      <h3 style={{ marginTop: 0 }}>{title}</h3>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: spacing[2], marginBottom: spacing[1] }}>
+        <h3 style={{ margin: 0, flex: 1, minWidth: 0 }}>{title}</h3>
+        <InfoTip text={infoTip} label={`About ${title}`} maxWidth={300} />
+      </div>
       <div style={{ display: "grid", gap: spacing[3] }}>
         {grouped.map(([date, rows]) => {
           const isToday = date === today;
@@ -101,21 +115,30 @@ export function EarningsCalendar({ events, title = "Earnings Calendar", maxDays 
                         <strong>{row.symbol}</strong> <span style={{ color: colors.textMuted }}>{row.company_name}</span>
                       </span>
                       <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>{earningsTimingLabel(row.report_time)}</span>
-                      <span
-                        style={{
-                          borderRadius: borderRadius.full,
-                          padding: "2px 8px",
-                          fontSize: typography.scale.xs,
-                          background: impact === "high" ? "rgba(239,68,68,.14)" : impact === "medium" ? "rgba(245,158,11,.14)" : "rgba(148,163,184,.14)",
-                          color: impact === "high" ? colors.bearish : impact === "medium" ? colors.caution : colors.textMuted
-                        }}
-                      >
-                        {impact}
-                      </span>
+                      <DecisionMetric explanation={EARNINGS_IMPACT_BADGE_TIP} label="How earnings impact label is used" maxWidth={280}>
+                        <span
+                          style={{
+                            borderRadius: borderRadius.full,
+                            padding: "2px 8px",
+                            fontSize: typography.scale.xs,
+                            background: impact === "high" ? "rgba(239,68,68,.14)" : impact === "medium" ? "rgba(245,158,11,.14)" : "rgba(148,163,184,.14)",
+                            color: impact === "high" ? colors.bearish : impact === "medium" ? colors.caution : colors.textMuted
+                          }}
+                        >
+                          {impact}
+                        </span>
+                      </DecisionMetric>
                       {typeof row.actual_eps === "number" ? (
                         <div style={{ gridColumn: "2 / 5", color: epsColor, fontSize: typography.scale.xs }}>
-                          EPS {row.actual_eps.toFixed(2)} vs est {typeof row.estimated_eps === "number" ? row.estimated_eps.toFixed(2) : "n/a"}
-                          {typeof row.surprise_percent === "number" ? ` (${row.surprise_percent >= 0 ? "+" : ""}${row.surprise_percent.toFixed(1)}%)` : ""}
+                          <DecisionMetric explanation={EARNINGS_EPS_SURPRISE_TIP} label="How EPS vs estimate is used" maxWidth={300}>
+                            <span>
+                              EPS {row.actual_eps.toFixed(2)} vs est{" "}
+                              {typeof row.estimated_eps === "number" ? row.estimated_eps.toFixed(2) : "n/a"}
+                              {typeof row.surprise_percent === "number"
+                                ? ` (${row.surprise_percent >= 0 ? "+" : ""}${row.surprise_percent.toFixed(1)}%)`
+                                : ""}
+                            </span>
+                          </DecisionMetric>
                         </div>
                       ) : null}
                     </div>

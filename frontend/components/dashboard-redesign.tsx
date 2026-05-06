@@ -1,13 +1,14 @@
 "use client";
 
-import { type ReactNode, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
+import { DashboardCard } from "@/components/dashboard-card";
 import { DashboardRealtime } from "@/components/dashboard-realtime";
+import { DecisionMetric } from "@/components/decision-metric";
 import { EarningsCalendar } from "@/components/earnings-calendar";
 import { InfoTip } from "@/components/info-tip";
 import { MarketSentimentScoreWidget } from "@/components/market-sentiment-score-widget";
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
-import { MorningBriefCollapse } from "@/components/morning-brief-collapse";
 import { NewsPanel } from "@/components/news-panel";
 import { PdtStatusPill } from "@/components/pdt-status-pill";
 import { getChangeColor } from "@/components/market-sentiment-score-widget";
@@ -24,15 +25,27 @@ import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/d
 import { useTheme } from "@/lib/theme-provider";
 import { buildEvidenceFromSetup, enrichEvidenceWithRealComposite, type SignalEvidenceData } from "@/lib/signal-evidence";
 import { tickerNewsTriggerLine } from "@/lib/api/ticker-news-panel";
-import { CONFIDENCE_PERCENT_TIP, TOP_SIGNALS_TIP } from "@/lib/ui-tooltips";
+import {
+  CONFIDENCE_PERCENT_TIP,
+  CONFLUENCE_COUNT_DECISION_TIP,
+  DASHBOARD_MARKET_SENTIMENT_CARD_TIP,
+  GEO_WEIGHTED_EXPOSURE_TIP,
+  LAST_PRICE_SIGNAL_CARD_TIP,
+  MARKET_PULSE_CARD_TIP,
+  QQQ_PULSE_NUMBER_TIP,
+  REGIME_BADGE_TIP,
+  SESSION_STATUS_STRIP_TIP,
+  SPY_PULSE_NUMBER_TIP,
+  TOP_SIGNAL_ROW_CARD_TIP,
+  TOP_SIGNALS_CARD_TIP,
+  VIX_PULSE_NUMBER_TIP
+} from "@/lib/ui-tooltips";
 
 interface DashboardRedesignProps {
   marketOverview: MarketOverview;
   pdtStatus: PDTStatusPayload | null;
   scannerOverview: ScannerOverview;
   earningsEvents: EarningsEvent[];
-  /** When set (e.g. Suspense-wrapped server fetch), shown in the morning-brief slot instead of `scannerOverview.morningBrief`. */
-  morningBriefSlot?: ReactNode;
 }
 
 function SkeletonLine({ width = "100%", height = 14 }: { width?: string; height?: number }) {
@@ -92,7 +105,10 @@ function TopSignalGeoStrip({ preview, colors }: { preview: IntradayGeoPreview; c
       </div>
       {scoreStr ? (
         <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, fontVariantNumeric: "tabular-nums" }}>
-          Weighted exposure {scoreStr}
+          Weighted exposure{" "}
+          <DecisionMetric explanation={GEO_WEIGHTED_EXPOSURE_TIP} label="How weighted geo exposure is used" maxWidth={280}>
+            <span>{scoreStr}</span>
+          </DecisionMetric>
         </span>
       ) : null}
       {preview.theme_tags && preview.theme_tags.length > 0 ? (
@@ -127,20 +143,6 @@ function toPrice(n: number | null | undefined): string {
   return `$${n.toFixed(2)}`;
 }
 
-function isMorningBriefingWindowNow(): boolean {
-  const formatter = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false
-  });
-  const parts = formatter.formatToParts(new Date());
-  const hour = Number(parts.find((p) => p.type === "hour")?.value || 0);
-  const minute = Number(parts.find((p) => p.type === "minute")?.value || 0);
-  const minutes = hour * 60 + minute;
-  return minutes >= 7 * 60 + 45 && minutes <= 10 * 60;
-}
-
 function findVixSnapshot(snapshots: SnapshotPayload[]): SnapshotPayload | undefined {
   const order = ["I:VIX", "^VIX", "VIX"];
   for (const k of order) {
@@ -150,12 +152,15 @@ function findVixSnapshot(snapshots: SnapshotPayload[]): SnapshotPayload | undefi
   return undefined;
 }
 
-/** Session change % for pulse widgets when API omits `change_percent` (e.g. some index snapshots). */
+/** Session change % for pulse widgets (aligns with scanner `snapPct`: regular → pre → after → derived). */
 function snapshotSessionChangePct(s: SnapshotPayload | null | undefined): number | null {
   if (!s) return null;
-  if (typeof s.change_percent === "number" && Number.isFinite(s.change_percent)) {
-    return s.change_percent;
-  }
+  const c = s.change_percent;
+  if (typeof c === "number" && Number.isFinite(c)) return c;
+  const pre = s.pre_market_change_percent;
+  if (typeof pre === "number" && Number.isFinite(pre)) return pre;
+  const ah = s.after_hours_change_percent;
+  if (typeof ah === "number" && Number.isFinite(ah)) return ah;
   const last = s.last_trade_price;
   const prev = s.prev_close;
   if (
@@ -170,6 +175,16 @@ function snapshotSessionChangePct(s: SnapshotPayload | null | undefined): number
   return null;
 }
 
+/** Same thresholds as `frontend/lib/api/scanner.ts` regime label. */
+function regimeFromSpyQqq(spyPct: number | null, qqqPct: number | null, fallback: string): string {
+  if (spyPct != null && qqqPct != null) {
+    if (spyPct > 0.2 && qqqPct > 0.15) return "Bullish";
+    if (spyPct < -0.2 || qqqPct < -0.25) return "Bearish";
+    return "Neutral";
+  }
+  return fallback;
+}
+
 function pulseRegimeColor(regime: string, colors: ThemeColors): string {
   const r = regime.trim().toLowerCase();
   if (r === "bullish") return colors.bullish;
@@ -181,8 +196,7 @@ export function DashboardRedesign({
   marketOverview,
   pdtStatus,
   scannerOverview,
-  earningsEvents,
-  morningBriefSlot
+  earningsEvents
 }: DashboardRedesignProps) {
   const { colors } = useTheme();
   const [evidence, setEvidence] = useState<SignalEvidenceData | null>(null);
@@ -190,17 +204,33 @@ export function DashboardRedesign({
   const [newsPanelSymbol, setNewsPanelSymbol] = useState("");
   const [newsPanelOpen, setNewsPanelOpen] = useState(false);
   const [newsUiTick, setNewsUiTick] = useState(0);
-  const snapshotsBySymbol = new Map(marketOverview.snapshots.map((s) => [s.symbol, s]));
-  const morningVisible =
-    isMorningBriefingWindowNow() && (!!scannerOverview.morningBrief || morningBriefSlot != null);
+  const snapshotsBySymbol = useMemo(
+    () => new Map(marketOverview.snapshots.map((s) => [(s.symbol || "").toUpperCase(), s])),
+    [marketOverview.snapshots]
+  );
   const topSignals = scannerOverview.setups.slice(0, 3);
   const pdt = pdtStatus?.assessment;
   const vixSnapshot =
-    findVixSnapshot(marketOverview.snapshots) || snapshotsBySymbol.get("VIX") || snapshotsBySymbol.get("^VIX");
+    findVixSnapshot(marketOverview.snapshots) ||
+    snapshotsBySymbol.get("I:VIX") ||
+    snapshotsBySymbol.get("VIX") ||
+    snapshotsBySymbol.get("^VIX");
   const earningsBySymbol = new Map(earningsEvents.map((e) => [e.symbol.toUpperCase(), e] as const));
-  const spyPct = scannerOverview.spyPct ?? null;
-  const qqqPct = scannerOverview.qqqPct ?? null;
-  const regimeLabel = scannerOverview.regimeLabel ?? "Neutral";
+  const spyFromScanner =
+    typeof scannerOverview.spyPct === "number" && Number.isFinite(scannerOverview.spyPct)
+      ? scannerOverview.spyPct
+      : null;
+  const qqqFromScanner =
+    typeof scannerOverview.qqqPct === "number" && Number.isFinite(scannerOverview.qqqPct)
+      ? scannerOverview.qqqPct
+      : null;
+  const spyPct = spyFromScanner ?? snapshotSessionChangePct(snapshotsBySymbol.get("SPY"));
+  const qqqPct = qqqFromScanner ?? snapshotSessionChangePct(snapshotsBySymbol.get("QQQ"));
+  const useScannerRegime =
+    !scannerOverview.error && spyFromScanner != null && qqqFromScanner != null;
+  const regimeLabel = useScannerRegime
+    ? (scannerOverview.regimeLabel ?? "Neutral")
+    : regimeFromSpyQqq(spyPct, qqqPct, scannerOverview.regimeLabel ?? "Neutral");
   const vixPct = snapshotSessionChangePct(vixSnapshot);
 
   const newsLabels = useMemo(() => {
@@ -212,15 +242,16 @@ export function DashboardRedesign({
   }, [scannerOverview.setups, newsUiTick]);
 
   return (
-    <section style={{ display: "grid", gap: spacing[4] }}>
+    <section className="stocvest-dashboard-v2" style={{ display: "grid", gap: spacing[5] }}>
       <article
         style={{
-          borderBottom: `1px solid ${colors.border}`,
-          paddingBottom: spacing[3],
+          borderBottom: `1px solid color-mix(in srgb, ${colors.border} 80%, ${colors.accent} 20%)`,
+          paddingBottom: spacing[4],
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          gap: spacing[3]
+          gap: spacing[3],
+          background: `linear-gradient(90deg, color-mix(in srgb, ${colors.accent} 5%, transparent) 0%, transparent 55%)`
         }}
       >
         <div className="min-w-0" style={{ display: "grid", gap: spacing[3] }}>
@@ -251,39 +282,31 @@ export function DashboardRedesign({
             <PdtStatusPill assessment={pdt ?? null} />
           </div>
         </div>
-        <DashboardRealtime />
+        <div className="flex shrink-0 items-center gap-2">
+          <DashboardRealtime />
+          <InfoTip text={SESSION_STATUS_STRIP_TIP} label="About the session status strip" maxWidth={300} />
+        </div>
       </article>
 
-      <div className="dashboard-grid grid grid-cols-1 gap-4 lg:grid-cols-[7fr_13fr] lg:items-stretch [&>*]:min-w-0">
+      <div className="dashboard-grid grid grid-cols-1 gap-5 lg:grid-cols-[7fr_13fr] lg:items-stretch [&>*]:min-w-0">
           <div className="order-1 min-w-0 lg:col-span-2 lg:col-start-1 lg:row-start-1">
-            <MarketSentimentScoreWidget marketOverview={marketOverview} />
-            <p style={{ margin: `${spacing[2]} 0 0`, color: colors.textMuted, fontSize: typography.scale.sm }}>
-              Blend of tape tone from SPY, QQQ, and IWM snapshots. Use as a quick pulse, not trade advice.
-            </p>
+            <DashboardCard
+              eyebrow="Decision desk"
+              title="Tape & sentiment"
+              subtitle="SPY, QQQ, and IWM in one view—how the session is leaning before you open setups or run the full composite on a symbol."
+              cardTip={DASHBOARD_MARKET_SENTIMENT_CARD_TIP}
+            >
+              <MarketSentimentScoreWidget marketOverview={marketOverview} embedded />
+            </DashboardCard>
           </div>
 
-          <article
-            className={`order-2 flex w-full min-h-[200px] flex-col overflow-hidden lg:self-start lg:col-start-1 lg:row-start-2 ${surfaceGlowClassName}`}
-            style={{
-              background: colors.surface,
-              border: `1px solid ${colors.border}`,
-              borderRadius: borderRadius.xl,
-              padding: spacing[4]
-            }}
+          <DashboardCard
+            className={`order-2 flex w-full min-h-[200px] flex-col overflow-hidden lg:self-start lg:col-start-1 lg:row-start-2`}
+            title="Top signals"
+            eyebrow="Scanner"
+            subtitle="Highest-ranked intraday candidates right now. Open Evidence for the six-layer read on any row."
+            cardTip={TOP_SIGNALS_CARD_TIP}
           >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: spacing[2],
-                flexShrink: 0,
-                marginBottom: spacing[2]
-              }}
-            >
-              <h3 style={{ margin: 0 }}>Top Signals</h3>
-              <InfoTip text={TOP_SIGNALS_TIP} label="About top signals" />
-            </div>
             <div className="flex flex-col gap-3">
               {topSignals.length === 0 ? (
                 <div className="flex flex-col justify-center py-4" style={{ padding: spacing[2] }}>
@@ -315,12 +338,18 @@ export function DashboardRedesign({
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: idx * 0.08 }}
                     style={{
-                      background: colors.surfaceMuted,
-                      border: `1px solid ${colors.border}`,
+                      position: "relative",
+                      background: `linear-gradient(160deg, color-mix(in srgb, ${colors.accent} 6%, ${colors.surfaceMuted}) 0%, ${colors.surfaceMuted} 100%)`,
+                      border: `1px solid color-mix(in srgb, ${colors.border} 88%, ${colors.accent} 12%)`,
                       borderRadius: borderRadius.lg,
-                      padding: spacing[3]
+                      padding: spacing[3],
+                      paddingTop: `calc(${spacing[3]} + 4px)`,
+                      paddingRight: `calc(${spacing[3]} + 28px)`
                     }}
                   >
+                    <div style={{ position: "absolute", top: spacing[2], right: spacing[2], zIndex: 1 }}>
+                      <InfoTip text={TOP_SIGNAL_ROW_CARD_TIP} label="About this signal row" maxWidth={300} />
+                    </div>
                     <div className="flex flex-col gap-2">
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: spacing[2] }}>
                         <div style={{ display: "flex", alignItems: "center", gap: spacing[2], minWidth: 0, flexWrap: "wrap" }}>
@@ -342,10 +371,11 @@ export function DashboardRedesign({
                           </span>
                         </div>
                         <div style={{ display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-                          <span style={{ color: colors.text, fontSize: typography.scale.sm, fontWeight: 600 }}>
-                            {topSignalStrengthPercent(signal)}%
-                          </span>
-                          <InfoTip text={CONFIDENCE_PERCENT_TIP} label="About signal strength" />
+                          <DecisionMetric explanation={CONFIDENCE_PERCENT_TIP} label="How signal strength is used" maxWidth={300}>
+                            <span style={{ color: colors.text, fontSize: typography.scale.sm, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+                              {topSignalStrengthPercent(signal)}%
+                            </span>
+                          </DecisionMetric>
                         </div>
                       </div>
                       {signal.company_name?.trim() ? (
@@ -362,7 +392,10 @@ export function DashboardRedesign({
                             fontVariantNumeric: "tabular-nums"
                           }}
                         >
-                          Last <span style={{ color: colors.text, fontWeight: 600 }}>${signal.last_price.toFixed(2)}</span>
+                          Last{" "}
+                          <DecisionMetric explanation={LAST_PRICE_SIGNAL_CARD_TIP} label="How last price is used" maxWidth={280}>
+                            <span style={{ color: colors.text, fontWeight: 600 }}>${signal.last_price.toFixed(2)}</span>
+                          </DecisionMetric>
                         </p>
                       ) : null}
                       {signal.geo_preview ? <TopSignalGeoStrip preview={signal.geo_preview} colors={colors} /> : null}
@@ -378,16 +411,20 @@ export function DashboardRedesign({
                           ) : (
                             <span style={{ color: colors.text }}>Confluence</span>
                           )}
-                          {nConf != null ? (
+                          {nConf != null || (nConfl != null && nConfl > 0) ? (
                             <>
                               {" "}
-                              · {nConf} aligning
-                            </>
-                          ) : null}
-                          {nConfl != null && nConfl > 0 ? (
-                            <>
-                              {" "}
-                              · {nConfl} conflict{nConfl === 1 ? "" : "s"}
+                              <DecisionMetric explanation={CONFLUENCE_COUNT_DECISION_TIP} label="How confluence counts are used" maxWidth={300}>
+                                <span style={{ color: colors.textMuted }}>
+                                  {nConf != null ? <>· {nConf} aligning</> : null}
+                                  {nConfl != null && nConfl > 0 ? (
+                                    <>
+                                      {" "}
+                                      · {nConfl} conflict{nConfl === 1 ? "" : "s"}
+                                    </>
+                                  ) : null}
+                                </span>
+                              </DecisionMetric>
                             </>
                           ) : null}
                         </p>
@@ -469,7 +506,7 @@ export function DashboardRedesign({
                 })
               )}
             </div>
-          </article>
+          </DashboardCard>
           <EarningsCalendar
             className="order-5 lg:col-start-1 lg:row-start-3"
             events={earningsEvents}
@@ -477,32 +514,13 @@ export function DashboardRedesign({
             maxDays={7}
           />
 
-          <article
-            className={`order-3 flex min-h-[200px] flex-col overflow-hidden lg:col-start-2 lg:row-start-2 lg:self-start ${surfaceGlowClassName}`}
-            style={{
-              background: colors.surface,
-              border: `1px solid ${colors.border}`,
-              borderRadius: borderRadius.xl,
-              padding: spacing[4]
-            }}
+          <DashboardCard
+            className={`order-3 flex min-h-[200px] flex-col overflow-hidden lg:col-start-2 lg:row-start-2 lg:self-start`}
+            eyebrow="Tape"
+            title="Market pulse"
+            subtitle="SPY · QQQ · VIX session change and regime — aligned with the scanner when it completes; otherwise from your overview snapshots."
+            cardTip={MARKET_PULSE_CARD_TIP}
           >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: spacing[2],
-                flexShrink: 0,
-                marginBottom: spacing[2]
-              }}
-            >
-              <div style={{ display: "grid", gap: 2 }}>
-                <h3 style={{ margin: 0 }}>Market Pulse</h3>
-                <p style={{ margin: 0, fontSize: 10, color: colors.textMuted, fontStyle: "italic" }}>
-                  SPY · QQQ · VIX direction and regime from the same tape context as day setups (no extra API calls)
-                </p>
-              </div>
-            </div>
             <div className="flex flex-col gap-3 text-sm" style={{ color: colors.text }}>
               <div
                 className="flex flex-wrap gap-x-4 gap-y-2 font-semibold"
@@ -511,48 +529,63 @@ export function DashboardRedesign({
                 <span>
                   SPY{" "}
                   <span style={{ color: spyPct != null ? getChangeColor(spyPct, colors) : colors.textMuted }}>
-                    {spyPct != null ? `${spyPct >= 0 ? "+" : ""}${spyPct.toFixed(2)}%` : "—"}
+                    {spyPct != null ? (
+                      <DecisionMetric explanation={SPY_PULSE_NUMBER_TIP} label="How SPY change is used" maxWidth={280}>
+                        <span>{`${spyPct >= 0 ? "+" : ""}${spyPct.toFixed(2)}%`}</span>
+                      </DecisionMetric>
+                    ) : (
+                      "—"
+                    )}
                   </span>
                 </span>
                 <span>
                   QQQ{" "}
                   <span style={{ color: qqqPct != null ? getChangeColor(qqqPct, colors) : colors.textMuted }}>
-                    {qqqPct != null ? `${qqqPct >= 0 ? "+" : ""}${qqqPct.toFixed(2)}%` : "—"}
+                    {qqqPct != null ? (
+                      <DecisionMetric explanation={QQQ_PULSE_NUMBER_TIP} label="How QQQ change is used" maxWidth={280}>
+                        <span>{`${qqqPct >= 0 ? "+" : ""}${qqqPct.toFixed(2)}%`}</span>
+                      </DecisionMetric>
+                    ) : (
+                      "—"
+                    )}
                   </span>
                 </span>
                 <span>
                   VIX{" "}
                   <span style={{ color: vixPct != null ? getChangeColor(vixPct, colors) : colors.textMuted }}>
-                    {vixPct != null
-                      ? `${vixPct > 0.05 ? "▲" : vixPct < -0.05 ? "▼" : "→"} ${vixPct >= 0 ? "+" : ""}${vixPct.toFixed(2)}%`
-                      : vixSnapshot?.last_trade_price != null
-                        ? `→ ${Number(vixSnapshot.last_trade_price).toFixed(2)}`
-                        : "—"}
+                    {vixPct != null ? (
+                      <DecisionMetric explanation={VIX_PULSE_NUMBER_TIP} label="How VIX move is used" maxWidth={280}>
+                        <span>{`${vixPct > 0.05 ? "▲" : vixPct < -0.05 ? "▼" : "→"} ${vixPct >= 0 ? "+" : ""}${vixPct.toFixed(2)}%`}</span>
+                      </DecisionMetric>
+                    ) : vixSnapshot?.last_trade_price != null ? (
+                      <DecisionMetric explanation={VIX_PULSE_NUMBER_TIP} label="How VIX level is used" maxWidth={280}>
+                        <span>→ {Number(vixSnapshot.last_trade_price).toFixed(2)}</span>
+                      </DecisionMetric>
+                    ) : (
+                      "—"
+                    )}
                   </span>
                 </span>
               </div>
-              <div
-                className="inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wide"
-                style={{
-                  borderColor: colors.border,
-                  background: "rgba(148,163,184,0.08)",
-                  color: pulseRegimeColor(regimeLabel, colors)
-                }}
-              >
-                Regime: {regimeLabel}
-              </div>
+              <DecisionMetric explanation={REGIME_BADGE_TIP} label="How regime label is used" maxWidth={300}>
+                <div
+                  className="inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wide"
+                  style={{
+                    borderColor: colors.border,
+                    background: "rgba(148,163,184,0.08)",
+                    color: pulseRegimeColor(regimeLabel, colors)
+                  }}
+                >
+                  Regime: {regimeLabel}
+                </div>
+              </DecisionMetric>
               <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.5 }}>
                 Per-symbol headlines are in the news drawer on each signal card (opens on demand — not prefetched).
               </p>
             </div>
-          </article>
+          </DashboardCard>
       </div>
 
-      {morningVisible ? (
-        morningBriefSlot ?? (scannerOverview.morningBrief ? (
-          <MorningBriefCollapse mb={scannerOverview.morningBrief} pdt={pdt} />
-        ) : null)
-      ) : null}
       <SignalEvidenceModal
         open={evidenceOpen}
         evidence={evidence}

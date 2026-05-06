@@ -10,7 +10,7 @@ export async function fetchSymbolNews(symbol: string, limit = 10): Promise<NewsP
     return [];
   }
   const capped = Math.min(100, Math.max(1, limit));
-  const panel = await fetchTickerNewsPanel(sym, { days: 20, limit: capped });
+  const panel = await fetchTickerNewsPanel(sym, { days: 20, limit: capped, recentHours: 8 });
   if (!panel?.articles?.length) {
     return [];
   }

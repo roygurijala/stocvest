@@ -67,3 +67,70 @@ export const LAYER_NAME_HINTS: Record<string, string> = {
   internals:
     "Market-wide health indicators including how many stocks are rising versus falling, the VIX volatility index, and advance-decline line breadth."
 };
+
+/** ─── Dashboard cards (umbrella copy for circled i on each panel) ─── */
+
+export const DASHBOARD_MARKET_SENTIMENT_CARD_TIP =
+  "This panel summarizes how large-cap, tech, and small-cap indices are moving versus yesterday’s close. STOCVEST uses it as a fast read on risk appetite before you open scanner setups or run the six-layer composite on a symbol. It is not a trade signal by itself.";
+
+export const MARKET_PULSE_CARD_TIP =
+  "SPY, QQQ, and VIX session change plus a simple regime label. When the scanner finishes, these numbers match the same tape inputs used in gap and setup context; otherwise they come from your market overview snapshots. They inform macro-style context in the engine, not individual entry prices.";
+
+export const TOP_SIGNALS_CARD_TIP =
+  "The highest-ranked intraday candidates from your scanner right now. Each row is a starting point: open Evidence to fetch news, levels, and the full server-side composite for that ticker. Rankings come from the scanner API (pattern + confluence when available).";
+
+export const TOP_SIGNAL_ROW_CARD_TIP =
+  "A single scanner candidate. Use signal strength and confluence lines to prioritize which names to research first; the composite engine on the evidence screen decides how layers align for that symbol at open time.";
+
+export const EARNINGS_CALENDAR_CARD_TIP =
+  "Earnings dates for symbols on your dashboard list. Reporting days add event risk: STOCVEST surfaces them so you can weigh gap risk and news volatility before acting on a setup.";
+
+export const MORNING_BRIEF_CARD_TIP =
+  "Structured pre-market brief: futures tone, VIX direction, economic prints, and a highlighted watch. It is a narrative digest of conditions, separate from the ranked scanner list below.";
+
+/** ─── Decision metric tooltips (how a number feeds the product) ─── */
+
+export const SENTIMENT_SCORE_NUMBER_TIP =
+  "This headline score averages a simple 0–100 translation of SPY, QQQ, and IWM session change. It only drives this dashboard gauge and copy like “favor today”—it is not the same math as the per-stock composite score.";
+
+export const SENTIMENT_FROM_OPEN_TIP =
+  "Shows how today’s opening gap versus prior close shifted the same 0–100 index sub-scores on average. A negative read means the open was weaker than prior close; use it alongside the headline score to see intraday give-back or recovery.";
+
+export const INDEX_SUBSCORE_TIP =
+  "A 0–100 shorthand from that index’s session change versus prior close. It colors the small index tile and feeds the headline gauge; the swing or real composite for an individual stock uses its own bars and layers.";
+
+export const INDEX_LAST_PRICE_DECISION_TIP =
+  "Last traded price for context on the tape card. When you open Evidence on a symbol, STOCVEST refreshes snapshot data for the composite—not this static tile.";
+
+export const INDEX_SESSION_CHANGE_DECISION_TIP =
+  "Session percent change versus prior close for that index. Macro and internals-style context in the engine use broad market direction; large down prints often coincide with more defensive tilts when other layers are ambiguous.";
+
+export const SPY_PULSE_NUMBER_TIP =
+  "SPY session change is a primary macro breadth proxy in STOCVEST. It helps label regime (bullish / neutral / bearish) together with QQQ; it does not set stops or targets on any trade.";
+
+export const QQQ_PULSE_NUMBER_TIP =
+  "QQQ session change reflects tech-heavy risk appetite. When it diverges from SPY, the UI calls out a skew (growth vs broad); the composite still evaluates each stock on its own merits.";
+
+export const VIX_PULSE_NUMBER_TIP =
+  "VIX level and session change feed fear/grease context. Elevated VIX raises caution in macro and internals-style scoring; it is one input among six layers on a full composite.";
+
+export const REGIME_BADGE_TIP =
+  "Regime is a simple label from SPY and QQQ moves (scanner path when available, otherwise snapshots). It helps you read the tape in one glance; the composite engine uses richer per-layer math when you open Evidence.";
+
+export const LAST_PRICE_SIGNAL_CARD_TIP =
+  "Last price captured with this scanner row. Opening Evidence fetches a fresh snapshot for the composite and resolution logic—use this figure as a quick reference only.";
+
+export const CONFLUENCE_COUNT_DECISION_TIP =
+  "Counts how many independent context checks (structure, regime, sector hooks, etc.) line up on this setup. Higher alignment raises scanner rank; conflicts reduce priority before you pull a full composite.";
+
+export const GEO_WEIGHTED_EXPOSURE_TIP =
+  "A condensed geopolitical exposure score for this symbol’s sector from recent headlines. It nudges scanner context when themes (energy, defense, trade) spike; the full geo layer in the composite uses a broader headline sample when you open Evidence.";
+
+export const EARNINGS_IMPACT_BADGE_TIP =
+  "Rough liquidity proxy from market cap: larger names tend to move indexes and your watchlist more on earnings day. It does not predict beat or miss—only how noisy the tape might be.";
+
+export const EARNINGS_EPS_SURPRISE_TIP =
+  "Actual EPS versus the consensus estimate, plus surprise percent when available. STOCVEST shows it so you can judge how much the report is ‘news’ versus expectations—helpful context next to a technical setup, not a standalone signal.";
+
+export const SESSION_STATUS_STRIP_TIP =
+  "Shows whether US equities are open or closed, a quick VIX quote when available, and your pattern-day-trade status from the broker path. This strip is for situational awareness only—it does not alter the six-layer composite scores.";

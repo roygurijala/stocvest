@@ -1,7 +1,4 @@
-import { Suspense } from "react";
-import { CuteLoader } from "@/components/cute-loader";
 import { DashboardRedesign } from "@/components/dashboard-redesign";
-import { MorningBriefFromCore } from "@/components/morning-brief-from-core";
 import { fetchMarketOverview } from "@/lib/api/market";
 import { fetchPdtStatus } from "@/lib/api/pdt";
 import { loadScannerDataWithoutBrief } from "@/lib/api/scanner";
@@ -19,9 +16,9 @@ const DASHBOARD_SCANNER_TUNING = {
   daySetupsLimit: 6
 } as const;
 
-/** VPC Lambdas + Secrets Manager cold start can exceed a few seconds; keep under typical serverless route budgets. */
-const DASHBOARD_MARKET_TIMEOUT_MS = 28_000;
-const DASHBOARD_SCANNER_TIMEOUT_MS = 28_000;
+/** Allow gap + snapshots + bars + day/setups to finish without forcing empty scanner fallback (Vercel: set maxDuration on dashboard page). */
+const DASHBOARD_MARKET_TIMEOUT_MS = 58_000;
+const DASHBOARD_SCANNER_TIMEOUT_MS = 58_000;
 const DASHBOARD_EARNINGS_TIMEOUT_MS = 5000;
 
 function timeoutFallback<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
@@ -89,20 +86,12 @@ export async function DashboardPageContent() {
     regimeLabel: scannerCore.regimeLabel
   };
 
-  const morningBriefSlot =
-    !scannerCore.error ? (
-      <Suspense fallback={<CuteLoader label="Loading morning brief" sublabel="Preparing today's quick read" compact />}>
-        <MorningBriefFromCore core={scannerCore} pdtStatus={pdtStatus} />
-      </Suspense>
-    ) : null;
-
   return (
     <DashboardRedesign
       marketOverview={marketOverview}
       pdtStatus={pdtStatus}
       scannerOverview={scannerOverview}
       earningsEvents={earnings.upcoming}
-      morningBriefSlot={morningBriefSlot}
     />
   );
 }

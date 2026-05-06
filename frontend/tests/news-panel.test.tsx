@@ -18,7 +18,7 @@ function panelJson(overrides: Record<string, unknown>) {
   return {
     symbol: "AAPL",
     has_recent_news: true,
-    recent_cutoff_hours: 4,
+    recent_cutoff_hours: 8,
     articles: [] as unknown[],
     total_found: 0,
     oldest_included: null,
@@ -68,8 +68,8 @@ describe("NewsPanel", () => {
     }) as unknown as typeof fetch;
 
     wrap(<NewsPanel symbol="AAPL" isOpen onClose={vi.fn()} />);
-    await waitFor(() => expect(screen.getByText(/No news in the last 4h/i)).toBeInTheDocument());
-    expect(screen.getByText(/Showing most recent available/i)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/no articles in the last 8 hours/i)).toBeInTheDocument());
+    expect(screen.getAllByText(/20-day archive/i).length).toBeGreaterThanOrEqual(1);
   });
 
   test("test_news_panel_no_banner_when_recent_exists", async () => {
@@ -103,11 +103,10 @@ describe("NewsPanel", () => {
   });
 
   test("test_news_panel_groups_by_date", async () => {
-    const now = new Date();
-    const todayIso = new Date(now.getTime() - 2 * 3600000).toISOString();
-    const y = new Date(now);
-    y.setDate(y.getDate() - 1);
-    const yIso = new Date(y.getTime() + 8 * 3600000).toISOString();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-05-06T16:00:00.000Z"));
+    const todayIso = "2026-05-06T15:00:00.000Z";
+    const yIso = "2026-05-05T15:00:00.000Z";
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () =>
@@ -145,9 +144,13 @@ describe("NewsPanel", () => {
         })
     }) as unknown as typeof fetch;
 
-    wrap(<NewsPanel symbol="AAPL" isOpen onClose={vi.fn()} />);
-    await waitFor(() => expect(screen.getByText("TODAY")).toBeInTheDocument());
-    expect(screen.getByText("YESTERDAY")).toBeInTheDocument();
+    try {
+      wrap(<NewsPanel symbol="AAPL" isOpen onClose={vi.fn()} />);
+      await waitFor(() => expect(screen.getByText("TODAY")).toBeInTheDocument());
+      expect(screen.getByText("YESTERDAY")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test("test_news_panel_skeleton_during_load", async () => {
@@ -166,9 +169,7 @@ describe("NewsPanel", () => {
 
     wrap(<NewsPanel symbol="ZZZ" isOpen onClose={vi.fn()} />);
     await waitFor(() =>
-      expect(
-        screen.getByText(/No news found for ZZZ in the last 20 trading days/i)
-      ).toBeInTheDocument()
+      expect(screen.getByText(/No qualifying news for ZZZ in the last 20 calendar days/i)).toBeInTheDocument()
     );
   });
 

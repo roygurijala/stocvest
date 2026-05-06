@@ -6,7 +6,7 @@
 
 **Last updated:** 2026-05-06  
 **Repo:** https://github.com/roygurijala/stocvest  
-**Test baseline (regression gate — must match §13):** Backend `pytest tests/ -q` → **718 passed**, **3 skipped**. Frontend `npm run test` → **92 passed** (21 test files). **`npm run build`** last verified: success.
+**Test baseline (regression gate — must match §13):** Backend `pytest tests/ -q` → **721 passed**, **3 skipped**. Frontend `npm run test` → **93 passed** (22 test files). **`npm run build`** last verified: success.
 
 ---
 
@@ -18,7 +18,7 @@
 | Swing + day-trading signals | ✅ | `stocvest/signals/` (layers, scanner, briefing, journal engine, PDT tracker); **swing vs day composite** — same six layers; `SwingTechnicalAnalyzer` + daily bars; `POST /v1/signals/composite/swing`; dashboard **Day trade / Swing trade** toggle (`localStorage` `stocvest_trading_mode`) |
 | Brokers | ✅ | Mock, IBKR, E*TRADE adapters; factory; PDT hook |
 | HTTP API (Lambdas) | ✅ | Market, **signals** (HTTP submodule + public/user record routes + **model portfolio** `GET/POST /v1/portfolio/*` on signals Lambda), brokers, portfolio, scanner, journal, PDT, orders, auth; journal `user_id` from JWT only; free-text **`text_sanitize`**; **`log_privacy`** for CloudWatch-safe logs |
-| Frontend (Next.js) | ✅ | Auth, dashboard redesign, **Gap Intelligence** scanner panel + structured **morning brief** (7:45–10:00 ET); scanner/signals/**watchlists**/portfolio/journal/options/crypto/futures, landing, legal pages; **`/portfolio`** signal-tracking page (notional model portfolio, disclaimers); BFF **`/api/stocvest/signals/**`** + **`/api/stocvest/portfolio/**`** (swing composite, **`composite/real`**, user history, record by id); **signals page** uses server **`composite/real`** for layer scores (no client `bullishBias` heuristic); **after-hours research panel** (`signals-after-hours-panel.tsx`) for closed-market insufficient-data states; **compact PDT status pill** beside Market/VIX (`pdt-status-pill.tsx`); **Market Pulse** strip (SPY/QQQ/VIX + regime from scanner overview) replaces the embedded **Market Intelligence** headline grid; **on-demand `NewsPanel`** (`news-panel.tsx`) — fetch on open, per-symbol **2m** client cache, wired from dashboard signal cards, evidence (incl. “View all news”), signals page; **`vercel.json`** security headers (+ HSTS on **stocvest.app**) |
+| Frontend (Next.js) | ✅ | Auth, dashboard redesign, **Gap Intelligence** scanner panel + **morning brief** on scanner paths when enabled (not on home dashboard); scanner/signals/**watchlists**/portfolio/journal/options/crypto/futures, landing, legal pages; **`/portfolio`** signal-tracking page (notional model portfolio, disclaimers); BFF **`/api/stocvest/signals/**`** + **`/api/stocvest/portfolio/**`** (swing composite, **`composite/real`**, user history, record by id); **signals page** uses server **`composite/real`** for layer scores (no client `bullishBias` heuristic); **after-hours research panel** (`signals-after-hours-panel.tsx`) for closed-market insufficient-data states; **compact PDT status pill** beside Market/VIX (`pdt-status-pill.tsx`); **Market Pulse** strip (SPY/QQQ/VIX + regime from scanner overview) replaces the embedded **Market Intelligence** headline grid; **on-demand `NewsPanel`** (`news-panel.tsx`) — fetch on open, per-symbol **2m** client cache, wired from dashboard signal cards, evidence (incl. “View all news”), signals page; **`vercel.json`** security headers (+ HSTS on **stocvest.app**) |
 | Journal automation (B1) | ✅ | `journal_order_hooks` on order submit (open/close rows, optional signal fields), `GET /v1/journal/analytics`, entry GET/PATCH, journal UI + scanner → portfolio order prefill |
 | Onboarding + legal acknowledgment (B2) | ✅ | `UserProfile` legal + onboarding fields; `GET`/`PATCH /v1/users/me`; mandatory **legal acknowledgment modal** + optional **onboarding wizard** on `app/dashboard/layout.tsx`; BFF `/api/stocvest/users/me` |
 | Order safety (Step 8) | ✅ | `order_safety.py`, validate/submit BFF, confirmation modal, paper/live mode |
@@ -242,8 +242,8 @@ Report exact counts. If any count dropped, fix before proceeding to documentatio
 
 | Suite | Command | Last verified |
 |-------|---------|---------------|
-| Backend | `pytest tests/ -q` | **718 passed**, **3 skipped** |
-| Frontend tests | `cd frontend && npm run test` | **92 passed** (21 test files); Vitest **`fileParallelism: false`** in **`vitest.config.ts`** (avoids **`global.fetch`** races across files) |
+| Backend | `pytest tests/ -q` | **721 passed**, **3 skipped** |
+| Frontend tests | `cd frontend && npm run test` | **93 passed** (22 test files); Vitest **`fileParallelism: false`** in **`vitest.config.ts`** (avoids **`global.fetch`** races across files) |
 | Frontend build | `cd frontend && npm run build` | **success** |
 
 ---

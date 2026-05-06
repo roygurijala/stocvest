@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { InfoTip } from "@/components/info-tip";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
+import { MORNING_BRIEF_CARD_TIP } from "@/lib/ui-tooltips";
 import type { MorningBriefPayload } from "@/lib/api/scanner";
 import type { PDTAssessmentPayload } from "@/lib/api/pdt";
 
@@ -21,25 +23,31 @@ export function MorningBriefCollapse({ mb, pdt }: MorningBriefCollapseProps) {
       style={{
         border: `1px solid ${colors.border}`,
         borderRadius: borderRadius.xl,
-        background: colors.surface,
-        padding: spacing[4]
+        background: `linear-gradient(150deg, color-mix(in srgb, ${colors.accent} 6%, ${colors.surface}) 0%, ${colors.surface} 55%)`,
+        padding: spacing[4],
+        boxShadow: `0 14px 40px rgba(0,0,0,0.18), 0 0 0 1px color-mix(in srgb, ${colors.accent} 10%, transparent)`
       }}
     >
-      <button
-        type="button"
-        onClick={() => setBriefOpen((v) => !v)}
-        style={{
-          cursor: "pointer",
-          fontWeight: 700,
-          border: "none",
-          background: "transparent",
-          color: colors.text,
-          padding: 0,
-          textAlign: "left"
-        }}
-      >
-        Morning brief · {mb.conditions.label} conditions
-      </button>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: spacing[2] }}>
+        <button
+          type="button"
+          onClick={() => setBriefOpen((v) => !v)}
+          style={{
+            cursor: "pointer",
+            fontWeight: 700,
+            border: "none",
+            background: "transparent",
+            color: colors.text,
+            padding: 0,
+            textAlign: "left",
+            flex: 1,
+            minWidth: 0
+          }}
+        >
+          Morning brief · {mb.conditions.label} conditions
+        </button>
+        <InfoTip text={MORNING_BRIEF_CARD_TIP} label="About the morning brief" maxWidth={300} />
+      </div>
       {briefOpen ? (
         <div style={{ marginTop: spacing[3], display: "grid", gap: spacing[4] }}>
           <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.sm, lineHeight: 1.5 }}>

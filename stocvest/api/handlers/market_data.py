@@ -313,11 +313,17 @@ def news_handler(
             return bad_request("Invalid limit.")
         if panel_limit < 1 or panel_limit > 100:
             return bad_request("Limit must be between 1 and 100.")
+        try:
+            recent_hours = int(query.get("recent_hours") or RECENT_NEWS_HOURS)
+        except ValueError:
+            return bad_request("Invalid recent_hours.")
+        if recent_hours < 1 or recent_hours > 168:
+            return bad_request("recent_hours must be between 1 and 168.")
 
         async def _run_symbol_panel() -> dict[str, Any]:
             now = datetime.now(timezone.utc)
             since = now - timedelta(days=days)
-            recent_cutoff = now - timedelta(hours=RECENT_NEWS_HOURS)
+            recent_cutoff = now - timedelta(hours=recent_hours)
             fetch_limit = min(1000, max(80, panel_limit * 5))
             settings = get_settings()
             async with client_factory(api_key=settings.polygon_api_key) as client:
@@ -399,7 +405,7 @@ def news_handler(
                 {
                     "symbol": symbol,
                     "has_recent_news": has_recent_news,
-                    "recent_cutoff_hours": RECENT_NEWS_HOURS,
+                    "recent_cutoff_hours": recent_hours,
                     "articles": articles_out,
                     "total_found": total_found,
                     "oldest_included": oldest_included,

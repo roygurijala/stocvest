@@ -113,7 +113,7 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
   const { colors } = useTheme();
   const isMobileLayout = useIsMobileLayout();
   const [tab, setTab] = useState<"layers" | "history">("layers");
-  const [tradingMode, setTradingMode] = useState<TradingMode>("day");
+  const [tradingMode, setTradingMode] = useState<TradingMode>("swing");
   const [symbol, setSymbol] = useState("AAPL");
   const [signalEvidence, setSignalEvidence] = useState<SignalEvidenceData | null>(null);
   const [evidenceOpen, setEvidenceOpen] = useState(false);

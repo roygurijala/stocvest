@@ -5,8 +5,19 @@ import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { getEtClock } from "@/lib/market-hours-et";
+import { DecisionMetric } from "@/components/decision-metric";
 import { InfoTip } from "@/components/info-tip";
-import { MARKET_SENTIMENT_SCORE_TIP } from "@/lib/ui-tooltips";
+import {
+  IWM_CARD_TIP,
+  INDEX_LAST_PRICE_DECISION_TIP,
+  INDEX_SESSION_CHANGE_DECISION_TIP,
+  INDEX_SUBSCORE_TIP,
+  MARKET_SENTIMENT_SCORE_TIP,
+  QQQ_CARD_TIP,
+  SENTIMENT_FROM_OPEN_TIP,
+  SENTIMENT_SCORE_NUMBER_TIP,
+  SPY_CARD_TIP
+} from "@/lib/ui-tooltips";
 
 const MONO = `ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace`;
 
@@ -261,11 +272,19 @@ function SkeletonBlock() {
   );
 }
 
-type Props = {
-  marketOverview: MarketOverview;
+const INDEX_CARD_TIP: Record<(typeof STAT_SYMBOLS)[number], string> = {
+  SPY: SPY_CARD_TIP,
+  QQQ: QQQ_CARD_TIP,
+  IWM: IWM_CARD_TIP
 };
 
-export function MarketSentimentScoreWidget({ marketOverview }: Props) {
+type Props = {
+  marketOverview: MarketOverview;
+  /** When true, sits inside `DashboardCard`: lighter chrome and no duplicate info icon on the first row. */
+  embedded?: boolean;
+};
+
+export function MarketSentimentScoreWidget({ marketOverview, embedded = false }: Props) {
   const { colors } = useTheme();
   const model = buildMarketSentimentModel(marketOverview);
   const sparkBy = marketOverview.sparklinesBySymbol ?? {};
@@ -314,15 +333,16 @@ export function MarketSentimentScoreWidget({ marketOverview }: Props) {
 
   return (
     <div
-      className={surfaceGlowClassName}
+      className={embedded ? undefined : surfaceGlowClassName}
       style={{
-        background: "var(--color-background-secondary)",
-        border: "0.5px solid var(--color-border-tertiary)",
+        background: embedded ? "transparent" : "var(--color-background-secondary)",
+        border: embedded ? "none" : "0.5px solid var(--color-border-tertiary)",
         borderRadius: 12,
-        padding: "20px 24px",
+        padding: embedded ? 0 : "20px 24px",
         fontFamily: MONO,
         display: "grid",
-        gap: 20
+        gap: 20,
+        boxShadow: embedded ? "none" : undefined
       }}
     >
       {/* Section 1 */}
@@ -338,7 +358,7 @@ export function MarketSentimentScoreWidget({ marketOverview }: Props) {
           >
             Market Sentiment
           </span>
-          <InfoTip text={MARKET_SENTIMENT_SCORE_TIP} label="About market sentiment score" />
+          {embedded ? null : <InfoTip text={MARKET_SENTIMENT_SCORE_TIP} label="About market sentiment score" maxWidth={300} />}
         </div>
         <span
           style={{
@@ -374,7 +394,9 @@ export function MarketSentimentScoreWidget({ marketOverview }: Props) {
               color: mainStyle.text
             }}
           >
-            {model.sentiment_score}
+            <DecisionMetric explanation={SENTIMENT_SCORE_NUMBER_TIP} label="How the headline sentiment score is used" maxWidth={300}>
+              <span style={{ fontVariantNumeric: "tabular-nums" }}>{model.sentiment_score}</span>
+            </DecisionMetric>
           </div>
           <span
             style={{
@@ -399,8 +421,12 @@ export function MarketSentimentScoreWidget({ marketOverview }: Props) {
                 display: "block"
               }}
             >
-              {fromOpen > 0 ? "+" : ""}
-              {fromOpen} from open
+              <DecisionMetric explanation={SENTIMENT_FROM_OPEN_TIP} label="How change from open is used" maxWidth={300}>
+                <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                  {fromOpen > 0 ? "+" : ""}
+                  {fromOpen} from open
+                </span>
+              </DecisionMetric>
             </span>
           ) : null}
         </div>
@@ -499,7 +525,9 @@ export function MarketSentimentScoreWidget({ marketOverview }: Props) {
         }}
       >
         {model.components.map((c) => {
-          const meta = INDEX_META[c.symbol as keyof typeof INDEX_META];
+          const sym = c.symbol as (typeof STAT_SYMBOLS)[number];
+          const cardTip = INDEX_CARD_TIP[sym];
+          const meta = INDEX_META[sym];
           const style = getSentimentStyle(c.score, colors);
           const path = sparklinePath(sparkBy[c.symbol] ?? []);
           const trend = sparklineTrend(c.score, sparkBy[c.symbol] ?? []);
@@ -537,28 +565,33 @@ export function MarketSentimentScoreWidget({ marketOverview }: Props) {
                 <span className="font-semibold" style={{ fontSize: 13, color: colors.text }}>
                   {c.symbol}
                 </span>
-                <span
-                  style={{
-                    color: style.text,
-                    fontSize: "0.75rem",
-                    fontWeight: 600,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 4
-                  }}
-                >
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                   <span
                     style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: "50%",
-                      backgroundColor: style.dot,
-                      display: "inline-block",
-                      flexShrink: 0
+                      color: style.text,
+                      fontSize: "0.75rem",
+                      fontWeight: 600,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4
                     }}
-                  />
-                  {style.label}
-                </span>
+                  >
+                    <span
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: "50%",
+                        backgroundColor: style.dot,
+                        display: "inline-block",
+                        flexShrink: 0
+                      }}
+                    />
+                    <DecisionMetric explanation={INDEX_SUBSCORE_TIP} label="How index sub-score is used" maxWidth={280}>
+                      <span>{style.label}</span>
+                    </DecisionMetric>
+                  </span>
+                  <InfoTip text={cardTip} label={`About ${c.symbol}`} maxWidth={280} />
+                </div>
               </div>
               <div
                 style={{
@@ -577,7 +610,9 @@ export function MarketSentimentScoreWidget({ marketOverview }: Props) {
                     fontVariantNumeric: "tabular-nums"
                   }}
                 >
-                  {priceLabel}
+                  <DecisionMetric explanation={INDEX_LAST_PRICE_DECISION_TIP} label="How last price is used" maxWidth={280}>
+                    <span>{priceLabel}</span>
+                  </DecisionMetric>
                 </span>
                 <span
                   style={{
@@ -587,7 +622,9 @@ export function MarketSentimentScoreWidget({ marketOverview }: Props) {
                     fontVariantNumeric: "tabular-nums"
                   }}
                 >
-                  {pctStr}
+                  <DecisionMetric explanation={INDEX_SESSION_CHANGE_DECISION_TIP} label="How session change is used" maxWidth={280}>
+                    <span>{pctStr}</span>
+                  </DecisionMetric>
                 </span>
               </div>
               <p

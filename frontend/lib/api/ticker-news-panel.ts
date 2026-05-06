@@ -88,12 +88,13 @@ export function tickerNewsTriggerLine(symbol: string): string {
 
 export async function fetchTickerNewsPanel(
   symbol: string,
-  opts?: { days?: number; limit?: number }
+  opts?: { days?: number; limit?: number; recentHours?: number }
 ): Promise<TickerNewsPanelResponse | null> {
   const sym = symbol.trim().toUpperCase();
   if (!sym) return null;
   const days = Math.min(20, Math.max(1, opts?.days ?? 20));
   const limit = Math.min(100, Math.max(1, opts?.limit ?? 20));
+  const recentHours = Math.min(168, Math.max(1, opts?.recentHours ?? 8));
   const token = readWsTokenFromDocumentCookie();
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (token) {
@@ -102,7 +103,8 @@ export async function fetchTickerNewsPanel(
   const qs = new URLSearchParams({
     symbol: sym,
     days: String(days),
-    limit: String(limit)
+    limit: String(limit),
+    recent_hours: String(recentHours)
   });
   const res = await fetch(`${apiBaseUrl()}/v1/market/news?${qs.toString()}`, {
     method: "GET",

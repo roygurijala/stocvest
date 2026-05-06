@@ -111,6 +111,13 @@ a {
   }
 }
 
+/* Logged-in dashboard: stacking context for tooltips / motion */
+.stocvest-dashboard-v2 {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+}
+
 @media (max-width: 1023px) {
   .dashboard-grid {
     grid-template-columns: 1fr !important;

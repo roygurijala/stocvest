@@ -5,7 +5,6 @@ import type { PDTStatusPayload } from "@/lib/api/pdt";
 import type { ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
 import type { AuthSession } from "@/lib/auth/types";
-import type { ReactNode } from "react";
 
 interface DashboardShellProps {
   session: AuthSession;
@@ -13,7 +12,6 @@ interface DashboardShellProps {
   pdtStatus: PDTStatusPayload | null;
   scannerOverview: ScannerOverview;
   earningsEvents: EarningsEvent[];
-  morningBriefSlot?: ReactNode;
 }
 
 export function DashboardShell({
@@ -21,8 +19,7 @@ export function DashboardShell({
   marketOverview,
   pdtStatus,
   scannerOverview,
-  earningsEvents,
-  morningBriefSlot
+  earningsEvents
 }: DashboardShellProps) {
   return (
     <AppShell session={session}>
@@ -31,7 +28,6 @@ export function DashboardShell({
         pdtStatus={pdtStatus}
         scannerOverview={scannerOverview}
         earningsEvents={earningsEvents}
-        morningBriefSlot={morningBriefSlot}
       />
     </AppShell>
   );
