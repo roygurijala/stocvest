@@ -16,8 +16,9 @@ import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
 import type { MarketOverview, NewsCredibilityBand, NewsIntelCategory, NewsPayload, SnapshotPayload } from "@/lib/api/market";
 import type { PDTStatusPayload } from "@/lib/api/pdt";
-import type { ScannerOverview } from "@/lib/api/scanner";
+import { topSignalStrengthPercent, type IntradayGeoPreview, type ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
+import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { buildEvidenceFromSetup, enrichEvidenceWithRealComposite, type SignalEvidenceData } from "@/lib/signal-evidence";
@@ -44,6 +45,58 @@ function SkeletonLine({ width = "100%", height = 14 }: { width?: string; height?
         animation: "stocvest-skeleton 1.2s ease-in-out infinite"
       }}
     />
+  );
+}
+
+function TopSignalGeoStrip({ preview, colors }: { preview: IntradayGeoPreview; colors: ThemeColors }) {
+  const band = (preview.exposure_band || "low").toLowerCase();
+  const bandStyles =
+    band === "high"
+      ? { fg: colors.bearish, bg: "rgba(239,68,68,0.11)", border: "rgba(239,68,68,0.38)" }
+      : band === "moderate"
+        ? { fg: colors.caution, bg: "rgba(245,158,11,0.12)", border: "rgba(245,158,11,0.42)" }
+        : { fg: colors.bullish, bg: "rgba(34,197,94,0.10)", border: "rgba(34,197,94,0.38)" };
+  const scoreStr =
+    preview.weighted_score != null && Number.isFinite(preview.weighted_score)
+      ? preview.weighted_score.toFixed(2)
+      : null;
+  return (
+    <div
+      style={{
+        borderRadius: borderRadius.md,
+        border: `1px solid ${bandStyles.border}`,
+        background: bandStyles.bg,
+        padding: `${spacing[2]} ${spacing[2]}`,
+        display: "grid",
+        gap: spacing[1]
+      }}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span style={{ fontSize: typography.scale.xs, fontWeight: 600, color: colors.text }}>{preview.impact_sector_label}</span>
+        <span
+          style={{
+            fontSize: typography.scale.xs,
+            fontWeight: 700,
+            textTransform: "capitalize",
+            color: bandStyles.fg,
+            padding: "2px 8px",
+            borderRadius: borderRadius.full,
+            border: `1px solid ${bandStyles.border}`,
+            background: "rgba(255,255,255,0.04)"
+          }}
+        >
+          Geo {band}
+        </span>
+      </div>
+      {scoreStr ? (
+        <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, fontVariantNumeric: "tabular-nums" }}>
+          Weighted exposure {scoreStr}
+        </span>
+      ) : null}
+      {preview.summary ? (
+        <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45 }}>{preview.summary}</p>
+      ) : null}
+    </div>
   );
 }
 
@@ -236,7 +289,7 @@ export function DashboardRedesign({
         <DashboardRealtime />
       </article>
 
-      <div className="dashboard-grid grid grid-cols-1 gap-4 lg:grid-cols-[13fr_7fr] [&>*]:min-w-0">
+      <div className="dashboard-grid grid grid-cols-1 gap-4 lg:grid-cols-[13fr_7fr] lg:items-stretch [&>*]:min-w-0">
           <div className="order-1 min-w-0 lg:col-span-2 lg:col-start-1 lg:row-start-1">
             <MarketSentimentScoreWidget marketOverview={marketOverview} />
             <p style={{ margin: `${spacing[2]} 0 0`, color: colors.textMuted, fontSize: typography.scale.sm }}>
@@ -244,25 +297,31 @@ export function DashboardRedesign({
             </p>
           </div>
 
-          <section className="order-2 lg:col-start-1 lg:row-start-2">
+          <article
+            className={`order-2 flex h-full min-h-[260px] flex-col overflow-hidden lg:col-start-1 lg:row-start-2 ${surfaceGlowClassName}`}
+            style={{
+              background: colors.surface,
+              border: `1px solid ${colors.border}`,
+              borderRadius: borderRadius.xl,
+              padding: spacing[4]
+            }}
+          >
             <div
               style={{
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
                 gap: spacing[2],
+                flexShrink: 0,
                 marginBottom: spacing[2]
               }}
             >
               <h3 style={{ margin: 0 }}>Top Signals</h3>
               <InfoTip text={TOP_SIGNALS_TIP} label="About top signals" />
             </div>
-            <div style={{ display: "grid", gap: spacing[3] }}>
+            <div className="flex min-h-0 flex-1 flex-col gap-3">
               {topSignals.length === 0 ? (
-                <article
-                  className={surfaceGlowClassName}
-                  style={{ background: colors.surface, borderRadius: borderRadius.lg, padding: spacing[4] }}
-                >
+                <div className="flex flex-1 flex-col justify-center" style={{ padding: spacing[2] }}>
                   {scannerOverview.error ? (
                     <p style={{ margin: 0, color: colors.textMuted }}>{scannerOverview.error}</p>
                   ) : (
@@ -270,98 +329,121 @@ export function DashboardRedesign({
                       Intelligence engine is warming up. Check back at market open.
                     </p>
                   )}
-                </article>
+                </div>
               ) : (
                 topSignals.map((signal, idx) => (
                   <motion.article
                     key={`${signal.symbol}-${idx}`}
-                    className={surfaceGlowClassName}
+                    className={`flex min-h-0 flex-1 flex-col ${surfaceGlowClassName}`}
                     initial={{ opacity: 0, x: -8 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: idx * 0.08 }}
                     style={{
-                      background: colors.surface,
+                      background: colors.surfaceMuted,
                       border: `1px solid ${colors.border}`,
                       borderRadius: borderRadius.lg,
                       padding: spacing[3],
-                      display: "grid",
-                      gap: spacing[2],
-                      position: "relative",
-                      paddingBottom: spacing[5]
+                      minHeight: 132
                     }}
                   >
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2] }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: spacing[2], minWidth: 0, flexWrap: "wrap" }}>
-                        <p style={{ margin: 0, fontWeight: 700 }}>{signal.symbol}</p>
-                        <span
+                    <div className="flex min-h-0 flex-1 flex-col gap-2">
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: spacing[2] }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: spacing[2], minWidth: 0, flexWrap: "wrap" }}>
+                          <p style={{ margin: 0, fontWeight: 700, fontSize: typography.scale.base }}>{signal.symbol}</p>
+                          <span
+                            style={{
+                              background: ["bullish", "long"].includes(signal.direction.toLowerCase())
+                                ? "rgba(34,197,94,.2)"
+                                : "rgba(239,68,68,.2)",
+                              color: ["bullish", "long"].includes(signal.direction.toLowerCase()) ? colors.bullish : colors.bearish,
+                              borderRadius: borderRadius.full,
+                              padding: "2px 8px",
+                              fontSize: typography.scale.xs,
+                              fontWeight: 600,
+                              textTransform: "lowercase"
+                            }}
+                          >
+                            {signal.direction}
+                          </span>
+                        </div>
+                        <div style={{ display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                          <span style={{ color: colors.text, fontSize: typography.scale.sm, fontWeight: 600 }}>
+                            {topSignalStrengthPercent(signal)}%
+                          </span>
+                          <InfoTip text={CONFIDENCE_PERCENT_TIP} label="About signal strength" />
+                        </div>
+                      </div>
+                      {signal.geo_preview ? <TopSignalGeoStrip preview={signal.geo_preview} colors={colors} /> : null}
+                      {signal.triggers[0] ? (
+                        <p
                           style={{
-                            background: ["bullish", "long"].includes(signal.direction.toLowerCase())
-                              ? "rgba(34,197,94,.2)"
-                              : "rgba(239,68,68,.2)",
-                            color: ["bullish", "long"].includes(signal.direction.toLowerCase()) ? colors.bullish : colors.bearish,
-                            borderRadius: borderRadius.full,
-                            padding: "2px 8px",
-                            fontSize: typography.scale.xs
+                            margin: 0,
+                            fontSize: typography.scale.xs,
+                            color: colors.textMuted,
+                            lineHeight: 1.45,
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden"
                           }}
                         >
-                          {signal.direction}
-                        </span>
+                          {signal.triggers[0]}
+                        </p>
+                      ) : null}
+                      <div className="mt-auto flex flex-col gap-2 pt-1" style={{ marginTop: "auto" }}>
+                        <button
+                          type="button"
+                          className="min-h-11 w-full text-sm sm:w-auto"
+                          onClick={async () => {
+                            const sym = signal.symbol.trim().toUpperCase();
+                            let snapshot = snapshotsBySymbol.get(sym);
+                            if (!snapshot) {
+                              snapshot = (await fetchSymbolSnapshot(sym)) ?? undefined;
+                            }
+                            let symbolNewsArticles: NewsPayload[] = [];
+                            try {
+                              symbolNewsArticles = await fetchSymbolNews(signal.symbol, 10);
+                            } catch {
+                              symbolNewsArticles = [];
+                            }
+                            const event = earningsBySymbol.get(signal.symbol.toUpperCase());
+                            const today = new Date().toISOString().slice(0, 10);
+                            const daysUntil =
+                              event != null
+                                ? Math.floor(
+                                    (Date.parse(`${event.report_date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000
+                                  )
+                                : undefined;
+                            const base = buildEvidenceFromSetup(signal, snapshot, {
+                              symbolNewsArticles,
+                              earningsRiskDays: typeof daysUntil === "number" ? daysUntil : undefined,
+                              earningsReportTime: event?.report_time
+                            });
+                            setEvidence(await enrichEvidenceWithRealComposite(base));
+                            setEvidenceOpen(true);
+                          }}
+                          style={{
+                            border: `1px solid ${colors.border}`,
+                            borderRadius: borderRadius.md,
+                            background: "transparent",
+                            color: colors.text,
+                            padding: `${spacing[2]} ${spacing[3]}`,
+                            cursor: "pointer",
+                            alignSelf: "flex-start"
+                          }}
+                        >
+                          View Evidence
+                        </button>
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                          <SignalDisclaimerChip />
+                        </div>
                       </div>
-                      <div style={{ display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-                        <span style={{ color: colors.textMuted, fontSize: typography.scale.sm }}>{Math.round(signal.score * 100)}%</span>
-                        <InfoTip text={CONFIDENCE_PERCENT_TIP} label="About signal strength" />
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      className="min-h-11 text-sm"
-                      onClick={async () => {
-                        const sym = signal.symbol.trim().toUpperCase();
-                        let snapshot = snapshotsBySymbol.get(sym);
-                        if (!snapshot) {
-                          snapshot = (await fetchSymbolSnapshot(sym)) ?? undefined;
-                        }
-                        let symbolNewsArticles: NewsPayload[] = [];
-                        try {
-                          symbolNewsArticles = await fetchSymbolNews(signal.symbol, 10);
-                        } catch {
-                          symbolNewsArticles = [];
-                        }
-                        const event = earningsBySymbol.get(signal.symbol.toUpperCase());
-                        const today = new Date().toISOString().slice(0, 10);
-                        const daysUntil =
-                          event != null
-                            ? Math.floor((Date.parse(`${event.report_date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000)
-                            : undefined;
-                        const base = buildEvidenceFromSetup(signal, snapshot, {
-                          symbolNewsArticles,
-                          earningsRiskDays: typeof daysUntil === "number" ? daysUntil : undefined,
-                          earningsReportTime: event?.report_time
-                        });
-                        setEvidence(await enrichEvidenceWithRealComposite(base));
-                        setEvidenceOpen(true);
-                      }}
-                      style={{
-                        border: `1px solid ${colors.border}`,
-                        borderRadius: borderRadius.md,
-                        background: "transparent",
-                        color: colors.text,
-                        padding: `${spacing[2]} ${spacing[3]}`,
-                        cursor: "pointer",
-                        whiteSpace: "nowrap",
-                        justifySelf: "start"
-                      }}
-                    >
-                      View Evidence
-                    </button>
-                    <div style={{ position: "absolute", right: spacing[3], bottom: spacing[3] }}>
-                      <SignalDisclaimerChip />
                     </div>
                   </motion.article>
                 ))
               )}
             </div>
-          </section>
+          </article>
           <EarningsCalendar
             className="order-5 lg:col-start-1 lg:row-start-3"
             events={earningsEvents}
@@ -370,14 +452,12 @@ export function DashboardRedesign({
           />
 
           <article
-            className={`order-3 flex min-h-0 flex-col lg:col-start-2 lg:row-start-2 ${surfaceGlowClassName}`}
+            className={`order-3 flex h-full min-h-[260px] flex-col overflow-hidden lg:col-start-2 lg:row-start-2 ${surfaceGlowClassName}`}
             style={{
               background: colors.surface,
               border: `1px solid ${colors.border}`,
               borderRadius: borderRadius.xl,
-              padding: spacing[4],
-              height: 420,
-              maxHeight: 420
+              padding: spacing[4]
             }}
           >
             <div

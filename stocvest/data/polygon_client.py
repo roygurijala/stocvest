@@ -550,6 +550,25 @@ class PolygonClient:
     # REST — News
     # ──────────────────────────────────────────────────────────────────────────
 
+    @staticmethod
+    def _news_row_matches_requested_tickers(row: dict, requested_upper: list[str]) -> bool:
+        """
+        When callers pass explicit tickers, keep only rows whose ``tickers`` list
+        intersects that set. Benzinga websocket replay often ignores query ``tickers``;
+        Polygon can occasionally return mis-tagged rows — this is defense-in-depth
+        so composite/news sentiment never scores unrelated symbols.
+        """
+        if not requested_upper:
+            return True
+        req = {str(t).strip().upper() for t in requested_upper if str(t).strip()}
+        if not req:
+            return True
+        raw = row.get("tickers")
+        if not isinstance(raw, list):
+            return False
+        row_syms = {str(t).strip().upper() for t in raw if t is not None and str(t).strip()}
+        return bool(row_syms & req)
+
     async def get_market_news(
         self,
         *,
@@ -568,11 +587,10 @@ class PolygonClient:
                 limit=limit,
                 published_utc_gte=published_utc_gte,
             )
+        ticker_filter = [str(t).strip().upper() for t in (tickers or []) if str(t).strip()]
         params: dict[str, str] = {"limit": str(limit), "order": order}
-        if tickers:
-            clean = [str(t).strip().upper() for t in tickers if str(t).strip()]
-            if clean:
-                params["ticker.any_of"] = ",".join(clean)
+        if ticker_filter:
+            params["ticker.any_of"] = ",".join(ticker_filter)
         if published_utc_gte is not None:
             params["published_utc.gte"] = (
                 published_utc_gte.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -588,6 +606,10 @@ class PolygonClient:
                 if len(rows_out) >= limit:
                     break
                 if isinstance(row, dict):
+                    if ticker_filter and not PolygonClient._news_row_matches_requested_tickers(
+                        row, ticker_filter
+                    ):
+                        continue
                     row.setdefault("source", "polygon")
                     rows_out.append(row)
             next_url = data.get("next_url") if isinstance(data, dict) else None
@@ -640,6 +662,8 @@ class PolygonClient:
                         row = PolygonClient._parse_benzinga_ws_news_row(msg)
                         if row is None:
                             continue
+                        if clean and not PolygonClient._news_row_matches_requested_tickers(row, clean):
+                            continue
                         aid = str(row.get("id") or "").strip()
                         if aid and aid in seen_ids:
                             continue
@@ -671,11 +695,10 @@ class PolygonClient:
         published_utc_gte: datetime | None = None,
     ) -> list[dict]:
         """Force Polygon REST news path (used as a fallback from Benzinga websocket)."""
+        ticker_filter = [str(t).strip().upper() for t in (tickers or []) if str(t).strip()]
         params: dict[str, str] = {"limit": str(limit), "order": order}
-        if tickers:
-            clean = [str(t).strip().upper() for t in tickers if str(t).strip()]
-            if clean:
-                params["ticker.any_of"] = ",".join(clean)
+        if ticker_filter:
+            params["ticker.any_of"] = ",".join(ticker_filter)
         if published_utc_gte is not None:
             params["published_utc.gte"] = (
                 published_utc_gte.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -691,6 +714,10 @@ class PolygonClient:
                 if len(rows_out) >= limit:
                     break
                 if isinstance(row, dict):
+                    if ticker_filter and not PolygonClient._news_row_matches_requested_tickers(
+                        row, ticker_filter
+                    ):
+                        continue
                     row.setdefault("source", "polygon")
                     rows_out.append(row)
             next_url = data.get("next_url") if isinstance(data, dict) else None

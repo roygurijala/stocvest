@@ -2,13 +2,28 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any, Protocol
 
 from stocvest.config.sector_etf_defaults import DEFAULT_SECTOR_TO_ETF
 from stocvest.config.signal_parameters import SectorParameters
+from stocvest.utils.logging import get_logger
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
+
+
+def should_persist_sector_dynamo_item(*, etf: str, sector_name: str, sic_code: str) -> bool:
+    """
+    Skip Dynamo when SPY is only a guess: no SIC from Polygon → ``default`` bucket.
+
+    Persist SPY when SIC is present but unmapped (explicit broad-market fallback).
+    Always persist non-SPY sector ETFs.
+    """
+    etf_u = (etf or "").strip().upper()
+    if etf_u != "SPY":
+        return True
+    if (sector_name or "").strip().lower() == "default" and not (sic_code or "").strip():
+        return False
+    return True
 
 # US OSHA SIC manual (SEC filing codes). Stable reference taxonomy.
 SIC_TO_SECTOR: dict[str, str] = {
@@ -149,7 +164,40 @@ class SupportsSectorCache(Protocol):
 class SectorMapper:
     """symbol → (etf_ticker, display_name) using memory → optional cache → Polygon."""
 
-    _memory_cache: dict[str, tuple[str, str]] = {}
+    _memory_cache: dict[str, tuple[str, str, str]] = {}
+
+    @staticmethod
+    def _log_sector_resolution(
+        *,
+        symbol: str,
+        etf: str,
+        display_name: str,
+        source: str,
+        sic_code: str | None = None,
+        sector_bucket: str | None = None,
+        persist_dynamo: bool | None = None,
+        extra: str | None = None,
+    ) -> None:
+        parts = [
+            "sector_etf_resolution",
+            f"symbol={symbol}",
+            f"etf={etf}",
+            f"display={display_name}",
+            f"source={source}",
+        ]
+        if sic_code is not None:
+            parts.append(f"sic={sic_code if sic_code else '(empty)'}")
+        if sector_bucket is not None:
+            parts.append(f"bucket={sector_bucket}")
+        if persist_dynamo is not None:
+            parts.append(f"persist_dynamo={persist_dynamo}")
+        if extra:
+            parts.append(extra)
+        line = " ".join(parts)
+        if source == "memory_cache":
+            log.debug(line)
+        else:
+            log.info(line)
 
     @classmethod
     def clear_memory_cache(cls) -> None:
@@ -162,13 +210,26 @@ class SectorMapper:
         polygon_client: Any,
         sector_cache: SupportsSectorCache | None = None,
         sector_params: SectorParameters | None = None,
-    ) -> tuple[str, str]:
+    ) -> tuple[str, str, str]:
+        """
+        Returns ``(sector_etf, display_name, sic_bucket)`` for ETF routing and geo sector weights.
+        """
         sym = symbol.upper().strip()
         if not sym:
-            return "SPY", ETF_DISPLAY_NAMES["SPY"]
+            cls._log_sector_resolution(
+                symbol="(empty)",
+                etf="SPY",
+                display_name=ETF_DISPLAY_NAMES["SPY"],
+                source="empty_symbol_fallback",
+            )
+            return "SPY", ETF_DISPLAY_NAMES["SPY"], "default"
 
         if sym in cls._memory_cache:
-            return cls._memory_cache[sym]
+            etf, dn, bucket = cls._memory_cache[sym]
+            cls._log_sector_resolution(
+                symbol=sym, etf=etf, display_name=dn, source="memory_cache", sector_bucket=bucket
+            )
+            return etf, dn, bucket
 
         if sector_cache is not None:
             try:
@@ -176,11 +237,21 @@ class SectorMapper:
                 if cached and cached.get("sector_etf"):
                     etf = str(cached["sector_etf"])
                     dn = cached.get("display_name") or ETF_DISPLAY_NAMES.get(etf, etf)
-                    result = (etf, str(dn))
+                    bucket_cached = str(cached.get("sector_name") or "").strip() or "default"
+                    result = (etf, str(dn), bucket_cached)
                     cls._memory_cache[sym] = result
+                    sic_cached = str(cached.get("sic_code") or "").strip() or None
+                    cls._log_sector_resolution(
+                        symbol=sym,
+                        etf=etf,
+                        display_name=str(dn),
+                        source="dynamo_cache",
+                        sic_code=sic_cached,
+                        sector_bucket=bucket_cached,
+                    )
                     return result
             except Exception as exc:
-                log.warning("Sector cache read %s: %s", sym, exc)
+                log.warning("Sector cache read failed symbol=%s err=%s", sym, exc)
 
         mapping = dict(sector_params.sector_to_etf) if sector_params else dict(DEFAULT_SECTOR_TO_ETF)
 
@@ -193,10 +264,23 @@ class SectorMapper:
             sector_name = SIC_TO_SECTOR.get(sic_code, "default")
             etf = mapping.get(sector_name, mapping.get("default", "SPY"))
             display = str(ETF_DISPLAY_NAMES.get(etf, etf))
-            result = (etf, display)
+            result = (etf, display, sector_name)
             cls._memory_cache[sym] = result
 
-            if sector_cache is not None:
+            persist = should_persist_sector_dynamo_item(
+                etf=etf, sector_name=sector_name, sic_code=sic_code
+            )
+            cls._log_sector_resolution(
+                symbol=sym,
+                etf=etf,
+                display_name=display,
+                source="polygon_sic",
+                sic_code=sic_code,
+                sector_bucket=sector_name,
+                persist_dynamo=persist,
+            )
+
+            if sector_cache is not None and persist:
                 try:
                     await sector_cache.save_sector_cache(
                         symbol=sym,
@@ -207,9 +291,13 @@ class SectorMapper:
                         ttl_days=30,
                     )
                 except Exception as exc:
-                    log.warning("Sector cache write %s: %s", sym, exc)
+                    log.warning("Sector cache write failed symbol=%s err=%s", sym, exc)
 
             return result
         except Exception as exc:
-            log.warning("Sector lookup failed %s: %s", sym, exc)
-            return "SPY", ETF_DISPLAY_NAMES["SPY"]
+            log.warning(
+                "sector_etf_resolution symbol=%s etf=SPY source=polygon_error_fallback err=%s",
+                sym,
+                exc,
+            )
+            return "SPY", ETF_DISPLAY_NAMES["SPY"], "default"

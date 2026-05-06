@@ -27,5 +27,18 @@ def test_rr_quality_bands_correct() -> None:
 
 def test_rr_warning_false_when_above_2() -> None:
     comp = CompositeScoreEngine().compute([LayerSignal("technical", 0.9, 1.0)], regime="sideways")
-    out = build_swing_composite_evidence_fields(composite=comp, regime="sideways", payload={}, confluence=None, snapshot={"last_trade_price": 100.0, "day_high": 102.0, "day_low": 98.0, "day_vwap": 100.0})
+    out = build_swing_composite_evidence_fields(
+        composite=comp,
+        regime="sideways",
+        payload={},
+        confluence=None,
+        snapshot={
+            "last_trade_price": 100.0,
+            "day_high": 106.0,
+            "day_low": 99.0,
+            "day_vwap": 99.5,
+        },
+    )
     assert isinstance(out["rr_warning"], bool)
+    assert out["risk_reward"] >= 2.0
+    assert out["rr_warning"] is False

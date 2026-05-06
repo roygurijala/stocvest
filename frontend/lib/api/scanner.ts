@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api/client";
+import type { NewsPayload } from "@/lib/api/market";
 import type { PDTStatusPayload } from "@/lib/api/pdt";
 import { fetchDefaultWatchlistSymbols } from "@/lib/api/watchlists";
 
@@ -49,6 +50,49 @@ export interface ConfluenceSignalChip {
   detail?: string;
 }
 
+/** Headlines forwarded to day/setups for per-symbol geo preview (same window as Market Intelligence). */
+export type GeoScanArticleInput = {
+  title: string;
+  description: string;
+  published_utc: string;
+};
+
+export function geoScanArticlesFromMarketNews(articles: NewsPayload[] | undefined | null): GeoScanArticleInput[] {
+  if (!articles?.length) return [];
+  const out: GeoScanArticleInput[] = [];
+  for (const a of articles.slice(0, 24)) {
+    const title = (a.title ?? "").trim();
+    const desc = (a.description ?? "").trim();
+    if (!title && !desc) continue;
+    out.push({
+      title,
+      description: desc,
+      published_utc: (a.published_utc ?? a.published_at ?? "").trim()
+    });
+  }
+  return out;
+}
+
+/**
+ * Percent shown on setup rows: **confluence** (0–100) when the API attached it, else intraday **pattern**
+ * score from price/volume triggers. Pattern scores often cluster at the scanner gateway (e.g. 0.55 → 55%).
+ */
+export function topSignalStrengthPercent(setup: IntradaySetupPayload): number {
+  if (typeof setup.confluence_score === "number" && Number.isFinite(setup.confluence_score)) {
+    return Math.max(0, Math.min(100, Math.round(setup.confluence_score)));
+  }
+  const raw = typeof setup.score === "number" && Number.isFinite(setup.score) ? setup.score : 0;
+  return Math.max(0, Math.min(100, Math.round(raw * 100)));
+}
+
+export interface IntradayGeoPreview {
+  impact_sector_key: string;
+  impact_sector_label: string;
+  exposure_band: string;
+  weighted_score: number | null;
+  summary: string | null;
+}
+
 export interface IntradaySetupPayload {
   symbol: string;
   direction: string;
@@ -69,6 +113,8 @@ export interface IntradaySetupPayload {
   n_conflicting?: number;
   historical_note?: string;
   confluence_disclaimer?: string;
+  /** Present when day/setups received `geo_scan_articles` (e.g. dashboard Market Intelligence feed). */
+  geo_preview?: IntradayGeoPreview | null;
 }
 
 export interface MorningBriefPayload {
@@ -152,6 +198,10 @@ export type ScannerLoadTuning = {
   parallelDefaultWatchlist?: boolean;
   /** Max setups returned by `POST /v1/signals/day/setups` (default 10). Lower = less compute and smaller payload. */
   daySetupsLimit?: number;
+};
+
+export type DaySetupsRequestExtras = {
+  geoScanArticles?: GeoScanArticleInput[];
 };
 
 const BARS_BATCH_MAX = 24;
@@ -253,7 +303,8 @@ async function fetchBarsMatrix(
 export async function loadScannerDataWithoutBrief(
   _pdtStatus: PDTStatusPayload | null,
   watchlistSymbols: string[] = [],
-  tuning: ScannerLoadTuning | null = null
+  tuning: ScannerLoadTuning | null = null,
+  daySetupsExtras: DaySetupsRequestExtras | null = null
 ): Promise<ScannerCoreData> {
   try {
     const gapIntelPromise = apiFetch<{ items: GapIntelligenceItem[]; disclaimer?: string }>(
@@ -352,16 +403,20 @@ export async function loadScannerDataWithoutBrief(
     });
 
     const setupsLimit = tuning?.daySetupsLimit ?? 10;
+    const daySetupsBody: Record<string, unknown> = {
+      bars_by_symbol: cleanBarsBySymbol,
+      limit: setupsLimit,
+      min_score: 0.55,
+      liquidity_by_symbol: liquidity_by_symbol,
+      snapshots_by_symbol,
+      regime: regimeForSetups
+    };
+    if (daySetupsExtras?.geoScanArticles?.length) {
+      daySetupsBody.geo_scan_articles = daySetupsExtras.geoScanArticles;
+    }
     const setups = await apiFetch<IntradaySetupPayload[]>("/v1/signals/day/setups", {
       method: "POST",
-      body: JSON.stringify({
-        bars_by_symbol: cleanBarsBySymbol,
-        limit: setupsLimit,
-        min_score: 0.55,
-        liquidity_by_symbol: liquidity_by_symbol,
-        snapshots_by_symbol,
-        regime: regimeForSetups
-      })
+      body: JSON.stringify(daySetupsBody)
     });
     if (setups == null) {
       return {

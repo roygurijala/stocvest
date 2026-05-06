@@ -337,6 +337,58 @@ def test_news_handler_includes_relevance_enrichment() -> None:
     assert "matches_watchlist" in h
 
 
+class _SymbolScopeNewsClient(_FakePolygonClient):
+    """Simulates a leaky upstream: returns multiple tickers even when scoped."""
+
+    last_news_tickers: list[str] | None = None
+
+    async def get_market_news(
+        self,
+        *,
+        tickers: list[str] | None = None,
+        limit: int = 50,
+        order: str = "desc",
+        published_utc_gte: datetime | None = None,
+    ) -> list[dict]:
+        _ = limit
+        _ = order
+        _ = published_utc_gte
+        self.__class__.last_news_tickers = list(tickers) if tickers else None
+        return [
+            {
+                "id": "coty1",
+                "published_utc": "2026-01-02T12:00:00Z",
+                "title": "COTY quarterly revenue tops estimates",
+                "description": "earnings beat beauty segment",
+                "article_url": "https://e/coty",
+                "publisher": {"name": "Reuters"},
+                "tickers": ["COTY"],
+                "insights": [{"sentiment": "positive"}],
+            },
+            {
+                "id": "pins1",
+                "published_utc": "2026-01-02T12:05:00Z",
+                "title": "PINS user engagement trends",
+                "description": "Pinterest session data",
+                "article_url": "https://e/pins",
+                "publisher": {"name": "Reuters"},
+                "tickers": ["PINS"],
+                "insights": [{"sentiment": "neutral"}],
+            },
+        ]
+
+
+def test_news_handler_symbol_query_only_fetches_and_returns_that_ticker() -> None:
+    event = {"queryStringParameters": {"symbol": "PINS", "limit": "10"}}
+    response = news_handler(event, {}, client_factory=_SymbolScopeNewsClient)
+    assert response["statusCode"] == 200
+    assert _SymbolScopeNewsClient.last_news_tickers == ["PINS"]
+    body = json.loads(response["body"])
+    ids = {h["article_id"] for h in body["headlines"]}
+    assert ids == {"pins1"}
+    assert all("PINS" in h["tickers"] for h in body["headlines"])
+
+
 def test_options_chain_handler_returns_contracts_with_greeks() -> None:
     event = {"queryStringParameters": {"symbol": "aapl", "limit": "10"}}
     response = options_chain_handler(event, {}, client_factory=_FakePolygonClient)

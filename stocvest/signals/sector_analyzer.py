@@ -6,6 +6,9 @@ from dataclasses import dataclass, field
 
 from stocvest.config.signal_parameters import SectorParameters
 from stocvest.data.models import Snapshot
+from stocvest.utils.logging import get_logger
+
+_LOG = get_logger(__name__)
 
 
 def _clamp_i(x: float, lo: int, hi: int) -> int:
@@ -40,7 +43,6 @@ class SectorAnalyzer:
         weekly_sector_pct: float | None = None,
         weekly_spy_pct: float | None = None,
     ) -> SectorLayerResult:
-        _ = symbol
         if sector_etf_snapshot is None or spy_snapshot is None:
             return SectorLayerResult(
                 status="unavailable",
@@ -106,8 +108,35 @@ class SectorAnalyzer:
             verdict = "neutral"
 
         etf = sector_etf_snapshot.symbol
+        etf_u = (etf or "").strip().upper()
         period = "5d" if use_weekly else "1d"
-        chips = [f"{etf} {sector_pct:+.2f}% ({period})", f"vs SPY {relative:+.2f}%"]
+
+        if etf_u == "SPY":
+            chips = [
+                f"Broad market (SPY) {sector_pct:+.2f}% ({period}) — no separate sector ETF",
+            ]
+            reasoning = (
+                f"Sector layer uses SPY as the benchmark (no distinct sector index). "
+                f"SPY {sector_pct:+.2f}% vs SPY leg {spy_pct:+.2f}% ({period}); spread {relative:+.2f}% "
+                f"(near zero when both snapshots are SPY) → score {final}."
+            )
+            _LOG.info(
+                "sector_layer_spy_proxy symbol=%s day_pct=%.4f spy_leg_pct=%.4f spread=%.4f score=%s",
+                (symbol or "").strip().upper() or "?",
+                sector_pct,
+                spy_pct,
+                relative,
+                final,
+            )
+        else:
+            chips = [
+                f"{etf} {sector_pct:+.2f}% ({period})",
+                f"Rel. vs SPY: {relative:+.2f}% ({period})",
+            ]
+            reasoning = (
+                f"Sector {etf} {sector_pct:+.2f}% vs SPY {spy_pct:+.2f}% "
+                f"({period} rel {relative:+.2f}%) → score {final}."
+            )
 
         return SectorLayerResult(
             status="available",
@@ -119,9 +148,6 @@ class SectorAnalyzer:
             spy_day_pct=spy_pct,
             relative_strength=relative,
             sector_signal=sector_signal,
-            reasoning=(
-                f"Sector {etf} {sector_pct:+.2f}% vs SPY {spy_pct:+.2f}% "
-                f"({period} rel {relative:+.2f}%) → score {final}."
-            ),
+            reasoning=reasoning,
             chips=chips,
         )

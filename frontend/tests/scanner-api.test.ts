@@ -129,3 +129,32 @@ describe("scanner API overview", () => {
     expect(result.gapIntelligence).toHaveLength(0);
   }, 25000);
 });
+
+describe("topSignalStrengthPercent", () => {
+  test("prefers confluence over pattern score", async () => {
+    const { topSignalStrengthPercent } = await import("@/lib/api/scanner");
+    expect(
+      topSignalStrengthPercent({
+        symbol: "AAPL",
+        direction: "long",
+        score: 0.55,
+        triggers: [],
+        timestamp_iso: "",
+        confluence_score: 72
+      })
+    ).toBe(72);
+  });
+
+  test("falls back to pattern score when confluence is absent", async () => {
+    const { topSignalStrengthPercent } = await import("@/lib/api/scanner");
+    expect(
+      topSignalStrengthPercent({
+        symbol: "NVDA",
+        direction: "short",
+        score: 0.55,
+        triggers: [],
+        timestamp_iso: ""
+      })
+    ).toBe(55);
+  });
+});

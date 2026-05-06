@@ -5,6 +5,24 @@ import { coerceSnapshotForReferenceLevels } from "@/lib/snapshot-reference-level
 export type EvidenceDirection = "bullish" | "bearish" | "neutral";
 export type EvidenceStatus = "Bullish" | "Bearish" | "Neutral" | "Unavailable";
 
+/** Per-theme sector multiplier row from composite `layers[].geo_event_details`. */
+export interface GeoEventDetailRow {
+  event_type: string;
+  score: number;
+  sector_multiplier: number | null;
+}
+
+/** Structured geopolitical exposure (real/swing composite) for the evidence card. */
+export interface GeopoliticalLayerExtras {
+  impactSectorKey: string;
+  impactSectorLabel: string;
+  stockExposureScore: number | null;
+  exposureBand: "low" | "moderate" | "high" | null;
+  exposureSummary: string | null;
+  activeEvents: Array<{ event_type: string; score: number }>;
+  eventDetails: GeoEventDetailRow[];
+}
+
 export interface EvidenceLayer {
   key: string;
   icon: string;
@@ -15,6 +33,8 @@ export interface EvidenceLayer {
   keyPoints: string[];
   contributionScore: number;
   freshnessLabel: string;
+  /** Present when API returns geo sector mapping + themes (geopolitical layer only). */
+  geo?: GeopoliticalLayerExtras;
 }
 
 export interface SignalEvidenceConfluence {
@@ -72,6 +92,9 @@ export interface SignalEvidenceData {
     orHigh?: number | null;
     orLow?: number | null;
   };
+  /** Snapshot last when `buildEvidenceFromSetup` had a quote; aligns client R/R with swing composite geometry. */
+  lastTradePrice?: number | null;
+  prevClose?: number | null;
   updatedLabel: string;
   newsFreshnessLabel: string;
   /** ISO string used for `updatedLabel`; lets the card clamp invalid or very stale timestamps. */
@@ -346,7 +369,13 @@ export function buildEvidenceFromSetup(
 
   const direction = evidenceDirectionFromSetup(setup.direction);
   const directionBadgeLabel = directionBadgeFromSetup(setup.direction);
-  const confidencePercent = clamp(Math.round(setup.score * 100), 0, 100);
+  const confidencePercent = clamp(
+    typeof setup.confluence_score === "number" && Number.isFinite(setup.confluence_score)
+      ? Math.round(setup.confluence_score)
+      : Math.round(setup.score * 100),
+    0,
+    100
+  );
   const last = snap?.last_trade_price ?? null;
   const dayVwap = snap?.day_vwap;
   const prev = snap?.prev_close ?? last;
@@ -470,6 +499,10 @@ export function buildEvidenceFromSetup(
         }
       : null;
 
+  const prevCloseRaw = snap?.prev_close;
+  const prevClose =
+    typeof prevCloseRaw === "number" && Number.isFinite(prevCloseRaw) && prevCloseRaw > 0 ? prevCloseRaw : null;
+
   return {
     symbol: setup.symbol,
     direction,
@@ -477,6 +510,8 @@ export function buildEvidenceFromSetup(
     confidencePercent,
     layers,
     confluence,
+    lastTradePrice: typeof last === "number" && Number.isFinite(last) && last > 0 ? last : null,
+    prevClose,
     aiVerdict:
       direction === "bullish"
         ? "Strong technical pattern with supportive internals; geopolitical noise is the main risk to continuation."
@@ -523,6 +558,72 @@ function numOrNull(v: unknown): number | null {
     return Number.isFinite(n) ? n : null;
   }
   return null;
+}
+
+function parseGeoEventDetailRows(raw: unknown): GeoEventDetailRow[] {
+  if (!Array.isArray(raw)) return [];
+  const out: GeoEventDetailRow[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const o = item as Record<string, unknown>;
+    const et = String(o.event_type ?? "").trim();
+    const sc = numOrNull(o.score);
+    if (!et || sc == null) continue;
+    const mult =
+      o.sector_multiplier === null || o.sector_multiplier === undefined ? null : numOrNull(o.sector_multiplier);
+    out.push({ event_type: et, score: sc, sector_multiplier: mult });
+  }
+  return out;
+}
+
+function formatGeoSectorLabel(key: string): string {
+  const k = (key || "").trim();
+  if (!k || k === "default") return "Sector unknown";
+  return k.replace(/_/g, " ").replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
+
+/** Parse composite `layers[]` row for geopolitical into card extras. */
+export function extractGeopoliticalLayerExtras(match: Record<string, unknown>): GeopoliticalLayerExtras | undefined {
+  const ik = String(match.geo_impact_sector_key ?? "").trim();
+  const details = parseGeoEventDetailRows(match.geo_event_details);
+  const summaryRaw = match.geo_exposure_summary;
+  const exposureSummary = typeof summaryRaw === "string" && summaryRaw.trim() ? summaryRaw.trim() : null;
+  const stockExposureScore = numOrNull(match.geo_stock_exposure_score);
+  const bandRaw = String(match.geo_exposure_band ?? "").trim().toLowerCase();
+  const exposureBand =
+    bandRaw === "low" || bandRaw === "moderate" || bandRaw === "high" ? (bandRaw as "low" | "moderate" | "high") : null;
+  const activeEvents: Array<{ event_type: string; score: number }> = [];
+  const rawEv = match.geo_active_events;
+  if (Array.isArray(rawEv)) {
+    for (const e of rawEv) {
+      if (!e || typeof e !== "object") continue;
+      const o = e as Record<string, unknown>;
+      const et = String(o.event_type ?? "").trim();
+      const sc = numOrNull(o.score);
+      if (et && sc != null) activeEvents.push({ event_type: et, score: sc });
+    }
+  }
+  const eventDetails: GeoEventDetailRow[] =
+    details.length > 0
+      ? details
+      : activeEvents.map((e) => ({ event_type: e.event_type, score: e.score, sector_multiplier: null }));
+  const hasSomething =
+    ik.length > 0 ||
+    exposureSummary != null ||
+    stockExposureScore != null ||
+    activeEvents.length > 0 ||
+    eventDetails.length > 0 ||
+    exposureBand != null;
+  if (!hasSomething) return undefined;
+  return {
+    impactSectorKey: ik,
+    impactSectorLabel: formatGeoSectorLabel(ik || "default"),
+    stockExposureScore,
+    exposureBand,
+    exposureSummary,
+    activeEvents,
+    eventDetails
+  };
 }
 
 /** Map composite JSON to 0–100 for insight; supports `signal_score`, `signal_strength` (0–1), or `score` (−1..1). */
@@ -639,6 +740,186 @@ function catalystsFromCompositeBody(body: Record<string, unknown>): ParsedCataly
 /**
  * Parse swing-composite POST JSON into a structured insight. Returns null if core fields are missing.
  */
+function roundPrice4(n: number): number {
+  return Math.round(n * 10000) / 10000;
+}
+
+function longSideGeometry(opts: {
+  dayLo: number | null;
+  dayHi: number | null;
+  vwap: number | null;
+  prevClose: number | null;
+  last: number | null;
+}): { stop: number | null; target1: number | null; target2: number | null } {
+  const { dayLo, dayHi, vwap, prevClose, last } = opts;
+  let reference_stop: number | null = null;
+  if (dayLo != null && dayLo > 0 && vwap != null && vwap > 0) {
+    reference_stop = roundPrice4(Math.min(dayLo, vwap) * 0.998);
+  } else if (dayLo != null && dayLo > 0) {
+    reference_stop = roundPrice4(dayLo * 0.995);
+  } else if (vwap != null && vwap > 0) {
+    reference_stop = roundPrice4(vwap * 0.995);
+  } else if (prevClose != null && prevClose > 0) {
+    reference_stop = roundPrice4(prevClose * 0.99);
+  } else if (last != null && last > 0) {
+    reference_stop = roundPrice4(last * 0.98);
+  }
+
+  let reference_target_1: number | null = null;
+  if (dayHi != null && dayHi > 0) {
+    reference_target_1 = roundPrice4(dayHi);
+  } else if (last != null && last > 0) {
+    reference_target_1 = roundPrice4(last * 1.012);
+  }
+
+  let reference_target_2: number | null = null;
+  const entryGuess = last != null && last > 0 ? last : null;
+  if (reference_target_1 != null && reference_stop != null && entryGuess != null && entryGuess > reference_stop) {
+    const t2R = entryGuess + 2.0 * (entryGuess - reference_stop);
+    if (t2R > reference_target_1 + 1e-6) {
+      reference_target_2 = roundPrice4(t2R);
+    }
+  }
+  if (reference_target_2 == null && reference_target_1 != null && last != null && last > 0) {
+    reference_target_2 = roundPrice4(reference_target_1 * 1.004);
+  }
+  return { stop: reference_stop, target1: reference_target_1, target2: reference_target_2 };
+}
+
+function shortSideGeometry(opts: {
+  dayLo: number | null;
+  dayHi: number | null;
+  vwap: number | null;
+  prevClose: number | null;
+  last: number | null;
+}): { stop: number | null; target1: number | null; target2: number | null } {
+  const { dayLo, dayHi, vwap, prevClose, last } = opts;
+  let reference_stop: number | null = null;
+  if (dayHi != null && dayHi > 0 && vwap != null && vwap > 0) {
+    reference_stop = roundPrice4(Math.max(dayHi, vwap) * 1.002);
+  } else if (dayHi != null && dayHi > 0) {
+    reference_stop = roundPrice4(dayHi * 1.005);
+  } else if (vwap != null && vwap > 0) {
+    reference_stop = roundPrice4(vwap * 1.005);
+  } else if (prevClose != null && prevClose > 0) {
+    reference_stop = roundPrice4(prevClose * 1.01);
+  } else if (last != null && last > 0) {
+    reference_stop = roundPrice4(last * 1.02);
+  }
+
+  let reference_target_1: number | null = null;
+  if (dayLo != null && dayLo > 0) {
+    reference_target_1 = roundPrice4(dayLo);
+  } else if (last != null && last > 0) {
+    reference_target_1 = roundPrice4(last * 0.988);
+  }
+
+  let reference_target_2: number | null = null;
+  const entryGuess = last != null && last > 0 ? last : null;
+  if (reference_target_1 != null && reference_stop != null && entryGuess != null && reference_stop > entryGuess) {
+    const t2R = entryGuess - 2.0 * (reference_stop - entryGuess);
+    if (t2R < reference_target_1 - 1e-6) {
+      reference_target_2 = roundPrice4(t2R);
+    }
+  }
+  if (reference_target_2 == null && reference_target_1 != null && last != null && last > 0) {
+    reference_target_2 = roundPrice4(reference_target_1 * 0.996);
+  }
+  return { stop: reference_stop, target1: reference_target_1, target2: reference_target_2 };
+}
+
+function useLongRrStructure(
+  direction: EvidenceDirection,
+  dayLo: number | null,
+  dayHi: number | null,
+  last: number | null
+): boolean {
+  if (direction === "bullish") return true;
+  if (direction === "bearish") return false;
+  if (dayLo != null && dayHi != null && dayHi > dayLo && last != null && last > 0) {
+    const mid = (dayLo + dayHi) / 2;
+    return last >= mid;
+  }
+  return true;
+}
+
+function entryPriceForRr(last: number | null, zoneLo: number | null, zoneHi: number | null): number | null {
+  if (last != null && last > 0) return last;
+  if (zoneLo != null && zoneHi != null && zoneHi > zoneLo) return (zoneLo + zoneHi) / 2;
+  return null;
+}
+
+function rrFromLevelsLong(entry: number, target: number, stop: number): number | null {
+  const risk = entry - stop;
+  const reward = target - entry;
+  if (risk <= 1e-6 || reward <= 1e-6) return null;
+  return reward / risk;
+}
+
+function rrFromLevelsShort(entry: number, target: number, stop: number): number | null {
+  const risk = stop - entry;
+  const reward = entry - target;
+  if (risk <= 1e-6 || reward <= 1e-6) return null;
+  return reward / risk;
+}
+
+function syntheticRrFromConfidence(confidencePercent: number): number {
+  const conf = clamp(confidencePercent, 0, 100) / 100;
+  return Math.round(Math.min(3.5, Math.max(1.0, 1.15 + conf * 1.55)) * 10) / 10;
+}
+
+function rrQualityFromValue(riskReward: number): "low" | "acceptable" | "good" | "strong" {
+  if (riskReward < 2.0) return "low";
+  if (riskReward < 3.0) return "acceptable";
+  if (riskReward < 5.0) return "good";
+  return "strong";
+}
+
+export interface SessionReferenceLevelsInput {
+  direction: EvidenceDirection;
+  support?: number | null;
+  resistance?: number | null;
+  vwap?: number | null;
+  lastTradePrice?: number | null;
+  prevClose?: number | null;
+}
+
+/**
+ * Reference stop / targets from session structure (VWAP + session high/low), matching
+ * `swing_composite_evidence._long_side_geometry` / `_short_side_geometry` — not fixed % off support/resistance alone.
+ */
+export function referenceLevelsFromSessionStructure(
+  input: SessionReferenceLevelsInput
+): {
+  reference_stop_level: number | null;
+  reference_target_1: number | null;
+  reference_target_2: number | null;
+} {
+  const dayLo =
+    typeof input.support === "number" && Number.isFinite(input.support) && input.support > 0 ? input.support : null;
+  const dayHi =
+    typeof input.resistance === "number" && Number.isFinite(input.resistance) && input.resistance > 0
+      ? input.resistance
+      : null;
+  const vwap = typeof input.vwap === "number" && Number.isFinite(input.vwap) && input.vwap > 0 ? input.vwap : null;
+  const last =
+    typeof input.lastTradePrice === "number" && Number.isFinite(input.lastTradePrice) && input.lastTradePrice > 0
+      ? input.lastTradePrice
+      : null;
+  const prevClose =
+    typeof input.prevClose === "number" && Number.isFinite(input.prevClose) && input.prevClose > 0 ? input.prevClose : null;
+
+  const useLong = useLongRrStructure(input.direction, dayLo, dayHi, last);
+  const g = useLong
+    ? longSideGeometry({ dayLo, dayHi, vwap, prevClose, last })
+    : shortSideGeometry({ dayLo, dayHi, vwap, prevClose, last });
+  return {
+    reference_stop_level: g.stop,
+    reference_target_1: g.target1,
+    reference_target_2: g.target2
+  };
+}
+
 export function parseSwingCompositeInsight(body: Record<string, unknown>): SignalEvidenceInsight | null {
   const signal_score = compositeSignalScoreFromBody(body);
   if (signal_score == null) return null;
@@ -714,27 +995,57 @@ export function deriveEvidenceInsightFallback(evidence: SignalEvidenceData): Sig
   const trend_direction =
     evidence.direction === "bullish" ? "Uptrend" : evidence.direction === "bearish" ? "Downtrend" : "Sideways";
   const { support, resistance, vwap } = evidence.keyLevels;
-  const mid =
-    typeof support === "number" && typeof resistance === "number"
-      ? (support + resistance) / 2
-      : typeof vwap === "number"
-        ? vwap
-        : 100;
-  let risk_reward = 1.8;
+  const last =
+    typeof evidence.lastTradePrice === "number" && Number.isFinite(evidence.lastTradePrice) && evidence.lastTradePrice > 0
+      ? evidence.lastTradePrice
+      : null;
+  const prevClose =
+    typeof evidence.prevClose === "number" && Number.isFinite(evidence.prevClose) && evidence.prevClose > 0
+      ? evidence.prevClose
+      : null;
+
+  const historical_entry_zone =
+    typeof support === "number" && typeof resistance === "number" && resistance > support
+      ? { low: Math.round(support * 10000) / 10000, high: Math.round(resistance * 10000) / 10000 }
+      : typeof vwap === "number" && vwap > 0
+        ? { low: Math.round(vwap * 0.99 * 10000) / 10000, high: Math.round(vwap * 1.01 * 10000) / 10000 }
+        : null;
+
+  const { reference_stop_level, reference_target_1, reference_target_2 } = referenceLevelsFromSessionStructure({
+    direction: evidence.direction,
+    support,
+    resistance,
+    vwap,
+    lastTradePrice: last ?? undefined,
+    prevClose: prevClose ?? undefined
+  });
+
+  const zoneLo = historical_entry_zone?.low ?? null;
+  const zoneHi = historical_entry_zone?.high ?? null;
+  const dayLo = typeof support === "number" && Number.isFinite(support) && support > 0 ? support : null;
+  const dayHi = typeof resistance === "number" && Number.isFinite(resistance) && resistance > 0 ? resistance : null;
+  const entry = entryPriceForRr(last, zoneLo, zoneHi);
+  const useLong = useLongRrStructure(evidence.direction, dayLo, dayHi, last);
+  let rrFromStructure: number | null = null;
   if (
-    typeof support === "number" &&
-    typeof resistance === "number" &&
-    resistance > support &&
-    mid > support &&
-    mid < resistance
+    entry != null &&
+    reference_stop_level != null &&
+    reference_target_1 != null &&
+    Number.isFinite(entry) &&
+    Number.isFinite(reference_stop_level) &&
+    Number.isFinite(reference_target_1)
   ) {
-    if (evidence.direction === "bullish") {
-      risk_reward = (resistance - mid) / Math.max(0.01, mid - support);
-    } else if (evidence.direction === "bearish") {
-      risk_reward = (mid - support) / Math.max(0.01, resistance - mid);
-    }
+    rrFromStructure = useLong
+      ? rrFromLevelsLong(entry, reference_target_1, reference_stop_level)
+      : rrFromLevelsShort(entry, reference_target_1, reference_stop_level);
   }
-  risk_reward = Math.round(clamp(risk_reward, 0.8, 3.5) * 10) / 10;
+  const risk_reward =
+    rrFromStructure != null
+      ? Math.round(Math.min(10.0, Math.max(0.5, rrFromStructure)) * 10) / 10
+      : syntheticRrFromConfidence(evidence.confidencePercent);
+  const rr_warning = risk_reward < 2.0;
+  const rr_quality = rrQualityFromValue(risk_reward);
+
   const macroLayer = evidence.layers.find((l) => l.key === "macro");
   const market_regime =
     macroLayer?.status === "Bullish" ? "Bullish" : macroLayer?.status === "Bearish" ? "Bearish" : "Neutral";
@@ -759,17 +1070,6 @@ export function deriveEvidenceInsightFallback(evidence: SignalEvidenceData): Sig
     risk_factors.push("Neutral read: layers disagree — treat follow-through as unconfirmed.");
   }
   const sym = evidence.symbol.trim().toUpperCase() || "SYMBOL";
-  const historical_entry_zone =
-    typeof support === "number" && typeof resistance === "number" && resistance > support
-      ? { low: Math.round(support * 10000) / 10000, high: Math.round(resistance * 10000) / 10000 }
-      : typeof vwap === "number" && vwap > 0
-        ? { low: Math.round(vwap * 0.99 * 10000) / 10000, high: Math.round(vwap * 1.01 * 10000) / 10000 }
-        : null;
-  const reference_target_1 =
-    typeof resistance === "number" ? Math.round(resistance * 1.008 * 10000) / 10000 : null;
-  const reference_target_2 =
-    typeof resistance === "number" ? Math.round(resistance * 1.018 * 10000) / 10000 : null;
-  const reference_stop_level = typeof support === "number" ? Math.round(support * 0.995 * 10000) / 10000 : null;
   const zoneTxt = historical_entry_zone
     ? `$${historical_entry_zone.low.toFixed(2)}–$${historical_entry_zone.high.toFixed(2)}`
     : "the Historical Entry Zone in the reference strip";
@@ -784,6 +1084,8 @@ export function deriveEvidenceInsightFallback(evidence: SignalEvidenceData): Sig
     trend_strength,
     trend_direction,
     risk_reward,
+    rr_warning,
+    rr_quality,
     market_regime,
     confirming_signals,
     conflicting_signals,
@@ -872,32 +1174,35 @@ export function applySwingCompositeEnrichment(
         return layer;
       }
       const apiLayer = evidencePatchFromApiLayer(match);
+      const geo = layer.key === "geopolitical" ? extractGeopoliticalLayerExtras(match) : undefined;
+      const maxChips = layer.key === "geopolitical" ? 6 : 4;
+      const fin = (merged: EvidenceLayer): EvidenceLayer => (geo ? { ...merged, geo } : merged);
       const chips = match.chips;
       if (Array.isArray(chips) && chips.length > 0) {
-        return {
+        return fin({
           ...layer,
           ...apiLayer,
-          keyPoints: chips.map((c) => String(c).trim()).filter(Boolean).slice(0, 4)
-        };
+          keyPoints: chips.map((c) => String(c).trim()).filter(Boolean).slice(0, maxChips)
+        });
       }
       const reasoning = typeof match.reasoning === "string" ? match.reasoning.trim() : "";
       if (reasoning) {
-        const parts = reasoningToKeyPoints(reasoning, 4);
+        const parts = reasoningToKeyPoints(reasoning, maxChips);
         if (parts.length) {
-          return { ...layer, ...apiLayer, keyPoints: parts };
+          return fin({ ...layer, ...apiLayer, keyPoints: parts });
         }
       }
       const contrib = findContributionRow(body, layer.key);
       const contribR = typeof contrib?.reasoning === "string" ? contrib.reasoning.trim() : "";
       if (contribR) {
-        const parts = reasoningToKeyPoints(contribR, 4);
-        if (parts.length) return { ...layer, ...apiLayer, keyPoints: parts };
+        const parts = reasoningToKeyPoints(contribR, maxChips);
+        if (parts.length) return fin({ ...layer, ...apiLayer, keyPoints: parts });
       }
       const synth = synthKeyPointsFromLayerApi(match);
       if (synth.length) {
-        return { ...layer, ...apiLayer, keyPoints: synth };
+        return fin({ ...layer, ...apiLayer, keyPoints: synth });
       }
-      return { ...layer, ...apiLayer };
+      return fin({ ...layer, ...apiLayer });
     });
   }
 

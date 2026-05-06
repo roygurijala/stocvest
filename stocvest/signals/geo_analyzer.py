@@ -8,6 +8,15 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from stocvest.signals.geo_sector_impact import (
+    detect_geo_event_scores,
+    deterministic_geo_exposure_summary,
+    geo_event_details_for_sector,
+    geo_exposure_band,
+    normalize_sector_for_geo,
+    weighted_stock_geo_score,
+)
+
 GEO_HIGH_RISK = (
     "war",
     "invasion",
@@ -54,18 +63,34 @@ class GeoLayerResult:
     risk_score: float = 0.0
     reasoning: str = ""
     chips: list[str] = field(default_factory=list)
+    #: Articles in the scan window whose text matched ``GEO_HIGH_RISK`` keywords (same count as the
+    #: first figure in chip ``H/M/L hits H/M/L``). Exposed as ``geo_high_impact_count`` on composite payloads.
+    high_impact_count: int = 0
+    geo_active_events: list[dict[str, Any]] = field(default_factory=list)
+    geo_impact_sector_key: str = ""
+    geo_stock_exposure_score: float | None = None
+    geo_exposure_summary: str | None = None
+    geo_event_details: list[dict[str, Any]] = field(default_factory=list)
+    geo_exposure_band: str = ""
 
 
-def _digest(articles: list[dict[str, Any]]) -> str:
+def _digest(articles: list[dict[str, Any]], sector_bucket: str | None) -> str:
     parts: list[str] = []
     for a in articles[:20]:
         parts.append(str(a.get("title") or ""))
         parts.append(str(a.get("description") or ""))
+    parts.append(str(sector_bucket or ""))
     return hashlib.sha256("\n".join(parts).encode("utf-8", errors="ignore")).hexdigest()
 
 
 class GeoAnalyzer:
-    def analyze(self, articles: list[dict[str, Any]], *, lookback_hours: int = 8) -> GeoLayerResult:
+    def analyze(
+        self,
+        articles: list[dict[str, Any]],
+        *,
+        lookback_hours: int = 8,
+        sector_bucket: str | None = None,
+    ) -> GeoLayerResult:
         now_utc = datetime.now(timezone.utc)
         cutoff = now_utc - timedelta(hours=float(lookback_hours))
         filtered: list[dict[str, Any]] = []
@@ -84,7 +109,7 @@ class GeoAnalyzer:
                 filtered.append(a)
         articles = filtered
 
-        digest = _digest(articles)
+        digest = _digest(articles, sector_bucket)
         now = time.monotonic()
         hit = _CACHE.get(digest)
         if hit and (now - hit[0]) < _CACHE_TTL_SEC:
@@ -99,6 +124,13 @@ class GeoAnalyzer:
                 risk_score=0.0,
                 reasoning="No headlines — geo risk assumed low.",
                 chips=["Geo: calm"],
+                high_impact_count=0,
+                geo_active_events=[],
+                geo_impact_sector_key="",
+                geo_stock_exposure_score=None,
+                geo_exposure_summary=None,
+                geo_event_details=[],
+                geo_exposure_band="",
             )
             _CACHE[digest] = (now, result)
             return result
@@ -134,6 +166,29 @@ class GeoAnalyzer:
         else:
             verdict = "neutral"
 
+        geo_events = detect_geo_event_scores(
+            scanned, high_kw=GEO_HIGH_RISK, med_kw=GEO_MEDIUM_RISK, low_kw=GEO_LOW_RISK
+        )
+        impact_key = normalize_sector_for_geo(sector_bucket) if sector_bucket else ""
+        w_geo = (
+            weighted_stock_geo_score(geo_events, impact_key)
+            if geo_events and impact_key and impact_key != "default"
+            else 0.0
+        )
+        exposure_line = deterministic_geo_exposure_summary(
+            events=geo_events, impact_sector_key=impact_key or "default", weighted_score=w_geo
+        )
+        event_details = (
+            geo_event_details_for_sector(geo_events, impact_key) if geo_events and impact_key else []
+        )
+        band = ""
+        if geo_events and impact_key:
+            band = geo_exposure_band(w_geo) if w_geo > 0 else "low"
+        chips = [f"Geo {level}", f"H/M/L hits {high}/{medium}/{low}"]
+        if geo_events:
+            theme_bits = [e.get("event_type", "?").replace("_", " ") for e in geo_events]
+            chips.append(f"Themes: {', '.join(theme_bits)}")
+
         result = GeoLayerResult(
             status="available",
             score=score,
@@ -141,7 +196,14 @@ class GeoAnalyzer:
             risk_level=level,
             risk_score=float(risk_points),
             reasoning=f"Geo risk {level} from {len(scanned)} articles (score index {risk_points:.1f}).",
-            chips=[f"Geo {level}", f"H/M/L hits {high}/{medium}/{low}"],
+            chips=chips,
+            high_impact_count=high,
+            geo_active_events=geo_events,
+            geo_impact_sector_key=impact_key,
+            geo_stock_exposure_score=w_geo if geo_events and impact_key else None,
+            geo_exposure_summary=exposure_line,
+            geo_event_details=event_details,
+            geo_exposure_band=band,
         )
         _CACHE[digest] = (now, result)
         return result

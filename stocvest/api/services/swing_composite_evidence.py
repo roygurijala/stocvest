@@ -117,6 +117,144 @@ def is_signal_complete(signal: dict[str, Any]) -> tuple[bool, list[str]]:
     return (len(missing) == 0, missing)
 
 
+def _synthetic_rr_from_composite(composite: CompositeSignal) -> float:
+    """Legacy heuristic when price structure cannot support (target-entry)/(entry-stop)."""
+    conf = float(composite.confidence)
+    mag = abs(float(composite.score))
+    return round(min(3.5, max(1.0, 1.15 + conf * 1.55 + mag * 1.05)), 1)
+
+
+def _entry_price_for_rr(
+    last: float | None,
+    zone_lo: float | None,
+    zone_hi: float | None,
+) -> float | None:
+    if last is not None and last > 0:
+        return float(last)
+    if zone_lo is not None and zone_hi is not None and zone_hi > zone_lo:
+        return float((zone_lo + zone_hi) / 2.0)
+    return None
+
+
+def _long_side_geometry(
+    *,
+    day_lo: float | None,
+    day_hi: float | None,
+    vwap: float | None,
+    prev_close: float | None,
+    last: float | None,
+) -> tuple[float | None, float | None, float | None]:
+    """
+    Bullish reference levels anchored to session structure (not fixed % off day low).
+
+    Stop: slightly under min(session low, VWAP) when both exist; else session low,
+    VWAP alone, prior close support, then last-based fallback.
+    Targets: session high as primary resistance; second target = 2R extension from entry when possible.
+    """
+    reference_stop: float | None = None
+    if day_lo is not None and day_lo > 0 and vwap is not None and vwap > 0:
+        reference_stop = round(min(float(day_lo), float(vwap)) * 0.998, 4)
+    elif day_lo is not None and day_lo > 0:
+        reference_stop = round(float(day_lo) * 0.995, 4)
+    elif vwap is not None and vwap > 0:
+        reference_stop = round(float(vwap) * 0.995, 4)
+    elif prev_close is not None and prev_close > 0:
+        reference_stop = round(float(prev_close) * 0.99, 4)
+    elif last is not None and last > 0:
+        reference_stop = round(float(last) * 0.98, 4)
+
+    reference_target_1: float | None = None
+    if day_hi is not None and day_hi > 0:
+        reference_target_1 = round(float(day_hi), 4)
+    elif last is not None and last > 0:
+        reference_target_1 = round(float(last) * 1.012, 4)
+
+    reference_target_2: float | None = None
+    if reference_target_1 is not None and reference_stop is not None:
+        entry_guess = last if (last is not None and last > 0) else None
+        if entry_guess is not None and entry_guess > reference_stop:
+            t2_r = entry_guess + 2.0 * (entry_guess - reference_stop)
+            if t2_r > reference_target_1 + 1e-6:
+                reference_target_2 = round(t2_r, 4)
+    if reference_target_2 is None and reference_target_1 is not None and last is not None and last > 0:
+        reference_target_2 = round(float(reference_target_1) * 1.004, 4)
+
+    return reference_stop, reference_target_1, reference_target_2
+
+
+def _short_side_geometry(
+    *,
+    day_lo: float | None,
+    day_hi: float | None,
+    vwap: float | None,
+    prev_close: float | None,
+    last: float | None,
+) -> tuple[float | None, float | None, float | None]:
+    """Bearish reference levels: stop above session/VWAP ceiling; target at session low."""
+    reference_stop: float | None = None
+    if day_hi is not None and day_hi > 0 and vwap is not None and vwap > 0:
+        reference_stop = round(max(float(day_hi), float(vwap)) * 1.002, 4)
+    elif day_hi is not None and day_hi > 0:
+        reference_stop = round(float(day_hi) * 1.005, 4)
+    elif vwap is not None and vwap > 0:
+        reference_stop = round(float(vwap) * 1.005, 4)
+    elif prev_close is not None and prev_close > 0:
+        reference_stop = round(float(prev_close) * 1.01, 4)
+    elif last is not None and last > 0:
+        reference_stop = round(float(last) * 1.02, 4)
+
+    reference_target_1: float | None = None
+    if day_lo is not None and day_lo > 0:
+        reference_target_1 = round(float(day_lo), 4)
+    elif last is not None and last > 0:
+        reference_target_1 = round(float(last) * 0.988, 4)
+
+    reference_target_2: float | None = None
+    if reference_target_1 is not None and reference_stop is not None:
+        entry_guess = last if (last is not None and last > 0) else None
+        if entry_guess is not None and reference_stop > entry_guess:
+            t2_r = entry_guess - 2.0 * (reference_stop - entry_guess)
+            if t2_r < reference_target_1 - 1e-6:
+                reference_target_2 = round(t2_r, 4)
+    if reference_target_2 is None and reference_target_1 is not None and last is not None and last > 0:
+        reference_target_2 = round(float(reference_target_1) * 0.996, 4)
+
+    return reference_stop, reference_target_1, reference_target_2
+
+
+def _use_long_rr_structure(verdict: CompositeVerdict, day_lo: float | None, day_hi: float | None, last: float | None) -> bool:
+    if verdict == CompositeVerdict.BULLISH:
+        return True
+    if verdict == CompositeVerdict.BEARISH:
+        return False
+    if (
+        day_lo is not None
+        and day_hi is not None
+        and day_hi > day_lo
+        and last is not None
+        and last > 0
+    ):
+        mid = (float(day_lo) + float(day_hi)) / 2.0
+        return float(last) >= mid
+    return True
+
+
+def _rr_from_levels_long(entry: float, target: float, stop: float) -> float | None:
+    risk = entry - stop
+    reward = target - entry
+    if risk <= 1e-6 or reward <= 1e-6:
+        return None
+    return float(reward / risk)
+
+
+def _rr_from_levels_short(entry: float, target: float, stop: float) -> float | None:
+    risk = stop - entry
+    reward = entry - target
+    if risk <= 1e-6 or reward <= 1e-6:
+        return None
+    return float(reward / risk)
+
+
 def build_swing_composite_evidence_fields(
     *,
     composite: CompositeSignal,
@@ -147,17 +285,6 @@ def build_swing_composite_evidence_fields(
     else:
         trend_direction = "Downtrend"
 
-    risk_reward = round(min(3.5, max(1.0, 1.15 + conf * 1.55 + mag * 1.05)), 1)
-    rr_warning = risk_reward < 2.0
-    if risk_reward < 2.0:
-        rr_quality = "low"
-    elif risk_reward < 3.0:
-        rr_quality = "acceptable"
-    elif risk_reward < 4.0:
-        rr_quality = "good"
-    else:
-        rr_quality = "strong"
-
     reg = (regime or "sideways").strip().lower()
     if reg in ("bull", "bullish"):
         market_regime = "Bullish"
@@ -166,13 +293,10 @@ def build_swing_composite_evidence_fields(
     else:
         market_regime = "Neutral"
 
-    signal_score = int(round(max(0.0, min(100.0, (score + 1.0) / 2.0 * 100.0))))
-    if rr_warning:
-        signal_score = int(round(max(0.0, min(100.0, signal_score * 0.8))))
-
     last = _snap_float(snapshot, "last_trade_price")
     day_lo = _snap_float(snapshot, "day_low")
     day_hi = _snap_float(snapshot, "day_high")
+    prev_close = _snap_float(snapshot, "prev_close")
     vwap = _snap_float(snapshot, "day_vwap")
     if vwap is None and bool(payload.get("market_open")):
         vwap = _intraday_vwap_from_payload_bars(payload)
@@ -186,19 +310,56 @@ def build_swing_composite_evidence_fields(
             "high": round(last * 1.015, 4),
         }
 
-    reference_target_1: float | None = None
-    reference_target_2: float | None = None
-    reference_stop_level: float | None = None
-    if day_hi is not None and day_hi > 0:
-        reference_target_1 = round(day_hi * 1.008, 4)
-        reference_target_2 = round(day_hi * 1.018, 4)
-    elif last is not None and last > 0:
-        reference_target_1 = round(last * 1.012, 4)
-        reference_target_2 = round(last * 1.024, 4)
-    if day_lo is not None and day_lo > 0:
-        reference_stop_level = round(day_lo * 0.995, 4)
-    elif last is not None and last > 0:
-        reference_stop_level = round(last * 0.98, 4)
+    zone_lo = historical_entry_zone["low"] if historical_entry_zone else None
+    zone_hi = historical_entry_zone["high"] if historical_entry_zone else None
+    use_long = _use_long_rr_structure(composite.verdict, day_lo, day_hi, last)
+    if use_long:
+        reference_stop_level, reference_target_1, reference_target_2 = _long_side_geometry(
+            day_lo=day_lo,
+            day_hi=day_hi,
+            vwap=vwap,
+            prev_close=prev_close,
+            last=last,
+        )
+    else:
+        reference_stop_level, reference_target_1, reference_target_2 = _short_side_geometry(
+            day_lo=day_lo,
+            day_hi=day_hi,
+            vwap=vwap,
+            prev_close=prev_close,
+            last=last,
+        )
+
+    entry = _entry_price_for_rr(last, zone_lo, zone_hi)
+    rr_from_structure: float | None = None
+    if (
+        entry is not None
+        and reference_stop_level is not None
+        and reference_target_1 is not None
+    ):
+        if use_long:
+            rr_from_structure = _rr_from_levels_long(entry, reference_target_1, reference_stop_level)
+        else:
+            rr_from_structure = _rr_from_levels_short(entry, reference_target_1, reference_stop_level)
+
+    if rr_from_structure is not None:
+        risk_reward = round(min(10.0, max(0.5, rr_from_structure)), 1)
+    else:
+        risk_reward = _synthetic_rr_from_composite(composite)
+
+    rr_warning = risk_reward < 2.0
+    if risk_reward < 2.0:
+        rr_quality = "low"
+    elif risk_reward < 3.0:
+        rr_quality = "acceptable"
+    elif risk_reward < 5.0:
+        rr_quality = "good"
+    else:
+        rr_quality = "strong"
+
+    signal_score = int(round(max(0.0, min(100.0, (score + 1.0) / 2.0 * 100.0))))
+    if rr_warning:
+        signal_score = int(round(max(0.0, min(100.0, signal_score * 0.8))))
 
     catalyst_rows: list[dict[str, Any]] = []
     extras = payload.get("catalyst_headlines")
@@ -245,11 +406,18 @@ def build_swing_composite_evidence_fields(
     geo_verdict = str(payload.get("geopolitical_verdict") or "").strip().lower()
     geo_high = int(payload.get("geo_high_impact_count") or 0)
     if geo_verdict == "bearish" or geo_high > 2:
+        if geo_high > 0:
+            geo_detail = (
+                f"{geo_high} top-tier (H) headline match"
+                f"{'es' if geo_high != 1 else ''} in the geopolitical scan window."
+            )
+        else:
+            geo_detail = "Geopolitical layer is bearish with no top-tier (H) headline matches in the scan window."
         risk_factors_detailed.append(
             {
                 "label": "Elevated Geopolitical Risk",
                 "severity": "high",
-                "detail": f"Geo risk high — {geo_high} high-impact events active",
+                "detail": geo_detail,
             }
         )
     if bool(payload.get("ema_conflict")):

@@ -173,9 +173,10 @@ async def run_real_composite_engine_phase(
 
         sector_snap: Snapshot | None = None
         sector_display: str | None = None
+        sic_bucket_for_geo: str | None = None
         if sym_snap is not None:
             try:
-                etf, sector_display = await SectorMapper.get_sector_etf(
+                etf, sector_display, sic_bucket_for_geo = await SectorMapper.get_sector_etf(
                     sym,
                     client,
                     sector_cache if sector_cache.enabled else None,
@@ -192,7 +193,20 @@ async def run_real_composite_engine_phase(
     news = NewsAnalyzer().analyze(sym, news_rows, params.news, lookback_hours=params.news.lookback_hours)
     macro = MacroAnalyzer().analyze(spy_snap, qqq_snap, vix_snap, econ, params.macro, events_lookback_days=1)
     sector = SectorAnalyzer().analyze(sym, sector_snap, spy_snap, params.sector, sector_display_name=sector_display)
-    geo = GeoAnalyzer().analyze(news_rows, lookback_hours=params.news.lookback_hours)
+    geo = GeoAnalyzer().analyze(
+        news_rows, lookback_hours=params.news.lookback_hours, sector_bucket=sic_bucket_for_geo
+    )
+    if geo.geo_active_events and geo.geo_impact_sector_key and geo.geo_exposure_summary:
+        from stocvest.signals.geo_exposure_llm import try_claude_geo_exposure_line
+
+        llm_line = await try_claude_geo_exposure_line(
+            events=geo.geo_active_events,
+            impact_sector_key=geo.geo_impact_sector_key,
+            weighted_score=float(geo.geo_stock_exposure_score or 0.0),
+            template_fallback=geo.geo_exposure_summary,
+        )
+        if llm_line:
+            geo.geo_exposure_summary = llm_line
     internals = InternalsAnalyzer().analyze(vix_snap, spy_snap, qqq_snap, params.macro)
 
     layer_results = [tech, news, macro, sector, geo, internals]
@@ -292,16 +306,23 @@ async def build_real_composite_response(
 
     layers_out: list[dict[str, Any]] = []
     for lid, res in zip(layer_ids, layer_results):
-        layers_out.append(
-            {
-                "layer": lid,
-                "status": getattr(res, "status", "unavailable"),
-                "score": getattr(res, "score", None),
-                "verdict": getattr(res, "verdict", "neutral"),
-                "reasoning": getattr(res, "reasoning", ""),
-                "chips": list(getattr(res, "chips", []) or []),
-            }
-        )
+        row: dict[str, Any] = {
+            "layer": lid,
+            "status": getattr(res, "status", "unavailable"),
+            "score": getattr(res, "score", None),
+            "verdict": getattr(res, "verdict", "neutral"),
+            "reasoning": getattr(res, "reasoning", ""),
+            "chips": list(getattr(res, "chips", []) or []),
+        }
+        if lid == "geopolitical":
+            row["geo_active_events"] = list(getattr(res, "geo_active_events", []) or [])
+            row["geo_impact_sector_key"] = getattr(res, "geo_impact_sector_key", "") or ""
+            row["geo_stock_exposure_score"] = getattr(res, "geo_stock_exposure_score", None)
+            row["geo_exposure_summary"] = getattr(res, "geo_exposure_summary", None)
+            row["geo_event_details"] = list(getattr(res, "geo_event_details", []) or [])
+            band = str(getattr(res, "geo_exposure_band", "") or "").strip()
+            row["geo_exposure_band"] = band if band else None
+        layers_out.append(row)
 
     snap_dict = sym_snap.model_dump(mode="json") if sym_snap else {}
     direction_out = ""

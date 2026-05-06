@@ -14,6 +14,7 @@ import {
   layerFreshnessFromIso,
   type EvidenceLayer,
   type EvidenceStatus,
+  type GeopoliticalLayerExtras,
   type SignalEvidenceData,
   type SignalEvidenceInsight
 } from "@/lib/signal-evidence";
@@ -126,6 +127,128 @@ function formatCatalystSource(source: string | undefined): string {
 function formatSentimentScore(score: number): string {
   if (!Number.isFinite(score)) return "";
   return score > 0 ? `+${score.toFixed(2)}` : score.toFixed(2);
+}
+
+function formatGeoEventTypeLabel(et: string): string {
+  return et.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function geoExposureBandStyles(
+  band: "low" | "moderate" | "high" | null,
+  colors: ThemeColors
+): { bg: string; fg: string; border: string } {
+  if (band === "high") return { bg: "rgba(239,68,68,0.10)", fg: colors.bearish, border: "rgba(239,68,68,0.38)" };
+  if (band === "moderate") return { bg: "rgba(245,158,11,0.12)", fg: colors.caution, border: "rgba(245,158,11,0.42)" };
+  if (band === "low") return { bg: "rgba(34,197,94,0.09)", fg: colors.bullish, border: "rgba(34,197,94,0.38)" };
+  return { bg: "rgba(148,163,184,0.10)", fg: colors.textMuted, border: colors.border };
+}
+
+function formatSectorMultiplier(m: number | null): string {
+  if (m == null || !Number.isFinite(m)) return "—";
+  const rounded = Math.round(m * 100) / 100;
+  const s = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2).replace(/\.?0+$/, "");
+  return `${s}×`;
+}
+
+function GeopoliticalExposurePanel({ geo, colors }: { geo: GeopoliticalLayerExtras; colors: ThemeColors }) {
+  const bandSt = geoExposureBandStyles(geo.exposureBand, colors);
+  return (
+    <div
+      style={{
+        marginTop: spacing[2],
+        padding: spacing[3],
+        borderRadius: borderRadius.md,
+        border: `1px solid ${bandSt.border}`,
+        background: bandSt.bg,
+        display: "grid",
+        gap: spacing[2]
+      }}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span
+          style={{
+            fontSize: typography.scale.xs,
+            fontWeight: 700,
+            letterSpacing: "0.055em",
+            color: colors.textMuted
+          }}
+        >
+          Stock geo exposure
+        </span>
+        {geo.exposureBand ? (
+          <span
+            style={{
+              fontSize: typography.scale.xs,
+              fontWeight: 700,
+              textTransform: "capitalize",
+              color: bandSt.fg,
+              padding: "3px 10px",
+              borderRadius: borderRadius.full,
+              border: `1px solid ${bandSt.border}`,
+              background: "rgba(255,255,255,0.04)"
+            }}
+          >
+            {geo.exposureBand}
+          </span>
+        ) : null}
+      </div>
+      <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.text, lineHeight: 1.45 }}>
+        <strong>{geo.impactSectorLabel}</strong>
+        {geo.eventDetails.length > 0 ? (
+          <span style={{ color: colors.textMuted, fontWeight: 400 }}> · mapped sector vs headline themes</span>
+        ) : null}
+      </p>
+      {geo.eventDetails.length > 0 ? (
+        <ul
+          style={{
+            margin: 0,
+            paddingLeft: "1.15rem",
+            color: colors.textMuted,
+            fontSize: typography.scale.sm,
+            display: "grid",
+            gap: spacing[1],
+            listStyleType: "disc"
+          }}
+        >
+          {geo.eventDetails.map((row) => (
+            <li key={row.event_type} style={{ lineHeight: 1.5 }}>
+              <span style={{ color: colors.text }}>{formatGeoEventTypeLabel(row.event_type)}</span>
+              <span style={{ fontVariantNumeric: "tabular-nums" }}> · intensity {row.score.toFixed(2)}</span>
+              <span style={{ fontVariantNumeric: "tabular-nums", color: bandSt.fg }}> · {formatSectorMultiplier(row.sector_multiplier)}</span>
+              <span style={{ fontSize: typography.scale.xs, opacity: 0.88 }}> for this sector</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {geo.stockExposureScore != null ? (
+        <p
+          style={{
+            margin: 0,
+            fontSize: typography.scale.xs,
+            color: colors.textMuted,
+            fontVariantNumeric: "tabular-nums"
+          }}
+        >
+          Weighted score:{" "}
+          <strong style={{ color: colors.text }}>{geo.stockExposureScore.toFixed(2)}</strong>
+        </p>
+      ) : null}
+      {geo.exposureSummary ? (
+        <p
+          style={{
+            margin: 0,
+            fontSize: typography.scale.sm,
+            lineHeight: 1.55,
+            color: colors.text,
+            borderTop: `1px solid ${colors.border}`,
+            paddingTop: spacing[2]
+          }}
+        >
+          {geo.exposureSummary}
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
 export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
@@ -429,6 +552,7 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
                   </span>
                 ))}
               </div>
+              {layer.key === "geopolitical" && layer.geo ? <GeopoliticalExposurePanel geo={layer.geo} colors={colors} /> : null}
               <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>{displayLayerFreshness(layer, evidence)}</span>
             </article>
           ))}

@@ -12,6 +12,7 @@ from stocvest.api.response import bad_request, internal_error, ok
 from stocvest.api.services.news_impact_analyzer import analyze_news_impact, generate_impact_summary
 from stocvest.api.services.news_quality_filter import get_publisher_tier, passes_market_intelligence_gate
 from stocvest.api.services.news_relevance import (
+    _article_tickers_upper,
     calculate_article_relevance,
     catalyst_category_for_text,
     categorize_article,
@@ -310,13 +311,17 @@ def news_handler(
                     seen.add(sym)
                     merged_tickers.append(sym)
     merged_tickers = merged_tickers[:30]
+    # Single-symbol requests (e.g. signal evidence catalysts) must not blend in liquid
+    # names or watchlist-only tickers — Polygon returns `ticker.any_of` matches, so a
+    # merged list produced COTY/UNH headlines under `?symbol=PINS`.
+    news_query_tickers: list[str] = [symbol] if symbol else merged_tickers
 
     async def _run() -> dict[str, Any]:
         settings = get_settings()
         since = datetime.now(timezone.utc) - timedelta(hours=4)
         async with client_factory(api_key=settings.polygon_api_key) as client:
             raw_articles = await client.get_market_news(
-                tickers=merged_tickers,
+                tickers=news_query_tickers,
                 limit=50,
                 order="desc",
                 published_utc_gte=since,
@@ -325,6 +330,8 @@ def news_handler(
         scored_polygon: list[dict[str, Any]] = []
         for article in raw_articles:
             if not passes_market_intelligence_gate(article):
+                continue
+            if symbol and symbol not in _article_tickers_upper(article):
                 continue
             rel = calculate_article_relevance(article, watchlist_symbols)
             if rel < 10:

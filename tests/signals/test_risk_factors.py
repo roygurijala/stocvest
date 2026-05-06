@@ -52,7 +52,18 @@ def test_layer_contradiction_generates_risk_factor() -> None:
 
 def test_no_risk_factors_when_clean_signal() -> None:
     comp = CompositeScoreEngine().compute([LayerSignal("technical", 0.9, 1.0), LayerSignal("news", 0.8, 1.0)], regime="sideways")
-    out = build_swing_composite_evidence_fields(composite=comp, regime="sideways", payload={}, confluence=None, snapshot={"last_trade_price": 100.0, "day_low": 99.0, "day_high": 101.0, "day_vwap": 100.0})
+    out = build_swing_composite_evidence_fields(
+        composite=comp,
+        regime="sideways",
+        payload={},
+        confluence=None,
+        snapshot={
+            "last_trade_price": 100.0,
+            "day_low": 99.0,
+            "day_high": 106.0,
+            "day_vwap": 99.5,
+        },
+    )
     assert out["risk_factors"] == ["No significant risk factors detected"]
 
 

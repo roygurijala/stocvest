@@ -8,6 +8,27 @@ function apiBaseUrl(): string {
   return process.env.NEXT_PUBLIC_STOCVEST_API_BASE_URL || DEFAULT_BASE_URL;
 }
 
+function newsRowsFromJson(data: unknown): NewsPayload[] {
+  if (Array.isArray(data)) {
+    return data as NewsPayload[];
+  }
+  if (data && typeof data === "object") {
+    const h = (data as { headlines?: unknown }).headlines;
+    if (Array.isArray(h)) {
+      return h as NewsPayload[];
+    }
+  }
+  return [];
+}
+
+function articleTagsSymbol(row: NewsPayload, symUpper: string): boolean {
+  if (!Array.isArray(row.tickers)) {
+    return false;
+  }
+  const tags = row.tickers.map((t) => String(t).trim().toUpperCase()).filter(Boolean);
+  return tags.includes(symUpper);
+}
+
 /** Polygon-backed articles for a single ticker; safe in Client Components (no `next/headers`). */
 export async function fetchSymbolNews(symbol: string, limit = 10): Promise<NewsPayload[]> {
   const sym = symbol.trim().toUpperCase();
@@ -29,7 +50,8 @@ export async function fetchSymbolNews(symbol: string, limit = 10): Promise<NewsP
   }
   try {
     const data = (await res.json()) as unknown;
-    return Array.isArray(data) ? (data as NewsPayload[]) : [];
+    const rows = newsRowsFromJson(data).filter((a) => articleTagsSymbol(a, sym));
+    return rows.slice(0, capped);
   } catch {
     return [];
   }

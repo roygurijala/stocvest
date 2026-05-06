@@ -28,13 +28,13 @@ export const PDT_GUARDIAN_TIP =
   "The Pattern Day Trader rule limits brokerage accounts under $25,000 to 3 day trades within any 5 business days. STOCVEST enforces this automatically at the broker layer so your account is never restricted by accident.";
 
 export const CONFIDENCE_PERCENT_TIP =
-  "How strongly all six signal layers agree on the direction. Above 80 percent means strong alignment across all layers. Between 50 and 65 percent means mixed signals — signal data supports smaller exposure if you choose to act.";
+  "When present, this is confluence (0–100): how many independent context checks align with this direction (structure, regime, sector, news, gaps), minus conflict penalties. Otherwise it is the intraday pattern score from price and volume triggers; many marginal setups share the same gateway value (for example 55%) because that is the minimum score to pass the scanner.";
 
 export const SETUP_RELATIVE_VOLUME_TIP =
   "How today's trading volume compares to the 20-day average. 2x means twice the normal activity. Higher volume confirms stronger price moves and more reliable signals.";
 
 export const TOP_SIGNALS_TIP =
-  "The strongest active signals identified by the signal engine right now. Signal strength shows how strongly all six layers align on direction.";
+  "The strongest active intraday candidates from the scanner right now. The percentage prefers confluence (broader context agreement) when the API includes it; otherwise it reflects the pattern score from triggers only.";
 
 export const LATEST_HEADLINES_TIP =
   "Real-time market news from Polygon.io. Headlines are scored for sentiment and used as one of the six signal layers.";

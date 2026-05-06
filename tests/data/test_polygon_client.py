@@ -306,12 +306,27 @@ class TestGetNews:
     @pytest.mark.asyncio
     @respx.mock
     async def test_get_market_news_with_ticker_any_of_and_time_filter(self):
+        payload = {
+            "status": "OK",
+            "results": [
+                {
+                    "id": "spy1",
+                    "published_utc": "2024-01-02T14:30:00Z",
+                    "title": "ETF flows",
+                    "description": "SPY",
+                    "article_url": "https://example.com/article",
+                    "publisher": {"name": "Reuters"},
+                    "tickers": ["SPY", "QQQ"],
+                    "keywords": ["etf"],
+                }
+            ],
+        }
         route = respx.get("https://api.polygon.io/v2/reference/news").mock(
-            return_value=httpx.Response(200, json=NEWS_PAYLOAD)
+            return_value=httpx.Response(200, json=payload)
         )
         since = datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
 
-        async with PolygonClient(FAKE_KEY) as client:
+        async with PolygonClient(FAKE_KEY, benzinga_api_key="") as client:
             rows = await client.get_market_news(
                 tickers=["SPY", "QQQ"],
                 limit=50,
@@ -400,6 +415,50 @@ class TestGetNews:
 
         assert [a.article_id for a in articles] == ["a1", "a2"]
         assert route.call_count == 2
+
+
+class TestNewsRowTickerFilter:
+    def test_matches_intersection(self):
+        assert PolygonClient._news_row_matches_requested_tickers({"tickers": ["PINS"]}, ["PINS"])
+        assert PolygonClient._news_row_matches_requested_tickers(
+            {"tickers": ["PINS", "COTY"]}, ["PINS"]
+        )
+        assert not PolygonClient._news_row_matches_requested_tickers({"tickers": ["COTY"]}, ["PINS"])
+        assert not PolygonClient._news_row_matches_requested_tickers({"tickers": []}, ["PINS"])
+        assert not PolygonClient._news_row_matches_requested_tickers({}, ["PINS"])
+
+    def test_no_requested_means_pass_through(self):
+        assert PolygonClient._news_row_matches_requested_tickers({"tickers": ["COTY"]}, [])
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_get_market_news_drops_mistagged_rows(self):
+        mixed = {
+            "status": "OK",
+            "results": [
+                {
+                    "id": "1",
+                    "published_utc": "2024-01-02T14:30:00Z",
+                    "title": "PINS earnings beat",
+                    "article_url": "https://example.com/1",
+                    "tickers": ["PINS"],
+                },
+                {
+                    "id": "2",
+                    "published_utc": "2024-01-02T14:29:00Z",
+                    "title": "Coty lawsuit",
+                    "article_url": "https://example.com/2",
+                    "tickers": ["COTY"],
+                },
+            ],
+        }
+        respx.get("https://api.polygon.io/v2/reference/news").mock(
+            return_value=httpx.Response(200, json=mixed)
+        )
+        async with PolygonClient(FAKE_KEY, benzinga_api_key="") as client:
+            rows = await client.get_market_news(tickers=["PINS"], limit=20)
+        assert len(rows) == 1
+        assert rows[0]["tickers"] == ["PINS"]
 
 
 # ──────────────────────────────────────────────────────────────────────────────

@@ -17,7 +17,7 @@ import { AddToWatchlistButton } from "@/components/add-to-watchlist-button";
 import { GapCatalystNewsDrawer } from "@/components/gap-catalyst-news-drawer";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
-import type { GapIntelligenceItem, IntradaySetupPayload, ScannerOverview } from "@/lib/api/scanner";
+import { topSignalStrengthPercent, type GapIntelligenceItem, type IntradaySetupPayload, type ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
 import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
@@ -821,7 +821,7 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                               fontFamily: MONO
                             }}
                           >
-                            {Math.round(setup.score * 100)}%
+                            {topSignalStrengthPercent(setup)}%
                             <InfoTip text={CONFIDENCE_PERCENT_TIP} label="About signal strength" />
                           </span>
                         </div>
@@ -962,7 +962,7 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                               symbol: sym,
                               side: isLongDirection(setup.direction) ? "buy" : "sell",
                               pattern: setup.triggers[0] || "intraday_setup",
-                              signal_strength: String(Math.min(100, Math.max(0, Math.round(setup.score * 100)))),
+                              signal_strength: String(topSignalStrengthPercent(setup)),
                               signal_direction: setup.direction,
                               ...(setup.confluence_score != null
                                 ? { confluence_score: String(Math.round(setup.confluence_score)) }

@@ -1,9 +1,16 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test } from "vitest";
 
+import { SignalEvidenceCard } from "@/components/signal-evidence-card";
+import { ThemeProvider } from "@/lib/theme-provider";
 import {
   applySwingCompositeEnrichment,
   buildEvidenceFromSetup,
-  parseSwingCompositeInsight
+  deriveEvidenceInsightFallback,
+  extractGeopoliticalLayerExtras,
+  parseSwingCompositeInsight,
+  referenceLevelsFromSessionStructure
 } from "@/lib/signal-evidence";
 import type { NewsPayload } from "@/lib/api/market";
 import type { IntradaySetupPayload } from "@/lib/api/scanner";
@@ -148,6 +155,43 @@ describe("buildEvidenceFromSetup key levels", () => {
     expect(data.keyLevels.vwap).toBe(199.5);
     expect(data.keyLevels.support).toBe(198);
     expect(data.keyLevels.resistance).toBe(202);
+    expect(data.lastTradePrice).toBe(200);
+  });
+});
+
+describe("session reference levels and fallback R/R", () => {
+  test("referenceLevelsFromSessionStructure matches swing long geometry (no % buffer on high)", () => {
+    const lv = referenceLevelsFromSessionStructure({
+      direction: "bullish",
+      support: 98,
+      resistance: 102,
+      vwap: 99.5,
+      lastTradePrice: 100,
+      prevClose: 99
+    });
+    expect(lv.reference_target_1).toBe(102);
+    expect(lv.reference_stop_level).toBeCloseTo(Math.round(Math.min(98, 99.5) * 0.998 * 10000) / 10000, 4);
+  });
+
+  test("deriveEvidenceInsightFallback uses (target-entry)/(entry-stop) not mid-range ratio", () => {
+    const ev = buildEvidenceFromSetup(
+      baseSetup,
+      {
+        symbol: "AAPL",
+        last_trade_price: 100,
+        prev_close: 99,
+        day_low: 98,
+        day_high: 102,
+        day_vwap: 99.5
+      },
+      { symbolNewsArticles: [] }
+    );
+    const insight = deriveEvidenceInsightFallback(ev);
+    expect(insight.reference_target_1).toBe(102);
+    const stop = Math.min(98, 99.5) * 0.998;
+    const rr = (102 - 100) / (100 - stop);
+    expect(insight.risk_reward).toBe(Math.round(Math.min(10, Math.max(0.5, rr)) * 10) / 10);
+    expect(insight.rr_warning).toBe(insight.risk_reward < 2.0);
   });
 });
 
@@ -411,5 +455,101 @@ describe("applySwingCompositeEnrichment", () => {
     expect(enriched.insight?.reference_target_1).not.toBeNull();
     expect(enriched.insight?.reference_stop_level).not.toBeNull();
     expect(enriched.insight?.vwap).toBe(99.5);
+  });
+
+  test("parses geopolitical layer extras from composite layers row", () => {
+    const geo = extractGeopoliticalLayerExtras({
+      layer: "geopolitical",
+      geo_impact_sector_key: "semiconductors",
+      geo_stock_exposure_score: 4.2,
+      geo_exposure_band: "moderate",
+      geo_exposure_summary: "Supply-chain and export controls weigh on fabs.",
+      geo_active_events: [{ event_type: "trade_tension", score: 2 }],
+      geo_event_details: [
+        { event_type: "trade_tension", score: 2, sector_multiplier: 1.5 },
+        { event_type: "sanctions", score: 1, sector_multiplier: 2 }
+      ]
+    });
+    expect(geo).toBeDefined();
+    expect(geo!.impactSectorLabel).toBe("Semiconductors");
+    expect(geo!.stockExposureScore).toBe(4.2);
+    expect(geo!.exposureBand).toBe("moderate");
+    expect(geo!.exposureSummary).toContain("Supply-chain");
+    expect(geo!.eventDetails).toHaveLength(2);
+    expect(geo!.eventDetails[0].sector_multiplier).toBe(1.5);
+  });
+
+  test("merges geo onto geopolitical evidence layer when composite provides layers[]", () => {
+    const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
+    const enriched = applySwingCompositeEnrichment(base, {
+      signal_score: 70,
+      trend_strength: "Moderate",
+      trend_direction: "Uptrend",
+      risk_reward: 2,
+      market_regime: "Bullish",
+      catalysts: [],
+      risk_factors: [],
+      signal_parameters: "x",
+      historical_entry_zone: { low: 10, high: 11 },
+      layers: [
+        {
+          layer: "geopolitical",
+          chips: ["Themes: trade_tension", "Sector map: semiconductors"],
+          verdict: "bearish",
+          score: 40,
+          status: "available",
+          reasoning: "",
+          geo_impact_sector_key: "technology_hardware",
+          geo_stock_exposure_score: 3.1,
+          geo_exposure_band: "low",
+          geo_exposure_summary: "Limited direct exposure.",
+          geo_event_details: [{ event_type: "trade_tension", score: 1, sector_multiplier: 1.2 }]
+        }
+      ]
+    });
+    const geoLayer = enriched.layers.find((l) => l.key === "geopolitical");
+    expect(geoLayer?.geo?.impactSectorLabel).toBe("Technology Hardware");
+    expect(geoLayer?.geo?.stockExposureScore).toBe(3.1);
+    expect(geoLayer?.keyPoints[0]).toContain("Themes");
+  });
+});
+
+describe("SignalEvidenceCard geopolitical panel", () => {
+  test("renders band, sector, themes, and summary in static markup", () => {
+    const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
+    const enriched = applySwingCompositeEnrichment(base, {
+      signal_score: 70,
+      trend_strength: "Moderate",
+      trend_direction: "Uptrend",
+      risk_reward: 2,
+      market_regime: "Bullish",
+      catalysts: [],
+      risk_factors: [],
+      signal_parameters: "x",
+      historical_entry_zone: { low: 10, high: 11 },
+      layers: [
+        {
+          layer: "geopolitical",
+          chips: ["Themes: trade_tension"],
+          verdict: "bearish",
+          score: 40,
+          status: "available",
+          reasoning: "",
+          geo_impact_sector_key: "semiconductors",
+          geo_stock_exposure_score: 3.1,
+          geo_exposure_band: "moderate",
+          geo_exposure_summary: "Tariff headlines skew risk for fabs.",
+          geo_event_details: [{ event_type: "trade_tension", score: 1.5, sector_multiplier: 1.2 }]
+        }
+      ]
+    });
+    const html = renderToStaticMarkup(
+      createElement(ThemeProvider, null, createElement(SignalEvidenceCard, { evidence: enriched }))
+    );
+    expect(html).toContain("Stock geo exposure");
+    expect(html).toContain("Semiconductors");
+    expect(html).toContain("moderate");
+    expect(html).toContain("Trade Tension");
+    expect(html).toContain("Tariff headlines");
   });
 });

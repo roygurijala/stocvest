@@ -24,6 +24,7 @@ from stocvest.api.services.swing_composite_engine import swing_composite_body_sy
 from stocvest.api.services.signal_snapshot_builders import build_swing_composite_snapshot_payload
 from stocvest.config.parameter_store import ParameterStore
 from stocvest.api.services.composite_market_context import fetch_composite_market_status_payload_sync
+from stocvest.api.services.day_setups_geo_preview import attach_geo_preview_to_intraday_rows
 from stocvest.api.services.signal_dto import (
     parse_bar,
     parse_pdt_assessment,
@@ -435,7 +436,12 @@ def day_setups_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, 
         setups = IntradaySetupScanner(min_score=min_score).scan(
             bars_by_symbol, liquidity_by_symbol=liq, limit=limit
         )
-        return ok(serialize_intraday_setups_with_confluence(setups, payload))
+        rows = serialize_intraday_setups_with_confluence(setups, payload)
+        try:
+            attach_geo_preview_to_intraday_rows(rows, payload)
+        except Exception as exc:
+            _LOG.warning("day setups geo preview failed: %s", exc)
+        return ok(rows)
     except (KeyError, TypeError, ValueError) as exc:
         return bad_request(f"Invalid day setup request: {exc}")
     except Exception as exc:
