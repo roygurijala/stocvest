@@ -92,6 +92,47 @@ def test_swing_composite_unavailable_layers_reduce_available_count(monkeypatch: 
     assert body["available_layers"] == 1
 
 
+def test_swing_composite_excludes_unavailable_layer_from_denominator() -> None:
+    base_event = {
+        "body": json.dumps(
+            {
+                "regime": "sideways",
+                "symbol": "AAPL",
+                "signals": [
+                    {"layer": "technical", "score": 0.6, "confidence": 1.0},
+                    {"layer": "macro", "score": 0.2, "confidence": 1.0},
+                    {"layer": "sector", "score": -0.2, "confidence": 1.0},
+                ],
+            }
+        )
+    }
+    with_unavailable_noise_event = {
+        "body": json.dumps(
+            {
+                "regime": "sideways",
+                "symbol": "AAPL",
+                "signals": [
+                    {"layer": "technical", "score": 0.6, "confidence": 1.0},
+                    {"layer": "macro", "score": 0.2, "confidence": 1.0},
+                    {"layer": "sector", "score": -0.2, "confidence": 1.0},
+                    # Must be ignored entirely (not in numerator, not in denominator).
+                    {"layer": "news", "status": "unavailable", "score": 1.0, "confidence": 1.0},
+                ],
+            }
+        )
+    }
+    base_response = swing_composite_handler(base_event, {})
+    noisy_response = swing_composite_handler(with_unavailable_noise_event, {})
+    assert base_response["statusCode"] == 200
+    assert noisy_response["statusCode"] == 200
+    base_body = json.loads(base_response["body"])
+    noisy_body = json.loads(noisy_response["body"])
+    assert base_body["score"] == pytest.approx(noisy_body["score"])
+    assert base_body["signal_strength"] == pytest.approx(noisy_body["signal_strength"])
+    assert len(base_body["contributions"]) == 3
+    assert len(noisy_body["contributions"]) == 3
+
+
 def test_swing_composite_handler_returns_bullish_signal_summary() -> None:
     event = {
         "body": json.dumps(
