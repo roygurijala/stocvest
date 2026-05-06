@@ -330,13 +330,15 @@ function synthKeyPointsFromLayerApi(match: Record<string, unknown>): string[] {
 function evidencePatchFromApiLayer(match: Record<string, unknown>): Partial<EvidenceLayer> {
   const patch: Partial<EvidenceLayer> = {};
   const raw = match.score;
-  if (typeof raw === "number" && Number.isFinite(raw)) {
-    patch.contributionScore = clamp(Math.round(raw), 0, 100);
-  }
   const layerStatus = String(match.status ?? "").trim().toLowerCase();
   if (layerStatus === "unavailable") {
+    // Keep cards + breakdown consistent: unavailable layers should not show a numeric strength bar.
+    patch.contributionScore = 0;
     patch.status = "Unavailable";
     return patch;
+  }
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    patch.contributionScore = clamp(Math.round(raw), 0, 100);
   }
   const verdict = String(match.verdict ?? "").trim().toLowerCase();
   if (verdict === "bullish") {

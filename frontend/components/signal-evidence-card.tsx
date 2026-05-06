@@ -874,7 +874,9 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
                       }}
                     >
                       <div style={{ fontWeight: 600 }}>{row.layer}</div>
-                      <div style={{ color: colors.textMuted, marginTop: 4 }}>Score: {row.score}</div>
+                      <div style={{ color: colors.textMuted, marginTop: 4 }}>
+                        {row.status === "Unavailable" ? "Unavailable" : `Score: ${row.score}`}
+                      </div>
                     </div>
                   );
                 }}
