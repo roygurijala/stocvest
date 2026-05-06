@@ -306,7 +306,7 @@ export function DashboardRedesign({
           </div>
 
           <article
-            className={`order-2 flex h-full min-h-[260px] flex-col overflow-hidden lg:col-start-1 lg:row-start-2 ${surfaceGlowClassName}`}
+            className={`order-2 flex w-full min-h-[260px] flex-col overflow-hidden lg:self-start lg:col-start-1 lg:row-start-2 ${surfaceGlowClassName}`}
             style={{
               background: colors.surface,
               border: `1px solid ${colors.border}`,
@@ -327,9 +327,9 @@ export function DashboardRedesign({
               <h3 style={{ margin: 0 }}>Top Signals</h3>
               <InfoTip text={TOP_SIGNALS_TIP} label="About top signals" />
             </div>
-            <div className="flex min-h-0 flex-1 flex-col gap-3">
+            <div className="flex flex-col gap-3">
               {topSignals.length === 0 ? (
-                <div className="flex flex-1 flex-col justify-center" style={{ padding: spacing[2] }}>
+                <div className="flex flex-col justify-center py-4" style={{ padding: spacing[2] }}>
                   {scannerOverview.error ? (
                     <p style={{ margin: 0, color: colors.textMuted }}>{scannerOverview.error}</p>
                   ) : (
@@ -339,10 +339,21 @@ export function DashboardRedesign({
                   )}
                 </div>
               ) : (
-                topSignals.map((signal, idx) => (
+                topSignals.map((signal, idx) => {
+                  const triggersLine = signal.triggers
+                    .map((t) => String(t).trim())
+                    .filter(Boolean)
+                    .slice(0, 3)
+                    .join(" · ");
+                  const tier = (signal.confluence_tier || "").trim().toLowerCase();
+                  const nConf = typeof signal.n_confirming === "number" ? signal.n_confirming : signal.confirming_signals?.length;
+                  const nConfl =
+                    typeof signal.n_conflicting === "number" ? signal.n_conflicting : signal.conflicting_signals?.length;
+
+                  return (
                   <motion.article
                     key={`${signal.symbol}-${idx}`}
-                    className={`flex min-h-0 flex-1 flex-col ${surfaceGlowClassName}`}
+                    className={`flex flex-col gap-2 ${surfaceGlowClassName}`}
                     initial={{ opacity: 0, x: -8 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: idx * 0.08 }}
@@ -350,11 +361,10 @@ export function DashboardRedesign({
                       background: colors.surfaceMuted,
                       border: `1px solid ${colors.border}`,
                       borderRadius: borderRadius.lg,
-                      padding: spacing[3],
-                      minHeight: 132
+                      padding: spacing[3]
                     }}
                   >
-                    <div className="flex min-h-0 flex-1 flex-col gap-2">
+                    <div className="flex flex-col gap-2">
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: spacing[2] }}>
                         <div style={{ display: "flex", alignItems: "center", gap: spacing[2], minWidth: 0, flexWrap: "wrap" }}>
                           <p style={{ margin: 0, fontWeight: 700, fontSize: typography.scale.base }}>{signal.symbol}</p>
@@ -381,24 +391,54 @@ export function DashboardRedesign({
                           <InfoTip text={CONFIDENCE_PERCENT_TIP} label="About signal strength" />
                         </div>
                       </div>
-                      {signal.geo_preview ? <TopSignalGeoStrip preview={signal.geo_preview} colors={colors} /> : null}
-                      {signal.triggers[0] ? (
+                      {signal.company_name?.trim() ? (
+                        <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.35 }}>
+                          {signal.company_name.trim()}
+                        </p>
+                      ) : null}
+                      {typeof signal.last_price === "number" && Number.isFinite(signal.last_price) ? (
                         <p
                           style={{
                             margin: 0,
                             fontSize: typography.scale.xs,
                             color: colors.textMuted,
-                            lineHeight: 1.45,
-                            display: "-webkit-box",
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: "vertical",
-                            overflow: "hidden"
+                            fontVariantNumeric: "tabular-nums"
                           }}
                         >
-                          {signal.triggers[0]}
+                          Last <span style={{ color: colors.text, fontWeight: 600 }}>${signal.last_price.toFixed(2)}</span>
                         </p>
                       ) : null}
-                      <div className="mt-auto flex flex-col gap-2 pt-1" style={{ marginTop: "auto" }}>
+                      {signal.geo_preview ? <TopSignalGeoStrip preview={signal.geo_preview} colors={colors} /> : null}
+                      {triggersLine ? (
+                        <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.text, lineHeight: 1.45 }}>{triggersLine}</p>
+                      ) : null}
+                      {tier || nConf != null || nConfl != null ? (
+                        <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45 }}>
+                          {tier ? (
+                            <>
+                              <span style={{ textTransform: "capitalize", color: colors.text }}>{tier}</span> confluence
+                            </>
+                          ) : (
+                            <span style={{ color: colors.text }}>Confluence</span>
+                          )}
+                          {nConf != null ? (
+                            <>
+                              {" "}
+                              · {nConf} aligning
+                            </>
+                          ) : null}
+                          {nConfl != null && nConfl > 0 ? (
+                            <>
+                              {" "}
+                              · {nConfl} conflict{nConfl === 1 ? "" : "s"}
+                            </>
+                          ) : null}
+                        </p>
+                      ) : null}
+                      <div
+                        className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between"
+                        style={{ borderTopColor: colors.border }}
+                      >
                         <button
                           type="button"
                           className="min-h-11 w-full text-sm sm:w-auto"
@@ -442,13 +482,14 @@ export function DashboardRedesign({
                         >
                           View Evidence
                         </button>
-                        <div className="flex flex-wrap items-center justify-end gap-2">
+                        <div className="flex flex-wrap items-center justify-start sm:justify-end">
                           <SignalDisclaimerChip />
                         </div>
                       </div>
                     </div>
                   </motion.article>
-                ))
+                  );
+                })
               )}
             </div>
           </article>
