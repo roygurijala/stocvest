@@ -6,6 +6,23 @@ vi.mock("@/lib/auth/ws-token-cookie", () => ({
   readWsTokenFromDocumentCookie: readWsTokenMock
 }));
 
+function panelArticle(overrides: Record<string, unknown>) {
+  return {
+    id: "a1",
+    title: "x",
+    source: "polygon",
+    source_label: "Polygon",
+    published_at: "2026-01-01T00:00:00Z",
+    sentiment_score: 0,
+    sentiment_label: "neutral",
+    catalyst_type: null,
+    url: "https://example.com",
+    is_recent: true,
+    age_label: "1h ago",
+    ...overrides
+  };
+}
+
 describe("fetchSymbolNews", () => {
   const originalFetch = global.fetch;
 
@@ -18,13 +35,16 @@ describe("fetchSymbolNews", () => {
     global.fetch = originalFetch;
   });
 
-  test("requests symbol and limit query params", async () => {
+  test("requests symbol, days, and limit query params", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        headlines: [
-          { article_id: "a1", title: "NVDA item", tickers: ["NVDA"], published_at: "2026-01-01T00:00:00Z", url: "u" }
-        ]
+        symbol: "NVDA",
+        has_recent_news: true,
+        recent_cutoff_hours: 4,
+        articles: [panelArticle({ id: "a1", title: "NVDA item" })],
+        total_found: 1,
+        oldest_included: "2026-01-01T00:00:00Z"
       })
     });
     global.fetch = fetchMock as unknown as typeof fetch;
@@ -35,30 +55,21 @@ describe("fetchSymbolNews", () => {
     const url = String(fetchMock.mock.calls[0][0]);
     expect(url).toContain("symbol=NVDA");
     expect(url).toContain("limit=10");
+    expect(url).toContain("days=20");
     expect(rows).toHaveLength(1);
     expect(rows[0].title).toBe("NVDA item");
   });
 
-  test("keeps only articles whose tickers include the requested symbol", async () => {
+  test("maps panel articles to NewsPayload for the requested symbol", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        headlines: [
-          {
-            article_id: "c1",
-            title: "COTY beat",
-            tickers: ["COTY"],
-            published_at: "2026-01-01T00:00:00Z",
-            url: "u1"
-          },
-          {
-            article_id: "p1",
-            title: "PINS engagement",
-            tickers: ["PINS"],
-            published_at: "2026-01-01T01:00:00Z",
-            url: "u2"
-          }
-        ]
+        symbol: "PINS",
+        has_recent_news: false,
+        recent_cutoff_hours: 4,
+        articles: [panelArticle({ id: "p1", title: "PINS engagement", sentiment_label: "bullish", sentiment_score: 0.5 })],
+        total_found: 1,
+        oldest_included: null
       })
     });
     global.fetch = fetchMock as unknown as typeof fetch;
@@ -67,6 +78,8 @@ describe("fetchSymbolNews", () => {
     const rows = await fetchSymbolNews("PINS", 10);
     expect(rows).toHaveLength(1);
     expect(rows[0].article_id).toBe("p1");
+    expect(rows[0].tickers).toEqual(["PINS"]);
+    expect(rows[0].sentiment).toBe("positive");
   });
 
   test("returns empty array for blank symbol without calling fetch", async () => {

@@ -15,6 +15,7 @@ import { RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { AddToWatchlistButton } from "@/components/add-to-watchlist-button";
 import { GapCatalystNewsDrawer } from "@/components/gap-catalyst-news-drawer";
+import { NewsPanel } from "@/components/news-panel";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import type { GapIntelligenceItem, IntradaySetupPayload, ScannerOverview } from "@/lib/api/scanner";
@@ -89,6 +90,8 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
   const { colors } = useTheme();
   const [isPending, startTransition] = useTransition();
   const [evidenceOpen, setEvidenceOpen] = useState(false);
+  const [newsPanelSymbol, setNewsPanelSymbol] = useState("");
+  const [newsPanelOpen, setNewsPanelOpen] = useState(false);
   const [gapNewsDrawerItem, setGapNewsDrawerItem] = useState<GapIntelligenceItem | null>(null);
   const [evidence, setEvidence] = useState<SignalEvidenceData | null>(null);
   const router = useRouter();
@@ -1047,7 +1050,16 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
           if (it) void openGapEvidence(it);
         }}
       />
-      <SignalEvidenceModal open={evidenceOpen} evidence={evidence} onClose={() => setEvidenceOpen(false)} />
+      <SignalEvidenceModal
+        open={evidenceOpen}
+        evidence={evidence}
+        onClose={() => setEvidenceOpen(false)}
+        onOpenNewsPanel={(sym) => {
+          setNewsPanelSymbol(sym.trim().toUpperCase());
+          setNewsPanelOpen(true);
+        }}
+      />
+      <NewsPanel symbol={newsPanelSymbol} isOpen={newsPanelOpen} onClose={() => setNewsPanelOpen(false)} />
     </section>
   );
 }

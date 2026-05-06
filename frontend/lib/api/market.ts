@@ -25,6 +25,8 @@ export interface SnapshotPayload {
   pre_market_price?: number | null;
   /** Issuer name when Polygon includes `name` on the ticker snapshot. */
   company_name?: string | null;
+  /** Session change vs prior close when present on snapshot payload. */
+  change_percent?: number | null;
 }
 
 /** Primary tab category from API (`/v1/market/news`). */
@@ -187,12 +189,11 @@ export async function fetchMarketOverview(
   const sparklineBarLimit = options.sparklineBarLimit ?? 20;
   const cleanSymbols = symbols.map((s) => s.trim().toUpperCase()).filter(Boolean);
   try {
-    const [status, newsResp, snapshots] = await Promise.all([
+    const [status, snapshots] = await Promise.all([
       apiFetch<MarketStatusPayload>("/v1/market/status"),
-      apiFetch<NewsPayload[] | { headlines?: NewsPayload[] }>("/v1/market/news?limit=20"),
       fetchOverviewSnapshots(cleanSymbols)
     ]);
-    const news = Array.isArray(newsResp) ? newsResp : (newsResp?.headlines ?? []);
+    const news: NewsPayload[] = [];
     if (!status) {
       return { snapshots: [], news: [], error: "Service temporarily unavailable. Please try again." };
     }

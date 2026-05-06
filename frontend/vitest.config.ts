@@ -14,6 +14,8 @@ export default defineConfig({
     globals: true,
     environment: "jsdom",
     setupFiles: ["./vitest.setup.ts"],
-    include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"]
+    include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"],
+    /** Avoid cross-file races on `global.fetch` stubs (market/scanner/symbol-news tests). */
+    fileParallelism: false
   }
 });

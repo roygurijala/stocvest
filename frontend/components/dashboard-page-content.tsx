@@ -64,7 +64,7 @@ export async function DashboardPageContent() {
   };
 
   const marketOverview = await timeoutFallback(
-    fetchMarketOverview(undefined, { sparklineBarLimit: 12 }),
+    fetchMarketOverview(["SPY", "QQQ", "IWM", "I:VIX"], { sparklineBarLimit: 12 }),
     DASHBOARD_MARKET_TIMEOUT_MS,
     marketFallback
   );
@@ -86,7 +86,10 @@ export async function DashboardPageContent() {
     gapIntelligence: scannerCore.gapIntelligence,
     setups: scannerCore.setups,
     morningBrief: undefined,
-    error: scannerCore.error
+    error: scannerCore.error,
+    spyPct: scannerCore.spyPct,
+    qqqPct: scannerCore.qqqPct,
+    regimeLabel: scannerCore.regimeLabel
   };
 
   const morningBriefSlot =

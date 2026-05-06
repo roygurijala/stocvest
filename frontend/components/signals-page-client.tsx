@@ -15,6 +15,7 @@ import { SignalLayerDivergenceChart } from "@/components/signal-layer-divergence
 import { SignalsAfterHoursPanel } from "@/components/signals-after-hours-panel";
 import { InfoTip } from "@/components/info-tip";
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
+import { NewsPanel } from "@/components/news-panel";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
@@ -33,6 +34,7 @@ import {
   formatHorizonOutcome,
   type PublicSignal
 } from "@/lib/api/public-signals";
+import { tickerNewsTriggerLine } from "@/lib/api/ticker-news-panel";
 import { LAYER_NAME_HINTS } from "@/lib/ui-tooltips";
 import { isInsufficientCompositeResponse, type SwingCompositeMarketStatus } from "@/lib/api/swing-composite";
 
@@ -115,6 +117,9 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
   const [symbol, setSymbol] = useState("AAPL");
   const [signalEvidence, setSignalEvidence] = useState<SignalEvidenceData | null>(null);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
+  const [newsPanelSymbol, setNewsPanelSymbol] = useState("");
+  const [newsPanelOpen, setNewsPanelOpen] = useState(false);
+  const [newsUiTick, setNewsUiTick] = useState(0);
   const [symbolSnapshot, setSymbolSnapshot] = useState<SnapshotPayload | null>(null);
   const [historyRows, setHistoryRows] = useState<PublicSignal[]>([]);
   const [histLoading, setHistLoading] = useState(false);
@@ -129,6 +134,11 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
   const [afterHoursNews, setAfterHoursNews] = useState<NewsPayload[]>([]);
   const [afterHoursInWatchlist, setAfterHoursInWatchlist] = useState(false);
   const [afterHoursWatchlistKnown, setAfterHoursWatchlistKnown] = useState(false);
+
+  const signalsNewsTrigger = useMemo(() => {
+    void newsUiTick;
+    return tickerNewsTriggerLine(symbol);
+  }, [symbol, newsUiTick]);
 
   const rawSnapshot = useMemo(() => {
     const sym = symbol.toUpperCase();
@@ -919,6 +929,25 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
           <button
             type="button"
             className="min-h-11 text-sm"
+            onClick={() => {
+              setNewsPanelSymbol(symbol.toUpperCase());
+              setNewsPanelOpen(true);
+            }}
+            style={{
+              border: "none",
+              background: "transparent",
+              color: colors.textMuted,
+              padding: `${spacing[2]} 0`,
+              cursor: "pointer",
+              fontWeight: 500,
+              fontSize: typography.scale.xs
+            }}
+          >
+            {signalsNewsTrigger}
+          </button>
+          <button
+            type="button"
+            className="min-h-11 text-sm"
             onClick={async () => {
               const setupLike = setup || {
                 symbol: symbol.toUpperCase(),
@@ -1048,7 +1077,24 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
       ) : null}
         </>
       ) : null}
-      <SignalEvidenceModal open={evidenceOpen} evidence={signalEvidence} onClose={() => setEvidenceOpen(false)} />
+      <SignalEvidenceModal
+        open={evidenceOpen}
+        evidence={signalEvidence}
+        onClose={() => setEvidenceOpen(false)}
+        onOpenNewsPanel={(sym) => {
+          setNewsPanelSymbol(sym.trim().toUpperCase());
+          setNewsPanelOpen(true);
+        }}
+      />
+      <NewsPanel
+        symbol={newsPanelSymbol}
+        isOpen={newsPanelOpen}
+        onClose={() => {
+          setNewsPanelOpen(false);
+          setNewsUiTick((t) => t + 1);
+        }}
+        onLoaded={() => setNewsUiTick((t) => t + 1)}
+      />
     </section>
   );
 }

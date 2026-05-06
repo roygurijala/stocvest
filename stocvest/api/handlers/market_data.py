@@ -10,6 +10,14 @@ from typing import Any
 
 from stocvest.api.response import bad_request, internal_error, ok
 from stocvest.api.services.news_impact_analyzer import analyze_news_impact, generate_impact_summary
+from stocvest.api.services.news_panel_format import (
+    RECENT_NEWS_HOURS,
+    catalyst_type_for_article,
+    classify_news_source,
+    compute_news_age_label,
+    parse_published_utc,
+    sentiment_score_and_label,
+)
 from stocvest.api.services.news_quality_filter import get_publisher_tier, passes_market_intelligence_gate
 from stocvest.api.services.news_relevance import (
     _article_tickers_upper,
@@ -282,15 +290,133 @@ def news_handler(
 ) -> dict[str, Any]:
     _ = context
     query = _query_params(event)
+    symbol_raw = str(query.get("symbol") or "").strip()
+    symbol = symbol_raw.upper() if symbol_raw else None
+    rc = build_request_context(event)
+
+    watchlist_symbols: list[str] = []
+    if rc.user_id:
+        default = get_watchlist_store().get_default_watchlist(rc.user_id)
+        if default:
+            watchlist_symbols = [str(s).strip().upper() for s in default.symbols if str(s).strip()]
+
+    if symbol:
+        try:
+            days = int(query.get("days") or 20)
+        except ValueError:
+            return bad_request("Invalid days.")
+        if days < 1 or days > 20:
+            return bad_request("days must be between 1 and 20.")
+        try:
+            panel_limit = int(query.get("limit") or 20)
+        except ValueError:
+            return bad_request("Invalid limit.")
+        if panel_limit < 1 or panel_limit > 100:
+            return bad_request("Limit must be between 1 and 100.")
+
+        async def _run_symbol_panel() -> dict[str, Any]:
+            now = datetime.now(timezone.utc)
+            since = now - timedelta(days=days)
+            recent_cutoff = now - timedelta(hours=RECENT_NEWS_HOURS)
+            fetch_limit = min(1000, max(80, panel_limit * 5))
+            settings = get_settings()
+            async with client_factory(api_key=settings.polygon_api_key) as client:
+                raw_articles = await client.get_market_news(
+                    tickers=[symbol],
+                    limit=fetch_limit,
+                    order="desc",
+                    published_utc_gte=since,
+                )
+
+            def collect_panel(min_relevance: int) -> list[dict[str, Any]]:
+                rows: list[dict[str, Any]] = []
+                for article in raw_articles:
+                    if not passes_market_intelligence_gate(article):
+                        continue
+                    if symbol not in _article_tickers_upper(article):
+                        continue
+                    pub = parse_published_utc(str(article.get("published_utc") or ""))
+                    if pub is None or pub < since:
+                        continue
+                    rel = calculate_article_relevance(article, watchlist_symbols)
+                    if rel < min_relevance:
+                        continue
+                    rows.append({**article, "_relevance_score": rel})
+                return rows
+
+            scored = collect_panel(10)
+            if not scored:
+                scored = collect_panel(0)
+            scored.sort(key=_news_relevance_sort_key)
+            deduped = deduplicate_articles(scored, score_key="_relevance_score")
+            for row in deduped:
+                row.pop("_relevance_score", None)
+            deduped.sort(key=_published_utc_sort_key, reverse=True)
+
+            total_found = len(deduped)
+            has_recent_news = False
+            for article in deduped:
+                pub = parse_published_utc(str(article.get("published_utc") or ""))
+                if pub and pub > recent_cutoff:
+                    has_recent_news = True
+                    break
+
+            slice_rows = deduped[:panel_limit]
+            articles_out: list[dict[str, Any]] = []
+            oldest_dt: datetime | None = None
+            for article in slice_rows:
+                pub = parse_published_utc(str(article.get("published_utc") or ""))
+                if pub and (oldest_dt is None or pub < oldest_dt):
+                    oldest_dt = pub
+                src, src_label = classify_news_source(article)
+                score, sent_label = sentiment_score_and_label(article)
+                cat = catalyst_type_for_article(article)
+                pub_iso = str(article.get("published_utc") or "")
+                is_recent = bool(pub and pub > recent_cutoff)
+                age_label = compute_news_age_label(now, pub) if pub else ""
+                url_val = str(article.get("article_url") or "").strip()
+                articles_out.append(
+                    {
+                        "id": str(article.get("id") or ""),
+                        "title": str(article.get("title") or ""),
+                        "source": src,
+                        "source_label": src_label,
+                        "published_at": pub_iso,
+                        "sentiment_score": round(score, 4),
+                        "sentiment_label": sent_label,
+                        "catalyst_type": cat,
+                        "url": url_val if url_val else None,
+                        "is_recent": is_recent,
+                        "age_label": age_label,
+                    }
+                )
+
+            oldest_included: str | None = None
+            if oldest_dt is not None:
+                oldest_included = oldest_dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+            return ok(
+                {
+                    "symbol": symbol,
+                    "has_recent_news": has_recent_news,
+                    "recent_cutoff_hours": RECENT_NEWS_HOURS,
+                    "articles": articles_out,
+                    "total_found": total_found,
+                    "oldest_included": oldest_included,
+                }
+            )
+
+        try:
+            return asyncio.run(_run_symbol_panel())
+        except PolygonError as exc:
+            return internal_error(str(exc))
+
     try:
         limit = int(query.get("limit") or 20)
     except ValueError:
         return bad_request("Invalid limit.")
     if limit < 1 or limit > 1000:
         return bad_request("Limit must be between 1 and 1000.")
-    symbol_raw = str(query.get("symbol") or "").strip()
-    symbol = symbol_raw.upper() if symbol_raw else None
-    rc = build_request_context(event)
 
     merged_tickers: list[str] = []
     seen: set[str] = set()
@@ -298,23 +424,12 @@ def news_handler(
         if sym not in seen:
             seen.add(sym)
             merged_tickers.append(sym)
-    if symbol and symbol not in seen:
-        seen.add(symbol)
-        merged_tickers.append(symbol)
-    watchlist_symbols: list[str] = []
-    if rc.user_id:
-        default = get_watchlist_store().get_default_watchlist(rc.user_id)
-        if default:
-            watchlist_symbols = [str(s).strip().upper() for s in default.symbols if str(s).strip()]
-            for sym in watchlist_symbols:
-                if sym not in seen and len(merged_tickers) < 30:
-                    seen.add(sym)
-                    merged_tickers.append(sym)
+    for sym in watchlist_symbols:
+        if sym not in seen and len(merged_tickers) < 30:
+            seen.add(sym)
+            merged_tickers.append(sym)
     merged_tickers = merged_tickers[:30]
-    # Single-symbol requests (e.g. signal evidence catalysts) must not blend in liquid
-    # names or watchlist-only tickers — Polygon returns `ticker.any_of` matches, so a
-    # merged list produced COTY/UNH headlines under `?symbol=PINS`.
-    news_query_tickers: list[str] = [symbol] if symbol else merged_tickers
+    news_query_tickers = merged_tickers
 
     async def _run() -> dict[str, Any]:
         settings = get_settings()

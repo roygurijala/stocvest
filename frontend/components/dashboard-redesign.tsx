@@ -2,20 +2,20 @@
 
 import { type ReactNode, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { useRouter } from "next/navigation";
 import { DashboardRealtime } from "@/components/dashboard-realtime";
 import { EarningsCalendar } from "@/components/earnings-calendar";
 import { InfoTip } from "@/components/info-tip";
 import { MarketSentimentScoreWidget } from "@/components/market-sentiment-score-widget";
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import { MorningBriefCollapse } from "@/components/morning-brief-collapse";
+import { NewsPanel } from "@/components/news-panel";
 import { PdtStatusPill } from "@/components/pdt-status-pill";
-import { NewsHeadlineDrawer } from "@/components/news-headline-drawer";
+import { getChangeColor } from "@/components/market-sentiment-score-widget";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
 import { topSignalStrengthPercent } from "@/lib/top-signal-strength";
-import type { MarketOverview, NewsCredibilityBand, NewsIntelCategory, NewsPayload, SnapshotPayload } from "@/lib/api/market";
+import type { MarketOverview, NewsPayload, SnapshotPayload } from "@/lib/api/market";
 import type { PDTStatusPayload } from "@/lib/api/pdt";
 import type { IntradayGeoPreview, IntradaySetupPayload, ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
@@ -23,7 +23,8 @@ import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { buildEvidenceFromSetup, enrichEvidenceWithRealComposite, type SignalEvidenceData } from "@/lib/signal-evidence";
-import { CONFIDENCE_PERCENT_TIP, LATEST_HEADLINES_TIP, TOP_SIGNALS_TIP } from "@/lib/ui-tooltips";
+import { tickerNewsTriggerLine } from "@/lib/api/ticker-news-panel";
+import { CONFIDENCE_PERCENT_TIP, TOP_SIGNALS_TIP } from "@/lib/ui-tooltips";
 
 interface DashboardRedesignProps {
   marketOverview: MarketOverview;
@@ -140,105 +141,20 @@ function isMorningBriefingWindowNow(): boolean {
   return minutes >= 7 * 60 + 45 && minutes <= 10 * 60;
 }
 
-function timeAgo(iso: string): string {
-  const ts = Date.parse(iso);
-  if (Number.isNaN(ts)) return "now";
-  const delta = Math.max(1, Math.floor((Date.now() - ts) / 1000));
-  if (delta < 60) return `${delta}s ago`;
-  if (delta < 3600) return `${Math.floor(delta / 60)}m ago`;
-  if (delta < 86400) return `${Math.floor(delta / 3600)}h ago`;
-  return `${Math.floor(delta / 86400)}d ago`;
+function findVixSnapshot(snapshots: SnapshotPayload[]): SnapshotPayload | undefined {
+  const order = ["I:VIX", "^VIX", "VIX"];
+  for (const k of order) {
+    const hit = snapshots.find((x) => (x.symbol || "").toUpperCase() === k);
+    if (hit) return hit;
+  }
+  return undefined;
 }
 
-type MiTab = "all" | "watchlist" | "earnings" | "analyst" | "macro";
-
-const MI_TAB_DEFS: { id: MiTab; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "watchlist", label: "Watchlist" },
-  { id: "earnings", label: "Earnings" },
-  { id: "analyst", label: "Analyst" },
-  { id: "macro", label: "Macro" }
-];
-
-const CATEGORY_ICONS: Record<string, { icon: string; color: string }> = {
-  earnings: { icon: "📊", color: "#00E07A" },
-  analyst: { icon: "🏦", color: "#00C8DC" },
-  macro: { icon: "🌍", color: "#F5B800" },
-  merger: { icon: "🤝", color: "#A855F7" },
-  breaking: { icon: "🔴", color: "#FF3358" },
-  sector: { icon: "⚙️", color: "#94A3B8" },
-  general: { icon: "📰", color: "#64748B" }
-};
-
-function articleIntelCategory(article: NewsPayload): NewsIntelCategory {
-  if (article.category) return article.category;
-  const c = article.catalyst_category;
-  if (c === "ma") return "merger";
-  if (c === "fda" || c === "sector") return "sector";
-  if (c === "earnings" || c === "analyst" || c === "macro" || c === "general") return c;
-  return "general";
-}
-
-function articleMatchesMiTab(article: NewsPayload, tab: MiTab): boolean {
-  const cat = articleIntelCategory(article);
-  if (tab === "all") return true;
-  if (tab === "watchlist") {
-    return Boolean(article.affected_stocks?.some((s) => s.is_watchlist));
-  }
-  if (tab === "earnings") return cat === "earnings";
-  if (tab === "analyst") return cat === "analyst";
-  if (tab === "macro") return cat === "macro" || cat === "breaking";
-  return false;
-}
-
-function miEmptyMessage(tab: MiTab): string {
-  switch (tab) {
-    case "earnings":
-      return "No earnings news in the last 8 hours.";
-    case "analyst":
-      return "No analyst action headlines in the last 8 hours.";
-    case "macro":
-      return "No macro headlines in the last 8 hours.";
-    case "watchlist":
-      return "Add stocks to your default watchlist to see personalized news in this feed.";
-    default:
-      return "No headlines in this category right now. Try another tab.";
-  }
-}
-
-function sourceLineStyle(article: NewsPayload, colors: { textMuted: string }) {
-  const band = article.credibility?.band;
-  if (band === "pr_wire") {
-    return { color: colors.textMuted, opacity: 0.72 } as const;
-  }
-  if (band === "elite" || band === "major") {
-    return { color: "#00d4ff", opacity: 1 } as const;
-  }
-  return { color: article.publisher?.tier === 1 ? "#00d4ff" : "#4a6080", opacity: 1 } as const;
-}
-
-function credibilityChipStyle(
-  band: NewsCredibilityBand | undefined,
-  colors: { border: string; textMuted: string; caution: string; surfaceMuted: string }
-) {
-  switch (band) {
-    case "elite":
-      return { backgroundColor: "rgba(0,212,255,0.1)", border: "1px solid rgba(0,212,255,0.35)", color: "#00d4ff" };
-    case "major":
-      return { backgroundColor: "rgba(59,130,246,0.12)", border: "1px solid rgba(59,130,246,0.35)", color: "#60a5fa" };
-    case "trade":
-      return { backgroundColor: "rgba(168,85,247,0.1)", border: "1px solid rgba(168,85,247,0.3)", color: "#c084fc" };
-    case "research":
-      return { backgroundColor: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.35)", color: colors.caution };
-    case "pr_wire":
-      return { backgroundColor: "rgba(251,113,133,0.1)", border: "1px solid rgba(251,113,133,0.35)", color: "#fb7185" };
-    default:
-      return {
-        backgroundColor: colors.surfaceMuted,
-        border: `1px solid ${colors.border}`,
-        color: colors.textMuted
-      };
-  }
+function pulseRegimeColor(regime: string, colors: ThemeColors): string {
+  const r = regime.trim().toLowerCase();
+  if (r === "bullish") return colors.bullish;
+  if (r === "bearish") return colors.bearish;
+  return colors.caution;
 }
 
 export function DashboardRedesign({
@@ -249,23 +165,34 @@ export function DashboardRedesign({
   morningBriefSlot
 }: DashboardRedesignProps) {
   const { colors } = useTheme();
-  const router = useRouter();
   const [evidence, setEvidence] = useState<SignalEvidenceData | null>(null);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
-  const [headlineArticle, setHeadlineArticle] = useState<NewsPayload | null>(null);
-  const [miTab, setMiTab] = useState<MiTab>("all");
+  const [newsPanelSymbol, setNewsPanelSymbol] = useState("");
+  const [newsPanelOpen, setNewsPanelOpen] = useState(false);
+  const [newsUiTick, setNewsUiTick] = useState(0);
   const snapshotsBySymbol = new Map(marketOverview.snapshots.map((s) => [s.symbol, s]));
   const morningVisible =
     isMorningBriefingWindowNow() && (!!scannerOverview.morningBrief || morningBriefSlot != null);
   const topSignals = scannerOverview.setups.slice(0, 3);
   const pdt = pdtStatus?.assessment;
-  const vixSnapshot = snapshotsBySymbol.get("VIX") || snapshotsBySymbol.get("^VIX");
+  const vixSnapshot =
+    findVixSnapshot(marketOverview.snapshots) || snapshotsBySymbol.get("VIX") || snapshotsBySymbol.get("^VIX");
   const earningsBySymbol = new Map(earningsEvents.map((e) => [e.symbol.toUpperCase(), e] as const));
+  const spyPct = scannerOverview.spyPct ?? null;
+  const qqqPct = scannerOverview.qqqPct ?? null;
+  const regimeLabel = scannerOverview.regimeLabel ?? "Neutral";
+  const vixPct =
+    typeof vixSnapshot?.change_percent === "number" && Number.isFinite(vixSnapshot.change_percent)
+      ? vixSnapshot.change_percent
+      : null;
 
-  const filteredMiNews = useMemo(
-    () => marketOverview.news.filter((a) => articleMatchesMiTab(a, miTab)),
-    [marketOverview.news, miTab]
-  );
+  const newsLabels = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of scannerOverview.setups.slice(0, 3)) {
+      m.set(s.symbol.trim().toUpperCase(), tickerNewsTriggerLine(s.symbol));
+    }
+    return m;
+  }, [scannerOverview.setups, newsUiTick]);
 
   return (
     <section style={{ display: "grid", gap: spacing[4] }}>
@@ -448,6 +375,25 @@ export function DashboardRedesign({
                           ) : null}
                         </p>
                       ) : null}
+                      <button
+                        type="button"
+                        className="w-full text-left"
+                        style={{
+                          margin: 0,
+                          padding: `${spacing[1]} 0`,
+                          fontSize: typography.scale.xs,
+                          color: colors.textMuted,
+                          cursor: "pointer",
+                          background: "none",
+                          border: "none"
+                        }}
+                        onClick={() => {
+                          setNewsPanelSymbol(signal.symbol.trim().toUpperCase());
+                          setNewsPanelOpen(true);
+                        }}
+                      >
+                        {newsLabels.get(signal.symbol.trim().toUpperCase()) ?? tickerNewsTriggerLine(signal.symbol)}
+                      </button>
                       <div
                         className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between"
                         style={{ borderTopColor: colors.border }}
@@ -534,259 +480,53 @@ export function DashboardRedesign({
               }}
             >
               <div style={{ display: "grid", gap: 2 }}>
-                <h3 style={{ margin: 0 }}>Market Intelligence</h3>
+                <h3 style={{ margin: 0 }}>Market Pulse</h3>
                 <p style={{ margin: 0, fontSize: 10, color: colors.textMuted, fontStyle: "italic" }}>
-                  News filtered to stocks that move markets
+                  SPY · QQQ · VIX direction and regime from the same tape context as day setups (no extra API calls)
                 </p>
               </div>
-              <InfoTip text={LATEST_HEADLINES_TIP} label="About latest headlines" />
             </div>
-            {marketOverview.news.length > 0 ? (
+            <div className="flex flex-col gap-3 text-sm" style={{ color: colors.text }}>
               <div
-                className="min-w-0 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-                style={{ display: "flex", gap: spacing[1], flexShrink: 0, marginBottom: spacing[2] }}
+                className="flex flex-wrap gap-x-4 gap-y-2 font-semibold"
+                style={{ fontVariantNumeric: "tabular-nums" }}
               >
-                {MI_TAB_DEFS.map((t) => {
-                  const active = miTab === t.id;
-                  return (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => setMiTab(t.id)}
-                      style={{
-                        flex: "0 0 auto",
-                        padding: "5px 10px",
-                        borderRadius: 999,
-                        border: `1px solid ${active ? colors.accent : colors.border}`,
-                        background: active ? `color-mix(in srgb, ${colors.accent} 22%, transparent)` : "transparent",
-                        color: active ? colors.text : colors.textMuted,
-                        fontSize: 11,
-                        fontWeight: active ? 700 : 500,
-                        cursor: "pointer",
-                        whiteSpace: "nowrap"
-                      }}
-                    >
-                      {t.label}
-                    </button>
-                  );
-                })}
+                <span>
+                  SPY{" "}
+                  <span style={{ color: spyPct != null ? getChangeColor(spyPct, colors) : colors.textMuted }}>
+                    {spyPct != null ? `${spyPct >= 0 ? "+" : ""}${spyPct.toFixed(2)}%` : "—"}
+                  </span>
+                </span>
+                <span>
+                  QQQ{" "}
+                  <span style={{ color: qqqPct != null ? getChangeColor(qqqPct, colors) : colors.textMuted }}>
+                    {qqqPct != null ? `${qqqPct >= 0 ? "+" : ""}${qqqPct.toFixed(2)}%` : "—"}
+                  </span>
+                </span>
+                <span>
+                  VIX{" "}
+                  <span style={{ color: vixPct != null ? getChangeColor(vixPct, colors) : colors.textMuted }}>
+                    {vixPct != null
+                      ? `${vixPct > 0.05 ? "▲" : vixPct < -0.05 ? "▼" : "→"} ${vixPct >= 0 ? "+" : ""}${vixPct.toFixed(2)}%`
+                      : vixSnapshot?.last_trade_price != null
+                        ? `→ ${Number(vixSnapshot.last_trade_price).toFixed(2)}`
+                        : "—"}
+                  </span>
+                </span>
               </div>
-            ) : null}
-            <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-              {marketOverview.news.length === 0 ? (
-                marketOverview.error ? (
-                  <p style={{ color: colors.textMuted, margin: 0 }}>{marketOverview.error}</p>
-                ) : (
-                  <p
-                    style={{
-                      color: colors.textMuted,
-                      margin: 0,
-                      textAlign: "center",
-                      fontSize: typography.scale.sm,
-                      lineHeight: 1.55
-                    }}
-                  >
-                    No headlines passed the feed filters: stories must tag tickers, beat a relevance cutoff, and usually sit in
-                    a short lookback—quiet markets or a failed upstream fetch can look empty here. The service retries a wider
-                    window when the last few hours have nothing.
-                  </p>
-                )
-              ) : filteredMiNews.length === 0 ? (
-                <p style={{ color: colors.textMuted, margin: 0, textAlign: "center", fontSize: typography.scale.sm }}>
-                  {miEmptyMessage(miTab)}
-                </p>
-              ) : (
-                <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: spacing[3] }}>
-                  {filteredMiNews.map((article) => (
-                    <li
-                      key={article.id || article.article_id}
-                      style={{
-                        borderBottom: `1px solid ${colors.border}`,
-                        paddingBottom: spacing[2],
-                        display: "grid",
-                        gap: spacing[1]
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "flex-start",
-                          justifyContent: "space-between",
-                          gap: spacing[2],
-                          flexWrap: "wrap"
-                        }}
-                      >
-                        <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0, flex: "1 1 140px" }}>
-                          <p style={{ margin: 0, fontSize: 11, ...sourceLineStyle(article, colors) }}>
-                            <span
-                              style={{
-                                marginRight: 4,
-                                color: (CATEGORY_ICONS[articleIntelCategory(article)] ?? CATEGORY_ICONS.general).color
-                              }}
-                            >
-                              {(CATEGORY_ICONS[articleIntelCategory(article)] ?? CATEGORY_ICONS.general).icon}
-                            </span>
-                            {article.credibility?.band === "elite" || article.credibility?.band === "major" ? (
-                              <span style={{ marginRight: 3 }} aria-hidden>
-                                ✓
-                              </span>
-                            ) : null}
-                            {(article.publisher?.name || article.source || "Unknown source").trim()} ·{" "}
-                            {timeAgo(article.published_utc || article.published_at)}
-                          </p>
-                          {article.credibility?.label ? (
-                            <span
-                              style={{
-                                display: "inline-flex",
-                                alignSelf: "flex-start",
-                                padding: "2px 8px",
-                                borderRadius: 999,
-                                fontSize: 9,
-                                fontWeight: 700,
-                                letterSpacing: 0.3,
-                                textTransform: "uppercase",
-                                ...credibilityChipStyle(article.credibility.band, colors)
-                              }}
-                            >
-                              {article.credibility.label}
-                            </span>
-                          ) : null}
-                        </div>
-                        <span
-                          style={{
-                            fontSize: 10,
-                            fontWeight: 700,
-                            color:
-                              (article.sentiment || "neutral").toLowerCase() === "positive"
-                                ? colors.bullish
-                                : (article.sentiment || "neutral").toLowerCase() === "negative"
-                                  ? colors.bearish
-                                  : colors.caution
-                          }}
-                        >
-                          {((article.sentiment || "neutral").toLowerCase() || "neutral").toUpperCase()}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setHeadlineArticle(article)}
-                        style={{
-                          display: "block",
-                          width: "100%",
-                          marginTop: 2,
-                          padding: 0,
-                          border: "none",
-                          background: "transparent",
-                          textAlign: "left",
-                          cursor: "pointer",
-                          color: "#e8f4ff",
-                          fontSize: 12,
-                          lineHeight: 1.45,
-                          fontWeight: 600
-                        }}
-                      >
-                        {article.title.length > 100 ? `${article.title.slice(0, 97)}...` : article.title}
-                      </button>
-                      {article.affected_stocks && article.affected_stocks.length > 0 ? (
-                        <>
-                          <p
-                            style={{
-                              margin: 0,
-                              fontSize: 9,
-                              letterSpacing: 0.6,
-                              textTransform: "uppercase",
-                              color: colors.textMuted,
-                              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace"
-                            }}
-                          >
-                            Affected Stocks
-                          </p>
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: spacing[1] }}>
-                            {article.affected_stocks.map((stock) => {
-                              const tone = stock.impact;
-                              const toneColor = tone === "bullish" ? "#00e87a" : tone === "bearish" ? "#ff3d5a" : "#f5c542";
-                              const borderColor =
-                                tone === "bullish"
-                                  ? "rgba(0,232,122,0.2)"
-                                  : tone === "bearish"
-                                    ? "rgba(255,61,90,0.2)"
-                                    : "rgba(245,197,66,0.2)";
-                              const bgColor =
-                                tone === "bullish"
-                                  ? "rgba(0,232,122,0.04)"
-                                  : tone === "bearish"
-                                    ? "rgba(255,61,90,0.04)"
-                                    : "rgba(245,197,66,0.04)";
-                              return (
-                                <button
-                                  key={`${article.article_id}-${stock.symbol}`}
-                                  type="button"
-                                  title={stock.is_watchlist ? "On your watchlist" : undefined}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    router.push(`/dashboard/signals?symbol=${encodeURIComponent(stock.symbol)}`);
-                                  }}
-                                  style={{
-                                    border: `1px solid ${stock.is_watchlist ? "rgba(255,255,255,0.25)" : borderColor}`,
-                                    background: bgColor,
-                                    borderRadius: 999,
-                                    color: colors.text,
-                                    padding: "4px 8px",
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    gap: 6,
-                                    cursor: "pointer"
-                                  }}
-                                >
-                                  <span
-                                    style={{
-                                      width: 6,
-                                      height: 6,
-                                      borderRadius: 999,
-                                      background: toneColor,
-                                      boxShadow: `0 0 8px ${toneColor}`
-                                    }}
-                                  />
-                                  <span style={{ fontSize: 10, fontWeight: 700 }}>
-                                    {stock.is_watchlist ? "★ " : ""}
-                                    {stock.symbol}
-                                  </span>
-                                  <span style={{ fontSize: 10, color: toneColor }}>{stock.reason}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </>
-                      ) : null}
-                      {article.impact_summary ? (
-                        <p
-                          style={{
-                            margin: 0,
-                            paddingTop: 8,
-                            borderTop: "0.5px solid rgba(0,180,255,0.06)",
-                            fontSize: 11,
-                            fontStyle: "italic",
-                            color: "#4a6080",
-                            lineHeight: 1.5
-                          }}
-                        >
-                          {article.impact_summary}
-                        </p>
-                      ) : null}
-                      <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                        <a
-                          href={article.article_url || article.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          style={{ fontSize: 10, color: colors.textMuted, textDecoration: "none" }}
-                        >
-                          Open article ↗
-                        </a>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <div
+                className="inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wide"
+                style={{
+                  borderColor: colors.border,
+                  background: "rgba(148,163,184,0.08)",
+                  color: pulseRegimeColor(regimeLabel, colors)
+                }}
+              >
+                Regime: {regimeLabel}
+              </div>
+              <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.5 }}>
+                Per-symbol headlines are in the news drawer on each signal card (opens on demand — not prefetched).
+              </p>
             </div>
           </article>
       </div>
@@ -796,11 +536,23 @@ export function DashboardRedesign({
           <MorningBriefCollapse mb={scannerOverview.morningBrief} pdt={pdt} />
         ) : null)
       ) : null}
-      <SignalEvidenceModal open={evidenceOpen} evidence={evidence} onClose={() => setEvidenceOpen(false)} />
-      <NewsHeadlineDrawer
-        open={headlineArticle != null}
-        article={headlineArticle}
-        onClose={() => setHeadlineArticle(null)}
+      <SignalEvidenceModal
+        open={evidenceOpen}
+        evidence={evidence}
+        onClose={() => setEvidenceOpen(false)}
+        onOpenNewsPanel={(sym) => {
+          setNewsPanelSymbol(sym.trim().toUpperCase());
+          setNewsPanelOpen(true);
+        }}
+      />
+      <NewsPanel
+        symbol={newsPanelSymbol}
+        isOpen={newsPanelOpen}
+        onClose={() => {
+          setNewsPanelOpen(false);
+          setNewsUiTick((t) => t + 1);
+        }}
+        onLoaded={() => setNewsUiTick((t) => t + 1)}
       />
     </section>
   );

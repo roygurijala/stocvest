@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -18,6 +18,10 @@ from stocvest.api.handlers.market_data import (
 from stocvest.data.models import Bar, EarningsEvent, MarketStatus, NewsArticle, OptionContract, Snapshot, Timeframe
 from stocvest.data.polygon_client import PolygonError
 from stocvest.utils.config import get_settings
+
+
+def _iso_utc(dt: datetime) -> str:
+    return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 class _FakePolygonClient:
@@ -92,10 +96,11 @@ class _FakePolygonClient:
                     break
             else:
                 sym = str(tickers[0]).upper()
+        now = datetime.now(timezone.utc)
         return [
             {
                 "id": "a1",
-                "published_utc": "2026-01-02T13:00:00Z",
+                "published_utc": _iso_utc(now - timedelta(hours=2)),
                 "title": f"Headline {sym}",
                 "description": "Market moving update",
                 "article_url": "https://example.com/news/1",
@@ -238,11 +243,12 @@ def test_news_handler_returns_filtered_news() -> None:
     response = news_handler(event, {}, client_factory=_FakePolygonClient)
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
-    assert "headlines" in body
-    assert len(body["headlines"]) == 1
-    assert body["headlines"][0]["title"] == "Headline MSFT"
-    assert body["headlines"][0]["publisher"]["tier"] == 1
-    assert body["headlines"][0]["affected_stocks"][0]["symbol"] == "MSFT"
+    assert "articles" in body
+    assert body["symbol"] == "MSFT"
+    assert len(body["articles"]) == 1
+    assert body["articles"][0]["title"] == "Headline MSFT"
+    assert body["articles"][0]["sentiment_label"] == "bullish"
+    assert body["total_found"] >= 1
 
 
 class _DiversityPolygonClient(_FakePolygonClient):
@@ -329,12 +335,12 @@ def test_news_handler_includes_relevance_enrichment() -> None:
     response = news_handler(event, {}, client_factory=_FakePolygonClient)
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
-    h = body["headlines"][0]
-    assert "relevance_score" in h
-    assert "credibility" in h and "label" in h["credibility"]
-    assert "category" in h
-    assert "catalyst_category" in h
-    assert "matches_watchlist" in h
+    h = body["articles"][0]
+    assert "sentiment_score" in h
+    assert "source" in h and h["source"] == "polygon"
+    assert "source_label" in h
+    assert "age_label" in h
+    assert "is_recent" in h
 
 
 class _SymbolScopeNewsClient(_FakePolygonClient):
@@ -354,10 +360,11 @@ class _SymbolScopeNewsClient(_FakePolygonClient):
         _ = order
         _ = published_utc_gte
         self.__class__.last_news_tickers = list(tickers) if tickers else None
+        now = datetime.now(timezone.utc)
         return [
             {
                 "id": "coty1",
-                "published_utc": "2026-01-02T12:00:00Z",
+                "published_utc": _iso_utc(now - timedelta(hours=5)),
                 "title": "COTY quarterly revenue tops estimates",
                 "description": "earnings beat beauty segment",
                 "article_url": "https://e/coty",
@@ -367,7 +374,7 @@ class _SymbolScopeNewsClient(_FakePolygonClient):
             },
             {
                 "id": "pins1",
-                "published_utc": "2026-01-02T12:05:00Z",
+                "published_utc": _iso_utc(now - timedelta(hours=4)),
                 "title": "PINS user engagement trends",
                 "description": "Pinterest session data",
                 "article_url": "https://e/pins",
@@ -384,9 +391,8 @@ def test_news_handler_symbol_query_only_fetches_and_returns_that_ticker() -> Non
     assert response["statusCode"] == 200
     assert _SymbolScopeNewsClient.last_news_tickers == ["PINS"]
     body = json.loads(response["body"])
-    ids = {h["article_id"] for h in body["headlines"]}
+    ids = {h["id"] for h in body["articles"]}
     assert ids == {"pins1"}
-    assert all("PINS" in h["tickers"] for h in body["headlines"])
 
 
 def test_options_chain_handler_returns_contracts_with_greeks() -> None:
@@ -438,4 +444,130 @@ def test_earnings_calendar_handler_returns_notice_on_polygon_forbidden() -> None
     assert body["recent"] == []
     assert isinstance(body.get("notice"), str)
     assert "polygon" in body["notice"].lower()
+
+
+def test_news_symbol_panel_rejects_days_over_20() -> None:
+    event = {"queryStringParameters": {"symbol": "AAPL", "days": "25"}}
+    response = news_handler(event, {}, client_factory=_FakePolygonClient)
+    assert response["statusCode"] == 400
+
+
+def _make_has_recent_news_client(recent: bool):
+    class _HasRecentNewsClient(_FakePolygonClient):
+        async def get_market_news(
+            self,
+            *,
+            tickers: list[str] | None = None,
+            limit: int = 50,
+            order: str = "desc",
+            published_utc_gte: datetime | None = None,
+        ) -> list[dict]:
+            _ = limit
+            _ = order
+            _ = published_utc_gte
+            sym = str(tickers[0]).upper() if tickers else "SPY"
+            now = datetime.now(timezone.utc)
+            pub = now - timedelta(hours=2) if recent else now - timedelta(hours=6)
+            return [
+                {
+                    "id": "n1",
+                    "published_utc": _iso_utc(pub),
+                    "title": f"Story {sym}",
+                    "description": "d",
+                    "article_url": "https://example.com/x",
+                    "publisher": {"name": "Reuters"},
+                    "tickers": [sym],
+                    "insights": [{"sentiment": "neutral"}],
+                }
+            ]
+
+    return _HasRecentNewsClient
+
+
+def test_news_endpoint_returns_has_recent_flag_true() -> None:
+    event = {"queryStringParameters": {"symbol": "AAPL", "limit": "5"}}
+    response = news_handler(event, {}, client_factory=_make_has_recent_news_client(True))
+    body = json.loads(response["body"])
+    assert body["has_recent_news"] is True
+
+
+def test_news_endpoint_returns_has_recent_flag_false() -> None:
+    event = {"queryStringParameters": {"symbol": "AAPL", "limit": "5"}}
+    response = news_handler(event, {}, client_factory=_make_has_recent_news_client(False))
+    body = json.loads(response["body"])
+    assert body["has_recent_news"] is False
+
+
+class _TwentyDayWindowClient(_FakePolygonClient):
+    async def get_market_news(
+        self,
+        *,
+        tickers: list[str] | None = None,
+        limit: int = 50,
+        order: str = "desc",
+        published_utc_gte: datetime | None = None,
+    ) -> list[dict]:
+        _ = limit
+        _ = order
+        _ = published_utc_gte
+        sym = str(tickers[0]).upper() if tickers else "SPY"
+        now = datetime.now(timezone.utc)
+        return [
+            {
+                "id": "too_old",
+                "published_utc": _iso_utc(now - timedelta(days=25)),
+                "title": "Old",
+                "description": "d",
+                "article_url": "https://example.com/old",
+                "publisher": {"name": "Reuters"},
+                "tickers": [sym],
+                "insights": [{"sentiment": "neutral"}],
+            },
+            {
+                "id": "in_window",
+                "published_utc": _iso_utc(now - timedelta(days=5)),
+                "title": "Recent window",
+                "description": "d",
+                "article_url": "https://example.com/new",
+                "publisher": {"name": "Bloomberg"},
+                "tickers": [sym],
+                "insights": [{"sentiment": "positive"}],
+            },
+        ]
+
+
+def test_news_endpoint_20_day_limit() -> None:
+    event = {"queryStringParameters": {"symbol": "NVDA", "days": "20", "limit": "10"}}
+    response = news_handler(event, {}, client_factory=_TwentyDayWindowClient)
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    ids = {a["id"] for a in body["articles"]}
+    assert ids == {"in_window"}
+    assert body["total_found"] == 1
+
+
+class _EmptyNewsClient(_FakePolygonClient):
+    async def get_market_news(
+        self,
+        *,
+        tickers: list[str] | None = None,
+        limit: int = 50,
+        order: str = "desc",
+        published_utc_gte: datetime | None = None,
+    ) -> list[dict]:
+        _ = tickers
+        _ = limit
+        _ = order
+        _ = published_utc_gte
+        return []
+
+
+def test_news_endpoint_empty_result() -> None:
+    event = {"queryStringParameters": {"symbol": "ZZZ", "days": "20"}}
+    response = news_handler(event, {}, client_factory=_EmptyNewsClient)
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["articles"] == []
+    assert body["has_recent_news"] is False
+    assert body["total_found"] == 0
 

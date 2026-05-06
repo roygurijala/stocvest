@@ -4,7 +4,7 @@
 `CONTEXT.md` holds **status-at-a-glance**, **what’s implemented**, **near-term ops** (Terraform, secrets, CI, legal), **legal rules**, and **session rules**.  
 **This file** holds **planned work only**: themes, sub-items, and notes—**without** repeating the CONTEXT status table or §3 pending list.
 
-**Last updated:** 2026-05-05 (portfolio scheduler + scheduled scanner composite hook)
+**Last updated:** 2026-05-06 (ticker news panel + Market Pulse)
 
 ---
 
@@ -36,6 +36,7 @@ Tracked in **`CONTEXT.md` §3** only (Terraform apply, GitHub/AWS/Vercel secrets
 | B16 | **Signals page after-hours research panel** | Done 2026-05-04 | Added `frontend/components/signals-after-hours-panel.tsx` and wired signals-page insufficient-data closed-session rendering to show last-session levels, earnings window, recent news, tomorrow watch levels, and watchlist CTA with graceful per-section fallbacks. |
 | B17 | **PDT Guardian → compact status pill** | Done 2026-05-04 · commit: `3b7551f` | Removed large dashboard PDT card; added **`pdt-status-pill.tsx`** beside Market/VIX (color bands 0–1 / 2 / 3 day trades, desktop tooltip, mobile tap panel). PDT fetch unchanged. |
 | B18 | **Scheduled scanner → portfolio composite pass** | Done 2026-05-05 · commit: `ed59cdf` | **`scanner_scheduled_pipeline`:** after gap/setups + notify, optional **`run_portfolio_scanner_for_symbol`** per symbol when event **`run_portfolio_composite`** is true; **`scanner.py`** passes flag into **`run_scheduled_scan_sync`**. **`infra/eventbridge_scheduler_6g.tf`:** **`run_portfolio_composite`** on **premarket** + **`scanner_intraday_morning`** only. **`portfolio_reversal.py`** (**`get_composite_verdict_only`**) for weekday reversal without duplicate auto-log side effects; real/swing composite **`enable_portfolio_log`**. **Tests:** **`tests/api/test_scanner_scheduled_pipeline_portfolio.py`**, **`tests/api/test_model_portfolio_fixes_v2.py`**. |
+| B19 | **Ticker news panel + Market Pulse** | Done 2026-05-06 · commit: pending | **Backend:** **`GET /v1/market/news?symbol=`** returns historical panel JSON (`days`/`limit`, **`articles`** with age/source/sentiment); no-symbol path unchanged **`headlines`**. **`news_panel_format.py`** + tests. **Frontend:** **`news-panel.tsx`**, **`ticker-news-panel.ts`**, per-ticker **2m** cache, fetch on open; **`fetchMarketOverview`** drops news; dashboard **Market Pulse** (SPY/QQQ/VIX/regime) replaces embedded Market Intelligence grid; triggers on dashboard cards, evidence, signals page. **Vitest:** **`fileParallelism: false`** to stabilize **`global.fetch`** mocks. |
 | B5 | **Subscriptions** | Not done | Stripe (Atlas-linked), tier gating (Free / Pro / Institutional), usage limits; **after** attorney-reviewed ToS and entity readiness (`CONTEXT.md` §14). |
 | B6 | **Sector & market internals** | Not done | Sector rotation view, breadth (A/D, highs/lows), VIX regime, optional put/call—**data-only** copy per legal framing. |
 | B7 | **Risk management UX** | Not done | Position sizing helper (% of portfolio), optional max daily loss guardrails, concentration / correlation hints—**never** framed as advice; copy reviewed with counsel. |

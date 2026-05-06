@@ -11,9 +11,10 @@ interface SignalEvidenceModalProps {
   evidence: SignalEvidenceData | null;
   open: boolean;
   onClose: () => void;
+  onOpenNewsPanel?: (symbol: string) => void;
 }
 
-export function SignalEvidenceModal({ evidence, open, onClose }: SignalEvidenceModalProps) {
+export function SignalEvidenceModal({ evidence, open, onClose, onOpenNewsPanel }: SignalEvidenceModalProps) {
   const { colors } = useTheme();
   return (
     <AnimatePresence>
@@ -57,7 +58,7 @@ export function SignalEvidenceModal({ evidence, open, onClose }: SignalEvidenceM
                 <X size={18} />
               </button>
             </div>
-            <SignalEvidenceCard evidence={evidence} />
+            <SignalEvidenceCard evidence={evidence} onOpenNewsPanel={onOpenNewsPanel} />
           </motion.div>
         </motion.div>
       ) : null}

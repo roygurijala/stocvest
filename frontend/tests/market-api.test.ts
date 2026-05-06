@@ -11,14 +11,13 @@ describe("market API overview fetch", () => {
     apiFetchMock.mockReset();
   });
 
-  test("fetchMarketOverview orchestrates status/snapshots/news", async () => {
+  test("fetchMarketOverview orchestrates status/snapshots/sparklines", async () => {
     const { fetchMarketOverview } = await import("@/lib/api/market");
     apiFetchMock.mockResolvedValueOnce({
       market: "open",
       exchanges: { nyse: "open" },
       currencies: { usd: "open" }
     });
-    apiFetchMock.mockResolvedValueOnce([{ article_id: "n1", title: "Headline", tickers: [], published_at: "x", url: "u" }]);
     apiFetchMock.mockResolvedValueOnce({
       snapshots: [
         { symbol: "SPY", last_trade_price: 501.2 },
@@ -36,16 +35,16 @@ describe("market API overview fetch", () => {
     expect(result.error).toBeUndefined();
     expect(result.status?.market).toBe("open");
     expect(result.snapshots).toHaveLength(2);
-    expect(result.news).toHaveLength(1);
+    expect(result.news).toHaveLength(0);
     expect(result.sparklinesBySymbol?.SPY?.length).toBeGreaterThan(0);
     expect(result.sparklinesBySymbol?.QQQ?.length).toBeGreaterThan(0);
   });
 
   test("fetchMarketOverview handles API errors", async () => {
     const { fetchMarketOverview } = await import("@/lib/api/market");
-    apiFetchMock.mockRejectedValueOnce(new Error("API request failed (500): boom"));
+    apiFetchMock.mockRejectedValue(new Error("API request failed (500): boom"));
     const result = await fetchMarketOverview();
-    expect(result.error).toContain("500");
+    expect(result.error).toMatch(/500/);
     expect(result.snapshots).toHaveLength(0);
   });
 });

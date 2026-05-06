@@ -22,6 +22,7 @@ import { AI_VERDICT_TIP, CONFIDENCE_PERCENT_TIP, LAYER_NAME_HINTS } from "@/lib/
 
 interface SignalEvidenceCardProps {
   evidence: SignalEvidenceData;
+  onOpenNewsPanel?: (symbol: string) => void;
 }
 
 function statusColor(status: EvidenceStatus, colors: ThemeColors): string {
@@ -252,7 +253,7 @@ function GeopoliticalExposurePanel({ geo, colors }: { geo: GeopoliticalLayerExtr
   );
 }
 
-export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
+export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidenceCardProps) {
   const { colors } = useTheme();
   const isMobileLayout = useIsMobileLayout();
   const insight = evidence.insight ?? deriveEvidenceInsightFallback(evidence);
@@ -553,6 +554,18 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
                   </span>
                 ))}
               </div>
+              {layer.key === "news" && onOpenNewsPanel ? (
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    className="border-0 bg-transparent p-0 text-xs font-semibold underline-offset-2 hover:underline"
+                    style={{ color: colors.accent, cursor: "pointer" }}
+                    onClick={() => onOpenNewsPanel(evidence.symbol)}
+                  >
+                    View all news for {evidence.symbol} →
+                  </button>
+                </div>
+              ) : null}
               {layer.key === "geopolitical" && layer.geo ? <GeopoliticalExposurePanel geo={layer.geo} colors={colors} /> : null}
               <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>{displayLayerFreshness(layer, evidence)}</span>
             </article>

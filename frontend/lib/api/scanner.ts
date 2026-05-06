@@ -145,6 +145,10 @@ export interface ScannerOverview {
   setups: IntradaySetupPayload[];
   morningBrief?: MorningBriefPayload;
   error?: string;
+  /** From scanner core / day-setups pipeline (no extra API). */
+  spyPct?: number | null;
+  qqqPct?: number | null;
+  regimeLabel?: string;
 }
 
 /** Snapshot + gap pipeline through intraday setups (no morning briefing). */
@@ -509,6 +513,9 @@ export async function fetchScannerOverview(
     gapIntelligence: core.gapIntelligence,
     setups: core.setups,
     morningBrief,
-    error: undefined
+    error: undefined,
+    spyPct: core.spyPct,
+    qqqPct: core.qqqPct,
+    regimeLabel: core.regimeLabel
   };
 }
