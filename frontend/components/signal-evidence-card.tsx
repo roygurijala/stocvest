@@ -1,9 +1,10 @@
 "use client";
 
 import { Brain } from "lucide-react";
-import { Bar, BarChart, Cell, ResponsiveContainer, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { useIsMobileLayout } from "@/lib/hooks/use-is-mobile-layout";
 import { useTheme } from "@/lib/theme-provider";
 import { InfoTip } from "@/components/info-tip";
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
@@ -129,6 +130,7 @@ function formatSentimentScore(score: number): string {
 
 export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
   const { colors } = useTheme();
+  const isMobileLayout = useIsMobileLayout();
   const insight = evidence.insight ?? deriveEvidenceInsightFallback(evidence);
   const directionTone =
     evidence.direction === "bullish" ? colors.bullish : evidence.direction === "bearish" ? colors.bearish : colors.caution;
@@ -699,7 +701,7 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
 
       <section style={{ border: `1px solid ${colors.border}`, borderRadius: borderRadius.lg, padding: spacing[3], display: "grid", gap: spacing[2] }}>
         <h3 style={{ margin: 0 }}>Signal Strength Breakdown</h3>
-        <div className="h-[160px] w-full max-w-full lg:h-[200px]">
+        <div className="h-[208px] w-full max-w-full min-w-0 lg:h-[236px]">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={evidence.layers.map((l) => ({
@@ -708,10 +710,52 @@ export function SignalEvidenceCard({ evidence }: SignalEvidenceCardProps) {
                 status: l.status
               }))}
               layout="vertical"
+              margin={
+                isMobileLayout
+                  ? { top: 4, right: 8, left: 0, bottom: 8 }
+                  : { top: 4, right: 14, left: 2, bottom: 4 }
+              }
+              barCategoryGap={isMobileLayout ? "14%" : "16%"}
             >
-              <XAxis type="number" />
-              <YAxis type="category" dataKey="layer" width={90} />
-              <Bar dataKey="score" radius={[0, 6, 6, 0]}>
+              <XAxis
+                type="number"
+                domain={[0, 100]}
+                tick={{ fontSize: isMobileLayout ? 9 : 10, fill: colors.textMuted }}
+                axisLine={{ stroke: colors.border }}
+                tickLine={{ stroke: colors.border }}
+              />
+              <YAxis
+                type="category"
+                dataKey="layer"
+                width={isMobileLayout ? 108 : 124}
+                interval={0}
+                tick={{ fontSize: isMobileLayout ? 9 : 10, fill: colors.textMuted }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <Tooltip
+                cursor={{ fill: "rgba(148,163,184,0.07)" }}
+                content={({ active, payload }) => {
+                  if (!active || !payload?.[0]) return null;
+                  const row = payload[0].payload as { layer: string; score: number; status: EvidenceStatus };
+                  return (
+                    <div
+                      style={{
+                        background: colors.surface,
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 8,
+                        padding: "8px 10px",
+                        fontSize: 12,
+                        color: colors.text
+                      }}
+                    >
+                      <div style={{ fontWeight: 600 }}>{row.layer}</div>
+                      <div style={{ color: colors.textMuted, marginTop: 4 }}>Score: {row.score}</div>
+                    </div>
+                  );
+                }}
+              />
+              <Bar dataKey="score" radius={[0, 6, 6, 0]} maxBarSize={isMobileLayout ? 18 : 20} isAnimationActive={false}>
                 {evidence.layers.map((l) => (
                   <Cell key={l.key} fill={statusColor(l.status, colors)} />
                 ))}
