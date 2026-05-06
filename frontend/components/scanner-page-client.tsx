@@ -17,7 +17,7 @@ import { AddToWatchlistButton } from "@/components/add-to-watchlist-button";
 import { GapCatalystNewsDrawer } from "@/components/gap-catalyst-news-drawer";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
-import { topSignalStrengthPercent, type GapIntelligenceItem, type IntradaySetupPayload, type ScannerOverview } from "@/lib/api/scanner";
+import type { GapIntelligenceItem, IntradaySetupPayload, ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
 import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
@@ -71,6 +71,14 @@ const CONFLUENCE_BADGE_STYLE: CSSProperties = {
 
 function isLongDirection(direction: string): boolean {
   return ["bullish", "long"].includes(direction.toLowerCase());
+}
+
+function topSignalStrengthPercent(setup: IntradaySetupPayload): number {
+  if (typeof setup.confluence_score === "number" && Number.isFinite(setup.confluence_score)) {
+    return Math.max(0, Math.min(100, Math.round(setup.confluence_score)));
+  }
+  const raw = typeof setup.score === "number" && Number.isFinite(setup.score) ? setup.score : 0;
+  return Math.max(0, Math.min(100, Math.round(raw * 100)));
 }
 
 function formatSignalFiredTimeEt(iso: string): string {

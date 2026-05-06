@@ -16,7 +16,7 @@ import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
 import type { MarketOverview, NewsCredibilityBand, NewsIntelCategory, NewsPayload, SnapshotPayload } from "@/lib/api/market";
 import type { PDTStatusPayload } from "@/lib/api/pdt";
-import { topSignalStrengthPercent, type IntradayGeoPreview, type ScannerOverview } from "@/lib/api/scanner";
+import type { IntradayGeoPreview, IntradaySetupPayload, ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
 import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
@@ -98,6 +98,14 @@ function TopSignalGeoStrip({ preview, colors }: { preview: IntradayGeoPreview; c
       ) : null}
     </div>
   );
+}
+
+function topSignalStrengthPercent(setup: IntradaySetupPayload): number {
+  if (typeof setup.confluence_score === "number" && Number.isFinite(setup.confluence_score)) {
+    return Math.max(0, Math.min(100, Math.round(setup.confluence_score)));
+  }
+  const raw = typeof setup.score === "number" && Number.isFinite(setup.score) ? setup.score : 0;
+  return Math.max(0, Math.min(100, Math.round(raw * 100)));
 }
 
 function toPrice(n: number | null | undefined): string {
