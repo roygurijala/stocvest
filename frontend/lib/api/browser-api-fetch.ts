@@ -4,7 +4,12 @@ const DEFAULT_BASE_URL = "http://localhost:3001";
 const DEFAULT_TIMEOUT_MS = 55_000;
 
 function apiBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_STOCVEST_API_BASE_URL || DEFAULT_BASE_URL;
+  const a = typeof process.env.STOCVEST_API_BASE_URL === "string" ? process.env.STOCVEST_API_BASE_URL.trim() : "";
+  const b =
+    typeof process.env.NEXT_PUBLIC_STOCVEST_API_BASE_URL === "string"
+      ? process.env.NEXT_PUBLIC_STOCVEST_API_BASE_URL.trim()
+      : "";
+  return (a || b || DEFAULT_BASE_URL).replace(/\/+$/, "");
 }
 
 /** JSON API fetch for Client Components (no `next/headers` / server session). */

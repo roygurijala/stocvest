@@ -340,9 +340,13 @@ export function DashboardRedesign({
                 >
                   {marketOverview.status.market?.toLowerCase() === "open" ? "Open" : "Closed"}
                 </span>
-              ) : !marketOverview.error ? (
+              ) : marketOverview.error ? (
+                <span style={{ color: colors.caution }} title={marketOverview.error}>
+                  unavailable
+                </span>
+              ) : (
                 <SkeletonLine width="64px" />
-              ) : null}
+              )}
             </span>
             {vixSnapshot ? (
               <span style={{ color: colors.textMuted }}>
@@ -366,7 +370,15 @@ export function DashboardRedesign({
               subtitle="SPY, QQQ, and IWM — last ~5 trading sessions (daily closes), not intraday tape."
               cardTip={WEEKLY_MARKET_CONTEXT_CARD_TIP}
             >
-              <WeeklyMarketContextWidget rows={weeklyIndexRows} marketStatus={marketOverview.status} />
+              <WeeklyMarketContextWidget
+                rows={weeklyIndexRows}
+                marketStatus={marketOverview.status}
+                dataIssue={
+                  weeklyIndexRows.every((r) => r.pct5d == null) && weeklyIndexRows.every((r) => r.lastPrice == null)
+                    ? marketOverview.error || null
+                    : null
+                }
+              />
             </DashboardCard>
           </div>
 

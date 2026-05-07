@@ -17,20 +17,32 @@ export type WeeklyIndexRow = {
 type Props = {
   rows: WeeklyIndexRow[];
   marketStatus?: MarketStatusPayload;
+  /** When snapshots/bars failed (e.g. API unreachable), surface this instead of an endless loading hint. */
+  dataIssue?: string | null;
 };
 
-function weekTone(rows: WeeklyIndexRow[], colors: ThemeColors): { label: string; color: string } {
+function weekTone(
+  rows: WeeklyIndexRow[],
+  colors: ThemeColors,
+  dataIssue?: string | null
+): { label: string; color: string } {
   const vals = rows.map((r) => r.pct5d).filter((x): x is number => typeof x === "number" && Number.isFinite(x));
-  if (vals.length === 0) return { label: "Weekly data loading…", color: colors.textMuted };
+  if (vals.length === 0) {
+    const hint = typeof dataIssue === "string" ? dataIssue.trim() : "";
+    if (hint) {
+      return { label: hint.length > 140 ? `${hint.slice(0, 137)}…` : hint, color: colors.caution };
+    }
+    return { label: "Weekly data loading…", color: colors.textMuted };
+  }
   const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
   if (avg >= 0.6) return { label: "Constructive 5-session tape", color: colors.bullish };
   if (avg <= -0.6) return { label: "Defensive 5-session tape", color: colors.bearish };
   return { label: "Mixed 5-session tape", color: colors.caution };
 }
 
-export function WeeklyMarketContextWidget({ rows, marketStatus }: Props) {
+export function WeeklyMarketContextWidget({ rows, marketStatus, dataIssue }: Props) {
   const { colors } = useTheme();
-  const tone = weekTone(rows, colors);
+  const tone = weekTone(rows, colors, dataIssue);
   const mkt = (marketStatus?.market || "").toLowerCase();
 
   return (

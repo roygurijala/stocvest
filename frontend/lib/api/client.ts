@@ -6,8 +6,18 @@ const DEFAULT_BASE_URL = "http://localhost:3001";
 /** Cold VPC Lambdas + Polygon can exceed a few seconds; dashboard chains multiple calls per request. */
 const DEFAULT_API_TIMEOUT_MS = 55_000;
 
+/**
+ * STOCVEST Lambda HTTP API base (no trailing slash).
+ * Prefer `STOCVEST_API_BASE_URL` on Vercel so server rendering does not rely on NEXT_PUBLIC_* (build-time only).
+ */
 export function apiBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_STOCVEST_API_BASE_URL || DEFAULT_BASE_URL;
+  const a = typeof process.env.STOCVEST_API_BASE_URL === "string" ? process.env.STOCVEST_API_BASE_URL.trim() : "";
+  const b =
+    typeof process.env.NEXT_PUBLIC_STOCVEST_API_BASE_URL === "string"
+      ? process.env.NEXT_PUBLIC_STOCVEST_API_BASE_URL.trim()
+      : "";
+  const raw = a || b || DEFAULT_BASE_URL;
+  return raw.replace(/\/+$/, "");
 }
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T | null> {
