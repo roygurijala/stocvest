@@ -207,6 +207,7 @@ export async function runScannerLoadWithoutBrief(
         spyPct: null,
         qqqPct: null,
         regimeLabel: "Neutral",
+        swingUniverseSymbolCount: null,
         error: "Service temporarily unavailable. Please try again."
       };
     }
@@ -337,6 +338,7 @@ export async function runScannerLoadWithoutBrief(
           spyPct,
           qqqPct,
           regimeLabel,
+          swingUniverseSymbolCount: universe.length,
           error: "Service temporarily unavailable. Please try again."
         };
       }
@@ -378,7 +380,8 @@ export async function runScannerLoadWithoutBrief(
       setups,
       spyPct,
       qqqPct,
-      regimeLabel
+      regimeLabel,
+      swingUniverseSymbolCount: universe.length
     };
   } catch (error: unknown) {
     if (isNextRedirect(error)) throw error;
@@ -388,6 +391,7 @@ export async function runScannerLoadWithoutBrief(
       spyPct: null,
       qqqPct: null,
       regimeLabel: "Neutral",
+      swingUniverseSymbolCount: null,
       error: error instanceof Error ? error.message : "Unable to connect. Check your connection."
     };
   }

@@ -21,6 +21,11 @@ type Props = {
   dataIssue?: string | null;
 };
 
+/** Weekly headline is context only — softer chroma so it does not read like a trade signal. */
+function weekToneColor(accent: string, colors: ThemeColors): string {
+  return `color-mix(in srgb, ${accent} 52%, ${colors.textMuted})`;
+}
+
 function weekTone(
   rows: WeeklyIndexRow[],
   colors: ThemeColors,
@@ -35,9 +40,22 @@ function weekTone(
     return { label: "Weekly data loading…", color: colors.textMuted };
   }
   const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
-  if (avg >= 0.6) return { label: "Constructive 5-session tape", color: colors.bullish };
-  if (avg <= -0.6) return { label: "Defensive 5-session tape", color: colors.bearish };
-  return { label: "Mixed 5-session tape", color: colors.caution };
+  if (avg >= 0.6) {
+    return {
+      label: "Constructive 5-session tape (background)",
+      color: weekToneColor(colors.bullish, colors)
+    };
+  }
+  if (avg <= -0.6) {
+    return {
+      label: "Defensive 5-session tape (background)",
+      color: weekToneColor(colors.bearish, colors)
+    };
+  }
+  return {
+    label: "Mixed 5-session tape (background)",
+    color: `color-mix(in srgb, ${colors.caution} 58%, ${colors.textMuted})`
+  };
 }
 
 export function WeeklyMarketContextWidget({ rows, marketStatus, dataIssue }: Props) {

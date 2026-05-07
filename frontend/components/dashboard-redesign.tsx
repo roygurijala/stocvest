@@ -10,7 +10,6 @@ import { InfoTip } from "@/components/info-tip";
 import { WeeklyMarketContextWidget, type WeeklyIndexRow } from "@/components/weekly-market-context-widget";
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import { NewsPanel } from "@/components/news-panel";
-import { PdtStatusPill } from "@/components/pdt-status-pill";
 import { getChangeColor } from "@/components/market-sentiment-score-widget";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import { fetchMacroContext } from "@/lib/api/fetch-macro-context";
@@ -18,7 +17,6 @@ import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
 import { topSignalStrengthPercent } from "@/lib/top-signal-strength";
 import type { MarketOverview, NewsPayload, SnapshotPayload } from "@/lib/api/market";
-import type { PDTStatusPayload } from "@/lib/api/pdt";
 import type { IntradayGeoPreview, IntradaySetupPayload, ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
 import { earningsTimingLabel } from "@/lib/earnings-timing";
@@ -45,11 +43,22 @@ import {
   SPY_PULSE_NUMBER_TIP,
   TOP_SIGNAL_ROW_CARD_TIP,
   TOP_SIGNALS_CARD_TIP,
+  ALIGNMENT_LADDER_TIP,
+  SWING_REENABLE_CALLOUT_TIP,
+  WATCHLIST_READINESS_TIP,
   UPCOMING_CATALYSTS_CARD_TIP,
   VIX_PULSE_NUMBER_TIP,
   WEEKLY_MARKET_CONTEXT_CARD_TIP
 } from "@/lib/ui-tooltips";
 import { buildDashboardSignalCardStrip } from "@/lib/dashboard-signal-card-strip";
+import {
+  buildAlignmentLadder,
+  buildSwingReenableBullets,
+  macroRiskStateHeadline,
+  macroRiskStateTip,
+  sectorTapeKindFromPct5d,
+  watchlistReadinessLine
+} from "@/lib/dashboard-posture";
 import Link from "next/link";
 
 export type { WeeklyIndexRow } from "@/components/weekly-market-context-widget";
@@ -66,7 +75,6 @@ export type PortfolioActiveRow = {
 
 interface DashboardRedesignProps {
   marketOverview: MarketOverview;
-  pdtStatus: PDTStatusPayload | null;
   scannerOverview: ScannerOverview;
   earningsEvents: EarningsEvent[];
   earningsRecent: EarningsEvent[];
@@ -235,6 +243,12 @@ function pulseRegimeColor(regime: string, colors: ThemeColors): string {
   if (r === "bullish") return colors.bullish;
   if (r === "bearish") return colors.bearish;
   return colors.caution;
+}
+
+/** Regime pill in Market pulse — slightly desaturated vs raw tape colors so it does not fight macro rails nearby. */
+function pulseRegimeBadgeColor(regime: string, colors: ThemeColors): string {
+  const raw = pulseRegimeColor(regime, colors);
+  return `color-mix(in srgb, ${raw} 76%, ${colors.text})`;
 }
 
 /** Dashboard Top signals empty state: explains “no list” vs “broken API”. */
@@ -485,7 +499,6 @@ function VixDashExplained({ kind, colors }: { kind: VixBlankKind; colors: ThemeC
 
 export function DashboardRedesign({
   marketOverview,
-  pdtStatus,
   scannerOverview,
   earningsEvents,
   earningsRecent,
@@ -521,7 +534,6 @@ export function DashboardRedesign({
     [scannerOverview.setups]
   );
   const topSignals = swingTopSignals.slice(0, 3);
-  const pdt = pdtStatus?.assessment;
   const vixSnapshot =
     findVixSnapshot(marketOverview.snapshots) ||
     snapshotsBySymbol.get("I:VIX") ||
@@ -576,7 +588,49 @@ export function DashboardRedesign({
     () => sectorRotationFrame(regimeLabel, sectorRotation, weeklyIndexRows, swingTopSignals.length === 0),
     [regimeLabel, sectorRotation, weeklyIndexRows, swingTopSignals.length]
   );
-  const regimeChipAccent = pulseRegimeColor(regimeLabel, colors);
+  const sectorTapePoster = useMemo(
+    () => sectorTapeKindFromPct5d(sectorRotation.map((s) => s.pct5d)),
+    [sectorRotation]
+  );
+  const weeklyAvgPct5dVal = useMemo(() => weeklyIndexAvgPct5d(weeklyIndexRows), [weeklyIndexRows]);
+  const swingReenableBullets = useMemo(
+    () => buildSwingReenableBullets({ regimeLabel, sectorTape: sectorTapePoster, weeklyAvgPct5d: weeklyAvgPct5dVal }),
+    [regimeLabel, sectorTapePoster, weeklyAvgPct5dVal]
+  );
+  const alignmentLadder = useMemo(
+    () =>
+      buildAlignmentLadder({
+        macro: macroPulse,
+        regimeLabel,
+        regimePriceBreadthOnly: regimeBadgePriceBreadthOnly,
+        sectorTape: sectorTapePoster,
+        sectorChipKind: sectorFrame.chipKind,
+        weeklyAvgPct5d: weeklyAvgPct5dVal,
+        swingSetupCount: swingTopSignals.length,
+        scannerError: scannerOverview.error
+      }),
+    [
+      macroPulse,
+      regimeLabel,
+      regimeBadgePriceBreadthOnly,
+      sectorTapePoster,
+      sectorFrame.chipKind,
+      weeklyAvgPct5dVal,
+      swingTopSignals.length,
+      scannerOverview.error
+    ]
+  );
+  const watchlistReadiness = useMemo(
+    () =>
+      watchlistReadinessLine({
+        scannerError: scannerOverview.error,
+        swingSetupCount: swingTopSignals.length,
+        swingUniverseSymbolCount: scannerOverview.swingUniverseSymbolCount
+      }),
+    [scannerOverview.error, scannerOverview.swingUniverseSymbolCount, swingTopSignals.length]
+  );
+  const regimeChipCore = pulseRegimeColor(regimeLabel, colors);
+  const regimeChipAccent = pulseRegimeBadgeColor(regimeLabel, colors);
 
   const newsLabels = useMemo(() => {
     const m = new Map<string, string>();
@@ -591,7 +645,6 @@ export function DashboardRedesign({
     [earningsEvents]
   );
 
-  const macroRiskLevel = (macroPulse?.macro_risk_level ?? macroPulse?.macro_risk ?? "low").toLowerCase();
   const macroWarnings = macroPulse?.warnings ?? [];
 
   return (
@@ -643,7 +696,6 @@ export function DashboardRedesign({
                 <span>—</span>
               )}
             </span>
-            <PdtStatusPill assessment={pdt ?? null} />
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -704,8 +756,8 @@ export function DashboardRedesign({
                         <span
                           className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold tracking-wide"
                           style={{
-                            border: `1px solid color-mix(in srgb, ${regimeChipAccent} 55%, ${colors.border})`,
-                            background: `color-mix(in srgb, ${regimeChipAccent} 14%, transparent)`,
+                            border: `1px solid color-mix(in srgb, ${regimeChipCore} 38%, ${colors.border})`,
+                            background: `color-mix(in srgb, ${regimeChipCore} 10%, transparent)`,
                             color: regimeChipAccent,
                             textTransform: "none"
                           }}
@@ -941,6 +993,71 @@ export function DashboardRedesign({
                   );
                 })
               )}
+              <div
+                style={{
+                  borderTop: `1px solid ${colors.border}`,
+                  paddingTop: spacing[3],
+                  marginTop: spacing[1],
+                  display: "grid",
+                  gap: spacing[3]
+                }}
+              >
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: spacing[2] }}>
+                  <span style={{ fontSize: typography.scale.xs, fontWeight: 600, color: colors.textMuted }}>
+                    Alignment (system posture)
+                  </span>
+                  <InfoTip text={ALIGNMENT_LADDER_TIP} label="How to read the alignment ladder" maxWidth={300} />
+                </div>
+                <div
+                  className="grid w-full max-w-md gap-y-1 font-mono text-xs"
+                  style={{ fontVariantNumeric: "tabular-nums", color: colors.text }}
+                >
+                  {alignmentLadder.map((row) => (
+                    <div
+                      key={row.key}
+                      className="grid w-full gap-x-3"
+                      style={{ gridTemplateColumns: "minmax(0,7.5rem) minmax(0,1fr)", alignItems: "baseline" }}
+                    >
+                      <span style={{ color: colors.textMuted }}>{row.label}</span>
+                      <span style={{ color: colors.text, fontWeight: 600 }}>{row.state}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: "grid", gap: spacing[1] }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: spacing[2] }}>
+                    <span style={{ fontSize: typography.scale.xs, fontWeight: 600, color: colors.textMuted }}>
+                      Watchlist readiness
+                    </span>
+                    <InfoTip text={WATCHLIST_READINESS_TIP} label="What watchlist readiness means" maxWidth={300} />
+                  </div>
+                  <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.text, lineHeight: 1.55 }}>
+                    {watchlistReadiness}
+                  </p>
+                </div>
+                <div style={{ display: "grid", gap: spacing[2] }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: spacing[2] }}>
+                    <span style={{ fontSize: typography.scale.xs, fontWeight: 600, color: colors.textMuted }}>
+                      What would re-enable swing setups
+                    </span>
+                    <InfoTip text={SWING_REENABLE_CALLOUT_TIP} label="How these bullets are derived" maxWidth={320} />
+                  </div>
+                  <ul
+                    style={{
+                      margin: 0,
+                      paddingLeft: spacing[4],
+                      color: colors.text,
+                      fontSize: typography.scale.sm,
+                      lineHeight: 1.55,
+                      display: "grid",
+                      gap: spacing[2]
+                    }}
+                  >
+                    {swingReenableBullets.map((b, idx) => (
+                      <li key={idx}>{b}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
             </div>
           </DashboardCard>
 
@@ -954,10 +1071,10 @@ export function DashboardRedesign({
           >
             <div className="flex flex-col gap-3 text-sm" style={{ color: colors.text }}>
               <div
-                className="flex flex-wrap gap-x-4 gap-y-2 font-semibold"
+                className="grid w-full grid-cols-1 gap-x-6 gap-y-2 text-left font-semibold sm:grid-cols-3"
                 style={{ fontVariantNumeric: "tabular-nums" }}
               >
-                <span>
+                <span className="min-w-0">
                   SPY{" "}
                   <span style={{ color: spyPct != null ? getChangeColor(spyPct, colors) : colors.textMuted }}>
                     {spyPct != null ? (
@@ -969,7 +1086,7 @@ export function DashboardRedesign({
                     )}
                   </span>
                 </span>
-                <span>
+                <span className="min-w-0">
                   QQQ{" "}
                   <span style={{ color: qqqPct != null ? getChangeColor(qqqPct, colors) : colors.textMuted }}>
                     {qqqPct != null ? (
@@ -981,9 +1098,12 @@ export function DashboardRedesign({
                     )}
                   </span>
                 </span>
-                <span>
+                <span className="min-w-0">
                   VIX{" "}
-                  <span style={{ color: vixPct != null ? getChangeColor(vixPct, colors) : colors.textMuted }}>
+                  <span
+                    className="inline-flex min-w-0 flex-wrap items-baseline gap-x-0.5 align-middle"
+                    style={{ color: vixPct != null ? getChangeColor(vixPct, colors) : colors.textMuted }}
+                  >
                     {vixPct != null ? (
                       <DecisionMetric explanation={VIX_PULSE_NUMBER_TIP} label="How VIX move is used" maxWidth={280}>
                         <span>{`${vixPct > 0.05 ? "▲" : vixPct < -0.05 ? "▼" : "→"} ${vixPct >= 0 ? "+" : ""}${vixPct.toFixed(2)}%`}</span>
@@ -1000,13 +1120,23 @@ export function DashboardRedesign({
                   </span>
                 </span>
               </div>
+              <div className="flex flex-wrap items-center gap-2" style={{ fontSize: typography.scale.sm }}>
+                <span style={{ color: colors.textMuted, fontWeight: 600 }}>Macro risk state</span>
+                <strong style={{ color: colors.text }}>{macroRiskStateHeadline(macroPulse)}</strong>
+                <InfoTip text={macroRiskStateTip(macroPulse)} label="What macro risk state means" maxWidth={320} />
+              </div>
+              {macroWarnings[0] ? (
+                <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.5 }}>
+                  {macroWarnings[0]}
+                </p>
+              ) : null}
               <DecisionMetric explanation={regimeBadgeExplanation} label="How regime label is used" maxWidth={320}>
                 <div
                   className="inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wide"
                   style={{
-                    borderColor: colors.border,
+                    borderColor: `color-mix(in srgb, ${pulseRegimeColor(regimeLabel, colors)} 35%, ${colors.border})`,
                     background: "rgba(148,163,184,0.08)",
-                    color: pulseRegimeColor(regimeLabel, colors)
+                    color: pulseRegimeBadgeColor(regimeLabel, colors)
                   }}
                 >
                   Regime: {regimeLabel}
@@ -1021,17 +1151,6 @@ export function DashboardRedesign({
               <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.5 }}>
                 Session tape for context; swing thesis uses weekly panel + Evidence.
               </p>
-              {(macroRiskLevel === "critical" || macroRiskLevel === "elevated") && macroWarnings.length > 0 ? (
-                <div
-                  className={
-                    macroRiskLevel === "critical"
-                      ? "mt-2 rounded border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400"
-                      : "mt-2 rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-400"
-                  }
-                >
-                  {macroWarnings[0]}
-                </div>
-              ) : null}
             </div>
           </DashboardCard>
 
@@ -1132,7 +1251,15 @@ export function DashboardRedesign({
               </Link>
             </div>
             {portfolioActive.length === 0 ? (
-              <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted }}>No open tracked positions.</p>
+              <div style={{ display: "grid", gap: spacing[2] }}>
+                <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted, lineHeight: 1.55 }}>
+                  No open rows in the signal portfolio.
+                </p>
+                <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.55 }}>
+                  This is the model book only — not your brokerage. An empty list means nothing is marked open here, not
+                  that data failed to load.
+                </p>
+              </div>
             ) : (
               <ul style={{ margin: 0, paddingLeft: spacing[4], color: colors.text, fontSize: typography.scale.sm, lineHeight: 1.55 }}>
                 {portfolioActive.map((p) => {

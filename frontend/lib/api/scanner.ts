@@ -142,6 +142,8 @@ export interface ScannerOverview {
   spyPct?: number | null;
   qqqPct?: number | null;
   regimeLabel?: string;
+  /** Symbols considered for swing daily scan on this load (capped universe); dashboard copy only. */
+  swingUniverseSymbolCount?: number | null;
 }
 
 /** Snapshot + gap pipeline through intraday setups (no morning briefing). */
@@ -152,6 +154,7 @@ export type ScannerCoreData = {
   qqqPct: number | null;
   regimeLabel: string;
   error?: string;
+  swingUniverseSymbolCount?: number | null;
 };
 
 /** Which setup endpoints power the scanner core (dashboard defaults to both via `includeSwingDailySetups`). */

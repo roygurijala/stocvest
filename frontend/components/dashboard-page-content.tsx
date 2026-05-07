@@ -1,6 +1,5 @@
 import { DashboardRedesign } from "@/components/dashboard-redesign";
 import { fetchDailyBarClosesBySymbol, fetchMarketOverview, fetchSnapshotsForSymbols } from "@/lib/api/market";
-import { fetchPdtStatus } from "@/lib/api/pdt";
 import { loadScannerDataWithoutBrief } from "@/lib/api/scanner";
 import { DEFAULT_EARNINGS_SYMBOLS, fetchEarningsCalendar } from "@/lib/api/earnings";
 import type { MarketOverview, SnapshotPayload } from "@/lib/api/market";
@@ -141,6 +140,7 @@ export async function DashboardPageContent() {
     spyPct: null,
     qqqPct: null,
     regimeLabel: "Neutral",
+    swingUniverseSymbolCount: null,
     error: "Scanner timed out."
   };
   const earningsFallback: EarningsResponse = {
@@ -153,13 +153,12 @@ export async function DashboardPageContent() {
 
   const dailyBarSymbols = [...INDEX_WEEKLY_META.map((r) => r.symbol), ...SECTOR_ROTATION_META.map((r) => r.symbol)];
 
-  const [marketOverview, pdtStatus, scannerCore, earnings, dailyCloses, portfolioActive] = await Promise.all([
+  const [marketOverview, scannerCore, earnings, dailyCloses, portfolioActive] = await Promise.all([
     timeoutFallback(
       fetchMarketOverview(["SPY", "QQQ", "IWM", "I:VIX"], { sparklineBarLimit: 12 }),
       DASHBOARD_MARKET_TIMEOUT_MS,
       marketFallback
     ),
-    fetchPdtStatus().catch(() => null),
     timeoutFallback(
       loadScannerDataWithoutBrief(null, [], DASHBOARD_SCANNER_TUNING, null),
       DASHBOARD_SCANNER_TIMEOUT_MS,
@@ -180,13 +179,13 @@ export async function DashboardPageContent() {
     error: scannerCore.error,
     spyPct: scannerCore.spyPct,
     qqqPct: scannerCore.qqqPct,
-    regimeLabel: scannerCore.regimeLabel
+    regimeLabel: scannerCore.regimeLabel,
+    swingUniverseSymbolCount: scannerCore.swingUniverseSymbolCount ?? null
   };
 
   return (
     <DashboardRedesign
       marketOverview={marketOverview}
-      pdtStatus={pdtStatus}
       scannerOverview={scannerOverview}
       earningsEvents={earnings.upcoming}
       earningsRecent={earnings.recent}

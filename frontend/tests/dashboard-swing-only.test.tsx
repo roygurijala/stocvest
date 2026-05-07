@@ -54,7 +54,6 @@ describe("Dashboard swing-only Top Signals", () => {
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
-        pdtStatus={null}
         scannerOverview={{
           ...baseScanner,
           setups: [
@@ -87,7 +86,6 @@ describe("Dashboard swing-only Top Signals", () => {
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
-        pdtStatus={null}
         scannerOverview={{
           ...baseScanner,
           setups: [

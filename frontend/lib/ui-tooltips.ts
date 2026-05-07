@@ -74,13 +74,22 @@ export const DASHBOARD_MARKET_SENTIMENT_CARD_TIP =
   "This panel summarizes how large-cap, tech, and small-cap indices are moving versus yesterday’s close. STOCVEST uses it as a fast tape read for swing workflow—risk appetite and breadth—before you drill into a symbol’s Evidence or six-layer composite. It is not a trade signal by itself.";
 
 export const WEEKLY_MARKET_CONTEXT_CARD_TIP =
-  "Shows roughly five **trading sessions** of change on SPY, QQQ, and IWM using **daily** closes (Polygon aggregates), plus last price from the snapshot. This is swing-style context: how the week is shaping, not intraday ORB/VWAP noise. It is not a trade signal by itself.";
+  "Shows roughly five **trading sessions** of change on SPY, QQQ, and IWM using **daily** closes (Polygon aggregates), plus last price from the snapshot. The summary line is suffixed **(background)** and uses softer color on purpose—swing context only, not a trade signal. It is not intraday ORB/VWAP noise.";
 
 export const MARKET_PULSE_CARD_TIP =
   "SPY, QQQ, and VIX session change plus a simple regime label—useful context for how today’s session sits next to a swing thesis. When the scanner finishes, these numbers match the same tape inputs used in gap and setup context; otherwise they come from your market overview snapshots. They inform macro-style context in the engine, not individual entry prices.";
 
 export const TOP_SIGNALS_CARD_TIP =
   "Top names from the **daily swing** scanner (DailyBarScanner) on the home dashboard only — not intraday ORB/EMA session patterns. Open Evidence for news, levels, and the six-layer read. Use the full Scanner page for day + swing lists.";
+
+export const SWING_REENABLE_CALLOUT_TIP =
+  "Bullets mirror shipped thresholds: tape regime uses the same SPY/QQQ session rules sent as `regime` to POST /v1/signals/swing/setups; swing rows require DailyBarScanner passes (≥205 US daily bars, score ≥ 0.48, pattern + liquidity). Not a forecast—only what would change inputs the engine already uses.";
+
+export const WATCHLIST_READINESS_TIP =
+  "Readiness counts how many symbols in the capped home universe cleared swing gates versus how many were evaluated. No tickers, prices, or direction—pressure awareness only.";
+
+export const ALIGNMENT_LADDER_TIP =
+  "Text-only stack of macro pulse, tape regime, 5d sector skew, weekly index structure, and whether swing setups are active or suppressed. Mirrors dashboard inputs, not a second opinion engine.";
 
 export const TOP_SIGNAL_ROW_CARD_TIP =
   "A single scanner candidate. Entry zone, stop/target, and R:R are **reference geometry** from the session snapshot (same style as Evidence reference levels), not guaranteed fills. Pattern line translates day-scanner triggers into swing-readable language; catalyst line uses the earnings calendar when available. Open Evidence for the full six-layer composite.";
@@ -161,4 +170,4 @@ export const EARNINGS_EPS_SURPRISE_TIP =
   "Actual EPS versus the consensus estimate, plus surprise percent when available. STOCVEST shows it so you can judge how much the report is ‘news’ versus expectations—helpful context next to a technical setup, not a standalone signal.";
 
 export const SESSION_STATUS_STRIP_TIP =
-  "Shows whether US equities are open or closed, a quick VIX quote when available, and your pattern-day-trade status from the broker path. This strip is for situational awareness only—it does not alter the six-layer composite scores.";
+  "Shows whether US equities are open or closed and a quick VIX read when available. This strip is for situational awareness only—it does not alter the six-layer composite scores.";
