@@ -4,12 +4,21 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Optional
+from datetime import date, datetime
+from typing import Any, Optional
 
 from zoneinfo import ZoneInfo
 
 from stocvest.config.signal_parameters import TechnicalParameters
 from stocvest.data.models import Bar, Snapshot
+from stocvest.signals.indicator_scope import finalize_day_technical_chips
+from stocvest.signals.vwap_state import (
+    VWAPState,
+    VWAP_STATE_TOOLTIP,
+    build_vwap_chip,
+    resolve_vwap_state,
+    vwap_session_flags_et,
+)
 
 log = logging.getLogger(__name__)
 
@@ -42,6 +51,9 @@ class TechnicalLayerResult:
     reasoning: str = ""
     chips: list[str] = field(default_factory=list)
     error: Optional[str] = None
+    vwap_state: Optional[str] = None
+    vwap_state_tooltip: Optional[str] = None
+    vwap_chip: Optional[str] = None
 
 
 def _calculate_rsi(closes: list[float], period: int = 14) -> Optional[float]:
@@ -116,31 +128,82 @@ def _detect_ema_crossover(closes: list[float], ema9: float, lookback: int = 3) -
     return None
 
 
-def _detect_orb(bars: list[Bar], params: TechnicalParameters) -> tuple[str, Optional[float], Optional[float]]:
-    min_bars = params.orb_period_minutes
-    if len(bars) < min_bars:
-        return "insufficient", None, None
+def get_orb_state(symbol: str, current_price: float, *, ref_et: datetime) -> dict[str, Any]:
+    """ORB display + levels from the daily DynamoDB artifact (not from bar-window expiry)."""
+    from stocvest.data.orb_store import get_orb_record
 
-    orb_high = max(bar.high for bar in bars[:min_bars])
-    orb_low = min(bar.low for bar in bars[:min_bars])
-    if orb_high is None or orb_low is None:
-        return "insufficient", None, None
+    trade_date: date = ref_et.date()
+    tmin = ref_et.hour * 60 + ref_et.minute
+    open_start = 9 * 60 + 30
 
-    last_bar = bars[-1]
-    try:
-        bar_et = last_bar.timestamp.astimezone(_ET)
-        if bar_et.hour >= params.orb_expiry_hour_et:
-            return "expired", float(orb_high), float(orb_low)
-    except Exception as exc:
-        log.warning("ORB timestamp parse: %s", exc)
+    if tmin < open_start:
+        return {
+            "orb_status": "pre_market",
+            "orb_high": None,
+            "orb_low": None,
+            "breakout_direction": None,
+            "chip": None,
+        }
 
-    price = float(bars[-1].close)
-    buf = float(params.orb_buffer_pct)
-    if price > float(orb_high) * (1 + buf):
-        return "breakout_long", float(orb_high), float(orb_low)
-    if price < float(orb_low) * (1 - buf):
-        return "breakout_short", float(orb_high), float(orb_low)
-    return "inside_range", float(orb_high), float(orb_low)
+    is_forming = (ref_et.hour == 9 and ref_et.minute >= 30) or (ref_et.hour == 10 and ref_et.minute == 0)
+    if is_forming:
+        return {
+            "orb_status": "forming",
+            "orb_high": None,
+            "orb_low": None,
+            "breakout_direction": None,
+            "chip": "ORB Forming",
+        }
+
+    orb = get_orb_record(symbol, trade_date=trade_date)
+    if orb is None:
+        return {
+            "orb_status": "unavailable",
+            "orb_high": None,
+            "orb_low": None,
+            "breakout_direction": None,
+            "chip": None,
+        }
+
+    if current_price > orb.orb_high:
+        direction = "long"
+        chip = f"ORB Long ↑ ${orb.orb_high:.2f}"
+    elif current_price < orb.orb_low:
+        direction = "short"
+        chip = f"ORB Short ↓ ${orb.orb_low:.2f}"
+    else:
+        direction = "inside"
+        chip = f"Inside ORB (${orb.orb_low:.2f}–${orb.orb_high:.2f})"
+
+    return {
+        "orb_status": "complete",
+        "orb_high": orb.orb_high,
+        "orb_low": orb.orb_low,
+        "orb_range_pct": orb.orb_range_pct,
+        "breakout_direction": direction,
+        "chip": chip,
+        "computed_at": orb.computed_at,
+    }
+
+
+def _orb_signal_from_store_state(
+    price: float,
+    orb_high: Optional[float],
+    orb_low: Optional[float],
+    buf: float,
+    status: str,
+) -> tuple[str, Optional[float], Optional[float]]:
+    if status == "complete" and orb_high is not None and orb_low is not None:
+        if price > float(orb_high) * (1 + buf):
+            return "breakout_long", float(orb_high), float(orb_low)
+        if price < float(orb_low) * (1 - buf):
+            return "breakout_short", float(orb_high), float(orb_low)
+        return "inside_range", float(orb_high), float(orb_low)
+    if status == "forming":
+        return "forming", None, None
+    if status == "pre_market":
+        return "pre_market", None, None
+    return "unavailable", None, None
 
 
 def _compute_volume_ratio(
@@ -174,7 +237,6 @@ class TechnicalAnalyzer:
         *,
         adv: float | None = None,
     ) -> TechnicalLayerResult:
-        _ = symbol
         if not bars or len(bars) < self.MIN_BARS:
             return TechnicalLayerResult(
                 status="unavailable",
@@ -203,7 +265,20 @@ class TechnicalAnalyzer:
         ema9 = _calculate_ema(closes, params.ema_fast_period)
         ema20 = _calculate_ema(closes, params.ema_slow_period)
         atr = _calculate_atr(bars, params.atr_period)
-        orb_signal, orb_high, orb_low = _detect_orb(bars, params)
+        ref_et = bars[-1].timestamp.astimezone(_ET)
+        is_pre_market, market_open = vwap_session_flags_et(ref_et)
+        vwap_state_e = resolve_vwap_state(vwap, market_open, len(bars), is_pre_market)
+        vwap_chip = build_vwap_chip(vwap_state_e, vwap, price)
+        vwap_state_tooltip = VWAP_STATE_TOOLTIP[vwap_state_e]
+        orb_state = get_orb_state(symbol, price, ref_et=ref_et)
+        buf = float(params.orb_buffer_pct)
+        orb_signal, orb_high, orb_low = _orb_signal_from_store_state(
+            price,
+            orb_state.get("orb_high"),
+            orb_state.get("orb_low"),
+            buf,
+            str(orb_state.get("orb_status") or "unavailable"),
+        )
         volume_ratio, adv_available = _compute_volume_ratio(bars, params, adv)
         volume_surge = volume_ratio >= params.volume_surge_multiplier
 
@@ -232,9 +307,9 @@ class TechnicalAnalyzer:
 
         base_score = 50.0
 
-        if vwap is not None:
+        if vwap_state_e == VWAPState.AVAILABLE and vwap is not None:
             delta = float(params.vwap_score_delta)
-            base_score += delta if price > vwap else -delta
+            base_score += delta if price >= vwap else -delta
 
         if ema_alignment == "bullish":
             base_score += params.ema_score_delta
@@ -276,8 +351,8 @@ class TechnicalAnalyzer:
             verdict = "neutral"
 
         parts: list[str] = []
-        if vwap:
-            pos = "above" if price > vwap else "below"
+        if vwap_state_e == VWAPState.AVAILABLE and vwap:
+            pos = "above" if price >= vwap else "below"
             parts.append(f"Price {pos} VWAP (${vwap:.2f})")
         if ema_alignment == "bullish" and ema9 is not None and ema20 is not None:
             parts.append(f"EMA9({ema9:.2f}) > EMA20({ema20:.2f}) — trend stack bullish")
@@ -291,8 +366,10 @@ class TechnicalAnalyzer:
         elif orb_signal == "breakout_short" and orb_low is not None:
             q = "confirmed" if orb_qualified else "weak"
             parts.append(f"ORB breakdown below ${orb_low:.2f} ({q})")
-        elif orb_signal == "expired":
-            parts.append("ORB window closed (after 10 AM ET)")
+        elif str(orb_state.get("orb_status")) == "forming":
+            parts.append("ORB range still forming (9:30–10:00 AM ET)")
+        elif str(orb_state.get("orb_status")) == "complete" and orb_signal == "inside_range":
+            parts.append("Price inside stored opening range")
         if rsi is not None:
             if rsi > params.rsi_overbought:
                 parts.append(f"RSI {rsi:.0f} — overbought, reducing confidence")
@@ -307,20 +384,18 @@ class TechnicalAnalyzer:
         chips: list[str] = []
         if rsi is not None:
             chips.append(f"RSI {rsi:.0f}")
-        if vwap:
-            chips.append("VWAP Above" if price > vwap else "VWAP Below")
-        if orb_signal == "breakout_long":
-            chips.append("ORB Breakout Long")
-        elif orb_signal == "breakout_short":
-            chips.append("ORB Breakout Short")
-        elif orb_signal == "expired":
-            chips.append("ORB Expired")
+        chips.append(vwap_chip)
+        chip = orb_state.get("chip")
+        if isinstance(chip, str) and chip.strip():
+            chips.append(chip.strip())
         if ema_alignment == "bullish":
             chips.append("EMA Stack Bullish")
         elif ema_alignment == "bearish":
             chips.append("EMA Stack Bearish")
         if volume_surge:
             chips.append(f"Vol {volume_ratio:.1f}x")
+
+        chips = finalize_day_technical_chips(symbol, chips)
 
         return TechnicalLayerResult(
             status="available",
@@ -331,7 +406,13 @@ class TechnicalAnalyzer:
             ema9=ema9,
             ema20=ema20,
             atr=atr,
-            price_vs_vwap=("above" if vwap and price > vwap else "below" if vwap else None),
+            price_vs_vwap=(
+                "above"
+                if vwap_state_e == VWAPState.AVAILABLE and vwap is not None and price >= vwap
+                else "below"
+                if vwap_state_e == VWAPState.AVAILABLE and vwap is not None
+                else None
+            ),
             ema_alignment=ema_alignment,
             ema_crossed_recently=ema_crossed,
             orb_signal=orb_signal,
@@ -346,4 +427,7 @@ class TechnicalAnalyzer:
             bars_analyzed=len(bars),
             reasoning=reasoning,
             chips=chips,
+            vwap_state=vwap_state_e.value,
+            vwap_state_tooltip=vwap_state_tooltip,
+            vwap_chip=vwap_chip,
         )

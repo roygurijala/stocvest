@@ -45,6 +45,7 @@ class DynamoSectorCache:
                 "display_name": item.get("display_name"),
                 "sector_name": item.get("sector_name"),
                 "sic_code": item.get("sic_code"),
+                "resolution_state": item.get("resolution_state"),
             }
 
         return await asyncio.to_thread(_run)
@@ -58,6 +59,7 @@ class DynamoSectorCache:
         display_name: str,
         sic_code: str,
         ttl_days: int = 30,
+        resolution_state: str = "resolved",
     ) -> None:
         if not self.enabled:
             return
@@ -73,6 +75,7 @@ class DynamoSectorCache:
                     "sector_name": sector_name,
                     "display_name": display_name,
                     "sic_code": sic_code,
+                    "resolution_state": resolution_state,
                     "expires_at": expires_at,
                 }
             )

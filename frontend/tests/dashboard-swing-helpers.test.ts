@@ -16,10 +16,10 @@ describe("pctChangeOverDailySessions", () => {
 });
 
 describe("swingStylePatternLine", () => {
-  it("maps ORB + EMA to swing-readable headline", () => {
-    const s = swingStylePatternLine(["orb_breakout_long", "ema9_bounce"]);
-    expect(s).toContain("Trend continuation");
-    expect(s).toContain("Pullback");
+  it("maps daily-structure triggers to swing-readable headline (no session ORB)", () => {
+    const s = swingStylePatternLine(["weekly_rsi_recovery", "ema9_bounce"]);
+    expect(s).toContain("Weekly RSI Recovery");
+    expect(s).toContain("EMA9 Bounce (Daily)");
   });
 });
 

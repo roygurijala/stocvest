@@ -8,6 +8,7 @@ from typing import Any, Literal
 
 from stocvest.api.services.news_quality_filter import is_quality_article
 from stocvest.config.signal_parameters import NewsParameters
+from stocvest.data.benzinga_client import BenzingaMultiResult
 from stocvest.signals.news_sentiment import (
     DAY_NEWS_LOOKBACK_HOURS,
     SWING_NEWS_LOOKBACK_HOURS,
@@ -24,8 +25,13 @@ class NewsLayerResult:
     weighted_sentiment: float | None = None
     catalyst_type: str | None = None
     catalyst_headline: str | None = None
+    wim_summary: str | None = None
+    data_state: str = "fresh"
     reasoning: str = ""
     chips: list[str] = field(default_factory=list)
+    latest_rating: dict[str, Any] | None = None
+    latest_guidance: dict[str, Any] | None = None
+    earnings_result: dict[str, Any] | None = None
 
 
 _CATALYST_PATTERNS: dict[str, tuple[str, ...]] = {
@@ -50,6 +56,44 @@ def _article_sentiment(article: dict[str, Any]) -> float:
     return 0.0
 
 
+def _benzinga_layer_attachments(bz: BenzingaMultiResult | None) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None]:
+    if bz is None:
+        return None, None, None
+    now = datetime.now(timezone.utc)
+
+    lr: dict[str, Any] | None = None
+    if bz.ratings:
+        r = bz.ratings[0]
+        if (now - r.published_at) <= timedelta(days=7):
+            lr = {
+                "action": r.action,
+                "rating": r.rating,
+                "firm": r.analyst_firm,
+                "date_str": r.published_at.date().isoformat(),
+            }
+
+    lg: dict[str, Any] | None = None
+    if bz.guidance:
+        g = bz.guidance[0]
+        if (now - g.published_at) <= timedelta(days=14):
+            lg = {"type": g.guidance_type, "headline": g.headline, "date_str": g.published_at.date().isoformat()}
+
+    ee: dict[str, Any] | None = None
+    if bz.earnings:
+        e = bz.earnings[0]
+        if (now - e.reported_at) <= timedelta(days=30):
+            ee = {"beat": e.beat, "eps_surprise_pct": e.eps_surprise_pct, "period": e.period}
+    return lr, lg, ee
+
+
+def _fill_benzinga_fields(out: NewsLayerResult, bz: BenzingaMultiResult | None) -> NewsLayerResult:
+    lr, lg, ee = _benzinga_layer_attachments(bz)
+    out.latest_rating = lr
+    out.latest_guidance = lg
+    out.earnings_result = ee
+    return out
+
+
 def _detect_catalyst(title: str, desc: str) -> tuple[str | None, str | None]:
     blob = f"{title} {desc}".lower()
     for kind, keys in _CATALYST_PATTERNS.items():
@@ -67,6 +111,7 @@ class NewsAnalyzer:
         *,
         lookback_hours: int | None = None,
         mode: Literal["day", "swing"] = "day",
+        benzinga_data: BenzingaMultiResult | None = None,
     ) -> NewsLayerResult:
         sym = symbol.upper().strip()
         now = datetime.now(timezone.utc)
@@ -93,13 +138,22 @@ class NewsAnalyzer:
         rows = time_filtered[: params.max_articles]
         quality = [a for a in rows if is_quality_article(a)]
         if not quality:
-            return NewsLayerResult(
-                status="unavailable",
-                score=None,
-                verdict="neutral",
-                article_count=0,
-                reasoning="No qualifying news articles in lookback.",
-                chips=[],
+            return _fill_benzinga_fields(
+                NewsLayerResult(
+                    status="available",
+                    score=50,
+                    verdict="neutral",
+                    article_count=0,
+                    weighted_sentiment=0.0,
+                    wim_summary=(benzinga_data.wim.reason if benzinga_data and benzinga_data.wim else None),
+                    data_state="stale",
+                    reasoning=(
+                        f"No qualifying news for {sym} in the lookback window. "
+                        "No active negative catalyst detected."
+                    ),
+                    chips=["News: neutral", "No qualifying headlines"],
+                ),
+                benzinga_data,
             )
 
         weights: list[float] = []
@@ -145,16 +199,26 @@ class NewsAnalyzer:
 
         wsum = sum(weights)
         if wsum <= 0:
-            return NewsLayerResult(
-                status="unavailable",
-                score=None,
-                verdict="neutral",
-                article_count=len(quality),
-                reasoning="Article weights collapsed to zero.",
-                chips=[],
+            return _fill_benzinga_fields(
+                NewsLayerResult(
+                    status="available",
+                    score=50,
+                    verdict="neutral",
+                    article_count=len(quality),
+                    weighted_sentiment=0.0,
+                    wim_summary=(benzinga_data.wim.reason if benzinga_data and benzinga_data.wim else None),
+                    data_state="stale",
+                    reasoning="No dominant catalyst in current lookback; sentiment baseline remains neutral.",
+                    chips=["News: neutral", "Weights collapsed"],
+                ),
+                benzinga_data,
             )
 
         weighted_avg = sum(s * w for s, w in zip(sentiments, weights)) / wsum
+        catalyst_type_extra, adjust = self._benzinga_adjustment(benzinga_data)
+        if catalyst_type_extra:
+            catalyst_type = catalyst_type_extra
+        weighted_avg = max(-1.0, min(1.0, weighted_avg + adjust))
         score = int(round((weighted_avg + 1) / 2 * 100))
 
         if score >= params.bullish_threshold:
@@ -167,18 +231,69 @@ class NewsAnalyzer:
         chips = [f"{len(quality)} articles", f"sent_avg {weighted_avg:+.2f}"]
         if catalyst_type:
             chips.append(f"Catalyst: {catalyst_type}")
+        if benzinga_data and benzinga_data.wim:
+            chips.append("WIM context")
 
-        return NewsLayerResult(
-            status="available",
-            score=score,
-            verdict=verdict,
-            article_count=len(quality),
-            weighted_sentiment=weighted_avg,
-            catalyst_type=catalyst_type,
-            catalyst_headline=catalyst_headline,
-            reasoning=(
-                f"News score {score}/100 from {len(quality)} quality articles "
-                f"(weighted sentiment {weighted_avg:+.2f})."
+        return _fill_benzinga_fields(
+            NewsLayerResult(
+                status="available",
+                score=score,
+                verdict=verdict,
+                article_count=len(quality),
+                weighted_sentiment=weighted_avg,
+                catalyst_type=catalyst_type,
+                catalyst_headline=catalyst_headline,
+                wim_summary=(benzinga_data.wim.reason if benzinga_data and benzinga_data.wim else None),
+                data_state="fresh",
+                reasoning=(
+                    f"News score {score}/100 from {len(quality)} quality articles "
+                    f"(weighted sentiment {weighted_avg:+.2f})."
+                ),
+                chips=chips,
             ),
-            chips=chips,
+            benzinga_data,
         )
+
+    def _benzinga_adjustment(self, bz: BenzingaMultiResult | None) -> tuple[str | None, float]:
+        if bz is None:
+            return None, 0.0
+        now = datetime.now(timezone.utc)
+        catalyst: str | None = None
+        adjust = 0.0
+
+        if bz.ratings:
+            latest = bz.ratings[0]
+            if (now - latest.published_at) <= timedelta(days=7):
+                act = latest.action.lower()
+                if "upgrade" in act:
+                    adjust += 0.15
+                    catalyst = "analyst_upgrade"
+                elif "downgrade" in act:
+                    adjust -= 0.15
+                    catalyst = "analyst_downgrade"
+                elif "initiate" in act and "buy" in (latest.rating or "").lower():
+                    adjust += 0.10
+                    catalyst = "analyst_initiates_buy"
+
+        if bz.guidance:
+            latest_g = bz.guidance[0]
+            if (now - latest_g.published_at) <= timedelta(days=14):
+                g = latest_g.guidance_type.lower()
+                if g == "raised":
+                    adjust += 0.20
+                    catalyst = "guidance_raise"
+                elif g == "lowered":
+                    adjust -= 0.20
+                    catalyst = "guidance_cut"
+
+        if bz.earnings:
+            latest_e = bz.earnings[0]
+            if (now - latest_e.reported_at) <= timedelta(days=30):
+                if latest_e.beat is True:
+                    adjust += 0.25
+                    catalyst = "earnings_beat"
+                elif latest_e.beat is False:
+                    adjust -= 0.25
+                    catalyst = "earnings_miss"
+
+        return catalyst, adjust

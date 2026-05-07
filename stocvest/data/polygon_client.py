@@ -1191,6 +1191,10 @@ class PolygonClient:
         out.sort(key=lambda e: (e.event_date or date.min, rank.get(e.impact, 3), e.time_et))
         return out[:50]
 
+    async def get_polygon_econ_events(self, start: date, end: date) -> list[EconomicCalendarEvent]:
+        """Alias for :meth:`get_economic_calendar_range` — economics feed for macro enrichment."""
+        return await self.get_economic_calendar_range(start, end)
+
     # ──────────────────────────────────────────────────────────────────────────
     # WebSocket — Real-time streaming
     # ──────────────────────────────────────────────────────────────────────────

@@ -31,9 +31,11 @@ from stocvest.api.services.news_relevance import (
 from stocvest.api.shared import build_request_context, parse_json_body
 from stocvest.api.types import LambdaContext, LambdaEvent
 from stocvest.data import PolygonClient, PolygonError, Timeframe
+from stocvest.data.models import EconomicCalendarEvent
 from stocvest.data.polygon_client import LIQUID_NEWS_TICKERS
 from stocvest.data.watchlist_store import get_watchlist_store
 from stocvest.utils.config import get_settings
+from stocvest.signals.macro_context import get_macro_context
 
 
 def _published_utc_sort_key(article: dict[str, Any]) -> str:
@@ -117,6 +119,31 @@ def market_status_handler(
     try:
         return asyncio.run(_run())
     except PolygonError as exc:
+        return internal_error(str(exc))
+
+
+def macro_context_handler(
+    event: LambdaEvent,
+    context: LambdaContext,
+    client_factory: Callable[..., PolygonClient] = PolygonClient,
+) -> dict[str, Any]:
+    """Lightweight macro pulse (FRED + optional Polygon economics) for dashboard banner."""
+    _ = context
+
+    async def _run() -> dict[str, Any]:
+        settings = get_settings()
+        econ: list[EconomicCalendarEvent] = []
+        try:
+            async with client_factory(api_key=settings.polygon_api_key) as client:
+                econ = await client.get_polygon_econ_events(date.today(), date.today() + timedelta(days=14))
+        except Exception:
+            econ = []
+        ctx = await get_macro_context(polygon_econ_events=econ)
+        return ok(ctx)
+
+    try:
+        return asyncio.run(_run())
+    except Exception as exc:
         return internal_error(str(exc))
 
 

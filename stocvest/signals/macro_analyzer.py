@@ -1,8 +1,10 @@
-"""Layer 3 — SPY/QQQ momentum, VIX volatility, economic calendar risk."""
+"""Layer 3 — SPY/QQQ momentum, VIX volatility, economic calendar risk, FRED macro context."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
+
 from stocvest.config.signal_parameters import MacroParameters
 from stocvest.data.models import EconomicCalendarEvent, Snapshot
 from stocvest.signals.morning_brief import infer_regime, vix_direction_from_change
@@ -26,6 +28,10 @@ class MacroLayerResult:
     event_name: str | None = None
     reasoning: str = ""
     chips: list[str] = field(default_factory=list)
+    upcoming_events: list[dict[str, Any]] = field(default_factory=list)
+    macro_warnings: list[str] = field(default_factory=list)
+    macro_risk_level: str = "low"
+    yield_curve: dict[str, Any] | None = None
 
 
 _MAJOR = (
@@ -54,6 +60,7 @@ class MacroAnalyzer:
         params: MacroParameters,
         *,
         events_lookback_days: int = 1,
+        macro_context: dict[str, Any] | None = None,
     ) -> MacroLayerResult:
         spy_pct = float(spy_snapshot.change_percent) if spy_snapshot and spy_snapshot.change_percent is not None else None
         qqq_pct = float(qqq_snapshot.change_percent) if qqq_snapshot and qqq_snapshot.change_percent is not None else None
@@ -111,7 +118,21 @@ class MacroAnalyzer:
             + vol_score * params.volatility_weight
             + event_score * params.event_weight
         )
-        macro_score = int(round(_clamp(macro_score_f, 0.0, 100.0)))
+        base_macro_score = int(round(_clamp(macro_score_f, 0.0, 100.0)))
+
+        ctx = macro_context or {}
+        macro_risk = str(ctx.get("macro_risk") or "low")
+        risk_penalty = {"critical": -20, "elevated": -10, "moderate": -5, "low": 0}.get(macro_risk, 0)
+
+        yc = ctx.get("yield_curve") if isinstance(ctx.get("yield_curve"), dict) else None
+        yc_penalty = 0
+        if yc:
+            if yc.get("regime") == "inverted":
+                yc_penalty = -15
+            elif yc.get("regime") == "flat":
+                yc_penalty = -5
+
+        macro_score = int(max(0, min(100, base_macro_score + risk_penalty + yc_penalty)))
 
         vix_for_regime = vix_price if vix_price is not None else 18.0
         label = infer_regime(spy_pct, qqq_pct, vix_for_regime)
@@ -141,12 +162,42 @@ class MacroAnalyzer:
         if events_lookback_days > 1:
             chips.append(f"Calendar {events_lookback_days}d")
 
+        upcoming = list(ctx.get("upcoming_events") or [])
+        if isinstance(upcoming, list) and upcoming:
+            upcoming = sorted(
+                upcoming,
+                key=lambda r: str((r if isinstance(r, dict) else {}).get("scheduled_time") or ""),
+            )
+        if isinstance(upcoming, list):
+            for event_row in upcoming[:2]:
+                if not isinstance(event_row, dict):
+                    continue
+                st = str(event_row.get("status") or "")
+                if st not in ("imminent", "today"):
+                    continue
+                hours = float(event_row.get("hours_until") or 0)
+                nm = str(event_row.get("name") or "Event")
+                if hours < 4:
+                    mins = max(1, int(hours * 60))
+                    chips.append(f"⚠️ {nm} in {mins}m")
+                else:
+                    chips.append(f"⚠️ {nm} today")
+
+        if yc and isinstance(yc.get("chip"), str):
+            chips.append(str(yc["chip"]))
+
         reason = (
             f"Macro {macro_score}/100 — momentum {momentum_score:.0f}, "
             f"volatility {vol_score:.0f}, event-risk {event_score:.0f}."
         )
         if events_lookback_days > 1:
             reason += f" Economic window: {events_lookback_days} days."
+        if macro_risk != "low":
+            reason += f" Macro risk: {macro_risk}."
+        if yc and yc.get("regime"):
+            reason += f" Yield curve: {yc.get('regime')}."
+
+        warnings = list(ctx.get("warnings") or []) if isinstance(ctx.get("warnings"), list) else []
 
         return MacroLayerResult(
             status="available",
@@ -161,4 +212,8 @@ class MacroAnalyzer:
             event_name=event_name,
             reasoning=reason,
             chips=chips,
+            upcoming_events=upcoming if isinstance(upcoming, list) else [],
+            macro_warnings=warnings,
+            macro_risk_level=macro_risk,
+            yield_curve=yc,
         )

@@ -31,6 +31,26 @@ AI_MODEL_FAST = "claude-haiku-4-5-20251001"
 # Standard: multi-source synthesis, geopolitical scan, longer reasoning.
 AI_MODEL_STANDARD = "claude-sonnet-4-6"
 
+def __getattr__(name: str) -> str:
+    """Lazy aliases for Secrets-backed keys (same sources as Settings / external-api-keys merge)."""
+    if name == "BENZINGA_NEWS_KEY":
+        return _settings_key("benzinga_news_api_key")
+    if name == "BENZINGA_ANALYST_KEY":
+        return _settings_key("benzinga_analyst_key")
+    if name == "BENZINGA_WIM_KEY":
+        return _settings_key("benzinga_wim_key")
+    if name == "BENZINGA_PRESS_KEY":
+        return _settings_key("benzinga_press_key")
+    if name == "PERPLEXITY_API_KEY":
+        return _settings_key("perplexity_api_key")
+    if name == "REDIS_URL":
+        return str(get_settings().redis_url).strip()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def _settings_key(field: str) -> str:
+    return str(getattr(get_settings(), field) or "").strip()
+
 
 def _apply_lambda_runtime_secret_to_environ() -> None:
     """Merge stocvest/lambda-runtime JSON into os.environ (Lambda only)."""
@@ -65,6 +85,11 @@ class Settings(BaseSettings):
     # ── Polygon ──────────────────────────────────────────────────
     polygon_api_key: str = Field(..., alias="POLYGON_API_KEY")
     benzinga_api_key: str = Field("", alias="BENZINGA_API_KEY")
+    benzinga_news_api_key: str = Field("", alias="BENZINGA_NEWS_API_KEY")
+    benzinga_analyst_key: str = Field("", alias="BENZINGA_ANALYST_KEY")
+    benzinga_wim_key: str = Field("", alias="BENZINGA_WIM_KEY")
+    benzinga_press_key: str = Field("", alias="BENZINGA_PRESS_KEY")
+    perplexity_api_key: str = Field("", alias="PERPLEXITY_API_KEY")
     benzinga_news_ws_url: str = Field(
         "wss://api.benzinga.com/api/v1/news/stream",
         alias="BENZINGA_NEWS_WS_URL",
@@ -80,6 +105,9 @@ class Settings(BaseSettings):
 
     # ── Anthropic ─────────────────────────────────────────────────
     anthropic_api_key: str = Field("", alias="ANTHROPIC_API_KEY")
+
+    # ── FRED (macro calendar + Treasury series) ──────────────────
+    fred_api_key: str = Field("", alias="FRED_API_KEY")
 
     # ── App ──────────────────────────────────────────────────────
     env: str = Field("development", alias="STOCVEST_ENV")
@@ -172,7 +200,14 @@ def get_settings() -> Settings:
     """Return cached Settings instance. Call this everywhere instead of reading env directly."""
     _apply_lambda_runtime_secret_to_environ()
     settings = Settings()
-    if settings.benzinga_api_key:
+    if (
+        settings.benzinga_api_key
+        and settings.benzinga_news_api_key
+        and settings.benzinga_analyst_key
+        and settings.benzinga_wim_key
+        and settings.benzinga_press_key
+        and settings.perplexity_api_key
+    ):
         return settings
     if not os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
         return settings
@@ -183,12 +218,30 @@ def get_settings() -> Settings:
         client = boto3.client("secretsmanager", region_name=settings.aws_region)
         resp = client.get_secret_value(SecretId=secret_name)
         payload = json.loads(str(resp.get("SecretString") or "{}"))
+        if not isinstance(payload, dict):
+            return settings
+
+        def _load_secret_key(*aliases: str) -> str:
+            for alias in aliases:
+                val = payload.get(alias)
+                if val is not None:
+                    s = str(val).strip()
+                    if s:
+                        return s
+            return ""
+
         if not settings.benzinga_api_key:
-            settings.benzinga_api_key = str(
-                payload.get("BENZINGA_API_KEY")
-                or payload.get("benzinga_api_key")
-                or ""
-            ).strip()
+            settings.benzinga_api_key = _load_secret_key("BENZINGA_API_KEY", "benzinga_api_key")
+        if not settings.benzinga_news_api_key:
+            settings.benzinga_news_api_key = _load_secret_key("BENZINGA_NEWS_API_KEY", "benzinga_news_api_key")
+        if not settings.benzinga_analyst_key:
+            settings.benzinga_analyst_key = _load_secret_key("BENZINGA_ANALYST_KEY", "benzinga_analyst_key")
+        if not settings.benzinga_wim_key:
+            settings.benzinga_wim_key = _load_secret_key("BENZINGA_WIM_KEY", "benzinga_wim_key")
+        if not settings.benzinga_press_key:
+            settings.benzinga_press_key = _load_secret_key("BENZINGA_PRESS_KEY", "benzinga_press_key")
+        if not settings.perplexity_api_key:
+            settings.perplexity_api_key = _load_secret_key("PERPLEXITY_API_KEY", "perplexity_api_key")
     except Exception:
         # Best-effort fallback for local dev / non-AWS contexts.
         pass

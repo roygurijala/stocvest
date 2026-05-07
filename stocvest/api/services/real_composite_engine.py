@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 from uuid import uuid4
 
 from stocvest.api.legal_copy import API_SIGNAL_DISCLAIMER
+from stocvest.api.services.composite_sector_wire import sector_layer_api_extras
 from stocvest.api.services.composite_market_context import fetch_composite_market_status_payload_sync
 from stocvest.api.services.morning_brief_fetch import get_vix_snapshot_with_fallback
 from stocvest.api.services.portfolio_auto_log import schedule_model_portfolio_log_from_composite
@@ -19,6 +20,7 @@ from stocvest.api.services.signal_recorder import get_signal_recorder
 from stocvest.api.services.swing_composite_evidence import build_swing_composite_evidence_fields
 from stocvest.config.parameter_store import ParameterStore
 from stocvest.config.signal_parameters import SignalParameters
+from stocvest.data.benzinga_client import BenzingaClient, BenzingaMultiResult
 from stocvest.data.models import Bar, SignalRecord, Snapshot, Timeframe
 from stocvest.data.polygon_client import PolygonClient, PolygonError
 from stocvest.signals.confluence import ConfluenceDetector, confluence_result_to_response_fields, normalize_direction
@@ -26,10 +28,19 @@ from stocvest.signals.composite_score import CompositeScoreEngine, CompositeSign
 from stocvest.signals.geo_analyzer import GeoAnalyzer
 from stocvest.signals.internals_analyzer import InternalsAnalyzer
 from stocvest.signals.macro_analyzer import MacroAnalyzer
+from stocvest.signals.macro_context import get_macro_context
 from stocvest.signals.news_analyzer import NewsAnalyzer
+from stocvest.signals.alignment_score import AlignmentResult, adjust_composite_with_alignment, alignment_to_response_dict
 from stocvest.signals.sector_analyzer import SectorAnalyzer
-from stocvest.signals.sector_mapper import SectorMapper
+from stocvest.signals.sector_mapper import SectorMapper, SectorResolutionState
+from stocvest.signals.sector_momentum import (
+    SectorMomentumScore,
+    compute_day_sector_score,
+    session_details_from_returns,
+)
+from stocvest.workers.sector_daily_cache import get_all_cached_sector_data, get_cached_sector_returns
 from stocvest.signals.technical_analyzer import TechnicalAnalyzer
+from stocvest.signals.vwap_state import vwap_session_flags_et
 from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
 
@@ -58,6 +69,51 @@ def _safe_result(result: object, default: Any) -> Any:
     if isinstance(result, Exception):
         return default
     return result
+
+
+def _merge_benzinga_first_news_rows(
+    polygon_rows: list[dict[str, Any]],
+    bz_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    titles = {
+        str(r.get("title") or "").strip().lower()
+        for r in bz_rows
+        if isinstance(r, dict) and str(r.get("title") or "").strip()
+    }
+    out = list(bz_rows)
+    for r in polygon_rows:
+        if not isinstance(r, dict):
+            continue
+        t = str(r.get("title") or "").strip().lower()
+        if not t:
+            continue
+        if t in titles:
+            continue
+        out.append(r)
+        titles.add(t)
+    return out
+
+
+def _benzinga_articles_to_rows(items: list[Any]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for a in items:
+        title = str(getattr(a, "title", "") or "").strip()
+        if not title:
+            continue
+        out.append(
+            {
+                "id": str(getattr(a, "article_id", "") or ""),
+                "title": title,
+                "description": str(getattr(a, "body", "") or ""),
+                "published_utc": getattr(a, "published_at", datetime.now(timezone.utc)).isoformat(),
+                "tickers": list(getattr(a, "tickers", []) or []),
+                "source": str(getattr(a, "source", "benzinga") or "benzinga"),
+                "article_url": getattr(a, "url", None),
+                "publisher": {"name": "Benzinga"},
+                "insights": [],
+            }
+        )
+    return out
 
 
 def _score_to_layer_signal(layer: str, score: int | None, status: str) -> LayerSignal | None:
@@ -134,6 +190,9 @@ class RealCompositeEnginePhase:
     signals: list[LayerSignal]
     regime: str
     composite: CompositeSignal
+    alignment: AlignmentResult | None = None
+    sector_momentum: SectorMomentumScore | None = None
+    sector_resolution_state: SectorResolutionState | None = None
 
 
 async def run_real_composite_engine_phase(
@@ -151,8 +210,9 @@ async def run_real_composite_engine_phase(
     sector_cache = DynamoSectorCache(settings.dynamodb_sector_cache_table)
 
     news_since = datetime.now(timezone.utc) - timedelta(hours=float(params.news.lookback_hours))
+    benzinga = BenzingaClient()
     async with PolygonClient(api_key=settings.polygon_api_key) as client:
-        bars_r, sym_r, news_r, spy_r, qqq_r, vix_r, econ_r = await asyncio.gather(
+        bars_r, sym_r, news_r, spy_r, qqq_r, vix_r, econ_r, bz_r = await asyncio.gather(
             client.get_bars(sym, Timeframe.MIN_1, limit=60),
             client.get_snapshot(sym),
             client.get_market_news(tickers=[sym], limit=20, published_utc_gte=news_since),
@@ -160,12 +220,15 @@ async def run_real_composite_engine_phase(
             client.get_snapshot("QQQ"),
             get_vix_snapshot_with_fallback(client),
             client.get_economic_calendar_for_day(date.today()),
+            benzinga.get_multi(sym, mode="day"),
             return_exceptions=True,
         )
 
         bars: list[Bar] = _safe_result(bars_r, [])
         sym_snap: Snapshot | None = _safe_result(sym_r, None)
-        news_rows: list[dict[str, Any]] = _safe_result(news_r, [])
+        news_polygon: list[dict[str, Any]] = _safe_result(news_r, [])
+        bz_data: BenzingaMultiResult = _safe_result(bz_r, BenzingaMultiResult())
+        news_rows = _merge_benzinga_first_news_rows(news_polygon, _benzinga_articles_to_rows(bz_data.news))
         spy_snap: Snapshot | None = _safe_result(spy_r, None)
         qqq_snap: Snapshot | None = _safe_result(qqq_r, None)
         vix_snap: Snapshot | None = _safe_result(vix_r, None)
@@ -174,27 +237,60 @@ async def run_real_composite_engine_phase(
         sector_snap: Snapshot | None = None
         sector_display: str | None = None
         sic_bucket_for_geo: str | None = None
+        sector_resolution_state: SectorResolutionState | None = None
+        sector_etf_sym: str = ""
         if sym_snap is not None:
             try:
-                etf, sector_display, sic_bucket_for_geo = await SectorMapper.get_sector_etf(
+                etf, sector_display, sic_bucket_for_geo, sector_resolution_state = await SectorMapper.get_sector_etf(
                     sym,
                     client,
                     sector_cache if sector_cache.enabled else None,
                     params.sector,
                 )
-                sector_snap = await client.get_snapshot(etf)
+                sector_etf_sym = (etf or "").strip().upper()
+                if sector_etf_sym and sector_resolution_state != SectorResolutionState.PENDING_REFRESH:
+                    sector_snap = await client.get_snapshot(etf)
             except (PolygonError, Exception) as exc:
                 _LOG.warning("sector snapshot chain failed for %s: %s", sym, exc)
+
+    all_sector_daily = get_all_cached_sector_data()
+    sector_momentum: SectorMomentumScore | None = None
+    if sector_resolution_state not in (None, SectorResolutionState.PENDING_REFRESH):
+        eff = (sector_etf_sym or "SPY").strip().upper()
+        if eff:
+            sector_momentum = compute_day_sector_score(
+                eff,
+                sic_bucket_for_geo or "default",
+                get_cached_sector_returns(eff) or [],
+                all_sector_daily,
+            )
 
     snap_for_tech = sym_snap if sym_snap is not None else Snapshot(symbol=sym)
     adv = float(sym_snap.prev_day_volume) if sym_snap and sym_snap.prev_day_volume else None
 
     tech = TechnicalAnalyzer().analyze(sym, bars, snap_for_tech, params.technical, adv=adv)
     news = NewsAnalyzer().analyze(
-        sym, news_rows, params.news, lookback_hours=params.news.lookback_hours, mode="day"
+        sym,
+        news_rows,
+        params.news,
+        lookback_hours=params.news.lookback_hours,
+        mode="day",
+        benzinga_data=bz_data,
     )
-    macro = MacroAnalyzer().analyze(spy_snap, qqq_snap, vix_snap, econ, params.macro, events_lookback_days=1)
-    sector = SectorAnalyzer().analyze(sym, sector_snap, spy_snap, params.sector, sector_display_name=sector_display)
+    macro_ctx = await get_macro_context(polygon_econ_events=econ)
+    macro = MacroAnalyzer().analyze(
+        spy_snap, qqq_snap, vix_snap, econ, params.macro, events_lookback_days=1, macro_context=macro_ctx
+    )
+    sector = SectorAnalyzer().analyze(
+        sym,
+        sector_snap,
+        spy_snap,
+        params.sector,
+        sector_display_name=sector_display,
+        resolution_state=sector_resolution_state,
+        sector_momentum=sector_momentum,
+        mode="day",
+    )
     geo = GeoAnalyzer().analyze(
         news_rows, lookback_hours=params.news.lookback_hours, sector_bucket=sic_bucket_for_geo
     )
@@ -247,7 +343,29 @@ async def run_real_composite_engine_phase(
         bullish_threshold=float(params.composite.bullish_threshold),
         bearish_threshold=float(params.composite.bearish_threshold),
     )
-    composite = engine.compute(signals, regime=regime)
+    composite_raw = engine.compute(signals, regime=regime)
+    sector_persist = float(sector_momentum.persistence) if sector_momentum else 0.5
+    composite, alignment = adjust_composite_with_alignment(
+        composite_raw,
+        macro_verdict=str(macro.verdict or "neutral"),
+        macro_regime=str(macro.market_regime or "neutral"),
+        sector_verdict=str(sector.verdict or "neutral"),
+        sector_persistence=sector_persist,
+        technical_verdict=str(tech.verdict or "neutral"),
+        bullish_threshold=float(params.composite.bullish_threshold),
+        bearish_threshold=float(params.composite.bearish_threshold),
+    )
+    _LOG.info(
+        "alignment_computed symbol=%s level=%s modifier=%.1f raw=%.4f final=%.4f macro=%s sector=%s tech=%s",
+        sym,
+        alignment.level.value,
+        alignment.score_modifier,
+        composite_raw.score,
+        composite.score,
+        alignment.macro_direction,
+        alignment.sector_direction,
+        alignment.technical_direction,
+    )
 
     return RealCompositeEnginePhase(
         sym=sym,
@@ -259,6 +377,9 @@ async def run_real_composite_engine_phase(
         signals=signals,
         regime=regime,
         composite=composite,
+        alignment=alignment,
+        sector_momentum=sector_momentum,
+        sector_resolution_state=sector_resolution_state,
     )
 
 
@@ -284,6 +405,9 @@ async def build_real_composite_response(
     signals = phase.signals
     regime = phase.regime
     composite = phase.composite
+    alignment = getattr(phase, "alignment", None)
+    sector_momentum = getattr(phase, "sector_momentum", None)
+    sector_resolution_state = getattr(phase, "sector_resolution_state", None)
     tech, news, macro, sector, geo, internals = layer_results
 
     contributions: list[dict[str, Any]] = []
@@ -316,6 +440,13 @@ async def build_real_composite_response(
             "reasoning": getattr(res, "reasoning", ""),
             "chips": list(getattr(res, "chips", []) or []),
         }
+        if lid == "news":
+            row["wim_summary"] = getattr(res, "wim_summary", None)
+            row["data_state"] = getattr(res, "data_state", "fresh")
+            row["article_count"] = int(getattr(res, "article_count", 0) or 0)
+            row["latest_rating"] = getattr(res, "latest_rating", None)
+            row["latest_guidance"] = getattr(res, "latest_guidance", None)
+            row["earnings_result"] = getattr(res, "earnings_result", None)
         if lid == "geopolitical":
             row["geo_active_events"] = list(getattr(res, "geo_active_events", []) or [])
             row["geo_impact_sector_key"] = getattr(res, "geo_impact_sector_key", "") or ""
@@ -324,6 +455,31 @@ async def build_real_composite_response(
             row["geo_event_details"] = list(getattr(res, "geo_event_details", []) or [])
             band = str(getattr(res, "geo_exposure_band", "") or "").strip()
             row["geo_exposure_band"] = band if band else None
+            row["geo_baseline_score"] = int(getattr(res, "geo_baseline_score", 0) or 0)
+            row["geo_baseline_summary"] = str(getattr(res, "geo_baseline_summary", "") or "")
+            row["geo_has_live_events"] = bool(getattr(res, "geo_has_live_events", False))
+            row["geo_primary_theme"] = getattr(res, "geo_primary_theme", None)
+        if lid == "technical":
+            row["vwap_state"] = getattr(res, "vwap_state", None)
+            row["vwap_state_tooltip"] = getattr(res, "vwap_state_tooltip", None)
+        if lid == "macro":
+            row["macro_warnings"] = list(getattr(res, "macro_warnings", None) or [])
+            row["macro_risk_level"] = getattr(res, "macro_risk_level", None)
+            row["upcoming_events"] = list(getattr(res, "upcoming_events", None) or [])
+            row["yield_curve"] = getattr(res, "yield_curve", None)
+        if lid == "sector":
+            ds = None
+            if sector_momentum:
+                ds = session_details_from_returns(
+                    get_cached_sector_returns(sector_momentum.etf) or []
+                )
+            row.update(
+                sector_layer_api_extras(
+                    momentum=sector_momentum,
+                    resolution_state=sector_resolution_state,
+                    daily_sessions=ds,
+                )
+            )
         layers_out.append(row)
 
     snap_dict = sym_snap.model_dump(mode="json") if sym_snap else {}
@@ -348,6 +504,8 @@ async def build_real_composite_response(
         "alignment_ratio": composite.alignment_ratio,
         "conflicted_layers": list(composite.conflicted_layers or []),
     }
+    if alignment is not None:
+        response_body["alignment"] = alignment_to_response_dict(alignment)
 
     nc: dict[str, Any] | None = None
     if news.catalyst_headline:
@@ -386,6 +544,8 @@ async def build_real_composite_response(
             "n_conflicting": response_body.get("n_conflicting"),
         }
 
+    _ref_et = bars[-1].timestamp if bars else datetime.now(timezone.utc)
+    _ipm, _mob = vwap_session_flags_et(_ref_et)
     payload_stub: dict[str, Any] = {
         "symbol": sym,
         "regime": regime,
@@ -397,6 +557,12 @@ async def build_real_composite_response(
         "geopolitical_verdict": geo.verdict,
         "geo_high_impact_count": int(getattr(geo, "high_impact_count", 0) or 0),
         "market_open": _market_open_now(),
+        "vwap_session_is_pre_market": _ipm,
+        "vwap_session_market_open": _mob,
+        "intraday_bar_count": len(bars),
+        "vwap_state": getattr(tech, "vwap_state", None),
+        "vwap_state_tooltip": getattr(tech, "vwap_state_tooltip", None),
+        "vwap_display": getattr(tech, "vwap_chip", None),
         "intraday_bars": [
             {"high": b.high, "low": b.low, "close": b.close, "volume": b.volume} for b in bars
         ],

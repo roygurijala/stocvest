@@ -16,10 +16,11 @@ def test_negative_articles_bearish(mock_parameter_store) -> None:
     assert n.score is not None and n.score <= 40
 
 
-def test_no_articles_returns_unavailable(mock_parameter_store) -> None:
+def test_no_articles_returns_neutral_available(mock_parameter_store) -> None:
     n = NewsAnalyzer().analyze("TEST", [], mock_parameter_store.news)
-    assert n.status == "unavailable"
-    assert n.score is None
+    assert n.status == "available"
+    assert n.score == 50
+    assert n.verdict == "neutral"
 
 
 def test_pr_wire_filtered(mock_parameter_store) -> None:
@@ -33,7 +34,8 @@ def test_pr_wire_filtered(mock_parameter_store) -> None:
         }
     ]
     n = NewsAnalyzer().analyze("TEST", articles, mock_parameter_store.news)
-    assert n.status == "unavailable"
+    assert n.status == "available"
+    assert n.verdict == "neutral"
 
 
 def test_params_threshold_used(mock_parameter_store) -> None:

@@ -65,6 +65,42 @@ def test_unknown_module(monkeypatch: pytest.MonkeyPatch) -> None:
     assert r["statusCode"] == 404
 
 
+def test_geo_themes_job_module(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("STOCVEST_LAMBDA_MODULE", "geo_themes")
+
+    def fake(_event: dict, _ctx: dict) -> dict:
+        return {"statusCode": 200, "themes_count": 2}
+
+    monkeypatch.setattr("stocvest.workers.geo_themes_updater.handler", fake)
+    r = lambda_handler({"action": "update_geo_themes"}, {})
+    assert r["statusCode"] == 200
+    assert r["themes_count"] == 2
+
+
+def test_orb_compute_job_module(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("STOCVEST_LAMBDA_MODULE", "orb_compute")
+
+    def fake(_event: dict, _ctx: dict) -> dict:
+        return {"statusCode": 200, "computed": 1, "symbols": ["AAPL"]}
+
+    monkeypatch.setattr("stocvest.workers.orb_compute_worker.handler", fake)
+    r = lambda_handler({"action": "compute_orb"}, {})
+    assert r["statusCode"] == 200
+    assert r["computed"] == 1
+
+
+def test_macro_warmer_job_module(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("STOCVEST_LAMBDA_MODULE", "macro_warmer")
+
+    def fake(_event: dict, _ctx: dict) -> dict:
+        return {"statusCode": 200, "events": 3, "yield_curve": True}
+
+    monkeypatch.setattr("stocvest.workers.macro_cache_warmer.handler", fake)
+    r = lambda_handler({"source": "eventbridge"}, {})
+    assert r["statusCode"] == 200
+    assert r["events"] == 3
+
+
 def test_dispatch_uses_stocvest_lambda_module_from_os() -> None:
     os.environ["STOCVEST_LAMBDA_MODULE"] = "health"
     try:

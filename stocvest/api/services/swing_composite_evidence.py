@@ -6,6 +6,7 @@ import math
 from typing import Any
 
 from stocvest.signals.composite_score import CompositeSignal, CompositeVerdict
+from stocvest.signals.vwap_state import VWAP_STATE_TOOLTIP, VWAPState, build_vwap_chip, resolve_vwap_state
 
 
 def _float_or_none(v: Any) -> float | None:
@@ -112,7 +113,9 @@ def is_signal_complete(signal: dict[str, Any]) -> tuple[bool, list[str]]:
         missing.append("stop_level")
     if signal.get("reference_target_1") is None:
         missing.append("target_1")
-    if signal.get("vwap") is None:
+    vdisp = str(signal.get("vwap_display") or "").strip()
+    vnum = signal.get("vwap")
+    if not vdisp and not (isinstance(vnum, (int, float)) and vnum is not None and float(vnum) > 0):
         missing.append("vwap")
     return (len(missing) == 0, missing)
 
@@ -301,6 +304,44 @@ def build_swing_composite_evidence_fields(
     if vwap is None and bool(payload.get("market_open")):
         vwap = _intraday_vwap_from_payload_bars(payload)
 
+    intraday_list = payload.get("intraday_bars")
+    n_bars_raw = payload.get("intraday_bar_count")
+    if isinstance(n_bars_raw, int) and n_bars_raw >= 0:
+        n_bars = int(n_bars_raw)
+    else:
+        n_bars = len(intraday_list) if isinstance(intraday_list, list) else 0
+    # Session flags: omitting ``market_open`` / RTH keys means "no intraday context in payload"
+    # (swing BFF + unit tests). Default market_open True so snapshot ``day_vwap`` is not
+    # classified as post-market and stripped from the response.
+    if "vwap_session_market_open" in payload:
+        mo = bool(payload.get("vwap_session_market_open"))
+    elif "market_open" in payload:
+        mo = bool(payload.get("market_open"))
+    else:
+        mo = True
+    ipm = bool(payload.get("vwap_session_is_pre_market", False))
+    ts_override = str(payload.get("vwap_state") or "").strip()
+    if ts_override:
+        try:
+            vs = VWAPState(ts_override)
+        except ValueError:
+            adj_bars = n_bars
+            if adj_bars == 0 and vwap is not None and vwap > 0 and mo:
+                adj_bars = 20
+            vs = resolve_vwap_state(vwap, mo, adj_bars, ipm)
+    else:
+        adj_bars = n_bars
+        if adj_bars == 0 and vwap is not None and vwap > 0 and mo:
+            adj_bars = 20
+        vs = resolve_vwap_state(vwap, mo, adj_bars, ipm)
+
+    vwap_display = str(payload.get("vwap_display") or "").strip()
+    if not vwap_display:
+        vwap_display = build_vwap_chip(vs, vwap, last)
+    vwap_tooltip = str(payload.get("vwap_state_tooltip") or "").strip()
+    if not vwap_tooltip:
+        vwap_tooltip = VWAP_STATE_TOOLTIP[vs]
+
     historical_entry_zone: dict[str, float] | None = None
     if day_lo is not None and day_hi is not None and day_hi > day_lo:
         historical_entry_zone = {"low": round(day_lo, 4), "high": round(day_hi, 4)}
@@ -482,7 +523,7 @@ def build_swing_composite_evidence_fields(
         if historical_entry_zone
         else "the Historical Entry Zone shown in reference levels"
     )
-    vw_txt = f"${vwap:.2f}" if vwap is not None and vwap > 0 else "VWAP from the reference strip"
+    vw_txt = vwap_display if vwap_display else "VWAP from the reference strip"
     signal_parameters = (
         f"Consider observing how {sym} behaves versus {zone_txt} on a closing basis before sizing any follow-up. "
         f"Scale participation down when confirming layers diverge or when price cannot hold {vw_txt}. "
@@ -509,8 +550,11 @@ def build_swing_composite_evidence_fields(
         "reference_stop_level": reference_stop_level,
         "alignment_ratio": round(float(composite.alignment_ratio), 4),
         "conflicted_layers": list(composite.conflicted_layers or []),
+        "vwap_state": vs.value,
+        "vwap_display": vwap_display,
+        "vwap_tooltip": vwap_tooltip,
     }
-    if vwap is not None and vwap > 0:
+    if vwap is not None and vwap > 0 and vs == VWAPState.AVAILABLE:
         out["vwap"] = round(vwap, 4)
     is_complete, missing_fields = is_signal_complete(out)
     out["is_complete"] = is_complete

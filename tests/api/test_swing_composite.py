@@ -9,6 +9,7 @@ import pytest
 
 from stocvest.config.signal_parameters import SwingTechnicalParameters, default_signal_parameters
 from stocvest.data.models import Bar, Snapshot, Timeframe
+from stocvest.signals.sector_mapper import SectorResolutionState
 from stocvest.signals.technical_analyzer import TechnicalAnalyzer
 
 
@@ -45,6 +46,8 @@ def _mute_side_effects(monkeypatch: pytest.MonkeyPatch) -> None:
     rec = MagicMock()
     rec.record_signal = MagicMock()
     monkeypatch.setattr("stocvest.api.services.swing_composite_engine.get_signal_recorder", lambda: rec)
+    monkeypatch.setattr("stocvest.api.services.swing_composite_engine.get_all_cached_sector_data", lambda: {})
+    monkeypatch.setattr("stocvest.api.services.swing_composite_engine.get_cached_sector_returns", lambda _etf: None)
 
 
 @pytest.mark.asyncio
@@ -112,7 +115,7 @@ async def test_swing_fetches_daily_bars_not_1min(_mute_side_effects: None, monke
     )
     monkeypatch.setattr(
         "stocvest.api.services.swing_composite_engine.SectorMapper.get_sector_etf",
-        AsyncMock(return_value=("XLK", "Technology")),
+        AsyncMock(return_value=("XLK", "Technology", "technology", SectorResolutionState.RESOLVED)),
     )
 
     from stocvest.api.services.swing_composite_engine import build_swing_composite_response
@@ -124,6 +127,15 @@ async def test_swing_fetches_daily_bars_not_1min(_mute_side_effects: None, monke
         params=default_signal_parameters(),
     )
     assert out.get("mode") == "swing"
+    assert out.get("signal_basis") == "daily_bars_rth"
+    lbl = str(out.get("signal_basis_label") or "")
+    assert lbl and "daily" in lbl.lower()
+    tech_layer = next(x for x in out["layers"] if x["layer"] == "technical")
+    for c in tech_layer.get("chips", []):
+        assert "VWAP" not in c or "Daily" in c
+        assert "(session)" not in c
+        assert "ORB" not in c
+        assert "Opening Range" not in c
     assert any(tf == Timeframe.DAY_1 for sym, tf in calls if sym == "AAPL")
     assert not any(tf == Timeframe.MIN_1 for _, tf in calls)
 
@@ -191,7 +203,7 @@ async def test_swing_news_uses_extended_lookback(_mute_side_effects: None, monke
     )
     monkeypatch.setattr(
         "stocvest.api.services.swing_composite_engine.SectorMapper.get_sector_etf",
-        AsyncMock(return_value=("XLK", "Technology")),
+        AsyncMock(return_value=("XLK", "Technology", "technology", SectorResolutionState.RESOLVED)),
     )
 
     from stocvest.api.services.swing_composite_engine import build_swing_composite_response
@@ -266,7 +278,7 @@ async def test_swing_uses_swing_technical_not_day(_mute_side_effects: None, monk
     )
     monkeypatch.setattr(
         "stocvest.api.services.swing_composite_engine.SectorMapper.get_sector_etf",
-        AsyncMock(return_value=("XLK", "Technology")),
+        AsyncMock(return_value=("XLK", "Technology", "technology", SectorResolutionState.RESOLVED)),
     )
 
     mock_analyze = MagicMock(side_effect=AssertionError("TechnicalAnalyzer should not run for swing composite"))

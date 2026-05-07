@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from stocvest.config.signal_parameters import default_signal_parameters
+from stocvest.signals.sector_mapper import SectorResolutionState
 
 
 @pytest.mark.asyncio
@@ -68,8 +69,15 @@ async def test_swing_composite_does_not_auto_log(monkeypatch: pytest.MonkeyPatch
 
         async def get_economic_calendar_range(self, *a, **k):
             return []
-
     monkeypatch.setattr(sce, "PolygonClient", FakePoly)
+    monkeypatch.setattr(
+        "stocvest.api.services.swing_composite_engine.get_all_cached_sector_data",
+        lambda: {},
+    )
+    monkeypatch.setattr(
+        "stocvest.api.services.swing_composite_engine.get_cached_sector_returns",
+        lambda _etf: None,
+    )
     monkeypatch.setattr(
         "stocvest.api.services.swing_composite_engine.get_vix_snapshot_with_fallback",
         AsyncMock(
@@ -80,7 +88,7 @@ async def test_swing_composite_does_not_auto_log(monkeypatch: pytest.MonkeyPatch
     )
     monkeypatch.setattr(
         "stocvest.api.services.swing_composite_engine.SectorMapper.get_sector_etf",
-        AsyncMock(return_value=("XLE", "Energy")),
+        AsyncMock(return_value=("XLE", "Energy", "oil_gas", SectorResolutionState.RESOLVED)),
     )
     rec = MagicMock()
     rec.record_signal = MagicMock()

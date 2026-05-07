@@ -7,6 +7,7 @@ from typing import Optional
 
 from stocvest.config.signal_parameters import SwingTechnicalParameters
 from stocvest.data.models import Bar, Snapshot
+from stocvest.signals.indicator_scope import finalize_swing_technical_chips, sanitize_swing_reasoning_text
 from stocvest.signals.technical_analyzer import _calculate_ema, _calculate_rsi
 
 
@@ -243,6 +244,8 @@ class SwingTechnicalAnalyzer:
         if near_high:
             chips.append("Near 52W High")
 
+        chips = finalize_swing_technical_chips(symbol, chips)
+
         parts: list[str] = []
         if sma50 is not None and sma200 is not None:
             parts.append(f"Price vs SMA50 (${sma50:.2f}) and SMA200 (${sma200:.2f}) — {'uptrend' if gc else 'mixed' if not dc else 'downtrend'} structure.")
@@ -253,6 +256,7 @@ class SwingTechnicalAnalyzer:
         if m_now is not None and s_now is not None:
             parts.append(f"MACD {m_now:.3f} vs signal {s_now:.3f} ({'above' if macd_above else 'below'}).")
         reasoning = " ".join(parts) if parts else "Daily swing technical snapshot complete."
+        reasoning = sanitize_swing_reasoning_text(reasoning, symbol=symbol)
 
         cp = "golden_cross" if gc else "swing_composite"
         if macd_bull_cross:

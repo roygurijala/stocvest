@@ -86,6 +86,14 @@ def signal_resolution_scheduled_handler(event: LambdaEvent, context: LambdaConte
             except Exception as exc:
                 _LOG.exception("Portfolio reversal job error: %s", exc)
                 return ok({"job": "portfolio_reversal", "error": str(exc), "closed": 0})
+        if str(event.get("stocvest_job") or "") == "geo_themes_update":
+            try:
+                from stocvest.workers.geo_themes_updater import update_geo_themes_sync
+
+                return ok({"job": "geo_themes_update", **update_geo_themes_sync()})
+            except Exception as exc:
+                _LOG.exception("Geo themes update job error: %s", exc)
+                return ok({"job": "geo_themes_update", "error": str(exc), "themes_count": 0})
 
     async def _run() -> dict[str, int]:
         settings = get_settings()

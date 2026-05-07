@@ -85,7 +85,8 @@ def test_day_news_analyzer_uses_8h_window_by_default() -> None:
     p = default_signal_parameters().news
     res8 = NewsAnalyzer().analyze("TEST", [art], p, lookback_hours=8, mode="day")
     res120 = NewsAnalyzer().analyze("TEST", [art], p, lookback_hours=120, mode="day")
-    assert res8.status == "unavailable"
+    assert res8.status == "available"
+    assert res8.verdict == "neutral"
     assert res120.status == "available"
     res_swing_default = NewsAnalyzer().analyze("TEST", [art], p, mode="swing")
     assert res_swing_default.status == "available"

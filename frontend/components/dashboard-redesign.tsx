@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { DashboardCard } from "@/components/dashboard-card";
 import { DashboardRealtime } from "@/components/dashboard-realtime";
@@ -13,6 +13,7 @@ import { NewsPanel } from "@/components/news-panel";
 import { PdtStatusPill } from "@/components/pdt-status-pill";
 import { getChangeColor } from "@/components/market-sentiment-score-widget";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
+import { fetchMacroContext } from "@/lib/api/fetch-macro-context";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
 import { topSignalStrengthPercent } from "@/lib/top-signal-strength";
@@ -235,6 +236,19 @@ export function DashboardRedesign({
   const [newsPanelSymbol, setNewsPanelSymbol] = useState("");
   const [newsPanelOpen, setNewsPanelOpen] = useState(false);
   const [newsUiTick, setNewsUiTick] = useState(0);
+  const [macroPulse, setMacroPulse] = useState<Awaited<ReturnType<typeof fetchMacroContext>>>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchMacroContext().then((ctx) => {
+      if (!cancelled) {
+        setMacroPulse(ctx);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const snapshotsBySymbol = useMemo(
     () => new Map(marketOverview.snapshots.map((s) => [(s.symbol || "").toUpperCase(), s])),
     [marketOverview.snapshots]
@@ -293,6 +307,9 @@ export function DashboardRedesign({
     () => [...earningsEvents].sort((a, b) => a.report_date.localeCompare(b.report_date)).slice(0, 10),
     [earningsEvents]
   );
+
+  const macroRiskLevel = (macroPulse?.macro_risk_level ?? macroPulse?.macro_risk ?? "low").toLowerCase();
+  const macroWarnings = macroPulse?.warnings ?? [];
 
   return (
     <section className="stocvest-dashboard-v2" style={{ display: "grid", gap: spacing[5] }}>
@@ -357,7 +374,7 @@ export function DashboardRedesign({
             className={`order-2 flex w-full min-h-[200px] flex-col overflow-hidden lg:self-start lg:col-start-1 lg:row-start-2`}
             title="Top signals"
             eyebrow="Scanner"
-            subtitle="Daily swing scanner only (no intraday session patterns on the dashboard). Open Evidence for news, levels, and the six-layer read."
+            subtitle="Daily swing scanner only (no intraday session patterns on the dashboard). Open Evidence for the six-layer read, macro–sector–technical alignment, and levels."
             cardTip={TOP_SIGNALS_CARD_TIP}
           >
             <div className="flex flex-col gap-3">
@@ -669,6 +686,17 @@ export function DashboardRedesign({
               <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.5 }}>
                 Session tape for context; swing thesis uses weekly panel + Evidence.
               </p>
+              {(macroRiskLevel === "critical" || macroRiskLevel === "elevated") && macroWarnings.length > 0 ? (
+                <div
+                  className={
+                    macroRiskLevel === "critical"
+                      ? "mt-2 rounded border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400"
+                      : "mt-2 rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-400"
+                  }
+                >
+                  {macroWarnings[0]}
+                </div>
+              ) : null}
             </div>
           </DashboardCard>
 

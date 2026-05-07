@@ -83,6 +83,7 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
             bars_batch_handler,
             bars_handler,
             earnings_calendar_handler,
+            macro_context_handler,
             market_status_handler,
             news_handler,
             options_chain_handler,
@@ -98,6 +99,7 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
                 context,
                 {
                     "GET /v1/market/status": market_status_handler,
+                    "GET /v1/market/macro-context": macro_context_handler,
                     "GET /v1/market/snapshot": snapshot_handler,
                     "GET /v1/market/snapshots": snapshots_batch_handler,
                     "GET /v1/market/bars": bars_handler,
@@ -232,6 +234,26 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
         from stocvest.api.handlers.signal_resolution import signal_resolution_scheduled_handler
 
         return _with_cors_and_audit(event=event, response=signal_resolution_scheduled_handler(event, context), module=module)
+
+    if module == "geo_themes":
+        from stocvest.workers.geo_themes_updater import handler as geo_themes_job_handler
+
+        return geo_themes_job_handler(event, context)
+
+    if module == "orb_compute":
+        from stocvest.workers.orb_compute_worker import handler as orb_compute_handler
+
+        return orb_compute_handler(event, context)
+
+    if module == "macro_warmer":
+        from stocvest.workers.macro_cache_warmer import handler as macro_warmer_handler
+
+        return macro_warmer_handler(event, context)
+
+    if module == "sector_daily_cache":
+        from stocvest.workers.sector_daily_cache import handler as sector_daily_job_handler
+
+        return sector_daily_job_handler(event, context)
 
     if module == "websocket":
         from stocvest.api.handlers.websocket import (

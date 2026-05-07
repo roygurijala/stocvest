@@ -21,6 +21,87 @@ export interface GeopoliticalLayerExtras {
   exposureSummary: string | null;
   activeEvents: Array<{ event_type: string; score: number }>;
   eventDetails: GeoEventDetailRow[];
+  /** Structural baseline (risk / sensitivity scale) — always present once geo layer is hydrated. */
+  geoBaselineScore?: number;
+  geoBaselineSummary?: string;
+  /** True when headlineKeyword events augmented the geo read; false = structural baseline only. */
+  geoHasLiveEvents?: boolean;
+  geoPrimaryTheme?: string | null;
+}
+
+export interface NewsLayerRating {
+  action: string;
+  rating: string;
+  firm: string;
+  /** ISO date string (`YYYY-MM-DD`) */
+  date: string;
+}
+
+export interface NewsLayerGuidance {
+  type: string;
+  headline: string;
+  /** ISO date string (`YYYY-MM-DD`) */
+  date: string;
+}
+
+export interface NewsLayerEarningsResult {
+  beat: boolean | null;
+  eps_surprise_pct: number | null;
+  period: string;
+}
+
+/** Macro calendar / FRED extras from composite `layers[].macro` row. */
+export interface MacroUpcomingEventWire {
+  event_id: string;
+  name: string;
+  category: string;
+  status: string;
+  importance: number;
+  hours_until: number;
+  warning: string | null;
+  scheduled_time: string;
+}
+
+export interface MacroYieldCurveWire {
+  yield_2yr: number;
+  yield_10yr: number;
+  spread: number;
+  regime: "normal" | "flat" | "inverted";
+  label: string;
+  chip: string;
+}
+
+/** Sector mapper / cache resolution (composite `layers[].sector_resolution_state`). */
+export type SectorResolutionStateWire = "resolved" | "pending_cache_refresh" | "unmapped";
+
+/** Redis-backed daily ETF vs SPY session row when API includes `sector_daily_sessions`. */
+export interface SectorDailySessionWire {
+  date: string;
+  etf_pct: number;
+  spy_pct: number;
+  relative: number;
+  outperformed: boolean;
+  volume_ratio: number;
+}
+
+/** Macro-sector-technical synthesis from composite top-level `alignment` (additive). */
+export type CompositeAlignmentLevelWire = "full" | "strong" | "moderate" | "weak" | "conflict";
+
+export interface CompositeAlignmentWire {
+  level: CompositeAlignmentLevelWire;
+  score_modifier: number;
+  label: string;
+  detail: string;
+  chip: string;
+  is_tailwind: boolean;
+  is_headwind: boolean;
+  is_counter_trend: boolean;
+  macro_direction: string;
+  sector_direction: string;
+  technical_direction: string;
+  macro_supports: boolean;
+  sector_supports: boolean;
+  technical_supports: boolean;
 }
 
 export interface EvidenceLayer {
@@ -33,8 +114,30 @@ export interface EvidenceLayer {
   keyPoints: string[];
   contributionScore: number;
   freshnessLabel: string;
+  macro_warnings?: string[];
+  macro_risk_level?: "low" | "moderate" | "elevated" | "critical";
+  upcoming_events?: MacroUpcomingEventWire[];
+  yield_curve?: MacroYieldCurveWire | null;
   /** Present when API returns geo sector mapping + themes (geopolitical layer only). */
   geo?: GeopoliticalLayerExtras;
+  /** Composite news layer extras (when BFF merges `layers[].news`). */
+  wim_summary?: string;
+  articles_count?: number;
+  news_data_state?: string;
+  latest_rating?: NewsLayerRating;
+  latest_guidance?: NewsLayerGuidance;
+  earnings_result?: NewsLayerEarningsResult;
+  /** Sector layer momentum + resolver state (composite real/swing APIs). */
+  sector_resolution_state?: SectorResolutionStateWire | null;
+  sector_persistence?: number | null;
+  sector_sessions_leading?: number | null;
+  sector_total_sessions?: number | null;
+  sector_trending?: string | null;
+  sector_rank_1d?: number | null;
+  sector_rank_5d?: number | null;
+  sector_interpretation?: string | null;
+  sector_data_available?: boolean | null;
+  sector_daily_sessions?: SectorDailySessionWire[];
 }
 
 export interface SignalEvidenceConfluence {
@@ -70,10 +173,86 @@ export interface SignalEvidenceInsight {
   reference_stop_level: number | null;
   /** Session VWAP when available; modal uses this before `keyLevels.vwap`. */
   vwap: number | null;
+  vwap_state?: string;
+  vwap_display?: string;
+  vwap_tooltip?: string;
   is_complete?: boolean;
   missing_fields?: string[];
   alignment_ratio?: number;
   conflicted_layers?: string[];
+}
+
+/** Mirrors backend ``VWAPState`` for client display. */
+export const VWAP_STATE = {
+  PRE_MARKET: "pre_market",
+  FORMING: "forming",
+  AVAILABLE: "available",
+  POST_MARKET: "post_market"
+} as const;
+
+export function getVWAPTooltip(state?: string): string {
+  const tooltips: Record<string, string> = {
+    pre_market: "VWAP resets at 9:30 AM ET. Not available pre-market.",
+    forming: "VWAP is calculating from early session bars.",
+    available: "Volume Weighted Average Price since market open.",
+    post_market: "VWAP is an RTH-only indicator. Not available post-market."
+  };
+  return tooltips[state ?? ""] ?? "Intraday volume-weighted price level.";
+}
+
+export function getVWAPDisplay(
+  vwapValue: number | null | undefined,
+  vwapState: string | undefined,
+  price: number | null | undefined,
+  vwapDisplay: string | undefined,
+  serverTooltip?: string | undefined
+): { label: string; muted: boolean; tooltip: string; state?: string } {
+  if (vwapDisplay && vwapDisplay.trim()) {
+    const st = vwapState?.trim();
+    const muted = st !== VWAP_STATE.AVAILABLE;
+    const tip = (serverTooltip && serverTooltip.trim()) || (st ? getVWAPTooltip(st) : getVWAPTooltip());
+    return {
+      label: vwapDisplay.trim(),
+      muted,
+      tooltip: tip,
+      state: st
+    };
+  }
+  if (vwapValue != null && Number.isFinite(vwapValue) && vwapValue > 0) {
+    const direction = price != null && Number.isFinite(price) && price >= vwapValue ? "— Above" : "— Below";
+    return {
+      label: `VWAP $${vwapValue.toFixed(2)} ${direction}`.trim(),
+      muted: false,
+      tooltip: getVWAPTooltip(VWAP_STATE.AVAILABLE),
+      state: VWAP_STATE.AVAILABLE
+    };
+  }
+  return {
+    label: "VWAP starts at 9:30 ET",
+    muted: true,
+    tooltip: "VWAP resets each session at open.",
+    state: VWAP_STATE.PRE_MARKET
+  };
+}
+
+/** Client-side mirror of intraday-only chip markers (defense when API mis-scopes). */
+const INTRADAY_CHIP_MARKERS = ["(session)", "session", "orb", "opening range", "opening drive", "intraday"] as const;
+
+export function isChipAllowedForSwing(chip: string): boolean {
+  const lower = chip.toLowerCase();
+  for (const marker of INTRADAY_CHIP_MARKERS) {
+    if (lower.includes(marker)) return false;
+  }
+  if (lower.includes("vwap") && !lower.includes("daily")) return false;
+  if ((lower.includes("ema9") || lower.includes("9 ema")) && !lower.includes("daily") && !lower.includes("dma")) {
+    return false;
+  }
+  return true;
+}
+
+export function filterChipsForMode(chips: string[], mode: "day" | "swing"): string[] {
+  if (mode !== "swing") return chips;
+  return chips.filter(isChipAllowedForSwing);
 }
 
 export interface SignalEvidenceData {
@@ -87,6 +266,9 @@ export interface SignalEvidenceData {
   aiFreshnessLabel: string;
   keyLevels: {
     vwap?: number | null;
+    vwap_state?: string;
+    vwap_display?: string;
+    vwap_tooltip?: string;
     support?: number | null;
     resistance?: number | null;
     orHigh?: number | null;
@@ -106,6 +288,12 @@ export interface SignalEvidenceData {
   confluence?: SignalEvidenceConfluence | null;
   /** Populated from swing composite JSON or derived locally for consistent evidence UI. */
   insight?: SignalEvidenceInsight | null;
+  /** Set when evidence is merged from composite day/swing API responses. */
+  compositeMode?: "day" | "swing";
+  signal_basis?: string;
+  signal_basis_label?: string;
+  /** Present after composite enrichment when backend sends `alignment`. */
+  alignment?: CompositeAlignmentWire | null;
 }
 
 function clamp(v: number, min: number, max: number): number {
@@ -327,7 +515,7 @@ function synthKeyPointsFromLayerApi(match: Record<string, unknown>): string[] {
  * Real-composite `layers[]` rows carry authoritative verdict/score; chips were merged into keyPoints
  * but the badge still came from `buildEvidenceFromSetup` heuristics — keep badge + bar chart aligned.
  */
-function evidencePatchFromApiLayer(match: Record<string, unknown>): Partial<EvidenceLayer> {
+function evidencePatchFromApiLayer(match: Record<string, unknown>, layerKey?: string): Partial<EvidenceLayer> {
   const patch: Partial<EvidenceLayer> = {};
   const raw = match.score;
   const layerStatus = String(match.status ?? "").trim().toLowerCase();
@@ -354,6 +542,151 @@ function evidencePatchFromApiLayer(match: Record<string, unknown>): Partial<Evid
     patch.status = "Neutral";
   } else if (patch.contributionScore !== undefined) {
     patch.status = statusFromScore(patch.contributionScore);
+  }
+
+  const lk = (layerKey ?? "").trim().toLowerCase();
+  if (lk === "news") {
+    const wim = typeof match.wim_summary === "string" && match.wim_summary.trim() ? match.wim_summary.trim() : undefined;
+    if (wim) patch.wim_summary = wim;
+    const ds = typeof match.data_state === "string" ? match.data_state.trim() : undefined;
+    if (ds) patch.news_data_state = ds;
+    const ac = numOrNull(match.article_count ?? match.articles_count);
+    if (ac != null) patch.articles_count = ac;
+
+    const lrRaw = match.latest_rating;
+    if (lrRaw && typeof lrRaw === "object") {
+      const o = lrRaw as Record<string, unknown>;
+      patch.latest_rating = {
+        action: String(o.action ?? "").trim(),
+        rating: String(o.rating ?? "").trim(),
+        firm: String(o.firm ?? "").trim(),
+        date: String(o.date ?? o.date_str ?? "").trim()
+      };
+    }
+    const lgRaw = match.latest_guidance;
+    if (lgRaw && typeof lgRaw === "object") {
+      const g = lgRaw as Record<string, unknown>;
+      patch.latest_guidance = {
+        type: String(g.type ?? "").trim(),
+        headline: String(g.headline ?? "").trim(),
+        date: String(g.date ?? g.date_str ?? "").trim()
+      };
+    }
+    const erRaw = match.earnings_result;
+    if (erRaw && typeof erRaw === "object") {
+      const e = erRaw as Record<string, unknown>;
+      const beatRaw = e.beat;
+      const beatParsed: boolean | null = typeof beatRaw === "boolean" ? beatRaw : null;
+      patch.earnings_result = {
+        beat: beatParsed,
+        eps_surprise_pct:
+          typeof e.eps_surprise_pct === "number" && Number.isFinite(e.eps_surprise_pct) ? e.eps_surprise_pct : null,
+        period: String(e.period ?? "").trim()
+      };
+    }
+  }
+  if (lk === "macro") {
+    const mw = match.macro_warnings;
+    if (Array.isArray(mw)) {
+      patch.macro_warnings = mw.map((x) => String(x)).filter((s) => s.length > 0);
+    }
+    const mr = String(match.macro_risk_level ?? "").trim().toLowerCase();
+    if (mr === "low" || mr === "moderate" || mr === "elevated" || mr === "critical") {
+      patch.macro_risk_level = mr;
+    }
+    const ue = match.upcoming_events;
+    if (Array.isArray(ue)) {
+      const rows: MacroUpcomingEventWire[] = [];
+      for (const item of ue) {
+        if (!item || typeof item !== "object") continue;
+        const o = item as Record<string, unknown>;
+        const eid = String(o.event_id ?? "").trim();
+        const nm = String(o.name ?? "").trim();
+        if (!eid || !nm) continue;
+        const st = String(o.status ?? "").trim().toLowerCase();
+        const imp = numOrNull(o.importance);
+        const hu = numOrNull(o.hours_until);
+        rows.push({
+          event_id: eid,
+          name: nm,
+          category: String(o.category ?? "").trim(),
+          status: st,
+          importance: imp ?? 0,
+          hours_until: hu ?? 0,
+          warning: o.warning == null ? null : String(o.warning),
+          scheduled_time: String(o.scheduled_time ?? "").trim()
+        });
+      }
+      if (rows.length) patch.upcoming_events = rows;
+    }
+    const ycRaw = match.yield_curve;
+    if (ycRaw && typeof ycRaw === "object") {
+      const y = ycRaw as Record<string, unknown>;
+      const y2 = numOrNull(y.yield_2yr);
+      const y10 = numOrNull(y.yield_10yr);
+      const sp = numOrNull(y.spread);
+      const reg = String(y.regime ?? "").trim().toLowerCase();
+      if (
+        y2 != null &&
+        y10 != null &&
+        sp != null &&
+        (reg === "normal" || reg === "flat" || reg === "inverted")
+      ) {
+        patch.yield_curve = {
+          yield_2yr: y2,
+          yield_10yr: y10,
+          spread: sp,
+          regime: reg,
+          label: String(y.label ?? "").trim() || `Yield curve: ${reg}`,
+          chip: String(y.chip ?? "").trim() || ""
+        };
+      }
+    }
+  }
+  if (lk === "sector") {
+    const srs = String(match.sector_resolution_state ?? "").trim().toLowerCase();
+    if (srs === "resolved" || srs === "pending_cache_refresh" || srs === "unmapped") {
+      patch.sector_resolution_state = srs as SectorResolutionStateWire;
+    }
+    const sp = numOrNull(match.sector_persistence);
+    if (sp != null) patch.sector_persistence = sp;
+    const ssl = numOrNull(match.sector_sessions_leading);
+    if (ssl != null) patch.sector_sessions_leading = Math.round(ssl);
+    const sts = numOrNull(match.sector_total_sessions);
+    if (sts != null) patch.sector_total_sessions = Math.round(sts);
+    const st = String(match.sector_trending ?? "").trim();
+    if (st) patch.sector_trending = st;
+    const r1 = numOrNull(match.sector_rank_1d);
+    if (r1 != null) patch.sector_rank_1d = r1;
+    const r5 = numOrNull(match.sector_rank_5d);
+    if (r5 != null) patch.sector_rank_5d = r5;
+    const interp = String(match.sector_interpretation ?? "").trim();
+    if (interp) patch.sector_interpretation = interp;
+    if (typeof match.sector_data_available === "boolean") {
+      patch.sector_data_available = match.sector_data_available;
+    }
+    const sds = match.sector_daily_sessions;
+    if (Array.isArray(sds)) {
+      const rows: SectorDailySessionWire[] = [];
+      for (const item of sds) {
+        if (!item || typeof item !== "object") continue;
+        const r = item as Record<string, unknown>;
+        const date = String(r.date ?? "").trim();
+        const etf_pct = numOrNull(r.etf_pct);
+        const spy_pct = numOrNull(r.spy_pct);
+        const rel = numOrNull(r.relative);
+        if (!date || etf_pct == null || spy_pct == null || rel == null) continue;
+        rows.push({
+          date,
+          etf_pct,
+          spy_pct,
+          relative: rel,
+          outperformed: r.outperformed === true,
+          volume_ratio: numOrNull(r.volume_ratio) ?? 1
+        });
+      }
+      if (rows.length) patch.sector_daily_sessions = rows;
+    }
   }
   return patch;
 }
@@ -567,6 +900,38 @@ function numOrNull(v: unknown): number | null {
   return null;
 }
 
+const ALIGN_LEVEL_SET = new Set<string>(["full", "strong", "moderate", "weak", "conflict"]);
+
+/** Parse composite top-level ``alignment`` object (additive API field). */
+export function parseCompositeAlignment(raw: unknown): CompositeAlignmentWire | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const levelRaw = String(o.level ?? "").trim().toLowerCase();
+  if (!ALIGN_LEVEL_SET.has(levelRaw)) return null;
+  const mod = numOrNull(o.score_modifier);
+  if (mod == null) return null;
+  const label = String(o.label ?? "").trim();
+  const detail = String(o.detail ?? "").trim();
+  const chip = String(o.chip ?? "").trim();
+  if (!label || !detail || !chip) return null;
+  return {
+    level: levelRaw as CompositeAlignmentLevelWire,
+    score_modifier: Math.round(mod * 10) / 10,
+    label,
+    detail,
+    chip,
+    is_tailwind: o.is_tailwind === true,
+    is_headwind: o.is_headwind === true,
+    is_counter_trend: o.is_counter_trend === true,
+    macro_direction: String(o.macro_direction ?? "neutral").trim().toLowerCase(),
+    sector_direction: String(o.sector_direction ?? "neutral").trim().toLowerCase(),
+    technical_direction: String(o.technical_direction ?? "neutral").trim().toLowerCase(),
+    macro_supports: o.macro_supports === true,
+    sector_supports: o.sector_supports === true,
+    technical_supports: o.technical_supports === true
+  };
+}
+
 function parseGeoEventDetailRows(raw: unknown): GeoEventDetailRow[] {
   if (!Array.isArray(raw)) return [];
   const out: GeoEventDetailRow[] = [];
@@ -589,6 +954,13 @@ function formatGeoSectorLabel(key: string): string {
   return k.replace(/_/g, " ").replace(/\b\w/g, (ch) => ch.toUpperCase());
 }
 
+export function structuralBandFromBaselineScore(score: number | null): "low" | "moderate" | "high" | null {
+  if (score == null) return null;
+  if (score >= 60) return "high";
+  if (score >= 35) return "moderate";
+  return "low";
+}
+
 /** Parse composite `layers[]` row for geopolitical into card extras. */
 export function extractGeopoliticalLayerExtras(match: Record<string, unknown>): GeopoliticalLayerExtras | undefined {
   const ik = String(match.geo_impact_sector_key ?? "").trim();
@@ -599,6 +971,12 @@ export function extractGeopoliticalLayerExtras(match: Record<string, unknown>): 
   const bandRaw = String(match.geo_exposure_band ?? "").trim().toLowerCase();
   const exposureBand =
     bandRaw === "low" || bandRaw === "moderate" || bandRaw === "high" ? (bandRaw as "low" | "moderate" | "high") : null;
+  const geoBaselineScore = numOrNull(match.geo_baseline_score);
+  const blRaw = match.geo_baseline_summary;
+  const geoBaselineSummary = typeof blRaw === "string" && blRaw.trim() ? blRaw.trim() : null;
+  const geoPrimaryClean =
+    match.geo_primary_theme == null ? null : String(match.geo_primary_theme).trim() || null;
+
   const activeEvents: Array<{ event_type: string; score: number }> = [];
   const rawEv = match.geo_active_events;
   if (Array.isArray(rawEv)) {
@@ -610,26 +988,41 @@ export function extractGeopoliticalLayerExtras(match: Record<string, unknown>): 
       if (et && sc != null) activeEvents.push({ event_type: et, score: sc });
     }
   }
+  const liveFlagRaw = match.geo_has_live_events;
+  const geoHasLiveEvents =
+    typeof liveFlagRaw === "boolean" ? Boolean(liveFlagRaw) : activeEvents.length > 0;
   const eventDetails: GeoEventDetailRow[] =
     details.length > 0
       ? details
       : activeEvents.map((e) => ({ event_type: e.event_type, score: e.score, sector_multiplier: null }));
+  const baselineBand = structuralBandFromBaselineScore(geoBaselineScore);
   const hasSomething =
     ik.length > 0 ||
     exposureSummary != null ||
     stockExposureScore != null ||
     activeEvents.length > 0 ||
     eventDetails.length > 0 ||
-    exposureBand != null;
+    exposureBand != null ||
+    geoBaselineSummary != null ||
+    geoBaselineScore != null ||
+    geoHasLiveEvents ||
+    geoPrimaryClean != null;
   if (!hasSomething) return undefined;
+
+  const exposureBandMerged = geoHasLiveEvents ? exposureBand : baselineBand ?? exposureBand;
+
   return {
     impactSectorKey: ik,
     impactSectorLabel: formatGeoSectorLabel(ik || "default"),
     stockExposureScore,
-    exposureBand,
-    exposureSummary,
+    exposureBand: exposureBandMerged ?? baselineBand ?? exposureBand,
+    exposureSummary: exposureSummary ?? geoBaselineSummary,
     activeEvents,
-    eventDetails
+    eventDetails,
+    geoBaselineScore: geoBaselineScore ?? undefined,
+    geoBaselineSummary: geoBaselineSummary ?? undefined,
+    geoHasLiveEvents,
+    geoPrimaryTheme: geoPrimaryClean
   };
 }
 
@@ -970,6 +1363,9 @@ export function parseSwingCompositeInsight(body: Record<string, unknown>): Signa
       : "Observe how price behaves versus the Historical Entry Zone on a closing basis. Signal data only — not investment advice.";
   const historical_entry_zone = parseHistoricalZone(body.historical_entry_zone);
   const vwapRaw = numOrNull(body.vwap ?? body.day_vwap);
+  const vwap_state_parsed = String(body.vwap_state ?? "").trim() || undefined;
+  const vwap_display_parsed = String(body.vwap_display ?? "").trim() || undefined;
+  const vwap_tooltip_parsed = String(body.vwap_tooltip ?? "").trim() || undefined;
   return {
     signal_score,
     trend_strength,
@@ -989,6 +1385,9 @@ export function parseSwingCompositeInsight(body: Record<string, unknown>): Signa
     reference_target_2: numOrNull(body.reference_target_2),
     reference_stop_level: numOrNull(body.reference_stop_level),
     vwap: vwapRaw != null && vwapRaw > 0 ? Math.round(vwapRaw * 10000) / 10000 : null,
+    vwap_state: vwap_state_parsed,
+    vwap_display: vwap_display_parsed,
+    vwap_tooltip: vwap_tooltip_parsed,
     is_complete: body.is_complete === false ? false : true,
     missing_fields: Array.isArray(body.missing_fields) ? body.missing_fields.map((x) => String(x)) : [],
     alignment_ratio: numOrNull(body.alignment_ratio) ?? undefined,
@@ -1086,6 +1485,13 @@ export function deriveEvidenceInsightFallback(evidence: SignalEvidenceData): Sig
     typeof evidence.keyLevels.vwap === "number" && Number.isFinite(evidence.keyLevels.vwap) && evidence.keyLevels.vwap > 0
       ? Math.round(evidence.keyLevels.vwap * 10000) / 10000
       : null;
+  const vwapFb = getVWAPDisplay(
+    vwapLvl,
+    vwapLvl != null && vwapLvl > 0 ? VWAP_STATE.AVAILABLE : undefined,
+    last,
+    evidence.keyLevels.vwap_display,
+    evidence.keyLevels.vwap_tooltip
+  );
   return {
     signal_score,
     trend_strength,
@@ -1103,8 +1509,36 @@ export function deriveEvidenceInsightFallback(evidence: SignalEvidenceData): Sig
     reference_target_1,
     reference_target_2,
     reference_stop_level,
-    vwap: vwapLvl
+    vwap: vwapLvl,
+    vwap_state: vwapFb.state,
+    vwap_display: vwapFb.label,
+    vwap_tooltip: vwapFb.tooltip
   };
+}
+
+/** Strip legacy ORB runtime labels; map slug chips to session copy. */
+export const ORB_CHIP_REMAP: Record<string, string> = {
+  "ORB Expired": "",
+  "ORB Unavailable": "",
+  orb_breakout_long: "ORB Long ↑",
+  orb_breakout_short: "ORB Short ↓",
+  orb_forming: "ORB Forming"
+};
+
+export function sanitizeEvidenceChips(rawChips: string[]): string[] {
+  const out: string[] = [];
+  for (const raw of rawChips) {
+    const chip = String(raw).trim();
+    if (!chip) continue;
+    const lower = chip.toLowerCase();
+    if (lower.includes("expired")) continue;
+    if (lower.startsWith("orb") && lower.includes("unavailable")) continue;
+    const mapped = ORB_CHIP_REMAP[chip] ?? ORB_CHIP_REMAP[chip.trim()];
+    const next = (mapped !== undefined ? mapped : chip).trim();
+    if (!next) continue;
+    out.push(next);
+  }
+  return out;
 }
 
 function findContributionRow(body: Record<string, unknown>, layerKey: string): Record<string, unknown> | undefined {
@@ -1131,6 +1565,9 @@ function mergeParsedInsightWithFallback(
     reference_target_2: parsed.reference_target_2 ?? fallback.reference_target_2,
     reference_stop_level: parsed.reference_stop_level ?? fallback.reference_stop_level,
     vwap: parsed.vwap ?? fallback.vwap,
+    vwap_state: parsed.vwap_state ?? fallback.vwap_state,
+    vwap_display: parsed.vwap_display ?? fallback.vwap_display,
+    vwap_tooltip: parsed.vwap_tooltip ?? fallback.vwap_tooltip,
     catalysts,
     risk_factors,
     risk_factors_detailed
@@ -1142,8 +1579,22 @@ export function applySwingCompositeEnrichment(
   body: Record<string, unknown> | null | undefined
 ): SignalEvidenceData {
   const fallback = deriveEvidenceInsightFallback(evidence);
+  const cm: "day" | "swing" | undefined =
+    body != null && (body.mode === "swing" || body.mode === "day")
+      ? (body.mode as "day" | "swing")
+      : evidence.compositeMode;
   if (body == null || body.status === "insufficient_data") {
-    return { ...evidence, insight: fallback };
+    const signal_basis_i = body != null && typeof body.signal_basis === "string" ? body.signal_basis : evidence.signal_basis;
+    const signal_basis_label_i =
+      body != null && typeof body.signal_basis_label === "string" ? body.signal_basis_label : evidence.signal_basis_label;
+    return {
+      ...evidence,
+      insight: fallback,
+      compositeMode: cm ?? evidence.compositeMode,
+      signal_basis: signal_basis_i,
+      signal_basis_label: signal_basis_label_i,
+      alignment: evidence.alignment ?? null
+    };
   }
   const parsed = parseSwingCompositeInsight(body);
   const insight = parsed == null ? fallback : mergeParsedInsightWithFallback(parsed, fallback);
@@ -1180,16 +1631,20 @@ export function applySwingCompositeEnrichment(
         }
         return layer;
       }
-      const apiLayer = evidencePatchFromApiLayer(match);
+      const apiLayer = evidencePatchFromApiLayer(match, layer.key);
       const geo = layer.key === "geopolitical" ? extractGeopoliticalLayerExtras(match) : undefined;
       const maxChips = layer.key === "geopolitical" ? 6 : 4;
       const fin = (merged: EvidenceLayer): EvidenceLayer => (geo ? { ...merged, geo } : merged);
       const chips = match.chips;
       if (Array.isArray(chips) && chips.length > 0) {
+        let raw = chips.map((c) => String(c));
+        if (layer.key === "technical" && cm === "swing") {
+          raw = filterChipsForMode(raw, "swing");
+        }
         return fin({
           ...layer,
           ...apiLayer,
-          keyPoints: chips.map((c) => String(c).trim()).filter(Boolean).slice(0, maxChips)
+          keyPoints: sanitizeEvidenceChips(raw).slice(0, maxChips)
         });
       }
       const reasoning = typeof match.reasoning === "string" ? match.reasoning.trim() : "";
@@ -1213,7 +1668,33 @@ export function applySwingCompositeEnrichment(
     });
   }
 
-  return { ...evidence, layers, insight, confluence };
+  const vs = typeof body.vwap_state === "string" ? body.vwap_state.trim() : "";
+  const vd = typeof body.vwap_display === "string" ? body.vwap_display.trim() : "";
+  const vt = typeof body.vwap_tooltip === "string" ? body.vwap_tooltip.trim() : "";
+  const vwNum = numOrNull(body.vwap ?? body.day_vwap);
+  const keyLevels = { ...evidence.keyLevels };
+  if (vs) keyLevels.vwap_state = vs;
+  if (vd) keyLevels.vwap_display = vd;
+  if (vt) keyLevels.vwap_tooltip = vt;
+  if (vwNum != null && vwNum > 0) keyLevels.vwap = Math.round(vwNum * 10000) / 10000;
+
+  const signal_basis = typeof body.signal_basis === "string" ? body.signal_basis : evidence.signal_basis;
+  const signal_basis_label =
+    typeof body.signal_basis_label === "string" ? body.signal_basis_label : evidence.signal_basis_label;
+
+  const alignmentMerged = parseCompositeAlignment(body.alignment) ?? evidence.alignment ?? null;
+
+  return {
+    ...evidence,
+    compositeMode: cm ?? evidence.compositeMode,
+    signal_basis,
+    signal_basis_label,
+    keyLevels,
+    layers,
+    insight,
+    confluence,
+    alignment: alignmentMerged
+  };
 }
 
 /**

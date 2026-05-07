@@ -10,8 +10,12 @@ import {
   buildEvidenceFromSetup,
   deriveEvidenceInsightFallback,
   extractGeopoliticalLayerExtras,
+  filterChipsForMode,
+  parseCompositeAlignment,
   parseSwingCompositeInsight,
-  referenceLevelsFromSessionStructure
+  referenceLevelsFromSessionStructure,
+  sanitizeEvidenceChips,
+  getVWAPDisplay
 } from "@/lib/signal-evidence";
 import type { NewsPayload } from "@/lib/api/market";
 import type { IntradaySetupPayload } from "@/lib/api/scanner";
@@ -326,6 +330,43 @@ describe("parseSwingCompositeInsight", () => {
   });
 });
 
+describe("parseCompositeAlignment", () => {
+  test("parses backend alignment payload", () => {
+    const a = parseCompositeAlignment({
+      level: "full",
+      score_modifier: 14,
+      label: "Full alignment",
+      detail: "All layers confirm.",
+      chip: "All layers aligned ✓",
+      is_tailwind: true,
+      is_headwind: false,
+      is_counter_trend: false,
+      macro_direction: "bullish",
+      sector_direction: "bullish",
+      technical_direction: "bullish",
+      macro_supports: true,
+      sector_supports: true,
+      technical_supports: true
+    });
+    expect(a).not.toBeNull();
+    expect(a!.level).toBe("full");
+    expect(a!.score_modifier).toBe(14);
+    expect(a!.macro_supports).toBe(true);
+  });
+
+  test("returns null on invalid level", () => {
+    expect(
+      parseCompositeAlignment({
+        level: "nope",
+        score_modifier: 1,
+        label: "x",
+        detail: "y",
+        chip: "z"
+      })
+    ).toBeNull();
+  });
+});
+
 describe("applySwingCompositeEnrichment", () => {
   test("uses fallback insight for insufficient_data body", () => {
     const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
@@ -561,6 +602,67 @@ describe("applySwingCompositeEnrichment", () => {
     expect(geoLayer?.geo?.stockExposureScore).toBe(3.1);
     expect(geoLayer?.keyPoints[0]).toContain("Themes");
   });
+
+  test("merges alignment and sector momentum extras from composite body", () => {
+    const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
+    const enriched = applySwingCompositeEnrichment(base, {
+      mode: "swing",
+      signal_score: 70,
+      trend_strength: "Moderate",
+      trend_direction: "Uptrend",
+      risk_reward: 2,
+      market_regime: "Bullish",
+      catalysts: [],
+      risk_factors: [],
+      signal_parameters: "x",
+      historical_entry_zone: { low: 10, high: 11 },
+      alignment: {
+        level: "strong",
+        score_modifier: 8,
+        label: "Strong alignment",
+        detail: "Macro and sector support.",
+        chip: "Macro + sector ✓",
+        is_tailwind: true,
+        is_headwind: false,
+        is_counter_trend: false,
+        macro_direction: "bullish",
+        sector_direction: "bullish",
+        technical_direction: "neutral",
+        macro_supports: true,
+        sector_supports: true,
+        technical_supports: false
+      },
+      layers: [
+        {
+          layer: "sector",
+          chips: ["XLK +0.3% vs SPY"],
+          verdict: "bullish",
+          score: 62,
+          status: "available",
+          reasoning: "",
+          sector_resolution_state: "resolved",
+          sector_persistence: 0.8,
+          sector_sessions_leading: 4,
+          sector_total_sessions: 5,
+          sector_trending: "strengthening",
+          sector_rank_1d: 0.71,
+          sector_rank_5d: 0.65,
+          sector_interpretation: "Semi leadership",
+          sector_data_available: true,
+          sector_daily_sessions: [
+            { date: "2026-01-06", etf_pct: 1.2, spy_pct: 0.5, relative: 0.7, outperformed: true, volume_ratio: 1 }
+          ]
+        }
+      ]
+    });
+    expect(enriched.alignment?.level).toBe("strong");
+    expect(enriched.alignment?.score_modifier).toBe(8);
+    const sec = enriched.layers.find((l) => l.key === "sector");
+    expect(sec?.sector_resolution_state).toBe("resolved");
+    expect(sec?.sector_persistence).toBe(0.8);
+    expect(sec?.sector_interpretation).toBe("Semi leadership");
+    expect(sec?.sector_daily_sessions).toHaveLength(1);
+  });
 });
 
 describe("SignalEvidenceCard geopolitical panel", () => {
@@ -588,6 +690,8 @@ describe("SignalEvidenceCard geopolitical panel", () => {
           geo_stock_exposure_score: 3.1,
           geo_exposure_band: "moderate",
           geo_exposure_summary: "Tariff headlines skew risk for fabs.",
+          geo_has_live_events: true,
+          geo_active_events: [{ event_type: "trade_tension", score: 1.5 }],
           geo_event_details: [{ event_type: "trade_tension", score: 1.5, sector_multiplier: 1.2 }]
         }
       ]
@@ -608,5 +712,913 @@ describe("SignalEvidenceCard geopolitical panel", () => {
     expect(html).toContain("moderate");
     expect(html).toContain("Trade Tension");
     expect(html).toContain("Tariff headlines");
+  });
+});
+
+describe("SignalEvidenceCard sector + cross-layer alignment", () => {
+  test("renders alignment chip and sector momentum details", () => {
+    const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
+    const enriched = applySwingCompositeEnrichment(base, {
+      mode: "swing",
+      signal_score: 70,
+      trend_strength: "Moderate",
+      trend_direction: "Uptrend",
+      risk_reward: 2,
+      market_regime: "Bullish",
+      catalysts: [],
+      risk_factors: [],
+      signal_parameters: "x",
+      historical_entry_zone: { low: 10, high: 11 },
+      reference_target_1: 12,
+      reference_stop_level: 9,
+      reference_target_2: 13,
+      alignment: {
+        level: "moderate",
+        score_modifier: 4,
+        label: "Moderate alignment",
+        detail: "Some confirmation across layers.",
+        chip: "Mixed but constructive",
+        is_tailwind: false,
+        is_headwind: false,
+        is_counter_trend: false,
+        macro_direction: "bullish",
+        sector_direction: "bullish",
+        technical_direction: "bearish",
+        macro_supports: true,
+        sector_supports: true,
+        technical_supports: false
+      },
+      layers: [
+        {
+          layer: "sector",
+          chips: ["XLK vs SPY"],
+          verdict: "bullish",
+          score: 58,
+          status: "available",
+          reasoning: "",
+          sector_resolution_state: "resolved",
+          sector_persistence: 0.6,
+          sector_sessions_leading: 3,
+          sector_total_sessions: 5,
+          sector_interpretation: "Tech bid",
+          sector_data_available: true
+        }
+      ]
+    });
+    const html = renderToStaticMarkup(
+      createElement(
+        ThemeProvider,
+        null,
+        createElement(
+          UserProfileProvider,
+          { value: { profile: null, loaded: true } },
+          createElement(SignalEvidenceCard, { evidence: enriched })
+        )
+      )
+    );
+    expect(html).toContain("LAYER ALIGNMENT");
+    expect(html).toContain("Mixed but constructive");
+    expect(html).toContain("Tech bid");
+    expect(html).toContain("Resolved");
+  });
+});
+
+describe("ORB technical chips (evidence)", () => {
+  test("sanitizeEvidenceChips removes expired and keeps RSI", () => {
+    expect(sanitizeEvidenceChips(["ORB Expired", "RSI 47"])).toEqual(["RSI 47"]);
+  });
+
+  test("expired ORB chip filtered from layer keyPoints in static markup", () => {
+    const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
+    const enriched = applySwingCompositeEnrichment(base, {
+      signal_score: 70,
+      trend_strength: "Moderate",
+      trend_direction: "Uptrend",
+      risk_reward: 2,
+      market_regime: "Bullish",
+      catalysts: [],
+      risk_factors: [],
+      signal_parameters: "x",
+      historical_entry_zone: { low: 10, high: 11 },
+      layers: [
+        {
+          layer: "technical",
+          chips: ["ORB Expired", "RSI 47"],
+          verdict: "neutral",
+          score: 55,
+          status: "available",
+          reasoning: ""
+        }
+      ]
+    });
+    const html = renderToStaticMarkup(
+      createElement(
+        ThemeProvider,
+        null,
+        createElement(
+          UserProfileProvider,
+          { value: { profile: null, loaded: true } },
+          createElement(SignalEvidenceCard, { evidence: enriched })
+        )
+      )
+    );
+    expect(html).toContain("RSI 47");
+    expect(html).not.toContain("ORB Expired");
+  });
+
+  test("ORB Long chip uses green ORB styling", () => {
+    const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
+    const enriched = applySwingCompositeEnrichment(base, {
+      signal_score: 70,
+      trend_strength: "Moderate",
+      trend_direction: "Uptrend",
+      risk_reward: 2,
+      market_regime: "Bullish",
+      catalysts: [],
+      risk_factors: [],
+      signal_parameters: "x",
+      historical_entry_zone: { low: 10, high: 11 },
+      layers: [
+        {
+          layer: "technical",
+          chips: ["ORB Long ↑ $432.15"],
+          verdict: "bullish",
+          score: 62,
+          status: "available",
+          reasoning: ""
+        }
+      ]
+    });
+    const html = renderToStaticMarkup(
+      createElement(
+        ThemeProvider,
+        null,
+        createElement(
+          UserProfileProvider,
+          { value: { profile: null, loaded: true } },
+          createElement(SignalEvidenceCard, { evidence: enriched })
+        )
+      )
+    );
+    expect(html).toContain("ORB Long");
+    expect(html).toContain("rgba(34,197,94");
+  });
+
+  test("ORB Short chip uses red ORB styling", () => {
+    const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
+    const enriched = applySwingCompositeEnrichment(base, {
+      signal_score: 70,
+      trend_strength: "Moderate",
+      trend_direction: "Uptrend",
+      risk_reward: 2,
+      market_regime: "Bullish",
+      catalysts: [],
+      risk_factors: [],
+      signal_parameters: "x",
+      historical_entry_zone: { low: 10, high: 11 },
+      layers: [
+        {
+          layer: "technical",
+          chips: ["ORB Short ↓ $428.90"],
+          verdict: "bearish",
+          score: 40,
+          status: "available",
+          reasoning: ""
+        }
+      ]
+    });
+    const html = renderToStaticMarkup(
+      createElement(
+        ThemeProvider,
+        null,
+        createElement(
+          UserProfileProvider,
+          { value: { profile: null, loaded: true } },
+          createElement(SignalEvidenceCard, { evidence: enriched })
+        )
+      )
+    );
+    expect(html).toContain("ORB Short");
+    expect(html).toContain("rgba(239,68,68");
+  });
+
+  test("ORB Forming chip uses amber ORB styling", () => {
+    const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
+    const enriched = applySwingCompositeEnrichment(base, {
+      signal_score: 70,
+      trend_strength: "Moderate",
+      trend_direction: "Uptrend",
+      risk_reward: 2,
+      market_regime: "Bullish",
+      catalysts: [],
+      risk_factors: [],
+      signal_parameters: "x",
+      historical_entry_zone: { low: 10, high: 11 },
+      layers: [
+        {
+          layer: "technical",
+          chips: ["ORB Forming"],
+          verdict: "neutral",
+          score: 50,
+          status: "available",
+          reasoning: ""
+        }
+      ]
+    });
+    const html = renderToStaticMarkup(
+      createElement(
+        ThemeProvider,
+        null,
+        createElement(
+          UserProfileProvider,
+          { value: { profile: null, loaded: true } },
+          createElement(SignalEvidenceCard, { evidence: enriched })
+        )
+      )
+    );
+    expect(html).toContain("ORB Forming");
+    expect(html).toContain("rgba(245,158,11");
+  });
+});
+
+describe("VWAP evidence display", () => {
+  test("getVWAPDisplay uses server vwap_display when provided", () => {
+    const d = getVWAPDisplay(null, "pre_market", null, "VWAP starts at 9:30 ET", "Server tip");
+    expect(d.label).toBe("VWAP starts at 9:30 ET");
+    expect(d.muted).toBe(true);
+    expect(d.tooltip).toBe("Server tip");
+  });
+
+  test("vwap reference row never shows bare em dash placeholder", () => {
+    const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
+    const enriched = applySwingCompositeEnrichment(base, {
+      signal_score: 70,
+      trend_strength: "Moderate",
+      trend_direction: "Uptrend",
+      risk_reward: 2,
+      market_regime: "Bullish",
+      catalysts: [],
+      risk_factors: [],
+      signal_parameters: "x",
+      historical_entry_zone: { low: 10, high: 11 },
+      vwap_state: "pre_market",
+      vwap_display: "VWAP starts at 9:30 ET",
+      vwap_tooltip: "Pre-market copy.",
+      reference_target_1: 12,
+      reference_stop_level: 9,
+      reference_target_2: 13
+    });
+    const html = renderToStaticMarkup(
+      createElement(
+        ThemeProvider,
+        null,
+        createElement(
+          UserProfileProvider,
+          { value: { profile: null, loaded: true } },
+          createElement(SignalEvidenceCard, { evidence: enriched })
+        )
+      )
+    );
+    expect(html).toContain("VWAP starts at 9:30 ET");
+    expect(html).not.toContain("VWAP: </strong>—");
+  });
+
+  test("vwap post_market uses muted class on value", () => {
+    const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
+    const enriched = applySwingCompositeEnrichment(base, {
+      signal_score: 70,
+      trend_strength: "Moderate",
+      trend_direction: "Uptrend",
+      risk_reward: 2,
+      market_regime: "Bullish",
+      catalysts: [],
+      risk_factors: [],
+      signal_parameters: "x",
+      historical_entry_zone: { low: 10, high: 11 },
+      vwap_state: "post_market",
+      vwap_display: "VWAP (RTH closed)",
+      vwap_tooltip: "RTH only.",
+      reference_target_1: 12,
+      reference_stop_level: 9,
+      reference_target_2: 13
+    });
+    const html = renderToStaticMarkup(
+      createElement(
+        ThemeProvider,
+        null,
+        createElement(
+          UserProfileProvider,
+          { value: { profile: null, loaded: true } },
+          createElement(SignalEvidenceCard, { evidence: enriched })
+        )
+      )
+    );
+    expect(html).toContain("text-muted-foreground");
+    expect(html).toContain("VWAP (RTH closed)");
+  });
+
+  test("vwap available shows price without muted class", () => {
+    const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
+    const enriched = applySwingCompositeEnrichment(base, {
+      signal_score: 70,
+      trend_strength: "Moderate",
+      trend_direction: "Uptrend",
+      risk_reward: 2,
+      market_regime: "Bullish",
+      catalysts: [],
+      risk_factors: [],
+      signal_parameters: "x",
+      historical_entry_zone: { low: 10, high: 11 },
+      vwap_state: "available",
+      vwap_display: "VWAP $430.21 — Above",
+      vwap_tooltip: "Anchor.",
+      vwap: 430.21,
+      reference_target_1: 12,
+      reference_stop_level: 9,
+      reference_target_2: 13
+    });
+    const html = renderToStaticMarkup(
+      createElement(
+        ThemeProvider,
+        null,
+        createElement(
+          UserProfileProvider,
+          { value: { profile: null, loaded: true } },
+          createElement(SignalEvidenceCard, { evidence: enriched })
+        )
+      )
+    );
+    expect(html).toContain("$430.21");
+    const idx = html.indexOf("VWAP $430.21");
+    expect(idx).toBeGreaterThan(-1);
+    const slice = html.slice(Math.max(0, idx - 80), idx + 40);
+    expect(slice).not.toContain("text-muted-foreground");
+  });
+
+  test("VWAP above chip is green tinted", () => {
+    const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
+    const enriched = applySwingCompositeEnrichment(base, {
+      signal_score: 70,
+      trend_strength: "Moderate",
+      trend_direction: "Uptrend",
+      risk_reward: 2,
+      market_regime: "Bullish",
+      catalysts: [],
+      risk_factors: [],
+      signal_parameters: "x",
+      historical_entry_zone: { low: 10, high: 11 },
+      layers: [
+        {
+          layer: "technical",
+          chips: ["VWAP $430.21 — Above"],
+          verdict: "bullish",
+          score: 62,
+          status: "available",
+          reasoning: ""
+        }
+      ]
+    });
+    const html = renderToStaticMarkup(
+      createElement(
+        ThemeProvider,
+        null,
+        createElement(
+          UserProfileProvider,
+          { value: { profile: null, loaded: true } },
+          createElement(SignalEvidenceCard, { evidence: enriched })
+        )
+      )
+    );
+    expect(html).toContain("rgba(34,197,94");
+  });
+
+  test("VWAP below chip is red tinted", () => {
+    const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
+    const enriched = applySwingCompositeEnrichment(base, {
+      signal_score: 70,
+      trend_strength: "Moderate",
+      trend_direction: "Uptrend",
+      risk_reward: 2,
+      market_regime: "Bullish",
+      catalysts: [],
+      risk_factors: [],
+      signal_parameters: "x",
+      historical_entry_zone: { low: 10, high: 11 },
+      layers: [
+        {
+          layer: "technical",
+          chips: ["VWAP $430.21 — Below"],
+          verdict: "bearish",
+          score: 40,
+          status: "available",
+          reasoning: ""
+        }
+      ]
+    });
+    const html = renderToStaticMarkup(
+      createElement(
+        ThemeProvider,
+        null,
+        createElement(
+          UserProfileProvider,
+          { value: { profile: null, loaded: true } },
+          createElement(SignalEvidenceCard, { evidence: enriched })
+        )
+      )
+    );
+    expect(html).toContain("rgba(239,68,68");
+  });
+
+  test("VWAP Forming chip is amber", () => {
+    const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
+    const enriched = applySwingCompositeEnrichment(base, {
+      signal_score: 70,
+      trend_strength: "Moderate",
+      trend_direction: "Uptrend",
+      risk_reward: 2,
+      market_regime: "Bullish",
+      catalysts: [],
+      risk_factors: [],
+      signal_parameters: "x",
+      historical_entry_zone: { low: 10, high: 11 },
+      layers: [
+        {
+          layer: "technical",
+          chips: ["VWAP Forming"],
+          verdict: "neutral",
+          score: 50,
+          status: "available",
+          reasoning: ""
+        }
+      ]
+    });
+    const html = renderToStaticMarkup(
+      createElement(
+        ThemeProvider,
+        null,
+        createElement(
+          UserProfileProvider,
+          { value: { profile: null, loaded: true } },
+          createElement(SignalEvidenceCard, { evidence: enriched })
+        )
+      )
+    );
+    expect(html).toContain("rgba(245,158,11");
+  });
+
+  test("VWAP row renders InfoTip", () => {
+    const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
+    const enriched = applySwingCompositeEnrichment(base, {
+      signal_score: 70,
+      trend_strength: "Moderate",
+      trend_direction: "Uptrend",
+      risk_reward: 2,
+      market_regime: "Bullish",
+      catalysts: [],
+      risk_factors: [],
+      signal_parameters: "x",
+      historical_entry_zone: { low: 10, high: 11 },
+      vwap_state: "available",
+      vwap_display: "VWAP $100.00 — Above",
+      vwap_tooltip: "Tooltip body not empty.",
+      vwap: 100,
+      reference_target_1: 12,
+      reference_stop_level: 9,
+      reference_target_2: 13
+    });
+    const html = renderToStaticMarkup(
+      createElement(
+        ThemeProvider,
+        null,
+        createElement(
+          UserProfileProvider,
+          { value: { profile: null, loaded: true } },
+          createElement(SignalEvidenceCard, { evidence: enriched })
+        )
+      )
+    );
+    expect(html).toContain("VWAP context");
+  });
+});
+
+describe("Indicator scope (swing vs day chips)", () => {
+  test("filterChipsForMode strips intraday chips for swing", () => {
+    const out = filterChipsForMode(["VWAP Below", "RSI 47 (Daily)", "EMA9 bounce (session)"], "swing");
+    expect(out).toEqual(["RSI 47 (Daily)"]);
+  });
+
+  test("swing card shows derived-from-daily-bars label", () => {
+    const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
+    const enriched = applySwingCompositeEnrichment(base, {
+      mode: "swing",
+      signal_basis: "daily_bars_rth",
+      signal_basis_label: "Derived from daily bars (RTH)",
+      signal_score: 70,
+      trend_strength: "Moderate",
+      trend_direction: "Uptrend",
+      risk_reward: 2,
+      market_regime: "Bullish",
+      catalysts: [],
+      risk_factors: [],
+      signal_parameters: "x",
+      historical_entry_zone: { low: 10, high: 11 },
+      reference_target_1: 12,
+      reference_stop_level: 9,
+      reference_target_2: 13,
+      layers: [
+        {
+          layer: "technical",
+          chips: ["RSI 55 (Daily)"],
+          verdict: "bullish",
+          score: 60,
+          status: "available",
+          reasoning: ""
+        }
+      ]
+    });
+    const html = renderToStaticMarkup(
+      createElement(
+        ThemeProvider,
+        null,
+        createElement(
+          UserProfileProvider,
+          { value: { profile: null, loaded: true } },
+          createElement(SignalEvidenceCard, { evidence: enriched })
+        )
+      )
+    );
+    expect(html).toContain("Derived from daily bars (RTH)");
+  });
+
+  test("day card keeps VWAP chip text", () => {
+    const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
+    const enriched = applySwingCompositeEnrichment(base, {
+      mode: "day",
+      signal_score: 70,
+      trend_strength: "Moderate",
+      trend_direction: "Uptrend",
+      risk_reward: 2,
+      market_regime: "Bullish",
+      catalysts: [],
+      risk_factors: [],
+      signal_parameters: "x",
+      historical_entry_zone: { low: 10, high: 11 },
+      reference_target_1: 12,
+      reference_stop_level: 9,
+      reference_target_2: 13,
+      layers: [
+        {
+          layer: "technical",
+          chips: ["VWAP $430.21 — Below"],
+          verdict: "bearish",
+          score: 40,
+          status: "available",
+          reasoning: ""
+        }
+      ]
+    });
+    const html = renderToStaticMarkup(
+      createElement(
+        ThemeProvider,
+        null,
+        createElement(
+          UserProfileProvider,
+          { value: { profile: null, loaded: true } },
+          createElement(SignalEvidenceCard, { evidence: enriched })
+        )
+      )
+    );
+    expect(html).toContain("VWAP $430.21");
+  });
+
+  test("bare EMA9 chip not rendered on swing technical row", () => {
+    const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
+    const enriched = applySwingCompositeEnrichment(base, {
+      mode: "swing",
+      signal_basis: "daily_bars_rth",
+      signal_score: 70,
+      trend_strength: "Moderate",
+      trend_direction: "Uptrend",
+      risk_reward: 2,
+      market_regime: "Bullish",
+      catalysts: [],
+      risk_factors: [],
+      signal_parameters: "x",
+      historical_entry_zone: { low: 10, high: 11 },
+      reference_target_1: 12,
+      reference_stop_level: 9,
+      reference_target_2: 13,
+      layers: [
+        {
+          layer: "technical",
+          chips: ["EMA9 Bounce", "RSI 62 (Daily)"],
+          verdict: "bullish",
+          score: 60,
+          status: "available",
+          reasoning: ""
+        }
+      ]
+    });
+    const html = renderToStaticMarkup(
+      createElement(
+        ThemeProvider,
+        null,
+        createElement(
+          UserProfileProvider,
+          { value: { profile: null, loaded: true } },
+          createElement(SignalEvidenceCard, { evidence: enriched })
+        )
+      )
+    );
+    expect(html).not.toContain("EMA9 Bounce</span>");
+    expect(html).toContain("RSI 62 (Daily)");
+  });
+
+  test("EMA9 (Daily) chip renders on swing", () => {
+    const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
+    const enriched = applySwingCompositeEnrichment(base, {
+      mode: "swing",
+      signal_score: 70,
+      trend_strength: "Moderate",
+      trend_direction: "Uptrend",
+      risk_reward: 2,
+      market_regime: "Bullish",
+      catalysts: [],
+      risk_factors: [],
+      signal_parameters: "x",
+      historical_entry_zone: { low: 10, high: 11 },
+      reference_target_1: 12,
+      reference_stop_level: 9,
+      reference_target_2: 13,
+      layers: [
+        {
+          layer: "technical",
+          chips: ["EMA9 Bounce (Daily)"],
+          verdict: "bullish",
+          score: 60,
+          status: "available",
+          reasoning: ""
+        }
+      ]
+    });
+    const html = renderToStaticMarkup(
+      createElement(
+        ThemeProvider,
+        null,
+        createElement(
+          UserProfileProvider,
+          { value: { profile: null, loaded: true } },
+          createElement(SignalEvidenceCard, { evidence: enriched })
+        )
+      )
+    );
+    expect(html).toContain("EMA9 Bounce (Daily)");
+  });
+});
+
+describe("Macro layer warning surface", () => {
+  function renderMacroEvidence(body: Record<string, unknown>): string {
+    const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
+    const enriched = applySwingCompositeEnrichment(base, body);
+    return renderToStaticMarkup(
+      createElement(
+        ThemeProvider,
+        null,
+        createElement(
+          UserProfileProvider,
+          { value: { profile: null, loaded: true } },
+          createElement(SignalEvidenceCard, { evidence: enriched })
+        )
+      )
+    );
+  }
+
+  test("critical banner shown when imminent", () => {
+    const html = renderMacroEvidence({
+      signal_score: 70,
+      trend_strength: "Moderate",
+      trend_direction: "Uptrend",
+      risk_reward: 2,
+      market_regime: "Bullish",
+      catalysts: [],
+      risk_factors: [],
+      signal_parameters: "x",
+      historical_entry_zone: { low: 10, high: 11 },
+      layers: [
+        {
+          layer: "macro",
+          verdict: "neutral",
+          score: 55,
+          status: "available",
+          reasoning: "Macro",
+          macro_risk_level: "critical",
+          macro_warnings: ["⚠️ FOMC in 45 minutes"],
+          upcoming_events: [],
+          yield_curve: null
+        }
+      ]
+    });
+    expect(html).toContain("High-Impact Event Imminent");
+    expect(html).toContain("⚠️ FOMC in 45 minutes");
+  });
+
+  test("no banner when low risk", () => {
+    const html = renderMacroEvidence({
+      signal_score: 70,
+      trend_strength: "Moderate",
+      trend_direction: "Uptrend",
+      risk_reward: 2,
+      market_regime: "Bullish",
+      catalysts: [],
+      risk_factors: [],
+      signal_parameters: "x",
+      historical_entry_zone: { low: 10, high: 11 },
+      layers: [
+        {
+          layer: "macro",
+          verdict: "neutral",
+          score: 55,
+          status: "available",
+          reasoning: "Macro",
+          macro_risk_level: "low",
+          macro_warnings: [],
+          upcoming_events: [],
+          yield_curve: null
+        }
+      ]
+    });
+    expect(html).not.toContain("High-Impact Event Imminent");
+    expect(html).not.toContain("Macro Event Today");
+  });
+
+  test("yield curve inverted shows red", () => {
+    const html = renderMacroEvidence({
+      signal_score: 70,
+      trend_strength: "Moderate",
+      trend_direction: "Uptrend",
+      risk_reward: 2,
+      market_regime: "Bullish",
+      catalysts: [],
+      risk_factors: [],
+      signal_parameters: "x",
+      historical_entry_zone: { low: 10, high: 11 },
+      layers: [
+        {
+          layer: "macro",
+          verdict: "neutral",
+          score: 55,
+          status: "available",
+          reasoning: "Macro",
+          macro_risk_level: "low",
+          macro_warnings: [],
+          upcoming_events: [],
+          yield_curve: {
+            yield_2yr: 4.2,
+            yield_10yr: 3.8,
+            spread: -0.4,
+            regime: "inverted",
+            label: "Yield curve: inverted ⚠️",
+            chip: "2s10s: -0.40% (inverted)"
+          }
+        }
+      ]
+    });
+    expect(html).toContain("text-red-400");
+    expect(html).toContain("Yield curve:");
+  });
+
+  test("yield curve normal shows green", () => {
+    const html = renderMacroEvidence({
+      signal_score: 70,
+      trend_strength: "Moderate",
+      trend_direction: "Uptrend",
+      risk_reward: 2,
+      market_regime: "Bullish",
+      catalysts: [],
+      risk_factors: [],
+      signal_parameters: "x",
+      historical_entry_zone: { low: 10, high: 11 },
+      layers: [
+        {
+          layer: "macro",
+          verdict: "neutral",
+          score: 55,
+          status: "available",
+          reasoning: "Macro",
+          macro_risk_level: "low",
+          macro_warnings: [],
+          upcoming_events: [],
+          yield_curve: {
+            yield_2yr: 3.8,
+            yield_10yr: 4.5,
+            spread: 0.7,
+            regime: "normal",
+            label: "Yield curve: normal",
+            chip: "2s10s: +0.70%"
+          }
+        }
+      ]
+    });
+    expect(html).toContain("text-green-400");
+  });
+
+  test("upcoming events listed", () => {
+    const html = renderMacroEvidence({
+      signal_score: 70,
+      trend_strength: "Moderate",
+      trend_direction: "Uptrend",
+      risk_reward: 2,
+      market_regime: "Bullish",
+      catalysts: [],
+      risk_factors: [],
+      signal_parameters: "x",
+      historical_entry_zone: { low: 10, high: 11 },
+      layers: [
+        {
+          layer: "macro",
+          verdict: "neutral",
+          score: 55,
+          status: "available",
+          reasoning: "Macro",
+          macro_risk_level: "moderate",
+          macro_warnings: [],
+          upcoming_events: [
+            {
+              event_id: "1",
+              name: "Alpha Release",
+              category: "CPI",
+              status: "upcoming",
+              importance: 5,
+              hours_until: 72,
+              warning: null,
+              scheduled_time: "2026-05-10T08:30:00-04:00"
+            },
+            {
+              event_id: "2",
+              name: "Bravo Jobs",
+              category: "Jobs",
+              status: "upcoming",
+              importance: 5,
+              hours_until: 48,
+              warning: null,
+              scheduled_time: "2026-05-09T08:30:00-04:00"
+            },
+            {
+              event_id: "3",
+              name: "Charlie GDP",
+              category: "GDP",
+              status: "upcoming",
+              importance: 4,
+              hours_until: 96,
+              warning: null,
+              scheduled_time: "2026-05-11T08:30:00-04:00"
+            }
+          ],
+          yield_curve: null
+        }
+      ]
+    });
+    expect(html).toContain("Alpha Release");
+    expect(html).toContain("Bravo Jobs");
+    expect(html).toContain("Charlie GDP");
+  });
+
+  test("imminent event shows minutes", () => {
+    const html = renderMacroEvidence({
+      signal_score: 70,
+      trend_strength: "Moderate",
+      trend_direction: "Uptrend",
+      risk_reward: 2,
+      market_regime: "Bullish",
+      catalysts: [],
+      risk_factors: [],
+      signal_parameters: "x",
+      historical_entry_zone: { low: 10, high: 11 },
+      layers: [
+        {
+          layer: "macro",
+          verdict: "neutral",
+          score: 55,
+          status: "available",
+          reasoning: "Macro",
+          macro_risk_level: "low",
+          macro_warnings: [],
+          upcoming_events: [
+            {
+              event_id: "x",
+              name: "FOMC",
+              category: "Fed",
+              status: "imminent",
+              importance: 5,
+              hours_until: 0.75,
+              warning: null,
+              scheduled_time: "2026-05-07T14:00:00-04:00"
+            }
+          ],
+          yield_curve: null
+        }
+      ]
+    });
+    expect(html).toContain("45m");
   });
 });

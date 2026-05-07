@@ -1,7 +1,9 @@
 "use client";
 
+import type { CSSProperties } from "react";
+import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Brain } from "lucide-react";
+import { AlignJustify, ArrowDown, ArrowUp, Brain, Clock } from "lucide-react";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
@@ -13,10 +15,18 @@ import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import {
   catalystPublishedAgo,
   deriveEvidenceInsightFallback,
+  filterChipsForMode,
   layerFreshnessFromIso,
+  sanitizeEvidenceChips,
+  structuralBandFromBaselineScore,
+  VWAP_STATE,
+  getVWAPDisplay,
+  type CompositeAlignmentWire,
   type EvidenceLayer,
   type EvidenceStatus,
   type GeopoliticalLayerExtras,
+  type SectorDailySessionWire,
+  type SectorResolutionStateWire,
   type SignalEvidenceData,
   type SignalEvidenceInsight
 } from "@/lib/signal-evidence";
@@ -110,9 +120,268 @@ function regimeColor(regime: string, colors: ThemeColors): string {
   return colors.caution;
 }
 
+function sectorResolutionLabel(state: SectorResolutionStateWire | null | undefined): string {
+  if (!state) return "";
+  if (state === "resolved") return "Resolved";
+  if (state === "pending_cache_refresh") return "Pending cache refresh";
+  return "Unmapped";
+}
+
+function alignmentAccent(level: CompositeAlignmentWire["level"], colors: ThemeColors): string {
+  if (level === "full" || level === "strong") return colors.bullish;
+  if (level === "conflict") return colors.bearish;
+  return colors.caution;
+}
+
+function formatDirShort(d: string): string {
+  const x = (d || "neutral").trim().toLowerCase();
+  if (x === "bullish") return "Bull";
+  if (x === "bearish") return "Bear";
+  return "Neutral";
+}
+
+function sectorLayerHasMomentumDetails(layer: EvidenceLayer): boolean {
+  if (layer.key !== "sector") return false;
+  return (
+    layer.sector_resolution_state != null ||
+    layer.sector_interpretation != null ||
+    layer.sector_data_available != null ||
+    layer.sector_persistence != null ||
+    layer.sector_sessions_leading != null ||
+    (layer.sector_daily_sessions != null && layer.sector_daily_sessions.length > 0)
+  );
+}
+
+function SectorMomentumPanel({ layer, colors }: { layer: EvidenceLayer; colors: ThemeColors }) {
+  const st = layer.sector_resolution_state;
+  const interp = layer.sector_interpretation?.trim();
+  const lead =
+    typeof layer.sector_sessions_leading === "number" && typeof layer.sector_total_sessions === "number"
+      ? `${layer.sector_sessions_leading}/${layer.sector_total_sessions}`
+      : null;
+  const pers =
+    typeof layer.sector_persistence === "number" && Number.isFinite(layer.sector_persistence)
+      ? `${Math.round(layer.sector_persistence * 100)}%`
+      : null;
+  const rank1 =
+    typeof layer.sector_rank_1d === "number" && Number.isFinite(layer.sector_rank_1d)
+      ? `1d rank ${(layer.sector_rank_1d * 100).toFixed(0)}%`
+      : null;
+  const rank5 =
+    typeof layer.sector_rank_5d === "number" && Number.isFinite(layer.sector_rank_5d)
+      ? `5d rank ${(layer.sector_rank_5d * 100).toFixed(0)}%`
+      : null;
+  const sessions = layer.sector_daily_sessions ?? [];
+
+  return (
+    <div
+      className="mt-2 space-y-2 rounded-md px-3 py-2"
+      style={{ border: `1px solid ${colors.border}`, background: "rgba(148,163,184,0.06)" }}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        {st ? (
+          <span
+            className="rounded-full px-2 py-0.5 text-xs font-semibold"
+            style={{
+              border: `1px solid ${st === "resolved" ? "rgba(34,197,94,0.45)" : "rgba(245,158,11,0.5)"}`,
+              background: st === "resolved" ? "rgba(34,197,94,0.1)" : "rgba(245,158,11,0.12)",
+              color: st === "resolved" ? colors.bullish : colors.caution
+            }}
+          >
+            {sectorResolutionLabel(st)}
+          </span>
+        ) : null}
+        {layer.sector_data_available === false ? (
+          <span className="text-xs text-muted-foreground">Sector momentum data not cached yet</span>
+        ) : null}
+        {layer.sector_trending ? (
+          <span className="text-xs text-muted-foreground capitalize">Trend: {layer.sector_trending}</span>
+        ) : null}
+      </div>
+      {lead != null || pers != null ? (
+        <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted }}>
+          {lead != null ? (
+            <>
+              <strong style={{ color: colors.text }}>{lead}</strong> sessions vs SPY
+            </>
+          ) : null}
+          {lead != null && pers != null ? " · " : null}
+          {pers != null ? (
+            <>
+              persistence <strong style={{ color: colors.text }}>{pers}</strong>
+            </>
+          ) : null}
+        </p>
+      ) : null}
+      {(rank1 || rank5) && (
+        <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted }}>
+          {[rank1, rank5].filter(Boolean).join(" · ")}
+        </p>
+      )}
+      {interp ? (
+        <span
+          className="inline-flex w-fit rounded-full px-2.5 py-1 text-xs font-semibold"
+          style={{
+            border: `1px solid rgba(59,130,246,0.42)`,
+            background: "rgba(59,130,246,0.1)",
+            color: colors.accent
+          }}
+        >
+          {interp}
+        </span>
+      ) : null}
+      {sessions.length > 0 ? (
+        <div className="space-y-1">
+          <div className="text-xs uppercase tracking-wide text-muted-foreground">Recent vs SPY (cached)</div>
+          <ul className="m-0 grid list-none gap-1 p-0" style={{ fontSize: typography.scale.xs }}>
+            {sessions.slice(-5).map((s: SectorDailySessionWire) => (
+              <li key={s.date} className="flex justify-between gap-2 tabular-nums text-muted-foreground">
+                <span>{s.date}</span>
+                <span style={{ color: s.outperformed ? colors.bullish : colors.textMuted }}>
+                  {s.relative >= 0 ? "+" : ""}
+                  {s.relative.toFixed(2)}%
+                  {s.outperformed ? " · outperform" : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function rrMarkerPct(rr: number): number {
   const clamped = Math.max(0.5, Math.min(3.5, rr));
   return ((clamped - 0.5) / 3.0) * 100;
+}
+
+/** VWAP chips from the technical layer — always non-empty server copy. */
+function technicalVwapChipPresentation(
+  point: string,
+  colors: ThemeColors
+): { skip: boolean; chipStyle: CSSProperties; Icon?: LucideIcon } {
+  const lower = point.toLowerCase();
+  if (lower.includes("vwap") && lower.includes("— above")) {
+    return {
+      skip: false,
+      chipStyle: {
+        fontSize: typography.scale.xs,
+        fontWeight: 600,
+        border: "1px solid rgba(34,197,94,0.45)",
+        background: "rgba(34,197,94,0.12)",
+        color: colors.bullish
+      },
+      Icon: ArrowUp
+    };
+  }
+  if (lower.includes("vwap") && lower.includes("— below")) {
+    return {
+      skip: false,
+      chipStyle: {
+        fontSize: typography.scale.xs,
+        fontWeight: 600,
+        border: "1px solid rgba(239,68,68,0.45)",
+        background: "rgba(239,68,68,0.12)",
+        color: colors.bearish
+      },
+      Icon: ArrowDown
+    };
+  }
+  if (point === "VWAP Forming" || lower === "vwap forming") {
+    return {
+      skip: false,
+      chipStyle: {
+        fontSize: typography.scale.xs,
+        fontWeight: 600,
+        border: "1px solid rgba(245,158,11,0.45)",
+        background: "rgba(245,158,11,0.14)",
+        color: colors.caution
+      },
+      Icon: Clock
+    };
+  }
+  if (point.startsWith("VWAP starts at") || point.startsWith("VWAP (RTH closed)")) {
+    return {
+      skip: false,
+      chipStyle: {
+        fontSize: typography.scale.xs,
+        fontWeight: 600,
+        border: `1px solid ${colors.border}`,
+        background: "rgba(148,163,184,0.10)",
+        color: colors.textMuted
+      }
+    };
+  }
+  return { skip: true, chipStyle: {} };
+}
+
+/** Distinct styling for session ORB chips on the technical layer (evidence modal). */
+function technicalOrbChipPresentation(
+  point: string,
+  colors: ThemeColors
+): { skip: boolean; chipStyle: CSSProperties; Icon?: LucideIcon } {
+  const lower = point.toLowerCase();
+  if (lower.includes("expired")) {
+    return { skip: true, chipStyle: {} };
+  }
+  const baseFont = { fontSize: typography.scale.xs, fontWeight: 600 as const };
+  if (point.startsWith("ORB Long")) {
+    return {
+      skip: false,
+      chipStyle: {
+        ...baseFont,
+        border: "1px solid rgba(34,197,94,0.45)",
+        background: "rgba(34,197,94,0.12)",
+        color: colors.bullish
+      },
+      Icon: ArrowUp
+    };
+  }
+  if (point.startsWith("ORB Short")) {
+    return {
+      skip: false,
+      chipStyle: {
+        ...baseFont,
+        border: "1px solid rgba(239,68,68,0.45)",
+        background: "rgba(239,68,68,0.12)",
+        color: colors.bearish
+      },
+      Icon: ArrowDown
+    };
+  }
+  if (point === "ORB Forming") {
+    return {
+      skip: false,
+      chipStyle: {
+        ...baseFont,
+        border: "1px solid rgba(245,158,11,0.45)",
+        background: "rgba(245,158,11,0.14)",
+        color: colors.caution
+      },
+      Icon: Clock
+    };
+  }
+  if (point.startsWith("Inside ORB")) {
+    return {
+      skip: false,
+      chipStyle: {
+        ...baseFont,
+        border: "1px solid rgba(148,163,184,0.4)",
+        background: "rgba(148,163,184,0.12)",
+        color: colors.textMuted
+      },
+      Icon: AlignJustify
+    };
+  }
+  return {
+    skip: false,
+    chipStyle: {
+      fontSize: typography.scale.xs,
+      border: `1px solid ${colors.border}`,
+      color: colors.textMuted
+    }
+  };
 }
 
 function confluenceChips(evidence: SignalEvidenceData, insight: SignalEvidenceInsight) {
@@ -161,6 +430,74 @@ function formatSectorMultiplier(m: number | null): string {
   const rounded = Math.round(m * 100) / 100;
   const s = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2).replace(/\.?0+$/, "");
   return `${s}×`;
+}
+
+function GeoStructuralBaselinePanel({ geo, colors }: { geo: GeopoliticalLayerExtras; colors: ThemeColors }) {
+  const band = structuralBandFromBaselineScore(geo.geoBaselineScore ?? null) ?? geo.exposureBand;
+  const bandSt = geoExposureBandStyles(band ?? "low", colors);
+  const body = (geo.geoBaselineSummary ?? geo.exposureSummary ?? "").trim();
+  const sector = geo.impactSectorLabel;
+  const themeChip =
+    geo.geoPrimaryTheme && geo.geoPrimaryTheme.length ? geo.geoPrimaryTheme.replace(/_/g, " ") : "";
+
+  return (
+    <div
+      style={{
+        marginTop: spacing[2],
+        padding: spacing[3],
+        borderRadius: borderRadius.md,
+        border: `1px solid ${bandSt.border}`,
+        background: bandSt.bg,
+        display: "grid",
+        gap: spacing[2]
+      }}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span
+          style={{
+            fontSize: typography.scale.xs,
+            fontWeight: 700,
+            letterSpacing: "0.055em",
+            color: colors.textMuted
+          }}
+        >
+          Structural exposure
+        </span>
+        {band ? (
+          <span
+            style={{
+              fontSize: typography.scale.xs,
+              fontWeight: 700,
+              textTransform: "capitalize",
+              color: bandSt.fg,
+              padding: "3px 10px",
+              borderRadius: borderRadius.full,
+              border: `1px solid ${bandSt.border}`,
+              background: "rgba(255,255,255,0.04)"
+            }}
+          >
+            {band}
+          </span>
+        ) : null}
+      </div>
+      {themeChip ? (
+        <span
+          className="w-fit rounded-full px-3 py-1 text-xs font-semibold"
+          style={{ border: `1px solid ${colors.border}`, color: colors.text }}
+        >
+          {sector && sector !== "Sector unknown" ? `${sector} · ${themeChip}` : themeChip}
+        </span>
+      ) : null}
+      {body ? (
+        <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.text, lineHeight: 1.55 }}>
+          {body}
+        </p>
+      ) : null}
+      <p className="text-xs italic text-muted-foreground" style={{ margin: 0 }}>
+        Structural baseline — no active geo headlines in the current window.
+      </p>
+    </div>
+  );
 }
 
 function GeopoliticalExposurePanel({ geo, colors }: { geo: GeopoliticalLayerExtras; colors: ThemeColors }) {
@@ -347,7 +684,18 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
   const rt2 = insight.reference_target_2 ?? (typeof evidence.keyLevels.resistance === "number" ? evidence.keyLevels.resistance * 1.012 : null);
   const stopLvl = insight.reference_stop_level ?? evidence.keyLevels.support ?? null;
   const vwap = insight.vwap ?? evidence.keyLevels.vwap ?? null;
-  const levelsComplete = Boolean(entryZone && rt1 != null && stopLvl != null && vwap != null);
+  const lastPrice =
+    typeof evidence.lastTradePrice === "number" && Number.isFinite(evidence.lastTradePrice) && evidence.lastTradePrice > 0
+      ? evidence.lastTradePrice
+      : null;
+  const vwapRow = getVWAPDisplay(
+    vwap,
+    insight.vwap_state ?? evidence.keyLevels.vwap_state,
+    lastPrice,
+    insight.vwap_display ?? evidence.keyLevels.vwap_display,
+    insight.vwap_tooltip ?? evidence.keyLevels.vwap_tooltip
+  );
+  const levelsComplete = Boolean(entryZone && rt1 != null && stopLvl != null);
 
   return (
     <article style={{ display: "grid", gap: spacing[4], position: "relative", paddingBottom: spacing[4] }}>
@@ -380,35 +728,42 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
       ) : null}
 
       <section className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <h2 className="text-xl sm:text-2xl" style={{ margin: 0 }}>
-            {evidence.symbol}
-          </h2>
-          <span
-            style={{
-              borderRadius: borderRadius.full,
-              padding: "4px 10px",
-              fontSize: typography.scale.xs,
-              fontWeight: 700,
-              background: "rgba(148,163,184,0.14)",
-              color: directionTone
-            }}
-          >
-            {evidence.directionBadgeLabel}
-          </span>
-          <span
-            style={{
-              borderRadius: borderRadius.full,
-              padding: "4px 10px",
-              fontSize: typography.scale.xs,
-              fontWeight: 700,
-              letterSpacing: "0.04em",
-              background: "rgba(59,130,246,0.12)",
-              color: colors.textMuted
-            }}
-          >
-            NOT INVESTMENT ADVICE
-          </span>
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <h2 className="text-xl sm:text-2xl" style={{ margin: 0 }}>
+              {evidence.symbol}
+            </h2>
+            <span
+              style={{
+                borderRadius: borderRadius.full,
+                padding: "4px 10px",
+                fontSize: typography.scale.xs,
+                fontWeight: 700,
+                background: "rgba(148,163,184,0.14)",
+                color: directionTone
+              }}
+            >
+              {evidence.directionBadgeLabel}
+            </span>
+            <span
+              style={{
+                borderRadius: borderRadius.full,
+                padding: "4px 10px",
+                fontSize: typography.scale.xs,
+                fontWeight: 700,
+                letterSpacing: "0.04em",
+                background: "rgba(59,130,246,0.12)",
+                color: colors.textMuted
+              }}
+            >
+              NOT INVESTMENT ADVICE
+            </span>
+          </div>
+          {evidence.compositeMode === "swing" || evidence.signal_basis === "daily_bars_rth" ? (
+            <div className="text-xs text-muted-foreground tracking-wide">
+              {evidence.signal_basis_label?.trim() || "Derived from daily bars (RTH)"}
+            </div>
+          ) : null}
         </div>
         <span className="text-sm" style={{ color: colors.textMuted }}>
           {displayUpdatedLabel(evidence)}
@@ -540,8 +895,9 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
         </div>
       </section>
 
-      {(insight.alignment_ratio != null && Number.isFinite(insight.alignment_ratio)) ||
-      (insight.conflicted_layers != null && insight.conflicted_layers.length > 0) ? (
+      {(evidence.alignment != null ||
+        (insight.alignment_ratio != null && Number.isFinite(insight.alignment_ratio)) ||
+        (insight.conflicted_layers != null && insight.conflicted_layers.length > 0)) ? (
         <section
           style={{
             border: `1px solid ${colors.border}`,
@@ -562,6 +918,60 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
           >
             LAYER ALIGNMENT
           </h3>
+          {evidence.alignment ? (
+            <div style={{ display: "grid", gap: spacing[2] }}>
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className="rounded-full px-2.5 py-1 text-xs font-bold"
+                  style={{
+                    border: `1px solid ${alignmentAccent(evidence.alignment.level, colors)}`,
+                    color: alignmentAccent(evidence.alignment.level, colors),
+                    background: "rgba(148,163,184,0.08)"
+                  }}
+                >
+                  {evidence.alignment.chip}
+                </span>
+                <span className="text-xs font-semibold text-muted-foreground">{evidence.alignment.label}</span>
+                <span className="text-xs tabular-nums text-muted-foreground">
+                  Score adj:{" "}
+                  <strong style={{ color: evidence.alignment.score_modifier >= 0 ? colors.bullish : colors.bearish }}>
+                    {evidence.alignment.score_modifier >= 0 ? "+" : ""}
+                    {evidence.alignment.score_modifier}
+                  </strong>
+                </span>
+              </div>
+              <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.text, lineHeight: 1.5 }}>{evidence.alignment.detail}</p>
+              <div className="flex flex-wrap gap-3" style={{ fontSize: typography.scale.xs }}>
+                {(
+                  [
+                    ["Macro", evidence.alignment.macro_supports, evidence.alignment.macro_direction],
+                    ["Sector", evidence.alignment.sector_supports, evidence.alignment.sector_direction],
+                    ["Technical", evidence.alignment.technical_supports, evidence.alignment.technical_direction]
+                  ] as const
+                ).map(([label, supports, dir]) => (
+                  <div key={label} className="flex items-center gap-1.5">
+                    <span
+                      title={supports ? "Supports direction" : "Does not support direction"}
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: "50%",
+                        background: supports ? colors.bullish : colors.textMuted,
+                        opacity: supports ? 1 : 0.35
+                      }}
+                    />
+                    <span className="text-muted-foreground">{label}:</span>
+                    <span style={{ fontWeight: 600, color: colors.text }}>{formatDirShort(dir)}</span>
+                  </div>
+                ))}
+              </div>
+              {evidence.alignment.is_counter_trend ? (
+                <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.caution, fontWeight: 600 }}>
+                  Counter-trend vs macro or sector — size and risk accordingly.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           {insight.alignment_ratio != null && Number.isFinite(insight.alignment_ratio) ? (
             <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.text }}>
               <strong style={{ color: colors.text }}>Agreement:</strong>{" "}
@@ -629,22 +1039,179 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
               <p className="text-sm leading-relaxed sm:text-base" style={{ margin: 0, color: colors.textMuted }}>
                 {layer.explanation}
               </p>
+              {layer.key === "macro" ? (
+                <div className="flex flex-col gap-2">
+                  {layer.macro_risk_level === "critical" && (layer.macro_warnings?.length ?? 0) > 0 ? (
+                    <div className="mb-1 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2">
+                      <div className="text-sm font-medium text-red-400">⚠️ High-Impact Event Imminent</div>
+                      {(layer.macro_warnings ?? []).map((w, i) => (
+                        <div key={i} className="mt-0.5 text-xs text-red-300">
+                          {w}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  {layer.macro_risk_level === "elevated" && (layer.macro_warnings?.length ?? 0) > 0 ? (
+                    <div className="mb-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+                      <div className="text-sm font-medium text-amber-400">⚠️ Macro Event Today</div>
+                      {(layer.macro_warnings ?? []).map((w, i) => (
+                        <div key={i} className="mt-0.5 text-xs text-amber-300">
+                          {w}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  {layer.yield_curve ? (
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <span className="text-xs text-muted-foreground">Yield curve:</span>
+                      <span
+                        className={`text-xs font-medium ${
+                          layer.yield_curve.regime === "normal"
+                            ? "text-green-400"
+                            : layer.yield_curve.regime === "flat"
+                              ? "text-amber-400"
+                              : "text-red-400"
+                        }`}
+                      >
+                        {layer.yield_curve.label}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        (2yr {layer.yield_curve.yield_2yr.toFixed(2)}% / 10yr {layer.yield_curve.yield_10yr.toFixed(2)}%)
+                      </span>
+                    </div>
+                  ) : null}
+                  {(layer.upcoming_events?.length ?? 0) > 0 ? (
+                    <div className="mt-1 space-y-1">
+                      <div className="text-xs uppercase tracking-wide text-muted-foreground">Upcoming</div>
+                      {(layer.upcoming_events ?? []).slice(0, 3).map((ev) => (
+                        <div key={ev.event_id} className="flex items-center justify-between text-xs">
+                          <span
+                            className={
+                              ev.status === "imminent"
+                                ? "font-medium text-red-400"
+                                : ev.status === "today"
+                                  ? "text-amber-400"
+                                  : "text-muted-foreground"
+                            }
+                          >
+                            {ev.name}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {ev.status === "imminent"
+                              ? `${Math.round(ev.hours_until * 60)}m`
+                              : ev.status === "today"
+                                ? "Today"
+                                : `${Math.round(ev.hours_until / 24)}d`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="flex flex-wrap gap-2">
-                {layer.keyPoints.map((point, idx) => (
-                  <span
-                    key={`${layer.key}-${idx}`}
-                    style={{
+                {(layer.key === "technical" && evidence.compositeMode === "swing"
+                  ? filterChipsForMode(sanitizeEvidenceChips(layer.keyPoints), "swing")
+                  : sanitizeEvidenceChips(layer.keyPoints)
+                )
+                  .filter((p) => !p.toLowerCase().includes("expired"))
+                  .map((point, idx) => {
+                    let pres =
+                      layer.key === "technical"
+                        ? technicalVwapChipPresentation(point, colors)
+                        : { skip: true, chipStyle: {} as CSSProperties };
+                    if (layer.key === "technical" && pres.skip) {
+                      pres = technicalOrbChipPresentation(point, colors);
+                    }
+                    if (layer.key !== "technical") {
+                      pres = {
+                        skip: false,
+                        chipStyle: {
+                          fontSize: typography.scale.xs,
+                          border: `1px solid ${colors.border}`,
+                          color: colors.textMuted
+                        } as CSSProperties
+                      };
+                    }
+                    if (pres.skip) return null;
+                    const Icon = layer.key === "technical" ? pres.Icon : undefined;
+                    const merged: CSSProperties = {
                       borderRadius: borderRadius.full,
                       padding: "2px 8px",
-                      fontSize: typography.scale.xs,
-                      border: `1px solid ${colors.border}`,
-                      color: colors.textMuted
-                    }}
-                  >
-                    {point}
-                  </span>
-                ))}
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                      ...pres.chipStyle
+                    };
+                    return (
+                      <span key={`${layer.key}-${idx}`} style={merged}>
+                        {Icon ? <Icon className="h-3 w-3 shrink-0" strokeWidth={2.5} aria-hidden /> : null}
+                        {point}
+                      </span>
+                    );
+                  })}
               </div>
+              {layer.key === "news" ? (
+                <div style={{ display: "grid", gap: spacing[2] }}>
+                  {layer.wim_summary ? (
+                    <div className="mt-2 text-sm italic text-muted-foreground">
+                      &ldquo;{layer.wim_summary}&rdquo;
+                      <span className="ml-2 text-xs not-italic opacity-70">&mdash; Benzinga editorial</span>
+                    </div>
+                  ) : null}
+                  {layer.latest_rating &&
+                  ["upgrade", "downgrade", "initiates"].includes(layer.latest_rating.action.toLowerCase()) ? (
+                    <span
+                      className="inline-flex w-fit rounded-full px-3 py-1 text-xs font-semibold"
+                      style={{
+                        border: `1px solid ${
+                          layer.latest_rating.action.toLowerCase().includes("downgrade")
+                            ? "rgba(239,68,68,0.5)"
+                            : "rgba(34,197,94,0.5)"
+                        }`,
+                        background:
+                          layer.latest_rating.action.toLowerCase().includes("downgrade") ? "rgba(239,68,68,0.1)" : "rgba(34,197,94,0.1)",
+                        color: layer.latest_rating.action.toLowerCase().includes("downgrade") ? colors.bearish : colors.bullish
+                      }}
+                    >
+                      {layer.latest_rating.firm}: {layer.latest_rating.action}
+                      {layer.latest_rating.rating ? ` (${layer.latest_rating.rating})` : ""}
+                    </span>
+                  ) : null}
+                  {layer.earnings_result && layer.earnings_result.beat !== null ? (
+                    <span
+                      className="inline-flex w-fit rounded-full px-3 py-1 text-xs font-semibold"
+                      style={{
+                        border: `1px solid ${layer.earnings_result.beat ? "rgba(34,197,94,0.5)" : "rgba(239,68,68,0.5)"}`,
+                        background: layer.earnings_result.beat ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)",
+                        color: layer.earnings_result.beat ? colors.bullish : colors.bearish
+                      }}
+                    >
+                      {layer.earnings_result.beat ? "Beat" : "Missed"} EPS{" "}
+                      {typeof layer.earnings_result.eps_surprise_pct === "number" && Number.isFinite(layer.earnings_result.eps_surprise_pct)
+                        ? `${layer.earnings_result.eps_surprise_pct > 0 ? "+" : ""}${layer.earnings_result.eps_surprise_pct.toFixed(1)}%`
+                        : ""}
+                    </span>
+                  ) : null}
+                  {layer.latest_guidance && (layer.latest_guidance.type === "raised" || layer.latest_guidance.type === "lowered") ? (
+                    <span
+                      className="inline-flex w-fit rounded-full px-3 py-1 text-xs font-semibold"
+                      style={{
+                        border: `1px solid ${layer.latest_guidance.type === "raised" ? "rgba(34,197,94,0.5)" : "rgba(239,68,68,0.5)"}`,
+                        background: layer.latest_guidance.type === "raised" ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)",
+                        color: layer.latest_guidance.type === "raised" ? colors.bullish : colors.bearish
+                      }}
+                    >
+                      {layer.latest_guidance.type === "raised" ? "Guidance raised" : "Guidance cut"}
+                    </span>
+                  ) : null}
+                  {layer.news_data_state === "stale" && (layer.articles_count === 0 || layer.articles_count === undefined) ? (
+                    <p className="text-sm text-muted-foreground" style={{ margin: 0 }}>
+                      No qualifying news in lookback window. No active negative catalyst detected.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
               {layer.key === "news" && onOpenNewsPanel ? (
                 <div className="flex justify-end">
                   <button
@@ -657,7 +1224,16 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
                   </button>
                 </div>
               ) : null}
-              {layer.key === "geopolitical" && layer.geo ? <GeopoliticalExposurePanel geo={layer.geo} colors={colors} /> : null}
+              {layer.key === "sector" && sectorLayerHasMomentumDetails(layer) ? (
+                <SectorMomentumPanel layer={layer} colors={colors} />
+              ) : null}
+              {layer.key === "geopolitical" && layer.geo ? (
+                (layer.geo.activeEvents?.length ?? 0) > 0 || layer.geo.geoHasLiveEvents ? (
+                  <GeopoliticalExposurePanel geo={layer.geo} colors={colors} />
+                ) : (
+                  <GeoStructuralBaselinePanel geo={layer.geo} colors={colors} />
+                )
+              ) : null}
               <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>{displayLayerFreshness(layer, evidence)}</span>
             </article>
           ))}
@@ -697,9 +1273,34 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
               <strong style={{ color: colors.text }}>Reference Stop Level: </strong>
               {formatLevel(stopLvl)}
             </p>
-            <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted }}>
+            <p
+              style={{
+                margin: 0,
+                fontSize: typography.scale.sm,
+                color: colors.textMuted,
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                gap: 6
+              }}
+            >
               <strong style={{ color: colors.text }}>VWAP: </strong>
-              {formatLevel(vwap)}
+              <span
+                className={vwapRow.muted ? "text-muted-foreground" : undefined}
+                style={{
+                  color:
+                    vwapRow.state === VWAP_STATE.FORMING
+                      ? colors.caution
+                      : vwapRow.muted
+                        ? colors.textMuted
+                        : colors.text,
+                  fontStyle: vwapRow.state === VWAP_STATE.PRE_MARKET && vwapRow.muted ? "italic" : undefined,
+                  fontWeight: vwapRow.muted ? 500 : 600
+                }}
+              >
+                {vwapRow.label}
+              </span>
+              <InfoTip text={vwapRow.tooltip} label="VWAP context" />
             </p>
             <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>{displayUpdatedLabel(evidence)}</span>
           </div>

@@ -53,16 +53,40 @@ def test_vwap_none_when_zero_volume(mock_parameter_store) -> None:
     assert r.vwap_from_bars is None
 
 
-def test_orb_insufficient_bars(mock_parameter_store) -> None:
+def test_orb_forming_during_opening_range(mock_parameter_store) -> None:
     ta = TechnicalAnalyzer()
     r = ta.analyze("T", make_bars(10), make_snapshot(), mock_parameter_store.technical)
-    assert r.orb_signal == "insufficient"
+    assert r.orb_signal == "forming"
+    assert any("ORB Forming" in c for c in r.chips)
 
 
-def test_orb_expired_after_10am(mock_parameter_store) -> None:
+def test_orb_unavailable_after_window_without_store(monkeypatch, mock_parameter_store) -> None:
+    monkeypatch.setattr("stocvest.data.orb_store.get_orb_record", lambda *a, **k: None)
     ta = TechnicalAnalyzer()
-    r = ta.analyze("T", make_bars(31), make_snapshot(), mock_parameter_store.technical)
-    assert r.orb_signal == "expired"
+    # Last bar after 10:00 AM ET (opening range window closed).
+    r = ta.analyze("T", make_bars(40), make_snapshot(), mock_parameter_store.technical)
+    assert r.orb_signal == "unavailable"
+    assert not any("expired" in c.lower() for c in r.chips)
+
+
+def test_orb_breakout_long_uses_dynamo_levels(monkeypatch, mock_parameter_store) -> None:
+    from stocvest.data.orb_store import ORBRecord
+
+    def _fake_get(sym: str, trade_date=None):
+        return ORBRecord(
+            trade_date="2026-05-04",
+            symbol=sym,
+            orb_high=101.0,
+            orb_low=99.0,
+            orb_range_pct=2.0,
+            computed_at="10:00 ET",
+        )
+
+    monkeypatch.setattr("stocvest.data.orb_store.get_orb_record", _fake_get)
+    ta = TechnicalAnalyzer()
+    r = ta.analyze("T", make_bars(40, trend=0.02), make_snapshot(), mock_parameter_store.technical)
+    assert r.orb_signal == "breakout_long"
+    assert any("ORB Long" in c for c in r.chips)
 
 
 def test_strong_bullish_vs_bearish_differ(mock_parameter_store) -> None:

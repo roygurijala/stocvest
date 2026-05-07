@@ -242,3 +242,313 @@ resource "aws_lambda_permission" "portfolio_reversal_eventbridge_scheduler" {
   principal     = "scheduler.amazonaws.com"
   source_arn    = "arn:aws:scheduler:${var.aws_region}:${data.aws_caller_identity.current.account_id}:schedule/${aws_scheduler_schedule_group.portfolio_reversal.name}/*"
 }
+
+# ── Geo themes (Perplexity → Redis) Mon–Fri ─────────────────────────────────
+
+resource "aws_scheduler_schedule_group" "geo_themes" {
+  name = "stocvest-development-geo-themes"
+
+  tags = merge(local.common_tags, {
+    Name = "stocvest-development-geo-themes-schedule-group"
+  })
+}
+
+resource "aws_iam_role" "eventbridge_geo_themes_invoke" {
+  name = "stocvest-development-eventbridge-geo-themes-invoke"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Service = "scheduler.amazonaws.com"
+      }
+      Action = "sts:AssumeRole"
+    }]
+  })
+
+  tags = merge(local.common_tags, {
+    Name = "stocvest-development-eventbridge-geo-themes-invoke-role"
+  })
+}
+
+resource "aws_iam_role_policy" "eventbridge_geo_themes_invoke_lambda" {
+  name = "stocvest-development-invoke-geo-themes-lambda"
+  role = aws_iam_role.eventbridge_geo_themes_invoke.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["lambda:InvokeFunction"]
+      Resource = aws_lambda_function.api["geo_themes"].arn
+    }]
+  })
+}
+
+resource "aws_scheduler_schedule" "geo_themes_updater" {
+  name       = "stocvest-geo-themes-updater"
+  group_name = aws_scheduler_schedule_group.geo_themes.name
+
+  state = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  schedule_expression          = "cron(45 12 ? * MON-FRI *)"
+  schedule_expression_timezone = "America/New_York"
+
+  target {
+    arn      = aws_lambda_function.api["geo_themes"].arn
+    role_arn = aws_iam_role.eventbridge_geo_themes_invoke.arn
+    input = jsonencode({
+      action = "update_geo_themes"
+    })
+  }
+}
+
+resource "aws_lambda_permission" "geo_themes_eventbridge_scheduler" {
+  statement_id  = "AllowExecutionFromEventBridgeSchedulerGeoThemes"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.api["geo_themes"].function_name
+  principal     = "scheduler.amazonaws.com"
+  source_arn    = "arn:aws:scheduler:${var.aws_region}:${data.aws_caller_identity.current.account_id}:schedule/${aws_scheduler_schedule_group.geo_themes.name}/*"
+}
+
+# ── ORB daily artifact (9:30–10:00 ET window closes → persist highs/lows) ─────────
+
+resource "aws_scheduler_schedule_group" "orb_compute" {
+  name = "stocvest-development-orb-compute"
+
+  tags = merge(local.common_tags, {
+    Name = "stocvest-development-orb-compute-schedule-group"
+  })
+}
+
+resource "aws_iam_role" "eventbridge_orb_compute_invoke" {
+  name = "stocvest-development-eventbridge-orb-compute-invoke"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Service = "scheduler.amazonaws.com"
+      }
+      Action = "sts:AssumeRole"
+    }]
+  })
+
+  tags = merge(local.common_tags, {
+    Name = "stocvest-development-eventbridge-orb-compute-invoke-role"
+  })
+}
+
+resource "aws_iam_role_policy" "eventbridge_orb_compute_invoke_lambda" {
+  name = "stocvest-development-invoke-orb-compute-lambda"
+  role = aws_iam_role.eventbridge_orb_compute_invoke.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["lambda:InvokeFunction"]
+      Resource = aws_lambda_function.api["orb_compute"].arn
+    }]
+  })
+}
+
+resource "aws_scheduler_schedule" "orb_compute" {
+  name       = "stocvest-orb-compute"
+  group_name = aws_scheduler_schedule_group.orb_compute.name
+
+  state = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  schedule_expression          = "cron(0 10 ? * MON-FRI *)"
+  schedule_expression_timezone = "America/New_York"
+
+  target {
+    arn      = aws_lambda_function.api["orb_compute"].arn
+    role_arn = aws_iam_role.eventbridge_orb_compute_invoke.arn
+    input = jsonencode({
+      action = "compute_orb"
+    })
+  }
+}
+
+resource "aws_lambda_permission" "orb_compute_eventbridge_scheduler" {
+  statement_id  = "AllowExecutionFromEventBridgeSchedulerOrbCompute"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.api["orb_compute"].function_name
+  principal     = "scheduler.amazonaws.com"
+  source_arn    = "arn:aws:scheduler:${var.aws_region}:${data.aws_caller_identity.current.account_id}:schedule/${aws_scheduler_schedule_group.orb_compute.name}/*"
+}
+
+# ── Macro cache warmer (7:30 AM America/New_York Mon–Fri) → macro_warmer Lambda ─────────
+
+resource "aws_scheduler_schedule_group" "macro_cache" {
+  name = "stocvest-development-macro-cache"
+
+  tags = merge(local.common_tags, {
+    Name = "stocvest-development-macro-cache-schedule-group"
+  })
+}
+
+resource "aws_iam_role" "eventbridge_macro_cache_invoke" {
+  name = "stocvest-development-eventbridge-macro-cache-invoke"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Service = "scheduler.amazonaws.com"
+      }
+      Action = "sts:AssumeRole"
+    }]
+  })
+
+  tags = merge(local.common_tags, {
+    Name = "stocvest-development-eventbridge-macro-cache-invoke-role"
+  })
+}
+
+resource "aws_iam_role_policy" "eventbridge_macro_cache_invoke_lambda" {
+  name = "stocvest-development-invoke-macro-warmer-lambda"
+  role = aws_iam_role.eventbridge_macro_cache_invoke.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["lambda:InvokeFunction"]
+      Resource = aws_lambda_function.api["macro_warmer"].arn
+    }]
+  })
+}
+
+resource "aws_scheduler_schedule" "macro_cache_warmer" {
+  name       = "stocvest-macro-cache-warmer"
+  group_name = aws_scheduler_schedule_group.macro_cache.name
+
+  state = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  schedule_expression          = "cron(30 7 ? * MON-FRI *)"
+  schedule_expression_timezone = "America/New_York"
+
+  target {
+    arn      = aws_lambda_function.api["macro_warmer"].arn
+    role_arn = aws_iam_role.eventbridge_macro_cache_invoke.arn
+    input    = jsonencode({ source = "eventbridge", job = "macro_cache_warm" })
+  }
+}
+
+resource "aws_lambda_permission" "macro_cache_eventbridge_scheduler" {
+  statement_id  = "AllowExecutionFromEventBridgeSchedulerMacroCache"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.api["macro_warmer"].function_name
+  principal     = "scheduler.amazonaws.com"
+  source_arn    = "arn:aws:scheduler:${var.aws_region}:${data.aws_caller_identity.current.account_id}:schedule/${aws_scheduler_schedule_group.macro_cache.name}/*"
+}
+
+# ── Sector daily Redis cache warmer (sector ETF vs SPY daily relative returns) ──────────────
+
+resource "aws_scheduler_schedule_group" "sector_daily_cache" {
+  name = "stocvest-development-sector-daily-cache"
+
+  tags = merge(local.common_tags, {
+    Name = "stocvest-development-sector-daily-cache-schedule-group"
+  })
+}
+
+resource "aws_iam_role" "eventbridge_sector_daily_cache_invoke" {
+  name = "stocvest-development-eventbridge-sector-daily-cache-invoke"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Service = "scheduler.amazonaws.com"
+      }
+      Action = "sts:AssumeRole"
+    }]
+  })
+
+  tags = merge(local.common_tags, {
+    Name = "stocvest-development-eventbridge-sector-daily-cache-invoke-role"
+  })
+}
+
+resource "aws_iam_role_policy" "eventbridge_sector_daily_cache_invoke_lambda" {
+  name = "stocvest-development-invoke-sector-daily-cache-lambda"
+  role = aws_iam_role.eventbridge_sector_daily_cache_invoke.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["lambda:InvokeFunction"]
+      Resource = aws_lambda_function.api["sector_daily_cache"].arn
+    }]
+  })
+}
+
+# 4:30 PM ET after close — full 5-session relative returns (hours are local NY).
+resource "aws_scheduler_schedule" "sector_daily_cache_close" {
+  name       = "stocvest-sector-daily-close"
+  group_name = aws_scheduler_schedule_group.sector_daily_cache.name
+
+  state = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  schedule_expression          = "cron(30 16 ? * MON-FRI *)"
+  schedule_expression_timezone = "America/New_York"
+
+  target {
+    arn      = aws_lambda_function.api["sector_daily_cache"].arn
+    role_arn = aws_iam_role.eventbridge_sector_daily_cache_invoke.arn
+    input    = jsonencode({ action = "update_sector_daily_cache" })
+  }
+}
+
+# Pre-market refresher (~7:45 AM ET): warm Redis before composite traffic.
+resource "aws_scheduler_schedule" "sector_daily_cache_premarket" {
+  name       = "stocvest-sector-daily-premarket"
+  group_name = aws_scheduler_schedule_group.sector_daily_cache.name
+
+  state = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  schedule_expression          = "cron(45 7 ? * MON-FRI *)"
+  schedule_expression_timezone = "America/New_York"
+
+  target {
+    arn      = aws_lambda_function.api["sector_daily_cache"].arn
+    role_arn = aws_iam_role.eventbridge_sector_daily_cache_invoke.arn
+    input    = jsonencode({ action = "update_sector_daily_cache" })
+  }
+}
+
+resource "aws_lambda_permission" "sector_daily_cache_eventbridge_scheduler" {
+  statement_id  = "AllowExecutionFromEventBridgeSchedulerSectorDailyCache"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.api["sector_daily_cache"].function_name
+  principal     = "scheduler.amazonaws.com"
+  source_arn    = "arn:aws:scheduler:${var.aws_region}:${data.aws_caller_identity.current.account_id}:schedule/${aws_scheduler_schedule_group.sector_daily_cache.name}/*"
+}
