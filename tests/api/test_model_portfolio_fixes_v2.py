@@ -37,9 +37,10 @@ def test_claude_model_name_is_correct() -> None:
     assert not claude3_hits, f"unexpected legacy Claude v3 model id substring in: {claude3_hits}"
 
     from stocvest.signals import geopolitical_scanner, news_sentiment
+    from stocvest.utils.config import AI_MODEL_FAST, AI_MODEL_STANDARD
 
-    assert news_sentiment.DEFAULT_MODEL == "claude-sonnet-4-6"
-    assert geopolitical_scanner.DEFAULT_MODEL == "claude-sonnet-4-6"
+    assert news_sentiment.DEFAULT_MODEL == AI_MODEL_FAST
+    assert geopolitical_scanner.DEFAULT_MODEL == AI_MODEL_STANDARD
 
 
 @pytest.mark.asyncio

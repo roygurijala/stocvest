@@ -1,6 +1,6 @@
 # STOCVEST — API contracts (immutable sections)
 
-**Last reviewed:** 2026-05-06
+**Last reviewed:** 2026-05-07
 
 Sections referenced from **`docs/CONTEXT.md`** §7 must not change without explicit review and coordinated code updates.
 
@@ -62,6 +62,7 @@ All REST routes are versioned under `/v1/`.
 - `GET /v1/signals/records/{signal_id}` — single **platform** signal (404 if row is user-scoped)
 - `GET /v1/signals/me/history` — authenticated user’s evaluated signals; query `symbol`, `days` (1–365), `limit` (1–200)
 - `GET /v1/signals/me/records/{signal_id}` — single signal for the signed-in user only
+- `GET /v1/signals/founding-members` — **public**. JSON **`founding_member_count`** (**int**, Dynamo scan of **`Users.subscriptionPlan`** for paid tiers only: **`swing_pro`**, **`swing_day_pro`**, legacy **`founding_swing_pro`**, **`founding_swing_day_pro`**), **`founding_spots_total`** (**100**), **`founding_spots_remaining`** (non-negative clamp of **100 − count**). Never counts **`free`** or unknown plans.
 
 ### 4.4 Brokers (Phase 4e)
 
@@ -114,3 +115,31 @@ Supported default actions:
 - `GET /v1/pdt/status` — returns authenticated user's PDT assessment snapshot
   - Includes `current_day_trade_count` and `days_until_reset`
   - Supports optional `as_of=YYYY-MM-DD` query for deterministic assessments/testing
+
+### 4.10 User profile (brokers Lambda)
+
+Authenticated:
+
+- `GET /v1/users/me` — returns **`UserProfile`** JSON: **`user_id`**, **`trading_mode`**, onboarding/legal fields, **`subscription_plan`** (billing; not client-writable here), **`beta_full_access`**, **`beta_access_until`**, **`beta_access_granted_at`**, derived **`has_full_access`** (**true** when paid **`subscription_plan`** or **active** beta window), **`has_ai_explanations`** (mirrors **`has_full_access`** for gating Claude explanations).
+
+- `PATCH /v1/users/me` — updates onboarding/legal/trading-mode fields **only**. Body keys **`subscription_plan`**, **`beta_full_access`**, **`beta_access_until`**, **`beta_access_granted_at`** are **stripped** (billing + admin concern).
+
+Admin (same authorization mode as **`GET /v1/signals/analysis`** — internal analysis header **`X-Stocvest-Internal-Analysis`**, JWT **`sub` ∈ `STOCVEST_ANALYSIS_ADMIN_SUBS`**, or Cognito group **`signal-analytics-admin`**):
+
+- `PATCH /v1/admin/users/{user_id}/beta-access` — JSON **`{ "enabled": true|false [, "until": "<ISO-8601 optional>"] }`**. Sets beta fields on the **`Users`** row; responses match **`GET /v1/users/me`** shape when possible. Writes an **`AuditEvent`** row when Dynamo audit is configured.
+
+- `GET /v1/admin/audit/users/{user_id}` — newest-first audit items for **`user_id`**; optional query **`limit`** (1–500, default **200**). Each item aligns with **`AuditEvent`** (**`route`**, **`method`**, **`statusCode`**, redacted **`requestSummary`** / **`responseSummary`**, optional **`marketSnapshot`**, entitlement/pricing snapshots).
+
+- `GET /v1/admin/audit/sessions/{session_id}` — same item shape filtered by **`sessionId`** (**best-effort `Scan`** in Dynamo implementation; callers should keep **`limit`** reasonable).
+
+### 4.11 HTTP audit + correlation headers
+
+- After each HTTP Lambda response routed through **`stocvest.api.lambda_dispatch`** (excluding **`authorizer`** / non-HTTP events), the runtime **best-effort** persists an **`AuditEvent`** when **`DYNAMODB_AUDIT_EVENTS_TABLE`** is set.
+
+- Browsers integrating the SPA against API Gateway should send **`x-stocvest-session-id`** on mutating reads when convenient; it is echoed into audit rows (**`sessionId`**) for **`GET .../audit/sessions/...`** replay. Listed on API Gateway **CORS** **`allow_headers`** and on Lambda **`Access-Control-Allow-Headers`** for credentialed responses.
+
+Terraform table **`AuditEvents`**: **`pk`** = `user#{userId|anon}`, **`sk`** = `{occurred_at ISO}#{event_id}` (**`audit_store.py`**).
+
+### 4.12 Beta access script
+
+- Repo script **`scripts/beta_access.py`** — operator CLI: updates **`Users`** Dynamo attributes **`betaFullAccess`**, **`betaAccessUntil`**, **`betaAccessGrantedAt`** (requires **`DYNAMODB_USERS_TABLE`** + AWS creds). Mirrors **`PATCH .../beta-access`** semantics (**`--enable` / `--disable`**, optional **`--until`**).

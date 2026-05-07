@@ -264,8 +264,31 @@ export async function runScannerLoadWithoutBrief(
 
     const snapPct = (snap: Record<string, unknown> | null | undefined): number | null => {
       if (!snap || typeof snap !== "object") return null;
-      const c = snap.change_percent ?? snap.pre_market_change_percent;
-      return typeof c === "number" && Number.isFinite(c) ? c : null;
+      const pick = (v: unknown): number | null => {
+        if (typeof v !== "number" || !Number.isFinite(v)) return null;
+        // Guard against broken feed values (seen as -100 when close/baseline is missing).
+        if (v <= -99.5) return null;
+        return v;
+      };
+      const direct = pick(snap.change_percent);
+      if (direct != null) return direct;
+      const pre = pick(snap.pre_market_change_percent);
+      if (pre != null) return pre;
+      const ah = pick(snap.after_hours_change_percent);
+      if (ah != null) return ah;
+      const last = snap.last_trade_price;
+      const prev = snap.prev_close;
+      if (
+        typeof last === "number" &&
+        typeof prev === "number" &&
+        Number.isFinite(last) &&
+        Number.isFinite(prev) &&
+        prev > 0
+      ) {
+        const derived = ((last - prev) / prev) * 100;
+        return pick(derived);
+      }
+      return null;
     };
     const spyIdx = universe.indexOf("SPY");
     const qqqIdx = universe.indexOf("QQQ");

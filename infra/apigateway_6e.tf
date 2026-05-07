@@ -23,6 +23,7 @@ locals {
     "GET /v1/signals/recent"                 = { module_key = "signals", authorizer = false }
     "GET /v1/signals/performance/summary"    = { module_key = "signals", authorizer = false }
     "GET /v1/signals/records/{signal_id}"    = { module_key = "signals", authorizer = false }
+    "GET /v1/signals/founding-members"       = { module_key = "signals", authorizer = false }
     "GET /v1/signals/me/history"             = { module_key = "signals", authorizer = true }
     "GET /v1/signals/me/records/{signal_id}" = { module_key = "signals", authorizer = true }
     "GET /v1/signals/analysis"               = { module_key = "signals", authorizer = true }
@@ -42,15 +43,18 @@ locals {
     "GET /v1/brokers/orders"    = { module_key = "brokers", authorizer = true }
     "DELETE /v1/brokers/orders" = { module_key = "brokers", authorizer = true }
 
-    "POST /v1/orders/validate"         = { module_key = "brokers", authorizer = true }
-    "POST /v1/orders/submit"           = { module_key = "brokers", authorizer = true }
-    "GET /v1/orders/{order_id}/status" = { module_key = "brokers", authorizer = true }
-    "GET /v1/profile/trading-mode"     = { module_key = "brokers", authorizer = true }
-    "POST /v1/profile/trading-mode"    = { module_key = "brokers", authorizer = true }
-    "GET /v1/users/me"                 = { module_key = "brokers", authorizer = true }
-    "PATCH /v1/users/me"               = { module_key = "brokers", authorizer = true }
-    "GET /v1/auth/etrade/start"        = { module_key = "brokers", authorizer = true }
-    "POST /v1/auth/etrade/callback"    = { module_key = "brokers", authorizer = true }
+    "POST /v1/orders/validate"                    = { module_key = "brokers", authorizer = true }
+    "POST /v1/orders/submit"                      = { module_key = "brokers", authorizer = true }
+    "GET /v1/orders/{order_id}/status"            = { module_key = "brokers", authorizer = true }
+    "GET /v1/profile/trading-mode"                = { module_key = "brokers", authorizer = true }
+    "POST /v1/profile/trading-mode"               = { module_key = "brokers", authorizer = true }
+    "GET /v1/users/me"                            = { module_key = "brokers", authorizer = true }
+    "PATCH /v1/users/me"                          = { module_key = "brokers", authorizer = true }
+    "PATCH /v1/admin/users/{user_id}/beta-access" = { module_key = "brokers", authorizer = true }
+    "GET /v1/admin/audit/users/{user_id}"         = { module_key = "brokers", authorizer = true }
+    "GET /v1/admin/audit/sessions/{session_id}"   = { module_key = "brokers", authorizer = true }
+    "GET /v1/auth/etrade/start"                   = { module_key = "brokers", authorizer = true }
+    "POST /v1/auth/etrade/callback"               = { module_key = "brokers", authorizer = true }
 
     "GET /v1/watchlists/default/symbols"                    = { module_key = "brokers", authorizer = true }
     "POST /v1/watchlists/default/symbols"                   = { module_key = "brokers", authorizer = true }
@@ -93,7 +97,7 @@ resource "aws_apigatewayv2_api" "http" {
   protocol_type = "HTTP"
 
   cors_configuration {
-    allow_headers = ["authorization", "content-type", "x-requested-with", "x-stocvest-internal-analysis"]
+    allow_headers = ["authorization", "content-type", "x-requested-with", "x-stocvest-internal-analysis", "x-stocvest-session-id"]
     allow_methods = ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
     allow_origins = [
       "https://stocvest.app",

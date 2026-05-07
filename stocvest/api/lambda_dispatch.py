@@ -25,6 +25,16 @@ def _dispatch_http_routes(
     return target(event, context)
 
 
+def _with_cors_and_audit(*, event: LambdaEvent, response: dict[str, Any], module: str) -> dict[str, Any]:
+    from stocvest.api.services.audit_capture import capture_http_audit_event
+
+    try:
+        capture_http_audit_event(event=event, response=response, module=module)
+    except Exception:
+        pass
+    return apply_cors_to_http_proxy_response(response, event)
+
+
 def _websocket_route(event: LambdaEvent) -> str:
     rc = event.get("requestContext") or {}
     if not isinstance(rc, dict):
@@ -61,7 +71,7 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
     if module == "health":
         from stocvest.api.handlers.health import handler as h
 
-        return apply_cors_to_http_proxy_response(h(event, context), event)
+        return _with_cors_and_audit(event=event, response=h(event, context), module=module)
 
     if module == "authorizer":
         from stocvest.api.handlers.authorizer import handler as h
@@ -80,8 +90,10 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
             snapshots_batch_handler,
         )
 
-        return apply_cors_to_http_proxy_response(
-            _dispatch_http_routes(
+        return _with_cors_and_audit(
+            event=event,
+            module=module,
+            response=_dispatch_http_routes(
                 event,
                 context,
                 {
@@ -95,13 +107,12 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
                     "GET /v1/market/earnings": earnings_calendar_handler,
                 },
             ),
-            event,
         )
 
     if module == "signals":
         from stocvest.api.handlers.signals import signals_http_dispatch
 
-        return apply_cors_to_http_proxy_response(signals_http_dispatch(event, context), event)
+        return _with_cors_and_audit(event=event, response=signals_http_dispatch(event, context), module=module)
 
     if module == "brokers":
         route = http_route_descriptor(event)
@@ -115,11 +126,11 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
         ):
             from stocvest.api.handlers.watchlists import watchlists_dispatch_handler
 
-            return apply_cors_to_http_proxy_response(watchlists_dispatch_handler(event, context), event)
+            return _with_cors_and_audit(event=event, response=watchlists_dispatch_handler(event, context), module=module)
         if route.startswith("GET /v1/alerts") or route.startswith("PATCH /v1/alerts"):
             from stocvest.api.handlers.alerts import alerts_dispatch_handler
 
-            return apply_cors_to_http_proxy_response(alerts_dispatch_handler(event, context), event)
+            return _with_cors_and_audit(event=event, response=alerts_dispatch_handler(event, context), module=module)
 
         from stocvest.api.handlers.brokers import (
             broker_accounts_handler,
@@ -135,6 +146,9 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
             etrade_oauth_start_handler,
         )
         from stocvest.api.handlers.orders import (
+            admin_beta_access_patch_handler,
+            admin_audit_session_events_handler,
+            admin_audit_user_events_handler,
             orders_status_handler,
             orders_submit_handler,
             orders_validate_handler,
@@ -144,8 +158,10 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
             users_me_patch_handler,
         )
 
-        return apply_cors_to_http_proxy_response(
-            _dispatch_http_routes(
+        return _with_cors_and_audit(
+            event=event,
+            module=module,
+            response=_dispatch_http_routes(
                 event,
                 context,
                 {
@@ -163,11 +179,13 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
                     "POST /v1/profile/trading-mode": profile_trading_mode_post_handler,
                     "GET /v1/users/me": users_me_get_handler,
                     "PATCH /v1/users/me": users_me_patch_handler,
+                    "PATCH /v1/admin/users/{user_id}/beta-access": admin_beta_access_patch_handler,
+                    "GET /v1/admin/audit/users/{user_id}": admin_audit_user_events_handler,
+                    "GET /v1/admin/audit/sessions/{session_id}": admin_audit_session_events_handler,
                     "GET /v1/auth/etrade/start": etrade_oauth_start_handler,
                     "POST /v1/auth/etrade/callback": etrade_oauth_callback_handler,
                 },
             ),
-            event,
         )
 
     if module == "portfolio":
@@ -177,8 +195,10 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
             portfolio_summary_handler,
         )
 
-        return apply_cors_to_http_proxy_response(
-            _dispatch_http_routes(
+        return _with_cors_and_audit(
+            event=event,
+            module=module,
+            response=_dispatch_http_routes(
                 event,
                 context,
                 {
@@ -187,31 +207,31 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
                     "POST /v1/portfolio/allocation": portfolio_allocation_handler,
                 },
             ),
-            event,
         )
 
     if module == "journal":
         from stocvest.api.handlers.journal import journal_dispatch_handler
 
-        return apply_cors_to_http_proxy_response(journal_dispatch_handler(event, context), event)
+        return _with_cors_and_audit(event=event, response=journal_dispatch_handler(event, context), module=module)
 
     if module == "pdt":
         from stocvest.api.handlers.pdt import pdt_status_handler
 
-        return apply_cors_to_http_proxy_response(
-            _dispatch_http_routes(event, context, {"GET /v1/pdt/status": pdt_status_handler}),
-            event,
+        return _with_cors_and_audit(
+            event=event,
+            module=module,
+            response=_dispatch_http_routes(event, context, {"GET /v1/pdt/status": pdt_status_handler}),
         )
 
     if module == "scanner":
         from stocvest.api.handlers.scanner import handler as scanner_handler
 
-        return apply_cors_to_http_proxy_response(scanner_handler(event, context), event)
+        return _with_cors_and_audit(event=event, response=scanner_handler(event, context), module=module)
 
     if module == "signal_resolution":
         from stocvest.api.handlers.signal_resolution import signal_resolution_scheduled_handler
 
-        return apply_cors_to_http_proxy_response(signal_resolution_scheduled_handler(event, context), event)
+        return _with_cors_and_audit(event=event, response=signal_resolution_scheduled_handler(event, context), module=module)
 
     if module == "websocket":
         from stocvest.api.handlers.websocket import (

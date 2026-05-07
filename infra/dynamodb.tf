@@ -273,3 +273,24 @@ resource "aws_dynamodb_table" "model_portfolio" {
     Name = "stocvest-development-ddb-model-portfolio"
   })
 }
+
+# HTTP/API replay audit — pk user#{userId|anon}, sk {iso}#{eventId}; see stocvest/api/services/audit_store.py.
+resource "aws_dynamodb_table" "audit_events" {
+  name         = "AuditEvents"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "stocvest-development-ddb-audit-events"
+  })
+}

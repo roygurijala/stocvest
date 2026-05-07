@@ -76,3 +76,5 @@ This document describes the **server-side** multi-layer stacks behind **`POST /v
 
 - **Legacy client-scored path (unchanged)**: `POST /v1/signals/swing/composite`.
 - **New server-scored path**: `POST /v1/signals/composite/real` (+ BFF `frontend/app/api/stocvest/signals/composite/real/route.ts`).
+
+**Product / entitlements (2026-05):** on-demand **AI signal explanations** and related paid surfaces gate on **`UserProfile.has_ai_explanations`** (true when subscribed or **beta** full access is active). See **`docs/API_CONTRACTS.md`** §4.10 and **`docs/CONTEXT.md`** §1.

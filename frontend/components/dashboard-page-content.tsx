@@ -12,13 +12,16 @@ import { stocvestAuthedFetch } from "@/lib/bff/stocvest-authed";
 import type { PortfolioActiveRow, SectorRotationChip } from "@/components/dashboard-redesign";
 import type { WeeklyIndexRow } from "@/components/weekly-market-context-widget";
 
-/** Tighter than the full scanner page; default watchlist loads in parallel with gap-intelligence inside the scanner loader. */
-const DASHBOARD_SCANNER_TUNING = {
+/**
+ * Dashboard Top Signals: **swing daily only** (DailyBarScanner). No intraday
+ * `POST /v1/signals/day/setups` — avoids session ORB / fast EMA copy on a swing-first home surface.
+ * Gap intelligence + market context still load here for Market Pulse / gaps.
+ */
+export const DASHBOARD_SCANNER_TUNING = {
   maxUniverseSymbols: 24,
   intradayBarLimit: 60,
   parallelDefaultWatchlist: true,
-  daySetupsLimit: 6,
-  includeSwingDailySetups: true,
+  scannerSetupLoadMode: "swing" as const,
   swingDailyBarLimit: 220,
   swingSetupsLimit: 4
 } as const;

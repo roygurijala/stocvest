@@ -10,6 +10,8 @@ export interface BrokerHealthResponse {
   health: string;
 }
 
+export type SubscriptionPlan = "free" | "swing_pro" | "swing_day_pro";
+
 export interface UserMePayload {
   user_id: string;
   trading_mode: "paper" | "live";
@@ -18,6 +20,12 @@ export interface UserMePayload {
   legal_acknowledged: boolean;
   legal_acknowledged_at?: string | null;
   legal_acknowledged_version?: string | null;
+  subscription_plan?: SubscriptionPlan;
+  beta_full_access?: boolean;
+  beta_access_until?: string | null;
+  beta_access_granted_at?: string | null;
+  has_full_access?: boolean;
+  has_ai_explanations?: boolean;
 }
 
 export interface JournalEntryPayload {

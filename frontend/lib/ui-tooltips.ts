@@ -80,7 +80,7 @@ export const MARKET_PULSE_CARD_TIP =
   "SPY, QQQ, and VIX session change plus a simple regime label—useful context for how today’s session sits next to a swing thesis. When the scanner finishes, these numbers match the same tape inputs used in gap and setup context; otherwise they come from your market overview snapshots. They inform macro-style context in the engine, not individual entry prices.";
 
 export const TOP_SIGNALS_CARD_TIP =
-  "The highest-ranked names from your scanner right now (swing-first ranking in the product). Each row is a starting point: open Evidence to fetch news, levels, and the full server-side composite for that ticker. Rankings come from the scanner API (pattern + confluence when available).";
+  "Top names from the **daily swing** scanner (DailyBarScanner) on the home dashboard only — not intraday ORB/EMA session patterns. Open Evidence for news, levels, and the six-layer read. Use the full Scanner page for day + swing lists.";
 
 export const TOP_SIGNAL_ROW_CARD_TIP =
   "A single scanner candidate. Entry zone, stop/target, and R:R are **reference geometry** from the session snapshot (same style as Evidence reference levels), not guaranteed fills. Pattern line translates day-scanner triggers into swing-readable language; catalyst line uses the earnings calendar when available. Open Evidence for the full six-layer composite.";

@@ -4,6 +4,7 @@ import { describe, expect, test } from "vitest";
 
 import { SignalEvidenceCard } from "@/components/signal-evidence-card";
 import { ThemeProvider } from "@/lib/theme-provider";
+import { UserProfileProvider } from "@/lib/user-profile-context";
 import {
   applySwingCompositeEnrichment,
   buildEvidenceFromSetup,
@@ -592,7 +593,15 @@ describe("SignalEvidenceCard geopolitical panel", () => {
       ]
     });
     const html = renderToStaticMarkup(
-      createElement(ThemeProvider, null, createElement(SignalEvidenceCard, { evidence: enriched }))
+      createElement(
+        ThemeProvider,
+        null,
+        createElement(
+          UserProfileProvider,
+          { value: { profile: null, loaded: true } },
+          createElement(SignalEvidenceCard, { evidence: enriched })
+        )
+      )
     );
     expect(html).toContain("Stock geo exposure");
     expect(html).toContain("Semiconductors");

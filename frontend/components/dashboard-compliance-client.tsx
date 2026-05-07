@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import type { UserMePayload } from "@/lib/api/contracts";
 import { LegalAcknowledgmentModal } from "@/components/legal-acknowledgment-modal";
 import { OnboardingWizardModal } from "@/components/onboarding-wizard-modal";
+import { UserProfileProvider } from "@/lib/user-profile-context";
 
 interface DashboardComplianceClientProps {
   hasSession: boolean;
@@ -48,19 +49,22 @@ export function DashboardComplianceClient({ hasSession, children }: DashboardCom
     !profile.onboarding_completed &&
     !skipOnboardingSession;
 
+  const profileCtx = { profile, loaded: hasSession ? loaded : true };
+
   return (
-    <div style={{ position: "relative", minHeight: "100%" }}>
-      <div
-        style={{
-          pointerEvents: showLegal ? "none" : "auto",
-          userSelect: showLegal ? "none" : "auto",
-          opacity: showLegal ? 0.25 : 1,
-          transition: "opacity 0.2s ease"
-        }}
-        aria-hidden={showLegal ? true : undefined}
-      >
-        {children}
-      </div>
+    <UserProfileProvider value={profileCtx}>
+      <div style={{ position: "relative", minHeight: "100%" }}>
+        <div
+          style={{
+            pointerEvents: showLegal ? "none" : "auto",
+            userSelect: showLegal ? "none" : "auto",
+            opacity: showLegal ? 0.25 : 1,
+            transition: "opacity 0.2s ease"
+          }}
+          aria-hidden={showLegal ? true : undefined}
+        >
+          {children}
+        </div>
       {showLegal ? (
         <LegalAcknowledgmentModal
           onCompleted={() => {
@@ -74,6 +78,7 @@ export function DashboardComplianceClient({ hasSession, children }: DashboardCom
           onRemindLater={() => setSkipOnboardingSession(true)}
         />
       ) : null}
-    </div>
+      </div>
+    </UserProfileProvider>
   );
 }

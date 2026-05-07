@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Brain } from "lucide-react";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { ThemeColors } from "@/lib/design-system";
@@ -26,6 +27,9 @@ import {
   trendStrengthDecisionTooltip
 } from "@/lib/metric-decision-copy";
 import { AI_VERDICT_TIP, CONFIDENCE_PERCENT_TIP, LAYER_NAME_HINTS } from "@/lib/ui-tooltips";
+import { AIExplanationDisplay } from "@/components/ai-explanation-display";
+import { UpgradePrompt } from "@/components/upgrade-prompt";
+import { useHasAIExplanations, useUserProfileLoaded } from "@/lib/api/user";
 
 interface SignalEvidenceCardProps {
   evidence: SignalEvidenceData;
@@ -263,7 +267,73 @@ function GeopoliticalExposurePanel({ geo, colors }: { geo: GeopoliticalLayerExtr
 export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidenceCardProps) {
   const { colors } = useTheme();
   const isMobileLayout = useIsMobileLayout();
+  const hasAIExplanations = useHasAIExplanations();
+  const profileLoaded = useUserProfileLoaded();
+  const [captureEx, setCaptureEx] = useState<{
+    text: string;
+    source: "ai" | "deterministic";
+    upgrade: boolean;
+    cached: boolean;
+  } | null>(null);
   const insight = evidence.insight ?? deriveEvidenceInsightFallback(evidence);
+
+  useEffect(() => {
+    let cancelled = false;
+    const sym = evidence.symbol.trim().toUpperCase();
+    const topLayers = evidence.layers.slice(0, 4).map((l) => ({
+      layer: l.key,
+      status: l.status,
+      score: l.contributionScore
+    }));
+    void (async () => {
+      try {
+        const res = await fetch("/api/stocvest/signals/ai/explanations", {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            type: "signal_capture",
+            symbol: sym,
+            score: insight.signal_score,
+            verdict: evidence.direction,
+            risk_reward: insight.risk_reward,
+            top_layers: topLayers
+          })
+        });
+        if (!res.ok) throw new Error("explanation request failed");
+        const j = (await res.json()) as {
+          text?: string;
+          source?: string;
+          upgrade_available?: boolean;
+          cached?: boolean;
+        };
+        if (cancelled) return;
+        setCaptureEx({
+          text: String(j.text || ""),
+          source: j.source === "ai" ? "ai" : "deterministic",
+          upgrade: Boolean(j.upgrade_available),
+          cached: Boolean(j.cached)
+        });
+      } catch {
+        if (!cancelled) setCaptureEx(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    evidence.symbol,
+    evidence.direction,
+    evidence.layers,
+    insight.signal_score,
+    insight.risk_reward,
+    evidence.updatedAtIso
+  ]);
+
+  const captureDisplayText = captureEx?.text && captureEx.text.length > 0 ? captureEx.text : evidence.aiVerdict;
+  const captureCachedFlag = Boolean(captureEx?.cached);
+  const showUpgradeAfterCapture =
+    Boolean(captureEx?.upgrade) || (profileLoaded && !hasAIExplanations && captureEx !== null);
   const directionTone =
     evidence.direction === "bullish" ? colors.bullish : evidence.direction === "bearish" ? colors.bearish : colors.caution;
   const { yes: confYes, no: confNo } = confluenceChips(evidence, insight);
@@ -834,9 +904,21 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
           AI Signal Analysis
           <InfoTip text={AI_VERDICT_TIP} label="About AI signal analysis" />
         </h3>
-        <p style={{ margin: 0, fontStyle: "italic" }}>&ldquo;{evidence.aiVerdict}&rdquo;</p>
+        <AIExplanationDisplay
+          text={captureDisplayText}
+          source={captureEx ? captureEx.source : "deterministic"}
+          cached={captureCachedFlag}
+          colors={colors}
+        />
         <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>Signal summary</span>
         <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>{evidence.aiFreshnessLabel}</span>
+        {showUpgradeAfterCapture ? (
+          <UpgradePrompt
+            feature="AI Signal Explanations"
+            plan="Swing Pro"
+            description="Get plain-English explanations tailored to this specific setup and market context."
+          />
+        ) : null}
       </section>
 
       <section

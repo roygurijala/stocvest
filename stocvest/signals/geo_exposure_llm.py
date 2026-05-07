@@ -8,7 +8,8 @@ from typing import Any
 
 import httpx
 
-from stocvest.signals.geopolitical_scanner import ANTHROPIC_API_URL, ANTHROPIC_VERSION, DEFAULT_MODEL
+from stocvest.signals.geopolitical_scanner import ANTHROPIC_API_URL, ANTHROPIC_VERSION
+from stocvest.utils.config import AI_MODEL_FAST
 from stocvest.utils.api_rate_limits import await_claude_api_slot
 from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
@@ -32,7 +33,7 @@ async def try_claude_geo_exposure_line(
         return None
 
     payload = {
-        "model": DEFAULT_MODEL,
+        "model": AI_MODEL_FAST,
         "max_tokens": 120,
         "temperature": 0,
         "messages": [

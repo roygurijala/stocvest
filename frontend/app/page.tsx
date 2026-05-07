@@ -5,6 +5,7 @@ import {
   fetchLandingPerformanceSummary,
   fetchLandingSignals
 } from "@/lib/api/landing-signals";
+import { getFoundingMemberCount } from "@/lib/api/founding-members";
 import { getServerSession } from "@/lib/auth/session";
 
 export default async function HomePage() {
@@ -12,9 +13,10 @@ export default async function HomePage() {
   if (session) {
     redirect("/dashboard");
   }
-  const [apiSignals, performanceSummary] = await Promise.all([
+  const [apiSignals, performanceSummary, foundingMemberCount] = await Promise.all([
     fetchLandingSignals(),
-    fetchLandingPerformanceSummary()
+    fetchLandingPerformanceSummary(),
+    getFoundingMemberCount()
   ]);
   const usedApiFallback = apiSignals.length === 0;
   const explorerSignals = usedApiFallback ? FALLBACK_SIGNALS : apiSignals;
@@ -24,6 +26,7 @@ export default async function HomePage() {
       activitySignals={apiSignals}
       usedApiFallback={usedApiFallback}
       performanceSummary={performanceSummary}
+      foundingMemberCount={foundingMemberCount}
     />
   );
 }

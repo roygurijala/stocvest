@@ -43,7 +43,9 @@ from stocvest.api.services.signal_recorder import (
     public_signal_detail_dict,
 )
 from stocvest.api.services.swing_composite_evidence import build_swing_composite_evidence_fields
+from stocvest.api.services.user_profile_store import get_founding_member_count, get_user_profile_store
 from stocvest.data.models import Bar, SignalRecord
+from stocvest.signals.ai_explanations import AIExplanationService, news_articles_from_payload
 from stocvest.signals import (
     AISynthesis,
     CompositeScoreEngine,
@@ -613,6 +615,83 @@ def signals_analysis_handler(event: LambdaEvent, context: LambdaContext) -> dict
     return ok(body)
 
 
+def ai_explanations_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    """POST /v1/signals/ai/explanations — signal capture / news synthesis copy (paid = Claude)."""
+    _ = context
+    rc = build_request_context(event)
+    if not rc.user_id:
+        return unauthorized("Authenticated user is required.")
+    try:
+        body = parse_json_body(event)
+    except (TypeError, ValueError, KeyError):
+        return bad_request("Invalid JSON body.")
+    if not isinstance(body, dict):
+        return bad_request("Body must be a JSON object.")
+
+    profile = get_user_profile_store().get_profile(rc.user_id)
+    typ = str(body.get("type") or "").strip()
+    svc = AIExplanationService()
+
+    try:
+        if typ == "signal_capture":
+            symbol = str(body.get("symbol") or "").strip().upper()
+            if not symbol:
+                return bad_request("symbol is required.")
+            score = int(body.get("score") or 0)
+            verdict = str(body.get("verdict") or "neutral")
+            rr = float(body.get("risk_reward") or 0.0)
+            raw_layers = body.get("top_layers")
+            top_layers = [x for x in raw_layers if isinstance(x, dict)] if isinstance(raw_layers, list) else []
+            result = asyncio.run(
+                svc.explain_signal_capture(
+                    symbol=symbol,
+                    score=score,
+                    verdict=verdict,
+                    top_layers=top_layers,
+                    risk_reward=rr,
+                    user_profile=profile,
+                )
+            )
+        elif typ == "news_synthesis":
+            symbol = str(body.get("symbol") or "").strip().upper()
+            if not symbol:
+                return bad_request("symbol is required.")
+            verdict = str(body.get("verdict") or "neutral")
+            raw_arts = body.get("articles")
+            arts_list = raw_arts if isinstance(raw_arts, list) else []
+            articles = news_articles_from_payload(arts_list)
+            result = asyncio.run(
+                svc.explain_news_synthesis(
+                    symbol=symbol,
+                    articles=articles,
+                    verdict=verdict,
+                    user_profile=profile,
+                )
+            )
+        else:
+            return bad_request("type must be signal_capture or news_synthesis.")
+    except (TypeError, ValueError) as exc:
+        return bad_request(f"Invalid explanation request: {exc}")
+
+    return ok(
+        {
+            "text": result.text,
+            "source": result.source,
+            "upgrade_available": result.upgrade_available,
+            "cached": result.cached,
+            "disclaimer": API_SIGNAL_DISCLAIMER,
+        }
+    )
+
+
+def founding_members_count_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    """GET /v1/signals/founding-members — public pricing counter for landing page."""
+    _ = event
+    _ = context
+    count = max(0, get_founding_member_count())
+    return ok({"founding_member_count": count, "founding_spots_total": 100, "founding_spots_remaining": max(0, 100 - count)})
+
+
 def user_signal_history_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
     """GET /v1/signals/me/history — historical signal data for the signed-in user."""
     _ = context
@@ -659,6 +738,8 @@ def signals_http_dispatch(event: LambdaEvent, context: LambdaContext) -> dict[st
         return model_portfolio_close_post_handler(event, context)
 
     routes: dict[str, Callable[[LambdaEvent, LambdaContext], dict[str, Any]]] = {
+        "GET /v1/signals/founding-members": founding_members_count_handler,
+        "POST /v1/signals/ai/explanations": ai_explanations_handler,
         "POST /v1/signals/composite/real": real_composite_handler,
         "POST /v1/signals/composite/swing": swing_real_composite_handler,
         "POST /v1/signals/swing/composite": swing_composite_handler,

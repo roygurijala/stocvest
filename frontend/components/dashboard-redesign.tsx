@@ -177,12 +177,17 @@ function findVixSnapshot(snapshots: SnapshotPayload[]): SnapshotPayload | undefi
 /** Session change % for pulse widgets (aligns with scanner `snapPct`: regular → pre → after → derived). */
 function snapshotSessionChangePct(s: SnapshotPayload | null | undefined): number | null {
   if (!s) return null;
+  const clean = (v: number | null | undefined): number | null => {
+    if (typeof v !== "number" || !Number.isFinite(v)) return null;
+    if (v <= -99.5) return null;
+    return v;
+  };
   const c = s.change_percent;
-  if (typeof c === "number" && Number.isFinite(c)) return c;
+  if (clean(c) != null) return clean(c);
   const pre = s.pre_market_change_percent;
-  if (typeof pre === "number" && Number.isFinite(pre)) return pre;
+  if (clean(pre) != null) return clean(pre);
   const ah = s.after_hours_change_percent;
-  if (typeof ah === "number" && Number.isFinite(ah)) return ah;
+  if (clean(ah) != null) return clean(ah);
   const last = s.last_trade_price;
   const prev = s.prev_close;
   if (
@@ -192,7 +197,7 @@ function snapshotSessionChangePct(s: SnapshotPayload | null | undefined): number
     Number.isFinite(prev) &&
     prev !== 0
   ) {
-    return ((last - prev) / prev) * 100;
+    return clean(((last - prev) / prev) * 100);
   }
   return null;
 }
@@ -234,7 +239,11 @@ export function DashboardRedesign({
     () => new Map(marketOverview.snapshots.map((s) => [(s.symbol || "").toUpperCase(), s])),
     [marketOverview.snapshots]
   );
-  const topSignals = scannerOverview.setups.slice(0, 3);
+  const swingTopSignals = useMemo(
+    () => scannerOverview.setups.filter((s) => s.scanner_mode === "swing_daily"),
+    [scannerOverview.setups]
+  );
+  const topSignals = swingTopSignals.slice(0, 3);
   const pdt = pdtStatus?.assessment;
   const vixSnapshot =
     findVixSnapshot(marketOverview.snapshots) ||
@@ -252,11 +261,15 @@ export function DashboardRedesign({
     return m;
   }, [earningsEvents, earningsRecent]);
   const spyFromScanner =
-    typeof scannerOverview.spyPct === "number" && Number.isFinite(scannerOverview.spyPct)
+    typeof scannerOverview.spyPct === "number" &&
+    Number.isFinite(scannerOverview.spyPct) &&
+    scannerOverview.spyPct > -99.5
       ? scannerOverview.spyPct
       : null;
   const qqqFromScanner =
-    typeof scannerOverview.qqqPct === "number" && Number.isFinite(scannerOverview.qqqPct)
+    typeof scannerOverview.qqqPct === "number" &&
+    Number.isFinite(scannerOverview.qqqPct) &&
+    scannerOverview.qqqPct > -99.5
       ? scannerOverview.qqqPct
       : null;
   const spyPct = spyFromScanner ?? snapshotSessionChangePct(snapshotsBySymbol.get("SPY"));
@@ -270,11 +283,11 @@ export function DashboardRedesign({
 
   const newsLabels = useMemo(() => {
     const m = new Map<string, string>();
-    for (const s of scannerOverview.setups.slice(0, 3)) {
-      m.set(s.symbol.trim().toUpperCase(), tickerNewsTriggerLine(s.symbol));
+    for (const s of swingTopSignals.slice(0, 3)) {
+      m.set(s.symbol.trim().toUpperCase(), tickerNewsTriggerLine(s.symbol, 120));
     }
     return m;
-  }, [scannerOverview.setups, newsUiTick]);
+  }, [swingTopSignals, newsUiTick]);
 
   const upcomingCatalystWeek = useMemo(
     () => [...earningsEvents].sort((a, b) => a.report_date.localeCompare(b.report_date)).slice(0, 10),
@@ -344,18 +357,34 @@ export function DashboardRedesign({
             className={`order-2 flex w-full min-h-[200px] flex-col overflow-hidden lg:self-start lg:col-start-1 lg:row-start-2`}
             title="Top signals"
             eyebrow="Scanner"
-            subtitle="Highest-ranked scanner names right now (swing-first list). Open Evidence for news, levels, and the six-layer read on any row."
+            subtitle="Daily swing scanner only (no intraday session patterns on the dashboard). Open Evidence for news, levels, and the six-layer read."
             cardTip={TOP_SIGNALS_CARD_TIP}
           >
             <div className="flex flex-col gap-3">
               {topSignals.length === 0 ? (
-                <div className="flex flex-col justify-center py-4" style={{ padding: spacing[2] }}>
+                <div className="flex flex-col justify-center gap-3 py-4" style={{ padding: spacing[2] }}>
                   {scannerOverview.error ? (
                     <p style={{ margin: 0, color: colors.textMuted }}>{scannerOverview.error}</p>
                   ) : (
-                    <p style={{ margin: 0, color: colors.textMuted }}>
-                      No ranked setups on the board yet. The scanner refreshes on a short cadence—check back after the next run.
-                    </p>
+                    <>
+                      <p style={{ margin: 0, color: colors.textMuted, lineHeight: 1.55 }}>
+                        No active swing setups right now.
+                      </p>
+                      <p style={{ margin: 0, color: colors.textMuted, lineHeight: 1.55, fontSize: typography.scale.sm }}>
+                        The daily scanner runs each morning and surfaces setups when conditions align across price structure,
+                        volume, and weekly momentum.
+                      </p>
+                      <p style={{ margin: 0, color: colors.textMuted, lineHeight: 1.55, fontSize: typography.scale.sm }}>
+                        Check back at market open or run the full Scanner for intraday lists and detail.
+                      </p>
+                      <Link
+                        href="/dashboard/scanner"
+                        className="inline-flex min-h-11 items-center font-semibold"
+                        style={{ color: colors.accent, fontSize: typography.scale.sm }}
+                      >
+                        Open Scanner →
+                      </Link>
+                    </>
                   )}
                 </div>
               ) : (
@@ -524,7 +553,9 @@ export function DashboardRedesign({
                             }
                             let symbolNewsArticles: NewsPayload[] = [];
                             try {
-                              symbolNewsArticles = await fetchSymbolNews(signal.symbol, 10);
+                              symbolNewsArticles = await fetchSymbolNews(signal.symbol, 10, {
+                                newsTradingMode: "swing"
+                              });
                             } catch {
                               symbolNewsArticles = [];
                             }
@@ -743,7 +774,7 @@ export function DashboardRedesign({
       <NewsPanel
         symbol={newsPanelSymbol}
         isOpen={newsPanelOpen}
-        newsTradingMode="day"
+        newsTradingMode="swing"
         onClose={() => {
           setNewsPanelOpen(false);
           setNewsUiTick((t) => t + 1);

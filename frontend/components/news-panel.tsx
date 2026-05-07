@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   fetchTickerNewsPanel,
@@ -10,6 +11,7 @@ import {
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useIsMobileLayout } from "@/lib/hooks/use-is-mobile-layout";
 import { useTheme } from "@/lib/theme-provider";
+import { useHasAIExplanations } from "@/lib/api/user";
 
 const INITIAL_VISIBLE = 10;
 
@@ -124,14 +126,25 @@ export interface NewsPanelProps {
   onLoaded?: () => void;
   /** Swing evidence uses a 5-day recent window; day stays at 8h (see `fetchTickerNewsPanel`). */
   newsTradingMode?: "day" | "swing";
+  /** Composite direction for AI news synthesis (paid). */
+  signalVerdict?: string;
 }
 
-export function NewsPanel({ symbol, isOpen, onClose, onLoaded, newsTradingMode = "day" }: NewsPanelProps) {
+export function NewsPanel({
+  symbol,
+  isOpen,
+  onClose,
+  onLoaded,
+  newsTradingMode = "day",
+  signalVerdict = "neutral"
+}: NewsPanelProps) {
   const { colors } = useTheme();
   const mobile = useIsMobileLayout();
+  const hasAIExplanations = useHasAIExplanations();
   const [data, setData] = useState<TickerNewsPanelResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
+  const [newsSyn, setNewsSyn] = useState<{ text: string; source: string; cached: boolean } | null>(null);
   const onLoadedRef = useRef(onLoaded);
   onLoadedRef.current = onLoaded;
 
@@ -161,6 +174,50 @@ export function NewsPanel({ symbol, isOpen, onClose, onLoaded, newsTradingMode =
     setVisibleCount(INITIAL_VISIBLE);
     void load();
   }, [isOpen, sym, load]);
+
+  useEffect(() => {
+    if (!isOpen || !sym || !hasAIExplanations || !data?.articles.length) {
+      setNewsSyn(null);
+      return;
+    }
+    let cancelled = false;
+    const articles = data.articles.slice(0, 5).map((a) => ({
+      title: a.title,
+      article_id: a.id,
+      published_at: a.published_at,
+      sentiment_score: a.sentiment_score,
+      sentiment: a.sentiment_label,
+      url: a.url
+    }));
+    void (async () => {
+      try {
+        const res = await fetch("/api/stocvest/signals/ai/explanations", {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            type: "news_synthesis",
+            symbol: sym,
+            verdict: signalVerdict,
+            articles
+          })
+        });
+        if (!res.ok) throw new Error("news synthesis failed");
+        const j = (await res.json()) as { text?: string; source?: string; cached?: boolean };
+        if (cancelled) return;
+        setNewsSyn({
+          text: String(j.text || ""),
+          source: String(j.source || "deterministic"),
+          cached: Boolean(j.cached)
+        });
+      } catch {
+        if (!cancelled) setNewsSyn(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, sym, hasAIExplanations, data, signalVerdict]);
 
   const visibleArticles = useMemo(() => {
     if (!data?.articles.length) return [];
@@ -203,6 +260,18 @@ export function NewsPanel({ symbol, isOpen, onClose, onLoaded, newsTradingMode =
               {panelSummary(data)}
             </p>
           ) : null}
+          {!hasAIExplanations ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]" style={{ color: colors.textMuted }}>
+              <span>✦ AI news synthesis available on Swing Pro</span>
+              <Link
+                href="/dashboard/settings"
+                className="font-semibold underline-offset-2 hover:underline"
+                style={{ color: colors.caution }}
+              >
+                Upgrade →
+              </Link>
+            </div>
+          ) : null}
         </div>
         <button
           type="button"
@@ -216,6 +285,17 @@ export function NewsPanel({ symbol, isOpen, onClose, onLoaded, newsTradingMode =
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-2">
+        {hasAIExplanations && newsSyn?.text ? (
+          <div
+            className="mb-3 rounded-lg border px-3 py-2 text-xs leading-relaxed"
+            style={{ borderColor: colors.border, color: colors.text, background: "rgba(59,130,246,0.06)" }}
+          >
+            <div className="mb-1 font-semibold" style={{ color: colors.textMuted }}>
+              AI news read{newsSyn.cached ? " · cached today" : ""}
+            </div>
+            {newsSyn.text}
+          </div>
+        ) : null}
         {loading && !data ? (
           <div className="flex flex-col gap-3 py-2">
             {[0, 1, 2, 3].map((i) => (

@@ -87,7 +87,7 @@ API keys are **not** set on the Lambda environment. Terraform creates **`stocves
 | Area | Notes |
 |------|--------|
 | Core signals, scanner, brokers, HTTP API | Shipped (see CONTEXT §1) |
-| Next.js frontend (dashboard, landing, legal, BFF) | Shipped — compact **PDT** pill, **Market Intelligence** (ranked news, tabs); see CONTEXT §1–§2 |
+| Next.js frontend (dashboard, **marketing landing** + founding scarcity counter, legal, BFF) | Shipped — compact **PDT** pill, **Market Pulse** / ticker **NewsPanel**; see CONTEXT §1–§2 |
 | Terraform / AWS | Modules in `infra/`; **apply** and production wiring may still be pending (CONTEXT §3) |
 | Phase 7 (E2E, audits, extended paper validation) | Planned — BACKLOG **P1** |
 
@@ -98,5 +98,6 @@ Historical phase labels in older READMEs are obsolete; use **git `main`** + **CO
 - Never hardcode credentials — always AWS Secrets Manager
 - Never log prices, accounts, or credentials; use structured logging and redaction helpers where user-supplied text or tokens could reach logs (`stocvest/utils/log_privacy.py`)
 - Treat API **`user_id`** as server-derived from the JWT on protected routes — do not trust client body fields for identity
+- **Ops / replay:** HTTP handlers wrapped with **audit capture** when **`DYNAMODB_AUDIT_EVENTS_TABLE`** is set (Terraform); optional browser header **`x-stocvest-session-id`** for session-aligned admin queries (**`docs/API_CONTRACTS.md`**)
 - PDT rule is non-negotiable — always enforced, never bypassed
 - Paper trading required (minimum 2 weeks) before live trading

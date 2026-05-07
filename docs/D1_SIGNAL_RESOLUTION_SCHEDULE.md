@@ -1,6 +1,6 @@
 # D1 — Signal resolution Lambda (EventBridge)
 
-**Last updated:** 2026-05-05 (reviewed; schedule and Terraform source unchanged)
+**Last updated:** 2026-05-07 (reviewed; D1 schedule and Terraform in this doc unchanged — see **CONTEXT** for newer **`AuditEvents`** / founding-gateway notes).
 
 **Ops note (2026-05-03):** **`terraform apply -var-file=terraform.tfvars -input=false -auto-approve`** completed successfully (**Apply complete! Resources: 19 added, 14 changed, 2 destroyed.**), including EventBridge rule/target/permission alignment, new API Gateway HTTP routes, Lambda environment updates, and SES IAM on the API execution role.
 

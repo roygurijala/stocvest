@@ -130,6 +130,125 @@ describe("scanner API overview", () => {
   }, 25000);
 });
 
+describe("loadScannerDataWithoutBrief swing-only (dashboard)", () => {
+  beforeEach(() => {
+    apiFetchMock.mockReset();
+  });
+
+  test("test_dashboard_does_not_fetch_intraday (swing tuning skips day/setups)", async () => {
+    const { loadScannerDataWithoutBrief } = await import("@/lib/api/scanner");
+    const paths: string[] = [];
+    apiFetchMock.mockImplementation(async (path: string, init?: RequestInit) => {
+      paths.push(path);
+      if (path === "/v1/signals/day/setups") {
+        throw new Error("day/setups must not be requested in swing-only mode");
+      }
+      if (path === "/v1/scanner/gap-intelligence") {
+        return {
+          items: [
+            {
+              symbol: "GAP1",
+              company_name: "G1",
+              gap_pct: 4,
+              gap_dollars: 4,
+              prev_close: 100,
+              current_price: 104,
+              volume: 1_000_000,
+              volume_vs_avg: 2,
+              gap_quality_score: 80,
+              catalyst: null,
+              has_catalyst: false,
+              no_catalyst_warning: "x"
+            }
+          ]
+        };
+      }
+      if (path.startsWith("/v1/market/snapshots?")) {
+        const q = path.includes("?") ? path.split("?")[1] : "";
+        const syms = (new URLSearchParams(q).get("symbols") ?? "").split(",").filter(Boolean);
+        return {
+          snapshots: syms.map((sym) => ({
+            symbol: sym,
+            prev_close: 100,
+            pre_market_price: 104,
+            day_volume: 1_000_000
+          }))
+        };
+      }
+      if (path.startsWith("/v1/market/snapshot?symbol=")) {
+        const q = path.includes("?") ? path.split("?")[1] : "";
+        const sym = new URLSearchParams(q).get("symbol") ?? "UNK";
+        return {
+          symbol: sym,
+          prev_close: 100,
+          pre_market_price: 104,
+          day_volume: 1_000_000
+        };
+      }
+      if (path === "/v1/market/bars-batch") {
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          requests?: Array<{ symbol?: string; timeframe?: string }>;
+        };
+        const syms = (body.requests ?? []).map((r) => String(r.symbol ?? "").toUpperCase());
+        const tf = String(body.requests?.[0]?.timeframe ?? "1min");
+        const bar = {
+          timestamp: "2026-04-29T10:00:00+00:00",
+          timeframe: tf,
+          open: 100,
+          high: 101,
+          low: 99,
+          close: 100.5,
+          volume: 120000
+        };
+        const bars_by_symbol: Record<string, typeof bar[]> = {};
+        for (const s of syms) bars_by_symbol[s] = [bar];
+        return { bars_by_symbol };
+      }
+      if (path.includes("/v1/market/bars?")) {
+        return [
+          {
+            timestamp: "2026-04-29T10:00:00+00:00",
+            timeframe: "1min",
+            open: 100,
+            high: 101,
+            low: 99,
+            close: 100.5,
+            volume: 120000
+          }
+        ];
+      }
+      if (path === "/v1/signals/swing/setups") {
+        return [
+          {
+            symbol: "SW1",
+            direction: "bullish",
+            score: 0.82,
+            triggers: ["ema50_cross_above_200"],
+            timestamp_iso: "2026-05-01T12:00:00Z",
+            scanner_mode: "swing_daily",
+            pattern_maturity_days: 4
+          }
+        ];
+      }
+      throw new Error(`Unhandled path ${path}`);
+    });
+
+    const core = await loadScannerDataWithoutBrief(null, [], {
+      maxUniverseSymbols: 24,
+      intradayBarLimit: 60,
+      parallelDefaultWatchlist: false,
+      scannerSetupLoadMode: "swing",
+      swingDailyBarLimit: 220,
+      swingSetupsLimit: 4
+    });
+    expect(core.error).toBeUndefined();
+    expect(paths.some((p) => p.includes("/v1/signals/day/setups"))).toBe(false);
+    expect(paths.some((p) => p.includes("/v1/signals/swing/setups"))).toBe(true);
+    expect(core.setups).toHaveLength(1);
+    expect(core.setups[0]?.scanner_mode).toBe("swing_daily");
+  }, 25000);
+});
+
 describe("topSignalStrengthPercent", () => {
   test("blends confluence with pattern score when both exist", async () => {
     const { topSignalStrengthPercent } = await import("@/lib/api/scanner");

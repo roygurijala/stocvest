@@ -1,6 +1,6 @@
 # STOCVEST Terraform
 
-**Last updated:** 2026-05-05 (align with [`docs/CONTEXT.md`](../docs/CONTEXT.md) §3 for apply/pending items; no infra change required for dashboard news/PDT UI — API remains `market_data` Lambda.)
+**Last updated:** 2026-05-07 (includes **`AuditEvents`** DynamoDB, **`DYNAMODB_AUDIT_EVENTS_TABLE`** on all API Lambdas, API Gateway routes for **`GET /v1/signals/founding-members`** and admin **beta** / **audit** paths, CORS **`x-stocvest-session-id`** — align with [`docs/CONTEXT.md`](../docs/CONTEXT.md) §3.)
 
 This directory contains AWS infrastructure as code:
 
@@ -8,7 +8,7 @@ This directory contains AWS infrastructure as code:
 - Public/private subnets, public and private route tables (private egress via NAT)
 - NAT gateway (Elastic IP) in the first public subnet
 - Security groups
-- DynamoDB tables: `Users`, `BrokerConnections`, `Watchlists`, `Alerts` (TTL on `expiresAt`), `Orders`, `DayTradingSetups`, **`SignalHistory`**, **`TradeJournal`**, **`PDTState`** — on-demand billing; tags `project=stocvest`, `env=development`
+- DynamoDB tables: `Users`, `BrokerConnections`, `Watchlists`, `Alerts` (TTL on `expiresAt`), `Orders`, `DayTradingSetups`, **`SignalHistory`**, **`TradeJournal`**, **`PDTState`**, **`AuditEvents`** (HTTP audit replay keys `pk` / `sk`) — on-demand billing; tags `project=stocvest`, `env=development`
 - ElastiCache Redis 7.x single-node (`cache.t3.micro`) in private subnets, data-tier security group, subnet group + parameter group; primary endpoint in `terraform output` for `REDIS_URL`
 - ECS cluster `stocvest-development` (Fargate-only) and task definition for **ibeam** (`docker.io/voyz/ibeam:latest`) exposing **4002** (paper IB Gateway API). Run **ECS service** or **RunTask** with `awsvpc` using **`private_subnet_ids`** + **`app_security_group_id`** and `assignPublicIp=DISABLED`. Logs: `/ecs/stocvest-development/tws`.
 - **Lambda (6e):** one function per handler module (`health`, `market_data`, `signals`, **`signal_resolution`**, `brokers`, `portfolio`, `scanner`, `journal`, `pdt`, `authorizer`, `websocket`), Python **3.11**, VPC (**private subnets** + **app** SG), placeholder deployment zip until CI uploads real bundles; env includes **`REDIS_URL`**, **DynamoDB table names**, **`ECS_CLUSTER_ARN`**, **`STOCVEST_LAMBDA_MODULE`** (per-function, matches handler group); **CloudWatch** `/aws/lambda/stocvest-development-api-*` (14-day retention). Runtime entrypoint remains **`handler.lambda_handler`** (root shim + `stocvest.api.lambda_dispatch`).

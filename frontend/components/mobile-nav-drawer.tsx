@@ -9,6 +9,7 @@ import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/d
 import { useTheme } from "@/lib/theme-provider";
 import { DASHBOARD_NAV_ITEMS } from "@/components/sidebar";
 import { isDashboardNavItemActive } from "@/lib/dashboard-nav-active";
+import { isDashboardNavItemEnabled } from "@/lib/nav-features";
 import { usePathname } from "next/navigation";
 
 interface MobileNavDrawerProps {
@@ -86,7 +87,7 @@ export function MobileNavDrawer({ open, onClose, userLabel }: MobileNavDrawerPro
               className="min-h-0 flex-1 overflow-y-auto"
               style={{ padding: spacing[4], display: "grid", gap: spacing[2], alignContent: "start" }}
             >
-              {DASHBOARD_NAV_ITEMS.map((item) => {
+              {DASHBOARD_NAV_ITEMS.filter(isDashboardNavItemEnabled).map((item) => {
                 const Icon = item.icon;
                 const isActive = isDashboardNavItemActive(pathname, item.href);
                 return (

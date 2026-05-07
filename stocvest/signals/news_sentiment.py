@@ -17,14 +17,14 @@ from typing import Any
 import httpx
 
 from stocvest.data.models import NewsArticle, Newssentiment
-from stocvest.utils.config import get_settings
+from stocvest.utils.config import AI_MODEL_FAST, get_settings
 from stocvest.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
-DEFAULT_MODEL = "claude-sonnet-4-6"  # Claude Sonnet 4.6 (Anthropic Messages API id)
+DEFAULT_MODEL = AI_MODEL_FAST
 REQUEST_TIMEOUT_SECONDS = 20.0
 DEFAULT_MAX_RETRIES = 2
 DEFAULT_MAX_CONCURRENCY = 5

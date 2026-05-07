@@ -52,5 +52,8 @@ def apply_cors_to_http_proxy_response(response: Any, event: LambdaEvent) -> Any:
     headers = dict(response.get("headers") or {})
     headers["Access-Control-Allow-Origin"] = origin
     headers.setdefault("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS")
-    headers.setdefault("Access-Control-Allow-Headers", "authorization,content-type,x-requested-with")
+    headers.setdefault(
+        "Access-Control-Allow-Headers",
+        "authorization,content-type,x-requested-with,x-stocvest-internal-analysis,x-stocvest-session-id",
+    )
     return {**response, "headers": headers}

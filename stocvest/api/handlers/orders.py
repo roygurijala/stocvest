@@ -11,6 +11,8 @@ from typing import Any
 
 from stocvest.api.broker_gateway_provider import DEFAULT_BROKER_GATEWAY_PROVIDER, BrokerGatewayProvider
 from stocvest.api.response import bad_request, json_response, ok, unauthorized
+from stocvest.api.services.audit_store import get_audit_store
+from stocvest.api.services.signal_analysis import analysis_authorized
 from stocvest.api.services.journal_order_hooks import apply_journal_after_order_submit
 from stocvest.api.services.order_safety import OrderAccountState, OrderSafetyGate
 from stocvest.api.services.pdt_store import get_pdt_state_store
@@ -35,9 +37,11 @@ from stocvest.brokers import (
 )
 from stocvest.data import PolygonClient
 from stocvest.data.models import TradingMode, UserProfile
+from stocvest.data.models import AuditEvent
 from stocvest.utils.config import get_settings
 from stocvest.utils.log_privacy import user_ref_for_logs
 from stocvest.utils.logging import get_logger
+from uuid import uuid4
 
 _LOG = get_logger(__name__)
 
@@ -283,6 +287,12 @@ def _serialize_user_profile(profile: UserProfile) -> dict[str, Any]:
         "legal_acknowledged": profile.legal_acknowledged,
         "legal_acknowledged_at": profile.legal_acknowledged_at,
         "legal_acknowledged_version": profile.legal_acknowledged_version,
+        "subscription_plan": profile.subscription_plan,
+        "beta_full_access": profile.beta_full_access,
+        "beta_access_until": profile.beta_access_until,
+        "beta_access_granted_at": profile.beta_access_granted_at,
+        "has_full_access": profile.has_full_access,
+        "has_ai_explanations": profile.has_ai_explanations,
     }
 
 
@@ -304,6 +314,11 @@ def users_me_patch_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
         body = parse_json_body(event)
     except (TypeError, ValueError, KeyError):
         return bad_request("Invalid JSON body.")
+    # Billing-only field; ignore if client sends it.
+    if isinstance(body, dict):
+        blocked = {"subscription_plan", "beta_full_access", "beta_access_until", "beta_access_granted_at"}
+        if any(k in body for k in blocked):
+            body = {k: v for k, v in body.items() if k not in blocked}
     store = get_user_profile_store()
     cur = store.get_profile(request_context.user_id)
     updates: dict[str, Any] = {}
@@ -346,11 +361,110 @@ def users_me_patch_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
             updates["legal_acknowledged_version"] = None
 
     if not updates:
-        return bad_request("No supported fields to update.")
+        return ok(_serialize_user_profile(cur))
 
     merged = cur.model_copy(update=updates)
     store.put_profile(merged)
     return ok(_serialize_user_profile(merged))
+
+
+def admin_beta_access_patch_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    """PATCH /v1/admin/users/{user_id}/beta-access — grant/revoke full beta access per user."""
+    _ = context
+    request_context = build_request_context(event)
+    headers = event.get("headers") or {}
+    if not analysis_authorized(user_id=request_context.user_id, claims=request_context.claims, headers=headers):
+        return json_response(403, {"error": "forbidden", "message": "Admin authorization required."})
+    target_user_id = _path_params(event).get("user_id", "").strip()
+    if not target_user_id:
+        return bad_request("user_id path parameter is required.")
+    try:
+        body = parse_json_body(event)
+    except (TypeError, ValueError, KeyError):
+        return bad_request("Invalid JSON body.")
+    if "enabled" not in body:
+        return bad_request("enabled is required.")
+    enabled = bool(body.get("enabled"))
+    raw_until = body.get("until")
+    until = str(raw_until).strip() if raw_until is not None else None
+    if until == "":
+        until = None
+    store = get_user_profile_store()
+    cur = store.get_profile(target_user_id)
+    merged = cur.model_copy(
+        update={
+            "beta_full_access": enabled,
+            "beta_access_until": until if enabled else None,
+            "beta_access_granted_at": datetime.now(timezone.utc).isoformat() if enabled else None,
+        }
+    )
+    store.put_profile(merged)
+    try:
+        get_audit_store().put_event(
+            AuditEvent(
+                event_id=str(uuid4()),
+                occurred_at=datetime.now(timezone.utc),
+                module="brokers",
+                route="PATCH /v1/admin/users/{user_id}/beta-access",
+                method="PATCH",
+                path=str(event.get("path") or ""),
+                request_id=request_context.request_id or None,
+                session_id=(event.get("headers") or {}).get("x-stocvest-session-id") if isinstance(event.get("headers"), dict) else None,
+                user_id=target_user_id,
+                status_code=200,
+                outcome="success",
+                entitlement_snapshot={
+                    "subscription_plan": merged.subscription_plan,
+                    "beta_full_access": merged.beta_full_access,
+                    "beta_access_until": merged.beta_access_until,
+                    "has_full_access": merged.has_full_access,
+                    "has_ai_explanations": merged.has_ai_explanations,
+                },
+                pricing_snapshot={"admin_action": "beta_access_toggle"},
+                request_summary={"enabled": enabled, "until": until},
+                response_summary={"message": "beta access updated"},
+                market_snapshot={},
+            )
+        )
+    except Exception:
+        pass
+    return ok(_serialize_user_profile(merged))
+
+
+def admin_audit_user_events_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    _ = context
+    rc = build_request_context(event)
+    headers = event.get("headers") or {}
+    if not analysis_authorized(user_id=rc.user_id, claims=rc.claims, headers=headers):
+        return json_response(403, {"error": "forbidden", "message": "Admin authorization required."})
+    user_id = _path_params(event).get("user_id", "").strip()
+    if not user_id:
+        return bad_request("user_id path parameter is required.")
+    qs = _query_params(event)
+    try:
+        limit = max(1, min(500, int(qs.get("limit") or "200")))
+    except ValueError:
+        limit = 200
+    rows = get_audit_store().get_user_events(user_id, limit=limit)
+    return ok([r.model_dump(mode="json") for r in rows])
+
+
+def admin_audit_session_events_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    _ = context
+    rc = build_request_context(event)
+    headers = event.get("headers") or {}
+    if not analysis_authorized(user_id=rc.user_id, claims=rc.claims, headers=headers):
+        return json_response(403, {"error": "forbidden", "message": "Admin authorization required."})
+    session_id = _path_params(event).get("session_id", "").strip()
+    if not session_id:
+        return bad_request("session_id path parameter is required.")
+    qs = _query_params(event)
+    try:
+        limit = max(1, min(500, int(qs.get("limit") or "200")))
+    except ValueError:
+        limit = 200
+    rows = get_audit_store().get_session_events(session_id, limit=limit)
+    return ok([r.model_dump(mode="json") for r in rows])
 
 
 def profile_trading_mode_get_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:

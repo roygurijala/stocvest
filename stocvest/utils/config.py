@@ -25,6 +25,12 @@ from pydantic_settings import BaseSettings  # pydantic v2
 
 load_dotenv()  # no-op in Lambda; harmless locally
 
+# Anthropic Messages API model ids (central switch for cost/latency).
+# Fast: classification, extraction, sentiment, short summaries.
+AI_MODEL_FAST = "claude-haiku-4-5-20251001"
+# Standard: multi-source synthesis, geopolitical scan, longer reasoning.
+AI_MODEL_STANDARD = "claude-sonnet-4-6"
+
 
 def _apply_lambda_runtime_secret_to_environ() -> None:
     """Merge stocvest/lambda-runtime JSON into os.environ (Lambda only)."""
@@ -114,6 +120,7 @@ class Settings(BaseSettings):
     dynamodb_day_trading_setups: str = Field("", alias="DYNAMODB_DAY_TRADING_SETUPS")
     dynamodb_alerts: str = Field("", alias="DYNAMODB_ALERTS")
     dynamodb_signal_history_table: str = Field("", alias="DYNAMODB_SIGNAL_HISTORY_TABLE")
+    dynamodb_audit_events_table: str = Field("", alias="DYNAMODB_AUDIT_EVENTS_TABLE")
     dynamodb_parameter_history_table: str = Field("", alias="DYNAMODB_PARAMETER_HISTORY_TABLE")
     dynamodb_sector_cache_table: str = Field("", alias="DYNAMODB_SECTOR_CACHE_TABLE")
     dynamodb_model_portfolio_table: str = Field("", alias="DYNAMODB_MODEL_PORTFOLIO_TABLE")

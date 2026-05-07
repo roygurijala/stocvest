@@ -12,6 +12,7 @@ from stocvest.utils.config import get_settings
 class DynamoTableLike(Protocol):
     def get_item(self, *, Key: dict[str, Any]) -> dict[str, Any]: ...
     def put_item(self, *, Item: dict[str, Any]) -> dict[str, Any]: ...
+    def scan(self, **kwargs: Any) -> dict[str, Any]: ...
 
 
 class UserProfileStore(Protocol):
@@ -30,6 +31,8 @@ def _item_to_profile(user_id: str, item: dict[str, Any]) -> UserProfile:
             mode = TradingMode.PAPER
     raw_email = item.get("email")
     email = str(raw_email).strip() if raw_email is not None and str(raw_email).strip() else None
+    raw_plan = item.get("subscriptionPlan")
+    subscription_plan = str(raw_plan).strip() if raw_plan is not None else "free"
     return UserProfile(
         user_id=user_id,
         email=email,
@@ -39,6 +42,10 @@ def _item_to_profile(user_id: str, item: dict[str, Any]) -> UserProfile:
         legal_acknowledged=bool(item.get("legalAcknowledged")),
         legal_acknowledged_at=_s(item.get("legalAcknowledgedAt")),
         legal_acknowledged_version=_s(item.get("legalAcknowledgedVersion")),
+        subscription_plan=subscription_plan,
+        beta_full_access=bool(item.get("betaFullAccess")),
+        beta_access_until=_s(item.get("betaAccessUntil")),
+        beta_access_granted_at=_s(item.get("betaAccessGrantedAt")),
     )
 
 
@@ -55,6 +62,8 @@ def _profile_to_item(profile: UserProfile) -> dict[str, Any]:
         "tradingMode": profile.trading_mode.value,
         "onboardingCompleted": profile.onboarding_completed,
         "legalAcknowledged": profile.legal_acknowledged,
+        "subscriptionPlan": profile.subscription_plan,
+        "betaFullAccess": bool(profile.beta_full_access),
     }
     if profile.email:
         item["email"] = profile.email
@@ -64,6 +73,10 @@ def _profile_to_item(profile: UserProfile) -> dict[str, Any]:
         item["legalAcknowledgedAt"] = profile.legal_acknowledged_at
     if profile.legal_acknowledged_version:
         item["legalAcknowledgedVersion"] = profile.legal_acknowledged_version
+    if profile.beta_access_until:
+        item["betaAccessUntil"] = profile.beta_access_until
+    if profile.beta_access_granted_at:
+        item["betaAccessGrantedAt"] = profile.beta_access_granted_at
     return item
 
 
@@ -141,3 +154,50 @@ def reset_user_profile_store_for_tests() -> None:
     """Drop cached store after env/settings change (tests)."""
     global _USER_PROFILE_STORE
     _USER_PROFILE_STORE = None
+
+
+def _is_founding_plan(plan: str) -> bool:
+    p = (plan or "").strip().lower()
+    # Shared founding counter is only for paid subscriptions.
+    # Free users must never affect this count.
+    return p in {
+        "swing_pro",
+        "swing_day_pro",
+        # keep legacy aliases if older rows exist
+        "founding_swing_pro",
+        "founding_swing_day_pro",
+    }
+
+
+def get_founding_member_count() -> int:
+    """
+    Best-effort founding-member usage count for landing pricing.
+
+    Counts users in plans that represent founding/pro paid tiers. Returns 0 on
+    store errors so callers can gracefully fallback in UI copy.
+    """
+    store = get_user_profile_store()
+    try:
+        if isinstance(store, InMemoryUserProfileStore):
+            return sum(1 for p in store._profiles.values() if _is_founding_plan(p.subscription_plan))
+        if isinstance(store, DynamoDBUserProfileStore):
+            count = 0
+            last_key: dict[str, Any] | None = None
+            while True:
+                kwargs: dict[str, Any] = {"ProjectionExpression": "subscriptionPlan"}
+                if last_key:
+                    kwargs["ExclusiveStartKey"] = last_key
+                resp = store.table.scan(**kwargs)
+                items = resp.get("Items") or []
+                for item in items:
+                    if not isinstance(item, dict):
+                        continue
+                    if _is_founding_plan(str(item.get("subscriptionPlan") or "")):
+                        count += 1
+                last_key = resp.get("LastEvaluatedKey")
+                if not last_key:
+                    break
+            return count
+    except Exception:
+        return 0
+    return 0

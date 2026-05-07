@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -22,6 +22,21 @@ function num(v: unknown, fallback = 0): number {
   return fallback;
 }
 
+const PORTFOLIO_MAIN_TAB_KEY = "stocvest_portfolio_tab";
+
+type PortfolioMainTab = "day" | "swing";
+
+function readStoredPortfolioTab(): PortfolioMainTab {
+  if (typeof window === "undefined") return "swing";
+  try {
+    const raw = localStorage.getItem(PORTFOLIO_MAIN_TAB_KEY);
+    if (raw === "day" || raw === "swing") return raw;
+  } catch {
+    /* ignore */
+  }
+  return "swing";
+}
+
 function fmtMoney(n: number, sign = false): string {
   const abs = Math.abs(n);
   const core = abs.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -31,6 +46,7 @@ function fmtMoney(n: number, sign = false): string {
 
 export default function ModelPortfolioPage() {
   const { colors } = useTheme();
+  const [mainTab, setMainTab] = useState<PortfolioMainTab>("swing");
   const [summary, setSummary] = useState<SummaryPayload | null>(null);
   const [open, setOpen] = useState<PositionRow[]>([]);
   const [closed, setClosed] = useState<PositionRow[]>([]);
@@ -56,9 +72,22 @@ export default function ModelPortfolioPage() {
     }
   }, []);
 
+  useLayoutEffect(() => {
+    setMainTab(readStoredPortfolioTab());
+  }, []);
+
   useEffect(() => {
     void load();
   }, [load]);
+
+  const persistMainTab = useCallback((tab: PortfolioMainTab) => {
+    setMainTab(tab);
+    try {
+      localStorage.setItem(PORTFOLIO_MAIN_TAB_KEY, tab);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const su = summary?.summary || {};
   const closedCount = num(su.closed_positions);
@@ -92,7 +121,7 @@ export default function ModelPortfolioPage() {
           </Link>
         </div>
 
-        <header style={{ marginBottom: spacing[8] }}>
+        <header style={{ marginBottom: spacing[6] }}>
           <h1 style={{ fontSize: typography.scale["3xl"], fontWeight: 700, marginBottom: spacing[3] }}>
             $100K signal tracking portfolio
           </h1>
@@ -106,6 +135,85 @@ export default function ModelPortfolioPage() {
           ) : null}
         </header>
 
+        <div
+          role="tablist"
+          aria-label="Signal portfolio track"
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: spacing[2],
+            marginBottom: spacing[6]
+          }}
+        >
+          {(["day", "swing"] as const).map((tab) => {
+            const active = mainTab === tab;
+            const label = tab === "day" ? "Day Signals" : "Swing Signals";
+            return (
+              <button
+                key={tab}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => persistMainTab(tab)}
+                style={{
+                  borderRadius: borderRadius.md,
+                  border: `1px solid ${active ? colors.accent : colors.border}`,
+                  padding: `${spacing[2]} ${spacing[4]}`,
+                  fontSize: typography.scale.sm,
+                  fontWeight: active ? 700 : 500,
+                  background: active ? `color-mix(in srgb, ${colors.accent} 14%, transparent)` : colors.surface,
+                  color: active ? colors.accent : colors.textMuted,
+                  cursor: "pointer"
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+
+        {mainTab === "swing" ? (
+          <section
+            style={{
+              background: colors.surface,
+              border: `1px solid ${colors.border}`,
+              borderRadius: borderRadius.lg,
+              padding: spacing[6],
+              marginBottom: spacing[8],
+              maxWidth: 720
+            }}
+          >
+            <h2 style={{ fontSize: typography.scale.xl, fontWeight: 600, marginTop: 0, marginBottom: spacing[3] }}>
+              Swing Signal Track Record
+            </h2>
+            <div style={{ display: "grid", gap: spacing[3], color: colors.textMuted, lineHeight: 1.55, fontSize: typography.scale.sm }}>
+              <p style={{ margin: 0 }}>
+                Swing signals are tracked separately from day signals — positions hold for <strong style={{ color: colors.text }}>2–10 days</strong>{" "}
+                and are evaluated at <strong style={{ color: colors.text }}>daily close</strong>, not intraday.
+              </p>
+              <p style={{ margin: 0 }}>
+                The swing track record will launch once the first validated swing signals complete their hold periods.
+              </p>
+              <p style={{ margin: 0 }}>
+                In the meantime, use the Scanner and Signals pages to explore active swing setups.
+              </p>
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: spacing[3], marginTop: spacing[5] }}>
+              <Link
+                href="/dashboard/scanner"
+                style={{ color: colors.accent, fontWeight: 600, fontSize: typography.scale.sm }}
+              >
+                Go to Scanner →
+              </Link>
+              <Link href="/dashboard/signals" style={{ color: colors.accent, fontWeight: 600, fontSize: typography.scale.sm }}>
+                Go to Signals →
+              </Link>
+            </div>
+          </section>
+        ) : null}
+
+        {mainTab === "day" ? (
+          <>
         <section
           style={{
             display: "grid",
@@ -306,6 +414,8 @@ export default function ModelPortfolioPage() {
               "Signal data for informational purposes only. Not investment advice. This portfolio uses notional $100K capital for transparency."}
           </p>
         </footer>
+          </>
+        ) : null}
       </div>
     </div>
   );

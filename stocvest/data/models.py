@@ -227,6 +227,47 @@ class UserProfile(BaseModel):
     legal_acknowledged: bool = False
     legal_acknowledged_at: str | None = None
     legal_acknowledged_version: str | None = None
+    """Billing sets this (e.g. Stripe webhook). Not user-editable via PATCH /v1/users/me."""
+    subscription_plan: str = "free"
+    # Admin-only override for invited beta users to unlock full app access.
+    beta_full_access: bool = False
+    beta_access_until: str | None = None
+    beta_access_granted_at: str | None = None
+
+    @field_validator("subscription_plan", mode="before")
+    @classmethod
+    def _normalize_subscription_plan(cls, v: object) -> str:
+        allowed = frozenset({"free", "swing_pro", "swing_day_pro"})
+        s = str(v or "free").strip()
+        return s if s in allowed else "free"
+
+    @property
+    def is_paid(self) -> bool:
+        return self.subscription_plan != "free"
+
+    @property
+    def beta_access_active(self) -> bool:
+        if not self.beta_full_access:
+            return False
+        raw = (self.beta_access_until or "").strip()
+        if not raw:
+            return True
+        try:
+            cutoff = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError:
+            return False
+        if cutoff.tzinfo is None:
+            cutoff = cutoff.replace(tzinfo=timezone.utc)
+        return datetime.now(timezone.utc) < cutoff
+
+    @property
+    def has_full_access(self) -> bool:
+        return self.is_paid or self.beta_access_active
+
+    @property
+    def has_ai_explanations(self) -> bool:
+        """Paid feature with beta override: Claude-generated signal explanations."""
+        return self.has_full_access
 
 
 class AlertType(str, Enum):
@@ -286,6 +327,27 @@ class OrderAttemptLog(BaseModel):
     quantity: float
     order_type: str
     execution_mode: str  # "paper" | "live"
+
+
+class AuditEvent(BaseModel):
+    """Immutable audit row for replaying user/API actions."""
+
+    event_id: str
+    occurred_at: datetime
+    module: str
+    route: str
+    method: str
+    path: str
+    request_id: str | None = None
+    session_id: str | None = None
+    user_id: str | None = None
+    status_code: int = 0
+    outcome: str = "unknown"
+    entitlement_snapshot: dict[str, object] = Field(default_factory=dict)
+    pricing_snapshot: dict[str, object] = Field(default_factory=dict)
+    request_summary: dict[str, object] = Field(default_factory=dict)
+    response_summary: dict[str, object] = Field(default_factory=dict)
+    market_snapshot: dict[str, object] = Field(default_factory=dict)
 
 
 class SignalRecord(BaseModel):

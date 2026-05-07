@@ -23,27 +23,36 @@ import { logoutAction } from "@/app/login/actions";
 import { openCrispChat } from "@/components/crisp-chat";
 import { isDashboardNavItemActive } from "@/lib/dashboard-nav-active";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
+import { isDashboardNavItemEnabled, type NavFeatureKey } from "@/lib/nav-features";
+
+export { NAV_FEATURES } from "@/lib/nav-features";
 import { useTheme } from "@/lib/theme-provider";
+import type { LucideIcon } from "lucide-react";
 
 interface SidebarProps {
   userLabel: string;
 }
 
-export const DASHBOARD_NAV_ITEMS = [
+export const DASHBOARD_NAV_ITEMS: ReadonlyArray<{
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  feature?: NavFeatureKey;
+}> = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/scanner", label: "Scanner", icon: Radio },
   { href: "/dashboard/watchlists", label: "Watchlists", icon: Bookmark },
   { href: "/dashboard/signals", label: "Signals", icon: Zap },
   { href: "/portfolio", label: "Signal portfolio", icon: Activity },
   { href: "/dashboard/earnings", label: "Earnings", icon: CalendarDays },
-  { href: "/dashboard/portfolio", label: "Portfolio", icon: Briefcase },
-  { href: "/dashboard/options", label: "Options", icon: Layers },
-  { href: "/dashboard/crypto", label: "Crypto", icon: TrendingUp },
-  { href: "/dashboard/futures", label: "Futures", icon: BarChart2 },
+  { href: "/dashboard/portfolio", label: "Portfolio", icon: Briefcase, feature: "brokerPortfolio" },
+  { href: "/dashboard/options", label: "Options", icon: Layers, feature: "options" },
+  { href: "/dashboard/crypto", label: "Crypto", icon: TrendingUp, feature: "crypto" },
+  { href: "/dashboard/futures", label: "Futures", icon: BarChart2, feature: "futures" },
   { href: "/dashboard/journal", label: "Journal", icon: BookOpen },
   { href: "/dashboard/performance", label: "Performance", icon: Percent },
   { href: "/dashboard/settings", label: "Settings", icon: Settings }
-] as const;
+];
 
 export function Sidebar({ userLabel }: SidebarProps) {
   const pathname = usePathname();
@@ -82,7 +91,7 @@ export function Sidebar({ userLabel }: SidebarProps) {
           minHeight: 0
         }}
       >
-        {DASHBOARD_NAV_ITEMS.map((item) => {
+        {DASHBOARD_NAV_ITEMS.filter(isDashboardNavItemEnabled).map((item) => {
           const Icon = item.icon;
           const isActive = isDashboardNavItemActive(pathname, item.href);
           return (
