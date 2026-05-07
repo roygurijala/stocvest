@@ -21,6 +21,10 @@ export const NEWS_CATALYSTS_TIP =
 export const GAP_INTELLIGENCE_TIP =
   "Pre-market gaps ranked by quality, volume versus average, and whether same-day news supports the move. Gaps without a clear catalyst are flagged as higher reversal risk.";
 
+/** Scanner gap card — quality bar (not a trade signal). */
+export const GAP_QUALITY_SCORE_TIP =
+  "Liquidity, volume validation, news relevance, and move significance — not a trade signal.";
+
 export const INTRADAY_SETUPS_TIP =
   "Real-time trading opportunities identified during market hours based on price action and volume patterns. Updated every 5 minutes by the scanner engine.";
 

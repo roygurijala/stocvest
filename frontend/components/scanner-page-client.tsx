@@ -36,6 +36,7 @@ import { topSignalStrengthPercent } from "@/lib/top-signal-strength";
 import {
   CONFIDENCE_PERCENT_TIP,
   GAP_INTELLIGENCE_TIP,
+  GAP_QUALITY_SCORE_TIP,
   INTRADAY_SETUPS_TIP,
   SETUP_RELATIVE_VOLUME_TIP
 } from "@/lib/ui-tooltips";
@@ -206,6 +207,21 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
       .slice(0, 10);
   }, [overview.setups]);
 
+  const showSwingScanContextBanner = useMemo(() => {
+    return (
+      scannerSetupMode === "swing" &&
+      overview.gapIntelligence.length > 0 &&
+      rankedSetups.length === 0
+    );
+  }, [scannerSetupMode, overview.gapIntelligence.length, rankedSetups.length]);
+
+  const setupsEmptyMessage =
+    scannerSetupMode === "swing"
+      ? "No swing setups — regime and structure not aligned."
+      : scannerSetupMode === "day"
+        ? "No day setups right now."
+        : "No swing or day setups right now.";
+
   const confluenceAlertSymbols = useMemo(() => {
     const s = new Set<string>();
     for (const setup of overview.setups) {
@@ -336,9 +352,12 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
           ) : null}
           <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>Pre-market gap</span>
         </div>
-        <div style={{ marginTop: spacing[2] }}>
+          <div style={{ marginTop: spacing[2] }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2] }}>
-            <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Quality</span>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Quality</span>
+              <InfoTip text={GAP_QUALITY_SCORE_TIP} label="What quality measures" maxWidth={280} />
+            </div>
             <span style={{ fontSize: typography.scale.xs, fontFamily: MONO }}>{item.gap_quality_score}</span>
           </div>
           <div
@@ -524,6 +543,17 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
             </button>
           </span>
         </div>
+        <p
+          style={{
+            margin: `${spacing[2]} 0 0`,
+            fontSize: typography.scale.xs,
+            color: colors.textMuted,
+            lineHeight: 1.45,
+            maxWidth: "100%"
+          }}
+        >
+          Use Watchlist to track for post-gap base or mean-reversion.
+        </p>
         <p
           style={{
             margin: `${spacing[2]} 0 0`,
@@ -759,13 +789,52 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
         })}
       </div>
 
+      {showSwingScanContextBanner ? (
+        <div
+          role="note"
+          style={{
+            borderRadius: borderRadius.lg,
+            border: `1px solid ${colors.border}`,
+            background: `color-mix(in srgb, ${colors.textMuted} 8%, ${colors.surface})`,
+            padding: `${spacing[2]} ${spacing[3]}`,
+            fontSize: typography.scale.sm,
+            color: colors.textMuted,
+            lineHeight: 1.5
+          }}
+        >
+          <span style={{ color: colors.text, fontWeight: 600 }}>Scan focus: </span>
+          Early volatility & news dislocations — swing candidates require stabilization.
+        </div>
+      ) : null}
+
       <div className="scanner-grid grid grid-cols-1 gap-3 lg:grid-cols-2">
         <section
           className={`min-w-0 ${surfaceGlowClassName}`}
           style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
         >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2], marginBottom: spacing[2] }}>
-            <h3 style={{ margin: 0 }}>Gap Intelligence</h3>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              gap: spacing[2],
+              marginBottom: spacing[2]
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <h3 style={{ margin: 0 }}>Gap Intelligence</h3>
+              <p
+                style={{
+                  margin: `${spacing[1]} 0 0`,
+                  fontSize: typography.scale.xs,
+                  color: colors.textMuted,
+                  lineHeight: 1.45,
+                  maxWidth: "42rem"
+                }}
+              >
+                Extreme moves to monitor — not swing entries on the gap.
+              </p>
+            </div>
             <InfoTip text={GAP_INTELLIGENCE_TIP} label="About gap intelligence" />
           </div>
           <div
@@ -819,7 +888,7 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
             }}
           >
             {rankedSetups.length === 0 ? (
-              <p style={{ margin: 0, color: colors.textMuted }}>No setups right now.</p>
+              <p style={{ margin: 0, color: colors.textMuted, lineHeight: 1.45 }}>{setupsEmptyMessage}</p>
             ) : (
               rankedSetups.map((setup, idx) => {
                 const snap = snapBySymbol[setup.symbol] ?? null;

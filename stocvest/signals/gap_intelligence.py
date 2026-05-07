@@ -4,6 +4,7 @@ Gap intelligence: merge pre-market gap candidates with news catalyst context.
 
 from __future__ import annotations
 
+import math
 import re
 from collections import defaultdict
 from dataclasses import dataclass
@@ -24,34 +25,96 @@ NO_CATALYST_WARNING = (
 
 SECONDARY_SHARED_CATALYST_HEADLINE = "Referenced in related news — see primary ticker"
 
+# Gap intelligence quality: four additive components (interpretable swing-style blend).
+_GAP_MAX = 40.0
+_GAP_SCALE = 11.0  # ~|gap|/scale; ~10% → mid-20s gap pts, large gaps saturate toward _GAP_MAX
+_VOL_MAX = 20.0
+_PRICE_MAX = 10.0
+_PRICE_THRESHOLD = 20.0  # soft liquidity floor; full price pts at this price and above
+_CATALYST_MAX = 30.0  # type band × narrative; sums with above to 100 at ceiling
+
+
+def _catalyst_component(
+    has_catalyst: bool,
+    catalyst_type: str | None,
+    narrative_score: int | None,
+    sentiment_label: str | None,
+) -> float:
+    """
+    Narrative-weighted catalyst points (0–_CATALYST_MAX).
+
+    Bands follow swing hold-through intuition: earnings / structural > insider-ish >
+    M&A uncertainty > analyst > macro / weak.
+    ``narrative_score`` (0–100 from the detector) interpolates within each type's band.
+    """
+    if not has_catalyst:
+        return 0.0
+    t = (float(narrative_score) if narrative_score is not None else 55.0) / 100.0
+    t = max(0.0, min(1.0, t))
+    ct = (catalyst_type or "").strip().lower()
+    sent = (sentiment_label or "").strip().lower()
+
+    if ct == "earnings":
+        if sent == "bearish":
+            lo, hi = 22.0, _CATALYST_MAX  # miss, guide cut, structural downside
+        else:
+            lo, hi = 14.0, 24.0  # beat / mixed — still tradable but not max structural weight
+    elif ct == "insider":
+        lo, hi = 14.0, 22.0  # regulatory / Form 4 adjacent
+    elif ct == "merger":
+        lo, hi = 11.0, 20.0  # M&A rumor / deal uncertainty
+    elif ct == "analyst":
+        lo, hi = 9.0, 18.0
+    elif ct == "macro":
+        lo, hi = 5.0, 11.0  # secondary / tape-level
+    else:
+        lo, hi = 2.0, 9.0  # weak / incidental / unknown category
+
+    return lo + t * (hi - lo)
+
 
 def calculate_gap_quality_score(
     gap_pct: float,
     volume_vs_avg: float,
     has_catalyst: bool,
     price: float,
+    *,
+    catalyst_narrative_score: int | None = None,
+    catalyst_type: str | None = None,
+    catalyst_sentiment: str | None = None,
 ) -> int:
-    score = 0
-    ag = abs(gap_pct)
-    if ag >= 10:
-        score += 30
-    elif ag >= 5:
-        score += 20
-    elif ag >= 2:
-        score += 10
-    if volume_vs_avg >= 2.0:
-        score += 30
-    elif volume_vs_avg >= 1.5:
-        score += 20
-    elif volume_vs_avg >= 1.0:
-        score += 10
-    if has_catalyst:
-        score += 20
-    if price >= 10:
-        score += 20
-    elif price >= 5:
-        score += 10
-    return score
+    """
+    Scanner gap quality: smooth saturating gap + volume, soft price liquidity, type-weighted catalyst.
+
+    Components (each bounded, sum clamped 0–100):
+
+    1. Gap magnitude: ``_GAP_MAX * (1 - exp(-|gap_pct| / _GAP_SCALE))``.
+    2. Volume vs prior session: ``_VOL_MAX * (1 - exp(-max(0, vol_ratio - 1)))``.
+    3. Price: ``_PRICE_MAX * min(1, price / _PRICE_THRESHOLD)`` (scanner already drops price < 5).
+    4. Catalyst: band by ``catalyst_type`` + sentiment for earnings; width from narrative score.
+
+    Pass ``catalyst_type`` and ``catalyst_sentiment`` from ``NewsCatalystCandidate`` when present.
+    """
+    ag = abs(float(gap_pct))
+    vv = max(0.0, float(volume_vs_avg))
+    px = float(price)
+
+    gap_pts = _GAP_MAX * (1.0 - math.exp(-ag / _GAP_SCALE))
+
+    excess_vol = max(0.0, vv - 1.0)
+    vol_pts = _VOL_MAX * (1.0 - math.exp(-excess_vol))
+
+    if px < 5.0:
+        price_pts = 0.0
+    else:
+        price_pts = _PRICE_MAX * min(1.0, px / _PRICE_THRESHOLD)
+
+    cat_pts = _catalyst_component(
+        has_catalyst, catalyst_type, catalyst_narrative_score, catalyst_sentiment
+    )
+
+    raw = gap_pts + vol_pts + cat_pts + price_pts
+    return int(max(0, min(100, round(raw))))
 
 
 def _volume_vs_adv(day_volume: float, prev_day_volume: float | None) -> float:
@@ -213,7 +276,18 @@ def build_gap_intelligence_items(
                 mismatch,
                 noise_c,
             )
-        gqs = calculate_gap_quality_score(g.gap_percent, w.volume_vs_avg, has_cat, price)
+        narrative = int(best.narrative_score) if best is not None else None
+        cat_type = best.catalyst_type if best is not None else None
+        cat_sent = best.sentiment_label if best is not None else None
+        gqs = calculate_gap_quality_score(
+            g.gap_percent,
+            w.volume_vs_avg,
+            has_cat,
+            price,
+            catalyst_narrative_score=narrative,
+            catalyst_type=cat_type,
+            catalyst_sentiment=cat_sent,
+        )
         if gqs < 40:
             continue
 

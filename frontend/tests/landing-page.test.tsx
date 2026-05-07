@@ -63,13 +63,15 @@ test("test_pricing_no_broker_claim", () => {
   expect(pricing?.textContent?.toLowerCase()).not.toContain("broker");
 });
 
-test("test_pricing_founding_member_shown", () => {
+test("test_pricing_early_member_rates_shown", () => {
   view();
-  expect(screen.getByText(/FOUNDING MEMBER OFFER/i)).toBeInTheDocument();
+  expect(screen.getByText(/Early member pricing/i)).toBeInTheDocument();
   expect(screen.getByText("$49/month")).toBeInTheDocument();
   expect(screen.getByText("$99/month")).toBeInTheDocument();
   expect(screen.getByText("$29/month")).toBeInTheDocument();
   expect(screen.getByText("$59/month")).toBeInTheDocument();
+  expect(screen.queryByText(/FOUNDING MEMBER OFFER/i)).toBeNull();
+  expect(screen.queryByText(/spots remaining/i)).toBeNull();
 });
 
 test("test_pdt_section_removed", () => {

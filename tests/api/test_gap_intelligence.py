@@ -174,8 +174,43 @@ def test_sorted_catalyst_first_then_none() -> None:
 
 
 def test_quality_score_calculation_correct() -> None:
-    assert calculate_gap_quality_score(10.0, 2.0, True, 15.0) == 100
-    assert calculate_gap_quality_score(2.0, 1.0, False, 5.0) == 30
+    # Spec: ~10% gap + 2× vol + merger catalyst + mid narrative + $15 → mid-high, not 100.
+    mid = calculate_gap_quality_score(
+        10.0,
+        2.0,
+        True,
+        15.0,
+        catalyst_narrative_score=55,
+        catalyst_type="merger",
+        catalyst_sentiment="mixed",
+    )
+    assert 52 <= mid <= 68
+    # Ceiling: large gap, heavy vol, bearish earnings at top narrative, liquid price.
+    top = calculate_gap_quality_score(
+        55.0,
+        6.0,
+        True,
+        150.0,
+        catalyst_narrative_score=100,
+        catalyst_type="earnings",
+        catalyst_sentiment="bearish",
+    )
+    assert top >= 98
+    # Small gap, 1× vol, no catalyst, $5 → low (smooth gap curve still gives a few points).
+    weak = calculate_gap_quality_score(2.0, 1.0, False, 5.0)
+    assert weak <= 12
+    # Larger |gap| increases score holding catalyst and volume fixed.
+    assert calculate_gap_quality_score(
+        15.0, 2.0, True, 15.0, catalyst_narrative_score=60, catalyst_type="merger", catalyst_sentiment="mixed"
+    ) > calculate_gap_quality_score(
+        8.0, 2.0, True, 15.0, catalyst_narrative_score=60, catalyst_type="merger", catalyst_sentiment="mixed"
+    )
+    # Bearish earnings band sits above neutral merger at same narrative.
+    assert calculate_gap_quality_score(
+        12.0, 2.0, True, 20.0, catalyst_narrative_score=70, catalyst_type="earnings", catalyst_sentiment="bearish"
+    ) > calculate_gap_quality_score(
+        12.0, 2.0, True, 20.0, catalyst_narrative_score=70, catalyst_type="merger", catalyst_sentiment="mixed"
+    )
 
 
 def test_duplicate_catalyst_headline_primary_first_in_title() -> None:
