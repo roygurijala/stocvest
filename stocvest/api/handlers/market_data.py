@@ -12,6 +12,7 @@ from stocvest.api.response import bad_request, internal_error, ok
 from stocvest.api.services.news_impact_analyzer import analyze_news_impact, generate_impact_summary
 from stocvest.api.services.news_panel_format import (
     RECENT_NEWS_HOURS,
+    SWING_PANEL_RECENT_NEWS_HOURS,
     catalyst_type_for_article,
     classify_news_source,
     compute_news_age_label,
@@ -314,7 +315,9 @@ def news_handler(
         if panel_limit < 1 or panel_limit > 100:
             return bad_request("Limit must be between 1 and 100.")
         try:
-            recent_hours = int(query.get("recent_hours") or RECENT_NEWS_HOURS)
+            panel_mode = str(query.get("trading_mode") or query.get("panel_mode") or "").strip().lower()
+            default_recent = SWING_PANEL_RECENT_NEWS_HOURS if panel_mode == "swing" else RECENT_NEWS_HOURS
+            recent_hours = int(query.get("recent_hours") or default_recent)
         except ValueError:
             return bad_request("Invalid recent_hours.")
         if recent_hours < 1 or recent_hours > 168:

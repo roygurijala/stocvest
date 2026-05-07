@@ -10,7 +10,6 @@ from uuid import uuid4
 from stocvest.api.legal_copy import API_SIGNAL_DISCLAIMER
 from stocvest.api.services.composite_market_context import fetch_composite_market_status_payload_sync
 from stocvest.api.services.morning_brief_fetch import get_vix_snapshot_with_fallback
-from stocvest.api.services.portfolio_auto_log import schedule_model_portfolio_log_from_composite
 from stocvest.api.services.real_composite_engine import (
     _build_catalyst_headlines,
     _market_open_now,
@@ -32,6 +31,7 @@ from stocvest.signals.geo_analyzer import GeoAnalyzer
 from stocvest.signals.internals_analyzer import InternalsAnalyzer
 from stocvest.signals.macro_analyzer import MacroAnalyzer
 from stocvest.signals.news_analyzer import NewsAnalyzer
+from stocvest.signals.news_sentiment import SWING_NEWS_LOOKBACK_HOURS
 from stocvest.signals.sector_analyzer import SectorAnalyzer
 from stocvest.signals.sector_mapper import SectorMapper
 from stocvest.signals.swing_technical_analyzer import SwingTechnicalAnalyzer
@@ -67,9 +67,12 @@ async def build_swing_composite_response(
     enable_portfolio_log: bool = False,
 ) -> dict[str, Any]:
     sym = symbol.strip().upper()
+    if enable_portfolio_log:
+        _LOG.debug("swing composite ignores enable_portfolio_log (model portfolio is intraday-only)")
     settings = get_settings()
     sector_cache = DynamoSectorCache(settings.dynamodb_sector_cache_table)
-    news_since = datetime.now(timezone.utc) - timedelta(hours=float(params.swing_news_lookback_hours))
+    # Swing news window: five-session headline context (not intraday 8h).
+    news_since = datetime.now(timezone.utc) - timedelta(hours=float(SWING_NEWS_LOOKBACK_HOURS))
     econ_end = date.today() + timedelta(days=max(0, int(params.swing_macro_events_days) - 1))
     sic_bucket_for_geo: str | None = None
 
@@ -120,7 +123,7 @@ async def build_swing_composite_response(
 
     snap_for_tech = sym_snap if sym_snap is not None else Snapshot(symbol=sym)
     tech = SwingTechnicalAnalyzer().analyze(sym, daily_bars, snap_for_tech, params.swing_technical)
-    news = NewsAnalyzer().analyze(sym, news_rows, params.news, lookback_hours=params.swing_news_lookback_hours)
+    news = NewsAnalyzer().analyze(sym, news_rows, params.news, mode="swing")
     macro = MacroAnalyzer().analyze(
         spy_snap,
         qqq_snap,
@@ -332,13 +335,12 @@ async def build_swing_composite_response(
     _score_0_100_preview = max(0, min(100, _score_0_100_preview))
     _is_complete = response_body.get("status") != "incomplete"
     _LOG.info(
-        "composite scored symbol=%s score=%s verdict=%s alignment=%.2f complete=%s portfolio_log=%s",
+        "composite scored symbol=%s score=%s verdict=%s alignment=%.2f complete=%s",
         sym,
         _score_0_100_preview,
         composite.verdict.value,
         float(composite.alignment_ratio),
         _is_complete,
-        enable_portfolio_log,
     )
 
     if direction_out:
@@ -359,6 +361,10 @@ async def build_swing_composite_response(
                     confirming_labels=confirming_labs,
                     conflicting_labels=conflicting_labs,
                 )
+                # Swing composite intentionally does not auto-log to model portfolio.
+                # The current portfolio uses intraday resolution (30-min stop checks, 9:35 AM
+                # reversal). Swing positions require daily-close evaluation with ATR-based stops.
+                # A dedicated swing track record will be built as a separate feature.
                 record = SignalRecord(
                     signal_id=str(uuid4()),
                     symbol=sym,
@@ -377,6 +383,7 @@ async def build_swing_composite_response(
                     internals_snapshot_json=blobs.get("internals_snapshot_json"),
                     layer_scores_json=blobs.get("layer_scores_json"),
                     status=str(response_body.get("status") or "active"),
+                    mode="swing",
                 )
                 get_signal_recorder().record_signal(record)
                 if record.status != "active":
@@ -399,24 +406,6 @@ async def build_swing_composite_response(
 
                     run_alert_background(_fire_alert)
 
-                score_0_100 = int(round((float(composite.score) + 1.0) * 50.0))
-                score_0_100 = max(0, min(100, score_0_100))
-                if enable_portfolio_log:
-                    schedule_model_portfolio_log_from_composite(
-                        symbol=sym,
-                        composite_verdict=composite.verdict,
-                        composite_score=score_0_100,
-                        entry_price=price_at,
-                        layer_results=layer_results,
-                        macro_regime=str(macro.market_regime or "neutral"),
-                        confluence_fired=bool(response_body.get("is_confluence_alert")),
-                        confluence_score=int(response_body.get("confluence_score") or 0),
-                        vix_at_entry=float(internals.vix_price) if internals.vix_price is not None else None,
-                        spy_day_pct=float(macro.spy_day_pct) if macro.spy_day_pct is not None else None,
-                        sector_etf=(str(sector.sector_etf).strip().upper() if getattr(sector, "sector_etf", None) else None),
-                        sector_day_pct=float(sector.sector_day_pct) if sector.sector_day_pct is not None else None,
-                        parameter_version=str(params.version or "1.0.0"),
-                    )
             except Exception as exc:
                 _LOG.warning("swing record_signal skipped: %s", exc)
 

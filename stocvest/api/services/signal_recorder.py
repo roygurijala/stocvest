@@ -102,6 +102,7 @@ def _record_to_item(rec: SignalRecord) -> dict[str, Any]:
         item["parameter_version"] = rec.parameter_version
     if rec.status != "active":
         item["status"] = rec.status
+    item["mode"] = rec.mode
     return item
 
 
@@ -462,6 +463,7 @@ def _public_api_shape(rec: SignalRecord) -> dict[str, Any]:
         "outcome": _tracked_outcome_summary(rec.outcome_1d, rec.outcome_1h),
         "disclaimer": API_SIGNAL_DISCLAIMER,
         "status": rec.status,
+        "mode": rec.mode,
     }
 
 

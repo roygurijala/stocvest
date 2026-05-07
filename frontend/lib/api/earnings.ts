@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api/client";
+import { earningsTimingLabel as earningsTimingLabelImpl } from "@/lib/earnings-timing";
 
 export interface EarningsEvent {
   symbol: string;
@@ -46,9 +47,4 @@ export async function fetchEarningsCalendar(symbols: string[], days = 7): Promis
   };
 }
 
-export function earningsTimingLabel(reportTime: EarningsEvent["report_time"]): "BMO" | "AMC" | "DURING" | "TBD" {
-  if (reportTime === "before_market") return "BMO";
-  if (reportTime === "after_market") return "AMC";
-  if (reportTime === "during_market") return "DURING";
-  return "TBD";
-}
+export const earningsTimingLabel = earningsTimingLabelImpl;

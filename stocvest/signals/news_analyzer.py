@@ -4,10 +4,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Literal
 
 from stocvest.api.services.news_quality_filter import is_quality_article
 from stocvest.config.signal_parameters import NewsParameters
+from stocvest.signals.news_sentiment import (
+    DAY_NEWS_LOOKBACK_HOURS,
+    SWING_NEWS_LOOKBACK_HOURS,
+    swing_recency_weight,
+)
 
 
 @dataclass
@@ -61,10 +66,16 @@ class NewsAnalyzer:
         params: NewsParameters,
         *,
         lookback_hours: int | None = None,
+        mode: Literal["day", "swing"] = "day",
     ) -> NewsLayerResult:
         sym = symbol.upper().strip()
         now = datetime.now(timezone.utc)
-        lb_h = float(lookback_hours if lookback_hours is not None else params.lookback_hours)
+        if lookback_hours is not None:
+            lb_h = float(lookback_hours)
+        elif mode == "swing":
+            lb_h = float(SWING_NEWS_LOOKBACK_HOURS)
+        else:
+            lb_h = float(params.lookback_hours if params.lookback_hours else DAY_NEWS_LOOKBACK_HOURS)
         cutoff = now - timedelta(hours=lb_h)
         raw_rows = [a for a in articles if isinstance(a, dict)]
         time_filtered: list[dict[str, Any]] = []
@@ -127,6 +138,8 @@ class NewsAnalyzer:
             tset = {str(t).strip().upper() for t in tickers} if isinstance(tickers, list) else set()
             rel = params.direct_mention_weight if sym in tset else params.indirect_mention_weight
             combined = w_time * rel
+            if mode == "swing":
+                combined *= swing_recency_weight(pub.astimezone(timezone.utc), now)
             weights.append(combined)
             sentiments.append(sent)
 

@@ -92,4 +92,24 @@ describe("fetchSymbolNews", () => {
     expect(rows).toEqual([]);
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  test("swing newsTradingMode requests recent_hours=120", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        symbol: "AMD",
+        has_recent_news: true,
+        recent_cutoff_hours: 120,
+        articles: [panelArticle({ id: "a2", title: "AMD item" })],
+        total_found: 1,
+        oldest_included: null
+      })
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const { fetchSymbolNews } = await import("@/lib/api/fetch-symbol-news");
+    await fetchSymbolNews("amd", 10, { newsTradingMode: "swing" });
+    const url = String(fetchMock.mock.calls[0][0]);
+    expect(url).toContain("recent_hours=120");
+  });
 });

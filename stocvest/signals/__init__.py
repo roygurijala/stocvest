@@ -4,6 +4,7 @@ from stocvest.signals.ai_synthesis import (
     SynthesisVerdict,
     TradeAction,
 )
+from stocvest.signals.daily_bar_scanner import DailyBarScanner, DailyBarSetupCandidate
 from stocvest.signals.day_trading_scanner import (
     EMAUpdate,
     IntradaySetupCandidate,
@@ -40,7 +41,13 @@ from stocvest.signals.geopolitical_scanner import (
     GeopoliticalScanner,
 )
 from stocvest.signals.macro_events import MacroEvent, MacroEventDetector, MacroEventType
-from stocvest.signals.news_sentiment import NewsSentimentScorer, SentimentResult
+from stocvest.signals.news_sentiment import (
+    DAY_NEWS_LOOKBACK_HOURS,
+    SWING_NEWS_LOOKBACK_HOURS,
+    NewsSentimentScorer,
+    SentimentResult,
+    swing_recency_weight,
+)
 from stocvest.signals.pdt_tracker import (
     PDTAssessment,
     PDTBlockedError,
@@ -60,6 +67,8 @@ from stocvest.signals.trade_journal import (
 
 __all__ = [
     "AISynthesis",
+    "DailyBarScanner",
+    "DailyBarSetupCandidate",
     "ConfluenceDetector",
     "ConfluenceResult",
     "CompositeScoreEngine",
@@ -81,6 +90,8 @@ __all__ = [
     "IntradaySetupCandidate",
     "IntradaySetupScanner",
     "IntradayEMA9Calculator",
+    "DAY_NEWS_LOOKBACK_HOURS",
+    "SWING_NEWS_LOOKBACK_HOURS",
     "NewsSentimentScorer",
     "NewsCatalystCandidate",
     "NewsCatalystDetector",
@@ -99,6 +110,7 @@ __all__ = [
     "SynthesisInput",
     "SynthesisVerdict",
     "SentimentResult",
+    "swing_recency_weight",
     "TradeAction",
     "JournalAnalytics",
     "TradeJournal",

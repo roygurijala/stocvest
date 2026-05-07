@@ -7,7 +7,7 @@ import { DashboardRealtime } from "@/components/dashboard-realtime";
 import { DecisionMetric } from "@/components/decision-metric";
 import { EarningsCalendar } from "@/components/earnings-calendar";
 import { InfoTip } from "@/components/info-tip";
-import { MarketSentimentScoreWidget } from "@/components/market-sentiment-score-widget";
+import { WeeklyMarketContextWidget, type WeeklyIndexRow } from "@/components/weekly-market-context-widget";
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import { NewsPanel } from "@/components/news-panel";
 import { PdtStatusPill } from "@/components/pdt-status-pill";
@@ -20,6 +20,7 @@ import type { MarketOverview, NewsPayload, SnapshotPayload } from "@/lib/api/mar
 import type { PDTStatusPayload } from "@/lib/api/pdt";
 import type { IntradayGeoPreview, IntradaySetupPayload, ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
+import { earningsTimingLabel } from "@/lib/earnings-timing";
 import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
@@ -28,24 +29,45 @@ import { tickerNewsTriggerLine } from "@/lib/api/ticker-news-panel";
 import {
   CONFIDENCE_PERCENT_TIP,
   CONFLUENCE_COUNT_DECISION_TIP,
-  DASHBOARD_MARKET_SENTIMENT_CARD_TIP,
   GEO_WEIGHTED_EXPOSURE_TIP,
   LAST_PRICE_SIGNAL_CARD_TIP,
   MARKET_PULSE_CARD_TIP,
+  PORTFOLIO_ACTIVE_CARD_TIP,
   QQQ_PULSE_NUMBER_TIP,
   REGIME_BADGE_TIP,
+  SECTOR_ROTATION_CARD_TIP,
   SESSION_STATUS_STRIP_TIP,
   SPY_PULSE_NUMBER_TIP,
   TOP_SIGNAL_ROW_CARD_TIP,
   TOP_SIGNALS_CARD_TIP,
-  VIX_PULSE_NUMBER_TIP
+  UPCOMING_CATALYSTS_CARD_TIP,
+  VIX_PULSE_NUMBER_TIP,
+  WEEKLY_MARKET_CONTEXT_CARD_TIP
 } from "@/lib/ui-tooltips";
+import { buildDashboardSignalCardStrip } from "@/lib/dashboard-signal-card-strip";
+import Link from "next/link";
+
+export type { WeeklyIndexRow } from "@/components/weekly-market-context-widget";
+
+export type SectorRotationChip = { symbol: string; label: string; pct5d: number | null };
+
+export type PortfolioActiveRow = {
+  symbol: string;
+  side: string;
+  entry: number;
+  last: number | null;
+  pnlDollars: number | null;
+};
 
 interface DashboardRedesignProps {
   marketOverview: MarketOverview;
   pdtStatus: PDTStatusPayload | null;
   scannerOverview: ScannerOverview;
   earningsEvents: EarningsEvent[];
+  earningsRecent: EarningsEvent[];
+  weeklyIndexRows: WeeklyIndexRow[];
+  sectorRotation: SectorRotationChip[];
+  portfolioActive: PortfolioActiveRow[];
 }
 
 function SkeletonLine({ width = "100%", height = 14 }: { width?: string; height?: number }) {
@@ -196,7 +218,11 @@ export function DashboardRedesign({
   marketOverview,
   pdtStatus,
   scannerOverview,
-  earningsEvents
+  earningsEvents,
+  earningsRecent,
+  weeklyIndexRows,
+  sectorRotation,
+  portfolioActive
 }: DashboardRedesignProps) {
   const { colors } = useTheme();
   const [evidence, setEvidence] = useState<SignalEvidenceData | null>(null);
@@ -215,7 +241,16 @@ export function DashboardRedesign({
     snapshotsBySymbol.get("I:VIX") ||
     snapshotsBySymbol.get("VIX") ||
     snapshotsBySymbol.get("^VIX");
-  const earningsBySymbol = new Map(earningsEvents.map((e) => [e.symbol.toUpperCase(), e] as const));
+  const earningsBySymbol = useMemo(() => {
+    const m = new Map<string, EarningsEvent>();
+    for (const e of earningsRecent) {
+      m.set(e.symbol.trim().toUpperCase(), e);
+    }
+    for (const e of earningsEvents) {
+      m.set(e.symbol.trim().toUpperCase(), e);
+    }
+    return m;
+  }, [earningsEvents, earningsRecent]);
   const spyFromScanner =
     typeof scannerOverview.spyPct === "number" && Number.isFinite(scannerOverview.spyPct)
       ? scannerOverview.spyPct
@@ -240,6 +275,11 @@ export function DashboardRedesign({
     }
     return m;
   }, [scannerOverview.setups, newsUiTick]);
+
+  const upcomingCatalystWeek = useMemo(
+    () => [...earningsEvents].sort((a, b) => a.report_date.localeCompare(b.report_date)).slice(0, 10),
+    [earningsEvents]
+  );
 
   return (
     <section className="stocvest-dashboard-v2" style={{ display: "grid", gap: spacing[5] }}>
@@ -291,12 +331,12 @@ export function DashboardRedesign({
       <div className="dashboard-grid grid grid-cols-1 gap-5 lg:grid-cols-[7fr_13fr] lg:items-stretch [&>*]:min-w-0">
           <div className="order-1 min-w-0 lg:col-span-2 lg:col-start-1 lg:row-start-1">
             <DashboardCard
-              eyebrow="Decision desk"
-              title="Tape & sentiment"
-              subtitle="SPY, QQQ, and IWM in one view—a fast tape read for swing context. Pair it with multi-day structure when you open Evidence or run the full composite on a symbol."
-              cardTip={DASHBOARD_MARKET_SENTIMENT_CARD_TIP}
+              eyebrow="Swing desk"
+              title="Weekly market context"
+              subtitle="SPY, QQQ, and IWM — last ~5 trading sessions (daily closes), not intraday tape."
+              cardTip={WEEKLY_MARKET_CONTEXT_CARD_TIP}
             >
-              <MarketSentimentScoreWidget marketOverview={marketOverview} embedded />
+              <WeeklyMarketContextWidget rows={weeklyIndexRows} marketStatus={marketOverview.status} />
             </DashboardCard>
           </div>
 
@@ -320,11 +360,11 @@ export function DashboardRedesign({
                 </div>
               ) : (
                 topSignals.map((signal, idx) => {
-                  const triggersLine = signal.triggers
-                    .map((t) => String(t).trim())
-                    .filter(Boolean)
-                    .slice(0, 3)
-                    .join(" · ");
+                  const snapRow = snapshotsBySymbol.get(signal.symbol.trim().toUpperCase());
+                  const strip = buildDashboardSignalCardStrip(signal, snapRow, {
+                    upcoming: earningsEvents,
+                    recent: earningsRecent
+                  });
                   const tier = (signal.confluence_tier || "").trim().toLowerCase();
                   const nConf = typeof signal.n_confirming === "number" ? signal.n_confirming : signal.confirming_signals?.length;
                   const nConfl =
@@ -398,10 +438,31 @@ export function DashboardRedesign({
                           </DecisionMetric>
                         </p>
                       ) : null}
-                      {signal.geo_preview ? <TopSignalGeoStrip preview={signal.geo_preview} colors={colors} /> : null}
-                      {triggersLine ? (
-                        <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.text, lineHeight: 1.45 }}>{triggersLine}</p>
+                      <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.text, lineHeight: 1.45, fontWeight: 600 }}>
+                        {strip.patternLine}
+                      </p>
+                      {strip.swingDailyDetailLine ? (
+                        <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45 }}>
+                          {strip.swingDailyDetailLine}
+                        </p>
                       ) : null}
+                      {strip.entryZoneLine ? (
+                        <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.text, fontVariantNumeric: "tabular-nums" }}>
+                          {strip.entryZoneLine}
+                        </p>
+                      ) : null}
+                      {strip.stopTargetLine ? (
+                        <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, fontVariantNumeric: "tabular-nums" }}>
+                          {strip.stopTargetLine}
+                        </p>
+                      ) : null}
+                      {strip.maturityLine ? (
+                        <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45 }}>{strip.maturityLine}</p>
+                      ) : null}
+                      <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.text, lineHeight: 1.45 }}>
+                        <strong>Catalyst:</strong> {strip.catalystLine}
+                      </p>
+                      {signal.geo_preview ? <TopSignalGeoStrip preview={signal.geo_preview} colors={colors} /> : null}
                       {tier || nConf != null || nConfl != null ? (
                         <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45 }}>
                           {tier ? (
@@ -507,15 +568,10 @@ export function DashboardRedesign({
               )}
             </div>
           </DashboardCard>
-          <EarningsCalendar
-            className="order-5 lg:col-start-1 lg:row-start-3"
-            events={earningsEvents}
-            title="Upcoming Earnings (Next 7 Days)"
-            maxDays={7}
-          />
 
+          <div className="order-3 flex min-w-0 flex-col gap-5 lg:col-start-2 lg:row-start-2">
           <DashboardCard
-            className={`order-3 flex min-h-[200px] flex-col overflow-hidden lg:col-start-2 lg:row-start-2 lg:self-start`}
+            className="flex min-h-[200px] flex-col overflow-hidden lg:self-start"
             eyebrow="Tape"
             title="Market pulse"
             subtitle="SPY · QQQ · VIX session change and regime — today’s tape versus your swing read. Numbers match the scanner when it completes; otherwise they come from your overview snapshots."
@@ -580,10 +636,99 @@ export function DashboardRedesign({
                 </div>
               </DecisionMetric>
               <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.5 }}>
-                Per-symbol headlines are in the news drawer on each signal card (opens on demand — not prefetched).
+                Session tape for context; swing thesis uses weekly panel + Evidence.
               </p>
             </div>
           </DashboardCard>
+
+          <DashboardCard
+            eyebrow="Sectors"
+            title="Sector rotation (5 sessions)"
+            subtitle="Where equity flows clustered over the last week of daily closes."
+            cardTip={SECTOR_ROTATION_CARD_TIP}
+          >
+            <div className="flex flex-wrap gap-2" style={{ fontSize: typography.scale.sm, fontVariantNumeric: "tabular-nums" }}>
+              {sectorRotation.map((s) => (
+                <span
+                  key={s.symbol}
+                  style={{
+                    borderRadius: borderRadius.md,
+                    border: `1px solid ${colors.border}`,
+                    padding: `${spacing[1]} ${spacing[2]}`,
+                    color: colors.text
+                  }}
+                >
+                  <strong>{s.symbol}</strong>{" "}
+                  <span style={{ color: s.pct5d != null ? getChangeColor(s.pct5d, colors) : colors.textMuted }}>
+                    {s.pct5d != null ? `${s.pct5d >= 0 ? "+" : ""}${s.pct5d.toFixed(1)}%` : "—"}
+                  </span>
+                  <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}> · {s.label}</span>
+                </span>
+              ))}
+            </div>
+          </DashboardCard>
+
+          <DashboardCard
+            eyebrow="Catalysts"
+            title="Upcoming events this week"
+            subtitle="Earnings on your dashboard symbol list (same feed as the calendar below)."
+            cardTip={UPCOMING_CATALYSTS_CARD_TIP}
+          >
+            {upcomingCatalystWeek.length === 0 ? (
+              <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted }}>No upcoming dates in range.</p>
+            ) : (
+              <ul style={{ margin: 0, paddingLeft: spacing[4], color: colors.text, fontSize: typography.scale.sm, lineHeight: 1.55 }}>
+                {upcomingCatalystWeek.map((e) => (
+                  <li key={`${e.symbol}-${e.report_date}`}>
+                    <strong>{e.symbol}</strong> · {earningsTimingLabel(e.report_time)} · {e.report_date.slice(5).replace("-", "/")}
+                    {e.company_name ? (
+                      <span style={{ color: colors.textMuted }}> — {e.company_name}</span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </DashboardCard>
+
+          <DashboardCard
+            eyebrow="Signal portfolio"
+            title="Active positions"
+            subtitle="Model book marks — not your brokerage."
+            cardTip={PORTFOLIO_ACTIVE_CARD_TIP}
+          >
+            <div className="mb-2">
+              <Link href="/portfolio" style={{ fontSize: typography.scale.xs, color: colors.accent, fontWeight: 600 }}>
+                Open full portfolio →
+              </Link>
+            </div>
+            {portfolioActive.length === 0 ? (
+              <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted }}>No open tracked positions.</p>
+            ) : (
+              <ul style={{ margin: 0, paddingLeft: spacing[4], color: colors.text, fontSize: typography.scale.sm, lineHeight: 1.55 }}>
+                {portfolioActive.map((p) => {
+                  const lastStr = p.last != null && Number.isFinite(p.last) ? `$${p.last.toFixed(2)}` : "—";
+                  const pnlStr =
+                    p.pnlDollars != null && Number.isFinite(p.pnlDollars)
+                      ? `${p.pnlDollars >= 0 ? "+" : ""}$${Math.abs(p.pnlDollars).toFixed(0)}`
+                      : null;
+                  return (
+                    <li key={`${p.symbol}-${p.entry}`}>
+                      <strong>{p.symbol}</strong> {p.side} · Entry ${p.entry.toFixed(2)} · Now {lastStr}
+                      {pnlStr ? <span style={{ color: p.pnlDollars! >= 0 ? colors.bullish : colors.bearish }}> · {pnlStr}</span> : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </DashboardCard>
+          </div>
+
+          <EarningsCalendar
+            className="order-4 lg:col-span-2 lg:col-start-1 lg:row-start-3"
+            events={earningsEvents}
+            title="Upcoming Earnings (Next 7 Days)"
+            maxDays={7}
+          />
       </div>
 
       <SignalEvidenceModal
@@ -598,6 +743,7 @@ export function DashboardRedesign({
       <NewsPanel
         symbol={newsPanelSymbol}
         isOpen={newsPanelOpen}
+        newsTradingMode="day"
         onClose={() => {
           setNewsPanelOpen(false);
           setNewsUiTick((t) => t + 1);

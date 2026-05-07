@@ -407,7 +407,7 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
     let cancelled = false;
     void (async () => {
       const [news, watchlistSymbols] = await Promise.all([
-        fetchSymbolNews(sym, 5).catch(() => [] as NewsPayload[]),
+        fetchSymbolNews(sym, 5, { newsTradingMode: tradingMode }).catch(() => [] as NewsPayload[]),
         fetch("/api/stocvest/watchlists/default/symbols", { method: "GET" })
           .then(async (res) => {
             if (!res.ok) return [] as string[];
@@ -425,7 +425,7 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
     return () => {
       cancelled = true;
     };
-  }, [showAfterHoursPanel, symbol]);
+  }, [showAfterHoursPanel, symbol, tradingMode]);
 
   function directionChipStyle(bias: PublicSignal["bias"]): CSSProperties {
     if (bias === "bullish") {
@@ -972,7 +972,9 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
               }
               let symbolNewsArticles: Awaited<ReturnType<typeof fetchSymbolNews>> = [];
               try {
-                symbolNewsArticles = await fetchSymbolNews(symbol.toUpperCase(), 10);
+                symbolNewsArticles = await fetchSymbolNews(symbol.toUpperCase(), 10, {
+                  newsTradingMode: tradingMode
+                });
               } catch {
                 symbolNewsArticles = [];
               }
@@ -1089,6 +1091,7 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
       <NewsPanel
         symbol={newsPanelSymbol}
         isOpen={newsPanelOpen}
+        newsTradingMode={tradingMode}
         onClose={() => {
           setNewsPanelOpen(false);
           setNewsUiTick((t) => t + 1);

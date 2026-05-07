@@ -52,6 +52,10 @@ def run_portfolio_scanner_for_symbol(symbol: str) -> dict[str, Any]:
     """
     Internal/system path: run real composite with model-portfolio auto-log enabled.
 
+    Only ``build_real_composite_response`` (intraday / day layers) feeds the model
+    portfolio. Swing composite has its own track record (future — see BACKLOG
+    B-swing-portfolio) and must never call this path.
+
     HTTP handlers must not call this; they use ``enable_portfolio_log=False``.
     """
     params = ParameterStore.get_parameters_sync()

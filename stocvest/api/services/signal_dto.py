@@ -14,6 +14,7 @@ from stocvest.signals import (
     PDTAssessment,
     PremarketGapCandidate,
 )
+from stocvest.signals.daily_bar_scanner import DailyBarSetupCandidate
 from stocvest.signals.confluence import ConfluenceDetector, confluence_result_to_response_fields
 
 
@@ -175,6 +176,67 @@ def serialize_intraday_setups_with_confluence(
         raw_news = news_map.get(sym)
         nc = dict(raw_news) if isinstance(raw_news, dict) else None
         out.append(serialize_intraday_setup(c, snapshot=snap, news_catalyst=nc, regime=regime, sector_signal=sector))
+    return out
+
+
+def serialize_daily_bar_setup(
+    candidate: DailyBarSetupCandidate,
+    *,
+    snapshot: dict[str, Any] | None = None,
+    news_catalyst: dict[str, Any] | None = None,
+    regime: str = "neutral",
+    sector_signal: str = "neutral",
+) -> dict[str, Any]:
+    """Same envelope as intraday setups plus swing-daily fields for dashboard/API consumers."""
+    intra = IntradaySetupCandidate(
+        symbol=candidate.symbol,
+        direction=candidate.direction,
+        score=candidate.score,
+        triggers=candidate.triggers,
+        last_price=candidate.last_price,
+        vwap=None,
+        ema9=None,
+        timestamp_iso=candidate.timestamp_iso,
+        company_name=candidate.company_name,
+        volume_vs_avg=candidate.volume_vs_avg,
+        gap_pct=0.0,
+    )
+    base = serialize_intraday_setup(
+        intra, snapshot=snapshot, news_catalyst=news_catalyst, regime=regime, sector_signal=sector_signal
+    )
+    base.update(
+        {
+            "ema_daily_crossovers": list(candidate.ema_daily_crossovers),
+            "weekly_rsi_recovery": bool(candidate.weekly_rsi_recovery),
+            "weekly_rsi": candidate.weekly_rsi,
+            "volume_expansion_ratio": candidate.volume_expansion_ratio,
+            "pattern_maturity_days": int(candidate.pattern_maturity_days),
+            "scanner_mode": "swing_daily",
+        }
+    )
+    return base
+
+
+def serialize_daily_bar_setups_with_confluence(
+    candidates: list[DailyBarSetupCandidate],
+    payload: dict[str, Any],
+) -> list[dict[str, Any]]:
+    regime = _norm_axis(str(payload.get("market_regime") or payload.get("regime") or "neutral"))
+    sector = _norm_axis(str(payload.get("sector_signal") or "neutral"))
+    snap_map = payload.get("snapshots_by_symbol") or {}
+    news_map = payload.get("news_catalysts_by_symbol") or {}
+    if not isinstance(snap_map, dict):
+        snap_map = {}
+    if not isinstance(news_map, dict):
+        news_map = {}
+    out: list[dict[str, Any]] = []
+    for c in candidates:
+        sym = c.symbol.upper()
+        raw_snap = snap_map.get(sym)
+        snap = dict(raw_snap) if isinstance(raw_snap, dict) else {}
+        raw_news = news_map.get(sym)
+        nc = dict(raw_news) if isinstance(raw_news, dict) else None
+        out.append(serialize_daily_bar_setup(c, snapshot=snap, news_catalyst=nc, regime=regime, sector_signal=sector))
     return out
 
 

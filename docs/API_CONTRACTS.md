@@ -55,6 +55,7 @@ All REST routes are versioned under `/v1/`.
 - `POST /v1/signals/swing/composite` — build structured composite score and signal parameters from layer signals
 - `POST /v1/signals/swing/synthesis/parse` — parse AI JSON synthesis output to normalized action payload
 - `POST /v1/signals/day/setups` — rank intraday setup candidates from 1-minute bars
+- `POST /v1/signals/swing/setups` — rank swing candidates from **daily** (`1day`) bars; body mirrors day/setups (`bars_by_symbol`, `liquidity_by_symbol`, `snapshots_by_symbol`, `regime`, optional `geo_scan_articles`) plus optional **`min_daily_bars`** (default **205** for EMA200 context). Response rows include the usual confluence fields plus **`scanner_mode": "swing_daily"`**, **`ema_daily_crossovers`**, **`weekly_rsi_recovery`**, **`weekly_rsi`**, **`volume_expansion_ratio`**, **`pattern_maturity_days`**
 - `POST /v1/signals/day/briefing` — render daily briefing markdown from structured inputs
 - `GET /v1/signals/recent` — public historical signal data (last 50 platform rows); optional `?landing=true`
 - `GET /v1/signals/performance/summary` — directional accuracy over evaluated platform signals (1d horizon); JSON uses `correct_direction_count`, `incorrect_direction_count`, `neutral_direction_count` (legacy `win_count` / `loss_count` accepted on read in clients only)

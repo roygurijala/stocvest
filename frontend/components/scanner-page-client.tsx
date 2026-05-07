@@ -18,7 +18,13 @@ import { GapCatalystNewsDrawer } from "@/components/gap-catalyst-news-drawer";
 import { NewsPanel } from "@/components/news-panel";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
-import type { GapIntelligenceItem, IntradaySetupPayload, ScannerOverview } from "@/lib/api/scanner";
+import { loadScannerDataWithoutBrief } from "@/lib/api/scanner-client-load";
+import type {
+  GapIntelligenceItem,
+  IntradaySetupPayload,
+  ScannerOverview,
+  ScannerSetupLoadMode
+} from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
 import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
@@ -51,6 +57,8 @@ interface ScannerPageClientProps {
   initialTimestampIso: string;
   earningsBySymbol: Record<string, EarningsEvent>;
 }
+
+const SCANNER_MODE_STORAGE_KEY = "stocvest_scanner_mode";
 
 const MONO = typography.fontFamilyMono;
 
@@ -88,6 +96,8 @@ function formatSignalFiredTimeEt(iso: string): string {
 
 export function ScannerPageClient({ initialOverview, initialTimestampIso, earningsBySymbol }: ScannerPageClientProps) {
   const { colors } = useTheme();
+  const [overview, setOverview] = useState<ScannerOverview>(initialOverview);
+  const [scannerSetupMode, setScannerSetupMode] = useState<ScannerSetupLoadMode>("swing");
   const [isPending, startTransition] = useTransition();
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [newsPanelSymbol, setNewsPanelSymbol] = useState("");
@@ -112,61 +122,111 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
   const [snapBySymbol, setSnapBySymbol] = useState<Record<string, SnapshotPayload | null>>({});
   const [pmhBySymbol, setPmhBySymbol] = useState<Record<string, number | null>>({});
 
+  useLayoutEffect(() => {
+    try {
+      const raw = localStorage.getItem(SCANNER_MODE_STORAGE_KEY);
+      if (raw === "day" || raw === "swing" || raw === "both") {
+        setScannerSetupMode(raw);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const core = await loadScannerDataWithoutBrief(null, [], {
+        parallelDefaultWatchlist: true,
+        scannerSetupLoadMode: scannerSetupMode,
+        intradayBarLimit: 120,
+        daySetupsLimit: 10,
+        swingSetupsLimit: 6
+      });
+      if (cancelled) return;
+      if (core.error) {
+        setOverview((prev) => ({ ...prev, error: core.error }));
+        return;
+      }
+      setOverview((prev) => ({
+        gapIntelligence: core.gapIntelligence,
+        setups: core.setups,
+        morningBrief: prev.morningBrief,
+        error: undefined,
+        spyPct: core.spyPct,
+        qqqPct: core.qqqPct,
+        regimeLabel: core.regimeLabel
+      }));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [scannerSetupMode]);
+
+  const persistScannerMode = useCallback((m: ScannerSetupLoadMode) => {
+    setScannerSetupMode(m);
+    try {
+      localStorage.setItem(SCANNER_MODE_STORAGE_KEY, m);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const symbolsKey = useMemo(
     () =>
       [
         ...new Set([
-          ...initialOverview.gapIntelligence.map((g) => g.symbol),
-          ...initialOverview.setups.map((s) => s.symbol)
+          ...overview.gapIntelligence.map((g) => g.symbol),
+          ...overview.setups.map((s) => s.symbol)
         ])
       ]
         .sort()
         .join(","),
-    [initialOverview.gapIntelligence, initialOverview.setups]
+    [overview.gapIntelligence, overview.setups]
   );
 
   const gapMeanVolume = useMemo(() => {
-    const vs = initialOverview.gapIntelligence.map((g) => g.volume || 0).filter((v) => v > 0);
+    const vs = overview.gapIntelligence.map((g) => g.volume || 0).filter((v) => v > 0);
     if (!vs.length) return 1;
     return vs.reduce((a, b) => a + b, 0) / vs.length;
-  }, [initialOverview.gapIntelligence]);
+  }, [overview.gapIntelligence]);
 
   const dayVolBySymbol = useMemo(() => {
     const m = new Map<string, number>();
-    for (const g of initialOverview.gapIntelligence) {
+    for (const g of overview.gapIntelligence) {
       m.set(g.symbol, g.volume || 0);
     }
     return m;
-  }, [initialOverview.gapIntelligence]);
+  }, [overview.gapIntelligence]);
 
   const rankedSetups = useMemo(() => {
-    return [...initialOverview.setups]
+    return [...overview.setups]
       .filter((s) => typeof s.score === "number" && Number.isFinite(s.score))
       .sort((a, b) => b.score - a.score)
       .slice(0, 10);
-  }, [initialOverview.setups]);
+  }, [overview.setups]);
 
   const confluenceAlertSymbols = useMemo(() => {
     const s = new Set<string>();
-    for (const setup of initialOverview.setups) {
+    for (const setup of overview.setups) {
       if (setup.is_confluence_alert && setup.symbol) s.add(setup.symbol.trim().toUpperCase());
     }
     return s;
-  }, [initialOverview.setups]);
+  }, [overview.setups]);
 
   const gapSymbolsKey = useMemo(
-    () => initialOverview.gapIntelligence.map((g) => g.symbol).join(","),
-    [initialOverview.gapIntelligence]
+    () => overview.gapIntelligence.map((g) => g.symbol).join(","),
+    [overview.gapIntelligence]
   );
 
   const gapIntelGrouped = useMemo(() => {
-    const items = [...initialOverview.gapIntelligence].sort(
+    const items = [...overview.gapIntelligence].sort(
       (a, b) => b.gap_quality_score - a.gap_quality_score
     );
     const withCat = items.filter((x) => x.has_catalyst);
     const without = items.filter((x) => !x.has_catalyst);
     return { withCat, without };
-  }, [initialOverview.gapIntelligence]);
+  }, [overview.gapIntelligence]);
 
   function qualityBarStyle(score: number, colors: ThemeColors): { fill: string; glow?: string } {
     if (score >= 80) return { fill: "#4ade80", glow: "0 0 12px rgba(74,222,128,0.45)" };
@@ -435,7 +495,7 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
               type="button"
               onClick={() => {
                 const sym = item.symbol.trim().toUpperCase();
-                const setupFor = initialOverview.setups.find((s) => s.symbol.trim().toUpperCase() === sym);
+                const setupFor = overview.setups.find((s) => s.symbol.trim().toUpperCase() === sym);
                 goToPortfolioOrder({
                   symbol: sym,
                   side: item.gap_pct >= 0 ? "buy" : "sell",
@@ -498,7 +558,7 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
     (async () => {
       const map: Record<string, number | null> = {};
       await Promise.all(
-        initialOverview.gapIntelligence.map(async (g) => {
+        overview.gapIntelligence.map(async (g) => {
           const bars = await fetchSymbolMinuteBars(g.symbol, ny, ny, 500);
           if (cancelled) return;
           map[g.symbol] = computePmhFromBars(bars, ny);
@@ -510,7 +570,7 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
     return () => {
       cancelled = true;
     };
-  }, [gapSymbolsKey]);
+  }, [gapSymbolsKey, overview.gapIntelligence]);
 
   useEffect(() => {
     const id = window.setInterval(() => forceTick((x) => x + 1), 1000);
@@ -539,17 +599,44 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
   }, [router]);
 
   const onManualRefresh = useCallback(() => {
-    startTransition(() => {
+    startTransition(async () => {
       if (isUsRegularSessionOpenEt()) {
         nextScanRef.current = Date.now() + 5 * 60 * 1000;
       }
+      const core = await loadScannerDataWithoutBrief(null, [], {
+        parallelDefaultWatchlist: true,
+        scannerSetupLoadMode: scannerSetupMode,
+        intradayBarLimit: 120,
+        daySetupsLimit: 10,
+        swingSetupsLimit: 6
+      });
+      if (!core.error) {
+        setOverview((prev) => ({
+          gapIntelligence: core.gapIntelligence,
+          setups: core.setups,
+          morningBrief: prev.morningBrief,
+          error: undefined,
+          spyPct: core.spyPct,
+          qqqPct: core.qqqPct,
+          regimeLabel: core.regimeLabel
+        }));
+      }
       router.refresh();
     });
-  }, [router, startTransition]);
+  }, [router, startTransition, scannerSetupMode]);
 
   const marketOpen = isUsRegularSessionOpenEt();
   const secondsToScan = Math.max(0, Math.ceil((nextScanRef.current - Date.now()) / 1000));
   const scanCountdownLabel = `${Math.floor(secondsToScan / 60)}:${String(secondsToScan % 60).padStart(2, "0")}`;
+
+  const setupsPanelTitle =
+    scannerSetupMode === "swing"
+      ? "Swing setups (daily)"
+      : scannerSetupMode === "both"
+        ? "Setups · swing + day"
+        : "Day setups (intraday)";
+
+  const panelNewsTradingMode = scannerSetupMode === "day" ? "day" : "swing";
 
   const earningsBadgeFor = (symbol: string): { label: string; tip: string } | null => {
     const event = earningsBySymbol[symbol.toUpperCase()];
@@ -584,7 +671,9 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
     async (item: GapIntelligenceItem) => {
       let symbolNewsArticles: Awaited<ReturnType<typeof fetchSymbolNews>> = [];
       try {
-        symbolNewsArticles = await fetchSymbolNews(item.symbol, 10);
+        symbolNewsArticles = await fetchSymbolNews(item.symbol, 10, {
+          newsTradingMode: panelNewsTradingMode
+        });
       } catch {
         symbolNewsArticles = [];
       }
@@ -599,7 +688,7 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
       setEvidence(await enrichEvidenceWithRealComposite(base));
       setEvidenceOpen(true);
     },
-    [earningsBySymbol]
+    [earningsBySymbol, panelNewsTradingMode]
   );
 
   return (
@@ -637,6 +726,39 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
         </button>
       </header>
 
+      <div
+        role="tablist"
+        aria-label="Scanner setup source"
+        className="flex flex-wrap gap-2"
+        style={{ marginTop: 0 }}
+      >
+        {(["swing", "day", "both"] as const).map((m) => {
+          const active = scannerSetupMode === m;
+          const label = m === "swing" ? "Swing" : m === "day" ? "Day" : "Both";
+          return (
+            <button
+              key={m}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => persistScannerMode(m)}
+              style={{
+                borderRadius: borderRadius.md,
+                border: `1px solid ${active ? colors.accent : colors.border}`,
+                padding: `${spacing[1]} ${spacing[3]}`,
+                fontSize: typography.scale.sm,
+                fontWeight: active ? 700 : 500,
+                background: active ? `color-mix(in srgb, ${colors.accent} 12%, transparent)` : colors.surface,
+                color: active ? colors.accent : colors.text,
+                cursor: "pointer"
+              }}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
       <div className="scanner-grid grid grid-cols-1 gap-3 lg:grid-cols-2">
         <section
           className={`min-w-0 ${surfaceGlowClassName}`}
@@ -655,7 +777,7 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
               paddingRight: spacing[1]
             }}
           >
-            {initialOverview.gapIntelligence.length === 0 ? (
+            {overview.gapIntelligence.length === 0 ? (
               <p style={{ margin: 0, color: colors.textMuted }}>No gap intelligence matches right now.</p>
             ) : (
               <>
@@ -684,8 +806,8 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
           style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
         >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2], marginBottom: spacing[2] }}>
-            <h3 style={{ margin: 0 }}>Intraday Setups</h3>
-            <InfoTip text={INTRADAY_SETUPS_TIP} label="About intraday setups" />
+            <h3 style={{ margin: 0 }}>{setupsPanelTitle}</h3>
+            <InfoTip text={INTRADAY_SETUPS_TIP} label="About ranked setups" />
           </div>
           <div
             style={{
@@ -763,6 +885,18 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                         ) : null}
                       </div>
                       <span style={{ color: colors.textMuted, fontSize: typography.scale.sm }}>{patternLabel}</span>
+                      {setup.scanner_mode === "swing_daily" ? (
+                        <span style={{ color: colors.textMuted, fontSize: typography.scale.xs, lineHeight: 1.45 }}>
+                          {typeof setup.pattern_maturity_days === "number"
+                            ? `Maturity ${setup.pattern_maturity_days} sessions · `
+                            : ""}
+                          {setup.ema_daily_crossovers?.length ? `EMA ${setup.ema_daily_crossovers.join(", ")}` : ""}
+                          {typeof setup.weekly_rsi === "number"
+                            ? `${setup.ema_daily_crossovers?.length ? " · " : ""}Weekly RSI ${setup.weekly_rsi.toFixed(0)}`
+                            : ""}
+                          {setup.weekly_rsi_recovery ? " · RSI recovery" : ""}
+                        </span>
+                      ) : null}
                       <div
                         style={{
                           display: "flex",
@@ -995,7 +1129,9 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                         onClick={async () => {
                           let symbolNewsArticles: Awaited<ReturnType<typeof fetchSymbolNews>> = [];
                           try {
-                            symbolNewsArticles = await fetchSymbolNews(setup.symbol, 10);
+                            symbolNewsArticles = await fetchSymbolNews(setup.symbol, 10, {
+                              newsTradingMode: panelNewsTradingMode
+                            });
                           } catch {
                             symbolNewsArticles = [];
                           }
@@ -1059,7 +1195,12 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
           setNewsPanelOpen(true);
         }}
       />
-      <NewsPanel symbol={newsPanelSymbol} isOpen={newsPanelOpen} onClose={() => setNewsPanelOpen(false)} />
+      <NewsPanel
+        symbol={newsPanelSymbol}
+        isOpen={newsPanelOpen}
+        onClose={() => setNewsPanelOpen(false)}
+        newsTradingMode={panelNewsTradingMode}
+      />
     </section>
   );
 }

@@ -465,6 +465,13 @@ def test_news_symbol_panel_returns_requested_recent_cutoff_hours() -> None:
     assert body["recent_cutoff_hours"] == 12
 
 
+def test_news_symbol_panel_swing_trading_mode_defaults_recent_hours_to_120() -> None:
+    event = {"queryStringParameters": {"symbol": "AAPL", "trading_mode": "swing"}}
+    response = news_handler(event, {}, client_factory=_make_has_recent_news_client(True))
+    body = json.loads(response["body"])
+    assert body["recent_cutoff_hours"] == 120
+
+
 def _make_has_recent_news_client(recent: bool):
     class _HasRecentNewsClient(_FakePolygonClient):
         async def get_market_news(

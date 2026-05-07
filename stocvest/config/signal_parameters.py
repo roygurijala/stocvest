@@ -216,7 +216,7 @@ class SignalParameters:
     composite: CompositeParameters = field(default_factory=CompositeParameters)
 
     swing_technical: SwingTechnicalParameters = field(default_factory=SwingTechnicalParameters)
-    swing_news_lookback_hours: int = 168
+    swing_news_lookback_hours: int = 120
     swing_macro_events_days: int = 14
     swing_geo_lookback_hours: int = 168
     swing_sector_use_weekly: bool = True

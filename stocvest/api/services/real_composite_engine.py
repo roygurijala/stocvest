@@ -190,7 +190,9 @@ async def run_real_composite_engine_phase(
     adv = float(sym_snap.prev_day_volume) if sym_snap and sym_snap.prev_day_volume else None
 
     tech = TechnicalAnalyzer().analyze(sym, bars, snap_for_tech, params.technical, adv=adv)
-    news = NewsAnalyzer().analyze(sym, news_rows, params.news, lookback_hours=params.news.lookback_hours)
+    news = NewsAnalyzer().analyze(
+        sym, news_rows, params.news, lookback_hours=params.news.lookback_hours, mode="day"
+    )
     macro = MacroAnalyzer().analyze(spy_snap, qqq_snap, vix_snap, econ, params.macro, events_lookback_days=1)
     sector = SectorAnalyzer().analyze(sym, sector_snap, spy_snap, params.sector, sector_display_name=sector_display)
     geo = GeoAnalyzer().analyze(
@@ -464,6 +466,7 @@ async def build_real_composite_response(
                     internals_snapshot_json=blobs.get("internals_snapshot_json"),
                     layer_scores_json=blobs.get("layer_scores_json"),
                     status=str(response_body.get("status") or "active"),
+                    mode="day",
                 )
                 get_signal_recorder().record_signal(record)
                 if record.status != "active":

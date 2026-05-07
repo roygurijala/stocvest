@@ -22,6 +22,7 @@ from stocvest.api.handlers.signals import (
     day_briefing_handler,
     day_setups_handler,
     swing_composite_handler,
+    swing_setups_handler,
     swing_synthesis_parse_handler,
 )
 from stocvest.api.handlers.websocket import (
@@ -61,6 +62,7 @@ __all__ = [
     "broker_positions_handler",
     "day_briefing_handler",
     "day_setups_handler",
+    "swing_setups_handler",
     "health_handler",
     "market_status_handler",
     "news_handler",

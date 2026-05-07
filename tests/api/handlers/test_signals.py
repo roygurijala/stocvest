@@ -9,6 +9,7 @@ import pytest
 from stocvest.api.handlers.signals import (
     day_briefing_handler,
     day_setups_handler,
+    swing_setups_handler,
     public_performance_summary_handler,
     public_platform_signal_record_handler,
     public_recent_signals_handler,
@@ -370,6 +371,73 @@ def test_day_briefing_handler_returns_structured_brief() -> None:
 
 def test_day_setups_handler_validates_body() -> None:
     response = day_setups_handler({"body": json.dumps({"bars_by_symbol": []})}, {})
+    assert response["statusCode"] == 400
+
+
+def test_swing_setups_handler_returns_swing_daily_dto_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    from stocvest.signals.daily_bar_scanner import DailyBarSetupCandidate
+
+    fake = DailyBarSetupCandidate(
+        symbol="ABC",
+        direction="long",
+        score=0.9,
+        triggers=["ema20_cross_above_50", "weekly_rsi_recovery"],
+        last_price=100.0,
+        timestamp_iso="2026-05-01T00:00:00+00:00",
+        company_name="Test Co",
+        volume_vs_avg=1.2,
+        ema_daily_crossovers=["ema20_cross_above_50"],
+        weekly_rsi_recovery=True,
+        weekly_rsi=55.5,
+        volume_expansion_ratio=1.8,
+        pattern_maturity_days=5,
+    )
+
+    def fake_scan(
+        self,
+        bars_by_symbol,
+        *,
+        liquidity_by_symbol=None,
+        limit=8,
+    ):
+        _ = (self, bars_by_symbol, liquidity_by_symbol, limit)
+        return [fake]
+
+    monkeypatch.setattr("stocvest.api.handlers.signals.DailyBarScanner.scan", fake_scan)
+
+    et = ZoneInfo("America/New_York")
+    bar = _bar_payload(datetime(2026, 5, 1, 16, 0, tzinfo=et), close=100.0, volume=1_000_000)
+    bar["timeframe"] = "1day"
+    event = {
+        "body": json.dumps(
+            {
+                "bars_by_symbol": {"ABC": [bar]},
+                "limit": 5,
+                "min_score": 0.1,
+                "min_daily_bars": 1,
+                "liquidity_by_symbol": {
+                    "ABC": {"avg_daily_volume": 8_000_000, "last_price": 100.0, "company_name": "Test Co"}
+                },
+            }
+        )
+    }
+    response = swing_setups_handler(event, {})
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert len(body) == 1
+    row = body[0]
+    assert row["symbol"] == "ABC"
+    assert row["scanner_mode"] == "swing_daily"
+    assert row["ema_daily_crossovers"] == ["ema20_cross_above_50"]
+    assert row["weekly_rsi_recovery"] is True
+    assert row["weekly_rsi"] == 55.5
+    assert row["volume_expansion_ratio"] == 1.8
+    assert row["pattern_maturity_days"] == 5
+    assert row.get("disclaimer")
+
+
+def test_swing_setups_handler_validates_body() -> None:
+    response = swing_setups_handler({"body": json.dumps({"bars_by_symbol": []})}, {})
     assert response["statusCode"] == 400
 
 

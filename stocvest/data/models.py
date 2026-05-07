@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 from enum import Enum
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -316,6 +316,7 @@ class SignalRecord(BaseModel):
     layer_scores_json: str | None = None
     parameter_version: str | None = None
     status: str = "active"  # active | incomplete
+    mode: Literal["day", "swing"] = "day"
 
     @field_validator("direction")
     @classmethod
@@ -332,6 +333,14 @@ class SignalRecord(BaseModel):
         if s not in {"active", "incomplete"}:
             raise ValueError("status must be active or incomplete")
         return s
+
+    @field_validator("mode")
+    @classmethod
+    def _norm_mode(cls, v: str) -> str:
+        m = str(v or "day").strip().lower()
+        if m not in {"day", "swing"}:
+            raise ValueError("mode must be day or swing")
+        return m
 
     @staticmethod
     def from_dynamo_item(item: dict) -> "SignalRecord":
@@ -388,7 +397,15 @@ class SignalRecord(BaseModel):
             layer_scores_json=_s("layer_scores_json"),
             parameter_version=_s("parameter_version"),
             status=str(item.get("status") or "active"),
+            mode=_coerce_signal_mode(item.get("mode")),
         )
+
+
+def _coerce_signal_mode(raw: object) -> Literal["day", "swing"]:
+    m = str(raw or "day").strip().lower()
+    if m == "swing":
+        return "swing"
+    return "day"
 
 
 # ──────────────────────────────────────────────────────────────────────────────

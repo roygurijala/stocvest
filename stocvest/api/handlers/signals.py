@@ -28,6 +28,7 @@ from stocvest.api.services.day_setups_geo_preview import attach_geo_preview_to_i
 from stocvest.api.services.signal_dto import (
     parse_bar,
     parse_pdt_assessment,
+    serialize_daily_bar_setups_with_confluence,
     serialize_intraday_setups_with_confluence,
 )
 from stocvest.api.shared import build_request_context, parse_json_body
@@ -51,6 +52,7 @@ from stocvest.signals import (
     LayerSignal,
     parse_liquidity_by_symbol_payload,
 )
+from stocvest.signals.daily_bar_scanner import DailyBarScanner
 from stocvest.signals.confluence import ConfluenceDetector, confluence_result_to_response_fields
 from stocvest.signals.morning_brief import build_morning_brief_payload
 from stocvest.utils.logging import get_logger
@@ -326,6 +328,7 @@ def swing_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[
                     sector_snapshot_json=snap_blobs.get("sector_snapshot_json"),
                     internals_snapshot_json=snap_blobs.get("internals_snapshot_json"),
                     layer_scores_json=snap_blobs.get("layer_scores_json"),
+                    mode="swing",
                 )
                 get_signal_recorder().record_signal(record)
                 if request_context.user_id and request_context.email and direction_out:
@@ -444,6 +447,48 @@ def day_setups_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, 
         return ok(rows)
     except (KeyError, TypeError, ValueError) as exc:
         return bad_request(f"Invalid day setup request: {exc}")
+    except Exception as exc:
+        return internal_error(str(exc))
+
+
+def swing_setups_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    """POST /v1/signals/swing/setups — rank swing candidates from daily (DAY_1) bars."""
+    _ = context
+    try:
+        payload = parse_json_body(event)
+    except ValueError as exc:
+        return bad_request(str(exc))
+
+    bars_by_symbol_raw = payload.get("bars_by_symbol")
+    if not isinstance(bars_by_symbol_raw, dict):
+        return bad_request("Body field 'bars_by_symbol' must be an object.")
+
+    try:
+        limit = int(payload.get("limit", 8))
+        min_score = float(payload.get("min_score", 0.48))
+        min_daily_bars = int(payload.get("min_daily_bars", 205))
+    except ValueError:
+        return bad_request("Invalid 'limit', 'min_score', or 'min_daily_bars'.")
+
+    try:
+        bars_by_symbol: dict[str, list[Bar]] = {}
+        for symbol, bars in bars_by_symbol_raw.items():
+            if not isinstance(symbol, str) or not isinstance(bars, list):
+                return bad_request("bars_by_symbol entries must map symbol strings to bar arrays.")
+            bars_by_symbol[symbol.upper()] = [parse_bar(item, symbol.upper()) for item in bars]
+
+        liq = parse_liquidity_by_symbol_payload(payload.get("liquidity_by_symbol"))
+        setups = DailyBarScanner(min_score=min_score, min_bars=max(60, min_daily_bars)).scan(
+            bars_by_symbol, liquidity_by_symbol=liq, limit=limit
+        )
+        rows = serialize_daily_bar_setups_with_confluence(setups, payload)
+        try:
+            attach_geo_preview_to_intraday_rows(rows, payload)
+        except Exception as exc:
+            _LOG.warning("swing setups geo preview failed: %s", exc)
+        return ok(rows)
+    except (KeyError, TypeError, ValueError) as exc:
+        return bad_request(f"Invalid swing setup request: {exc}")
     except Exception as exc:
         return internal_error(str(exc))
 
@@ -619,6 +664,7 @@ def signals_http_dispatch(event: LambdaEvent, context: LambdaContext) -> dict[st
         "POST /v1/signals/swing/composite": swing_composite_handler,
         "POST /v1/signals/swing/synthesis/parse": swing_synthesis_parse_handler,
         "POST /v1/signals/day/setups": day_setups_handler,
+        "POST /v1/signals/swing/setups": swing_setups_handler,
         "POST /v1/signals/day/briefing": day_briefing_handler,
         "GET /v1/signals/recent": public_recent_signals_handler,
         "GET /v1/signals/performance/summary": public_performance_summary_handler,

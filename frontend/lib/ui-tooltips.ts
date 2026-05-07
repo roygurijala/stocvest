@@ -73,6 +73,9 @@ export const LAYER_NAME_HINTS: Record<string, string> = {
 export const DASHBOARD_MARKET_SENTIMENT_CARD_TIP =
   "This panel summarizes how large-cap, tech, and small-cap indices are moving versus yesterday’s close. STOCVEST uses it as a fast tape read for swing workflow—risk appetite and breadth—before you drill into a symbol’s Evidence or six-layer composite. It is not a trade signal by itself.";
 
+export const WEEKLY_MARKET_CONTEXT_CARD_TIP =
+  "Shows roughly five **trading sessions** of change on SPY, QQQ, and IWM using **daily** closes (Polygon aggregates), plus last price from the snapshot. This is swing-style context: how the week is shaping, not intraday ORB/VWAP noise. It is not a trade signal by itself.";
+
 export const MARKET_PULSE_CARD_TIP =
   "SPY, QQQ, and VIX session change plus a simple regime label—useful context for how today’s session sits next to a swing thesis. When the scanner finishes, these numbers match the same tape inputs used in gap and setup context; otherwise they come from your market overview snapshots. They inform macro-style context in the engine, not individual entry prices.";
 
@@ -80,10 +83,19 @@ export const TOP_SIGNALS_CARD_TIP =
   "The highest-ranked names from your scanner right now (swing-first ranking in the product). Each row is a starting point: open Evidence to fetch news, levels, and the full server-side composite for that ticker. Rankings come from the scanner API (pattern + confluence when available).";
 
 export const TOP_SIGNAL_ROW_CARD_TIP =
-  "A single scanner candidate. Use signal strength and confluence lines to prioritize which names to research first; the composite engine on the evidence screen decides how layers align for that symbol when you open it.";
+  "A single scanner candidate. Entry zone, stop/target, and R:R are **reference geometry** from the session snapshot (same style as Evidence reference levels), not guaranteed fills. Pattern line translates day-scanner triggers into swing-readable language; catalyst line uses the earnings calendar when available. Open Evidence for the full six-layer composite.";
 
 export const EARNINGS_CALENDAR_CARD_TIP =
   "Earnings dates for symbols on your dashboard list. Reporting days add event risk: STOCVEST surfaces them so you can weigh gap risk and news volatility before acting on a setup.";
+
+export const SECTOR_ROTATION_CARD_TIP =
+  "Sector ETFs (XLK, XLC, XLE, …) with the same **5-session** daily return as the weekly index row. Shows where equity risk has rotated over the last week of trading—not intraday heatmaps.";
+
+export const UPCOMING_CATALYSTS_CARD_TIP =
+  "Next earnings dates pulled from the same calendar as the table below, limited to the dashboard symbol list. Times are BMO/AMC/TBD when Polygon provides them.";
+
+export const PORTFOLIO_ACTIVE_CARD_TIP =
+  "Open rows from the **Signal portfolio** (notional model book). Mark-to-market uses the latest snapshot last price when available; otherwise entry is shown as the live figure until quotes load.";
 
 export const MORNING_BRIEF_CARD_TIP =
   "Structured pre-market brief: futures tone, VIX direction, economic prints, and a highlighted watch. It is a narrative digest of conditions, separate from the ranked scanner list below.";

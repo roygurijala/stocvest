@@ -11,6 +11,7 @@ import asyncio
 import json
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 import httpx
@@ -27,6 +28,28 @@ DEFAULT_MODEL = "claude-sonnet-4-6"  # Claude Sonnet 4.6 (Anthropic Messages API
 REQUEST_TIMEOUT_SECONDS = 20.0
 DEFAULT_MAX_RETRIES = 2
 DEFAULT_MAX_CONCURRENCY = 5
+
+# Composite news windows (aligned with `NewsAnalyzer` `mode` kwarg).
+DAY_NEWS_LOOKBACK_HOURS = 8
+SWING_NEWS_LOOKBACK_HOURS = 120  # ~5 trading sessions of headlines for swing context
+
+
+def swing_recency_weight(published_at: datetime, now: datetime) -> float:
+    """
+    Decay multiplier for swing-mode news aggregation (older articles count less).
+
+    Day/intraday mode does not apply this — only the swing composite news layer.
+    """
+    age_hours = (now - published_at).total_seconds() / 3600.0
+    if age_hours <= 24:
+        return 1.0
+    if age_hours <= 48:
+        return 0.80
+    if age_hours <= 72:
+        return 0.60
+    if age_hours <= 96:
+        return 0.40
+    return 0.25
 
 
 @dataclass(frozen=True)

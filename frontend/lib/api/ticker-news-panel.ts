@@ -36,10 +36,14 @@ export interface TickerNewsPanelResponse {
 const CACHE_TTL_MS = 120_000;
 const cache = new Map<string, { t: number; data: TickerNewsPanelResponse }>();
 
-export function tickerNewsCacheGet(symbol: string): TickerNewsPanelResponse | null {
+function panelCacheKey(symbol: string, recentHours: number): string {
+  return `${symbol.trim().toUpperCase()}:${recentHours}`;
+}
+
+export function tickerNewsCacheGet(symbol: string, recentHours: number = 8): TickerNewsPanelResponse | null {
   const sym = symbol.trim().toUpperCase();
   if (!sym) return null;
-  const row = cache.get(sym);
+  const row = cache.get(panelCacheKey(sym, recentHours));
   if (!row) return null;
   if (Date.now() - row.t > CACHE_TTL_MS) {
     cache.delete(sym);
@@ -48,23 +52,30 @@ export function tickerNewsCacheGet(symbol: string): TickerNewsPanelResponse | nu
   return row.data;
 }
 
-export function tickerNewsCacheSet(symbol: string, data: TickerNewsPanelResponse): void {
+export function tickerNewsCacheSet(symbol: string, data: TickerNewsPanelResponse, recentHours: number = 8): void {
   const sym = symbol.trim().toUpperCase();
   if (!sym) return;
-  cache.set(sym, { t: Date.now(), data });
+  cache.set(panelCacheKey(sym, recentHours), { t: Date.now(), data });
 }
 
 /** Clears cache entry (e.g. tests). */
-export function tickerNewsCacheClear(symbol?: string): void {
+export function tickerNewsCacheClear(symbol?: string, recentHours?: number): void {
   if (symbol) {
-    cache.delete(symbol.trim().toUpperCase());
+    const sym = symbol.trim().toUpperCase();
+    if (typeof recentHours === "number") {
+      cache.delete(panelCacheKey(sym, recentHours));
+      return;
+    }
+    for (const k of [...cache.keys()]) {
+      if (k.startsWith(`${sym}:`)) cache.delete(k);
+    }
     return;
   }
   cache.clear();
 }
 
-export function tickerNewsTriggerLine(symbol: string): string {
-  const data = tickerNewsCacheGet(symbol);
+export function tickerNewsTriggerLine(symbol: string, recentHours: number = 8): string {
+  const data = tickerNewsCacheGet(symbol, recentHours);
   if (!data || data.total_found === 0) {
     return "📰 View news";
   }
@@ -88,13 +99,14 @@ export function tickerNewsTriggerLine(symbol: string): string {
 
 export async function fetchTickerNewsPanel(
   symbol: string,
-  opts?: { days?: number; limit?: number; recentHours?: number }
+  opts?: { days?: number; limit?: number; recentHours?: number; newsTradingMode?: "day" | "swing" }
 ): Promise<TickerNewsPanelResponse | null> {
   const sym = symbol.trim().toUpperCase();
   if (!sym) return null;
   const days = Math.min(20, Math.max(1, opts?.days ?? 20));
   const limit = Math.min(100, Math.max(1, opts?.limit ?? 20));
-  const recentHours = Math.min(168, Math.max(1, opts?.recentHours ?? 8));
+  const defaultRecent = opts?.newsTradingMode === "swing" ? 120 : 8;
+  const recentHours = Math.min(168, Math.max(1, opts?.recentHours ?? defaultRecent));
   const token = readWsTokenFromDocumentCookie();
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (token) {
@@ -120,7 +132,7 @@ export async function fetchTickerNewsPanel(
     if (!data || typeof data !== "object" || !Array.isArray(data.articles)) {
       return null;
     }
-    tickerNewsCacheSet(sym, data);
+    tickerNewsCacheSet(sym, data, recentHours);
     return data;
   } catch {
     return null;

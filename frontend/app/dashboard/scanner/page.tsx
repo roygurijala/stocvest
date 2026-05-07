@@ -10,7 +10,9 @@ export default async function DashboardScannerPage() {
   if (!session) {
     redirect("/login");
   }
-  const overview = await fetchScannerOverview(null, [], { loadTuning: { parallelDefaultWatchlist: true } });
+  const overview = await fetchScannerOverview(null, [], {
+    loadTuning: { parallelDefaultWatchlist: true, scannerSetupLoadMode: "swing" }
+  });
   const scannerSymbols = Array.from(
     new Set([...overview.gapIntelligence.map((g) => g.symbol), ...overview.setups.map((s) => s.symbol)])
   );

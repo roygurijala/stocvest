@@ -122,9 +122,11 @@ export interface NewsPanelProps {
   isOpen: boolean;
   onClose: () => void;
   onLoaded?: () => void;
+  /** Swing evidence uses a 5-day recent window; day stays at 8h (see `fetchTickerNewsPanel`). */
+  newsTradingMode?: "day" | "swing";
 }
 
-export function NewsPanel({ symbol, isOpen, onClose, onLoaded }: NewsPanelProps) {
+export function NewsPanel({ symbol, isOpen, onClose, onLoaded, newsTradingMode = "day" }: NewsPanelProps) {
   const { colors } = useTheme();
   const mobile = useIsMobileLayout();
   const [data, setData] = useState<TickerNewsPanelResponse | null>(null);
@@ -134,10 +136,11 @@ export function NewsPanel({ symbol, isOpen, onClose, onLoaded }: NewsPanelProps)
   onLoadedRef.current = onLoaded;
 
   const sym = symbol.trim().toUpperCase();
+  const recentHoursDefault = newsTradingMode === "swing" ? 120 : 8;
 
   const load = useCallback(async () => {
     if (!sym) return;
-    const cached = tickerNewsCacheGet(sym);
+    const cached = tickerNewsCacheGet(sym, recentHoursDefault);
     if (cached) {
       setData(cached);
       onLoadedRef.current?.();
@@ -145,13 +148,13 @@ export function NewsPanel({ symbol, isOpen, onClose, onLoaded }: NewsPanelProps)
     }
     setLoading(true);
     try {
-      const row = await fetchTickerNewsPanel(sym, { days: 20, limit: 20, recentHours: 8 });
+      const row = await fetchTickerNewsPanel(sym, { days: 20, limit: 20, newsTradingMode });
       setData(row);
       onLoadedRef.current?.();
     } finally {
       setLoading(false);
     }
-  }, [sym]);
+  }, [sym, newsTradingMode, recentHoursDefault]);
 
   useEffect(() => {
     if (!isOpen || !sym) return;

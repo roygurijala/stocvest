@@ -116,16 +116,18 @@ function barClose(bar: Record<string, unknown>): number | null {
   return null;
 }
 
-async function fetchOverviewSnapshots(symbols: string[]): Promise<(SnapshotPayload | null)[]> {
+/** Snapshots for an arbitrary symbol list (dashboard weekly context, portfolio marks, etc.). */
+export async function fetchSnapshotsForSymbols(symbols: string[]): Promise<(SnapshotPayload | null)[]> {
   if (symbols.length === 0) return [];
-  if (symbols.length === 1) {
+  const clean = symbols.map((s) => s.trim().toUpperCase()).filter(Boolean);
+  if (clean.length === 1) {
     const row = await apiFetch<SnapshotPayload>(
-      `/v1/market/snapshot?symbol=${encodeURIComponent(symbols[0])}`
+      `/v1/market/snapshot?symbol=${encodeURIComponent(clean[0])}`
     );
     return [row];
   }
   const batch = await apiFetch<{ snapshots?: SnapshotPayload[] }>(
-    `/v1/market/snapshots?symbols=${encodeURIComponent(symbols.join(","))}`
+    `/v1/market/snapshots?symbols=${encodeURIComponent(clean.join(","))}`
   );
   if (batch?.snapshots && Array.isArray(batch.snapshots) && batch.snapshots.length > 0) {
     const by = new Map<string, SnapshotPayload>();
@@ -134,10 +136,10 @@ async function fetchOverviewSnapshots(symbols: string[]): Promise<(SnapshotPaylo
         by.set(String(row.symbol).trim().toUpperCase(), row);
       }
     }
-    return symbols.map((s) => by.get(s) ?? null);
+    return clean.map((s) => by.get(s) ?? null);
   }
   return Promise.all(
-    symbols.map((symbol) =>
+    clean.map((symbol) =>
       apiFetch<SnapshotPayload>(`/v1/market/snapshot?symbol=${encodeURIComponent(symbol)}`)
     )
   );
@@ -193,7 +195,7 @@ export async function fetchMarketOverview(
   try {
     const [status, snapshots] = await Promise.all([
       apiFetch<MarketStatusPayload>("/v1/market/status"),
-      fetchOverviewSnapshots(cleanSymbols)
+      fetchSnapshotsForSymbols(cleanSymbols)
     ]);
     const news: NewsPayload[] = [];
     if (!status) {
@@ -214,4 +216,44 @@ export async function fetchMarketOverview(
       error: error instanceof Error ? error.message : "Unable to connect. Check your connection."
     };
   }
+}
+
+/**
+ * Last `limit` daily closes per symbol (Polygon `1day` bars), oldest → newest within each array.
+ * Uses `/v1/market/bars-batch` (max 24 requests per call); chunk if you pass more symbols.
+ */
+export async function fetchDailyBarClosesBySymbol(
+  symbols: string[],
+  limit = 8
+): Promise<Record<string, number[]>> {
+  const clean = [...new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean))];
+  if (clean.length === 0) return {};
+  const out: Record<string, number[]> = {};
+  for (let i = 0; i < clean.length; i += 24) {
+    const chunk = clean.slice(i, i + 24);
+    const requests = chunk.map((symbol) => ({ symbol, timeframe: "1day", limit }));
+    const batch = await apiFetch<{ bars_by_symbol?: Record<string, Record<string, unknown>[]> }>(
+      "/v1/market/bars-batch",
+      { method: "POST", body: JSON.stringify({ requests }) }
+    );
+    if (!batch?.bars_by_symbol || typeof batch.bars_by_symbol !== "object") {
+      continue;
+    }
+    for (const sym of chunk) {
+      const rows =
+        batch.bars_by_symbol[sym] ??
+        batch.bars_by_symbol[sym.toUpperCase()] ??
+        batch.bars_by_symbol[sym.toLowerCase()] ??
+        [];
+      const arr = Array.isArray(rows) ? rows : [];
+      const closes = arr
+        .map((b) => barClose(b))
+        .filter((n): n is number => n !== null)
+        .slice(-limit);
+      if (closes.length > 0) {
+        out[sym] = closes;
+      }
+    }
+  }
+  return out;
 }

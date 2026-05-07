@@ -39,7 +39,7 @@ def _bullish_daily_series(symbol: str, n: int) -> list[Bar]:
 @pytest.fixture
 def _mute_side_effects(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "stocvest.api.services.swing_composite_engine.schedule_model_portfolio_log_from_composite",
+        "stocvest.api.services.portfolio_auto_log.schedule_model_portfolio_log_from_composite",
         MagicMock(),
     )
     rec = MagicMock()
@@ -196,13 +196,15 @@ async def test_swing_news_uses_extended_lookback(_mute_side_effects: None, monke
 
     from stocvest.api.services.swing_composite_engine import build_swing_composite_response
 
-    p = default_signal_parameters()
-    p.swing_news_lookback_hours = 168
-    await build_swing_composite_response(symbol="AAPL", user_id=None, user_email=None, params=p)
+    await build_swing_composite_response(
+        symbol="AAPL", user_id=None, user_email=None, params=default_signal_parameters()
+    )
     assert news_calls, "expected news fetch"
     gte = news_calls[0].get("published_utc_gte")
     assert gte is not None
-    assert (datetime.now(timezone.utc) - gte).total_seconds() >= 60 * 60 * 24 * 6
+    delta_sec = (datetime.now(timezone.utc) - gte).total_seconds()
+    assert delta_sec >= 119 * 3600, "swing composite should fetch ~5d/120h of news"
+    assert delta_sec <= 125 * 3600
 
 
 @pytest.mark.asyncio

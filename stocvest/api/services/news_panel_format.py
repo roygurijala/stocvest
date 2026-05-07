@@ -13,6 +13,8 @@ NewsSentimentLabel = Literal["bullish", "bearish", "neutral"]
 
 # “Recent” window for per-symbol news panel (`GET /v1/market/news?symbol=`); overridable via `recent_hours` query (1–168).
 RECENT_NEWS_HOURS = 8
+# Default when `trading_mode=swing` (or `panel_mode=swing`) is set and `recent_hours` is omitted — swing evidence context.
+SWING_PANEL_RECENT_NEWS_HOURS = 120
 
 
 def parse_published_utc(raw: str) -> datetime | None:
