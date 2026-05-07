@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 from dataclasses import dataclass, replace
 from datetime import datetime, time as dt_time, timezone
@@ -265,7 +266,9 @@ class AIExplanationService:
 
     async def _claude_text_or_none(self, *, system: str, user_prompt: str, max_tokens: int) -> str | None:
         settings = get_settings()
-        if not settings.anthropic_api_key:
+        # Tests may monkeypatch env vars after settings cache is primed.
+        api_key = (settings.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY") or "").strip()
+        if not api_key:
             return None
         payload = {
             "model": AI_MODEL_FAST,
@@ -274,7 +277,7 @@ class AIExplanationService:
             "messages": [{"role": "user", "content": f"{system}\n\n{user_prompt}"}],
         }
         headers = {
-            "x-api-key": settings.anthropic_api_key,
+            "x-api-key": api_key,
             "anthropic-version": ANTHROPIC_VERSION,
             "content-type": "application/json",
         }
