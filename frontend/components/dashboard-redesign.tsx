@@ -36,6 +36,10 @@ import {
   PORTFOLIO_ACTIVE_CARD_TIP,
   QQQ_PULSE_NUMBER_TIP,
   REGIME_BADGE_TIP,
+  REGIME_WITHOUT_VIX_APPEND,
+  VIX_BLANK_DATA_PENDING_TIP,
+  VIX_BLANK_MARKET_CLOSED_TIP,
+  VIX_BLANK_UPSTREAM_TIP,
   SECTOR_ROTATION_CARD_TIP,
   SESSION_STATUS_STRIP_TIP,
   SPY_PULSE_NUMBER_TIP,
@@ -203,6 +207,19 @@ function snapshotSessionChangePct(s: SnapshotPayload | null | undefined): number
   return null;
 }
 
+/** True when the pulse can show a usable VIX session % or last index level (matches Market pulse row). */
+function vixPulseDataAvailable(snapshot: SnapshotPayload | undefined, sessionPct: number | null): boolean {
+  if (sessionPct != null && Number.isFinite(sessionPct)) return true;
+  if (!snapshot) return false;
+  const p = snapshot.last_trade_price;
+  return typeof p === "number" && Number.isFinite(p);
+}
+
+function regimeLabelIsDirectional(regimeLabel: string): boolean {
+  const r = regimeLabel.trim().toLowerCase();
+  return r.includes("bear") || r.includes("bull");
+}
+
 /** Same thresholds as `frontend/lib/api/scanner.ts` regime label. */
 function regimeFromSpyQqq(spyPct: number | null, qqqPct: number | null, fallback: string): string {
   if (spyPct != null && qqqPct != null) {
@@ -218,6 +235,252 @@ function pulseRegimeColor(regime: string, colors: ThemeColors): string {
   if (r === "bullish") return colors.bullish;
   if (r === "bearish") return colors.bearish;
   return colors.caution;
+}
+
+/** Dashboard Top signals empty state: explains “no list” vs “broken API”. */
+function emptySwingTopSignalsDiagnostic(regimeLabel: string, sectors: SectorRotationChip[]): string {
+  const r = regimeLabel.trim().toLowerCase();
+  let macro: string;
+  if (r.includes("bear")) macro = "macro regime bearish";
+  else if (r.includes("bull")) macro = "macro regime bullish";
+  else macro = "macro regime neutral";
+
+  const pcts = sectors.map((s) => s.pct5d).filter((x): x is number => typeof x === "number" && Number.isFinite(x));
+  let sectorW: string;
+  if (pcts.length === 0) {
+    sectorW = "sector leadership unclear until rotation data fills in";
+  } else {
+    const up = pcts.filter((x) => x > 0.2).length;
+    const down = pcts.filter((x) => x < -0.2).length;
+    if (up >= 2 && down >= 2) sectorW = "sector leadership mixed";
+    else if (down >= 3 && up <= 1) sectorW = "sector leadership defensive";
+    else if (up >= 3 && down <= 1) sectorW = "sector leadership risk-on";
+    else sectorW = "sector leadership narrow";
+  }
+
+  return `No swing setups — ${macro} and ${sectorW}.`;
+}
+
+function emptySwingTopSignalsChip(regimeLabel: string): { label: string; tip: string } {
+  const r = regimeLabel.trim().toLowerCase();
+  if (r.includes("bear")) {
+    return {
+      label: "Signal suppressed: Regime",
+      tip: "Tape regime reads bearish; the swing desk stays idle until trend and structure meet the scanner’s rules."
+    };
+  }
+  if (r.includes("bull")) {
+    return {
+      label: "Signal suppressed: Filters",
+      tip: "Tape can be risk-on, but no symbol passed daily swing structure, volume, and momentum gates today."
+    };
+  }
+  return {
+    label: "Signal context: Neutral tape",
+    tip: "Regime is neutral or mixed; swing rows only appear when price structure and weekly momentum align with the desk rules."
+  };
+}
+
+type SectorTapeTone = "defensive" | "risk_on" | "mixed" | "narrow" | "unknown";
+
+function classifySectorTapeTone(sectors: SectorRotationChip[]): SectorTapeTone {
+  const pcts = sectors.map((s) => s.pct5d).filter((x): x is number => typeof x === "number" && Number.isFinite(x));
+  if (pcts.length === 0) return "unknown";
+  const up = pcts.filter((x) => x > 0.2).length;
+  const down = pcts.filter((x) => x < -0.2).length;
+  if (up >= 2 && down >= 2) return "mixed";
+  if (down >= 3 && up <= 1) return "defensive";
+  if (up >= 3 && down <= 1) return "risk_on";
+  return "narrow";
+}
+
+function weeklyIndexAvgPct5d(rows: WeeklyIndexRow[]): number | null {
+  const vals = rows.map((r) => r.pct5d).filter((x): x is number => typeof x === "number" && Number.isFinite(x));
+  if (vals.length === 0) return null;
+  return vals.reduce((a, b) => a + b, 0) / vals.length;
+}
+
+const SECTOR_FRAME_TIMING_TIP =
+  "These percentages roll up the last ~5 trading sessions of daily closes on each ETF—the same swing-style window as Weekly market context. Market pulse Regime instead uses SPY/QQQ session change for today. A green sector chip does not cancel a bearish regime; it timestamps a different question.";
+
+type SectorRotationFrame = {
+  narrative: string | null;
+  chip: { label: string; tip: string } | null;
+  chipKind: "confirming" | "nonconfirming" | "mixed" | null;
+};
+
+function sectorRotationFrame(
+  regimeLabel: string,
+  sectors: SectorRotationChip[],
+  weeklyRows: WeeklyIndexRow[],
+  noSwingSetups: boolean
+): SectorRotationFrame {
+  const tone = classifySectorTapeTone(sectors);
+  const r = regimeLabel.trim().toLowerCase();
+  const bear = r.includes("bear");
+  const bull = r.includes("bull");
+  const wAvg = weeklyIndexAvgPct5d(weeklyRows);
+  const baseTip =
+    "Sector chips use ~5 sessions of ETF daily closes. Regime in Market pulse uses SPY/QQQ session change. They are different layers—divergence is expected when leadership rotates without benchmark follow-through.";
+
+  if (tone === "unknown") {
+    return { narrative: null, chip: null, chipKind: null };
+  }
+
+  let narrative: string | null = null;
+  let chip: { label: string; tip: string } | null = null;
+  let chipKind: SectorRotationFrame["chipKind"] = null;
+
+  if (bear) {
+    if (tone === "risk_on") {
+      narrative =
+        wAvg != null && wAvg < -0.25
+          ? "Cyclical-led gains last week did not lift the cap-weighted tape on average — leadership rotation without index follow-through."
+          : "Lopsided sector leadership to the upside while the session regime reads risk-off — often isolated bounce or late-cycle chop before benchmarks turn.";
+      chip = {
+        label: "Leadership: Non-confirming",
+        tip: `${baseTip} Here, sector skew looks risk-on versus a bearish headline—does not imply the engine ignored the tape.`
+      };
+      chipKind = "nonconfirming";
+    } else if (tone === "mixed") {
+      narrative = noSwingSetups
+        ? "Winners and losers both printed over the week while Regime is bearish and swing setups are quiet — classic non-confirmation: rotation under the surface without a clean tape bid."
+        : "Winners and losers both printed over the week — choppy rotation under a bearish session regime. Sector gains here did not have to lift SPY/QQQ the same day you read Regime.";
+      chip = {
+        label: "Leadership: Mixed / fading",
+        tip: `${baseTip} Mixed buckets mean money swaps groups without a broad thrust—pairs with selective scanners even when a few ETFs look strong.`
+      };
+      chipKind = "mixed";
+    } else if (tone === "defensive") {
+      narrative = "Sector skew over the week leans defensive — closer to what a bearish tape label implies.";
+      chip = { label: "Leadership: Confirming", tip: `${baseTip} More sector buckets are weak than strong on this window.` };
+      chipKind = "confirming";
+    } else {
+      narrative =
+        "Narrow leadership last week — a few groups moved while breadth stayed thin. That can coexist with a bearish headline until indexes broaden.";
+      chip = {
+        label: "Leadership: Isolated",
+        tip: `${baseTip} Narrow prints mean one or two themes drove the tape; watch whether SPY/QQQ catch up or mean-revert.`
+      };
+      chipKind = "mixed";
+    }
+  } else if (bull) {
+    if (tone === "defensive") {
+      narrative =
+        "Session regime reads risk-on, but sector buckets over the week skew soft — leadership not fully backing the headline yet.";
+      chip = {
+        label: "Leadership: Non-confirming",
+        tip: `${baseTip} Defensive skew versus a bullish regime often flags late-cycle chop or megacap-led tape.`
+      };
+      chipKind = "nonconfirming";
+    } else if (tone === "mixed") {
+      narrative = "Mixed week under the surface while tape reads bullish — rotation without a single clean leadership story.";
+      chip = {
+        label: "Leadership: Mixed",
+        tip: `${baseTip} Use weekly indexes + Evidence when the story under the hood disagrees with the headline label.`
+      };
+      chipKind = "mixed";
+    } else if (tone === "risk_on") {
+      narrative = "Risk-on skew in sectors aligns with the headline regime on this window.";
+      chip = { label: "Leadership: Confirming", tip: `${baseTip}` };
+      chipKind = "confirming";
+    } else {
+      narrative = "Narrow leadership — watch whether cyclicals broaden or stall.";
+      chip = { label: "Leadership: Narrow", tip: `${baseTip}` };
+      chipKind = "mixed";
+    }
+  } else {
+    if (tone === "mixed") {
+      narrative = "Mixed sector impulses over the week sit naturally next to a neutral headline regime.";
+      chip = { label: "Leadership: Mixed", tip: `${baseTip}` };
+      chipKind = "mixed";
+    } else if (tone === "risk_on" || tone === "defensive") {
+      narrative =
+        tone === "risk_on"
+          ? "Cyclical skew on the week while headline regime is neutral — watch whether indexes adopt the same story."
+          : "Defensive skew on the week while headline regime is neutral — hedging rotation without a decisive benchmark break.";
+      chip = { label: "Leadership: Drift", tip: `${baseTip}` };
+      chipKind = "mixed";
+    } else {
+      narrative = "Narrow sector moves — little conviction versus a neutral headline.";
+      chip = { label: "Leadership: Narrow", tip: `${baseTip}` };
+      chipKind = "mixed";
+    }
+  }
+
+  return { narrative, chip, chipKind };
+}
+
+function sectorLeadershipChipColors(kind: NonNullable<SectorRotationFrame["chipKind"]>, colors: ThemeColors) {
+  if (kind === "confirming") {
+    return {
+      border: `color-mix(in srgb, ${colors.bullish} 55%, ${colors.border})`,
+      background: "rgba(34,197,94,0.10)",
+      color: colors.bullish
+    };
+  }
+  if (kind === "nonconfirming") {
+    return {
+      border: `color-mix(in srgb, ${colors.caution} 55%, ${colors.border})`,
+      background: "rgba(245,158,11,0.12)",
+      color: colors.caution
+    };
+  }
+  return {
+    border: `color-mix(in srgb, ${colors.textMuted} 45%, ${colors.border})`,
+    background: "rgba(148,163,184,0.08)",
+    color: colors.textMuted
+  };
+}
+
+/** Why VIX shows “—” on the dashboard tape (never silent). */
+type VixBlankKind = "market_closed" | "upstream_gap" | "data_pending";
+
+function resolveVixBlankKind(
+  vixPulseOk: boolean,
+  status: MarketOverview["status"],
+  marketError: string | undefined,
+  spyPct: number | null,
+  qqqPct: number | null
+): VixBlankKind | null {
+  if (vixPulseOk) return null;
+  if (marketError) return "upstream_gap";
+  const m = status?.market?.trim().toLowerCase();
+  if (m && m !== "open") return "market_closed";
+  if (m === "open") {
+    if (spyPct == null && qqqPct == null) return "data_pending";
+    return "upstream_gap";
+  }
+  if (spyPct == null && qqqPct == null) return "data_pending";
+  return "upstream_gap";
+}
+
+function vixBlankTag(kind: VixBlankKind): string {
+  switch (kind) {
+    case "market_closed":
+      return "(market closed)";
+    case "data_pending":
+      return "(data pending)";
+    default:
+      return "(unavailable)";
+  }
+}
+
+function VixDashExplained({ kind, colors }: { kind: VixBlankKind; colors: ThemeColors }) {
+  const tag = vixBlankTag(kind);
+  const tip =
+    kind === "market_closed"
+      ? VIX_BLANK_MARKET_CLOSED_TIP
+      : kind === "data_pending"
+        ? VIX_BLANK_DATA_PENDING_TIP
+        : VIX_BLANK_UPSTREAM_TIP;
+  return (
+    <span className="inline-flex flex-wrap items-center gap-x-1 gap-y-0.5">
+      <span>—</span>
+      <span style={{ fontSize: typography.scale.xs, fontWeight: 600, color: colors.textMuted }}>{tag}</span>
+      <InfoTip text={tip} label="Why VIX is blank" maxWidth={320} />
+    </span>
+  );
 }
 
 export function DashboardRedesign({
@@ -294,6 +557,26 @@ export function DashboardRedesign({
     ? (scannerOverview.regimeLabel ?? "Neutral")
     : regimeFromSpyQqq(spyPct, qqqPct, scannerOverview.regimeLabel ?? "Neutral");
   const vixPct = snapshotSessionChangePct(vixSnapshot);
+  const vixPulseOk = vixPulseDataAvailable(vixSnapshot, vixPct);
+  const vixBlankKind = resolveVixBlankKind(vixPulseOk, marketOverview.status, marketOverview.error, spyPct, qqqPct);
+  const regimeBadgePriceBreadthOnly = !vixPulseOk && regimeLabelIsDirectional(regimeLabel);
+  const regimeBadgeExplanation = useMemo(() => {
+    if (vixPulseOk) return REGIME_BADGE_TIP;
+    return `${REGIME_BADGE_TIP}${REGIME_WITHOUT_VIX_APPEND}`;
+  }, [vixPulseOk]);
+
+  const emptySwingTeaching = useMemo(
+    () => ({
+      sentence: emptySwingTopSignalsDiagnostic(regimeLabel, sectorRotation),
+      chip: emptySwingTopSignalsChip(regimeLabel)
+    }),
+    [regimeLabel, sectorRotation]
+  );
+  const sectorFrame = useMemo(
+    () => sectorRotationFrame(regimeLabel, sectorRotation, weeklyIndexRows, swingTopSignals.length === 0),
+    [regimeLabel, sectorRotation, weeklyIndexRows, swingTopSignals.length]
+  );
+  const regimeChipAccent = pulseRegimeColor(regimeLabel, colors);
 
   const newsLabels = useMemo(() => {
     const m = new Map<string, string>();
@@ -348,11 +631,18 @@ export function DashboardRedesign({
                 <SkeletonLine width="64px" />
               )}
             </span>
-            {vixSnapshot ? (
-              <span style={{ color: colors.textMuted }}>
-                <strong style={{ color: colors.text }}>VIX</strong> {toPrice(vixSnapshot.last_trade_price)}
-              </span>
-            ) : null}
+            <span style={{ color: colors.textMuted }} className="inline-flex items-center gap-1">
+              <strong style={{ color: colors.text }}>VIX</strong>
+              {vixPulseOk && vixSnapshot && toPrice(vixSnapshot.last_trade_price) ? (
+                <span>{toPrice(vixSnapshot.last_trade_price)}</span>
+              ) : vixPct != null ? (
+                <span>{`${vixPct >= 0 ? "+" : ""}${vixPct.toFixed(2)}%`}</span>
+              ) : vixBlankKind ? (
+                <VixDashExplained kind={vixBlankKind} colors={colors} />
+              ) : (
+                <span>—</span>
+              )}
+            </span>
             <PdtStatusPill assessment={pdt ?? null} />
           </div>
         </div>
@@ -399,6 +689,31 @@ export function DashboardRedesign({
                       <p style={{ margin: 0, color: colors.textMuted, lineHeight: 1.55 }}>
                         No active swing setups right now.
                       </p>
+                      <p
+                        style={{
+                          margin: 0,
+                          color: colors.text,
+                          lineHeight: 1.55,
+                          fontSize: typography.scale.sm,
+                          fontWeight: 500
+                        }}
+                      >
+                        {emptySwingTeaching.sentence}
+                      </p>
+                      <div className="inline-flex flex-wrap items-center gap-2">
+                        <span
+                          className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold tracking-wide"
+                          style={{
+                            border: `1px solid color-mix(in srgb, ${regimeChipAccent} 55%, ${colors.border})`,
+                            background: `color-mix(in srgb, ${regimeChipAccent} 14%, transparent)`,
+                            color: regimeChipAccent,
+                            textTransform: "none"
+                          }}
+                        >
+                          {emptySwingTeaching.chip.label}
+                          <InfoTip text={emptySwingTeaching.chip.tip} label="Why the swing list can be empty" maxWidth={300} />
+                        </span>
+                      </div>
                       <p style={{ margin: 0, color: colors.textMuted, lineHeight: 1.55, fontSize: typography.scale.sm }}>
                         The daily scanner runs each morning and surfaces setups when conditions align across price structure,
                         volume, and weekly momentum.
@@ -677,13 +992,15 @@ export function DashboardRedesign({
                       <DecisionMetric explanation={VIX_PULSE_NUMBER_TIP} label="How VIX level is used" maxWidth={280}>
                         <span>→ {Number(vixSnapshot.last_trade_price).toFixed(2)}</span>
                       </DecisionMetric>
+                    ) : vixBlankKind ? (
+                      <VixDashExplained kind={vixBlankKind} colors={colors} />
                     ) : (
                       "—"
                     )}
                   </span>
                 </span>
               </div>
-              <DecisionMetric explanation={REGIME_BADGE_TIP} label="How regime label is used" maxWidth={300}>
+              <DecisionMetric explanation={regimeBadgeExplanation} label="How regime label is used" maxWidth={320}>
                 <div
                   className="inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wide"
                   style={{
@@ -693,6 +1010,12 @@ export function DashboardRedesign({
                   }}
                 >
                   Regime: {regimeLabel}
+                  {regimeBadgePriceBreadthOnly ? (
+                    <span style={{ fontWeight: 700, textTransform: "none", letterSpacing: "0.02em" }}>
+                      {" "}
+                      (price + breadth only)
+                    </span>
+                  ) : null}
                 </div>
               </DecisionMetric>
               <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.5 }}>
@@ -715,9 +1038,36 @@ export function DashboardRedesign({
           <DashboardCard
             eyebrow="Sectors"
             title="Sector rotation (5 sessions)"
-            subtitle="Where equity flows clustered over the last week of daily closes."
+            subtitle="ETF buckets over ~5 trading sessions of daily closes — not today’s session % beside Regime."
             cardTip={SECTOR_ROTATION_CARD_TIP}
           >
+            <div className="flex flex-col gap-3">
+              <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.55 }}>
+                <strong style={{ color: colors.text }}>When this is from:</strong> last ~5{" "}
+                <strong style={{ color: colors.text }}>trading sessions</strong> of daily closes (same swing window as
+                Weekly market context).{" "}
+                <InfoTip text={SECTOR_FRAME_TIMING_TIP} label="How sector timing differs from Regime" maxWidth={320} />
+              </p>
+              {sectorFrame.narrative ? (
+                <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.text, lineHeight: 1.55, fontWeight: 500 }}>
+                  {sectorFrame.narrative}
+                </p>
+              ) : null}
+              {sectorFrame.chip && sectorFrame.chipKind ? (
+                <div className="inline-flex flex-wrap items-center gap-2">
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold tracking-wide"
+                    style={{
+                      textTransform: "none",
+                      letterSpacing: "0.02em",
+                      ...sectorLeadershipChipColors(sectorFrame.chipKind, colors)
+                    }}
+                  >
+                    {sectorFrame.chip.label}
+                    <InfoTip text={sectorFrame.chip.tip} label="How to read leadership vs regime" maxWidth={320} />
+                  </span>
+                </div>
+              ) : null}
             <div className="flex flex-wrap gap-2" style={{ fontSize: typography.scale.sm, fontVariantNumeric: "tabular-nums" }}>
               {sectorRotation.map((s) => (
                 <span
@@ -737,16 +1087,25 @@ export function DashboardRedesign({
                 </span>
               ))}
             </div>
+            </div>
           </DashboardCard>
 
           <DashboardCard
             eyebrow="Catalysts"
-            title="Upcoming events this week"
-            subtitle="Earnings on your dashboard symbol list (same feed as the calendar below)."
+            title="Upcoming earnings this week"
+            subtitle="Earnings on your dashboard symbol list only — macro prints (Fed, CPI, etc.) are not shown here."
             cardTip={UPCOMING_CATALYSTS_CARD_TIP}
           >
             {upcomingCatalystWeek.length === 0 ? (
-              <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted }}>No upcoming dates in range.</p>
+              <div style={{ display: "grid", gap: spacing[2] }}>
+                <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.text, lineHeight: 1.55 }}>
+                  No tracked earnings in this window.
+                </p>
+                <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.55 }}>
+                  Macro economic events are not shown in this panel — absence of rows does not mean there is nothing on
+                  the calendar.
+                </p>
+              </div>
             ) : (
               <ul style={{ margin: 0, paddingLeft: spacing[4], color: colors.text, fontSize: typography.scale.sm, lineHeight: 1.55 }}>
                 {upcomingCatalystWeek.map((e) => (

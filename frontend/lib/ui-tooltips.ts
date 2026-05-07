@@ -89,10 +89,10 @@ export const EARNINGS_CALENDAR_CARD_TIP =
   "Earnings dates for symbols on your dashboard list. Reporting days add event risk: STOCVEST surfaces them so you can weigh gap risk and news volatility before acting on a setup.";
 
 export const SECTOR_ROTATION_CARD_TIP =
-  "Sector ETFs (XLK, XLC, XLE, …) with the same **5-session** daily return as the weekly index row. Shows where equity risk has rotated over the last week of trading—not intraday heatmaps.";
+  "Sector ETFs (XLK, XLC, XLE, …) with the same ~5 **trading sessions** of daily closes as the weekly index row—not today’s session % beside Market pulse. When chips disagree with Regime, the panel explains that gap (rotation vs benchmark, timing window, breadth).";
 
 export const UPCOMING_CATALYSTS_CARD_TIP =
-  "Next earnings dates pulled from the same calendar as the table below, limited to the dashboard symbol list. Times are BMO/AMC/TBD when Polygon provides them.";
+  "Earnings dates only — same feed as the calendar below, limited to your dashboard symbol list. Fed, CPI, and other macro calendars are not wired into this panel yet; an empty list does not mean there is nothing on the macro calendar.";
 
 export const PORTFOLIO_ACTIVE_CARD_TIP =
   "Open rows from the **Signal portfolio** (notional model book). Mark-to-market uses the latest snapshot last price when available; otherwise entry is shown as the live figure until quotes load.";
@@ -127,7 +127,23 @@ export const VIX_PULSE_NUMBER_TIP =
   "VIX level and session change feed fear/grease context. Elevated VIX raises caution in macro and internals-style scoring; it is one input among six layers on a full composite.";
 
 export const REGIME_BADGE_TIP =
-  "Regime is a simple label from SPY and QQQ moves (scanner path when available, otherwise snapshots). It helps you read the tape in one glance; the composite engine uses richer per-layer math when you open Evidence.";
+  "On this dashboard the regime word is derived from SPY and QQQ session change only (scanner path when both prints are present, otherwise overview snapshots). VIX on the same line is tape context only—it does not change the bullish / neutral / bearish label. When VIX is blank, the badge notes completeness so you are never left guessing whether vol agreed, was skipped, or the market was simply closed. Open Evidence for full six-layer composite math.";
+
+/** Appended to `REGIME_BADGE_TIP` when VIX is absent from the pulse row (DecisionMetric). */
+export const REGIME_WITHOUT_VIX_APPEND =
+  " VIX is not on this read — a blank VIX field is not an implicit low-volatility signal. The label above still follows SPY/QQQ rules only; when it is directional we mark price + breadth until VIX prints in this panel.";
+
+/** VIX shows “—” and equities session is not regular open — expected stale / no fresh print. */
+export const VIX_BLANK_MARKET_CLOSED_TIP =
+  "VIX is built from SPX options and normally updates during regular US equity hours. Pre-market, post-market, weekends, and some holidays often have no fresh index-style print here. Showing “—” is correct; it does not mean your account is broken.";
+
+/** VIX missing while the tape row otherwise has data — upstream gap or partial outage. */
+export const VIX_BLANK_UPSTREAM_TIP =
+  "The overview or options path did not return a usable VIX for this load (feed hiccup, partial outage, or symbol missing in the response). A blank here means implied volatility is absent from this line—not that vol is necessarily low. The dashboard regime badge still uses SPY and QQQ only; see its tooltip for how completeness is labeled.";
+
+/** Tape not ready yet — SPY/QQQ also missing so the row is still filling. */
+export const VIX_BLANK_DATA_PENDING_TIP =
+  "Market snapshots are still loading or the first response has not included VIX yet. Wait for a refresh; until then treat the dash as pending data, not a neutral vol read.";
 
 export const LAST_PRICE_SIGNAL_CARD_TIP =
   "Last price captured with this scanner row. Opening Evidence fetches a fresh snapshot for the composite and resolution logic—use this figure as a quick reference only.";
