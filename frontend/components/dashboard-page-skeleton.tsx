@@ -1,7 +1,7 @@
 "use client";
 
 import { CuteLoader } from "@/components/cute-loader";
-import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
+import { borderRadius, spacing, surfaceGlowClassName } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
 /** Shown instantly while dashboard data streams in — keeps shell + sidebar usable. */
@@ -23,9 +23,6 @@ export function DashboardPageSkeleton() {
       >
         <CuteLoader label="Loading dashboard" sublabel="Pulling scanner, market, and earnings data" />
       </article>
-      <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.sm, textAlign: "center" }}>
-        Preparing your dashboard view...
-      </p>
     </section>
   );
 }

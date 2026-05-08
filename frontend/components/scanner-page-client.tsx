@@ -107,6 +107,8 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
   const [scannerSetupMode, setScannerSetupMode] = useState<ScannerSetupLoadMode>("swing");
   const [isPending, startTransition] = useTransition();
   const [evidenceOpen, setEvidenceOpen] = useState(false);
+  const [evidenceLoading, setEvidenceLoading] = useState(false);
+  const [evidenceLoadingSymbol, setEvidenceLoadingSymbol] = useState<string | null>(null);
   const [newsPanelSymbol, setNewsPanelSymbol] = useState("");
   const [newsPanelOpen, setNewsPanelOpen] = useState(false);
   const [gapNewsDrawerItem, setGapNewsDrawerItem] = useState<GapIntelligenceItem | null>(null);
@@ -512,18 +514,20 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
           <button
             type="button"
             onClick={() => void openGapEvidence(item)}
+            disabled={evidenceLoading}
             style={{
               border: `1px solid ${colors.border}`,
               borderRadius: borderRadius.md,
               background: colors.surfaceMuted,
               color: colors.text,
               padding: `${spacing[1]} ${spacing[2]}`,
-              cursor: "pointer",
+              cursor: evidenceLoading ? "wait" : "pointer",
+              opacity: evidenceLoading ? 0.72 : 1,
               fontSize: typography.scale.xs,
               fontWeight: 500
             }}
           >
-            View Signal
+            {evidenceLoading ? "Preparing signal..." : "View Signal"}
           </button>
           <AddToWatchlistButton symbol={item.symbol} />
           <span title="ORB window has closed for today" style={{ display: "inline-flex" }}>
@@ -716,24 +720,32 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
 
   const openGapEvidence = useCallback(
     async (item: GapIntelligenceItem) => {
-      let symbolNewsArticles: Awaited<ReturnType<typeof fetchSymbolNews>> = [];
-      try {
-        symbolNewsArticles = await fetchSymbolNews(item.symbol, 10, {
-          newsTradingMode: panelNewsTradingMode
-        });
-      } catch {
-        symbolNewsArticles = [];
-      }
-      const risk = earningsRiskFor(item.symbol);
       const sym = item.symbol.trim().toUpperCase();
-      const s = (await fetchSymbolSnapshot(sym)) ?? undefined;
-      const base = buildEvidenceFromSetup(gapSyntheticSetup(item), s, {
-        symbolNewsArticles,
-        earningsRiskDays: risk?.daysUntil,
-        earningsReportTime: risk?.reportTime
-      });
-      setEvidence(await enrichEvidenceWithRealComposite(base));
+      setEvidenceLoading(true);
+      setEvidenceLoadingSymbol(sym);
+      setEvidence(null);
       setEvidenceOpen(true);
+      try {
+        let symbolNewsArticles: Awaited<ReturnType<typeof fetchSymbolNews>> = [];
+        try {
+          symbolNewsArticles = await fetchSymbolNews(item.symbol, 10, {
+            newsTradingMode: panelNewsTradingMode
+          });
+        } catch {
+          symbolNewsArticles = [];
+        }
+        const risk = earningsRiskFor(item.symbol);
+        const s = (await fetchSymbolSnapshot(sym)) ?? undefined;
+        const base = buildEvidenceFromSetup(gapSyntheticSetup(item), s, {
+          symbolNewsArticles,
+          earningsRiskDays: risk?.daysUntil,
+          earningsReportTime: risk?.reportTime
+        });
+        setEvidence(await enrichEvidenceWithRealComposite(base));
+      } finally {
+        setEvidenceLoading(false);
+        setEvidenceLoadingSymbol(null);
+      }
     },
     [earningsBySymbol, panelNewsTradingMode]
   );
@@ -1213,37 +1225,47 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                       <button
                         type="button"
                         onClick={async () => {
-                          let symbolNewsArticles: Awaited<ReturnType<typeof fetchSymbolNews>> = [];
-                          try {
-                            symbolNewsArticles = await fetchSymbolNews(setup.symbol, 10, {
-                              newsTradingMode: panelNewsTradingMode
-                            });
-                          } catch {
-                            symbolNewsArticles = [];
-                          }
-                          const risk = earningsRiskFor(setup.symbol);
                           const sym = setup.symbol.trim().toUpperCase();
-                          const s = (await fetchSymbolSnapshot(sym)) ?? undefined;
-                          const base = buildEvidenceFromSetup(setup, s, {
-                            symbolNewsArticles,
-                            earningsRiskDays: risk?.daysUntil,
-                            earningsReportTime: risk?.reportTime
-                          });
-                          setEvidence(await enrichEvidenceWithRealComposite(base));
+                          setEvidenceLoading(true);
+                          setEvidenceLoadingSymbol(sym);
+                          setEvidence(null);
                           setEvidenceOpen(true);
+                          try {
+                            let symbolNewsArticles: Awaited<ReturnType<typeof fetchSymbolNews>> = [];
+                            try {
+                              symbolNewsArticles = await fetchSymbolNews(setup.symbol, 10, {
+                                newsTradingMode: panelNewsTradingMode
+                              });
+                            } catch {
+                              symbolNewsArticles = [];
+                            }
+                            const risk = earningsRiskFor(setup.symbol);
+                            const s = (await fetchSymbolSnapshot(sym)) ?? undefined;
+                            const base = buildEvidenceFromSetup(setup, s, {
+                              symbolNewsArticles,
+                              earningsRiskDays: risk?.daysUntil,
+                              earningsReportTime: risk?.reportTime
+                            });
+                            setEvidence(await enrichEvidenceWithRealComposite(base));
+                          } finally {
+                            setEvidenceLoading(false);
+                            setEvidenceLoadingSymbol(null);
+                          }
                         }}
+                        disabled={evidenceLoading}
                         style={{
                           border: `1px solid ${colors.border}`,
                           borderRadius: borderRadius.md,
                           background: colors.surfaceMuted,
                           color: colors.text,
                           padding: `${spacing[1]} ${spacing[2]}`,
-                          cursor: "pointer",
+                          cursor: evidenceLoading ? "wait" : "pointer",
+                          opacity: evidenceLoading ? 0.72 : 1,
                           fontSize: typography.scale.xs,
                           fontWeight: 500
                         }}
                       >
-                        View Evidence
+                        {evidenceLoading ? "Preparing signal..." : "View Evidence"}
                       </button>
                       <InfoTip text={SETUP_RELATIVE_VOLUME_TIP} label="Relative volume" />
                     </div>
@@ -1275,7 +1297,13 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
       <SignalEvidenceModal
         open={evidenceOpen}
         evidence={evidence}
-        onClose={() => setEvidenceOpen(false)}
+        loading={evidenceLoading}
+        loadingSymbol={evidenceLoadingSymbol}
+        onClose={() => {
+          setEvidenceOpen(false);
+          setEvidenceLoading(false);
+          setEvidenceLoadingSymbol(null);
+        }}
         onOpenNewsPanel={(sym) => {
           setNewsPanelSymbol(sym.trim().toUpperCase());
           setNewsPanelOpen(true);

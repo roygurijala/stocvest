@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
+import { CuteLoader } from "@/components/cute-loader";
 import { SignalEvidenceCard } from "@/components/signal-evidence-card";
 import { spacing, surfaceGlowClassName } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
@@ -10,15 +11,24 @@ import type { SignalEvidenceData } from "@/lib/signal-evidence";
 interface SignalEvidenceModalProps {
   evidence: SignalEvidenceData | null;
   open: boolean;
+  loading?: boolean;
+  loadingSymbol?: string | null;
   onClose: () => void;
   onOpenNewsPanel?: (symbol: string) => void;
 }
 
-export function SignalEvidenceModal({ evidence, open, onClose, onOpenNewsPanel }: SignalEvidenceModalProps) {
+export function SignalEvidenceModal({
+  evidence,
+  open,
+  loading = false,
+  loadingSymbol = null,
+  onClose,
+  onOpenNewsPanel
+}: SignalEvidenceModalProps) {
   const { colors } = useTheme();
   return (
     <AnimatePresence>
-      {open && evidence ? (
+      {open ? (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -58,7 +68,22 @@ export function SignalEvidenceModal({ evidence, open, onClose, onOpenNewsPanel }
                 <X size={18} />
               </button>
             </div>
-            <SignalEvidenceCard evidence={evidence} onOpenNewsPanel={onOpenNewsPanel} />
+            {loading || !evidence ? (
+              <div
+                className="grid place-items-center"
+                style={{ minHeight: "42vh", color: colors.text, padding: spacing[4] }}
+                aria-live="polite"
+                aria-busy="true"
+              >
+                <CuteLoader
+                  compact
+                  label={`Preparing signal${loadingSymbol ? ` for ${loadingSymbol}` : ""}...`}
+                  sublabel="Fetching snapshot, news, and six-layer synthesis."
+                />
+              </div>
+            ) : (
+              <SignalEvidenceCard evidence={evidence} onOpenNewsPanel={onOpenNewsPanel} />
+            )}
           </motion.div>
         </motion.div>
       ) : null}

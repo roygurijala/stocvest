@@ -13,36 +13,52 @@ export function CuteLoader({
   sublabel = "Fetching fresh market context",
   compact = false
 }: CuteLoaderProps) {
-  const size = compact ? 18 : 22;
+  const ringSize = compact ? 34 : 46;
+  const ringStroke = compact ? 2 : 2.5;
   return (
     <div className="grid place-items-center gap-3 text-center">
-      <motion.div
-        initial={{ scale: 0.96, opacity: 0.85 }}
-        animate={{ scale: 1.02, opacity: 1 }}
-        transition={{ duration: 0.9, repeat: Infinity, repeatType: "reverse", ease: "easeInOut" }}
+      <div
         style={{
-          fontSize: compact ? 26 : 32,
-          lineHeight: 1
+          width: ringSize,
+          height: ringSize,
+          position: "relative",
+          display: "grid",
+          placeItems: "center"
         }}
         aria-hidden
       >
-        📈
-      </motion.div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }} aria-hidden>
-        {[0, 1, 2].map((i) => (
-          <motion.span
-            key={i}
-            animate={{ y: [0, -5, 0], opacity: [0.35, 1, 0.35] }}
-            transition={{ duration: 0.85, repeat: Infinity, delay: i * 0.12, ease: "easeInOut" }}
-            style={{
-              width: size,
-              height: size,
-              borderRadius: 999,
-              background: "linear-gradient(135deg, rgba(59,130,246,0.95), rgba(34,197,94,0.85))",
-              boxShadow: "0 0 0 1px rgba(148,163,184,0.3), 0 3px 14px rgba(30,64,175,0.35)"
-            }}
-          />
-        ))}
+        <span
+          style={{
+            position: "absolute",
+            inset: 0,
+            borderRadius: 999,
+            border: `${ringStroke}px solid rgba(148,163,184,0.28)`
+          }}
+        />
+        <motion.span
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1.05, repeat: Infinity, ease: "linear" }}
+          style={{
+            position: "absolute",
+            inset: 0,
+            borderRadius: 999,
+            border: `${ringStroke}px solid transparent`,
+            borderTopColor: "rgba(56,189,248,0.95)",
+            borderRightColor: "rgba(99,102,241,0.82)",
+            boxShadow: "0 0 18px rgba(59,130,246,0.25)"
+          }}
+        />
+        <motion.span
+          animate={{ scale: [0.92, 1.05, 0.92], opacity: [0.7, 1, 0.7] }}
+          transition={{ duration: 1.3, repeat: Infinity, ease: "easeInOut" }}
+          style={{
+            width: compact ? 6 : 8,
+            height: compact ? 6 : 8,
+            borderRadius: 999,
+            background: "rgba(125,211,252,0.95)",
+            boxShadow: "0 0 14px rgba(56,189,248,0.55)"
+          }}
+        />
       </div>
       <div style={{ display: "grid", gap: 2 }}>
         <strong style={{ fontSize: compact ? 14 : 16 }}>{label}</strong>
