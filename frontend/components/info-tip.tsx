@@ -140,6 +140,7 @@ export function InfoTip({ text, label, maxWidth }: { text: string; label?: strin
         padding: "8px 12px",
         fontSize: 13,
         lineHeight: 1.5,
+        whiteSpace: "pre-line",
         opacity: tipReady ? 1 : 0,
         transition: "opacity 150ms ease"
       }}

@@ -84,16 +84,23 @@ export const MARKET_PULSE_CARD_TIP =
   "SPY, QQQ, and VIX session change plus a simple regime label—useful context for how today’s session sits next to a swing thesis. When the scanner finishes, these numbers match the same tape inputs used in gap and setup context; otherwise they come from your market overview snapshots. They inform macro-style context in the engine, not individual entry prices.";
 
 export const TOP_SIGNALS_CARD_TIP =
-  "Top names from the **daily swing** scanner (DailyBarScanner) on the home dashboard only — not intraday ORB/EMA session patterns. Open Evidence for news, levels, and the six-layer read. Use the full Scanner page for day + swing lists.";
+  "Ideas from the overnight multi-day (swing) stock scan on this home page only—not same-day session patterns. Open Evidence on a symbol for news, levels, and the full six-layer read. Use the Scanner page for combined day-trading and swing lists.";
+
+/** Empty swing “Primary read” strip — explains headline + “swing suppressed” + filter lines in plain language. */
+export const PRIMARY_READ_SWING_CONTEXT_TIP =
+  "System posture means the app is waiting: it is watching the market but is not highlighting swing (multi-day) ideas until its checks line up.\n\nSwing suppressed means the daily swing scanner finished and did not find stocks that met the quality bar. That is usually expected behavior, not an outage.\n\nSymbol-level confirmation means each ticker is judged on its own—enough price history, a strong enough pattern score, trading activity, and complete quote data. If the broad market looks fine but no individual names pass those checks, you will see wording about filters or confirmations instead of a ticker list.";
 
 export const SWING_REENABLE_CALLOUT_TIP =
-  "Bullets mirror shipped thresholds: tape regime uses the same SPY/QQQ session rules sent as `regime` to POST /v1/signals/swing/setups; swing rows require DailyBarScanner passes (≥205 US daily bars, score ≥ 0.48, pattern + liquidity). Not a forecast—only what would change inputs the engine already uses.";
+  "This checklist describes what typically has to improve before new swing rows can show up again: how the big indexes are labeled today, whether sectors agree with that story, weekly index tone, and whether specific stocks pass the scanner’s per-name quality bar. It is not a price forecast—only the kinds of inputs STOCVEST already watches when it decides to show or hide ideas.\n\nWhen bullets mention the overnight scanner, read that as the automated daily review that must sign off on each stock before it can appear here.";
 
 export const WATCHLIST_READINESS_TIP =
-  "Readiness counts how many symbols in the capped home universe cleared swing gates versus how many were evaluated. No tickers, prices, or direction—pressure awareness only.";
+  "A pass/fail count for the stocks the home dashboard tried to evaluate for swing ideas. It never lists ticker symbols; it only signals whether the empty board is because almost nothing was checked or because nothing cleared the bar.";
+
+export const WATCHLIST_READINESS_DETAIL_INTRO =
+  "Plain-language read: readiness is how many names passed the swing quality checks versus how many were scanned. The line below states the outcome using the same rules the scanner applies.";
 
 export const ALIGNMENT_LADDER_TIP =
-  "Text-only stack of macro pulse, tape regime, 5d sector skew, weekly index structure, and whether swing setups are active or suppressed. Mirrors dashboard inputs, not a second opinion engine.";
+  "A simple stack that shows how macro context, today’s large-cap tape label, sector leadership, weekly index momentum, and the swing list relate. The words describe alignment only—they are not buy or sell instructions, and they do not replace opening Evidence on a stock.";
 
 export const TOP_SIGNAL_ROW_CARD_TIP =
   "A single scanner candidate. Entry zone, stop/target, and R:R are **reference geometry** from the session snapshot (same style as Evidence reference levels), not guaranteed fills. Pattern line translates day-scanner triggers into swing-readable language; catalyst line uses the earnings calendar when available. Open Evidence for the full six-layer composite.";

@@ -45,7 +45,9 @@ import {
   TOP_SIGNAL_ROW_CARD_TIP,
   TOP_SIGNALS_CARD_TIP,
   ALIGNMENT_LADDER_TIP,
+  PRIMARY_READ_SWING_CONTEXT_TIP,
   SWING_REENABLE_CALLOUT_TIP,
+  WATCHLIST_READINESS_DETAIL_INTRO,
   WATCHLIST_READINESS_TIP,
   UPCOMING_CATALYSTS_CARD_TIP,
   VIX_PULSE_NUMBER_TIP,
@@ -54,7 +56,6 @@ import {
 import { buildDashboardSignalCardStrip } from "@/lib/dashboard-signal-card-strip";
 import {
   buildAlignmentLadder,
-  buildSwingReenableBulletsJoined,
   buildSwingReenableBulletsShort,
   macroRiskStateHeadline,
   macroRiskStateTip,
@@ -254,48 +255,12 @@ function pulseRegimeBadgeColor(regime: string, colors: ThemeColors): string {
   return `color-mix(in srgb, ${raw} 76%, ${colors.text})`;
 }
 
-/** Dashboard Top signals empty state: explains “no list” vs “broken API”. */
-function emptySwingTopSignalsDiagnostic(regimeLabel: string, sectors: SectorRotationChip[]): string {
+/** Institutional one-liner for empty swing list — no tooltip (story lives in posture + ladder below). */
+function emptySwingSuppressionStatusLine(regimeLabel: string): string {
   const r = regimeLabel.trim().toLowerCase();
-  let macro: string;
-  if (r.includes("bear")) macro = "macro regime bearish";
-  else if (r.includes("bull")) macro = "macro regime bullish";
-  else macro = "macro regime neutral";
-
-  const pcts = sectors.map((s) => s.pct5d).filter((x): x is number => typeof x === "number" && Number.isFinite(x));
-  let sectorW: string;
-  if (pcts.length === 0) {
-    sectorW = "sector leadership unclear until rotation data fills in";
-  } else {
-    const up = pcts.filter((x) => x > 0.2).length;
-    const down = pcts.filter((x) => x < -0.2).length;
-    if (up >= 2 && down >= 2) sectorW = "sector leadership mixed";
-    else if (down >= 3 && up <= 1) sectorW = "sector leadership defensive";
-    else if (up >= 3 && down <= 1) sectorW = "sector leadership risk-on";
-    else sectorW = "sector leadership narrow";
-  }
-
-  return `No swing setups — ${macro} and ${sectorW}.`;
-}
-
-function emptySwingTopSignalsChip(regimeLabel: string): { label: string; tip: string } {
-  const r = regimeLabel.trim().toLowerCase();
-  if (r.includes("bear")) {
-    return {
-      label: "Signal suppressed: Regime",
-      tip: "Tape regime reads bearish; the swing desk stays idle until trend and structure meet the scanner’s rules."
-    };
-  }
-  if (r.includes("bull")) {
-    return {
-      label: "Signal suppressed: Filters",
-      tip: "Tape can be risk-on, but no symbol passed daily swing structure, volume, and momentum gates today."
-    };
-  }
-  return {
-    label: "Signal context: Neutral tape",
-    tip: "Regime is neutral or mixed; swing rows only appear when price structure and weekly momentum align with the desk rules."
-  };
+  if (r.includes("bear")) return "Signal suppressed — regime not cleared";
+  if (r.includes("bull")) return "Signal suppressed — filters not cleared";
+  return "Signal suppressed — alignment not cleared";
 }
 
 function emptySwingPostureHeadline(): string {
@@ -311,10 +276,6 @@ function emptySwingOneLiner(regimeLabel: string): string {
     return "Swing suppressed — symbol-level confirmations still missing on the daily scanner.";
   }
   return "Swing suppressed — neutral chop; tape clarity and per-symbol gates still apply.";
-}
-
-function emptySwingWhyDetail(regimeLabel: string, sectors: SectorRotationChip[], chip: { label: string; tip: string }): string {
-  return `${chip.tip}\n\n${emptySwingTopSignalsDiagnostic(regimeLabel, sectors)}`;
 }
 
 type SectorTapeTone = "defensive" | "risk_on" | "mixed" | "narrow" | "unknown";
@@ -599,14 +560,7 @@ export function DashboardRedesign({
     return `${REGIME_BADGE_TIP}${REGIME_WITHOUT_VIX_APPEND}`;
   }, [vixPulseOk]);
 
-  const emptySwingTeaching = useMemo(() => {
-    const chip = emptySwingTopSignalsChip(regimeLabel);
-    return {
-      sentence: emptySwingTopSignalsDiagnostic(regimeLabel, sectorRotation),
-      chip,
-      why: emptySwingWhyDetail(regimeLabel, sectorRotation, chip)
-    };
-  }, [regimeLabel, sectorRotation]);
+  const emptySwingSuppressionLine = useMemo(() => emptySwingSuppressionStatusLine(regimeLabel), [regimeLabel]);
   const sectorFrame = useMemo(
     () => sectorRotationFrame(regimeLabel, sectorRotation, weeklyIndexRows, swingTopSignals.length === 0),
     [regimeLabel, sectorRotation, weeklyIndexRows, swingTopSignals.length]
@@ -618,10 +572,6 @@ export function DashboardRedesign({
   const weeklyAvgPct5dVal = useMemo(() => weeklyIndexAvgPct5d(weeklyIndexRows), [weeklyIndexRows]);
   const swingReenableBulletsShort = useMemo(
     () => buildSwingReenableBulletsShort({ regimeLabel, sectorTape: sectorTapePoster, weeklyAvgPct5d: weeklyAvgPct5dVal }),
-    [regimeLabel, sectorTapePoster, weeklyAvgPct5dVal]
-  );
-  const swingReenableBulletsFull = useMemo(
-    () => buildSwingReenableBulletsJoined({ regimeLabel, sectorTape: sectorTapePoster, weeklyAvgPct5d: weeklyAvgPct5dVal }),
     [regimeLabel, sectorTapePoster, weeklyAvgPct5dVal]
   );
   const alignmentLadder = useMemo(
@@ -657,9 +607,6 @@ export function DashboardRedesign({
   );
   const watchlistReadinessShort = useMemo(() => watchlistReadinessShortLine(watchlistReadinessOpts), [watchlistReadinessOpts]);
   const watchlistReadinessFull = useMemo(() => watchlistReadinessLine(watchlistReadinessOpts), [watchlistReadinessOpts]);
-  const regimeChipCore = pulseRegimeColor(regimeLabel, colors);
-  const regimeChipAccent = pulseRegimeBadgeColor(regimeLabel, colors);
-
   const newsLabels = useMemo(() => {
     const m = new Map<string, string>();
     for (const s of swingTopSignals.slice(0, 3)) {
@@ -770,7 +717,7 @@ export function DashboardRedesign({
                         No active swing setups right now.
                       </p>
                       <motion.div
-                        key={`${regimeLabel}-${emptySwingTeaching.chip.label}`}
+                        key={`${regimeLabel}-${emptySwingSuppressionLine}`}
                         initial={{ opacity: 0.88, y: 4 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.38, ease: "easeOut" }}
@@ -783,41 +730,43 @@ export function DashboardRedesign({
                           gap: spacing[3]
                         }}
                       >
-                        <p
-                          style={{
-                            margin: 0,
-                            fontSize: 10,
-                            letterSpacing: "0.18em",
-                            textTransform: "uppercase",
-                            fontWeight: 600,
-                            color: colors.textMuted
-                          }}
-                        >
-                          Primary read
-                        </p>
+                        <div className="inline-flex flex-wrap items-center gap-2">
+                          <p
+                            style={{
+                              margin: 0,
+                              fontSize: 10,
+                              letterSpacing: "0.18em",
+                              textTransform: "uppercase",
+                              fontWeight: 600,
+                              color: colors.textMuted
+                            }}
+                          >
+                            Primary read
+                          </p>
+                          <InfoTip
+                            text={PRIMARY_READ_SWING_CONTEXT_TIP}
+                            label="What this primary read means"
+                            maxWidth={340}
+                          />
+                        </div>
                         <p style={{ margin: 0, fontSize: typography.scale.base, fontWeight: 600, color: colors.text, lineHeight: 1.35 }}>
                           {emptySwingPostureHeadline()}
                         </p>
                         <p style={{ margin: 0, fontSize: typography.scale.sm, fontWeight: 500, color: colors.textMuted, lineHeight: 1.5 }}>
                           {emptySwingOneLiner(regimeLabel)}
                         </p>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span
-                            className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold tracking-wide"
-                            style={{
-                              border: `1px solid color-mix(in srgb, ${regimeChipCore} 28%, ${colors.border})`,
-                              background: `color-mix(in srgb, ${regimeChipCore} 7%, transparent)`,
-                              color: regimeChipAccent,
-                              textTransform: "none"
-                            }}
-                          >
-                            {emptySwingTeaching.chip.label}
-                          </span>
-                          <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }} className="inline-flex items-center gap-1">
-                            Why?
-                            <InfoTip text={emptySwingTeaching.why} label="Why swing rows are quiet" maxWidth={320} />
-                          </span>
-                        </div>
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: typography.scale.sm,
+                            fontWeight: 500,
+                            color: colors.textMuted,
+                            lineHeight: 1.45,
+                            letterSpacing: "0.02em"
+                          }}
+                        >
+                          {emptySwingSuppressionLine}
+                        </p>
                       </motion.div>
                       <p style={{ margin: 0, color: colors.textMuted, lineHeight: 1.5, fontSize: typography.scale.xs, fontWeight: 400 }}>
                         Scanner runs each morning; full lists and intraday work live on Scanner.
@@ -1093,7 +1042,11 @@ export function DashboardRedesign({
                     className="inline-flex flex-wrap items-baseline gap-x-2 gap-y-1"
                   >
                     <span style={{ color: colors.text, fontWeight: 500 }}>{watchlistReadinessShort}</span>
-                    <InfoTip text={watchlistReadinessFull} label="Watchlist readiness — full criteria" maxWidth={320} />
+                    <InfoTip
+                      text={`${WATCHLIST_READINESS_DETAIL_INTRO}\n\n${watchlistReadinessFull}`}
+                      label="Watchlist readiness — full criteria"
+                      maxWidth={320}
+                    />
                   </p>
                 </div>
                 <div style={{ display: "grid", gap: spacing[2] }}>
@@ -1104,8 +1057,8 @@ export function DashboardRedesign({
                     <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }} className="inline-flex items-center gap-1">
                       Why?
                       <InfoTip
-                        text={`${SWING_REENABLE_CALLOUT_TIP}\n\n${swingReenableBulletsFull}`}
-                        label="Full re-enablement detail"
+                        text={`${SWING_REENABLE_CALLOUT_TIP}\n\n${swingReenableBulletsShort.map((b) => `• ${b}`).join("\n")}`}
+                        label="What would bring swing rows back"
                         maxWidth={340}
                       />
                     </span>
