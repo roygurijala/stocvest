@@ -65,6 +65,21 @@ export function watchlistReadinessLine(opts: {
   return "No symbols met swing readiness (score ≥ 0.48, ≥205 daily US bars, pattern + liquidity checks).";
 }
 
+/** One-line watchlist row; pair with `watchlistReadinessLine` inside an InfoTip for full thresholds. */
+export function watchlistReadinessShortLine(opts: {
+  scannerError?: string;
+  swingSetupCount: number;
+  swingUniverseSymbolCount: number | null | undefined;
+}): string {
+  if (opts.scannerError) return "Readiness unknown — scanner did not finish.";
+  if (opts.swingSetupCount > 0) return "At least one symbol passed swing readiness.";
+  const n = opts.swingUniverseSymbolCount;
+  if (typeof n === "number" && n > 0) {
+    return `No passing rows across ${n} evaluated symbols.`;
+  }
+  return "No symbols passed swing readiness gates.";
+}
+
 /**
  * What would bring swing rows back — tied to shipped thresholds and payloads, not predictions.
  * Regime thresholds mirror `regimeFromSpyQqq` / scanner-load; swing gates mirror `POST /v1/signals/swing/setups` defaults.
@@ -114,6 +129,55 @@ export function buildSwingReenableBullets(opts: {
   }
 
   return [b1, b2, b3];
+}
+
+/** Short ladder lines for the dashboard; full reasoning stays in `buildSwingReenableBullets` (use in a “Why?” tip). */
+export function buildSwingReenableBulletsShort(opts: {
+  regimeLabel: string;
+  sectorTape: SectorTapeKind;
+  weeklyAvgPct5d: number | null;
+}): string[] {
+  const rl = opts.regimeLabel.trim().toLowerCase();
+  const bear = rl.includes("bear");
+  const bull = rl.includes("bull");
+  const st = opts.sectorTape;
+  const wa = opts.weeklyAvgPct5d;
+
+  const b1 = bear
+    ? "Regime: bearish tape — SPY/QQQ must reclaim swing thresholds before the label clears."
+    : bull
+      ? "Swing: tape can be risk-on; symbols still need DailyBarScanner passes (score, bars, liquidity)."
+      : "Regime: neutral chop — swing/setups wants a clearer Bullish or Bearish tape label.";
+
+  let b2: string;
+  if (bear && (st === "mixed" || st === "narrow" || st === "risk_on" || st === "unknown")) {
+    b2 = "Sectors: leadership is cross-current vs the headline tape — weakens confluence.";
+  } else if (bear && st === "defensive") {
+    b2 = "Sectors: defensive skew matches the tape — gating is mostly per-symbol.";
+  } else if (bull && st === "defensive") {
+    b2 = "Sectors: cyclicals lag a Bullish label — watch whether the tape broadens.";
+  } else {
+    b2 = "Sectors: keep skew coherent with headline regime so rows are not fighting the tape.";
+  }
+
+  let b3: string;
+  if (wa != null && wa <= -0.6) {
+    b3 = "Weekly: indexes need a cleaner constructive 5d skew (off defensive drift) for swing context.";
+  } else if (wa != null && wa >= 0.6) {
+    b3 = "Weekly: structure looks constructive — remaining gaps are symbol-local gates.";
+  } else {
+    b3 = "Weekly: mixed 5d drift — clearer medium-term skew helps alongside daily history.";
+  }
+
+  return [b1, b2, b3];
+}
+
+export function buildSwingReenableBulletsJoined(opts: {
+  regimeLabel: string;
+  sectorTape: SectorTapeKind;
+  weeklyAvgPct5d: number | null;
+}): string {
+  return buildSwingReenableBullets(opts).join("\n\n");
 }
 
 export type AlignmentLadderRow = { key: string; label: string; state: string };

@@ -135,6 +135,8 @@ resource "aws_apigatewayv2_integration" "http" {
   integration_type       = "AWS_PROXY"
   integration_uri        = aws_lambda_function.api[each.key].invoke_arn
   payload_format_version = "2.0"
+  # HTTP API hard cap (30000 ms); heavy handlers must finish within this window.
+  timeout_milliseconds = 30000
 }
 
 resource "aws_apigatewayv2_route" "http" {

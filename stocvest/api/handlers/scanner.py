@@ -72,9 +72,13 @@ async def _enrich_gap_company_names(client: PolygonClient, items: list[dict[str,
             row["company_name"] = nm
 
 
-async def _load_snapshots_for_dynamic_gaps(user_id: str | None = None) -> list[Snapshot]:
+async def _load_snapshots_for_dynamic_gaps(user_id: str | None = None, *, bounded: bool = False) -> list[Snapshot]:
     """
     Prefer Polygon's full US equities snapshot (one paginated REST feed).
+
+    If ``bounded`` is True (used by HTTP ``gap-intelligence`` with empty snapshots), skip the
+    aggregate US feed and fetch watchlist + system defaults only. That keeps the request under
+    API Gateway's ~30s Lambda integration limit; the full US snapshot can exceed it.
 
     If the API key's tier returns 401/403 on that aggregate route, batch-fetch
     watchlist + system default symbols (see :func:`stocvest.data.scan_symbols.get_scan_symbols`).
@@ -84,6 +88,18 @@ async def _load_snapshots_for_dynamic_gaps(user_id: str | None = None) -> list[S
 
     settings = get_settings()
     async with PolygonClient(api_key=settings.polygon_api_key) as client:
+        if bounded:
+            try:
+                wl_store = get_watchlist_store()
+            except Exception as w_exc:  # noqa: BLE001 — never break scanner on Dynamo/boto init
+                _LOG.warning("watchlist store unavailable; using system defaults only: %s", w_exc)
+                wl_store = None
+            merged = get_scan_symbols(user_id, wl_store)
+            _LOG.info(
+                "bounded scanner snapshots (%s symbols) for gap-intelligence HTTP path",
+                len(merged),
+            )
+            return await client.get_snapshots_many(merged, chunk_size=50)
         try:
             return await client.get_us_stocks_market_snapshots(include_otc=False)
         except PolygonError as exc:
@@ -289,7 +305,7 @@ async def _gap_intelligence_async(payload: dict[str, Any], user_id: str | None) 
     news_limit = min(1000, max(50, int(payload.get("news_limit", 400))))
 
     if len(snapshots_raw) == 0:
-        snapshots = await _load_snapshots_for_dynamic_gaps(user_id)
+        snapshots = await _load_snapshots_for_dynamic_gaps(user_id, bounded=True)
     else:
         snapshots = [Snapshot.model_validate(item) for item in snapshots_raw]
 

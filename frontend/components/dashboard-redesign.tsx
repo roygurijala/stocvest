@@ -54,11 +54,13 @@ import {
 import { buildDashboardSignalCardStrip } from "@/lib/dashboard-signal-card-strip";
 import {
   buildAlignmentLadder,
-  buildSwingReenableBullets,
+  buildSwingReenableBulletsJoined,
+  buildSwingReenableBulletsShort,
   macroRiskStateHeadline,
   macroRiskStateTip,
   sectorTapeKindFromPct5d,
-  watchlistReadinessLine
+  watchlistReadinessLine,
+  watchlistReadinessShortLine
 } from "@/lib/dashboard-posture";
 import Link from "next/link";
 
@@ -296,6 +298,25 @@ function emptySwingTopSignalsChip(regimeLabel: string): { label: string; tip: st
   };
 }
 
+function emptySwingPostureHeadline(): string {
+  return "System posture: Waiting for alignment";
+}
+
+function emptySwingOneLiner(regimeLabel: string): string {
+  const r = regimeLabel.trim().toLowerCase();
+  if (r.includes("bear")) {
+    return "Swing suppressed — risk-off tape; desk idle until structure aligns.";
+  }
+  if (r.includes("bull")) {
+    return "Swing suppressed — symbol-level confirmations still missing on the daily scanner.";
+  }
+  return "Swing suppressed — neutral chop; tape clarity and per-symbol gates still apply.";
+}
+
+function emptySwingWhyDetail(regimeLabel: string, sectors: SectorRotationChip[], chip: { label: string; tip: string }): string {
+  return `${chip.tip}\n\n${emptySwingTopSignalsDiagnostic(regimeLabel, sectors)}`;
+}
+
 type SectorTapeTone = "defensive" | "risk_on" | "mixed" | "narrow" | "unknown";
 
 function classifySectorTapeTone(sectors: SectorRotationChip[]): SectorTapeTone {
@@ -359,7 +380,7 @@ function sectorRotationFrame(
       chipKind = "nonconfirming";
     } else if (tone === "mixed") {
       narrative = noSwingSetups
-        ? "Winners and losers both printed over the week while Regime is bearish and swing setups are quiet — classic non-confirmation: rotation under the surface without a clean tape bid."
+        ? "Bearish regime with a mixed week — rotation under the surface without a clean tape bid (see Weekly context + Evidence for depth)."
         : "Winners and losers both printed over the week — choppy rotation under a bearish session regime. Sector gains here did not have to lift SPY/QQQ the same day you read Regime.";
       chip = {
         label: "Leadership: Mixed / fading",
@@ -578,13 +599,14 @@ export function DashboardRedesign({
     return `${REGIME_BADGE_TIP}${REGIME_WITHOUT_VIX_APPEND}`;
   }, [vixPulseOk]);
 
-  const emptySwingTeaching = useMemo(
-    () => ({
+  const emptySwingTeaching = useMemo(() => {
+    const chip = emptySwingTopSignalsChip(regimeLabel);
+    return {
       sentence: emptySwingTopSignalsDiagnostic(regimeLabel, sectorRotation),
-      chip: emptySwingTopSignalsChip(regimeLabel)
-    }),
-    [regimeLabel, sectorRotation]
-  );
+      chip,
+      why: emptySwingWhyDetail(regimeLabel, sectorRotation, chip)
+    };
+  }, [regimeLabel, sectorRotation]);
   const sectorFrame = useMemo(
     () => sectorRotationFrame(regimeLabel, sectorRotation, weeklyIndexRows, swingTopSignals.length === 0),
     [regimeLabel, sectorRotation, weeklyIndexRows, swingTopSignals.length]
@@ -594,8 +616,12 @@ export function DashboardRedesign({
     [sectorRotation]
   );
   const weeklyAvgPct5dVal = useMemo(() => weeklyIndexAvgPct5d(weeklyIndexRows), [weeklyIndexRows]);
-  const swingReenableBullets = useMemo(
-    () => buildSwingReenableBullets({ regimeLabel, sectorTape: sectorTapePoster, weeklyAvgPct5d: weeklyAvgPct5dVal }),
+  const swingReenableBulletsShort = useMemo(
+    () => buildSwingReenableBulletsShort({ regimeLabel, sectorTape: sectorTapePoster, weeklyAvgPct5d: weeklyAvgPct5dVal }),
+    [regimeLabel, sectorTapePoster, weeklyAvgPct5dVal]
+  );
+  const swingReenableBulletsFull = useMemo(
+    () => buildSwingReenableBulletsJoined({ regimeLabel, sectorTape: sectorTapePoster, weeklyAvgPct5d: weeklyAvgPct5dVal }),
     [regimeLabel, sectorTapePoster, weeklyAvgPct5dVal]
   );
   const alignmentLadder = useMemo(
@@ -621,15 +647,16 @@ export function DashboardRedesign({
       scannerOverview.error
     ]
   );
-  const watchlistReadiness = useMemo(
-    () =>
-      watchlistReadinessLine({
-        scannerError: scannerOverview.error,
-        swingSetupCount: swingTopSignals.length,
-        swingUniverseSymbolCount: scannerOverview.swingUniverseSymbolCount
-      }),
+  const watchlistReadinessOpts = useMemo(
+    () => ({
+      scannerError: scannerOverview.error,
+      swingSetupCount: swingTopSignals.length,
+      swingUniverseSymbolCount: scannerOverview.swingUniverseSymbolCount
+    }),
     [scannerOverview.error, scannerOverview.swingUniverseSymbolCount, swingTopSignals.length]
   );
+  const watchlistReadinessShort = useMemo(() => watchlistReadinessShortLine(watchlistReadinessOpts), [watchlistReadinessOpts]);
+  const watchlistReadinessFull = useMemo(() => watchlistReadinessLine(watchlistReadinessOpts), [watchlistReadinessOpts]);
   const regimeChipCore = pulseRegimeColor(regimeLabel, colors);
   const regimeChipAccent = pulseRegimeBadgeColor(regimeLabel, colors);
 
@@ -649,7 +676,7 @@ export function DashboardRedesign({
   const macroWarnings = macroPulse?.warnings ?? [];
 
   return (
-    <section className="stocvest-dashboard-v2" style={{ display: "grid", gap: spacing[5] }}>
+    <section className="stocvest-dashboard-v2" style={{ display: "grid", gap: spacing[7] }}>
       <article
         style={{
           borderBottom: `1px solid color-mix(in srgb, ${colors.border} 80%, ${colors.accent} 20%)`,
@@ -705,7 +732,7 @@ export function DashboardRedesign({
         </div>
       </article>
 
-      <div className="dashboard-grid grid grid-cols-1 gap-5 lg:grid-cols-[7fr_13fr] lg:items-stretch [&>*]:min-w-0">
+      <div className="dashboard-grid grid grid-cols-1 gap-7 lg:grid-cols-[7fr_13fr] lg:items-stretch [&>*]:min-w-0">
           <div className="order-1 min-w-0 lg:col-span-2 lg:col-start-1 lg:row-start-1">
             <DashboardCard
               eyebrow="Swing desk"
@@ -734,45 +761,66 @@ export function DashboardRedesign({
           >
             <div className="flex flex-col gap-3">
               {topSignals.length === 0 ? (
-                <div className="flex flex-col justify-center gap-3 py-4" style={{ padding: spacing[2] }}>
+                <div className="flex flex-col justify-center gap-4 py-2" style={{ padding: spacing[1] }}>
                   {scannerOverview.error ? (
                     <p style={{ margin: 0, color: colors.textMuted }}>{scannerOverview.error}</p>
                   ) : (
                     <>
-                      <p style={{ margin: 0, color: colors.textMuted, lineHeight: 1.55 }}>
+                      <p style={{ margin: 0, color: colors.textMuted, lineHeight: 1.5, fontSize: typography.scale.sm, fontWeight: 400 }}>
                         No active swing setups right now.
                       </p>
-                      <p
+                      <motion.div
+                        key={`${regimeLabel}-${emptySwingTeaching.chip.label}`}
+                        initial={{ opacity: 0.88, y: 4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.38, ease: "easeOut" }}
                         style={{
-                          margin: 0,
-                          color: colors.text,
-                          lineHeight: 1.55,
-                          fontSize: typography.scale.sm,
-                          fontWeight: 500
+                          borderRadius: borderRadius.xl,
+                          border: `1px solid color-mix(in srgb, ${colors.border} 72%, transparent)`,
+                          background: `color-mix(in srgb, ${colors.textMuted} 6%, ${colors.surface})`,
+                          padding: `${spacing[5]} ${spacing[5]}`,
+                          display: "grid",
+                          gap: spacing[3]
                         }}
                       >
-                        {emptySwingTeaching.sentence}
-                      </p>
-                      <div className="inline-flex flex-wrap items-center gap-2">
-                        <span
-                          className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold tracking-wide"
+                        <p
                           style={{
-                            border: `1px solid color-mix(in srgb, ${regimeChipCore} 38%, ${colors.border})`,
-                            background: `color-mix(in srgb, ${regimeChipCore} 10%, transparent)`,
-                            color: regimeChipAccent,
-                            textTransform: "none"
+                            margin: 0,
+                            fontSize: 10,
+                            letterSpacing: "0.18em",
+                            textTransform: "uppercase",
+                            fontWeight: 600,
+                            color: colors.textMuted
                           }}
                         >
-                          {emptySwingTeaching.chip.label}
-                          <InfoTip text={emptySwingTeaching.chip.tip} label="Why the swing list can be empty" maxWidth={300} />
-                        </span>
-                      </div>
-                      <p style={{ margin: 0, color: colors.textMuted, lineHeight: 1.55, fontSize: typography.scale.sm }}>
-                        The daily scanner runs each morning and surfaces setups when conditions align across price structure,
-                        volume, and weekly momentum.
-                      </p>
-                      <p style={{ margin: 0, color: colors.textMuted, lineHeight: 1.55, fontSize: typography.scale.sm }}>
-                        Check back at market open or run the full Scanner for intraday lists and detail.
+                          Primary read
+                        </p>
+                        <p style={{ margin: 0, fontSize: typography.scale.base, fontWeight: 600, color: colors.text, lineHeight: 1.35 }}>
+                          {emptySwingPostureHeadline()}
+                        </p>
+                        <p style={{ margin: 0, fontSize: typography.scale.sm, fontWeight: 500, color: colors.textMuted, lineHeight: 1.5 }}>
+                          {emptySwingOneLiner(regimeLabel)}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span
+                            className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold tracking-wide"
+                            style={{
+                              border: `1px solid color-mix(in srgb, ${regimeChipCore} 28%, ${colors.border})`,
+                              background: `color-mix(in srgb, ${regimeChipCore} 7%, transparent)`,
+                              color: regimeChipAccent,
+                              textTransform: "none"
+                            }}
+                          >
+                            {emptySwingTeaching.chip.label}
+                          </span>
+                          <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }} className="inline-flex items-center gap-1">
+                            Why?
+                            <InfoTip text={emptySwingTeaching.why} label="Why swing rows are quiet" maxWidth={320} />
+                          </span>
+                        </div>
+                      </motion.div>
+                      <p style={{ margin: 0, color: colors.textMuted, lineHeight: 1.5, fontSize: typography.scale.xs, fontWeight: 400 }}>
+                        Scanner runs each morning; full lists and intraday work live on Scanner.
                       </p>
                       <Link
                         href="/dashboard/scanner"
@@ -1010,19 +1058,22 @@ export function DashboardRedesign({
                   <InfoTip text={ALIGNMENT_LADDER_TIP} label="How to read the alignment ladder" maxWidth={300} />
                 </div>
                 <div
-                  className="grid w-full max-w-md gap-y-1 font-mono text-xs"
+                  className="grid w-full max-w-md gap-y-2 font-mono text-xs"
                   style={{ fontVariantNumeric: "tabular-nums", color: colors.text }}
                 >
-                  {alignmentLadder.map((row) => (
-                    <div
-                      key={row.key}
-                      className="grid w-full gap-x-3"
-                      style={{ gridTemplateColumns: "minmax(0,7.5rem) minmax(0,1fr)", alignItems: "baseline" }}
-                    >
-                      <span style={{ color: colors.textMuted }}>{row.label}</span>
-                      <span style={{ color: colors.text, fontWeight: 600 }}>{row.state}</span>
-                    </div>
-                  ))}
+                  {alignmentLadder.map((row) => {
+                    const emphasis = row.key === "regime" || row.key === "setups";
+                    return (
+                      <div
+                        key={row.key}
+                        className="grid w-full gap-x-3"
+                        style={{ gridTemplateColumns: "minmax(0,7.5rem) minmax(0,1fr)", alignItems: "baseline" }}
+                      >
+                        <span style={{ color: colors.textMuted, fontWeight: 400 }}>{row.label}</span>
+                        <span style={{ color: colors.text, fontWeight: emphasis ? 700 : 500 }}>{row.state}</span>
+                      </div>
+                    );
+                  })}
                 </div>
                 <div style={{ display: "grid", gap: spacing[1] }}>
                   <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: spacing[2] }}>
@@ -1031,8 +1082,18 @@ export function DashboardRedesign({
                     </span>
                     <InfoTip text={WATCHLIST_READINESS_TIP} label="What watchlist readiness means" maxWidth={300} />
                   </div>
-                  <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.text, lineHeight: 1.55 }}>
-                    {watchlistReadiness}
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: typography.scale.sm,
+                      color: colors.textMuted,
+                      lineHeight: 1.55,
+                      fontWeight: 400
+                    }}
+                    className="inline-flex flex-wrap items-baseline gap-x-2 gap-y-1"
+                  >
+                    <span style={{ color: colors.text, fontWeight: 500 }}>{watchlistReadinessShort}</span>
+                    <InfoTip text={watchlistReadinessFull} label="Watchlist readiness — full criteria" maxWidth={320} />
                   </p>
                 </div>
                 <div style={{ display: "grid", gap: spacing[2] }}>
@@ -1040,21 +1101,31 @@ export function DashboardRedesign({
                     <span style={{ fontSize: typography.scale.xs, fontWeight: 600, color: colors.textMuted }}>
                       What would re-enable swing setups
                     </span>
-                    <InfoTip text={SWING_REENABLE_CALLOUT_TIP} label="How these bullets are derived" maxWidth={320} />
+                    <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }} className="inline-flex items-center gap-1">
+                      Why?
+                      <InfoTip
+                        text={`${SWING_REENABLE_CALLOUT_TIP}\n\n${swingReenableBulletsFull}`}
+                        label="Full re-enablement detail"
+                        maxWidth={340}
+                      />
+                    </span>
                   </div>
                   <ul
                     style={{
                       margin: 0,
                       paddingLeft: spacing[4],
-                      color: colors.text,
+                      color: colors.textMuted,
                       fontSize: typography.scale.sm,
                       lineHeight: 1.55,
+                      fontWeight: 400,
                       display: "grid",
                       gap: spacing[2]
                     }}
                   >
-                    {swingReenableBullets.map((b, idx) => (
-                      <li key={idx}>{b}</li>
+                    {swingReenableBulletsShort.map((b, idx) => (
+                      <li key={idx} style={{ color: colors.text }}>
+                        {b}
+                      </li>
                     ))}
                   </ul>
                 </div>
@@ -1132,7 +1203,11 @@ export function DashboardRedesign({
                 </p>
               ) : null}
               <DecisionMetric explanation={regimeBadgeExplanation} label="How regime label is used" maxWidth={320}>
-                <div
+                <motion.div
+                  key={regimeLabel}
+                  initial={{ opacity: 0.82 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.32 }}
                   className="inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wide"
                   style={{
                     borderColor: `color-mix(in srgb, ${pulseRegimeColor(regimeLabel, colors)} 35%, ${colors.border})`,
@@ -1147,7 +1222,7 @@ export function DashboardRedesign({
                       (price + breadth only)
                     </span>
                   ) : null}
-                </div>
+                </motion.div>
               </DecisionMetric>
               <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.5 }}>
                 Session tape for context; swing thesis uses weekly panel + Evidence.
@@ -1158,14 +1233,18 @@ export function DashboardRedesign({
           <DashboardCard
             eyebrow="Sectors"
             title="Sector rotation (5 sessions)"
-            subtitle="ETF buckets over ~5 trading sessions of daily closes — not today’s session % beside Regime."
+            subtitle="ETF 5d buckets — same swing window as Weekly market context (not today’s session % beside Regime)."
             cardTip={SECTOR_ROTATION_CARD_TIP}
+            style={{
+              boxShadow: "0 10px 28px rgba(0,0,0,0.14)",
+              border: `1px solid color-mix(in srgb, ${colors.border} 92%, transparent)`,
+              background: colors.surface,
+              padding: spacing[4]
+            }}
           >
-            <div className="flex flex-col gap-3">
-              <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.55 }}>
-                <strong style={{ color: colors.text }}>When this is from:</strong> last ~5{" "}
-                <strong style={{ color: colors.text }}>trading sessions</strong> of daily closes (same swing window as
-                Weekly market context).{" "}
+            <div className="flex flex-col gap-4">
+              <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45, fontWeight: 400 }}>
+                Timing vs Regime differs —{" "}
                 <InfoTip text={SECTOR_FRAME_TIMING_TIP} label="How sector timing differs from Regime" maxWidth={320} />
               </p>
               {sectorFrame.narrative ? (
@@ -1188,22 +1267,21 @@ export function DashboardRedesign({
                   </span>
                 </div>
               ) : null}
-            <div className="flex flex-wrap gap-2" style={{ fontSize: typography.scale.sm, fontVariantNumeric: "tabular-nums" }}>
+            <div
+              className="flex flex-wrap gap-x-3 gap-y-2 border-t pt-3"
+              style={{
+                fontSize: typography.scale.sm,
+                fontVariantNumeric: "tabular-nums",
+                borderTopColor: `color-mix(in srgb, ${colors.border} 55%, transparent)`
+              }}
+            >
               {sectorRotation.map((s) => (
-                <span
-                  key={s.symbol}
-                  style={{
-                    borderRadius: borderRadius.md,
-                    border: `1px solid ${colors.border}`,
-                    padding: `${spacing[1]} ${spacing[2]}`,
-                    color: colors.text
-                  }}
-                >
-                  <strong>{s.symbol}</strong>{" "}
+                <span key={s.symbol} style={{ padding: `${spacing[1]} 0`, color: colors.text }}>
+                  <strong style={{ fontWeight: 600 }}>{s.symbol}</strong>{" "}
                   <span style={{ color: s.pct5d != null ? getChangeColor(s.pct5d, colors) : colors.textMuted }}>
                     {s.pct5d != null ? `${s.pct5d >= 0 ? "+" : ""}${s.pct5d.toFixed(1)}%` : "—"}
                   </span>
-                  <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}> · {s.label}</span>
+                  <span style={{ color: colors.textMuted, fontSize: typography.scale.xs, fontWeight: 400 }}> · {s.label}</span>
                 </span>
               ))}
             </div>
@@ -1213,8 +1291,14 @@ export function DashboardRedesign({
           <DashboardCard
             eyebrow="Catalysts"
             title="Upcoming earnings this week"
-            subtitle="Earnings on your dashboard symbol list only — macro prints (Fed, CPI, etc.) are not shown here."
+            subtitle="Dashboard symbol list only — macro prints (Fed, CPI, etc.) live elsewhere."
             cardTip={UPCOMING_CATALYSTS_CARD_TIP}
+            style={{
+              boxShadow: "0 8px 22px rgba(0,0,0,0.12)",
+              border: `1px solid color-mix(in srgb, ${colors.border} 94%, transparent)`,
+              background: colors.surface,
+              padding: spacing[4]
+            }}
           >
             {upcomingCatalystWeek.length === 0 ? (
               <div style={{ display: "grid", gap: spacing[2] }}>

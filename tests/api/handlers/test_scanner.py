@@ -270,6 +270,79 @@ def test_scanner_gap_intelligence_handler_merges_news(monkeypatch: pytest.Monkey
     assert "GAP1" in syms
 
 
+def test_scanner_gap_intelligence_empty_snapshots_uses_bounded_feed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """HTTP gap-intelligence must not pull the full US snapshot feed (often exceeds API Gateway ~30s)."""
+    scanner_response_cache._MEMORY.clear()
+    called = {"us": 0, "many": 0}
+
+    class _FakePoly:
+        def __init__(self, api_key: str) -> None:
+            _ = api_key
+
+        async def __aenter__(self) -> "_FakePoly":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            _ = args
+
+        async def get_us_stocks_market_snapshots(self, *, include_otc: bool = False) -> list[Snapshot]:
+            _ = include_otc
+            called["us"] += 1
+            raise AssertionError("full US snapshot must not be used for bounded gap-intelligence")
+
+        async def get_snapshots_many(self, symbols: list[str], chunk_size: int = 50) -> list[Snapshot]:
+            _ = chunk_size
+            called["many"] += 1
+            assert len(symbols) >= 1
+            return [
+                Snapshot(
+                    symbol="GAP99",
+                    prev_close=100.0,
+                    last_trade_price=110.0,
+                    day_volume=2_000_000.0,
+                    prev_day_volume=1_200_000.0,
+                    company_name="Gap99 Co",
+                )
+            ]
+
+        async def get_news(self, symbol=None, limit: int = 50):
+            _ = limit
+            if symbol is None:
+                return [
+                    NewsArticle(
+                        article_id="n-gap99",
+                        published_at=datetime.now(timezone.utc),
+                        title="GAP99 stock upgraded by analysts with higher price target",
+                        description="",
+                        url="https://example.com/g99",
+                        source="Reuters",
+                        tickers=["GAP99"],
+                        keywords=["upgrade"],
+                    )
+                ]
+            return []
+
+        async def get_ticker_details(self, sym: str) -> dict:
+            _ = sym
+            return {"name": ""}
+
+    monkeypatch.setattr("stocvest.api.handlers.scanner.PolygonClient", _FakePoly)
+    monkeypatch.setattr("stocvest.api.handlers.scanner.get_settings", lambda: SimpleNamespace(polygon_api_key="k"))
+
+    event = {
+        "version": "2.0",
+        "routeKey": "POST /v1/scanner/gap-intelligence",
+        "body": json.dumps({"snapshots": []}),
+    }
+    response = scanner_gap_intelligence_handler(event, {})
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["items"]
+    assert body["items"][0]["symbol"] == "GAP99"
+    assert called["us"] == 0
+    assert called["many"] >= 1
+
+
 def test_scanner_handlers_validate_inputs() -> None:
     response = scanner_gaps_handler({"body": json.dumps({"snapshots": {}})}, {})
     assert response["statusCode"] == 400

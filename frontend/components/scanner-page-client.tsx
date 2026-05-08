@@ -661,7 +661,9 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
         daySetupsLimit: 10,
         swingSetupsLimit: 6
       });
-      if (!core.error) {
+      if (core.error) {
+        setOverview((prev) => ({ ...prev, error: core.error }));
+      } else {
         setOverview((prev) => ({
           gapIntelligence: core.gapIntelligence,
           setups: core.setups,
@@ -752,6 +754,42 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
 
   return (
     <section style={{ display: "grid", gap: spacing[4] }}>
+      {overview.error ? (
+        <div
+          role="alert"
+          style={{
+            borderRadius: borderRadius.lg,
+            border: `1px solid ${colors.caution}`,
+            background: `color-mix(in srgb, ${colors.caution} 12%, ${colors.surface})`,
+            padding: `${spacing[3]} ${spacing[4]}`,
+            color: colors.text,
+            fontSize: typography.scale.sm,
+            lineHeight: 1.5
+          }}
+        >
+          <strong style={{ display: "block", marginBottom: spacing[1] }}>Scanner data could not load</strong>
+          {overview.error}
+          <div style={{ marginTop: spacing[2] }}>
+            <button
+              type="button"
+              onClick={onManualRefresh}
+              style={{
+                border: `1px solid ${colors.border}`,
+                borderRadius: borderRadius.md,
+                background: colors.surface,
+                color: colors.text,
+                padding: `${spacing[1]} ${spacing[3]}`,
+                fontSize: typography.scale.xs,
+                fontWeight: 600,
+                cursor: "pointer"
+              }}
+            >
+              Try again
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0" style={{ display: "grid", gap: spacing[1] }}>
           <p className="text-sm sm:text-base" style={{ margin: 0, color: colors.textMuted }}>
