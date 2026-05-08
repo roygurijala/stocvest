@@ -1,4 +1,4 @@
-import { CuteLoader } from "@/components/cute-loader";
+import { ContentLoading } from "@/components/content-loading";
 
 export default function AppLoading() {
   return (
@@ -10,8 +10,7 @@ export default function AppLoading() {
         padding: "2rem"
       }}
     >
-      <CuteLoader label="Loading app" sublabel="Warming up your workspace" />
+      <ContentLoading />
     </div>
   );
 }
-

@@ -1,17 +1,19 @@
 "use client";
 
-import { CuteLoader } from "@/components/cute-loader";
+import { ContentLoading } from "@/components/content-loading";
+import { useTheme } from "@/lib/theme-provider";
 
+/** Full-screen overlay during in-app route transitions (AppShell). */
 export function PageLoader() {
+  const { theme } = useTheme();
+  const scrim =
+    theme === "dark"
+      ? "radial-gradient(circle at 50% 42%, rgba(30,41,59,0.38) 0%, rgba(10,14,26,0.88) 52%, rgba(10,14,26,0.94) 100%)"
+      : "radial-gradient(circle at 50% 42%, rgba(255,255,255,0.5) 0%, rgba(248,250,252,0.9) 52%, rgba(248,250,252,0.96) 100%)";
+
   return (
-    <div
-      className="fixed inset-0 z-[120] grid place-items-center"
-      style={{
-        background:
-          "radial-gradient(circle at 50% 42%, rgba(17,24,39,0.32) 0%, rgba(10,14,26,0.86) 54%, rgba(10,14,26,0.92) 100%)"
-      }}
-    >
-      <CuteLoader label="Loading page" sublabel="Just a sec, getting things ready" />
+    <div className="fixed inset-0 z-[120] grid place-items-center" style={{ background: scrim }}>
+      <ContentLoading />
     </div>
   );
 }

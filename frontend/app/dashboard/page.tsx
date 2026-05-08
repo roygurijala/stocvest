@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { DashboardPageContent } from "@/components/dashboard-page-content";
-import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
+import { ContentLoading } from "@/components/content-loading";
 import { getServerSession } from "@/lib/auth/session";
 
 /** Dashboard chains market + scanner API work; must exceed client apiFetch and timeoutFallback budgets. */
@@ -15,7 +15,7 @@ export default function DashboardPage() {
   }
   return (
     <AppShell session={session}>
-      <Suspense fallback={<DashboardPageSkeleton />}>
+      <Suspense fallback={<ContentLoading />}>
         <DashboardPageContent />
       </Suspense>
     </AppShell>
