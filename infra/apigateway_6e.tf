@@ -98,8 +98,9 @@ resource "aws_apigatewayv2_api" "http" {
   protocol_type = "HTTP"
 
   cors_configuration {
-    allow_headers = ["authorization", "content-type", "x-requested-with", "x-stocvest-internal-analysis", "x-stocvest-session-id"]
-    allow_methods = ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
+    allow_credentials = true
+    allow_headers     = ["authorization", "content-type", "x-requested-with", "x-stocvest-internal-analysis", "x-stocvest-session-id"]
+    allow_methods     = ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
     allow_origins = [
       "https://stocvest.app",
       "https://www.stocvest.app",

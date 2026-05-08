@@ -51,6 +51,8 @@ def apply_cors_to_http_proxy_response(response: Any, event: LambdaEvent) -> Any:
         return response
     headers = dict(response.get("headers") or {})
     headers["Access-Control-Allow-Origin"] = origin
+    # Browsers with fetch(..., credentials: "include") require this on preflight and responses.
+    headers["Access-Control-Allow-Credentials"] = "true"
     headers.setdefault("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS")
     headers.setdefault(
         "Access-Control-Allow-Headers",
