@@ -460,6 +460,77 @@ resource "aws_lambda_permission" "macro_cache_eventbridge_scheduler" {
   source_arn    = "arn:aws:scheduler:${var.aws_region}:${data.aws_caller_identity.current.account_id}:schedule/${aws_scheduler_schedule_group.macro_cache.name}/*"
 }
 
+# ── Market pulse refresher (every minute 9:00–16:59 ET Mon–Fri; Lambda skips outside RTH) ───
+
+resource "aws_scheduler_schedule_group" "market_pulse" {
+  name = "stocvest-development-market-pulse"
+
+  tags = merge(local.common_tags, {
+    Name = "stocvest-development-market-pulse-schedule-group"
+  })
+}
+
+resource "aws_iam_role" "eventbridge_market_pulse_invoke" {
+  name = "stocvest-development-eventbridge-market-pulse-invoke"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Service = "scheduler.amazonaws.com"
+      }
+      Action = "sts:AssumeRole"
+    }]
+  })
+
+  tags = merge(local.common_tags, {
+    Name = "stocvest-development-eventbridge-market-pulse-invoke-role"
+  })
+}
+
+resource "aws_iam_role_policy" "eventbridge_market_pulse_invoke_lambda" {
+  name = "stocvest-development-invoke-market-pulse-refresher-lambda"
+  role = aws_iam_role.eventbridge_market_pulse_invoke.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["lambda:InvokeFunction"]
+      Resource = aws_lambda_function.api["market_pulse_refresher"].arn
+    }]
+  })
+}
+
+resource "aws_scheduler_schedule" "market_pulse_refresher" {
+  name       = "stocvest-market-pulse-refresher"
+  group_name = aws_scheduler_schedule_group.market_pulse.name
+
+  state = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  schedule_expression          = "cron(0/1 9-16 ? * MON-FRI *)"
+  schedule_expression_timezone = "America/New_York"
+
+  target {
+    arn      = aws_lambda_function.api["market_pulse_refresher"].arn
+    role_arn = aws_iam_role.eventbridge_market_pulse_invoke.arn
+    input    = jsonencode({ source = "eventbridge", job = "market_pulse_refresh" })
+  }
+}
+
+resource "aws_lambda_permission" "market_pulse_eventbridge_scheduler" {
+  statement_id  = "AllowExecutionFromEventBridgeSchedulerMarketPulse"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.api["market_pulse_refresher"].function_name
+  principal     = "scheduler.amazonaws.com"
+  source_arn    = "arn:aws:scheduler:${var.aws_region}:${data.aws_caller_identity.current.account_id}:schedule/${aws_scheduler_schedule_group.market_pulse.name}/*"
+}
+
 # ── Sector daily Redis cache warmer (sector ETF vs SPY daily relative returns) ──────────────
 
 resource "aws_scheduler_schedule_group" "sector_daily_cache" {

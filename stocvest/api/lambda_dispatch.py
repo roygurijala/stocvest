@@ -255,6 +255,11 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
 
         return sector_daily_job_handler(event, context)
 
+    if module == "market_pulse_refresher":
+        from stocvest.workers.market_pulse_refresher import handler as market_pulse_refresher_handler
+
+        return market_pulse_refresher_handler(event, context)
+
     if module == "websocket":
         from stocvest.api.handlers.websocket import (
             websocket_connect_handler,

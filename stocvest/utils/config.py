@@ -113,6 +113,8 @@ class Settings(BaseSettings):
     env: str = Field("development", alias="STOCVEST_ENV")
     redis_url: str = Field("redis://localhost:6379", alias="REDIS_URL")
     stocvest_disable_redis: bool = Field(False, alias="STOCVEST_DISABLE_REDIS")
+    upstash_redis_rest_url: str = Field("", alias="UPSTASH_REDIS_REST_URL")
+    upstash_redis_rest_token: str = Field("", alias="UPSTASH_REDIS_REST_TOKEN")
     polygon_rate_limit_per_second: int = Field(30, alias="STOCVEST_POLYGON_RATE_PER_SEC")
     claude_rate_limit_per_minute: int = Field(20, alias="STOCVEST_CLAUDE_RATE_PER_MIN")
     scanner_cache_bucket_seconds: int = Field(60, alias="STOCVEST_SCANNER_CACHE_BUCKET_SEC")
@@ -242,6 +244,16 @@ def get_settings() -> Settings:
             settings.benzinga_press_key = _load_secret_key("BENZINGA_PRESS_KEY", "benzinga_press_key")
         if not settings.perplexity_api_key:
             settings.perplexity_api_key = _load_secret_key("PERPLEXITY_API_KEY", "perplexity_api_key")
+        if not settings.upstash_redis_rest_url:
+            settings.upstash_redis_rest_url = _load_secret_key(
+                "UPSTASH_REDIS_REST_URL",
+                "upstash_redis_rest_url",
+            )
+        if not settings.upstash_redis_rest_token:
+            settings.upstash_redis_rest_token = _load_secret_key(
+                "UPSTASH_REDIS_REST_TOKEN",
+                "upstash_redis_rest_token",
+            )
     except Exception:
         # Best-effort fallback for local dev / non-AWS contexts.
         pass

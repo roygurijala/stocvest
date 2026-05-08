@@ -27,6 +27,12 @@ from stocvest.signals import (
     PremarketGapScanner,
 )
 from stocvest.signals.day_trading_scanner import SymbolLiquidityContext
+from stocvest.data.dashboard_cache import (
+    DashboardKeys,
+    make_state_version,
+    publish_signals_live_hint,
+    write_dashboard_cache,
+)
 from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
 
@@ -236,6 +242,37 @@ async def run_scheduled_scan(scan_type: str, *, run_portfolio_composite: bool = 
 
     if run_portfolio_composite:
         _run_portfolio_composite_for_qualifying_tickers(document=document, scan_type=scan_type)
+
+    data_block = document.get("data") or {}
+    if not data_block.get("error"):
+        try:
+            if scan_type == "premarket":
+                gaps = data_block.get("gaps") or []
+                write_dashboard_cache(
+                    DashboardKeys.TOP_SIGNALS_SWING,
+                    {
+                        "signals": gaps,
+                        "signal_count": len(gaps),
+                        "scanner_mode": "swing_daily",
+                    },
+                    "swing_signals",
+                    "swing",
+                )
+            elif scan_type == "intraday":
+                setups = data_block.get("setups") or []
+                write_dashboard_cache(
+                    DashboardKeys.TOP_SIGNALS_DAY,
+                    {
+                        "signals": setups,
+                        "signal_count": len(setups),
+                        "scanner_mode": "intraday",
+                    },
+                    "day_signals",
+                    "day",
+                )
+                publish_signals_live_hint(make_state_version("day"))
+        except Exception as exc:
+            _LOG.warning("dashboard_upstash_write_failed scan_type=%s err=%s", scan_type, exc)
 
     return {
         "invocation": "schedule",

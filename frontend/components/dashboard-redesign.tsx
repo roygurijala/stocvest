@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { DashboardCard } from "@/components/dashboard-card";
+import { DashboardEdgeSync } from "@/components/dashboard-edge-sync";
 import { DashboardRealtime } from "@/components/dashboard-realtime";
 import { DecisionMetric } from "@/components/decision-metric";
 import { EarningsCalendar } from "@/components/earnings-calendar";
@@ -1307,6 +1308,7 @@ export function DashboardRedesign({
         }}
         onLoaded={() => setNewsUiTick((t) => t + 1)}
       />
+      <DashboardEdgeSync />
     </section>
   );
 }

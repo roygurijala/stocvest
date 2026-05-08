@@ -10,10 +10,28 @@ from stocvest.api.response import ok
 from stocvest.api.services.signal_recorder import get_signal_recorder
 from stocvest.api.types import LambdaContext, LambdaEvent
 from stocvest.data.polygon_client import PolygonClient
+from stocvest.data.dashboard_cache import DashboardKeys, write_dashboard_cache
 from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
+
+
+def _sync_model_portfolio_cache_to_upstash() -> None:
+    """Public model-portfolio open rows — Edge can surface a non-user-specific active book."""
+    try:
+        from stocvest.api.services.portfolio_recorder import get_portfolio_recorder
+
+        rec = get_portfolio_recorder()
+        opens = rec.get_open_positions() or []
+        write_dashboard_cache(
+            DashboardKeys.ACTIVE_POSITIONS,
+            {"positions": opens, "position_count": len(opens)},
+            "active_positions",
+            "swing",
+        )
+    except Exception as exc:
+        _LOG.warning("active_positions_upstash_failed err=%s", exc)
 
 
 async def _check_model_portfolio_exits(client: PolygonClient) -> None:
@@ -109,6 +127,7 @@ def signal_resolution_scheduled_handler(event: LambdaEvent, context: LambdaConte
         n1h = int(result["resolved_1h"])
         n24h = int(result["resolved_24h"])
         _LOG.info("Resolved: %s (1h), %s (24h)", n1h, n24h)
+        _sync_model_portfolio_cache_to_upstash()
         payload = {
             "resolved_1h": n1h,
             "resolved_24h": n24h,

@@ -207,6 +207,59 @@ def get_all_cached_sector_data() -> dict[str, list[DailyReturn]]:
     return result
 
 
+_ETF_DISPLAY = {
+    "XLK": "Tech",
+    "XLC": "Comm",
+    "XLE": "Energy",
+    "XLF": "Financials",
+    "XLV": "Health care",
+    "XLY": "Cons. disc.",
+    "XLP": "Cons. staples",
+    "XLI": "Industrials",
+    "XLRE": "Real estate",
+    "XLB": "Materials",
+    "XLU": "Utilities",
+    "SMH": "Semis",
+    "KBE": "Banks",
+    "GLD": "Gold",
+}
+
+
+def write_sector_rotation_dashboard_payload() -> bool:
+    """Summarize cached ETF vs SPY returns for Edge dashboard (dual-write to Upstash)."""
+    from stocvest.data.dashboard_cache import DashboardKeys, write_dashboard_cache
+
+    sectors: list[dict] = []
+    for etf, returns in get_all_cached_sector_data().items():
+        if not returns:
+            continue
+        window = returns[-5:]
+        pct_5d = sum(r.etf_pct for r in window)
+        last = window[-1]
+        rel = float(last.relative)
+        if rel > 0.05:
+            verdict = "outperforming"
+        elif rel < -0.05:
+            verdict = "underperforming"
+        else:
+            verdict = "inline"
+        sectors.append(
+            {
+                "etf": etf,
+                "name": _ETF_DISPLAY.get(etf, etf),
+                "pct_5d": round(pct_5d, 4),
+                "pct_1d": round(float(last.etf_pct), 4),
+                "verdict": verdict,
+            }
+        )
+    return write_dashboard_cache(
+        DashboardKeys.SECTOR_ROTATION,
+        {"sectors": sectors},
+        "sector_rotation",
+        "swing",
+    )
+
+
 def handler(event, context):
     import asyncio
 
@@ -214,6 +267,10 @@ def handler(event, context):
     _ = context
     logging.getLogger(__name__).info("sector_daily_cache_lambda_start")
     results = asyncio.run(update_sector_daily_cache())
+    try:
+        write_sector_rotation_dashboard_payload()
+    except Exception as exc:
+        _LOG.warning("sector_rotation_upstash_failed err=%s", exc)
     return {
         "statusCode": 200,
         "etfs_cached": len(results),

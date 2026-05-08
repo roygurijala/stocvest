@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from datetime import date, datetime, timezone
 from typing import Any, Callable
 from uuid import uuid4
@@ -44,6 +45,12 @@ from stocvest.api.services.signal_recorder import (
 )
 from stocvest.api.services.swing_composite_evidence import build_swing_composite_evidence_fields
 from stocvest.api.services.user_profile_store import get_founding_member_count, get_user_profile_store
+from stocvest.data.dashboard_cache import (
+    evidence_cache_key,
+    evidence_rate_limit_exceeded,
+    read_dashboard_cache,
+    write_dashboard_cache,
+)
 from stocvest.data.models import Bar, SignalRecord
 from stocvest.signals.ai_explanations import AIExplanationService, news_articles_from_payload
 from stocvest.signals import (
@@ -57,6 +64,7 @@ from stocvest.signals import (
 from stocvest.signals.daily_bar_scanner import DailyBarScanner
 from stocvest.signals.confluence import ConfluenceDetector, confluence_result_to_response_fields
 from stocvest.signals.morning_brief import build_morning_brief_payload
+from stocvest.utils.circuit_breaker import CircuitOpenError, polygon_circuit
 from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
@@ -66,6 +74,77 @@ _COMPOSITE_INSUFFICIENT_MESSAGE = (
     "Insufficient market data to generate a reliable signal. "
     "Real-time data is required for at least 3 of 6 layers."
 )
+
+_COMPOSITE_TIMEOUT_SEC = 8.0
+
+
+def _compute_with_thread_timeout(
+    fn: Callable[[], dict[str, Any]],
+    *,
+    timeout_sec: float,
+) -> dict[str, Any] | None:
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        fut = pool.submit(fn)
+        try:
+            return fut.result(timeout=timeout_sec)
+        except FuturesTimeoutError:
+            return None
+
+
+def composite_response_with_evidence_cache(
+    *,
+    symbol: str,
+    user_id: str | None,
+    user_email: str | None,
+    mode: str,
+    sync_compute: Callable[[], dict[str, Any]],
+) -> dict[str, Any]:
+    """Bounded + cached composite for View Evidence (Upstash); rate limit + circuit breaker."""
+    if evidence_rate_limit_exceeded(user_id):
+        return {
+            "error": "rate_limited",
+            "retry_after": 60,
+            "disclaimer": API_SIGNAL_DISCLAIMER,
+        }
+
+    cache_key = evidence_cache_key(symbol, mode)
+    envelope = read_dashboard_cache(cache_key)
+    if envelope and isinstance(envelope.get("data"), dict):
+        data = dict(envelope["data"])
+        data["source"] = "cache"
+        data["cache_state_version"] = envelope.get("state_version")
+        return data
+
+    try:
+        body = polygon_circuit.call(
+            lambda: _compute_with_thread_timeout(sync_compute, timeout_sec=_COMPOSITE_TIMEOUT_SEC)
+        )
+    except CircuitOpenError:
+        return {
+            "error": "upstream_unavailable",
+            "message": "Market data is briefly unavailable. Try again in a moment.",
+            "disclaimer": API_SIGNAL_DISCLAIMER,
+        }
+
+    if body is None:
+        return {
+            "error": "timeout",
+            "message": "Signal analysis timed out. Try again in a moment.",
+            "disclaimer": API_SIGNAL_DISCLAIMER,
+        }
+
+    if str(body.get("status") or "") == "insufficient_data" or body.get("error"):
+        return dict(body)
+
+    write_dashboard_cache(
+        cache_key,
+        dict(body),
+        "evidence",
+        "day" if mode == "day" else "swing",
+    )
+    out = dict(body)
+    out["source"] = "computed"
+    return out
 
 
 def _parse_composite_signal_item(item: object) -> dict[str, Any] | None:
@@ -172,8 +251,17 @@ def real_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     if not symbol:
         return bad_request("Body field 'symbol' is required.")
     rc = build_request_context(event)
-    body = real_composite_body_sync(
-        symbol=symbol, user_id=rc.user_id, user_email=rc.email, enable_portfolio_log=False
+    body = composite_response_with_evidence_cache(
+        symbol=symbol,
+        user_id=rc.user_id,
+        user_email=rc.email,
+        mode="day",
+        sync_compute=lambda: real_composite_body_sync(
+            symbol=symbol,
+            user_id=rc.user_id,
+            user_email=rc.email,
+            enable_portfolio_log=False,
+        ),
     )
     return ok(body)
 
@@ -189,8 +277,17 @@ def swing_real_composite_handler(event: LambdaEvent, context: LambdaContext) -> 
     if not symbol:
         return bad_request("Body field 'symbol' is required.")
     rc = build_request_context(event)
-    body = swing_composite_body_sync(
-        symbol=symbol, user_id=rc.user_id, user_email=rc.email, enable_portfolio_log=False
+    body = composite_response_with_evidence_cache(
+        symbol=symbol,
+        user_id=rc.user_id,
+        user_email=rc.email,
+        mode="swing",
+        sync_compute=lambda: swing_composite_body_sync(
+            symbol=symbol,
+            user_id=rc.user_id,
+            user_email=rc.email,
+            enable_portfolio_log=False,
+        ),
     )
     return ok(body)
 

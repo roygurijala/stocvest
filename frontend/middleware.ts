@@ -11,6 +11,13 @@ export function middleware(request: NextRequest) {
   const token = request.cookies.get(cookieName())?.value;
   const { pathname } = request.nextUrl;
 
+  if (pathname.startsWith("/ops")) {
+    const internal = request.headers.get("x-internal-token");
+    if (!internal || internal !== process.env.INTERNAL_OPS_TOKEN) {
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
+  }
+
   if (pathname.startsWith("/dashboard") && !token) {
     const loginUrl = new URL("/login", request.url);
     return NextResponse.redirect(loginUrl);
@@ -26,5 +33,5 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   // Include `/dashboard` so the bare path is guarded (some Next versions treat `:path*` as subpaths only).
-  matcher: ["/dashboard", "/dashboard/:path*", "/login"]
+  matcher: ["/dashboard", "/dashboard/:path*", "/login", "/ops", "/ops/:path*"]
 };

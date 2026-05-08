@@ -13,6 +13,7 @@ from typing import Any
 
 import httpx
 
+from stocvest.data.dashboard_cache import DashboardKeys, write_dashboard_cache
 from stocvest.utils.config import PERPLEXITY_API_KEY
 from stocvest.utils.logging import get_logger
 
@@ -188,6 +189,11 @@ async def update_geo_themes() -> dict[str, Any]:
         _LOG.info("geo_themes_cached source=%s", themes.get("source"))
     except Exception as exc:
         _LOG.error("geo_themes_redis_write_failed error=%s", str(exc))
+
+    try:
+        write_dashboard_cache(DashboardKeys.GEO_THEMES, themes, "geo_themes", "swing")
+    except Exception as exc:
+        _LOG.warning("geo_themes_upstash_write_failed error=%s", str(exc))
 
     return themes
 
