@@ -676,7 +676,7 @@ export function DashboardRedesign({
   const macroWarnings = macroPulse?.warnings ?? [];
 
   return (
-    <section className="stocvest-dashboard-v2" style={{ display: "grid", gap: spacing[7] }}>
+    <section className="stocvest-dashboard-v2" style={{ display: "grid", gap: spacing[8] }}>
       <article
         style={{
           borderBottom: `1px solid color-mix(in srgb, ${colors.border} 80%, ${colors.accent} 20%)`,
