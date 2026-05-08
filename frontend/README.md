@@ -4,6 +4,8 @@ Next.js **14** app (`app/` router): marketing **landing** (`/`) — server load 
 
 **Session context & test baselines:** [`docs/CONTEXT.md`](../docs/CONTEXT.md) §13.
 
+**Dashboard copy:** circled‑i **InfoTip** text for the home dashboard (including empty **Top signals** / **Primary read**) lives in **`lib/ui-tooltips.ts`**; keep new tips in plain language for non-experts. Tooltip bodies support multiple paragraphs via **`white-space: pre-line`** in **`components/info-tip.tsx`**.
+
 ## Local setup
 
 1. Copy `.env.example` to `.env.local` (set `NEXT_PUBLIC_STOCVEST_API_BASE_URL`, Cognito IDs from Terraform outputs, etc.).

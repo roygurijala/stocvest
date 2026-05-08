@@ -87,7 +87,7 @@ API keys are **not** set on the Lambda environment. Terraform creates **`stocves
 | Area | Notes |
 |------|--------|
 | Core signals, scanner, brokers, HTTP API | Shipped (see CONTEXT §1) |
-| Next.js frontend (dashboard, **marketing landing** + founding scarcity counter, legal, BFF) | Shipped — compact **PDT** pill, **Market Pulse** / ticker **NewsPanel**; see CONTEXT §1–§2 |
+| Next.js frontend (dashboard, **marketing landing** + founding scarcity counter, legal, BFF) | Shipped — compact **PDT** pill, **Market Pulse** / ticker **NewsPanel**, empty-swing **Primary read** + layman **InfoTip** copy in **`frontend/lib/ui-tooltips.ts`**; see CONTEXT §1–§2 |
 | Terraform / AWS | Modules in `infra/`; **apply** and production wiring may still be pending (CONTEXT §3) |
 | Phase 7 (E2E, audits, extended paper validation) | Planned — BACKLOG **P1** |
 

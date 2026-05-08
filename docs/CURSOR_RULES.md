@@ -9,3 +9,4 @@ This page exists so people browsing `docs/` know where the rules are. **Do not m
 - Start every session: **`docs/CONTEXT.md`** (and **`docs/BACKLOG.md`** for planned work).
 - Contracts: **`docs/API_CONTRACTS.md`** — change only with explicit instruction (a user directive to refresh all `.md` files counts as coordinated contract documentation when implementations already exist).
 - Test baselines: **`docs/CONTEXT.md` §13**.
+- Dashboard **InfoTip** / card tooltip strings: **`frontend/lib/ui-tooltips.ts`** (prefer plain-language explanations; see **`docs/CONTEXT.md` §2** **Frontend** and **B25** in **`docs/BACKLOG.md`**).

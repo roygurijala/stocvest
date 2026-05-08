@@ -1,6 +1,6 @@
 # STOCVEST Terraform
 
-**Last updated:** 2026-05-07 (includes **`AuditEvents`** DynamoDB, **`DYNAMODB_AUDIT_EVENTS_TABLE`** on all API Lambdas, API Gateway routes for **`GET /v1/signals/founding-members`** and admin **beta** / **audit** paths, CORS **`x-stocvest-session-id`** — align with [`docs/CONTEXT.md`](../docs/CONTEXT.md) §3.)
+**Last updated:** 2026-05-08 (no Terraform change this date—doc pointer only; infra snapshot unchanged: **`AuditEvents`**, **`DYNAMODB_AUDIT_EVENTS_TABLE`**, founding + audit Gateway routes, CORS **`x-stocvest-session-id`** — align with [`docs/CONTEXT.md`](../docs/CONTEXT.md) §3.)
 
 This directory contains AWS infrastructure as code:
 
