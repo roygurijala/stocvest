@@ -430,7 +430,7 @@ function sectorLeadershipChipColors(kind: NonNullable<SectorRotationFrame["chipK
   };
 }
 
-/** Why VIX shows “—” on the dashboard tape (never silent). */
+/** When VIX shows “—” on the dashboard tape (never silent). */
 type VixBlankKind = "market_closed" | "upstream_gap" | "data_pending";
 
 function resolveVixBlankKind(
@@ -475,7 +475,7 @@ function VixDashExplained({ kind, colors }: { kind: VixBlankKind; colors: ThemeC
     <span className="inline-flex flex-wrap items-center gap-x-1 gap-y-0.5">
       <span>—</span>
       <span style={{ fontSize: typography.scale.xs, fontWeight: 600, color: colors.textMuted }}>{tag}</span>
-      <InfoTip text={tip} label="Why VIX is blank" maxWidth={320} />
+      <InfoTip text={tip} label="What the VIX dash means" maxWidth={320} />
     </span>
   );
 }
@@ -1054,14 +1054,11 @@ export function DashboardRedesign({
                     <span style={{ fontSize: typography.scale.xs, fontWeight: 600, color: colors.textMuted }}>
                       What would re-enable swing setups
                     </span>
-                    <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }} className="inline-flex items-center gap-1">
-                      Why?
-                      <InfoTip
-                        text={`${SWING_REENABLE_CALLOUT_TIP}\n\n${swingReenableBulletsShort.map((b) => `• ${b}`).join("\n")}`}
-                        label="What would bring swing rows back"
-                        maxWidth={340}
-                      />
-                    </span>
+                    <InfoTip
+                      text={`${SWING_REENABLE_CALLOUT_TIP}\n\n${swingReenableBulletsShort.map((b) => `• ${b}`).join("\n")}`}
+                      label="What would bring swing rows back"
+                      maxWidth={340}
+                    />
                   </div>
                   <ul
                     style={{

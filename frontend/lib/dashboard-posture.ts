@@ -131,7 +131,7 @@ export function buildSwingReenableBullets(opts: {
   return [b1, b2, b3];
 }
 
-/** Short ladder lines for the dashboard; full reasoning stays in `buildSwingReenableBullets` (use in a “Why?” tip). */
+/** Short ladder lines for the dashboard; full reasoning stays in `buildSwingReenableBullets` (use in the re-enable InfoTip). */
 export function buildSwingReenableBulletsShort(opts: {
   regimeLabel: string;
   sectorTape: SectorTapeKind;
