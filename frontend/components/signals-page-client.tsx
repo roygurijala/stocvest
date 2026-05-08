@@ -44,6 +44,10 @@ interface LayerRow {
   icon: string;
   name: string;
   status: LayerStatus;
+  /** When set, shown instead of `status` (e.g. sector cache pending — not neutral). */
+  statusLabel?: string;
+  /** Sector mapper cache still warming; excluded from composite — not "stale close" data. */
+  sectorCachePending?: boolean;
   explanation: string;
   score: number;
 }
@@ -107,6 +111,53 @@ function verdictToLayerStatus(verdict: string, status: string): LayerStatus {
   if (v === "bullish") return "Bullish";
   if (v === "bearish") return "Bearish";
   return "Neutral";
+}
+
+/** One-line framing: why trade readiness / neutrals look capped — discipline, not broken logic. */
+function buildSignalsPageVerdict(input: {
+  rows: LayerRow[];
+  layerAgreementPercent: number | null;
+  tradeReadiness: number | null;
+  rrWarning: boolean;
+}): string {
+  const { rows, layerAgreementPercent, tradeReadiness, rrWarning } = input;
+  const unavailable = rows.filter((r) => r.status === "Unavailable").length;
+  const neutral = rows.filter((r) => r.status === "Neutral").length;
+  const directional = rows.filter((r) => r.status === "Bullish" || r.status === "Bearish").length;
+  const technical = rows[0];
+  const techConstructive = technical?.status === "Bullish" || technical?.status === "Bearish";
+  const anyLayerLeanConstructive = rows.some(
+    (r) => (r.status === "Bullish" || r.status === "Bearish") && r.score >= 55
+  );
+  const sectorRow = rows.find((r) => r.name === "Sector");
+  const sectorCachePending = sectorRow?.sectorCachePending === true;
+  const sectorStale =
+    !sectorCachePending &&
+    (sectorRow?.status === "Unavailable" || sectorRow?.status === "As of close");
+  const agreement = layerAgreementPercent;
+  const weakConfirmation =
+    (agreement != null && agreement < 52) || (agreement == null && neutral >= 4);
+  const readinessSoft = tradeReadiness == null || tradeReadiness < 58;
+
+  if (unavailable >= 2) {
+    return "Several layers lack fresh data right now — the read stays intentionally conservative until coverage improves.";
+  }
+  if (sectorStale && unavailable >= 1 && neutral >= 2) {
+    return "Some layers (including sector) are still resolving or stale — capped scores reflect data gates, not a fault in the engine.";
+  }
+  if ((techConstructive || anyLayerLeanConstructive) && (weakConfirmation || rrWarning)) {
+    return "Technically constructive in places, but confirmation and/or risk thresholds are not fully cleared — trade readiness reflects that discipline.";
+  }
+  if (neutral >= 4 && readinessSoft) {
+    return "Most layers read mixed or neutral — capped trade readiness reflects alignment gates, not missing logic.";
+  }
+  if (directional >= 4 && (agreement ?? 0) >= 58 && !rrWarning) {
+    return "Multiple layers agree and risk checks pass — trade readiness reflects that alignment.";
+  }
+  if (directional >= 3 && (agreement ?? 0) >= 48 && !rrWarning) {
+    return "Cross-layer agreement is reasonable — trade readiness blends structure with context; muted layers still weigh in.";
+  }
+  return "Trade readiness blends all six layers; yellow or neutral reads usually mean intentional gates, not broken logic.";
 }
 
 export function SignalsPageClient({ marketOverview, scannerOverview, earningsBySymbol }: SignalsPageClientProps) {
@@ -254,7 +305,11 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
           : 0;
       const verdict = typeof entry?.verdict === "string" ? entry.verdict : "neutral";
       const st = typeof entry?.status === "string" ? entry.status : "unavailable";
-      const status = verdictToLayerStatus(verdict, st);
+      const sectorCachePending =
+        key === "sector" && String(entry?.sector_resolution_state ?? "") === "pending_cache_refresh";
+      const statusLabel = sectorCachePending ? "Unavailable (not factored)" : undefined;
+      const baseStatus = verdictToLayerStatus(verdict, st);
+      const status: LayerStatus = sectorCachePending ? "Unavailable" : baseStatus;
       const reasoning =
         typeof entry?.reasoning === "string" && entry.reasoning.trim()
           ? entry.reasoning.trim()
@@ -267,7 +322,15 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
               : status === "Bearish"
                 ? `${name} signals show downside pressure.`
                 : `${name} is mixed without strong direction.`;
-      return { icon, name, status, explanation: reasoning, score };
+      return {
+        icon,
+        name,
+        status,
+        statusLabel,
+        sectorCachePending: sectorCachePending || undefined,
+        explanation: reasoning,
+        score
+      };
     });
   }, [compositeResult]);
 
@@ -311,12 +374,25 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
     return Math.round(overall);
   }, [layerAgreementPercent, compositeResult, overall]);
 
-  /** Same 0–100 signal score as the evidence modal (API `signal_score` / strength / score map, not layer agreement). */
+  /** Same 0–100 trade readiness as the evidence modal (API `signal_score` / strength / score map, not layer agreement). */
   const aiStripSignalScore = useMemo(() => {
     if (!compositeResult || isInsufficientCompositeResponse(compositeResult)) return null;
     const insight = parseSwingCompositeInsight(compositeResult as Record<string, unknown>);
     return insight?.signal_score ?? null;
   }, [compositeResult]);
+
+  const signalsPageVerdictLine = useMemo(() => {
+    if (!compositeResult || isInsufficientCompositeResponse(compositeResult)) return null;
+    const c = compositeResult as Record<string, unknown>;
+    const rr = typeof c.risk_reward === "number" && Number.isFinite(c.risk_reward) ? c.risk_reward : 1.5;
+    const rrWarning = Boolean(c.rr_warning) || rr < 2.0;
+    return buildSignalsPageVerdict({
+      rows,
+      layerAgreementPercent,
+      tradeReadiness: aiStripSignalScore,
+      rrWarning
+    });
+  }, [compositeResult, rows, layerAgreementPercent, aiStripSignalScore]);
 
   const aiStripBarPct = useMemo(() => aiStripSignalScore ?? aiStripAgreementPct, [aiStripSignalScore, aiStripAgreementPct]);
   const summaryTone =
@@ -365,9 +441,14 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
           setRadarData(
             (raw as Array<Record<string, unknown>>).map((layer) => {
               const k = String(layer.layer ?? "").toLowerCase();
+              const sectorPending =
+                k === "sector" && String(layer.sector_resolution_state ?? "") === "pending_cache_refresh";
+              const n = typeof layer.score === "number" && Number.isFinite(layer.score) ? Math.round(layer.score) : null;
+              // Pending sector is excluded from composite — plot at baseline so radar/divergence shows no false skew.
+              const score = sectorPending ? baseline : n ?? 0;
               return {
                 layer: RADAR_LAYER_LABEL[k] ?? k,
-                score: typeof layer.score === "number" && Number.isFinite(layer.score) ? Math.round(layer.score) : 0,
+                score,
                 hist: baseline
               };
             })
@@ -734,7 +815,7 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
                         color: statusColor(row.status, colors)
                       }}
                     >
-                      {row.status}
+                      {row.statusLabel ?? row.status}
                     </span>
                     <span className="min-w-0 flex-1 text-sm leading-snug sm:text-sm" style={{ color: colors.textMuted }}>
                       {row.explanation}
@@ -876,7 +957,7 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
           {aiStripSignalScore != null ? (
             <>
               {" "}
-              with signal score <strong style={{ color: summaryTone }}>{aiStripSignalScore}/100</strong>
+              with trade readiness <strong style={{ color: summaryTone }}>{aiStripSignalScore}/100</strong>
               {layerAgreementPercent != null ? (
                 <>
                   {" "}
@@ -892,9 +973,15 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
             </>
           )}
         </p>
+        {signalsPageVerdictLine ? (
+          <p className="text-sm leading-relaxed" style={{ margin: `${spacing[2]} 0 0 0`, color: colors.text }}>
+            <strong style={{ color: colors.textMuted, fontWeight: 600 }}>Verdict: </strong>
+            {signalsPageVerdictLine}
+          </p>
+        ) : null}
         {aiStripSignalScore != null && layerAgreementPercent != null ? (
           <p className="text-xs" style={{ margin: `${spacing[2]} 0 0 0`, color: colors.textMuted }}>
-            Bar width follows signal score (matches View Evidence), not the agreement %.
+            Bar width follows trade readiness (matches View Evidence), not the agreement %.
           </p>
         ) : null}
         <div style={{ marginTop: spacing[3], height: 10, background: colors.surfaceMuted, borderRadius: borderRadius.full }}>

@@ -49,7 +49,7 @@ export function marketRegimeDecisionTooltip(regime: string): string {
 
 export function compositeSignalScoreTooltip(score: number): string {
   return (
-    `This ${score} score maps the composite engine’s directional read to a 0–100 style display for the card. ` +
+    `Trade readiness at ${score}/100 maps the composite engine’s directional read to a 0–100 display on the card. ` +
     "It reflects the weighted six-layer blend after gates; use it alongside R/R, regime, and confluence rather than as a single go/no-go number."
   );
 }

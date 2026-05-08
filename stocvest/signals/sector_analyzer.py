@@ -52,17 +52,18 @@ class SectorAnalyzer:
 
         if resolution_state == SectorResolutionState.PENDING_REFRESH:
             return SectorLayerResult(
-                status="available",
-                score=50,
+                status="unavailable",
+                score=None,
                 verdict="neutral",
                 sector_etf=None,
                 sector_name=sector_display_name,
                 sector_signal="neutral",
                 reasoning=(
-                    "Sector classification is being resolved for this ticker. Refresh in a moment for "
-                    "full sector analysis."
+                    "Sector momentum is not in the composite yet — sector cache is still refreshing. "
+                    "This layer is excluded until data is ready; it does not count as neutral disagreement "
+                    "and does not reduce alignment vs other layers."
                 ),
-                chips=["Sector resolving…"],
+                chips=["Unavailable · not factored in composite"],
             )
 
         if (

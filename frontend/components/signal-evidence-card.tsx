@@ -123,7 +123,7 @@ function regimeColor(regime: string, colors: ThemeColors): string {
 function sectorResolutionLabel(state: SectorResolutionStateWire | null | undefined): string {
   if (!state) return "";
   if (state === "resolved") return "Resolved";
-  if (state === "pending_cache_refresh") return "Pending cache refresh";
+  if (state === "pending_cache_refresh") return "Unavailable (not factored)";
   return "Unmapped";
 }
 
@@ -183,16 +183,20 @@ function SectorMomentumPanel({ layer, colors }: { layer: EvidenceLayer; colors: 
           <span
             className="rounded-full px-2 py-0.5 text-xs font-semibold"
             style={{
-              border: `1px solid ${st === "resolved" ? "rgba(34,197,94,0.45)" : "rgba(245,158,11,0.5)"}`,
-              background: st === "resolved" ? "rgba(34,197,94,0.1)" : "rgba(245,158,11,0.12)",
-              color: st === "resolved" ? colors.bullish : colors.caution
+              border: `1px solid ${st === "resolved" ? "rgba(34,197,94,0.45)" : "rgba(148,163,184,0.45)"}`,
+              background: st === "resolved" ? "rgba(34,197,94,0.1)" : "rgba(148,163,184,0.1)",
+              color: st === "resolved" ? colors.bullish : colors.textMuted
             }}
           >
             {sectorResolutionLabel(st)}
           </span>
         ) : null}
-        {layer.sector_data_available === false ? (
-          <span className="text-xs text-muted-foreground">Sector momentum data not cached yet</span>
+        {layer.sector_data_available === false && st === "pending_cache_refresh" ? (
+          <span className="text-xs text-muted-foreground">
+            Excluded from composite score and alignment until cache is ready — not a system error.
+          </span>
+        ) : layer.sector_data_available === false ? (
+          <span className="text-xs text-muted-foreground">Sector momentum data not available for this read.</span>
         ) : null}
         {layer.sector_trending ? (
           <span className="text-xs text-muted-foreground capitalize">Trend: {layer.sector_trending}</span>
@@ -434,11 +438,12 @@ function formatSectorMultiplier(m: number | null): string {
 
 function GeoStructuralBaselinePanel({ geo, colors }: { geo: GeopoliticalLayerExtras; colors: ThemeColors }) {
   const band = structuralBandFromBaselineScore(geo.geoBaselineScore ?? null) ?? geo.exposureBand;
-  const bandSt = geoExposureBandStyles(band ?? "low", colors);
   const body = (geo.geoBaselineSummary ?? geo.exposureSummary ?? "").trim();
   const sector = geo.impactSectorLabel;
   const themeChip =
     geo.geoPrimaryTheme && geo.geoPrimaryTheme.length ? geo.geoPrimaryTheme.replace(/_/g, " ") : "";
+  const baselineBadge =
+    band === "high" ? "Background sensitivity" : band === "moderate" ? "Structural context" : "Baseline exposure";
 
   return (
     <div
@@ -446,8 +451,7 @@ function GeoStructuralBaselinePanel({ geo, colors }: { geo: GeopoliticalLayerExt
         marginTop: spacing[2],
         padding: spacing[3],
         borderRadius: borderRadius.md,
-        border: `1px solid ${bandSt.border}`,
-        background: bandSt.bg,
+        border: `1px solid ${colors.border}`,
         display: "grid",
         gap: spacing[2]
       }}
@@ -467,16 +471,15 @@ function GeoStructuralBaselinePanel({ geo, colors }: { geo: GeopoliticalLayerExt
           <span
             style={{
               fontSize: typography.scale.xs,
-              fontWeight: 700,
-              textTransform: "capitalize",
-              color: bandSt.fg,
+              fontWeight: 600,
+              color: colors.textMuted,
               padding: "3px 10px",
               borderRadius: borderRadius.full,
-              border: `1px solid ${bandSt.border}`,
-              background: "rgba(255,255,255,0.04)"
+              border: `1px solid ${colors.border}`,
+              background: "rgba(148,163,184,0.08)"
             }}
           >
-            {band}
+            {baselineBadge}
           </span>
         ) : null}
       </div>
@@ -493,8 +496,14 @@ function GeoStructuralBaselinePanel({ geo, colors }: { geo: GeopoliticalLayerExt
           {body}
         </p>
       ) : null}
-      <p className="text-xs italic text-muted-foreground" style={{ margin: 0 }}>
-        Structural baseline — no active geo headlines in the current window.
+      <p className="text-xs text-muted-foreground" style={{ margin: 0 }}>
+        Background sensitivity, not an active event.
+      </p>
+      <p className="text-xs text-muted-foreground" style={{ margin: 0 }}>
+        Structural baseline — no active geo escalation in the current window.
+      </p>
+      <p className="text-xs text-muted-foreground" style={{ margin: 0 }}>
+        Structural exposure informs position sizing and confidence — not entry timing.
       </p>
     </div>
   );
@@ -781,13 +790,13 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
           }}
         >
           <span style={{ fontSize: typography.scale.xs, fontWeight: 700, letterSpacing: "0.06em", color: colors.textMuted }}>
-            SIGNAL SCORE
+            TRADE READINESS
           </span>
           <span
             className="text-3xl font-bold tabular-nums sm:text-4xl"
             style={{ color: scoreHeaderColor(insight.signal_score, colors), lineHeight: 1.1 }}
           >
-            <DecisionMetric explanation={compositeSignalScoreTooltip(insight.signal_score)} label="How signal score is used" maxWidth={300}>
+            <DecisionMetric explanation={compositeSignalScoreTooltip(insight.signal_score)} label="How trade readiness is used" maxWidth={300}>
               <span>
                 {insight.signal_score}
                 <span style={{ fontSize: typography.scale.sm, color: colors.textMuted, fontWeight: 600 }}> / 100</span>

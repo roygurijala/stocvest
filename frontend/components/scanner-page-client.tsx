@@ -36,7 +36,7 @@ import { topSignalStrengthPercent } from "@/lib/top-signal-strength";
 import {
   CONFIDENCE_PERCENT_TIP,
   GAP_INTELLIGENCE_TIP,
-  GAP_QUALITY_SCORE_TIP,
+  EVENT_SIGNIFICANCE_SCORE_TIP,
   INTRADAY_SETUPS_TIP,
   SETUP_RELATIVE_VOLUME_TIP
 } from "@/lib/ui-tooltips";
@@ -355,10 +355,12 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
           <div style={{ marginTop: spacing[2] }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2] }}>
             <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Quality</span>
-              <InfoTip text={GAP_QUALITY_SCORE_TIP} label="What quality measures" maxWidth={280} />
+              <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Event significance</span>
+              <InfoTip text={EVENT_SIGNIFICANCE_SCORE_TIP} label="What event significance measures" maxWidth={280} />
             </div>
-            <span style={{ fontSize: typography.scale.xs, fontFamily: MONO }}>{item.gap_quality_score}</span>
+            <span style={{ fontSize: typography.scale.xs, fontFamily: MONO }}>
+              {item.gap_quality_score}/100
+            </span>
           </div>
           <div
             style={{

@@ -28,8 +28,9 @@ def test_pending_sector_cache_chips(monkeypatch: pytest.MonkeyPatch) -> None:
         default_signal_parameters().sector,
         resolution_state=SectorResolutionState.PENDING_REFRESH,
     )
-    assert any("Sector resolving" in c for c in res.chips)
-    assert res.score == 50
+    assert res.status == "unavailable"
+    assert res.score is None
+    assert any("not factored" in c.lower() for c in res.chips)
     assert "SPY" not in " ".join(res.chips).upper()
 
 

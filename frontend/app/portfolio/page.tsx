@@ -269,7 +269,7 @@ export default function ModelPortfolioPage() {
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: spacing[3] }}>
                       <strong>{sym}</strong>
-                      <span style={{ color: colors.textMuted }}>Signal score: {String(p.signal_score)}%</span>
+                      <span style={{ color: colors.textMuted }}>Trade readiness: {String(p.signal_score)}/100</span>
                     </div>
                     <p style={{ fontSize: typography.scale.sm, color: colors.textMuted, marginTop: spacing[2] }}>
                       Entry logged at {fmtMoney(entry)} · Stop {fmtMoney(stop)} · Target {fmtMoney(target)}
@@ -363,7 +363,7 @@ export default function ModelPortfolioPage() {
                   <th style={{ padding: spacing[3] }}>Symbol</th>
                   <th style={{ padding: spacing[3] }}>Entry</th>
                   <th style={{ padding: spacing[3] }}>Exit</th>
-                  <th style={{ padding: spacing[3] }}>Signal</th>
+                  <th style={{ padding: spacing[3] }}>Trade readiness</th>
                   <th style={{ padding: spacing[3] }}>Outcome</th>
                   <th style={{ padding: spacing[3] }}>Reason</th>
                 </tr>
@@ -389,7 +389,7 @@ export default function ModelPortfolioPage() {
                         <td style={{ padding: spacing[3] }}>{String(r.symbol)}</td>
                         <td style={{ padding: spacing[3] }}>{fmtMoney(num(r.entry_price))}</td>
                         <td style={{ padding: spacing[3] }}>{r.exit_price != null ? fmtMoney(num(r.exit_price)) : "—"}</td>
-                        <td style={{ padding: spacing[3] }}>{String(r.signal_score)}%</td>
+                        <td style={{ padding: spacing[3] }}>{String(r.signal_score)}/100</td>
                         <td style={{ padding: spacing[3] }}>{r.outcome != null ? String(r.outcome) : "—"}</td>
                         <td style={{ padding: spacing[3] }}>{r.exit_reason != null ? String(r.exit_reason) : "—"}</td>
                       </tr>
