@@ -46,12 +46,111 @@ interface SignalEvidenceCardProps {
   onOpenNewsPanel?: (symbol: string) => void;
 }
 
+type TradeDecisionState = "actionable" | "monitor" | "blocked";
+
+interface TradeDecision {
+  state: TradeDecisionState;
+  line: string;
+  reinforcements: string[];
+}
+
+type CardTone = "neutral" | "bullish" | "bearish" | "caution";
+
 function statusColor(status: EvidenceStatus, colors: ThemeColors): string {
   if (status === "Bullish") return colors.bullish;
   if (status === "Bearish") return colors.bearish;
   if (status === "Neutral") return colors.caution;
   if (status === "As of close") return colors.text;
   return colors.textMuted;
+}
+
+function decisionLineColor(state: TradeDecisionState, colors: ThemeColors): string {
+  if (state === "actionable") return colors.bullish;
+  if (state === "blocked") return colors.bearish;
+  return colors.caution;
+}
+
+function toneFromStatus(status: EvidenceStatus): CardTone {
+  if (status === "Bullish") return "bullish";
+  if (status === "Bearish") return "bearish";
+  if (status === "Neutral") return "caution";
+  return "neutral";
+}
+
+function elevatedCardStyle(colors: ThemeColors, tone: CardTone = "neutral"): CSSProperties {
+  if (tone === "bullish") {
+    return {
+      border: "1px solid rgba(34,197,94,0.35)",
+      background: "rgba(34,197,94,0.05)",
+      boxShadow: "0 0 0 1px rgba(34,197,94,0.1), 0 0 20px rgba(34,197,94,0.1)"
+    };
+  }
+  if (tone === "bearish") {
+    return {
+      border: "1px solid rgba(239,68,68,0.35)",
+      background: "rgba(239,68,68,0.05)",
+      boxShadow: "0 0 0 1px rgba(239,68,68,0.1), 0 0 20px rgba(239,68,68,0.1)"
+    };
+  }
+  if (tone === "caution") {
+    return {
+      border: "1px solid rgba(245,158,11,0.34)",
+      background: "rgba(245,158,11,0.05)",
+      boxShadow: "0 0 0 1px rgba(245,158,11,0.1), 0 0 20px rgba(245,158,11,0.1)"
+    };
+  }
+  return {
+    border: `1px solid ${colors.border}`,
+    background: "rgba(148,163,184,0.04)",
+    boxShadow: "0 0 0 1px rgba(148,163,184,0.08), 0 0 18px rgba(15,23,42,0.2)"
+  };
+}
+
+function synthTradeDecision(evidence: SignalEvidenceData, insight: SignalEvidenceInsight): TradeDecision {
+  const layers = evidence.layers ?? [];
+  const totalLayers = Math.max(1, layers.length);
+  const availableLayers = layers.filter((l) => l.status !== "Unavailable").length;
+  const directionalLayers = layers.filter((l) => l.status === "Bullish" || l.status === "Bearish").length;
+  const hasInsufficient = insight.is_complete === false;
+  const rr = Number.isFinite(insight.risk_reward) ? insight.risk_reward : 0;
+  const rrFail = rr < 2.0;
+  const agreementPct =
+    insight.alignment_ratio != null && Number.isFinite(insight.alignment_ratio)
+      ? Math.round(Math.max(0, Math.min(1, insight.alignment_ratio)) * 100)
+      : null;
+  const weakAgreement = agreementPct != null ? agreementPct < 52 : directionalLayers < 3;
+  const lowReadiness = insight.signal_score < 58;
+  const strongReadiness = insight.signal_score >= 68;
+  const strongAgreement = agreementPct != null ? agreementPct >= 60 : directionalLayers >= 4;
+  const goodCoverage = availableLayers >= 5;
+  const counterTrend = evidence.alignment?.is_counter_trend === true;
+
+  const reinforcements: string[] = [];
+  if (rrFail) reinforcements.push(`Risk/Reward below minimum threshold (${rr.toFixed(1)} : 1).`);
+  if (agreementPct != null && weakAgreement) reinforcements.push(`Mixed layer alignment (${agreementPct}%).`);
+  if (agreementPct == null && directionalLayers < 3) reinforcements.push("Limited directional confirmation across layers.");
+  if (availableLayers < 5) reinforcements.push(`Limited layer coverage (${availableLayers}/${totalLayers} available).`);
+  if (counterTrend) reinforcements.push("Counter-trend versus macro/sector context.");
+
+  if (hasInsufficient || (rrFail && weakAgreement && lowReadiness) || availableLayers < 4) {
+    return {
+      state: "blocked",
+      line: "Decision: 🚫 Blocked — fails minimum synthesis and risk gates",
+      reinforcements
+    };
+  }
+  if (strongReadiness && !rrFail && strongAgreement && goodCoverage && !counterTrend) {
+    return {
+      state: "actionable",
+      line: "Decision: ✅ Actionable — passes risk/reward and confirmation thresholds",
+      reinforcements: []
+    };
+  }
+  return {
+    state: "monitor",
+    line: "Decision: ⚠️ Monitor only — confirmation and/or risk gates are not fully cleared",
+    reinforcements
+  };
 }
 
 function formatLevel(n: number | null | undefined): string {
@@ -451,7 +550,9 @@ function GeoStructuralBaselinePanel({ geo, colors }: { geo: GeopoliticalLayerExt
         marginTop: spacing[2],
         padding: spacing[3],
         borderRadius: borderRadius.md,
-        border: `1px solid ${colors.border}`,
+        border: "1px solid rgba(148,163,184,0.3)",
+        background: "linear-gradient(180deg, rgba(51,65,85,0.18), rgba(15,23,42,0.14))",
+        boxShadow: "0 0 0 1px rgba(148,163,184,0.08), 0 0 18px rgba(15,23,42,0.24)",
         display: "grid",
         gap: spacing[2]
       }}
@@ -475,8 +576,8 @@ function GeoStructuralBaselinePanel({ geo, colors }: { geo: GeopoliticalLayerExt
               color: colors.textMuted,
               padding: "3px 10px",
               borderRadius: borderRadius.full,
-              border: `1px solid ${colors.border}`,
-              background: "rgba(148,163,184,0.08)"
+              border: "1px solid rgba(148,163,184,0.3)",
+              background: "rgba(148,163,184,0.12)"
             }}
           >
             {baselineBadge}
@@ -684,6 +785,29 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
     evidence.direction === "bullish" ? colors.bullish : evidence.direction === "bearish" ? colors.bearish : colors.caution;
   const { yes: confYes, no: confNo } = confluenceChips(evidence, insight);
   const showConfluencePanel = confYes.length > 0 || confNo.length > 0;
+  const tradeDecision = synthTradeDecision(evidence, insight);
+  const riskReinforcementBullets = tradeDecision.reinforcements;
+  const readinessTone: CardTone =
+    tradeDecision.state === "actionable" ? "bullish" : tradeDecision.state === "blocked" ? "bearish" : "caution";
+  const trendTone: CardTone =
+    insight.trend_strength.toLowerCase() === "strong"
+      ? "bullish"
+      : insight.trend_strength.toLowerCase() === "weak"
+        ? "bearish"
+        : "caution";
+  const rrTone: CardTone = insight.risk_reward >= 2.5 ? "bullish" : insight.risk_reward < 1.5 ? "bearish" : "caution";
+  const regimeTone: CardTone =
+    insight.market_regime.toLowerCase() === "bullish"
+      ? "bullish"
+      : insight.market_regime.toLowerCase() === "bearish"
+        ? "bearish"
+        : "caution";
+  const alignmentTone: CardTone =
+    evidence.alignment?.level === "full" || evidence.alignment?.level === "strong"
+      ? "bullish"
+      : evidence.alignment?.level === "conflict"
+        ? "bearish"
+        : "caution";
   const entryZone =
     insight.historical_entry_zone ??
     (typeof evidence.keyLevels.support === "number" && typeof evidence.keyLevels.resistance === "number"
@@ -782,11 +906,11 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
       <section className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         <div
           style={{
-            border: `1px solid ${colors.border}`,
             borderRadius: borderRadius.lg,
             padding: spacing[3],
             display: "grid",
-            gap: spacing[1]
+            gap: spacing[1],
+            ...elevatedCardStyle(colors, readinessTone)
           }}
         >
           <span style={{ fontSize: typography.scale.xs, fontWeight: 700, letterSpacing: "0.06em", color: colors.textMuted }}>
@@ -807,17 +931,28 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
             Composite read
             <InfoTip text={CONFIDENCE_PERCENT_TIP} label="Scanner vs composite score detail" />
           </span>
+          <p
+            style={{
+              margin: 0,
+              fontSize: typography.scale.xs,
+              color: decisionLineColor(tradeDecision.state, colors),
+              fontWeight: 600,
+              lineHeight: 1.45
+            }}
+          >
+            {tradeDecision.line}
+          </p>
           {insight.is_complete === false ? (
             <span style={{ color: colors.caution, fontSize: typography.scale.xs, fontWeight: 700 }}>Incomplete</span>
           ) : null}
         </div>
         <div
           style={{
-            border: `1px solid ${colors.border}`,
             borderRadius: borderRadius.lg,
             padding: spacing[3],
             display: "grid",
-            gap: spacing[1]
+            gap: spacing[1],
+            ...elevatedCardStyle(colors, trendTone)
           }}
         >
           <span style={{ fontSize: typography.scale.xs, fontWeight: 700, letterSpacing: "0.06em", color: colors.textMuted }}>
@@ -832,11 +967,11 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
         </div>
         <div
           style={{
-            border: `1px solid ${colors.border}`,
             borderRadius: borderRadius.lg,
             padding: spacing[3],
             display: "grid",
-            gap: spacing[1]
+            gap: spacing[1],
+            ...elevatedCardStyle(colors, rrTone)
           }}
         >
           <span style={{ fontSize: typography.scale.xs, fontWeight: 700, letterSpacing: "0.06em", color: colors.textMuted }}>
@@ -885,11 +1020,11 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
         </div>
         <div
           style={{
-            border: `1px solid ${colors.border}`,
             borderRadius: borderRadius.lg,
             padding: spacing[3],
             display: "grid",
-            gap: spacing[1]
+            gap: spacing[1],
+            ...elevatedCardStyle(colors, regimeTone)
           }}
         >
           <span style={{ fontSize: typography.scale.xs, fontWeight: 700, letterSpacing: "0.06em", color: colors.textMuted }}>
@@ -909,11 +1044,11 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
         (insight.conflicted_layers != null && insight.conflicted_layers.length > 0)) ? (
         <section
           style={{
-            border: `1px solid ${colors.border}`,
             borderRadius: borderRadius.lg,
             padding: spacing[3],
             display: "grid",
-            gap: spacing[2]
+            gap: spacing[2],
+            ...elevatedCardStyle(colors, alignmentTone)
           }}
         >
           <h3
@@ -1018,11 +1153,11 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
             <article
               key={layer.key}
               style={{
-                border: `1px solid ${colors.border}`,
                 borderRadius: borderRadius.lg,
                 padding: spacing[3],
                 display: "grid",
-                gap: spacing[2]
+                gap: spacing[2],
+                ...elevatedCardStyle(colors, toneFromStatus(layer.status))
               }}
             >
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -1253,11 +1388,11 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
         <div style={{ display: "grid", gap: spacing[3] }}>
           <div
             style={{
-              border: `1px solid ${colors.border}`,
               borderRadius: borderRadius.lg,
               padding: spacing[3],
               display: "grid",
-              gap: spacing[2]
+              gap: spacing[2],
+              ...elevatedCardStyle(colors)
             }}
           >
             <h3 style={{ margin: 0 }}>Reference Levels</h3>
@@ -1317,11 +1452,11 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
           {showConfluencePanel ? (
             <div
               style={{
-                border: `1px solid ${colors.border}`,
                 borderRadius: borderRadius.lg,
                 padding: spacing[3],
                 display: "grid",
-                gap: spacing[2]
+                gap: spacing[2],
+                ...elevatedCardStyle(colors)
               }}
             >
               <h3 style={{ margin: 0 }}>Confirming Signals</h3>
@@ -1369,11 +1504,11 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
         <div style={{ display: "grid", gap: spacing[3] }}>
           <div
             style={{
-              border: `1px solid ${colors.border}`,
               borderRadius: borderRadius.lg,
               padding: spacing[3],
               display: "grid",
-              gap: spacing[2]
+              gap: spacing[2],
+              ...elevatedCardStyle(colors)
             }}
           >
             <h3 style={{ margin: 0 }}>Catalysts &amp; Context</h3>
@@ -1475,19 +1610,19 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
 
           <div
             style={{
-              border: `1px solid ${colors.border}`,
               borderRadius: borderRadius.lg,
               padding: spacing[3],
               display: "grid",
-              gap: spacing[2]
+              gap: spacing[2],
+              ...elevatedCardStyle(colors, riskReinforcementBullets.length > 0 ? "caution" : "neutral")
             }}
           >
             <h3 style={{ margin: 0 }}>Risk Factors</h3>
-            {insight.risk_factors.length === 0 ? (
+            {riskReinforcementBullets.length === 0 && insight.risk_factors.length === 0 ? (
               <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted }}>No significant risk factors detected</p>
             ) : (
             <ul style={{ margin: 0, paddingInlineStart: 0, listStyle: "none", display: "grid", gap: spacing[2] }}>
-              {insight.risk_factors.slice(0, 6).map((r, i) => (
+              {(riskReinforcementBullets.length > 0 ? riskReinforcementBullets : insight.risk_factors.slice(0, 6)).map((r, i) => (
                 <li key={`risk-${i}`} className="flex gap-2 text-sm" style={{ color: colors.text }}>
                   <span
                     style={{
@@ -1508,7 +1643,15 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
         </div>
       </section>
 
-      <section style={{ border: `1px solid ${colors.border}`, borderRadius: borderRadius.lg, padding: spacing[3], display: "grid", gap: spacing[2] }}>
+      <section
+        style={{
+          borderRadius: borderRadius.lg,
+          padding: spacing[3],
+          display: "grid",
+          gap: spacing[2],
+          ...elevatedCardStyle(colors)
+        }}
+      >
         <h3 style={{ margin: 0, display: "flex", alignItems: "center", gap: spacing[2] }}>
           <Brain size={18} />
           AI Signal Analysis
@@ -1533,11 +1676,11 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
 
       <section
         style={{
-          border: `1px solid ${colors.border}`,
           borderRadius: borderRadius.lg,
           padding: spacing[3],
           display: "grid",
-          gap: spacing[2]
+          gap: spacing[2],
+          ...elevatedCardStyle(colors)
         }}
       >
         <h3 style={{ margin: 0 }}>Signal Parameters</h3>
@@ -1557,23 +1700,32 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
 
       <div
         style={{
-          background: "rgba(255,193,7,0.06)",
-          border: "1px solid rgba(255,193,7,0.2)",
-          borderRadius: "8px",
+          background: "linear-gradient(180deg, rgba(59,130,246,0.08), rgba(148,163,184,0.08))",
+          border: "1px solid rgba(59,130,246,0.24)",
+          borderRadius: borderRadius.lg,
           padding: "12px 16px",
           fontSize: "12px",
-          color: "#8a9ab0",
+          color: colors.textMuted,
           lineHeight: "1.6",
-          marginBottom: "4px"
+          marginBottom: "4px",
+          boxShadow: "0 0 0 1px rgba(59,130,246,0.1), 0 0 20px rgba(37,99,235,0.08)"
         }}
       >
-        <strong style={{ color: "#f5c542" }}>Signal Data Only</strong>
+        <strong style={{ color: colors.accent }}>Signal Data Only</strong>
         <br />
         This analysis surfaces technical patterns and signal data for informational purposes. It is not investment advice. Reference
         levels shown are derived from historical patterns — not predictions. You are solely responsible for all trading decisions.
       </div>
 
-      <section style={{ border: `1px solid ${colors.border}`, borderRadius: borderRadius.lg, padding: spacing[3], display: "grid", gap: spacing[2] }}>
+      <section
+        style={{
+          borderRadius: borderRadius.lg,
+          padding: spacing[3],
+          display: "grid",
+          gap: spacing[2],
+          ...elevatedCardStyle(colors)
+        }}
+      >
         <h3 style={{ margin: 0 }}>Signal Strength Breakdown</h3>
         <div className="h-[208px] w-full max-w-full min-w-0 lg:h-[236px]">
           <ResponsiveContainer width="100%" height="100%">

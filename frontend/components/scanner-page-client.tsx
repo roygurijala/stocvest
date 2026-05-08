@@ -60,6 +60,7 @@ interface ScannerPageClientProps {
 }
 
 const SCANNER_MODE_STORAGE_KEY = "stocvest_scanner_mode";
+const SECONDARY_SHARED_CATALYST_HEADLINE = "Referenced in related news — see primary ticker";
 
 const MONO = typography.fontFamilyMono;
 
@@ -95,6 +96,11 @@ function formatSignalFiredTimeEt(iso: string): string {
   });
 }
 
+function isSecondarySharedCatalyst(item: GapIntelligenceItem): boolean {
+  const h = item.catalyst?.headline;
+  return typeof h === "string" && h.trim() === SECONDARY_SHARED_CATALYST_HEADLINE;
+}
+
 export function ScannerPageClient({ initialOverview, initialTimestampIso, earningsBySymbol }: ScannerPageClientProps) {
   const { colors } = useTheme();
   const [overview, setOverview] = useState<ScannerOverview>(initialOverview);
@@ -122,6 +128,15 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
 
   const [snapBySymbol, setSnapBySymbol] = useState<Record<string, SnapshotPayload | null>>({});
   const [pmhBySymbol, setPmhBySymbol] = useState<Record<string, number | null>>({});
+
+  const openGapNews = useCallback((item: GapIntelligenceItem) => {
+    if (isSecondarySharedCatalyst(item)) {
+      setNewsPanelSymbol(item.symbol.trim().toUpperCase());
+      setNewsPanelOpen(true);
+      return;
+    }
+    setGapNewsDrawerItem(item);
+  }, []);
 
   useLayoutEffect(() => {
     try {
@@ -402,10 +417,10 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
-                setGapNewsDrawerItem(item);
+                openGapNews(item);
               }
             }}
-            onClick={() => setGapNewsDrawerItem(item)}
+            onClick={() => openGapNews(item)}
             style={{
               marginTop: spacing[2],
               cursor: "pointer",
