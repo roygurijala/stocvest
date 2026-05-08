@@ -25,7 +25,7 @@ Set these in the Vercel project (**Production** and **Preview** as needed). Root
 | Vercel / Next.js env var | Terraform output |
 | --- | --- |
 | `NEXT_PUBLIC_STOCVEST_API_BASE_URL` | `api_gateway_http_invoke_url` |
-| `NEXT_PUBLIC_STOCVEST_WS_URL` | `api_gateway_websocket_callback_url` (use `wss://` in the browser) |
+| `NEXT_PUBLIC_STOCVEST_WS_URL` | `api_gateway_websocket_callback_url` — full `wss://…execute-api…/$default` URL (stage path required) |
 | `NEXT_PUBLIC_COGNITO_USER_POOL_ID` | `cognito_user_pool_id` |
 | `NEXT_PUBLIC_COGNITO_CLIENT_ID` | `cognito_user_pool_client_frontend_id` |
 

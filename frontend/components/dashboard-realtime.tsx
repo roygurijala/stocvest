@@ -9,8 +9,33 @@ function browserWsBaseUrl(): string {
   return raw.replace(/^https:\/\//i, "wss://");
 }
 
+/** API Gateway v2 WebSocket requires the stage in the URL path; bare host + "/?token=" connects to the wrong route and fails. */
+const EXECUTE_API_WS_HOST = /\.execute-api\.[a-z0-9-]+\.amazonaws\.com$/i;
+
+function ensureApiGatewayWebSocketStagePath(baseWss: string): string {
+  const withWss = baseWss.startsWith("wss://") ? baseWss : `wss://${baseWss}`;
+  try {
+    const u = new URL(withWss);
+    if (!EXECUTE_API_WS_HOST.test(u.hostname)) {
+      return withWss;
+    }
+    const segments = u.pathname
+      .replace(/\/+$/, "")
+      .split("/")
+      .filter(Boolean);
+    if (segments.length === 0) {
+      u.pathname = "/$default";
+    }
+    return u.toString().replace(/\/+$/, "");
+  } catch {
+    return baseWss;
+  }
+}
+
 function buildWebSocketUrlWithToken(baseWss: string, token: string): string {
-  const normalized = baseWss.startsWith("wss://") ? baseWss : `wss://${baseWss}`;
+  const normalized = ensureApiGatewayWebSocketStagePath(
+    baseWss.startsWith("wss://") ? baseWss : `wss://${baseWss}`
+  );
   const u = new URL(normalized);
   u.searchParams.set("token", token);
   return u.toString();

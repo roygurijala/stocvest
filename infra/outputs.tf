@@ -89,8 +89,8 @@ output "api_gateway_http_invoke_url" {
 }
 
 output "api_gateway_websocket_callback_url" {
-  description = "WebSocket API URL (use wss:// scheme in clients if api_endpoint is https://)."
-  value       = aws_apigatewayv2_api.websocket.api_endpoint
+  description = "Browser WebSocket URL including the API Gateway stage path (e.g. /$default). Copy into NEXT_PUBLIC_STOCVEST_WS_URL as-is (wss://)."
+  value       = "wss://${aws_apigatewayv2_api.websocket.id}.execute-api.${var.aws_region}.amazonaws.com/${aws_apigatewayv2_stage.websocket_default.name}"
 }
 
 output "api_gateway_websocket_management_url" {
