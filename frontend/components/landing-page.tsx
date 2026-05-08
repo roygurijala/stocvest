@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, type KeyboardEvent, type MouseEvent } from "react";
 import { MoonStar, Zap } from "lucide-react";
 import type { LandingSignal } from "@/lib/api/landing-signals";
 import type { PerformanceSummary } from "@/lib/api/public-signals";
@@ -12,6 +12,8 @@ const MONO =
 
 type LandingMode = "swing" | "day";
 
+type PricingTier = "free" | "swing_pro" | "swing_day_pro";
+
 export type LandingPageProps = {
   explorerSignals: LandingSignal[];
   activitySignals: LandingSignal[];
@@ -19,16 +21,6 @@ export type LandingPageProps = {
   performanceSummary: PerformanceSummary;
   foundingMemberCount: number | null;
 };
-
-function hasEnoughAccuracyData(summary: PerformanceSummary): boolean {
-  return summary.signals_evaluated >= 20;
-}
-
-function signalModeBadge(s: LandingSignal): "SWING" | "DAY" {
-  const p = s.pattern.toLowerCase();
-  if (p.includes("daily") || p.includes("swing") || p.includes("ema") || p.includes("weekly")) return "SWING";
-  return "DAY";
-}
 
 function layerRow(label: string, pct: number) {
   return (
@@ -120,15 +112,14 @@ function EngineCard({ mode }: { mode: LandingMode }) {
 
 export function LandingPage({
   explorerSignals: _explorerSignals,
-  activitySignals,
+  activitySignals: _activitySignals,
   usedApiFallback: _usedApiFallback,
-  performanceSummary,
+  performanceSummary: _performanceSummary,
   foundingMemberCount: _foundingMemberCount
 }: LandingPageProps) {
   const isScrolled = useScrollPosition(24);
   const [engineTab, setEngineTab] = useState<LandingMode>("swing");
-  const enoughAccuracy = hasEnoughAccuracyData(performanceSummary);
-  const recentSignals = activitySignals.slice(0, 5);
+  const [pricingTier, setPricingTier] = useState<PricingTier>("swing_pro");
   const trustBadges = [
     "Real-time data · Polygon.io",
     "AI synthesis · Anthropic Claude",
@@ -136,6 +127,27 @@ export function LandingPage({
     "STOCVEST LLC",
     "Not investment advice"
   ];
+
+  const selectPricingCard = (tier: PricingTier) => setPricingTier(tier);
+
+  const onPricingCardClick = (e: MouseEvent<HTMLDivElement>, tier: PricingTier) => {
+    if ((e.target as HTMLElement).closest("a[href]")) return;
+    selectPricingCard(tier);
+  };
+
+  const onPricingCardKeyDown = (e: KeyboardEvent<HTMLDivElement>, tier: PricingTier) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      selectPricingCard(tier);
+    }
+  };
+
+  const pricingCardClass = (tier: PricingTier) =>
+    [
+      "landing-pricing-card flex h-full cursor-pointer flex-col p-6 text-left outline-none transition-[transform,box-shadow] duration-200",
+      "focus-visible:ring-2 focus-visible:ring-cyan-400/90 focus-visible:ring-offset-2 focus-visible:ring-offset-[#070d18]",
+      pricingTier === tier ? "landing-pricing-card--selected" : ""
+    ].join(" ");
 
   return (
     <main className="bg-[#070d18] text-slate-100">
@@ -151,11 +163,7 @@ export function LandingPage({
 
       {/* 1 · Hero — decision-first */}
       <section className="mx-auto flex min-h-screen max-w-7xl flex-col justify-center px-4 pt-24 md:px-8">
-        <h1 className="max-w-4xl text-4xl font-black leading-tight md:text-6xl">
-          Know when to trade — and when to stay out.
-          <br />
-          Intelligence for swing and day traders who don&apos;t guess.
-        </h1>
+        <h1 className="max-w-4xl text-4xl font-black leading-tight md:text-6xl">We tell you when to trade — and when not to.</h1>
         <p className="mt-5 max-w-3xl text-lg text-slate-300">
           STOCVEST evaluates every setup across six independent layers — and only surfaces trades when they agree. Built for traders who want
           alignment, not noise.
@@ -292,11 +300,9 @@ export function LandingPage({
           Most traders lose money not because they lack data — but because they rely on only one or two perspectives at a time.
         </p>
         <h2 className="text-center text-3xl font-bold md:text-5xl">Every other platform gives you data. We give you a verdict.</h2>
-        <p className="mx-auto mt-3 max-w-2xl text-center text-sm font-medium text-slate-200">
-          You see the reasoning behind every call — nothing is hidden.
-        </p>
-        <p className="mx-auto mt-4 max-w-3xl text-center text-slate-300">
-          Six independent engines analyze every setup simultaneously. One composite score. One directional call. Full reasoning shown — always.
+        <p className="mx-auto mt-4 max-w-3xl text-center text-base font-medium leading-relaxed text-slate-200 md:text-lg">
+          Our system evaluates every setup across six independent layers and surfaces trades only when they agree — with full reasoning shown when
+          you need it.
         </p>
         <p className="mx-auto mt-8 max-w-3xl text-center text-sm leading-relaxed text-slate-400">
           Here&apos;s what alignment looks like when all six layers are considered together.
@@ -324,59 +330,92 @@ export function LandingPage({
           Most traders review this card briefly — or not at all — depending on experience level. The platform holds the full depth when you need
           it.
         </p>
-        <div className="mt-8 rounded-lg border border-amber-300/40 bg-amber-300/10 p-5 text-sm text-amber-100">
-          <p className="font-semibold">The geo layer isn&apos;t a generic market risk flag.</p>
-          <p className="mt-2">It knows NVDA faces semiconductor trade restrictions at 1.8× sensitivity. PINS (social media) faces almost none at 0.4×.</p>
-          <p className="mt-2">Same world event. Two completely different reads.</p>
-          <p className="mt-2 font-semibold">No other retail trading platform does this.</p>
-        </div>
       </section>
 
       {/* 6 · Pricing */}
       <section className="mx-auto max-w-7xl px-4 py-16 md:px-8">
         <h2 className="mb-2 text-center text-3xl font-bold md:text-4xl">Simple pricing. Both modes included.</h2>
         <p className="mx-auto mb-8 max-w-2xl text-center text-sm text-slate-400">Early member pricing for initial members at signup.</p>
-        <div className="grid gap-4 lg:grid-cols-3">
-          <div className="landing-pricing-card p-6">
-            <h3 className="text-xl font-bold">Free</h3>
-            <p className="mt-1 text-sm text-slate-400">Understand the system</p>
+        <div className="grid gap-4 lg:grid-cols-3 lg:items-stretch">
+          <div
+            role="button"
+            tabIndex={0}
+            aria-pressed={pricingTier === "free"}
+            aria-label="Free — Understand the system plan — select to compare"
+            className={pricingCardClass("free")}
+            onClick={(e) => onPricingCardClick(e, "free")}
+            onKeyDown={(e) => onPricingCardKeyDown(e, "free")}
+          >
+            <div className="mb-1 min-h-[2.75rem] shrink-0" aria-hidden="true" />
+            <h3 className="text-xl font-bold leading-snug">Free — Understand the system</h3>
             <p className="mt-2 text-3xl font-black text-cyan-300">$0/month</p>
-            <ul className="mt-3 space-y-1 text-sm text-slate-300">
-              <li>• Limited access to swing signals</li>
-              <li>• Limited access to day signals</li>
+            <ul className="mt-3 flex flex-1 list-none flex-col gap-1 pl-0 text-sm text-slate-300">
+              <li>• Preview access to swing and day signals</li>
               <li>• Limited evidence views per day</li>
               <li>• Basic scanner results</li>
               <li>• Signal evidence cards</li>
               <li>• Public signal track record</li>
             </ul>
-            <Link href="/register" className="mt-4 inline-flex rounded-md bg-[#3b82f6] px-4 py-2 font-semibold">
-              Get Started Free
-            </Link>
+            <div className="mt-auto shrink-0 pt-4">
+              <p className="mb-3 text-left text-xs leading-relaxed text-slate-500">Built for exploration, not active trading.</p>
+              <Link
+                href="/register"
+                className="inline-flex min-h-11 w-full items-center justify-center rounded-md bg-[#3b82f6] px-4 py-2 font-semibold"
+                onClick={(e) => e.stopPropagation()}
+              >
+                Get Started Free
+              </Link>
+            </div>
           </div>
-          <div className="landing-pricing-card landing-pricing-card--selected p-6">
-            <p className="text-xs font-bold uppercase tracking-wide text-cyan-300">Most Popular</p>
+          <div
+            role="button"
+            tabIndex={0}
+            aria-pressed={pricingTier === "swing_pro"}
+            aria-label="Swing Pro plan — select to compare"
+            className={pricingCardClass("swing_pro")}
+            onClick={(e) => onPricingCardClick(e, "swing_pro")}
+            onKeyDown={(e) => onPricingCardKeyDown(e, "swing_pro")}
+          >
+            <div className="mb-1 min-h-[2.75rem] shrink-0">
+              <p className="text-xs font-bold uppercase tracking-wide text-cyan-300">Most Popular</p>
+            </div>
             <h3 className="text-xl font-bold">Swing Pro</h3>
             <p className="mt-1 text-sm text-slate-400">Commit to disciplined swing trading</p>
             <p className="mt-2 text-sm text-slate-400 line-through">$49/month</p>
             <p className="text-3xl font-black text-cyan-300">$29/month</p>
             <p className="text-xs text-slate-400">Early member rate · reg. $49</p>
-            <ul className="mt-3 space-y-1 text-sm text-slate-300">
+            <ul className="mt-3 flex flex-1 list-none flex-col gap-1 pl-0 text-sm text-slate-300">
               <li>• Full swing signal access</li>
               <li>• Full daily bar scanner</li>
               <li>• AI signal explanations (paid feature)</li>
               <li>• Swing trading alerts</li>
             </ul>
-            <Link href="/register" className="mt-4 inline-flex rounded-md bg-[#3b82f6] px-4 py-2 font-semibold">
-              Choose Swing Pro
-            </Link>
+            <div className="mt-auto shrink-0 pt-4">
+              <Link
+                href="/register"
+                className="inline-flex min-h-11 w-full items-center justify-center rounded-md bg-[#3b82f6] px-4 py-2 font-semibold"
+                onClick={(e) => e.stopPropagation()}
+              >
+                Choose Swing Pro
+              </Link>
+            </div>
           </div>
-          <div className="landing-pricing-card p-6">
+          <div
+            role="button"
+            tabIndex={0}
+            aria-pressed={pricingTier === "swing_day_pro"}
+            aria-label="Swing plus Day Pro plan — select to compare"
+            className={pricingCardClass("swing_day_pro")}
+            onClick={(e) => onPricingCardClick(e, "swing_day_pro")}
+            onKeyDown={(e) => onPricingCardKeyDown(e, "swing_day_pro")}
+          >
+            <div className="mb-1 min-h-[2.75rem] shrink-0" aria-hidden="true" />
             <h3 className="text-xl font-bold">Swing + Day Pro</h3>
             <p className="mt-1 text-sm text-slate-400">Full-spectrum market intelligence</p>
             <p className="mt-2 text-sm text-slate-400 line-through">$99/month</p>
             <p className="text-3xl font-black text-cyan-300">$59/month</p>
             <p className="text-xs text-slate-400">Early member rate · reg. $99</p>
-            <ul className="mt-3 space-y-1 text-sm text-slate-300">
+            <ul className="mt-3 flex flex-1 list-none flex-col gap-1 pl-0 text-sm text-slate-300">
               <li>• Everything in Swing Pro</li>
               <li>• Full day-trading signal access</li>
               <li>• Pre-market gap scanner</li>
@@ -384,9 +423,15 @@ export function LandingPage({
               <li>• Day trading alerts</li>
               <li>• Priority support</li>
             </ul>
-            <Link href="/register" className="mt-4 inline-flex rounded-md bg-[#3b82f6] px-4 py-2 font-semibold">
-              Choose Swing + Day Pro
-            </Link>
+            <div className="mt-auto shrink-0 pt-4">
+              <Link
+                href="/register"
+                className="inline-flex min-h-11 w-full items-center justify-center rounded-md bg-[#3b82f6] px-4 py-2 font-semibold"
+                onClick={(e) => e.stopPropagation()}
+              >
+                Choose Swing + Day Pro
+              </Link>
+            </div>
           </div>
         </div>
       </section>
@@ -396,40 +441,10 @@ export function LandingPage({
         <p className="mb-2 text-center text-xs uppercase tracking-[0.25em] text-cyan-300" style={{ fontFamily: MONO }}>
           LIVE ENGINE
         </p>
-        <h2 className="text-center text-3xl font-bold md:text-4xl">Signals generating right now</h2>
-        <p className="mx-auto mt-3 max-w-2xl text-center text-sm leading-relaxed text-slate-400">
-          Signals appear only when conditions align — inactivity is intentional.
-        </p>
-        <div className="mt-8 grid gap-6 md:grid-cols-2">
-          <div className="landing-glow-card p-4">
-            {recentSignals.length === 0 ? (
-              <div className="rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-slate-300">Signal engine active</div>
-            ) : (
-              <ul className="space-y-2">
-                {recentSignals.map((s, i) => (
-                  <li key={`${s.symbol}-${i}`} className="flex items-center justify-between rounded-md border border-white/10 px-3 py-2 text-sm">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold">{s.symbol}</span>
-                      <span className="rounded border border-white/20 px-1.5 py-0.5 text-[10px]">{signalModeBadge(s)}</span>
-                    </div>
-                    <span className="text-cyan-300" style={{ fontFamily: MONO }}>
-                      {s.signal_strength}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-          <div className="landing-glow-card p-4">
-            {!enoughAccuracy ? (
-              <div className="text-sm text-slate-300">
-                <p>Signal tracking began {performanceSummary.launch_date || "recently"}.</p>
-                <p className="mt-2">Swing signals evaluate at daily close. Day signals evaluate within 24 hours.</p>
-                <p className="mt-2">Live accuracy appears here automatically as signals complete their evaluation window.</p>
-              </div>
-            ) : (
-              <p className="text-sm text-slate-300">Directional Accuracy: {performanceSummary.directional_accuracy_percent}%</p>
-            )}
+        <h2 className="text-center text-3xl font-bold md:text-4xl">Signals generate only when conditions align.</h2>
+        <div className="mx-auto mt-8 max-w-3xl">
+          <div className="landing-glow-card p-6 text-center text-base leading-relaxed text-slate-200 md:text-lg">
+            The engine is live — inactivity is intentional when alignment isn&apos;t present.
           </div>
         </div>
       </section>

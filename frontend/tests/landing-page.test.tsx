@@ -108,9 +108,10 @@ test("test_comparison_no_competitor_names", () => {
   expect(txt).not.toContain("Webull");
 });
 
-test("test_geo_callout_visible", () => {
+test("test_live_engine_section_copy", () => {
   view();
-  expect(screen.getAllByText(/1\.8×/).length).toBeGreaterThan(0);
-  expect(screen.getAllByText(/0\.4×/).length).toBeGreaterThan(0);
-  expect(screen.getByText(/Same news\. Different stock\. Different exposure\./)).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: /Signals generate only when conditions align/i })).toBeInTheDocument();
+  expect(
+    screen.getByText(/The engine is live — inactivity is intentional when alignment isn'?t present\./i)
+  ).toBeInTheDocument();
 });
