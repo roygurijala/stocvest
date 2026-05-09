@@ -36,6 +36,7 @@ import {
   riskRewardEntryDecisionTooltip,
   trendStrengthDecisionTooltip
 } from "@/lib/metric-decision-copy";
+import { pickNewsEmptyCopy } from "@/lib/news-empty-copy";
 import { AI_VERDICT_TIP, CONFIDENCE_PERCENT_TIP, LAYER_NAME_HINTS } from "@/lib/ui-tooltips";
 import { AIExplanationDisplay } from "@/components/ai-explanation-display";
 import { UpgradePrompt } from "@/components/upgrade-prompt";
@@ -518,6 +519,20 @@ function formatGeoEventTypeLabel(et: string): string {
   return et.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+/** Avoid chip/semiconductor-heavy theme copy when the mapped sector is not tech-adjacent. */
+function scrubGeoCopyForDisplay(body: string, sectorLabel: string): string {
+  const t = body.trim();
+  if (!t) return body;
+  const s = sectorLabel.trim();
+  const techish =
+    /semi|software|chip|cloud|saas|hardware|internet|tech|communication|network|digital/i.test(s);
+  if (techish) return body;
+  if (/semiconductor|chip ban|export controls?|foundry|wafer/i.test(t)) {
+    return "No elevated geopolitical sensitivity detected for this company.";
+  }
+  return body;
+}
+
 function geoExposureBandStyles(
   band: "low" | "moderate" | "high" | null,
   colors: ThemeColors
@@ -537,7 +552,8 @@ function formatSectorMultiplier(m: number | null): string {
 
 function GeoStructuralBaselinePanel({ geo, colors }: { geo: GeopoliticalLayerExtras; colors: ThemeColors }) {
   const band = structuralBandFromBaselineScore(geo.geoBaselineScore ?? null) ?? geo.exposureBand;
-  const body = (geo.geoBaselineSummary ?? geo.exposureSummary ?? "").trim();
+  const rawBody = (geo.geoBaselineSummary ?? geo.exposureSummary ?? "").trim();
+  const body = scrubGeoCopyForDisplay(rawBody, geo.impactSectorLabel ?? "");
   const sector = geo.impactSectorLabel;
   const themeChip =
     geo.geoPrimaryTheme && geo.geoPrimaryTheme.length ? geo.geoPrimaryTheme.replace(/_/g, " ") : "";
@@ -704,7 +720,7 @@ function GeopoliticalExposurePanel({ geo, colors }: { geo: GeopoliticalLayerExtr
             paddingTop: spacing[2]
           }}
         >
-          {geo.exposureSummary}
+          {scrubGeoCopyForDisplay(geo.exposureSummary, geo.impactSectorLabel ?? "")}
         </p>
       ) : null}
     </div>
@@ -1351,7 +1367,7 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
                   ) : null}
                   {layer.news_data_state === "stale" && (layer.articles_count === 0 || layer.articles_count === undefined) ? (
                     <p className="text-sm text-muted-foreground" style={{ margin: 0 }}>
-                      No qualifying news in lookback window. No active negative catalyst detected.
+                      {pickNewsEmptyCopy(evidence.symbol)}
                     </p>
                   ) : null}
                 </div>
@@ -1396,6 +1412,9 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
             }}
           >
             <h3 style={{ margin: 0 }}>Reference Levels</h3>
+            <p className="m-0 text-xs leading-snug text-muted-foreground" style={{ marginTop: spacing[1] }}>
+              Reference levels (context, not entry signals)
+            </p>
             {!levelsComplete ? (
               <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.caution }}>
                 Signal data incomplete - levels unavailable

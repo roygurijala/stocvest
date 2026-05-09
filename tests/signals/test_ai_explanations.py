@@ -211,7 +211,17 @@ async def test_news_synthesis_empty_articles_paid(monkeypatch: pytest.MonkeyPatc
     svc = AIExplanationService()
     u = UserProfile(user_id="u", subscription_plan="swing_pro")
     r = await svc.explain_news_synthesis(symbol="AAPL", articles=[], verdict="bullish", user_profile=u)
-    assert "No qualifying news" in r.text
+    low = r.text.lower()
+    assert any(
+        phrase in low
+        for phrase in (
+            "qualifying news",
+            "material news",
+            "company-specific catalysts",
+            "lookback",
+            "filtered feed",
+        )
+    )
     assert r.source == "deterministic"
 
 

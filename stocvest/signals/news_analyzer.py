@@ -9,6 +9,7 @@ from typing import Any, Literal
 from stocvest.api.services.news_quality_filter import is_quality_article
 from stocvest.config.signal_parameters import NewsParameters
 from stocvest.data.benzinga_client import BenzingaMultiResult
+from stocvest.signals.news_copy import no_qualifying_news_reasoning
 from stocvest.signals.news_sentiment import (
     DAY_NEWS_LOOKBACK_HOURS,
     SWING_NEWS_LOOKBACK_HOURS,
@@ -147,10 +148,7 @@ class NewsAnalyzer:
                     weighted_sentiment=0.0,
                     wim_summary=(benzinga_data.wim.reason if benzinga_data and benzinga_data.wim else None),
                     data_state="stale",
-                    reasoning=(
-                        f"No qualifying news for {sym} in the lookback window. "
-                        "No active negative catalyst detected."
-                    ),
+                    reasoning=no_qualifying_news_reasoning(sym),
                     chips=["News: neutral", "No qualifying headlines"],
                 ),
                 benzinga_data,

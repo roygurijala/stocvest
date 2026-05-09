@@ -20,6 +20,7 @@ import httpx
 
 from stocvest.data.models import NewsArticle, Newssentiment, UserProfile
 from stocvest.signals.geopolitical_scanner import ANTHROPIC_API_URL, ANTHROPIC_VERSION
+from stocvest.signals.news_copy import no_qualifying_news_reasoning
 from stocvest.utils.api_rate_limits import await_claude_api_slot
 from stocvest.utils.config import AI_MODEL_FAST, get_settings
 from stocvest.utils.logging import get_logger
@@ -141,7 +142,7 @@ class AIExplanationService:
 
         if not user_profile.has_ai_explanations:
             return ExplanationResult(
-                text=self._deterministic_news_copy(len(articles), v),
+                text=self._deterministic_news_copy(len(articles), v, sym),
                 source="deterministic",
                 upgrade_available=True,
                 cached=False,
@@ -151,7 +152,7 @@ class AIExplanationService:
         if hit is not None:
             return hit
 
-        det = self._deterministic_news_copy(len(articles), v)
+        det = self._deterministic_news_copy(len(articles), v, sym)
         if not top:
             return ExplanationResult(text=det, source="deterministic", upgrade_available=False, cached=False)
 
@@ -178,9 +179,9 @@ class AIExplanationService:
             f"R/R is {rr:.1f}:1 ({rr_text}). Open Evidence for full layer detail."
         )
 
-    def _deterministic_news_copy(self, article_count: int, verdict: str) -> str:
+    def _deterministic_news_copy(self, article_count: int, verdict: str, symbol: str) -> str:
         if article_count == 0:
-            return "No qualifying news in the lookback window."
+            return no_qualifying_news_reasoning(symbol)
         return (
             f"{article_count} news articles scored for this ticker. Sentiment aligns with {verdict} composite. "
             "Open Evidence for full news detail."

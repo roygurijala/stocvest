@@ -1,8 +1,17 @@
 """
 Phase 2d: Signal weighting and composite score.
 
-Combines per-layer directional signals into a single normalized score and
-portfolio-level verdict.
+Contributor contract (do not collapse these stages):
+  **Stage A — per-layer truth:** Each analyzer (`*_analyzer.py`) produces a
+  domain-specific read from its own inputs. Composite goals must not leak back
+  into layer logic.
+  **Stage B — decision synthesis:** This module combines Stage-A outputs into a
+  reconciled scalar verdict, preserving disagreement (alignment metadata,
+  contradiction penalty) rather than hiding it.
+
+Regime multipliers scale **influence** (effective weight), not the sign of the
+layer’s directional score: keep `REGIME_WEIGHTS` values strictly positive unless
+an explicit ADR allows otherwise.
 """
 
 from __future__ import annotations

@@ -72,5 +72,15 @@ def test_news_sentiment_neutral_when_no_articles(monkeypatch: pytest.MonkeyPatch
     assert nr.verdict == "neutral"
     assert nr.weighted_sentiment == 0.0
     assert nr.data_state == "stale"
-    assert "No qualifying news" in nr.reasoning
+    low = nr.reasoning.lower()
+    assert any(
+        phrase in low
+        for phrase in (
+            "no qualifying news",
+            "no material news",
+            "no company-specific catalysts",
+            "lookback",
+            "filtered feed",
+        )
+    )
     assert "unavailable" not in nr.reasoning.lower()

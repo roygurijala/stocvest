@@ -281,7 +281,7 @@ class SectorAnalyzer:
     ) -> SectorLayerResult:
         chips = ["Broad market (SPY)"]
         reasoning = (
-            "No specific sector ETF identified. Using broad market (SPY) as benchmark."
+            "This company does not map cleanly to a single sector benchmark. Broad market (SPY) used for context."
         )
         if sector_etf_snapshot is None or spy_snapshot is None:
             return SectorLayerResult(

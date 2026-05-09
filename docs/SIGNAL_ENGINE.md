@@ -2,6 +2,11 @@
 
 This document describes the **server-side** multi-layer stacks behind **`POST /v1/signals/composite/real`** (intraday / day-trade mode) and **`POST /v1/signals/composite/swing`** (daily-bar swing mode). Both reuse the same six layer *types*, `CompositeScoreEngine`, and confluence/evidence plumbing; data fetch windows and the technical implementation differ (`technical_analyzer` vs `swing_technical_analyzer`). Tunables live in `SignalParameters` (Secrets Manager JSON); defaults in `stocvest/config/signal_parameters.py` and `stocvest/config/sector_etf_defaults.py`.
 
+## Architecture: Stage A → Stage B (contributor contract)
+
+- **Stage A — per-layer truth:** Each layer analyzer runs on **its own** inputs and produces a **domain-specific** judgment (scores, verdicts, reasoning, chips). Meaning is **not** derived by working backward from a single composite number.
+- **Stage B — decision synthesis:** The composite engine and HTTP handlers **reconcile** Stage-A outputs after the fact (weighting, regime scaling, alignment, penalties, hard gates). **Do not** push composite heuristics into Stage-A code paths—that is the main failure mode this split prevents.
+
 ## Data contracts
 
 - **Bars / snapshots**: Only `stocvest.data.models.Bar` and `Snapshot` field names. Polygon raw JSON is normalized exclusively in `PolygonClient._parse_snapshot()`.
@@ -52,8 +57,38 @@ This document describes the **server-side** multi-layer stacks behind **`POST /v
 
 ## Composite
 
-- **Engine**: `CompositeScoreEngine` (`stocvest/signals/composite_score.py`) with weights from `CompositeParameters` and regime multipliers (`bull`/`bear`/`sideways`) derived from macro `market_regime`.
-- **Gate**: Fewer than `composite.min_available_layers` available layers → `insufficient_data` response (same envelope as swing composite).
+### Engine
+
+- **`CompositeScoreEngine`** (`stocvest/signals/composite_score.py`): base weights from `CompositeParameters`, **regime multipliers** (`bull` / `bear` / `sideways`) keyed off macro **`market_regime`**, per-layer confidence, normalized composite score and verdict, plus **`alignment_ratio`** and **`conflicted_layers`**.
+
+### Weighting, regime, and layer direction (invariant)
+
+- Each layer contributes **`weighted_value = layer_score × effective_weight`**, where **`effective_weight = base_weight × regime_multiplier × confidence`**.
+- Default **`REGIME_WEIGHTS`** entries are **strictly positive**; they **amplify or dampen how much** a layer counts, **not** whether a bullish layer input counts as bullish. **Do not** introduce **negative** regime multipliers without an explicit design review and coordinated API/docs updates— that would silently **invert** a layer’s contribution sign.
+- **Disagreement is first-class:** alignment metadata and the **contradiction penalty** (`_apply_contradiction_penalty`) reduce the **composite scalar** when layers conflict; they do **not** rewrite individual layer outputs.
+
+### Readiness / signal strength (internal vocabulary)
+
+For **contributors and product copy** (the UI may use terms like “trade readiness” or `signal_strength` / `signal_score` on payloads):
+
+- Treat the headline **0–100-style** read as **alignment and cleanliness after rules and gates**, **not** win probability, expected return, or a trade instruction.
+- **Internal mental model** (not necessarily a single literal formula in code): readiness is driven by **weighted directional alignment**, **data quality** (available layers, confidence), and **gate clearance** (e.g. insufficient-data envelope, evidence-side R/R warnings). Features should **not** quietly inflate scores without revisiting this framing.
+
+### Gate taxonomy: eligibility vs degradation
+
+Keep these **conceptually separate** when adding features:
+
+| Kind | Role | Examples |
+|------|------|----------|
+| **Eligibility gates** | Withhold or replace the **composite body** until inputs are trustworthy | Fewer than `composite.min_available_layers` → **`insufficient_data`** HTTP 200 envelope (real + swing composites); market/session preconditions documented on handlers |
+| **Degradation / honesty checks** | Adjust **how strongly** the composite speaks once eligible | `_apply_contradiction_penalty` on the net score from alignment; swing evidence **`rr_warning`** and related narrative fields (`swing_composite_evidence.py`) — quality checks, **not** extra “layers” |
+
+Weighting math and permission-style gates should stay **separate concerns** in code reviews.
+
+### Composite verdict (bullish / neutral / bearish)
+
+- The composite verdict is a **reconciled judgment with friction**, not a simple **majority vote** across layer labels.
+- **Optional roadmap (not required in API today):** “stability tiers” (e.g. strong vs leaning bullish/bearish) could be added **later** for explanations and UX; doing so would be a **behavior + contract** change and needs explicit versioning or additive fields—do not half-ship inside layer analyzers.
 
 ## Confluence
 
@@ -78,3 +113,11 @@ This document describes the **server-side** multi-layer stacks behind **`POST /v
 - **New server-scored path**: `POST /v1/signals/composite/real` (+ BFF `frontend/app/api/stocvest/signals/composite/real/route.ts`).
 
 **Product / entitlements (2026-05):** on-demand **AI signal explanations** and related paid surfaces gate on **`UserProfile.has_ai_explanations`** (true when subscribed or **beta** full access is active). See **`docs/API_CONTRACTS.md`** §4.10 and **`docs/CONTEXT.md`** §1.
+
+## Future enhancements (non-blocking)
+
+These are **intentional backlog themes**, not corrections to current behavior:
+
+- **Canonical explanation library:** map common composite outcomes (e.g. high conflict + macro risk-off) to **standard** educator-facing sentences so UI and AI prompts do not drift in tone.
+- **“What would need to change” hints:** short, rule-based hints keyed off **which layers dominated a soft veto** (extends informal copy already in places).
+- **Regime-segmented “typical” baselines:** later, radar / “vs typical” baselines could be **conditional on regime** to deepen trust without adding noise on every tick.

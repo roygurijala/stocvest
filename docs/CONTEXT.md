@@ -100,7 +100,8 @@ App router pages (dashboard **`layout.tsx`** wraps routes with **legal acknowled
 7. AI: Claude (Sonnet) → structured JSON for synthesis; **public APIs use compliance field names** (`signal_summary`, `signal_strength`, …).  
 8. Domain: **stocvest.app**.  
 9. Day trading: Phase 2.5 scanner + PDT tracker are first-class.  
-10. News ingestion is now multi-source: Benzinga websocket for live news plus SEC EDGAR 8-K polling, with Claude scoring kept in the SQS-triggered Lambda consumer.
+10. News ingestion is now multi-source: Benzinga websocket for live news plus SEC EDGAR 8-K polling, with Claude scoring kept in the SQS-triggered Lambda consumer.  
+11. **Composite signal architecture:** **Stage A** = per-layer analyzers (each speaks from its own domain); **Stage B** = `CompositeScoreEngine` and handlers reconcile after the fact. Regime multipliers **scale influence**, not the **sign** of a layer’s directional input (default multipliers stay positive). **Eligibility gates** (e.g. `insufficient_data`) vs **degradation** (e.g. contradiction penalty, R/R warnings) are separate ideas—see **`docs/SIGNAL_ENGINE.md`** (§ Architecture, § Composite, § Future enhancements).
 
 ---
 

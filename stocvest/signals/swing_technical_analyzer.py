@@ -254,7 +254,19 @@ class SwingTechnicalAnalyzer:
         if in_base:
             parts.append(f"Base formation ~{bd}d ({brp * 100:.1f}% range).")
         if m_now is not None and s_now is not None:
-            parts.append(f"MACD {m_now:.3f} vs signal {s_now:.3f} ({'above' if macd_above else 'below'}).")
+            line_vs_signal = "MACD line above its signal" if macd_above else "MACD line below its signal"
+            if m_now < 0 and s_now < 0:
+                parts.append(
+                    f"MACD {m_now:.3f} vs signal {s_now:.3f} ({line_vs_signal}; "
+                    "both below zero — momentum remains weak)."
+                )
+            elif m_now > 0 and s_now > 0 and macd_above:
+                parts.append(
+                    f"MACD {m_now:.3f} vs signal {s_now:.3f} ({line_vs_signal}; "
+                    "both above zero — momentum building)."
+                )
+            else:
+                parts.append(f"MACD {m_now:.3f} vs signal {s_now:.3f} ({line_vs_signal}).")
         reasoning = " ".join(parts) if parts else "Daily swing technical snapshot complete."
         reasoning = sanitize_swing_reasoning_text(reasoning, symbol=symbol)
 

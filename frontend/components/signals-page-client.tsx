@@ -3,7 +3,7 @@
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Brain, Clock, Zap } from "lucide-react";
+import { Brain, ChevronDown, ChevronUp, Clock, Zap } from "lucide-react";
 import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer } from "recharts";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
@@ -115,6 +115,18 @@ const RADAR_LAYER_LABEL: Record<string, string> = {
   internals: "Internals"
 };
 
+/** Marginal bullish internals vs clearly bearish technical — reconciliation copy only in this band (fixed, no UI tuning). */
+const INTERNALS_LEAN_BULLISH_MAX_SCORE = 65;
+/** Technical layer score at/below this = “clearly bearish structure” for reconciliation (avoids borderline Bearish labels). */
+const TECHNICAL_CLEAR_BEARISH_MAX_SCORE = 45;
+
+function macroVerdictContextNote(status: LayerStatus): string {
+  if (status === "Bullish") return "Macro conditions broadly supportive of risk assets.";
+  if (status === "Bearish") return "Elevated macro risk constrains risk appetite despite local signals.";
+  if (status === "Neutral") return "Mixed macro inputs; no dominant economic tailwind or headwind.";
+  return "Macro gauges backdrop and event risk; when coverage is limited, treat this row as context, not a trade trigger.";
+}
+
 function snapshotHasTradeableLast(s: SnapshotPayload | null | undefined): boolean {
   return (
     s != null &&
@@ -221,6 +233,8 @@ export function SignalsPageClient({
   const [newsPanelSymbol, setNewsPanelSymbol] = useState("");
   const [newsPanelOpen, setNewsPanelOpen] = useState(false);
   const [newsUiTick, setNewsUiTick] = useState(0);
+  /** Radar is detail-dense; collapsed by default so narrative layers stay primary. */
+  const [signalRadarExpanded, setSignalRadarExpanded] = useState(false);
   const [symbolSnapshot, setSymbolSnapshot] = useState<SnapshotPayload | null>(null);
   const [historyRows, setHistoryRows] = useState<PublicSignal[]>([]);
   const [histLoading, setHistLoading] = useState(false);
@@ -778,7 +792,7 @@ export function SignalsPageClient({
         {(
           [
             ["layers", "Layer analysis"],
-            ["history", "Historical signal data"]
+            ["history", "Past signal states"]
           ] as const
         ).map(([key, label]) => (
           <button
@@ -806,7 +820,7 @@ export function SignalsPageClient({
           <p style={{ margin: `0 0 ${spacing[3]} 0`, color: colors.textMuted, fontSize: typography.scale.sm }}>
             {historySource === "user"
               ? "Your evaluated signals (signed in): last 30 days by default. Filter by symbol, direction, or 1d outcome."
-              : "Platform historical signal data (public feed). Sign in to include your personal evaluated signals in this list."}
+              : "Platform past signal states (public feed). Sign in to include your personal evaluated signals in this list."}
           </p>
           <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
             <input
@@ -1176,8 +1190,8 @@ export function SignalsPageClient({
         </div>
         <p className="m-0 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
           {tradingMode === "day"
-            ? "Intraday setups · VWAP · ORB · Valid through regular session close (see signal_valid_until in API)."
-            : "Multi-day setups · Daily SMA / MACD · Valid ~5 calendar days (signal_expires on API response)."}
+            ? "Same-session structure from live tape; valid through regular session close (see signal_valid_until on the API response)."
+            : "Multi-day setups evaluated on daily closes. Valid ~5 calendar days (signal_expires on the API response)."}
         </p>
       </div>
 
@@ -1244,47 +1258,72 @@ export function SignalsPageClient({
             </div>
           ) : (
             <div style={{ display: "grid", gap: spacing[2] }}>
-              {rows.map((row, rowIdx) => (
-                <article
-                  key={row.name}
-                  style={{
-                    display: "grid",
-                    gap: spacing[2],
-                    borderBottom: `1px solid ${colors.border}`,
-                    paddingBottom: spacing[2]
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2] }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: spacing[2], minWidth: 0 }}>
-                      <span>{row.icon}</span>
-                      <strong style={{ margin: 0 }}>{row.name}</strong>
+              {rows.map((row, rowIdx) => {
+                const techRow = rows[0];
+                const explanation = row.explanation;
+                const showInternalsReconciliation =
+                  rowIdx === 5 &&
+                  techRow?.status === "Bearish" &&
+                  typeof techRow.score === "number" &&
+                  techRow.score <= TECHNICAL_CLEAR_BEARISH_MAX_SCORE &&
+                  row.status === "Bullish" &&
+                  typeof row.score === "number" &&
+                  row.score <= INTERNALS_LEAN_BULLISH_MAX_SCORE;
+                return (
+                  <article
+                    key={row.name}
+                    style={{
+                      display: "grid",
+                      gap: spacing[2],
+                      borderBottom: `1px solid ${colors.border}`,
+                      paddingBottom: spacing[2]
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2] }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: spacing[2], minWidth: 0 }}>
+                        <span>{row.icon}</span>
+                        <strong style={{ margin: 0 }}>{row.name}</strong>
+                      </div>
+                      <InfoTip
+                        text={(() => {
+                          const k = SIGNAL_LAYER_KEYS[rowIdx];
+                          return k ? LAYER_NAME_HINTS[k] : "Layer readout for this symbol.";
+                        })()}
+                        label={row.name}
+                      />
                     </div>
-                    <InfoTip
-                      text={(() => {
-                        const k = SIGNAL_LAYER_KEYS[rowIdx];
-                        return k ? LAYER_NAME_HINTS[k] : "Layer readout for this symbol.";
-                      })()}
-                      label={row.name}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-                    <span
-                      className="text-sm"
-                      style={{
-                        borderRadius: borderRadius.full,
-                        padding: "2px 8px",
-                        background: "rgba(148,163,184,0.12)",
-                        color: statusColor(row.status, colors)
-                      }}
-                    >
-                      {row.statusLabel ?? row.status}
-                    </span>
-                    <span className="min-w-0 flex-1 text-sm leading-snug sm:text-sm" style={{ color: colors.textMuted }}>
-                      {row.explanation}
-                    </span>
-                  </div>
-                </article>
-              ))}
+                    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start">
+                      <span
+                        className="text-sm shrink-0"
+                        style={{
+                          borderRadius: borderRadius.full,
+                          padding: "2px 8px",
+                          background: "rgba(148,163,184,0.12)",
+                          color: statusColor(row.status, colors)
+                        }}
+                      >
+                        {row.statusLabel ?? row.status}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <span className="block text-sm leading-snug sm:text-sm" style={{ color: colors.textMuted }}>
+                          {explanation}
+                        </span>
+                        {rowIdx === 2 ? (
+                          <p className="m-0 mt-1 text-xs leading-snug" style={{ color: colors.textMuted, opacity: 0.88 }}>
+                            {macroVerdictContextNote(row.status)}
+                          </p>
+                        ) : null}
+                        {showInternalsReconciliation ? (
+                          <p className="m-0 mt-1 text-xs leading-snug" style={{ color: colors.textMuted, opacity: 0.88 }}>
+                            Internals show improving participation, but price structure remains bearish; breadth alone has not
+                            confirmed a durable shift.
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           )}
         </section>
@@ -1294,96 +1333,125 @@ export function SignalsPageClient({
             className={`order-1 min-w-0 lg:order-2 ${surfaceGlowClassName}`}
             style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
           >
-            <h3 style={{ marginTop: 0 }}>Signal Radar</h3>
-            <p className="text-sm" style={{ margin: `0 0 ${spacing[2]} 0`, color: colors.textMuted }}>
-              At-a-glance shape vs a typical baseline — dashed ring is historical average, solid fill is today.
-            </p>
-            <div
-              className="flex flex-wrap items-center gap-x-4 gap-y-2"
-              style={{ margin: `0 0 ${spacing[3]} 0`, fontSize: 12, color: colors.textMuted }}
-              aria-label="Radar chart legend"
-            >
-              <span className="inline-flex items-center gap-2">
-                <span
-                  className="inline-block shrink-0 rounded-sm"
-                  style={{ width: 12, height: 12, background: "#0ea5e9", opacity: 0.85, border: "1px solid #38bdf8" }}
-                  aria-hidden
-                />
-                Current
-              </span>
-              <span className="inline-flex items-center gap-2">
-                <span
-                  className="inline-block shrink-0 rounded-sm"
-                  style={{
-                    width: 12,
-                    height: 12,
-                    border: `2px dashed ${colors.text}`,
-                    background: "transparent",
-                    opacity: 0.85
-                  }}
-                  aria-hidden
-                />
-                Historical avg
-              </span>
-            </div>
-            <div className="mx-auto min-w-0 max-w-full overflow-x-auto overscroll-x-contain touch-pan-x">
-              {/* One chart only: a display:none sibling gives ResponsiveContainer 0×0 and Recharts warns. */}
-              <div
-                className={`mx-auto max-w-full min-w-0 ${isMobileLayout ? "min-w-[260px]" : "overflow-hidden"}`}
-                style={{ height: isMobileLayout ? 256 : 288 }}
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <h3 style={{ marginTop: 0 }}>Signal Radar</h3>
+              <button
+                type="button"
+                className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-md px-2.5 text-xs font-medium"
+                style={{ border: `1px solid ${colors.border}`, color: colors.textMuted, background: colors.surfaceMuted }}
+                aria-expanded={signalRadarExpanded}
+                onClick={() => setSignalRadarExpanded((e) => !e)}
               >
-                <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart
-                    data={radarData}
-                    margin={
-                      isMobileLayout
-                        ? { top: 16, right: 18, bottom: 22, left: 18 }
-                        : { top: 18, right: 20, bottom: 26, left: 20 }
-                    }
-                  >
-                    <PolarGrid stroke={colors.border} />
-                    <PolarAngleAxis
-                      dataKey="layer"
-                      tick={{ fill: colors.textMuted, fontSize: isMobileLayout ? 10 : 11 }}
-                      tickLine={false}
-                    />
-                    <PolarRadiusAxis
-                      angle={30}
-                      domain={[0, 100]}
-                      tick={{ fill: colors.textMuted, fontSize: isMobileLayout ? 9 : 10 }}
-                    />
-                    <Radar
-                      name="Historical avg"
-                      dataKey="hist"
-                      stroke={colors.text}
-                      strokeWidth={2}
-                      strokeDasharray="5 4"
-                      fill="none"
-                      dot={false}
-                      isAnimationActive={false}
-                    />
-                    <Radar
-                      name="Current"
-                      dataKey="score"
-                      stroke="#38bdf8"
-                      strokeWidth={2}
-                      fill="#0ea5e9"
-                      fillOpacity={0.38}
-                      dot={false}
-                    />
-                  </RadarChart>
-                </ResponsiveContainer>
-              </div>
+                {signalRadarExpanded ? (
+                  <>
+                    <ChevronUp size={14} aria-hidden />
+                    Collapse
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown size={14} aria-hidden />
+                    Expand radar
+                  </>
+                )}
+              </button>
             </div>
+            {!signalRadarExpanded ? (
+              <p className="m-0 text-sm leading-relaxed" style={{ color: colors.textMuted }}>
+                Six-layer shape vs a typical baseline — expand when you want the chart and per-layer gap bars; the written
+                breakdown stays the main read.
+              </p>
+            ) : (
+              <>
+                <p className="text-sm" style={{ margin: `0 0 ${spacing[2]} 0`, color: colors.textMuted }}>
+                  At-a-glance shape vs a typical baseline — dashed ring is a typical baseline, solid fill is today.
+                </p>
+                <div
+                  className="flex flex-wrap items-center gap-x-4 gap-y-2"
+                  style={{ margin: `0 0 ${spacing[3]} 0`, fontSize: 12, color: colors.textMuted }}
+                  aria-label="Radar chart legend"
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <span
+                      className="inline-block shrink-0 rounded-sm"
+                      style={{ width: 12, height: 12, background: "#0ea5e9", opacity: 0.85, border: "1px solid #38bdf8" }}
+                      aria-hidden
+                    />
+                    Current
+                  </span>
+                  <span className="inline-flex items-center gap-2">
+                    <span
+                      className="inline-block shrink-0 rounded-sm"
+                      style={{
+                        width: 12,
+                        height: 12,
+                        border: `2px dashed ${colors.text}`,
+                        background: "transparent",
+                        opacity: 0.85
+                      }}
+                      aria-hidden
+                    />
+                    Typical baseline
+                  </span>
+                </div>
+                <div className="mx-auto w-full min-w-0 max-w-full">
+                  {/* One chart only: a display:none sibling gives ResponsiveContainer 0×0 and Recharts warns. */}
+                  <div
+                    className="mx-auto w-full max-w-full min-w-0 overflow-hidden"
+                    style={{ height: isMobileLayout ? 256 : 288 }}
+                  >
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RadarChart
+                        data={radarData}
+                        margin={
+                          isMobileLayout
+                            ? { top: 16, right: 18, bottom: 22, left: 18 }
+                            : { top: 18, right: 20, bottom: 26, left: 20 }
+                        }
+                      >
+                        <PolarGrid stroke={colors.border} />
+                        <PolarAngleAxis
+                          dataKey="layer"
+                          tick={{ fill: colors.textMuted, fontSize: isMobileLayout ? 10 : 11 }}
+                          tickLine={false}
+                        />
+                        <PolarRadiusAxis
+                          angle={30}
+                          domain={[0, 100]}
+                          tick={{ fill: colors.textMuted, fontSize: isMobileLayout ? 9 : 10 }}
+                        />
+                        <Radar
+                          name="Typical baseline"
+                          dataKey="hist"
+                          stroke={colors.text}
+                          strokeWidth={2}
+                          strokeDasharray="5 4"
+                          fill="none"
+                          dot={false}
+                          isAnimationActive={false}
+                        />
+                        <Radar
+                          name="Current"
+                          dataKey="score"
+                          stroke="#38bdf8"
+                          strokeWidth={2}
+                          fill="#0ea5e9"
+                          fillOpacity={0.38}
+                          dot={false}
+                        />
+                      </RadarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
 
-            <h4 style={{ margin: `${spacing[4]} 0 ${spacing[1]} 0`, fontSize: 13, fontWeight: 600, color: colors.text }}>
-              Today vs typical (per layer)
-            </h4>
-            <p className="text-xs leading-snug" style={{ margin: `0 0 ${spacing[2]} 0`, color: colors.textMuted }}>
-              Point gap vs the dashed &quot;historical avg&quot; ring on the radar (today − typical). Color key is directly above the
-              bars.
-            </p>
-            <SignalLayerDivergenceChart data={radarData} colors={colors} height={isMobileLayout ? 348 : 312} />
+                <h4 style={{ margin: `${spacing[4]} 0 ${spacing[1]} 0`, fontSize: 13, fontWeight: 600, color: colors.text }}>
+                  Today vs typical (per layer)
+                </h4>
+                <p className="text-xs leading-snug" style={{ margin: `0 0 ${spacing[2]} 0`, color: colors.textMuted }}>
+                  Point gap vs the dashed typical-baseline ring on the radar (today − typical). Color key is directly above the bars.
+                </p>
+                <SignalLayerDivergenceChart data={radarData} colors={colors} height={isMobileLayout ? 348 : 312} />
+              </>
+            )}
           </section>
         ) : null}
       </div>
@@ -1439,6 +1507,9 @@ export function SignalsPageClient({
             }}
           />
         </div>
+        <p className="m-0 text-xs leading-snug" style={{ marginTop: spacing[2], color: colors.textMuted }}>
+          Trade readiness reflects cross-layer alignment and gates, not win probability or a prompt to trade.
+        </p>
         <div
           style={{
             background: "rgba(255,193,7,0.06)",
@@ -1560,6 +1631,9 @@ export function SignalsPageClient({
         }}
       >
         <h3 style={{ marginTop: 0 }}>Reference Levels</h3>
+        <p className="m-0 text-xs leading-snug" style={{ margin: `0 0 ${spacing[2]} 0`, color: colors.textMuted }}>
+          Reference levels (context, not entry signals)
+        </p>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
           <div>
             <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>VWAP</p>
