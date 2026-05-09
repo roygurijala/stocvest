@@ -81,6 +81,17 @@ function normalizeTickerInput(raw: string): string | null {
   return null;
 }
 
+/** Polygon reference search / manual entry — slightly wider than strict 6-letter US symbols. */
+function normalizeTickerFromApi(raw: string): string | null {
+  const u = raw.trim().toUpperCase();
+  if (!u) return null;
+  const narrow = normalizeTickerInput(u);
+  if (narrow) return narrow;
+  if (/^[A-Z]{1,10}$/.test(u)) return u;
+  if (/^[A-Z0-9]{1,8}\.[A-Z]{1,3}$/.test(u)) return u;
+  return null;
+}
+
 const layerMeta = [
   ["📊", "Technical"],
   ["📰", "News"],
@@ -204,6 +215,7 @@ export function SignalsPageClient({
   const [watchlistPickerLoading, setWatchlistPickerLoading] = useState(false);
   const [remoteCandidates, setRemoteCandidates] = useState<SymbolCandidate[]>([]);
   const [remoteSearchLoading, setRemoteSearchLoading] = useState(false);
+  const [remoteSearchError, setRemoteSearchError] = useState<string | null>(null);
   const [signalEvidence, setSignalEvidence] = useState<SignalEvidenceData | null>(null);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [newsPanelSymbol, setNewsPanelSymbol] = useState("");
@@ -257,28 +269,49 @@ export function SignalsPageClient({
     if (q.length < 2) {
       setRemoteCandidates([]);
       setRemoteSearchLoading(false);
+      setRemoteSearchError(null);
       return;
     }
     let cancelled = false;
     setRemoteSearchLoading(true);
+    setRemoteSearchError(null);
     const timer = window.setTimeout(() => {
       void (async () => {
         try {
-          const res = await fetch(`/api/stocvest/market/tickers-search?q=${encodeURIComponent(q)}`);
+          const res = await fetch(`/api/stocvest/market/tickers-search?q=${encodeURIComponent(q)}`, {
+            credentials: "same-origin",
+            cache: "no-store"
+          });
+          if (cancelled) return;
+          if (!res.ok) {
+            const hint =
+              res.status === 404
+                ? "Ticker search is not deployed yet (API route missing). Apply latest Terraform / redeploy API."
+                : `Search failed (${res.status}). Try a known symbol.`;
+            setRemoteSearchError(hint);
+            setRemoteCandidates([]);
+            return;
+          }
           const j = (await res.json().catch(() => ({}))) as { items?: unknown };
           const items = Array.isArray(j.items) ? j.items : [];
           const next: SymbolCandidate[] = [];
           for (const it of items) {
             if (!it || typeof it !== "object") continue;
             const o = it as { symbol?: unknown; name?: unknown };
-            const sym = normalizeTickerInput(String(o.symbol ?? ""));
+            const sym = normalizeTickerFromApi(String(o.symbol ?? ""));
             if (!sym) continue;
             const name = String(o.name ?? "").trim();
             next.push({ symbol: sym, label: name ? `${sym} — ${name}` : sym });
           }
-          if (!cancelled) setRemoteCandidates(next);
+          if (!cancelled) {
+            setRemoteCandidates(next);
+            setRemoteSearchError(null);
+          }
         } catch {
-          if (!cancelled) setRemoteCandidates([]);
+          if (!cancelled) {
+            setRemoteCandidates([]);
+            setRemoteSearchError("Network error while searching tickers.");
+          }
         } finally {
           if (!cancelled) setRemoteSearchLoading(false);
         }
@@ -304,11 +337,19 @@ export function SignalsPageClient({
   }, [symbolCandidates, symbolDraft, remoteCandidates]);
 
   const applyCommittedSymbol = useCallback((sym: string | null | undefined) => {
-    const t = normalizeTickerInput(String(sym ?? ""));
+    const t = normalizeTickerFromApi(String(sym ?? ""));
     if (!t) {
       setSymbol("");
       setSymbolDraft("");
       setSuggestOpen(false);
+      setCompositeResult(null);
+      setSignalEvidence(null);
+      setRadarData(null);
+      try {
+        sessionStorage.removeItem(SIGNALS_SESSION_SYMBOL_KEY);
+      } catch {
+        /* ignore */
+      }
       return;
     }
     setSymbol(t);
@@ -878,13 +919,22 @@ export function SignalsPageClient({
             value={symbolDraft}
             autoComplete="off"
             onChange={(e) => {
-              setSymbolDraft(e.target.value);
+              const v = e.target.value;
+              setSymbolDraft(v);
               setSuggestOpen(true);
+              if (!v.trim()) {
+                applyCommittedSymbol("");
+              }
             }}
             onFocus={() => setSuggestOpen(true)}
             onBlur={() => {
               window.setTimeout(() => {
-                const t = normalizeTickerInput(symbolDraft);
+                const raw = symbolDraft.trim();
+                if (!raw) {
+                  applyCommittedSymbol("");
+                  return;
+                }
+                const t = normalizeTickerFromApi(raw);
                 if (t) applyCommittedSymbol(t);
               }, 120);
             }}
@@ -911,7 +961,7 @@ export function SignalsPageClient({
                   applyCommittedSymbol(pick.symbol);
                   return;
                 }
-                const t = normalizeTickerInput(symbolDraft);
+                const t = normalizeTickerFromApi(symbolDraft);
                 if (t) {
                   e.preventDefault();
                   applyCommittedSymbol(t);
@@ -930,7 +980,9 @@ export function SignalsPageClient({
           />
         </div>
         {suggestOpen &&
-        (suggestionRows.length > 0 || (remoteSearchLoading && symbolDraft.trim().length >= 2)) ? (
+        (suggestionRows.length > 0 ||
+          (remoteSearchLoading && symbolDraft.trim().length >= 2) ||
+          (Boolean(remoteSearchError) && symbolDraft.trim().length >= 2)) ? (
           <ul
             id="signal-symbol-suggestions"
             role="listbox"
@@ -941,7 +993,12 @@ export function SignalsPageClient({
               boxShadow: "0 12px 40px rgba(0,0,0,0.35)"
             }}
           >
-            {remoteSearchLoading && suggestionRows.length === 0 && symbolDraft.trim().length >= 2 ? (
+            {remoteSearchError && symbolDraft.trim().length >= 2 ? (
+              <li className="px-3 py-2 text-sm leading-snug" style={{ color: colors.bearish }}>
+                {remoteSearchError}
+              </li>
+            ) : null}
+            {remoteSearchLoading && suggestionRows.length === 0 && symbolDraft.trim().length >= 2 && !remoteSearchError ? (
               <li className="px-3 py-2 text-sm" style={{ color: colors.textMuted }}>
                 Searching…
               </li>
@@ -969,7 +1026,10 @@ export function SignalsPageClient({
                 </button>
               </li>
             ))}
-            {!remoteSearchLoading && suggestionRows.length === 0 && symbolDraft.trim().length >= 2 ? (
+            {!remoteSearchLoading &&
+            !remoteSearchError &&
+            suggestionRows.length === 0 &&
+            symbolDraft.trim().length >= 2 ? (
               <li className="px-3 py-2 text-sm" style={{ color: colors.textMuted }}>
                 No matching tickers. Try a symbol (e.g. AAPL) or another spelling.
               </li>
