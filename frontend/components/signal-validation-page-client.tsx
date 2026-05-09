@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   fetchUserSignalHistoryPage,
@@ -354,7 +355,15 @@ export function SignalValidationPageClient() {
                       const td = { padding: spacing[2], borderBottom: `1px solid ${colors.border}` };
                       return (
                         <tr key={r.signal_id ?? `${r.symbol}-${r.timestamp_iso}`} style={{ color: colors.text }}>
-                          <td style={{ ...td, fontWeight: 600 }}>{r.symbol}</td>
+                          <td style={{ ...td, fontWeight: 600 }}>
+                            <Link
+                              href={`/dashboard/signals?symbol=${encodeURIComponent(r.symbol.trim().toUpperCase())}&ref=validation`}
+                              className="font-semibold no-underline hover:underline"
+                              style={{ color: colors.text }}
+                            >
+                              {r.symbol}
+                            </Link>
+                          </td>
                           <td style={{ ...td, whiteSpace: "nowrap" }}>{dash(entryD)}</td>
                           <td style={{ ...td, whiteSpace: "nowrap" }}>{dash(exitD)}</td>
                           <td style={td}>{Math.round(r.signal_strength)}</td>
@@ -421,7 +430,15 @@ export function SignalValidationPageClient() {
                           : "—";
                       return (
                         <tr key={r.signal_id ?? `${r.symbol}-${r.timestamp_iso}`} style={{ color: colors.text }}>
-                          <td style={{ ...td, fontWeight: 600 }}>{r.symbol}</td>
+                          <td style={{ ...td, fontWeight: 600 }}>
+                            <Link
+                              href={`/dashboard/signals?symbol=${encodeURIComponent(r.symbol.trim().toUpperCase())}&ref=validation`}
+                              className="font-semibold no-underline hover:underline"
+                              style={{ color: colors.text }}
+                            >
+                              {r.symbol}
+                            </Link>
+                          </td>
                           <td style={{ ...td, whiteSpace: "nowrap" }}>{formatEtLine(r.timestamp_iso)}</td>
                           <td style={{ ...td, whiteSpace: "nowrap" }}>
                             {r.closed_at ? formatEtLine(r.closed_at) : "—"}

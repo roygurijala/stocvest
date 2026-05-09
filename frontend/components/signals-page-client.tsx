@@ -1,7 +1,8 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { Brain, Clock, Zap } from "lucide-react";
 import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer } from "recharts";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
@@ -52,10 +53,29 @@ interface LayerRow {
   score: number;
 }
 
+export type SignalsPagePrefill = {
+  /** From `?symbol=&ref=scanner|watchlist|validation|journal` only. */
+  urlSymbol: string | null;
+};
+
 interface SignalsPageClientProps {
   marketOverview: MarketOverview;
   scannerOverview: ScannerOverview;
   earningsBySymbol: Record<string, EarningsEvent>;
+  signalsPrefill?: SignalsPagePrefill;
+}
+
+const SIGNALS_SESSION_SYMBOL_KEY = "stocvest_signals_session_symbol";
+
+type SymbolCandidate = { symbol: string; label: string };
+
+function normalizeTickerInput(raw: string): string | null {
+  const letters = raw
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z]/g, "");
+  if (letters.length >= 1 && letters.length <= 6) return letters;
+  return null;
 }
 
 const layerMeta = [
@@ -160,12 +180,24 @@ function buildSignalsPageVerdict(input: {
   return "Trade readiness blends all six layers; yellow or neutral reads usually mean intentional gates, not broken logic.";
 }
 
-export function SignalsPageClient({ marketOverview, scannerOverview, earningsBySymbol }: SignalsPageClientProps) {
+export function SignalsPageClient({
+  marketOverview,
+  scannerOverview,
+  earningsBySymbol,
+  signalsPrefill = { urlSymbol: null }
+}: SignalsPageClientProps) {
   const { colors } = useTheme();
   const isMobileLayout = useIsMobileLayout();
+  const symbolComboRef = useRef<HTMLDivElement | null>(null);
   const [tab, setTab] = useState<"layers" | "history">("layers");
   const [tradingMode, setTradingMode] = useState<TradingMode>("swing");
-  const [symbol, setSymbol] = useState("AAPL");
+  const [symbol, setSymbol] = useState(() => signalsPrefill.urlSymbol ?? "");
+  const [symbolDraft, setSymbolDraft] = useState(() => signalsPrefill.urlSymbol ?? "");
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  const [suggestHighlight, setSuggestHighlight] = useState(0);
+  const [watchlistPickerOpen, setWatchlistPickerOpen] = useState(false);
+  const [watchlistPickerSyms, setWatchlistPickerSyms] = useState<string[]>([]);
+  const [watchlistPickerLoading, setWatchlistPickerLoading] = useState(false);
   const [signalEvidence, setSignalEvidence] = useState<SignalEvidenceData | null>(null);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [newsPanelSymbol, setNewsPanelSymbol] = useState("");
@@ -191,6 +223,67 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
     return tickerNewsTriggerLine(symbol);
   }, [symbol, newsUiTick]);
 
+  const symbolCommitted = symbol.trim().length > 0;
+
+  const symbolCandidates = useMemo(() => {
+    const m = new Map<string, SymbolCandidate>();
+    const add = (sym: string, name?: string | null) => {
+      const u = sym.trim().toUpperCase();
+      if (!u || !/^[A-Z]{1,6}$/.test(u)) return;
+      const n = (name ?? "").trim();
+      const label = n ? `${u} — ${n}` : u;
+      if (!m.has(u)) m.set(u, { symbol: u, label });
+    };
+    for (const s of scannerOverview.setups) {
+      add(s.symbol, s.company_name ?? null);
+    }
+    for (const g of scannerOverview.gapIntelligence) {
+      add(g.symbol, g.company_name);
+    }
+    for (const snap of marketOverview.snapshots) {
+      add(snap.symbol, snap.company_name ?? null);
+    }
+    return Array.from(m.values()).sort((a, b) => a.symbol.localeCompare(b.symbol));
+  }, [scannerOverview.setups, scannerOverview.gapIntelligence, marketOverview.snapshots]);
+
+  const suggestionRows = useMemo(() => {
+    const q = symbolDraft.trim().toLowerCase();
+    if (!q) return symbolCandidates.slice(0, 12);
+    return symbolCandidates
+      .filter((c) => c.symbol.toLowerCase().startsWith(q) || c.label.toLowerCase().includes(q))
+      .slice(0, 12);
+  }, [symbolCandidates, symbolDraft]);
+
+  const applyCommittedSymbol = useCallback((sym: string | null | undefined) => {
+    const u = (sym ?? "").trim().toUpperCase();
+    if (!u || !/^[A-Z]{1,6}$/.test(u)) {
+      setSymbol("");
+      setSymbolDraft("");
+      setSuggestOpen(false);
+      return;
+    }
+    setSymbol(u);
+    setSymbolDraft(u);
+    setSuggestOpen(false);
+  }, []);
+
+  const openWatchlistPicker = useCallback(async () => {
+    setWatchlistPickerOpen(true);
+    setWatchlistPickerLoading(true);
+    try {
+      const res = await fetch("/api/stocvest/watchlists/default/symbols", { method: "GET" });
+      const data = (await res.json().catch(() => ({}))) as { symbols?: string[] };
+      const list = Array.isArray(data.symbols)
+        ? data.symbols.map((x) => String(x).trim().toUpperCase()).filter((x) => /^[A-Z]{1,6}$/.test(x))
+        : [];
+      setWatchlistPickerSyms(list);
+    } catch {
+      setWatchlistPickerSyms([]);
+    } finally {
+      setWatchlistPickerLoading(false);
+    }
+  }, []);
+
   const rawSnapshot = useMemo(() => {
     const sym = symbol.toUpperCase();
     return marketOverview.snapshots.find((s) => s.symbol === sym) ?? symbolSnapshot;
@@ -206,6 +299,33 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
       /* ignore */
     }
   }, []);
+
+  useEffect(() => {
+    if (signalsPrefill.urlSymbol) return;
+    try {
+      const s = sessionStorage.getItem(SIGNALS_SESSION_SYMBOL_KEY);
+      if (s && /^[A-Z]{1,6}$/.test(s)) {
+        setSymbol(s);
+        setSymbolDraft(s);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [signalsPrefill.urlSymbol]);
+
+  useEffect(() => {
+    if (!suggestOpen) return;
+    const onDown = (e: MouseEvent) => {
+      const el = symbolComboRef.current;
+      if (el && e.target instanceof Node && !el.contains(e.target)) setSuggestOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [suggestOpen]);
+
+  useEffect(() => {
+    setSuggestHighlight(0);
+  }, [symbolDraft, suggestOpen]);
 
   const updateTradingMode = (m: TradingMode) => {
     setTradingMode(m);
@@ -278,10 +398,11 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
     });
   }, [historyRows, histSymbolFilter, histDirectionFilter, histOutcomeFilter]);
 
-  const setup = useMemo(
-    () => scannerOverview.setups.find((s) => s.symbol === symbol.toUpperCase()) || scannerOverview.setups[0],
-    [scannerOverview.setups, symbol]
-  );
+  const setup = useMemo(() => {
+    const sym = symbol.trim().toUpperCase();
+    if (!sym) return undefined;
+    return scannerOverview.setups.find((s) => s.symbol.toUpperCase() === sym);
+  }, [scannerOverview.setups, symbol]);
 
   const referenceLevels = useMemo(() => {
     const comp =
@@ -474,6 +595,16 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
     ? compositeResult.market_status
     : null;
   const hasValidSignal = compositeResult !== null && !isInsufficientCompositeResponse(compositeResult);
+
+  useEffect(() => {
+    if (!hasValidSignal || !symbol.trim()) return;
+    try {
+      sessionStorage.setItem(SIGNALS_SESSION_SYMBOL_KEY, symbol.trim().toUpperCase());
+    } catch {
+      /* ignore */
+    }
+  }, [hasValidSignal, symbol]);
+
   const showAfterHoursPanel =
     tradingMode === "day" && insufficientComposite?.market_session === "closed";
 
@@ -648,25 +779,203 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
 
       {tab === "layers" ? (
         <>
-      <div className="flex w-full min-w-0 flex-col gap-2 sm:max-w-md sm:flex-row sm:items-center">
-        <label htmlFor="signal-symbol" className="text-sm" style={{ color: colors.textMuted }}>
-          Symbol
-        </label>
-        <input
-          id="signal-symbol"
-          value={symbol}
-          onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-          placeholder="AAPL"
-          className="min-h-11 w-full min-w-0 text-base sm:flex-1"
-          style={{
-            borderRadius: borderRadius.md,
-            border: `1px solid ${colors.border}`,
-            background: colors.surface,
-            color: colors.text,
-            padding: `${spacing[2]} ${spacing[3]}`
-          }}
-        />
+      <div ref={symbolComboRef} className="relative w-full min-w-0 sm:max-w-xl">
+        <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+          <label htmlFor="signal-symbol" className="text-sm sm:shrink-0" style={{ color: colors.textMuted }}>
+            Symbol
+          </label>
+          <input
+            id="signal-symbol"
+            role="combobox"
+            aria-expanded={suggestOpen}
+            aria-controls="signal-symbol-suggestions"
+            aria-autocomplete="list"
+            value={symbolDraft}
+            autoComplete="off"
+            onChange={(e) => {
+              setSymbolDraft(e.target.value);
+              setSuggestOpen(true);
+            }}
+            onFocus={() => setSuggestOpen(true)}
+            onBlur={() => {
+              window.setTimeout(() => {
+                const t = normalizeTickerInput(symbolDraft);
+                if (t) applyCommittedSymbol(t);
+              }, 120);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                setSuggestOpen(false);
+                return;
+              }
+              if (e.key === "ArrowDown" && suggestionRows.length) {
+                e.preventDefault();
+                setSuggestOpen(true);
+                setSuggestHighlight((i) => Math.min(i + 1, suggestionRows.length - 1));
+                return;
+              }
+              if (e.key === "ArrowUp" && suggestionRows.length) {
+                e.preventDefault();
+                setSuggestHighlight((i) => Math.max(i - 1, 0));
+                return;
+              }
+              if (e.key === "Enter") {
+                const pick = suggestionRows[suggestHighlight];
+                if (pick) {
+                  e.preventDefault();
+                  applyCommittedSymbol(pick.symbol);
+                  return;
+                }
+                const t = normalizeTickerInput(symbolDraft);
+                if (t) {
+                  e.preventDefault();
+                  applyCommittedSymbol(t);
+                }
+              }
+            }}
+            placeholder="Ticker or company name"
+            className="min-h-11 w-full min-w-0 text-base sm:flex-1"
+            style={{
+              borderRadius: borderRadius.md,
+              border: `1px solid ${colors.border}`,
+              background: colors.surface,
+              color: colors.text,
+              padding: `${spacing[2]} ${spacing[3]}`
+            }}
+          />
+        </div>
+        {suggestOpen && suggestionRows.length > 0 ? (
+          <ul
+            id="signal-symbol-suggestions"
+            role="listbox"
+            className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-md border py-1 shadow-lg sm:left-auto sm:right-auto sm:min-w-full"
+            style={{
+              borderColor: colors.border,
+              background: colors.surface,
+              boxShadow: "0 12px 40px rgba(0,0,0,0.35)"
+            }}
+          >
+            {suggestionRows.map((row, idx) => (
+              <li key={row.symbol} role="option" aria-selected={idx === suggestHighlight}>
+                <button
+                  type="button"
+                  className="w-full px-3 py-2 text-left text-sm"
+                  style={{
+                    background: idx === suggestHighlight ? "rgba(59,130,246,0.15)" : "transparent",
+                    color: colors.text,
+                    border: "none",
+                    cursor: "pointer"
+                  }}
+                  onMouseDown={(ev) => ev.preventDefault()}
+                  onClick={() => applyCommittedSymbol(row.symbol)}
+                >
+                  <span className="font-semibold tracking-wide">{row.symbol}</span>
+                  {row.label !== row.symbol ? (
+                    <span className="block text-xs" style={{ color: colors.textMuted }}>
+                      {row.label.includes("—") ? row.label.split("—").slice(1).join("—").trim() : row.label}
+                    </span>
+                  ) : null}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </div>
+
+      {!symbolCommitted ? (
+        <article
+          className={surfaceGlowClassName}
+          style={{
+            background: colors.surface,
+            border: `1px solid ${colors.border}`,
+            borderRadius: borderRadius.xl,
+            padding: spacing[4],
+            maxWidth: 560
+          }}
+        >
+          <h2 style={{ margin: `0 0 ${spacing[2]}`, fontSize: typography.scale.lg, color: colors.text }}>Analyze a symbol</h2>
+          <p style={{ margin: 0, color: colors.textMuted, lineHeight: 1.6, fontSize: typography.scale.sm }}>
+            Enter a ticker to view STOCVEST&apos;s six-layer signal analysis and trade readiness.
+          </p>
+          <p style={{ margin: `${spacing[3]} 0 0`, color: colors.textMuted, lineHeight: 1.6, fontSize: typography.scale.sm }}>
+            This page evaluates symbols you choose — it does not recommend trades.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="min-h-11 rounded-md px-4 text-sm font-medium"
+              style={{ border: `1px solid ${colors.border}`, background: colors.surfaceMuted, color: colors.text }}
+              onClick={() => void openWatchlistPicker()}
+            >
+              Select from Watchlist
+            </button>
+            <Link
+              href="/dashboard/scanner"
+              className="inline-flex min-h-11 items-center justify-center rounded-md px-4 text-sm font-medium no-underline"
+              style={{ border: `1px solid ${colors.border}`, background: colors.surfaceMuted, color: colors.accent }}
+            >
+              Open Scanner
+            </Link>
+          </div>
+        </article>
+      ) : null}
+
+      {watchlistPickerOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.55)" }}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Choose symbol from watchlist"
+        >
+          <div
+            className="max-h-[min(80vh,480px)] w-full max-w-md overflow-hidden rounded-xl border p-4"
+            style={{ borderColor: colors.border, background: colors.surface }}
+          >
+            <h3 style={{ margin: `0 0 ${spacing[2]}`, color: colors.text }}>Default watchlist</h3>
+            {watchlistPickerLoading ? (
+              <p style={{ color: colors.textMuted, margin: 0 }}>Loading…</p>
+            ) : watchlistPickerSyms.length === 0 ? (
+              <p style={{ color: colors.textMuted, margin: 0 }}>
+                No symbols yet.{" "}
+                <Link href="/dashboard/watchlists" className="font-medium no-underline" style={{ color: colors.accent }}>
+                  Add tickers on Watchlists
+                </Link>
+                .
+              </p>
+            ) : (
+              <ul className="m-0 max-h-72 list-none overflow-y-auto p-0" style={{ display: "grid", gap: spacing[1] }}>
+                {watchlistPickerSyms.map((s) => (
+                  <li key={s}>
+                    <button
+                      type="button"
+                      className="w-full rounded-md px-3 py-2 text-left text-sm font-semibold tracking-wide"
+                      style={{ border: `1px solid ${colors.border}`, background: colors.background, color: colors.text }}
+                      onClick={() => {
+                        applyCommittedSymbol(s);
+                        setWatchlistPickerOpen(false);
+                      }}
+                    >
+                      {s}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <button
+              type="button"
+              className="mt-4 min-h-10 w-full rounded-md text-sm"
+              style={{ border: `1px solid ${colors.border}`, background: "transparent", color: colors.textMuted }}
+              onClick={() => setWatchlistPickerOpen(false)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {symbolCommitted ? (
+        <>
       <div className="flex flex-wrap items-center gap-2">
         <AddToWatchlistButton symbol={symbol} />
       </div>
@@ -1146,6 +1455,8 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
           isInDefaultWatchlist={afterHoursInWatchlist}
           watchlistCheckComplete={afterHoursWatchlistKnown}
         />
+      ) : null}
+        </>
       ) : null}
         </>
       ) : null}

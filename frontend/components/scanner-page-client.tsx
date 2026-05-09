@@ -12,6 +12,7 @@ import {
 } from "react";
 import { motion } from "framer-motion";
 import { RefreshCw } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AddToWatchlistButton } from "@/components/add-to-watchlist-button";
 import { GapCatalystNewsDrawer } from "@/components/gap-catalyst-news-drawer";
@@ -1305,6 +1306,13 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                       >
                         {evidenceLoading ? "Preparing signal..." : "View Evidence"}
                       </button>
+                      <Link
+                        href={`/dashboard/signals?symbol=${encodeURIComponent(setup.symbol.trim().toUpperCase())}&ref=scanner`}
+                        className="inline-flex min-h-8 items-center rounded-md px-2 text-xs font-medium no-underline"
+                        style={{ border: `1px solid ${colors.border}`, color: colors.accent, alignSelf: "center" }}
+                      >
+                        Open Signals
+                      </Link>
                       <InfoTip text={SETUP_RELATIVE_VOLUME_TIP} label="Relative volume" />
                     </div>
                     <div style={{ position: "absolute", right: spacing[3], bottom: spacing[3] }}>

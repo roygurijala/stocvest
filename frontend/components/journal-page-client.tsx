@@ -384,7 +384,15 @@ export function JournalPageClient({ initialEntries, initialAnalytics, connectedB
                           <div className="flex flex-wrap items-center gap-1">
                             {typeof entry.signal_strength === "number" ? (
                               <Link
-                                href={entry.signal_id ? `/dashboard/signals?signal_id=${encodeURIComponent(entry.signal_id)}` : "/dashboard/signals"}
+                                href={
+                                  entry.signal_id
+                                    ? `/dashboard/signals?${new URLSearchParams({
+                                        symbol: entry.symbol.trim().toUpperCase(),
+                                        signal_id: entry.signal_id,
+                                        ref: "journal"
+                                      }).toString()}`
+                                    : "/dashboard/signals"
+                                }
                                 className="inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold no-underline"
                                 style={{
                                   border: `1px solid ${colors.border}`,
@@ -397,7 +405,15 @@ export function JournalPageClient({ initialEntries, initialAnalytics, connectedB
                               </Link>
                             ) : (
                               <Link
-                                href={entry.signal_id ? `/dashboard/signals?signal_id=${encodeURIComponent(entry.signal_id)}` : "/dashboard/signals"}
+                                href={
+                                  entry.signal_id
+                                    ? `/dashboard/signals?${new URLSearchParams({
+                                        symbol: entry.symbol.trim().toUpperCase(),
+                                        signal_id: entry.signal_id,
+                                        ref: "journal"
+                                      }).toString()}`
+                                    : "/dashboard/signals"
+                                }
                                 className="text-[11px] no-underline"
                                 style={{ color: colors.accent }}
                               >

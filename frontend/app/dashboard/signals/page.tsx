@@ -7,11 +7,27 @@ import { fetchScannerOverview } from "@/lib/api/scanner";
 import { fetchEarningsCalendar } from "@/lib/api/earnings";
 import { getServerSession } from "@/lib/auth/session";
 
-export default async function DashboardSignalsPage() {
+const CONTEXTUAL_SIGNALS_REFS = new Set(["scanner", "watchlist", "validation", "journal"]);
+
+function firstParam(v: string | string[] | undefined): string | undefined {
+  if (v == null) return undefined;
+  return Array.isArray(v) ? v[0] : v;
+}
+
+export default async function DashboardSignalsPage({
+  searchParams
+}: {
+  searchParams: Record<string, string | string[] | undefined>;
+}) {
   const session = getServerSession();
   if (!session) {
     redirect("/login");
   }
+  const refRaw = (firstParam(searchParams.ref) ?? "").trim().toLowerCase();
+  const symRaw = (firstParam(searchParams.symbol) ?? "").trim().toUpperCase();
+  const urlSymbol =
+    symRaw && CONTEXTUAL_SIGNALS_REFS.has(refRaw) && /^[A-Z]{1,6}$/.test(symRaw) ? symRaw : null;
+
   const [pdtStatus, marketOverview, scannerOverview] = await Promise.all([
     fetchPdtStatus().catch(() => null),
     fetchMarketOverview(undefined, { sparklineBarLimit: 12 }),
@@ -23,7 +39,12 @@ export default async function DashboardSignalsPage() {
 
   return (
     <AppShell session={session}>
-      <SignalsPageClient marketOverview={marketOverview} scannerOverview={scannerOverview} earningsBySymbol={earningsBySymbol} />
+      <SignalsPageClient
+        marketOverview={marketOverview}
+        scannerOverview={scannerOverview}
+        earningsBySymbol={earningsBySymbol}
+        signalsPrefill={{ urlSymbol }}
+      />
     </AppShell>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CuteLoader } from "@/components/cute-loader";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
@@ -413,7 +414,16 @@ export function WatchlistsPageClient() {
                       color: colors.text
                     }}
                   >
-                    <span>{s}</span>
+                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span>{s}</span>
+                      <Link
+                        href={`/dashboard/signals?symbol=${encodeURIComponent(s)}&ref=watchlist`}
+                        className="text-[10px] font-semibold uppercase tracking-wide no-underline hover:underline"
+                        style={{ color: colors.accent }}
+                      >
+                        Signals
+                      </Link>
+                    </span>
                     <button
                       type="button"
                       aria-label={`Remove ${s}`}
