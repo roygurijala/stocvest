@@ -284,15 +284,11 @@ export function SignalsPageClient({
           });
           if (cancelled) return;
           if (!res.ok) {
-            const hint =
-              res.status === 404
-                ? "Ticker search is not deployed yet (API route missing). Apply latest Terraform / redeploy API."
-                : `Search failed (${res.status}). Try a known symbol.`;
-            setRemoteSearchError(hint);
+            setRemoteSearchError(`Search failed (${res.status}). Try a known symbol.`);
             setRemoteCandidates([]);
             return;
           }
-          const j = (await res.json().catch(() => ({}))) as { items?: unknown };
+          const j = (await res.json().catch(() => ({}))) as { items?: unknown; error?: unknown };
           const items = Array.isArray(j.items) ? j.items : [];
           const next: SymbolCandidate[] = [];
           for (const it of items) {
@@ -303,9 +299,10 @@ export function SignalsPageClient({
             const name = String(o.name ?? "").trim();
             next.push({ symbol: sym, label: name ? `${sym} — ${name}` : sym });
           }
+          const bodyError = typeof j.error === "string" ? j.error.trim() : "";
           if (!cancelled) {
             setRemoteCandidates(next);
-            setRemoteSearchError(null);
+            setRemoteSearchError(next.length === 0 && bodyError ? bodyError : null);
           }
         } catch {
           if (!cancelled) {
