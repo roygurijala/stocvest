@@ -865,48 +865,31 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
               </span>
             </div>
             <div className="mx-auto min-w-0 max-w-full overflow-x-auto overscroll-x-contain touch-pan-x">
-              <div className="mx-auto max-w-full min-w-[260px] lg:hidden" style={{ height: 256 }}>
+              {/* One chart only: a display:none sibling gives ResponsiveContainer 0×0 and Recharts warns. */}
+              <div
+                className={`mx-auto max-w-full min-w-0 ${isMobileLayout ? "min-w-[260px]" : "overflow-hidden"}`}
+                style={{ height: isMobileLayout ? 256 : 288 }}
+              >
                 <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart data={radarData} margin={{ top: 16, right: 18, bottom: 22, left: 18 }}>
+                  <RadarChart
+                    data={radarData}
+                    margin={
+                      isMobileLayout
+                        ? { top: 16, right: 18, bottom: 22, left: 18 }
+                        : { top: 18, right: 20, bottom: 26, left: 20 }
+                    }
+                  >
                     <PolarGrid stroke={colors.border} />
                     <PolarAngleAxis
                       dataKey="layer"
-                      tick={{ fill: colors.textMuted, fontSize: 10 }}
+                      tick={{ fill: colors.textMuted, fontSize: isMobileLayout ? 10 : 11 }}
                       tickLine={false}
                     />
-                    <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: colors.textMuted, fontSize: 9 }} />
-                    <Radar
-                      name="Historical avg"
-                      dataKey="hist"
-                      stroke={colors.text}
-                      strokeWidth={2}
-                      strokeDasharray="5 4"
-                      fill="none"
-                      dot={false}
-                      isAnimationActive={false}
+                    <PolarRadiusAxis
+                      angle={30}
+                      domain={[0, 100]}
+                      tick={{ fill: colors.textMuted, fontSize: isMobileLayout ? 9 : 10 }}
                     />
-                    <Radar
-                      name="Current"
-                      dataKey="score"
-                      stroke="#38bdf8"
-                      strokeWidth={2}
-                      fill="#0ea5e9"
-                      fillOpacity={0.38}
-                      dot={false}
-                    />
-                  </RadarChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="mx-auto hidden max-w-full overflow-hidden lg:block" style={{ height: 288 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart data={radarData} margin={{ top: 18, right: 20, bottom: 26, left: 20 }}>
-                    <PolarGrid stroke={colors.border} />
-                    <PolarAngleAxis
-                      dataKey="layer"
-                      tick={{ fill: colors.textMuted, fontSize: 11 }}
-                      tickLine={false}
-                    />
-                    <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: colors.textMuted, fontSize: 10 }} />
                     <Radar
                       name="Historical avg"
                       dataKey="hist"
