@@ -52,6 +52,14 @@ def test_parameter_version_stored_with_signal(monkeypatch: pytest.MonkeyPatch) -
     mem = InMemorySignalRecorder()
     monkeypatch.setattr("stocvest.api.handlers.signals.get_signal_recorder", lambda: mem)
     monkeypatch.setattr(
+        "stocvest.api.handlers.signals.evaluate_swing_ledger_entry",
+        lambda **kwargs: (True, {}),
+    )
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.is_swing_ledger_entry_window_et",
+        lambda _dt: True,
+    )
+    monkeypatch.setattr(
         "stocvest.api.handlers.signals.ParameterStore.get_parameters_sync",
         lambda: replace(default_signal_parameters(), version="1.0.0"),
     )

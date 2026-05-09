@@ -244,7 +244,7 @@ export function SignalsPageClient({ marketOverview, scannerOverview, earningsByS
     let cancelled = false;
     setHistLoading(true);
     void (async () => {
-      const mine = await fetchUserEvaluatedSignals({ days: 30, limit: 200 });
+      const mine = await fetchUserEvaluatedSignals({ days: 30 });
       if (cancelled) return;
       if (mine !== null) {
         setHistorySource("user");

@@ -281,38 +281,42 @@ export function SignalValidationPageClient() {
       ) : (
         <>
           {metrics ? (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
-                gap: spacing[3],
-                marginBottom: spacing[6]
-              }}
-            >
-              {[
-                ["Signals logged", String(metrics.n)],
-                ["Evaluated checkpoints", String(metrics.evaluated)],
-                ["Outcome settled", String(metrics.completed)],
-                ["Observed + / − / 0", `${metrics.plus} / ${metrics.minus} / ${metrics.zero}`],
-                [tab === "swing" ? "D1 resolved flag" : "1h resolved flag", String(metrics.ruleResolved)]
-              ].map(([k, v]) => (
-                <div
-                  key={k}
-                  style={{
-                    borderRadius: borderRadius.md,
-                    border: `1px solid ${colors.border}`,
-                    padding: spacing[3],
-                    background: colors.background
-                  }}
-                >
-                  <div style={{ fontSize: typography.scale.xs, color: colors.textMuted, marginBottom: spacing[1] }}>{k}</div>
-                  <div style={{ fontSize: typography.scale.lg, fontWeight: 700, color: colors.text }}>{v}</div>
-                </div>
-              ))}
-            </div>
-            <p style={{ margin: `${spacing[2]}px 0 0`, fontSize: typography.scale.xs, color: colors.textMuted }}>
-              Summary counts include every row loaded below; use &quot;Load more&quot; to extend the window.
-            </p>
+            <>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
+                  gap: spacing[3],
+                  marginBottom: spacing[6]
+                }}
+              >
+                {[
+                  ["Signals logged", String(metrics.n)],
+                  ["Evaluated checkpoints", String(metrics.evaluated)],
+                  ["Outcome settled", String(metrics.completed)],
+                  ["Observed + / − / 0", `${metrics.plus} / ${metrics.minus} / ${metrics.zero}`],
+                  [tab === "swing" ? "D1 resolved flag" : "1h resolved flag", String(metrics.ruleResolved)]
+                ].map(([k, v]) => (
+                  <div
+                    key={k}
+                    style={{
+                      borderRadius: borderRadius.md,
+                      border: `1px solid ${colors.border}`,
+                      padding: spacing[3],
+                      background: colors.background
+                    }}
+                  >
+                    <div style={{ fontSize: typography.scale.xs, color: colors.textMuted, marginBottom: spacing[1] }}>
+                      {k}
+                    </div>
+                    <div style={{ fontSize: typography.scale.lg, fontWeight: 700, color: colors.text }}>{v}</div>
+                  </div>
+                ))}
+              </div>
+              <p style={{ margin: `${spacing[2]}px 0 0`, fontSize: typography.scale.xs, color: colors.textMuted }}>
+                Summary counts include every row loaded below; use &quot;Load more&quot; to extend the window.
+              </p>
+            </>
           ) : null}
 
           <div style={{ overflowX: "auto" }}>
