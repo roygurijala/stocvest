@@ -6,6 +6,9 @@ export type PublicSignalOutcome = "pending" | "correct" | "incorrect" | "neutral
 export type PublicSignalDirection = "long" | "short" | "neutral";
 export type SignalBias = "bullish" | "bearish" | "neutral";
 
+/** Parsed `gate_status` from API (was `gate_status_json` in Dynamo). */
+export type GateStatusPayload = Record<string, unknown> | unknown[];
+
 export interface PublicSignal {
   signal_id?: string;
   symbol: string;
@@ -25,6 +28,25 @@ export interface PublicSignal {
   resolved_1d?: boolean;
   price_1h_after?: number | null;
   price_1d_after?: number | null;
+  /** Swing vs day track (fixed rules; not user customization). */
+  mode?: "day" | "swing";
+  layer_scores?: Record<string, number>;
+  status?: string;
+  /** ISO timestamp when the ledger row was closed (exit), if set. */
+  closed_at?: string | null;
+  ledger_entry_date_et?: string | null;
+  ledger_exit_date_et?: string | null;
+  entry_rationale?: string | null;
+  exit_reason?: string | null;
+  decision_state_entry?: string | null;
+  decision_state_exit?: string | null;
+  market_regime_exit?: string | null;
+  gate_status?: GateStatusPayload | null;
+  setup_type?: string | null;
+  exit_rule?: string | null;
+  max_adverse_excursion_pct?: number | null;
+  max_favorable_excursion_pct?: number | null;
+  hold_duration_minutes?: number | null;
 }
 
 /** When API adds per-pattern stats, map them here for the landing accuracy bars. */
@@ -88,6 +110,29 @@ function normalizePublicSignal(raw: Record<string, unknown>): PublicSignal | nul
   const o1h = raw.outcome_1h;
   const o1d = raw.outcome_1d;
   const pAt = raw.price_at_signal;
+  const modeRaw = raw.mode;
+  const mode =
+    modeRaw === "swing" || modeRaw === "day" ? (modeRaw as "day" | "swing") : undefined;
+  const layersRaw = raw.layer_scores;
+  let layer_scores: Record<string, number> | undefined;
+  if (layersRaw != null && typeof layersRaw === "object" && !Array.isArray(layersRaw)) {
+    const o: Record<string, number> = {};
+    for (const [k, v] of Object.entries(layersRaw as Record<string, unknown>)) {
+      const n = typeof v === "number" ? v : v != null ? Number(v) : NaN;
+      if (Number.isFinite(n)) o[k] = n;
+    }
+    layer_scores = Object.keys(o).length ? o : undefined;
+  }
+  const st = raw.status;
+  const closedAt = raw.closed_at;
+  const mae = raw.max_adverse_excursion_pct;
+  const mfe = raw.max_favorable_excursion_pct;
+  const holdMin = raw.hold_duration_minutes;
+  const gsRaw = raw.gate_status;
+  let gate_status: GateStatusPayload | null | undefined;
+  if (gsRaw != null && typeof gsRaw === "object") {
+    gate_status = gsRaw as GateStatusPayload;
+  }
   return {
     signal_id: typeof sid === "string" ? sid : undefined,
     symbol: raw.symbol,
@@ -114,8 +159,45 @@ function normalizePublicSignal(raw: Record<string, unknown>): PublicSignal | nul
         ? raw.price_1d_after
         : raw.price_1d_after != null
           ? Number(raw.price_1d_after)
-          : null
+          : null,
+    mode,
+    layer_scores,
+    status: typeof st === "string" ? st : undefined,
+    closed_at: typeof closedAt === "string" && closedAt.trim() ? closedAt : undefined,
+    ledger_entry_date_et: _optStr(raw.ledger_entry_date_et),
+    ledger_exit_date_et: _optStr(raw.ledger_exit_date_et),
+    entry_rationale: _optStr(raw.entry_rationale),
+    exit_reason: _optStr(raw.exit_reason),
+    decision_state_entry: _optStr(raw.decision_state_entry),
+    decision_state_exit: _optStr(raw.decision_state_exit),
+    market_regime_exit: _optStr(raw.market_regime_exit),
+    gate_status: gate_status ?? null,
+    setup_type: _optStr(raw.setup_type),
+    exit_rule: _optStr(raw.exit_rule),
+    max_adverse_excursion_pct: _numOrNull(mae),
+    max_favorable_excursion_pct: _numOrNull(mfe),
+    hold_duration_minutes: _intOrUndef(holdMin)
   };
+}
+
+function _numOrNull(v: unknown): number | null | undefined {
+  if (v == null || v === "") return undefined;
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function _intOrUndef(v: unknown): number | undefined {
+  if (v == null || v === "") return undefined;
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n)) return undefined;
+  return Math.round(n);
+}
+
+function _optStr(v: unknown): string | null | undefined {
+  if (v == null) return undefined;
+  if (typeof v !== "string") return String(v).trim() || undefined;
+  const t = v.trim();
+  return t || undefined;
 }
 
 /** Authenticated user's evaluated signals (platform + user-scoped rows for that account). Returns null if not signed in. */
@@ -123,11 +205,13 @@ export async function fetchUserEvaluatedSignals(params?: {
   days?: number;
   limit?: number;
   symbol?: string;
+  mode?: "day" | "swing";
 }): Promise<PublicSignal[] | null> {
   const qs = new URLSearchParams();
   if (params?.days != null) qs.set("days", String(params.days));
   if (params?.limit != null) qs.set("limit", String(params.limit));
   if (params?.symbol?.trim()) qs.set("symbol", params.symbol.trim().toUpperCase());
+  if (params?.mode === "day" || params?.mode === "swing") qs.set("mode", params.mode);
   const suffix = qs.toString() ? `?${qs.toString()}` : "";
   try {
     const response = await fetch(`/api/stocvest/signals/me/history${suffix}`, {

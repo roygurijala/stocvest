@@ -29,13 +29,6 @@ locals {
     "GET /v1/signals/me/records/{signal_id}" = { module_key = "signals", authorizer = true }
     "GET /v1/signals/analysis"               = { module_key = "signals", authorizer = true }
 
-    "GET /v1/portfolio/summary"           = { module_key = "signals", authorizer = false }
-    "GET /v1/portfolio/positions/open"    = { module_key = "signals", authorizer = false }
-    "GET /v1/portfolio/positions/history" = { module_key = "signals", authorizer = false }
-    "GET /v1/portfolio/performance"       = { module_key = "signals", authorizer = false }
-    "POST /v1/portfolio/positions/open"   = { module_key = "signals", authorizer = false }
-    "POST /v1/portfolio/positions/close"  = { module_key = "signals", authorizer = false }
-
     "GET /v1/brokers/health"    = { module_key = "brokers", authorizer = true }
     "GET /v1/brokers/accounts"  = { module_key = "brokers", authorizer = true }
     "GET /v1/brokers/positions" = { module_key = "brokers", authorizer = true }

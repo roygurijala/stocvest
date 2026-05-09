@@ -153,7 +153,6 @@ class Settings(BaseSettings):
     dynamodb_audit_events_table: str = Field("", alias="DYNAMODB_AUDIT_EVENTS_TABLE")
     dynamodb_parameter_history_table: str = Field("", alias="DYNAMODB_PARAMETER_HISTORY_TABLE")
     dynamodb_sector_cache_table: str = Field("", alias="DYNAMODB_SECTOR_CACHE_TABLE")
-    dynamodb_model_portfolio_table: str = Field("", alias="DYNAMODB_MODEL_PORTFOLIO_TABLE")
 
     # ── Signal tuning / analysis (optional) ───────────────────────
     stocvest_internal_analysis_key: str = Field("", alias="STOCVEST_INTERNAL_ANALYSIS_KEY")

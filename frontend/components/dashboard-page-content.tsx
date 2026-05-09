@@ -1,5 +1,5 @@
 import { DashboardRedesign } from "@/components/dashboard-redesign";
-import { fetchDailyBarClosesBySymbol, fetchMarketOverview, fetchSnapshotsForSymbols } from "@/lib/api/market";
+import { fetchDailyBarClosesBySymbol, fetchMarketOverview } from "@/lib/api/market";
 import { loadScannerDataWithoutBrief } from "@/lib/api/scanner";
 import { DEFAULT_EARNINGS_SYMBOLS, fetchEarningsCalendar } from "@/lib/api/earnings";
 import type { MarketOverview, SnapshotPayload } from "@/lib/api/market";
@@ -7,8 +7,7 @@ import type { ScannerCoreData } from "@/lib/api/scanner";
 import type { EarningsResponse } from "@/lib/api/earnings";
 import { isNextRedirect } from "@/lib/next-errors";
 import { pctChangeOverDailySessions } from "@/lib/session-return-math";
-import { stocvestAuthedFetch } from "@/lib/bff/stocvest-authed";
-import type { PortfolioActiveRow, SectorRotationChip } from "@/components/dashboard-redesign";
+import type { SectorRotationChip } from "@/components/dashboard-redesign";
 import type { WeeklyIndexRow } from "@/components/weekly-market-context-widget";
 
 /**
@@ -30,7 +29,6 @@ const DASHBOARD_MARKET_TIMEOUT_MS = 58_000;
 const DASHBOARD_SCANNER_TIMEOUT_MS = 58_000;
 const DASHBOARD_EARNINGS_TIMEOUT_MS = 5000;
 const DASHBOARD_DAILY_BARS_TIMEOUT_MS = 14_000;
-const DASHBOARD_PORTFOLIO_TIMEOUT_MS = 10_000;
 
 const INDEX_WEEKLY_META: readonly Omit<WeeklyIndexRow, "pct5d" | "lastPrice">[] = [
   { symbol: "SPY", label: "Large cap" },
@@ -63,44 +61,6 @@ function timeoutFallback<T>(promise: Promise<T>, ms: number, fallback: T): Promi
         resolve(fallback);
       });
   });
-}
-
-async function fetchDashboardPortfolioRows(): Promise<PortfolioActiveRow[]> {
-  try {
-    const res = await stocvestAuthedFetch("/v1/portfolio/positions/open", { method: "GET" });
-    if (!res.ok) return [];
-    const body = (await res.json()) as { positions?: Record<string, unknown>[] };
-    const positions = Array.isArray(body.positions) ? body.positions : [];
-    const syms = [...new Set(positions.map((p) => String(p.symbol ?? "").trim().toUpperCase()).filter(Boolean))];
-    const snaps = syms.length > 0 ? await fetchSnapshotsForSymbols(syms) : [];
-    const snapBy = new Map<string, SnapshotPayload>();
-    snaps.forEach((s) => {
-      if (s?.symbol) snapBy.set(String(s.symbol).trim().toUpperCase(), s);
-    });
-    return positions.map((p) => {
-      const sym = String(p.symbol ?? "").trim().toUpperCase();
-      const entryRaw = p.entry_price;
-      const entry =
-        typeof entryRaw === "number" && Number.isFinite(entryRaw)
-          ? entryRaw
-          : Number.parseFloat(String(entryRaw ?? "NaN"));
-      const sharesRaw = p.shares_equivalent;
-      const shares =
-        typeof sharesRaw === "number" && Number.isFinite(sharesRaw)
-          ? sharesRaw
-          : Number.parseFloat(String(sharesRaw ?? "NaN"));
-      const snap = snapBy.get(sym);
-      const last =
-        snap && typeof snap.last_trade_price === "number" && Number.isFinite(snap.last_trade_price)
-          ? snap.last_trade_price
-          : null;
-      const pnlDollars =
-        last != null && Number.isFinite(entry) && Number.isFinite(shares) ? (last - entry) * shares : null;
-      return { symbol: sym, side: "long", entry, last, pnlDollars };
-    });
-  } catch {
-    return [];
-  }
 }
 
 function buildWeeklyRows(
@@ -153,7 +113,7 @@ export async function DashboardPageContent() {
 
   const dailyBarSymbols = [...INDEX_WEEKLY_META.map((r) => r.symbol), ...SECTOR_ROTATION_META.map((r) => r.symbol)];
 
-  const [marketOverview, scannerCore, earnings, dailyCloses, portfolioActive] = await Promise.all([
+  const [marketOverview, scannerCore, earnings, dailyCloses] = await Promise.all([
     timeoutFallback(
       fetchMarketOverview(["SPY", "QQQ", "IWM", "I:VIX"], { sparklineBarLimit: 12 }),
       DASHBOARD_MARKET_TIMEOUT_MS,
@@ -165,8 +125,7 @@ export async function DashboardPageContent() {
       scannerFallback
     ),
     timeoutFallback(fetchEarningsCalendar(earningsSymbols, 7), DASHBOARD_EARNINGS_TIMEOUT_MS, earningsFallback),
-    timeoutFallback(fetchDailyBarClosesBySymbol(dailyBarSymbols, 8), DASHBOARD_DAILY_BARS_TIMEOUT_MS, {} as Record<string, number[]>),
-    timeoutFallback(fetchDashboardPortfolioRows(), DASHBOARD_PORTFOLIO_TIMEOUT_MS, [] as PortfolioActiveRow[])
+    timeoutFallback(fetchDailyBarClosesBySymbol(dailyBarSymbols, 8), DASHBOARD_DAILY_BARS_TIMEOUT_MS, {} as Record<string, number[]>)
   ]);
 
   const weeklyIndexRows = buildWeeklyRows(dailyCloses, marketOverview.snapshots);
@@ -191,7 +150,6 @@ export async function DashboardPageContent() {
       earningsRecent={earnings.recent}
       weeklyIndexRows={weeklyIndexRows}
       sectorRotation={sectorRotation}
-      portfolioActive={portfolioActive}
     />
   );
 }

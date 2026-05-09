@@ -1,5 +1,5 @@
 import { AppShell } from "@/components/app-shell";
-import { DashboardRedesign, type PortfolioActiveRow, type SectorRotationChip } from "@/components/dashboard-redesign";
+import { DashboardRedesign, type SectorRotationChip } from "@/components/dashboard-redesign";
 import type { MarketOverview } from "@/lib/api/market";
 import type { ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
@@ -37,8 +37,6 @@ export function DashboardShell({
     { symbol: "XLF", label: "Financials", pct5d: null },
     { symbol: "XLY", label: "Cons. disc.", pct5d: null }
   ];
-  const portfolioActive: PortfolioActiveRow[] = [];
-
   return (
     <AppShell session={session}>
       <DashboardRedesign
@@ -48,7 +46,6 @@ export function DashboardShell({
         earningsRecent={[]}
         weeklyIndexRows={weeklyIndexRows}
         sectorRotation={sectorRotation}
-        portfolioActive={portfolioActive}
       />
     </AppShell>
   );

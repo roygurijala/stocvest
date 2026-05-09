@@ -132,10 +132,9 @@ def _handle_eventbridge_schedule(event: LambdaEvent, context: LambdaContext) -> 
     """EventBridge Scheduler passes the schedule Input JSON as the Lambda event body (top-level dict)."""
     _ = context
     scan_type = str(event.get("scan_type"))
-    run_pf = bool(event.get("run_portfolio_composite"))
-    _LOG.info("scanner schedule invocation scan_type=%s run_portfolio_composite=%s", scan_type, run_pf)
+    _LOG.info("scanner schedule invocation scan_type=%s", scan_type)
     try:
-        result = run_scheduled_scan_sync(scan_type, run_portfolio_composite=run_pf)
+        result = run_scheduled_scan_sync(scan_type)
         return ok(result)
     except Exception as exc:
         _LOG.exception("scheduled scanner failed scan_type=%s", scan_type)

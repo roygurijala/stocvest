@@ -13,7 +13,6 @@ from stocvest.api.legal_copy import API_SIGNAL_DISCLAIMER
 from stocvest.api.services.composite_sector_wire import sector_layer_api_extras
 from stocvest.api.services.composite_market_context import fetch_composite_market_status_payload_sync
 from stocvest.api.services.morning_brief_fetch import get_vix_snapshot_with_fallback
-from stocvest.api.services.portfolio_auto_log import schedule_model_portfolio_log_from_composite
 from stocvest.api.services.sector_cache_dynamo import DynamoSectorCache
 from stocvest.api.services.signal_snapshot_builders import build_real_composite_snapshot_payload
 from stocvest.api.services.signal_recorder import get_signal_recorder
@@ -389,7 +388,6 @@ async def build_real_composite_response(
     user_id: str | None,
     user_email: str | None,
     params: SignalParameters,
-    enable_portfolio_log: bool = False,
 ) -> dict[str, Any]:
     sym = symbol.strip().upper()
     phase = await run_real_composite_engine_phase(symbol=sym, params=params)
@@ -587,13 +585,12 @@ async def build_real_composite_response(
     _score_0_100_preview = max(0, min(100, _score_0_100_preview))
     _is_complete = response_body.get("status") != "incomplete"
     _LOG.info(
-        "composite scored symbol=%s score=%s verdict=%s alignment=%.2f complete=%s portfolio_log=%s",
+        "composite scored symbol=%s score=%s verdict=%s alignment=%.2f complete=%s",
         sym,
         _score_0_100_preview,
         composite.verdict.value,
         float(composite.alignment_ratio),
         _is_complete,
-        enable_portfolio_log,
     )
 
     if direction_out:
@@ -655,24 +652,6 @@ async def build_real_composite_response(
 
                     run_alert_background(_fire_alert)
 
-                score_0_100 = int(round((float(composite.score) + 1.0) * 50.0))
-                score_0_100 = max(0, min(100, score_0_100))
-                if enable_portfolio_log:
-                    schedule_model_portfolio_log_from_composite(
-                        symbol=sym,
-                        composite_verdict=composite.verdict,
-                        composite_score=score_0_100,
-                        entry_price=price_at,
-                        layer_results=layer_results,
-                        macro_regime=str(macro.market_regime or "neutral"),
-                        confluence_fired=bool(response_body.get("is_confluence_alert")),
-                        confluence_score=int(response_body.get("confluence_score") or 0),
-                        vix_at_entry=float(internals.vix_price) if internals.vix_price is not None else None,
-                        spy_day_pct=float(macro.spy_day_pct) if macro.spy_day_pct is not None else None,
-                        sector_etf=(str(sector.sector_etf).strip().upper() if getattr(sector, "sector_etf", None) else None),
-                        sector_day_pct=float(sector.sector_day_pct) if sector.sector_day_pct is not None else None,
-                        parameter_version=str(params.version or "1.0.0"),
-                    )
             except Exception as exc:
                 _LOG.warning("record_signal skipped: %s", exc)
 
@@ -685,7 +664,6 @@ def real_composite_body_sync(
     user_id: str | None,
     user_email: str | None = None,
     params: SignalParameters | None = None,
-    enable_portfolio_log: bool = False,
 ) -> dict[str, Any]:
     """Sync entry for Lambda handler (isolated event loop per invocation)."""
     p = params or ParameterStore.get_parameters_sync()
@@ -695,6 +673,5 @@ def real_composite_body_sync(
             user_id=user_id,
             user_email=user_email,
             params=p,
-            enable_portfolio_log=enable_portfolio_log,
         )
     )

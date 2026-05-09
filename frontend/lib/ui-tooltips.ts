@@ -114,8 +114,8 @@ export const SECTOR_ROTATION_CARD_TIP =
 export const UPCOMING_CATALYSTS_CARD_TIP =
   "Earnings dates only — same feed as the calendar below, limited to your dashboard symbol list. Fed, CPI, and other macro calendars are not wired into this panel yet; an empty list does not mean there is nothing on the macro calendar.";
 
-export const PORTFOLIO_ACTIVE_CARD_TIP =
-  "Open rows from the **Signal portfolio** (notional model book). Mark-to-market uses the latest snapshot last price when available; otherwise entry is shown as the live figure until quotes load.";
+export const SIGNAL_VALIDATION_LEDGER_CARD_TIP =
+  "Shortcut to **Signal validation ledger** — logged outcomes of your STOCVEST decisions (swing vs day) under fixed rules. This is not a brokerage account, managed capital, or performance marketing.";
 
 export const MORNING_BRIEF_CARD_TIP =
   "Structured pre-market brief: futures tone, VIX direction, economic prints, and a highlighted watch. It is a narrative digest of conditions, separate from the ranked scanner list below.";

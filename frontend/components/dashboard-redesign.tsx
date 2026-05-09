@@ -32,7 +32,7 @@ import {
   GEO_WEIGHTED_EXPOSURE_TIP,
   LAST_PRICE_SIGNAL_CARD_TIP,
   MARKET_PULSE_CARD_TIP,
-  PORTFOLIO_ACTIVE_CARD_TIP,
+  SIGNAL_VALIDATION_LEDGER_CARD_TIP,
   QQQ_PULSE_NUMBER_TIP,
   REGIME_BADGE_TIP,
   REGIME_WITHOUT_VIX_APPEND,
@@ -69,14 +69,6 @@ export type { WeeklyIndexRow } from "@/components/weekly-market-context-widget";
 
 export type SectorRotationChip = { symbol: string; label: string; pct5d: number | null };
 
-export type PortfolioActiveRow = {
-  symbol: string;
-  side: string;
-  entry: number;
-  last: number | null;
-  pnlDollars: number | null;
-};
-
 interface DashboardRedesignProps {
   marketOverview: MarketOverview;
   scannerOverview: ScannerOverview;
@@ -84,7 +76,6 @@ interface DashboardRedesignProps {
   earningsRecent: EarningsEvent[];
   weeklyIndexRows: WeeklyIndexRow[];
   sectorRotation: SectorRotationChip[];
-  portfolioActive: PortfolioActiveRow[];
 }
 
 function SkeletonLine({ width = "100%", height = 14 }: { width?: string; height?: number }) {
@@ -486,8 +477,7 @@ export function DashboardRedesign({
   earningsEvents,
   earningsRecent,
   weeklyIndexRows,
-  sectorRotation,
-  portfolioActive
+  sectorRotation
 }: DashboardRedesignProps) {
   const { colors } = useTheme();
   const [evidence, setEvidence] = useState<SignalEvidenceData | null>(null);
@@ -1275,43 +1265,25 @@ export function DashboardRedesign({
           </DashboardCard>
 
           <DashboardCard
-            eyebrow="Signal portfolio"
-            title="Active positions"
-            subtitle="Model book marks — not your brokerage."
-            cardTip={PORTFOLIO_ACTIVE_CARD_TIP}
+            eyebrow="Validation"
+            title="Signal validation ledger"
+            subtitle="Tracked outcomes — not a brokerage account."
+            cardTip={SIGNAL_VALIDATION_LEDGER_CARD_TIP}
           >
             <div className="mb-2">
-              <Link href="/portfolio" style={{ fontSize: typography.scale.xs, color: colors.accent, fontWeight: 600 }}>
-                Open full portfolio →
+              <Link
+                href="/dashboard/signal-validation"
+                style={{ fontSize: typography.scale.xs, color: colors.accent, fontWeight: 600 }}
+              >
+                Open ledger (Swing / Day) →
               </Link>
             </div>
-            {portfolioActive.length === 0 ? (
-              <div style={{ display: "grid", gap: spacing[2] }}>
-                <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted, lineHeight: 1.55 }}>
-                  No open rows in the signal portfolio.
-                </p>
-                <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.55 }}>
-                  This is the model book only — not your brokerage. An empty list means nothing is marked open here, not
-                  that data failed to load.
-                </p>
-              </div>
-            ) : (
-              <ul style={{ margin: 0, paddingLeft: spacing[4], color: colors.text, fontSize: typography.scale.sm, lineHeight: 1.55 }}>
-                {portfolioActive.map((p) => {
-                  const lastStr = p.last != null && Number.isFinite(p.last) ? `$${p.last.toFixed(2)}` : "—";
-                  const pnlStr =
-                    p.pnlDollars != null && Number.isFinite(p.pnlDollars)
-                      ? `${p.pnlDollars >= 0 ? "+" : ""}$${Math.abs(p.pnlDollars).toFixed(0)}`
-                      : null;
-                  return (
-                    <li key={`${p.symbol}-${p.entry}`}>
-                      <strong>{p.symbol}</strong> {p.side} · Entry ${p.entry.toFixed(2)} · Now {lastStr}
-                      {pnlStr ? <span style={{ color: p.pnlDollars! >= 0 ? colors.bullish : colors.bearish }}> · {pnlStr}</span> : null}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
+            <div style={{ display: "grid", gap: spacing[2] }}>
+              <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted, lineHeight: 1.55 }}>
+                This page logs historical outcomes of STOCVEST decisions using fixed rules — for audit and learning, not
+                investment advice or performance marketing.
+              </p>
+            </div>
           </DashboardCard>
           </div>
 

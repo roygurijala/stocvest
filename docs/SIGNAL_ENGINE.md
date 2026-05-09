@@ -64,13 +64,13 @@ This document describes the **server-side** multi-layer stacks behind **`POST /v
 - After `POST /v1/signals/composite/real`, `applySwingCompositeEnrichment()` (`frontend/lib/signal-evidence.ts`) maps each `body.layers[]` entry to the evidence card by `layer` key (`technical`, `news`, …).
 - **Key points**: Prefer `chips` from the API; if empty, split `reasoning` on sentence boundaries; if still empty, show `—` (no fabricated macro/sector/VIX strings).
 
-## Model portfolio (signal tracking)
+## Signal validation ledger (tracked outcomes)
 
-- **Purpose**: Log notional “tracked positions” when a **bullish** real composite clears gates, for transparency and parameter tuning — **not** trade instructions.
-- **DynamoDB**: Table **`ModelPortfolio`** (`pk=PORTFOLIO#v1`, `sk=POSITION#…` or `SUMMARY`), GSIs **`status-entry-index`** and **`symbol-entry-index`**.
-- **Auto-open**: After a successful **`composite/real`** response with price, background thread calls `PortfolioRecorder.open_position` when verdict is **bullish**, mapped **0–100 score** `round((composite_score_float + 1) * 50)` is **≥ 72**, and macro `market_regime` ≠ **`avoid`**.
-- **Exits**: Scheduled **`signal_resolution`** Lambda uses Polygon **`get_snapshots`** for stop / target / 20-session-day time exit; separate EventBridge rule (**`cron(35 14 ? * MON-FRI *)`** = **14:35 UTC** weekdays) invokes the same Lambda with `{"stocvest_job":"portfolio_reversal"}` to close rows when a fresh composite is **bearish** or mapped score **≤ 35**. That wall-clock is **9:35 AM Eastern** in EST and **10:35 AM Eastern** in EDT (single UTC cron cannot match both without a second rule or seasonal change).
-- **API**: Public reads under **`GET /v1/portfolio/*`**; writes under **`POST /v1/portfolio/positions/open|close`** require the same internal header as **`GET /v1/signals/analysis`** (`analysis_authorized`).
+- **Purpose**: Audit how logged **Actionable** decisions behave under **fixed, disclosed rules** — decision-first language, not a brokerage portfolio or performance marketing. Swing vs day are **separate** tracks (`SignalRecord.mode` is `swing` or `day`).
+- **Storage**: DynamoDB **`SignalHistory`** rows shaped as **`SignalRecord`** (`stocvest/data/models.py`). Optional ledger attributes (written when enrichment / close jobs populate them) include: **`closed_at`**, **`ledger_entry_date_et`** / **`ledger_exit_date_et`** (NY session dates for swing daily-close framing), **`entry_rationale`**, **`exit_reason`**, **`decision_state_entry`** / **`decision_state_exit`**, **`market_regime_exit`**, **`gate_status_json`** (stored JSON; **`GET /v1/signals/me/history`** returns parsed **`gate_status`** when valid), **`setup_type`**, **`exit_rule`**, **`max_adverse_excursion_pct`**, **`max_favorable_excursion_pct`**, **`hold_duration_minutes`**.
+- **API**: Authenticated **`GET /v1/signals/me/history`** with query **`mode=day|swing`** (optional), plus existing **`days`**, **`limit`**, **`symbol`**. Same row shape on **`GET /v1/signals/me/records/{signal_id}`** and public detail helpers that wrap **`_public_api_shape`**.
+- **UI**: Dashboard **`/dashboard/signal-validation`**; legacy **`/portfolio`** redirects there. Broker holdings remain **`POST /v1/portfolio/holdings|summary|allocation`** (brokers Lambda) and **`/dashboard/portfolio`** — unrelated to the ledger.
+- **Retired (do not resurrect in docs)**: The notional **ModelPortfolio** table, signals-lambda **`GET/POST /v1/portfolio/*`** model-book routes, **`portfolio_reversal`** / **`run_portfolio_composite`** automation, and **`/portfolio`** as a model-book surface were removed in favor of this ledger.
 
 ## Related routes
 

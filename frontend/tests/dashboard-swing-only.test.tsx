@@ -74,7 +74,6 @@ describe("Dashboard swing-only Top Signals", () => {
           { symbol: "IWM", label: "Small cap", pct5d: 1, lastPrice: 200 }
         ]}
         sectorRotation={[]}
-        portfolioActive={[]}
       />
     );
     expect(screen.getByText(/No active swing setups right now/i)).toBeInTheDocument();
@@ -116,7 +115,6 @@ describe("Dashboard swing-only Top Signals", () => {
           { symbol: "IWM", label: "Small cap", pct5d: 1, lastPrice: 200 }
         ]}
         sectorRotation={[]}
-        portfolioActive={[]}
       />
     );
     expect(screen.getByText("AAA")).toBeInTheDocument();

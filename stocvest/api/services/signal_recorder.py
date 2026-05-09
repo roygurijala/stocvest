@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from decimal import Decimal
@@ -103,6 +104,34 @@ def _record_to_item(rec: SignalRecord) -> dict[str, Any]:
     if rec.status != "active":
         item["status"] = rec.status
     item["mode"] = rec.mode
+    if rec.closed_at is not None:
+        item["closed_at"] = rec.closed_at.astimezone(timezone.utc).isoformat()
+    if rec.ledger_entry_date_et:
+        item["ledger_entry_date_et"] = rec.ledger_entry_date_et
+    if rec.ledger_exit_date_et:
+        item["ledger_exit_date_et"] = rec.ledger_exit_date_et
+    if rec.entry_rationale:
+        item["entry_rationale"] = rec.entry_rationale
+    if rec.exit_reason:
+        item["exit_reason"] = rec.exit_reason
+    if rec.decision_state_entry:
+        item["decision_state_entry"] = rec.decision_state_entry
+    if rec.decision_state_exit:
+        item["decision_state_exit"] = rec.decision_state_exit
+    if rec.market_regime_exit:
+        item["market_regime_exit"] = rec.market_regime_exit
+    if rec.gate_status_json:
+        item["gate_status_json"] = rec.gate_status_json
+    if rec.setup_type:
+        item["setup_type"] = rec.setup_type
+    if rec.exit_rule:
+        item["exit_rule"] = rec.exit_rule
+    if rec.max_adverse_excursion_pct is not None:
+        item["max_adverse_excursion_pct"] = Decimal(str(rec.max_adverse_excursion_pct))
+    if rec.max_favorable_excursion_pct is not None:
+        item["max_favorable_excursion_pct"] = Decimal(str(rec.max_favorable_excursion_pct))
+    if rec.hold_duration_minutes is not None:
+        item["hold_duration_minutes"] = int(rec.hold_duration_minutes)
     return item
 
 
@@ -148,9 +177,13 @@ class InMemorySignalRecorder:
         symbol: str | None = None,
         days: int = 30,
         limit: int = 100,
+        mode: str | None = None,
     ) -> list[SignalRecord]:
         cutoff = datetime.now(timezone.utc) - timedelta(days=max(1, days))
         sym_filter = symbol.strip().upper() if symbol else None
+        mode_filter = mode.strip().lower() if mode else None
+        if mode_filter not in (None, "", "day", "swing"):
+            mode_filter = None
         scope = _scope_key(user_id)
         out: list[SignalRecord] = []
         for it in self._items.values():
@@ -160,6 +193,8 @@ class InMemorySignalRecorder:
             if rec.generated_at < cutoff:
                 continue
             if sym_filter and rec.symbol.upper() != sym_filter:
+                continue
+            if mode_filter and rec.mode != mode_filter:
                 continue
             out.append(rec)
         out.sort(key=lambda r: r.generated_at, reverse=True)
@@ -299,8 +334,12 @@ class DynamoDBSignalRecorder:
         symbol: str | None = None,
         days: int = 30,
         limit: int = 100,
+        mode: str | None = None,
     ) -> list[SignalRecord]:
         scope = _scope_key(user_id)
+        mode_filter = mode.strip().lower() if mode else None
+        if mode_filter not in (None, "", "day", "swing"):
+            mode_filter = None
         try:
             from boto3.dynamodb.conditions import Key
 
@@ -325,6 +364,8 @@ class DynamoDBSignalRecorder:
             if rec.generated_at < cutoff:
                 continue
             if sym_filter and rec.symbol.upper() != sym_filter:
+                continue
+            if mode_filter and rec.mode != mode_filter:
                 continue
             out.append(rec)
             if len(out) >= limit:
@@ -439,12 +480,24 @@ def _tracked_outcome_summary(outcome_1d: str | None, outcome_1h: str | None) -> 
     return "pending"
 
 
+def _gate_status_object(gate_status_json: str | None) -> dict[str, Any] | list[Any] | None:
+    if not gate_status_json or not str(gate_status_json).strip():
+        return None
+    try:
+        parsed = json.loads(gate_status_json)
+        if isinstance(parsed, (dict, list)):
+            return parsed
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return None
+
+
 def _public_api_shape(rec: SignalRecord) -> dict[str, Any]:
     from stocvest.api.legal_copy import API_SIGNAL_DISCLAIMER
 
     ts = rec.generated_at.astimezone(timezone.utc).isoformat()
     strength = float(rec.signal_strength)
-    return {
+    out: dict[str, Any] = {
         "signal_id": rec.signal_id,
         "symbol": rec.symbol.upper(),
         "direction": rec.direction,
@@ -465,6 +518,36 @@ def _public_api_shape(rec: SignalRecord) -> dict[str, Any]:
         "status": rec.status,
         "mode": rec.mode,
     }
+    if rec.closed_at is not None:
+        out["closed_at"] = rec.closed_at.astimezone(timezone.utc).isoformat()
+    if rec.ledger_entry_date_et:
+        out["ledger_entry_date_et"] = rec.ledger_entry_date_et
+    if rec.ledger_exit_date_et:
+        out["ledger_exit_date_et"] = rec.ledger_exit_date_et
+    if rec.entry_rationale:
+        out["entry_rationale"] = rec.entry_rationale
+    if rec.exit_reason:
+        out["exit_reason"] = rec.exit_reason
+    if rec.decision_state_entry:
+        out["decision_state_entry"] = rec.decision_state_entry
+    if rec.decision_state_exit:
+        out["decision_state_exit"] = rec.decision_state_exit
+    if rec.market_regime_exit:
+        out["market_regime_exit"] = rec.market_regime_exit
+    gs = _gate_status_object(rec.gate_status_json)
+    if gs is not None:
+        out["gate_status"] = gs
+    if rec.setup_type:
+        out["setup_type"] = rec.setup_type
+    if rec.exit_rule:
+        out["exit_rule"] = rec.exit_rule
+    if rec.max_adverse_excursion_pct is not None:
+        out["max_adverse_excursion_pct"] = float(rec.max_adverse_excursion_pct)
+    if rec.max_favorable_excursion_pct is not None:
+        out["max_favorable_excursion_pct"] = float(rec.max_favorable_excursion_pct)
+    if rec.hold_duration_minutes is not None:
+        out["hold_duration_minutes"] = int(rec.hold_duration_minutes)
+    return out
 
 
 def public_signal_detail_dict(rec: SignalRecord) -> dict[str, Any]:

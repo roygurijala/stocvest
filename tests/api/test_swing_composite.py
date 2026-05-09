@@ -39,10 +39,6 @@ def _bullish_daily_series(symbol: str, n: int) -> list[Bar]:
 
 @pytest.fixture
 def _mute_side_effects(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "stocvest.api.services.portfolio_auto_log.schedule_model_portfolio_log_from_composite",
-        MagicMock(),
-    )
     rec = MagicMock()
     rec.record_signal = MagicMock()
     monkeypatch.setattr("stocvest.api.services.swing_composite_engine.get_signal_recorder", lambda: rec)

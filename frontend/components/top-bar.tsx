@@ -13,6 +13,7 @@ const TITLE_BY_PATH: Record<string, string> = {
   "/dashboard/scanner": "Scanner",
   "/dashboard/earnings": "Earnings",
   "/dashboard/signals": "Signals",
+  "/dashboard/signal-validation": "Signal validation",
   "/dashboard/portfolio": "Portfolio",
   "/dashboard/options": "Options",
   "/dashboard/crypto": "Crypto",

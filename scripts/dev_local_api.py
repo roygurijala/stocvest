@@ -50,17 +50,6 @@ def _module_for_path(method: str, path_only: str) -> str | None:
     if p.startswith("/v1/alerts"):
         return "brokers"
     if p.startswith("/v1/portfolio"):
-        if m == "GET" and (
-            p.startswith("/v1/portfolio/summary")
-            or p.startswith("/v1/portfolio/positions/")
-            or p.startswith("/v1/portfolio/performance")
-        ):
-            return "signals"
-        if m == "POST" and (
-            p == "/v1/portfolio/positions/open"
-            or p == "/v1/portfolio/positions/close"
-        ):
-            return "signals"
         return "portfolio"
     if p.startswith("/v1/journal"):
         return "journal"

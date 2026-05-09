@@ -106,41 +106,7 @@ def _liquidity_from_snapshots(snaps: list[Snapshot]) -> dict[str, SymbolLiquidit
     return out
 
 
-def qualifying_tickers_from_scheduled_scan_document(document: dict[str, Any], scan_type: str) -> list[str]:
-    """Symbols from ranked scanner output (gaps premarket; setups intraday) for downstream composite hooks."""
-    data = document.get("data") or {}
-    syms: list[str] = []
-    if scan_type == "premarket":
-        for row in data.get("gaps") or []:
-            if isinstance(row, dict):
-                s = str(row.get("symbol") or "").strip().upper()
-                if s:
-                    syms.append(s)
-    elif scan_type == "intraday":
-        for row in data.get("setups") or []:
-            if isinstance(row, dict):
-                s = str(row.get("symbol") or "").strip().upper()
-                if s:
-                    syms.append(s)
-    return list(dict.fromkeys(syms))
-
-
-def _run_portfolio_composite_for_qualifying_tickers(*, document: dict[str, Any], scan_type: str) -> None:
-    """Best-effort: system composite + optional model-portfolio auto-log per qualifying ticker."""
-    if scan_type not in ("premarket", "intraday"):
-        return
-    if (document.get("data") or {}).get("error"):
-        return
-    from stocvest.api.services.portfolio_reversal import run_portfolio_scanner_for_symbol
-
-    for sym in qualifying_tickers_from_scheduled_scan_document(document, scan_type):
-        try:
-            run_portfolio_scanner_for_symbol(sym)
-        except Exception as exc:  # noqa: BLE001 — never fail the scanner run
-            _LOG.warning("portfolio composite scanner hook failed symbol=%s err=%s", sym, exc)
-
-
-async def run_scheduled_scan(scan_type: str, *, run_portfolio_composite: bool = False) -> dict[str, Any]:
+async def run_scheduled_scan(scan_type: str) -> dict[str, Any]:
     """Run a full scheduled pipeline for ``premarket`` | ``intraday`` | ``eod_summary``."""
     settings = get_settings()
     symbols = await _resolve_scheduled_scan_symbols()
@@ -240,9 +206,6 @@ async def run_scheduled_scan(scan_type: str, *, run_portfolio_composite: bool = 
     put_scanner_alert(title=f"Scanner {scan_type}", detail=summary)
     broadcast_scanner_payload({"type": "scanner_run", **summary})
 
-    if run_portfolio_composite:
-        _run_portfolio_composite_for_qualifying_tickers(document=document, scan_type=scan_type)
-
     data_block = document.get("data") or {}
     if not data_block.get("error"):
         try:
@@ -284,5 +247,5 @@ async def run_scheduled_scan(scan_type: str, *, run_portfolio_composite: bool = 
     }
 
 
-def run_scheduled_scan_sync(scan_type: str, *, run_portfolio_composite: bool = False) -> dict[str, Any]:
-    return asyncio.run(run_scheduled_scan(scan_type, run_portfolio_composite=run_portfolio_composite))
+def run_scheduled_scan_sync(scan_type: str) -> dict[str, Any]:
+    return asyncio.run(run_scheduled_scan(scan_type))

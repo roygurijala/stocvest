@@ -79,11 +79,8 @@ async def build_swing_composite_response(
     user_id: str | None,
     user_email: str | None,
     params: SignalParameters,
-    enable_portfolio_log: bool = False,
 ) -> dict[str, Any]:
     sym = symbol.strip().upper()
-    if enable_portfolio_log:
-        _LOG.debug("swing composite ignores enable_portfolio_log (model portfolio is intraday-only)")
     settings = get_settings()
     sector_cache = DynamoSectorCache(settings.dynamodb_sector_cache_table)
     benzinga = BenzingaClient()
@@ -472,10 +469,7 @@ async def build_swing_composite_response(
                     confirming_labels=confirming_labs,
                     conflicting_labels=conflicting_labs,
                 )
-                # Swing composite intentionally does not auto-log to model portfolio.
-                # The current portfolio uses intraday resolution (30-min stop checks, 9:35 AM
-                # reversal). Swing positions require daily-close evaluation with ATR-based stops.
-                # A dedicated swing track record will be built as a separate feature.
+                # Swing rows feed SignalHistory for validation / audit (see Signal validation ledger UI).
                 record = SignalRecord(
                     signal_id=str(uuid4()),
                     symbol=sym,
@@ -529,7 +523,6 @@ def swing_composite_body_sync(
     user_id: str | None,
     user_email: str | None = None,
     params: SignalParameters | None = None,
-    enable_portfolio_log: bool = False,
 ) -> dict[str, Any]:
     p = params or ParameterStore.get_parameters_sync()
     return asyncio.run(
@@ -538,6 +531,5 @@ def swing_composite_body_sync(
             user_id=user_id,
             user_email=user_email,
             params=p,
-            enable_portfolio_log=enable_portfolio_log,
         )
     )
