@@ -184,7 +184,7 @@ export function SignalValidationPageClient() {
           background: colors.surface
         }}
       >
-        <h2 style={{ margin: `0 0 ${spacing[3]}px`, fontSize: typography.scale.md, color: colors.text }}>
+        <h2 style={{ margin: `0 0 ${spacing[3]}px`, fontSize: typography.scale.lg, color: colors.text }}>
           {tab === "swing" ? "Swing track" : "Day track"}
         </h2>
         <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.55 }}>

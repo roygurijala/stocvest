@@ -7,6 +7,7 @@ import {
   BookOpen,
   Bookmark,
   Briefcase,
+  ClipboardList,
   Layers,
   LayoutDashboard,
   LogOut,
