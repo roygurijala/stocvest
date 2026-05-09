@@ -387,7 +387,6 @@ export function JournalPageClient({ initialEntries, initialAnalytics, connectedB
                                 href={
                                   entry.signal_id
                                     ? `/dashboard/signals?${new URLSearchParams({
-                                        symbol: entry.symbol.trim().toUpperCase(),
                                         signal_id: entry.signal_id,
                                         ref: "journal"
                                       }).toString()}`
@@ -408,7 +407,6 @@ export function JournalPageClient({ initialEntries, initialAnalytics, connectedB
                                 href={
                                   entry.signal_id
                                     ? `/dashboard/signals?${new URLSearchParams({
-                                        symbol: entry.symbol.trim().toUpperCase(),
                                         signal_id: entry.signal_id,
                                         ref: "journal"
                                       }).toString()}`

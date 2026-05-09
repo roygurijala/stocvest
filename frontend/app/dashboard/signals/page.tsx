@@ -6,12 +6,30 @@ import { fetchPdtStatus } from "@/lib/api/pdt";
 import { fetchScannerOverview } from "@/lib/api/scanner";
 import { fetchEarningsCalendar } from "@/lib/api/earnings";
 import { getServerSession } from "@/lib/auth/session";
+import { stocvestAuthedFetch } from "@/lib/bff/stocvest-authed";
 
 const CONTEXTUAL_SIGNALS_REFS = new Set(["scanner", "watchlist", "validation", "journal"]);
 
 function firstParam(v: string | string[] | undefined): string | undefined {
   if (v == null) return undefined;
   return Array.isArray(v) ? v[0] : v;
+}
+
+function normalizePrefillTicker(sym: string): string | null {
+  const u = sym.trim().toUpperCase();
+  return u && /^[A-Z]{1,6}$/.test(u) ? u : null;
+}
+
+/** Resolve ticker from user's evaluated signal (journal deep-links may omit `symbol`). */
+async function symbolFromJournalSignalId(signalId: string): Promise<string | null> {
+  const id = encodeURIComponent(signalId.trim());
+  if (!id) return null;
+  const res = await stocvestAuthedFetch(`/v1/signals/me/records/${id}`, { method: "GET" });
+  if (!res.ok) return null;
+  const body = (await res.json().catch(() => null)) as { symbol?: unknown } | null;
+  if (!body || typeof body !== "object") return null;
+  const sym = body.symbol;
+  return typeof sym === "string" ? normalizePrefillTicker(sym) : null;
 }
 
 export default async function DashboardSignalsPage({
@@ -25,8 +43,13 @@ export default async function DashboardSignalsPage({
   }
   const refRaw = (firstParam(searchParams.ref) ?? "").trim().toLowerCase();
   const symRaw = (firstParam(searchParams.symbol) ?? "").trim().toUpperCase();
-  const urlSymbol =
-    symRaw && CONTEXTUAL_SIGNALS_REFS.has(refRaw) && /^[A-Z]{1,6}$/.test(symRaw) ? symRaw : null;
+  let urlSymbol =
+    symRaw && CONTEXTUAL_SIGNALS_REFS.has(refRaw) ? normalizePrefillTicker(symRaw) : null;
+
+  const signalIdRaw = (firstParam(searchParams.signal_id) ?? "").trim();
+  if (!urlSymbol && refRaw === "journal" && signalIdRaw) {
+    urlSymbol = await symbolFromJournalSignalId(signalIdRaw);
+  }
 
   const [pdtStatus, marketOverview, scannerOverview] = await Promise.all([
     fetchPdtStatus().catch(() => null),
