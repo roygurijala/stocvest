@@ -46,6 +46,14 @@ def test_signal_recorded_on_composite_generation(monkeypatch: pytest.MonkeyPatch
     get_settings.cache_clear()
     mem = InMemorySignalRecorder()
     monkeypatch.setattr("stocvest.api.handlers.signals.get_signal_recorder", lambda: mem)
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.evaluate_swing_ledger_entry",
+        lambda **kwargs: (True, {}),
+    )
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.is_swing_ledger_entry_window_et",
+        lambda _dt: True,
+    )
 
     import json
 

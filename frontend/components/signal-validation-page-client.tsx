@@ -1,12 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { fetchUserEvaluatedSignals, type PublicSignal } from "@/lib/api/public-signals";
+import {
+  fetchUserSignalHistoryPage,
+  type PublicSignal,
+  type UserSignalHistoryPageSize
+} from "@/lib/api/public-signals";
 import { CuteLoader } from "@/components/cute-loader";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
 type LedgerTab = "swing" | "day";
+
+const PAGE_SIZE_OPTIONS: UserSignalHistoryPageSize[] = [25, 50, 75, 100];
 
 function formatEtLine(iso: string): string {
   try {
@@ -109,21 +115,54 @@ function ledgerMetrics(rows: PublicSignal[], tab: LedgerTab) {
 export function SignalValidationPageClient() {
   const { colors } = useTheme();
   const [tab, setTab] = useState<LedgerTab>("swing");
+  const [pageSize, setPageSize] = useState<UserSignalHistoryPageSize>(25);
   const [rows, setRows] = useState<PublicSignal[] | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
-  const load = useCallback(async (t: LedgerTab) => {
+  const loadFirstPage = useCallback(async (t: LedgerTab, ps: UserSignalHistoryPageSize) => {
     setLoading(true);
-    const data = await fetchUserEvaluatedSignals({ mode: t, days: 120, limit: 500 });
-    setRows(data);
+    const page = await fetchUserSignalHistoryPage({
+      mode: t,
+      days: 120,
+      pageSize: ps,
+      ledgerOnly: true
+    });
+    if (page === null) {
+      setRows(null);
+      setNextCursor(null);
+    } else {
+      setRows(page.items);
+      setNextCursor(page.next_cursor);
+    }
     setLoading(false);
   }, []);
 
   useEffect(() => {
-    void load(tab);
-  }, [tab, load]);
+    void loadFirstPage(tab, pageSize);
+  }, [tab, pageSize, loadFirstPage]);
 
-  const metrics = useMemo(() => (rows ? ledgerMetrics(rows, tab) : null), [rows, tab]);
+  const loadMore = useCallback(async () => {
+    if (nextCursor == null || loadingMore || rows == null) {
+      return;
+    }
+    setLoadingMore(true);
+    const page = await fetchUserSignalHistoryPage({
+      mode: tab,
+      days: 120,
+      pageSize,
+      cursor: nextCursor,
+      ledgerOnly: true
+    });
+    if (page != null) {
+      setRows((prev) => (prev == null ? page.items : [...prev, ...page.items]));
+      setNextCursor(page.next_cursor);
+    }
+    setLoadingMore(false);
+  }, [nextCursor, loadingMore, rows, tab, pageSize]);
+
+  const metrics = useMemo(() => (rows != null ? ledgerMetrics(rows, tab) : null), [rows, tab]);
 
   const tabBtn = (id: LedgerTab, label: string) => {
     const on = tab === id;
@@ -169,9 +208,48 @@ export function SignalValidationPageClient() {
         </p>
       </header>
 
-      <div style={{ display: "flex", flexWrap: "wrap", gap: spacing[2], marginBottom: spacing[5] }}>
-        {tabBtn("swing", "Swing (multi-day)")}
-        {tabBtn("day", "Day (intraday)")}
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "center",
+          gap: spacing[3],
+          marginBottom: spacing[5]
+        }}
+      >
+        <div style={{ display: "flex", flexWrap: "wrap", gap: spacing[2] }}>
+          {tabBtn("swing", "Swing (multi-day)")}
+          {tabBtn("day", "Day (intraday)")}
+        </div>
+        <label
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: spacing[2],
+            fontSize: typography.scale.sm,
+            color: colors.textMuted
+          }}
+        >
+          Rows per page
+          <select
+            value={pageSize}
+            onChange={(e) => setPageSize(Number(e.target.value) as UserSignalHistoryPageSize)}
+            style={{
+              padding: `${spacing[1]}px ${spacing[2]}px`,
+              borderRadius: borderRadius.md,
+              border: `1px solid ${colors.border}`,
+              background: colors.surface,
+              color: colors.text,
+              fontSize: typography.scale.sm
+            }}
+          >
+            {PAGE_SIZE_OPTIONS.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <section
@@ -232,6 +310,9 @@ export function SignalValidationPageClient() {
                 </div>
               ))}
             </div>
+            <p style={{ margin: `${spacing[2]}px 0 0`, fontSize: typography.scale.xs, color: colors.textMuted }}>
+              Summary counts include every row loaded below; use &quot;Load more&quot; to extend the window.
+            </p>
           ) : null}
 
           <div style={{ overflowX: "auto" }}>
@@ -369,6 +450,28 @@ export function SignalValidationPageClient() {
                 </tbody>
               </table>
             )}
+            {nextCursor ? (
+              <div style={{ marginTop: spacing[4], display: "flex", justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  disabled={loadingMore}
+                  onClick={() => void loadMore()}
+                  style={{
+                    padding: `${spacing[2]}px ${spacing[4]}px`,
+                    borderRadius: borderRadius.md,
+                    border: `1px solid ${colors.border}`,
+                    background: colors.surface,
+                    color: colors.text,
+                    fontSize: typography.scale.sm,
+                    fontWeight: 600,
+                    cursor: loadingMore ? "wait" : "pointer",
+                    opacity: loadingMore ? 0.7 : 1
+                  }}
+                >
+                  {loadingMore ? "Loading…" : "Load more"}
+                </button>
+              </div>
+            ) : null}
           </div>
         </>
       )}

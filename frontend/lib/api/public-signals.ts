@@ -47,6 +47,26 @@ export interface PublicSignal {
   max_adverse_excursion_pct?: number | null;
   max_favorable_excursion_pct?: number | null;
   hold_duration_minutes?: number | null;
+  /** True when this row passed validation ledger entry gates at record time. */
+  ledger_qualified?: boolean;
+  /** False after a rule-based exit; true while the validation monitor still tracks the row. */
+  ledger_position_open?: boolean;
+  /** Audit vocabulary mapped from directional outcome at close. */
+  validation_outcome?: "favorable" | "unfavorable" | "neutral";
+  stop_level?: number | null;
+  reference_structure_level?: number | null;
+  regime_label_at_entry?: string | null;
+  sector_label_at_entry?: string | null;
+  vwap_state_at_entry?: string | null;
+  regime_window_key?: string | null;
+}
+
+export type UserSignalHistoryPageSize = 25 | 50 | 75 | 100;
+
+export interface UserSignalHistoryPage {
+  items: PublicSignal[];
+  next_cursor: string | null;
+  page_size: number;
 }
 
 /** When API adds per-pattern stats, map them here for the landing accuracy bars. */
@@ -176,7 +196,21 @@ function normalizePublicSignal(raw: Record<string, unknown>): PublicSignal | nul
     exit_rule: _optStr(raw.exit_rule),
     max_adverse_excursion_pct: _numOrNull(mae),
     max_favorable_excursion_pct: _numOrNull(mfe),
-    hold_duration_minutes: _intOrUndef(holdMin)
+    hold_duration_minutes: _intOrUndef(holdMin),
+    ledger_qualified: typeof raw.ledger_qualified === "boolean" ? raw.ledger_qualified : undefined,
+    ledger_position_open: typeof raw.ledger_position_open === "boolean" ? raw.ledger_position_open : undefined,
+    validation_outcome:
+      raw.validation_outcome === "favorable" ||
+      raw.validation_outcome === "unfavorable" ||
+      raw.validation_outcome === "neutral"
+        ? raw.validation_outcome
+        : undefined,
+    stop_level: _numOrNull(raw.stop_level),
+    reference_structure_level: _numOrNull(raw.reference_structure_level),
+    regime_label_at_entry: _optStr(raw.regime_label_at_entry),
+    sector_label_at_entry: _optStr(raw.sector_label_at_entry),
+    vwap_state_at_entry: _optStr(raw.vwap_state_at_entry),
+    regime_window_key: _optStr(raw.regime_window_key)
   };
 }
 
@@ -200,18 +234,56 @@ function _optStr(v: unknown): string | null | undefined {
   return t || undefined;
 }
 
-/** Authenticated user's evaluated signals (platform + user-scoped rows for that account). Returns null if not signed in. */
-export async function fetchUserEvaluatedSignals(params?: {
+function _parseUserHistoryPayload(data: unknown): UserSignalHistoryPage | null {
+  if (typeof data !== "object" || data === null) {
+    return null;
+  }
+  const o = data as Record<string, unknown>;
+  const itemsRaw = o.items;
+  if (!Array.isArray(itemsRaw)) {
+    return null;
+  }
+  const items = itemsRaw
+    .map((x) => (typeof x === "object" && x !== null ? normalizePublicSignal(x as Record<string, unknown>) : null))
+    .filter((x): x is PublicSignal => x !== null);
+  const next = o.next_cursor;
+  const next_cursor =
+    next === null || typeof next === "undefined" ? null : typeof next === "string" ? next : null;
+  const ps = o.page_size;
+  const page_size = typeof ps === "number" && Number.isFinite(ps) ? ps : 25;
+  return { items, next_cursor, page_size };
+}
+
+/**
+ * One page of authenticated user signal history. Default page size on the API is 25;
+ * allowed sizes are 25, 50, 75, 100.
+ */
+export async function fetchUserSignalHistoryPage(params?: {
   days?: number;
-  limit?: number;
+  pageSize?: UserSignalHistoryPageSize;
+  cursor?: string | null;
   symbol?: string;
   mode?: "day" | "swing";
-}): Promise<PublicSignal[] | null> {
+  ledgerOnly?: boolean;
+}): Promise<UserSignalHistoryPage | null> {
   const qs = new URLSearchParams();
-  if (params?.days != null) qs.set("days", String(params.days));
-  if (params?.limit != null) qs.set("limit", String(params.limit));
-  if (params?.symbol?.trim()) qs.set("symbol", params.symbol.trim().toUpperCase());
-  if (params?.mode === "day" || params?.mode === "swing") qs.set("mode", params.mode);
+  if (params?.days != null) {
+    qs.set("days", String(params.days));
+  }
+  const ps: UserSignalHistoryPageSize = params?.pageSize ?? 25;
+  qs.set("page_size", String(ps));
+  if (params?.cursor) {
+    qs.set("cursor", params.cursor);
+  }
+  if (params?.symbol?.trim()) {
+    qs.set("symbol", params.symbol.trim().toUpperCase());
+  }
+  if (params?.mode === "day" || params?.mode === "swing") {
+    qs.set("mode", params.mode);
+  }
+  if (params?.ledgerOnly) {
+    qs.set("ledger_only", "true");
+  }
   const suffix = qs.toString() ? `?${qs.toString()}` : "";
   try {
     const response = await fetch(`/api/stocvest/signals/me/history${suffix}`, {
@@ -223,18 +295,48 @@ export async function fetchUserEvaluatedSignals(params?: {
       return null;
     }
     if (!response.ok) {
-      return [];
+      return { items: [], next_cursor: null, page_size: ps };
     }
     const data = (await response.json()) as unknown;
-    if (!Array.isArray(data)) {
-      return [];
+    if (Array.isArray(data)) {
+      const items = data
+        .map((x) => (typeof x === "object" && x !== null ? normalizePublicSignal(x as Record<string, unknown>) : null))
+        .filter((x): x is PublicSignal => x !== null);
+      return { items, next_cursor: null, page_size: items.length };
     }
-    return data
-      .map((x) => (typeof x === "object" && x !== null ? normalizePublicSignal(x as Record<string, unknown>) : null))
-      .filter((x): x is PublicSignal => x !== null);
+    return _parseUserHistoryPayload(data) ?? { items: [], next_cursor: null, page_size: ps };
   } catch {
-    return [];
+    return { items: [], next_cursor: null, page_size: ps };
   }
+}
+
+/** Aggregates multiple pages (up to 12 × 100 rows) for tabs that need a full list. */
+export async function fetchUserEvaluatedSignals(params?: {
+  days?: number;
+  symbol?: string;
+  mode?: "day" | "swing";
+  ledgerOnly?: boolean;
+}): Promise<PublicSignal[] | null> {
+  const all: PublicSignal[] = [];
+  let cursor: string | undefined;
+  const pageSize: UserSignalHistoryPageSize = 100;
+  for (let i = 0; i < 12; i++) {
+    const page = await fetchUserSignalHistoryPage({
+      ...params,
+      pageSize,
+      cursor,
+      ledgerOnly: params?.ledgerOnly
+    });
+    if (page === null) {
+      return all.length ? all : null;
+    }
+    all.push(...page.items);
+    if (!page.next_cursor) {
+      break;
+    }
+    cursor = page.next_cursor;
+  }
+  return all;
 }
 
 export async function fetchLiveSignals(): Promise<PublicSignal[]> {

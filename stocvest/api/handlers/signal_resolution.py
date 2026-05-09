@@ -7,6 +7,7 @@ import json
 from typing import Any
 
 from stocvest.api.response import ok
+from stocvest.api.services.ledger_position_monitor import run_ledger_position_monitor
 from stocvest.api.services.signal_recorder import get_signal_recorder
 from stocvest.api.types import LambdaContext, LambdaEvent
 from stocvest.data.polygon_client import PolygonClient
@@ -35,20 +36,34 @@ def signal_resolution_scheduled_handler(event: LambdaEvent, context: LambdaConte
         settings = get_settings()
         rec = get_signal_recorder()
         async with PolygonClient(api_key=settings.polygon_api_key) as client:
+            ledger_counts = await run_ledger_position_monitor(client, rec)
             resolved_1h = await rec.resolve_signals(60, client, horizon="1h")
             resolved_24h = await rec.resolve_signals(1440, client, horizon="1d")
-        return {"resolved_1h": resolved_1h, "resolved_24h": resolved_24h}
+        out = {"resolved_1h": resolved_1h, "resolved_24h": resolved_24h, **ledger_counts}
+        return out
 
     try:
         result = asyncio.run(_run())
         n1h = int(result["resolved_1h"])
         n24h = int(result["resolved_24h"])
-        _LOG.info("Resolved: %s (1h), %s (24h)", n1h, n24h)
+        _LOG.info(
+            "Ledger monitor: swing=%s day=%s skipped=%s errors=%s; Resolved: %s (1h), %s (24h)",
+            result.get("swing_closed", 0),
+            result.get("day_closed", 0),
+            result.get("skipped", 0),
+            result.get("errors", 0),
+            n1h,
+            n24h,
+        )
         payload = {
             "resolved_1h": n1h,
             "resolved_24h": n24h,
             "updated_1h": n1h,
             "updated_1d": n24h,
+            "ledger_swing_closed": int(result.get("swing_closed", 0)),
+            "ledger_day_closed": int(result.get("day_closed", 0)),
+            "ledger_monitor_skipped": int(result.get("skipped", 0)),
+            "ledger_monitor_errors": int(result.get("errors", 0)),
         }
         return ok(payload)
     except Exception as exc:

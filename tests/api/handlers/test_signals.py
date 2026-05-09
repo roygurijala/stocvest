@@ -668,9 +668,99 @@ def test_user_signal_history_returns_rows(monkeypatch: pytest.MonkeyPatch) -> No
     }
     resp = user_signal_history_handler(event, {})
     assert resp["statusCode"] == 200
-    rows = json.loads(resp["body"])
+    body = json.loads(resp["body"])
+    rows = body["items"]
+    assert body["page_size"] == 25
+    assert body.get("next_cursor") is None
     assert len(rows) == 1
     assert rows[0]["symbol"] == "XOM"
+
+
+def test_user_signal_history_ledger_only_filters(monkeypatch: pytest.MonkeyPatch) -> None:
+    reset_signal_recorder_for_tests()
+    mem = InMemorySignalRecorder()
+    monkeypatch.setattr("stocvest.api.handlers.signals.get_signal_recorder", lambda: mem)
+    now = datetime.now(timezone.utc)
+    mem.record_signal(
+        SignalRecord(
+            signal_id="lq1",
+            symbol="AAPL",
+            direction="neutral",
+            signal_strength=50,
+            pattern="p",
+            layer_scores={},
+            price_at_signal=1.0,
+            generated_at=now,
+            user_id="u1",
+            ledger_qualified=True,
+        )
+    )
+    mem.record_signal(
+        SignalRecord(
+            signal_id="lq0",
+            symbol="MSFT",
+            direction="neutral",
+            signal_strength=50,
+            pattern="p",
+            layer_scores={},
+            price_at_signal=2.0,
+            generated_at=now,
+            user_id="u1",
+            ledger_qualified=False,
+        )
+    )
+    event = {
+        "requestContext": {
+            "http": {"method": "GET", "path": "/v1/signals/me/history"},
+            "authorizer": {"claims": {"sub": "u1"}},
+        },
+        "queryStringParameters": {"ledger_only": "true"},
+    }
+    body = json.loads(user_signal_history_handler(event, {})["body"])
+    assert len(body["items"]) == 1
+    assert body["items"][0]["symbol"] == "AAPL"
+
+
+def test_user_signal_history_page_size_and_cursor(monkeypatch: pytest.MonkeyPatch) -> None:
+    reset_signal_recorder_for_tests()
+    mem = InMemorySignalRecorder()
+    monkeypatch.setattr("stocvest.api.handlers.signals.get_signal_recorder", lambda: mem)
+    base = datetime.now(timezone.utc)
+    for i in range(30):
+        mem.record_signal(
+            SignalRecord(
+                signal_id=f"p{i}",
+                symbol="XOM",
+                direction="neutral",
+                signal_strength=50,
+                pattern="p",
+                layer_scores={},
+                price_at_signal=float(i),
+                generated_at=base - timedelta(seconds=i),
+                user_id="u2",
+            )
+        )
+    event1 = {
+        "requestContext": {
+            "http": {"method": "GET", "path": "/v1/signals/me/history"},
+            "authorizer": {"claims": {"sub": "u2"}},
+        },
+        "queryStringParameters": {"page_size": "25"},
+    }
+    r1 = json.loads(user_signal_history_handler(event1, {})["body"])
+    assert r1["page_size"] == 25
+    assert len(r1["items"]) == 25
+    assert r1["next_cursor"]
+    event2 = {
+        "requestContext": {
+            "http": {"method": "GET", "path": "/v1/signals/me/history"},
+            "authorizer": {"claims": {"sub": "u2"}},
+        },
+        "queryStringParameters": {"page_size": "25", "cursor": r1["next_cursor"]},
+    }
+    r2 = json.loads(user_signal_history_handler(event2, {})["body"])
+    assert len(r2["items"]) == 5
+    assert r2.get("next_cursor") is None
 
 
 def _bar_payload(ts: datetime, *, close: float, volume: float) -> dict[str, object]:

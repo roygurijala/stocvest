@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from stocvest.api.services.signal_validation_eligibility import MIN_RISK_REWARD_DAY, MIN_RISK_REWARD_SWING
 from stocvest.signals.composite_score import CompositeSignal, CompositeVerdict
 from stocvest.signals.vwap_state import VWAP_STATE_TOOLTIP, VWAPState, build_vwap_chip, resolve_vwap_state
 
@@ -388,8 +389,10 @@ def build_swing_composite_evidence_fields(
     else:
         risk_reward = _synthetic_rr_from_composite(composite)
 
-    rr_warning = risk_reward < 2.0
-    if risk_reward < 2.0:
+    mode = str(payload.get("mode") or "swing").strip().lower()
+    min_rr = MIN_RISK_REWARD_DAY if mode == "day" else MIN_RISK_REWARD_SWING
+    rr_warning = risk_reward < min_rr
+    if risk_reward < min_rr:
         rr_quality = "low"
     elif risk_reward < 3.0:
         rr_quality = "acceptable"
@@ -474,7 +477,7 @@ def build_swing_composite_evidence_fields(
             {
                 "label": "Low Risk/Reward",
                 "severity": "high",
-                "detail": f"R/R {risk_reward:.1f}:1 is below minimum 2:1 threshold",
+                "detail": f"R/R {risk_reward:.1f}:1 is below minimum {min_rr:.1f}:1 threshold",
             }
         )
     alignment_ratio = float(composite.alignment_ratio)

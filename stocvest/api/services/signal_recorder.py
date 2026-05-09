@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -20,6 +21,23 @@ log = get_logger(__name__)
 NEUTRAL_MOVE_PCT = 0.1
 GSI_NAME = "scope_generated_at"
 _ET = ZoneInfo("America/New_York")
+
+_MAX_HISTORY_QUERY_ROUNDS = 12
+
+
+def _encode_history_cursor(state: dict[str, Any]) -> str:
+    return base64.urlsafe_b64encode(json.dumps(state, default=str, separators=(",", ":")).encode("utf-8")).decode("ascii")
+
+
+def _decode_history_cursor(token: str | None) -> dict[str, Any] | None:
+    if not token or not str(token).strip():
+        return None
+    try:
+        raw = base64.urlsafe_b64decode(str(token).strip().encode("ascii"))
+        d = json.loads(raw.decode("utf-8"))
+        return d if isinstance(d, dict) else None
+    except (ValueError, json.JSONDecodeError, UnicodeDecodeError):
+        return None
 
 
 def _et_today() -> date:
@@ -104,6 +122,7 @@ def _record_to_item(rec: SignalRecord) -> dict[str, Any]:
     if rec.status != "active":
         item["status"] = rec.status
     item["mode"] = rec.mode
+    item["ledger_qualified"] = bool(rec.ledger_qualified)
     if rec.closed_at is not None:
         item["closed_at"] = rec.closed_at.astimezone(timezone.utc).isoformat()
     if rec.ledger_entry_date_et:
@@ -132,11 +151,52 @@ def _record_to_item(rec: SignalRecord) -> dict[str, Any]:
         item["max_favorable_excursion_pct"] = Decimal(str(rec.max_favorable_excursion_pct))
     if rec.hold_duration_minutes is not None:
         item["hold_duration_minutes"] = int(rec.hold_duration_minutes)
+    if rec.stop_level is not None:
+        item["stop_level"] = Decimal(str(rec.stop_level))
+    if rec.reference_structure_level is not None:
+        item["reference_structure_level"] = Decimal(str(rec.reference_structure_level))
+    if rec.regime_label_at_entry:
+        item["regime_label_at_entry"] = rec.regime_label_at_entry
+    if rec.sector_label_at_entry:
+        item["sector_label_at_entry"] = rec.sector_label_at_entry
+    if rec.vwap_state_at_entry:
+        item["vwap_state_at_entry"] = rec.vwap_state_at_entry
+    if rec.regime_window_key:
+        item["regime_window_key"] = rec.regime_window_key
+    if rec.ledger_position_open is not None:
+        item["ledger_position_open"] = bool(rec.ledger_position_open)
+    if rec.validation_outcome:
+        item["validation_outcome"] = rec.validation_outcome
     return item
 
 
 def _item_to_record(item: dict[str, Any]) -> SignalRecord:
     return SignalRecord.from_dynamo_item(item)
+
+
+def _item_ledger_validation_still_open(it: dict[str, Any]) -> bool:
+    """Whether this row is a user validation ledger position waiting for rule-based closure."""
+    lq = it.get("ledger_qualified")
+    ledger_ok = lq is True or lq == 1 or (isinstance(lq, Decimal) and int(lq) == 1) or str(lq).lower() == "true"
+    if not ledger_ok or not it.get("user_id"):
+        return False
+    if it.get("closed_at"):
+        return False
+    lpo = it.get("ledger_position_open")
+    if lpo is None:
+        return True
+    if lpo is False or str(lpo).lower() == "false" or (isinstance(lpo, Decimal) and int(lpo) == 0):
+        return False
+    return True
+
+
+def _validation_label_from_directional_outcome(outcome: str) -> str:
+    o = str(outcome or "").strip().lower()
+    if o == "correct":
+        return "favorable"
+    if o == "incorrect":
+        return "unfavorable"
+    return "neutral"
 
 
 @runtime_checkable
@@ -178,14 +238,43 @@ class InMemorySignalRecorder:
         days: int = 30,
         limit: int = 100,
         mode: str | None = None,
+        ledger_qualified_only: bool = False,
     ) -> list[SignalRecord]:
+        rows, _ = self.get_user_signal_history_page(
+            user_id=user_id,
+            symbol=symbol,
+            days=days,
+            page_size=limit,
+            mode=mode,
+            ledger_qualified_only=ledger_qualified_only,
+            cursor=None,
+        )
+        return rows[:limit]
+
+    def get_user_signal_history_page(
+        self,
+        *,
+        user_id: str | None,
+        symbol: str | None = None,
+        days: int = 30,
+        page_size: int = 25,
+        mode: str | None = None,
+        ledger_qualified_only: bool = True,
+        cursor: str | None = None,
+    ) -> tuple[list[SignalRecord], str | None]:
         cutoff = datetime.now(timezone.utc) - timedelta(days=max(1, days))
         sym_filter = symbol.strip().upper() if symbol else None
         mode_filter = mode.strip().lower() if mode else None
         if mode_filter not in (None, "", "day", "swing"):
             mode_filter = None
         scope = _scope_key(user_id)
-        out: list[SignalRecord] = []
+        skip = 0
+        if cursor and cursor.startswith("mem:"):
+            try:
+                skip = max(0, int(cursor[4:]))
+            except ValueError:
+                skip = 0
+        out_all: list[SignalRecord] = []
         for it in self._items.values():
             if it.get("scope_key") != scope:
                 continue
@@ -196,9 +285,13 @@ class InMemorySignalRecorder:
                 continue
             if mode_filter and rec.mode != mode_filter:
                 continue
-            out.append(rec)
-        out.sort(key=lambda r: r.generated_at, reverse=True)
-        return out[:limit]
+            if ledger_qualified_only and not rec.ledger_qualified:
+                continue
+            out_all.append(rec)
+        out_all.sort(key=lambda r: r.generated_at, reverse=True)
+        page = out_all[skip : skip + page_size]
+        next_cur = f"mem:{skip + page_size}" if skip + page_size < len(out_all) else None
+        return page, next_cur
 
     def iter_public_records(self) -> list[SignalRecord]:
         return [
@@ -231,6 +324,8 @@ class InMemorySignalRecorder:
         outcome_attr = "outcome_1h" if horizon == "1h" else "outcome_1d"
         updated = 0
         for sid, it in list(self._items.items()):
+            if _item_ledger_validation_still_open(it):
+                continue
             if it.get(resolved_attr):
                 continue
             gen = datetime.fromisoformat(str(it["generated_at"]).replace("Z", "+00:00"))
@@ -251,6 +346,77 @@ class InMemorySignalRecorder:
             self._items[sid] = it
             updated += 1
         return updated
+
+    def has_open_validation_position(self, user_id: str, symbol: str, mode: str) -> bool:
+        scope = _scope_key(user_id.strip())
+        sym_u = symbol.strip().upper()
+        m = mode.strip().lower()
+        if m not in ("day", "swing"):
+            return False
+        for it in self._items.values():
+            if it.get("scope_key") != scope:
+                continue
+            if str(it.get("symbol") or "").upper() != sym_u:
+                continue
+            if str(it.get("mode") or "day") != m:
+                continue
+            if _item_ledger_validation_still_open(it):
+                return True
+        return False
+
+    def close_validation_position(
+        self,
+        *,
+        signal_id: str,
+        exit_price: float,
+        exit_rule: str,
+        exit_reason: str,
+        mode: str,
+        now: datetime,
+        market_regime_exit: str | None = None,
+    ) -> bool:
+        sid = signal_id.strip()
+        it = self._items.get(sid)
+        if not isinstance(it, dict):
+            return False
+        if it.get("closed_at"):
+            return False
+        if not _item_ledger_validation_still_open(it):
+            return False
+        gen = datetime.fromisoformat(str(it["generated_at"]).replace("Z", "+00:00"))
+        if gen.tzinfo is None:
+            gen = gen.replace(tzinfo=timezone.utc)
+        direction = str(it["direction"])
+        outcome = outcome_from_prices(direction, float(it["price_at_signal"]), float(exit_price))
+        val = _validation_label_from_directional_outcome(outcome)
+        mo = mode.strip().lower()
+        if mo == "swing":
+            it["price_1d_after"] = Decimal(str(float(exit_price)))
+            it["resolved_1d"] = True
+            it["outcome_1d"] = outcome
+        else:
+            it["price_1h_after"] = Decimal(str(float(exit_price)))
+            it["resolved_1h"] = True
+            it["outcome_1h"] = outcome
+        it["closed_at"] = now.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        it["ledger_position_open"] = False
+        it["exit_rule"] = exit_rule
+        it["exit_reason"] = exit_reason
+        it["ledger_exit_date_et"] = now.astimezone(_ET).date().isoformat()
+        it["hold_duration_minutes"] = int((now - gen).total_seconds() // 60)
+        it["decision_state_exit"] = "rule_based_exit"
+        it["validation_outcome"] = val
+        if market_regime_exit:
+            it["market_regime_exit"] = market_regime_exit
+        self._items[sid] = it
+        return True
+
+    def iter_open_validation_records(self) -> list[SignalRecord]:
+        return [
+            _item_to_record(it)
+            for it in self._items.values()
+            if isinstance(it, dict) and _item_ledger_validation_still_open(it)
+        ]
 
 
 class DynamoDBSignalRecorder:
@@ -335,42 +501,100 @@ class DynamoDBSignalRecorder:
         days: int = 30,
         limit: int = 100,
         mode: str | None = None,
+        ledger_qualified_only: bool = False,
     ) -> list[SignalRecord]:
+        rows, _ = self.get_user_signal_history_page(
+            user_id=user_id,
+            symbol=symbol,
+            days=days,
+            page_size=limit,
+            mode=mode,
+            ledger_qualified_only=ledger_qualified_only,
+            cursor=None,
+        )
+        return rows[:limit]
+
+    def get_user_signal_history_page(
+        self,
+        *,
+        user_id: str | None,
+        symbol: str | None = None,
+        days: int = 30,
+        page_size: int = 25,
+        mode: str | None = None,
+        ledger_qualified_only: bool = True,
+        cursor: str | None = None,
+    ) -> tuple[list[SignalRecord], str | None]:
+        from boto3.dynamodb.conditions import Key
+
         scope = _scope_key(user_id)
         mode_filter = mode.strip().lower() if mode else None
         if mode_filter not in (None, "", "day", "swing"):
             mode_filter = None
-        try:
-            from boto3.dynamodb.conditions import Key
-
-            resp = self._table.query(
-                IndexName=GSI_NAME,
-                KeyConditionExpression=Key("scope_key").eq(scope),
-                ScanIndexForward=False,
-                Limit=min(500, max(limit, 1) * 5),
-            )
-        except ClientError as exc:
-            code = str((exc.response or {}).get("Error", {}).get("Code", ""))
-            if code in {"ResourceNotFoundException", "ValidationException"}:
-                return []
-            raise
-        cutoff = datetime.now(timezone.utc) - timedelta(days=max(1, days))
         sym_filter = symbol.strip().upper() if symbol else None
-        out: list[SignalRecord] = []
-        for raw in resp.get("Items") or []:
-            if not isinstance(raw, dict):
-                continue
-            rec = _item_to_record(raw)
-            if rec.generated_at < cutoff:
-                continue
-            if sym_filter and rec.symbol.upper() != sym_filter:
-                continue
-            if mode_filter and rec.mode != mode_filter:
-                continue
-            out.append(rec)
-            if len(out) >= limit:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=max(1, days))
+        cutoff_iso = cutoff.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+        st = _decode_history_cursor(cursor) or {}
+        batch_start_key: dict[str, Any] | None = st.get("start_key")
+        if batch_start_key is not None and not isinstance(batch_start_key, dict):
+            batch_start_key = None
+        try:
+            skip = max(0, int(st.get("skip", 0)))
+        except (TypeError, ValueError):
+            skip = 0
+
+        collected: list[SignalRecord] = []
+        rounds = 0
+        start_key_for_batch: dict[str, Any] | None = batch_start_key
+
+        while len(collected) < page_size and rounds < _MAX_HISTORY_QUERY_ROUNDS:
+            rounds += 1
+            qkwargs: dict[str, Any] = {
+                "IndexName": GSI_NAME,
+                "KeyConditionExpression": Key("scope_key").eq(scope) & Key("generated_at").gte(cutoff_iso),
+                "ScanIndexForward": False,
+                "Limit": max(page_size * 3, 40),
+            }
+            if start_key_for_batch:
+                qkwargs["ExclusiveStartKey"] = start_key_for_batch
+            try:
+                resp = self._table.query(**qkwargs)
+            except ClientError as exc:
+                code = str((exc.response or {}).get("Error", {}).get("Code", ""))
+                if code in {"ResourceNotFoundException", "ValidationException"}:
+                    return [], None
+                raise
+            items = [x for x in (resp.get("Items") or []) if isinstance(x, dict)]
+            dynamo_next = resp.get("LastEvaluatedKey")
+            query_start = start_key_for_batch
+
+            i = skip
+            skip = 0
+            while i < len(items) and len(collected) < page_size:
+                raw = items[i]
+                i += 1
+                rec = _item_to_record(raw)
+                if sym_filter and rec.symbol.upper() != sym_filter:
+                    continue
+                if mode_filter and rec.mode != mode_filter:
+                    continue
+                if ledger_qualified_only and not rec.ledger_qualified:
+                    continue
+                collected.append(rec)
+
+            if len(collected) >= page_size:
+                if i < len(items):
+                    return collected[:page_size], _encode_history_cursor({"start_key": query_start, "skip": i})
+                if dynamo_next:
+                    return collected[:page_size], _encode_history_cursor({"start_key": dynamo_next, "skip": 0})
+                return collected[:page_size], None
+
+            if not dynamo_next:
                 break
-        return out
+            start_key_for_batch = dynamo_next
+
+        return collected, None
 
     def iter_public_records(self) -> list[SignalRecord]:
         return [
@@ -434,6 +658,8 @@ class DynamoDBSignalRecorder:
         for item in self._scan_all():
             if not item.get("signal_id"):
                 continue
+            if _item_ledger_validation_still_open(item):
+                continue
             if item.get(resolved_attr):
                 continue
             gen = datetime.fromisoformat(str(item["generated_at"]).replace("Z", "+00:00"))
@@ -448,28 +674,193 @@ class DynamoDBSignalRecorder:
             price_at = float(item["price_at_signal"])
             direction = str(item["direction"])
             outcome = outcome_from_prices(direction, price_at, float(price_after))
+            expr_parts = [
+                f"#{price_attr} = :p",
+                f"#{outcome_attr} = :o",
+                f"#{resolved_attr} = :r",
+            ]
+            names: dict[str, str] = {
+                f"#{price_attr}": price_attr,
+                f"#{outcome_attr}": outcome_attr,
+                f"#{resolved_attr}": resolved_attr,
+            }
+            vals: dict[str, Any] = {
+                ":p": Decimal(str(float(price_after))),
+                ":o": outcome,
+                ":r": True,
+            }
             try:
                 self._table.update_item(
                     Key={"signal_id": item["signal_id"]},
-                    UpdateExpression=(
-                        f"SET #{price_attr} = :p, #{outcome_attr} = :o, #{resolved_attr} = :r"
-                    ),
-                    ExpressionAttributeNames={
-                        f"#{price_attr}": price_attr,
-                        f"#{outcome_attr}": outcome_attr,
-                        f"#{resolved_attr}": resolved_attr,
-                    },
-                    ExpressionAttributeValues={
-                        ":p": Decimal(str(float(price_after))),
-                        ":o": outcome,
-                        ":r": True,
-                    },
+                    UpdateExpression="SET " + ", ".join(expr_parts),
+                    ExpressionAttributeNames=names,
+                    ExpressionAttributeValues=vals,
                 )
             except ClientError as exc:
                 log.warning("resolve update failed signal_id=%s: %s", item.get("signal_id"), exc)
                 continue
             updated += 1
         return updated
+
+    def has_open_validation_position(self, user_id: str, symbol: str, mode: str) -> bool:
+        from boto3.dynamodb.conditions import Attr, Key
+
+        scope = _scope_key(user_id.strip())
+        sym_u = symbol.strip().upper()
+        m = mode.strip().lower()
+        if m not in ("day", "swing"):
+            return False
+        cutoff_iso = (datetime.now(timezone.utc) - timedelta(days=400)).replace(microsecond=0).isoformat().replace(
+            "+00:00", "Z"
+        )
+        kwargs: dict[str, Any] = {
+            "IndexName": GSI_NAME,
+            "KeyConditionExpression": Key("scope_key").eq(scope) & Key("generated_at").gte(cutoff_iso),
+            "FilterExpression": Attr("ledger_qualified").eq(True)
+            & Attr("symbol").eq(sym_u)
+            & Attr("mode").eq(m)
+            & (Attr("ledger_position_open").not_exists() | Attr("ledger_position_open").eq(True))
+            & Attr("closed_at").not_exists(),
+            "Limit": 5,
+        }
+        try:
+            resp = self._table.query(**kwargs)
+        except ClientError as exc:
+            log.warning("has_open_validation_position query failed: %s", exc)
+            return False
+        items = resp.get("Items") or []
+        return len(items) > 0
+
+    def close_validation_position(
+        self,
+        *,
+        signal_id: str,
+        exit_price: float,
+        exit_rule: str,
+        exit_reason: str,
+        mode: str,
+        now: datetime,
+        market_regime_exit: str | None = None,
+    ) -> bool:
+        sid = signal_id.strip()
+        try:
+            raw = self._table.get_item(Key={"signal_id": sid}).get("Item")
+        except ClientError as exc:
+            log.warning("close_validation_position get_item failed: %s", exc)
+            return False
+        if not isinstance(raw, dict):
+            return False
+        gen = datetime.fromisoformat(str(raw["generated_at"]).replace("Z", "+00:00"))
+        if gen.tzinfo is None:
+            gen = gen.replace(tzinfo=timezone.utc)
+        direction = str(raw["direction"])
+        price_at = float(raw["price_at_signal"])
+        outcome = outcome_from_prices(direction, price_at, float(exit_price))
+        val = _validation_label_from_directional_outcome(outcome)
+        mo = mode.strip().lower()
+        names: dict[str, str] = {
+            "#ca": "closed_at",
+            "#lp": "ledger_position_open",
+            "#er": "exit_rule",
+            "#exr": "exit_reason",
+            "#ld": "ledger_exit_date_et",
+            "#hm": "hold_duration_minutes",
+            "#dse": "decision_state_exit",
+            "#vo": "validation_outcome",
+            "#p1h": "price_1h_after",
+            "#o1h": "outcome_1h",
+            "#r1h": "resolved_1h",
+            "#p1d": "price_1d_after",
+            "#o1d": "outcome_1d",
+            "#r1d": "resolved_1d",
+        }
+        vals: dict[str, Any] = {
+            ":ca": now.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+            ":lp": False,
+            ":er": exit_reason,
+            ":exr": exit_rule,
+            ":ld": now.astimezone(_ET).date().isoformat(),
+            ":hm": int((now - gen).total_seconds() // 60),
+            ":dse": "rule_based_exit",
+            ":vo": val,
+            ":p": Decimal(str(float(exit_price))),
+            ":o": outcome,
+            ":r": True,
+        }
+        if market_regime_exit:
+            names["#mre"] = "market_regime_exit"
+            vals[":mre"] = market_regime_exit
+        if mo == "swing":
+            set_parts = [
+                "#p1d = :p",
+                "#o1d = :o",
+                "#r1d = :r",
+                "#ca = :ca",
+                "#lp = :lp",
+                "#er = :er",
+                "#exr = :exr",
+                "#ld = :ld",
+                "#hm = :hm",
+                "#dse = :dse",
+                "#vo = :vo",
+            ]
+        else:
+            set_parts = [
+                "#p1h = :p",
+                "#o1h = :o",
+                "#r1h = :r",
+                "#ca = :ca",
+                "#lp = :lp",
+                "#er = :er",
+                "#exr = :exr",
+                "#ld = :ld",
+                "#hm = :hm",
+                "#dse = :dse",
+                "#vo = :vo",
+            ]
+        if market_regime_exit:
+            set_parts.append("#mre = :mre")
+        try:
+            self._table.update_item(
+                Key={"signal_id": sid},
+                UpdateExpression="SET " + ", ".join(set_parts),
+                ExpressionAttributeNames=names,
+                ExpressionAttributeValues=vals,
+                ConditionExpression="attribute_not_exists(#ca)",
+            )
+        except ClientError as exc:
+            code = str((exc.response or {}).get("Error", {}).get("Code", ""))
+            if code == "ConditionalCheckFailedException":
+                return False
+            log.warning("close_validation_position update failed: %s", exc)
+            return False
+        return True
+
+    def iter_open_validation_records(self) -> list[SignalRecord]:
+        """Scan (filtered) — suitable for moderate table sizes; consider a sparse GSI if this grows."""
+        from boto3.dynamodb.conditions import Attr
+
+        out: list[SignalRecord] = []
+        scan_kwargs: dict[str, Any] = {
+            "FilterExpression": Attr("ledger_qualified").eq(True)
+            & Attr("user_id").exists()
+            & Attr("closed_at").not_exists()
+            & (Attr("ledger_position_open").not_exists() | Attr("ledger_position_open").eq(True)),
+        }
+        while True:
+            try:
+                result = self._table.scan(**scan_kwargs)
+            except ClientError as exc:
+                log.warning("iter_open_validation_records scan failed: %s", exc)
+                break
+            for x in result.get("Items") or []:
+                if isinstance(x, dict):
+                    out.append(_item_to_record(x))
+            lek = result.get("LastEvaluatedKey")
+            if not lek:
+                break
+            scan_kwargs["ExclusiveStartKey"] = lek
+        return out
 
 
 def _tracked_outcome_summary(outcome_1d: str | None, outcome_1h: str | None) -> str:
@@ -517,6 +908,7 @@ def _public_api_shape(rec: SignalRecord) -> dict[str, Any]:
         "disclaimer": API_SIGNAL_DISCLAIMER,
         "status": rec.status,
         "mode": rec.mode,
+        "ledger_qualified": bool(rec.ledger_qualified),
     }
     if rec.closed_at is not None:
         out["closed_at"] = rec.closed_at.astimezone(timezone.utc).isoformat()
@@ -547,6 +939,25 @@ def _public_api_shape(rec: SignalRecord) -> dict[str, Any]:
         out["max_favorable_excursion_pct"] = float(rec.max_favorable_excursion_pct)
     if rec.hold_duration_minutes is not None:
         out["hold_duration_minutes"] = int(rec.hold_duration_minutes)
+    if rec.parameter_version:
+        out["parameter_version"] = rec.parameter_version
+        out["logic_version_id"] = rec.parameter_version
+    if rec.stop_level is not None:
+        out["stop_level"] = float(rec.stop_level)
+    if rec.reference_structure_level is not None:
+        out["reference_structure_level"] = float(rec.reference_structure_level)
+    if rec.regime_label_at_entry:
+        out["regime_label_at_entry"] = rec.regime_label_at_entry
+    if rec.sector_label_at_entry:
+        out["sector_label_at_entry"] = rec.sector_label_at_entry
+    if rec.vwap_state_at_entry:
+        out["vwap_state_at_entry"] = rec.vwap_state_at_entry
+    if rec.regime_window_key:
+        out["regime_window_key"] = rec.regime_window_key
+    if rec.ledger_position_open is not None:
+        out["ledger_position_open"] = bool(rec.ledger_position_open)
+    if rec.validation_outcome:
+        out["validation_outcome"] = rec.validation_outcome
     return out
 
 

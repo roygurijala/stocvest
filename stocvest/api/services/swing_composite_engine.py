@@ -24,6 +24,13 @@ from stocvest.api.services.real_composite_engine import (
 from stocvest.api.services.sector_cache_dynamo import DynamoSectorCache
 from stocvest.api.services.signal_snapshot_builders import build_real_composite_snapshot_payload
 from stocvest.api.services.signal_recorder import get_signal_recorder
+from stocvest.api.services.signal_validation_eligibility import (
+    derive_decision_state,
+    entry_rationale_from_gates,
+    evaluate_swing_ledger_entry,
+    gate_blob_json,
+)
+from stocvest.api.services.validation_timing import build_regime_window_key, is_swing_ledger_entry_window_et
 from stocvest.api.services.swing_composite_evidence import build_swing_composite_evidence_fields
 from stocvest.config.parameter_store import ParameterStore
 from stocvest.config.signal_parameters import SignalParameters
@@ -215,6 +222,7 @@ async def build_swing_composite_response(
         return {
             "symbol": sym,
             "status": "insufficient_data",
+            "decision_state": "blocked",
             "available_layers": len(available),
             "required_layers": min_layers,
             "message": _COMPOSITE_INSUFFICIENT_MESSAGE,
@@ -410,6 +418,7 @@ async def build_swing_composite_response(
     _sw_ipm, _sw_mob = vwap_session_flags_et(_sw_et)
     payload_stub: dict[str, Any] = {
         "symbol": sym,
+        "mode": "swing",
         "regime": regime,
         "sector_signal": sector.sector_signal,
         "news_catalyst": nc,
@@ -469,7 +478,50 @@ async def build_swing_composite_response(
                     confirming_labels=confirming_labs,
                     conflicting_labels=conflicting_labs,
                 )
-                # Swing rows feed SignalHistory for validation / audit (see Signal validation ledger UI).
+                rr_raw = response_body.get("risk_reward")
+                rr_f = float(rr_raw) if isinstance(rr_raw, (int, float)) else None
+                if rr_raw is not None and rr_f is None:
+                    try:
+                        rr_f = float(rr_raw)
+                    except (TypeError, ValueError):
+                        rr_f = None
+                eligible, gates = evaluate_swing_ledger_entry(
+                    response_status=str(response_body.get("status") or "active"),
+                    verdict=composite.verdict,
+                    composite_score=float(composite.score),
+                    alignment_ratio=float(composite.alignment_ratio),
+                    macro_market_regime=str(macro.market_regime or "neutral"),
+                    risk_reward=rr_f,
+                    layer_scores=layer_scores,
+                )
+                gen_at = datetime.now(timezone.utc)
+                if eligible:
+                    if not is_swing_ledger_entry_window_et(gen_at):
+                        eligible = False
+                        gates["entry_daily_close_window"] = {
+                            "pass": False,
+                            "need": "post_regular_close_window_et",
+                        }
+                    if eligible and user_id:
+                        if get_signal_recorder().has_open_validation_position(user_id, sym, "swing"):
+                            eligible = False
+                            gates["dedupe_open_position"] = {
+                                "pass": False,
+                                "reason": "one_open_validation_per_symbol_mode",
+                            }
+                ny_date = gen_at.astimezone(ZoneInfo("America/New_York")).date().isoformat()
+                rb = response_body
+                stop_lvl = rb.get("reference_stop_level")
+                ref_t1 = rb.get("reference_target_1")
+                try:
+                    stop_f = float(stop_lvl) if stop_lvl is not None else None
+                except (TypeError, ValueError):
+                    stop_f = None
+                try:
+                    ref_struct_f = float(ref_t1) if ref_t1 is not None else None
+                except (TypeError, ValueError):
+                    ref_struct_f = None
+                rwk = build_regime_window_key(str(macro.market_regime or "neutral"), gen_at)
                 record = SignalRecord(
                     signal_id=str(uuid4()),
                     symbol=sym,
@@ -478,7 +530,7 @@ async def build_swing_composite_response(
                     pattern=pattern,
                     layer_scores=layer_scores,
                     price_at_signal=price_at,
-                    generated_at=datetime.now(timezone.utc),
+                    generated_at=gen_at,
                     user_id=user_id,
                     parameter_version=params.version,
                     technical_snapshot_json=blobs.get("technical_snapshot_json"),
@@ -489,11 +541,28 @@ async def build_swing_composite_response(
                     layer_scores_json=blobs.get("layer_scores_json"),
                     status=str(response_body.get("status") or "active"),
                     mode="swing",
+                    ledger_qualified=eligible,
+                    gate_status_json=gate_blob_json(gates, qualified=eligible),
+                    entry_rationale=entry_rationale_from_gates(eligible, "swing"),
+                    decision_state_entry="actionable" if eligible else None,
+                    ledger_entry_date_et=ny_date if eligible else None,
+                    stop_level=stop_f,
+                    reference_structure_level=ref_struct_f,
+                    regime_label_at_entry=str(macro.market_regime or "neutral"),
+                    sector_label_at_entry=str(getattr(sector, "sector_signal", None) or sector.verdict or ""),
+                    vwap_state_at_entry=(
+                        str(rb.get("vwap_state") or getattr(tech, "vwap_state", None) or "").strip() or None
+                    ),
+                    regime_window_key=rwk,
+                    ledger_position_open=bool(eligible),
                 )
-                get_signal_recorder().record_signal(record)
+                if eligible:
+                    get_signal_recorder().record_signal(record)
+                else:
+                    _LOG.info("swing ledger row skipped (gates) symbol=%s", sym)
                 if record.status != "active":
                     return response_body
-                if user_id and user_email and direction_out:
+                if eligible and user_id and user_email and direction_out:
                     from stocvest.api.services.alert_tasks import run_alert_background
                     from stocvest.services.alert_trigger import get_alert_trigger
 
@@ -514,6 +583,10 @@ async def build_swing_composite_response(
             except Exception as exc:
                 _LOG.warning("swing record_signal skipped: %s", exc)
 
+    response_body["decision_state"] = derive_decision_state(
+        response_status=str(response_body.get("status") or "active"),
+        verdict=composite.verdict,
+    )
     return response_body
 
 

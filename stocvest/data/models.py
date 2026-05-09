@@ -376,9 +376,12 @@ class SignalRecord(BaseModel):
     sector_snapshot_json: str | None = None
     internals_snapshot_json: str | None = None
     layer_scores_json: str | None = None
+    #: Parameter bundle version; used as **logic_version_id** on the API for validation audit.
     parameter_version: str | None = None
     status: str = "active"  # active | incomplete
     mode: Literal["day", "swing"] = "day"
+    #: True only when strict validation gates passed at entry (user ledger rows).
+    ledger_qualified: bool = False
     # ── Signal validation ledger (optional; populated when closed / enriched) ──
     closed_at: datetime | None = None
     ledger_entry_date_et: str | None = None  # YYYY-MM-DD NY session for swing daily-close entry
@@ -394,6 +397,17 @@ class SignalRecord(BaseModel):
     max_adverse_excursion_pct: float | None = None
     max_favorable_excursion_pct: float | None = None
     hold_duration_minutes: int | None = None
+    # ── Validation ledger entry snapshot (immutable after close; set at record time) ──
+    stop_level: float | None = None
+    reference_structure_level: float | None = None
+    regime_label_at_entry: str | None = None
+    sector_label_at_entry: str | None = None
+    vwap_state_at_entry: str | None = None
+    regime_window_key: str | None = None
+    #: True while the position is open under rule-based monitoring; False when a rule exit fires.
+    ledger_position_open: bool | None = None
+    #: Maps directional outcome to audit vocabulary: favorable | unfavorable | neutral.
+    validation_outcome: str | None = None
 
     @field_validator("direction")
     @classmethod
@@ -490,6 +504,7 @@ class SignalRecord(BaseModel):
             parameter_version=_s("parameter_version"),
             status=str(item.get("status") or "active"),
             mode=_coerce_signal_mode(item.get("mode")),
+            ledger_qualified=bool(item.get("ledger_qualified")),
             closed_at=_dt_opt("closed_at"),
             ledger_entry_date_et=_s("ledger_entry_date_et"),
             ledger_exit_date_et=_s("ledger_exit_date_et"),
@@ -504,7 +519,24 @@ class SignalRecord(BaseModel):
             max_adverse_excursion_pct=_f("max_adverse_excursion_pct"),
             max_favorable_excursion_pct=_f("max_favorable_excursion_pct"),
             hold_duration_minutes=_i_opt("hold_duration_minutes"),
+            stop_level=_f("stop_level"),
+            reference_structure_level=_f("reference_structure_level"),
+            regime_label_at_entry=_s("regime_label_at_entry"),
+            sector_label_at_entry=_s("sector_label_at_entry"),
+            vwap_state_at_entry=_s("vwap_state_at_entry"),
+            regime_window_key=_s("regime_window_key"),
+            ledger_position_open=_bool("ledger_position_open") if item.get("ledger_position_open") is not None else None,
+            validation_outcome=_norm_vo(_s("validation_outcome")),
         )
+
+
+def _norm_vo(raw: str | None) -> str | None:
+    if not raw:
+        return None
+    s = str(raw).strip().lower()
+    if s not in {"favorable", "unfavorable", "neutral"}:
+        return None
+    return s
 
 
 def _coerce_signal_mode(raw: object) -> Literal["day", "swing"]:

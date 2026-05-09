@@ -16,6 +16,17 @@ from stocvest.api.services.morning_brief_fetch import get_vix_snapshot_with_fall
 from stocvest.api.services.sector_cache_dynamo import DynamoSectorCache
 from stocvest.api.services.signal_snapshot_builders import build_real_composite_snapshot_payload
 from stocvest.api.services.signal_recorder import get_signal_recorder
+from stocvest.api.services.signal_validation_eligibility import (
+    derive_decision_state,
+    entry_rationale_from_gates,
+    evaluate_day_ledger_entry,
+    gate_blob_json,
+)
+from stocvest.api.services.validation_timing import (
+    MIN_SESSION_VOLUME_SHARES_DAY_LEDGER,
+    build_regime_window_key,
+    is_day_ledger_entry_session_et,
+)
 from stocvest.api.services.swing_composite_evidence import build_swing_composite_evidence_fields
 from stocvest.config.parameter_store import ParameterStore
 from stocvest.config.signal_parameters import SignalParameters
@@ -314,6 +325,7 @@ async def run_real_composite_engine_phase(
         return {
             "symbol": sym,
             "status": "insufficient_data",
+            "decision_state": "blocked",
             "available_layers": len(available),
             "required_layers": min_layers,
             "message": _COMPOSITE_INSUFFICIENT_MESSAGE,
@@ -546,6 +558,7 @@ async def build_real_composite_response(
     _ipm, _mob = vwap_session_flags_et(_ref_et)
     payload_stub: dict[str, Any] = {
         "symbol": sym,
+        "mode": "day",
         "regime": regime,
         "sector_signal": sector.sector_signal,
         "news_catalyst": nc,
@@ -611,6 +624,66 @@ async def build_real_composite_response(
                     confirming_labels=confirming_labs,
                     conflicting_labels=conflicting_labs,
                 )
+                rr_raw = response_body.get("risk_reward")
+                rr_f = float(rr_raw) if isinstance(rr_raw, (int, float)) else None
+                if rr_raw is not None and rr_f is None:
+                    try:
+                        rr_f = float(rr_raw)
+                    except (TypeError, ValueError):
+                        rr_f = None
+                eligible, gates = evaluate_day_ledger_entry(
+                    response_status=str(response_body.get("status") or "active"),
+                    verdict=composite.verdict,
+                    composite_score=float(composite.score),
+                    alignment_ratio=float(composite.alignment_ratio),
+                    macro_market_regime=str(macro.market_regime or "neutral"),
+                    risk_reward=rr_f,
+                    intraday_bar_count=len(bars),
+                    orb_signal=str(tech.orb_signal or "").strip() or None,
+                    vwap_state=str(getattr(tech, "vwap_state", None) or "").strip() or None,
+                )
+                gen_at = datetime.now(timezone.utc)
+                if eligible:
+                    if not is_day_ledger_entry_session_et(gen_at):
+                        eligible = False
+                        gates["entry_session_timing"] = {
+                            "pass": False,
+                            "need": "us_regular_session_only",
+                        }
+                    else:
+                        dv = float(sym_snap.day_volume) if sym_snap and sym_snap.day_volume else 0.0
+                        if dv < MIN_SESSION_VOLUME_SHARES_DAY_LEDGER:
+                            eligible = False
+                            gates["session_liquidity"] = {
+                                "pass": False,
+                                "day_volume": dv,
+                                "min": MIN_SESSION_VOLUME_SHARES_DAY_LEDGER,
+                            }
+                    if eligible and user_id:
+                        if get_signal_recorder().has_open_validation_position(user_id, sym, "day"):
+                            eligible = False
+                            gates["dedupe_open_position"] = {
+                                "pass": False,
+                                "reason": "one_open_validation_per_symbol_mode",
+                            }
+                ny_date = gen_at.astimezone(ZoneInfo("America/New_York")).date().isoformat()
+                setup_type = (
+                    str(tech.orb_signal).strip()
+                    if tech.orb_signal
+                    else (str(getattr(tech, "vwap_state", None) or "").strip() or None)
+                )
+                rb = response_body
+                stop_lvl = rb.get("reference_stop_level")
+                ref_struct = rb.get("reference_target_1")
+                try:
+                    stop_f = float(stop_lvl) if stop_lvl is not None else None
+                except (TypeError, ValueError):
+                    stop_f = None
+                try:
+                    ref_struct_f = float(ref_struct) if ref_struct is not None else None
+                except (TypeError, ValueError):
+                    ref_struct_f = None
+                rwk = build_regime_window_key(str(macro.market_regime or "neutral"), gen_at)
                 record = SignalRecord(
                     signal_id=str(uuid4()),
                     symbol=sym,
@@ -619,7 +692,7 @@ async def build_real_composite_response(
                     pattern=str(tech.orb_signal or "real_composite"),
                     layer_scores=layer_scores,
                     price_at_signal=price_at,
-                    generated_at=datetime.now(timezone.utc),
+                    generated_at=gen_at,
                     user_id=user_id,
                     parameter_version=params.version,
                     technical_snapshot_json=blobs.get("technical_snapshot_json"),
@@ -630,11 +703,27 @@ async def build_real_composite_response(
                     layer_scores_json=blobs.get("layer_scores_json"),
                     status=str(response_body.get("status") or "active"),
                     mode="day",
+                    ledger_qualified=eligible,
+                    gate_status_json=gate_blob_json(gates, qualified=eligible),
+                    entry_rationale=entry_rationale_from_gates(eligible, "day"),
+                    decision_state_entry="actionable" if eligible else None,
+                    ledger_entry_date_et=ny_date if eligible else None,
+                    setup_type=setup_type,
+                    stop_level=stop_f,
+                    reference_structure_level=ref_struct_f,
+                    regime_label_at_entry=str(macro.market_regime or "neutral"),
+                    sector_label_at_entry=str(getattr(sector, "sector_signal", None) or sector.verdict or ""),
+                    vwap_state_at_entry=str(getattr(tech, "vwap_state", None) or "") or None,
+                    regime_window_key=rwk,
+                    ledger_position_open=bool(eligible),
                 )
-                get_signal_recorder().record_signal(record)
+                if eligible:
+                    get_signal_recorder().record_signal(record)
+                else:
+                    _LOG.info("day ledger row skipped (gates) symbol=%s", sym)
                 if record.status != "active":
                     return response_body
-                if user_id and user_email and direction_out:
+                if eligible and user_id and user_email and direction_out:
                     from stocvest.api.services.alert_tasks import run_alert_background
                     from stocvest.services.alert_trigger import get_alert_trigger
 
@@ -655,6 +744,10 @@ async def build_real_composite_response(
             except Exception as exc:
                 _LOG.warning("record_signal skipped: %s", exc)
 
+    response_body["decision_state"] = derive_decision_state(
+        response_status=str(response_body.get("status") or "active"),
+        verdict=composite.verdict,
+    )
     return response_body
 
 

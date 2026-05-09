@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from datetime import date, datetime, timezone
+from zoneinfo import ZoneInfo
 from typing import Any, Callable
 from uuid import uuid4
 
@@ -36,6 +37,12 @@ from stocvest.api.services.signal_recorder import (
     public_signal_detail_dict,
 )
 from stocvest.api.services.swing_composite_evidence import build_swing_composite_evidence_fields
+from stocvest.api.services.signal_validation_eligibility import (
+    entry_rationale_from_gates,
+    evaluate_swing_ledger_entry,
+    gate_blob_json,
+)
+from stocvest.api.services.validation_timing import build_regime_window_key, is_swing_ledger_entry_window_et
 from stocvest.api.services.user_profile_store import get_founding_member_count, get_user_profile_store
 from stocvest.data.dashboard_cache import (
     evidence_cache_key,
@@ -389,6 +396,23 @@ def swing_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[
                 sector_signal=sector_c,
             )
             response_body.update(confluence_result_to_response_fields(cf))
+        cf_subset: dict[str, Any] | None = None
+        if direction_out:
+            cf_subset = {
+                "confirming_signals": response_body.get("confirming_signals"),
+                "conflicting_signals": response_body.get("conflicting_signals"),
+                "n_confirming": response_body.get("n_confirming"),
+                "n_conflicting": response_body.get("n_conflicting"),
+            }
+        response_body.update(
+            build_swing_composite_evidence_fields(
+                composite=composite,
+                regime=regime,
+                payload=payload,
+                confluence=cf_subset,
+                snapshot=snap,
+            )
+        )
         if symbol and price_raw is not None:
             try:
                 price_at = float(price_raw)
@@ -400,6 +424,54 @@ def swing_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[
                     layer_scores=layer_scores,
                 )
                 param_ver = ParameterStore.get_parameters_sync().version
+                rr_raw = response_body.get("risk_reward")
+                rr_f = float(rr_raw) if isinstance(rr_raw, (int, float)) else None
+                if rr_raw is not None and rr_f is None:
+                    try:
+                        rr_f = float(rr_raw)
+                    except (TypeError, ValueError):
+                        rr_f = None
+                macro_regime = str(
+                    payload.get("macro_market_regime") or payload.get("market_regime") or regime or "neutral"
+                )
+                eligible, gates = evaluate_swing_ledger_entry(
+                    response_status=str(response_body.get("status") or "active"),
+                    verdict=composite.verdict,
+                    composite_score=float(composite.score),
+                    alignment_ratio=float(composite.alignment_ratio),
+                    macro_market_regime=macro_regime,
+                    risk_reward=rr_f,
+                    layer_scores=layer_scores,
+                )
+                gen_at = datetime.now(timezone.utc)
+                uid = request_context.user_id
+                if eligible:
+                    if not is_swing_ledger_entry_window_et(gen_at):
+                        eligible = False
+                        gates["entry_daily_close_window"] = {
+                            "pass": False,
+                            "need": "post_regular_close_window_et",
+                        }
+                    if eligible and uid:
+                        if get_signal_recorder().has_open_validation_position(uid, symbol, "swing"):
+                            eligible = False
+                            gates["dedupe_open_position"] = {
+                                "pass": False,
+                                "reason": "one_open_validation_per_symbol_mode",
+                            }
+                ny_date = gen_at.astimezone(ZoneInfo("America/New_York")).date().isoformat()
+                rb = response_body
+                stop_lvl = rb.get("reference_stop_level")
+                ref_t1 = rb.get("reference_target_1")
+                try:
+                    stop_f = float(stop_lvl) if stop_lvl is not None else None
+                except (TypeError, ValueError):
+                    stop_f = None
+                try:
+                    ref_struct_f = float(ref_t1) if ref_t1 is not None else None
+                except (TypeError, ValueError):
+                    ref_struct_f = None
+                rwk = build_regime_window_key(macro_regime, gen_at)
                 record = SignalRecord(
                     signal_id=str(uuid4()),
                     symbol=symbol,
@@ -408,8 +480,8 @@ def swing_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[
                     pattern=pattern,
                     layer_scores=layer_scores,
                     price_at_signal=price_at,
-                    generated_at=datetime.now(timezone.utc),
-                    user_id=request_context.user_id,
+                    generated_at=gen_at,
+                    user_id=uid,
                     parameter_version=param_ver,
                     technical_snapshot_json=snap_blobs.get("technical_snapshot_json"),
                     news_snapshot_json=snap_blobs.get("news_snapshot_json"),
@@ -418,9 +490,27 @@ def swing_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[
                     internals_snapshot_json=snap_blobs.get("internals_snapshot_json"),
                     layer_scores_json=snap_blobs.get("layer_scores_json"),
                     mode="swing",
+                    ledger_qualified=eligible,
+                    gate_status_json=gate_blob_json(gates, qualified=eligible),
+                    entry_rationale=entry_rationale_from_gates(eligible, "swing"),
+                    decision_state_entry="actionable" if eligible else None,
+                    ledger_entry_date_et=ny_date if eligible else None,
+                    stop_level=stop_f,
+                    reference_structure_level=ref_struct_f,
+                    regime_label_at_entry=str(macro_regime),
+                    sector_label_at_entry=str(
+                        payload.get("sector_signal") or payload.get("sector_verdict") or ""
+                    ).strip()
+                    or None,
+                    vwap_state_at_entry=str(rb.get("vwap_state") or "").strip() or None,
+                    regime_window_key=rwk,
+                    ledger_position_open=bool(eligible),
                 )
-                get_signal_recorder().record_signal(record)
-                if request_context.user_id and request_context.email and direction_out:
+                if eligible:
+                    get_signal_recorder().record_signal(record)
+                else:
+                    _LOG.info("swing (legacy) ledger row skipped (gates) symbol=%s", symbol)
+                if eligible and request_context.user_id and request_context.email and direction_out:
                     from stocvest.api.services.alert_tasks import run_alert_background
                     from stocvest.services.alert_trigger import get_alert_trigger
 
@@ -439,23 +529,6 @@ def swing_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[
                     run_alert_background(_fire_alert)
             except Exception as exc:
                 _LOG.warning("record_signal skipped: %s", exc)
-        cf_subset: dict[str, Any] | None = None
-        if direction_out:
-            cf_subset = {
-                "confirming_signals": response_body.get("confirming_signals"),
-                "conflicting_signals": response_body.get("conflicting_signals"),
-                "n_confirming": response_body.get("n_confirming"),
-                "n_conflicting": response_body.get("n_conflicting"),
-            }
-        response_body.update(
-            build_swing_composite_evidence_fields(
-                composite=composite,
-                regime=regime,
-                payload=payload,
-                confluence=cf_subset,
-                snapshot=snap,
-            )
-        )
         return ok(response_body)
     except (KeyError, TypeError, ValueError) as exc:
         return bad_request(f"Invalid composite request: {exc}")
@@ -779,6 +852,28 @@ def founding_members_count_handler(event: LambdaEvent, context: LambdaContext) -
     return ok({"founding_member_count": count, "founding_spots_total": 100, "founding_spots_remaining": max(0, 100 - count)})
 
 
+def _parse_me_history_page_size(qs: dict[str, Any]) -> int:
+    """Allowed sizes only; default 25. Legacy `limit` is honored when `page_size` is absent."""
+    allowed = (25, 50, 75, 100)
+    raw_ps = qs.get("page_size")
+    if raw_ps is not None and str(raw_ps).strip() != "":
+        try:
+            n = int(str(raw_ps))
+        except (TypeError, ValueError):
+            return 25
+        return n if n in allowed else 25
+    raw_lim = qs.get("limit")
+    if raw_lim is not None and str(raw_lim).strip() != "":
+        try:
+            n = int(str(raw_lim))
+        except (TypeError, ValueError):
+            return 25
+        if n in allowed:
+            return n
+        return 100 if n > 100 else 25
+    return 25
+
+
 def user_signal_history_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
     """GET /v1/signals/me/history — historical signal data for the signed-in user."""
     _ = context
@@ -791,16 +886,28 @@ def user_signal_history_handler(event: LambdaEvent, context: LambdaContext) -> d
         days = max(1, min(365, int(str(qs.get("days") or "30"))))
     except (TypeError, ValueError):
         days = 30
-    try:
-        limit = max(1, min(200, int(str(qs.get("limit") or "100"))))
-    except (TypeError, ValueError):
-        limit = 100
+    page_size = _parse_me_history_page_size(qs)
+    cursor_raw = str(qs.get("cursor") or "").strip() or None
+    lo = str(qs.get("ledger_only") or qs.get("ledger_qualified_only") or "").strip().lower()
+    ledger_qualified_only = lo in ("1", "true", "yes")
     mode_raw = str(qs.get("mode") or "").strip().lower()
     mode_filter: str | None = mode_raw if mode_raw in ("day", "swing") else None
-    rows = get_signal_recorder().get_signal_history(
-        user_id=rc.user_id, symbol=symbol, days=days, limit=limit, mode=mode_filter
+    rows, next_cursor = get_signal_recorder().get_user_signal_history_page(
+        user_id=rc.user_id,
+        symbol=symbol,
+        days=days,
+        page_size=page_size,
+        mode=mode_filter,
+        ledger_qualified_only=ledger_qualified_only,
+        cursor=cursor_raw,
     )
-    return ok([public_signal_detail_dict(r) for r in rows])
+    return ok(
+        {
+            "items": [public_signal_detail_dict(r) for r in rows],
+            "next_cursor": next_cursor,
+            "page_size": page_size,
+        }
+    )
 
 
 def signals_http_dispatch(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
