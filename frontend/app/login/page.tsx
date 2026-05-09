@@ -4,7 +4,7 @@ import { LoginForm } from "@/components/auth/login-form";
 import { AuthShell } from "@/components/auth/auth-shell";
 import { redirect } from "next/navigation";
 
-export default function LoginPage({ searchParams }: { searchParams?: { message?: string } }) {
+export default function LoginPage({ searchParams }: { searchParams?: { message?: string; email?: string } }) {
   const session = getServerSession();
   if (session) {
     redirect("/dashboard");
@@ -15,7 +15,7 @@ export default function LoginPage({ searchParams }: { searchParams?: { message?:
       {searchParams?.message ? (
         <p className="mb-4 rounded-md bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300">{searchParams.message}</p>
       ) : null}
-      <LoginForm showDevBypass={isStocvestDevelopment()} />
+      <LoginForm showDevBypass={isStocvestDevelopment()} defaultEmail={searchParams?.email} />
     </AuthShell>
   );
 }

@@ -124,6 +124,62 @@ def test_admin_beta_access_requires_authorization(
     assert resp["statusCode"] == 403
 
 
+def test_admin_beta_access_grant_indefinite_no_until(
+    fresh_profile_store: InMemoryUserProfileStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import stocvest.api.handlers.orders as orders_mod
+
+    monkeypatch.setenv("STOCVEST_LAMBDA_MODULE", "brokers")
+    monkeypatch.setattr(orders_mod, "analysis_authorized", lambda **kwargs: True)
+    grant = lambda_handler(
+        _admin_event("PATCH", target_user_id="target-1", body={"enabled": True, "indefinite": True}),
+        {},
+    )
+    assert grant["statusCode"] == 200
+    gb = _body(grant)
+    assert gb["beta_full_access"] is True
+    assert gb.get("beta_access_until") is None
+    assert gb["has_full_access"] is True
+
+
+def test_admin_beta_access_indefinite_rejects_until_combo(
+    fresh_profile_store: InMemoryUserProfileStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import stocvest.api.handlers.orders as orders_mod
+
+    monkeypatch.setenv("STOCVEST_LAMBDA_MODULE", "brokers")
+    monkeypatch.setattr(orders_mod, "analysis_authorized", lambda **kwargs: True)
+    resp = lambda_handler(
+        _admin_event(
+            "PATCH",
+            target_user_id="target-1",
+            body={"enabled": True, "indefinite": True, "until": "2099-01-01T00:00:00+00:00"},
+        ),
+        {},
+    )
+    assert resp["statusCode"] == 400
+
+
+def test_admin_beta_access_grant_without_until_defaults_21_day_window(
+    fresh_profile_store: InMemoryUserProfileStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from datetime import datetime, timezone
+
+    import stocvest.api.handlers.orders as orders_mod
+
+    monkeypatch.setenv("STOCVEST_LAMBDA_MODULE", "brokers")
+    monkeypatch.setattr(orders_mod, "analysis_authorized", lambda **kwargs: True)
+    before = datetime.now(timezone.utc)
+    grant = lambda_handler(_admin_event("PATCH", target_user_id="target-1", body={"enabled": True}), {})
+    assert grant["statusCode"] == 200
+    gb = _body(grant)
+    assert gb["beta_full_access"] is True
+    assert gb.get("beta_access_until")
+    until = datetime.fromisoformat(str(gb["beta_access_until"]).replace("Z", "+00:00"))
+    delta_days = (until - before).total_seconds() / 86400.0
+    assert 20.9 <= delta_days <= 21.1
+
+
 def test_admin_beta_access_grant_and_revoke(
     fresh_profile_store: InMemoryUserProfileStore, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { signupAction, type SignupActionState } from "@/app/signup/actions";
@@ -52,6 +53,10 @@ export function SignupForm() {
   const confirmStarted = confirmPassword.length > 0;
   const passwordsMatch = password === confirmPassword;
 
+  const existingEmail = state.existingEmail?.trim();
+  const loginHref = existingEmail ? `/login?email=${encodeURIComponent(existingEmail)}` : "/login";
+  const forgotHref = existingEmail ? `/forgot-password?email=${encodeURIComponent(existingEmail)}` : "/forgot-password";
+
   return (
     <form action={action} className="grid gap-4">
       <div className="grid gap-1.5">
@@ -67,6 +72,34 @@ export function SignupForm() {
           className="rounded-md border border-white/15 bg-[#111827] px-3 py-2.5 text-slate-100 placeholder:text-slate-500 focus:border-[#3b82f6] focus:outline-none"
         />
       </div>
+      {state.accountAlreadyExists && existingEmail ? (
+        <div
+          className="rounded-lg border border-cyan-500/30 bg-cyan-950/35 p-4 text-sm text-slate-200"
+          role="status"
+          aria-live="polite"
+        >
+          <p className="m-0 font-semibold text-cyan-100">You already have an account</p>
+          <p className="mt-2 mb-0 leading-relaxed text-slate-300">
+            That email is already registered with STOCVEST. We only allow one account per address. Sign in below, or reset your password if
+            you do not remember it. If you never finished verifying your email, sign in and follow the prompts.
+          </p>
+          <p className="mt-2 mb-0 font-mono text-xs text-cyan-200/90">{existingEmail}</p>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Link
+              href={loginHref}
+              className="inline-flex min-h-10 items-center justify-center rounded-md bg-[#3b82f6] px-4 py-2 text-sm font-semibold text-white shadow-[0_0_16px_rgba(59,130,246,0.35)] transition hover:shadow-[0_0_24px_rgba(59,130,246,0.5)]"
+            >
+              Sign in
+            </Link>
+            <Link
+              href={forgotHref}
+              className="inline-flex min-h-10 items-center justify-center rounded-md border border-white/20 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-white/40 hover:bg-white/5"
+            >
+              Forgot password
+            </Link>
+          </div>
+        </div>
+      ) : null}
       <div className="grid gap-1.5">
         <label htmlFor="password" className="text-sm text-slate-300">
           Password
@@ -127,7 +160,7 @@ export function SignupForm() {
           </p>
         ) : null}
       </div>
-      {state.error ? <p className="m-0 text-sm text-rose-300">{state.error}</p> : null}
+      {state.error && !state.accountAlreadyExists ? <p className="m-0 text-sm text-rose-300">{state.error}</p> : null}
       <SubmitButton disabled={!requirementsMet || !passwordsMatch} />
     </form>
   );

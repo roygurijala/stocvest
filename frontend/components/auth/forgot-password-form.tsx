@@ -18,7 +18,7 @@ function SubmitButton() {
   );
 }
 
-export function ForgotPasswordForm() {
+export function ForgotPasswordForm({ defaultEmail }: { defaultEmail?: string }) {
   const [state, action] = useFormState(forgotPasswordAction, INITIAL_STATE);
 
   return (
@@ -32,6 +32,7 @@ export function ForgotPasswordForm() {
           name="email"
           type="email"
           required
+          defaultValue={defaultEmail ?? ""}
           placeholder="you@example.com"
           className="rounded-md border border-white/15 bg-[#111827] px-3 py-2.5 text-slate-100 placeholder:text-slate-500 focus:border-[#3b82f6] focus:outline-none"
         />

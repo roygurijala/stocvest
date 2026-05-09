@@ -6,6 +6,7 @@ import { MoonStar, Zap } from "lucide-react";
 import type { LandingSignal } from "@/lib/api/landing-signals";
 import type { PerformanceSummary } from "@/lib/api/public-signals";
 import { useScrollPosition } from "@/lib/hooks/use-scroll-position";
+import { isPaidCheckoutEnabled } from "@/lib/feature-flags";
 
 const MONO =
   '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
@@ -141,6 +142,8 @@ export function LandingPage({
       "focus-visible:ring-2 focus-visible:ring-cyan-400/90 focus-visible:ring-offset-2 focus-visible:ring-offset-[#070d18]",
       pricingTier === tier ? "landing-pricing-card--selected" : ""
     ].join(" ");
+
+  const paidCheckout = isPaidCheckoutEnabled();
 
   return (
     <main className="bg-[#070d18] text-slate-100">
@@ -330,8 +333,22 @@ export function LandingPage({
       {/* 6 · Pricing */}
       <section className="mx-auto max-w-7xl px-4 py-16 md:px-8">
         <h2 className="mb-2 text-center text-3xl font-bold md:text-4xl">Simple pricing. Both modes included.</h2>
-        <p className="mx-auto mb-8 max-w-2xl text-center text-sm text-slate-400">Early member pricing for initial members at signup.</p>
-        <p className="mx-auto mb-4 max-w-2xl text-center text-xs text-slate-500">Click a card to compare plans; use the button to continue signup.</p>
+        <p className="mx-auto mb-4 max-w-2xl text-center text-sm text-slate-400">
+          {paidCheckout
+            ? "Early member pricing for initial members at signup."
+            : "Pro prices are preview-only — we are not accepting payment yet. Create a free account to explore the product."}
+        </p>
+        {!paidCheckout ? (
+          <p className="mx-auto mb-6 max-w-2xl rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-center text-xs leading-relaxed text-amber-100/95">
+            Paid checkout is not available yet. Invited beta testers receive full Pro-equivalent access without payment — if you were invited,
+            sign in with the email you used to register.
+          </p>
+        ) : null}
+        <p className="mx-auto mb-4 max-w-2xl text-center text-xs text-slate-500">
+          {paidCheckout
+            ? "Click a card to compare plans; use the button to continue signup."
+            : "Click a card to compare plans. Only the free tier can self-serve signup today."}
+        </p>
         <div className="grid gap-4 lg:grid-cols-3 lg:items-stretch">
           <div
             aria-label="Free — Understand the system plan — click to compare"
@@ -378,12 +395,22 @@ export function LandingPage({
               <li>• Swing trading alerts</li>
             </ul>
             <div className="mt-auto shrink-0 pt-4">
-              <Link
-                href="/signup/agreements"
-                className="inline-flex min-h-11 w-full items-center justify-center rounded-md bg-[#3b82f6] px-4 py-2 font-semibold"
-              >
-                Choose Swing Pro
-              </Link>
+              {paidCheckout ? (
+                <Link
+                  href="/signup/agreements"
+                  className="inline-flex min-h-11 w-full items-center justify-center rounded-md bg-[#3b82f6] px-4 py-2 font-semibold"
+                >
+                  Choose Swing Pro
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  className="inline-flex min-h-11 w-full cursor-not-allowed items-center justify-center rounded-md border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-400"
+                >
+                  Paid checkout coming soon
+                </button>
+              )}
             </div>
           </div>
           <div
@@ -406,12 +433,22 @@ export function LandingPage({
               <li>• Priority support</li>
             </ul>
             <div className="mt-auto shrink-0 pt-4">
-              <Link
-                href="/signup/agreements"
-                className="inline-flex min-h-11 w-full items-center justify-center rounded-md bg-[#3b82f6] px-4 py-2 font-semibold"
-              >
-                Choose Swing + Day Pro
-              </Link>
+              {paidCheckout ? (
+                <Link
+                  href="/signup/agreements"
+                  className="inline-flex min-h-11 w-full items-center justify-center rounded-md bg-[#3b82f6] px-4 py-2 font-semibold"
+                >
+                  Choose Swing + Day Pro
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  className="inline-flex min-h-11 w-full cursor-not-allowed items-center justify-center rounded-md border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-400"
+                >
+                  Paid checkout coming soon
+                </button>
+              )}
             </div>
           </div>
         </div>

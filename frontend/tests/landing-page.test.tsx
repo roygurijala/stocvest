@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { LandingPage } from "@/components/landing-page";
 import { ThemeProvider } from "@/lib/theme-provider";
 import type { LandingSignal } from "@/lib/api/landing-signals";
@@ -64,14 +64,31 @@ test("test_pricing_no_broker_claim", () => {
 });
 
 test("test_pricing_early_member_rates_shown", () => {
-  view();
-  expect(screen.getByText(/Early member pricing/i)).toBeInTheDocument();
-  expect(screen.getByText("$49/month")).toBeInTheDocument();
-  expect(screen.getByText("$99/month")).toBeInTheDocument();
-  expect(screen.getByText("$29/month")).toBeInTheDocument();
-  expect(screen.getByText("$59/month")).toBeInTheDocument();
-  expect(screen.queryByText(/FOUNDING MEMBER OFFER/i)).toBeNull();
-  expect(screen.queryByText(/spots remaining/i)).toBeNull();
+  vi.stubEnv("NEXT_PUBLIC_ENABLE_PAID_CHECKOUT", "true");
+  try {
+    view();
+    expect(screen.getByText(/Early member pricing/i)).toBeInTheDocument();
+    expect(screen.getByText("$49/month")).toBeInTheDocument();
+    expect(screen.getByText("$99/month")).toBeInTheDocument();
+    expect(screen.getByText("$29/month")).toBeInTheDocument();
+    expect(screen.getByText("$59/month")).toBeInTheDocument();
+    expect(screen.queryByText(/FOUNDING MEMBER OFFER/i)).toBeNull();
+    expect(screen.queryByText(/spots remaining/i)).toBeNull();
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
+test("test_pricing_paid_ctas_disabled_when_checkout_env_off", () => {
+  vi.stubEnv("NEXT_PUBLIC_ENABLE_PAID_CHECKOUT", "");
+  try {
+    view();
+    expect(screen.getByText(/Pro prices are preview-only/i)).toBeInTheDocument();
+    const soon = screen.getAllByRole("button", { name: /Paid checkout coming soon/i });
+    expect(soon.length).toBe(2);
+  } finally {
+    vi.unstubAllEnvs();
+  }
 });
 
 test("test_pdt_section_removed", () => {

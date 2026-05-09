@@ -128,7 +128,7 @@ Authenticated:
 
 Admin (same authorization mode as **`GET /v1/signals/analysis`** — internal analysis header **`X-Stocvest-Internal-Analysis`**, JWT **`sub` ∈ `STOCVEST_ANALYSIS_ADMIN_SUBS`**, or Cognito group **`signal-analytics-admin`**):
 
-- `PATCH /v1/admin/users/{user_id}/beta-access` — JSON **`{ "enabled": true|false [, "until": "<ISO-8601 optional>"] }`**. Sets beta fields on the **`Users`** row; responses match **`GET /v1/users/me`** shape when possible. Writes an **`AuditEvent`** row when Dynamo audit is configured.
+- `PATCH /v1/admin/users/{user_id}/beta-access` — JSON **`{ "enabled": true|false [, "until": "<ISO-8601 optional>" | "indefinite": true] }`**. Sets beta fields on the **`Users`** row; responses match **`GET /v1/users/me`** shape when possible. When **`enabled`** is **true**: if **`indefinite`** (or **`no_expiry`**) is **true**, no end date is stored (open-ended beta). Else if **`until`** is omitted, **`beta_access_until`** defaults to **21 days** from grant time (UTC). Do not send both **`until`** and **`indefinite`**. Writes an **`AuditEvent`** row when Dynamo audit is configured.
 
 - `GET /v1/admin/audit/users/{user_id}` — newest-first audit items for **`user_id`**; optional query **`limit`** (1–500, default **200**). Each item aligns with **`AuditEvent`** (**`route`**, **`method`**, **`statusCode`**, redacted **`requestSummary`** / **`responseSummary`**, optional **`marketSnapshot`**, entitlement/pricing snapshots).
 
@@ -144,4 +144,4 @@ Terraform table **`AuditEvents`**: **`pk`** = `user#{userId|anon}`, **`sk`** = `
 
 ### 4.12 Beta access script
 
-- Repo script **`scripts/beta_access.py`** — operator CLI: updates **`Users`** Dynamo attributes **`betaFullAccess`**, **`betaAccessUntil`**, **`betaAccessGrantedAt`** (requires **`DYNAMODB_USERS_TABLE`** + AWS creds). Mirrors **`PATCH .../beta-access`** semantics (**`--enable` / `--disable`**, optional **`--until`**).
+- Repo script **`scripts/beta_access.py`** — operator CLI: updates **`Users`** Dynamo attributes **`betaFullAccess`**, **`betaAccessUntil`**, **`betaAccessGrantedAt`** (requires **`DYNAMODB_USERS_TABLE`** + AWS creds). Mirrors **`PATCH .../beta-access`** semantics (**`--enable` / `--disable`**). **`--until`** is optional; **`--no-expiry`** with **`--enable`** leaves beta open-ended. If **`--enable`** without **`--until`** or **`--no-expiry`**, expiry defaults to **21 days** from now (UTC). **`scripts/cognito_sub_for_email.py`** prints a user’s **`sub`** from their login email (needs **`COGNITO_USER_POOL_ID`** + **`cognito-idp:AdminGetUser`**).

@@ -35,6 +35,7 @@ from stocvest.brokers import (
     PlaceOrderRequest,
     UnknownSymbolError,
 )
+from stocvest.config.beta_access import default_beta_access_until_iso
 from stocvest.data import PolygonClient
 from stocvest.data.models import TradingMode, UserProfile
 from stocvest.data.models import AuditEvent
@@ -385,16 +386,27 @@ def admin_beta_access_patch_handler(event: LambdaEvent, context: LambdaContext) 
     if "enabled" not in body:
         return bad_request("enabled is required.")
     enabled = bool(body.get("enabled"))
+    indefinite = bool(body.get("indefinite")) or bool(body.get("no_expiry"))
     raw_until = body.get("until")
     until = str(raw_until).strip() if raw_until is not None else None
     if until == "":
         until = None
+    if enabled and indefinite and until is not None:
+        return bad_request("Do not pass both until and indefinite.")
+    effective_until: str | None = None
+    if enabled:
+        if indefinite:
+            effective_until = None
+        elif until is not None:
+            effective_until = until
+        else:
+            effective_until = default_beta_access_until_iso()
     store = get_user_profile_store()
     cur = store.get_profile(target_user_id)
     merged = cur.model_copy(
         update={
             "beta_full_access": enabled,
-            "beta_access_until": until if enabled else None,
+            "beta_access_until": effective_until,
             "beta_access_granted_at": datetime.now(timezone.utc).isoformat() if enabled else None,
         }
     )
@@ -421,7 +433,12 @@ def admin_beta_access_patch_handler(event: LambdaEvent, context: LambdaContext) 
                     "has_ai_explanations": merged.has_ai_explanations,
                 },
                 pricing_snapshot={"admin_action": "beta_access_toggle"},
-                request_summary={"enabled": enabled, "until": until},
+                request_summary={
+                    "enabled": enabled,
+                    "until": effective_until,
+                    "until_client_supplied": until is not None,
+                    "indefinite": indefinite,
+                },
                 response_summary={"message": "beta access updated"},
                 market_snapshot={},
             )

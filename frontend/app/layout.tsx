@@ -8,7 +8,11 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "STOCVEST",
-  description: "Multi-broker swing and day trading platform"
+  description: "Multi-broker swing and day trading platform",
+  icons: {
+    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+    shortcut: "/favicon.svg",
+  },
 };
 
 export const viewport: Viewport = {

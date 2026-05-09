@@ -17,15 +17,27 @@ const REGION = USER_POOL_ID.split("_")[0] || "us-east-1";
 
 const client = new CognitoIdentityProviderClient({ region: REGION });
 
+export function getCognitoErrorName(error: unknown): string {
+  return typeof error === "object" && error && "name" in error ? String((error as { name: unknown }).name) : "";
+}
+
+/** SignUp / alias conflict — an account already uses this email in the user pool. */
+export function isDuplicateCognitoUsernameError(error: unknown): boolean {
+  const name = getCognitoErrorName(error);
+  return name === "UsernameExistsException" || name === "AliasExistsException";
+}
+
 export function cognitoErrorMessage(error: unknown, fallback: string): string {
-  const name = typeof error === "object" && error && "name" in error ? String((error as { name: unknown }).name) : "";
+  const name = getCognitoErrorName(error);
   if (name === "NotAuthorizedException") return "Incorrect email or password";
   if (name === "UserNotFoundException") return "No account found with that email";
   if (name === "UserNotConfirmedException") return "Please verify your email first. Check your inbox.";
   if (name === "LimitExceededException" || name === "TooManyRequestsException") {
     return "Too many attempts. Please try again later.";
   }
-  if (name === "UsernameExistsException") return "An account with this email already exists";
+  if (name === "UsernameExistsException" || name === "AliasExistsException") {
+    return "An account with this email already exists";
+  }
   if (name === "InvalidPasswordException") return "Password does not meet requirements";
   if (name === "CodeMismatchException" || name === "ExpiredCodeException") {
     return "Invalid or expired code. Please try again.";

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="STOCVEST">
+  <rect width="32" height="32" rx="8" fill="#070d18"/>
+  <path fill="#22d3ee" d="M7 11h18v2.2H7zm0 6h14v2.2H7zm0 6h10v2.2H7z"/>
+  <rect x="22" y="7" width="4" height="9" rx="1" fill="#3b82f6"/>
+</svg>

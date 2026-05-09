@@ -129,6 +129,11 @@ class DynamoDBUserProfileStore:
     def put_profile(self, profile: UserProfile) -> None:
         existing = self.table.get_item(Key={self.user_key: profile.user_id}).get("Item") or {}
         merged = {**existing, **_profile_to_item(profile)}
+        # Merged overwrite skips absent keys; explicitly drop beta window attrs when cleared.
+        if not (profile.beta_access_until or "").strip():
+            merged.pop("betaAccessUntil", None)
+        if not (profile.beta_access_granted_at or "").strip():
+            merged.pop("betaAccessGrantedAt", None)
         self.table.put_item(Item=merged)
 
 

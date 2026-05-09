@@ -2,11 +2,14 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { cognitoErrorMessage, signUp } from "@/lib/auth/cognito";
+import { cognitoErrorMessage, isDuplicateCognitoUsernameError, signUp } from "@/lib/auth/cognito";
 import { AGREEMENTS_BUNDLE_VERSION, SIGNUP_LEGAL_COOKIE_NAME } from "@/lib/legal-agreements";
 
 export interface SignupActionState {
   error?: string;
+  /** Email already registered in Cognito — direct user to sign-in or password reset. */
+  accountAlreadyExists?: boolean;
+  existingEmail?: string;
 }
 
 export async function signupAction(_prev: SignupActionState, formData: FormData): Promise<SignupActionState> {
@@ -29,6 +32,9 @@ export async function signupAction(_prev: SignupActionState, formData: FormData)
   try {
     await signUp(email, password);
   } catch (error: unknown) {
+    if (isDuplicateCognitoUsernameError(error)) {
+      return { accountAlreadyExists: true, existingEmail: email };
+    }
     return { error: cognitoErrorMessage(error, "Something went wrong. Please try again.") };
   }
 

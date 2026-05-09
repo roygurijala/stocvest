@@ -2,6 +2,9 @@
 
 Usage examples:
   python scripts/beta_access.py --user-id <cognito-sub> --enable
+    # If --until is omitted, beta expires after the default window (21 days, UTC).
+  python scripts/beta_access.py --user-id <cognito-sub> --enable --no-expiry
+    # Open-ended beta (no betaAccessUntil in Dynamo).
   python scripts/beta_access.py --user-id <cognito-sub> --enable --until 2026-12-31T23:59:59+00:00
   python scripts/beta_access.py --user-id <cognito-sub> --disable
 """
@@ -11,10 +14,13 @@ from __future__ import annotations
 import argparse
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import boto3
+from dotenv import load_dotenv
 
+from stocvest.config.beta_access import BETA_ACCESS_DEFAULT_DAYS, default_beta_access_until_iso
 from stocvest.utils.config import get_settings
 
 
@@ -24,11 +30,24 @@ def _parse_args() -> argparse.Namespace:
     mode = p.add_mutually_exclusive_group(required=True)
     mode.add_argument("--enable", action="store_true", help="Enable beta full access.")
     mode.add_argument("--disable", action="store_true", help="Disable beta full access.")
-    p.add_argument("--until", default="", help="Optional ISO timestamp for beta expiry when enabling.")
+    p.add_argument(
+        "--until",
+        default="",
+        help=f"Optional ISO timestamp for beta expiry when enabling. If omitted with --enable (and not --no-expiry), defaults to now + {BETA_ACCESS_DEFAULT_DAYS} days (UTC).",
+    )
+    p.add_argument(
+        "--no-expiry",
+        action="store_true",
+        help="With --enable, do not set betaAccessUntil (open-ended access). Cannot be combined with --until.",
+    )
     return p.parse_args()
 
 
 def main() -> None:
+    _root = Path(__file__).resolve().parents[1]
+    load_dotenv(_root / ".env")
+    load_dotenv(_root / "frontend" / ".env.local")
+
     args = _parse_args()
     settings = get_settings()
     table_name = (settings.dynamodb_users_table or "").strip()
@@ -39,13 +58,23 @@ def main() -> None:
     user_id = str(args.user_id).strip()
     if not user_id:
         raise SystemExit("--user-id is required.")
+    if args.enable and args.no_expiry and args.until.strip():
+        raise SystemExit("Use only one of --until or --no-expiry.")
     existing = table.get_item(Key={"userId": user_id}).get("Item") or {"userId": user_id}
     enabled = bool(args.enable)
     now_iso = datetime.now(timezone.utc).isoformat()
+    until_val: str | None = None
+    if enabled:
+        if args.no_expiry:
+            until_val = None
+        elif args.until.strip():
+            until_val = args.until.strip()
+        else:
+            until_val = default_beta_access_until_iso()
     updated: dict[str, Any] = {
         **existing,
         "betaFullAccess": enabled,
-        "betaAccessUntil": args.until.strip() if enabled and args.until.strip() else None,
+        "betaAccessUntil": until_val,
         "betaAccessGrantedAt": now_iso if enabled else None,
     }
     # DynamoDB low-level serializer prefers absent keys over explicit None.
