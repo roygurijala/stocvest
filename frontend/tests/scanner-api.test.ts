@@ -244,6 +244,14 @@ describe("loadScannerDataWithoutBrief swing-only (dashboard)", () => {
     expect(core.error).toBeUndefined();
     expect(paths.some((p) => p.includes("/v1/signals/day/setups"))).toBe(false);
     expect(paths.some((p) => p.includes("/v1/signals/swing/setups"))).toBe(true);
+    const barsBatchCalls = apiFetchMock.mock.calls.filter((c) => c[0] === "/v1/market/bars-batch");
+    const requests1min = barsBatchCalls.some(([, init]) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as {
+        requests?: Array<{ timeframe?: string }>;
+      };
+      return (body.requests ?? []).some((r) => String(r.timeframe ?? "") === "1min");
+    });
+    expect(requests1min).toBe(false);
     expect(core.setups).toHaveLength(1);
     expect(core.setups[0]?.scanner_mode).toBe("swing_daily");
   }, 25000);

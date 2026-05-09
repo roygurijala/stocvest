@@ -103,31 +103,36 @@ async function fetchSnapshotsMatrix(
     return [row && typeof row === "object" ? row : null];
   }
   const bySym = new Map<string, Record<string, unknown>>();
+  const snapshotSlices: string[][] = [];
   for (let i = 0; i < universe.length; i += SNAPSHOTS_BATCH_MAX) {
-    const slice = universe.slice(i, i + SNAPSHOTS_BATCH_MAX);
-    const batch = await jsonFetch<{ snapshots?: Record<string, unknown>[] }>(
-      `/v1/market/snapshots?symbols=${encodeURIComponent(slice.join(","))}`
-    );
-    if (batch?.snapshots && Array.isArray(batch.snapshots)) {
-      for (const row of batch.snapshots) {
-        if (!row || typeof row !== "object") continue;
-        const sym = String((row as { symbol?: string }).symbol || "")
-          .trim()
-          .toUpperCase();
-        if (sym) bySym.set(sym, row as Record<string, unknown>);
-      }
-    } else {
-      const rows = await Promise.all(
-        slice.map((symbol) =>
-          jsonFetch<Record<string, unknown>>(`/v1/market/snapshot?symbol=${encodeURIComponent(symbol)}`)
-        )
-      );
-      slice.forEach((s, j) => {
-        const row = rows[j];
-        if (row && typeof row === "object") bySym.set(s, row);
-      });
-    }
+    snapshotSlices.push(universe.slice(i, i + SNAPSHOTS_BATCH_MAX));
   }
+  await Promise.all(
+    snapshotSlices.map(async (slice) => {
+      const batch = await jsonFetch<{ snapshots?: Record<string, unknown>[] }>(
+        `/v1/market/snapshots?symbols=${encodeURIComponent(slice.join(","))}`
+      );
+      if (batch?.snapshots && Array.isArray(batch.snapshots)) {
+        for (const row of batch.snapshots) {
+          if (!row || typeof row !== "object") continue;
+          const sym = String((row as { symbol?: string }).symbol || "")
+            .trim()
+            .toUpperCase();
+          if (sym) bySym.set(sym, row as Record<string, unknown>);
+        }
+      } else {
+        const rows = await Promise.all(
+          slice.map((symbol) =>
+            jsonFetch<Record<string, unknown>>(`/v1/market/snapshot?symbol=${encodeURIComponent(symbol)}`)
+          )
+        );
+        slice.forEach((s, j) => {
+          const row = rows[j];
+          if (row && typeof row === "object") bySym.set(s, row);
+        });
+      }
+    })
+  );
   return universe.map((s) => bySym.get(s) ?? null);
 }
 
@@ -154,24 +159,29 @@ async function fetchBarsMatrix(
     return true;
   };
 
+  const barSlices: string[][] = [];
   for (let i = 0; i < universe.length; i += BARS_BATCH_MAX) {
-    const syms = universe.slice(i, i + BARS_BATCH_MAX);
-    const payload = { requests: syms.map((symbol) => ({ symbol, timeframe: tf, limit: barLimit })) };
-    const batch = await jsonFetch<{ bars_by_symbol?: Record<string, Record<string, unknown>[]> }>(
-      "/v1/market/bars-batch",
-      { method: "POST", body: JSON.stringify(payload) }
-    );
-    if (!fillFromBatch(syms, batch)) {
-      await Promise.all(
-        syms.map(async (symbol) => {
-          const bars = await jsonFetch<Record<string, unknown>[]>(
-            `/v1/market/bars?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(tf)}&limit=${barLimit}`
-          );
-          merge[symbol] = Array.isArray(bars) ? bars : [];
-        })
-      );
-    }
+    barSlices.push(universe.slice(i, i + BARS_BATCH_MAX));
   }
+  await Promise.all(
+    barSlices.map(async (syms) => {
+      const payload = { requests: syms.map((symbol) => ({ symbol, timeframe: tf, limit: barLimit })) };
+      const batch = await jsonFetch<{ bars_by_symbol?: Record<string, Record<string, unknown>[]> }>(
+        "/v1/market/bars-batch",
+        { method: "POST", body: JSON.stringify(payload) }
+      );
+      if (!fillFromBatch(syms, batch)) {
+        await Promise.all(
+          syms.map(async (symbol) => {
+            const bars = await jsonFetch<Record<string, unknown>[]>(
+              `/v1/market/bars?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(tf)}&limit=${barLimit}`
+            );
+            merge[symbol] = Array.isArray(bars) ? bars : [];
+          })
+        );
+      }
+    })
+  );
   return merge;
 }
 
@@ -228,10 +238,14 @@ export async function runScannerLoadWithoutBrief(
 
     const setupLoadMode = resolveScannerSetupLoadMode(tuning);
     const fetchDailyBars = setupLoadMode === "swing" || setupLoadMode === "both";
+    const loadDaySetups = setupLoadMode === "day" || setupLoadMode === "both";
+    const loadSwingSetups = setupLoadMode === "swing" || setupLoadMode === "both";
+    /** Intraday bars only feed `POST /v1/signals/day/setups`; swing-only loads skip them (large critical-path savings). */
+    const needIntradayBars = loadDaySetups;
     const swingDailyBarLimit = tuning?.swingDailyBarLimit ?? 220;
     const [snapshotRows, barsBySymbol, dailyBarsBySymbol] = await Promise.all([
       fetchSnapshotsMatrix(jsonFetch, universe),
-      fetchBarsMatrix(jsonFetch, universe, barLimit, "1min"),
+      needIntradayBars ? fetchBarsMatrix(jsonFetch, universe, barLimit, "1min") : Promise.resolve({}),
       fetchDailyBars ? fetchBarsMatrix(jsonFetch, universe, swingDailyBarLimit, "1day") : Promise.resolve({})
     ]);
 
@@ -322,11 +336,50 @@ export async function runScannerLoadWithoutBrief(
     if (daySetupsExtras?.geoScanArticles?.length) {
       daySetupsBody.geo_scan_articles = daySetupsExtras.geoScanArticles;
     }
-    const loadDaySetups = setupLoadMode === "day" || setupLoadMode === "both";
-    const loadSwingSetups = setupLoadMode === "swing" || setupLoadMode === "both";
+
+    const swingSetupsLimit = tuning?.swingSetupsLimit ?? 4;
+    const swingReady = loadSwingSetups && Object.keys(cleanDailyBarsBySymbol).length > 0;
+    const swingBody: Record<string, unknown> = {
+      bars_by_symbol: cleanDailyBarsBySymbol,
+      limit: swingSetupsLimit,
+      min_score: 0.48,
+      liquidity_by_symbol: liquidity_by_symbol,
+      snapshots_by_symbol,
+      regime: regimeForSetups
+    };
+    if (daySetupsExtras?.geoScanArticles?.length) {
+      swingBody.geo_scan_articles = daySetupsExtras.geoScanArticles;
+    }
 
     let setups: IntradaySetupPayload[] = [];
-    if (loadDaySetups) {
+
+    if (loadDaySetups && swingReady) {
+      const [dayRows, swingSetups] = await Promise.all([
+        jsonFetch<IntradaySetupPayload[]>("/v1/signals/day/setups", {
+          method: "POST",
+          body: JSON.stringify(daySetupsBody)
+        }),
+        jsonFetch<IntradaySetupPayload[]>("/v1/signals/swing/setups", {
+          method: "POST",
+          body: JSON.stringify(swingBody)
+        }).catch(() => null as IntradaySetupPayload[] | null)
+      ]);
+      if (dayRows == null) {
+        return {
+          gapIntelligence: [],
+          setups: [],
+          spyPct,
+          qqqPct,
+          regimeLabel,
+          swingUniverseSymbolCount: universe.length,
+          error: "Service temporarily unavailable. Please try again."
+        };
+      }
+      setups = dayRows;
+      if (Array.isArray(swingSetups) && swingSetups.length > 0) {
+        setups = mergeSwingAndDaySetups(swingSetups, setups);
+      }
+    } else if (loadDaySetups) {
       const dayRows = await jsonFetch<IntradaySetupPayload[]>("/v1/signals/day/setups", {
         method: "POST",
         body: JSON.stringify(daySetupsBody)
@@ -343,35 +396,17 @@ export async function runScannerLoadWithoutBrief(
         };
       }
       setups = dayRows;
-    }
-
-    if (loadSwingSetups && Object.keys(cleanDailyBarsBySymbol).length > 0) {
-      const swingSetupsLimit = tuning?.swingSetupsLimit ?? 4;
-      const swingBody: Record<string, unknown> = {
-        bars_by_symbol: cleanDailyBarsBySymbol,
-        limit: swingSetupsLimit,
-        min_score: 0.48,
-        liquidity_by_symbol: liquidity_by_symbol,
-        snapshots_by_symbol,
-        regime: regimeForSetups
-      };
-      if (daySetupsExtras?.geoScanArticles?.length) {
-        swingBody.geo_scan_articles = daySetupsExtras.geoScanArticles;
-      }
+    } else if (swingReady) {
       try {
         const swingSetups = await jsonFetch<IntradaySetupPayload[]>("/v1/signals/swing/setups", {
           method: "POST",
           body: JSON.stringify(swingBody)
         });
         if (Array.isArray(swingSetups)) {
-          if (setupLoadMode === "swing") {
-            setups = swingSetups;
-          } else if (swingSetups.length > 0) {
-            setups = mergeSwingAndDaySetups(swingSetups, setups);
-          }
+          setups = swingSetups;
         }
       } catch {
-        /* keep day-only setups when swing fails */
+        /* swing-only path: leave setups empty if request fails */
       }
     }
 
