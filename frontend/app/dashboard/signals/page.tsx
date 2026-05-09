@@ -17,11 +17,14 @@ function firstParam(v: string | string[] | undefined): string | undefined {
 
 function normalizePrefillTicker(sym: string): string | null {
   const u = sym.trim().toUpperCase();
-  return u && /^[A-Z]{1,6}$/.test(u) ? u : null;
+  if (!u) return null;
+  if (/^[A-Z]{1,6}$/.test(u)) return u;
+  if (/^[A-Z]{1,5}\.[A-Z]$/.test(u)) return u;
+  return null;
 }
 
-/** Resolve ticker from user's evaluated signal (journal deep-links may omit `symbol`). */
-async function symbolFromJournalSignalId(signalId: string): Promise<string | null> {
+/** Resolve ticker from user's evaluated signal (`?signal_id=` deep-links). */
+async function symbolFromUserSignalRecord(signalId: string): Promise<string | null> {
   const id = encodeURIComponent(signalId.trim());
   if (!id) return null;
   const res = await stocvestAuthedFetch(`/v1/signals/me/records/${id}`, { method: "GET" });
@@ -47,8 +50,8 @@ export default async function DashboardSignalsPage({
     symRaw && CONTEXTUAL_SIGNALS_REFS.has(refRaw) ? normalizePrefillTicker(symRaw) : null;
 
   const signalIdRaw = (firstParam(searchParams.signal_id) ?? "").trim();
-  if (!urlSymbol && refRaw === "journal" && signalIdRaw) {
-    urlSymbol = await symbolFromJournalSignalId(signalIdRaw);
+  if (!urlSymbol && signalIdRaw) {
+    urlSymbol = await symbolFromUserSignalRecord(signalIdRaw);
   }
 
   const [pdtStatus, marketOverview, scannerOverview] = await Promise.all([
@@ -66,7 +69,11 @@ export default async function DashboardSignalsPage({
         marketOverview={marketOverview}
         scannerOverview={scannerOverview}
         earningsBySymbol={earningsBySymbol}
-        signalsPrefill={{ urlSymbol }}
+        signalsPrefill={{
+          urlSymbol,
+          signalIdForResolve: signalIdRaw && !urlSymbol ? signalIdRaw : null,
+          hadSignalIdQuery: Boolean(signalIdRaw)
+        }}
       />
     </AppShell>
   );

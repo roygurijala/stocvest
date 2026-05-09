@@ -386,10 +386,7 @@ export function JournalPageClient({ initialEntries, initialAnalytics, connectedB
                               <Link
                                 href={
                                   entry.signal_id
-                                    ? `/dashboard/signals?${new URLSearchParams({
-                                        signal_id: entry.signal_id,
-                                        ref: "journal"
-                                      }).toString()}`
+                                    ? `/dashboard/signals?${new URLSearchParams({ signal_id: entry.signal_id }).toString()}`
                                     : "/dashboard/signals"
                                 }
                                 className="inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold no-underline"
@@ -406,10 +403,7 @@ export function JournalPageClient({ initialEntries, initialAnalytics, connectedB
                               <Link
                                 href={
                                   entry.signal_id
-                                    ? `/dashboard/signals?${new URLSearchParams({
-                                        signal_id: entry.signal_id,
-                                        ref: "journal"
-                                      }).toString()}`
+                                    ? `/dashboard/signals?${new URLSearchParams({ signal_id: entry.signal_id }).toString()}`
                                     : "/dashboard/signals"
                                 }
                                 className="text-[11px] no-underline"

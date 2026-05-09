@@ -56,6 +56,10 @@ interface LayerRow {
 export type SignalsPagePrefill = {
   /** From `?symbol=&ref=scanner|watchlist|validation|journal` only. */
   urlSymbol: string | null;
+  /** When `?signal_id=` is present but server could not resolve ticker; client fetches me/records. */
+  signalIdForResolve: string | null;
+  /** URL contained `signal_id` (strip query after symbol is committed). */
+  hadSignalIdQuery: boolean;
 };
 
 interface SignalsPageClientProps {
@@ -70,11 +74,10 @@ const SIGNALS_SESSION_SYMBOL_KEY = "stocvest_signals_session_symbol";
 type SymbolCandidate = { symbol: string; label: string };
 
 function normalizeTickerInput(raw: string): string | null {
-  const letters = raw
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z]/g, "");
-  if (letters.length >= 1 && letters.length <= 6) return letters;
+  const u = raw.trim().toUpperCase();
+  if (!u) return null;
+  if (/^[A-Z]{1,6}$/.test(u)) return u;
+  if (/^[A-Z]{1,5}\.[A-Z]$/.test(u)) return u;
   return null;
 }
 
@@ -184,11 +187,12 @@ export function SignalsPageClient({
   marketOverview,
   scannerOverview,
   earningsBySymbol,
-  signalsPrefill = { urlSymbol: null }
+  signalsPrefill = { urlSymbol: null, signalIdForResolve: null, hadSignalIdQuery: false }
 }: SignalsPageClientProps) {
   const { colors } = useTheme();
   const isMobileLayout = useIsMobileLayout();
   const symbolComboRef = useRef<HTMLDivElement | null>(null);
+  const signalIdUrlStrippedRef = useRef(false);
   const [tab, setTab] = useState<"layers" | "history">("layers");
   const [tradingMode, setTradingMode] = useState<TradingMode>("swing");
   const [symbol, setSymbol] = useState(() => signalsPrefill.urlSymbol ?? "");
@@ -228,8 +232,8 @@ export function SignalsPageClient({
   const symbolCandidates = useMemo(() => {
     const m = new Map<string, SymbolCandidate>();
     const add = (sym: string, name?: string | null) => {
-      const u = sym.trim().toUpperCase();
-      if (!u || !/^[A-Z]{1,6}$/.test(u)) return;
+      const u = normalizeTickerInput(sym);
+      if (!u) return;
       const n = (name ?? "").trim();
       const label = n ? `${u} — ${n}` : u;
       if (!m.has(u)) m.set(u, { symbol: u, label });
@@ -255,15 +259,15 @@ export function SignalsPageClient({
   }, [symbolCandidates, symbolDraft]);
 
   const applyCommittedSymbol = useCallback((sym: string | null | undefined) => {
-    const u = (sym ?? "").trim().toUpperCase();
-    if (!u || !/^[A-Z]{1,6}$/.test(u)) {
+    const t = normalizeTickerInput(String(sym ?? ""));
+    if (!t) {
       setSymbol("");
       setSymbolDraft("");
       setSuggestOpen(false);
       return;
     }
-    setSymbol(u);
-    setSymbolDraft(u);
+    setSymbol(t);
+    setSymbolDraft(t);
     setSuggestOpen(false);
   }, []);
 
@@ -274,7 +278,7 @@ export function SignalsPageClient({
       const res = await fetch("/api/stocvest/watchlists/default/symbols", { method: "GET" });
       const data = (await res.json().catch(() => ({}))) as { symbols?: string[] };
       const list = Array.isArray(data.symbols)
-        ? data.symbols.map((x) => String(x).trim().toUpperCase()).filter((x) => /^[A-Z]{1,6}$/.test(x))
+        ? data.symbols.map((x) => String(x)).map((x) => normalizeTickerInput(x)).filter((x): x is string => Boolean(x))
         : [];
       setWatchlistPickerSyms(list);
     } catch {
@@ -301,17 +305,53 @@ export function SignalsPageClient({
   }, []);
 
   useEffect(() => {
-    if (signalsPrefill.urlSymbol) return;
+    if (signalsPrefill.urlSymbol || signalsPrefill.signalIdForResolve) return;
     try {
       const s = sessionStorage.getItem(SIGNALS_SESSION_SYMBOL_KEY);
-      if (s && /^[A-Z]{1,6}$/.test(s)) {
-        setSymbol(s);
-        setSymbolDraft(s);
+      const sym = s ? normalizeTickerInput(s) : null;
+      if (sym) {
+        setSymbol(sym);
+        setSymbolDraft(sym);
       }
     } catch {
       /* ignore */
     }
-  }, [signalsPrefill.urlSymbol]);
+  }, [signalsPrefill.urlSymbol, signalsPrefill.signalIdForResolve]);
+
+  useEffect(() => {
+    const id = signalsPrefill.signalIdForResolve?.trim();
+    if (!id) return;
+    if (symbol.trim()) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/stocvest/signals/me/records/${encodeURIComponent(id)}`, { method: "GET" });
+        if (!res.ok || cancelled) return;
+        const data = (await res.json().catch(() => null)) as { symbol?: unknown } | null;
+        const raw = data && typeof data === "object" && typeof data.symbol === "string" ? data.symbol : "";
+        const sym = normalizeTickerInput(raw);
+        if (sym && !cancelled) applyCommittedSymbol(sym);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [signalsPrefill.signalIdForResolve, symbol, applyCommittedSymbol]);
+
+  useEffect(() => {
+    if (signalIdUrlStrippedRef.current) return;
+    if (!signalsPrefill.hadSignalIdQuery) return;
+    const sym = symbol.trim();
+    if (!sym) return;
+    signalIdUrlStrippedRef.current = true;
+    try {
+      window.history.replaceState(null, "", "/dashboard/signals");
+    } catch {
+      /* ignore */
+    }
+  }, [symbol, signalsPrefill.hadSignalIdQuery]);
 
   useEffect(() => {
     if (!suggestOpen) return;
