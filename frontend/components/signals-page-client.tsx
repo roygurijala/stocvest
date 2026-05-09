@@ -597,13 +597,13 @@ export function SignalsPageClient({
   const hasValidSignal = compositeResult !== null && !isInsufficientCompositeResponse(compositeResult);
 
   useEffect(() => {
-    if (!hasValidSignal || !symbol.trim()) return;
+    if (!symbol.trim() || compositeResult === null) return;
     try {
       sessionStorage.setItem(SIGNALS_SESSION_SYMBOL_KEY, symbol.trim().toUpperCase());
     } catch {
       /* ignore */
     }
-  }, [hasValidSignal, symbol]);
+  }, [compositeResult, symbol]);
 
   const showAfterHoursPanel =
     tradingMode === "day" && insufficientComposite?.market_session === "closed";
