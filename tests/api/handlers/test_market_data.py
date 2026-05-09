@@ -14,6 +14,7 @@ from stocvest.api.handlers.market_data import (
     options_chain_handler,
     snapshot_handler,
     snapshots_batch_handler,
+    tickers_search_handler,
 )
 from stocvest.data.models import Bar, EarningsEvent, MarketStatus, NewsArticle, OptionContract, Snapshot, Timeframe
 from stocvest.data.polygon_client import PolygonError
@@ -50,6 +51,15 @@ class _FakePolygonClient:
     async def get_snapshots_many(self, symbols: list[str], *, chunk_size: int = 50) -> list[Snapshot]:
         _ = chunk_size
         return [await self.get_snapshot(s) for s in symbols]
+
+    async def search_reference_tickers(self, query: str, *, limit: int = 15) -> list[dict[str, str]]:
+        _ = limit
+        q = query.strip().lower()
+        if "booz" in q:
+            return [{"ticker": "BAH", "name": "Booz Allen Hamilton Holding Corporation"}]
+        if q.startswith("msft") or q == "micro":
+            return [{"ticker": "MSFT", "name": "Microsoft Corporation"}]
+        return []
 
     async def get_bars(
         self,
@@ -190,6 +200,19 @@ def test_snapshot_handler_returns_symbol_snapshot() -> None:
     body = json.loads(response["body"])
     assert body["symbol"] == "AAPL"
     assert body["last_trade_price"] == 101.5
+
+
+def test_tickers_search_handler_requires_two_chars() -> None:
+    response = tickers_search_handler({"queryStringParameters": {"q": "a"}}, {}, client_factory=_FakePolygonClient)
+    assert response["statusCode"] == 400
+
+
+def test_tickers_search_handler_returns_items() -> None:
+    event = {"queryStringParameters": {"q": "Booz"}}
+    response = tickers_search_handler(event, {}, client_factory=_FakePolygonClient)
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["items"] == [{"symbol": "BAH", "name": "Booz Allen Hamilton Holding Corporation"}]
 
 
 def test_snapshots_batch_handler_requires_symbols() -> None:

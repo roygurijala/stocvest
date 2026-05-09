@@ -4,15 +4,16 @@ locals {
   http_api_route_definitions = {
     "GET /v1/health" = { module_key = "health", authorizer = false }
 
-    "GET /v1/market/status"        = { module_key = "market_data", authorizer = true }
-    "GET /v1/market/macro-context" = { module_key = "market_data", authorizer = true }
-    "GET /v1/market/snapshot"      = { module_key = "market_data", authorizer = true }
-    "GET /v1/market/snapshots"     = { module_key = "market_data", authorizer = true }
-    "GET /v1/market/bars"          = { module_key = "market_data", authorizer = true }
-    "POST /v1/market/bars-batch"   = { module_key = "market_data", authorizer = true }
-    "GET /v1/market/news"          = { module_key = "market_data", authorizer = true }
-    "GET /v1/market/options"       = { module_key = "market_data", authorizer = true }
-    "GET /v1/market/earnings"      = { module_key = "market_data", authorizer = true }
+    "GET /v1/market/status"         = { module_key = "market_data", authorizer = true }
+    "GET /v1/market/macro-context"  = { module_key = "market_data", authorizer = true }
+    "GET /v1/market/snapshot"       = { module_key = "market_data", authorizer = true }
+    "GET /v1/market/snapshots"      = { module_key = "market_data", authorizer = true }
+    "GET /v1/market/tickers-search" = { module_key = "market_data", authorizer = true }
+    "GET /v1/market/bars"           = { module_key = "market_data", authorizer = true }
+    "POST /v1/market/bars-batch"    = { module_key = "market_data", authorizer = true }
+    "GET /v1/market/news"           = { module_key = "market_data", authorizer = true }
+    "GET /v1/market/options"        = { module_key = "market_data", authorizer = true }
+    "GET /v1/market/earnings"       = { module_key = "market_data", authorizer = true }
 
     "POST /v1/signals/ai/explanations"       = { module_key = "signals", authorizer = true }
     "POST /v1/signals/swing/composite"       = { module_key = "signals", authorizer = true }

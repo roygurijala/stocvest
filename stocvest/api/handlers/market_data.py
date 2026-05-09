@@ -170,6 +170,33 @@ def snapshot_handler(
         return internal_error(str(exc))
 
 
+def tickers_search_handler(
+    event: LambdaEvent,
+    context: LambdaContext,
+    client_factory: Callable[..., PolygonClient] = PolygonClient,
+) -> dict[str, Any]:
+    """GET ``/v1/market/tickers-search?q=`` — Polygon reference ticker search (symbol / company name)."""
+    _ = context
+    query = _query_params(event)
+    raw = str(query.get("q") or query.get("search") or "").strip()
+    if len(raw) < 2:
+        return bad_request("Query param 'q' must be at least 2 characters.")
+    if len(raw) > 80:
+        return bad_request("Query too long.")
+
+    async def _run() -> dict[str, Any]:
+        settings = get_settings()
+        async with client_factory(api_key=settings.polygon_api_key) as client:
+            rows = await client.search_reference_tickers(raw, limit=15)
+        items = [{"symbol": r["ticker"], "name": r.get("name", "")} for r in rows if r.get("ticker")]
+        return ok({"items": items})
+
+    try:
+        return asyncio.run(_run())
+    except PolygonError as exc:
+        return internal_error(str(exc))
+
+
 def snapshots_batch_handler(
     event: LambdaEvent,
     context: LambdaContext,

@@ -202,6 +202,8 @@ export function SignalsPageClient({
   const [watchlistPickerOpen, setWatchlistPickerOpen] = useState(false);
   const [watchlistPickerSyms, setWatchlistPickerSyms] = useState<string[]>([]);
   const [watchlistPickerLoading, setWatchlistPickerLoading] = useState(false);
+  const [remoteCandidates, setRemoteCandidates] = useState<SymbolCandidate[]>([]);
+  const [remoteSearchLoading, setRemoteSearchLoading] = useState(false);
   const [signalEvidence, setSignalEvidence] = useState<SignalEvidenceData | null>(null);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [newsPanelSymbol, setNewsPanelSymbol] = useState("");
@@ -250,13 +252,56 @@ export function SignalsPageClient({
     return Array.from(m.values()).sort((a, b) => a.symbol.localeCompare(b.symbol));
   }, [scannerOverview.setups, scannerOverview.gapIntelligence, marketOverview.snapshots]);
 
+  useEffect(() => {
+    const q = symbolDraft.trim();
+    if (q.length < 2) {
+      setRemoteCandidates([]);
+      setRemoteSearchLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setRemoteSearchLoading(true);
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const res = await fetch(`/api/stocvest/market/tickers-search?q=${encodeURIComponent(q)}`);
+          const j = (await res.json().catch(() => ({}))) as { items?: unknown };
+          const items = Array.isArray(j.items) ? j.items : [];
+          const next: SymbolCandidate[] = [];
+          for (const it of items) {
+            if (!it || typeof it !== "object") continue;
+            const o = it as { symbol?: unknown; name?: unknown };
+            const sym = normalizeTickerInput(String(o.symbol ?? ""));
+            if (!sym) continue;
+            const name = String(o.name ?? "").trim();
+            next.push({ symbol: sym, label: name ? `${sym} — ${name}` : sym });
+          }
+          if (!cancelled) setRemoteCandidates(next);
+        } catch {
+          if (!cancelled) setRemoteCandidates([]);
+        } finally {
+          if (!cancelled) setRemoteSearchLoading(false);
+        }
+      })();
+    }, 280);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      setRemoteSearchLoading(false);
+    };
+  }, [symbolDraft]);
+
   const suggestionRows = useMemo(() => {
     const q = symbolDraft.trim().toLowerCase();
-    if (!q) return symbolCandidates.slice(0, 12);
-    return symbolCandidates
-      .filter((c) => c.symbol.toLowerCase().startsWith(q) || c.label.toLowerCase().includes(q))
-      .slice(0, 12);
-  }, [symbolCandidates, symbolDraft]);
+    const localMatches = !q
+      ? symbolCandidates.slice(0, 8)
+      : symbolCandidates
+          .filter((c) => c.symbol.toLowerCase().startsWith(q) || c.label.toLowerCase().includes(q))
+          .slice(0, 8);
+    const seen = new Set(localMatches.map((c) => c.symbol));
+    const fromRemote = remoteCandidates.filter((c) => !seen.has(c.symbol));
+    return [...localMatches, ...fromRemote].slice(0, 12);
+  }, [symbolCandidates, symbolDraft, remoteCandidates]);
 
   const applyCommittedSymbol = useCallback((sym: string | null | undefined) => {
     const t = normalizeTickerInput(String(sym ?? ""));
@@ -884,7 +929,8 @@ export function SignalsPageClient({
             }}
           />
         </div>
-        {suggestOpen && suggestionRows.length > 0 ? (
+        {suggestOpen &&
+        (suggestionRows.length > 0 || (remoteSearchLoading && symbolDraft.trim().length >= 2)) ? (
           <ul
             id="signal-symbol-suggestions"
             role="listbox"
@@ -895,6 +941,11 @@ export function SignalsPageClient({
               boxShadow: "0 12px 40px rgba(0,0,0,0.35)"
             }}
           >
+            {remoteSearchLoading && suggestionRows.length === 0 && symbolDraft.trim().length >= 2 ? (
+              <li className="px-3 py-2 text-sm" style={{ color: colors.textMuted }}>
+                Searching…
+              </li>
+            ) : null}
             {suggestionRows.map((row, idx) => (
               <li key={row.symbol} role="option" aria-selected={idx === suggestHighlight}>
                 <button
@@ -918,6 +969,11 @@ export function SignalsPageClient({
                 </button>
               </li>
             ))}
+            {!remoteSearchLoading && suggestionRows.length === 0 && symbolDraft.trim().length >= 2 ? (
+              <li className="px-3 py-2 text-sm" style={{ color: colors.textMuted }}>
+                No matching tickers. Try a symbol (e.g. AAPL) or another spelling.
+              </li>
+            ) : null}
           </ul>
         ) : null}
       </div>

@@ -996,6 +996,34 @@ class PolygonClient:
         data = await self._get(f"/v3/reference/tickers/{symbol}")
         return data.get("results", {})
 
+    async def search_reference_tickers(self, query: str, *, limit: int = 15) -> list[dict[str, str]]:
+        """
+        Polygon ``GET /v3/reference/tickers`` — match ticker or company name (for symbol pickers).
+        """
+        q = (query or "").strip()
+        if len(q) < 2:
+            return []
+        lim = max(1, min(int(limit), 25))
+        params = {
+            "search": q,
+            "active": "true",
+            "limit": str(lim),
+            "market": "stocks",
+        }
+        data = await self._get("/v3/reference/tickers", params)
+        rows_out: list[dict[str, str]] = []
+        for row in data.get("results", []) or []:
+            if not isinstance(row, dict):
+                continue
+            t = str(row.get("ticker") or "").strip().upper()
+            if not t or len(t) > 12:
+                continue
+            name = str(row.get("name") or "").strip()
+            rows_out.append({"ticker": t, "name": name})
+            if len(rows_out) >= lim:
+                break
+        return rows_out
+
     async def get_earnings_calendar(
         self,
         symbols: list[str],
