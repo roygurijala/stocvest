@@ -1,19 +1,26 @@
 import Link from "next/link";
-import { AGREEMENTS_BUNDLE_VERSION } from "@/lib/legal-agreements";
+import { AGREEMENTS_BUNDLE_VERSION, isSignupLegalEmbedSearch, withSignupLegalEmbed } from "@/lib/legal-agreements";
 
-export default function RiskDisclosurePage() {
+export default function RiskDisclosurePage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
+  const embed = isSignupLegalEmbedSearch(searchParams);
+  const termsHref = embed ? withSignupLegalEmbed("/terms") : "/terms";
+
   return (
     <main className="min-h-screen bg-[#0a0e1a] px-4 py-16 text-slate-100 md:px-8">
       <div className="mx-auto grid max-w-3xl gap-6">
-        <Link href="/signup/agreements" className="text-sm text-[#3b82f6] hover:underline">
-          ← Back to signup agreements
-        </Link>
-        <Link href="/" className="text-sm text-slate-400 hover:text-slate-200">
-          ← Home
-        </Link>
+        {embed ? null : (
+          <>
+            <Link href="/signup/agreements" className="text-sm text-[#3b82f6] hover:underline">
+              ← Back to signup agreements
+            </Link>
+            <Link href="/" className="text-sm text-slate-400 hover:text-slate-200">
+              ← Home
+            </Link>
+          </>
+        )}
         <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-100/95">
           ⚠️ Summary for onboarding only. This is not a substitute for the full{" "}
-          <Link href="/terms" className="text-amber-200 underline">
+          <Link href={termsHref} className="text-amber-200 underline">
             Terms of Service
           </Link>
           . Counsel must review all legal copy before paid launch.

@@ -1,14 +1,19 @@
 import Link from "next/link";
 
-import { AGREEMENTS_BUNDLE_VERSION } from "@/lib/legal-agreements";
+import { AGREEMENTS_BUNDLE_VERSION, isSignupLegalEmbedSearch, withSignupLegalEmbed } from "@/lib/legal-agreements";
 
-export default function TermsPage() {
+export default function TermsPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
+  const embed = isSignupLegalEmbedSearch(searchParams);
+  const riskHref = embed ? withSignupLegalEmbed("/legal/risk-disclosure") : "/legal/risk-disclosure";
+
   return (
     <main className="min-h-screen bg-[#0a0e1a] px-4 py-16 text-slate-100 md:px-8">
       <div className="mx-auto grid max-w-4xl gap-6">
-        <Link href="/" className="text-sm text-[#3b82f6] hover:underline">
-          ← Back to home
-        </Link>
+        {embed ? null : (
+          <Link href="/" className="text-sm text-[#3b82f6] hover:underline">
+            ← Back to home
+          </Link>
+        )}
         <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-100/95">
           ⚠️ This Terms of Service is a working draft. It is pending review by a licensed securities attorney before this platform accepts
           paid subscribers.
@@ -39,7 +44,7 @@ export default function TermsPage() {
           <p className="mt-3 text-slate-300">
             Trading involves substantial risk of loss. Past signal outcomes do not guarantee future results. You are solely responsible for
             your trading decisions. See also the{" "}
-            <Link href="/legal/risk-disclosure" className="text-[#38bdf8] hover:underline">
+            <Link href={riskHref} className="text-[#38bdf8] hover:underline">
               risk disclosure
             </Link>{" "}
             page.

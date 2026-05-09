@@ -1,14 +1,18 @@
 import Link from "next/link";
 
-import { AGREEMENTS_BUNDLE_VERSION } from "@/lib/legal-agreements";
+import { AGREEMENTS_BUNDLE_VERSION, isSignupLegalEmbedSearch } from "@/lib/legal-agreements";
 
-export default function PrivacyPage() {
+export default function PrivacyPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
+  const embed = isSignupLegalEmbedSearch(searchParams);
+
   return (
     <main className="min-h-screen bg-[#0a0e1a] px-4 py-16 text-slate-100 md:px-8">
       <div className="mx-auto grid max-w-4xl gap-6">
-        <Link href="/" className="text-sm text-[#3b82f6] hover:underline">
-          ← Back to home
-        </Link>
+        {embed ? null : (
+          <Link href="/" className="text-sm text-[#3b82f6] hover:underline">
+            ← Back to home
+          </Link>
+        )}
         <div>
           <h1 className="m-0 text-3xl font-bold md:text-4xl">Privacy Policy</h1>
           <p className="mt-2 text-sm text-slate-400">

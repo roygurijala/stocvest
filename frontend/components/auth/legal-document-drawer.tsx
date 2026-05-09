@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
+import { withSignupLegalEmbed } from "@/lib/legal-agreements";
 
 function isDocumentScrolledToBottom(win: Window, doc: Document, tolerancePx: number): boolean {
   const de = doc.documentElement;
@@ -152,7 +153,13 @@ export function LegalDocumentDrawer({
           signup.
         </p>
         <div className="relative min-h-0 flex-1 bg-[#070d18]">
-          <iframe ref={iframeRef} title={title} src={href} className="h-full w-full border-0" onLoad={wireIframe} />
+          <iframe
+            ref={iframeRef}
+            title={title}
+            src={withSignupLegalEmbed(href)}
+            className="h-full w-full border-0"
+            onLoad={wireIframe}
+          />
         </div>
       </aside>
     </div>,

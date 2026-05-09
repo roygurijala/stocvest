@@ -21,3 +21,20 @@ export const AGREEMENTS_DOCUMENT_LINKS: ReadonlyArray<{ href: string; label: str
   { href: "/privacy", label: "Privacy Policy" },
   { href: "/legal/risk-disclosure", label: "Risk disclosure" },
 ];
+
+/** Query key: legal pages loaded in the signup drawer iframe append this to hide exit links. */
+export const SIGNUP_LEGAL_EMBED_PARAM = "signupEmbed";
+
+export function isSignupLegalEmbedSearch(raw?: Record<string, string | string[] | undefined>): boolean {
+  if (!raw) return false;
+  const v = raw[SIGNUP_LEGAL_EMBED_PARAM];
+  const s = Array.isArray(v) ? v[0] : v;
+  return s === "1" || s === "true";
+}
+
+/** Use for iframe `src` so embedded legal pages can detect embed mode. */
+export function withSignupLegalEmbed(path: string): string {
+  if (path.includes(`${SIGNUP_LEGAL_EMBED_PARAM}=`)) return path;
+  const sep = path.includes("?") ? "&" : "?";
+  return `${path}${sep}${SIGNUP_LEGAL_EMBED_PARAM}=1`;
+}
