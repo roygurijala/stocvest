@@ -37,6 +37,7 @@ Thumbs.db
 frontend/node_modules/
 frontend/.next/
 frontend/.env.local
+*.tsbuildinfo
 
 # AWS / Terraform (for later phases)
 *.tfstate
