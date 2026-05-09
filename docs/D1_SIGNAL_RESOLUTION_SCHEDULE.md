@@ -1,6 +1,6 @@
 # D1 — Signal resolution Lambda (EventBridge)
 
-**Last updated:** 2026-05-08 (D1 schedule unchanged; **CONTEXT** §13 lists current **`pytest` / Vitest** baselines).
+**Last updated:** 2026-05-08 (D1 schedule unchanged; **CONTEXT** §13 lists current **`pytest` / Vitest** baselines — backend **`885 passed`, `3 skipped`** as of last doc sync).
 
 **Ops note (2026-05-03):** **`terraform apply -var-file=terraform.tfvars -input=false -auto-approve`** completed successfully (**Apply complete! Resources: 19 added, 14 changed, 2 destroyed.**), including EventBridge rule/target/permission alignment, new API Gateway HTTP routes, Lambda environment updates, and SES IAM on the API execution role.
 

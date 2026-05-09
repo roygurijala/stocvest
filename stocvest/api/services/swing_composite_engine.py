@@ -48,6 +48,7 @@ from stocvest.signals.news_analyzer import NewsAnalyzer
 from stocvest.signals.news_sentiment import SWING_NEWS_LOOKBACK_HOURS
 from stocvest.signals.sector_analyzer import SectorAnalyzer
 from stocvest.signals.sector_mapper import SectorMapper, SectorResolutionState
+from stocvest.signals.sector_sic_fallback import SicMappingTier
 from stocvest.signals.sector_momentum import (
     SectorMomentumScore,
     compute_swing_sector_score,
@@ -96,6 +97,7 @@ async def build_swing_composite_response(
     econ_end = date.today() + timedelta(days=max(0, int(params.swing_macro_events_days) - 1))
     sic_bucket_for_geo: str | None = None
     sector_resolution_state: SectorResolutionState | None = None
+    sic_mapping_tier: SicMappingTier | None = None
 
     async with PolygonClient(api_key=settings.polygon_api_key) as client:
         daily_r, sym_r, news_r, spy_r, qqq_r, vix_r, econ_r, bz_r = await asyncio.gather(
@@ -127,11 +129,13 @@ async def build_swing_composite_response(
         sector_week_bars: list[Bar] = []
         if sym_snap is not None:
             try:
-                etf, sector_display, sic_bucket_for_geo, sector_resolution_state = await SectorMapper.get_sector_etf(
-                    sym,
-                    client,
-                    sector_cache if sector_cache.enabled else None,
-                    params.sector,
+                etf, sector_display, sic_bucket_for_geo, sector_resolution_state, sic_mapping_tier = (
+                    await SectorMapper.get_sector_etf(
+                        sym,
+                        client,
+                        sector_cache if sector_cache.enabled else None,
+                        params.sector,
+                    )
                 )
                 sector_etf_sym = (etf or "").strip().upper()
                 if sector_etf_sym and sector_resolution_state != SectorResolutionState.PENDING_REFRESH:
@@ -343,6 +347,7 @@ async def build_swing_composite_response(
                     momentum=sector_momentum,
                     resolution_state=sector_resolution_state,
                     daily_sessions=ds,
+                    sic_mapping_tier=sic_mapping_tier,
                 )
             )
         layers_out.append(row)

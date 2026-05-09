@@ -43,6 +43,7 @@ from stocvest.signals.news_analyzer import NewsAnalyzer
 from stocvest.signals.alignment_score import AlignmentResult, adjust_composite_with_alignment, alignment_to_response_dict
 from stocvest.signals.sector_analyzer import SectorAnalyzer
 from stocvest.signals.sector_mapper import SectorMapper, SectorResolutionState
+from stocvest.signals.sector_sic_fallback import SicMappingTier
 from stocvest.signals.sector_momentum import (
     SectorMomentumScore,
     compute_day_sector_score,
@@ -203,6 +204,7 @@ class RealCompositeEnginePhase:
     alignment: AlignmentResult | None = None
     sector_momentum: SectorMomentumScore | None = None
     sector_resolution_state: SectorResolutionState | None = None
+    sic_mapping_tier: SicMappingTier | None = None
 
 
 async def run_real_composite_engine_phase(
@@ -248,14 +250,17 @@ async def run_real_composite_engine_phase(
         sector_display: str | None = None
         sic_bucket_for_geo: str | None = None
         sector_resolution_state: SectorResolutionState | None = None
+        sic_mapping_tier: SicMappingTier | None = None
         sector_etf_sym: str = ""
         if sym_snap is not None:
             try:
-                etf, sector_display, sic_bucket_for_geo, sector_resolution_state = await SectorMapper.get_sector_etf(
-                    sym,
-                    client,
-                    sector_cache if sector_cache.enabled else None,
-                    params.sector,
+                etf, sector_display, sic_bucket_for_geo, sector_resolution_state, sic_mapping_tier = (
+                    await SectorMapper.get_sector_etf(
+                        sym,
+                        client,
+                        sector_cache if sector_cache.enabled else None,
+                        params.sector,
+                    )
                 )
                 sector_etf_sym = (etf or "").strip().upper()
                 if sector_etf_sym and sector_resolution_state != SectorResolutionState.PENDING_REFRESH:
@@ -391,6 +396,7 @@ async def run_real_composite_engine_phase(
         alignment=alignment,
         sector_momentum=sector_momentum,
         sector_resolution_state=sector_resolution_state,
+        sic_mapping_tier=sic_mapping_tier,
     )
 
 
@@ -418,6 +424,7 @@ async def build_real_composite_response(
     alignment = getattr(phase, "alignment", None)
     sector_momentum = getattr(phase, "sector_momentum", None)
     sector_resolution_state = getattr(phase, "sector_resolution_state", None)
+    sic_mapping_tier = getattr(phase, "sic_mapping_tier", None)
     tech, news, macro, sector, geo, internals = layer_results
 
     contributions: list[dict[str, Any]] = []
@@ -488,6 +495,7 @@ async def build_real_composite_response(
                     momentum=sector_momentum,
                     resolution_state=sector_resolution_state,
                     daily_sessions=ds,
+                    sic_mapping_tier=sic_mapping_tier,
                 )
             )
         layers_out.append(row)

@@ -1,6 +1,6 @@
 # STOCVEST — Monthly signal tuning playbook
 
-**Last reviewed:** 2026-05-07 — playbook unchanged; landing, founding-member API, beta override, and HTTP audit infra are documented in [`docs/CONTEXT.md`](./CONTEXT.md) §1–§2 and [`docs/API_CONTRACTS.md`](./API_CONTRACTS.md).
+**Last reviewed:** 2026-05-08 — optional composite **`layers[]`** field **`sic_mapping_tier`** on the **sector** row supports cohort analysis (e.g. exclude **`coarse`** / **`fallback_spy`** when studying sector-layer accuracy); see [`docs/SIGNAL_ENGINE.md`](./SIGNAL_ENGINE.md) § Sector and [`docs/API_CONTRACTS.md`](./API_CONTRACTS.md) §4.3. Other pointers: [`docs/CONTEXT.md`](./CONTEXT.md) §1–§2, founding-member API, beta override, HTTP audit infra.
 
 Use with **`stocvest/config/signal_parameters.py`** (defaults), **Secrets Manager** secret `stocvest/signal-parameters`, **DynamoDB** `ParameterHistory`, and **`GET /v1/signals/analysis`**.
 
@@ -25,7 +25,7 @@ Authenticated **GET** (recommended via API Gateway):
 
 Or direct Lambda invoke with an event shaped like your API Gateway proxy (include the internal header if using `STOCVEST_INTERNAL_ANALYSIS_KEY`).
 
-Inspect JSON: `by_rsi_bucket`, `by_vwap_position`, `by_orb_signal`, `by_volume_bucket`, `by_parameter_version`, `layer_accuracy`, `confluence_accuracy`, `total_signals`, `signals_with_outcomes`.
+Inspect JSON: `by_rsi_bucket`, `by_vwap_position`, `by_orb_signal`, `by_volume_bucket`, `by_parameter_version`, `layer_accuracy`, `confluence_accuracy`, `total_signals`, `signals_with_outcomes`. For **sector** post-hoc studies, join stored composite snapshots (if captured) with **`sic_mapping_tier`** when present — **`coarse`** is a provisional 2-digit SIC proxy; **`fallback_spy`** is the honest broad-market path.
 
 ---
 

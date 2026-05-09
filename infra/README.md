@@ -1,6 +1,6 @@
 # STOCVEST Terraform
 
-**Last updated:** 2026-05-08 (no Terraform change this date—doc pointer only; infra snapshot unchanged: **`AuditEvents`**, **`DYNAMODB_AUDIT_EVENTS_TABLE`**, founding + audit Gateway routes, CORS **`x-stocvest-session-id`** — align with [`docs/CONTEXT.md`](../docs/CONTEXT.md) §3.)
+**Last updated:** 2026-05-08 (doc pointer sync with [`docs/CONTEXT.md`](../docs/CONTEXT.md) §3 / §13; no infra change required for sector **SIC** mapping tiers — application-only in `stocvest/signals/`.)
 
 This directory contains AWS infrastructure as code:
 

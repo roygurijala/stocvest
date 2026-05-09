@@ -104,7 +104,7 @@ async def fetch_sector_buckets_for_symbols(symbols: list[str]) -> dict[str, str]
 
             async def one(sym: str) -> tuple[str, str]:
                 try:
-                    _, _, bucket, _ = await SectorMapper.get_sector_etf(
+                    _, _, bucket, _, _ = await SectorMapper.get_sector_etf(
                         sym,
                         client,
                         sector_cache if cache.enabled else None,

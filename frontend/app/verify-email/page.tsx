@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getServerSession } from "@/lib/auth/session";
 import { VerifyEmailForm } from "@/components/auth/verify-email-form";
+import { AuthShell } from "@/components/auth/auth-shell";
 
 export default function VerifyEmailPage({ searchParams }: { searchParams?: { email?: string } }) {
   const session = getServerSession();
@@ -10,12 +11,11 @@ export default function VerifyEmailPage({ searchParams }: { searchParams?: { ema
   const email = searchParams?.email || "";
 
   return (
-    <main className="grid min-h-screen place-items-center bg-[#0a0e1a] px-4 py-10">
-      <section className="stocvest-edge-line-card w-full max-w-md bg-[#111827] p-6">
-        <h1 className="m-0 text-3xl font-bold text-slate-100">Check your email.</h1>
-        <p className="mb-6 mt-1 text-slate-400">We sent a verification code to {email || "your email"}.</p>
-        <VerifyEmailForm email={email} />
-      </section>
-    </main>
+    <AuthShell
+      title="Check your email."
+      subtitle={`We sent a verification code to ${email || "your inbox"}. Enter the code below to activate your account.`}
+    >
+      <VerifyEmailForm email={email} />
+    </AuthShell>
   );
 }

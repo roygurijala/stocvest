@@ -17,7 +17,8 @@ import {
   Settings,
   TrendingUp,
   Zap,
-  Percent
+  Percent,
+  BadgeCheck
 } from "lucide-react";
 import { logoutAction } from "@/app/login/actions";
 import { openCrispChat } from "@/components/crisp-chat";
@@ -51,6 +52,7 @@ export const DASHBOARD_NAV_ITEMS: ReadonlyArray<{
   { href: "/dashboard/futures", label: "Futures", icon: BarChart2, feature: "futures" },
   { href: "/dashboard/journal", label: "Journal", icon: BookOpen },
   { href: "/dashboard/performance", label: "Performance", icon: Percent },
+  { href: "/dashboard/legal", label: "Legal & agreements", icon: BadgeCheck },
   { href: "/dashboard/settings", label: "Settings", icon: Settings }
 ];
 

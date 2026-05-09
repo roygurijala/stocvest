@@ -1,13 +1,20 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { cognitoErrorMessage, signUp } from "@/lib/auth/cognito";
+import { AGREEMENTS_BUNDLE_VERSION, SIGNUP_LEGAL_COOKIE_NAME } from "@/lib/legal-agreements";
 
 export interface SignupActionState {
   error?: string;
 }
 
 export async function signupAction(_prev: SignupActionState, formData: FormData): Promise<SignupActionState> {
+  const jar = cookies();
+  if (jar.get(SIGNUP_LEGAL_COOKIE_NAME)?.value !== AGREEMENTS_BUNDLE_VERSION) {
+    redirect("/signup/agreements");
+  }
+
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "");
   const confirmPassword = String(formData.get("confirm_password") || "");

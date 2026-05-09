@@ -3,6 +3,7 @@ import pytest
 from stocvest.config.sector_etf_defaults import DEFAULT_SECTOR_TO_ETF
 from stocvest.config.signal_parameters import default_signal_parameters
 from stocvest.signals.sector_mapper import SIC_TO_SECTOR, SectorMapper
+from stocvest.signals.sector_sic_fallback import SicMappingTier
 
 
 def test_sic_7375_maps_communication_services() -> None:
@@ -35,15 +36,79 @@ def test_pending_sector_cache_chips(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_unmapped_after_polygon_etfs_valid(mock_parameter_store: object) -> None:
-    """Unknown SIC after lookup uses SPY with UNMAPPED state (validated via polygon path mocks)."""
+async def test_bah_sic_8742_resolves_xli(mock_parameter_store: object) -> None:
     from unittest.mock import AsyncMock
 
-    from stocvest.signals.sector_mapper import SectorResolutionState
+    from stocvest.signals.sector_mapper import SectorMapper, SectorResolutionState
 
+    SectorMapper.clear_memory_cache()
+    mock_client = AsyncMock()
+    mock_client.get_ticker_details.return_value = {"sic_code": "8742"}
+    etf, _, bucket, st, tier = await SectorMapper.get_sector_etf("BAH", mock_client, None, mock_parameter_store.sector)
+    assert etf == "XLI"
+    assert bucket == "industrials"
+    assert st == SectorResolutionState.RESOLVED
+    assert tier == SicMappingTier.EXACT
+
+
+@pytest.mark.asyncio
+async def test_dynamo_sp_remaps_when_sic_now_in_table(mock_parameter_store: object) -> None:
+    """Stale SPY+unmapped cache rows upgrade when SIC maps to a sector ETF (no Polygon call)."""
+    from unittest.mock import AsyncMock
+
+    from stocvest.signals.sector_mapper import SectorMapper, SectorResolutionState
+
+    SectorMapper.clear_memory_cache()
+    mock_cache = AsyncMock()
+    mock_cache.get_sector_cache = AsyncMock(
+        return_value={
+            "sector_etf": "SPY",
+            "display_name": "Broad Market",
+            "sector_name": "default",
+            "sic_code": "8742",
+            "resolution_state": "unmapped",
+        }
+    )
+    mock_cache.save_sector_cache = AsyncMock()
+    mock_client = AsyncMock()
+    etf, _, bucket, st, tier = await SectorMapper.get_sector_etf("BAH", mock_client, mock_cache, mock_parameter_store.sector)
+    assert etf == "XLI"
+    assert bucket == "industrials"
+    assert st == SectorResolutionState.RESOLVED
+    assert tier == SicMappingTier.EXACT
+    mock_client.get_ticker_details.assert_not_called()
+    mock_cache.save_sector_cache.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_unmapped_after_polygon_etfs_valid(mock_parameter_store: object) -> None:
+    """Non-classifiable SIC (9999) stays SPY + UNMAPPED."""
+    from unittest.mock import AsyncMock
+
+    from stocvest.signals.sector_mapper import SectorMapper, SectorResolutionState
+
+    SectorMapper.clear_memory_cache()
     mock_client = AsyncMock()
     mock_client.get_ticker_details.return_value = {"sic_code": "9999"}
-    etf, _, bucket, st = await SectorMapper.get_sector_etf("FOO", mock_client, None, mock_parameter_store.sector)
+    etf, _, bucket, st, tier = await SectorMapper.get_sector_etf("FOO", mock_client, None, mock_parameter_store.sector)
     assert etf == "SPY"
     assert bucket == "default"
     assert st == SectorResolutionState.UNMAPPED
+    assert tier == SicMappingTier.FALLBACK_SPY
+
+
+@pytest.mark.asyncio
+async def test_unknown_sic_coarse_two_digit_maps_industrials(mock_parameter_store: object) -> None:
+    """SIC not in exact table but in manufacturing division (20–39) maps to XLI via 2-digit fallback."""
+    from unittest.mock import AsyncMock
+
+    from stocvest.signals.sector_mapper import SectorMapper, SectorResolutionState
+
+    SectorMapper.clear_memory_cache()
+    mock_client = AsyncMock()
+    mock_client.get_ticker_details.return_value = {"sic_code": "2099"}
+    etf, _, bucket, st, tier = await SectorMapper.get_sector_etf("ZZZ", mock_client, None, mock_parameter_store.sector)
+    assert etf == "XLI"
+    assert bucket == "industrials"
+    assert st == SectorResolutionState.RESOLVED
+    assert tier == SicMappingTier.COARSE

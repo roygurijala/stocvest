@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { AGREEMENTS_BUNDLE_VERSION } from "@/lib/legal-agreements";
+
 export default function PrivacyPage() {
   return (
     <main className="min-h-screen bg-[#0a0e1a] px-4 py-16 text-slate-100 md:px-8">
@@ -7,7 +9,12 @@ export default function PrivacyPage() {
         <Link href="/" className="text-sm text-[#3b82f6] hover:underline">
           ← Back to home
         </Link>
-        <h1 className="text-3xl font-bold md:text-4xl">Privacy Policy</h1>
+        <div>
+          <h1 className="m-0 text-3xl font-bold md:text-4xl">Privacy Policy</h1>
+          <p className="mt-2 text-sm text-slate-400">
+            Document version: <span className="font-mono text-slate-200">{AGREEMENTS_BUNDLE_VERSION}</span> (bundled with Terms at signup).
+          </p>
+        </div>
         <section className="rounded-xl border border-white/10 bg-white/5 p-6">
           <p className="text-slate-300">
             We collect account and usage data needed to operate STOCVEST, including authentication details, profile

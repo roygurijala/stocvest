@@ -10,6 +10,7 @@ import pytest
 from stocvest.config.signal_parameters import SwingTechnicalParameters, default_signal_parameters
 from stocvest.data.models import Bar, Snapshot, Timeframe
 from stocvest.signals.sector_mapper import SectorResolutionState
+from stocvest.signals.sector_sic_fallback import SicMappingTier
 from stocvest.signals.technical_analyzer import TechnicalAnalyzer
 
 
@@ -111,7 +112,9 @@ async def test_swing_fetches_daily_bars_not_1min(_mute_side_effects: None, monke
     )
     monkeypatch.setattr(
         "stocvest.api.services.swing_composite_engine.SectorMapper.get_sector_etf",
-        AsyncMock(return_value=("XLK", "Technology", "technology", SectorResolutionState.RESOLVED)),
+        AsyncMock(
+            return_value=("XLK", "Technology", "technology", SectorResolutionState.RESOLVED, SicMappingTier.EXACT)
+        ),
     )
 
     from stocvest.api.services.swing_composite_engine import build_swing_composite_response
@@ -199,7 +202,9 @@ async def test_swing_news_uses_extended_lookback(_mute_side_effects: None, monke
     )
     monkeypatch.setattr(
         "stocvest.api.services.swing_composite_engine.SectorMapper.get_sector_etf",
-        AsyncMock(return_value=("XLK", "Technology", "technology", SectorResolutionState.RESOLVED)),
+        AsyncMock(
+            return_value=("XLK", "Technology", "technology", SectorResolutionState.RESOLVED, SicMappingTier.EXACT)
+        ),
     )
 
     from stocvest.api.services.swing_composite_engine import build_swing_composite_response
@@ -274,7 +279,9 @@ async def test_swing_uses_swing_technical_not_day(_mute_side_effects: None, monk
     )
     monkeypatch.setattr(
         "stocvest.api.services.swing_composite_engine.SectorMapper.get_sector_etf",
-        AsyncMock(return_value=("XLK", "Technology", "technology", SectorResolutionState.RESOLVED)),
+        AsyncMock(
+            return_value=("XLK", "Technology", "technology", SectorResolutionState.RESOLVED, SicMappingTier.EXACT)
+        ),
     )
 
     mock_analyze = MagicMock(side_effect=AssertionError("TechnicalAnalyzer should not run for swing composite"))

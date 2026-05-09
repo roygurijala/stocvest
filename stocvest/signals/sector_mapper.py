@@ -10,6 +10,11 @@ from stocvest.api.services.sector_cache_dynamo import DynamoSectorCache
 from stocvest.config.sector_etf_defaults import DEFAULT_SECTOR_TO_ETF
 from stocvest.config.signal_parameters import SectorParameters
 from stocvest.data.polygon_client import PolygonClient
+from stocvest.signals.sector_sic_fallback import (
+    SicMappingTier,
+    normalize_sic_digits,
+    resolve_sector_bucket_from_sic,
+)
 from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
 
@@ -110,6 +115,14 @@ SIC_TO_SECTOR: dict[str, str] = {
     "1321": "oil_gas",
     "3559": "industrials",
     "3537": "industrials",
+    # Management / business consulting & related services (e.g. Booz Allen BAH = 8742).
+    # Benchmark: XLI vs SPY for broad professional / government-services tilt without SPY–SPY spread.
+    "8741": "industrials",
+    "8742": "industrials",
+    "8743": "industrials",
+    "8744": "industrials",
+    "8748": "industrials",
+    "8711": "industrials",
     "3812": "defense",
     "3760": "defense",
     "3769": "defense",
@@ -153,6 +166,7 @@ ETF_DISPLAY_NAMES: dict[str, str] = {
     "XLP": "Consumer Staples",
     "XLE": "Energy",
     "XLI": "Industrials",
+    "ITA": "Aerospace & Defense",
     "XTN": "Transportation",
     "ITA": "Aerospace & Defense",
     "JETS": "Airlines",
@@ -182,9 +196,9 @@ class SupportsSectorCache(Protocol):
 
 
 class SectorMapper:
-    """symbol → (etf_ticker, display_name, sic_bucket, resolution_state)."""
+    """symbol → (etf_ticker, display_name, sic_bucket, resolution_state, sic_mapping_tier)."""
 
-    _memory_cache: dict[str, tuple[str, str, str, SectorResolutionState]] = {}
+    _memory_cache: dict[str, tuple[str, str, str, SectorResolutionState, SicMappingTier]] = {}
     _pending_tasks: ClassVar[dict[str, asyncio.Task]] = {}
 
     @staticmethod
@@ -198,6 +212,7 @@ class SectorMapper:
         sector_bucket: str | None = None,
         persist_dynamo: bool | None = None,
         resolution_state: str | None = None,
+        sic_mapping_tier: str | None = None,
         extra: str | None = None,
     ) -> None:
         parts = [
@@ -211,6 +226,8 @@ class SectorMapper:
             parts.append(f"sic={sic_code if sic_code else '(empty)'}")
         if sector_bucket is not None:
             parts.append(f"bucket={sector_bucket}")
+        if sic_mapping_tier:
+            parts.append(f"sic_mapping_tier={sic_mapping_tier}")
         if persist_dynamo is not None:
             parts.append(f"persist_dynamo={persist_dynamo}")
         if resolution_state:
@@ -230,6 +247,38 @@ class SectorMapper:
     @classmethod
     def _mapping(cls, sector_params: SectorParameters | None) -> dict[str, str]:
         return dict(sector_params.sector_to_etf) if sector_params else dict(DEFAULT_SECTOR_TO_ETF)
+
+    @classmethod
+    def _upgrade_cached_sector_if_sic_now_mapped(
+        cls,
+        *,
+        etf: str,
+        display_name: str,
+        bucket: str,
+        state: SectorResolutionState,
+        sic_code: str,
+        sector_params: SectorParameters | None,
+    ) -> tuple[str, str, str, SectorResolutionState, SicMappingTier] | None:
+        """
+        Dynamo may still hold SPY + unmapped from before a SIC code was added to SIC_TO_SECTOR.
+        If we now have a non-default bucket for that SIC, remap without a Polygon round-trip.
+        """
+        etf_u = (etf or "").strip().upper()
+        sic = normalize_sic_digits(sic_code)
+        if not sic or etf_u != "SPY":
+            return None
+        fresh_bucket, fresh_tier = resolve_sector_bucket_from_sic(sic, SIC_TO_SECTOR)
+        if fresh_bucket == "default":
+            return None
+        mapping = cls._mapping(sector_params)
+        new_etf = mapping.get(fresh_bucket, mapping.get("default", "SPY"))
+        if (new_etf or "").strip().upper() == "SPY":
+            return None
+        new_display = str(ETF_DISPLAY_NAMES.get(new_etf, new_etf))
+        new_state = SectorResolutionState.RESOLVED
+        if new_etf == etf and fresh_bucket == bucket and new_state == state:
+            return None
+        return (new_etf, new_display, fresh_bucket, new_state, fresh_tier)
 
     @classmethod
     def _resolution_from_polygon(
@@ -257,12 +306,12 @@ class SectorMapper:
             if not isinstance(details, dict):
                 details = {}
             sic_raw = details.get("sic_code")
-            sic_code = str(sic_raw).strip() if sic_raw is not None else ""
-            sector_name = SIC_TO_SECTOR.get(sic_code, "default")
+            sic_code = normalize_sic_digits(sic_raw)
+            sector_name, sic_tier = resolve_sector_bucket_from_sic(sic_code, SIC_TO_SECTOR)
             etf = mapping.get(sector_name, mapping.get("default", "SPY"))
             display = str(ETF_DISPLAY_NAMES.get(etf, etf))
             state = cls._resolution_from_polygon(sic_code=sic_code, sector_name=sector_name, etf=etf)
-            cls._memory_cache[sym] = (etf, display, sector_name, state)
+            cls._memory_cache[sym] = (etf, display, sector_name, state, sic_tier)
             persist = should_persist_sector_dynamo_item(etf=etf, sector_name=sector_name, sic_code=sic_code)
             cls._log_sector_resolution(
                 symbol=sym,
@@ -273,6 +322,7 @@ class SectorMapper:
                 sector_bucket=sector_name,
                 persist_dynamo=persist,
                 resolution_state=state.value,
+                sic_mapping_tier=sic_tier.value,
             )
             if persist:
                 try:
@@ -298,6 +348,7 @@ class SectorMapper:
                 ETF_DISPLAY_NAMES["SPY"],
                 "default",
                 SectorResolutionState.UNMAPPED,
+                SicMappingTier.FALLBACK_SPY,
             )
 
     @classmethod
@@ -327,7 +378,7 @@ class SectorMapper:
         polygon_client: Any,
         sector_cache: SupportsSectorCache | None = None,
         sector_params: SectorParameters | None = None,
-    ) -> tuple[str, str, str, SectorResolutionState]:
+    ) -> tuple[str, str, str, SectorResolutionState, SicMappingTier | None]:
         sym = symbol.upper().strip()
         if not sym:
             cls._log_sector_resolution(
@@ -336,11 +387,12 @@ class SectorMapper:
                 display_name=ETF_DISPLAY_NAMES["SPY"],
                 source="empty_symbol_fallback",
                 resolution_state=SectorResolutionState.UNMAPPED.value,
+                sic_mapping_tier=SicMappingTier.FALLBACK_SPY.value,
             )
-            return "SPY", ETF_DISPLAY_NAMES["SPY"], "default", SectorResolutionState.UNMAPPED
+            return "SPY", ETF_DISPLAY_NAMES["SPY"], "default", SectorResolutionState.UNMAPPED, SicMappingTier.FALLBACK_SPY
 
         if sym in cls._memory_cache:
-            etf, dn, bucket, st = cls._memory_cache[sym]
+            etf, dn, bucket, st, tier = cls._memory_cache[sym]
             cls._log_sector_resolution(
                 symbol=sym,
                 etf=etf,
@@ -348,8 +400,9 @@ class SectorMapper:
                 source="memory_cache",
                 sector_bucket=bucket,
                 resolution_state=st.value,
+                sic_mapping_tier=tier.value,
             )
-            return etf, dn, bucket, st
+            return etf, dn, bucket, st, tier
 
         if sector_cache is not None and callable(getattr(sector_cache, "get_sector_cache", None)):
             try:
@@ -363,17 +416,49 @@ class SectorMapper:
                         st = SectorResolutionState(rs_raw) if rs_raw else SectorResolutionState.RESOLVED
                     except ValueError:
                         st = SectorResolutionState.RESOLVED
-                    result = (etf, str(dn), bucket_cached, st)
-                    cls._memory_cache[sym] = result
                     sic_cached = str(cached.get("sic_code") or "").strip() or None
+                    upgraded = cls._upgrade_cached_sector_if_sic_now_mapped(
+                        etf=etf,
+                        display_name=str(dn),
+                        bucket=bucket_cached,
+                        state=st,
+                        sic_code=sic_cached or "",
+                        sector_params=sector_params,
+                    )
+                    cache_log_source = "dynamo_cache"
+                    if upgraded is not None:
+                        etf, dn, bucket_cached, st, sic_tier = upgraded
+                        cache_log_source = "dynamo_cache_sic_remap"
+                        save_fn = getattr(sector_cache, "save_sector_cache", None)
+                        if save_fn is not None and sic_cached:
+                            try:
+                                await save_fn(
+                                    symbol=sym,
+                                    sector_etf=etf,
+                                    sector_name=bucket_cached,
+                                    display_name=str(dn),
+                                    sic_code=sic_cached,
+                                    ttl_days=30,
+                                    resolution_state=st.value,
+                                )
+                            except Exception as exc:
+                                log.warning("Sector cache remap write failed symbol=%s err=%s", sym, exc)
+                    else:
+                        _, sic_tier = resolve_sector_bucket_from_sic(
+                            normalize_sic_digits(sic_cached or ""),
+                            SIC_TO_SECTOR,
+                        )
+                    result = (etf, str(dn), bucket_cached, st, sic_tier)
+                    cls._memory_cache[sym] = result
                     cls._log_sector_resolution(
                         symbol=sym,
                         etf=etf,
                         display_name=str(dn),
-                        source="dynamo_cache",
+                        source=cache_log_source,
                         sic_code=sic_cached,
                         sector_bucket=bucket_cached,
                         resolution_state=st.value,
+                        sic_mapping_tier=sic_tier.value,
                     )
                     return result
             except Exception as exc:
@@ -388,7 +473,7 @@ class SectorMapper:
                     source="pending_cache_refresh",
                     resolution_state=SectorResolutionState.PENDING_REFRESH.value,
                 )
-                return "", "Sector resolving…", "default", SectorResolutionState.PENDING_REFRESH
+                return "", "Sector resolving…", "default", SectorResolutionState.PENDING_REFRESH, None
 
         mapping = cls._mapping(sector_params)
         try:
@@ -396,12 +481,12 @@ class SectorMapper:
             if not isinstance(details, dict):
                 details = {}
             sic_raw = details.get("sic_code")
-            sic_code = str(sic_raw).strip() if sic_raw is not None else ""
-            sector_name = SIC_TO_SECTOR.get(sic_code, "default")
+            sic_code = normalize_sic_digits(sic_raw)
+            sector_name, sic_tier = resolve_sector_bucket_from_sic(sic_code, SIC_TO_SECTOR)
             etf = mapping.get(sector_name, mapping.get("default", "SPY"))
             display = str(ETF_DISPLAY_NAMES.get(etf, etf))
             state = cls._resolution_from_polygon(sic_code=sic_code, sector_name=sector_name, etf=etf)
-            result = (etf, display, sector_name, state)
+            result = (etf, display, sector_name, state, sic_tier)
             cls._memory_cache[sym] = result
 
             persist = should_persist_sector_dynamo_item(etf=etf, sector_name=sector_name, sic_code=sic_code)
@@ -414,6 +499,7 @@ class SectorMapper:
                 sector_bucket=sector_name,
                 persist_dynamo=persist,
                 resolution_state=state.value,
+                sic_mapping_tier=sic_tier.value,
             )
 
             if sector_cache is not None and persist:
@@ -437,4 +523,4 @@ class SectorMapper:
                 sym,
                 exc,
             )
-            return "SPY", ETF_DISPLAY_NAMES["SPY"], "default", SectorResolutionState.UNMAPPED
+            return "SPY", ETF_DISPLAY_NAMES["SPY"], "default", SectorResolutionState.UNMAPPED, SicMappingTier.FALLBACK_SPY

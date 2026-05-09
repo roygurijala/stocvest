@@ -108,6 +108,12 @@ export function SettingsPageClient({ email }: SettingsPageClientProps) {
           STOCVEST is <strong style={{ color: colors.text }}>swing-first</strong>: the six-layer composite is the same engine for swing and day
           horizons; billing tiers only change limits and which surfaces are unlocked. Checkout will land here when subscriptions go live.
         </p>
+        <p style={{ margin: `${spacing[3]} 0 0`, fontSize: typography.scale.sm, color: colors.textMuted, lineHeight: 1.55 }}>
+          <Link href="/dashboard/legal" style={{ color: colors.accent, fontWeight: 600 }}>
+            View legal agreements you accepted
+          </Link>{" "}
+          (version, date, and links to Terms, Privacy, and risk disclosure).
+        </p>
       </article>
 
       <article

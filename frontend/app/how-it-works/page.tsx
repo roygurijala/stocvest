@@ -79,7 +79,7 @@ export default function HowItWorksPage() {
         </p>
 
         <Link
-          href="/signup"
+          href="/signup/agreements"
           className="mt-8 inline-flex min-h-11 items-center justify-center rounded-md bg-[#3b82f6] px-6 py-3 font-semibold text-white"
         >
           Get Started

@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { buildDevMockIdToken } from "@/lib/auth/dev-mock-token";
 import { cognitoErrorMessage, signIn } from "@/lib/auth/cognito";
+import { persistSignupLegalAckOnLogin } from "@/lib/auth/persist-signup-legal";
 import { clearSessionTokenCookies, setSessionTokenCookiesFromIdToken } from "@/lib/auth/session-cookies";
 import { isStocvestDevelopment } from "@/lib/auth/stocvest-env";
 
@@ -36,6 +37,7 @@ export async function loginWithPassword(
 
     if (result.idToken) {
       setAuthCookieFromIdToken(result.idToken);
+      await persistSignupLegalAckOnLogin(result.idToken);
       redirect("/dashboard");
     }
 

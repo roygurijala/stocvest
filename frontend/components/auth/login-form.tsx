@@ -80,7 +80,7 @@ export function LoginForm({ showDevBypass = false }: { showDevBypass?: boolean }
       </div>
       <p className="text-sm text-slate-400">
         New to STOCVEST?{" "}
-        <Link href="/signup" className="text-[#3b82f6] hover:underline">
+        <Link href="/signup/agreements" className="text-[#3b82f6] hover:underline">
           Get started
         </Link>
       </p>

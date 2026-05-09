@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState, type ReactNode } from "react";
 
-const LEGAL_VERSION = "1.0";
+import { AGREEMENTS_BUNDLE_VERSION } from "@/lib/legal-agreements";
 
 interface LegalAcknowledgmentModalProps {
   onCompleted: () => void;
@@ -32,7 +32,7 @@ export function LegalAcknowledgmentModal({ onCompleted }: LegalAcknowledgmentMod
         body: JSON.stringify({
           legal_acknowledged: true,
           legal_acknowledged_at: now,
-          legal_acknowledged_version: LEGAL_VERSION
+          legal_acknowledged_version: AGREEMENTS_BUNDLE_VERSION
         })
       });
       const data = (await res.json()) as { message?: string; error?: string };
@@ -136,7 +136,7 @@ export function LegalAcknowledgmentModal({ onCompleted }: LegalAcknowledgmentMod
           {busy ? "Saving…" : "I Understand — Continue"}
         </button>
         <p style={{ margin: "14px 0 0", fontSize: 8, color: "rgba(148,163,184,0.75)", textAlign: "center" }}>
-          Legal acknowledgment v{LEGAL_VERSION} · May 2026
+          Legal acknowledgment v{AGREEMENTS_BUNDLE_VERSION} · May 2026
         </p>
       </div>
     </div>

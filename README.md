@@ -30,7 +30,7 @@ tests/
   brokers/        Broker adapter tests
 ```
 
-**Docs:** [`docs/CONTEXT.md`](docs/CONTEXT.md) (session status) · [`docs/BACKLOG.md`](docs/BACKLOG.md) (planned work) · [`docs/API_CONTRACTS.md`](docs/API_CONTRACTS.md) (API + broker contracts)
+**Docs:** [`docs/CONTEXT.md`](docs/CONTEXT.md) (session status) · [`docs/BACKLOG.md`](docs/BACKLOG.md) (planned work) · [`docs/API_CONTRACTS.md`](docs/API_CONTRACTS.md) (API + broker contracts) · [`docs/SIGNAL_ENGINE.md`](docs/SIGNAL_ENGINE.md) (composite layers, sector **SIC** mapping + **`sic_mapping_tier`**)
 
 ## Setup
 

@@ -1,6 +1,6 @@
 # Deployment notes
 
-**Last updated:** 2026-05-07 · See also [`docs/CONTEXT.md`](./CONTEXT.md) §3 (full deploy checklist).
+**Last updated:** 2026-05-08 · See also [`docs/CONTEXT.md`](./CONTEXT.md) §3 (full deploy checklist).
 
 **Terraform (2026-05):** Apply `infra/` so **`AuditEvents`** exists and Lambdas receive **`DYNAMODB_AUDIT_EVENTS_TABLE`** (otherwise audit falls back to in-memory per cold start). API Gateway needs the **`GET /v1/signals/founding-members`** and admin **beta** / **audit** routes for production parity with repo (`apigateway_6e.tf`).
 

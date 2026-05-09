@@ -17,7 +17,8 @@ export function GlobalDisclaimer() {
       Trading involves substantial risk of loss and is not suitable for all investors.
       <br />
       <br />
-      © 2026 STOCVEST LLC · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · Not investment advice
+      © 2026 STOCVEST LLC · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> ·{" "}
+      <a href="/legal/risk-disclosure">Risks</a> · <a href="/dashboard/legal">Your agreements</a> · Not investment advice
     </div>
   );
 }

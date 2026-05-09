@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type KeyboardEvent, type MouseEvent } from "react";
+import { useState, type MouseEvent } from "react";
 import { MoonStar, Zap } from "lucide-react";
 import type { LandingSignal } from "@/lib/api/landing-signals";
 import type { PerformanceSummary } from "@/lib/api/public-signals";
@@ -135,13 +135,6 @@ export function LandingPage({
     selectPricingCard(tier);
   };
 
-  const onPricingCardKeyDown = (e: KeyboardEvent<HTMLDivElement>, tier: PricingTier) => {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      selectPricingCard(tier);
-    }
-  };
-
   const pricingCardClass = (tier: PricingTier) =>
     [
       "landing-pricing-card flex h-full cursor-pointer flex-col p-6 text-left outline-none transition-[transform,box-shadow] duration-200",
@@ -156,7 +149,9 @@ export function LandingPage({
           <p className="text-lg font-extrabold tracking-tight text-[#3b82f6] sm:text-xl">STOCVEST</p>
           <div className="flex items-center gap-2 md:gap-3">
             <Link href="/login" className="rounded-md border border-white/20 px-4 py-2 text-sm hover:border-white/40">Login</Link>
-            <Link href="/register" className="rounded-md bg-[#3b82f6] px-4 py-2 text-sm font-semibold text-white">Get Started</Link>
+            <Link href="/signup/agreements" className="rounded-md bg-[#3b82f6] px-4 py-2 text-sm font-semibold text-white">
+              Get Started
+            </Link>
           </div>
         </nav>
       </header>
@@ -169,7 +164,7 @@ export function LandingPage({
           alignment, not noise.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
-          <Link href="/register" className="rounded-md bg-[#3b82f6] px-6 py-3 font-semibold">
+          <Link href="/signup/agreements" className="rounded-md bg-[#3b82f6] px-6 py-3 font-semibold">
             Start Free — No Card Required
           </Link>
           <a href="#the-engine" className="rounded-md border border-white/30 px-6 py-3 font-semibold">
@@ -336,15 +331,12 @@ export function LandingPage({
       <section className="mx-auto max-w-7xl px-4 py-16 md:px-8">
         <h2 className="mb-2 text-center text-3xl font-bold md:text-4xl">Simple pricing. Both modes included.</h2>
         <p className="mx-auto mb-8 max-w-2xl text-center text-sm text-slate-400">Early member pricing for initial members at signup.</p>
+        <p className="mx-auto mb-4 max-w-2xl text-center text-xs text-slate-500">Click a card to compare plans; use the button to continue signup.</p>
         <div className="grid gap-4 lg:grid-cols-3 lg:items-stretch">
           <div
-            role="button"
-            tabIndex={0}
-            aria-pressed={pricingTier === "free"}
-            aria-label="Free — Understand the system plan — select to compare"
+            aria-label="Free — Understand the system plan — click to compare"
             className={pricingCardClass("free")}
             onClick={(e) => onPricingCardClick(e, "free")}
-            onKeyDown={(e) => onPricingCardKeyDown(e, "free")}
           >
             <div className="mb-1 min-h-[2.75rem] shrink-0" aria-hidden="true" />
             <h3 className="text-xl font-bold leading-snug">Free — Understand the system</h3>
@@ -359,22 +351,17 @@ export function LandingPage({
             <div className="mt-auto shrink-0 pt-4">
               <p className="mb-3 text-left text-xs leading-relaxed text-slate-500">Built for exploration, not active trading.</p>
               <Link
-                href="/register"
+                href="/signup/agreements"
                 className="inline-flex min-h-11 w-full items-center justify-center rounded-md bg-[#3b82f6] px-4 py-2 font-semibold"
-                onClick={(e) => e.stopPropagation()}
               >
                 Get Started Free
               </Link>
             </div>
           </div>
           <div
-            role="button"
-            tabIndex={0}
-            aria-pressed={pricingTier === "swing_pro"}
-            aria-label="Swing Pro plan — select to compare"
+            aria-label="Swing Pro plan — click to compare"
             className={pricingCardClass("swing_pro")}
             onClick={(e) => onPricingCardClick(e, "swing_pro")}
-            onKeyDown={(e) => onPricingCardKeyDown(e, "swing_pro")}
           >
             <div className="mb-1 min-h-[2.75rem] shrink-0">
               <p className="text-xs font-bold uppercase tracking-wide text-cyan-300">Most Popular</p>
@@ -392,22 +379,17 @@ export function LandingPage({
             </ul>
             <div className="mt-auto shrink-0 pt-4">
               <Link
-                href="/register"
+                href="/signup/agreements"
                 className="inline-flex min-h-11 w-full items-center justify-center rounded-md bg-[#3b82f6] px-4 py-2 font-semibold"
-                onClick={(e) => e.stopPropagation()}
               >
                 Choose Swing Pro
               </Link>
             </div>
           </div>
           <div
-            role="button"
-            tabIndex={0}
-            aria-pressed={pricingTier === "swing_day_pro"}
-            aria-label="Swing plus Day Pro plan — select to compare"
+            aria-label="Swing plus Day Pro plan — click to compare"
             className={pricingCardClass("swing_day_pro")}
             onClick={(e) => onPricingCardClick(e, "swing_day_pro")}
-            onKeyDown={(e) => onPricingCardKeyDown(e, "swing_day_pro")}
           >
             <div className="mb-1 min-h-[2.75rem] shrink-0" aria-hidden="true" />
             <h3 className="text-xl font-bold">Swing + Day Pro</h3>
@@ -425,9 +407,8 @@ export function LandingPage({
             </ul>
             <div className="mt-auto shrink-0 pt-4">
               <Link
-                href="/register"
+                href="/signup/agreements"
                 className="inline-flex min-h-11 w-full items-center justify-center rounded-md bg-[#3b82f6] px-4 py-2 font-semibold"
-                onClick={(e) => e.stopPropagation()}
               >
                 Choose Swing + Day Pro
               </Link>
@@ -452,7 +433,7 @@ export function LandingPage({
       {/* 8 · Final CTA */}
       <section className="border-t border-white/10 bg-black/20 px-4 py-20 text-center md:px-8">
         <h2 className="mb-4 text-3xl font-bold md:text-4xl">Trade when layers align. Wait when they don&apos;t.</h2>
-        <Link href="/register" className="inline-flex min-h-11 items-center justify-center rounded-md bg-[#3b82f6] px-6 py-3 font-semibold">
+        <Link href="/signup/agreements" className="inline-flex min-h-11 items-center justify-center rounded-md bg-[#3b82f6] px-6 py-3 font-semibold">
           Create Your Free Account
         </Link>
         <p className="mt-3 text-slate-300">Explore the platform free. No credit card required.</p>

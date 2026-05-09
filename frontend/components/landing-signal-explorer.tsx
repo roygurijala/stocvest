@@ -399,7 +399,7 @@ export function LandingSignalExplorer({
           </div>
           <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
             <Link
-              href="/signup"
+              href="/signup/agreements"
               className="inline-flex min-h-10 items-center justify-center rounded-md px-5 py-2 text-center text-sm font-semibold text-white"
               style={{ background: "#0077cc", boxShadow: "0 0 20px rgba(0,180,255,0.25)" }}
             >

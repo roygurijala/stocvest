@@ -1,5 +1,7 @@
 # Signal engine (real composite)
 
+**Last updated:** 2026-05-08
+
 This document describes the **server-side** multi-layer stacks behind **`POST /v1/signals/composite/real`** (intraday / day-trade mode) and **`POST /v1/signals/composite/swing`** (daily-bar swing mode). Both reuse the same six layer *types*, `CompositeScoreEngine`, and confluence/evidence plumbing; data fetch windows and the technical implementation differ (`technical_analyzer` vs `swing_technical_analyzer`). Tunables live in `SignalParameters` (Secrets Manager JSON); defaults in `stocvest/config/signal_parameters.py` and `stocvest/config/sector_etf_defaults.py`.
 
 ## Architecture: Stage A → Stage B (contributor contract)
@@ -41,7 +43,8 @@ This document describes the **server-side** multi-layer stacks behind **`POST /v
 
 ### Sector (`sector_analyzer.py` + `sector_mapper.py`)
 
-- **Mapper**: `PolygonClient.get_ticker_details()` → `sic_code` → internal `SIC_TO_SECTOR` → `SectorParameters.sector_to_etf` benchmark ticker.
+- **Mapper**: `PolygonClient.get_ticker_details()` → `sic_code` → internal `SIC_TO_SECTOR` (exact) → **`sector_sic_fallback.resolve_sector_bucket_from_sic`** (3-digit then 2-digit SEC division proxies when exact SIC is missing) → `SectorParameters.sector_to_etf` benchmark ticker. Non-classifiable codes (e.g. **9999**) stay on **SPY** / `default` by design.
+- **SIC mapping tier** (internal; logs + optional `sic_mapping_tier` on composite sector layer rows): **`exact`** (4-digit table), **`prefix`** (curated 3-digit), **`coarse`** (2-digit division proxy — treat as provisional for analytics), **`fallback_spy`** (empty SIC, excluded codes, unknown after fallbacks, or Polygon error — honest broad market). Prefer extending **`SIC_TO_SECTOR`** for symbols that matter rather than widening 2-digit inference. Do not switch to GICS without a data contract; do not hide coarse usage or silently “upgrade” unknowns. Any future **`sic_description`** keyword overrides should be **optional, override-only, never the default resolver**, and must not override exclusions or blend scores.
 - **Cache**: Optional DynamoDB `SectorCache` (`DYNAMODB_SECTOR_CACHE_TABLE`) with TTL attribute `expires_at`.
 - **Analyzer**: Relative strength = sector ETF `change_percent` minus SPY `change_percent` (day mode), or optional **`use_weekly`** with caller-supplied **`weekly_sector_pct`** and **`weekly_spy_pct`** (typically ~5 sessions from daily closes) minus SPY weekly %.
 

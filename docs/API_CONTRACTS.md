@@ -1,6 +1,6 @@
 # STOCVEST — API contracts (immutable sections)
 
-**Last reviewed:** 2026-05-07
+**Last reviewed:** 2026-05-08
 
 Sections referenced from **`docs/CONTEXT.md`** §7 must not change without explicit review and coordinated code updates.
 
@@ -52,6 +52,8 @@ All REST routes are versioned under `/v1/`.
 
 - `POST /v1/signals/composite/real` — JSON body `{ "symbol": "AAPL" }`; server runs six analyzers on **intraday** data; success payload includes **`mode": "day"`**, **`signal_valid_until`** (next US RTH close, ISO UTC), plus composite fields (`layers`, `score`, …). **`insufficient_data`** still HTTP 200 with `market_status`.
 - `POST /v1/signals/composite/swing` — same body; **daily** bars + swing parameters (extended news/macro/geo, optional weekly sector rel. strength); success includes **`mode": "swing"`**, **`signal_valid_days`**, **`signal_expires`** (ISO UTC).
+
+**Composite `layers[]` — sector row (additive, backward compatible):** When the **`layer`** value is **`sector`**, the object may include optional **`sic_mapping_tier`** — one of **`exact`**, **`prefix`**, **`coarse`**, **`fallback_spy`** — describing how Polygon **`sic_code`** was mapped to the internal sector bucket (see **`docs/SIGNAL_ENGINE.md`** § Sector). The field is **omitted** while sector cache is **`pending_cache_refresh`** or when tier is unknown. ETF choice and scores are unchanged from pre-tier behavior; this is metadata for debugging, analytics, and future UI.
 - `POST /v1/signals/swing/composite` — build structured composite score and signal parameters from layer signals
 - `POST /v1/signals/swing/synthesis/parse` — parse AI JSON synthesis output to normalized action payload
 - `POST /v1/signals/day/setups` — rank intraday setup candidates from 1-minute bars

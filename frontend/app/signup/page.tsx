@@ -1,39 +1,41 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getServerSession } from "@/lib/auth/session";
+import { cookies } from "next/headers";
 import { SignupForm } from "@/components/auth/signup-form";
+import { AuthShell } from "@/components/auth/auth-shell";
+import { getServerSession } from "@/lib/auth/session";
+import { AGREEMENTS_BUNDLE_VERSION, SIGNUP_LEGAL_COOKIE_NAME } from "@/lib/legal-agreements";
 
 export default function SignupPage() {
   const session = getServerSession();
   if (session) {
     redirect("/dashboard");
   }
+  const jar = cookies();
+  if (jar.get(SIGNUP_LEGAL_COOKIE_NAME)?.value !== AGREEMENTS_BUNDLE_VERSION) {
+    redirect("/signup/agreements");
+  }
 
   return (
-    <main className="grid min-h-screen place-items-center overflow-x-hidden bg-[#0a0e1a] px-4 py-8 sm:py-10">
-      <section className="stocvest-edge-line-card w-full max-w-full bg-[#111827] p-4 sm:max-w-md sm:p-6">
-        <p className="mb-3 text-xl font-extrabold tracking-tight text-[#3b82f6]">STOCVEST</p>
-        <h1 className="m-0 text-2xl font-bold text-slate-100 sm:text-3xl">Create your account.</h1>
-        <p className="mb-6 mt-1 text-slate-400">Start trading with institutional intelligence.</p>
-        <SignupForm />
-        <p className="mt-4 text-sm text-slate-400">
-          Already have an account?{" "}
-          <Link href="/login" className="text-[#3b82f6] hover:underline">
-            Sign in
-          </Link>
-        </p>
-        <p className="mt-3 text-xs text-slate-500">
-          By creating an account you agree to our{" "}
-          <Link href="/terms" className="text-slate-400 hover:text-slate-300">
-            Terms of Service
-          </Link>{" "}
-          and{" "}
-          <Link href="/privacy" className="text-slate-400 hover:text-slate-300">
-            Privacy Policy
-          </Link>
-          .
-        </p>
-      </section>
-    </main>
+    <AuthShell
+      signupStep="account"
+      title="Create your account."
+      subtitle="Choose a strong password. You already agreed to the current legal bundle in step 1."
+    >
+      <SignupForm />
+      <p className="mt-4 text-sm text-slate-400">
+        Already have an account?{" "}
+        <Link href="/login" className="text-[#3b82f6] hover:underline">
+          Sign in
+        </Link>
+      </p>
+      <p className="mt-3 text-xs text-slate-500">
+        Agreements for v{AGREEMENTS_BUNDLE_VERSION} are recorded in this browser. If you need to re-read them,{" "}
+        <Link href="/signup/agreements" className="text-slate-400 hover:text-slate-300">
+          return to the agreements step
+        </Link>{" "}
+        (you will need to check the box again).
+      </p>
+    </AuthShell>
   );
 }
