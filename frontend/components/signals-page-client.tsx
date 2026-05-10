@@ -92,6 +92,19 @@ function normalizeTickerFromApi(raw: string): string | null {
   return null;
 }
 
+/**
+ * Bucket a 0–100 layer-alignment score into "High / Medium / Low" for the past-signals table.
+ *
+ * Avoids exposing raw percentages to users: that wording was reading as confidence/probability,
+ * which the radar score is not. See product guidance in the "Past signal states" review.
+ */
+function formatLayerAlignmentBucket(score: number | null | undefined): string {
+  if (typeof score !== "number" || !Number.isFinite(score)) return "—";
+  if (score >= 70) return "High";
+  if (score >= 40) return "Medium";
+  return "Low";
+}
+
 const layerMeta = [
   ["📊", "Technical"],
   ["📰", "News"],
@@ -105,6 +118,9 @@ const SIGNAL_LAYER_KEYS = ["technical", "news", "macro", "sector", "geopolitical
 
 const TRADING_MODE_STORAGE_KEY = "stocvest_trading_mode";
 type TradingMode = "day" | "swing";
+
+/** Persist the experienced-user choice to keep the radar open across visits; default stays collapsed. */
+const SIGNAL_RADAR_EXPANDED_STORAGE_KEY = "stocvest_signal_radar_expanded";
 
 const RADAR_LAYER_LABEL: Record<string, string> = {
   technical: "Technical",
@@ -212,9 +228,23 @@ export function SignalsPageClient({
   earningsBySymbol,
   signalsPrefill = { urlSymbol: null, signalIdForResolve: null, hadSignalIdQuery: false }
 }: SignalsPageClientProps) {
-  const { colors } = useTheme();
+  const { colors, theme } = useTheme();
+  const historyFilterSelectStyle: CSSProperties = {
+    borderRadius: borderRadius.md,
+    border: `1px solid ${colors.border}`,
+    padding: spacing[2],
+    backgroundColor: colors.surfaceMuted,
+    color: colors.text,
+    colorScheme: theme === "dark" ? "dark" : "light"
+  };
+  const historyFilterOptionStyle: CSSProperties = {
+    backgroundColor: colors.surfaceMuted,
+    color: colors.text
+  };
   const isMobileLayout = useIsMobileLayout();
   const symbolComboRef = useRef<HTMLDivElement | null>(null);
+  /** Click-outside container for the "Past signal states" symbol typeahead (mirrors layer-analysis combobox). */
+  const histSymbolComboRef = useRef<HTMLDivElement | null>(null);
   const signalIdUrlStrippedRef = useRef(false);
   const [tab, setTab] = useState<"layers" | "history">("layers");
   const [tradingMode, setTradingMode] = useState<TradingMode>("swing");
@@ -238,7 +268,15 @@ export function SignalsPageClient({
   const [symbolSnapshot, setSymbolSnapshot] = useState<SnapshotPayload | null>(null);
   const [historyRows, setHistoryRows] = useState<PublicSignal[]>([]);
   const [histLoading, setHistLoading] = useState(false);
+  /** Committed symbol used to filter the past-signals table; "" means no filter. */
   const [histSymbolFilter, setHistSymbolFilter] = useState("");
+  /** Free-text input for history symbol typeahead (accepts ticker or company name). */
+  const [histSymbolDraft, setHistSymbolDraft] = useState("");
+  const [histSuggestOpen, setHistSuggestOpen] = useState(false);
+  const [histSuggestHighlight, setHistSuggestHighlight] = useState(0);
+  const [histRemoteCandidates, setHistRemoteCandidates] = useState<SymbolCandidate[]>([]);
+  const [histRemoteSearchLoading, setHistRemoteSearchLoading] = useState(false);
+  const [histRemoteSearchError, setHistRemoteSearchError] = useState<string | null>(null);
   const [histDirectionFilter, setHistDirectionFilter] = useState<"all" | "bullish" | "bearish" | "neutral">("all");
   const [histOutcomeFilter, setHistOutcomeFilter] = useState<
     "all" | "correct" | "incorrect" | "neutral" | "pending"
@@ -368,6 +406,94 @@ export function SignalsPageClient({
     setSuggestOpen(false);
   }, []);
 
+  /**
+   * Past-signals symbol filter typeahead — mirrors the layer-analysis combobox so users
+   * can search by ticker or company name. Reuses the local `symbolCandidates` map and
+   * adds an independent debounced remote search so the two inputs don't fight.
+   */
+  useEffect(() => {
+    const q = histSymbolDraft.trim();
+    if (q.length < 2) {
+      setHistRemoteCandidates([]);
+      setHistRemoteSearchLoading(false);
+      setHistRemoteSearchError(null);
+      return;
+    }
+    let cancelled = false;
+    setHistRemoteSearchLoading(true);
+    setHistRemoteSearchError(null);
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const res = await fetch(`/api/stocvest/market/tickers-search?q=${encodeURIComponent(q)}`, {
+            credentials: "same-origin",
+            cache: "no-store"
+          });
+          if (cancelled) return;
+          if (!res.ok) {
+            setHistRemoteSearchError(`Search failed (${res.status}). Try a known symbol.`);
+            setHistRemoteCandidates([]);
+            return;
+          }
+          const j = (await res.json().catch(() => ({}))) as { items?: unknown; error?: unknown };
+          const items = Array.isArray(j.items) ? j.items : [];
+          const next: SymbolCandidate[] = [];
+          for (const it of items) {
+            if (!it || typeof it !== "object") continue;
+            const o = it as { symbol?: unknown; name?: unknown };
+            const sym = normalizeTickerFromApi(String(o.symbol ?? ""));
+            if (!sym) continue;
+            const name = String(o.name ?? "").trim();
+            next.push({ symbol: sym, label: name ? `${sym} — ${name}` : sym });
+          }
+          const bodyError = typeof j.error === "string" ? j.error.trim() : "";
+          if (!cancelled) {
+            setHistRemoteCandidates(next);
+            setHistRemoteSearchError(next.length === 0 && bodyError ? bodyError : null);
+          }
+        } catch {
+          if (!cancelled) {
+            setHistRemoteCandidates([]);
+            setHistRemoteSearchError("Network error while searching tickers.");
+          }
+        } finally {
+          if (!cancelled) setHistRemoteSearchLoading(false);
+        }
+      })();
+    }, 280);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      setHistRemoteSearchLoading(false);
+    };
+  }, [histSymbolDraft]);
+
+  const histSuggestionRows = useMemo(() => {
+    const q = histSymbolDraft.trim().toLowerCase();
+    const localMatches = !q
+      ? symbolCandidates.slice(0, 8)
+      : symbolCandidates
+          .filter((c) => c.symbol.toLowerCase().startsWith(q) || c.label.toLowerCase().includes(q))
+          .slice(0, 8);
+    const seen = new Set(localMatches.map((c) => c.symbol));
+    const fromRemote = histRemoteCandidates.filter((c) => !seen.has(c.symbol));
+    return [...localMatches, ...fromRemote].slice(0, 12);
+  }, [symbolCandidates, histSymbolDraft, histRemoteCandidates]);
+
+  /** Commit a typeahead choice (or empty string) to the past-signals symbol filter. */
+  const applyHistSymbol = useCallback((sym: string | null | undefined) => {
+    const t = normalizeTickerFromApi(String(sym ?? ""));
+    if (!t) {
+      setHistSymbolFilter("");
+      setHistSymbolDraft("");
+      setHistSuggestOpen(false);
+      return;
+    }
+    setHistSymbolFilter(t);
+    setHistSymbolDraft(t);
+    setHistSuggestOpen(false);
+  }, []);
+
   const openWatchlistPicker = useCallback(async () => {
     setWatchlistPickerOpen(true);
     setWatchlistPickerLoading(true);
@@ -396,6 +522,15 @@ export function SignalsPageClient({
     try {
       const raw = localStorage.getItem(TRADING_MODE_STORAGE_KEY);
       if (raw === "swing" || raw === "day") setTradingMode(raw);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(SIGNAL_RADAR_EXPANDED_STORAGE_KEY);
+      if (raw === "1") setSignalRadarExpanded(true);
     } catch {
       /* ignore */
     }
@@ -464,6 +599,20 @@ export function SignalsPageClient({
     setSuggestHighlight(0);
   }, [symbolDraft, suggestOpen]);
 
+  useEffect(() => {
+    if (!histSuggestOpen) return;
+    const onDown = (e: MouseEvent) => {
+      const el = histSymbolComboRef.current;
+      if (el && e.target instanceof Node && !el.contains(e.target)) setHistSuggestOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [histSuggestOpen]);
+
+  useEffect(() => {
+    setHistSuggestHighlight(0);
+  }, [histSymbolDraft, histSuggestOpen]);
+
   const updateTradingMode = (m: TradingMode) => {
     setTradingMode(m);
     try {
@@ -471,6 +620,18 @@ export function SignalsPageClient({
     } catch {
       /* ignore */
     }
+  };
+
+  const toggleSignalRadarExpanded = () => {
+    setSignalRadarExpanded((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(SIGNAL_RADAR_EXPANDED_STORAGE_KEY, next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
   };
 
   useEffect(() => {
@@ -800,6 +961,7 @@ export function SignalsPageClient({
             type="button"
             className="min-h-11 rounded-md px-4 text-sm"
             onClick={() => setTab(key)}
+            aria-current={tab === key ? "page" : undefined}
             style={{
               border: `1px solid ${colors.border}`,
               background: tab === key ? "rgba(59,130,246,.2)" : "transparent",
@@ -812,50 +974,217 @@ export function SignalsPageClient({
       </div>
 
       {tab === "history" ? (
+        <p
+          className="m-0 text-xs leading-relaxed"
+          style={{ color: colors.textMuted, opacity: 0.85 }}
+        >
+          Historical record of evaluated signal states and their subsequent price behavior. This is not a
+          trading record or recommendation.
+        </p>
+      ) : null}
+
+      {tab === "history" ? (
         <article
           className={surfaceGlowClassName}
           style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
         >
-          <h3 style={{ marginTop: 0 }}>Signal outcome tracking</h3>
+          <h3 style={{ marginTop: 0 }}>Signal state history</h3>
+          <p
+            className="m-0 text-sm leading-relaxed"
+            style={{ color: colors.textMuted, fontStyle: "italic", marginBottom: spacing[2] }}
+          >
+            This view shows how price moved after STOCVEST issued a signal state. It is provided for transparency,
+            not as a trading record.
+          </p>
           <p style={{ margin: `0 0 ${spacing[3]} 0`, color: colors.textMuted, fontSize: typography.scale.sm }}>
             {historySource === "user"
-              ? "Your evaluated signals (signed in): last 30 days by default. Filter by symbol, direction, or 1d outcome."
+              ? "Your evaluated signals (signed in): last 30 days by default. Filter by ticker, signal bias, or post-signal price reaction."
               : "Platform past signal states (public feed). Sign in to include your personal evaluated signals in this list."}
           </p>
           <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-            <input
-              value={histSymbolFilter}
-              onChange={(e) => setHistSymbolFilter(e.target.value.toUpperCase())}
-              placeholder="Symbol filter"
-              className="min-h-11 min-w-[140px] flex-1 text-base"
-              style={{ borderRadius: borderRadius.md, border: `1px solid ${colors.border}`, padding: spacing[2] }}
-            />
+            <div ref={histSymbolComboRef} className="relative min-w-[180px] flex-1">
+              <input
+                role="combobox"
+                aria-expanded={histSuggestOpen}
+                aria-controls="history-symbol-suggestions"
+                aria-autocomplete="list"
+                aria-label="Filter past signal states by ticker or company name"
+                value={histSymbolDraft}
+                autoComplete="off"
+                placeholder="Ticker or company name"
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setHistSymbolDraft(v);
+                  setHistSuggestOpen(true);
+                  if (!v.trim()) {
+                    applyHistSymbol("");
+                  }
+                }}
+                onFocus={() => setHistSuggestOpen(true)}
+                onBlur={() => {
+                  window.setTimeout(() => {
+                    const raw = histSymbolDraft.trim();
+                    if (!raw) {
+                      applyHistSymbol("");
+                      return;
+                    }
+                    const t = normalizeTickerFromApi(raw);
+                    if (t) applyHistSymbol(t);
+                  }, 120);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    setHistSuggestOpen(false);
+                    return;
+                  }
+                  if (e.key === "ArrowDown" && histSuggestionRows.length) {
+                    e.preventDefault();
+                    setHistSuggestOpen(true);
+                    setHistSuggestHighlight((i) => Math.min(i + 1, histSuggestionRows.length - 1));
+                    return;
+                  }
+                  if (e.key === "ArrowUp" && histSuggestionRows.length) {
+                    e.preventDefault();
+                    setHistSuggestHighlight((i) => Math.max(i - 1, 0));
+                    return;
+                  }
+                  if (e.key === "Enter") {
+                    const pick = histSuggestionRows[histSuggestHighlight];
+                    if (pick) {
+                      e.preventDefault();
+                      applyHistSymbol(pick.symbol);
+                      return;
+                    }
+                    const t = normalizeTickerFromApi(histSymbolDraft);
+                    if (t) {
+                      e.preventDefault();
+                      applyHistSymbol(t);
+                    }
+                  }
+                }}
+                className="min-h-11 w-full text-base"
+                style={{
+                  borderRadius: borderRadius.md,
+                  border: `1px solid ${colors.border}`,
+                  background: colors.surface,
+                  color: colors.text,
+                  padding: `${spacing[2]} ${spacing[3]}`
+                }}
+              />
+              {histSuggestOpen &&
+              (histSuggestionRows.length > 0 ||
+                (histRemoteSearchLoading && histSymbolDraft.trim().length >= 2) ||
+                (Boolean(histRemoteSearchError) && histSymbolDraft.trim().length >= 2)) ? (
+                <ul
+                  id="history-symbol-suggestions"
+                  role="listbox"
+                  className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-md border py-1 shadow-lg"
+                  style={{
+                    borderColor: colors.border,
+                    background: colors.surface,
+                    boxShadow: "0 12px 40px rgba(0,0,0,0.35)"
+                  }}
+                >
+                  {histRemoteSearchError && histSymbolDraft.trim().length >= 2 ? (
+                    <li className="px-3 py-2 text-sm leading-snug" style={{ color: colors.bearish }}>
+                      {histRemoteSearchError}
+                    </li>
+                  ) : null}
+                  {histRemoteSearchLoading &&
+                  histSuggestionRows.length === 0 &&
+                  histSymbolDraft.trim().length >= 2 &&
+                  !histRemoteSearchError ? (
+                    <li className="px-3 py-2 text-sm" style={{ color: colors.textMuted }}>
+                      Searching…
+                    </li>
+                  ) : null}
+                  {histSuggestionRows.map((row, idx) => (
+                    <li key={row.symbol} role="option" aria-selected={idx === histSuggestHighlight}>
+                      <button
+                        type="button"
+                        className="w-full px-3 py-2 text-left text-sm"
+                        style={{
+                          background:
+                            idx === histSuggestHighlight ? "rgba(59,130,246,0.15)" : "transparent",
+                          color: colors.text,
+                          border: "none",
+                          cursor: "pointer"
+                        }}
+                        onMouseDown={(ev) => ev.preventDefault()}
+                        onClick={() => applyHistSymbol(row.symbol)}
+                      >
+                        <span className="font-semibold tracking-wide">{row.symbol}</span>
+                        {row.label !== row.symbol ? (
+                          <span className="block text-xs" style={{ color: colors.textMuted }}>
+                            {row.label.includes("—") ? row.label.split("—").slice(1).join("—").trim() : row.label}
+                          </span>
+                        ) : null}
+                      </button>
+                    </li>
+                  ))}
+                  {!histRemoteSearchLoading &&
+                  !histRemoteSearchError &&
+                  histSuggestionRows.length === 0 &&
+                  histSymbolDraft.trim().length >= 2 ? (
+                    <li className="px-3 py-2 text-sm" style={{ color: colors.textMuted }}>
+                      No matching tickers. Try a symbol (e.g. AAPL) or another spelling.
+                    </li>
+                  ) : null}
+                </ul>
+              ) : null}
+            </div>
             <select
               value={histDirectionFilter}
               onChange={(e) => setHistDirectionFilter(e.target.value as typeof histDirectionFilter)}
               className="min-h-11 text-base"
-              style={{ borderRadius: borderRadius.md, border: `1px solid ${colors.border}`, padding: spacing[2] }}
+              aria-label="Filter past signal states by signal bias"
+              style={historyFilterSelectStyle}
             >
-              <option value="all">All directions</option>
-              <option value="bullish">Bullish</option>
-              <option value="bearish">Bearish</option>
-              <option value="neutral">Neutral</option>
+              <option value="all" style={historyFilterOptionStyle}>
+                Any signal bias
+              </option>
+              <option value="bullish" style={historyFilterOptionStyle}>
+                Bullish
+              </option>
+              <option value="bearish" style={historyFilterOptionStyle}>
+                Bearish
+              </option>
+              <option value="neutral" style={historyFilterOptionStyle}>
+                Neutral
+              </option>
             </select>
-            <select
-              value={histOutcomeFilter}
-              onChange={(e) => setHistOutcomeFilter(e.target.value as typeof histOutcomeFilter)}
-              className="min-h-11 text-base"
-              style={{ borderRadius: borderRadius.md, border: `1px solid ${colors.border}`, padding: spacing[2] }}
-            >
-              <option value="all">All 1d outcomes</option>
-              <option value="pending">Pending</option>
-              <option value="correct">Correct</option>
-              <option value="incorrect">Incorrect</option>
-              <option value="neutral">Neutral</option>
-            </select>
+            <div className="flex items-center gap-1">
+              <select
+                value={histOutcomeFilter}
+                onChange={(e) => setHistOutcomeFilter(e.target.value as typeof histOutcomeFilter)}
+                className="min-h-11 text-base"
+                aria-label="Filter past signal states by 1-day price reaction (descriptive only — not a correctness metric)"
+                style={historyFilterSelectStyle}
+              >
+                <option value="all" style={historyFilterOptionStyle}>
+                  Any 1d price reaction
+                </option>
+                <option value="pending" style={historyFilterOptionStyle}>
+                  Pending evaluation
+                </option>
+                <option value="correct" style={historyFilterOptionStyle}>
+                  Moved with signal direction
+                </option>
+                <option value="incorrect" style={historyFilterOptionStyle}>
+                  Moved against signal direction
+                </option>
+                <option value="neutral" style={historyFilterOptionStyle}>
+                  Drifted (no clear move)
+                </option>
+              </select>
+              <InfoTip
+                label="About the price reaction filter"
+                text="Filters reflect subsequent price behavior, not signal correctness or trade recommendation."
+              />
+            </div>
           </div>
           {histLoading ? (
-            <CuteLoader label="Loading signal history" sublabel="Computing recent outcomes" compact />
+            <CuteLoader label="Loading signal history" sublabel="Reading recent state records" compact />
           ) : filteredHistory.length === 0 ? (
             <p style={{ color: colors.textMuted, margin: 0 }}>
               Signal history builds automatically as signals are generated. Check back after market hours.
@@ -867,18 +1196,19 @@ export function SignalsPageClient({
                   <tr style={{ color: colors.textMuted, textAlign: "left" }}>
                     <th style={{ padding: spacing[2] }}>Time</th>
                     <th style={{ padding: spacing[2] }}>Symbol</th>
-                    <th style={{ padding: spacing[2] }}>Direction</th>
-                    <th style={{ padding: spacing[2] }}>Strength</th>
+                    <th style={{ padding: spacing[2] }}>Signal bias</th>
+                    <th style={{ padding: spacing[2] }}>Alignment</th>
                     <th style={{ padding: spacing[2] }}>Pattern</th>
-                    <th style={{ padding: spacing[2] }}>Price at Signal</th>
-                    <th style={{ padding: spacing[2] }}>1h Outcome</th>
-                    <th style={{ padding: spacing[2] }}>1d Outcome</th>
+                    <th style={{ padding: spacing[2] }}>Price at signal</th>
+                    <th style={{ padding: spacing[2] }}>1h price reaction</th>
+                    <th style={{ padding: spacing[2] }}>1d price reaction</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredHistory.map((row) => {
                     const h1 = formatHorizonOutcome(row.outcome_1h);
                     const h1d = formatHorizonOutcome(row.outcome_1d);
+                    const alignment = formatLayerAlignmentBucket(row.signal_strength);
                     return (
                       <tr key={row.signal_id ?? `${row.symbol}-${row.timestamp_iso}`} style={{ borderTop: `1px solid ${colors.border}` }}>
                         <td style={{ padding: spacing[2], whiteSpace: "nowrap" }}>{new Date(row.timestamp_iso).toLocaleString()}</td>
@@ -897,7 +1227,9 @@ export function SignalsPageClient({
                             {row.bias}
                           </span>
                         </td>
-                        <td style={{ padding: spacing[2] }}>{Math.round(row.signal_strength)}%</td>
+                        <td style={{ padding: spacing[2] }} title="Layer alignment at issuance — High / Medium / Low. Not a probability or correctness metric.">
+                          {alignment}
+                        </td>
                         <td style={{ padding: spacing[2] }}>{row.pattern ?? "—"}</td>
                         <td style={{ padding: spacing[2] }}>
                           {typeof row.price_at_signal === "number" ? `$${row.price_at_signal.toFixed(2)}` : "—"}
@@ -1331,16 +1663,35 @@ export function SignalsPageClient({
         {hasValidSignal && radarData ? (
           <section
             className={`order-1 min-w-0 lg:order-2 ${surfaceGlowClassName}`}
-            style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
+            style={{
+              background: colors.surface,
+              border: `1px solid ${
+                signalRadarExpanded
+                  ? colors.border
+                  : `color-mix(in srgb, ${colors.border} 55%, transparent)`
+              }`,
+              borderRadius: borderRadius.xl,
+              padding: spacing[4],
+              opacity: signalRadarExpanded ? 1 : 0.92
+            }}
           >
             <div className="flex flex-wrap items-start justify-between gap-2">
-              <h3 style={{ marginTop: 0 }}>Signal Radar</h3>
+              <h3
+                style={{
+                  marginTop: 0,
+                  ...(signalRadarExpanded
+                    ? null
+                    : { fontSize: typography.scale.base, fontWeight: 600 })
+                }}
+              >
+                Signal Radar
+              </h3>
               <button
                 type="button"
                 className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-md px-2.5 text-xs font-medium"
                 style={{ border: `1px solid ${colors.border}`, color: colors.textMuted, background: colors.surfaceMuted }}
                 aria-expanded={signalRadarExpanded}
-                onClick={() => setSignalRadarExpanded((e) => !e)}
+                onClick={toggleSignalRadarExpanded}
               >
                 {signalRadarExpanded ? (
                   <>

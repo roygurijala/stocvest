@@ -14,9 +14,9 @@ import { isoDateInNewYork } from "@/lib/market-hours-et";
 import { useTheme } from "@/lib/theme-provider";
 
 function outcomeLabel(outcome: PublicSignal["outcome"]): string {
-  if (outcome === "correct") return "Outcome: Correct";
-  if (outcome === "incorrect") return "Price moved opposite";
-  if (outcome === "neutral") return "Neutral move";
+  if (outcome === "correct") return "Price moved in signal direction";
+  if (outcome === "incorrect") return "Price moved against signal direction";
+  if (outcome === "neutral") return "Price drifted (no clear move)";
   return "Pending evaluation";
 }
 

@@ -442,12 +442,17 @@ export async function fetchPerformanceSummary(): Promise<PerformanceSummary> {
   }
 }
 
-/** Row label for 1h / 1d outcome chips (signal outcome tracking terminology). */
+/**
+ * Row label for 1h / 1d post-signal price reactions.
+ *
+ * Phrased to describe price behavior, not to judge the signal — the goal is transparency,
+ * not a trading record. See "Past signal states" section in `signals-page-client.tsx`.
+ */
 export function formatHorizonOutcome(
   o: string | null | undefined
 ): { label: string; kind: "ok" | "bad" | "mid" | "pending" } {
-  if (o === "correct") return { label: "Outcome: Correct", kind: "ok" };
-  if (o === "incorrect") return { label: "Price moved opposite", kind: "bad" };
-  if (o === "neutral") return { label: "Neutral move", kind: "mid" };
+  if (o === "correct") return { label: "Price moved in signal direction", kind: "ok" };
+  if (o === "incorrect") return { label: "Price moved against signal direction", kind: "bad" };
+  if (o === "neutral") return { label: "Price drifted (no clear move)", kind: "mid" };
   return { label: "Pending evaluation", kind: "pending" };
 }
