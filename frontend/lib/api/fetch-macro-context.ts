@@ -1,4 +1,5 @@
 import { readWsTokenFromDocumentCookie } from "@/lib/auth/ws-token-cookie";
+import { surfaceAuthErrorIfAny } from "@/lib/auth/surface-auth-error";
 
 import type { MacroUpcomingEventWire, MacroYieldCurveWire } from "@/lib/signal-evidence";
 
@@ -31,6 +32,7 @@ export async function fetchMacroContext(): Promise<MacroContextPayload | null> {
       cache: "no-store"
     });
     if (!res.ok) {
+      surfaceAuthErrorIfAny(res);
       return null;
     }
     const row = (await res.json()) as MacroContextPayload;

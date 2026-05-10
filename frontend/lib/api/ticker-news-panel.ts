@@ -1,4 +1,5 @@
 import { readWsTokenFromDocumentCookie } from "@/lib/auth/ws-token-cookie";
+import { surfaceAuthErrorIfAny } from "@/lib/auth/surface-auth-error";
 
 const DEFAULT_BASE_URL = "http://localhost:3001";
 
@@ -125,6 +126,7 @@ export async function fetchTickerNewsPanel(
     cache: "no-store"
   }).catch(() => null);
   if (!res || !res.ok) {
+    surfaceAuthErrorIfAny(res);
     return null;
   }
   try {

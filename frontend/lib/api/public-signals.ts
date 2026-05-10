@@ -1,6 +1,7 @@
 "use client";
 
 import { isoDateInNewYork } from "@/lib/market-hours-et";
+import { surfaceAuthErrorIfAny } from "@/lib/auth/surface-auth-error";
 
 export type PublicSignalOutcome = "pending" | "correct" | "incorrect" | "neutral";
 export type PublicSignalDirection = "long" | "short" | "neutral";
@@ -292,6 +293,7 @@ export async function fetchUserSignalHistoryPage(params?: {
       cache: "no-store"
     });
     if (response.status === 401) {
+      surfaceAuthErrorIfAny(response);
       return null;
     }
     if (!response.ok) {

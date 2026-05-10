@@ -1,10 +1,14 @@
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { loginRedirectPath } from "@/lib/auth/login-redirect";
 import { getServerSession } from "@/lib/auth/session";
 import { clearSessionTokenCookies } from "@/lib/auth/session-cookies";
-import { redirect } from "next/navigation";
 
 const DEFAULT_BASE_URL = "http://localhost:3001";
 /** Cold VPC Lambdas + Polygon can exceed a few seconds; dashboard chains multiple calls per request. */
 const DEFAULT_API_TIMEOUT_MS = 55_000;
+/** Header set by `middleware.ts` so server-side code can capture the user's current path for `?next=`. */
+const PATHNAME_HEADER = "x-stocvest-pathname";
 
 /**
  * STOCVEST Lambda HTTP API base (no trailing slash).
@@ -20,18 +24,28 @@ export function apiBaseUrl(): string {
   return raw.replace(/\/+$/, "");
 }
 
+/** Read the request pathname (with search) propagated by middleware; null when called outside a request. */
+function currentRequestPath(): string | null {
+  try {
+    const value = headers().get(PATHNAME_HEADER);
+    return value && value.startsWith("/") ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T | null> {
   const session = getServerSession();
-  const headers = new Headers(init?.headers || {});
-  headers.set("content-type", "application/json");
+  const headersOut = new Headers(init?.headers || {});
+  headersOut.set("content-type", "application/json");
   if (session?.token) {
-    headers.set("authorization", `Bearer ${session.token}`);
+    headersOut.set("authorization", `Bearer ${session.token}`);
   }
 
   const timeoutSignal = AbortSignal.timeout(DEFAULT_API_TIMEOUT_MS);
   const response = await fetch(`${apiBaseUrl()}${path}`, {
     ...init,
-    headers,
+    headers: headersOut,
     cache: "no-store",
     // Keep caller signal if provided; otherwise apply default request timeout.
     signal: init?.signal ?? timeoutSignal
@@ -49,7 +63,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T |
     } catch {
       // Best effort in contexts where cookie mutation is restricted.
     }
-    redirect("/login?message=Session%20expired.%20Please%20sign%20in%20again.");
+    redirect(loginRedirectPath("expired", currentRequestPath()));
   }
 
   if (!response.ok) {

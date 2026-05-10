@@ -1,4 +1,5 @@
 import { readWsTokenFromDocumentCookie } from "@/lib/auth/ws-token-cookie";
+import { surfaceAuthErrorIfAny } from "@/lib/auth/surface-auth-error";
 
 const DEFAULT_BASE_URL = "http://localhost:3001";
 
@@ -48,7 +49,10 @@ export async function fetchSymbolMinuteBars(
       headers,
       cache: "no-store"
     });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      surfaceAuthErrorIfAny(res);
+      return [];
+    }
     const rows = (await res.json()) as Record<string, unknown>[];
     if (!Array.isArray(rows)) return [];
     const out: MinuteBarPayload[] = [];

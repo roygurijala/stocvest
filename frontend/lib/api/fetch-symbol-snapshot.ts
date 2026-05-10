@@ -1,4 +1,5 @@
 import { readWsTokenFromDocumentCookie } from "@/lib/auth/ws-token-cookie";
+import { surfaceAuthErrorIfAny } from "@/lib/auth/surface-auth-error";
 
 import type { SnapshotPayload } from "./market";
 
@@ -25,6 +26,7 @@ export async function fetchSymbolSnapshot(symbol: string): Promise<SnapshotPaylo
       { method: "GET", credentials: "include", headers, cache: "no-store" }
     );
     if (!res.ok) {
+      surfaceAuthErrorIfAny(res);
       return null;
     }
     const row = (await res.json()) as SnapshotPayload;

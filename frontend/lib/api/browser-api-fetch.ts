@@ -1,4 +1,5 @@
 import { readWsTokenFromDocumentCookie } from "@/lib/auth/ws-token-cookie";
+import { markSessionExpired } from "@/lib/auth/session-expired";
 
 const DEFAULT_BASE_URL = "http://localhost:3001";
 const DEFAULT_TIMEOUT_MS = 55_000;
@@ -12,7 +13,14 @@ function apiBaseUrl(): string {
   return (a || b || DEFAULT_BASE_URL).replace(/\/+$/, "");
 }
 
-/** JSON API fetch for Client Components (no `next/headers` / server session). */
+/**
+ * JSON API fetch for Client Components (no `next/headers` / server session).
+ *
+ * On 401 we mark the session expired via the client event bus so the `SessionExpiredBanner`
+ * renders the calm sticky bar — instead of dumping the user on the login page mid-action.
+ * The banner owns the eventual redirect (with `reason=expired&next=...`) once the user
+ * acknowledges by clicking "Sign in".
+ */
 export async function browserApiFetch<T>(path: string, init?: RequestInit): Promise<T | null> {
   const headers = new Headers(init?.headers || {});
   headers.set("content-type", "application/json");
@@ -35,9 +43,7 @@ export async function browserApiFetch<T>(path: string, init?: RequestInit): Prom
     return null;
   }
   if (response.status === 401) {
-    if (typeof window !== "undefined") {
-      window.location.assign("/login?message=Session%20expired.%20Please%20sign%20in%20again.");
-    }
+    markSessionExpired("auth_error");
     return null;
   }
   if (!response.ok) {

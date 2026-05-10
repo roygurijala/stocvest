@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { buildDevMockIdToken } from "@/lib/auth/dev-mock-token";
 import { cognitoErrorMessage, signIn } from "@/lib/auth/cognito";
+import { sanitizeNextPath } from "@/lib/auth/login-redirect";
 import { persistSignupLegalAckOnLogin } from "@/lib/auth/persist-signup-legal";
 import { clearSessionTokenCookies, setSessionTokenCookiesFromIdToken } from "@/lib/auth/session-cookies";
 import { isStocvestDevelopment } from "@/lib/auth/stocvest-env";
@@ -19,6 +20,13 @@ function setAuthCookieFromIdToken(idToken: string): void {
   setSessionTokenCookiesFromIdToken(idToken);
 }
 
+/** Read the hidden `next` form input and return a safe, internal path or `/dashboard`. */
+function postLoginDestination(formData: FormData): string {
+  const raw = formData.get("next");
+  const candidate = typeof raw === "string" ? raw : null;
+  return sanitizeNextPath(candidate) ?? "/dashboard";
+}
+
 export async function loginWithPassword(
   _prev: LoginActionState,
   formData: FormData
@@ -32,13 +40,15 @@ export async function loginWithPassword(
     return { error: "Email and password are required." };
   }
 
+  const destination = postLoginDestination(formData);
+
   try {
     const result = await signIn(email, password);
 
     if (result.idToken) {
       setAuthCookieFromIdToken(result.idToken);
       await persistSignupLegalAckOnLogin(result.idToken);
-      redirect("/dashboard");
+      redirect(destination);
     }
 
     if (result.challengeName === "NEW_PASSWORD_REQUIRED" && result.challengeSession) {
@@ -67,7 +77,7 @@ export async function loginWithPassword(
 
 export async function loginAsDevUser(
   _prev: LoginActionState,
-  _formData: FormData
+  formData: FormData
 ): Promise<LoginActionState> {
   if (!isStocvestDevelopment()) {
     return { error: "Dev login is only available when NEXT_PUBLIC_STOCVEST_ENV=development." };
@@ -78,7 +88,7 @@ export async function loginAsDevUser(
     const message = error instanceof Error ? error.message : "Dev login failed.";
     return { error: message };
   }
-  redirect("/dashboard");
+  redirect(postLoginDestination(formData));
 }
 
 export async function logoutAction(): Promise<void> {

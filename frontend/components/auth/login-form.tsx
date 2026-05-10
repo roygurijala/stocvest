@@ -29,13 +29,24 @@ function DevSubmitButton() {
   );
 }
 
-export function LoginForm({ showDevBypass = false, defaultEmail }: { showDevBypass?: boolean; defaultEmail?: string }) {
+export function LoginForm({
+  showDevBypass = false,
+  defaultEmail,
+  nextPath
+}: {
+  showDevBypass?: boolean;
+  defaultEmail?: string;
+  /** Sanitized return URL (path-only) — forwarded as a hidden field so server actions resume the user there. */
+  nextPath?: string | null;
+}) {
   const [showPassword, setShowPassword] = useState(false);
   const [state, formAction] = useFormState(loginWithPassword, INITIAL_STATE);
   const [devState, devFormAction] = useFormState(loginAsDevUser, INITIAL_STATE);
+  const nextValue = nextPath ?? "";
   return (
     <div className="grid w-full max-w-md gap-4">
       <form action={formAction} className="grid gap-4">
+        {nextValue ? <input type="hidden" name="next" value={nextValue} /> : null}
         <div className="grid gap-1.5">
           <label htmlFor="email" className="text-sm text-slate-300">
             Email
@@ -88,6 +99,7 @@ export function LoginForm({ showDevBypass = false, defaultEmail }: { showDevBypa
       <p className="text-xs text-slate-500">Signals are not investment advice</p>
       {showDevBypass ? (
         <form action={devFormAction} className="grid gap-1">
+          {nextValue ? <input type="hidden" name="next" value={nextValue} /> : null}
           {devState.error ? <p className="m-0 text-xs text-rose-300">{devState.error}</p> : null}
           <DevSubmitButton />
         </form>
