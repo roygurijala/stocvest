@@ -255,9 +255,18 @@ export function SignalsPageClient({
   const [watchlistPickerOpen, setWatchlistPickerOpen] = useState(false);
   const [watchlistPickerSyms, setWatchlistPickerSyms] = useState<string[]>([]);
   const [watchlistPickerLoading, setWatchlistPickerLoading] = useState(false);
+  /**
+   * Symbols on the user's default watchlist — used as one of four corroboration sources for the
+   * symbol input (alongside scanner setups / market overview snapshots / Polygon reference search).
+   * A typed-in ticker that doesn't appear in any of those is treated as unverified and is NOT
+   * auto-committed; the user sees a calm one-line caution under the input.
+   */
+  const [userWatchlistSyms, setUserWatchlistSyms] = useState<string[]>([]);
   const [remoteCandidates, setRemoteCandidates] = useState<SymbolCandidate[]>([]);
   const [remoteSearchLoading, setRemoteSearchLoading] = useState(false);
   const [remoteSearchError, setRemoteSearchError] = useState<string | null>(null);
+  /** Calm caution shown under the symbol input when free-text submission lacks corroboration. */
+  const [unverifiedSymbolNote, setUnverifiedSymbolNote] = useState<string | null>(null);
   const [signalEvidence, setSignalEvidence] = useState<SignalEvidenceData | null>(null);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [newsPanelSymbol, setNewsPanelSymbol] = useState("");
@@ -404,7 +413,63 @@ export function SignalsPageClient({
     setSymbol(t);
     setSymbolDraft(t);
     setSuggestOpen(false);
+    setUnverifiedSymbolNote(null);
   }, []);
+
+  /**
+   * Fetch the user's default watchlist once so we can corroborate typed-in tickers without
+   * hitting the network on every keystroke. Best-effort: if the request fails the watchlist
+   * source simply contributes no matches; remote Polygon search still gates free-text commits.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/stocvest/watchlists/default/symbols", { method: "GET" });
+        if (!res.ok || cancelled) return;
+        const data = (await res.json().catch(() => ({}))) as { symbols?: unknown };
+        const list = Array.isArray(data.symbols)
+          ? data.symbols
+              .map((x) => normalizeTickerInput(String(x)))
+              .filter((x): x is string => Boolean(x))
+          : [];
+        if (!cancelled) setUserWatchlistSyms(list);
+      } catch {
+        /* watchlist is one of four corroboration sources; failure is non-fatal */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /**
+   * A symbol is "corroborated" when at least one trustworthy source recognizes it, in line with
+   * STOCVEST's intentionality-over-permissiveness principle:
+   *   1. Scanner setups / gap intel / market overview snapshots (already in `symbolCandidates`).
+   *   2. The user's default watchlist.
+   *   3. Polygon reference search results in `remoteCandidates`.
+   * `applyCommittedSymbol` is called directly from typeahead picks (1+3) and the watchlist picker
+   * (2), which are corroborated by construction. The gate matters for free-text Enter/blur.
+   */
+  const isSymbolCorroborated = useCallback(
+    (sym: string): boolean => {
+      const u = sym.toUpperCase();
+      if (!u) return false;
+      if (symbolCandidates.some((c) => c.symbol === u)) return true;
+      if (remoteCandidates.some((c) => c.symbol === u)) return true;
+      if (userWatchlistSyms.includes(u)) return true;
+      return false;
+    },
+    [symbolCandidates, remoteCandidates, userWatchlistSyms]
+  );
+
+  /** Calm one-line caption used under the symbol input — kept in code so wording lives in one place. */
+  const buildUnverifiedSymbolNote = useCallback(
+    (sym: string): string =>
+      `No session data found for "${sym}". Verify the ticker or choose from the suggestions above.`,
+    []
+  );
 
   /**
    * Past-signals symbol filter typeahead — mirrors the layer-analysis combobox so users
@@ -1265,6 +1330,7 @@ export function SignalsPageClient({
               const v = e.target.value;
               setSymbolDraft(v);
               setSuggestOpen(true);
+              if (unverifiedSymbolNote) setUnverifiedSymbolNote(null);
               if (!v.trim()) {
                 applyCommittedSymbol("");
               }
@@ -1278,7 +1344,15 @@ export function SignalsPageClient({
                   return;
                 }
                 const t = normalizeTickerFromApi(raw);
-                if (t) applyCommittedSymbol(t);
+                if (!t) return;
+                if (t === symbol.toUpperCase()) return;
+                // Free-text on blur: only commit when corroborated. Otherwise leave the draft
+                // visible and let the user pick from suggestions or correct the spelling.
+                if (isSymbolCorroborated(t)) {
+                  applyCommittedSymbol(t);
+                } else {
+                  setUnverifiedSymbolNote(buildUnverifiedSymbolNote(t));
+                }
               }, 120);
             }}
             onKeyDown={(e) => {
@@ -1305,9 +1379,14 @@ export function SignalsPageClient({
                   return;
                 }
                 const t = normalizeTickerFromApi(symbolDraft);
-                if (t) {
-                  e.preventDefault();
+                if (!t) return;
+                e.preventDefault();
+                // Explicit free-text submit: pause and explain rather than silently commit a
+                // ticker the system can't corroborate (typeahead / watchlist / Polygon search).
+                if (isSymbolCorroborated(t)) {
                   applyCommittedSymbol(t);
+                } else {
+                  setUnverifiedSymbolNote(buildUnverifiedSymbolNote(t));
                 }
               }
             }}
@@ -1380,6 +1459,21 @@ export function SignalsPageClient({
           </ul>
         ) : null}
       </div>
+
+      {unverifiedSymbolNote ? (
+        <p
+          role="status"
+          aria-live="polite"
+          style={{
+            margin: `${spacing[1]} 0 0`,
+            color: colors.textMuted,
+            fontSize: typography.scale.xs,
+            lineHeight: 1.6
+          }}
+        >
+          {unverifiedSymbolNote}
+        </p>
+      ) : null}
 
       {!symbolCommitted ? (
         <article
