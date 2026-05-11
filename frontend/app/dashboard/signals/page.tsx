@@ -54,6 +54,16 @@ export default async function DashboardSignalsPage({
     urlSymbol = await symbolFromUserSignalRecord(signalIdRaw);
   }
 
+  // Mode Separation safety perimeter (assistant_prompts.py): the Signals page
+  // operates in exactly one mode at a time, and `trading_mode=swing|day` in the
+  // URL must be the authoritative source. Deep links from scanner / validation
+  // / watchlist propagate this so the user lands in the engine they came from,
+  // not whatever was last in localStorage. Invalid/missing values fall through
+  // to the client's existing localStorage default of "swing".
+  const tradingModeRaw = (firstParam(searchParams.trading_mode) ?? "").trim().toLowerCase();
+  const initialTradingMode: "day" | "swing" | null =
+    tradingModeRaw === "day" || tradingModeRaw === "swing" ? tradingModeRaw : null;
+
   const [pdtStatus, marketOverview, scannerOverview] = await Promise.all([
     fetchPdtStatus().catch(() => null),
     fetchMarketOverview(undefined, { sparklineBarLimit: 12 }),
@@ -72,7 +82,8 @@ export default async function DashboardSignalsPage({
         signalsPrefill={{
           urlSymbol,
           signalIdForResolve: signalIdRaw && !urlSymbol ? signalIdRaw : null,
-          hadSignalIdQuery: Boolean(signalIdRaw)
+          hadSignalIdQuery: Boolean(signalIdRaw),
+          initialTradingMode
         }}
       />
     </AppShell>

@@ -1473,7 +1473,13 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                         {evidenceLoading ? "Preparing signal..." : "View Evidence"}
                       </button>
                       <Link
-                        href={`/dashboard/signals?symbol=${encodeURIComponent(setup.symbol.trim().toUpperCase())}&ref=scanner`}
+                        // Mode Separation: each setup carries its own engine
+                        // (swing_daily → swing engine; everything else → day
+                        // engine). Propagating trading_mode in the deep link
+                        // ensures the user lands in the same engine they
+                        // clicked on, never the other one's localStorage
+                        // default.
+                        href={`/dashboard/signals?symbol=${encodeURIComponent(setup.symbol.trim().toUpperCase())}&ref=scanner&trading_mode=${setup.scanner_mode === "swing_daily" ? "swing" : "day"}`}
                         className="inline-flex min-h-8 items-center rounded-md px-2 text-xs font-medium no-underline"
                         style={{ border: `1px solid ${colors.border}`, color: colors.accent, alignSelf: "center" }}
                       >

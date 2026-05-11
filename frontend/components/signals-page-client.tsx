@@ -63,6 +63,13 @@ export type SignalsPagePrefill = {
   signalIdForResolve: string | null;
   /** URL contained `signal_id` (strip query after symbol is committed). */
   hadSignalIdQuery: boolean;
+  /**
+   * Mode Separation safety perimeter (assistant_prompts.py): when present,
+   * `?trading_mode=swing|day` in the URL is the authoritative source of the
+   * page's trading mode and OVERRIDES localStorage. `null` means the URL did
+   * not specify a mode, so the client falls back to localStorage / default.
+   */
+  initialTradingMode: "day" | "swing" | null;
 };
 
 interface SignalsPageClientProps {
@@ -256,7 +263,12 @@ export function SignalsPageClient({
   marketOverview,
   scannerOverview,
   earningsBySymbol,
-  signalsPrefill = { urlSymbol: null, signalIdForResolve: null, hadSignalIdQuery: false }
+  signalsPrefill = {
+    urlSymbol: null,
+    signalIdForResolve: null,
+    hadSignalIdQuery: false,
+    initialTradingMode: null
+  }
 }: SignalsPageClientProps) {
   const { colors, theme } = useTheme();
   const historyFilterSelectStyle: CSSProperties = {
@@ -277,7 +289,9 @@ export function SignalsPageClient({
   const histSymbolComboRef = useRef<HTMLDivElement | null>(null);
   const signalIdUrlStrippedRef = useRef(false);
   const [tab, setTab] = useState<"layers" | "history">("layers");
-  const [tradingMode, setTradingMode] = useState<TradingMode>("swing");
+  const [tradingMode, setTradingMode] = useState<TradingMode>(
+    () => signalsPrefill.initialTradingMode ?? "swing"
+  );
   const [symbol, setSymbol] = useState(() => signalsPrefill.urlSymbol ?? "");
   const [symbolDraft, setSymbolDraft] = useState(() => signalsPrefill.urlSymbol ?? "");
   const [suggestOpen, setSuggestOpen] = useState(false);
@@ -614,13 +628,18 @@ export function SignalsPageClient({
   const snapshot = useMemo(() => coerceSnapshotForReferenceLevels(rawSnapshot), [rawSnapshot]);
 
   useEffect(() => {
+    // URL-driven trading_mode takes precedence over localStorage. Skip the
+    // localStorage restore when the user landed here via a deep link that
+    // specified the mode explicitly — per the Mode Separation rule, that URL
+    // is the authoritative source for the engine that owns this view.
+    if (signalsPrefill.initialTradingMode != null) return;
     try {
       const raw = localStorage.getItem(TRADING_MODE_STORAGE_KEY);
       if (raw === "swing" || raw === "day") setTradingMode(raw);
     } catch {
       /* ignore */
     }
-  }, []);
+  }, [signalsPrefill.initialTradingMode]);
 
   useEffect(() => {
     try {
@@ -674,7 +693,15 @@ export function SignalsPageClient({
     if (!sym) return;
     signalIdUrlStrippedRef.current = true;
     try {
-      window.history.replaceState(null, "", "/dashboard/signals");
+      // Strip `signal_id` (and any other transient query like `ref`) but
+      // preserve `trading_mode` so the engine attribution survives the URL
+      // cleanup. The Mode Separation rule treats trading_mode as authoritative
+      // state, not transient nav state.
+      const next = new URLSearchParams();
+      const mode = new URL(window.location.href).searchParams.get("trading_mode");
+      if (mode === "swing" || mode === "day") next.set("trading_mode", mode);
+      const suffix = next.toString() ? `?${next.toString()}` : "";
+      window.history.replaceState(null, "", `/dashboard/signals${suffix}`);
     } catch {
       /* ignore */
     }
@@ -712,6 +739,16 @@ export function SignalsPageClient({
     setTradingMode(m);
     try {
       localStorage.setItem(TRADING_MODE_STORAGE_KEY, m);
+    } catch {
+      /* ignore */
+    }
+    // Mirror the mode into the URL so deep links/refreshes stay accurate and
+    // the URL remains authoritative for cross-screen handoff. We preserve
+    // other query params (e.g. `symbol`) by mutating the URL in place.
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set("trading_mode", m);
+      window.history.replaceState(null, "", url.pathname + (url.search || ""));
     } catch {
       /* ignore */
     }
@@ -757,7 +794,12 @@ export function SignalsPageClient({
     let cancelled = false;
     setHistLoading(true);
     void (async () => {
-      const mine = await fetchUserEvaluatedSignals({ days: 30 });
+      // Mode Separation rule: signal-history must be mode-isolated. While the
+      // Layers / Evidence tabs already switch engine via `tradingMode`, the
+      // history tab previously returned BOTH modes — a violation of "history
+      // entries are associated with exactly one mode at a time" because the
+      // user was looking at the swing or day engine, not a combined ledger.
+      const mine = await fetchUserEvaluatedSignals({ days: 30, mode: tradingMode });
       if (cancelled) return;
       if (mine !== null) {
         setHistorySource("user");
@@ -771,7 +813,7 @@ export function SignalsPageClient({
     return () => {
       cancelled = true;
     };
-  }, [tab]);
+  }, [tab, tradingMode]);
 
   const filteredHistory = useMemo(() => {
     const cutoff = Date.now() - 30 * 86400000;

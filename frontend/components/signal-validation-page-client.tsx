@@ -424,7 +424,11 @@ export function SignalValidationPageClient() {
                         <tr key={r.signal_id ?? `${r.symbol}-${r.timestamp_iso}`} style={{ color: colors.text }}>
                           <td style={{ ...td, fontWeight: 600 }}>
                             <Link
-                              href={`/dashboard/signals?symbol=${encodeURIComponent(r.symbol.trim().toUpperCase())}&ref=validation`}
+                              // Mode Separation: validation ledger is per-mode
+                              // (swing tab vs day tab), so the deep link must
+                              // open Signals in the same engine the user was
+                              // reviewing — never silently the other one.
+                              href={`/dashboard/signals?symbol=${encodeURIComponent(r.symbol.trim().toUpperCase())}&ref=validation&trading_mode=${tab}`}
                               className="font-semibold no-underline hover:underline"
                               style={{ color: colors.text }}
                             >
@@ -499,7 +503,11 @@ export function SignalValidationPageClient() {
                         <tr key={r.signal_id ?? `${r.symbol}-${r.timestamp_iso}`} style={{ color: colors.text }}>
                           <td style={{ ...td, fontWeight: 600 }}>
                             <Link
-                              href={`/dashboard/signals?symbol=${encodeURIComponent(r.symbol.trim().toUpperCase())}&ref=validation`}
+                              // Mode Separation: validation ledger is per-mode
+                              // (swing tab vs day tab), so the deep link must
+                              // open Signals in the same engine the user was
+                              // reviewing — never silently the other one.
+                              href={`/dashboard/signals?symbol=${encodeURIComponent(r.symbol.trim().toUpperCase())}&ref=validation&trading_mode=${tab}`}
                               className="font-semibold no-underline hover:underline"
                               style={{ color: colors.text }}
                             >
