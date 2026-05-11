@@ -94,24 +94,22 @@ export function PerformanceTrackingContent({ showHomeLink = false }: Performance
         signal accuracy does not guarantee future results.
       </p>
 
+      {/*
+       * Mode Separation safety perimeter (assistant_prompts.py): "Never headline
+       * a combined accuracy or result across Day and Swing." The legacy top row
+       * carried a single "Directional Accuracy" card averaged across both
+       * engines — removed. Per-mode accuracy now lives ONLY in the
+       * PublicValidationSection below (Swing track / Day track), where each
+       * engine reports its own number with its own context window.
+       */}
       <section
-        className={`grid grid-cols-1 gap-3 sm:grid-cols-2 ${showHomeLink ? "mt-8 lg:grid-cols-4" : "mt-6 lg:grid-cols-4"}`}
+        className={`grid grid-cols-1 gap-3 sm:grid-cols-2 ${showHomeLink ? "mt-8 lg:grid-cols-3" : "mt-6 lg:grid-cols-3"}`}
       >
         <div className={surfaceGlowClassName} style={metricCardStyle}>
           <p className="text-xs uppercase tracking-wide" style={{ color: colors.textMuted }}>
             Total Signals
           </p>
           <p className="mt-2 text-2xl font-bold">{summary?.total_signals_tracked ?? 0}</p>
-        </div>
-        <div className={surfaceGlowClassName} style={metricCardStyle}>
-          <p className="text-xs uppercase tracking-wide" style={{ color: colors.textMuted }}>
-            Directional Accuracy
-          </p>
-          <p className="mt-2 text-2xl font-bold">
-            {summary && summary.correct_direction_count + summary.incorrect_direction_count > 0
-              ? `${summary.directional_accuracy_percent.toFixed(1)}%`
-              : "—"}
-          </p>
         </div>
         <div className={surfaceGlowClassName} style={metricCardStyle}>
           <p className="text-xs uppercase tracking-wide" style={{ color: colors.textMuted }}>
@@ -132,8 +130,8 @@ export function PerformanceTrackingContent({ showHomeLink = false }: Performance
 
       {resolvedCount > 0 ? (
         <p className="mt-4 text-sm" style={{ color: colors.textMuted }}>
-          Based on {resolvedCount} resolved signal{resolvedCount === 1 ? "" : "s"} since launch (1d horizon). Pending signals are excluded
-          from the accuracy percentage.
+          Based on {resolvedCount} resolved signal{resolvedCount === 1 ? "" : "s"} since launch (1d horizon). Per-engine
+          accuracy is broken out in the Swing track and Day track cards below.
         </p>
       ) : null}
 
@@ -235,7 +233,7 @@ export function PerformanceTrackingContent({ showHomeLink = false }: Performance
   );
 }
 
-interface PublicValidationSectionProps {
+export interface PublicValidationSectionProps {
   validation: PublicHistoricalValidationResponse;
   surfaceClass: string;
   panelStyle: { background: string; border: string; borderRadius: string; padding: string };
@@ -254,7 +252,7 @@ interface PublicValidationSectionProps {
  * is "Explain the FRAMEWORK, not the DECISION", and that boundary is enforced both at
  * the API layer (Phase 3c-1 backend) and here at the rendering layer.
  */
-function PublicValidationSection({
+export function PublicValidationSection({
   validation,
   surfaceClass,
   panelStyle,
@@ -262,8 +260,10 @@ function PublicValidationSection({
   colors,
   showHomeLink
 }: PublicValidationSectionProps) {
-  const { overall, by_mode: byMode, rows_examined: rowsExamined } = validation.summary;
-  const resolved = overall.correct + overall.incorrect;
+  // `overall` deliberately not destructured — Mode Separation rule forbids
+  // surfacing a combined-engine headline on this page. The per-mode buckets
+  // are the only metrics rendered.
+  const { by_mode: byMode, rows_examined: rowsExamined } = validation.summary;
   const swing = byMode.swing;
   const day = byMode.day;
 
@@ -275,25 +275,17 @@ function PublicValidationSection({
         Neutrals (small drift moves) are excluded from the denominator. Nothing here is simulated and nothing here is a forecast.
       </p>
 
-      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div className={surfaceClass} style={metricCardStyle}>
+      {/*
+       * Two cards only — Mode Separation rule "Statistics, hit-rates, and
+       * outcomes must never be combined into a single headline number." The
+       * legacy "Overall accuracy (1d)" card averaged swing and day signals
+       * into one number — removed. Each engine now reports its own track
+       * record on its own card, side by side.
+       */}
+      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className={surfaceClass} style={metricCardStyle} data-testid="pv-swing-track">
           <p className="text-xs uppercase tracking-wide" style={{ color: colors.textMuted }}>
-            Overall accuracy (1d)
-          </p>
-          <p className="mt-2 text-2xl font-bold" style={{ fontFamily: typography.fontFamilyMono }}>
-            {formatAccuracyPercent(overall.accuracy)}
-          </p>
-          <p className="mt-1 text-[11px] leading-snug" style={{ color: colors.textMuted }}>
-            {resolved > 0
-              ? `${overall.correct} correct of ${resolved} resolved`
-              : "Awaiting resolved trades"}
-            {overall.neutral > 0 ? ` · ${overall.neutral} neutral` : ""}
-          </p>
-        </div>
-
-        <div className={surfaceClass} style={metricCardStyle}>
-          <p className="text-xs uppercase tracking-wide" style={{ color: colors.textMuted }}>
-            Swing track (1d)
+            Swing track (1d, multi-day cadence)
           </p>
           <p className="mt-2 text-2xl font-bold" style={{ fontFamily: typography.fontFamilyMono }}>
             {swing ? formatAccuracyPercent(swing.accuracy) : "—"}
@@ -305,9 +297,9 @@ function PublicValidationSection({
           </p>
         </div>
 
-        <div className={surfaceClass} style={metricCardStyle}>
+        <div className={surfaceClass} style={metricCardStyle} data-testid="pv-day-track">
           <p className="text-xs uppercase tracking-wide" style={{ color: colors.textMuted }}>
-            Day track (1d)
+            Day track (1d, intraday cadence)
           </p>
           <p className="mt-2 text-2xl font-bold" style={{ fontFamily: typography.fontFamilyMono }}>
             {day ? formatAccuracyPercent(day.accuracy) : "—"}

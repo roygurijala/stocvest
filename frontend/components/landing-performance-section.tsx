@@ -96,7 +96,9 @@ function PlaceholderSparkline() {
 export function LandingPerformanceSection({ summary }: { summary: PerformanceSummary | null }) {
   const hasPatternData = Boolean(summary?.pattern_breakdown && summary.pattern_breakdown.length > 0);
   const evaluated = summary?.signals_evaluated ?? 0;
-  const overallPct = summary?.directional_accuracy_percent ?? 0;
+  // Mode Separation rule: the homepage must not surface a combined-engine
+  // ``directional_accuracy_percent``. We still ingest the summary (for pattern
+  // breakdown / volume) but the single overall pct is intentionally NOT read.
   const sparkValues =
     hasPatternData && summary!.pattern_breakdown!.length >= 2
       ? summary!.pattern_breakdown!.map((r) => r.accuracy_percent)
@@ -226,10 +228,20 @@ export function LandingPerformanceSection({ summary }: { summary: PerformanceSum
             </div>
           </div>
 
+          {/*
+           * Mode Separation safety perimeter (assistant_prompts.py): "Never
+           * headline a combined accuracy or result across Day and Swing." The
+           * legacy fallback line surfaced ``Overall directional accuracy``
+           * averaged across both engines — a direct violation, especially on
+           * the LOGGED-OUT homepage where any combined number reads as a
+           * promotional claim. Per-engine track records live behind a sign-in
+           * on /performance and /dashboard/signal-validation; the homepage
+           * stays at the FRAMEWORK level only.
+           */}
           {evaluated > 0 && !hasPatternData ? (
             <p className="mb-3 text-center text-xs text-slate-400" style={{ fontFamily: MONO }}>
-              Overall directional accuracy (resolved 1d):{" "}
-              <span className="font-semibold text-slate-200">{overallPct.toFixed(1)}%</span> · n={evaluated}
+              Resolved 1d signals so far: <span className="font-semibold text-slate-200">{evaluated}</span>.
+              Per-engine accuracy (Swing / Day) is reported on the Signal Tracking page.
             </p>
           ) : null}
 
