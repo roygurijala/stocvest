@@ -152,6 +152,18 @@ export function StocvestAssistant() {
 
         const data = (await res.json().catch(() => ({}))) as Partial<AssistantChatResponse>;
         if (!res.ok || typeof data.text !== "string" || !data.text) {
+          if (typeof console !== "undefined") {
+            // eslint-disable-next-line no-console
+            console.warn(
+              `[STOCVEST Assistant] chat request failed status=${res.status} body=${JSON.stringify(data).slice(0, 200)}`
+            );
+          }
+          const fallbackText =
+            res.status === 404
+              ? "The STOCVEST Assistant isn't enabled in this environment yet. It will become available after the next deploy."
+              : res.status >= 500
+                ? "The explanation service is temporarily unavailable. Please try again in a moment — the Decision line and column tooltips on screen still carry the authoritative reasoning."
+                : "I couldn't reach the explanation service. The Decision line and column tooltips on screen carry the authoritative reasoning.";
           setMessages((cur) =>
             cur.map((m) =>
               m.id === pendingId
@@ -159,8 +171,7 @@ export function StocvestAssistant() {
                     ...m,
                     pending: false,
                     fresh: false,
-                    content:
-                      "I couldn't reach the explanation service. The Decision line and column tooltips on screen carry the authoritative reasoning."
+                    content: fallbackText
                   }
                 : m
             )
