@@ -53,9 +53,18 @@ function wrap(ui: ReactElement) {
   return render(<ThemeProvider>{ui}</ThemeProvider>);
 }
 
+const EMPTY_SCANNER_PAYLOAD = {
+  gapIntelligence: [] as import("@/lib/api/scanner").GapIntelligenceItem[],
+  setups: [] as import("@/lib/api/scanner").IntradaySetupPayload[],
+  spyPct: null as number | null,
+  qqqPct: null as number | null,
+  regimeLabel: "Neutral"
+};
+
 describe("ScannerPageClient setup mode toggle", () => {
   beforeEach(() => {
-    loadScannerDataWithoutBriefMock.mockClear();
+    loadScannerDataWithoutBriefMock.mockReset();
+    loadScannerDataWithoutBriefMock.mockImplementation(async () => ({ ...EMPTY_SCANNER_PAYLOAD }));
     localStorage.clear();
   });
 
@@ -92,5 +101,109 @@ describe("ScannerPageClient setup mode toggle", () => {
 
     wrap(ui);
     await waitFor(() => expect(screen.getByRole("tab", { name: "Day" })).toHaveAttribute("aria-selected", "true"));
+  });
+
+  test("test_scanner_mode_both_renders_two_separate_sections_not_merged_list", async () => {
+    // Mode-separation safety perimeter (assistant_prompts.py): when the user
+    // picks "Both", scanner output must render as TWO sections (Swing setups
+    // + Day setups), NOT a single merged ranked list sorted across engines.
+    // Lock-in: feed a mix where day's top score (0.9) exceeds swing's top
+    // (0.7) — if the implementation regressed to a single merge-sorted list,
+    // we'd see "DAYA" before "SWINGA" with no section headers at all.
+    localStorage.setItem(SCANNER_MODE_STORAGE_KEY, "both");
+    const mixedSetups: import("@/lib/api/scanner").IntradaySetupPayload[] = [
+      {
+        symbol: "SWINGA",
+        direction: "long",
+        score: 0.5,
+        triggers: ["ema50_cross_above_200"],
+        timestamp_iso: "2026-05-01T12:00:00Z",
+        scanner_mode: "swing_daily",
+        pattern_maturity_days: 4
+      },
+      {
+        symbol: "DAYA",
+        direction: "long",
+        score: 0.9,
+        triggers: ["orb_break"],
+        timestamp_iso: "2026-05-01T14:00:00Z"
+      },
+      {
+        symbol: "SWINGB",
+        direction: "long",
+        score: 0.7,
+        triggers: ["weekly_rsi_recovery"],
+        timestamp_iso: "2026-05-01T12:30:00Z",
+        scanner_mode: "swing_daily"
+      },
+      {
+        symbol: "DAYB",
+        direction: "long",
+        score: 0.4,
+        triggers: ["vwap_reclaim"],
+        timestamp_iso: "2026-05-01T14:30:00Z"
+      }
+    ];
+    // Sticky impl so every refetch (initial swing render + post-localStorage
+    // swap to both + any later refresh) gets the same dataset.
+    loadScannerDataWithoutBriefMock.mockImplementation(async () => ({
+      ...EMPTY_SCANNER_PAYLOAD,
+      setups: mixedSetups
+    }));
+
+    wrap(
+      <ScannerPageClient
+        initialOverview={{ gapIntelligence: [], setups: [] }}
+        initialTimestampIso="2026-05-06T12:00:00.000Z"
+        earningsBySymbol={{}}
+      />
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Both" })).toHaveAttribute("aria-selected", "true")
+    );
+
+    // Both engine-labelled section headers must be present.
+    const swingHeader = await screen.findByText("Swing setups (daily cadence)");
+    const dayHeader = await screen.findByText("Day setups (intraday cadence)");
+
+    // Swing section must precede Day section in DOM order — engines never
+    // interleave.
+    const order =
+      swingHeader.compareDocumentPosition(dayHeader) & Node.DOCUMENT_POSITION_FOLLOWING;
+    expect(order).toBeTruthy();
+
+    // Symbols from each engine must surface (proves both sections render rows,
+    // not just headers).
+    expect(screen.getByText("SWINGA")).toBeTruthy();
+    expect(screen.getByText("SWINGB")).toBeTruthy();
+    expect(screen.getByText("DAYA")).toBeTruthy();
+    expect(screen.getByText("DAYB")).toBeTruthy();
+  });
+
+  test("test_scanner_mode_both_uses_mode_specific_empty_state_copy", async () => {
+    // Mode-aware empty-state language rule (assistant_prompts.py): when a
+    // mode is suppressed in the both-view, its empty copy must use that
+    // mode's vocabulary — swing emphasises regime/structure alignment, day
+    // emphasises intraday confirmation / session timing. Never identical.
+    localStorage.setItem(SCANNER_MODE_STORAGE_KEY, "both");
+    // Empty defaults are already installed by beforeEach; no override needed.
+
+    wrap(
+      <ScannerPageClient
+        initialOverview={{ gapIntelligence: [], setups: [] }}
+        initialTimestampIso="2026-05-06T12:00:00.000Z"
+        earningsBySymbol={{}}
+      />
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Both" })).toHaveAttribute("aria-selected", "true")
+    );
+
+    expect(await screen.findByText(/No swing setups — regime and structure not aligned\./)).toBeTruthy();
+    expect(
+      await screen.findByText(/No day setups — intraday confirmation and session timing not aligned\./)
+    ).toBeTruthy();
   });
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -224,12 +225,41 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
     return m;
   }, [overview.gapIntelligence]);
 
-  const rankedSetups = useMemo(() => {
+  // Swing- vs day-engine ranked lists are partitioned independently. Per the
+  // Mode Separation safety perimeter (assistant_prompts.py): "scanner output
+  // stays separated by mode. When scanner_focus=both in the page context, the
+  // user sees TWO sections, not a single merged table with a mode column."
+  // Day results reflect intraday logic only; Swing results reflect
+  // daily/weekly logic only — they MUST NOT be sorted together.
+  const swingRankedSetups = useMemo(() => {
     return [...overview.setups]
-      .filter((s) => typeof s.score === "number" && Number.isFinite(s.score))
+      .filter(
+        (s) =>
+          s.scanner_mode === "swing_daily" &&
+          typeof s.score === "number" &&
+          Number.isFinite(s.score)
+      )
       .sort((a, b) => b.score - a.score)
-      .slice(0, 10);
-  }, [overview.setups]);
+      .slice(0, scannerSetupMode === "both" ? 5 : 10);
+  }, [overview.setups, scannerSetupMode]);
+
+  const dayRankedSetups = useMemo(() => {
+    return [...overview.setups]
+      .filter(
+        (s) =>
+          s.scanner_mode !== "swing_daily" &&
+          typeof s.score === "number" &&
+          Number.isFinite(s.score)
+      )
+      .sort((a, b) => b.score - a.score)
+      .slice(0, scannerSetupMode === "both" ? 5 : 10);
+  }, [overview.setups, scannerSetupMode]);
+
+  const rankedSetups = useMemo(() => {
+    if (scannerSetupMode === "swing") return swingRankedSetups;
+    if (scannerSetupMode === "day") return dayRankedSetups;
+    return [...swingRankedSetups, ...dayRankedSetups];
+  }, [scannerSetupMode, swingRankedSetups, dayRankedSetups]);
 
   const showSwingScanContextBanner = useMemo(() => {
     return (
@@ -243,8 +273,56 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
     scannerSetupMode === "swing"
       ? "No swing setups — regime and structure not aligned."
       : scannerSetupMode === "day"
-        ? "No day setups right now."
+        ? "No day setups — intraday confirmation and session timing not aligned."
         : "No swing or day setups right now.";
+
+  // Render groups feed the two-section layout when scannerSetupMode === "both".
+  // Each group carries its own mode-specific vocabulary for the empty state —
+  // swing emphasises regime/structure alignment, day emphasises intraday
+  // confirmation and session timing. The assistant prompt requires distinct
+  // copy per mode ("Never use identical copy for both modes").
+  type SetupRenderGroup = {
+    key: "swing" | "day" | "swing-only" | "day-only";
+    label: string | null;
+    setups: IntradaySetupPayload[];
+    emptyMessage: string;
+  };
+  const setupRenderGroups = useMemo<SetupRenderGroup[]>(() => {
+    if (scannerSetupMode === "both") {
+      return [
+        {
+          key: "swing",
+          label: "Swing setups (daily cadence)",
+          setups: swingRankedSetups,
+          emptyMessage: "No swing setups — regime and structure not aligned."
+        },
+        {
+          key: "day",
+          label: "Day setups (intraday cadence)",
+          setups: dayRankedSetups,
+          emptyMessage: "No day setups — intraday confirmation and session timing not aligned."
+        }
+      ];
+    }
+    if (scannerSetupMode === "swing") {
+      return [
+        {
+          key: "swing-only",
+          label: null,
+          setups: swingRankedSetups,
+          emptyMessage: setupsEmptyMessage
+        }
+      ];
+    }
+    return [
+      {
+        key: "day-only",
+        label: null,
+        setups: dayRankedSetups,
+        emptyMessage: setupsEmptyMessage
+      }
+    ];
+  }, [scannerSetupMode, swingRankedSetups, dayRankedSetups, setupsEmptyMessage]);
 
   const confluenceAlertSymbols = useMemo(() => {
     const s = new Set<string>();
@@ -693,7 +771,7 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
     scannerSetupMode === "swing"
       ? "Swing setups (daily)"
       : scannerSetupMode === "both"
-        ? "Setups · swing + day"
+        ? "Setups · swing + day (two separate desks)"
         : "Day setups (intraday)";
 
   const panelNewsTradingMode = scannerSetupMode === "day" ? "day" : "swing";
@@ -1027,10 +1105,26 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
               paddingRight: spacing[1]
             }}
           >
-            {rankedSetups.length === 0 ? (
-              <p style={{ margin: 0, color: colors.textMuted, lineHeight: 1.45 }}>{setupsEmptyMessage}</p>
-            ) : (
-              rankedSetups.map((setup, idx) => {
+            {setupRenderGroups.map((group) => (
+              <Fragment key={`setup-group-${group.key}`}>
+                {group.label ? (
+                  <h4
+                    style={{
+                      margin: 0,
+                      fontSize: typography.scale.xs,
+                      fontWeight: 700,
+                      color: colors.textMuted,
+                      letterSpacing: "0.06em",
+                      textTransform: "uppercase"
+                    }}
+                  >
+                    {group.label}
+                  </h4>
+                ) : null}
+                {group.setups.length === 0 ? (
+                  <p style={{ margin: 0, color: colors.textMuted, lineHeight: 1.45 }}>{group.emptyMessage}</p>
+                ) : (
+                  group.setups.map((setup, idx) => {
                 const snap = snapBySymbol[setup.symbol] ?? null;
                 const zone = entryZoneFromSnapshot(snap);
                 const vwap = snap?.day_vwap;
@@ -1393,7 +1487,9 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                   </motion.article>
                 );
               })
-            )}
+                )}
+              </Fragment>
+            ))}
           </div>
         </section>
       </div>
