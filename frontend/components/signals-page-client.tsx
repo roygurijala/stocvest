@@ -93,17 +93,44 @@ function normalizeTickerFromApi(raw: string): string | null {
 }
 
 /**
- * Bucket a 0–100 layer-alignment score into "High / Medium / Low" for the past-signals table.
+ * Bucket a 0–100 layer-alignment score into "High / Moderate / Low" for the past-signals table.
  *
  * Avoids exposing raw percentages to users: that wording was reading as confidence/probability,
- * which the radar score is not. See product guidance in the "Past signal states" review.
+ * which the radar score is not. "Moderate" is preferred over "Medium" per the Signal State
+ * History spec — it reads as a careful assessment rather than a graded score.
  */
 function formatLayerAlignmentBucket(score: number | null | undefined): string {
   if (typeof score !== "number" || !Number.isFinite(score)) return "—";
   if (score >= 70) return "High";
-  if (score >= 40) return "Medium";
+  if (score >= 40) return "Moderate";
   return "Low";
 }
+
+/**
+ * Tooltip wording for the Signal State History table — kept in one place so the philosophy
+ * of "describe price behavior, do not judge the signal" stays consistent across every column,
+ * filter, and header. See product spec: "This table describes what happened after STOCVEST
+ * spoke — not whether it should have been traded."
+ */
+const SIGNAL_STATE_HISTORY_TOOLTIPS = {
+  table:
+    "STOCVEST separates signal states from trade permission. Many signals shown here were not actionable due to risk, regime, or confirmation gates.",
+  filterSignalBias: "Filter by the directional bias STOCVEST expressed.",
+  filterPriceReaction:
+    "Filter by how price moved after the signal state. This does not imply correctness or tradability.",
+  colTime: "Timestamp when STOCVEST issued the signal state.",
+  colSymbol: "Ticker symbol evaluated by STOCVEST.",
+  colSignalBias:
+    "Directional bias expressed by STOCVEST at the time, based on multi-layer analysis.",
+  colAlignment:
+    "Degree of agreement across STOCVEST's six analysis layers at the time the signal state was issued.",
+  colPattern: "Technical pattern context at the time of the signal, if available.",
+  colPriceAtSignal: "Last traded price when the signal state was issued.",
+  col1hReaction:
+    "Observed price movement over the first hour after the signal state was issued. This reflects price behavior only, not signal correctness.",
+  col1dReaction:
+    "Observed price movement over the next trading day after the signal state was issued. This does not represent trade performance or profitability."
+} as const;
 
 const layerMeta = [
   ["📊", "Technical"],
@@ -1053,13 +1080,27 @@ export function SignalsPageClient({
           className={surfaceGlowClassName}
           style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
         >
-          <h3 style={{ marginTop: 0 }}>Signal state history</h3>
+          <h3
+            style={{
+              marginTop: 0,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: spacing[2]
+            }}
+          >
+            Signal State History
+            <InfoTip
+              label="About Signal State History"
+              text={SIGNAL_STATE_HISTORY_TOOLTIPS.table}
+              maxWidth={320}
+            />
+          </h3>
           <p
             className="m-0 text-sm leading-relaxed"
             style={{ color: colors.textMuted, fontStyle: "italic", marginBottom: spacing[2] }}
           >
             This view shows how price moved after STOCVEST issued a signal state. It is provided for transparency,
-            not as a trading record.
+            not as a trading record or recommendation.
           </p>
           <p style={{ margin: `0 0 ${spacing[3]} 0`, color: colors.textMuted, fontSize: typography.scale.sm }}>
             {historySource === "user"
@@ -1198,26 +1239,32 @@ export function SignalsPageClient({
                 </ul>
               ) : null}
             </div>
-            <select
-              value={histDirectionFilter}
-              onChange={(e) => setHistDirectionFilter(e.target.value as typeof histDirectionFilter)}
-              className="min-h-11 text-base"
-              aria-label="Filter past signal states by signal bias"
-              style={historyFilterSelectStyle}
-            >
-              <option value="all" style={historyFilterOptionStyle}>
-                Any signal bias
-              </option>
-              <option value="bullish" style={historyFilterOptionStyle}>
-                Bullish
-              </option>
-              <option value="bearish" style={historyFilterOptionStyle}>
-                Bearish
-              </option>
-              <option value="neutral" style={historyFilterOptionStyle}>
-                Neutral
-              </option>
-            </select>
+            <div className="flex items-center gap-1">
+              <select
+                value={histDirectionFilter}
+                onChange={(e) => setHistDirectionFilter(e.target.value as typeof histDirectionFilter)}
+                className="min-h-11 text-base"
+                aria-label="Filter past signal states by signal bias"
+                style={historyFilterSelectStyle}
+              >
+                <option value="all" style={historyFilterOptionStyle}>
+                  Any signal bias
+                </option>
+                <option value="bullish" style={historyFilterOptionStyle}>
+                  Bullish
+                </option>
+                <option value="bearish" style={historyFilterOptionStyle}>
+                  Bearish
+                </option>
+                <option value="neutral" style={historyFilterOptionStyle}>
+                  Neutral
+                </option>
+              </select>
+              <InfoTip
+                label="About the signal bias filter"
+                text={SIGNAL_STATE_HISTORY_TOOLTIPS.filterSignalBias}
+              />
+            </div>
             <div className="flex items-center gap-1">
               <select
                 value={histOutcomeFilter}
@@ -1244,7 +1291,7 @@ export function SignalsPageClient({
               </select>
               <InfoTip
                 label="About the price reaction filter"
-                text="Filters reflect subsequent price behavior, not signal correctness or trade recommendation."
+                text={SIGNAL_STATE_HISTORY_TOOLTIPS.filterPriceReaction}
               />
             </div>
           </div>
@@ -1259,14 +1306,65 @@ export function SignalsPageClient({
               <table className="min-w-[880px]" style={{ width: "100%", borderCollapse: "collapse", fontSize: typography.scale.sm }}>
                 <thead>
                   <tr style={{ color: colors.textMuted, textAlign: "left" }}>
-                    <th style={{ padding: spacing[2] }}>Time</th>
-                    <th style={{ padding: spacing[2] }}>Symbol</th>
-                    <th style={{ padding: spacing[2] }}>Signal bias</th>
-                    <th style={{ padding: spacing[2] }}>Alignment</th>
-                    <th style={{ padding: spacing[2] }}>Pattern</th>
-                    <th style={{ padding: spacing[2] }}>Price at signal</th>
-                    <th style={{ padding: spacing[2] }}>1h price reaction</th>
-                    <th style={{ padding: spacing[2] }}>1d price reaction</th>
+                    <th style={{ padding: spacing[2] }}>
+                      <span className="inline-flex items-center gap-1">
+                        Time
+                        <InfoTip label="About Time" text={SIGNAL_STATE_HISTORY_TOOLTIPS.colTime} />
+                      </span>
+                    </th>
+                    <th style={{ padding: spacing[2] }}>
+                      <span className="inline-flex items-center gap-1">
+                        Symbol
+                        <InfoTip label="About Symbol" text={SIGNAL_STATE_HISTORY_TOOLTIPS.colSymbol} />
+                      </span>
+                    </th>
+                    <th style={{ padding: spacing[2] }}>
+                      <span className="inline-flex items-center gap-1">
+                        Signal bias
+                        <InfoTip label="About Signal bias" text={SIGNAL_STATE_HISTORY_TOOLTIPS.colSignalBias} />
+                      </span>
+                    </th>
+                    <th style={{ padding: spacing[2] }}>
+                      <span className="inline-flex items-center gap-1">
+                        Alignment
+                        <InfoTip label="About Alignment" text={SIGNAL_STATE_HISTORY_TOOLTIPS.colAlignment} />
+                      </span>
+                    </th>
+                    <th style={{ padding: spacing[2] }}>
+                      <span className="inline-flex items-center gap-1">
+                        Pattern
+                        <InfoTip label="About Pattern" text={SIGNAL_STATE_HISTORY_TOOLTIPS.colPattern} />
+                      </span>
+                    </th>
+                    <th style={{ padding: spacing[2] }}>
+                      <span className="inline-flex items-center gap-1">
+                        Price at signal
+                        <InfoTip
+                          label="About Price at signal"
+                          text={SIGNAL_STATE_HISTORY_TOOLTIPS.colPriceAtSignal}
+                        />
+                      </span>
+                    </th>
+                    <th style={{ padding: spacing[2] }}>
+                      <span className="inline-flex items-center gap-1">
+                        1h price reaction
+                        <InfoTip
+                          label="About 1h price reaction"
+                          text={SIGNAL_STATE_HISTORY_TOOLTIPS.col1hReaction}
+                          maxWidth={320}
+                        />
+                      </span>
+                    </th>
+                    <th style={{ padding: spacing[2] }}>
+                      <span className="inline-flex items-center gap-1">
+                        1d price reaction
+                        <InfoTip
+                          label="About 1d price reaction"
+                          text={SIGNAL_STATE_HISTORY_TOOLTIPS.col1dReaction}
+                          maxWidth={320}
+                        />
+                      </span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1292,7 +1390,10 @@ export function SignalsPageClient({
                             {row.bias}
                           </span>
                         </td>
-                        <td style={{ padding: spacing[2] }} title="Layer alignment at issuance — High / Medium / Low. Not a probability or correctness metric.">
+                        <td
+                          style={{ padding: spacing[2] }}
+                          title="Layer alignment at issuance — High / Moderate / Low. Not a probability or correctness metric."
+                        >
                           {alignment}
                         </td>
                         <td style={{ padding: spacing[2] }}>{row.pattern ?? "—"}</td>
