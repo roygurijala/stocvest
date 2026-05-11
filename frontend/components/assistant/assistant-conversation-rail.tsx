@@ -84,12 +84,25 @@ interface ConversationRowProps {
 
 function ConversationRow({ message, colors, contextTone }: ConversationRowProps) {
   const tone = nodeColor(message.role, colors, contextTone);
+  /**
+   * Speaker labels are color-coded so user input is visually distinct from STOCVEST output
+   * at a glance: "YOU" picks up the accent, "STOCVEST" picks up the page tone (caution /
+   * bullish / bearish / neutral muted). The message body also carries a 2px ribbon in the
+   * same tone on its left edge, mirroring the rail node — clear role attribution without
+   * reverting to chat bubbles.
+   */
   const labelStyle: CSSProperties = {
     fontSize: 10,
     fontWeight: 700,
     letterSpacing: "0.14em",
-    color: colors.textMuted,
+    color: tone,
     textTransform: "uppercase"
+  };
+  const bodyWrapperStyle: CSSProperties = {
+    borderLeft: `2px solid ${tone}`,
+    paddingLeft: spacing[2],
+    background: message.role === "user" ? `${tone}0d` : "transparent",
+    borderRadius: 2
   };
 
   return (
@@ -115,7 +128,9 @@ function ConversationRow({ message, colors, contextTone }: ConversationRowProps)
         }}
       />
       <span style={labelStyle}>{speakerLabel(message.role)}</span>
-      <MessageBody message={message} colors={colors} />
+      <div style={bodyWrapperStyle}>
+        <MessageBody message={message} colors={colors} />
+      </div>
     </li>
   );
 }

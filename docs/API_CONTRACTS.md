@@ -79,6 +79,7 @@ All REST routes are versioned under `/v1/`.
       "page": "signals/layers" | "signals/history" | string,
       "trading_mode": "swing" | "day",
       "symbol": "AAPL",
+      "analysis_status": "loaded" | "loading" | "unavailable" | "insufficient_data",
       "decision_state": "actionable" | "monitor" | "blocked",
       "decision_line": "Decision: ⚠️ Monitor only ...",
       "decision_rationale": { "category": "risk_reward" | "confirmation" | "regime" | "data_insufficient" | "readiness", "label": "Why hold:", "text": "..." },

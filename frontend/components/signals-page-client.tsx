@@ -1054,16 +1054,14 @@ export function SignalsPageClient({
         symbol: sym || undefined
       };
     }
-    if (!signalEvidence) {
-      return { page: pageId, trading_mode: tradingMode, symbol: sym || undefined };
-    }
-    const insight = signalEvidence.insight;
-    if (!insight) {
-      return { page: pageId, trading_mode: tradingMode, symbol: sym || undefined };
-    }
-    const decision = synthTradeDecision(signalEvidence, insight);
+    /**
+     * Always derive the partial layer status from `signalEvidence.layers` if it exists, even
+     * when `insight` is missing. The assistant uses this to ground its answer in what the
+     * page can show, not just the symbol. When neither is loaded, mark analysis_status so
+     * the assistant explains STOCVEST in general terms instead of describing its own access.
+     */
     const layerStatus: Partial<Record<AssistantLayerKey, AssistantLayerStatus>> = {};
-    for (const layer of signalEvidence.layers ?? []) {
+    for (const layer of signalEvidence?.layers ?? []) {
       const k = layer.key as AssistantLayerKey;
       if (
         k === "technical" ||
@@ -1076,10 +1074,24 @@ export function SignalsPageClient({
         layerStatus[k] = layer.status;
       }
     }
+    const layerStatusForCtx = Object.keys(layerStatus).length > 0 ? layerStatus : undefined;
+
+    if (!signalEvidence || !signalEvidence.insight) {
+      return {
+        page: pageId,
+        trading_mode: tradingMode,
+        symbol: sym || undefined,
+        analysis_status: sym ? "loading" : undefined,
+        layer_status: layerStatusForCtx
+      };
+    }
+    const insight = signalEvidence.insight;
+    const decision = synthTradeDecision(signalEvidence, insight);
     return {
       page: pageId,
       trading_mode: tradingMode,
       symbol: sym,
+      analysis_status: "loaded",
       decision_state: decision.state,
       decision_line: decision.line,
       decision_rationale: decision.rationale ?? undefined,
@@ -1098,7 +1110,7 @@ export function SignalsPageClient({
         insight.alignment_ratio != null && Number.isFinite(insight.alignment_ratio)
           ? Math.round(Math.max(0, Math.min(1, insight.alignment_ratio)) * 100)
           : null,
-      layer_status: Object.keys(layerStatus).length > 0 ? layerStatus : undefined
+      layer_status: layerStatusForCtx
     };
   }, [tab, tradingMode, symbol, signalEvidence]);
 

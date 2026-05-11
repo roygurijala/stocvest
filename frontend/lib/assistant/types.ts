@@ -52,6 +52,12 @@ export interface AssistantPageContext {
   market_regime?: string;
   layer_alignment_pct?: number | null;
   layer_status?: Partial<Record<AssistantLayerKey, AssistantLayerStatus>>;
+  /**
+   * High-level status of the analysis on the current page. Lets the assistant distinguish
+   * "decision visible on screen" from "user has selected a symbol but no analysis loaded yet".
+   * Omit when the page does not run an analysis (e.g. Signal State History).
+   */
+  analysis_status?: "loaded" | "loading" | "unavailable" | "insufficient_data";
 }
 
 export type AssistantMessageRole = "user" | "assistant";
