@@ -877,12 +877,34 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     profile = get_user_profile_store().get_profile(rc.user_id)
     svc = AssistantChatService()
 
+    # Fetch the user's Phase 2 historical-validation summary (trailing 90 days, 1d
+    # horizon — same defaults as the public mirror on /performance, but scoped to this
+    # user). Failures are caught defensively: a chat turn must not break because the
+    # signal-history store is briefly slow / unavailable. When the summary cannot be
+    # fetched OR the user has zero rows in the window, the chat service skips the
+    # historical-validation tail block entirely and the prompt's "if the field is
+    # absent, do not comment" rule activates.
+    historical_summary = None
+    try:
+        validation_service = HistoricalValidationService(get_signal_recorder())
+        _now = datetime.now(timezone.utc)
+        historical_summary = validation_service.summarize(
+            user_id=rc.user_id,
+            from_at=_now - timedelta(days=90),
+            to_at=_now,
+            horizon="1d",
+        )
+    except Exception:  # noqa: BLE001 — never let a fetch failure break the chat reply
+        _LOG.exception("assistant_chat: failed to fetch historical validation summary")
+        historical_summary = None
+
     try:
         result = asyncio.run(
             svc.reply(
                 messages=raw_messages if isinstance(raw_messages, list) else [],
                 page_context=page_context,
                 user_profile=profile,
+                historical_validation_summary=historical_summary,
             )
         )
     except (TypeError, ValueError) as exc:

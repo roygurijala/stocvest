@@ -26,6 +26,8 @@ from typing import Any, Literal
 
 import httpx
 
+import math
+
 from stocvest.data.models import UserProfile
 from stocvest.signals.assistant_prompts import (
     ASSISTANT_SYSTEM_PROMPT,
@@ -33,6 +35,7 @@ from stocvest.signals.assistant_prompts import (
     serialize_page_context,
 )
 from stocvest.signals.geopolitical_scanner import ANTHROPIC_API_URL, ANTHROPIC_VERSION
+from stocvest.signals.historical_validation import HistoricalValidationSummary
 from stocvest.utils.api_rate_limits import await_claude_api_slot
 from stocvest.utils.config import AI_MODEL_FAST, get_settings
 from stocvest.utils.logging import get_logger
@@ -73,6 +76,96 @@ _DETERMINISTIC_PUBLIC_REPLY = (
 )
 
 
+HISTORICAL_VALIDATION_BLOCK_HEADER = "=== HISTORICAL VALIDATION ==="
+
+
+def _fmt_accuracy_percent(value: float) -> str:
+    """Format an accuracy fraction (NaN / 0..1) for the assistant context block.
+
+    NaN (no resolved-non-neutral trades) renders as the em-dash — never as ``"0.0%"``
+    or the literal string ``"NaN"``. Matches the wire contract that the
+    `/historical-validation/summary` endpoint and the dashboard panel both honor, so
+    the same calm "no data yet" framing reaches the LLM that reaches the screen.
+    """
+
+    if value is None or not isinstance(value, (int, float)) or math.isnan(value):
+        return "—"
+    return f"{value * 100:.1f}%"
+
+
+def serialize_historical_validation_summary(
+    summary: HistoricalValidationSummary | None,
+    *,
+    window_days: int,
+) -> str:
+    """Render the user's HistoricalValidationSummary as a compact tail block.
+
+    The block is appended to the system message of the **authenticated** chat path so
+    the LLM can answer "how has my track record been doing?" with real per-user numbers.
+    Returns an **empty string** when:
+
+    - ``summary`` is ``None`` (handler skipped or failed the fetch).
+    - ``summary.rows_examined == 0`` (the user has no signals in the window).
+
+    In both cases the chat service does not append anything and the prompt's
+    HISTORICAL VALIDATION CONTEXT section's "if the field is absent, do not comment"
+    rule activates.
+
+    Deliberately trimmed projection — same projection the public mirror serves on
+    ``/performance``: ``overall`` accuracy + ``by_mode`` (swing/day) + ``rows_examined``
+    only. The per-decision / per-regime / per-pattern / per-readiness / per-direction
+    stratifications are NOT shipped to the LLM, even though we have them, because:
+
+    - They would tempt per-symbol or per-pattern follow-ups that the prompt rules forbid.
+    - They are tightly tied to engine internals; surfacing them via natural-language
+      paraphrase would risk the LLM inventing detail (e.g. "your VWAP setups have been
+      working better than your gap setups, focus there") that crosses the advice line.
+    - The dashboard panel already renders the full breakdown for the user; the
+      assistant's job is the framework-level summary, not the stratified detail view.
+    """
+
+    if summary is None:
+        return ""
+    if summary.rows_examined <= 0:
+        return ""
+
+    lines: list[str] = [
+        HISTORICAL_VALIDATION_BLOCK_HEADER,
+        f"window_days={int(window_days)}",
+        f"horizon={summary.horizon}",
+    ]
+
+    overall = summary.overall
+    resolved = overall.correct + overall.incorrect
+    lines.append(
+        "overall="
+        f"{_fmt_accuracy_percent(overall.accuracy)} "
+        f"({overall.correct} correct of {resolved} resolved; "
+        f"{overall.neutral} neutral; {overall.total_signals} total)"
+    )
+
+    # Only emit a per-mode line when the bucket actually has rows. An empty bucket
+    # (Phase 1 pre-seeds the vocabulary so swing/day always appear as keys) would
+    # otherwise produce a calm-but-misleading "swing=— (0 correct of 0 resolved)" line
+    # that the LLM might paraphrase as "your swing track has no data" instead of just
+    # not mentioning it.
+    for key in ("swing", "day"):
+        bucket = summary.by_mode.get(key)
+        if bucket is None or bucket.total_signals <= 0:
+            continue
+        bucket_resolved = bucket.correct + bucket.incorrect
+        lines.append(
+            f"{key}="
+            f"{_fmt_accuracy_percent(bucket.accuracy)} "
+            f"({bucket.correct} correct of {bucket_resolved} resolved; "
+            f"{bucket.total_signals} total)"
+        )
+
+    lines.append(f"rows_examined={summary.rows_examined}")
+    lines.append("")  # trailing newline so the block sits cleanly above any next block
+    return "\n".join(lines)
+
+
 class AssistantChatService:
     """Paid-only conversational explanations with a calm deterministic fallback for free users."""
 
@@ -82,7 +175,20 @@ class AssistantChatService:
         messages: list[dict[str, str]],
         page_context: dict[str, Any] | None,
         user_profile: UserProfile,
+        historical_validation_summary: HistoricalValidationSummary | None = None,
+        historical_validation_window_days: int = 90,
     ) -> AssistantChatResult:
+        """Authenticated chat turn.
+
+        ``historical_validation_summary`` is an optional server-fetched per-user
+        Phase 2 summary. When non-None and non-empty (rows_examined > 0), it is
+        serialized into a calm tail block appended to the system message so the LLM
+        can ground "how has my track record been doing?"-style questions in real
+        numbers without ever crossing into per-symbol territory. The fetch is the
+        handler's responsibility (it owns I/O); this service stays a pure prompt /
+        Claude composition layer.
+        """
+
         clean = sanitize_messages(messages)
         # A user message MUST be present at the tail; otherwise the request is malformed.
         if not clean or clean[-1].get("role") != "user":
@@ -108,6 +214,12 @@ class AssistantChatService:
             )
 
         system_text = ASSISTANT_SYSTEM_PROMPT + "\n" + serialize_page_context(page_context)
+        validation_block = serialize_historical_validation_summary(
+            historical_validation_summary,
+            window_days=historical_validation_window_days,
+        )
+        if validation_block:
+            system_text += "\n" + validation_block
         ai_text = await self._claude_chat_or_none(
             system=system_text,
             messages=clean,

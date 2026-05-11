@@ -480,3 +480,90 @@ def test_prompt_keeps_public_mode_rules_label_for_section_routing() -> None:
     """`PUBLIC MODE RULES` is the section header the existing tests and the LOGGED-OUT
     section both reference — it must remain in the prompt."""
     assert "PUBLIC MODE RULES" in ASSISTANT_SYSTEM_PROMPT
+
+
+# ---------------------------------------------------------------------------
+# Phase 3c-2 — HISTORICAL VALIDATION CONTEXT section
+# ---------------------------------------------------------------------------
+
+
+def test_prompt_carries_historical_validation_context_section_header() -> None:
+    """The section is the entry point the assistant uses to recognize the appended
+    `=== HISTORICAL VALIDATION ===` block. Renaming the header silently would leave
+    the block in the system message but unanchored to any rules, so we lock the title
+    in here."""
+    assert "HISTORICAL VALIDATION CONTEXT (LOGGED-IN ONLY)" in ASSISTANT_SYSTEM_PROMPT
+
+
+def test_prompt_anchors_historical_validation_block_to_sentinel() -> None:
+    """The serializer in assistant_chat.py emits `=== HISTORICAL VALIDATION ===` as the
+    block header. The prompt must reference that exact sentinel so the LLM knows which
+    string to pattern-match on."""
+    assert "=== HISTORICAL VALIDATION ===" in ASSISTANT_SYSTEM_PROMPT
+
+
+def test_prompt_declares_em_dash_means_no_resolved_trades() -> None:
+    """The em-dash rendering for NaN accuracy is the calm "no data yet" framing —
+    the prompt must spell out that the LLM has to read it as such, never as "0%"."""
+    assert 'an em-dash (`—`) means no resolved non-neutral trades' in ASSISTANT_SYSTEM_PROMPT
+    assert 'never as "0%"' in ASSISTANT_SYSTEM_PROMPT
+
+
+def test_prompt_bans_translating_accuracy_into_dollar_pnl() -> None:
+    """Directional accuracy is NOT a return number. The prompt rule that pins this
+    is the single most important guardrail for the new context surface — without it
+    the LLM might paraphrase "60% accuracy" as "you'd make money 60% of the time"."""
+    assert "Translate the accuracy into dollar P&L" in ASSISTANT_SYSTEM_PROMPT
+    assert "Directional accuracy is NOT a return number" in ASSISTANT_SYSTEM_PROMPT
+
+
+def test_prompt_bans_predicting_future_track_record() -> None:
+    """The window is descriptive, not predictive — this is the second core guardrail.
+    The LLM must never extrapolate from past accuracy to a forecast."""
+    assert "Predict whether the trend in the user's accuracy will continue" in ASSISTANT_SYSTEM_PROMPT
+    assert "descriptive, not predictive" in ASSISTANT_SYSTEM_PROMPT
+
+
+def test_prompt_bans_per_symbol_pattern_regime_decision_readiness_direction_detail() -> None:
+    """The assistant only sees `overall` + `by_mode` — every other stratification is
+    deliberately withheld. The prompt must make it clear the LLM should redirect users
+    asking for stratified detail to the dashboard view, never invent it."""
+    text = ASSISTANT_SYSTEM_PROMPT
+    # The rule enumerates the forbidden stratifications and tells the LLM what to do
+    # when the user asks for them.
+    assert "per-symbol, per-pattern, per-regime, per-decision-state, per-readiness-bucket, or per-direction" in text
+    assert "deliberately withheld from your context" in text
+    assert "/dashboard/signal-validation" in text
+
+
+def test_prompt_bans_using_validation_to_promote_the_system() -> None:
+    """The numbers are evidence of behavior, not promotion. The LLM must never use the
+    user's accuracy to "prove" STOCVEST works or defend against skepticism."""
+    assert 'the system "works"' in ASSISTANT_SYSTEM_PROMPT
+    assert "evidence of behavior, not promotion" in ASSISTANT_SYSTEM_PROMPT
+
+
+def test_prompt_carries_no_block_means_no_comment_rule() -> None:
+    """Absence of the appended block means the LLM has no per-user numbers to talk
+    about. The rule against "inventing" or "recalling from a previous turn" is the
+    safety net that keeps the assistant from confabulating accuracy figures."""
+    text = ASSISTANT_SYSTEM_PROMPT
+    assert "No block means no comment" in text
+    assert "never invent a number" in text
+    assert "never recall a number from a previous turn" in text
+
+
+def test_prompt_bans_comparing_to_other_users_or_benchmarks() -> None:
+    """The block carries only this user's numbers for this window. Comparing them to
+    other users, "the market", or a benchmark would either fabricate data or treat
+    accuracy as a competitive metric, neither of which is acceptable."""
+    text = ASSISTANT_SYSTEM_PROMPT
+    assert 'Compare the user\'s accuracy to "the market"' in text
+    assert "to other users" in text
+
+
+def test_prompt_bans_recommending_mode_choice_from_accuracy() -> None:
+    """One mode having a higher accuracy in a 90-day window is not grounds for telling
+    the user to switch tracks. Mode choice is not an advice surface."""
+    text = ASSISTANT_SYSTEM_PROMPT
+    assert "Mode choice is not an advice surface" in text

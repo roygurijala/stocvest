@@ -95,7 +95,7 @@ def test_assistant_chat_scanner_page_alone_is_contextual(monkeypatch: pytest.Mon
 
     captured: dict[str, object] = {}
 
-    async def fake_reply(self, *, messages, page_context, user_profile):  # type: ignore[no-untyped-def]
+    async def fake_reply(self, *, messages, page_context, user_profile, **_kwargs):  # type: ignore[no-untyped-def]
         captured["page_context"] = page_context
         from stocvest.signals.assistant_chat import AssistantChatResult
 
@@ -139,6 +139,149 @@ def test_assistant_chat_scanner_page_alone_is_contextual(monkeypatch: pytest.Mon
     assert fwd.get("swing_setups_suppressed") is True
 
 
+def test_assistant_chat_handler_fetches_user_scoped_validation_summary_and_forwards_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The handler must fetch the user's Phase 2 summary (user_id=rc.user_id, trailing
+    90d, horizon=1d — same defaults as the public mirror, but scoped) and forward it
+    as `historical_validation_summary` to `svc.reply()`. This is the wiring lock that
+    proves the LOGGED-IN assistant gets per-user historical numbers."""
+    paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.get_user_profile_store",
+        lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: paid_profile)})(),
+    )
+
+    captured_service_init: dict[str, object] = {}
+    captured_summarize: dict[str, object] = {}
+    captured_reply: dict[str, object] = {}
+
+    class _SentinelSummary:
+        """Stand-in for a HistoricalValidationSummary the service returns. We do not
+        construct a real one here — the only contract this test asserts is that
+        whatever `service.summarize(...)` returns is the SAME object the handler
+        passes to `svc.reply(historical_validation_summary=...)`."""
+
+    sentinel = _SentinelSummary()
+
+    class _FakeService:
+        def __init__(self, recorder):  # noqa: D401, ANN001
+            captured_service_init["recorder_class"] = recorder.__class__.__name__
+
+        def summarize(self, **kwargs):  # type: ignore[no-untyped-def]
+            captured_summarize.update(kwargs)
+            return sentinel
+
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.HistoricalValidationService",
+        _FakeService,
+    )
+
+    async def fake_reply(self, *, messages, page_context, user_profile, **kwargs):  # type: ignore[no-untyped-def]
+        captured_reply["page_context"] = page_context
+        captured_reply["historical_validation_summary"] = kwargs.get(
+            "historical_validation_summary"
+        )
+        return AssistantChatResult(
+            text="Explained.",
+            source="ai",
+            mode="general",
+            upgrade_available=False,
+        )
+
+    monkeypatch.setattr(
+        "stocvest.signals.assistant_chat.AssistantChatService.reply",
+        fake_reply,
+    )
+
+    response = assistant_chat_handler(
+        _event(
+            body={
+                "messages": [{"role": "user", "content": "How has my track been doing?"}],
+            },
+            sub="u-paid",
+        ),
+        {},
+    )
+    assert response["statusCode"] == 200
+    # The handler resolved a HistoricalValidationService against the live recorder.
+    assert captured_service_init.get("recorder_class")
+    # User-scope: the summarize() call was scoped to the authenticated caller, never
+    # to the global platform (that would leak other users' performance into the LLM).
+    assert captured_summarize.get("user_id") == "u-paid"
+    # Default horizon and window match the public mirror's contract so the LLM never
+    # sees a window the user did not pick — the contract is the *same* trailing 90d,
+    # 1d-horizon view that powers /performance.
+    assert captured_summarize.get("horizon") == "1d"
+    assert captured_summarize.get("from_at") is not None
+    assert captured_summarize.get("to_at") is not None
+    # Sanity: the window is approximately 90 days wide. Allow a few seconds of jitter
+    # for the test runner's clock.
+    window_seconds = (
+        captured_summarize["to_at"] - captured_summarize["from_at"]
+    ).total_seconds()
+    assert 90 * 24 * 3600 - 60 <= window_seconds <= 90 * 24 * 3600 + 60
+    # The exact summary object returned by the service reaches `svc.reply` unchanged.
+    assert captured_reply.get("historical_validation_summary") is sentinel
+
+
+def test_assistant_chat_handler_swallows_summary_fetch_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When the Phase 2 service raises, the chat turn must still succeed and the
+    handler must pass `historical_validation_summary=None` to `svc.reply`. The chat
+    surface is critical — a slow / unavailable signal-history store must NOT break
+    the user's ability to ask STOCVEST a question."""
+    paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.get_user_profile_store",
+        lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: paid_profile)})(),
+    )
+
+    class _BrokenService:
+        def __init__(self, recorder):  # noqa: ANN001
+            pass
+
+        def summarize(self, **_kwargs):  # type: ignore[no-untyped-def]
+            raise RuntimeError("signal history briefly unavailable")
+
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.HistoricalValidationService",
+        _BrokenService,
+    )
+
+    captured: dict[str, object] = {}
+
+    async def fake_reply(self, *, messages, page_context, user_profile, **kwargs):  # type: ignore[no-untyped-def]
+        captured["historical_validation_summary"] = kwargs.get(
+            "historical_validation_summary"
+        )
+        return AssistantChatResult(
+            text="Explained.",
+            source="ai",
+            mode="general",
+            upgrade_available=False,
+        )
+
+    monkeypatch.setattr(
+        "stocvest.signals.assistant_chat.AssistantChatService.reply",
+        fake_reply,
+    )
+
+    response = assistant_chat_handler(
+        _event(
+            body={"messages": [{"role": "user", "content": "What is STOCVEST?"}]},
+            sub="u-paid",
+        ),
+        {},
+    )
+    assert response["statusCode"] == 200
+    # The handler swallowed the fetch error and the service received the canonical
+    # "no summary" signal (None) so the prompt's "if absent, do not comment" rule
+    # activates.
+    assert captured.get("historical_validation_summary") is None
+
+
 def test_assistant_chat_paid_user_calls_service_and_returns_ai_text(monkeypatch: pytest.MonkeyPatch) -> None:
     """Paid users get a Claude-generated turn; we patch the service so no network is needed."""
     paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
@@ -147,7 +290,7 @@ def test_assistant_chat_paid_user_calls_service_and_returns_ai_text(monkeypatch:
         lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: paid_profile)})(),
     )
 
-    async def fake_reply(self, *, messages, page_context, user_profile):  # type: ignore[no-untyped-def]
+    async def fake_reply(self, *, messages, page_context, user_profile, **_kwargs):  # type: ignore[no-untyped-def]
         assert user_profile.has_ai_explanations is True
         assert messages and messages[-1]["role"] == "user"
         assert page_context == {"symbol": "AAPL", "decision_state": "monitor"}
@@ -300,7 +443,7 @@ def test_assistant_chat_drops_client_system_role(monkeypatch: pytest.MonkeyPatch
 
     captured: dict[str, object] = {}
 
-    async def fake_reply(self, *, messages, page_context, user_profile):  # type: ignore[no-untyped-def]
+    async def fake_reply(self, *, messages, page_context, user_profile, **_kwargs):  # type: ignore[no-untyped-def]
         captured["messages"] = list(messages)
         return AssistantChatResult(
             text="Explained.", source="ai", mode="general", upgrade_available=False
