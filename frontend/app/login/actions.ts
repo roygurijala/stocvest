@@ -16,8 +16,8 @@ export interface LoginActionState {
 const NEW_PASSWORD_SESSION_COOKIE = "stocvest_new_password_session";
 const NEW_PASSWORD_EMAIL_COOKIE = "stocvest_new_password_email";
 
-function setAuthCookieFromIdToken(idToken: string): void {
-  setSessionTokenCookiesFromIdToken(idToken);
+function setAuthCookieFromIdToken(idToken: string, refreshToken?: string): void {
+  setSessionTokenCookiesFromIdToken(idToken, refreshToken);
 }
 
 /** Read the hidden `next` form input and return a safe, internal path or `/dashboard`. */
@@ -46,7 +46,7 @@ export async function loginWithPassword(
     const result = await signIn(email, password);
 
     if (result.idToken) {
-      setAuthCookieFromIdToken(result.idToken);
+      setAuthCookieFromIdToken(result.idToken, result.refreshToken);
       await persistSignupLegalAckOnLogin(result.idToken);
       redirect(destination);
     }

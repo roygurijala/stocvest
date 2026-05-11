@@ -126,7 +126,7 @@ export async function fetchTickerNewsPanel(
     cache: "no-store"
   }).catch(() => null);
   if (!res || !res.ok) {
-    surfaceAuthErrorIfAny(res);
+    void surfaceAuthErrorIfAny(res);
     return null;
   }
   try {

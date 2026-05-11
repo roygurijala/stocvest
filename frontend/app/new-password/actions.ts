@@ -37,7 +37,7 @@ export async function setNewPasswordAction(
     if (!result.idToken) {
       return { error: "Unable to complete sign in. Please try again." };
     }
-    setSessionTokenCookiesFromIdToken(result.idToken);
+    setSessionTokenCookiesFromIdToken(result.idToken, result.refreshToken);
     await persistSignupLegalAckOnLogin(result.idToken);
     cookies().delete(NEW_PASSWORD_SESSION_COOKIE);
     cookies().delete(NEW_PASSWORD_EMAIL_COOKIE);

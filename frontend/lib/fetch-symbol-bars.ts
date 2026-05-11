@@ -50,7 +50,7 @@ export async function fetchSymbolMinuteBars(
       cache: "no-store"
     });
     if (!res.ok) {
-      surfaceAuthErrorIfAny(res);
+      void surfaceAuthErrorIfAny(res);
       return [];
     }
     const rows = (await res.json()) as Record<string, unknown>[];

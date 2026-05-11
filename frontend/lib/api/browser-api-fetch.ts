@@ -1,5 +1,6 @@
 import { readWsTokenFromDocumentCookie } from "@/lib/auth/ws-token-cookie";
 import { markSessionExpired } from "@/lib/auth/session-expired";
+import { refreshSession } from "@/lib/auth/refresh-session";
 
 const DEFAULT_BASE_URL = "http://localhost:3001";
 const DEFAULT_TIMEOUT_MS = 55_000;
@@ -13,39 +14,69 @@ function apiBaseUrl(): string {
   return (a || b || DEFAULT_BASE_URL).replace(/\/+$/, "");
 }
 
-/**
- * JSON API fetch for Client Components (no `next/headers` / server session).
- *
- * On 401 we mark the session expired via the client event bus so the `SessionExpiredBanner`
- * renders the calm sticky bar — instead of dumping the user on the login page mid-action.
- * The banner owns the eventual redirect (with `reason=expired&next=...`) once the user
- * acknowledges by clicking "Sign in".
- */
-export async function browserApiFetch<T>(path: string, init?: RequestInit): Promise<T | null> {
+function buildHeaders(init?: RequestInit): Headers {
   const headers = new Headers(init?.headers || {});
   headers.set("content-type", "application/json");
   const token = readWsTokenFromDocumentCookie();
   if (token) {
     headers.set("authorization", `Bearer ${token}`);
   }
+  return headers;
+}
+
+/**
+ * JSON API fetch for Client Components (no `next/headers` / server session).
+ *
+ * Sliding-session contract:
+ *   - On 401, we attempt a silent refresh via `refreshSession()` (which coalesces parallel
+ *     callers onto a single in-flight POST to `/api/auth/refresh`). If the refresh succeeds,
+ *     we retry the original request **once** with the freshly-rewritten `stocvest_ws_token`
+ *     cookie. The user never sees the calm banner for that path.
+ *   - Only if the refresh itself fails — or the retry also returns 401 — do we fire
+ *     `markSessionExpired("auth_error")` so `SessionExpiredBanner` renders.
+ *   - 403 is intentionally NOT treated as auth failure: STOCVEST uses 403 for product-rule
+ *     denials (PDT lockout, margin, paid-tier gating) where the user IS authenticated.
+ */
+export async function browserApiFetch<T>(path: string, init?: RequestInit): Promise<T | null> {
   const timeoutSignal = AbortSignal.timeout(DEFAULT_TIMEOUT_MS);
-  const response = await fetch(`${apiBaseUrl()}${path}`, {
-    ...init,
-    headers,
-    credentials: "include",
-    cache: "no-store",
-    signal: init?.signal ?? timeoutSignal
-  }).catch((error: unknown) => {
-    console.error("Unable to connect. Check your connection.", error);
-    return null;
-  });
-  if (!response) {
-    return null;
-  }
+  const url = `${apiBaseUrl()}${path}`;
+
+  const doFetch = async (): Promise<Response | null> => {
+    return fetch(url, {
+      ...init,
+      headers: buildHeaders(init),
+      credentials: "include",
+      cache: "no-store",
+      signal: init?.signal ?? timeoutSignal
+    }).catch((error: unknown) => {
+      console.error("Unable to connect. Check your connection.", error);
+      return null;
+    });
+  };
+
+  let response = await doFetch();
+  if (!response) return null;
+
   if (response.status === 401) {
-    markSessionExpired("auth_error");
-    return null;
+    const refreshed = await refreshSession();
+    if (refreshed) {
+      // `refreshSession()` rewrote the mirror cookie via `Set-Cookie` on the refresh
+      // response; re-reading the cookie inside `buildHeaders` on the retry picks up the
+      // new token automatically.
+      response = await doFetch();
+      if (!response) return null;
+      if (response.status === 401) {
+        // Refreshed token also rejected — defensive: treat as hard expired so the banner
+        // renders rather than silently retrying forever.
+        markSessionExpired("auth_error");
+        return null;
+      }
+    } else {
+      markSessionExpired("auth_error");
+      return null;
+    }
   }
+
   if (!response.ok) {
     if (response.status >= 500) {
       console.error("Service temporarily unavailable. Please try again.", {

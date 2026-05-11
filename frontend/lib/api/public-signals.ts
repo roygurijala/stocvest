@@ -293,7 +293,7 @@ export async function fetchUserSignalHistoryPage(params?: {
       cache: "no-store"
     });
     if (response.status === 401) {
-      surfaceAuthErrorIfAny(response);
+      void surfaceAuthErrorIfAny(response);
       return null;
     }
     if (!response.ok) {

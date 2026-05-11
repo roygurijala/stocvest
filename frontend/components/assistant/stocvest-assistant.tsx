@@ -248,7 +248,7 @@ export function StocvestAssistant({ isAuthenticated }: StocvestAssistantProps) {
           body: JSON.stringify(body)
         });
 
-        if (isAuthenticated && surfaceAuthErrorIfAny(res)) {
+        if (isAuthenticated && (await surfaceAuthErrorIfAny(res))) {
           setMessages((cur) => cur.filter((m) => m.id !== pendingId));
           return;
         }

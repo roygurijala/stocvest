@@ -32,7 +32,7 @@ export async function fetchMacroContext(): Promise<MacroContextPayload | null> {
       cache: "no-store"
     });
     if (!res.ok) {
-      surfaceAuthErrorIfAny(res);
+      void surfaceAuthErrorIfAny(res);
       return null;
     }
     const row = (await res.json()) as MacroContextPayload;

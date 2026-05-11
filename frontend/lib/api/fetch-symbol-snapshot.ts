@@ -26,7 +26,7 @@ export async function fetchSymbolSnapshot(symbol: string): Promise<SnapshotPaylo
       { method: "GET", credentials: "include", headers, cache: "no-store" }
     );
     if (!res.ok) {
-      surfaceAuthErrorIfAny(res);
+      void surfaceAuthErrorIfAny(res);
       return null;
     }
     const row = (await res.json()) as SnapshotPayload;

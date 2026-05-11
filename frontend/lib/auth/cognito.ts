@@ -77,6 +77,7 @@ export async function resendConfirmationCode(email: string): Promise<void> {
 
 export async function signIn(email: string, password: string): Promise<{
   idToken?: string;
+  refreshToken?: string;
   challengeName?: string;
   challengeSession?: string;
 }> {
@@ -92,9 +93,33 @@ export async function signIn(email: string, password: string): Promise<{
   );
   return {
     idToken: response.AuthenticationResult?.IdToken,
+    refreshToken: response.AuthenticationResult?.RefreshToken,
     challengeName: response.ChallengeName,
     challengeSession: response.Session
   };
+}
+
+/**
+ * Exchange a Cognito refresh token for a fresh ID + access token.
+ *
+ * Used by `POST /api/auth/refresh` to give the browser a new ID token before the current one
+ * expires, so a continuously-active user never sees the "session expired" banner. The refresh
+ * token itself is not rotated by this call — Cognito returns a new ID/access token and reuses
+ * the same refresh token (which has its own 30-day server-side lifetime from sign-in).
+ *
+ * Throws on any Cognito error so the caller can map it to a 401 and clear cookies.
+ */
+export async function refreshIdToken(refreshToken: string): Promise<{ idToken?: string }> {
+  const response = await client.send(
+    new InitiateAuthCommand({
+      AuthFlow: "REFRESH_TOKEN_AUTH",
+      ClientId: CLIENT_ID,
+      AuthParameters: {
+        REFRESH_TOKEN: refreshToken
+      }
+    })
+  );
+  return { idToken: response.AuthenticationResult?.IdToken };
 }
 
 export async function forgotPassword(email: string): Promise<void> {
@@ -121,7 +146,7 @@ export async function respondToNewPasswordChallenge(
   session: string,
   newPassword: string,
   email: string
-): Promise<{ idToken?: string }> {
+): Promise<{ idToken?: string; refreshToken?: string }> {
   const response = await client.send(
     new RespondToAuthChallengeCommand({
       ChallengeName: "NEW_PASSWORD_REQUIRED",
@@ -133,5 +158,8 @@ export async function respondToNewPasswordChallenge(
       }
     })
   );
-  return { idToken: response.AuthenticationResult?.IdToken };
+  return {
+    idToken: response.AuthenticationResult?.IdToken,
+    refreshToken: response.AuthenticationResult?.RefreshToken
+  };
 }
