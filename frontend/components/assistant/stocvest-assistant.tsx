@@ -27,54 +27,35 @@ import { AssistantPanel } from "@/components/assistant/assistant-panel";
  *   - anonymous     → `/api/stocvest/public/assistant/chat` (no auth, public-mode prompt;
  *     no page context — marketing visitors have no STOCVEST page state)
  *
- * Cross-surface conversation isolation: the reset signal is the URL **pathname**, not the
- * published page context. The pathname always changes on a real navigation, even when
- * the destination is a route that publishes no page context at all (the marketing home
- * page `/`, `/login`, `/signup`, etc.). The moment the pathname changes, the persisted
- * conversation is wiped — so an answer about TTD on `/dashboard/signals/layers` never
- * leaks into a question on `/dashboard`, `/dashboard/scanner`, or `/`. Auth-state flips,
- * session expiry, and explicit logout clicks all also wipe the state.
+ * Conversation isolation (in-memory only — no sessionStorage):
+ *   - Refresh / hard reload → fresh state (mount = empty conversation).
+ *   - Cross-surface navigation (`/dashboard/signals/layers` → `/`) → fresh state.
+ *   - Auth-state flip (login or logout) → fresh state, even when the pathname does not
+ *     change (e.g. a sign-in modal on `/`).
+ *   - Session expiry / explicit logout-button click → fresh state via the
+ *     `clearAssistantSession()` event channel.
+ *
+ * We intentionally do NOT persist the conversation across page loads. The prior
+ * `sessionStorage`-backed design caused two regressions:
+ *   1. On refresh, stale conversation re-appeared even when the user expected a clean
+ *      surface.
+ *   2. On in-place login (auth flip without navigation), the hydrate effect was
+ *      clobbering the `prevAuthRef` that the auth-change reset effect depended on, so
+ *      homepage public-mode messages survived into the authenticated context. The
+ *      simplest, safest fix is to remove the persistence layer entirely so no stale
+ *      state can survive any kind of transition.
+ *
+ * Legacy `sessionStorage` data (from before this change) is opportunistically wiped on
+ * mount so existing tabs do not display stale messages either.
  */
 const MAX_MESSAGES_KEPT = 24;
 
-interface PersistedState {
-  open?: boolean;
-  composer?: string;
-  messages?: AssistantMessage[];
-  /** Pathname (e.g. `/dashboard/signals/layers`) the conversation was anchored to. */
-  lastPathname?: string | null;
-  /** Auth state at persist time; legacy persisted state from before this field existed
-   *  is now treated as a force-clear so stale logged-in conversations cannot show up
-   *  on the anonymous home page. */
-  isAuthenticated?: boolean;
-}
-
-function readPersistedState(): PersistedState | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.sessionStorage.getItem(ASSISTANT_STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as PersistedState;
-  } catch {
-    return null;
-  }
-}
-
-function writePersistedState(state: PersistedState): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.sessionStorage.setItem(ASSISTANT_STORAGE_KEY, JSON.stringify(state));
-  } catch {
-    /* sessionStorage may be unavailable in privacy modes */
-  }
-}
-
-function removePersistedState(): void {
+function wipeLegacyPersistedState(): void {
   if (typeof window === "undefined") return;
   try {
     window.sessionStorage.removeItem(ASSISTANT_STORAGE_KEY);
   } catch {
-    /* ignore */
+    /* sessionStorage may be unavailable in privacy modes — nothing to clean up. */
   }
 }
 
@@ -100,74 +81,36 @@ export function StocvestAssistant({ isAuthenticated }: StocvestAssistantProps) {
   const [hasUnread, setHasUnread] = useState(false);
 
   /**
-   * Pathname the persisted conversation belongs to. A useRef is used so the persist
-   * effect can read the latest value without re-rendering on every navigation.
+   * Last pathname this component saw. Used to detect cross-surface navigations and
+   * reset the conversation when the URL changes. Initialized to `null` so the very
+   * first effect run (mount) records the current pathname without firing a reset.
    */
   const conversationPathRef = useRef<string | null>(null);
-  const hydratedRef = useRef(false);
+
+  /**
+   * Last auth state this component saw. Used to detect login / logout transitions.
+   * Initialized to `null` so the very first effect run records the current auth state
+   * without firing a reset.
+   */
   const prevAuthRef = useRef<boolean | null>(null);
 
   /**
-   * Hydrate from sessionStorage so a refresh doesn't lose context, but never spans tabs.
-   * Three force-clear conditions, any of which wipe persisted state on first render:
-   *
-   *  1. `persisted.isAuthenticated` is missing (legacy data from a build before that
-   *     field was written) — we cannot know whether it belonged to a logged-in or
-   *     anonymous session, so the safe move is to start fresh.
-   *  2. `persisted.isAuthenticated` was a different value than the current session.
-   *  3. `persisted.lastPathname` differs from the current pathname (the user refreshed
-   *     on a different surface than the one the conversation was about).
+   * One-shot mount effect: wipe any legacy persisted state from older builds and make
+   * sure the conversation does not rehydrate from `sessionStorage`. Every page load is
+   * a fresh conversation by design.
    */
   useEffect(() => {
-    const persisted = readPersistedState();
-    if (persisted) {
-      const persistedAuth =
-        typeof persisted.isAuthenticated === "boolean" ? persisted.isAuthenticated : null;
-      const persistedPath =
-        typeof persisted.lastPathname === "string" ? persisted.lastPathname : null;
-      const authMismatch = persistedAuth !== isAuthenticated;
-      const pathMismatch =
-        persistedPath !== null && pathname !== null && persistedPath !== pathname;
-      if (authMismatch || pathMismatch) {
-        removePersistedState();
-      } else {
-        if (Array.isArray(persisted.messages)) {
-          setMessages(
-            persisted.messages
-              .filter(
-                (m): m is AssistantMessage =>
-                  !!m &&
-                  typeof m.id === "string" &&
-                  (m.role === "user" || m.role === "assistant") &&
-                  typeof m.content === "string"
-              )
-              .map((m) => ({ ...m, fresh: false, pending: false }))
-              .slice(-MAX_MESSAGES_KEPT)
-          );
-        }
-        if (typeof persisted.composer === "string") {
-          setComposerValue(persisted.composer);
-        }
-        if (persistedPath) {
-          conversationPathRef.current = persistedPath;
-        }
-      }
-    }
-    if (pathname) conversationPathRef.current = pathname;
-    hydratedRef.current = true;
-    prevAuthRef.current = isAuthenticated;
-    // Hydrate runs once per session; `pathname` and `isAuthenticated` are intentionally
-    // included so a server-side prop flip (e.g. middleware-driven logout) re-evaluates.
-  }, [isAuthenticated, pathname]);
+    wipeLegacyPersistedState();
+  }, []);
 
   /**
    * Pathname-based reset: every URL change wipes the conversation so the next question
-   * is answered against the new surface only. This is the **primary** cross-surface
-   * isolation — using the URL means we catch routes that publish no page context
-   * (`/`, `/login`, `/signup`, marketing surfaces) just as well as routes that do.
+   * is answered against the new surface only. Using the pathname catches routes that
+   * publish no page context (`/`, `/login`, `/signup`, etc.) just as reliably as routes
+   * that do. On first render, `conversationPathRef.current` is `null`, so the mount
+   * itself just records the current pathname without firing a reset.
    */
   useEffect(() => {
-    if (!hydratedRef.current) return;
     if (!pathname) return;
     if (conversationPathRef.current === pathname) return;
     if (conversationPathRef.current !== null) {
@@ -183,7 +126,12 @@ export function StocvestAssistant({ isAuthenticated }: StocvestAssistantProps) {
    * Auth-state change (login or logout): always reset. The session-expiry watcher and
    * the explicit logout-button `onClick` cover the typical paths, but this also catches
    * cases where the server re-renders with a flipped session without firing those
-   * channels (e.g. cookie cleared by middleware).
+   * channels — for example a sign-in modal on the marketing surface that flips auth
+   * without changing the pathname.
+   *
+   * On first render `prevAuthRef.current` is `null`, so the mount itself just records
+   * the current auth state without firing a reset. This ref is owned exclusively by
+   * this effect — no other effect writes to it — so the auth-flip detection is reliable.
    */
   useEffect(() => {
     if (prevAuthRef.current === null) {
@@ -198,7 +146,7 @@ export function StocvestAssistant({ isAuthenticated }: StocvestAssistantProps) {
     setHasUnread(false);
     setOpen(false);
     conversationPathRef.current = pathname ?? null;
-    removePersistedState();
+    wipeLegacyPersistedState();
   }, [isAuthenticated, pathname]);
 
   /**
@@ -222,17 +170,6 @@ export function StocvestAssistant({ isAuthenticated }: StocvestAssistantProps) {
       unsubReset();
     };
   }, [pathname]);
-
-  /** Persist on change. We don't persist `open` — every load starts collapsed for calm. */
-  useEffect(() => {
-    if (!hydratedRef.current) return;
-    writePersistedState({
-      composer: composerValue,
-      messages: messages.map((m) => ({ ...m, fresh: false, pending: false })),
-      lastPathname: conversationPathRef.current,
-      isAuthenticated
-    });
-  }, [composerValue, messages, isAuthenticated, pathname]);
 
   const close = useCallback(() => {
     setOpen(false);

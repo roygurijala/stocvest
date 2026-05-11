@@ -1,16 +1,19 @@
 /**
- * Storage + reset helpers for the STOCVEST Assistant.
+ * Reset helpers for the STOCVEST Assistant.
  *
- * The assistant persists a small slice of state ({@link ASSISTANT_STORAGE_KEY}) to
- * `sessionStorage` so a refresh inside the same tab doesn't lose the conversation. The
- * key is intentionally `sessionStorage` (not `localStorage`) so a sign-out in another
- * tab cannot leak the previous session's conversation into a new one.
+ * The assistant is **in-memory only**: a fresh conversation starts on every page load
+ * (including hard refresh), every cross-surface navigation, every login/logout, every
+ * session-expiry, and every explicit "Sign out" click. Nothing is persisted across page
+ * loads because we want zero chance of a stale public-mode conversation surviving into
+ * an authenticated context.
  *
- * Two callers wipe this state:
+ * `ASSISTANT_STORAGE_KEY` is preserved purely so legacy persisted state from earlier
+ * builds can be wiped opportunistically on mount; nothing new is ever written to it.
  *
- * 1. The assistant itself, when it detects the page identifier has changed or a session
- *    expiry event fires — that keeps cross-page context bleed from happening when the
- *    user navigates between dashboard surfaces.
+ * Two callers fire the reset event:
+ *
+ * 1. The assistant itself, when it detects the URL pathname has changed, the auth flag
+ *    has flipped, or a session-expiry event fires.
  * 2. The sign-out buttons (`sidebar.tsx`, `mobile-nav-drawer.tsx`), via an `onClick` that
  *    fires before the server action redirect — guaranteeing the next visitor on the same
  *    tab (likely the same person on the anonymous home page) doesn't see the previous
@@ -25,6 +28,9 @@ export const ASSISTANT_RESET_EVENT = "stocvest:assistant-reset";
 
 export function clearAssistantSession(): void {
   if (typeof window === "undefined") return;
+  // Defensive cleanup of any legacy persisted state from before the in-memory-only
+  // refactor. Today nothing writes to this key — but a tab that still has the old
+  // value cached should not show those messages after the user signs out.
   try {
     window.sessionStorage.removeItem(ASSISTANT_STORAGE_KEY);
   } catch {
