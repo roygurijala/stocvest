@@ -1,6 +1,6 @@
 # STOCVEST — API contracts (immutable sections)
 
-**Last reviewed:** 2026-05-08
+**Last reviewed:** 2026-05-10
 
 Sections referenced from **`docs/CONTEXT.md`** §7 must not change without explicit review and coordinated code updates.
 
@@ -65,6 +65,34 @@ All REST routes are versioned under `/v1/`.
 - `GET /v1/signals/me/history` — authenticated user’s evaluated signals. Query: `symbol`, `days` (1–365), optional `mode` (`day` \| `swing`), optional **`page_size`** (**25** \| **50** \| **75** \| **100**, default **25**), optional **`cursor`** (opaque token from prior response’s **`next_cursor`**), optional **`ledger_only`** (`true` to return only **`ledger_qualified`** rows for the validation ledger). Legacy **`limit`**: if **`page_size`** is omitted, **`limit`** may be used; values in **25/50/75/100** map to **`page_size`**; other values clamp to **100** or **25** as implemented. Response body: **`{ "items": [ ... ], "next_cursor": string | null, "page_size": number }`**. Each row includes core D1 fields plus optional ledger keys when present: `ledger_qualified`, `closed_at`, `ledger_entry_date_et`, `ledger_exit_date_et`, `entry_rationale`, `exit_reason`, `decision_state_entry`, `decision_state_exit`, `market_regime_exit`, `gate_status` (object, parsed from `gate_status_json`), `setup_type`, `exit_rule`, `max_adverse_excursion_pct`, `max_favorable_excursion_pct`, `hold_duration_minutes`, `layer_scores`, `mode`, `status`.
 - `GET /v1/signals/me/records/{signal_id}` — single signal for the signed-in user only
 - `GET /v1/signals/founding-members` — **public**. JSON **`founding_member_count`** (**int**, Dynamo scan of **`Users.subscriptionPlan`** for paid tiers only: **`swing_pro`**, **`swing_day_pro`**, legacy **`founding_swing_pro`**, **`founding_swing_day_pro`**), **`founding_spots_total`** (**100**), **`founding_spots_remaining`** (non-negative clamp of **100 − count**). Never counts **`free`** or unknown plans.
+- `POST /v1/signals/assistant/chat` — **authenticated**. STOCVEST Assistant conversational explanations. Request body:
+  ```jsonc
+  {
+    "messages": [
+      { "role": "user" | "assistant", "content": "string" }
+      // server-side sanitize_messages DROPS any other role (e.g. client-injected "system");
+      // history is trimmed to the last 12 user/assistant turns; individual user content is
+      // capped at 2000 chars.
+    ],
+    "page_context": {
+      // ALL fields optional; only the whitelisted keys below survive on the server.
+      "page": "signals/layers" | "signals/history" | string,
+      "trading_mode": "swing" | "day",
+      "symbol": "AAPL",
+      "decision_state": "actionable" | "monitor" | "blocked",
+      "decision_line": "Decision: ⚠️ Monitor only ...",
+      "decision_rationale": { "category": "risk_reward" | "confirmation" | "regime" | "data_insufficient" | "readiness", "label": "Why hold:", "text": "..." },
+      "trade_readiness": 88,
+      "risk_reward": 0.5,
+      "trend_strength": "Strong",
+      "trend_direction": "Long",
+      "market_regime": "Neutral",
+      "layer_alignment_pct": 88,
+      "layer_status": { "technical": "Bullish", "news": "Neutral", "macro": "Neutral", "sector": "Bullish", "geopolitical": "Neutral", "internals": "Bullish" }
+    }
+  }
+  ```
+  Response: `{ "text": string, "source": "ai" | "deterministic", "mode": "general" | "contextual", "upgrade_available": boolean, "disclaimer": string }`. **Mode** is `contextual` when `page_context` carries a `symbol` or a recognized `decision_state`, else `general`. **Source** is `ai` only for paid users (`has_ai_explanations`) when Anthropic responds successfully; otherwise `deterministic` (free user upgrade copy, or a calm fallback line on Claude outage). **Contract guarantee:** the server-held system prompt is the locked STOCVEST Assistant prompt (no investment advice, no price predictions, no exposure of internal weights/thresholds); clients **cannot** override it. Unknown keys inside `page_context` are silently dropped; non-`user`/`assistant` roles in `messages` are silently dropped.
 
 ### 4.4 Brokers (Phase 4e)
 
