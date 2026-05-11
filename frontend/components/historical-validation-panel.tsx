@@ -41,11 +41,20 @@ import { useTheme } from "@/lib/theme-provider";
  */
 
 type WindowDays = 30 | 60 | 90;
-type ModeFilter = "all" | "swing" | "day";
+/**
+ * Mode Separation safety perimeter (assistant_prompts.py): "Statistics,
+ * hit-rates, and outcomes must never be combined into a single headline
+ * number." The historical validation panel previously offered an `all` mode
+ * that produced a combined swing+day "Overall directional accuracy" hero —
+ * a direct violation. We drop `all` structurally so the UI cannot regress.
+ * The `by_mode` stratification card below still shows swing-vs-day side by
+ * side for diagnosis; that's a per-engine breakdown, not a combined headline.
+ */
+export type ModeFilter = "swing" | "day";
 
 const WINDOW_OPTIONS: WindowDays[] = [30, 60, 90];
 const HORIZON_OPTIONS: ValidationHorizon[] = ["1h", "1d"];
-const MODE_OPTIONS: ModeFilter[] = ["all", "swing", "day"];
+export const MODE_OPTIONS: ModeFilter[] = ["swing", "day"];
 
 // Friendly labels for the canonical engine vocabulary so the UI doesn't surface raw
 // engine tokens (e.g. `risk_on`, `swing_composite`, `actionable`). Unknown keys fall
@@ -279,7 +288,9 @@ export function HistoricalValidationPanel() {
   const { colors } = useTheme();
   const [horizon, setHorizon] = useState<ValidationHorizon>("1h");
   const [days, setDays] = useState<WindowDays>(30);
-  const [mode, setMode] = useState<ModeFilter>("all");
+  // Default to swing — the first-class engine in STOCVEST's product framing,
+  // with the deeper signal history. Users can flip to day with one click.
+  const [mode, setMode] = useState<ModeFilter>("swing");
   // Phase 4 — cross-version compare toggle. Off by default so the panel still opens to
   // the calm single-version overview; the user opts into the more detailed A-vs-B view.
   const [compare, setCompare] = useState(false);
@@ -297,11 +308,13 @@ export function HistoricalValidationPanel() {
       setLoading(true);
       setUnauthenticated(false);
       const { from, to } = buildTrailingWindow(d);
+      // Always send a concrete mode — the `all` option no longer exists in
+      // this panel (Mode Separation rule: no combined headlines).
       const params = {
         horizon: h,
         from,
         to,
-        ...(m === "all" ? {} : { mode: m as "swing" | "day" })
+        mode: m
       };
       if (cmp) {
         const result = await fetchHistoricalValidationByVersion(params);
@@ -414,7 +427,7 @@ export function HistoricalValidationPanel() {
           label="Mode"
           options={MODE_OPTIONS.map((m) => ({
             value: m,
-            label: m === "all" ? "All" : m === "swing" ? "Swing" : "Day"
+            label: m === "swing" ? "Swing (multi-day)" : "Day (intraday)"
           }))}
           value={mode}
           onChange={(v) => setMode(v as ModeFilter)}
@@ -498,10 +511,13 @@ export function HistoricalValidationPanel() {
                     marginBottom: spacing[1]
                   }}
                 >
-                  Overall directional accuracy
+                  {mode === "swing"
+                    ? "Swing directional accuracy (multi-day cadence)"
+                    : "Day directional accuracy (intraday cadence)"}
                 </div>
                 <div
                   data-testid="hv-overall-accuracy"
+                  data-mode={mode}
                   style={{
                     fontSize: typography.scale["3xl"],
                     color: colors.text,
