@@ -409,3 +409,74 @@ def test_prompt_carries_gating_logic_and_regime_transition_sections() -> None:
     assert "SUPPRESSION & GATING LOGIC" in ASSISTANT_SYSTEM_PROMPT
     assert "REGIME TRANSITIONS" in ASSISTANT_SYSTEM_PROMPT
     assert "BACKTESTING & VALIDATION" in ASSISTANT_SYSTEM_PROMPT
+
+
+# ---------------------------------------------------------------------------
+# Two-context safety perimeter — added 2026-05-11 to close the homepage
+# per-symbol hallucination risk. The previous PUBLIC MODE rules said "refuse
+# trade recommendations" but did not explicitly forbid the LLM from inventing
+# an Evidence card / Trade Readiness / blocking layer narrative for a stock
+# on the homepage. These tests lock in the new explicit guardrails.
+# ---------------------------------------------------------------------------
+
+
+def test_prompt_declares_critical_context_awareness_two_context_perimeter() -> None:
+    """The TOP-LEVEL safety perimeter must split context into LOGGED-OUT vs LOGGED-IN
+    and tie them to the `session_mode` field that ships in the page-context block."""
+    assert "CRITICAL CONTEXT AWARENESS RULE" in ASSISTANT_SYSTEM_PROMPT
+    assert "LOGGED-OUT" in ASSISTANT_SYSTEM_PROMPT
+    assert "LOGGED-IN" in ASSISTANT_SYSTEM_PROMPT
+    assert "session_mode=public" in ASSISTANT_SYSTEM_PROMPT
+    assert "session_mode=authenticated" in ASSISTANT_SYSTEM_PROMPT
+
+
+def test_prompt_carries_logged_out_golden_rule() -> None:
+    """The framework-not-decision rule is the load-bearing safety phrase for the homepage."""
+    assert "explain the FRAMEWORK, not the DECISION" in ASSISTANT_SYSTEM_PROMPT
+
+
+def test_prompt_explicitly_bans_per_symbol_evaluation_when_logged_out() -> None:
+    """The new PUBLIC MODE MUST-NOT list must explicitly enumerate the per-symbol bans.
+
+    These bans close the gap where the LLM might still invent an Evidence card / Trade
+    Readiness / blocking layer for a specific stock on the homepage, even after refusing
+    a buy/sell answer."""
+    # These exact phrases are the load-bearing bans.
+    assert "Evaluate or discuss any specific stock" in ASSISTANT_SYSTEM_PROMPT
+    assert "Refer to an Evidence card for a specific stock" in ASSISTANT_SYSTEM_PROMPT
+    assert "Mention a Trade Readiness score for a specific symbol" in ASSISTANT_SYSTEM_PROMPT
+    assert "currently blocking" in ASSISTANT_SYSTEM_PROMPT  # ban on "X is the layer currently blocking AAPL"
+    # The "no live demo" framing tells the LLM not to simulate the dashboard for the visitor.
+    assert "live demo" in ASSISTANT_SYSTEM_PROMPT
+
+
+def test_prompt_carries_homepage_safe_refusal_template_verbatim() -> None:
+    """The exact refusal opener must be in the prompt so the LLM falls back to it for
+    any per-symbol question on the homepage rather than improvising."""
+    assert (
+        "I can't assess individual stocks here, and I don't give buy or sell answers."
+        in ASSISTANT_SYSTEM_PROMPT
+    )
+    assert (
+        "What I can explain is how STOCVEST decides whether trading conditions are aligned once a symbol is evaluated inside the platform."
+        in ASSISTANT_SYSTEM_PROMPT
+    )
+
+
+def test_prompt_lists_concrete_ticker_examples_in_public_mode_ban() -> None:
+    """The MUST-NOT list must give the LLM concrete ticker examples (AAPL / TSLA / NVDA / MSFT)
+    so it pattern-matches any ticker the visitor names — not just the ones it has seen during
+    training."""
+    for ticker in ("AAPL", "TSLA", "NVDA", "MSFT"):
+        assert ticker in ASSISTANT_SYSTEM_PROMPT, f"PUBLIC MODE MUST-NOT list must show example ticker {ticker}"
+
+
+def test_prompt_carries_explain_why_boundary_exists_in_tone() -> None:
+    """Refusal-with-reason is the trust-building behavior. The rule must be in TONE & STYLE."""
+    assert "explain WHY the boundary exists" in ASSISTANT_SYSTEM_PROMPT
+
+
+def test_prompt_keeps_public_mode_rules_label_for_section_routing() -> None:
+    """`PUBLIC MODE RULES` is the section header the existing tests and the LOGGED-OUT
+    section both reference — it must remain in the prompt."""
+    assert "PUBLIC MODE RULES" in ASSISTANT_SYSTEM_PROMPT

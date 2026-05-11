@@ -57,10 +57,17 @@ def test_reply_public_calls_claude_with_public_mode_marker(
     assert result.upgrade_available is True
     system_text = captured.get("system")
     assert isinstance(system_text, str)
-    assert "session_mode=public" in system_text
-    # Must never hint at a logged-in / paid context for an anonymous caller.
-    assert "session_mode=authenticated" not in system_text
-    assert "mode=contextual" not in system_text
+    # The appended PAGE CONTEXT block (the part the client controls) must carry the public
+    # marker so the LLM routes into PUBLIC MODE RULES. We isolate the tail rather than scan
+    # the whole prompt because the static instruction block now mentions
+    # `session_mode=authenticated` as descriptive text inside the CRITICAL CONTEXT AWARENESS
+    # RULE — that mention is a guardrail, not a routing signal.
+    assert "=== PAGE CONTEXT ===" in system_text
+    page_ctx_tail = system_text.split("=== PAGE CONTEXT ===", 1)[1]
+    assert "session_mode=public" in page_ctx_tail
+    # The appended tail must never hint at a logged-in / paid context for an anonymous caller.
+    assert "session_mode=authenticated" not in page_ctx_tail
+    assert "mode=contextual" not in page_ctx_tail
 
 
 def test_reply_public_falls_back_to_deterministic_on_claude_outage(
