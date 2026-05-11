@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { useTheme } from "@/lib/theme-provider";
 import { useAssistantContext } from "@/lib/assistant/context";
 import {
   ASSISTANT_STORAGE_KEY,
-  clearAssistantSession,
   subscribeAssistantReset
 } from "@/lib/assistant/session-reset";
 import type { AssistantChatResponse, AssistantMessage } from "@/lib/assistant/types";
@@ -27,12 +27,13 @@ import { AssistantPanel } from "@/components/assistant/assistant-panel";
  *   - anonymous     → `/api/stocvest/public/assistant/chat` (no auth, public-mode prompt;
  *     no page context — marketing visitors have no STOCVEST page state)
  *
- * Cross-page context isolation: the page identifier the conversation belongs to is
- * persisted alongside messages. When the active page changes (e.g. user navigates from
- * Signals to Dashboard), the conversation is reset so an answer about TTD on Signals
- * never leaks into a Dashboard-page question. The same reset runs on logout, on session
- * expiry, and whenever the auth state flips — keeping every visitor's conversation
- * scoped to a single page identity.
+ * Cross-surface conversation isolation: the reset signal is the URL **pathname**, not the
+ * published page context. The pathname always changes on a real navigation, even when
+ * the destination is a route that publishes no page context at all (the marketing home
+ * page `/`, `/login`, `/signup`, etc.). The moment the pathname changes, the persisted
+ * conversation is wiped — so an answer about TTD on `/dashboard/signals/layers` never
+ * leaks into a question on `/dashboard`, `/dashboard/scanner`, or `/`. Auth-state flips,
+ * session expiry, and explicit logout clicks all also wipe the state.
  */
 const MAX_MESSAGES_KEPT = 24;
 
@@ -40,7 +41,11 @@ interface PersistedState {
   open?: boolean;
   composer?: string;
   messages?: AssistantMessage[];
-  lastPage?: string | null;
+  /** Pathname (e.g. `/dashboard/signals/layers`) the conversation was anchored to. */
+  lastPathname?: string | null;
+  /** Auth state at persist time; legacy persisted state from before this field existed
+   *  is now treated as a force-clear so stale logged-in conversations cannot show up
+   *  on the anonymous home page. */
   isAuthenticated?: boolean;
 }
 
@@ -64,6 +69,15 @@ function writePersistedState(state: PersistedState): void {
   }
 }
 
+function removePersistedState(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(ASSISTANT_STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 interface StocvestAssistantProps {
   /**
    * Server-rendered flag: was a session cookie present when the request was served?
@@ -76,6 +90,7 @@ interface StocvestAssistantProps {
 export function StocvestAssistant({ isAuthenticated }: StocvestAssistantProps) {
   const { colors } = useTheme();
   const pageContext = useAssistantContext();
+  const pathname = usePathname();
 
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
@@ -85,30 +100,36 @@ export function StocvestAssistant({ isAuthenticated }: StocvestAssistantProps) {
   const [hasUnread, setHasUnread] = useState(false);
 
   /**
-   * The page identifier the persisted conversation belongs to. Updated whenever a
-   * different page publishes context; compared against the active page on every
-   * navigation so a mismatch triggers a fresh-conversation reset. Stored in a ref
-   * because it must be readable from inside both the page-change effect and the
-   * persist effect without causing an extra re-render.
+   * Pathname the persisted conversation belongs to. A useRef is used so the persist
+   * effect can read the latest value without re-rendering on every navigation.
    */
-  const conversationPageRef = useRef<string | null>(null);
+  const conversationPathRef = useRef<string | null>(null);
   const hydratedRef = useRef(false);
   const prevAuthRef = useRef<boolean | null>(null);
 
-  /** Hydrate from sessionStorage so a refresh doesn't lose context, but never spans tabs. */
+  /**
+   * Hydrate from sessionStorage so a refresh doesn't lose context, but never spans tabs.
+   * Three force-clear conditions, any of which wipe persisted state on first render:
+   *
+   *  1. `persisted.isAuthenticated` is missing (legacy data from a build before that
+   *     field was written) — we cannot know whether it belonged to a logged-in or
+   *     anonymous session, so the safe move is to start fresh.
+   *  2. `persisted.isAuthenticated` was a different value than the current session.
+   *  3. `persisted.lastPathname` differs from the current pathname (the user refreshed
+   *     on a different surface than the one the conversation was about).
+   */
   useEffect(() => {
     const persisted = readPersistedState();
     if (persisted) {
-      // Drop persisted state if the auth state has flipped since persistence. Switching
-      // from signed-in → signed-out (or vice versa) is treated as a fresh visitor.
       const persistedAuth =
         typeof persisted.isAuthenticated === "boolean" ? persisted.isAuthenticated : null;
-      if (persistedAuth !== null && persistedAuth !== isAuthenticated) {
-        try {
-          window.sessionStorage.removeItem(ASSISTANT_STORAGE_KEY);
-        } catch {
-          /* ignore */
-        }
+      const persistedPath =
+        typeof persisted.lastPathname === "string" ? persisted.lastPathname : null;
+      const authMismatch = persistedAuth !== isAuthenticated;
+      const pathMismatch =
+        persistedPath !== null && pathname !== null && persistedPath !== pathname;
+      if (authMismatch || pathMismatch) {
+        removePersistedState();
       } else {
         if (Array.isArray(persisted.messages)) {
           setMessages(
@@ -127,36 +148,36 @@ export function StocvestAssistant({ isAuthenticated }: StocvestAssistantProps) {
         if (typeof persisted.composer === "string") {
           setComposerValue(persisted.composer);
         }
-        if (typeof persisted.lastPage === "string") {
-          conversationPageRef.current = persisted.lastPage;
+        if (persistedPath) {
+          conversationPathRef.current = persistedPath;
         }
       }
     }
+    if (pathname) conversationPathRef.current = pathname;
     hydratedRef.current = true;
     prevAuthRef.current = isAuthenticated;
-  }, [isAuthenticated]);
+    // Hydrate runs once per session; `pathname` and `isAuthenticated` are intentionally
+    // included so a server-side prop flip (e.g. middleware-driven logout) re-evaluates.
+  }, [isAuthenticated, pathname]);
 
   /**
-   * Page-change detection: the moment the published page identifier differs from the
-   * one the persisted conversation belongs to, wipe the messages so the LLM never sees
-   * a prior page's history. Null transitions (between unmount cleanup and the next
-   * publisher's effect) are deliberately ignored.
+   * Pathname-based reset: every URL change wipes the conversation so the next question
+   * is answered against the new surface only. This is the **primary** cross-surface
+   * isolation — using the URL means we catch routes that publish no page context
+   * (`/`, `/login`, `/signup`, marketing surfaces) just as well as routes that do.
    */
   useEffect(() => {
     if (!hydratedRef.current) return;
-    const currentPage = pageContext?.page ?? null;
-    if (currentPage === null) return;
-    if (
-      conversationPageRef.current !== null &&
-      conversationPageRef.current !== currentPage
-    ) {
+    if (!pathname) return;
+    if (conversationPathRef.current === pathname) return;
+    if (conversationPathRef.current !== null) {
       setMessages([]);
       setComposerValue("");
       setNotice(null);
       setHasUnread(false);
     }
-    conversationPageRef.current = currentPage;
-  }, [pageContext?.page]);
+    conversationPathRef.current = pathname;
+  }, [pathname]);
 
   /**
    * Auth-state change (login or logout): always reset. The session-expiry watcher and
@@ -176,13 +197,9 @@ export function StocvestAssistant({ isAuthenticated }: StocvestAssistantProps) {
     setNotice(null);
     setHasUnread(false);
     setOpen(false);
-    conversationPageRef.current = null;
-    try {
-      window.sessionStorage.removeItem(ASSISTANT_STORAGE_KEY);
-    } catch {
-      /* ignore */
-    }
-  }, [isAuthenticated]);
+    conversationPathRef.current = pathname ?? null;
+    removePersistedState();
+  }, [isAuthenticated, pathname]);
 
   /**
    * Reactive subscriptions: session-expiry (token expired or a 401 surfaced from any
@@ -196,7 +213,7 @@ export function StocvestAssistant({ isAuthenticated }: StocvestAssistantProps) {
       setNotice(null);
       setHasUnread(false);
       setOpen(false);
-      conversationPageRef.current = null;
+      conversationPathRef.current = pathname ?? null;
     };
     const unsubExpiry = subscribeSessionExpired(handleReset);
     const unsubReset = subscribeAssistantReset(handleReset);
@@ -204,7 +221,7 @@ export function StocvestAssistant({ isAuthenticated }: StocvestAssistantProps) {
       unsubExpiry();
       unsubReset();
     };
-  }, []);
+  }, [pathname]);
 
   /** Persist on change. We don't persist `open` — every load starts collapsed for calm. */
   useEffect(() => {
@@ -212,10 +229,10 @@ export function StocvestAssistant({ isAuthenticated }: StocvestAssistantProps) {
     writePersistedState({
       composer: composerValue,
       messages: messages.map((m) => ({ ...m, fresh: false, pending: false })),
-      lastPage: conversationPageRef.current,
+      lastPathname: conversationPathRef.current,
       isAuthenticated
     });
-  }, [composerValue, messages, isAuthenticated, pageContext?.page]);
+  }, [composerValue, messages, isAuthenticated, pathname]);
 
   const close = useCallback(() => {
     setOpen(false);

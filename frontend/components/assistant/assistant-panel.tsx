@@ -77,6 +77,7 @@ function buildQuickPrompts(
       return [
         "What is STOCVEST?",
         "How is STOCVEST different from signal-alert services?",
+        "How do the six layers work together?",
         "Explain risk/reward in plain terms"
       ];
     }
@@ -537,11 +538,88 @@ function EmptyState({
   context: AssistantPageContext | null;
   isAuthenticated: boolean;
 }) {
-  const heading = context
-    ? "I can explain what's driving this Decision and how to read the layers."
-    : isAuthenticated
-      ? "Ask about STOCVEST's Decisions, columns, or anything on screen."
-      : "Ask what STOCVEST is, how it differs from signal-alert services, or for any general finance or trading term.";
+  /**
+   * Three distinct empty-state surfaces:
+   *
+   *  - **Contextual** (any signed-in dashboard page that publishes a `page_context`):
+   *    a one-line invitation tailored to the current Decision and metrics on screen.
+   *
+   *  - **Marketing / anonymous** (no auth, no context — `/`, `/login`, `/signup`):
+   *    a welcoming pitch that explains in one paragraph *what* STOCVEST is and *how*
+   *    it helps, followed by the kinds of questions the visitor can ask. This is the
+   *    first impression for prospects, so it leads with the six-layer thesis instead
+   *    of a generic "ask me anything" line.
+   *
+   *  - **Signed-in, no context** (logged-in user on a route that publishes no page
+   *    context, e.g. they navigated to `/`): a calm "ask me anything" prompt that
+   *    keeps the same trade-disclaimer footer.
+   */
+  if (context) {
+    return (
+      <div style={{ display: "grid", gap: spacing[2] }}>
+        <p
+          style={{
+            margin: 0,
+            color: colors.text,
+            fontSize: typography.scale.sm,
+            lineHeight: 1.55,
+            fontWeight: 600
+          }}
+        >
+          I can explain what&apos;s driving this Decision and how to read the layers.
+        </p>
+        <p
+          style={{
+            margin: 0,
+            color: colors.textMuted,
+            fontSize: typography.scale.xs,
+            lineHeight: 1.55
+          }}
+        >
+          I explain analysis and product behavior. I never give trading advice or predict prices.
+        </p>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div style={{ display: "grid", gap: spacing[2] }}>
+        <p
+          style={{
+            margin: 0,
+            color: colors.text,
+            fontSize: typography.scale.sm,
+            lineHeight: 1.55,
+            fontWeight: 700
+          }}
+        >
+          Welcome to STOCVEST.
+        </p>
+        <p
+          style={{
+            margin: 0,
+            color: colors.text,
+            fontSize: typography.scale.sm,
+            lineHeight: 1.6
+          }}
+        >
+          STOCVEST is a market analysis and decision-support platform. It evaluates every setup across six independent layers — technical, news, macro, sector, geopolitical, and internals — and only flags trades when they agree. I&apos;m here to explain how STOCVEST thinks, not to tell you what to do.
+        </p>
+        <p
+          style={{
+            margin: 0,
+            color: colors.textMuted,
+            fontSize: typography.scale.xs,
+            lineHeight: 1.55
+          }}
+        >
+          Ask me what STOCVEST is, how it&apos;s different from signal-alert services, or for a plain-English explanation of any trading term (R/R, EMA, VWAP, ORB, expectancy, drawdown, position sizing — anything). I do not give trade recommendations or price predictions.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: "grid", gap: spacing[2] }}>
       <p
@@ -553,7 +631,7 @@ function EmptyState({
           fontWeight: 600
         }}
       >
-        {heading}
+        Ask about STOCVEST&apos;s analysis, Decisions, or anything on screen.
       </p>
       <p
         style={{
