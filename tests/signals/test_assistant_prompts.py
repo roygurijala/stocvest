@@ -696,3 +696,146 @@ def test_prompt_bans_validation_to_encourage_activity_during_suppression() -> No
     assert "NEVER a reason to override the current SUPPRESSION & GATING LOGIC" in text
     # The exemplar prompt the rule arms the LLM against.
     assert 'why aren\'t there any setups today' in text
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# MODE RESOLUTION PRIORITY ORDER (CHATBOT ROUTING) — Phase 0 lock-ins
+#
+# The Dashboard ships a two-desk layout (Swing Desk + Day Desk) in Phase 1.
+# That makes the LLM responsible for the P3 'both desks visible + ambiguous
+# question' case where the only correct behavior is a STRUCTURED DUAL ANSWER.
+# These tests pin every leg of the priority order so a future prompt edit
+# cannot silently regress to single-mode reasoning or to inference-from-market-
+# state shortcuts (which are explicitly banned).
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def test_prompt_carries_mode_resolution_priority_order_section_header() -> None:
+    """The new routing section is the LLM's only deterministic guide for the
+    'could relate to swing or day' question pattern that lands once the Dashboard
+    becomes a dual-desk surface. The header must be searchable by the LLM."""
+    text = ASSISTANT_SYSTEM_PROMPT
+    assert "MODE RESOLUTION PRIORITY ORDER (CHATBOT ROUTING)" in text
+    # The one-sentence anchor sits near the top of the section so the LLM can
+    # pattern-match on it even if it doesn't read the whole section.
+    assert "you resolve WHERE the question lives before deciding WHAT to say" in text
+
+
+def test_prompt_priority_1_screen_context_inherits_scope() -> None:
+    """Priority 1 is the strongest signal and the most common path. If the
+    page-context block carries a single `trading_mode=swing|day` the LLM must
+    inherit that scope without asking a clarifying question and without
+    mentioning the other mode."""
+    text = ASSISTANT_SYSTEM_PROMPT
+    assert "PRIORITY 1 — EXPLICIT SCREEN CONTEXT (STRONGEST SIGNAL)" in text
+    # The mechanic: the page-context block is authoritative.
+    assert "inherit that scope automatically" in text
+    # The behavioral contract for P1.
+    assert "you do NOT ask a clarifying question and you do NOT mention the other mode" in text
+    # At least two examples of mode-scoped surfaces so the LLM can pattern-match.
+    assert "Signals page with `trading_mode=swing`" in text
+    assert "Scanner with `scanner_focus=day`" in text
+
+
+def test_prompt_priority_2_lists_explicit_mode_language_terms() -> None:
+    """Priority 2 covers the case where the screen carries multiple modes but
+    the user's wording disambiguates. The LLM must use the user's stated mode
+    even on a dual-desk page (e.g. Dashboard) so a swing-specific question
+    isn't answered with a dual report."""
+    text = ASSISTANT_SYSTEM_PROMPT
+    assert "PRIORITY 2 — EXPLICIT MODE LANGUAGE IN THE USER'S QUESTION" in text
+    # The four trigger terms must all be enumerated so the LLM doesn't miss
+    # synonyms like 'intraday' that aren't 'day trade' but mean the same engine.
+    for term in ('"swing"', '"multi-day"', '"day trade"', '"intraday"'):
+        assert term in text, f"P2 must enumerate the trigger term {term}"
+    # Both negative examples — Swing-only AND Day-only — so the LLM sees the
+    # symmetry and doesn't only learn 'swing wording → swing answer'.
+    assert '"Why are there no swing setups today?" → Swing only' in text
+    assert '"Is day trading suppressed?" → Day only' in text
+
+
+def test_prompt_priority_3_structured_dual_answer_template_verbatim() -> None:
+    """Priority 3 is the only situation where a dual-mode response is allowed.
+    The template wording is the most likely to drift over time, so it's
+    pinned verbatim including the colon + indentation pattern. If a future
+    prompt edit converts the two-paragraph format to a single-paragraph
+    'overall' summary, this test fires immediately."""
+    text = ASSISTANT_SYSTEM_PROMPT
+    assert "PRIORITY 3 — AMBIGUOUS QUESTION + BOTH MODES VISIBLE" in text
+    # The verbatim template lines that the LLM must produce.
+    assert "Here's what STOCVEST is seeing by mode:" in text
+    assert "Swing (multi-day): <swing posture + short explanation in swing vocabulary>" in text
+    assert "Day (intraday): <day posture + short explanation in day vocabulary>" in text
+    # The explicit framing: two independent paragraphs, no comparison.
+    assert "INDEPENDENT STATUS REPORTS" in text
+
+
+def test_prompt_priority_3_bans_comparison_and_connective_tradeoff_language() -> None:
+    """The most likely failure mode of P3 is that the LLM connects the two
+    paragraphs with 'however' or 'on the other hand' framing that implicitly
+    compares the desks. Each ban is pinned individually so a prompt edit that
+    deletes just one ban (e.g. softens the connective-tissue rule) still
+    surfaces."""
+    text = ASSISTANT_SYSTEM_PROMPT
+    # The four canonical P3 violations, each in MUST NOT form.
+    assert 'Compare the two desks' in text
+    assert 'fallback or alternative to the other' in text
+    assert 'switch desks because one is suppressed' in text
+    # Connective-tissue tradeoff language ban — three specific connectives
+    # enumerated so the LLM sees the pattern.
+    assert '"on the other hand"' in text
+    assert '"however"' in text
+    assert '"instead"' in text
+
+
+def test_prompt_never_infer_mode_from_market_or_behavior() -> None:
+    """The most dangerous failure pattern is mode-inference from market
+    conditions — it dresses up cross-mode substitution as 'the user probably
+    meant the other mode'. Three concrete inference patterns are listed so
+    the LLM can pattern-match on the shape, not just the wording."""
+    text = ASSISTANT_SYSTEM_PROMPT
+    assert "NEVER — INFER MODE FROM MARKET BEHAVIOR OR CONDITIONS" in text
+    # The three exemplar inference patterns the rule arms the LLM against.
+    assert "Since swing is quiet, the user probably means day" in text
+    assert "Intraday volatility is high, so this question is about day trading" in text
+    assert "Choppy markets suggest day trades, so the user likely means day" in text
+    # The positive framing: mode is resolved by the priority order, not by inference.
+    assert "Mode is resolved by Priority 1, Priority 2, or Priority 3 only" in text
+
+
+def test_prompt_clarifying_question_fallback_is_verbatim_and_one_shot() -> None:
+    """The clarifying question is the assistant's only allowed escape hatch
+    when no priority resolves. It must be verbatim (no paraphrase that could
+    accidentally hint at the answer), one question only (not a stalling
+    tactic), and gated on 'all three priorities fail' so the LLM doesn't
+    fall back to it on mode-scoped surfaces where P1 already resolved."""
+    text = ASSISTANT_SYSTEM_PROMPT
+    assert "CLARIFYING-QUESTION FALLBACK (ONE QUESTION, ONLY WHEN ALL THREE PRIORITIES FAIL)" in text
+    # The verbatim question wording.
+    assert (
+        'Do you mean swing (multi-day) or day (intraday) trading? '
+        "STOCVEST evaluates those as independent decision engines."
+    ) in text
+    # The explicit gating that prevents the LLM from using this as a stall.
+    assert "Do not use it as a stalling tactic" in text
+    # The dual-desk carve-out so the LLM uses P3, not the clarifying question,
+    # on the Dashboard.
+    assert "on dual-desk surfaces (Priority 3 already covers them" in text
+
+
+def test_prompt_cross_mode_substitution_response_is_deterministic_and_short() -> None:
+    """The cross-mode-substitution question ('Swing is quiet — should I day
+    trade instead?') is the highest-risk user prompt the assistant will see.
+    The response must be deterministic — same shape every time — and must
+    not reference validation numbers as evidence for or against either
+    engine (which would re-open the door to using historical accuracy as a
+    permission signal, banned elsewhere by the historical-validation rules)."""
+    text = ASSISTANT_SYSTEM_PROMPT
+    assert "DETERMINISTIC RESPONSE TO THE CROSS-MODE-SUBSTITUTION QUESTION" in text
+    # The shape contract: refuses the comparison, explains independence.
+    assert "refuses the comparison, explains the independence" in text
+    # The hard rule against using validation as evidence in this answer pattern.
+    assert "does not reference validation numbers as evidence" in text
+    # At least two exemplar prompts so the LLM can pattern-match the shape.
+    assert 'Swing is quiet — should I day trade instead?' in text
+    assert 'Is day trading better than swing trading?' in text
