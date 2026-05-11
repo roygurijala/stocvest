@@ -40,6 +40,56 @@ export const colorTokens: Record<ThemeName, ThemeColors> = {
   }
 };
 
+/**
+ * Role-coded color language for dashboard surfaces — Mode Separation B28.
+ *
+ * Three orthogonal channels of meaning the user has to read on the dashboard:
+ *  1. PRICE DIRECTION — green/red — already locked to `colors.bullish` / `colors.bearish`.
+ *  2. CAUTION / WARNING — amber — already locked to `colors.caution`.
+ *  3. DESK ROLE — slate / indigo / teal — introduced here.
+ *
+ * The three role accents MUST NOT overlap with channels 1 or 2. They live in their own
+ * hue families (slate-blue, indigo, teal) so a user can answer "is this a swing card, a
+ * day card, or shared context?" by hue ALONE without reading copy. Numbers and arrows
+ * keep their P/L green/red semantics — color encodes role, not signal strength or market
+ * direction.
+ *
+ * Layered onto `surface` via `color-mix(in srgb, <role.accent> N%, <surface>)`. Card
+ * components apply the tint to the surface gradient + left-edge stripe + pill. Numeric
+ * cells (percent changes, scores) read from `colors.bullish` / `colors.bearish` /
+ * `colors.text` as today — those are unchanged.
+ */
+export type CardRole = "shared" | "swing" | "day";
+
+export interface RoleAccent {
+  /** Base hue used for the pill background, left-edge stripe, and tint. */
+  accent: string;
+  /** Stronger contrast variant for pill text on the muted surface. */
+  accentStrong: string;
+  /** Short uppercase label shown on the role pill. Locked verbatim so screenshots
+   *  are self-explanatory and tests can anchor on the exact string. */
+  pillLabel: string;
+}
+
+export const roleAccents: Record<ThemeName, Record<CardRole, RoleAccent>> = {
+  dark: {
+    // Shared Context — slate / steel. Neutral and authoritative; reads as "weather, not action".
+    shared: { accent: "#64748b", accentStrong: "#cbd5e1", pillLabel: "SHARED CONTEXT" },
+    // Swing Desk — indigo. Cool, deliberate, multi-day. Distinct from the global accent blue
+    // (#3b82f6) which is reserved for interaction cues; indigo (#818cf8) carries deck identity.
+    swing: { accent: "#818cf8", accentStrong: "#a5b4fc", pillLabel: "SWING · MULTI-DAY" },
+    // Day Desk — teal. Energetic and immediate without colliding with bullish/bearish or
+    // caution channels. Teal (not amber) was chosen so the desk identity does not visually
+    // shout "warning" when posture is calm.
+    day: { accent: "#2dd4bf", accentStrong: "#5eead4", pillLabel: "DAY · INTRADAY" }
+  },
+  light: {
+    shared: { accent: "#475569", accentStrong: "#334155", pillLabel: "SHARED CONTEXT" },
+    swing: { accent: "#4f46e5", accentStrong: "#3730a3", pillLabel: "SWING · MULTI-DAY" },
+    day: { accent: "#0d9488", accentStrong: "#115e59", pillLabel: "DAY · INTRADAY" }
+  }
+};
+
 export const typography = {
   fontFamilySans: "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif",
   fontFamilyMono: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",

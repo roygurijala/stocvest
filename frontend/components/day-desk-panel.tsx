@@ -215,7 +215,8 @@ export function DayDeskPanel({ setups, marketStatus, scannerError, topSignalCap 
 
   return (
     <DashboardCard
-      eyebrow="Day desk · Intraday (session-bound)"
+      role="day"
+      eyebrow="Intraday · session-bound"
       title="Day Desk"
       subtitle="Intraday engine — session-bound. Independent of the Swing Desk above. Posture (Active / Monitor / Suppressed) reflects today's volume / momentum / session-structure gates, not multi-day cadence."
       cardTip={DAY_DESK_CARD_TIP}

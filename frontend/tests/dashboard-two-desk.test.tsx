@@ -115,13 +115,12 @@ describe("dashboard two-desk render contract (Mode Separation B28 Phase 1)", () 
     expect(rel & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  test("weekly_market_context_eyebrow_is_shared_context_NOT_swing_desk", () => {
-    // The Weekly market context card is a SHARED input (both desks read it).
-    // Its eyebrow must NOT label it as a swing-desk surface — that would imply
-    // shared context belongs to one engine, violating the "WHAT MAY BE SHARED
-    // ACROSS MODES" rule. We anchor strictly on the eyebrow element (not the
-    // whole card body) because the subtitle legitimately names both desks to
-    // explain what reads this shared input.
+  test("shared_market_context_is_role_tagged_NOT_swing_coded", () => {
+    // The Short-Horizon Market State card is a SHARED input (both desks read it).
+    // The role pill carries the verbatim "SHARED CONTEXT" label — that's the
+    // canonical signal of shared-context identity (was previously the eyebrow).
+    // The eyebrow now carries the OBSERVATIONAL category ("Recent Market State"),
+    // freeing the role pill to do the disambiguation work.
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
@@ -134,11 +133,19 @@ describe("dashboard two-desk render contract (Mode Separation B28 Phase 1)", () 
     );
     const weekly = screen.getByTestId("shared-market-context-weekly");
     expect(weekly).toBeInTheDocument();
+    // (a) Role attribute carries `shared` — the structural signal.
+    expect(weekly.getAttribute("data-card-role")).toBe("shared");
+    // (b) Role pill is rendered with the verbatim "SHARED CONTEXT" label.
+    const rolePill = weekly.querySelector('[data-testid="dashboard-card-role-pill"]');
+    expect(rolePill).not.toBeNull();
+    expect((rolePill?.textContent || "").trim().toLowerCase()).toContain("shared context");
+    // (c) The eyebrow no longer carries swing-coded language — "swing desk" /
+    // "swing" / "multi-day" must not appear on a shared-context surface.
     const eyebrow = weekly.querySelector('[data-testid="dashboard-card-eyebrow"]');
     expect(eyebrow).not.toBeNull();
     const eyebrowText = (eyebrow?.textContent || "").toLowerCase();
-    expect(eyebrowText).toContain("shared context");
-    expect(eyebrowText).not.toContain("swing desk");
+    expect(eyebrowText).not.toContain("swing");
+    expect(eyebrowText).not.toContain("multi-day");
   });
 
   test("day_desk_posture_when_market_closed_is_suppressed_session_closed", () => {

@@ -737,9 +737,10 @@ export function DashboardRedesign({
       <div className="dashboard-grid grid grid-cols-1 gap-7 lg:grid-cols-[7fr_13fr] lg:items-stretch [&>*]:min-w-0">
           <div className="order-1 min-w-0 lg:col-span-2 lg:col-start-1 lg:row-start-1">
             <DashboardCard
-              eyebrow="Shared context"
-              title="Weekly market context"
-              subtitle="SPY, QQQ, and IWM — last ~5 trading sessions (daily closes). Shared input that both the Swing Desk and the Day Desk read; NOT a swing-only signal."
+              role="shared"
+              eyebrow="Recent Market State"
+              title="Short-Horizon Market State (Last ~5 Sessions)"
+              subtitle="Daily-close price behavior across major indices. Shared background input for all desks; not a trade signal."
               cardTip={WEEKLY_MARKET_CONTEXT_CARD_TIP}
               data-testid="shared-market-context-weekly"
             >
@@ -756,9 +757,10 @@ export function DashboardRedesign({
           </div>
 
           <DashboardCard
+            role="swing"
             className={`order-2 flex w-full min-h-[200px] flex-col overflow-hidden lg:self-start lg:col-start-1 lg:row-start-2`}
             title="Swing Desk"
-            eyebrow="Swing desk · Multi-day (evaluated on daily closes)"
+            eyebrow="Multi-day · evaluated on daily closes"
             subtitle="Multi-day engine — evaluates daily closes. Independent of the Day Desk below. Posture (Active / Monitor / Suppressed) reflects regime + sector + structure + per-symbol DailyBarScanner gates."
             cardTip={TOP_SIGNALS_CARD_TIP}
             data-testid="swing-desk-panel"
@@ -1157,11 +1159,13 @@ export function DashboardRedesign({
 
           <div className="order-4 flex min-w-0 flex-col gap-5 lg:col-start-2 lg:row-start-2">
           <DashboardCard
+            role="shared"
             className="flex min-h-[200px] flex-col overflow-hidden lg:self-start"
-            eyebrow="Tape"
+            eyebrow="Tape · session change"
             title="Market pulse"
-            subtitle="SPY · QQQ · VIX session change and regime — today’s tape versus your swing read. Numbers match the scanner when it completes; otherwise they come from your overview snapshots."
+            subtitle="SPY · QQQ · VIX session change and regime. Shared input both desks read — informs context, not entries. Numbers match the scanner when it completes; otherwise they come from your overview snapshots."
             cardTip={MARKET_PULSE_CARD_TIP}
+            data-testid="shared-market-pulse-card"
           >
             <div className="flex flex-col gap-3 text-sm" style={{ color: colors.text }}>
               <div
@@ -1253,10 +1257,12 @@ export function DashboardRedesign({
           </DashboardCard>
 
           <DashboardCard
-            eyebrow="Sectors"
+            role="shared"
+            eyebrow="Sectors · 5-session"
             title="Sector rotation (5 sessions)"
-            subtitle="ETF 5d buckets — same swing window as Weekly market context (not today’s session % beside Regime)."
+            subtitle="ETF 5d buckets — shared multi-session context (same daily-close window as Short-Horizon Market State above). Not today’s session % beside Regime."
             cardTip={SECTOR_ROTATION_CARD_TIP}
+            data-testid="shared-sector-rotation-card"
             style={{
               boxShadow: "0 10px 28px rgba(0,0,0,0.14)",
               border: `1px solid color-mix(in srgb, ${colors.border} 92%, transparent)`,
@@ -1311,10 +1317,12 @@ export function DashboardRedesign({
           </DashboardCard>
 
           <DashboardCard
-            eyebrow="Catalysts"
+            role="shared"
+            eyebrow="Catalysts · upcoming"
             title="Upcoming earnings this week"
-            subtitle="Dashboard symbol list only — macro prints (Fed, CPI, etc.) live elsewhere."
+            subtitle="Dashboard symbol list only — macro prints (Fed, CPI, etc.) live elsewhere. Shared context for both desks."
             cardTip={UPCOMING_CATALYSTS_CARD_TIP}
+            data-testid="shared-upcoming-catalysts-card"
             style={{
               boxShadow: "0 8px 22px rgba(0,0,0,0.12)",
               border: `1px solid color-mix(in srgb, ${colors.border} 94%, transparent)`,
@@ -1347,10 +1355,12 @@ export function DashboardRedesign({
           </DashboardCard>
 
           <DashboardCard
-            eyebrow="Validation"
+            role="shared"
+            eyebrow="Validation · tracked outcomes"
             title="Signal validation ledger"
-            subtitle="Tracked outcomes — not a brokerage account."
+            subtitle="Tracked outcomes — not a brokerage account. Shared link surface; the ledger itself is mode-segmented inside the Signal Validation page."
             cardTip={SIGNAL_VALIDATION_LEDGER_CARD_TIP}
+            data-testid="shared-signal-validation-ledger-card"
           >
             <div className="mb-2">
               <Link
