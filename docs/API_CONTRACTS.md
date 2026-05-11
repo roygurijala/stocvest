@@ -76,7 +76,7 @@ All REST routes are versioned under `/v1/`.
     ],
     "page_context": {
       // ALL fields optional; only the whitelisted keys below survive on the server.
-      "page": "signals/layers" | "signals/history" | string,
+      "page": "signals/layers" | "signals/history" | "dashboard/scanner" | string,
       "trading_mode": "swing" | "day",
       "symbol": "AAPL",
       "analysis_status": "loaded" | "loading" | "unavailable" | "insufficient_data",
@@ -89,11 +89,28 @@ All REST routes are versioned under `/v1/`.
       "trend_direction": "Long",
       "market_regime": "Neutral",
       "layer_alignment_pct": 88,
-      "layer_status": { "technical": "Bullish", "news": "Neutral", "macro": "Neutral", "sector": "Bullish", "geopolitical": "Neutral", "internals": "Bullish" }
+      "layer_status": { "technical": "Bullish", "news": "Neutral", "macro": "Neutral", "sector": "Bullish", "geopolitical": "Neutral", "internals": "Bullish" },
+
+      // ----- Scanner-overview fields (multi-symbol summary page). Set only when page = "dashboard/scanner". -----
+      "scanner_focus": "swing" | "day" | "both",
+      "market_open": true,
+      "gap_with_catalyst_count": 3,
+      "gap_without_catalyst_count": 1,
+      "ranked_setups_count": 0,
+      "swing_setups_suppressed": true,
+      "setups_empty_message": "No swing setups — regime and structure not aligned.",
+      "top_setups": [
+        // capped at 3 items; bucketed strength, no raw scores
+        { "symbol": "TSLA", "direction": "long" | "short", "strength_bucket": "strong" | "moderate" | "weak", "confluence": true, "orb_expired": false }
+      ],
+      "top_gaps_with_catalyst": [
+        // capped at 3 items; bucketed quality, no raw scores
+        { "symbol": "NVDA", "gap_direction": "up" | "down", "quality_bucket": "high" | "medium" | "low", "catalyst_category": "earnings", "catalyst_sentiment": "bullish" | "bearish" | "neutral" }
+      ]
     }
   }
   ```
-  Response: `{ "text": string, "source": "ai" | "deterministic", "mode": "general" | "contextual", "upgrade_available": boolean, "disclaimer": string }`. **Mode** is `contextual` when `page_context` carries a `symbol` or a recognized `decision_state`, else `general`. **Source** is `ai` only for paid users (`has_ai_explanations`) when Anthropic responds successfully; otherwise `deterministic` (free user upgrade copy, or a calm fallback line on Claude outage). **Contract guarantee:** the server-held system prompt is the locked STOCVEST Assistant prompt (no investment advice, no price predictions, no exposure of internal weights/thresholds); clients **cannot** override it. Unknown keys inside `page_context` are silently dropped; non-`user`/`assistant` roles in `messages` are silently dropped.
+  Response: `{ "text": string, "source": "ai" | "deterministic", "mode": "general" | "contextual", "upgrade_available": boolean, "disclaimer": string }`. **Mode** is `contextual` when `page_context` carries any of `page`, `symbol`, or a recognized `decision_state`; else `general`. This is intentional so multi-symbol overview pages like the scanner (which have no single symbol or decision_state) still drive the LLM's scanner-aware rule with the page identifier plus summary fields. **Source** is `ai` only for paid users (`has_ai_explanations`) when Anthropic responds successfully; otherwise `deterministic` (free user upgrade copy, or a calm fallback line on Claude outage). **Contract guarantee:** the server-held system prompt is the locked STOCVEST Assistant prompt (no investment advice, no price predictions, no exposure of internal weights/thresholds); clients **cannot** override it. Unknown keys inside `page_context` are silently dropped; non-`user`/`assistant` roles in `messages` are silently dropped. `top_setups` and `top_gaps_with_catalyst` are capped at 3 entries each server-side, with invalid `direction` / `strength_bucket` / `gap_direction` / `quality_bucket` values dropped silently so the assistant never receives free-form strings from the client.
 
 ### 4.4 Brokers (Phase 4e)
 

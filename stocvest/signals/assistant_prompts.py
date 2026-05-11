@@ -78,12 +78,14 @@ When page context is provided (such as a Signals page, Signal State History, or 
 - Do not list every contributing factor unless explicitly asked.
 - Never contradict the displayed decision.
 - If the page context provides only a symbol or page identifier (no decision_state and no metrics), the analysis has not loaded yet. In that case, answer the user's question in calm general terms about how STOCVEST works or what it evaluates for that page, and you MAY briefly note that the symbol is selected. Never refuse, never describe yourself as lacking data, and never ask the user to restate context.
+- If the page context describes a multi-symbol overview page (for example the scanner — fields like scanner_focus, gap_with_catalyst_count, ranked_setups_count, top_setup_*, top_gap_*, swing_setups_suppressed, setups_empty_message), treat those summary fields as the authoritative view of what the user is looking at. Answer in terms of what the page is showing (the count of gaps with catalysts, the top setups, the active scanner focus, whether swing setups are suppressed). Do not invent per-symbol decisions or layer scores for items on the scanner; reference items only as they appear in the supplied context.
 
 Examples of proper responses:
 - "This signal is in Monitor because risk/reward is unfavorable at the current price."
 - "Directional alignment is strong, but STOCVEST requires favorable asymmetry before granting trade permission."
 - "Price reaction reflects what happened after the signal state, not whether it was tradable or correct."
 - (symbol only, no analysis yet) "STOCVEST evaluates six analysis layers — technical, news, macro, sector, geopolitical, and internals — and combines them into a Decision shown on the Signals page. The layers and decision for TTD will appear once the analysis completes."
+- (scanner page) "The scanner is focused on swing setups right now. Gap Intelligence is flagging three catalyst-confirmed gaps to monitor, and there are no ranked swing setups because the regime context has not stabilized. Tap View Signal on a row to see its layer breakdown."
 
 ────────────────────────
 GENERAL MODE RULES
@@ -212,6 +214,67 @@ def serialize_page_context(ctx: dict[str, Any] | None) -> str:
             status = _coerce_str(layer_status.get(layer), limit=24)
             if status:
                 lines.append(f"layer_status_{layer}={status}")
+
+    # Scanner-overview fields. These describe a multi-symbol page; they are all qualitative
+    # summaries of what is already on screen (counts, top items, buckets — never raw scores).
+    scanner_focus = _coerce_str(ctx.get("scanner_focus"), limit=12).lower()
+    if scanner_focus in ("swing", "day", "both"):
+        lines.append(f"scanner_focus={scanner_focus}")
+
+    market_open = ctx.get("market_open")
+    if isinstance(market_open, bool):
+        lines.append(f"market_open={'true' if market_open else 'false'}")
+
+    for k in ("gap_with_catalyst_count", "gap_without_catalyst_count", "ranked_setups_count"):
+        s = _coerce_num(ctx.get(k))
+        if s:
+            lines.append(f"{k}={s}")
+
+    suppressed = ctx.get("swing_setups_suppressed")
+    if isinstance(suppressed, bool):
+        lines.append(f"swing_setups_suppressed={'true' if suppressed else 'false'}")
+
+    empty_msg = _coerce_str(ctx.get("setups_empty_message"), limit=200)
+    if empty_msg:
+        lines.append(f"setups_empty_message={empty_msg}")
+
+    top_setups = ctx.get("top_setups")
+    if isinstance(top_setups, list):
+        for idx, raw in enumerate(top_setups[:3]):
+            if not isinstance(raw, dict):
+                continue
+            sym = _coerce_str(raw.get("symbol"), limit=12).upper()
+            direction = _coerce_str(raw.get("direction"), limit=8).lower()
+            bucket = _coerce_str(raw.get("strength_bucket"), limit=12).lower()
+            if not sym or direction not in ("long", "short") or bucket not in ("strong", "moderate", "weak"):
+                continue
+            confluence = bool(raw.get("confluence"))
+            orb_expired = bool(raw.get("orb_expired"))
+            parts = [f"symbol={sym}", f"direction={direction}", f"strength={bucket}"]
+            if confluence:
+                parts.append("confluence=true")
+            if orb_expired:
+                parts.append("orb_expired=true")
+            lines.append(f"top_setup_{idx + 1}={'|'.join(parts)}")
+
+    top_gaps = ctx.get("top_gaps_with_catalyst")
+    if isinstance(top_gaps, list):
+        for idx, raw in enumerate(top_gaps[:3]):
+            if not isinstance(raw, dict):
+                continue
+            sym = _coerce_str(raw.get("symbol"), limit=12).upper()
+            gap_dir = _coerce_str(raw.get("gap_direction"), limit=8).lower()
+            quality = _coerce_str(raw.get("quality_bucket"), limit=12).lower()
+            if not sym or gap_dir not in ("up", "down") or quality not in ("high", "medium", "low"):
+                continue
+            cat = _coerce_str(raw.get("catalyst_category"), limit=40).lower()
+            sent = _coerce_str(raw.get("catalyst_sentiment"), limit=12).lower()
+            parts = [f"symbol={sym}", f"gap={gap_dir}", f"quality={quality}"]
+            if cat:
+                parts.append(f"catalyst={cat}")
+            if sent in ("bullish", "bearish", "neutral"):
+                parts.append(f"sentiment={sent}")
+            lines.append(f"top_gap_{idx + 1}={'|'.join(parts)}")
 
     return "\n".join(lines) + "\n"
 

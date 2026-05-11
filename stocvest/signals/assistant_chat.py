@@ -167,11 +167,18 @@ class AssistantChatService:
 
 
 def _mode_from_context(ctx: dict[str, Any] | None) -> AssistantMode:
-    """Contextual mode requires at least a symbol or decision_state on the page."""
+    """Contextual mode requires at least a page, symbol, or decision_state on the page.
+
+    A non-empty ``page`` identifier alone is sufficient — multi-symbol overview pages like
+    the scanner have no single symbol or decision_state, but the page itself is real context
+    the assistant should anchor on. The system prompt covers how to behave when only a page
+    identifier is present.
+    """
     if not isinstance(ctx, dict):
         return "general"
+    page = str(ctx.get("page") or "").strip()
     sym = str(ctx.get("symbol") or "").strip()
     state = str(ctx.get("decision_state") or "").strip().lower()
-    if sym or state in ("actionable", "monitor", "blocked"):
+    if page or sym or state in ("actionable", "monitor", "blocked"):
         return "contextual"
     return "general"

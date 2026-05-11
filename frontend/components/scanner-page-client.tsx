@@ -20,6 +20,12 @@ import { NewsPanel } from "@/components/news-panel";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { loadScannerDataWithoutBrief } from "@/lib/api/scanner-client-load";
+import { usePublishAssistantContext } from "@/lib/assistant/context";
+import type {
+  AssistantPageContext,
+  AssistantScannerGapSummary,
+  AssistantScannerSetupSummary
+} from "@/lib/assistant/types";
 import type {
   GapIntelligenceItem,
   IntradaySetupPayload,
@@ -720,6 +726,72 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
     if (dayDelta < 0 || dayDelta > 3) return null;
     return { daysUntil: dayDelta, reportTime: event.report_time };
   };
+
+  /**
+   * Publish a whitelisted, qualitative summary of what is currently on the scanner so the
+   * STOCVEST Assistant can answer in terms of the user's screen. Only fields enumerated in
+   * `AssistantPageContext` survive the server-side whitelist in `serialize_page_context`;
+   * unknown keys are dropped. Scores are bucketed (no raw numerics) to stay aligned with
+   * the assistant's "qualitative language" rule.
+   */
+  const assistantContext = useMemo<AssistantPageContext>(() => {
+    const topSetups: AssistantScannerSetupSummary[] = rankedSetups.slice(0, 3).map((setup) => {
+      const strengthPct = topSignalStrengthPercent(setup);
+      const strength_bucket: AssistantScannerSetupSummary["strength_bucket"] =
+        strengthPct >= 70 ? "strong" : strengthPct >= 50 ? "moderate" : "weak";
+      const patternRaw = setup.triggers?.[0] ?? "";
+      return {
+        symbol: setup.symbol.trim().toUpperCase(),
+        direction: isLongDirection(setup.direction) ? "long" : "short",
+        strength_bucket,
+        confluence: setup.is_confluence_alert === true,
+        orb_expired: patternRaw.toLowerCase().startsWith("orb_") && isAfterOrbCloseEt()
+      };
+    });
+
+    const topGapsWithCatalyst: AssistantScannerGapSummary[] = gapIntelGrouped.withCat
+      .slice(0, 3)
+      .map((item) => {
+        const quality_bucket: AssistantScannerGapSummary["quality_bucket"] =
+          item.gap_quality_score >= 80 ? "high" : item.gap_quality_score >= 60 ? "medium" : "low";
+        const sentRaw = (item.catalyst?.sentiment ?? "").toLowerCase();
+        const catalyst_sentiment: AssistantScannerGapSummary["catalyst_sentiment"] | undefined =
+          sentRaw === "bullish" || sentRaw === "bearish" || sentRaw === "neutral" ? sentRaw : undefined;
+        const catRaw = (item.catalyst?.category ?? "").trim().toLowerCase();
+        return {
+          symbol: item.symbol.trim().toUpperCase(),
+          gap_direction: item.gap_pct >= 0 ? "up" : "down",
+          quality_bucket,
+          catalyst_category: catRaw || undefined,
+          catalyst_sentiment
+        };
+      });
+
+    return {
+      page: "dashboard/scanner",
+      trading_mode: scannerSetupMode === "swing" ? "swing" : scannerSetupMode === "day" ? "day" : undefined,
+      market_regime: overview.regimeLabel?.trim() || undefined,
+      scanner_focus: scannerSetupMode,
+      market_open: marketOpen,
+      gap_with_catalyst_count: gapIntelGrouped.withCat.length,
+      gap_without_catalyst_count: gapIntelGrouped.without.length,
+      ranked_setups_count: rankedSetups.length,
+      top_setups: topSetups,
+      top_gaps_with_catalyst: topGapsWithCatalyst,
+      swing_setups_suppressed: showSwingScanContextBanner,
+      setups_empty_message: rankedSetups.length === 0 ? setupsEmptyMessage : undefined
+    };
+  }, [
+    scannerSetupMode,
+    overview.regimeLabel,
+    marketOpen,
+    gapIntelGrouped.withCat,
+    gapIntelGrouped.without.length,
+    rankedSetups,
+    showSwingScanContextBanner,
+    setupsEmptyMessage
+  ]);
+  usePublishAssistantContext(assistantContext);
 
   const openGapEvidence = useCallback(
     async (item: GapIntelligenceItem) => {

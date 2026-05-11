@@ -75,6 +75,62 @@ def test_assistant_chat_contextual_mode_uses_page_context(monkeypatch: pytest.Mo
     assert body["source"] == "deterministic"
 
 
+def test_assistant_chat_scanner_page_alone_is_contextual(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Multi-symbol overview pages (e.g. scanner) carry no single symbol but the page itself is
+    real context. `_mode_from_context` must flip to contextual when `page` alone is set so
+    the LLM's scanner-aware rule activates and the user gets a screen-anchored answer."""
+    paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.get_user_profile_store",
+        lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: paid_profile)})(),
+    )
+
+    captured: dict[str, object] = {}
+
+    async def fake_reply(self, *, messages, page_context, user_profile):  # type: ignore[no-untyped-def]
+        captured["page_context"] = page_context
+        from stocvest.signals.assistant_chat import AssistantChatResult
+
+        return AssistantChatResult(
+            text="The scanner is focused on swing setups.",
+            source="ai",
+            mode="contextual",
+            upgrade_available=False,
+        )
+
+    monkeypatch.setattr(
+        "stocvest.signals.assistant_chat.AssistantChatService.reply",
+        fake_reply,
+    )
+
+    response = assistant_chat_handler(
+        _event(
+            body={
+                "messages": [{"role": "user", "content": "What is the scanner showing?"}],
+                "page_context": {
+                    "page": "dashboard/scanner",
+                    "scanner_focus": "swing",
+                    "market_open": True,
+                    "gap_with_catalyst_count": 3,
+                    "ranked_setups_count": 0,
+                    "swing_setups_suppressed": True,
+                },
+            }
+        ),
+        {},
+    )
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["mode"] == "contextual"
+    # The full scanner payload reached the service untouched — the *server-side* whitelist in
+    # `serialize_page_context` is what decides which keys actually land in the system prompt.
+    fwd = captured.get("page_context")
+    assert isinstance(fwd, dict)
+    assert fwd.get("page") == "dashboard/scanner"
+    assert fwd.get("scanner_focus") == "swing"
+    assert fwd.get("swing_setups_suppressed") is True
+
+
 def test_assistant_chat_paid_user_calls_service_and_returns_ai_text(monkeypatch: pytest.MonkeyPatch) -> None:
     """Paid users get a Claude-generated turn; we patch the service so no network is needed."""
     paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
