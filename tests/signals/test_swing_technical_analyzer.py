@@ -284,3 +284,72 @@ def test_strong_bearish_daily_setup() -> None:
     r = SwingTechnicalAnalyzer().analyze("TEST", bars, snap, SwingTechnicalParameters())
     assert r.verdict == "bearish"
     assert r.score is not None and r.score <= 30
+
+
+# ---------------------------------------------------------------------------
+# D3 — wire-is-live lock-in
+# ---------------------------------------------------------------------------
+#
+# Identical 210-bar uptrend through two different :class:`SwingTechnicalParameters`
+# instances: the analyzer must read its scoring contributions and verdict
+# thresholds from the params it was passed, not from hardcoded constants.
+#
+# Note: the default scoring contributions in SwingTechnicalParameters sum to
+# more than 100 (20 + 15 + 15 + 15 + 10 + 10 = 85 plus the 50 baseline → 135),
+# so any clean uptrend saturates the score at 100. To prove the wire is live
+# we either (a) push the bullish threshold beyond the unreachable score, or
+# (b) zero out every scoring contribution and toggle one specific bonus.
+
+
+def test_bullish_threshold_param_actually_drives_verdict() -> None:
+    """A clean uptrend scores at the top of the band (clamped to 100); the
+    verdict must flip from bullish to neutral when the bullish threshold is
+    bumped beyond the score ceiling."""
+    bars = make_daily_bars(210, trend=0.008)
+    snap = Snapshot(
+        symbol="TEST",
+        last_trade_price=bars[-1].close,
+        prev_close=bars[-2].close,
+        change_percent=2.0,
+        change=2.0,
+    )
+    permissive = SwingTechnicalParameters(bullish_threshold=60, bearish_threshold=40)
+    strict = SwingTechnicalParameters(bullish_threshold=101, bearish_threshold=0)
+
+    r_permissive = SwingTechnicalAnalyzer().analyze("TEST", bars, snap, permissive)
+    r_strict = SwingTechnicalAnalyzer().analyze("TEST", bars, snap, strict)
+    assert r_permissive.score == r_strict.score
+    assert r_permissive.verdict == "bullish"
+    assert r_strict.verdict == "neutral"
+
+
+def test_above_sma50_score_param_actually_moves_score() -> None:
+    """With every scoring contribution zeroed, the score collapses to the
+    neutral baseline of 50; raising :attr:`above_sma50_score` to 30 must add
+    exactly that bonus on an uptrend where price sits above SMA50. Anything
+    other than 50 → 80 means the wire from params is broken or some other
+    contribution silently fired."""
+    bars = make_daily_bars(210, trend=0.008)
+    snap = Snapshot(
+        symbol="TEST",
+        last_trade_price=bars[-1].close,
+        prev_close=bars[-2].close,
+        change_percent=2.0,
+        change=2.0,
+    )
+    flat_kwargs = dict(
+        rsi_score_delta=0,
+        above_sma50_score=0,
+        above_sma200_score=0,
+        higher_highs_lows_score=0,
+        volume_accumulation_score=0,
+        near_52w_high_score=0,
+        base_formation_score=0,
+    )
+    flat = SwingTechnicalParameters(**flat_kwargs)
+    isolated = SwingTechnicalParameters(**{**flat_kwargs, "above_sma50_score": 30})
+
+    baseline = SwingTechnicalAnalyzer().analyze("TEST", bars, snap, flat)
+    boosted = SwingTechnicalAnalyzer().analyze("TEST", bars, snap, isolated)
+    assert baseline.score == 50
+    assert boosted.score == 80

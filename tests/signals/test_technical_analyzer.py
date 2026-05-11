@@ -69,6 +69,56 @@ def test_orb_unavailable_after_window_without_store(monkeypatch, mock_parameter_
     assert not any("expired" in c.lower() for c in r.chips)
 
 
+# ---------------------------------------------------------------------------
+# D3 — wire-is-live lock-in
+# ---------------------------------------------------------------------------
+#
+# Same uptrending bar window, two different :class:`TechnicalParameters`
+# instances differing only in :attr:`bullish_threshold`: the analyzer must
+# read the threshold from the params it was passed, not from a hardcoded
+# constant. If anyone refactors TechnicalAnalyzer to ignore the params arg
+# (or to default-construct TechnicalParameters() internally), this test
+# fails. This is the regression guard for the D3 wire from ParameterStore
+# through to the layer-1 verdict.
+
+
+def test_bullish_threshold_param_actually_drives_verdict() -> None:
+    """A bullish bar window scores in the bullish zone with the default
+    threshold of 65 but neutralizes when the threshold is bumped to 99."""
+    ta = TechnicalAnalyzer()
+    bars = make_bars(60, trend=0.005)
+    snap = make_snapshot(price=bars[-1].close, prev_close=bars[0].close, change_percent=5.0)
+
+    permissive = TechnicalParameters(bullish_threshold=55, bearish_threshold=45)
+    r_permissive = ta.analyze("T", bars, snap, permissive)
+    assert r_permissive.status == "available"
+
+    strict = TechnicalParameters(bullish_threshold=99, bearish_threshold=1)
+    r_strict = ta.analyze("T", bars, snap, strict)
+    assert r_strict.status == "available"
+
+    # Both runs see the same bars + snapshot, so the raw score is identical;
+    # the verdict differs because the threshold parameter actually drives it.
+    assert r_permissive.score == r_strict.score
+    assert r_permissive.verdict != r_strict.verdict
+
+
+def test_vwap_score_delta_param_actually_moves_score() -> None:
+    """Bumping the VWAP scoring delta from the default 20 to 0 must shrink
+    the absolute distance of the technical score from the neutral 50."""
+    ta = TechnicalAnalyzer()
+    bars = make_bars(30, trend=0.005)
+    snap = make_snapshot(price=bars[-1].close, prev_close=bars[0].close, change_percent=5.0)
+
+    p_default = TechnicalParameters()
+    p_no_vwap = TechnicalParameters(vwap_score_delta=0)
+    r_default = ta.analyze("T", bars, snap, p_default)
+    r_no_vwap = ta.analyze("T", bars, snap, p_no_vwap)
+    assert r_default.status == "available" and r_no_vwap.status == "available"
+    assert r_default.score is not None and r_no_vwap.score is not None
+    assert abs(r_default.score - 50) > abs(r_no_vwap.score - 50)
+
+
 def test_orb_breakout_long_uses_dynamo_levels(monkeypatch, mock_parameter_store) -> None:
     from stocvest.data.orb_store import ORBRecord
 
