@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { OptionChainOverview } from "@/lib/api/options";
+import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -25,6 +26,8 @@ export function OptionsPageClient({ overview }: OptionsPageClientProps) {
   const [symbol, setSymbol] = useState(overview.symbol);
   const [expiration, setExpiration] = useState("all");
   const [side, setSide] = useState<"all" | "call" | "put">("all");
+
+  usePublishAssistantContext({ page: "dashboard/options", symbol: symbol.trim().toUpperCase() || undefined });
 
   const expirations = useMemo(
     () => Array.from(new Set(overview.rows.map((r) => r.expiration))).sort(),

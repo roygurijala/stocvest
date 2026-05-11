@@ -4,6 +4,7 @@ import type { BrokerOverview } from "@/lib/api/brokers";
 import type { PortfolioMultiBrokerOverview } from "@/lib/api/portfolio";
 import type { EarningsEvent } from "@/lib/api/earnings";
 import { OrderEntryPanel, type PortfolioOrderPrefill } from "@/components/order-entry-panel";
+import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -20,6 +21,8 @@ function money(n: number): string {
 
 export function PortfolioPageClient({ brokerOverviews, overview, earningsBySymbol, orderFromSignal = null }: PortfolioPageClientProps) {
   const { colors, theme } = useTheme();
+
+  usePublishAssistantContext({ page: "dashboard/portfolio" });
   const brokerCards = brokerOverviews.map((broker) => {
     const healthy = broker.health?.ok ?? !broker.error;
     const accountType = broker.broker === "mock" ? "paper" : "live";

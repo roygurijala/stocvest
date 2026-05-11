@@ -1,6 +1,7 @@
 "use client";
 
 import type { FuturesDashboardOverview } from "@/lib/api/futures";
+import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, spacing, surfaceGlowClassName } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -10,6 +11,8 @@ interface FuturesDashboardPanelProps {
 
 export function FuturesDashboardPanel({ overview }: FuturesDashboardPanelProps) {
   const { colors } = useTheme();
+
+  usePublishAssistantContext({ page: "dashboard/futures" });
 
   return (
     <section style={{ marginTop: 18 }}>

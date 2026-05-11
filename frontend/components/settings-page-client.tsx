@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { CuteLoader } from "@/components/cute-loader";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { DEFAULT_UI_PLAN, PLAN_TIERS, planTierById } from "@/lib/subscription-plans";
 import { useTheme } from "@/lib/theme-provider";
@@ -32,6 +33,8 @@ export function SettingsPageClient({ email }: SettingsPageClientProps) {
   const { colors } = useTheme();
   const search = useSearchParams();
   const [confirmText, setConfirmText] = useState("");
+
+  usePublishAssistantContext({ page: "dashboard/settings" });
   const [etradeConnected, setEtradeConnected] = useState(false);
   const [etradeLastSync, setEtradeLastSync] = useState<string | null>(null);
   const [prefs, setPrefs] = useState<AlertPrefs | null>(null);

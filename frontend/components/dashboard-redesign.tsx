@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { motion } from "framer-motion";
 import { DashboardCard } from "@/components/dashboard-card";
 import { DashboardEdgeSync } from "@/components/dashboard-edge-sync";
@@ -549,6 +550,18 @@ export function DashboardRedesign({
     if (vixPulseOk) return REGIME_BADGE_TIP;
     return `${REGIME_BADGE_TIP}${REGIME_WITHOUT_VIX_APPEND}`;
   }, [vixPulseOk]);
+
+  // Publish a minimal qualitative summary of the home dashboard to the STOCVEST Assistant.
+  // Top Signals on the home dashboard is swing-only by design (see DashboardPageContent),
+  // so trading_mode is fixed at "swing". `ranked_setups_count` reflects what the user is
+  // looking at after the slice-to-3 cap so the assistant never claims a count beyond what's
+  // on screen.
+  usePublishAssistantContext({
+    page: "dashboard",
+    trading_mode: "swing",
+    market_regime: regimeLabel,
+    ranked_setups_count: topSignals.length
+  });
 
   const emptySwingSuppressionLine = useMemo(() => emptySwingSuppressionStatusLine(regimeLabel), [regimeLabel]);
   const sectorFrame = useMemo(

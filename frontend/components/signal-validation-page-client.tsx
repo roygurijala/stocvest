@@ -8,6 +8,7 @@ import {
   type UserSignalHistoryPageSize
 } from "@/lib/api/public-signals";
 import { CuteLoader } from "@/components/cute-loader";
+import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -121,6 +122,8 @@ export function SignalValidationPageClient() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+
+  usePublishAssistantContext({ page: "dashboard/signal-validation", trading_mode: tab });
 
   const loadFirstPage = useCallback(async (t: LedgerTab, ps: UserSignalHistoryPageSize) => {
     setLoading(true);

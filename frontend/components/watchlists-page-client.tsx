@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CuteLoader } from "@/components/cute-loader";
+import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -26,6 +27,8 @@ export function WatchlistsPageClient() {
   const [addInput, setAddInput] = useState("");
   const [symErr, setSymErr] = useState<string | null>(null);
   const [rename, setRename] = useState<string | null>(null);
+
+  usePublishAssistantContext({ page: "dashboard/watchlists" });
 
   const load = useCallback(async () => {
     setLoading(true);

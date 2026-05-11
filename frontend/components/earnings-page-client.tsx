@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import type { EarningsEvent } from "@/lib/api/earnings";
@@ -137,6 +138,8 @@ function buildRowGroups(filter: Filter, source: EarningsEvent[], today: string, 
 export function EarningsPageClient({ events, notice }: EarningsPageClientProps) {
   const { colors } = useTheme();
   const [filter, setFilter] = useState<Filter>("upcoming");
+
+  usePublishAssistantContext({ page: "dashboard/earnings" });
   const today = localTodayIso();
   const weekMon = mondayOfWeekContaining(today);
   const weekFri = fridayOfSameWeek(weekMon);

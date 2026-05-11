@@ -6,6 +6,7 @@ import type { CreateJournalEntryRequest, JournalAnalyticsPayload, JournalEntryPa
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
 import { Area, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { InfoTip } from "@/components/info-tip";
+import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { AVG_LOSER_TIP, AVG_WINNER_TIP, EXPECTANCY_TIP, STREAK_TIP, WIN_RATE_TIP } from "@/lib/ui-tooltips";
@@ -66,6 +67,8 @@ function unrealizedPnlUsd(entry: JournalEntryPayload, last: number | null | unde
 export function JournalPageClient({ initialEntries, initialAnalytics, connectedBroker }: JournalPageClientProps) {
   const { colors } = useTheme();
   const [entries, setEntries] = useState(initialEntries);
+
+  usePublishAssistantContext({ page: "dashboard/journal" });
   const [analytics, setAnalytics] = useState(initialAnalytics);
   const [sortDesc, setSortDesc] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);

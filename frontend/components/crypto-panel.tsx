@@ -1,6 +1,7 @@
 "use client";
 
 import type { CryptoOverview } from "@/lib/api/crypto";
+import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, spacing, surfaceGlowClassName } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -17,6 +18,11 @@ function fmt(value: number | undefined, digits: number = 2): string {
 
 export function CryptoPanel({ overview }: CryptoPanelProps) {
   const { colors } = useTheme();
+
+  usePublishAssistantContext({
+    page: "dashboard/crypto",
+    symbol: overview.symbol?.trim().toUpperCase() || undefined
+  });
 
   return (
     <section style={{ marginTop: 18 }}>

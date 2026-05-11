@@ -9,6 +9,7 @@ import {
   AGREEMENTS_DOCUMENT_LINKS,
   agreementsBundleLabel,
 } from "@/lib/legal-agreements";
+import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -27,6 +28,8 @@ export function LegalAgreementsReview() {
   const { colors } = useTheme();
   const [profile, setProfile] = useState<UserMePayload | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  usePublishAssistantContext({ page: "dashboard/legal" });
 
   useEffect(() => {
     let cancelled = false;

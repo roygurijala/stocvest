@@ -9,6 +9,7 @@ import {
   type PerformanceSummary,
   type PublicSignal
 } from "@/lib/api/public-signals";
+import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { isoDateInNewYork } from "@/lib/market-hours-et";
 import { useTheme } from "@/lib/theme-provider";
@@ -28,6 +29,8 @@ export function PerformanceTrackingContent({ showHomeLink = false }: Performance
   const { colors } = useTheme();
   const [signals, setSignals] = useState<PublicSignal[]>([]);
   const [summary, setSummary] = useState<PerformanceSummary | null>(null);
+
+  usePublishAssistantContext({ page: "dashboard/performance" });
 
   useEffect(() => {
     let active = true;
