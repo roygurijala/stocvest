@@ -34,7 +34,12 @@ from stocvest.data.benzinga_client import BenzingaClient, BenzingaMultiResult
 from stocvest.data.models import Bar, SignalRecord, Snapshot, Timeframe
 from stocvest.data.polygon_client import PolygonClient, PolygonError
 from stocvest.signals.confluence import ConfluenceDetector, confluence_result_to_response_fields, normalize_direction
-from stocvest.signals.composite_score import CompositeScoreEngine, CompositeSignal, CompositeVerdict, LayerSignal
+from stocvest.signals.composite_score import (
+    CompositeSignal,
+    CompositeVerdict,
+    LayerSignal,
+    build_composite_score_engine_from_params,
+)
 from stocvest.signals.geo_analyzer import GeoAnalyzer
 from stocvest.signals.internals_analyzer import InternalsAnalyzer
 from stocvest.signals.macro_analyzer import MacroAnalyzer
@@ -345,20 +350,8 @@ async def run_real_composite_engine_phase(
         if sig is not None:
             signals.append(sig)
 
-    base_weights = {
-        "technical": params.composite.technical_weight,
-        "news": params.composite.news_weight,
-        "macro": params.composite.macro_weight,
-        "sector": params.composite.sector_weight,
-        "geopolitical": params.composite.geopolitical_weight,
-        "internals": params.composite.internals_weight,
-    }
     regime = _regime_for_engine(macro.market_regime)
-    engine = CompositeScoreEngine(
-        base_weights=base_weights,
-        bullish_threshold=float(params.composite.bullish_threshold),
-        bearish_threshold=float(params.composite.bearish_threshold),
-    )
+    engine = build_composite_score_engine_from_params(params)
     composite_raw = engine.compute(signals, regime=regime)
     sector_persist = float(sector_momentum.persistence) if sector_momentum else 0.5
     composite, alignment = adjust_composite_with_alignment(

@@ -300,3 +300,41 @@ class CompositeScoreEngine:
         if alignment_ratio < 0.85:
             return score * 0.85
         return score
+
+
+def build_composite_score_engine_from_params(params: object) -> CompositeScoreEngine:
+    """Build a :class:`CompositeScoreEngine` from active :class:`SignalParameters`.
+
+    Single source of truth for translating tunable :class:`SignalParameters` into a
+    live :class:`CompositeScoreEngine`. All production callsites (swing composite,
+    day-trade real composite, and the legacy client-supplied-scores swing handler)
+    route through this helper so the ``parameter_version`` stamped on every
+    recorded :class:`SignalRecord` actually reflects the weights the engine used.
+
+    ``params`` is typed as ``object`` to avoid a circular import between
+    ``stocvest.signals.composite_score`` and ``stocvest.config.signal_parameters``
+    (the latter is import-light, but composite_score is imported by many engines
+    that pre-date the config module). The contract is duck-typed: ``params`` must
+    expose a ``composite`` attribute with ``technical_weight``, ``news_weight``,
+    ``macro_weight``, ``sector_weight``, ``geopolitical_weight``,
+    ``internals_weight``, ``bullish_threshold``, and ``bearish_threshold`` numeric
+    fields — i.e. a :class:`stocvest.config.signal_parameters.CompositeParameters`.
+
+    Test code is free to keep instantiating ``CompositeScoreEngine()`` with no
+    args for engine-unit coverage; that path falls back to
+    :data:`DEFAULT_BASE_WEIGHTS` which is documented as the test/no-args default.
+    """
+    composite = params.composite  # type: ignore[attr-defined]
+    base_weights: dict[str, float] = {
+        "technical": float(composite.technical_weight),
+        "news": float(composite.news_weight),
+        "macro": float(composite.macro_weight),
+        "sector": float(composite.sector_weight),
+        "geopolitical": float(composite.geopolitical_weight),
+        "internals": float(composite.internals_weight),
+    }
+    return CompositeScoreEngine(
+        base_weights=base_weights,
+        bullish_threshold=float(composite.bullish_threshold),
+        bearish_threshold=float(composite.bearish_threshold),
+    )

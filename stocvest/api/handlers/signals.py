@@ -66,6 +66,7 @@ from stocvest.signals import (
     CompositeVerdict,
     IntradaySetupScanner,
     LayerSignal,
+    build_composite_score_engine_from_params,
     parse_liquidity_by_symbol_payload,
 )
 from stocvest.signals.daily_bar_scanner import DailyBarScanner
@@ -333,7 +334,10 @@ def swing_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[
             )
             for p in available_layers
         ]
-        composite = CompositeScoreEngine().compute(signals, regime=regime)
+        active_params = ParameterStore.get_parameters_sync()
+        composite = build_composite_score_engine_from_params(active_params).compute(
+            signals, regime=regime
+        )
         snap_raw = payload.get("symbol_snapshot") or payload.get("snapshot") or {}
         snap = dict(snap_raw) if isinstance(snap_raw, dict) else {}
         request_context = build_request_context(event)
@@ -431,7 +435,7 @@ def swing_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[
                     response_body=response_body if direction_out else None,
                     layer_scores=layer_scores,
                 )
-                param_ver = ParameterStore.get_parameters_sync().version
+                param_ver = active_params.version
                 rr_raw = response_body.get("risk_reward")
                 rr_f = float(rr_raw) if isinstance(rr_raw, (int, float)) else None
                 if rr_raw is not None and rr_f is None:

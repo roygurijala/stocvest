@@ -34,6 +34,7 @@ from stocvest.signals.composite_score import (
     REGIME_WEIGHTS,
     LayerContribution,
     LayerSignal,
+    build_composite_score_engine_from_params,
 )
 from stocvest.signals.geopolitical_scanner import (
     GeopoliticalRiskAssessment,
@@ -112,6 +113,7 @@ __all__ = [
     "SentimentResult",
     "swing_recency_weight",
     "TradeAction",
+    "build_composite_score_engine_from_params",
     "JournalAnalytics",
     "TradeJournal",
     "TradeJournalEntry",

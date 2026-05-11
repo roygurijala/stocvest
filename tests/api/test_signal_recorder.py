@@ -82,6 +82,146 @@ def test_signal_recorded_on_composite_generation(monkeypatch: pytest.MonkeyPatch
     get_settings.cache_clear()
 
 
+def test_swing_composite_handler_stamps_active_parameter_version_actually_used(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D3 integrity gap: the legacy swing_composite_handler used to score with the
+    hardcoded ``DEFAULT_BASE_WEIGHTS`` while stamping ``parameter_version`` from
+    :class:`ParameterStore`. This made the recorded ``parameter_version`` a lie.
+
+    This test pins the contract that (a) the handler routes its engine build
+    through the same ``SignalParameters`` whose ``.version`` it stamps onto the
+    record, and (b) overriding the live parameters via ``ParameterStore`` actually
+    changes both the score AND the version stamp end-to-end.
+    """
+    from dataclasses import replace
+
+    from stocvest.api.services.signal_recorder import get_signal_recorder
+    from stocvest.config.parameter_store import ParameterStore
+    from stocvest.config.signal_parameters import default_signal_parameters
+
+    monkeypatch.setenv("POLYGON_API_KEY", "k")
+    from stocvest.utils.config import get_settings
+
+    get_settings.cache_clear()
+
+    mem = InMemorySignalRecorder()
+    monkeypatch.setattr("stocvest.api.handlers.signals.get_signal_recorder", lambda: mem)
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.evaluate_swing_ledger_entry",
+        lambda **kwargs: (True, {}),
+    )
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.is_swing_ledger_entry_window_et",
+        lambda _dt: True,
+    )
+    ParameterStore.invalidate_cache()
+
+    base = default_signal_parameters()
+    tuned_composite = replace(
+        base.composite,
+        technical_weight=0.60,
+        news_weight=0.05,
+        macro_weight=0.10,
+        sector_weight=0.10,
+        geopolitical_weight=0.10,
+        internals_weight=0.05,
+    )
+    tuned_params = replace(base, composite=tuned_composite, version="9.9.9-d3-test")
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.ParameterStore.get_parameters_sync",
+        lambda: tuned_params,
+    )
+
+    event = {
+        "body": json.dumps(
+            {
+                "regime": "bull",
+                "symbol": "AAPL",
+                "price_at_signal": 200.0,
+                "pattern": "swing_composite",
+                "signals": [
+                    {"layer": "technical", "score": 0.7, "confidence": 0.9},
+                    {"layer": "news", "score": 0.5, "confidence": 0.8},
+                    {"layer": "macro", "score": 0.45, "confidence": 0.75},
+                ],
+            }
+        )
+    }
+    response = swing_composite_handler(event, {})
+    assert response["statusCode"] == 200
+    history = mem.get_signal_history(days=30, limit=10)
+    assert len(history) == 1
+    record = history[0]
+    assert record.symbol == "AAPL"
+    assert record.parameter_version == "9.9.9-d3-test"
+
+    get_settings.cache_clear()
+    ParameterStore.invalidate_cache()
+
+
+def test_swing_composite_handler_responds_differently_under_tuned_parameters(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """End-to-end wire-is-live check: identical payload, two different parameter
+    versions, two different composite scores. Proves the legacy handler is no
+    longer reading hardcoded ``DEFAULT_BASE_WEIGHTS``.
+    """
+    from dataclasses import replace
+
+    from stocvest.config.parameter_store import ParameterStore
+    from stocvest.config.signal_parameters import default_signal_parameters
+
+    monkeypatch.setenv("POLYGON_API_KEY", "k")
+    from stocvest.utils.config import get_settings
+
+    get_settings.cache_clear()
+
+    base = default_signal_parameters()
+
+    body = json.dumps(
+        {
+            "regime": "sideways",
+            "symbol": "ZZZ",
+            "signals": [
+                {"layer": "technical", "score": 1.0, "confidence": 1.0},
+                {"layer": "news", "score": -1.0, "confidence": 1.0},
+                {"layer": "macro", "score": 0.0, "confidence": 1.0},
+            ],
+        }
+    )
+    event = {"body": body}
+
+    ParameterStore.invalidate_cache()
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.ParameterStore.get_parameters_sync",
+        lambda: base,
+    )
+    baseline = json.loads(swing_composite_handler(event, {})["body"])
+
+    tuned_composite = replace(
+        base.composite,
+        technical_weight=0.70,
+        news_weight=0.05,
+        macro_weight=0.05,
+        sector_weight=0.10,
+        geopolitical_weight=0.05,
+        internals_weight=0.05,
+    )
+    tuned_params = replace(base, composite=tuned_composite, version="9.9.9-tuned")
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.ParameterStore.get_parameters_sync",
+        lambda: tuned_params,
+    )
+    tuned = json.loads(swing_composite_handler(event, {})["body"])
+
+    assert baseline["score"] != pytest.approx(tuned["score"])
+    assert tuned["score"] > baseline["score"]
+
+    get_settings.cache_clear()
+    ParameterStore.invalidate_cache()
+
+
 def test_resolve_signals_marks_correct_outcome() -> None:
     rec = InMemorySignalRecorder()
     past = datetime.now(timezone.utc) - timedelta(hours=2)
