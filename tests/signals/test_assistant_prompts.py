@@ -567,3 +567,132 @@ def test_prompt_bans_recommending_mode_choice_from_accuracy() -> None:
     the user to switch tracks. Mode choice is not an advice surface."""
     text = ASSISTANT_SYSTEM_PROMPT
     assert "Mode choice is not an advice surface" in text
+
+
+# ---------------------------------------------------------------------------
+# Mode-separation safety perimeter (Swing vs Day)
+# ---------------------------------------------------------------------------
+#
+# These tests lock in the second perpendicular safety axis added on top of the
+# existing LOGGED-OUT / LOGGED-IN two-context perimeter: Swing and Day are
+# independent decision engines that share market context but never share
+# decisions, readiness, validation, or activity permission.
+
+
+def test_prompt_declares_mode_separation_as_absolute_design_rule() -> None:
+    """The Swing-vs-Day separation must be flagged as non-negotiable at the prompt
+    level so the LLM treats it as a hard constraint, not a soft preference. The
+    phrase 'NON-NEGOTIABLE' is the load-bearing word the test pins to."""
+    text = ASSISTANT_SYSTEM_PROMPT
+    assert "MODE SEPARATION (SWING VS DAY)" in text
+    assert "NON-NEGOTIABLE" in text
+    assert "Swing and Day must NEVER be blended" in text
+
+
+def test_prompt_lists_what_may_be_shared_across_modes() -> None:
+    """Market regime, macro, sector rotation, internals, and risk posture are the
+    only things that may be referenced when explaining either mode. The list is
+    pinned here so a refactor can't silently leak readiness or validation into
+    the 'shared' bucket."""
+    text = ASSISTANT_SYSTEM_PROMPT
+    assert "WHAT MAY BE SHARED ACROSS MODES" in text
+    for item in (
+        "Market regime",
+        "Macro context",
+        "Sector rotation",
+        "Market internals",
+        "Risk posture",
+    ):
+        assert item in text, f"shared-context item missing from prompt: {item}"
+    # The crucial qualifier on sharing context.
+    assert "Sharing context does NOT imply shared permission to trade" in text
+
+
+def test_prompt_lists_what_must_never_be_shared_across_modes() -> None:
+    """Trade Readiness, alignment, validity windows, gating, validation stats,
+    accuracy metrics, portfolio linkage, and journal entries are ALWAYS mode-
+    specific. The list is the inverse of the may-be-shared list and locks in the
+    safety boundary."""
+    text = ASSISTANT_SYSTEM_PROMPT
+    assert "WHAT MUST NEVER BE SHARED ACROSS MODES" in text
+    for item in (
+        "Trade Readiness scores",
+        "Layer alignment percentages",
+        "Signal validity windows",
+        "Gating outcomes",
+        "Validation statistics",
+        "Accuracy metrics",
+        "Portfolio linkage",
+        "Journal entries",
+    ):
+        assert item in text, f"mode-specific item missing from prompt: {item}"
+
+
+def test_prompt_carries_dashboard_two_desk_rule() -> None:
+    """The dashboard is described as TWO parallel desks (Swing Desk and Day Desk)
+    that report independently. The LLM must never let one desk's activity cover
+    for the other's suppression."""
+    text = ASSISTANT_SYSTEM_PROMPT
+    assert "Swing Desk" in text
+    assert "Day Desk" in text
+    # The active/monitor/suppressed posture vocabulary must be present so the LLM
+    # uses the same words the UI uses.
+    assert "Active / Monitor / Suppressed" in text
+
+
+def test_prompt_carries_scanner_two_section_rule() -> None:
+    """When scanner_focus=both, the scanner renders TWO sections — not a single
+    merged table with a mode column. The prompt must pin the exact `scanner_focus=both`
+    field name the page-context block emits so the LLM keys off the correct signal."""
+    text = ASSISTANT_SYSTEM_PROMPT
+    assert "scanner_focus=both" in text
+    assert "TWO sections" in text
+    # The 'no merged mode-column table' rule is the explicit anti-pattern.
+    assert "not a single merged table with a mode column" in text
+
+
+def test_prompt_carries_signals_page_single_mode_rule() -> None:
+    """The Signals page operates in EXACTLY one mode at a time. The page-context
+    field `trading_mode=swing|day` is authoritative, and switching modes means a
+    separate readiness computation — never a reuse of the other mode's result."""
+    text = ASSISTANT_SYSTEM_PROMPT
+    assert "operates in exactly one mode at a time" in text
+    assert "trading_mode=swing|day" in text
+    assert "Never reuse readiness, alignment, or conclusions across modes" in text
+
+
+def test_prompt_carries_mode_specific_empty_state_rule() -> None:
+    """Suppression copy must reflect the suppressed engine's vocabulary; identical
+    boilerplate for both modes would erase the discipline the separation is
+    designed to enforce."""
+    text = ASSISTANT_SYSTEM_PROMPT
+    assert "Swing suppression language emphasizes" in text
+    assert "Day suppression language emphasizes" in text
+    assert "Never use identical copy for both modes" in text
+
+
+def test_prompt_bans_cross_mode_substitution() -> None:
+    """The single most dangerous user prompt the assistant will see is some form of
+    'Swing is quiet — should I day-trade instead?'. The MUST NOT rule pins the LLM
+    to refusing that framing rather than treating it as an opening to push the user
+    toward the other engine."""
+    text = ASSISTANT_SYSTEM_PROMPT
+    assert "Suggest using Day signals because Swing is quiet" in text
+    assert "the two engines gate independently" in text
+    # And the symmetric ban on a combined "system overall" verdict.
+    assert "Headline a combined accuracy number" in text
+
+
+def test_prompt_bans_validation_to_encourage_activity_during_suppression() -> None:
+    """The new D3 invariant: past accuracy is descriptive and must never be used to
+    override the current suppression and gating logic. If the user contrasts a 62%
+    accuracy figure against today's empty board, the right answer is to explain the
+    active gate, not to use the figure to argue for activity."""
+    text = ASSISTANT_SYSTEM_PROMPT
+    # The ban itself.
+    assert "Use the figures to encourage activity during a suppressed regime" in text
+    # The supporting rationale anchors so refactors can't silently soften the rule.
+    assert "DESCRIPTIVE of past behavior" in text
+    assert "NEVER a reason to override the current SUPPRESSION & GATING LOGIC" in text
+    # The exemplar prompt the rule arms the LLM against.
+    assert 'why aren\'t there any setups today' in text
