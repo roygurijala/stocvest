@@ -892,6 +892,48 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     )
 
 
+def public_assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    """POST /v1/public/assistant/chat — unauthenticated STOCVEST Assistant for marketing visitors.
+
+    No JWT required. The locked system prompt's PUBLIC MODE section activates via the
+    appended ``session_mode=public`` marker so anonymous visitors can ask what STOCVEST
+    is, how it positions itself versus signal-alert services, and for explanations of
+    finance terms — while the prompt continues to refuse all trade recommendations,
+    price predictions, and accuracy claims.
+
+    Any ``page_context`` posted from the client is intentionally ignored on this path —
+    anonymous visitors have no STOCVEST page state to anchor against.
+    """
+    _ = context
+    try:
+        body = parse_json_body(event)
+    except (TypeError, ValueError, KeyError):
+        return bad_request("Invalid JSON body.")
+    if not isinstance(body, dict):
+        return bad_request("Body must be a JSON object.")
+
+    raw_messages = body.get("messages")
+    svc = AssistantChatService()
+    try:
+        result = asyncio.run(
+            svc.reply_public(
+                messages=raw_messages if isinstance(raw_messages, list) else [],
+            )
+        )
+    except (TypeError, ValueError) as exc:
+        return bad_request(f"Invalid assistant request: {exc}")
+
+    return ok(
+        {
+            "text": result.text,
+            "source": result.source,
+            "mode": result.mode,
+            "upgrade_available": result.upgrade_available,
+            "disclaimer": API_SIGNAL_DISCLAIMER,
+        }
+    )
+
+
 def founding_members_count_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
     """GET /v1/signals/founding-members — public pricing counter for landing page."""
     _ = event
@@ -974,6 +1016,7 @@ def signals_http_dispatch(event: LambdaEvent, context: LambdaContext) -> dict[st
         "GET /v1/signals/founding-members": founding_members_count_handler,
         "POST /v1/signals/ai/explanations": ai_explanations_handler,
         "POST /v1/signals/assistant/chat": assistant_chat_handler,
+        "POST /v1/public/assistant/chat": public_assistant_chat_handler,
         "POST /v1/signals/composite/real": real_composite_handler,
         "POST /v1/signals/composite/swing": swing_real_composite_handler,
         "POST /v1/signals/swing/composite": swing_composite_handler,

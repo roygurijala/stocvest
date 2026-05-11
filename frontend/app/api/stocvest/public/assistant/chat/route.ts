@@ -1,0 +1,33 @@
+import { NextResponse } from "next/server";
+import { apiBaseUrl } from "@/lib/api/client";
+
+/**
+ * BFF proxy for the **unauthenticated** STOCVEST Assistant chat used on the marketing
+ * surface (`/`, `/signup`, `/login`, etc.). The backend route has no JWT authorizer and
+ * the locked system prompt's PUBLIC MODE section is activated server-side, so this
+ * handler simply forwards the visitor's conversation turns. The client never speaks to
+ * the API origin directly — keeping the API base URL server-only.
+ *
+ * `page_context` is intentionally stripped before forwarding: anonymous visitors have no
+ * STOCVEST page state, and the backend public handler ignores the field regardless.
+ */
+export async function POST(req: Request) {
+  const payload = (await req.json().catch(() => ({}))) as { messages?: unknown };
+  const safeBody = { messages: Array.isArray(payload?.messages) ? payload.messages : [] };
+  let res: Response;
+  try {
+    res = await fetch(`${apiBaseUrl()}/v1/public/assistant/chat`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(safeBody),
+      cache: "no-store"
+    });
+  } catch {
+    return NextResponse.json(
+      { error: "upstream_unreachable", text: "" },
+      { status: 502 }
+    );
+  }
+  const body = await res.json().catch(() => ({}));
+  return NextResponse.json(body, { status: res.status });
+}

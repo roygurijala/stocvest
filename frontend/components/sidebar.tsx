@@ -21,6 +21,7 @@ import {
   BadgeCheck
 } from "lucide-react";
 import { logoutAction } from "@/app/login/actions";
+import { clearAssistantSession } from "@/lib/assistant/session-reset";
 import { openCrispChat } from "@/components/crisp-chat";
 import { isDashboardNavItemActive } from "@/lib/dashboard-nav-active";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
@@ -149,6 +150,7 @@ export function Sidebar({ userLabel }: SidebarProps) {
           <form action={logoutAction}>
             <button
               type="submit"
+              onClick={() => clearAssistantSession()}
               className="sidebar-signout-btn"
               style={{
                 width: "100%",

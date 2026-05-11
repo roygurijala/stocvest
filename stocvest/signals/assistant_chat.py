@@ -65,6 +65,13 @@ _DETERMINISTIC_CONTEXTUAL_REPLY = (
     "describing what it represents and what it is not."
 )
 
+_DETERMINISTIC_PUBLIC_REPLY = (
+    "I'm the STOCVEST Assistant. STOCVEST is a market analysis and decision-support "
+    "system: it explains why a signal is in Monitor, Blocked, or Actionable rather than "
+    "telling you what to trade. The explanation service is briefly unavailable; please "
+    "try again in a moment."
+)
+
 
 class AssistantChatService:
     """Paid-only conversational explanations with a calm deterministic fallback for free users."""
@@ -123,6 +130,61 @@ class AssistantChatService:
             source="deterministic",
             mode=mode,
             upgrade_available=False,
+        )
+
+    async def reply_public(
+        self,
+        *,
+        messages: list[dict[str, str]],
+    ) -> AssistantChatResult:
+        """Anonymous (unauthenticated) chat for the marketing surface.
+
+        No page context is honored — anonymous visitors have no STOCVEST page state. The
+        locked system prompt activates its PUBLIC MODE section via the appended
+        ``session_mode=public`` marker so the LLM is free to explain general finance terms,
+        STOCVEST's positioning, and product mechanics while continuing to refuse all
+        trade recommendations, predictions, and accuracy / profitability claims.
+
+        Claude is called directly (no paid-feature gate); the same rate limiter that
+        protects authenticated paid calls also protects this path. If Claude is unreachable
+        the visitor still gets a calm deterministic introduction so the surface never
+        appears broken.
+        """
+        clean = sanitize_messages(messages)
+        if not clean or clean[-1].get("role") != "user":
+            return AssistantChatResult(
+                text=(
+                    "I'm the STOCVEST Assistant. Ask me what STOCVEST is, how it differs "
+                    "from signal-alert services, or for an explanation of a finance term "
+                    "like R/R, EMA, VWAP, or ORB and I'll explain."
+                ),
+                source="deterministic",
+                mode="general",
+                upgrade_available=True,
+            )
+
+        system_text = (
+            ASSISTANT_SYSTEM_PROMPT
+            + "\n=== PAGE CONTEXT ===\nmode=general\nsession_mode=public\n"
+        )
+        ai_text = await self._claude_chat_or_none(
+            system=system_text,
+            messages=clean,
+            max_tokens=320,
+        )
+        if ai_text:
+            return AssistantChatResult(
+                text=ai_text.strip(),
+                source="ai",
+                mode="general",
+                upgrade_available=True,
+            )
+
+        return AssistantChatResult(
+            text=_DETERMINISTIC_PUBLIC_REPLY,
+            source="deterministic",
+            mode="general",
+            upgrade_available=True,
         )
 
     async def _claude_chat_or_none(

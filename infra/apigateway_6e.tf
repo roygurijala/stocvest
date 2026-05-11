@@ -17,6 +17,7 @@ locals {
 
     "POST /v1/signals/ai/explanations"       = { module_key = "signals", authorizer = true }
     "POST /v1/signals/assistant/chat"        = { module_key = "signals", authorizer = true }
+    "POST /v1/public/assistant/chat"         = { module_key = "signals", authorizer = false }
     "POST /v1/signals/swing/composite"       = { module_key = "signals", authorizer = true }
     "POST /v1/signals/composite/real"        = { module_key = "signals", authorizer = true }
     "POST /v1/signals/composite/swing"       = { module_key = "signals", authorizer = true }

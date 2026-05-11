@@ -20,6 +20,24 @@ def test_serialize_page_context_empty_emits_general_marker() -> None:
     out = serialize_page_context(None)
     assert "mode=general" in out
     assert "mode=contextual" not in out
+    # The session_mode marker is always present so the LLM can pick the right
+    # rule-set; the empty-ctx default is `authenticated` (sign-in is the implied path
+    # to reaching the contextual handler).
+    assert "session_mode=authenticated" in out
+
+
+def test_serialize_page_context_emits_public_session_marker() -> None:
+    """When the caller stamps session_mode=public, the marker propagates verbatim so
+    the locked system prompt's PUBLIC MODE rules activate for anonymous visitors."""
+    out = serialize_page_context({"session_mode": "public"})
+    assert "session_mode=public" in out
+
+
+def test_serialize_page_context_rejects_unknown_session_mode() -> None:
+    """Arbitrary session_mode values must collapse to `authenticated` (the safer default)."""
+    out = serialize_page_context({"session_mode": "godmode"})
+    assert "session_mode=authenticated" in out
+    assert "godmode" not in out
 
 
 def test_serialize_page_context_drops_unknown_keys() -> None:

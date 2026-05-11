@@ -83,27 +83,67 @@ interface ConversationRowProps {
 }
 
 function ConversationRow({ message, colors, contextTone }: ConversationRowProps) {
+  const isUser = message.role === "user";
   const tone = nodeColor(message.role, colors, contextTone);
   /**
-   * Speaker labels are color-coded so user input is visually distinct from STOCVEST output
-   * at a glance: "YOU" picks up the accent, "STOCVEST" picks up the page tone (caution /
-   * bullish / bearish / neutral muted). The message body also carries a 2px ribbon in the
-   * same tone on its left edge, mirroring the rail node — clear role attribution without
-   * reverting to chat bubbles.
+   * Visual distinction strategy (no chat bubbles, but clearly two different surfaces):
+   *
+   * - The speaker label is louder for the user turn — solid accent block with white text —
+   *   and quiet for the STOCVEST turn (small uppercase tone-tinted label, no chip).
+   * - The user message body sits in a clearly tinted accent panel with a strong 3px
+   *   ribbon. The STOCVEST message body sits on a neutral surface-muted panel with a
+   *   contrasting ribbon in the page tone.
+   * - The two surfaces use opposite alignment: user content right-aligns text and sits
+   *   in a panel pulled slightly to the right; STOCVEST stays left-aligned and full-width.
+   *   The asymmetry plus the contrasting backgrounds make the two roles unmistakable at
+   *   a glance, even without color (works for monochrome / colorblind users too).
    */
-  const labelStyle: CSSProperties = {
-    fontSize: 10,
-    fontWeight: 700,
-    letterSpacing: "0.14em",
-    color: tone,
-    textTransform: "uppercase"
-  };
-  const bodyWrapperStyle: CSSProperties = {
-    borderLeft: `2px solid ${tone}`,
-    paddingLeft: spacing[2],
-    background: message.role === "user" ? `${tone}0d` : "transparent",
-    borderRadius: 2
-  };
+  const userBg = `${tone}26`; // ~15% opacity accent
+  const userBorder = `${tone}66`;
+  const assistantBg = colors.surfaceMuted;
+  const assistantBorder = `${tone}55`;
+
+  const labelChipStyle: CSSProperties = isUser
+    ? {
+        display: "inline-block",
+        fontSize: 10,
+        fontWeight: 800,
+        letterSpacing: "0.16em",
+        textTransform: "uppercase",
+        padding: "2px 8px",
+        borderRadius: 999,
+        background: tone,
+        color: "#0b1322",
+        alignSelf: "flex-end"
+      }
+    : {
+        display: "inline-block",
+        fontSize: 10,
+        fontWeight: 700,
+        letterSpacing: "0.14em",
+        textTransform: "uppercase",
+        color: tone
+      };
+
+  const bodyWrapperStyle: CSSProperties = isUser
+    ? {
+        background: userBg,
+        border: `1px solid ${userBorder}`,
+        borderLeft: `3px solid ${tone}`,
+        padding: `${spacing[2]} ${spacing[3]}`,
+        borderRadius: 10,
+        marginLeft: spacing[3],
+        boxShadow: `0 0 0 1px ${tone}1a inset`,
+        textAlign: "right"
+      }
+    : {
+        background: assistantBg,
+        border: `1px solid ${colors.border}`,
+        borderLeft: `3px solid ${tone}`,
+        padding: `${spacing[2]} ${spacing[3]}`,
+        borderRadius: 10,
+        boxShadow: `0 1px 0 ${assistantBorder} inset`
+      };
 
   return (
     <li
@@ -111,7 +151,8 @@ function ConversationRow({ message, colors, contextTone }: ConversationRowProps)
         position: "relative",
         paddingLeft: 32,
         display: "grid",
-        gap: spacing[1]
+        gap: spacing[1],
+        justifyItems: isUser ? "end" : "stretch"
       }}
     >
       <span
@@ -127,15 +168,23 @@ function ConversationRow({ message, colors, contextTone }: ConversationRowProps)
           boxShadow: `0 0 0 3px ${colors.surface}, 0 0 0 4px ${tone}25`
         }}
       />
-      <span style={labelStyle}>{speakerLabel(message.role)}</span>
+      <span style={labelChipStyle}>{speakerLabel(message.role)}</span>
       <div style={bodyWrapperStyle}>
-        <MessageBody message={message} colors={colors} />
+        <MessageBody message={message} colors={colors} align={isUser ? "right" : "left"} />
       </div>
     </li>
   );
 }
 
-function MessageBody({ message, colors }: { message: AssistantMessage; colors: ThemeColors }) {
+function MessageBody({
+  message,
+  colors,
+  align = "left"
+}: {
+  message: AssistantMessage;
+  colors: ThemeColors;
+  align?: "left" | "right";
+}) {
   if (message.role === "assistant" && message.pending) {
     return (
       <span
@@ -164,7 +213,8 @@ function MessageBody({ message, colors }: { message: AssistantMessage; colors: T
         color: colors.text,
         fontSize: typography.scale.sm,
         lineHeight: 1.6,
-        whiteSpace: "pre-wrap"
+        whiteSpace: "pre-wrap",
+        textAlign: align
       }}
     >
       {message.content}

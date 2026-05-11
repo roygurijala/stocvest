@@ -26,14 +26,20 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   const session = getServerSession();
   const crispUserEmail = session?.email ?? null;
+  const isAuthenticated = session !== null;
 
   /**
-   * The STOCVEST Assistant is a paid product feature with a JWT-authenticated backend route.
-   * We mount it (and its context provider) at the root so logged-in users get the assistant on
-   * every route — dashboard, settings, marketing pages they navigate back to, etc. — but skip
-   * the mount entirely for anonymous visitors so the unauthenticated home/landing/login/signup
-   * surface is not exposed to client-side calls that would just 401. CrispChat (third-party
-   * support) stays mounted globally so anonymous prospects still have a chat path.
+   * The STOCVEST Assistant mounts at the root for **every** visitor — including anonymous
+   * marketing-surface traffic on `/`, `/login`, `/signup`, etc. — so prospects can ask
+   * what STOCVEST is, how it differs from signal-alert services, and for general finance
+   * and trading term explanations. The active session is passed as a flag so the
+   * assistant picks the right BFF endpoint (authenticated vs. public) and clears any
+   * persisted conversation when the auth state flips. The locked system prompt enforces
+   * the no-trade-advice / no-prediction / no-proprietary-logic rules on both paths.
+   *
+   * CrispChat (third-party support) stays mounted globally so users still have a manned
+   * support path; the two chat surfaces are intentionally separate (CrispChat = humans,
+   * STOCVEST Assistant = product behavior explanations).
    */
   const appBody = (
     <div className="app-shell flex min-h-screen flex-col">
@@ -46,14 +52,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body>
         <ThemeProvider>
           <CrispChat userEmail={crispUserEmail} />
-          {session ? (
-            <AssistantContextProvider>
-              {appBody}
-              <StocvestAssistant />
-            </AssistantContextProvider>
-          ) : (
-            appBody
-          )}
+          <AssistantContextProvider>
+            {appBody}
+            <StocvestAssistant isAuthenticated={isAuthenticated} />
+          </AssistantContextProvider>
           <GlobalDisclaimer />
         </ThemeProvider>
       </body>

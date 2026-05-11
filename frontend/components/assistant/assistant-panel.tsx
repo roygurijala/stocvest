@@ -33,6 +33,13 @@ interface AssistantPanelProps {
   loading: boolean;
   /** Optional gentle hint surfaced under the composer (e.g. upgrade or transient error). */
   notice?: string | null;
+  /**
+   * Whether the active visitor has a STOCVEST session. Controls the empty-state copy,
+   * quick prompts (anonymous visitors get marketing-flavored entry points like "What is
+   * STOCVEST?" / "How is STOCVEST different from signal-alert services?" / "What is R/R?")
+   * and the disclaimer wording.
+   */
+  isAuthenticated: boolean;
 }
 
 /** Six signal layers shown in the constellation context strip. Stable order matches the engine. */
@@ -61,8 +68,18 @@ function decisionContextTone(
   return "caution";
 }
 
-function buildQuickPrompts(ctx: AssistantPageContext | null): string[] {
+function buildQuickPrompts(
+  ctx: AssistantPageContext | null,
+  isAuthenticated: boolean
+): string[] {
   if (!ctx) {
+    if (!isAuthenticated) {
+      return [
+        "What is STOCVEST?",
+        "How is STOCVEST different from signal-alert services?",
+        "Explain risk/reward in plain terms"
+      ];
+    }
     return [
       "What is STOCVEST?",
       "How do I read a signal decision?",
@@ -106,7 +123,7 @@ function buildQuickPrompts(ctx: AssistantPageContext | null): string[] {
 }
 
 export const AssistantPanel = forwardRef<HTMLDivElement, AssistantPanelProps>(function AssistantPanel(
-  { colors, context, messages, composerValue, setComposerValue, onSubmit, onClose, loading, notice },
+  { colors, context, messages, composerValue, setComposerValue, onSubmit, onClose, loading, notice, isAuthenticated },
   ref
 ) {
   const tone = decisionContextTone(context);
@@ -177,7 +194,10 @@ export const AssistantPanel = forwardRef<HTMLDivElement, AssistantPanelProps>(fu
     : {};
 
   const showQuickPrompts = messages.length === 0 && !loading;
-  const quickPrompts = useMemo(() => buildQuickPrompts(context), [context]);
+  const quickPrompts = useMemo(
+    () => buildQuickPrompts(context, isAuthenticated),
+    [context, isAuthenticated]
+  );
   const mode: "general" | "contextual" = context ? "contextual" : "general";
 
   return (
@@ -237,7 +257,7 @@ export const AssistantPanel = forwardRef<HTMLDivElement, AssistantPanelProps>(fu
         }}
       >
         {messages.length === 0 ? (
-          <EmptyState colors={colors} context={context} />
+          <EmptyState colors={colors} context={context} isAuthenticated={isAuthenticated} />
         ) : (
           <AssistantConversationRail messages={messages} colors={colors} contextTone={tone} />
         )}
@@ -510,11 +530,18 @@ function ConstellationStrip({
 
 function EmptyState({
   colors,
-  context
+  context,
+  isAuthenticated
 }: {
   colors: ThemeColors;
   context: AssistantPageContext | null;
+  isAuthenticated: boolean;
 }) {
+  const heading = context
+    ? "I can explain what's driving this Decision and how to read the layers."
+    : isAuthenticated
+      ? "Ask about STOCVEST's Decisions, columns, or anything on screen."
+      : "Ask what STOCVEST is, how it differs from signal-alert services, or for any general finance or trading term.";
   return (
     <div style={{ display: "grid", gap: spacing[2] }}>
       <p
@@ -526,9 +553,7 @@ function EmptyState({
           fontWeight: 600
         }}
       >
-        {context
-          ? "I can explain what's driving this Decision and how to read the layers."
-          : "Ask about STOCVEST's Decisions, columns, or anything on screen."}
+        {heading}
       </p>
       <p
         style={{
