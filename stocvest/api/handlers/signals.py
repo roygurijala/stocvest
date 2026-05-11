@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import math
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 from typing import Any, Callable
 from uuid import uuid4
 
-from stocvest.api.legal_copy import API_SIGNAL_DISCLAIMER
+from stocvest.api.legal_copy import API_SIGNAL_DISCLAIMER, HISTORICAL_VALIDATION_DISCLAIMER
 from stocvest.api.http_route import http_route_descriptor
 from stocvest.api.response import bad_request, internal_error, not_found, ok, unauthorized
+from stocvest.api.services.historical_validation_service import HistoricalValidationService
 from stocvest.api.services.signal_analysis import analysis_authorized, build_signal_analysis_payload
 from stocvest.api.services.real_composite_engine import real_composite_body_sync
 from stocvest.api.services.swing_composite_engine import swing_composite_body_sync
@@ -53,6 +55,11 @@ from stocvest.data.dashboard_cache import (
 from stocvest.data.models import Bar, SignalRecord
 from stocvest.signals.ai_explanations import AIExplanationService, news_articles_from_payload
 from stocvest.signals.assistant_chat import AssistantChatService
+from stocvest.signals.historical_validation import (
+    BucketStats,
+    HistoricalValidationSummary,
+    Horizon,
+)
 from stocvest.signals import (
     AISynthesis,
     CompositeScoreEngine,
@@ -1000,6 +1007,174 @@ def user_signal_history_handler(event: LambdaEvent, context: LambdaContext) -> d
     )
 
 
+# ── D2 Historical Signal Validation — Phase 3a (read-only HTTP surface) ────────────────
+#
+# The handler below is the thin HTTP wrapper around ``HistoricalValidationService``
+# (Phase 2). It is deliberately narrow:
+#
+# - Auth-gated (``rc.user_id`` required) — every query is scoped to the calling user, so
+#   one tenant cannot read another tenant's tracked outcomes. The public ``/performance``
+#   mirror (Phase 3b) gets its own unauthenticated handler instead of widening this one.
+# - Read-only — no DB writes, no Polygon calls, no Claude calls. Worst case it scans a
+#   capped slice of ``SignalHistory`` and runs Phase 1's pure aggregator.
+# - JSON-safe — Phase 1's ``BucketStats.accuracy`` is ``math.nan`` when there are no
+#   resolved-non-neutral rows. We convert NaN to ``None`` here so the response is valid
+#   JSON (Python's default ``json.dumps`` emits the literal ``NaN`` which crashes browsers)
+#   and the dashboard tab can render "—" rather than a misleading "0%".
+
+
+def _parse_horizon(qs: dict[str, Any]) -> Horizon | None:
+    raw = str(qs.get("horizon") or "").strip().lower()
+    if raw in ("1h", "1d"):
+        return raw  # type: ignore[return-value]
+    return None
+
+
+def _parse_iso_datetime(raw: Any) -> datetime | None:
+    """Parse an ISO-8601 datetime from a query-string value.
+
+    Accepts the trailing-``Z`` form (`2026-04-01T00:00:00Z`) that JavaScript's
+    `Date.toISOString()` emits. Naive inputs are treated as UTC so the dashboard
+    tab can send a plain `YYYY-MM-DD` date if it wants the calendar-day window.
+    """
+
+    if raw is None or not str(raw).strip():
+        return None
+    s = str(raw).strip().replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(s)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def _bucket_stats_to_dict(stats: BucketStats) -> dict[str, Any]:
+    """JSON-safe serialization of a ``BucketStats``.
+
+    ``accuracy`` collapses NaN to ``None`` because Python's default ``json.dumps``
+    emits the literal ``NaN`` which is not valid JSON.
+    """
+
+    return {
+        "total_signals": stats.total_signals,
+        "correct": stats.correct,
+        "incorrect": stats.incorrect,
+        "neutral": stats.neutral,
+        "resolved": stats.resolved,
+        "accuracy": None if math.isnan(stats.accuracy) else stats.accuracy,
+    }
+
+
+def _summary_to_dict(summary: HistoricalValidationSummary) -> dict[str, Any]:
+    """JSON-safe serialization of a ``HistoricalValidationSummary``."""
+
+    return {
+        "horizon": summary.horizon,
+        "overall": _bucket_stats_to_dict(summary.overall),
+        "by_decision": {k: _bucket_stats_to_dict(v) for k, v in summary.by_decision.items()},
+        "by_regime": {k: _bucket_stats_to_dict(v) for k, v in summary.by_regime.items()},
+        "by_mode": {k: _bucket_stats_to_dict(v) for k, v in summary.by_mode.items()},
+        "by_pattern": {k: _bucket_stats_to_dict(v) for k, v in summary.by_pattern.items()},
+        "by_readiness": {k: _bucket_stats_to_dict(v) for k, v in summary.by_readiness.items()},
+        "by_direction": {k: _bucket_stats_to_dict(v) for k, v in summary.by_direction.items()},
+        "rows_examined": summary.rows_examined,
+        "parameter_versions": list(summary.parameter_versions),
+    }
+
+
+def historical_validation_summary_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    """GET /v1/signals/historical-validation/summary — directional accuracy over a window.
+
+    Query string:
+      ``horizon``   (required) — ``"1h"`` or ``"1d"``.
+      ``from``      (required) — ISO-8601 datetime. Naive = UTC. Lower bound inclusive.
+      ``to``        (required) — ISO-8601 datetime. Naive = UTC. Upper bound exclusive.
+      ``mode``      (optional) — ``"swing"`` or ``"day"``. Other values are ignored.
+      ``symbol``    (optional) — single ticker filter (e.g. ``AAPL``).
+      ``by_version`` (optional) — ``"true"`` to receive a per-``parameter_version`` map.
+
+    Responses:
+      - ``200`` — body carries ``summary`` (default) or ``by_parameter_version`` (when
+        ``by_version=true``), plus echoed window parameters and the historical-validation
+        disclaimer.
+      - ``400`` — invalid / missing horizon, invalid / missing ``from`` / ``to``, or
+        inverted window. The error envelope matches ``stocvest.api.response.bad_request``.
+      - ``401`` — no authenticated user.
+    """
+
+    _ = context
+    rc = build_request_context(event)
+    if not rc.user_id:
+        return unauthorized("Authenticated user is required.")
+
+    qs = event.get("queryStringParameters") or {}
+    if not isinstance(qs, dict):
+        qs = {}
+
+    horizon = _parse_horizon(qs)
+    if horizon is None:
+        return bad_request("horizon must be '1h' or '1d'.")
+
+    from_at = _parse_iso_datetime(qs.get("from"))
+    if from_at is None:
+        return bad_request("from must be an ISO-8601 datetime (e.g. 2026-04-01T00:00:00Z).")
+
+    to_at = _parse_iso_datetime(qs.get("to"))
+    if to_at is None:
+        return bad_request("to must be an ISO-8601 datetime (e.g. 2026-05-01T00:00:00Z).")
+
+    if to_at <= from_at:
+        return bad_request("to must be strictly after from.")
+
+    mode_raw = str(qs.get("mode") or "").strip().lower()
+    mode_filter: str | None = mode_raw if mode_raw in ("day", "swing") else None
+
+    symbol_raw = str(qs.get("symbol") or "").strip().upper()
+    symbol_filter: str | None = symbol_raw or None
+
+    by_version_raw = str(qs.get("by_version") or "").strip().lower()
+    by_version = by_version_raw in ("1", "true", "yes")
+
+    try:
+        service = HistoricalValidationService(get_signal_recorder())
+        body: dict[str, Any] = {
+            "horizon": horizon,
+            "from": from_at.isoformat(),
+            "to": to_at.isoformat(),
+            "mode": mode_filter,
+            "symbol": symbol_filter,
+            "disclaimer": HISTORICAL_VALIDATION_DISCLAIMER,
+        }
+        if by_version:
+            result_map = service.summarize_by_parameter_version(
+                user_id=rc.user_id,
+                from_at=from_at,
+                to_at=to_at,
+                horizon=horizon,
+                mode=mode_filter,
+                symbol=symbol_filter,
+            )
+            body["by_parameter_version"] = {
+                version: _summary_to_dict(summary) for version, summary in result_map.items()
+            }
+        else:
+            summary = service.summarize(
+                user_id=rc.user_id,
+                from_at=from_at,
+                to_at=to_at,
+                horizon=horizon,
+                mode=mode_filter,
+                symbol=symbol_filter,
+            )
+            body["summary"] = _summary_to_dict(summary)
+        return ok(body)
+    except Exception as exc:  # noqa: BLE001 — defensive; service should never raise
+        _LOG.exception("historical_validation_summary failed: %s", exc)
+        return internal_error("Historical validation summary failed.")
+
+
 def signals_http_dispatch(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
     """Route signals module requests including parameterized outcome-tracking paths."""
     route = http_route_descriptor(event)
@@ -1011,6 +1186,11 @@ def signals_http_dispatch(event: LambdaEvent, context: LambdaContext) -> dict[st
         return user_signal_history_handler(event, context)
     if route == "GET /v1/signals/analysis" or route.startswith("GET /v1/signals/analysis?"):
         return signals_analysis_handler(event, context)
+    if (
+        route == "GET /v1/signals/historical-validation/summary"
+        or route.startswith("GET /v1/signals/historical-validation/summary?")
+    ):
+        return historical_validation_summary_handler(event, context)
 
     routes: dict[str, Callable[[LambdaEvent, LambdaContext], dict[str, Any]]] = {
         "GET /v1/signals/founding-members": founding_members_count_handler,

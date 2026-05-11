@@ -32,6 +32,11 @@ locals {
     "GET /v1/signals/me/history"             = { module_key = "signals", authorizer = true }
     "GET /v1/signals/me/records/{signal_id}" = { module_key = "signals", authorizer = true }
     "GET /v1/signals/analysis"               = { module_key = "signals", authorizer = true }
+    # D2 Historical Signal Validation — Phase 3a backend surface. Auth-required; every
+    # query is scoped to the calling user via `rc.user_id` so one tenant cannot read
+    # another tenant's tracked outcomes. The eventual public `/performance` mirror gets
+    # its own unauthenticated route, not a widened version of this one.
+    "GET /v1/signals/historical-validation/summary" = { module_key = "signals", authorizer = true }
 
     "GET /v1/brokers/health"    = { module_key = "brokers", authorizer = true }
     "GET /v1/brokers/accounts"  = { module_key = "brokers", authorizer = true }
