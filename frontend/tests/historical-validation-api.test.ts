@@ -326,3 +326,132 @@ describe("buildTrailingWindow", () => {
     expect(days).toBeCloseTo(30, 5);
   });
 });
+
+// ── fetchPublicHistoricalValidationSummary (Phase 3c-1 public mirror) ──────────────
+
+const PUBLIC_SAMPLE_RESPONSE = {
+  horizon: "1d",
+  from: "2026-02-09T00:00:00.000Z",
+  to: "2026-05-10T00:00:00.000Z",
+  mode: null,
+  disclaimer: "Historical signal accuracy does not guarantee future results.",
+  summary: {
+    horizon: "1d",
+    overall: { total_signals: 5, correct: 3, incorrect: 2, neutral: 0, resolved: 5, accuracy: 0.6 },
+    by_mode: {
+      swing: { total_signals: 3, correct: 2, incorrect: 1, neutral: 0, resolved: 3, accuracy: 2 / 3 },
+      day: { total_signals: 2, correct: 1, incorrect: 1, neutral: 0, resolved: 2, accuracy: 0.5 }
+    },
+    rows_examined: 5
+  }
+};
+
+describe("fetchPublicHistoricalValidationSummary", () => {
+  test("hits the public API origin directly (no BFF) and parses the response", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(PUBLIC_SAMPLE_RESPONSE));
+
+    const { fetchPublicHistoricalValidationSummary } = await import(
+      "@/lib/api/historical-validation"
+    );
+    const result = await fetchPublicHistoricalValidationSummary();
+
+    const { url, init } = lastFetchCall();
+    expect(url).toContain("/v1/signals/historical-validation/public-summary");
+    // Must NOT route through the BFF — homepage visitors have no JWT cookie to forward.
+    expect(url).not.toContain("/api/stocvest/");
+    // No credentials are forwarded either; the public endpoint is fully anonymous.
+    expect(init?.credentials).toBeUndefined();
+
+    expect(result).not.toBeNull();
+    expect(result!.summary.overall.accuracy).toBeCloseTo(0.6, 10);
+    expect(result!.summary.by_mode.swing.accuracy).toBeCloseTo(2 / 3, 10);
+    expect(result!.summary.rows_examined).toBe(5);
+    expect(result!.disclaimer).toBe(
+      "Historical signal accuracy does not guarantee future results."
+    );
+  });
+
+  test("forwards optional horizon / mode / daysBack in the query string", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ...PUBLIC_SAMPLE_RESPONSE,
+        horizon: "1h",
+        mode: "swing",
+        summary: { ...PUBLIC_SAMPLE_RESPONSE.summary, horizon: "1h" }
+      })
+    );
+
+    const { fetchPublicHistoricalValidationSummary } = await import(
+      "@/lib/api/historical-validation"
+    );
+    await fetchPublicHistoricalValidationSummary({
+      horizon: "1h",
+      mode: "swing",
+      daysBack: 30
+    });
+
+    const qs = new URLSearchParams(lastFetchCall().url.split("?")[1] ?? "");
+    expect(qs.get("horizon")).toBe("1h");
+    expect(qs.get("mode")).toBe("swing");
+    expect(qs.get("from")).toBeTruthy();
+    expect(qs.get("to")).toBeTruthy();
+  });
+
+  test("does NOT route 401s through surfaceAuthErrorIfAny (it is a public endpoint)", async () => {
+    // Even on the unusual path where the public endpoint somehow returns 401 (e.g. an
+    // upstream misconfiguration), there is no session to refresh — the homepage caller
+    // must collapse to null rather than triggering the sliding-session refresh flow.
+    fetchMock.mockResolvedValueOnce(jsonResponse({ error: "unauthorized" }, { status: 401 }));
+
+    const { fetchPublicHistoricalValidationSummary } = await import(
+      "@/lib/api/historical-validation"
+    );
+    const result = await fetchPublicHistoricalValidationSummary();
+
+    expect(result).toBeNull();
+    expect(mocks.surfaceAuthErrorIfAny).not.toHaveBeenCalled();
+  });
+
+  test("returns null on a non-200 response so the homepage renders a calm empty state", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ error: "internal" }, { status: 500 }));
+
+    const { fetchPublicHistoricalValidationSummary } = await import(
+      "@/lib/api/historical-validation"
+    );
+    const result = await fetchPublicHistoricalValidationSummary();
+
+    expect(result).toBeNull();
+  });
+
+  test("returns null when the response body is missing a parseable summary", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        horizon: "1d",
+        from: "2026-02-09T00:00:00.000Z",
+        to: "2026-05-10T00:00:00.000Z",
+        disclaimer: "x"
+        // no `summary` field
+      })
+    );
+
+    const { fetchPublicHistoricalValidationSummary } = await import(
+      "@/lib/api/historical-validation"
+    );
+    const result = await fetchPublicHistoricalValidationSummary();
+
+    expect(result).toBeNull();
+  });
+
+  test("returns null when the response is not JSON", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response("not json", { status: 200, headers: { "content-type": "text/plain" } })
+    );
+
+    const { fetchPublicHistoricalValidationSummary } = await import(
+      "@/lib/api/historical-validation"
+    );
+    const result = await fetchPublicHistoricalValidationSummary();
+
+    expect(result).toBeNull();
+  });
+});

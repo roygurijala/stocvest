@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import math
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from typing import Any, Callable
 from uuid import uuid4
@@ -1175,6 +1175,142 @@ def historical_validation_summary_handler(event: LambdaEvent, context: LambdaCon
         return internal_error("Historical validation summary failed.")
 
 
+def _public_summary_to_dict(summary: HistoricalValidationSummary) -> dict[str, Any]:
+    """JSON-safe public projection of a ``HistoricalValidationSummary``.
+
+    Deliberately strips every stratification that the LOGGED-OUT golden rule in the
+    assistant prompt forbids surfacing to homepage visitors:
+
+    - ``by_decision`` — surfaces which decision states are passing / failing, which is
+      logged-in evidence detail.
+    - ``by_regime`` — per-macro-regime accuracy is per-context inference detail.
+    - ``by_pattern`` — per-setup-family accuracy is "evaluate this stock"-adjacent
+      (a visitor who sees a pattern's accuracy would naturally ask "what's the current
+      AAPL pattern?", and we never want to encourage that question from a logged-out
+      surface).
+    - ``by_readiness`` — Trade Readiness scores are LOGGED-IN ONLY by prompt rule.
+    - ``by_direction`` — bullish / bearish breakdown is performance per direction;
+      borderline, but safest to omit so the public mirror stays calm and framework-only.
+    - ``parameter_versions`` — internal engineering detail; no value for public users.
+
+    What remains:
+
+    - ``horizon`` — so the UI can render the right horizon label.
+    - ``overall`` — single overall directional accuracy, framework-level.
+    - ``by_mode`` — high-level "swing vs day" cadence framing, which is already public.
+    - ``rows_examined`` — how much data backs this number; transparency without specifics.
+    """
+
+    return {
+        "horizon": summary.horizon,
+        "overall": _bucket_stats_to_dict(summary.overall),
+        "by_mode": {k: _bucket_stats_to_dict(v) for k, v in summary.by_mode.items()},
+        "rows_examined": summary.rows_examined,
+    }
+
+
+# Default window the public mirror serves when ``from`` / ``to`` are omitted: the
+# trailing 90 calendar days ending now. 90d is enough to smooth single-week variance,
+# short enough that the mirror reflects "recent track record" rather than legacy noise,
+# and well below the service-layer ``MAX_LOOKBACK_DAYS = 366`` cap.
+PUBLIC_HISTORICAL_VALIDATION_DEFAULT_DAYS = 90
+PUBLIC_HISTORICAL_VALIDATION_DEFAULT_HORIZON: Horizon = "1d"
+
+
+def public_historical_validation_summary_handler(
+    event: LambdaEvent, context: LambdaContext
+) -> dict[str, Any]:
+    """GET /v1/signals/historical-validation/public-summary — public mirror of D2.
+
+    Same Phase 1 aggregator as ``historical_validation_summary_handler``, but:
+
+    - **Unauthenticated.** Backed by the platform signal scope (`user_id=None` →
+      `scope_key == "PUBLIC"`), so no user data ever leaks through.
+    - **Trimmed projection.** Returns only ``overall`` + ``by_mode`` + ``horizon`` +
+      ``rows_examined`` + the standing disclaimer; the per-decision / per-regime /
+      per-pattern / per-readiness / per-direction stratifications are dropped at the
+      response layer to honor the assistant prompt's LOGGED-OUT golden rule
+      ("Explain the FRAMEWORK, not the DECISION").
+    - **Defaults.** ``horizon`` defaults to ``"1d"`` (matches the marketing-facing
+      swing track) and the window defaults to the trailing
+      ``PUBLIC_HISTORICAL_VALIDATION_DEFAULT_DAYS`` days when ``from`` / ``to`` are
+      omitted, so the homepage can hit the endpoint with no query string at all.
+    - **Symbol filter forbidden.** Accepting ``symbol`` would let a logged-out visitor
+      query per-ticker accuracy, which the prompt rules explicitly disallow. We return
+      a calm 400 in that case rather than silently ignoring the param.
+    - **``by_version`` ignored.** Per-engine-version detail is internal; the public
+      surface never receives the per-version map even if the query param is set.
+
+    Query string (all optional):
+      ``horizon`` — ``"1h"`` or ``"1d"`` (default ``"1d"``).
+      ``from`` / ``to`` — ISO-8601 datetimes; if omitted, the trailing
+        ``PUBLIC_HISTORICAL_VALIDATION_DEFAULT_DAYS`` window ending now is used.
+      ``mode`` — ``"swing"`` or ``"day"``. Other values are ignored.
+    """
+
+    _ = context
+
+    qs = event.get("queryStringParameters") or {}
+    if not isinstance(qs, dict):
+        qs = {}
+
+    # Symbol-level queries are forbidden on the public surface — same compliance gate
+    # that the assistant prompt enforces. We respond with a clear 400 so any caller
+    # accidentally passing it sees the rejection rather than thinking it was honored.
+    if str(qs.get("symbol") or "").strip():
+        return bad_request(
+            "Per-symbol queries are not available on the public surface. "
+            "Sign in to see per-symbol evaluation."
+        )
+
+    horizon = _parse_horizon(qs)
+    if horizon is None and "horizon" in qs and str(qs.get("horizon") or "").strip():
+        # The caller passed *something* for horizon but it wasn't 1h/1d — surface a
+        # calm 400 rather than silently defaulting and confusing them.
+        return bad_request("horizon must be '1h' or '1d'.")
+    if horizon is None:
+        horizon = PUBLIC_HISTORICAL_VALIDATION_DEFAULT_HORIZON
+
+    now = datetime.now(timezone.utc)
+    from_at = _parse_iso_datetime(qs.get("from"))
+    to_at = _parse_iso_datetime(qs.get("to"))
+    if from_at is None and to_at is None:
+        to_at = now
+        from_at = now - timedelta(days=PUBLIC_HISTORICAL_VALIDATION_DEFAULT_DAYS)
+    elif from_at is None or to_at is None:
+        # Partial windows aren't supported on the public surface — either supply both
+        # bounds or neither (and let the default trailing window take over).
+        return bad_request("from and to must be supplied together, or both omitted.")
+    elif to_at <= from_at:
+        return bad_request("to must be strictly after from.")
+
+    mode_raw = str(qs.get("mode") or "").strip().lower()
+    mode_filter: str | None = mode_raw if mode_raw in ("day", "swing") else None
+
+    try:
+        service = HistoricalValidationService(get_signal_recorder())
+        summary = service.summarize(
+            user_id=None,  # platform scope; selects rows where scope_key == "PUBLIC"
+            from_at=from_at,
+            to_at=to_at,
+            horizon=horizon,
+            mode=mode_filter,
+            symbol=None,  # never honored on this surface — see symbol gate above
+        )
+        body: dict[str, Any] = {
+            "horizon": horizon,
+            "from": from_at.isoformat(),
+            "to": to_at.isoformat(),
+            "mode": mode_filter,
+            "disclaimer": HISTORICAL_VALIDATION_DISCLAIMER,
+            "summary": _public_summary_to_dict(summary),
+        }
+        return ok(body)
+    except Exception as exc:  # noqa: BLE001 — defensive
+        _LOG.exception("public_historical_validation_summary failed: %s", exc)
+        return internal_error("Public historical validation summary failed.")
+
+
 def signals_http_dispatch(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
     """Route signals module requests including parameterized outcome-tracking paths."""
     route = http_route_descriptor(event)
@@ -1186,6 +1322,11 @@ def signals_http_dispatch(event: LambdaEvent, context: LambdaContext) -> dict[st
         return user_signal_history_handler(event, context)
     if route == "GET /v1/signals/analysis" or route.startswith("GET /v1/signals/analysis?"):
         return signals_analysis_handler(event, context)
+    if (
+        route == "GET /v1/signals/historical-validation/public-summary"
+        or route.startswith("GET /v1/signals/historical-validation/public-summary?")
+    ):
+        return public_historical_validation_summary_handler(event, context)
     if (
         route == "GET /v1/signals/historical-validation/summary"
         or route.startswith("GET /v1/signals/historical-validation/summary?")

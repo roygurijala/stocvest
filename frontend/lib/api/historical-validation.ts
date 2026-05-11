@@ -2,6 +2,15 @@
 
 import { surfaceAuthErrorIfAny } from "@/lib/auth/surface-auth-error";
 
+const DEFAULT_PUBLIC_API_BASE_URL = "http://localhost:3001";
+
+/** Same lookup as `lib/api/public-signals.ts`. Kept inline because the public
+ *  fetcher in this module talks directly to the public API origin without going
+ *  through the BFF (homepage visitors have no JWT cookie to forward). */
+function publicApiBaseUrl(): string {
+  return process.env.NEXT_PUBLIC_STOCVEST_API_BASE_URL || DEFAULT_PUBLIC_API_BASE_URL;
+}
+
 /**
  * Client-side typed access to the D2 Historical Signal Validation summary endpoint.
  *
@@ -301,4 +310,104 @@ export function buildTrailingWindow(daysBack: number): { from: string; to: strin
     from: from.toISOString(),
     to: now.toISOString()
   };
+}
+
+// ── Public mirror (Phase 3c-1) ──────────────────────────────────────────────────────
+
+/**
+ * Trimmed response shape returned by `GET /v1/signals/historical-validation/public-summary`.
+ *
+ * The backend deliberately omits the per-decision / per-regime / per-pattern /
+ * per-readiness / per-direction stratifications, and the `parameter_versions` provenance
+ * list, to honor the assistant prompt's LOGGED-OUT golden rule ("Explain the FRAMEWORK,
+ * not the DECISION"). What remains is the minimum a homepage visitor needs to see:
+ *
+ * - `overall` — single overall directional accuracy, framework-level.
+ * - `by_mode` — high-level "swing vs day" cadence framing.
+ * - `rows_examined` — how much data backs the number.
+ * - `horizon` — so the UI can label the chart correctly.
+ * - `disclaimer` — verbatim from the backend (`HISTORICAL_VALIDATION_DISCLAIMER`).
+ */
+export interface PublicHistoricalValidationSummary {
+  horizon: ValidationHorizon;
+  overall: BucketStats;
+  by_mode: Record<string, BucketStats>;
+  rows_examined: number;
+}
+
+export interface PublicHistoricalValidationResponse {
+  horizon: ValidationHorizon;
+  from: string;
+  to: string;
+  mode: "swing" | "day" | null;
+  disclaimer: string;
+  summary: PublicHistoricalValidationSummary;
+}
+
+function parsePublicSummary(raw: unknown): PublicHistoricalValidationSummary | null {
+  if (!isRecord(raw)) return null;
+  const horizon = parseHorizon(raw.horizon);
+  const overall = parseBucketStats(raw.overall);
+  if (horizon === null || overall === null) return null;
+  return {
+    horizon,
+    overall,
+    by_mode: parseBucketMap(raw.by_mode),
+    rows_examined: parseInt0(raw.rows_examined)
+  };
+}
+
+export interface FetchPublicHistoricalValidationParams {
+  /** Optional override; backend defaults to "1d" when omitted. */
+  horizon?: ValidationHorizon;
+  /** Optional override; backend defaults to a trailing 90-day window. */
+  daysBack?: number;
+  mode?: "swing" | "day";
+}
+
+/**
+ * Fetch the public Historical Signal Validation summary directly from the API origin.
+ *
+ * No BFF proxy and no JWT — this is the unauthenticated public mirror that backs the
+ * homepage `/performance` page. Matches the existing `fetchPerformanceSummary` pattern
+ * in `lib/api/public-signals.ts` exactly: direct fetch to the API base URL, no cookies,
+ * `cache: "no-store"` so the homepage shows fresh numbers between sessions.
+ *
+ * Returns `null` on any non-200 response or malformed body — the homepage component
+ * collapses that to a calm empty state rather than a crash.
+ */
+export async function fetchPublicHistoricalValidationSummary(
+  params?: FetchPublicHistoricalValidationParams
+): Promise<PublicHistoricalValidationResponse | null> {
+  const qs = new URLSearchParams();
+  if (params?.horizon) qs.set("horizon", params.horizon);
+  if (params?.mode === "swing" || params?.mode === "day") qs.set("mode", params.mode);
+  if (params?.daysBack && params.daysBack > 0) {
+    const { from, to } = buildTrailingWindow(params.daysBack);
+    qs.set("from", from);
+    qs.set("to", to);
+  }
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  try {
+    const response = await fetch(
+      `${publicApiBaseUrl()}/v1/signals/historical-validation/public-summary${suffix}`,
+      { method: "GET", cache: "no-store" }
+    );
+    if (!response.ok) return null;
+    const data = (await response.json()) as unknown;
+    if (!isRecord(data)) return null;
+    const summary = parsePublicSummary(data.summary);
+    const horizon = parseHorizon(data.horizon);
+    if (!summary || !horizon) return null;
+    return {
+      horizon,
+      from: parseEchoedString(data.from) ?? "",
+      to: parseEchoedString(data.to) ?? "",
+      mode: parseEchoedMode(data.mode),
+      disclaimer: parseDisclaimer(data.disclaimer),
+      summary
+    };
+  } catch {
+    return null;
+  }
 }

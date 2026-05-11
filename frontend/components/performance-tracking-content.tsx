@@ -9,6 +9,11 @@ import {
   type PerformanceSummary,
   type PublicSignal
 } from "@/lib/api/public-signals";
+import {
+  fetchPublicHistoricalValidationSummary,
+  formatAccuracyPercent,
+  type PublicHistoricalValidationResponse
+} from "@/lib/api/historical-validation";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { isoDateInNewYork } from "@/lib/market-hours-et";
@@ -29,16 +34,25 @@ export function PerformanceTrackingContent({ showHomeLink = false }: Performance
   const { colors } = useTheme();
   const [signals, setSignals] = useState<PublicSignal[]>([]);
   const [summary, setSummary] = useState<PerformanceSummary | null>(null);
+  const [validation, setValidation] = useState<PublicHistoricalValidationResponse | null>(null);
 
   usePublishAssistantContext({ page: "dashboard/performance" });
 
   useEffect(() => {
     let active = true;
     const load = async () => {
-      const [s, p] = await Promise.all([fetchLiveSignals(), fetchPerformanceSummary()]);
+      // Fetch in parallel — the historical validation mirror is its own endpoint, so
+      // a slow / failing call there should not block the legacy performance summary or
+      // the live signals table from rendering.
+      const [s, p, v] = await Promise.all([
+        fetchLiveSignals(),
+        fetchPerformanceSummary(),
+        fetchPublicHistoricalValidationSummary({ daysBack: 90, horizon: "1d" })
+      ]);
       if (!active) return;
       setSignals(s);
       setSummary(p);
+      setValidation(v);
     };
     void load();
     return () => {
@@ -121,6 +135,17 @@ export function PerformanceTrackingContent({ showHomeLink = false }: Performance
           Based on {resolvedCount} resolved signal{resolvedCount === 1 ? "" : "s"} since launch (1d horizon). Pending signals are excluded
           from the accuracy percentage.
         </p>
+      ) : null}
+
+      {validation ? (
+        <PublicValidationSection
+          validation={validation}
+          surfaceClass={surfaceGlowClassName}
+          panelStyle={bodyPanelStyle}
+          metricCardStyle={metricCardStyle}
+          colors={colors}
+          showHomeLink={showHomeLink}
+        />
       ) : null}
 
       {!showTable ? (
@@ -207,5 +232,108 @@ export function PerformanceTrackingContent({ showHomeLink = false }: Performance
         </ul>
       </section>
     </div>
+  );
+}
+
+interface PublicValidationSectionProps {
+  validation: PublicHistoricalValidationResponse;
+  surfaceClass: string;
+  panelStyle: { background: string; border: string; borderRadius: string; padding: string };
+  metricCardStyle: { background: string; border: string; borderRadius: string; padding: string };
+  colors: ReturnType<typeof useTheme>["colors"];
+  showHomeLink?: boolean;
+}
+
+/**
+ * Public mirror of D2 Historical Signal Validation — homepage `/performance` surface.
+ *
+ * Renders ONLY the `overall` + `by_mode` projection that the backend ships at
+ * `GET /v1/signals/historical-validation/public-summary`. The full stratification grid
+ * (decision state, regime, pattern, readiness, direction) lives behind the login on
+ * `/dashboard/signal-validation` — the LOGGED-OUT golden rule from the assistant prompt
+ * is "Explain the FRAMEWORK, not the DECISION", and that boundary is enforced both at
+ * the API layer (Phase 3c-1 backend) and here at the rendering layer.
+ */
+function PublicValidationSection({
+  validation,
+  surfaceClass,
+  panelStyle,
+  metricCardStyle,
+  colors,
+  showHomeLink
+}: PublicValidationSectionProps) {
+  const { overall, by_mode: byMode, rows_examined: rowsExamined } = validation.summary;
+  const resolved = overall.correct + overall.incorrect;
+  const swing = byMode.swing;
+  const day = byMode.day;
+
+  return (
+    <section className={`${surfaceClass} ${showHomeLink ? "mt-8" : "mt-6"}`} style={panelStyle}>
+      <h2 className="text-2xl font-bold">Historical signal validation (last 90 days)</h2>
+      <p className="mt-2 text-sm" style={{ color: colors.textMuted }}>
+        Directional accuracy of real signals that STOCVEST emitted in the last 90 days, resolved against later prices.
+        Neutrals (small drift moves) are excluded from the denominator. Nothing here is simulated and nothing here is a forecast.
+      </p>
+
+      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className={surfaceClass} style={metricCardStyle}>
+          <p className="text-xs uppercase tracking-wide" style={{ color: colors.textMuted }}>
+            Overall accuracy (1d)
+          </p>
+          <p className="mt-2 text-2xl font-bold" style={{ fontFamily: typography.fontFamilyMono }}>
+            {formatAccuracyPercent(overall.accuracy)}
+          </p>
+          <p className="mt-1 text-[11px] leading-snug" style={{ color: colors.textMuted }}>
+            {resolved > 0
+              ? `${overall.correct} correct of ${resolved} resolved`
+              : "Awaiting resolved trades"}
+            {overall.neutral > 0 ? ` · ${overall.neutral} neutral` : ""}
+          </p>
+        </div>
+
+        <div className={surfaceClass} style={metricCardStyle}>
+          <p className="text-xs uppercase tracking-wide" style={{ color: colors.textMuted }}>
+            Swing track (1d)
+          </p>
+          <p className="mt-2 text-2xl font-bold" style={{ fontFamily: typography.fontFamilyMono }}>
+            {swing ? formatAccuracyPercent(swing.accuracy) : "—"}
+          </p>
+          <p className="mt-1 text-[11px] leading-snug" style={{ color: colors.textMuted }}>
+            {swing && swing.correct + swing.incorrect > 0
+              ? `${swing.correct} correct of ${swing.correct + swing.incorrect} resolved`
+              : "Awaiting resolved swing trades"}
+          </p>
+        </div>
+
+        <div className={surfaceClass} style={metricCardStyle}>
+          <p className="text-xs uppercase tracking-wide" style={{ color: colors.textMuted }}>
+            Day track (1d)
+          </p>
+          <p className="mt-2 text-2xl font-bold" style={{ fontFamily: typography.fontFamilyMono }}>
+            {day ? formatAccuracyPercent(day.accuracy) : "—"}
+          </p>
+          <p className="mt-1 text-[11px] leading-snug" style={{ color: colors.textMuted }}>
+            {day && day.correct + day.incorrect > 0
+              ? `${day.correct} correct of ${day.correct + day.incorrect} resolved`
+              : "Awaiting resolved day trades"}
+          </p>
+        </div>
+      </div>
+
+      <p className="mt-4 text-xs" style={{ color: colors.textMuted, fontStyle: "italic", lineHeight: 1.6 }}>
+        Based on {rowsExamined} signal{rowsExamined === 1 ? "" : "s"} examined.{" "}
+        {/*
+         * The standing disclaimer is rendered verbatim from the backend response so the
+         * exact wording is single-sourced across the assistant prompt, the API, and the
+         * UI. If the backend wording changes, this surface picks it up automatically.
+         */}
+        {validation.disclaimer}
+      </p>
+
+      <p className="mt-3 text-xs" style={{ color: colors.textMuted }}>
+        Sign in to see the full stratified breakdown — decision state, regime, setup pattern, readiness, and direction
+        — for your own tracked outcomes.
+      </p>
+    </section>
   );
 }
