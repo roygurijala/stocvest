@@ -8,11 +8,22 @@ import {
   type UserSignalHistoryPageSize
 } from "@/lib/api/public-signals";
 import { CuteLoader } from "@/components/cute-loader";
+import { HistoricalValidationPanel } from "@/components/historical-validation-panel";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
 type LedgerTab = "swing" | "day";
+
+/**
+ * Top-level view tabs on the Signal Validation page.
+ *
+ * - `ledger` — the row-level Tracked Outcomes ledger that this page has always rendered.
+ * - `historical` — the D2 Historical Signal Validation Phase 3b aggregate view (six
+ *   stratifications over a date-range slice). Lives in `historical-validation-panel.tsx`
+ *   so the ledger surface stays untouched and the aggregate surface can evolve on its own.
+ */
+type ValidationView = "ledger" | "historical";
 
 const PAGE_SIZE_OPTIONS: UserSignalHistoryPageSize[] = [25, 50, 75, 100];
 
@@ -116,6 +127,7 @@ function ledgerMetrics(rows: PublicSignal[], tab: LedgerTab) {
 
 export function SignalValidationPageClient() {
   const { colors } = useTheme();
+  const [view, setView] = useState<ValidationView>("ledger");
   const [tab, setTab] = useState<LedgerTab>("swing");
   const [pageSize, setPageSize] = useState<UserSignalHistoryPageSize>(25);
   const [rows, setRows] = useState<PublicSignal[] | null>(null);
@@ -123,7 +135,15 @@ export function SignalValidationPageClient() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  usePublishAssistantContext({ page: "dashboard/signal-validation", trading_mode: tab });
+  // Only forward `trading_mode` to the assistant when the user is looking at the ledger
+  // view (which is per-mode). The historical view is per-window and uses its own internal
+  // mode filter, so leaving `trading_mode` unset there avoids misleading the assistant's
+  // page-context routing.
+  usePublishAssistantContext(
+    view === "ledger"
+      ? { page: "dashboard/signal-validation", trading_mode: tab }
+      : { page: "dashboard/signal-validation" }
+  );
 
   const loadFirstPage = useCallback(async (t: LedgerTab, ps: UserSignalHistoryPageSize) => {
     setLoading(true);
@@ -144,8 +164,11 @@ export function SignalValidationPageClient() {
   }, []);
 
   useEffect(() => {
+    // Skip the ledger fetch when the user is on the historical view — saves a network
+    // round-trip every time the page mounts in historical mode.
+    if (view !== "ledger") return;
     void loadFirstPage(tab, pageSize);
-  }, [tab, pageSize, loadFirstPage]);
+  }, [view, tab, pageSize, loadFirstPage]);
 
   const loadMore = useCallback(async () => {
     if (nextCursor == null || loadingMore || rows == null) {
@@ -207,11 +230,52 @@ export function SignalValidationPageClient() {
           }}
         >
           This page logs historical outcomes of STOCVEST decisions using fixed rules. It is not a managed portfolio,
-          recommendation, trading account, or promise of results. Outcomes are observed for validation and learning —
+          recommendation, trading account, or promise of results.           Outcomes are observed for validation and learning —
           not promotion.
         </p>
       </header>
 
+      {/* Top-level view tabs: row-level Ledger vs aggregate Historical Validation. */}
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: spacing[2],
+          marginBottom: spacing[5]
+        }}
+      >
+        {([
+          ["ledger", "Tracked outcomes (ledger)"],
+          ["historical", "Historical accuracy"]
+        ] as const).map(([id, label]) => {
+          const on = view === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setView(id)}
+              data-testid={`signal-validation-view-${id}`}
+              style={{
+                padding: `${spacing[2]}px ${spacing[4]}px`,
+                borderRadius: borderRadius.md,
+                border: `1px solid ${on ? colors.accent : colors.border}`,
+                background: on ? `${colors.accent}18` : colors.surface,
+                color: on ? colors.accent : colors.text,
+                fontWeight: 600,
+                fontSize: typography.scale.sm,
+                cursor: "pointer"
+              }}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      {view === "historical" ? (
+        <HistoricalValidationPanel />
+      ) : (
+        <>
       <div
         style={{
           display: "flex",
@@ -497,6 +561,8 @@ export function SignalValidationPageClient() {
               </div>
             ) : null}
           </div>
+        </>
+      )}
         </>
       )}
     </div>
