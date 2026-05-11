@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from stocvest.signals.assistant_chat import _mode_from_context
 from stocvest.signals.assistant_prompts import (
+    ASSISTANT_SYSTEM_PROMPT,
     MAX_HISTORY_TURNS,
     MAX_USER_MESSAGE_CHARS,
     sanitize_messages,
@@ -214,3 +215,197 @@ def test_sanitize_messages_caps_history_to_max_turns() -> None:
     assert len(clean) == MAX_HISTORY_TURNS
     # Tail-keep: the most recent turns survive.
     assert clean[-1]["content"] == f"q {MAX_HISTORY_TURNS + 4}"
+
+
+# ---------------------------------------------------------------------------
+# ASSISTANT_SYSTEM_PROMPT — lock-in of the explanatory-voice philosophy
+#
+# The prompt is the contract. These tests anchor the parts of the contract that
+# user trust depends on, so a silent edit can never:
+#   - drop the "inactivity is intentional and protective" framing
+#   - drop the six-layer product reality
+#   - introduce concepts that do not exist in the shipped UI (VIC, System
+#     Confidence, Symbol Readiness Score, Sector Fragmented, 0.0-1.0 readiness)
+#   - drop the foundational principle or the calm refusal pattern
+#   - drop the banned self-limitation phrases that caused the production
+#     "I don't have access to live page data" regression
+#   - drop the section headers that the prompt is built around (PRIMARY GOAL,
+#     CORE PRODUCT PHILOSOPHY, etc.)
+# ---------------------------------------------------------------------------
+
+
+def test_prompt_declares_explanatory_voice_role() -> None:
+    """The opening line must name the assistant as the explanatory voice (not a decision-maker / trader / analyst)."""
+    assert "explanatory voice" in ASSISTANT_SYSTEM_PROMPT
+    # Either the original "not a decision-maker" framing or the new triplet must be present.
+    assert (
+        "not a decision-maker" in ASSISTANT_SYSTEM_PROMPT
+        or "not a trader, not an analyst, and not a signal generator" in ASSISTANT_SYSTEM_PROMPT
+    )
+
+
+def test_prompt_carries_primary_goal_and_product_philosophy_sections() -> None:
+    """The trust-building goal and the WHEN-not-WHAT philosophy must remain in the prompt."""
+    assert "PRIMARY GOAL" in ASSISTANT_SYSTEM_PROMPT
+    assert "CORE PRODUCT PHILOSOPHY" in ASSISTANT_SYSTEM_PROMPT
+    # The WHEN-not-WHAT framing. We check the load-bearing fragment so the surrounding
+    # sentence can be reworded without breaking the contract.
+    assert "decides WHEN trading is statistically worth risking capital" in ASSISTANT_SYSTEM_PROMPT
+    assert "INTENTIONAL and PROTECTIVE" in ASSISTANT_SYSTEM_PROMPT
+    # Silence-as-state framing is the trust win — must be in the prompt.
+    assert "Silence is an intentional system state" in ASSISTANT_SYSTEM_PROMPT
+
+
+def test_prompt_lists_real_six_layers_not_user_proposed_five() -> None:
+    """STOCVEST ships six layers. The prompt must enumerate all six by their product names."""
+    # Note: the sixth layer is "Market Internals" in the new prompt (the layer_status
+    # key is still "internals"; the UI label is "Internals").
+    for layer in ("Technical", "News", "Macro", "Sector", "Geopolitical", "Market Internals"):
+        assert layer in ASSISTANT_SYSTEM_PROMPT, f"missing layer name: {layer}"
+
+
+def test_prompt_uses_real_decision_state_vocabulary_verbatim() -> None:
+    """The Decision tri-state must be referenced with the exact on-card lines so the LLM
+    cannot invent its own phrasing.
+
+    The exact lines come from `frontend/lib/signal-evidence/trade-decision.ts`."""
+    assert "Actionable — passes risk/reward and confirmation thresholds" in ASSISTANT_SYSTEM_PROMPT
+    assert "Monitor only — confirmation and/or risk gates are not fully cleared" in ASSISTANT_SYSTEM_PROMPT
+    assert "Blocked — fails minimum synthesis and risk gates" in ASSISTANT_SYSTEM_PROMPT
+
+
+def test_prompt_uses_real_trade_readiness_scale() -> None:
+    """Trade readiness ships as 0-100 (`{score}/100` on the Evidence card), never 0.0-1.0.
+
+    The prompt must (a) state the real scale as 0-100, and (b) explicitly tell the LLM
+    not to invent a 0.0-1.0 scale."""
+    assert "Trade Readiness" in ASSISTANT_SYSTEM_PROMPT
+    assert ("0\u2013100" in ASSISTANT_SYSTEM_PROMPT) or ("0-100" in ASSISTANT_SYSTEM_PROMPT)
+    # The prompt must explicitly call out the wrong scale as forbidden so the LLM cannot
+    # adopt it from its training data or from a future user prompt.
+    assert ("0.0\u20131.0" in ASSISTANT_SYSTEM_PROMPT) or ("0.0-1.0" in ASSISTANT_SYSTEM_PROMPT)
+
+
+def test_prompt_uses_real_macro_pulse_states() -> None:
+    """Macro pulse ships with these labels in the alignment ladder, not Active/Weak/Unavailable.
+
+    These states come from `frontend/lib/dashboard-posture.ts` `macroRiskStateHeadline`."""
+    assert "Macro pulse" in ASSISTANT_SYSTEM_PROMPT or "Market Pulse" in ASSISTANT_SYSTEM_PROMPT
+    for state in ("Elevated", "Upcoming", "Known and absorbed", "Unavailable"):
+        assert state in ASSISTANT_SYSTEM_PROMPT, f"missing macro-pulse state: {state}"
+
+
+def test_prompt_uses_real_sector_chip_labels() -> None:
+    """Sector chips ship as Confirming / Non-confirming / Mixed (and tape framing
+    Risk-on / Defensive / Mixed / Narrow), never "Leading / Mixed / Fragmented"."""
+    for label in ("Confirming", "Non-confirming", "Risk-on", "Defensive", "Narrow"):
+        assert label in ASSISTANT_SYSTEM_PROMPT, f"missing sector chip label: {label}"
+
+
+def test_prompt_uses_real_layer_alignment_label() -> None:
+    """Layer alignment ships as High/Moderate/Low on the Evidence card; the prompt should mirror that."""
+    assert "Layer alignment" in ASSISTANT_SYSTEM_PROMPT
+    assert "High" in ASSISTANT_SYSTEM_PROMPT
+    assert "Moderate" in ASSISTANT_SYSTEM_PROMPT
+
+
+def test_prompt_explicitly_bans_concepts_that_do_not_ship() -> None:
+    """The user's earlier proposed prompt invented concepts that the product does not surface.
+
+    The locked prompt must explicitly enumerate the bans so the LLM cannot drift into
+    inventing them later. None of these strings exist in the STOCVEST UI."""
+    invented_concepts = [
+        "System Confidence",
+        "VIC",
+        "Volatility Control",
+        "Symbol Readiness Score",
+        "Sector Fragmented",
+    ]
+    for concept in invented_concepts:
+        assert concept in ASSISTANT_SYSTEM_PROMPT, (
+            f"prompt must mention {concept!r} in the ban list so the LLM is told not to invent it"
+        )
+
+
+def test_prompt_anchors_suppression_phrasing_to_real_product_copy() -> None:
+    """The dashboard's exact empty-state strings must be in the prompt so the assistant mirrors them.
+
+    These exact strings come from `frontend/components/dashboard-redesign.tsx` and
+    `frontend/lib/dashboard-posture.ts`."""
+    for phrase in (
+        "No active swing setups right now",
+        "System posture: Waiting for alignment",
+        "Swing suppressed",
+        "Signal suppressed",
+    ):
+        assert phrase in ASSISTANT_SYSTEM_PROMPT, f"missing real product copy: {phrase}"
+
+
+def test_prompt_routes_validation_questions_to_real_pages_with_disclaimer() -> None:
+    """Accuracy questions must point at /performance and /dashboard/signal-validation,
+    not at numbers the assistant invented, and must carry the standing disclaimer."""
+    assert "/performance" in ASSISTANT_SYSTEM_PROMPT
+    assert "/dashboard/signal-validation" in ASSISTANT_SYSTEM_PROMPT
+    assert "Historical signal accuracy does not guarantee future results." in ASSISTANT_SYSTEM_PROMPT
+
+
+def test_prompt_carries_paywall_awareness_section() -> None:
+    """The assistant should know which tiers have the Claude path so it can describe the
+    free-tier deterministic fallback accurately rather than calling it an error."""
+    assert "PAYWALL AWARENESS" in ASSISTANT_SYSTEM_PROMPT
+    assert "swing_pro" in ASSISTANT_SYSTEM_PROMPT
+    assert "swing_day_pro" in ASSISTANT_SYSTEM_PROMPT
+    assert "Active beta" in ASSISTANT_SYSTEM_PROMPT or "active beta" in ASSISTANT_SYSTEM_PROMPT
+
+
+def test_prompt_preserves_banned_self_limitation_phrases() -> None:
+    """Regression guard: the 2026-05-11 fix removed the LLM's tendency to say "I don't have
+    access to live page data" by promoting these phrases into an explicit ban list. The list
+    must remain in place."""
+    for banned in ("I don't have", "I can't see", "at this moment", "right now I lack"):
+        assert banned in ASSISTANT_SYSTEM_PROMPT, f"banned phrase guard missing: {banned}"
+
+
+def test_prompt_preserves_banned_response_shapes_block() -> None:
+    """The exact BAD/GOOD pair that caught the 2026-05-11 production regression must stay."""
+    assert "Banned response shapes" in ASSISTANT_SYSTEM_PROMPT
+    # The exact BAD example drawn from the production screenshot.
+    assert "BAD:" in ASSISTANT_SYSTEM_PROMPT
+    assert "I don't have access to live page data at this moment" in ASSISTANT_SYSTEM_PROMPT
+
+
+def test_prompt_preserves_foundational_principle() -> None:
+    """The foundational principle is the contract. It must remain verbatim."""
+    assert (
+        '"To help users understand how STOCVEST thinks — not to tell them what to do."'
+        in ASSISTANT_SYSTEM_PROMPT
+    )
+
+
+def test_prompt_preserves_calm_refusal_pattern() -> None:
+    """The exact refusal sentence is what the deterministic fallback echoes; it must stay stable."""
+    assert (
+        "I can explain STOCVEST's analysis and decisions, but I can't provide trading recommendations or predictions."
+        in ASSISTANT_SYSTEM_PROMPT
+    )
+
+
+def test_prompt_keeps_three_mode_structure() -> None:
+    """Three modes — GENERAL / CONTEXTUAL / PUBLIC — drive endpoint routing AND rule selection."""
+    assert "GENERAL MODE" in ASSISTANT_SYSTEM_PROMPT
+    assert "CONTEXTUAL MODE" in ASSISTANT_SYSTEM_PROMPT
+    assert "PUBLIC MODE" in ASSISTANT_SYSTEM_PROMPT
+
+
+def test_prompt_carries_user_interaction_may_must_not_lists() -> None:
+    """The MAY / MUST NOT lists are the user-facing summary of the rules — keep them stable."""
+    assert "USER INTERACTION RULES" in ASSISTANT_SYSTEM_PROMPT
+    assert "You MAY:" in ASSISTANT_SYSTEM_PROMPT
+    assert "You MUST NOT:" in ASSISTANT_SYSTEM_PROMPT
+
+
+def test_prompt_carries_gating_logic_and_regime_transition_sections() -> None:
+    """These two sections are the heart of the explanatory upgrade — they must be present."""
+    assert "SUPPRESSION & GATING LOGIC" in ASSISTANT_SYSTEM_PROMPT
+    assert "REGIME TRANSITIONS" in ASSISTANT_SYSTEM_PROMPT
+    assert "BACKTESTING & VALIDATION" in ASSISTANT_SYSTEM_PROMPT
