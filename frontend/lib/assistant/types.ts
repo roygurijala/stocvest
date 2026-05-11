@@ -100,6 +100,31 @@ export interface AssistantPageContext {
   swing_setups_suppressed?: boolean;
   /** The single calm one-liner shown to the user when the setups list is empty. */
   setups_empty_message?: string;
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Mode Separation B28 (Phase 1) — dual-desk dashboard posture.
+  //
+  // These two fields appear together on the dashboard page-context only.
+  // Their joint presence is the signal to the LLM that the active surface is a
+  // dual-desk view (Swing Desk + Day Desk both visible) — the trigger for the
+  // PRIORITY 3 STRUCTURED DUAL ANSWER routing path codified in
+  // ASSISTANT_SYSTEM_PROMPT. `trading_mode` is deliberately OMITTED on the
+  // dashboard so the LLM does not inherit a single mode via Priority 1.
+  // ────────────────────────────────────────────────────────────────────────────
+
+  /** Posture of the Swing Desk panel on the dashboard. Mirrors the visible pill state. */
+  swing_desk_posture?: "active" | "monitor" | "suppressed";
+  /** Posture of the Day Desk panel on the dashboard. Mirrors the visible pill state.
+   *  The two suppressed variants distinguish session-closed (no intraday gates can fire)
+   *  from in-session no-confirmation (gates available but not cleared). */
+  day_desk_posture?:
+    | "active"
+    | "monitor"
+    | "suppressed_session_closed"
+    | "suppressed_no_confirmation"
+    | "suppressed_scanner_error";
+  /** Number of intraday setups visible on the dashboard's Day Desk (cap respected). */
+  day_setups_count?: number;
 }
 
 export type AssistantMessageRole = "user" | "assistant";

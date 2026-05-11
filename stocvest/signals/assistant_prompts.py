@@ -658,6 +658,31 @@ def serialize_page_context(ctx: dict[str, Any] | None) -> str:
     if empty_msg:
         lines.append(f"setups_empty_message={empty_msg}")
 
+    # Mode Separation B28 (Phase 1) — dual-desk dashboard posture. These two fields
+    # feed the LLM's Priority 3 STRUCTURED DUAL ANSWER path: when both are present
+    # in the page context, the dashboard is a dual-desk surface and an ambiguous
+    # question must be answered with the two-paragraph template, not a single
+    # "system overall" summary. The values mirror the visible posture pill state
+    # on each desk so the LLM cannot describe a desk's state in terms that
+    # disagree with the on-screen rendering.
+    swing_desk_posture = _coerce_str(ctx.get("swing_desk_posture"), limit=32).lower()
+    if swing_desk_posture in ("active", "monitor", "suppressed"):
+        lines.append(f"swing_desk_posture={swing_desk_posture}")
+
+    day_desk_posture = _coerce_str(ctx.get("day_desk_posture"), limit=48).lower()
+    if day_desk_posture in (
+        "active",
+        "monitor",
+        "suppressed_session_closed",
+        "suppressed_no_confirmation",
+        "suppressed_scanner_error",
+    ):
+        lines.append(f"day_desk_posture={day_desk_posture}")
+
+    day_setups_count = _coerce_num(ctx.get("day_setups_count"))
+    if day_setups_count:
+        lines.append(f"day_setups_count={day_setups_count}")
+
     top_setups = ctx.get("top_setups")
     if isinstance(top_setups, list):
         for idx, raw in enumerate(top_setups[:3]):

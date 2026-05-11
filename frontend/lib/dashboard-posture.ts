@@ -1,4 +1,5 @@
 import type { MacroContextPayload } from "@/lib/api/fetch-macro-context";
+import type { MarketStatusPayload } from "@/lib/api/market";
 
 /** Same 5d sector buckets as dashboard `classifySectorTapeTone` (ETF % moves). */
 export type SectorTapeKind = "defensive" | "risk_on" | "mixed" | "narrow" | "unknown";
@@ -226,4 +227,165 @@ export function buildAlignmentLadder(opts: {
     { key: "structure", label: "Index structure", state: structureState },
     { key: "setups", label: "Swing setups", state: setupsState }
   ];
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// DAY DESK POSTURE — Mode Separation B28 (Phase 1)
+//
+// The Day Desk is a parallel decision surface on the dashboard. It MUST NOT
+// reuse Swing posture / vocabulary / re-enable language. These helpers
+// produce the day-side strings the DayDeskPanel renders.
+//
+// Posture mapping:
+//   active                       → real intraday setups cleared the score floor
+//   monitor                      → intraday setups present but score below floor
+//   suppressed_session_closed    → regular session not open (pre-market /
+//                                  after-hours / weekend / holiday)
+//   suppressed_no_confirmation   → session open + no intraday setup cleared
+//                                  the day scanner's volume / momentum gates
+//   suppressed_scanner_error     → upstream scanner failed; posture unknown
+//
+// The Day-Desk is INDEPENDENT of Swing posture per the assistant prompt's
+// Mode-Separation rules: "It is valid for one desk to be Active while the
+// other is Suppressed." Nothing in this file references Swing state.
+// ──────────────────────────────────────────────────────────────────────────────
+
+export type DayDeskPostureKind =
+  | "active"
+  | "monitor"
+  | "suppressed_session_closed"
+  | "suppressed_no_confirmation"
+  | "suppressed_scanner_error";
+
+/** Active threshold — matches the scanner's day-side min_score floor (0.55 default).
+ *  Below this the desk renders as Monitor-only (the row is real but quality is marginal). */
+export const DAY_DESK_ACTIVE_SCORE_FLOOR = 0.55;
+
+/** Returns the dashboard market session bucket. `marketStatus.market` follows Polygon
+ *  `/v1/marketstatus/now` semantics: "open" / "closed" / "extended-hours". Anything
+ *  other than `"open"` is session-bound suppression for the Day Desk. */
+function isRegularSessionOpen(marketStatus: MarketStatusPayload | undefined | null): boolean {
+  if (!marketStatus) return false;
+  const mkt = (marketStatus.market || "").trim().toLowerCase();
+  return mkt === "open";
+}
+
+export function dayDeskPostureKind(opts: {
+  marketStatus: MarketStatusPayload | undefined | null;
+  daySetupCount: number;
+  daySetupTopScore: number | null;
+  scannerError?: string;
+}): DayDeskPostureKind {
+  if (opts.scannerError) return "suppressed_scanner_error";
+  if (!isRegularSessionOpen(opts.marketStatus)) return "suppressed_session_closed";
+  if (opts.daySetupCount <= 0) return "suppressed_no_confirmation";
+  const top = opts.daySetupTopScore;
+  if (typeof top === "number" && Number.isFinite(top) && top >= DAY_DESK_ACTIVE_SCORE_FLOOR) {
+    return "active";
+  }
+  return "monitor";
+}
+
+/** Day-vocabulary headline for the desk's Primary Read block. Must NEVER reuse
+ *  swing wording ("regime alignment", "multi-day structure", "sector confirmation") —
+ *  those belong to the Swing Desk. */
+export function emptyDayPostureHeadline(kind: DayDeskPostureKind): string {
+  switch (kind) {
+    case "active":
+      return "Day Desk: Active";
+    case "monitor":
+      return "Day Desk: Monitor-only";
+    case "suppressed_session_closed":
+      return "Day Desk suppressed — session closed";
+    case "suppressed_no_confirmation":
+      return "Day Desk suppressed — intraday confirmation absent";
+    case "suppressed_scanner_error":
+      return "Day Desk: scanner did not complete";
+  }
+}
+
+export function emptyDayOneLiner(
+  kind: DayDeskPostureKind,
+  marketStatus: MarketStatusPayload | undefined | null
+): string {
+  const mkt = (marketStatus?.market || "").trim().toLowerCase();
+  switch (kind) {
+    case "active":
+      return "At least one intraday symbol cleared volume / momentum gates this load.";
+    case "monitor":
+      return "Intraday setups present but scores sit near the floor — confirmation has not strengthened.";
+    case "suppressed_session_closed":
+      if (mkt === "extended-hours" || mkt === "extendedhours") {
+        return "Extended-hours print only — intraday gates require regular-session price action.";
+      }
+      return "Session closed — intraday setups are session-bound and resume at the next regular open.";
+    case "suppressed_no_confirmation":
+      return "Session is open, but no intraday symbol cleared volume / momentum / session-structure gates this load.";
+    case "suppressed_scanner_error":
+      return "Intraday scanner did not finish — Day Desk posture cannot be determined this load.";
+  }
+}
+
+/** Single suppression-style status line — pairs with the headline above in the empty-state pattern
+ *  (mirrors `emptySwingSuppressionStatusLine` on the Swing Desk). Day vocabulary only. */
+export function dayDeskSuppressionStatusLine(kind: DayDeskPostureKind): string {
+  switch (kind) {
+    case "active":
+      return "Day signals cleared — confirmation gates passed.";
+    case "monitor":
+      return "Monitor-only — quality is below the actionable floor.";
+    case "suppressed_session_closed":
+      return "Signal suppressed — outside regular session.";
+    case "suppressed_no_confirmation":
+      return "Signal suppressed — intraday confirmation absent.";
+    case "suppressed_scanner_error":
+      return "Posture unknown — scanner error.";
+  }
+}
+
+/** What would bring intraday rows back. DAY-VOCABULARY ONLY — the prompt's Mode-Aware
+ *  Empty-State Language rule explicitly forbids reusing swing language ("regime / sector
+ *  alignment, structure readiness") for day suppression. */
+export function buildDayReenableBullets(opts: {
+  marketStatus: MarketStatusPayload | undefined | null;
+  daySetupCount: number;
+}): string[] {
+  const open = isRegularSessionOpen(opts.marketStatus);
+
+  const b1 = open
+    ? "Intraday volume expansion: a candidate's session volume needs to break above its ADV-relative threshold (POST /v1/signals/day/setups checks RVOL vs prior-day baseline)."
+    : "Regular session needs to open — extended-hours and overnight prints do not qualify for intraday gates; first ~30 minutes carry ORB triggers, mid-session carries trend continuation.";
+
+  const b2 = open
+    ? "Momentum confirmation: VWAP / EMA9 alignment with the same-direction tape on SPY/QQQ session % so day setups are not fighting the index."
+    : "ADV / liquidity baseline: each candidate still needs ≥1M prior-day volume so the day scanner's liquidity gate is ready to clear at the next open.";
+
+  const b3 = open
+    ? "Cleaner session structure: ORB qualification before 10:00 ET, no false-breakout invalidation, range expansion vs the prior session."
+    : "Session timing: trend-continuation setups want a clean overnight ledger and an open without large gap dislocations.";
+
+  return [b1, b2, b3];
+}
+
+/** Short bullets for the inline list under the Day Desk re-enable section. Full reasoning lives in
+ *  `buildDayReenableBullets` and feeds the InfoTip. */
+export function buildDayReenableBulletsShort(opts: {
+  marketStatus: MarketStatusPayload | undefined | null;
+  daySetupCount: number;
+}): string[] {
+  const open = isRegularSessionOpen(opts.marketStatus);
+
+  const b1 = open
+    ? "Volume: a symbol's session volume needs to break above its ADV-relative threshold."
+    : "Session: regular hours open before intraday gates can fire (extended-hours don't qualify).";
+
+  const b2 = open
+    ? "Momentum: VWAP / EMA9 alignment + same-direction tape on SPY/QQQ."
+    : "Liquidity: candidates need ≥1M prior-day volume to pass the day liquidity gate at the open.";
+
+  const b3 = open
+    ? "Structure: ORB qualification before 10:00 ET, no false-breakout invalidation."
+    : "Timing: clean overnight + open without a large gap dislocation.";
+
+  return [b1, b2, b3];
 }

@@ -10,6 +10,7 @@ import { DecisionMetric } from "@/components/decision-metric";
 import { EarningsCalendar } from "@/components/earnings-calendar";
 import { InfoTip } from "@/components/info-tip";
 import { WeeklyMarketContextWidget, type WeeklyIndexRow } from "@/components/weekly-market-context-widget";
+import { DayDeskPanel } from "@/components/day-desk-panel";
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import { NewsPanel } from "@/components/news-panel";
 import { getChangeColor } from "@/components/market-sentiment-score-widget";
@@ -57,7 +58,10 @@ import {
 import { buildDashboardSignalCardStrip } from "@/lib/dashboard-signal-card-strip";
 import {
   buildAlignmentLadder,
+  buildDayReenableBulletsShort,
   buildSwingReenableBulletsShort,
+  dayDeskPostureKind,
+  type DayDeskPostureKind,
   macroRiskStateHeadline,
   macroRiskStateTip,
   sectorTapeKindFromPct5d,
@@ -508,6 +512,30 @@ export function DashboardRedesign({
     [scannerOverview.setups]
   );
   const topSignals = swingTopSignals.slice(0, 3);
+  // Day Desk data partition — the OTHER half of the same scanner payload. Setups
+  // whose `scanner_mode` is undefined or anything other than "swing_daily" are
+  // intraday (ORB / VWAP / momentum / gap-with-catalyst). Mode Separation rule:
+  // the two partitions never share a row, a score, or a verdict — they feed two
+  // independent decision surfaces on the dashboard.
+  const dayTopSignals = useMemo(
+    () =>
+      scannerOverview.setups.filter(
+        (s) =>
+          s.scanner_mode !== "swing_daily" &&
+          typeof s.score === "number" &&
+          Number.isFinite(s.score)
+      ),
+    [scannerOverview.setups]
+  );
+  const dayTopScore = useMemo(() => {
+    let best: number | null = null;
+    for (const s of dayTopSignals) {
+      if (typeof s.score === "number" && Number.isFinite(s.score)) {
+        if (best == null || s.score > best) best = s.score;
+      }
+    }
+    return best;
+  }, [dayTopSignals]);
   const vixSnapshot =
     findVixSnapshot(marketOverview.snapshots) ||
     snapshotsBySymbol.get("I:VIX") ||
@@ -551,16 +579,40 @@ export function DashboardRedesign({
     return `${REGIME_BADGE_TIP}${REGIME_WITHOUT_VIX_APPEND}`;
   }, [vixPulseOk]);
 
-  // Publish a minimal qualitative summary of the home dashboard to the STOCVEST Assistant.
-  // Top Signals on the home dashboard is swing-only by design (see DashboardPageContent),
-  // so trading_mode is fixed at "swing". `ranked_setups_count` reflects what the user is
-  // looking at after the slice-to-3 cap so the assistant never claims a count beyond what's
-  // on screen.
+  // Day Desk posture for the assistant page-context. This is the input the LLM
+  // routing's PRIORITY 3 (ambiguous question + both desks visible → structured
+  // dual answer) reads on the dashboard. Posture is computed deterministically
+  // from the same scanner data the Day Desk panel renders — there is no
+  // separate posture computation that could drift from what the user sees.
+  const dayDeskPosture: DayDeskPostureKind = useMemo(
+    () =>
+      dayDeskPostureKind({
+        marketStatus: marketOverview.status,
+        daySetupCount: dayTopSignals.length,
+        daySetupTopScore: dayTopScore,
+        scannerError: scannerOverview.error
+      }),
+    [marketOverview.status, dayTopSignals.length, dayTopScore, scannerOverview.error]
+  );
+  const swingDeskPosture: "active" | "monitor" | "suppressed" = useMemo(() => {
+    if (scannerOverview.error) return "suppressed";
+    if (swingTopSignals.length > 0) return "active";
+    return "suppressed";
+  }, [scannerOverview.error, swingTopSignals.length]);
+
+  // Publish a qualitative summary of the home dashboard to the STOCVEST Assistant.
+  // Dashboard is now a TWO-DESK surface (Mode Separation B28 Phase 1): the assistant
+  // sees both `swing_desk_posture` and `day_desk_posture` side-by-side and must use
+  // the Priority 3 STRUCTURED DUAL ANSWER template when an ambiguous question lands
+  // here. `trading_mode` is deliberately OMITTED so the LLM does not inherit a
+  // single mode via Priority 1 — the dashboard is the canonical multi-mode surface.
   usePublishAssistantContext({
     page: "dashboard",
-    trading_mode: "swing",
     market_regime: regimeLabel,
-    ranked_setups_count: topSignals.length
+    ranked_setups_count: topSignals.length,
+    swing_desk_posture: swingDeskPosture,
+    day_desk_posture: dayDeskPosture,
+    day_setups_count: dayTopSignals.length
   });
 
   const emptySwingSuppressionLine = useMemo(() => emptySwingSuppressionStatusLine(regimeLabel), [regimeLabel]);
@@ -685,10 +737,11 @@ export function DashboardRedesign({
       <div className="dashboard-grid grid grid-cols-1 gap-7 lg:grid-cols-[7fr_13fr] lg:items-stretch [&>*]:min-w-0">
           <div className="order-1 min-w-0 lg:col-span-2 lg:col-start-1 lg:row-start-1">
             <DashboardCard
-              eyebrow="Swing desk"
+              eyebrow="Shared context"
               title="Weekly market context"
-              subtitle="SPY, QQQ, and IWM — last ~5 trading sessions (daily closes), not intraday tape."
+              subtitle="SPY, QQQ, and IWM — last ~5 trading sessions (daily closes). Shared input that both the Swing Desk and the Day Desk read; NOT a swing-only signal."
               cardTip={WEEKLY_MARKET_CONTEXT_CARD_TIP}
+              data-testid="shared-market-context-weekly"
             >
               <WeeklyMarketContextWidget
                 rows={weeklyIndexRows}
@@ -704,10 +757,12 @@ export function DashboardRedesign({
 
           <DashboardCard
             className={`order-2 flex w-full min-h-[200px] flex-col overflow-hidden lg:self-start lg:col-start-1 lg:row-start-2`}
-            title="Top signals"
-            eyebrow="Scanner"
-            subtitle="Daily swing scanner only (no intraday session patterns on the dashboard). Open Evidence for the six-layer read, macro–sector–technical alignment, and levels."
+            title="Swing Desk"
+            eyebrow="Swing desk · Multi-day (evaluated on daily closes)"
+            subtitle="Multi-day engine — evaluates daily closes. Independent of the Day Desk below. Posture (Active / Monitor / Suppressed) reflects regime + sector + structure + per-symbol DailyBarScanner gates."
             cardTip={TOP_SIGNALS_CARD_TIP}
+            data-testid="swing-desk-panel"
+            data-swing-desk-posture={swingDeskPosture}
           >
             <div className="flex flex-col gap-3">
               {topSignals.length === 0 ? (
@@ -1086,7 +1141,21 @@ export function DashboardRedesign({
             </div>
           </DashboardCard>
 
-          <div className="order-3 flex min-w-0 flex-col gap-5 lg:col-start-2 lg:row-start-2">
+          {/* Day Desk panel — Mode Separation B28 (Phase 1). Stacked directly under
+              the Swing Desk on every screen size; equal visual weight regardless of
+              either desk's posture. The panel is self-contained: posture, signals (or
+              suppression copy), re-enable language, and footer link are all owned by
+              the day-side helpers in lib/dashboard-posture.ts. No swing-side state
+              flows in. */}
+          <div className="order-3 min-w-0 lg:col-span-2 lg:col-start-1 lg:row-start-3">
+            <DayDeskPanel
+              setups={scannerOverview.setups}
+              marketStatus={marketOverview.status}
+              scannerError={scannerOverview.error}
+            />
+          </div>
+
+          <div className="order-4 flex min-w-0 flex-col gap-5 lg:col-start-2 lg:row-start-2">
           <DashboardCard
             className="flex min-h-[200px] flex-col overflow-hidden lg:self-start"
             eyebrow="Tape"

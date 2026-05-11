@@ -166,6 +166,92 @@ def test_serialize_page_context_rejects_invalid_scanner_buckets() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Mode Separation B28 (Phase 1) — dual-desk dashboard posture fields
+# ---------------------------------------------------------------------------
+
+
+def test_serialize_page_context_emits_dual_desk_posture_on_dashboard() -> None:
+    """Dashboard publishes both desks' posture so the LLM sees a dual-desk surface
+    (the trigger for Priority 3 STRUCTURED DUAL ANSWER routing). The two
+    `*_desk_posture` fields appear together on the dashboard and are the canonical
+    signal for the dual-answer template."""
+    ctx = {
+        "page": "dashboard",
+        "market_regime": "Neutral",
+        "ranked_setups_count": 2,
+        "swing_desk_posture": "active",
+        "day_desk_posture": "suppressed_no_confirmation",
+        "day_setups_count": 0,
+    }
+    out = serialize_page_context(ctx)
+    assert "page=dashboard" in out
+    assert "swing_desk_posture=active" in out
+    assert "day_desk_posture=suppressed_no_confirmation" in out
+    # trading_mode is deliberately ABSENT on the dashboard — neither side of
+    # the dual-desk surface inherits a single mode via Priority 1.
+    assert "trading_mode=" not in out
+
+
+def test_serialize_page_context_dual_desk_session_closed_variant() -> None:
+    """`suppressed_session_closed` is a distinct day-side variant from
+    `suppressed_no_confirmation`: the LLM uses session-bound language for
+    one and intraday-confirmation language for the other."""
+    ctx = {
+        "page": "dashboard",
+        "swing_desk_posture": "active",
+        "day_desk_posture": "suppressed_session_closed",
+    }
+    out = serialize_page_context(ctx)
+    assert "day_desk_posture=suppressed_session_closed" in out
+    assert "suppressed_no_confirmation" not in out
+
+
+def test_serialize_page_context_rejects_invalid_desk_posture_values() -> None:
+    """Bad posture values are dropped silently — the LLM never sees freeform
+    strings under desk-posture fields. A regression that allowed e.g.
+    `swing_desk_posture=ACTIONABLE_NOW` would let the client steer the LLM."""
+    ctx = {
+        "page": "dashboard",
+        "swing_desk_posture": "actionable_now",
+        "day_desk_posture": "FOMO_BUY",
+    }
+    out = serialize_page_context(ctx)
+    assert "swing_desk_posture=" not in out
+    assert "day_desk_posture=" not in out
+    assert "actionable_now" not in out
+    assert "FOMO_BUY" not in out.lower()
+
+
+def test_serialize_page_context_emits_day_setups_count_when_nonzero() -> None:
+    ctx = {
+        "page": "dashboard",
+        "swing_desk_posture": "suppressed",
+        "day_desk_posture": "active",
+        "day_setups_count": 3,
+    }
+    out = serialize_page_context(ctx)
+    assert "day_setups_count=3" in out
+
+
+def test_serialize_page_context_dashboard_dual_desk_omits_swing_only_fields() -> None:
+    """The dashboard's dual-desk page-context block doesn't carry scanner-overview
+    fields like `top_setup_1` or `gap_with_catalyst_count`. Make sure the new
+    posture serializer doesn't accidentally turn unrelated scanner fields back
+    on when they aren't supplied."""
+    ctx = {
+        "page": "dashboard",
+        "swing_desk_posture": "active",
+        "day_desk_posture": "active",
+    }
+    out = serialize_page_context(ctx)
+    assert "swing_desk_posture=active" in out
+    assert "day_desk_posture=active" in out
+    assert "top_setup_1=" not in out
+    assert "top_gap_1=" not in out
+    assert "gap_with_catalyst_count" not in out
+
+
+# ---------------------------------------------------------------------------
 # _mode_from_context — page identifier alone is sufficient context
 # ---------------------------------------------------------------------------
 

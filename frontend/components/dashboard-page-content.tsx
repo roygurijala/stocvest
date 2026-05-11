@@ -11,17 +11,24 @@ import type { SectorRotationChip } from "@/components/dashboard-redesign";
 import type { WeeklyIndexRow } from "@/components/weekly-market-context-widget";
 
 /**
- * Dashboard Top Signals: **swing daily only** (DailyBarScanner). No intraday
- * `POST /v1/signals/day/setups` — avoids session ORB / fast EMA copy on a swing-first home surface.
- * Gap intelligence + market context still load here for Market Pulse / gaps.
+ * Dashboard renders TWO independent decision desks (Swing Desk + Day Desk),
+ * each with its own posture and "what would re-enable" copy. Both setup
+ * sources load on every dashboard mount — `POST /v1/signals/swing/setups`
+ * (daily cadence) and `POST /v1/signals/day/setups` (intraday cadence) —
+ * so the Day Desk can render real posture instead of a placeholder.
+ * The render layer partitions results by `setup.scanner_mode` so the two
+ * engines never share a row, a score, or a verdict.
+ * Gap intelligence + market context load here for the shared Market Context
+ * region above the two desks.
  */
 export const DASHBOARD_SCANNER_TUNING = {
   maxUniverseSymbols: 24,
   intradayBarLimit: 60,
   parallelDefaultWatchlist: true,
-  scannerSetupLoadMode: "swing" as const,
+  scannerSetupLoadMode: "both" as const,
   swingDailyBarLimit: 220,
-  swingSetupsLimit: 4
+  swingSetupsLimit: 4,
+  daySetupsLimit: 4
 } as const;
 
 /** Allow gap + snapshots + bars + day/setups to finish without forcing empty scanner fallback (Vercel: set maxDuration on dashboard page). */

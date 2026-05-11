@@ -64,9 +64,14 @@ export function WeeklyMarketContextWidget({ rows, marketStatus, dataIssue }: Pro
   const mkt = (marketStatus?.market || "").toLowerCase();
 
   return (
-    <div className={`flex flex-col gap-4 ${surfaceGlowClassName}`} style={{ color: colors.text }}>
+    <div
+      className={`flex flex-col gap-4 ${surfaceGlowClassName}`}
+      style={{ color: colors.text, paddingTop: spacing[2] }}
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p style={{ margin: 0, fontSize: typography.scale.sm, fontWeight: 600, color: tone.color }}>{tone.label}</p>
+        <p style={{ margin: 0, fontSize: typography.scale.sm, fontWeight: 600, color: tone.color, lineHeight: 1.4 }}>
+          {tone.label}
+        </p>
         {marketStatus ? (
           <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>
             Cash session:{" "}

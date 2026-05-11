@@ -17,15 +17,32 @@ export type DashboardCardProps = {
   children: ReactNode;
   className?: string;
   style?: React.CSSProperties;
+  /** data-* attributes spread on the wrapping <article> — used by tests for stable DOM anchors
+   *  (e.g. data-testid, data-day-desk-posture). React passes data-* through automatically. */
+  [dataAttr: `data-${string}`]: string | undefined;
 };
 
 /**
  * Consistent dashboard panel: title block + circled info (i) top-right, themed surface.
  */
-export function DashboardCard({ title, eyebrow, subtitle, cardTip, headerRight, children, className, style }: DashboardCardProps) {
+export function DashboardCard({
+  title,
+  eyebrow,
+  subtitle,
+  cardTip,
+  headerRight,
+  children,
+  className,
+  style,
+  ...rest
+}: DashboardCardProps) {
   const { colors } = useTheme();
+  const dataAttrs = Object.fromEntries(
+    Object.entries(rest).filter(([k]) => k.startsWith("data-"))
+  );
   return (
     <article
+      {...dataAttrs}
       className={`${surfaceGlowClassName} ${className ?? ""}`.trim()}
       style={{
         position: "relative",
@@ -51,6 +68,7 @@ export function DashboardCard({ title, eyebrow, subtitle, cardTip, headerRight, 
         <div className="min-w-0" style={{ display: "grid", gap: spacing[1] }}>
           {eyebrow ? (
             <span
+              data-testid="dashboard-card-eyebrow"
               style={{
                 fontSize: 10,
                 letterSpacing: "0.2em",

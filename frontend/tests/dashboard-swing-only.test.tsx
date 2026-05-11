@@ -49,8 +49,13 @@ function wrap(ui: ReactElement) {
   return render(<ThemeProvider>{ui}</ThemeProvider>);
 }
 
-describe("Dashboard swing-only Top Signals", () => {
-  test("test_dashboard_shows_empty_state_when_no_swing_setups", () => {
+describe("Dashboard Swing Desk (top half of the two-desk layout)", () => {
+  test("test_swing_desk_shows_empty_state_when_no_swing_setups", () => {
+    // The dashboard now ALSO renders a Day Desk below the Swing Desk
+    // (Mode Separation B28 Phase 1). An intraday setup in the scanner
+    // payload renders inside the Day Desk panel — NOT inside the Swing
+    // Desk. This test guards the Swing Desk's empty-state copy and
+    // confirms the intraday setup does NOT leak into the Swing surface.
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
@@ -78,7 +83,17 @@ describe("Dashboard swing-only Top Signals", () => {
     );
     expect(screen.getByText(/No active swing setups right now/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open Scanner/i })).toHaveAttribute("href", "/dashboard/scanner");
-    expect(screen.queryByText("INTRADAY")).not.toBeInTheDocument();
+
+    // The intraday setup MUST appear inside the Day Desk panel — the
+    // dashboard is a dual-desk surface and intraday rows are no longer
+    // dropped. This is the Phase-1 contract: data partition by
+    // scanner_mode produces TWO desks fed by ONE scanner payload.
+    const dayDesk = screen.getByTestId("day-desk-panel");
+    expect(dayDesk).toBeInTheDocument();
+    expect(dayDesk.querySelector('[data-testid="day-desk-signals"]')).not.toBeNull();
+    // The symbol is rendered inside the Day Desk's signal section.
+    const intraNode = screen.getByText("INTRADAY");
+    expect(dayDesk.contains(intraNode)).toBe(true);
   });
 
   test("test_dashboard_shows_swing_setups_when_available", () => {
