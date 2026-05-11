@@ -455,3 +455,204 @@ describe("fetchPublicHistoricalValidationSummary", () => {
     expect(result).toBeNull();
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 4 — cross-version diff helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+const BUCKET_A_HAPPY = {
+  total_signals: 12,
+  correct: 7,
+  incorrect: 3,
+  neutral: 2,
+  resolved: 12,
+  accuracy: 0.7 // 7 / (7 + 3)
+};
+
+const BUCKET_B_HAPPY = {
+  total_signals: 15,
+  correct: 9,
+  incorrect: 3,
+  neutral: 3,
+  resolved: 15,
+  accuracy: 0.75 // 9 / (9 + 3)
+};
+
+describe("diffBucketStats", () => {
+  test("happy path subtracts B − A across accuracy and counts", async () => {
+    const { diffBucketStats } = await import("@/lib/api/historical-validation");
+    const delta = diffBucketStats(BUCKET_A_HAPPY, BUCKET_B_HAPPY);
+    // 0.75 - 0.70 = 0.05 (5 percentage points)
+    expect(delta.accuracyDelta).toBeCloseTo(0.05, 10);
+    expect(delta.totalDelta).toBe(3);
+    expect(delta.resolvedDelta).toBe(2); // (9+3) - (7+3)
+    expect(delta.neutralDelta).toBe(1);
+  });
+
+  test("null accuracy on either side → null accuracyDelta (em-dash discipline)", async () => {
+    const { diffBucketStats } = await import("@/lib/api/historical-validation");
+    const aNullAcc = { ...BUCKET_A_HAPPY, accuracy: null };
+    const bNullAcc = { ...BUCKET_B_HAPPY, accuracy: null };
+    expect(diffBucketStats(aNullAcc, BUCKET_B_HAPPY).accuracyDelta).toBeNull();
+    expect(diffBucketStats(BUCKET_A_HAPPY, bNullAcc).accuracyDelta).toBeNull();
+    expect(diffBucketStats(aNullAcc, bNullAcc).accuracyDelta).toBeNull();
+  });
+
+  test("identical buckets produce all-zero deltas (sanity)", async () => {
+    const { diffBucketStats } = await import("@/lib/api/historical-validation");
+    const delta = diffBucketStats(BUCKET_A_HAPPY, BUCKET_A_HAPPY);
+    expect(delta.accuracyDelta).toBe(0);
+    expect(delta.totalDelta).toBe(0);
+    expect(delta.resolvedDelta).toBe(0);
+    expect(delta.neutralDelta).toBe(0);
+  });
+
+  test("missing-on-one-side bucket is treated as zero rows with null accuracy", async () => {
+    // A stratum may exist in version A's data but not B's (a pattern family only the
+    // new rules can produce, or vice versa). The diff must not crash — it should treat
+    // the absent side as "zero rows, no accuracy" and surface that through the deltas.
+    const { diffBucketStats } = await import("@/lib/api/historical-validation");
+    const deltaBOnly = diffBucketStats(null, BUCKET_B_HAPPY);
+    expect(deltaBOnly.accuracyDelta).toBeNull(); // A had null accuracy → no comparison
+    expect(deltaBOnly.totalDelta).toBe(15);
+    expect(deltaBOnly.resolvedDelta).toBe(12);
+    expect(deltaBOnly.neutralDelta).toBe(3);
+
+    const deltaAOnly = diffBucketStats(BUCKET_A_HAPPY, undefined);
+    expect(deltaAOnly.accuracyDelta).toBeNull();
+    expect(deltaAOnly.totalDelta).toBe(-12);
+    expect(deltaAOnly.resolvedDelta).toBe(-10);
+    expect(deltaAOnly.neutralDelta).toBe(-2);
+  });
+
+  test("flags small samples independently on each side", async () => {
+    const { diffBucketStats, SMALL_SAMPLE_THRESHOLD } = await import(
+      "@/lib/api/historical-validation"
+    );
+    // A is below threshold (correct + incorrect = 4 < 10), B is above (8 + 5 = 13).
+    const aSmall = { total_signals: 5, correct: 3, incorrect: 1, neutral: 1, resolved: 5, accuracy: 0.75 };
+    const bLarge = { total_signals: 15, correct: 8, incorrect: 5, neutral: 2, resolved: 15, accuracy: 8 / 13 };
+    const delta = diffBucketStats(aSmall, bLarge);
+    expect(delta.smallSampleA).toBe(true);
+    expect(delta.smallSampleB).toBe(false);
+    // Reversing flips the flags — small-sample is a property of the bucket, not the
+    // side, so the function must consult B's own resolved count for smallSampleB.
+    const reversed = diffBucketStats(bLarge, aSmall);
+    expect(reversed.smallSampleA).toBe(false);
+    expect(reversed.smallSampleB).toBe(true);
+    // Sanity: the threshold constant is the documented `10` so any change to that
+    // number is a deliberate, test-visible event.
+    expect(SMALL_SAMPLE_THRESHOLD).toBe(10);
+  });
+});
+
+describe("formatAccuracyDelta", () => {
+  test("renders sign + percentage points for finite deltas", async () => {
+    const { formatAccuracyDelta } = await import("@/lib/api/historical-validation");
+    expect(formatAccuracyDelta(0.052)).toBe("+5.2pp");
+    expect(formatAccuracyDelta(-0.031)).toBe("-3.1pp");
+    expect(formatAccuracyDelta(0.1)).toBe("+10.0pp");
+    expect(formatAccuracyDelta(-0.1)).toBe("-10.0pp");
+  });
+
+  test("renders 0.0pp for exact-zero deltas — never an em-dash (zero is a real measurement)", async () => {
+    const { formatAccuracyDelta } = await import("@/lib/api/historical-validation");
+    expect(formatAccuracyDelta(0)).toBe("0.0pp");
+  });
+
+  test("renders em-dash for null / NaN / Infinity (consistency with formatAccuracyPercent)", async () => {
+    const { formatAccuracyDelta } = await import("@/lib/api/historical-validation");
+    expect(formatAccuracyDelta(null)).toBe("—");
+    expect(formatAccuracyDelta(Number.NaN)).toBe("—");
+    expect(formatAccuracyDelta(Number.POSITIVE_INFINITY)).toBe("—");
+    expect(formatAccuracyDelta(Number.NEGATIVE_INFINITY)).toBe("—");
+  });
+
+  test("one-decimal precision is enforced (no trailing zeros beyond one decimal place)", async () => {
+    const { formatAccuracyDelta } = await import("@/lib/api/historical-validation");
+    expect(formatAccuracyDelta(0.123456)).toBe("+12.3pp");
+    expect(formatAccuracyDelta(-0.001)).toBe("-0.1pp");
+  });
+});
+
+describe("selectComparableVersions + defaultCompareSelection", () => {
+  function summaryStub(): unknown {
+    return {
+      horizon: "1d",
+      overall: { total_signals: 1, correct: 1, incorrect: 0, neutral: 0, resolved: 1, accuracy: 1 },
+      by_decision: {},
+      by_regime: {},
+      by_mode: {},
+      by_pattern: {},
+      by_readiness: {},
+      by_direction: {},
+      rows_examined: 1,
+      parameter_versions: []
+    };
+  }
+
+  test("excludes the __all__ aggregate from selectable versions", async () => {
+    const { selectComparableVersions, ALL_VERSIONS_KEY } = await import(
+      "@/lib/api/historical-validation"
+    );
+    const map = {
+      [ALL_VERSIONS_KEY]: summaryStub(),
+      v1: summaryStub(),
+      v2: summaryStub()
+    } as unknown as Record<string, import("@/lib/api/historical-validation").HistoricalValidationSummary>;
+    const versions = selectComparableVersions(map);
+    expect(versions).toEqual(["v1", "v2"]);
+    expect(versions).not.toContain("__all__");
+  });
+
+  test("sorts v<n> numerically, not lexicographically (v2 < v10, not v10 between v1 and v2)", async () => {
+    const { selectComparableVersions } = await import("@/lib/api/historical-validation");
+    const map = {
+      v10: summaryStub(),
+      v2: summaryStub(),
+      v1: summaryStub()
+    } as unknown as Record<string, import("@/lib/api/historical-validation").HistoricalValidationSummary>;
+    expect(selectComparableVersions(map)).toEqual(["v1", "v2", "v10"]);
+  });
+
+  test("always places `unknown` last so legacy rows are an explicit choice, never a default", async () => {
+    const { selectComparableVersions, defaultCompareSelection } = await import(
+      "@/lib/api/historical-validation"
+    );
+    const map = {
+      unknown: summaryStub(),
+      v1: summaryStub(),
+      v2: summaryStub()
+    } as unknown as Record<string, import("@/lib/api/historical-validation").HistoricalValidationSummary>;
+    expect(selectComparableVersions(map)).toEqual(["v1", "v2", "unknown"]);
+    // The default selection picks the last two comparable — `unknown` is last, so the
+    // default A=v2, B=unknown is the intentional "what did the new rules add over the
+    // legacy unstamped baseline?" view. If we ever want a different default this test
+    // is the canary.
+    expect(defaultCompareSelection(map)).toEqual({ versionA: "v2", versionB: "unknown" });
+  });
+
+  test("defaultCompareSelection returns null when fewer than two comparable versions exist", async () => {
+    const { defaultCompareSelection, ALL_VERSIONS_KEY } = await import(
+      "@/lib/api/historical-validation"
+    );
+    // Only __all__ + one version → no diff possible.
+    const single = {
+      [ALL_VERSIONS_KEY]: summaryStub(),
+      v1: summaryStub()
+    } as unknown as Record<string, import("@/lib/api/historical-validation").HistoricalValidationSummary>;
+    expect(defaultCompareSelection(single)).toBeNull();
+    // Empty map → null.
+    expect(defaultCompareSelection({})).toBeNull();
+  });
+
+  test("defaultCompareSelection picks the last two versions (latest-pair-of-changes lens)", async () => {
+    const { defaultCompareSelection } = await import("@/lib/api/historical-validation");
+    const map = {
+      v1: summaryStub(),
+      v2: summaryStub(),
+      v3: summaryStub()
+    } as unknown as Record<string, import("@/lib/api/historical-validation").HistoricalValidationSummary>;
+    expect(defaultCompareSelection(map)).toEqual({ versionA: "v2", versionB: "v3" });
+  });
+});

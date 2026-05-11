@@ -298,6 +298,177 @@ export function formatAccuracyPercent(accuracy: number | null): string {
   return `${(accuracy * 100).toFixed(1)}%`;
 }
 
+// ── Phase 4 — cross-version diff helpers ────────────────────────────────────────────
+
+/**
+ * Sample-size threshold used to flag a delta as "small sample" on the compare view.
+ *
+ * Resolved-non-neutral signals fewer than this number make the directional accuracy
+ * statistically noisy; the UI keeps the row visible but adds a calm "small sample"
+ * annotation so the user does not over-read the delta. Ten is a deliberately
+ * conservative cutoff — it matches the threshold the dashboard already uses
+ * implicitly through the Evidence-card narrative copy and the assistant prompt's
+ * sample-size caveat clause.
+ */
+export const SMALL_SAMPLE_THRESHOLD = 10;
+
+/**
+ * Per-bucket diff between two `BucketStats` snapshots (A → B). All count deltas are
+ * computed as `B - A` so a positive `accuracyDelta` means version B is more
+ * directionally accurate than version A in this stratum.
+ *
+ * NaN-safe by design: if either side's `accuracy` is `null` (no resolved-non-neutral
+ * trades in the bucket), `accuracyDelta` is `null` and the UI renders "—" rather than
+ * a misleading "0.0pp". This mirrors the same em-dash discipline the single-version
+ * surface honors via {@link formatAccuracyPercent}.
+ */
+export interface BucketDelta {
+  accuracyDelta: number | null;
+  totalDelta: number;
+  resolvedDelta: number;
+  neutralDelta: number;
+  /** True when version A's resolved-non-neutral count is below `SMALL_SAMPLE_THRESHOLD`. */
+  smallSampleA: boolean;
+  /** True when version B's resolved-non-neutral count is below `SMALL_SAMPLE_THRESHOLD`. */
+  smallSampleB: boolean;
+}
+
+/**
+ * Empty bucket fallback for strata that exist on one side of the diff but not the
+ * other. Treats missing-on-side as "zero rows" so the diff math has uniform inputs.
+ */
+const EMPTY_BUCKET: BucketStats = {
+  total_signals: 0,
+  correct: 0,
+  incorrect: 0,
+  neutral: 0,
+  resolved: 0,
+  accuracy: null
+};
+
+/**
+ * Diff two `BucketStats` rows. Either side may be `null` (the stratum may exist in
+ * version A's data and not version B's, e.g. a pattern family that only fired under
+ * the new rules). A `null` side is treated as zero rows + `null` accuracy.
+ *
+ * - `accuracyDelta` is `B.accuracy - A.accuracy` when both finite; `null` otherwise.
+ * - `totalDelta` / `resolvedDelta` / `neutralDelta` are plain count subtractions.
+ * - `smallSampleA` / `smallSampleB` flag low-resolved-count noisiness independently
+ *   so the UI can annotate either side without obscuring the other.
+ */
+export function diffBucketStats(
+  a: BucketStats | null | undefined,
+  b: BucketStats | null | undefined
+): BucketDelta {
+  const left = a ?? EMPTY_BUCKET;
+  const right = b ?? EMPTY_BUCKET;
+  const accuracyDelta =
+    left.accuracy === null ||
+    right.accuracy === null ||
+    !Number.isFinite(left.accuracy) ||
+    !Number.isFinite(right.accuracy)
+      ? null
+      : right.accuracy - left.accuracy;
+  const resolvedA = left.correct + left.incorrect;
+  const resolvedB = right.correct + right.incorrect;
+  return {
+    accuracyDelta,
+    totalDelta: right.total_signals - left.total_signals,
+    resolvedDelta: resolvedB - resolvedA,
+    neutralDelta: right.neutral - left.neutral,
+    smallSampleA: resolvedA < SMALL_SAMPLE_THRESHOLD,
+    smallSampleB: resolvedB < SMALL_SAMPLE_THRESHOLD
+  };
+}
+
+/**
+ * Render an accuracy-delta as a percentage-point string for the compare view.
+ *
+ * Units are **percentage points** (the literal arithmetic difference of two fractions
+ * multiplied by 100), not "percent of percent". `formatAccuracyDelta(0.052)` → `"+5.2pp"`,
+ * `formatAccuracyDelta(-0.031)` → `"-3.1pp"`, `formatAccuracyDelta(0)` → `"0.0pp"`,
+ * `formatAccuracyDelta(null)` → `"—"`.
+ *
+ * The em-dash form is what the UI shows when either side of the diff had no
+ * resolved-non-neutral rows; it is intentionally identical to {@link formatAccuracyPercent}'s
+ * em-dash so users learn one calm "no data" signal across the whole panel.
+ */
+export function formatAccuracyDelta(delta: number | null): string {
+  if (delta === null || !Number.isFinite(delta)) return "—";
+  const pp = delta * 100;
+  if (pp === 0) return "0.0pp";
+  const sign = pp > 0 ? "+" : "";
+  return `${sign}${pp.toFixed(1)}pp`;
+}
+
+/**
+ * Special key the backend uses to denote the synthetic combined cross-version aggregate
+ * in `by_parameter_version`. It is exported as a constant so UI and tests can reference
+ * it without string-typoing the magic value.
+ */
+export const ALL_VERSIONS_KEY = "__all__";
+
+/** Key the backend uses for rows that pre-date `parameter_version` stamping. */
+export const UNKNOWN_VERSION_KEY = "unknown";
+
+/**
+ * Filter the `by_parameter_version` map down to the keys a user can meaningfully pick
+ * on a compare-A-vs-B view, ordered the way the dropdown should render them:
+ *
+ * 1. The synthetic `__all__` aggregate is excluded (it is not a "version", it is the
+ *    combined view; offering it as a side of an A-vs-B diff would be confusing).
+ * 2. Known `v<n>` versions are sorted numerically ascending so `v2` follows `v1` and
+ *    `v10` follows `v9` (lexicographic sort would put `v10` between `v1` and `v2`).
+ * 3. The `unknown` bucket is always last — it represents legacy rows without a
+ *    parameter_version stamp, so it is most useful as an explicit choice rather than
+ *    a defaulted one.
+ * 4. Any other unrecognized keys (defensive — backend should not emit them) sort
+ *    alphabetically between the `v<n>` series and `unknown`.
+ */
+export function selectComparableVersions(
+  map: Record<string, HistoricalValidationSummary>
+): string[] {
+  const keys = Object.keys(map).filter((k) => k !== ALL_VERSIONS_KEY);
+  return keys.sort(compareVersionKeys);
+}
+
+function compareVersionKeys(a: string, b: string): number {
+  if (a === UNKNOWN_VERSION_KEY && b !== UNKNOWN_VERSION_KEY) return 1;
+  if (b === UNKNOWN_VERSION_KEY && a !== UNKNOWN_VERSION_KEY) return -1;
+  const va = parseSemverIshVersion(a);
+  const vb = parseSemverIshVersion(b);
+  if (va !== null && vb !== null) return va - vb;
+  if (va !== null && vb === null) return -1;
+  if (va === null && vb !== null) return 1;
+  return a.localeCompare(b);
+}
+
+function parseSemverIshVersion(key: string): number | null {
+  if (!key.startsWith("v")) return null;
+  const n = Number.parseFloat(key.slice(1));
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Default selection for the compare view: the **last two** comparable versions in the
+ * sorted list returned by {@link selectComparableVersions}. The intuition is that a
+ * user opening the compare view most often wants to know "what did the latest rules
+ * change do?", which is the diff between the two most-recent versions.
+ *
+ * Returns `null` when there are fewer than two comparable versions — the panel renders
+ * a calm "need at least two parameter versions" empty state in that case.
+ */
+export function defaultCompareSelection(
+  map: Record<string, HistoricalValidationSummary>
+): { versionA: string; versionB: string } | null {
+  const versions = selectComparableVersions(map);
+  if (versions.length < 2) return null;
+  return {
+    versionA: versions[versions.length - 2]!,
+    versionB: versions[versions.length - 1]!
+  };
+}
+
 /**
  * Build a default `[from, to)` window for the panel: trailing N days ending now.
  * The dashboard component owns the picker UI; this helper centralizes the ISO formatting
