@@ -288,3 +288,132 @@ a {
     inset 3px 0 0 0 rgba(37, 99, 235, 0.38),
     inset 0 -3px 0 0 rgba(37, 99, 235, 0.32);
 }
+
+/* ───────────────────────────────────────────────────────────────
+ * STOCVEST Assistant — calm motion language.
+ *
+ * The chatbot's distinctive look is intentionally restrained:
+ * - launcher pulses slowly (3.6s) so it sits in the background until needed
+ * - panel rises with a single confident motion (no spring overshoot)
+ * - assistant words fade in with a small stagger, like considered speech
+ * No emoji indicators, no bubbles, no jitter.
+ * ─────────────────────────────────────────────────────────────── */
+
+@keyframes stocvest-assistant-launcher-pulse {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(1.55);
+    opacity: 0;
+  }
+}
+
+.stocvest-assistant-launcher-pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  pointer-events: none;
+  border: 1px solid rgba(56, 189, 248, 0.55);
+  animation: stocvest-assistant-launcher-pulse 3.6s ease-out infinite;
+}
+
+@keyframes stocvest-assistant-panel-rise {
+  0% {
+    transform: translateY(14px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.stocvest-assistant-panel {
+  animation: stocvest-assistant-panel-rise 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes stocvest-assistant-word-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.stocvest-assistant-word {
+  display: inline;
+  opacity: 0;
+  animation: stocvest-assistant-word-in 220ms ease-out forwards;
+  /* `display: inline` keeps the text wrapping natural; we only animate opacity + tiny shift. */
+}
+
+@keyframes stocvest-assistant-thinking {
+  0%,
+  80%,
+  100% {
+    opacity: 0.18;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+.stocvest-assistant-thinking-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 9999px;
+  background: currentColor;
+  margin: 0 2px;
+  animation: stocvest-assistant-thinking 1.2s ease-in-out infinite;
+}
+
+.stocvest-assistant-thinking-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.stocvest-assistant-thinking-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+/* Constellation strip: small layer dots that subtly glow when the layer has a directional read. */
+.stocvest-assistant-constellation-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: rgba(148, 163, 184, 0.35);
+  transition: background-color 200ms ease, box-shadow 200ms ease;
+}
+.stocvest-assistant-constellation-dot[data-tone="bullish"] {
+  background: rgba(34, 197, 94, 0.85);
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+}
+.stocvest-assistant-constellation-dot[data-tone="bearish"] {
+  background: rgba(239, 68, 68, 0.85);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+}
+.stocvest-assistant-constellation-dot[data-tone="neutral"] {
+  background: rgba(245, 158, 11, 0.78);
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.45);
+}
+.stocvest-assistant-constellation-dot[data-tone="unavailable"] {
+  background: rgba(148, 163, 184, 0.25);
+}
+
+/* Reduced-motion override: the assistant must respect the OS pref. */
+@media (prefers-reduced-motion: reduce) {
+  .stocvest-assistant-launcher-pulse,
+  .stocvest-assistant-panel,
+  .stocvest-assistant-word,
+  .stocvest-assistant-thinking-dot {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}

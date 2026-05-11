@@ -38,6 +38,9 @@ import {
 import { tickerNewsTriggerLine } from "@/lib/api/ticker-news-panel";
 import { LAYER_NAME_HINTS } from "@/lib/ui-tooltips";
 import { isInsufficientCompositeResponse, type SwingCompositeMarketStatus } from "@/lib/api/swing-composite";
+import { synthTradeDecision } from "@/lib/signal-evidence/trade-decision";
+import { usePublishAssistantContext } from "@/lib/assistant/context";
+import type { AssistantPageContext, AssistantLayerKey, AssistantLayerStatus } from "@/lib/assistant/types";
 
 type LayerStatus = "Bullish" | "Bearish" | "Neutral" | "Unavailable" | "As of close";
 
@@ -1028,6 +1031,78 @@ export function SignalsPageClient({
       cancelled = true;
     };
   }, [showAfterHoursPanel, symbol, tradingMode]);
+
+  /**
+   * Build the page-context payload published to the STOCVEST Assistant chatbot.
+   *
+   * The chatbot's locked system prompt lives on the server; this hook only forwards what
+   * is visible on screen so the assistant can ground its explanations in the same data
+   * the user is looking at. `synthTradeDecision` is the single source of truth for the
+   * Decision state and rationale — the Evidence card reads it for display, this hook
+   * reads it for chatbot context. No internal weights or thresholds are exposed.
+   */
+  const assistantContext = useMemo<AssistantPageContext | null>(() => {
+    const pageId = tab === "history" ? "signals/history" : "signals/layers";
+    const sym = symbol.trim().toUpperCase();
+    if (!sym && tab === "layers") {
+      return { page: pageId, trading_mode: tradingMode };
+    }
+    if (tab === "history") {
+      return {
+        page: pageId,
+        trading_mode: tradingMode,
+        symbol: sym || undefined
+      };
+    }
+    if (!signalEvidence) {
+      return { page: pageId, trading_mode: tradingMode, symbol: sym || undefined };
+    }
+    const insight = signalEvidence.insight;
+    if (!insight) {
+      return { page: pageId, trading_mode: tradingMode, symbol: sym || undefined };
+    }
+    const decision = synthTradeDecision(signalEvidence, insight);
+    const layerStatus: Partial<Record<AssistantLayerKey, AssistantLayerStatus>> = {};
+    for (const layer of signalEvidence.layers ?? []) {
+      const k = layer.key as AssistantLayerKey;
+      if (
+        k === "technical" ||
+        k === "news" ||
+        k === "macro" ||
+        k === "sector" ||
+        k === "geopolitical" ||
+        k === "internals"
+      ) {
+        layerStatus[k] = layer.status;
+      }
+    }
+    return {
+      page: pageId,
+      trading_mode: tradingMode,
+      symbol: sym,
+      decision_state: decision.state,
+      decision_line: decision.line,
+      decision_rationale: decision.rationale ?? undefined,
+      trade_readiness:
+        typeof insight.signal_score === "number" && Number.isFinite(insight.signal_score)
+          ? insight.signal_score
+          : null,
+      risk_reward:
+        typeof insight.risk_reward === "number" && Number.isFinite(insight.risk_reward)
+          ? insight.risk_reward
+          : null,
+      trend_strength: insight.trend_strength || undefined,
+      trend_direction: insight.trend_direction || undefined,
+      market_regime: insight.market_regime || undefined,
+      layer_alignment_pct:
+        insight.alignment_ratio != null && Number.isFinite(insight.alignment_ratio)
+          ? Math.round(Math.max(0, Math.min(1, insight.alignment_ratio)) * 100)
+          : null,
+      layer_status: Object.keys(layerStatus).length > 0 ? layerStatus : undefined
+    };
+  }, [tab, tradingMode, symbol, signalEvidence]);
+
+  usePublishAssistantContext(assistantContext);
 
   function directionChipStyle(bias: PublicSignal["bias"]): CSSProperties {
     if (bias === "bullish") {

@@ -52,6 +52,7 @@ from stocvest.data.dashboard_cache import (
 )
 from stocvest.data.models import Bar, SignalRecord
 from stocvest.signals.ai_explanations import AIExplanationService, news_articles_from_payload
+from stocvest.signals.assistant_chat import AssistantChatService
 from stocvest.signals import (
     AISynthesis,
     CompositeScoreEngine,
@@ -844,6 +845,53 @@ def ai_explanations_handler(event: LambdaEvent, context: LambdaContext) -> dict[
     )
 
 
+def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    """POST /v1/signals/assistant/chat — STOCVEST Assistant conversational explanations.
+
+    Requires authentication. The system prompt is locked server-side; clients only
+    supply the conversation turns and an optional whitelisted page-context object.
+    Paid users get a Claude-generated reply; free users get a deterministic message.
+    """
+    _ = context
+    rc = build_request_context(event)
+    if not rc.user_id:
+        return unauthorized("Authenticated user is required.")
+    try:
+        body = parse_json_body(event)
+    except (TypeError, ValueError, KeyError):
+        return bad_request("Invalid JSON body.")
+    if not isinstance(body, dict):
+        return bad_request("Body must be a JSON object.")
+
+    raw_messages = body.get("messages")
+    raw_context = body.get("page_context")
+    page_context = raw_context if isinstance(raw_context, dict) else None
+
+    profile = get_user_profile_store().get_profile(rc.user_id)
+    svc = AssistantChatService()
+
+    try:
+        result = asyncio.run(
+            svc.reply(
+                messages=raw_messages if isinstance(raw_messages, list) else [],
+                page_context=page_context,
+                user_profile=profile,
+            )
+        )
+    except (TypeError, ValueError) as exc:
+        return bad_request(f"Invalid assistant request: {exc}")
+
+    return ok(
+        {
+            "text": result.text,
+            "source": result.source,
+            "mode": result.mode,
+            "upgrade_available": result.upgrade_available,
+            "disclaimer": API_SIGNAL_DISCLAIMER,
+        }
+    )
+
+
 def founding_members_count_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
     """GET /v1/signals/founding-members — public pricing counter for landing page."""
     _ = event
@@ -925,6 +973,7 @@ def signals_http_dispatch(event: LambdaEvent, context: LambdaContext) -> dict[st
     routes: dict[str, Callable[[LambdaEvent, LambdaContext], dict[str, Any]]] = {
         "GET /v1/signals/founding-members": founding_members_count_handler,
         "POST /v1/signals/ai/explanations": ai_explanations_handler,
+        "POST /v1/signals/assistant/chat": assistant_chat_handler,
         "POST /v1/signals/composite/real": real_composite_handler,
         "POST /v1/signals/composite/swing": swing_real_composite_handler,
         "POST /v1/signals/swing/composite": swing_composite_handler,
