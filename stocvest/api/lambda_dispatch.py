@@ -237,6 +237,14 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
 
         return _with_cors_and_audit(event=event, response=signal_resolution_scheduled_handler(event, context), module=module)
 
+    if module == "weight_proposer":
+        from stocvest.api.handlers.weight_proposer import weight_proposer_scheduled_handler
+
+        # Scheduled-worker Lambda; the audit decorator is a no-op on
+        # EventBridge events so we skip the wrapper to keep the response
+        # body pristine for CloudWatch debugging.
+        return weight_proposer_scheduled_handler(event, context)
+
     if module == "geo_themes":
         from stocvest.workers.geo_themes_updater import handler as geo_themes_job_handler
 
