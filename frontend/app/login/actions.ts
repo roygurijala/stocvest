@@ -95,3 +95,46 @@ export async function logoutAction(): Promise<void> {
   clearSessionTokenCookies();
   redirect("/");
 }
+
+/**
+ * Server action used by `SessionExpiredBanner` when the user clicks "Sign in".
+ *
+ * Why this exists (separate from `logoutAction`):
+ *
+ *   The session-expired banner is rendered from a sticky `sessionStorage` flag
+ *   that survives client-side route changes. If the user's underlying Cognito
+ *   cookies are STILL valid (which can happen when a single 401 from a single
+ *   API call triggered the banner — e.g. a transient JWT-authorizer cache miss
+ *   or a stale token mid-rotation), simply navigating to `/login` from the
+ *   banner triggers a redirect-loop:
+ *
+ *     1. `router.push("/login?reason=expired")`
+ *     2. `middleware.ts` sees a valid cookie + `pathname.startsWith("/login")`
+ *        → redirects back to `/dashboard`.
+ *     3. The banner re-renders because the sessionStorage flag is still set.
+ *     4. To the user this looks like "I clicked Sign in and nothing happened."
+ *
+ *   This action breaks the loop by ALWAYS clearing the three session cookies
+ *   server-side first, then redirecting to `/login` with `reason=expired` and
+ *   the captured `next=` so the user resumes on the page they were on. Once
+ *   the cookies are gone, the middleware's `/login while signed in → bounce
+ *   to dashboard` branch doesn't fire and the user lands on the login page
+ *   cleanly. The login page's `LoginExpiredFlagClear` then scrubs the
+ *   sessionStorage flag on render, so the banner can't reappear after the
+ *   user signs back in.
+ *
+ *   We accept the `next` path via form data so the banner doesn't have to
+ *   embed it in a query string and so it can be sanitized server-side by the
+ *   same `sanitizeNextPath` allowlist every other login redirect uses.
+ */
+export async function signOutToLoginAction(formData: FormData): Promise<void> {
+  const rawNext = formData.get("next");
+  const safeNext = sanitizeNextPath(typeof rawNext === "string" ? rawNext : null);
+  clearSessionTokenCookies();
+  const params = new URLSearchParams();
+  params.set("reason", "expired");
+  if (safeNext) {
+    params.set("next", safeNext);
+  }
+  redirect(`/login?${params.toString()}`);
+}
