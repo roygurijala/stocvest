@@ -5,7 +5,7 @@ import { PortfolioPageClient } from "@/components/portfolio-page-client";
 import { fetchAllBrokerOverviews } from "@/lib/api/brokers";
 import { fetchPortfolioOverview } from "@/lib/api/portfolio";
 import { fetchEarningsCalendar } from "@/lib/api/earnings";
-import { getServerSession } from "@/lib/auth/session";
+import { getDashboardAuthContext } from "@/lib/auth/dashboard-session";
 
 function pickQuery(
   sp: Record<string, string | string[] | undefined> | undefined,
@@ -44,7 +44,7 @@ export default async function DashboardPortfolioPage({
 }: {
   searchParams?: Record<string, string | string[] | undefined>;
 }) {
-  const session = getServerSession();
+  const { session, isAdmin } = getDashboardAuthContext();
   if (!session) {
     redirect("/login");
   }
@@ -61,7 +61,7 @@ export default async function DashboardPortfolioPage({
   const earnings = await fetchEarningsCalendar(symbols, 2);
   const earningsBySymbol = Object.fromEntries([...earnings.upcoming, ...earnings.recent].map((e) => [e.symbol.toUpperCase(), e]));
   return (
-    <AppShell session={session}>
+    <AppShell session={session} isAdmin={isAdmin}>
       <PortfolioPageClient
         brokerOverviews={brokerOverviews}
         overview={overview}

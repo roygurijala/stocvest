@@ -4,7 +4,7 @@ import { JournalPageClient } from "@/components/journal-page-client";
 import { fetchAllBrokerOverviews } from "@/lib/api/brokers";
 import { fetchJournalAnalytics, fetchJournalEntries } from "@/lib/api/journal";
 import type { JournalAnalyticsPayload } from "@/lib/api/contracts";
-import { getServerSession } from "@/lib/auth/session";
+import { getDashboardAuthContext } from "@/lib/auth/dashboard-session";
 
 function emptyAnalytics(userId: string): JournalAnalyticsPayload {
   return {
@@ -26,7 +26,7 @@ function emptyAnalytics(userId: string): JournalAnalyticsPayload {
 }
 
 export default async function DashboardJournalPage() {
-  const session = getServerSession();
+  const { session, isAdmin } = getDashboardAuthContext();
   if (!session) {
     redirect("/login");
   }
@@ -41,7 +41,7 @@ export default async function DashboardJournalPage() {
     (brokerOverviews.length > 0 ? brokerOverviews[0]?.broker : null);
 
   return (
-    <AppShell session={session}>
+    <AppShell session={session} isAdmin={isAdmin}>
       <JournalPageClient initialEntries={entries} initialAnalytics={analytics} connectedBroker={connectedBroker} />
     </AppShell>
   );

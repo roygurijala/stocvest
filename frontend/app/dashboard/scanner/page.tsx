@@ -3,10 +3,10 @@ import { AppShell } from "@/components/app-shell";
 import { ScannerPageClient } from "@/components/scanner-page-client";
 import { fetchScannerOverview } from "@/lib/api/scanner";
 import { fetchEarningsCalendar } from "@/lib/api/earnings";
-import { getServerSession } from "@/lib/auth/session";
+import { getDashboardAuthContext } from "@/lib/auth/dashboard-session";
 
 export default async function DashboardScannerPage() {
-  const session = getServerSession();
+  const { session, isAdmin } = getDashboardAuthContext();
   if (!session) {
     redirect("/login");
   }
@@ -21,7 +21,7 @@ export default async function DashboardScannerPage() {
     [...earnings.upcoming, ...earnings.recent].map((e) => [e.symbol.toUpperCase(), e])
   );
   return (
-    <AppShell session={session}>
+    <AppShell session={session} isAdmin={isAdmin}>
       <ScannerPageClient initialOverview={overview} initialTimestampIso={new Date().toISOString()} earningsBySymbol={earningsBySymbol} />
     </AppShell>
   );

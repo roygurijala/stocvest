@@ -1,16 +1,16 @@
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { SignalValidationPageClient } from "@/components/signal-validation-page-client";
-import { getServerSession } from "@/lib/auth/session";
+import { getDashboardAuthContext } from "@/lib/auth/dashboard-session";
 
 export default async function SignalValidationPage() {
-  const session = getServerSession();
+  const { session, isAdmin } = getDashboardAuthContext();
   if (!session) {
     redirect("/login");
   }
 
   return (
-    <AppShell session={session}>
+    <AppShell session={session} isAdmin={isAdmin}>
       <SignalValidationPageClient />
     </AppShell>
   );

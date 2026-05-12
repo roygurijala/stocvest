@@ -15,6 +15,7 @@ import {
   Radio,
   CalendarDays,
   Settings,
+  ShieldCheck,
   TrendingUp,
   Zap,
   Percent,
@@ -33,6 +34,9 @@ import type { LucideIcon } from "lucide-react";
 
 interface SidebarProps {
   userLabel: string;
+  /** Whether to render admin-gated nav items. Resolved by the server (dashboard
+   *  layout reads `getServerSession()` + `isSessionAdmin()` and forwards). */
+  isAdmin?: boolean;
 }
 
 export const DASHBOARD_NAV_ITEMS: ReadonlyArray<{
@@ -57,9 +61,23 @@ export const DASHBOARD_NAV_ITEMS: ReadonlyArray<{
   { href: "/dashboard/settings", label: "Settings", icon: Settings }
 ];
 
-export function Sidebar({ userLabel }: SidebarProps) {
+/**
+ * Admin-only nav items. Rendered only when the server-side
+ * `isSessionAdmin()` check passes — the backend gate
+ * (`analysis_authorized()`) is still the real perimeter on every request.
+ */
+export const DASHBOARD_ADMIN_NAV_ITEMS: ReadonlyArray<{
+  href: string;
+  label: string;
+  icon: LucideIcon;
+}> = [
+  { href: "/dashboard/admin/proposals", label: "Admin · Proposals", icon: ShieldCheck }
+];
+
+export function Sidebar({ userLabel, isAdmin = false }: SidebarProps) {
   const pathname = usePathname();
   const { colors } = useTheme();
+  const adminItems = isAdmin ? DASHBOARD_ADMIN_NAV_ITEMS : [];
 
   return (
     <aside
@@ -120,6 +138,58 @@ export function Sidebar({ userLabel }: SidebarProps) {
             </Link>
           );
         })}
+        {adminItems.length > 0 ? (
+          <div
+            data-testid="sidebar-admin-section"
+            style={{
+              marginTop: spacing[3],
+              paddingTop: spacing[3],
+              borderTop: `1px solid ${colors.border}`,
+              display: "grid",
+              gap: spacing[2]
+            }}
+          >
+            <span
+              style={{
+                padding: `0 ${spacing[3]}`,
+                color: colors.textMuted,
+                fontSize: typography.scale.xs,
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                fontWeight: 600
+              }}
+            >
+              Admin
+            </span>
+            {adminItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = isDashboardNavItemActive(pathname, item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="sidebar-nav-item"
+                  data-testid={`sidebar-admin-item-${item.href}`}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: spacing[3],
+                    borderRadius: borderRadius.md,
+                    padding: `${spacing[2]} ${spacing[3]}`,
+                    borderLeft: `3px solid ${isActive ? colors.accent : "transparent"}`,
+                    background: isActive ? "rgba(59,130,246,0.12)" : "transparent",
+                    color: isActive ? colors.accent : colors.text,
+                    fontSize: typography.scale.sm,
+                    fontWeight: isActive ? 600 : 500
+                  }}
+                >
+                  <Icon size={18} />
+                  <span className="sidebar-nav-label">{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        ) : null}
       </nav>
 
       <div

@@ -12,9 +12,13 @@ import { useTheme } from "@/lib/theme-provider";
 interface AppShellProps {
   session: AuthSession;
   children: ReactNode;
+  /** Server-resolved admin flag — forwarded to Sidebar + MobileNavDrawer so they
+   *  conditionally render the admin nav section. The backend gate is the real
+   *  perimeter; this flag only controls UI visibility. */
+  isAdmin?: boolean;
 }
 
-export function AppShell({ session, children }: AppShellProps) {
+export function AppShell({ session, children, isAdmin = false }: AppShellProps) {
   const { colors } = useTheme();
   const pathname = usePathname();
   const [loading, setLoading] = useState(false);
@@ -36,13 +40,18 @@ export function AppShell({ session, children }: AppShellProps) {
     <>
       {loading ? <PageLoader /> : null}
       <div className="app-shell-layout grid min-h-screen grid-cols-1 lg:grid-cols-[248px_1fr]">
-        <Sidebar userLabel={userLabel} />
+        <Sidebar userLabel={userLabel} isAdmin={isAdmin} />
         <div className="min-w-0 overflow-x-hidden" style={{ background: colors.background }}>
           <TopBar onMenuClick={() => setDrawerOpen(true)} />
           <main className="min-w-0 px-4 py-6 lg:px-6">{children}</main>
         </div>
       </div>
-      <MobileNavDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} userLabel={userLabel} />
+      <MobileNavDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        userLabel={userLabel}
+        isAdmin={isAdmin}
+      />
     </>
   );
 }

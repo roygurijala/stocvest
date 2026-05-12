@@ -8,7 +8,7 @@ import { clearAssistantSession } from "@/lib/assistant/session-reset";
 import { openCrispChat } from "@/components/crisp-chat";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
-import { DASHBOARD_NAV_ITEMS } from "@/components/sidebar";
+import { DASHBOARD_NAV_ITEMS, DASHBOARD_ADMIN_NAV_ITEMS } from "@/components/sidebar";
 import { isDashboardNavItemActive } from "@/lib/dashboard-nav-active";
 import { isDashboardNavItemEnabled } from "@/lib/nav-features";
 import { usePathname } from "next/navigation";
@@ -17,11 +17,19 @@ interface MobileNavDrawerProps {
   open: boolean;
   onClose: () => void;
   userLabel: string;
+  /** Server-resolved admin flag. Mirrors `Sidebar.isAdmin`. */
+  isAdmin?: boolean;
 }
 
-export function MobileNavDrawer({ open, onClose, userLabel }: MobileNavDrawerProps) {
+export function MobileNavDrawer({
+  open,
+  onClose,
+  userLabel,
+  isAdmin = false
+}: MobileNavDrawerProps) {
   const pathname = usePathname();
   const { colors } = useTheme();
+  const adminItems = isAdmin ? DASHBOARD_ADMIN_NAV_ITEMS : [];
 
   return (
     <AnimatePresence>
@@ -115,6 +123,59 @@ export function MobileNavDrawer({ open, onClose, userLabel }: MobileNavDrawerPro
                   </Link>
                 );
               })}
+              {adminItems.length > 0 ? (
+                <div
+                  data-testid="mobile-nav-admin-section"
+                  style={{
+                    marginTop: spacing[3],
+                    paddingTop: spacing[3],
+                    borderTop: `1px solid ${colors.border}`,
+                    display: "grid",
+                    gap: spacing[2]
+                  }}
+                >
+                  <span
+                    style={{
+                      padding: `0 ${spacing[3]}`,
+                      color: colors.textMuted,
+                      fontSize: typography.scale.xs,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      fontWeight: 600
+                    }}
+                  >
+                    Admin
+                  </span>
+                  {adminItems.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = isDashboardNavItemActive(pathname, item.href);
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={onClose}
+                        data-testid={`mobile-nav-admin-item-${item.href}`}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: spacing[3],
+                          borderRadius: borderRadius.md,
+                          padding: `${spacing[3]} ${spacing[3]}`,
+                          borderLeft: `3px solid ${isActive ? colors.accent : "transparent"}`,
+                          background: isActive ? "rgba(59,130,246,0.12)" : "transparent",
+                          color: isActive ? colors.accent : colors.text,
+                          fontSize: typography.scale.sm,
+                          fontWeight: isActive ? 600 : 500,
+                          minHeight: 44
+                        }}
+                      >
+                        <Icon size={18} />
+                        <span>{item.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              ) : null}
             </nav>
 
             <div
