@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import {
   borderRadius,
+  cardSurfaceStyle,
   roleAccents,
   spacing,
   surfaceGlowClassName,
@@ -26,16 +27,23 @@ export type DashboardCardProps = {
   className?: string;
   style?: React.CSSProperties;
   /**
-   * Desk-role color encoding — Mode Separation B28 (Phase 2 color language).
+   * Desk-role identifier — Mode Separation B28.
    *
-   * Three orthogonal channels of meaning on the dashboard: (1) price direction
-   * green/red, (2) caution amber, (3) DESK ROLE — slate/indigo/teal — handled
-   * here. When `role` is set, the card surface tint, left-edge stripe, and
-   * top-left pill switch to that role's accent so a user can answer
-   * "is this swing, day, or shared context?" by hue alone.
+   * When set, the card surfaces a small labelled pill ("SHARED CONTEXT" /
+   * "SWING · MULTI-DAY" / "DAY · INTRADAY") top-left, plus a 4px-wide
+   * role-tinted `borderLeft` accent. Everything else — surface color,
+   * radius, padding, halo — uses the canonical
+   * {@link cardSurfaceStyle} shell so dashboard cards look and feel
+   * identical to Signals page, Scanner page, and Performance page cards.
    *
-   * Omit `role` to keep the legacy theme-accent surface (used by surfaces that
-   * are not part of the desk taxonomy yet — e.g. settings / legal pages).
+   * Phase 2b's bright 2px rail border, 4px top rail, 3px left stripe, and
+   * 9% role-tinted gradient were removed when the user asked for uniform
+   * look-and-feel across the application; role identity is now encoded by
+   * the labelled pill + the subtle 4px left accent (the same pattern
+   * Scanner gap cards use for the `caution` "no catalyst" flag).
+   *
+   * Omit `role` for surfaces that are not part of the desk taxonomy
+   * (settings / legal / future).
    */
   role?: CardRole;
   /** data-* attributes spread on the wrapping <article> — used by tests for stable DOM anchors
@@ -45,6 +53,11 @@ export type DashboardCardProps = {
 
 /**
  * Consistent dashboard panel: title block + circled info (i) top-right, themed surface.
+ *
+ * Shell delegates to {@link cardSurfaceStyle} so every dashboard card sits on
+ * the same visual contract as the rest of the application (Signals, Scanner,
+ * Performance, Evidence sub-panels). Role identity layered on top via a
+ * labelled pill + a subtle 4px-wide `borderLeft` accent.
  */
 export function DashboardCard({
   title,
@@ -63,30 +76,7 @@ export function DashboardCard({
     Object.entries(rest).filter(([k]) => k.startsWith("data-"))
   );
   const roleAccent: RoleAccent | null = role ? roleAccents[theme][role] : null;
-  // Phase 2b "rail line" treatment when role is set:
-  //   - Surface gets a soft 9% role tint blended into the gradient.
-  //   - BORDER becomes a 2px solid bright rail in `borderAccent` — distinctly
-  //     brighter than the surface tint so the master-card boundary is visible
-  //     in peripheral vision without reading any text. This is the structural
-  //     signal that answers "what layer of thinking am I in?" at a glance.
-  //   - A 4px-tall TOP ACCENT STRIP renders in the same borderAccent flush to
-  //     the rounded top of the card (combined with the 3px left stripe inside,
-  //     the role identity is anchored from two orthogonal edges).
-  //   - Outer halo picks up the borderAccent for a faint glow that completes
-  //     the rail-line impression without crossing into "decorative shadow".
-  // Without a role, the card preserves the legacy theme-accent surface (used
-  // for non-desk-taxonomy pages — settings / legal / future).
-  const surfaceAccent = roleAccent?.accent ?? colors.accent;
-  const railAccent = roleAccent?.borderAccent ?? colors.accent;
-  const cardBackground = roleAccent
-    ? `linear-gradient(145deg, color-mix(in srgb, ${surfaceAccent} 9%, ${colors.surface}) 0%, ${colors.surface} 55%, ${colors.surface} 100%)`
-    : `linear-gradient(145deg, color-mix(in srgb, ${colors.accent} 7%, ${colors.surface}) 0%, ${colors.surface} 42%, ${colors.surface} 100%)`;
-  const cardBorder = roleAccent
-    ? `2px solid color-mix(in srgb, ${railAccent} 78%, ${colors.border})`
-    : `1px solid color-mix(in srgb, ${colors.border} 80%, ${surfaceAccent} 20%)`;
-  const cardShadow = roleAccent
-    ? `0 18px 48px rgba(0,0,0,0.28), 0 0 0 1px color-mix(in srgb, ${railAccent} 22%, transparent), 0 0 20px color-mix(in srgb, ${railAccent} 8%, transparent)`
-    : `0 18px 48px rgba(0,0,0,0.22), 0 0 0 1px color-mix(in srgb, ${surfaceAccent} 14%, transparent)`;
+  const shell = cardSurfaceStyle(colors, "neutral");
 
   return (
     <article
@@ -95,60 +85,21 @@ export function DashboardCard({
       className={`${surfaceGlowClassName} ${className ?? ""}`.trim()}
       style={{
         position: "relative",
-        background: cardBackground,
-        border: cardBorder,
-        borderRadius: borderRadius["2xl"],
-        padding: spacing[5],
-        boxShadow: cardShadow,
+        background: shell.background,
+        border: shell.border,
+        borderLeft: roleAccent ? `4px solid ${roleAccent.accent}` : shell.border,
+        borderRadius: borderRadius.xl,
+        padding: spacing[4],
+        boxShadow: shell.boxShadow,
         overflow: "hidden",
         ...style
       }}
     >
       {roleAccent ? (
-        // Top-edge "rail" — 4px-tall solid strip flush to the rounded top corner.
-        // Together with the 2px bright border and the 3px left-edge stripe, this is
-        // the third orthogonal-edge anchor of role identity. Phase 2b ("rail lines,
-        // not soft shadows" per the user directive) — the boundary of each master
-        // card must be visible in peripheral vision without reading text.
-        <span
-          aria-hidden
-          data-testid="dashboard-card-role-top-rail"
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 4,
-            background: railAccent,
-            pointerEvents: "none"
-          }}
-        />
-      ) : null}
-      {roleAccent ? (
-        // Left-edge role stripe — 3px solid bar along the inside of the rounded border.
-        // Placed BEHIND content (zIndex 0) and the rest of the card sits in the normal
-        // flow so this never intercepts pointer events. Renders in the surface accent
-        // (softer hue) so the top rail (brighter borderAccent) reads as primary and
-        // this stripe as supporting structure.
-        <span
-          aria-hidden
-          data-testid="dashboard-card-role-stripe"
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            bottom: 0,
-            width: 3,
-            background: surfaceAccent,
-            pointerEvents: "none"
-          }}
-        />
-      ) : null}
-      {roleAccent ? (
-        // Role pill — sits above the eyebrow, anchored to the top-left of the card.
-        // Carries the verbatim role label ("SHARED CONTEXT" / "SWING · MULTI-DAY" /
-        // "DAY · INTRADAY") so screenshots are self-explanatory. Tests anchor on the
-        // exact label via `data-card-role-pill="..."`.
+        // Role pill — labelled tag at top-left. Same small-pill pattern used
+        // for "NOT INVESTMENT ADVICE" on the Evidence card; combined with the
+        // 4px borderLeft accent it tells the user "what layer of thinking am
+        // I in?" without competing visually with the rest of the page.
         <span
           data-testid="dashboard-card-role-pill"
           data-card-role-pill={role}
@@ -161,8 +112,8 @@ export function DashboardCard({
             paddingInline: spacing[2],
             paddingBlock: 2,
             borderRadius: borderRadius.full,
-            border: `1px solid color-mix(in srgb, ${surfaceAccent} 55%, ${colors.border})`,
-            background: `color-mix(in srgb, ${surfaceAccent} 16%, transparent)`,
+            border: `1px solid color-mix(in srgb, ${roleAccent.accent} 45%, ${colors.border})`,
+            background: `color-mix(in srgb, ${roleAccent.accent} 12%, transparent)`,
             color: roleAccent.accentStrong,
             fontSize: 10,
             fontWeight: 700,
@@ -180,7 +131,7 @@ export function DashboardCard({
           justifyContent: "space-between",
           alignItems: "flex-start",
           gap: spacing[3],
-          marginBottom: spacing[4],
+          marginBottom: spacing[3],
           paddingBottom: spacing[3],
           borderBottom: `1px solid color-mix(in srgb, ${colors.border} 70%, transparent)`
         }}

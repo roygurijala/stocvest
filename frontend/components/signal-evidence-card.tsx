@@ -5,8 +5,8 @@ import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AlignJustify, ArrowDown, ArrowUp, Brain, Clock } from "lucide-react";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import type { ThemeColors } from "@/lib/design-system";
-import { borderRadius, spacing, typography } from "@/lib/design-system";
+import type { CardTone, ThemeColors } from "@/lib/design-system";
+import { borderRadius, cardSurfaceStyle, spacing, typography } from "@/lib/design-system";
 import { useIsMobileLayout } from "@/lib/hooks/use-is-mobile-layout";
 import { useTheme } from "@/lib/theme-provider";
 import { DecisionMetric } from "@/components/decision-metric";
@@ -49,8 +49,6 @@ interface SignalEvidenceCardProps {
   onOpenNewsPanel?: (symbol: string) => void;
 }
 
-type CardTone = "neutral" | "bullish" | "bearish" | "caution";
-
 function statusColor(status: EvidenceStatus, colors: ThemeColors): string {
   if (status === "Bullish") return colors.bullish;
   if (status === "Bearish") return colors.bearish;
@@ -72,33 +70,15 @@ function toneFromStatus(status: EvidenceStatus): CardTone {
   return "neutral";
 }
 
+/**
+ * Local alias for the canonical card shell. Kept as a one-liner so existing
+ * call sites in this file (`...elevatedCardStyle(colors, tone)`) stay
+ * unchanged while the underlying shape lives in design-system.ts as
+ * {@link cardSurfaceStyle} — the single source of truth for the app-wide
+ * card visual contract.
+ */
 function elevatedCardStyle(colors: ThemeColors, tone: CardTone = "neutral"): CSSProperties {
-  if (tone === "bullish") {
-    return {
-      border: "1px solid rgba(34,197,94,0.35)",
-      background: "rgba(34,197,94,0.05)",
-      boxShadow: "0 0 0 1px rgba(34,197,94,0.1), 0 0 20px rgba(34,197,94,0.1)"
-    };
-  }
-  if (tone === "bearish") {
-    return {
-      border: "1px solid rgba(239,68,68,0.35)",
-      background: "rgba(239,68,68,0.05)",
-      boxShadow: "0 0 0 1px rgba(239,68,68,0.1), 0 0 20px rgba(239,68,68,0.1)"
-    };
-  }
-  if (tone === "caution") {
-    return {
-      border: "1px solid rgba(245,158,11,0.34)",
-      background: "rgba(245,158,11,0.05)",
-      boxShadow: "0 0 0 1px rgba(245,158,11,0.1), 0 0 20px rgba(245,158,11,0.1)"
-    };
-  }
-  return {
-    border: `1px solid ${colors.border}`,
-    background: "rgba(148,163,184,0.04)",
-    boxShadow: "0 0 0 1px rgba(148,163,184,0.08), 0 0 18px rgba(15,23,42,0.2)"
-  };
+  return cardSurfaceStyle(colors, tone);
 }
 
 function formatLevel(n: number | null | undefined): string {

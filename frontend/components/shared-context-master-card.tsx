@@ -12,7 +12,7 @@ import {
   type WeeklyIndexRow
 } from "@/components/weekly-market-context-widget";
 import type { ThemeColors } from "@/lib/design-system";
-import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { borderRadius, cardSurfaceStyle, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import type { MarketStatusPayload, SnapshotPayload } from "@/lib/api/market";
 import type { EarningsEvent } from "@/lib/api/earnings";
@@ -397,21 +397,22 @@ function SubsectionCard({
   dataAttrs?: Record<string, string | undefined>;
   children: ReactNode;
 }) {
+  // Delegates to the canonical {@link cardSurfaceStyle} neutral shell so the
+  // Shared Context sub-sections (B / C / D / E) share the same visual contract
+  // as every other card in the app (Signals page, Scanner page, Evidence
+  // sub-panels). Phase 2c's 1.5px slate-tinted border + gradient was retired
+  // when the user asked for uniform look-and-feel across the application.
+  const shell = cardSurfaceStyle(colors, "neutral");
   return (
     <div
       data-testid={testid}
       {...(dataAttrs ?? {})}
       style={{
         borderRadius: borderRadius.lg,
-        // Highlighted border at 1.5px so it reads as a structural unit
-        // (vs the 1px hairlines of supporting evidence rows inside).
-        // Slate-tinted at ~45% so it harmonizes with the master card's
-        // shared-context family without competing with the 2px bright
-        // rail-line border that wraps the whole master card.
-        border: `1.5px solid color-mix(in srgb, ${colors.border} 55%, ${colors.textMuted} 45%)`,
-        background: `linear-gradient(160deg, color-mix(in srgb, ${colors.textMuted} 6%, ${colors.surface}) 0%, ${colors.surface} 100%)`,
-        boxShadow: "0 4px 14px rgba(0,0,0,0.10)",
-        padding: spacing[4],
+        border: shell.border,
+        background: shell.background,
+        boxShadow: shell.boxShadow,
+        padding: spacing[3],
         display: "grid",
         gap: spacing[2]
       }}

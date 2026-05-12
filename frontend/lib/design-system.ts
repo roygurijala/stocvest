@@ -194,3 +194,61 @@ export const animationDurations = {
 
 /** Accent outer glow for panels; paired styles in `app/globals.css` (`.theme-dark` / `.theme-light`). */
 export const surfaceGlowClassName = "stocvest-glow-surface";
+
+/**
+ * Canonical card shell used across the application.
+ *
+ * Why this exists: the Signals page, Scanner page, Performance page and the
+ * Evidence-card sub-panels all converge on the same visual contract — a
+ * solid {@link ThemeColors.surface} background, a hairline
+ * {@link ThemeColors.border} border, a soft outer glow (paired with
+ * {@link surfaceGlowClassName} via `app/globals.css`), and an optional
+ * direction-tinted variant for green/red/amber semantic emphasis. Centralizing
+ * the shell here is the regression gate for "all cards look the same": any
+ * panel that ships its own `border` + `background` + `boxShadow` triple is a
+ * drift candidate and should switch to this helper instead.
+ *
+ * Variants:
+ * - `neutral` (default): 1px slate border, faint slate halo. The most common
+ *   panel surface. Use for all top-level dashboard panels, all scanner cards,
+ *   all info / context surfaces.
+ * - `bullish` | `bearish` | `caution`: tone-tinted variant for the Evidence
+ *   card sub-panels that already encode price-direction semantics. Tone color
+ *   maps to a 35% border, 5% surface tint, and faint glow in the same hue.
+ *   Do NOT use tone variants for desk role (shared/swing/day) — those are an
+ *   orthogonal channel and own their own subtle marker (a 4px role-tinted
+ *   `borderLeft` strip on {@link DashboardCard}, applied on top of this base).
+ */
+export type CardTone = "neutral" | "bullish" | "bearish" | "caution";
+
+export function cardSurfaceStyle(
+  colors: ThemeColors,
+  tone: CardTone = "neutral"
+): { border: string; background: string; boxShadow: string } {
+  if (tone === "bullish") {
+    return {
+      border: "1px solid rgba(34,197,94,0.35)",
+      background: "rgba(34,197,94,0.05)",
+      boxShadow: "0 0 0 1px rgba(34,197,94,0.1), 0 0 20px rgba(34,197,94,0.1)"
+    };
+  }
+  if (tone === "bearish") {
+    return {
+      border: "1px solid rgba(239,68,68,0.35)",
+      background: "rgba(239,68,68,0.05)",
+      boxShadow: "0 0 0 1px rgba(239,68,68,0.1), 0 0 20px rgba(239,68,68,0.1)"
+    };
+  }
+  if (tone === "caution") {
+    return {
+      border: "1px solid rgba(245,158,11,0.34)",
+      background: "rgba(245,158,11,0.05)",
+      boxShadow: "0 0 0 1px rgba(245,158,11,0.1), 0 0 20px rgba(245,158,11,0.1)"
+    };
+  }
+  return {
+    border: `1px solid ${colors.border}`,
+    background: "rgba(148,163,184,0.04)",
+    boxShadow: "0 0 0 1px rgba(148,163,184,0.08), 0 0 18px rgba(15,23,42,0.2)"
+  };
+}

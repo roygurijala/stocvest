@@ -25,7 +25,7 @@ import type { IntradayGeoPreview, IntradaySetupPayload, ScannerOverview } from "
 import type { EarningsEvent } from "@/lib/api/earnings";
 import { earningsTimingLabel } from "@/lib/earnings-timing";
 import type { ThemeColors } from "@/lib/design-system";
-import { borderRadius, roleAccents, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
+import { borderRadius, cardSurfaceStyle, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { buildEvidenceFromSetup, enrichEvidenceWithRealComposite, type SignalEvidenceData } from "@/lib/signal-evidence";
 import { tickerNewsTriggerLine } from "@/lib/api/ticker-news-panel";
@@ -485,7 +485,7 @@ export function DashboardRedesign({
   weeklyIndexRows,
   sectorRotation
 }: DashboardRedesignProps) {
-  const { colors, theme } = useTheme();
+  const { colors } = useTheme();
   const [evidence, setEvidence] = useState<SignalEvidenceData | null>(null);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [newsPanelSymbol, setNewsPanelSymbol] = useState("");
@@ -785,21 +785,18 @@ export function DashboardRedesign({
                         No active swing setups right now.
                       </p>
                       {/*
-                       * Phase 2c — "Primary read" card is the swing desk's
-                       * dominant decision surface when no setups are firing.
-                       * The user directive was explicit: "under swing desk
-                       * - primary read card should be again border
-                       * highlighted." We pick up the swing role's BRIGHT
-                       * borderAccent (the same hue the master card uses on
-                       * its rail-line border) at 1.5px so the Primary Read
-                       * card reads as a structural unit, not a paragraph
-                       * inside the panel.
+                       * "Primary read" card — the swing desk's dominant
+                       * decision surface when no setups are firing. Shell
+                       * delegates to {@link cardSurfaceStyle} so it shares
+                       * the canonical visual contract with every other card
+                       * in the app; the swing role is anchored by the parent
+                       * Swing Desk panel's 4px borderLeft accent + role
+                       * pill, so this child card doesn't need to repeat the
+                       * role hue.
                        *
-                       * The swing-role hue (not green/red) is the correct
-                       * channel here: this card describes "what the desk is
-                       * doing" — i.e. role/posture — not "did price go up
-                       * or down". Direction colors stay reserved for actual
-                       * price-direction signals downstream.
+                       * Phase 2c shipped a 1.5px violet border + 6% gradient
+                       * here; that loud treatment was retired when the user
+                       * asked for uniform look-and-feel across the app.
                        */}
                       <motion.div
                         key={`${regimeLabel}-${emptySwingSuppressionLine}`}
@@ -808,11 +805,9 @@ export function DashboardRedesign({
                         transition={{ duration: 0.38, ease: "easeOut" }}
                         data-testid="swing-desk-primary-read-card"
                         style={{
-                          borderRadius: borderRadius.xl,
-                          border: `1.5px solid color-mix(in srgb, ${roleAccents[theme].swing.borderAccent} 65%, ${colors.border})`,
-                          background: `linear-gradient(160deg, color-mix(in srgb, ${roleAccents[theme].swing.accent} 6%, ${colors.surface}) 0%, ${colors.surface} 100%)`,
-                          boxShadow: `0 6px 18px rgba(0,0,0,0.18), 0 0 0 1px color-mix(in srgb, ${roleAccents[theme].swing.borderAccent} 18%, transparent)`,
-                          padding: `${spacing[5]} ${spacing[5]}`,
+                          borderRadius: borderRadius.lg,
+                          ...cardSurfaceStyle(colors, "neutral"),
+                          padding: spacing[4],
                           display: "grid",
                           gap: spacing[3]
                         }}

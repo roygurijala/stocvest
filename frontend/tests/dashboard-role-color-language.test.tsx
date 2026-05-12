@@ -1,13 +1,18 @@
 /**
- * Dashboard role-color language + Shared Context master card (Mode Separation B28 Phase 2b).
+ * Dashboard role-color language + Shared Context master card.
  *
  * Three intertwined design contracts are locked in here:
  *
- * (A) ROLE COLOR ENCODES IDENTITY, NOT SIGNAL — every dashboard MASTER card
+ * (A) ROLE IDENTITY IS LABELLED, NOT LOUD — every dashboard MASTER card
  *     carries a `data-card-role` attribute ("shared" | "swing" | "day") and
  *     renders a verbatim role pill ("SHARED CONTEXT" / "SWING · MULTI-DAY" /
- *     "DAY · INTRADAY") plus a BRIGHT 2px rail-line border + top accent strip
- *     so the master-card boundary is visible in peripheral vision.
+ *     "DAY · INTRADAY"). Role hue surfaces as a 4px-wide left-edge accent on
+ *     the canonical {@link cardSurfaceStyle} shell so every dashboard card
+ *     shares the same visual contract as the rest of the application
+ *     (Signals page, Scanner page, Performance page, Evidence sub-panels).
+ *     The previous Phase 2b "bright 2px rail + 4px top rail + 3px left
+ *     stripe + 9% gradient" treatment was retired when the user asked for
+ *     uniform look-and-feel across the application.
  *
  * (B) ONE SHARED CONTEXT MASTER CARD with five strictly-ordered sub-sections
  *     (A-E). Phase 2b replaced the previous four separate shared cards
@@ -90,7 +95,7 @@ function wrap(ui: ReactElement) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// (A) ROLE COLOR LANGUAGE — three master cards, bright rail-line borders
+// (A) ROLE IDENTITY — three master cards, labelled role pill + 4px borderLeft
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("dashboard role-color language (Mode Separation B28 Phase 2b)", () => {
@@ -176,31 +181,25 @@ describe("dashboard role-color language (Mode Separation B28 Phase 2b)", () => {
     expect(new Set(masterRoles)).toEqual(new Set(["shared", "swing", "day"]));
   });
 
-  test("role_accents_are_three_distinct_hue_families_with_distinct_borderAccents", () => {
-    // Phase 2b adds `borderAccent` for the rail-line border treatment.
-    // It must be distinct per role (otherwise the structural signal collapses)
-    // AND distinct from the surface `accent` within the same role (otherwise
-    // the border doesn't visually pop against the surface tint).
+  test("role_accents_each_define_a_distinct_surface_accent_for_the_borderLeft_marker", () => {
+    // The surface `accent` is what the {@link DashboardCard} 4px borderLeft
+    // marker uses to encode role identity. Each role must claim a distinct
+    // hue so the marker is unambiguous.
     const dark = roleAccents.dark;
     const light = roleAccents.light;
     for (const theme of [dark, light]) {
       const accents = [theme.shared.accent, theme.swing.accent, theme.day.accent];
-      const borders = [theme.shared.borderAccent, theme.swing.borderAccent, theme.day.borderAccent];
       expect(new Set(accents).size).toBe(3);
-      expect(new Set(borders).size).toBe(3);
-      // Border distinct from surface accent within the same role (the whole
-      // point of the rail-line treatment is contrast at the boundary).
-      expect(theme.shared.borderAccent).not.toBe(theme.shared.accent);
-      expect(theme.swing.borderAccent).not.toBe(theme.swing.accent);
-      expect(theme.day.borderAccent).not.toBe(theme.day.accent);
     }
   });
 
-  test("every_master_card_renders_top_rail_AND_left_stripe_role_anchors", () => {
-    // Phase 2b: TWO orthogonal-edge anchors per master card. The 4px top rail
-    // is the bright `borderAccent` strip (visible in peripheral vision); the
-    // 3px left stripe is the softer surface `accent` (supporting structure).
-    // Both must render on every role-tinted master card.
+  test("every_master_card_renders_a_role_pill_AND_NOT_the_legacy_loud_rail_treatment", () => {
+    // Locks the "uniform look-and-feel" decision: every role-tinted master
+    // card carries a labelled role pill (matches the small-pill pattern used
+    // for NOT INVESTMENT ADVICE on the Evidence card) and must NOT reintroduce
+    // the retired Phase 2b loud rail treatment (4px top rail strip + 3px
+    // left stripe). A regression that brings back either dead element makes
+    // dashboard cards visually inconsistent with the rest of the app.
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
@@ -213,10 +212,38 @@ describe("dashboard role-color language (Mode Separation B28 Phase 2b)", () => {
     );
     for (const tid of ["swing-desk-panel", "day-desk-panel", "shared-context-master-card"]) {
       const card = screen.getByTestId(tid);
+      const pill = card.querySelector('[data-testid="dashboard-card-role-pill"]');
       const stripe = card.querySelector('[data-testid="dashboard-card-role-stripe"]');
       const topRail = card.querySelector('[data-testid="dashboard-card-role-top-rail"]');
-      expect(stripe).not.toBeNull();
-      expect(topRail).not.toBeNull();
+      expect(pill).not.toBeNull();
+      expect(stripe).toBeNull();
+      expect(topRail).toBeNull();
+    }
+  });
+
+  test("every_master_card_uses_borderRadius_xl_and_a_4px_role_tinted_borderLeft", () => {
+    // Canonical dashboard card shell: borderRadius.xl (16px, matches Signals
+    // / Scanner / Performance cards) + a 4px borderLeft in the role's
+    // surface accent. The borderLeft is the single channel that anchors role
+    // identity visually; the rest of the shell is identical to every other
+    // card in the app.
+    wrap(
+      <DashboardRedesign
+        marketOverview={baseMarket}
+        scannerOverview={baseScanner}
+        earningsEvents={[]}
+        earningsRecent={[]}
+        weeklyIndexRows={baseWeekly}
+        sectorRotation={[]}
+      />
+    );
+    for (const tid of ["swing-desk-panel", "day-desk-panel", "shared-context-master-card"]) {
+      const card = screen.getByTestId(tid);
+      const style = card.getAttribute("style") || "";
+      expect(style.toLowerCase()).toContain("border-radius: 1rem");
+      // 4px borderLeft is the role marker — assert it explicitly so a future
+      // flatten can't quietly strip role identity off the card.
+      expect(style.toLowerCase()).toMatch(/border-left:\s*4px\s+solid/);
     }
   });
 });
@@ -599,11 +626,17 @@ describe("Shared Context master card structure (Mode Separation B28 Phase 2b)", 
     expect(a.getAttribute("data-subsection-card")).toBeNull();
   });
 
-  test("swing_desk_primary_read_card_renders_with_highlighted_role_border", () => {
-    // Phase 2c: per user directive, the Swing Desk "Primary read" card must
-    // be border-highlighted using the SWING role's bright accent. We assert
-    // both the testid is present AND the inline border style picks up the
-    // role hue (color-mix using the swing borderAccent).
+  test("swing_desk_primary_read_card_renders_on_the_canonical_card_shell", () => {
+    // The Swing Desk "Primary read" card is the swing desk's dominant
+    // decision surface when no setups are firing. Its visual contract must
+    // match the canonical {@link cardSurfaceStyle} shell (same surface as
+    // every other card in the app); role identity is anchored by the parent
+    // Swing Desk panel's borderLeft + pill, so the child card itself does
+    // not repeat the role hue. Phase 2c's 1.5px violet border + 6% gradient
+    // was retired when the user asked for uniform look-and-feel across the
+    // application; a regression that reintroduces a >1px coloured border
+    // here makes the dashboard visually inconsistent with the rest of the
+    // app and is caught by this lock-in.
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
@@ -615,13 +648,10 @@ describe("Shared Context master card structure (Mode Separation B28 Phase 2b)", 
       />
     );
     const card = screen.queryByTestId("swing-desk-primary-read-card");
-    // The Primary read card is only rendered when there are no active
-    // swing setups — which is the baseScanner state in this test fixture.
     expect(card).not.toBeNull();
-    const style = card?.getAttribute("style") || "";
-    // Style picks up the swing borderAccent token at ≥1.5px — locks the
-    // "border-highlighted" treatment so a future flatten can't strip it.
-    expect(style).toMatch(/border:\s*1\.5px/);
-    expect(style.toLowerCase()).toContain("color-mix");
+    const style = (card?.getAttribute("style") || "").toLowerCase();
+    expect(style).not.toMatch(/border:\s*1\.5px/);
+    expect(style).not.toMatch(/border:\s*2px/);
+    expect(style).not.toContain("borderaccent");
   });
 });
