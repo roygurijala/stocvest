@@ -43,7 +43,19 @@ import {
   type SectorTapeKind
 } from "@/lib/dashboard-posture";
 import { isUsRegularSessionOpenEt } from "@/lib/market-hours-et";
-import type { MarketStatusPayload } from "@/lib/api/macro";
+
+/**
+ * Narrow input shape — we only read `.market` from the payload (to
+ * decide if the regular session is open / closed / extended-hours), so
+ * the helper accepts anything carrying that one field. Tests can pass
+ * `{ market: "open" }` literally without having to construct the full
+ * Polygon-shaped payload (`exchanges`, `currencies`, …). Production
+ * callers pass the real `MarketStatusPayload` from `@/lib/api/market`
+ * which is structurally a superset.
+ */
+export interface MarketStatusLite {
+  market?: string | null;
+}
 
 /**
  * Wire shape for the swing-side empty-state context. The component
@@ -104,7 +116,7 @@ export interface EmptyStateOverviewInput {
   /** Sector ETF 5-day percents for the dashboard sector-rotation helper. */
   sectorPct5d?: Array<number | null | undefined>;
   /** Optional explicit market status; defaults to `isUsRegularSessionOpenEt()`. */
-  marketStatus?: MarketStatusPayload | null;
+  marketStatus?: MarketStatusLite | null;
 }
 
 function tapeWord(pct: number | null | undefined): string {
@@ -217,8 +229,16 @@ export function buildDayEmptyStateContext(
     overview.marketStatus != null
       ? (overview.marketStatus.market || "").trim().toLowerCase() === "open"
       : isUsRegularSessionOpenEt();
+  // `buildDayReenableBullets` accepts the wider `MarketStatusPayload`
+  // type but internally only reads `.market` (via the same
+  // `isRegularSessionOpen` rule we use above). Our `MarketStatusLite`
+  // shape carries exactly that field, so the cast is structurally
+  // safe — it just sidesteps TypeScript's strict-superset check at
+  // the boundary so test fixtures don't have to construct the full
+  // Polygon-shaped payload (`exchanges`, `currencies`, etc.) every
+  // time they want to exercise the empty-state helper.
   const reenableBullets = buildDayReenableBullets({
-    marketStatus: overview.marketStatus ?? null,
+    marketStatus: (overview.marketStatus ?? null) as Parameters<typeof buildDayReenableBullets>[0]["marketStatus"],
     daySetupCount: 0
   });
   return {

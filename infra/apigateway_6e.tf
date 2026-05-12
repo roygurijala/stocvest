@@ -69,11 +69,11 @@ locals {
     "GET /v1/admin/system-status"      = { module_key = "signals", authorizer = true }
     "GET /v1/admin/audit/recent"       = { module_key = "brokers", authorizer = true }
 
-    "GET /v1/admin/users/search"                          = { module_key = "brokers", authorizer = true }
-    "GET /v1/admin/users/{user_id}"                       = { module_key = "brokers", authorizer = true }
-    "POST /v1/admin/users/{user_id}/reset-password"       = { module_key = "brokers", authorizer = true }
-    "POST /v1/admin/users/{user_id}/groups/{group}"       = { module_key = "brokers", authorizer = true }
-    "DELETE /v1/admin/users/{user_id}/groups/{group}"     = { module_key = "brokers", authorizer = true }
+    "GET /v1/admin/users/search"                      = { module_key = "brokers", authorizer = true }
+    "GET /v1/admin/users/{user_id}"                   = { module_key = "brokers", authorizer = true }
+    "POST /v1/admin/users/{user_id}/reset-password"   = { module_key = "brokers", authorizer = true }
+    "POST /v1/admin/users/{user_id}/groups/{group}"   = { module_key = "brokers", authorizer = true }
+    "DELETE /v1/admin/users/{user_id}/groups/{group}" = { module_key = "brokers", authorizer = true }
 
     "GET /v1/brokers/health"    = { module_key = "brokers", authorizer = true }
     "GET /v1/brokers/accounts"  = { module_key = "brokers", authorizer = true }
