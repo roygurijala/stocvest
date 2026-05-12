@@ -17,6 +17,15 @@ export interface GapIntelligenceCatalyst {
   source?: string;
 }
 
+/**
+ * Mode-fit verdict emitted by the backend gap classifier (see
+ * `stocvest.signals.gap_intelligence.classify_mode_best_fit`). Advisory: drives
+ * the on-card "Best evaluated as" tag and the on-click engine selection
+ * when the scanner is in the `Both` view. Explicit `scannerSetupMode`
+ * (`"swing"` / `"day"`) always wins over this verdict.
+ */
+export type GapModeBestFit = "swing" | "day" | "either";
+
 export interface GapIntelligenceItem {
   symbol: string;
   company_name: string;
@@ -30,6 +39,18 @@ export interface GapIntelligenceItem {
   catalyst: GapIntelligenceCatalyst | null;
   has_catalyst: boolean;
   no_catalyst_warning: string | null;
+  /**
+   * Mode-fit verdict for the gap (B30 Phase 4). Optional for back-compat:
+   * older cached responses or hand-rolled mocks may not include it; callers
+   * MUST default to `"either"` in that case.
+   */
+  mode_best_fit?: GapModeBestFit;
+  /**
+   * Reasoning chips that justified the `mode_best_fit` verdict. Optional for
+   * back-compat. When verdict is `"either"`, this concatenates both sides so
+   * the user can audit why the classifier could not pick.
+   */
+  mode_best_fit_reasons?: string[];
 }
 
 export interface ConfluenceSignalChip {

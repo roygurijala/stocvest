@@ -86,3 +86,47 @@ export function resolveSetupRowTradingMode(
   if (groupKey.startsWith("day")) return "day";
   return fallback;
 }
+
+/**
+ * Resolve the per-row Evidence-card trading mode for a gap-intelligence card.
+ *
+ * Gap cards are different from setup-card rows: a setup card belongs to a
+ * single render group with an explicit mode key, but a gap card is the same
+ * shape regardless of which desk the user is in. In `scannerSetupMode === "both"`
+ * view, the question "which engine should evaluate this gap?" can only be
+ * answered per row by the backend mode-fit classifier
+ * (`stocvest.signals.gap_intelligence.classify_mode_best_fit`), surfaced on the
+ * row as `item.mode_best_fit`.
+ *
+ * Resolution rules (kept simple — explicit user mode ALWAYS wins):
+ *   - `"day"`   → `"day"`   (User picked day-only mode; honor it regardless of fit verdict.)
+ *   - `"swing"` → `"swing"` (User picked swing-only mode; honor it regardless of fit verdict.)
+ *   - `"both"`  → driven by the per-row `modeBestFit`:
+ *       * `"swing"` → `"swing"` (classifier picked swing-leaning)
+ *       * `"day"`   → `"day"`   (classifier picked day-leaning)
+ *       * `"either"` or `undefined` → `"swing"` (preserve the current
+ *           "both → swing" default; the user can re-open from the day desk
+ *           if they want the alternate engine's read)
+ *
+ * Rationale: explicit context (user scanner mode) ALWAYS overrides advisory
+ * context (per-row classifier verdict). The classifier only kicks in when the
+ * scanner mode itself is ambiguous (`"both"`).
+ *
+ * @example
+ *   resolveGapCardTradingMode("day", "swing")    // → "day"   (explicit day-only wins)
+ *   resolveGapCardTradingMode("swing", "day")    // → "swing" (explicit swing-only wins)
+ *   resolveGapCardTradingMode("both", "swing")   // → "swing" (both view; classifier picked swing)
+ *   resolveGapCardTradingMode("both", "day")     // → "day"   (both view; classifier picked day)
+ *   resolveGapCardTradingMode("both", "either")  // → "swing" (both view; classifier abstained → default)
+ *   resolveGapCardTradingMode("both", undefined) // → "swing" (back-compat: no verdict from server)
+ */
+export function resolveGapCardTradingMode(
+  scannerSetupMode: ScannerSetupLoadMode,
+  modeBestFit: "swing" | "day" | "either" | undefined
+): EvidenceTradingMode {
+  if (scannerSetupMode === "day") return "day";
+  if (scannerSetupMode === "swing") return "swing";
+  if (modeBestFit === "swing") return "swing";
+  if (modeBestFit === "day") return "day";
+  return "swing";
+}

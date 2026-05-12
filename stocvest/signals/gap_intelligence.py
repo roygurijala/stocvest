@@ -123,6 +123,152 @@ def _volume_vs_adv(day_volume: float, prev_day_volume: float | None) -> float:
     return 1.0
 
 
+# ---------------------------------------------------------------------------
+# B30 Phase 4 — mode-fit classifier for gap cards
+# ---------------------------------------------------------------------------
+#
+# A pre-market gap is mode-agnostic data (a 4% gap is a market event, not a
+# trade plan), but a user clicking "View Signal" on the gap card on the
+# scanner expects the modal to evaluate the gap through ONE engine — and the
+# right engine depends on the gap's character. A 7% gap on bearish earnings is
+# a swing-engine question (multi-day continuation thesis, gaps of this scale
+# rarely round-trip intraday). A 2.5% gap with heavy premarket volume and no
+# catalyst is a day-engine question (intraday volatility play, the news layer
+# has no fundamental anchor to read).
+#
+# `classify_mode_best_fit` is the heuristic the gap card shows as a "Best
+# evaluated as: <mode>" tag AND drives the on-click engine selection in the
+# scanner's `Both` view. The classifier is intentionally transparent — it
+# returns a list of reasoning chips so the user can audit the classification
+# rather than treating it as a black box.
+#
+# It is **advisory, not authoritative**: when the user is in an explicit
+# `scannerSetupMode === "swing"` or `"day"` view, the explicit mode wins —
+# this tag only kicks in when the user is in the `Both` view and the mode
+# has to be inferred per row.
+
+# Reasoning chip prefixes (kept as constants so tests and UI can pin them).
+_SWING_CHIP_STRUCTURAL_CATALYST = "structural catalyst"
+_SWING_CHIP_LARGE_GAP = "large gap"
+_SWING_CHIP_HIGH_CONVICTION = "high-conviction catalyst"
+
+_DAY_CHIP_HEAVY_VOLUME = "heavy volume"
+_DAY_CHIP_INTRADAY_RANGE = "tradable intraday range"
+_DAY_CHIP_MOMENTUM_ONLY = "momentum gap (no fundamental anchor)"
+_DAY_CHIP_TAPE_CATALYST = "tape-level catalyst"
+
+# Closed-set return values (kept as a module-level constant so tests can pin
+# the lock-in that the classifier never emits anything else).
+MODE_BEST_FIT_VALUES: tuple[str, ...] = ("swing", "day", "either")
+
+
+def _swing_signals(
+    *,
+    abs_gap: float,
+    has_catalyst: bool,
+    catalyst_category: str | None,
+    catalyst_narrative_score: int | None,
+) -> list[str]:
+    """Enumerate the swing-tilt reasoning chips for one gap.
+
+    Swing-tilt patterns share one property: the gap reflects information the
+    market needs more than one session to fully digest. Earnings, M&A, and
+    insider activity are the canonical examples — the price discovery process
+    extends past the intraday session, so a swing hold benefits from the
+    sustained narrative reaction.
+    """
+    out: list[str] = []
+    cc = (catalyst_category or "").strip().lower()
+    if has_catalyst and cc in ("earnings", "merger", "insider"):
+        out.append(f"{_SWING_CHIP_STRUCTURAL_CATALYST} ({cc})")
+    if abs_gap >= 3.0:
+        out.append(f"{_SWING_CHIP_LARGE_GAP} ({abs_gap:.1f}%)")
+    if has_catalyst and (catalyst_narrative_score or 0) >= 60:
+        out.append(_SWING_CHIP_HIGH_CONVICTION)
+    return out
+
+
+def _day_signals(
+    *,
+    abs_gap: float,
+    volume_vs_avg: float,
+    has_catalyst: bool,
+    catalyst_category: str | None,
+) -> list[str]:
+    """Enumerate the day-tilt reasoning chips for one gap.
+
+    Day-tilt patterns share one property: the gap is more about flow than
+    information. Heavy participation, a tradable-not-extreme range, and the
+    absence of a fundamental anchor (or only a macro/analyst anchor that tends
+    to fade intraday) all point to an intraday-engine question.
+    """
+    out: list[str] = []
+    cc = (catalyst_category or "").strip().lower()
+    if volume_vs_avg >= 2.0:
+        out.append(f"{_DAY_CHIP_HEAVY_VOLUME} ({volume_vs_avg:.1f}\u00d7 avg)")
+    if 1.5 <= abs_gap < 5.0:
+        out.append(f"{_DAY_CHIP_INTRADAY_RANGE} ({abs_gap:.1f}%)")
+    if not has_catalyst:
+        out.append(_DAY_CHIP_MOMENTUM_ONLY)
+    elif cc in ("macro", "analyst"):
+        out.append(f"{_DAY_CHIP_TAPE_CATALYST} ({cc})")
+    return out
+
+
+def classify_mode_best_fit(
+    *,
+    gap_pct: float,
+    volume_vs_avg: float,
+    has_catalyst: bool,
+    catalyst_category: str | None = None,
+    catalyst_narrative_score: int | None = None,
+) -> tuple[str, list[str]]:
+    """Classify a gap's best-fit evaluation mode and return its reasoning chips.
+
+    Returns a 2-tuple ``(mode_best_fit, reasons)`` where:
+
+    * ``mode_best_fit`` is one of :data:`MODE_BEST_FIT_VALUES` (``"swing"`` /
+      ``"day"`` / ``"either"``).
+    * ``reasons`` is the short list of reasoning chips the UI shows below the
+      tag so the classification is auditable. When the verdict is ``"swing"``
+      or ``"day"``, only the chips that drove the winning side are returned;
+      when the verdict is ``"either"``, the chips from both sides are
+      concatenated so the user can see why the classifier could not pick.
+
+    Decision rule: count swing-tilt and day-tilt signals (chips above). If one
+    side wins by a margin of **at least 2**, that side is the verdict. Anything
+    closer (0 / 0, 1 / 1, 2 / 2, 2 / 1, 1 / 2, 3 / 2, 2 / 3, …) is ``"either"``.
+    A margin-2 threshold deliberately preserves ``"either"`` for cases where
+    the gap legitimately straddles both engines — a 4% gap on bullish-earnings
+    with heavy volume is plausibly tradable by both desks; the user gets to
+    pick.
+    """
+    abs_gap = abs(float(gap_pct))
+    vol_ratio = max(0.0, float(volume_vs_avg))
+
+    swing = _swing_signals(
+        abs_gap=abs_gap,
+        has_catalyst=has_catalyst,
+        catalyst_category=catalyst_category,
+        catalyst_narrative_score=catalyst_narrative_score,
+    )
+    day = _day_signals(
+        abs_gap=abs_gap,
+        volume_vs_avg=vol_ratio,
+        has_catalyst=has_catalyst,
+        catalyst_category=catalyst_category,
+    )
+
+    swing_count = len(swing)
+    day_count = len(day)
+
+    if swing_count - day_count >= 2:
+        return "swing", swing
+    if day_count - swing_count >= 2:
+        return "day", day
+    return "either", swing + day
+
+
 def _catalyst_lookback_hours_at(ny: datetime) -> int:
     """
     Regular session Mon–Fri 9:30–16:00 America/New_York → 24h news lookback; else 48h
@@ -315,6 +461,14 @@ def build_gap_intelligence_items(
                 "score": best.narrative_score,
             }
 
+        mode_best_fit, mode_best_fit_reasons = classify_mode_best_fit(
+            gap_pct=g.gap_percent,
+            volume_vs_avg=w.volume_vs_avg,
+            has_catalyst=has_cat,
+            catalyst_category=cat_type,
+            catalyst_narrative_score=narrative,
+        )
+
         items.append(
             {
                 "symbol": g.symbol,
@@ -329,6 +483,8 @@ def build_gap_intelligence_items(
                 "catalyst": catalyst_payload,
                 "has_catalyst": has_cat,
                 "no_catalyst_warning": None if has_cat else NO_CATALYST_WARNING,
+                "mode_best_fit": mode_best_fit,
+                "mode_best_fit_reasons": mode_best_fit_reasons,
             }
         )
 

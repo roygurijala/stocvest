@@ -26,6 +26,7 @@ import { describe, expect, test } from "vitest";
 
 import {
   resolveEvidenceTradingMode,
+  resolveGapCardTradingMode,
   resolveSetupRowTradingMode,
   type EvidenceTradingMode
 } from "@/lib/scanner-mode-resolution";
@@ -109,5 +110,46 @@ describe("resolveSetupRowTradingMode — per-row group-key disambiguation", () =
     // sending mixed-case keys.
     expect(resolveSetupRowTradingMode("Swing", "day")).toBe("day");
     expect(resolveSetupRowTradingMode("DAY", "swing")).toBe("swing");
+  });
+});
+
+describe("resolveGapCardTradingMode — per-gap-row classifier-driven routing (B30 Phase 4)", () => {
+  test("explicit scannerSetupMode 'day' wins regardless of classifier verdict", () => {
+    // Explicit user context ALWAYS overrides advisory classifier verdict.
+    expect(resolveGapCardTradingMode("day", "swing")).toBe("day");
+    expect(resolveGapCardTradingMode("day", "day")).toBe("day");
+    expect(resolveGapCardTradingMode("day", "either")).toBe("day");
+    expect(resolveGapCardTradingMode("day", undefined)).toBe("day");
+  });
+
+  test("explicit scannerSetupMode 'swing' wins regardless of classifier verdict", () => {
+    expect(resolveGapCardTradingMode("swing", "swing")).toBe("swing");
+    expect(resolveGapCardTradingMode("swing", "day")).toBe("swing");
+    expect(resolveGapCardTradingMode("swing", "either")).toBe("swing");
+    expect(resolveGapCardTradingMode("swing", undefined)).toBe("swing");
+  });
+
+  test("'both' view honors classifier 'swing' verdict", () => {
+    expect(resolveGapCardTradingMode("both", "swing")).toBe("swing");
+  });
+
+  test("'both' view honors classifier 'day' verdict (cross-engine routing)", () => {
+    // This is the load-bearing branch — in 'both' view, a day-leaning gap row
+    // MUST open the day engine even though the top-level fallback for 'both'
+    // is swing. Without this branch, every gap card on the 'both' view would
+    // open the swing engine and the classifier output would be cosmetic.
+    expect(resolveGapCardTradingMode("both", "day")).toBe("day");
+  });
+
+  test("'both' view with 'either' verdict falls back to swing (preserves prior default)", () => {
+    expect(resolveGapCardTradingMode("both", "either")).toBe("swing");
+  });
+
+  test("'both' view with undefined verdict (legacy / cached response) falls back to swing", () => {
+    // Back-compat: cached gap-intelligence responses from before B30 Phase 4
+    // don't carry mode_best_fit. Those rows MUST behave like the pre-Phase-4
+    // 'both → swing' default so no user-visible regression appears during the
+    // cache TTL window.
+    expect(resolveGapCardTradingMode("both", undefined)).toBe("swing");
   });
 });
