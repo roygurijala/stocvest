@@ -40,6 +40,7 @@ import { useTheme } from "@/lib/theme-provider";
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
 import { fetchSymbolMinuteBars } from "@/lib/fetch-symbol-bars";
 import { buildEvidenceFromSetup, enrichEvidenceWithComposite, type SignalEvidenceData } from "@/lib/signal-evidence";
+import { resolveEvidenceTradingMode, resolveSetupRowTradingMode } from "@/lib/scanner-mode-resolution";
 import { topSignalStrengthPercent } from "@/lib/top-signal-strength";
 import {
   CONFIDENCE_PERCENT_TIP,
@@ -777,13 +778,14 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
   const panelNewsTradingMode = scannerSetupMode === "day" ? "day" : "swing";
   /**
    * Trading mode used to enrich Evidence-card composite reads from this surface.
-   * Mirrors `panelNewsTradingMode`'s resolution so the news lookback window and the
-   * composite engine stay in lockstep. In `"both"` view the scanner is swing-first
-   * (Swing Desk is the primary, Day Desk renders below), so we default to swing —
-   * a Day-specific "evaluate as intraday" CTA can be added later without changing
-   * this default. Hard-coding the day route here was the regression we just fixed.
+   * The resolution rule lives in `@/lib/scanner-mode-resolution` as a single
+   * documented source of truth — keep it there, not inline here, so future
+   * surfaces (Day Desk inline evidence, additional engines, etc.) can reuse the
+   * same contract without copy-pasting a ternary that drifts. The rule mirrors
+   * `panelNewsTradingMode` above so news lookback + composite engine stay in
+   * lockstep on every Evidence-modal open.
    */
-  const evidenceTradingMode: "swing" | "day" = scannerSetupMode === "day" ? "day" : "swing";
+  const evidenceTradingMode = resolveEvidenceTradingMode(scannerSetupMode);
 
   const earningsBadgeFor = (symbol: string): { label: string; tip: string } | null => {
     const event = earningsBySymbol[symbol.toUpperCase()];
@@ -1135,16 +1137,14 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                 ) : (
                   group.setups.map((setup, idx) => {
                 /**
-                 * Per-row trading mode derived from the render group, so swing rows in
-                 * `scannerSetupMode === "both"` view always open the swing engine and day
-                 * rows always open the day engine. Top-level `evidenceTradingMode` (which
-                 * collapses "both" → swing) is the fallback when a group isn't mode-bound.
+                 * Per-row trading mode resolved from the render-group key (see
+                 * `resolveSetupRowTradingMode`) so swing-group rows always open the
+                 * swing engine and day-group rows always open the day engine even in
+                 * the merged `scannerSetupMode === "both"` view. Top-level
+                 * `evidenceTradingMode` is the defensive fallback if a future group
+                 * key doesn't start with `swing`/`day`.
                  */
-                const groupTradingMode: "swing" | "day" = group.key.startsWith("swing")
-                  ? "swing"
-                  : group.key.startsWith("day")
-                    ? "day"
-                    : evidenceTradingMode;
+                const groupTradingMode = resolveSetupRowTradingMode(group.key, evidenceTradingMode);
                 const snap = snapBySymbol[setup.symbol] ?? null;
                 const zone = entryZoneFromSnapshot(snap);
                 const vwap = snap?.day_vwap;
