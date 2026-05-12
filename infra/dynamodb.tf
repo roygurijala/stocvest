@@ -170,6 +170,63 @@ resource "aws_dynamodb_table" "parameter_history" {
   })
 }
 
+# D10 Phase 1 — candidate parameter rotations awaiting admin review.
+#
+# Written by the (Phase 2, separate Lambda) weekly weight-proposer optimizer
+# and promoted to live weights by the (Phase 3, separate API surface) admin
+# endpoint that wraps `ParameterStore.save_parameters_sync()`. This table is
+# *separate* from `ParameterHistory` on purpose:
+#
+#   * `ParameterHistory` is the audit log of weights that actually went live.
+#     Every row there reflects a real production-state transition; consumers
+#     (`docs/TUNING_PLAYBOOK.md`, the D2 cross-version diff view) treat it
+#     as a clean linear timeline.
+#   * `ParameterProposal` is the candidate pipeline. Most rows here will be
+#     rejected or superseded; mixing them into `ParameterHistory` would
+#     pollute the live-rotation timeline.
+#
+# GSI `status_index` lets the admin UI list pending proposals sorted by
+# `created_at` DESC (newest first) without scanning the full table. TTL is
+# enabled on the `ttl` attribute so old rejected/superseded proposals
+# auto-expire after the Phase-1 default 90-day window — operators can still
+# query promoted proposals long-term by deliberately omitting the TTL.
+resource "aws_dynamodb_table" "parameter_proposal" {
+  name         = "ParameterProposal"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "proposal_id"
+
+  attribute {
+    name = "proposal_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "status"
+    type = "S"
+  }
+
+  attribute {
+    name = "created_at"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name            = "status_index"
+    hash_key        = "status"
+    range_key       = "created_at"
+    projection_type = "ALL"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "stocvest-development-ddb-parameter-proposal"
+  })
+}
+
 # Trade journal — one item per user; keys match DynamoDBJournalStore (userId + entries).
 resource "aws_dynamodb_table" "trade_journal" {
   name         = "TradeJournal"

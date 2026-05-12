@@ -49,6 +49,7 @@ locals {
     DYNAMODB_DAY_TRADING_SETUPS       = aws_dynamodb_table.day_trading_setups.name
     DYNAMODB_SIGNAL_HISTORY_TABLE     = aws_dynamodb_table.signal_history.name
     DYNAMODB_PARAMETER_HISTORY_TABLE  = aws_dynamodb_table.parameter_history.name
+    DYNAMODB_PARAMETER_PROPOSAL_TABLE = aws_dynamodb_table.parameter_proposal.name
     DYNAMODB_SECTOR_CACHE_TABLE       = aws_dynamodb_table.sector_cache.name
     STOCVEST_TRADE_JOURNAL_TABLE      = aws_dynamodb_table.trade_journal.name
     STOCVEST_PDT_STATE_TABLE          = aws_dynamodb_table.pdt_state.name
@@ -67,6 +68,7 @@ locals {
       aws_dynamodb_table.day_trading_setups,
       aws_dynamodb_table.signal_history,
       aws_dynamodb_table.parameter_history,
+      aws_dynamodb_table.parameter_proposal,
       aws_dynamodb_table.trade_journal,
       aws_dynamodb_table.pdt_state,
       aws_dynamodb_table.sector_cache,

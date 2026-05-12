@@ -152,6 +152,12 @@ class Settings(BaseSettings):
     dynamodb_signal_history_table: str = Field("", alias="DYNAMODB_SIGNAL_HISTORY_TABLE")
     dynamodb_audit_events_table: str = Field("", alias="DYNAMODB_AUDIT_EVENTS_TABLE")
     dynamodb_parameter_history_table: str = Field("", alias="DYNAMODB_PARAMETER_HISTORY_TABLE")
+    # D10 Phase 1 — proposal-only weight-tuning pipeline. Holds candidate
+    # SignalParameters rotations produced by the Phase-2 optimizer Lambda and
+    # promoted/rejected through the Phase-3 admin endpoint. Decoupled from
+    # ParameterHistory so the audit log of *live* parameter changes stays
+    # uncluttered by rejected candidates.
+    dynamodb_parameter_proposal_table: str = Field("", alias="DYNAMODB_PARAMETER_PROPOSAL_TABLE")
     dynamodb_sector_cache_table: str = Field("", alias="DYNAMODB_SECTOR_CACHE_TABLE")
 
     # ── Signal tuning / analysis (optional) ───────────────────────
