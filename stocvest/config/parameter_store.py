@@ -50,6 +50,24 @@ def _coerce_dataclass(cls: type[T], raw: Any) -> T:
         return cls()
 
 
+def _parse_optional_composite_block(raw: Any) -> CompositeParameters | None:
+    """Parse a per-mode composite override block from Secrets Manager JSON.
+
+    Returns ``None`` when the key is absent or explicitly ``null`` so back-compat
+    secrets (which never declare ``swing_composite`` / ``day_composite``) keep
+    falling back to the shared ``composite`` block — see
+    :func:`stocvest.signals.composite_score.resolve_composite_block`.
+
+    Returns a :class:`CompositeParameters` when a dict is provided; unknown keys
+    in the dict are ignored (same contract as :func:`_coerce_dataclass`).
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        return None
+    return _coerce_dataclass(CompositeParameters, raw)
+
+
 def signal_parameters_from_dict(data: dict[str, Any]) -> SignalParameters:
     """Build :class:`SignalParameters` from a JSON object; unknown keys ignored."""
     base = default_signal_parameters()
@@ -60,6 +78,8 @@ def signal_parameters_from_dict(data: dict[str, Any]) -> SignalParameters:
     macro = _coerce_dataclass(MacroParameters, data.get("macro") or {})
     sector = _coerce_dataclass(SectorParameters, data.get("sector") or {})
     comp = _coerce_dataclass(CompositeParameters, data.get("composite") or {})
+    swing_comp = _parse_optional_composite_block(data.get("swing_composite"))
+    day_comp = _parse_optional_composite_block(data.get("day_composite"))
     swing_t = _coerce_dataclass(SwingTechnicalParameters, data.get("swing_technical") or {})
     return SignalParameters(
         version=str(data.get("version") or base.version),
@@ -70,6 +90,8 @@ def signal_parameters_from_dict(data: dict[str, Any]) -> SignalParameters:
         macro=macro,
         sector=sector,
         composite=comp,
+        swing_composite=swing_comp,
+        day_composite=day_comp,
         swing_technical=swing_t,
         swing_news_lookback_hours=int(data.get("swing_news_lookback_hours", base.swing_news_lookback_hours)),
         swing_macro_events_days=int(data.get("swing_macro_events_days", base.swing_macro_events_days)),

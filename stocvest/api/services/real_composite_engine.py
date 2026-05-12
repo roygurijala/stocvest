@@ -39,6 +39,7 @@ from stocvest.signals.composite_score import (
     CompositeVerdict,
     LayerSignal,
     build_composite_score_engine_from_params,
+    resolve_composite_block,
 )
 from stocvest.signals.geo_analyzer import GeoAnalyzer
 from stocvest.signals.internals_analyzer import InternalsAnalyzer
@@ -330,7 +331,8 @@ async def run_real_composite_engine_phase(
     layer_results = [tech, news, macro, sector, geo, internals]
     layer_ids = ["technical", "news", "macro", "sector", "geopolitical", "internals"]
     available = [r for r in layer_results if getattr(r, "status", "") == "available"]
-    min_layers = int(params.composite.min_available_layers)
+    day_composite = resolve_composite_block(params, mode="day")
+    min_layers = int(day_composite.min_available_layers)
     if len(available) < min_layers:
         return {
             "symbol": sym,
@@ -351,7 +353,7 @@ async def run_real_composite_engine_phase(
             signals.append(sig)
 
     regime = _regime_for_engine(macro.market_regime)
-    engine = build_composite_score_engine_from_params(params)
+    engine = build_composite_score_engine_from_params(params, mode="day")
     composite_raw = engine.compute(signals, regime=regime)
     sector_persist = float(sector_momentum.persistence) if sector_momentum else 0.5
     composite, alignment = adjust_composite_with_alignment(
@@ -361,8 +363,8 @@ async def run_real_composite_engine_phase(
         sector_verdict=str(sector.verdict or "neutral"),
         sector_persistence=sector_persist,
         technical_verdict=str(tech.verdict or "neutral"),
-        bullish_threshold=float(params.composite.bullish_threshold),
-        bearish_threshold=float(params.composite.bearish_threshold),
+        bullish_threshold=float(day_composite.bullish_threshold),
+        bearish_threshold=float(day_composite.bearish_threshold),
     )
     _LOG.info(
         "alignment_computed symbol=%s level=%s modifier=%.1f raw=%.4f final=%.4f macro=%s sector=%s tech=%s",

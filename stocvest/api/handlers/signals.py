@@ -335,7 +335,7 @@ def swing_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[
             for p in available_layers
         ]
         active_params = ParameterStore.get_parameters_sync()
-        composite = build_composite_score_engine_from_params(active_params).compute(
+        composite = build_composite_score_engine_from_params(active_params, mode="swing").compute(
             signals, regime=regime
         )
         snap_raw = payload.get("symbol_snapshot") or payload.get("snapshot") or {}

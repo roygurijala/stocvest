@@ -302,7 +302,46 @@ class CompositeScoreEngine:
         return score
 
 
-def build_composite_score_engine_from_params(params: object) -> CompositeScoreEngine:
+def resolve_composite_block(params: object, mode: str | None = None) -> object:
+    """Pick the active :class:`CompositeParameters` block for a given engine mode.
+
+    Single source of truth for mode-aware composite parameter resolution
+    (B30 Phase 3 — Suggestion 4 audit). The resolver lets the swing and day
+    engines diverge their layer blend weights *without* duplicating the rest of
+    the parameter graph (technical / news / macro / sector inputs are still
+    shared — only the **composite blend** can be overridden per mode).
+
+    Resolution order:
+
+    * If ``mode == "swing"`` and ``params.swing_composite`` is set, return it.
+    * If ``mode == "day"`` and ``params.day_composite`` is set, return it.
+    * Otherwise fall back to ``params.composite`` (the shared / legacy block).
+
+    The fallback is the load-bearing invariant: when Secrets Manager JSON does
+    not declare per-mode override blocks (which is the case for every existing
+    secret today), this resolver returns the shared block → production behavior
+    is unchanged. Operators rotate weights per mode by adding ``swing_composite``
+    and/or ``day_composite`` keys to the secret payload.
+
+    ``params`` is typed as ``object`` to avoid a circular import; the contract
+    is duck-typed: ``params`` must expose a ``composite`` attribute and may
+    optionally expose ``swing_composite`` / ``day_composite`` attributes (each
+    either a :class:`CompositeParameters` or ``None``).
+    """
+    if mode == "swing":
+        per_mode = getattr(params, "swing_composite", None)
+        if per_mode is not None:
+            return per_mode
+    elif mode == "day":
+        per_mode = getattr(params, "day_composite", None)
+        if per_mode is not None:
+            return per_mode
+    return params.composite  # type: ignore[attr-defined]
+
+
+def build_composite_score_engine_from_params(
+    params: object, *, mode: str | None = None
+) -> CompositeScoreEngine:
     """Build a :class:`CompositeScoreEngine` from active :class:`SignalParameters`.
 
     Single source of truth for translating tunable :class:`SignalParameters` into a
@@ -311,30 +350,37 @@ def build_composite_score_engine_from_params(params: object) -> CompositeScoreEn
     route through this helper so the ``parameter_version`` stamped on every
     recorded :class:`SignalRecord` actually reflects the weights the engine used.
 
+    ``mode`` selects between the per-mode composite override blocks (``"swing"``
+    / ``"day"``) or the shared block (default / ``None``). See
+    :func:`resolve_composite_block` for the resolution rules. ``mode=None`` is
+    the back-compat path used by tests and any caller that does not need
+    per-mode rotation.
+
     ``params`` is typed as ``object`` to avoid a circular import between
     ``stocvest.signals.composite_score`` and ``stocvest.config.signal_parameters``
     (the latter is import-light, but composite_score is imported by many engines
-    that pre-date the config module). The contract is duck-typed: ``params`` must
-    expose a ``composite`` attribute with ``technical_weight``, ``news_weight``,
+    that pre-date the config module). The contract is duck-typed: the resolved
+    composite block must expose ``technical_weight``, ``news_weight``,
     ``macro_weight``, ``sector_weight``, ``geopolitical_weight``,
-    ``internals_weight``, ``bullish_threshold``, and ``bearish_threshold`` numeric
-    fields — i.e. a :class:`stocvest.config.signal_parameters.CompositeParameters`.
+    ``internals_weight``, ``bullish_threshold``, and ``bearish_threshold``
+    numeric fields — i.e. a
+    :class:`stocvest.config.signal_parameters.CompositeParameters`.
 
     Test code is free to keep instantiating ``CompositeScoreEngine()`` with no
     args for engine-unit coverage; that path falls back to
     :data:`DEFAULT_BASE_WEIGHTS` which is documented as the test/no-args default.
     """
-    composite = params.composite  # type: ignore[attr-defined]
+    composite = resolve_composite_block(params, mode)
     base_weights: dict[str, float] = {
-        "technical": float(composite.technical_weight),
-        "news": float(composite.news_weight),
-        "macro": float(composite.macro_weight),
-        "sector": float(composite.sector_weight),
-        "geopolitical": float(composite.geopolitical_weight),
-        "internals": float(composite.internals_weight),
+        "technical": float(composite.technical_weight),  # type: ignore[attr-defined]
+        "news": float(composite.news_weight),  # type: ignore[attr-defined]
+        "macro": float(composite.macro_weight),  # type: ignore[attr-defined]
+        "sector": float(composite.sector_weight),  # type: ignore[attr-defined]
+        "geopolitical": float(composite.geopolitical_weight),  # type: ignore[attr-defined]
+        "internals": float(composite.internals_weight),  # type: ignore[attr-defined]
     }
     return CompositeScoreEngine(
         base_weights=base_weights,
-        bullish_threshold=float(composite.bullish_threshold),
-        bearish_threshold=float(composite.bearish_threshold),
+        bullish_threshold=float(composite.bullish_threshold),  # type: ignore[attr-defined]
+        bearish_threshold=float(composite.bearish_threshold),  # type: ignore[attr-defined]
     )

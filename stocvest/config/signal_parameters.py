@@ -215,6 +215,28 @@ class SignalParameters:
     sector: SectorParameters = field(default_factory=SectorParameters)
     composite: CompositeParameters = field(default_factory=CompositeParameters)
 
+    # Per-mode composite override blocks (B30 Phase 3 — Suggestion 4 audit).
+    #
+    # Both the swing and day composite engines today read the same `composite`
+    # block. The per-layer **inputs** already differ between engines (swing uses
+    # 120h news / 14d macro / 168h geo / weekly sector / daily-bar technical;
+    # day uses 8h news / 1d macro / 8h geo / daily sector / intraday technical),
+    # but the **blend weights** are identical. That is a known asymmetry: e.g.
+    # macro and sector deserve more weight for swing (multi-day holds carry
+    # through Fed days and sector rotation), while technical/internals deserve
+    # more weight for day (intraday confirmation IS the day-engine's primary
+    # truth).
+    #
+    # These two fields are the seam for rotating weights per mode. They default
+    # to None so the back-compat behavior is preserved: any Secrets Manager JSON
+    # without `swing_composite` or `day_composite` keys (i.e. every existing
+    # secret today) keeps using the shared `composite` block. Operators rotate
+    # the weights by adding the per-mode blocks to the secret payload; the live
+    # engine code is already mode-aware via `resolve_composite_block(params, mode)`
+    # in `stocvest.signals.composite_score`.
+    swing_composite: CompositeParameters | None = None
+    day_composite: CompositeParameters | None = None
+
     swing_technical: SwingTechnicalParameters = field(default_factory=SwingTechnicalParameters)
     swing_news_lookback_hours: int = 120
     swing_macro_events_days: int = 14
