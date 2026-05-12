@@ -925,3 +925,109 @@ def test_prompt_cross_mode_substitution_response_is_deterministic_and_short() ->
     # At least two exemplar prompts so the LLM can pattern-match the shape.
     assert 'Swing is quiet — should I day trade instead?' in text
     assert 'Is day trading better than swing trading?' in text
+
+
+# ---------------------------------------------------------------------------
+# ON-CARD CTA ROUTING (B28 Phase 2c follow-up)
+#
+# Reported failure on the scanner page: user asked "can you explain what
+# googl card is saying" with the GOOGL Gap Intelligence card visible. The
+# card already exposes a "View Signal" button that opens the Evidence card
+# in place — but the LLM said "click into the symbol on the Signals page",
+# routing the user off the page and asking them to re-find the symbol.
+#
+# The fix is a CONTEXTUAL MODE rule (the symbol is already on screen → refer
+# them to the on-card button, not to a navigation instruction) plus a
+# per-surface CTA map (verbatim labels so the user can scan and click).
+# These tests anchor the rule structurally so a future prompt rewrite cannot
+# silently drop it.
+# ---------------------------------------------------------------------------
+
+
+def test_prompt_carries_on_card_cta_routing_section() -> None:
+    """The CONTEXTUAL MODE rule about referring users to the on-card CTA
+    (instead of asking them to navigate to a different page) must be present
+    in the prompt as a named, scannable section so the LLM pattern-matches
+    it under any wording variant of the user's question."""
+    text = ASSISTANT_SYSTEM_PROMPT
+    # Section header.
+    assert (
+        "ON-CARD CTAs — REFER USERS TO THE BUTTON ON THE CARD THEY'RE LOOKING AT"
+        in text
+    )
+    # The behavioral rule must explicitly forbid navigation-instruction routing
+    # when the symbol is already on the current page.
+    assert "do not re-route them to a different page from scratch" in text
+    # The critical-line restatement at the bottom of the section is what the
+    # LLM should fall back to when the question is short / ambiguous.
+    assert (
+        "the next step is the on-card CTA — NOT a navigation instruction"
+        in text
+    )
+
+
+def test_prompt_carries_per_surface_cta_map_with_verbatim_button_labels() -> None:
+    """The per-surface CTA map names the exact button labels (View Signal /
+    View Evidence / Open Day Signals / Open full ledger) so the LLM can
+    reference them verbatim and the user can find the button on screen by
+    eye. Locking these labels to the shipped UI prevents prompt-side drift
+    (e.g. renaming "View Signal" to "Open Signal" in the prompt while the
+    button still says "View Signal" on screen)."""
+    text = ASSISTANT_SYSTEM_PROMPT
+    # Scanner — Gap Intelligence card: "View Signal" button.
+    assert "Gap Intelligence card" in text
+    assert "\"View Signal\" button" in text
+    # Scanner — setup card: "View Evidence" button + "Open Signals" link.
+    assert "setup card" in text
+    assert "\"View Evidence\" button" in text
+    assert "\"Open Signals\" link" in text
+    # Dashboard — Swing Desk row: "View Evidence" button.
+    assert "Swing Desk signal row" in text
+    # Dashboard — Day Desk row: "Open Day Signals →" link (with the arrow
+    # the actual button renders).
+    assert "Day Desk signal row" in text
+    assert "\"Open Day Signals →\" link" in text
+    # Performance page — historical ledger link.
+    assert "\"Open full ledger (Swing / Day) →\" link" in text
+
+
+def test_prompt_carries_banned_shape_for_scanner_to_signals_page_handoff() -> None:
+    """The exact regression that was reported (chatbot routed user from a
+    scanner card to the Signals page) is pinned in the BAD/GOOD section so
+    a future regression in either the production failure or a near-paraphrase
+    of it is structurally rejected by the prompt itself."""
+    text = ASSISTANT_SYSTEM_PROMPT
+    # The BAD shape — paraphrase of the failed production response.
+    assert (
+        "BAD (user on scanner asking about GOOGL gap card)"
+        in text
+    )
+    assert "click into the symbol on the Signals page" in text
+    # The parenthetical explanation tying the failure to the rule.
+    assert (
+        "the GOOGL gap card already has a **View Signal** button that opens the Evidence card in place"
+        in text
+    )
+    assert "ALWAYS refer to the on-card CTA" in text
+    # The GOOD counterpart — must name the on-card button by its verbatim
+    # label AND must reassure the user they don't need to leave the page.
+    assert (
+        "GOOD (same question, user on scanner asking about the GOOGL gap card)"
+        in text
+    )
+    assert "click the **View Signal** button on the GOOGL card itself" in text
+    assert "you do not need to leave the scanner" in text
+
+
+def test_prompt_signals_page_has_no_cta_referral_needed() -> None:
+    """On the Signals page the full Evidence card is ALREADY rendered, so
+    there is no CTA to refer the user to — the LLM should explain in place.
+    This carve-out prevents the LLM from telling a user already on the
+    Signals page to 'click View Evidence' — that button on this page would
+    just re-render what they already see."""
+    text = ASSISTANT_SYSTEM_PROMPT
+    # The Signals-page carve-out, in the per-surface map.
+    assert (
+        "Signals page: the full Evidence card is ALREADY rendered. No CTA referral needed"
+        in text
+    )
