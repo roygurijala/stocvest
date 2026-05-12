@@ -219,6 +219,60 @@ export function PerformanceTrackingContent({ showHomeLink = false }: Performance
         </section>
       )}
 
+      {/*
+       * Phase 2c — Signal Validation Ledger link. The full stratified ledger
+       * (decision state × regime × setup pattern × readiness × direction) is
+       * a PERFORMANCE-page artifact, not a dashboard artifact: tracked
+       * outcomes describe "did past signals work?", which is a performance
+       * question and explicitly NOT shared market context. The link surface
+       * lives here, in the logged-in Performance view, so it is one click
+       * from the Signal Outcome table above.
+       *
+       * Rendered ONLY for logged-in users (`!showHomeLink`). The homepage
+       * Performance mirror deliberately stops at the per-mode tracks above
+       * — the stratified breakdown is gated behind login at the API layer
+       * (Phase 3c-1) and on the UI layer here.
+       */}
+      {!showHomeLink ? (
+        <section
+          className={`${surfaceGlowClassName} mt-6`}
+          style={bodyPanelStyle}
+          data-testid="performance-validation-ledger-link"
+        >
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <p
+              style={{
+                margin: 0,
+                fontSize: 11,
+                letterSpacing: "0.18em",
+                textTransform: "uppercase",
+                fontWeight: 700,
+                color: colors.textMuted
+              }}
+            >
+              Validation ledger · stratified outcomes
+            </p>
+            <Link
+              href="/dashboard/signal-validation"
+              className="hover:underline"
+              style={{ fontSize: typography.scale.sm, color: colors.accent, fontWeight: 600 }}
+              data-testid="performance-validation-ledger-link-anchor"
+            >
+              Open full ledger (Swing / Day) →
+            </Link>
+          </div>
+          <p className="mt-2 text-sm" style={{ color: colors.textMuted, lineHeight: 1.5 }}>
+            Detailed historical signal validation — broken out by decision state, regime, setup pattern, readiness band,
+            and direction. Swing and Day tracks are kept structurally separate so accuracy in one engine never
+            implies permission to act in the other (Mode Separation).
+          </p>
+          <p className="mt-1 text-xs" style={{ color: colors.textMuted, fontStyle: "italic" }}>
+            Tracked outcomes only — not a brokerage account, not a recommendation. Past directional accuracy does not
+            guarantee future results.
+          </p>
+        </section>
+      ) : null}
+
       <section className={`${surfaceGlowClassName} ${showHomeLink ? "mt-8" : "mt-6"}`} style={bodyPanelStyle}>
         <h2 className="text-2xl font-bold">Our commitment to transparency</h2>
         <ul className="mt-3 list-disc space-y-1 pl-6" style={{ color: colors.textMuted }}>

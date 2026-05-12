@@ -10,7 +10,7 @@ import { DecisionMetric } from "@/components/decision-metric";
 import { EarningsCalendar } from "@/components/earnings-calendar";
 import { InfoTip } from "@/components/info-tip";
 import { type WeeklyIndexRow } from "@/components/weekly-market-context-widget";
-import { SharedContextMasterCard, SignalValidationLedgerTertiarySurface } from "@/components/shared-context-master-card";
+import { SharedContextMasterCard } from "@/components/shared-context-master-card";
 import { DayDeskPanel } from "@/components/day-desk-panel";
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import { NewsPanel } from "@/components/news-panel";
@@ -25,7 +25,7 @@ import type { IntradayGeoPreview, IntradaySetupPayload, ScannerOverview } from "
 import type { EarningsEvent } from "@/lib/api/earnings";
 import { earningsTimingLabel } from "@/lib/earnings-timing";
 import type { ThemeColors } from "@/lib/design-system";
-import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
+import { borderRadius, roleAccents, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { buildEvidenceFromSetup, enrichEvidenceWithRealComposite, type SignalEvidenceData } from "@/lib/signal-evidence";
 import { tickerNewsTriggerLine } from "@/lib/api/ticker-news-panel";
@@ -485,7 +485,7 @@ export function DashboardRedesign({
   weeklyIndexRows,
   sectorRotation
 }: DashboardRedesignProps) {
-  const { colors } = useTheme();
+  const { colors, theme } = useTheme();
   const [evidence, setEvidence] = useState<SignalEvidenceData | null>(null);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [newsPanelSymbol, setNewsPanelSymbol] = useState("");
@@ -784,15 +784,34 @@ export function DashboardRedesign({
                       <p style={{ margin: 0, color: colors.textMuted, lineHeight: 1.5, fontSize: typography.scale.sm, fontWeight: 400 }}>
                         No active swing setups right now.
                       </p>
+                      {/*
+                       * Phase 2c — "Primary read" card is the swing desk's
+                       * dominant decision surface when no setups are firing.
+                       * The user directive was explicit: "under swing desk
+                       * - primary read card should be again border
+                       * highlighted." We pick up the swing role's BRIGHT
+                       * borderAccent (the same hue the master card uses on
+                       * its rail-line border) at 1.5px so the Primary Read
+                       * card reads as a structural unit, not a paragraph
+                       * inside the panel.
+                       *
+                       * The swing-role hue (not green/red) is the correct
+                       * channel here: this card describes "what the desk is
+                       * doing" — i.e. role/posture — not "did price go up
+                       * or down". Direction colors stay reserved for actual
+                       * price-direction signals downstream.
+                       */}
                       <motion.div
                         key={`${regimeLabel}-${emptySwingSuppressionLine}`}
                         initial={{ opacity: 0.88, y: 4 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.38, ease: "easeOut" }}
+                        data-testid="swing-desk-primary-read-card"
                         style={{
                           borderRadius: borderRadius.xl,
-                          border: `1px solid color-mix(in srgb, ${colors.border} 72%, transparent)`,
-                          background: `color-mix(in srgb, ${colors.textMuted} 6%, ${colors.surface})`,
+                          border: `1.5px solid color-mix(in srgb, ${roleAccents[theme].swing.borderAccent} 65%, ${colors.border})`,
+                          background: `linear-gradient(160deg, color-mix(in srgb, ${roleAccents[theme].swing.accent} 6%, ${colors.surface}) 0%, ${colors.surface} 100%)`,
+                          boxShadow: `0 6px 18px rgba(0,0,0,0.18), 0 0 0 1px color-mix(in srgb, ${roleAccents[theme].swing.borderAccent} 18%, transparent)`,
                           padding: `${spacing[5]} ${spacing[5]}`,
                           display: "grid",
                           gap: spacing[3]
@@ -1162,11 +1181,15 @@ export function DashboardRedesign({
             scannerError={scannerOverview.error}
           />
 
-          {/* Tertiary surface — Signal Validation Ledger. Not a master card, not
-              role-colored: it deliberately sits BELOW the three master cards with
-              reduced visual weight so the three-card mental model stays clean. */}
-          <SignalValidationLedgerTertiarySurface />
-
+          {/* Phase 2c — the Signal Validation Ledger has been MOVED off the
+              dashboard and onto the Performance page. Tracked outcomes describe
+              "did past signals work?" — that's a performance question, not a
+              market-environment question, so per the user's directive ("a data
+              element belongs in Shared Context if and only if it answers what
+              kind of market environment are all traders operating in right
+              now") it no longer belongs on this surface at all. The link from
+              the dashboard chrome (sidebar / nav) still reaches the full ledger
+              at /dashboard/signal-validation. */}
 
           <EarningsCalendar
             events={earningsEvents}

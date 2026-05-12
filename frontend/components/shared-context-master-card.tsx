@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
-import Link from "next/link";
+import { useMemo, type ReactNode } from "react";
 import { DashboardCard } from "@/components/dashboard-card";
 import { IndexSparkline } from "@/components/index-sparkline";
 import { InfoTip } from "@/components/info-tip";
@@ -164,6 +163,67 @@ export function participationPlainLine(cat: ParticipationCategory): string {
 }
 
 /**
+ * Rotation profile — behavioral classification of how capital is moving across
+ * sectors. STRICTLY DESCRIPTIVE of "how the market feels", never ranked.
+ *
+ * Per the user directive: shared context for sector activity must answer the
+ * question "what kind of market environment are all traders operating in?" —
+ * NOT "which sector leads next?" or "where to allocate?". Names, rankings,
+ * and "leadership emerging" language are banned (they belong inside the Swing
+ * Desk downstream). This helper returns only the BEHAVIORAL pattern:
+ *
+ *   - "Concentrated" — high dispersion + narrow positives (1-2 sectors
+ *     dragging the index while the rest are quiet/negative). Day traders
+ *     should expect chop, swing traders should expect fragile follow-through.
+ *   - "Rotational"   — mixed direction across sectors + moderate dispersion.
+ *     Capital is cycling, no single sector controls the move. Both groups
+ *     should expect inconsistent follow-through and faster fades.
+ *   - "Mixed"        — partial leadership pattern that doesn't cleanly fit
+ *     either concentrated or rotational.
+ *   - "Unknown"      — insufficient sector data.
+ *
+ * Notice the absence of "Trending", "Leading", or any allocation-flavored
+ * label. That's intentional.
+ */
+export type RotationProfileCategory = "Concentrated" | "Rotational" | "Mixed" | "Unknown";
+
+export function classifyRotationProfile(sectorPct5d: Array<number | null>): RotationProfileCategory {
+  const clean = sectorPct5d.filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+  if (clean.length < 3) return "Unknown";
+  const sorted = [...clean].sort((a, b) => b - a);
+  const max = sorted[0]!;
+  const min = sorted[sorted.length - 1]!;
+  const spread = max - min;
+  const positives = clean.filter((v) => v > 0.2).length;
+  const negatives = clean.filter((v) => v < -0.2).length;
+  // Concentrated: a few outliers pull the average — high spread but only 1-2
+  // sectors are meaningfully positive. The "narrow leadership" pattern.
+  if (spread >= 3 && positives >= 1 && positives <= 2) return "Concentrated";
+  // Rotational: capital splits across sectors in BOTH directions with
+  // meaningful spread — no single sector controls the move.
+  if (positives >= 2 && negatives >= 1 && spread >= 1.5) return "Rotational";
+  return "Mixed";
+}
+
+/**
+ * Plain-language line for rotation profile — strictly DESCRIPTIVE of capital
+ * flow, never directional or actionable. No sector NAMES, no "leadership
+ * emerging", no allocation language.
+ */
+export function rotationProfilePlainLine(cat: RotationProfileCategory): string {
+  switch (cat) {
+    case "Concentrated":
+      return "Narrow leadership — a few sectors carrying the move; broad follow-through unlikely";
+    case "Rotational":
+      return "Capital rotating across sectors — no single sector controlling the move; expect inconsistent follow-through";
+    case "Mixed":
+      return "Mixed sector behavior — partial leadership, no dominant pattern";
+    default:
+      return "Sector activity pending";
+  }
+}
+
+/**
  * Risk-horizon category from upcoming earnings + macro warnings.
  *
  *   - macroWarning present                            → "Elevated"
@@ -310,6 +370,92 @@ function SubsectionDivider({ colors }: { colors: ThemeColors }) {
   );
 }
 
+/**
+ * Bordered sub-card wrapper for Sections B / C / D / E.
+ *
+ * Phase 2c — the user's directive was explicit: "under shared context B, C, D
+ * E sections should be cards with highlighted border like other cards". A
+ * sub-card treatment makes each environmental signal read as a discrete unit
+ * (Volatility / Participation / Risk / Summary) instead of a paragraph in a
+ * single wall of text. The border picks up a soft slate-tinted accent so the
+ * sub-cards stay coherent with the master card's shared-context identity
+ * without competing with the master card's bright rail-line border.
+ *
+ * Section A is intentionally NOT wrapped — it is already a row of three
+ * direction-bordered index tiles (SPY / QQQ / IWM), each of which IS the
+ * sub-card. Wrapping Section A in a fourth card would create card-in-card-in
+ * -card nesting that defeats the at-a-glance scan.
+ */
+function SubsectionCard({
+  colors,
+  testid,
+  dataAttrs,
+  children
+}: {
+  colors: ThemeColors;
+  testid?: string;
+  dataAttrs?: Record<string, string | undefined>;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      data-testid={testid}
+      {...(dataAttrs ?? {})}
+      style={{
+        borderRadius: borderRadius.lg,
+        // Highlighted border at 1.5px so it reads as a structural unit
+        // (vs the 1px hairlines of supporting evidence rows inside).
+        // Slate-tinted at ~45% so it harmonizes with the master card's
+        // shared-context family without competing with the 2px bright
+        // rail-line border that wraps the whole master card.
+        border: `1.5px solid color-mix(in srgb, ${colors.border} 55%, ${colors.textMuted} 45%)`,
+        background: `linear-gradient(160deg, color-mix(in srgb, ${colors.textMuted} 6%, ${colors.surface}) 0%, ${colors.surface} 100%)`,
+        boxShadow: "0 4px 14px rgba(0,0,0,0.10)",
+        padding: spacing[4],
+        display: "grid",
+        gap: spacing[2]
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Direction-aware border helper for the SPY / QQQ / IWM tiles in Section A.
+ *
+ * Phase 2c — per user directive: "spy qqq and iwm should have highlighted
+ * border like other cards in the app, like green when up and red when down".
+ * This keeps the orthogonal channel discipline intact:
+ *   - PRICE DIRECTION (green/red) — on numbers AND on the tile borders here.
+ *     Both are reading the same signal: did 5-session price drift up or down.
+ *   - DESK ROLE (slate/indigo/teal) — still owned by the MASTER card border.
+ *
+ * The two channels don't compete because they live on different surfaces:
+ * the tile border lives INSIDE Section A, the role border lives on the
+ * OUTSIDE of the master card. A glance reads "shared context (slate rail) →
+ * 5-session state (green/red tiles) → up or down".
+ *
+ * Threshold: ±0.1% mirrors the legacy `getChangeColor` neutral-band on
+ * the percent number — keeps the tile border and the % number in lockstep
+ * so they never disagree visually.
+ */
+function indexTileBorderForDirection(
+  pct5d: number | null | undefined,
+  colors: ThemeColors
+): string {
+  if (typeof pct5d !== "number" || !Number.isFinite(pct5d)) {
+    return `1.5px solid color-mix(in srgb, ${colors.border} 55%, ${colors.textMuted} 30%)`;
+  }
+  if (pct5d > 0.1) {
+    return `1.5px solid color-mix(in srgb, ${colors.bullish} 70%, ${colors.border})`;
+  }
+  if (pct5d < -0.1) {
+    return `1.5px solid color-mix(in srgb, ${colors.bearish} 70%, ${colors.border})`;
+  }
+  return `1.5px solid color-mix(in srgb, ${colors.border} 55%, ${colors.textMuted} 30%)`;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Master card
 // ─────────────────────────────────────────────────────────────────────────────
@@ -348,6 +494,13 @@ export function SharedContextMasterCard(props: Props) {
         weeklyIndexRows.map((r) => r.pct5d)
       ),
     [sectorRotation, weeklyIndexRows]
+  );
+  // Phase 2c — behavioral rotation profile (concentrated / rotational / mixed)
+  // strictly derived from sector dispersion. No NAMES, no rankings, no leadership
+  // language — Section C describes capital-flow PATTERN, not "what to buy".
+  const rotationProfile = useMemo(
+    () => classifyRotationProfile(sectorRotation.map((s) => s.pct5d)),
+    [sectorRotation]
   );
   const sortedEarnings = useMemo(
     () => [...upcomingEarnings].sort((a, b) => a.report_date.localeCompare(b.report_date)),
@@ -408,9 +561,22 @@ export function SharedContextMasterCard(props: Props) {
                 <div
                   key={r.symbol}
                   data-testid={`shared-context-index-tile-${r.symbol}`}
+                  data-tile-direction={
+                    typeof r.pct5d === "number" && Number.isFinite(r.pct5d)
+                      ? r.pct5d > 0.1
+                        ? "up"
+                        : r.pct5d < -0.1
+                          ? "down"
+                          : "flat"
+                      : "unknown"
+                  }
                   style={{
                     borderRadius: borderRadius.md,
-                    border: `1px solid ${colors.border}`,
+                    // Direction-aware highlighted border: green when 5-session
+                    // net % is up, red when down, neutral when flat/unknown.
+                    // The role border (slate rail) lives on the MASTER card —
+                    // these inner tiles only encode price direction.
+                    border: indexTileBorderForDirection(r.pct5d, colors),
                     background: "rgba(148,163,184,0.06)",
                     padding: spacing[3],
                     display: "grid",
@@ -473,9 +639,10 @@ export function SharedContextMasterCard(props: Props) {
         <SubsectionDivider colors={colors} />
 
         {/* ───────────────────────────── Section B ───────────────────────────── */}
-        <section
-          data-testid="shared-context-section-B"
-          style={{ display: "grid", gap: spacing[2] }}
+        <SubsectionCard
+          colors={colors}
+          testid="shared-context-section-B"
+          dataAttrs={{ "data-subsection-card": "B" }}
         >
           <SubsectionHeader
             letter="B"
@@ -494,21 +661,44 @@ export function SharedContextMasterCard(props: Props) {
               {volatilityPlainLine(volatility)}
             </span>
           </div>
-        </section>
+        </SubsectionCard>
 
         <SubsectionDivider colors={colors} />
 
         {/* ───────────────────────────── Section C ───────────────────────────── */}
-        <section
-          data-testid="shared-context-section-C"
-          style={{ display: "grid", gap: spacing[2] }}
+        {/*
+         * Section C (Phase 2c rewrite) — Sector behavior is shared context if and
+         * only if it answers "what kind of market environment are all traders
+         * operating in right now?" — NOT "which sector leads next?" or "where
+         * should I allocate?". Per user directive: rotation here is presented
+         * BEHAVIORALLY (Rotation profile + Participation categories) with NO
+         * % rankings, NO sector chips, NO "winners". Any leadership/allocation
+         * framing belongs DOWNSTREAM inside the Swing Desk, not here.
+         */}
+        <SubsectionCard
+          colors={colors}
+          testid="shared-context-section-C"
+          dataAttrs={{ "data-subsection-card": "C" }}
         >
           <SubsectionHeader
             letter="C"
-            label="Participation / Breadth Tone"
-            cardTip={SECTOR_ROTATION_CARD_TIP}
+            label="Sector Participation (Last ~5 Sessions)"
+            cardTip={`${SECTOR_ROTATION_CARD_TIP}\n\nReports BEHAVIOR only — capital-flow PATTERN across sectors over the last ~5 sessions. No rankings, no leadership names — those live downstream inside the Swing Desk if they exist at all.`}
             colors={colors}
           />
+          {/* Categorical readout 1 — Rotation profile (the dominant capital-flow pattern) */}
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <span
+              data-testid="shared-context-rotation-profile-category"
+              style={{ fontSize: typography.scale.base, fontWeight: 700, color: colors.text }}
+            >
+              Rotation profile: {rotationProfile}
+            </span>
+            <span style={{ fontSize: typography.scale.sm, color: colors.textMuted, lineHeight: 1.5 }}>
+              {rotationProfilePlainLine(rotationProfile)}
+            </span>
+          </div>
+          {/* Categorical readout 2 — Participation (breadth quality, not opportunity) */}
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <span
               data-testid="shared-context-participation-category"
@@ -520,35 +710,15 @@ export function SharedContextMasterCard(props: Props) {
               {participationPlainLine(participation)}
             </span>
           </div>
-          {sectorRotation.length > 0 ? (
-            <div
-              className="flex flex-wrap gap-x-3 gap-y-1"
-              style={{
-                fontSize: typography.scale.xs,
-                fontVariantNumeric: "tabular-nums",
-                marginTop: spacing[1]
-              }}
-              data-testid="shared-context-sector-chip-row"
-            >
-              {sectorRotation.map((s) => (
-                <span key={s.symbol} style={{ color: colors.text }}>
-                  <strong style={{ fontWeight: 600 }}>{s.symbol}</strong>{" "}
-                  <span style={{ color: s.pct5d != null ? getChangeColor(s.pct5d, colors) : colors.textMuted }}>
-                    {s.pct5d != null ? `${s.pct5d >= 0 ? "+" : ""}${s.pct5d.toFixed(1)}%` : "—"}
-                  </span>
-                  <span style={{ color: colors.textMuted, fontWeight: 400 }}> · {s.label}</span>
-                </span>
-              ))}
-            </div>
-          ) : null}
-        </section>
+        </SubsectionCard>
 
         <SubsectionDivider colors={colors} />
 
         {/* ───────────────────────────── Section D ───────────────────────────── */}
-        <section
-          data-testid="shared-context-section-D"
-          style={{ display: "grid", gap: spacing[2] }}
+        <SubsectionCard
+          colors={colors}
+          testid="shared-context-section-D"
+          dataAttrs={{ "data-subsection-card": "D" }}
         >
           <SubsectionHeader
             letter="D"
@@ -587,14 +757,15 @@ export function SharedContextMasterCard(props: Props) {
               ))}
             </ul>
           ) : null}
-        </section>
+        </SubsectionCard>
 
         <SubsectionDivider colors={colors} />
 
         {/* ───────────────────────────── Section E ───────────────────────────── */}
-        <section
-          data-testid="shared-context-section-E"
-          style={{ display: "grid", gap: spacing[2] }}
+        <SubsectionCard
+          colors={colors}
+          testid="shared-context-section-E"
+          dataAttrs={{ "data-subsection-card": "E" }}
         >
           <SubsectionHeader letter="E" label="Environment Summary" colors={colors} />
           <p
@@ -623,55 +794,16 @@ export function SharedContextMasterCard(props: Props) {
             <p style={{ margin: 0 }}>{SHORT_HORIZON_TIMEFRAME_LINE}</p>
             <p style={{ margin: 0 }}>{SHORT_HORIZON_WHY_THIS_MATTERS}</p>
           </div>
-        </section>
+        </SubsectionCard>
       </div>
     </DashboardCard>
   );
 }
 
-/** Small tertiary surface — Signal Validation Ledger lives below the three master
- *  cards now. Tracked outcomes are not "market context", so they cannot live
- *  inside the Shared Context master card; they are also not a decision engine,
- *  so they cannot be a peer master card. This component renders a low-prominence
- *  link surface — explicitly NOT role-colored, no rail-line border — so it does
- *  not compete with the three master cards above. Exported from the same module
- *  to keep the "Shared Context family" cohesively co-located. */
-export function SignalValidationLedgerTertiarySurface() {
-  const { colors } = useTheme();
-  return (
-    <aside
-      data-testid="signal-validation-ledger-tertiary"
-      style={{
-        borderTop: `1px solid color-mix(in srgb, ${colors.border} 60%, transparent)`,
-        paddingTop: spacing[4],
-        display: "grid",
-        gap: spacing[2]
-      }}
-    >
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p
-          style={{
-            margin: 0,
-            fontSize: 11,
-            letterSpacing: "0.18em",
-            textTransform: "uppercase",
-            fontWeight: 700,
-            color: colors.textMuted
-          }}
-        >
-          Validation · tracked outcomes
-        </p>
-        <Link
-          href="/dashboard/signal-validation"
-          style={{ fontSize: typography.scale.sm, color: colors.accent, fontWeight: 600 }}
-        >
-          Open ledger (Swing / Day) →
-        </Link>
-      </div>
-      <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.5 }}>
-        Tracked outcomes — not a brokerage account. The ledger itself is mode-segmented inside the Signal Validation
-        page; this dashboard surface is just a link.
-      </p>
-    </aside>
-  );
-}
+// Phase 2c — the former `SignalValidationLedgerTertiarySurface` (tracked
+// outcomes link card that lived BELOW the three master cards) has been removed
+// from the dashboard entirely. Per the user's directive, tracked outcomes are
+// not market context, so the dashboard is now exclusively the home of
+// market-environment + decision-desk content. The full ledger remains
+// accessible from the Performance page (see `PerformanceLedgerLink` in
+// `performance-tracking-content.tsx`) and from the dashboard nav.

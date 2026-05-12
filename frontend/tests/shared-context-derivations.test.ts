@@ -26,9 +26,11 @@ import {
   classifyVolatility,
   classifyParticipation,
   classifyRiskHorizon,
+  classifyRotationProfile,
   volatilityPlainLine,
   participationPlainLine,
   riskHorizonPlainLine,
+  rotationProfilePlainLine,
   buildEnvironmentSummary
 } from "@/components/shared-context-master-card";
 import type { EarningsEvent } from "@/lib/api/earnings";
@@ -242,5 +244,115 @@ describe("buildEnvironmentSummary (Phase 2b)", () => {
         }
       }
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rotation profile — behavioral classification of capital flow across sectors
+// (Phase 2c)
+//
+// Per user directive: rotation here is BEHAVIORAL ("what does the market
+// feel like?"), never ranked ("which sector leads?"). Strategy-coded
+// language (trending, leading, bullish, bearish, winners, losers) must
+// never leak through these helpers.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("classifyRotationProfile (Phase 2c)", () => {
+  test("returns 'Unknown' when fewer than 3 valid sector points", () => {
+    expect(classifyRotationProfile([])).toBe("Unknown");
+    expect(classifyRotationProfile([null, null])).toBe("Unknown");
+    expect(classifyRotationProfile([1.5, null])).toBe("Unknown");
+    expect(classifyRotationProfile([1.5, 1.0])).toBe("Unknown");
+  });
+
+  test("'Concentrated' — high spread + narrow positive leadership (1-2 winners)", () => {
+    // One outlier carrying the move while the rest are flat/negative.
+    expect(classifyRotationProfile([3.5, 0.1, -0.1, -0.5, -0.3])).toBe("Concentrated");
+    // Two sectors meaningfully positive, others quiet/negative.
+    expect(classifyRotationProfile([3.5, 2.0, 0.0, -0.5, -0.3])).toBe("Concentrated");
+  });
+
+  test("'Rotational' — capital splits in BOTH directions with meaningful spread", () => {
+    // Mixed signs, moderate spread, no narrow leadership.
+    expect(classifyRotationProfile([1.5, 0.8, -0.6, 0.4, -1.0])).toBe("Rotational");
+    expect(classifyRotationProfile([2.0, 1.2, -0.5, 0.7, -1.5])).toBe("Rotational");
+  });
+
+  test("'Mixed' — partial leadership that doesn't fit concentrated or rotational", () => {
+    // All-positive small magnitudes — no rotation (no negative sectors), no
+    // narrow leadership (spread too tight). Falls through to "Mixed".
+    expect(classifyRotationProfile([0.5, 0.3, 0.4, 0.2, 0.6])).toBe("Mixed");
+    // All-negative quiet — same fallthrough.
+    expect(classifyRotationProfile([-0.5, -0.3, -0.4, -0.2, -0.6])).toBe("Mixed");
+  });
+
+  test("never returns directional labels (Bullish/Bearish/Trending/Leading)", () => {
+    // Spot-check the boundary inputs all map to the closed set.
+    const inputs: Array<Array<number | null>> = [
+      [],
+      [1, 1, 1],
+      [-1, -1, -1],
+      [3, 2, 1, 0, -1],
+      [3, 0, 0, 0, 0],
+      [null, null, null, 1, 2, 3]
+    ];
+    const allowed = new Set(["Concentrated", "Rotational", "Mixed", "Unknown"]);
+    for (const arr of inputs) {
+      expect(allowed.has(classifyRotationProfile(arr))).toBe(true);
+    }
+  });
+
+  test("ignores NaN / non-finite values when counting valid sectors", () => {
+    expect(
+      classifyRotationProfile([Number.NaN, Number.POSITIVE_INFINITY, null, 1.0])
+    ).toBe("Unknown");
+    expect(
+      classifyRotationProfile([1.5, 0.8, -0.6, 0.4, -1.0, Number.NaN])
+    ).toBe("Rotational");
+  });
+});
+
+describe("rotationProfilePlainLine (Phase 2c)", () => {
+  test("each category maps to a behavioral, non-actionable sentence", () => {
+    const cats = ["Concentrated", "Rotational", "Mixed", "Unknown"] as const;
+    for (const c of cats) {
+      const line = rotationProfilePlainLine(c).toLowerCase();
+      // Must be descriptive of capital flow, not directional / allocative.
+      for (const banned of [
+        "buy",
+        "sell",
+        "long",
+        "short",
+        "recommend",
+        "allocate",
+        "should",
+        "must",
+        "trending",
+        "bullish",
+        "bearish",
+        "winners",
+        "losers",
+        "trend intact",
+        "setup"
+      ]) {
+        expect(line).not.toContain(banned);
+      }
+    }
+  });
+
+  test("'Concentrated' line explicitly disclaims broad follow-through", () => {
+    // The "narrow leadership" pattern means follow-through is unlikely — that
+    // is the SHARED takeaway both swing and day traders consume.
+    const line = rotationProfilePlainLine("Concentrated").toLowerCase();
+    expect(line).toContain("narrow leadership");
+    expect(line).toMatch(/follow-through unlikely|broad follow-through unlikely/);
+  });
+
+  test("'Rotational' line explicitly disclaims single-sector control", () => {
+    // The "capital rotating" pattern means inconsistent follow-through — also
+    // shared content both desks consume.
+    const line = rotationProfilePlainLine("Rotational").toLowerCase();
+    expect(line).toContain("rotating");
+    expect(line).toContain("no single sector controlling");
   });
 });

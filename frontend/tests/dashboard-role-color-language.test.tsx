@@ -327,14 +327,85 @@ describe("Shared Context master card structure (Mode Separation B28 Phase 2b)", 
         ]}
       />
     );
+    // Phase 2c: Section C now reports BEHAVIOR only.
+    // Two categorical readouts — Rotation profile + Participation — and NO
+    // ranked sector chip row. The chip row was a relative-strength ranking
+    // (XLK +1.5%, XLE -0.6%, …), which the user's directive explicitly
+    // banned from shared context (those belong DOWNSTREAM inside the Swing
+    // Desk, not in environmental context).
     const c = screen.getByTestId("shared-context-section-C");
-    const cat = c.querySelector('[data-testid="shared-context-participation-category"]');
-    expect(cat).not.toBeNull();
-    expect((cat?.textContent || "").toLowerCase()).toContain("participation:");
-    const chips = c.querySelector('[data-testid="shared-context-sector-chip-row"]');
-    expect(chips).not.toBeNull();
-    expect((chips?.textContent || "")).toContain("XLK");
-    expect((chips?.textContent || "")).toContain("XLE");
+    const participation = c.querySelector('[data-testid="shared-context-participation-category"]');
+    expect(participation).not.toBeNull();
+    expect((participation?.textContent || "").toLowerCase()).toContain("participation:");
+    const rotation = c.querySelector('[data-testid="shared-context-rotation-profile-category"]');
+    expect(rotation).not.toBeNull();
+    expect((rotation?.textContent || "").toLowerCase()).toContain("rotation profile:");
+    // Lock-in: the % chip row MUST be gone. Anyone trying to add a ranked
+    // per-sector strip back into shared context will fail this test.
+    expect(c.querySelector('[data-testid="shared-context-sector-chip-row"]')).toBeNull();
+    // And no sector ETF NAMES leak through Section C — naming sectors implies
+    // leadership/allocation, which the user's directive bans.
+    const cText = c.textContent || "";
+    for (const sectorName of ["XLK", "XLC", "XLE", "XLF", "XLY", "XLI", "XLV", "XLP", "XLU", "XLB", "XLRE"]) {
+      expect(cText).not.toContain(sectorName);
+    }
+  });
+
+  test("section_C_title_uses_neutral_behavioral_language_NOT_breadth_tone", () => {
+    // Phase 2c: per user directive, Section C is renamed from "Participation /
+    // Breadth Tone" to "Sector Participation (Last ~5 Sessions)". The new
+    // label anchors the time-horizon and reads as descriptive, not evaluative.
+    wrap(
+      <DashboardRedesign
+        marketOverview={baseMarket}
+        scannerOverview={baseScanner}
+        earningsEvents={[]}
+        earningsRecent={[]}
+        weeklyIndexRows={baseWeekly}
+        sectorRotation={[]}
+      />
+    );
+    const c = screen.getByTestId("shared-context-section-C");
+    const text = c.textContent || "";
+    expect(text).toContain("Sector Participation (Last ~5 Sessions)");
+  });
+
+  test("section_C_rotation_profile_label_is_one_of_the_closed_set", () => {
+    // Lock-in: only Concentrated / Rotational / Mixed / Unknown — never
+    // "Trending", "Leading", "Bullish", "Bearish", etc. Those would imply
+    // direction or actionability, which the directive bans.
+    wrap(
+      <DashboardRedesign
+        marketOverview={baseMarket}
+        scannerOverview={baseScanner}
+        earningsEvents={[]}
+        earningsRecent={[]}
+        weeklyIndexRows={baseWeekly}
+        sectorRotation={[
+          { symbol: "XLK", label: "Tech", pct5d: 1.2 },
+          { symbol: "XLC", label: "Comm", pct5d: -0.5 },
+          { symbol: "XLE", label: "Energy", pct5d: 1.8 },
+          { symbol: "XLF", label: "Financials", pct5d: 0.4 },
+          { symbol: "XLY", label: "Cons. disc.", pct5d: -1.0 }
+        ]}
+      />
+    );
+    const rotation = screen.getByTestId("shared-context-rotation-profile-category");
+    const text = (rotation.textContent || "").toLowerCase();
+    expect(text).toMatch(/concentrated|rotational|mixed|unknown/);
+    for (const banned of [
+      "trending",
+      "leading",
+      "leadership emerging",
+      "bullish",
+      "bearish",
+      "strong sector",
+      "weak sector",
+      "winners",
+      "losers"
+    ]) {
+      expect(text).not.toContain(banned);
+    }
   });
 
   test("section_D_renders_a_risk_horizon_category_plus_earnings_list", () => {
@@ -446,10 +517,12 @@ describe("Shared Context master card structure (Mode Separation B28 Phase 2b)", 
     expect(text).toContain("market environment and constraints used by all desks");
   });
 
-  test("signal_validation_ledger_is_a_tertiary_surface_NOT_a_role_master_card", () => {
-    // Phase 2b: tracked outcomes are neither shared context (market facts) nor
-    // a decision engine; they cannot be a master card. They live below the
-    // three desks as a low-prominence link surface with NO role color.
+  test("dashboard_does_NOT_render_signal_validation_ledger_anymore", () => {
+    // Phase 2c: per the user's directive — "a data element belongs in Shared
+    // Context if and only if it answers what kind of market environment are
+    // all traders operating in right now" — tracked outcomes are NOT shared
+    // context. They were moved to the Performance page. The dashboard must
+    // never render the validation ledger surface again.
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
@@ -460,11 +533,95 @@ describe("Shared Context master card structure (Mode Separation B28 Phase 2b)", 
         sectorRotation={[]}
       />
     );
-    const tertiary = screen.getByTestId("signal-validation-ledger-tertiary");
-    expect(tertiary).toBeInTheDocument();
-    // Must NOT have a `data-card-role` attribute — that's reserved for master
-    // cards. Asserting NULL prevents anyone from accidentally promoting this
-    // surface back to peer status.
-    expect(tertiary.getAttribute("data-card-role")).toBeNull();
+    expect(screen.queryByTestId("signal-validation-ledger-tertiary")).toBeNull();
+    // The dashboard root MUST NOT carry any link to the validation ledger
+    // either — pulling tracked outcomes back into the market-context surface
+    // (in any form, even as a link card) would re-create the mixing the user
+    // explicitly called out.
+    const dashboard = document.querySelector(".stocvest-dashboard-v2");
+    expect(dashboard).not.toBeNull();
+    const anchors = dashboard
+      ? Array.from(dashboard.querySelectorAll('a[href="/dashboard/signal-validation"]'))
+      : [];
+    expect(anchors).toHaveLength(0);
+  });
+
+  test("section_A_index_tiles_have_direction_aware_borders_green_red_neutral", () => {
+    // Phase 2c: SPY/QQQ/IWM tiles in Section A must have green/red highlighted
+    // borders — green when 5-day net % is up, red when down, neutral when
+    // flat or unknown. Each tile carries a `data-tile-direction` attribute
+    // we lock against.
+    wrap(
+      <DashboardRedesign
+        marketOverview={baseMarket}
+        scannerOverview={baseScanner}
+        earningsEvents={[]}
+        earningsRecent={[]}
+        weeklyIndexRows={[
+          { symbol: "SPY", label: "S&P 500", pct5d: 1.19, lastPrice: 500, closes5d: [495, 496, 498, 499, 500] },
+          { symbol: "QQQ", label: "Nasdaq 100", pct5d: -2.0, lastPrice: 400, closes5d: [410, 408, 405, 402, 400] },
+          { symbol: "IWM", label: "Russell 2000", pct5d: 0.05, lastPrice: 200, closes5d: [200, 200.1, 200, 199.9, 200] }
+        ]}
+        sectorRotation={[]}
+      />
+    );
+    const spy = screen.getByTestId("shared-context-index-tile-SPY");
+    expect(spy.getAttribute("data-tile-direction")).toBe("up");
+    const qqq = screen.getByTestId("shared-context-index-tile-QQQ");
+    expect(qqq.getAttribute("data-tile-direction")).toBe("down");
+    const iwm = screen.getByTestId("shared-context-index-tile-IWM");
+    expect(iwm.getAttribute("data-tile-direction")).toBe("flat");
+  });
+
+  test("subsections_B_C_D_E_each_render_as_their_own_bordered_subcard", () => {
+    // Phase 2c: per user directive, sections B/C/D/E should each be CARDS
+    // with highlighted borders, not paragraphs sharing one wall of text. We
+    // lock against the `data-subsection-card` attribute the SubsectionCard
+    // wrapper stamps on the DOM.
+    wrap(
+      <DashboardRedesign
+        marketOverview={baseMarket}
+        scannerOverview={baseScanner}
+        earningsEvents={[]}
+        earningsRecent={[]}
+        weeklyIndexRows={baseWeekly}
+        sectorRotation={[]}
+      />
+    );
+    for (const letter of ["B", "C", "D", "E"] as const) {
+      const section = screen.getByTestId(`shared-context-section-${letter}`);
+      expect(section.getAttribute("data-subsection-card")).toBe(letter);
+    }
+    // Section A is intentionally NOT a sub-card — it already IS a row of
+    // three direction-bordered tiles. Wrapping it would create card-in-card
+    // nesting that defeats the at-a-glance scan.
+    const a = screen.getByTestId("shared-context-section-A");
+    expect(a.getAttribute("data-subsection-card")).toBeNull();
+  });
+
+  test("swing_desk_primary_read_card_renders_with_highlighted_role_border", () => {
+    // Phase 2c: per user directive, the Swing Desk "Primary read" card must
+    // be border-highlighted using the SWING role's bright accent. We assert
+    // both the testid is present AND the inline border style picks up the
+    // role hue (color-mix using the swing borderAccent).
+    wrap(
+      <DashboardRedesign
+        marketOverview={baseMarket}
+        scannerOverview={baseScanner}
+        earningsEvents={[]}
+        earningsRecent={[]}
+        weeklyIndexRows={baseWeekly}
+        sectorRotation={[]}
+      />
+    );
+    const card = screen.queryByTestId("swing-desk-primary-read-card");
+    // The Primary read card is only rendered when there are no active
+    // swing setups — which is the baseScanner state in this test fixture.
+    expect(card).not.toBeNull();
+    const style = card?.getAttribute("style") || "";
+    // Style picks up the swing borderAccent token at ≥1.5px — locks the
+    // "border-highlighted" treatment so a future flatten can't strip it.
+    expect(style).toMatch(/border:\s*1\.5px/);
+    expect(style.toLowerCase()).toContain("color-mix");
   });
 });

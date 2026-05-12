@@ -74,6 +74,48 @@ describe("LandingPerformanceSection (homepage)", () => {
   });
 });
 
+describe("PerformanceTrackingContent — Validation ledger link (Phase 2c)", () => {
+  // The Signal Validation Ledger was moved off the dashboard onto the
+  // Performance page. Per the user directive ("a data element belongs in
+  // Shared Context if and only if it answers what kind of market environment
+  // are all traders operating in"), tracked outcomes are NOT shared context.
+  // The Performance page is the correct home; these tests lock in that
+  // location contract and the logged-out / logged-in gating.
+
+  test("logged-in Performance page renders the ledger link surface", () => {
+    const html = renderToStaticMarkup(
+      createElement(
+        ThemeProvider,
+        null,
+        createElement(PerformanceTrackingContent, { showHomeLink: false })
+      )
+    );
+    expect(html).toContain("performance-validation-ledger-link");
+    expect(html).toContain("Open full ledger (Swing / Day)");
+    expect(html).toContain("/dashboard/signal-validation");
+    // Mode Separation reminder must surface so a user opening the ledger
+    // for the first time understands Swing ≠ Day before they read numbers.
+    expect(html).toMatch(/Mode Separation/);
+  });
+
+  test("logged-out public Performance mirror does NOT render the ledger link", () => {
+    // The Performance mirror is gated behind login at the API layer
+    // (Phase 3c-1 backend). The UI must match: when `showHomeLink=true`
+    // (homepage `/performance` route), the stratified ledger surface must
+    // be absent so the LOGGED-OUT golden rule ("explain the FRAMEWORK,
+    // not the DECISION") is preserved at the rendering layer too.
+    const html = renderToStaticMarkup(
+      createElement(
+        ThemeProvider,
+        null,
+        createElement(PerformanceTrackingContent, { showHomeLink: true })
+      )
+    );
+    expect(html).not.toContain("performance-validation-ledger-link");
+    expect(html).not.toContain("Open full ledger (Swing / Day)");
+  });
+});
+
 describe("PerformanceTrackingContent (dashboard /performance top row)", () => {
   test("top metric row does NOT include a combined 'Directional Accuracy' card", () => {
     // renderToStaticMarkup runs the component without effects, so the data
