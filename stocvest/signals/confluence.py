@@ -34,6 +34,26 @@ BEARISH_TERMS = frozenset(
 )
 
 
+def _format_rel_vol(ratio: float) -> str:
+    """Format a relative-volume ratio for chip labels with precision-preserving rules.
+
+    Plain ``"{ratio:.1f}x avg"`` collapses small ratios (e.g. 0.42) to a misleading
+    ``"0.0x avg"`` that reads as literal zero and undermines user trust. This helper:
+
+    * Renders ratios in the ``[0.05, +inf)`` range with two decimal places so values
+      like ``0.42`` display as ``0.42×`` rather than ``0.0×``.
+    * Floors anything in the (0, 0.05) sliver to a clearly approximate ``"<0.05×"``
+      so the label communicates a very-low-volume condition without faking zero.
+    * Uses the multiplication sign (``×``) instead of the ASCII ``x`` to make the
+      label visually distinct from a stray letter.
+    """
+    if ratio <= 0:
+        return "0.00×"
+    if ratio < 0.05:
+        return "<0.05×"
+    return f"{ratio:.2f}×"
+
+
 def normalize_direction(value: str | None) -> str:
     """Map heterogeneous direction labels to bullish | bearish | neutral | mixed."""
     if not value:
@@ -245,7 +265,7 @@ class ConfluenceDetector:
             confirming.append(
                 {
                     "source": "volume_confirm",
-                    "label": f"Strong Volume ({vol_vs_avg:.1f}x avg)",
+                    "label": f"Strong Volume ({_format_rel_vol(vol_vs_avg)} avg)",
                     "detail": "Above average volume confirms participation",
                 }
             )
@@ -253,7 +273,7 @@ class ConfluenceDetector:
             conflicting.append(
                 {
                     "source": "volume_confirm",
-                    "label": f"Weak Volume ({vol_vs_avg:.1f}x avg)",
+                    "label": f"Weak Volume ({_format_rel_vol(vol_vs_avg)} avg)",
                     "detail": "Below average volume reduces conviction",
                 }
             )

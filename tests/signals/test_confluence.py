@@ -169,6 +169,83 @@ def test_volume_conflicts_below_0_8x() -> None:
     assert any(x["source"] == "volume_confirm" for x in r.conflicting_signals)
 
 
+# ---------------------------------------------------------------------------
+# Volume label precision — ratios like 0.42× must not collapse to "0.0x avg"
+# ---------------------------------------------------------------------------
+#
+# Regression guard: a "Weak Volume (0.0x avg)" chip is indistinguishable from a
+# literal-zero readout and triggers user doubt. Labels MUST use two-decimal
+# precision for legitimate fractional ratios and a clearly-approximate
+# "<0.05×" floor for the (0, 0.05) sliver. Multiplication sign (×) must be
+# used instead of the ASCII "x".
+
+
+def test_weak_volume_label_uses_two_decimal_precision() -> None:
+    d = _det()
+    r = d.calculate_confluence(
+        "S",
+        "long",
+        {"pattern": "x", "volume_vs_avg": 0.42, "gap_pct": 0},
+        {"last_trade_price": 100.0, "day_vwap": 100.0},
+        None,
+        "neutral",
+        "neutral",
+    )
+    weak = next(x for x in r.conflicting_signals if x["source"] == "volume_confirm")
+    label = weak["label"]
+    assert "Weak Volume" in label
+    assert "0.42×" in label, f"Expected two-decimal precision in {label!r}"
+    assert "0.0x" not in label and "0.0×" not in label, (
+        f"Two-decimal precision required to avoid a misleading near-zero readout: {label!r}"
+    )
+
+
+def test_weak_volume_label_floors_sub_005_to_lt_005x() -> None:
+    """Ratios in the (0, 0.05) sliver must render as '<0.05×' so the chip
+    communicates very-low-volume without faking literal zero."""
+    d = _det()
+    r = d.calculate_confluence(
+        "S",
+        "long",
+        {"pattern": "x", "volume_vs_avg": 0.01, "gap_pct": 0},
+        {"last_trade_price": 100.0, "day_vwap": 100.0},
+        None,
+        "neutral",
+        "neutral",
+    )
+    weak = next(x for x in r.conflicting_signals if x["source"] == "volume_confirm")
+    label = weak["label"]
+    assert "<0.05×" in label, f"Sub-0.05 ratio must floor to '<0.05× avg', got {label!r}"
+
+
+def test_strong_volume_label_uses_two_decimal_precision_and_times_sign() -> None:
+    d = _det()
+    r = d.calculate_confluence(
+        "S",
+        "long",
+        {"pattern": "x", "volume_vs_avg": 1.83, "gap_pct": 0},
+        {"last_trade_price": 100.0, "day_vwap": 100.0},
+        None,
+        "neutral",
+        "neutral",
+    )
+    strong = next(x for x in r.confirming_signals if x["source"] == "volume_confirm")
+    label = strong["label"]
+    assert "Strong Volume" in label
+    assert "1.83×" in label, f"Strong Volume must use two-decimal × format, got {label!r}"
+
+
+def test_volume_label_helper_directly() -> None:
+    """Belt-and-suspenders coverage of the helper used by both chip paths."""
+    from stocvest.signals.confluence import _format_rel_vol
+
+    assert _format_rel_vol(0.42) == "0.42×"
+    assert _format_rel_vol(0.01) == "<0.05×"
+    assert _format_rel_vol(0.0) == "0.00×"
+    assert _format_rel_vol(-1.0) == "0.00×"
+    assert _format_rel_vol(2.0) == "2.00×"
+
+
 def test_bullish_catalyst_confirms_long() -> None:
     d = _det()
     r = d.calculate_confluence(

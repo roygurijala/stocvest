@@ -73,6 +73,16 @@ def _calculate_rsi(closes: list[float], period: int = 14) -> Optional[float]:
     return round(100.0 - (100.0 / (1 + rs)), 2)
 
 
+# Maximum tolerated deviation of computed intraday VWAP from the current price
+# before the value is treated as anomalous and suppressed. A legitimate intraday
+# VWAP almost always tracks within a single-digit percent of the last trade
+# (since both are sampled from the same session bars). A drift well outside
+# this band is a strong indicator of corrupted inputs (mismatched symbol bars,
+# unadjusted prices crossing a corporate action, polluted cache, etc.), and a
+# user-facing number computed from such inputs is more harmful than absent.
+_VWAP_PRICE_DEVIATION_MAX_PCT = 0.30
+
+
 def _calculate_vwap(bars: list[Bar]) -> Optional[float]:
     total_pv = 0.0
     total_v = 0.0
@@ -85,6 +95,20 @@ def _calculate_vwap(bars: list[Bar]) -> Optional[float]:
     if total_v == 0:
         return None
     return round(total_pv / total_v, 4)
+
+
+def _vwap_is_plausible(vwap: Optional[float], price: Optional[float]) -> bool:
+    """Defensive guard against badly mis-aligned VWAP values reaching the UI."""
+    if vwap is None or price is None:
+        return False
+    try:
+        v = float(vwap)
+        p = float(price)
+    except (TypeError, ValueError):
+        return False
+    if v <= 0 or p <= 0:
+        return False
+    return abs(v - p) / p <= _VWAP_PRICE_DEVIATION_MAX_PCT
 
 
 def _calculate_ema(closes: list[float], period: int) -> Optional[float]:
@@ -262,6 +286,17 @@ class TechnicalAnalyzer:
 
         rsi = _calculate_rsi(closes, params.rsi_period)
         vwap = _calculate_vwap(bars)
+        if vwap is not None and not _vwap_is_plausible(vwap, price):
+            log.warning(
+                "vwap_anomaly_suppressed: symbol=%s computed=%.4f price=%.4f bars=%d "
+                "max_deviation_pct=%.2f",
+                symbol,
+                float(vwap),
+                float(price),
+                len(bars),
+                _VWAP_PRICE_DEVIATION_MAX_PCT,
+            )
+            vwap = None
         ema9 = _calculate_ema(closes, params.ema_fast_period)
         ema20 = _calculate_ema(closes, params.ema_slow_period)
         atr = _calculate_atr(bars, params.atr_period)

@@ -15,6 +15,7 @@ import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import { synthTradeDecision, type TradeDecisionState } from "@/lib/signal-evidence/trade-decision";
 import {
   catalystPublishedAgo,
+  buildVerdictTagReconciler,
   deriveEvidenceInsightFallback,
   filterChipsForMode,
   layerFreshnessFromIso,
@@ -747,6 +748,19 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
     evidence.direction === "bullish" ? colors.bullish : evidence.direction === "bearish" ? colors.bearish : colors.caution;
   const { yes: confYes, no: confNo } = confluenceChips(evidence, insight);
   const showConfluencePanel = confYes.length > 0 || confNo.length > 0;
+  const geopoliticalDragActive = evidence.layers.some(
+    (l) =>
+      l.key === "geopolitical" &&
+      l.geo != null &&
+      (l.geo.geoHasLiveEvents === true || (l.geo.activeEvents?.length ?? 0) > 0) &&
+      l.geo.exposureBand !== "low"
+  );
+  const verdictReconcilerText = buildVerdictTagReconciler(
+    evidence.direction,
+    confYes,
+    confNo,
+    geopoliticalDragActive
+  );
   const tradeDecision = synthTradeDecision(evidence, insight);
   const riskReinforcementBullets = tradeDecision.reinforcements;
   const readinessTone: CardTone =
@@ -853,6 +867,24 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
             >
               NOT INVESTMENT ADVICE
             </span>
+            {geopoliticalDragActive ? (
+              <span
+                data-testid="geopolitical-drag-badge"
+                title="Elevated geopolitical headlines are weighing on the composite read for this symbol's sector."
+                style={{
+                  borderRadius: borderRadius.full,
+                  padding: "4px 10px",
+                  fontSize: typography.scale.xs,
+                  fontWeight: 700,
+                  letterSpacing: "0.04em",
+                  background: "rgba(239,68,68,0.12)",
+                  color: colors.bearish,
+                  border: `1px solid rgba(239,68,68,0.45)`
+                }}
+              >
+                GEOPOLITICAL DRAG
+              </span>
+            ) : null}
           </div>
           {evidence.compositeMode === "swing" || evidence.signal_basis === "daily_bars_rth" ? (
             <div className="text-xs text-muted-foreground tracking-wide">
@@ -1490,6 +1522,20 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
                   </span>
                 ))}
               </div>
+              {verdictReconcilerText ? (
+                <p
+                  data-testid="verdict-tag-reconciler"
+                  style={{
+                    margin: 0,
+                    fontSize: typography.scale.xs,
+                    color: colors.textMuted,
+                    lineHeight: 1.45,
+                    fontStyle: "italic"
+                  }}
+                >
+                  {verdictReconcilerText}
+                </p>
+              ) : null}
             </div>
           ) : null}
         </div>

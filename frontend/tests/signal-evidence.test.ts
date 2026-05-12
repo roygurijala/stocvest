@@ -8,6 +8,7 @@ import { UserProfileProvider } from "@/lib/user-profile-context";
 import {
   applySwingCompositeEnrichment,
   buildEvidenceFromSetup,
+  buildVerdictTagReconciler,
   deriveEvidenceInsightFallback,
   extractGeopoliticalLayerExtras,
   filterChipsForMode,
@@ -1620,5 +1621,291 @@ describe("Macro layer warning surface", () => {
       ]
     });
     expect(html).toContain("45m");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Verdict-tag reconciler — explains bearish-verdict-with-bullish-tags dissonance
+// ---------------------------------------------------------------------------
+//
+// The Confirming/Conflicting chip group is scoped to the setup direction
+// (long / short), while `evidence.direction` is the composite-resolved
+// verdict. When those polarities disagree (e.g. long setup → bearish
+// verdict), users see green ✓ chips next to a bearish headline and ask which
+// is right. The reconciler must produce a single calm sentence naming the
+// inputs that overrode the bullish-looking tags.
+
+describe("buildVerdictTagReconciler", () => {
+  test("bearish_verdict_with_bullish_chips_returns_reconciler_naming_overriding_factors", () => {
+    const sentence = buildVerdictTagReconciler(
+      "bearish",
+      [{ label: "Above 9 EMA" }, { label: "Bullish Catalyst" }],
+      [{ label: "VWAP conflict" }, { label: "Weak Volume (0.42×)" }],
+      false
+    );
+    expect(sentence).not.toBeNull();
+    expect(sentence!).toMatch(/Bullish inputs present/i);
+    expect(sentence!).toMatch(/overridden by/i);
+    expect(sentence!).toContain("VWAP conflict");
+    expect(sentence!).toContain("Weak Volume");
+  });
+
+  test("bullish_verdict_with_no_conflicting_chips_returns_null", () => {
+    const sentence = buildVerdictTagReconciler(
+      "bullish",
+      [{ label: "Above 9 EMA" }, { label: "Bullish Catalyst" }],
+      [],
+      false
+    );
+    expect(sentence).toBeNull();
+  });
+
+  test("bearish_verdict_with_no_confirming_chips_returns_null", () => {
+    const sentence = buildVerdictTagReconciler(
+      "bearish",
+      [],
+      [{ label: "Weak Volume (0.42×)" }],
+      false
+    );
+    expect(sentence).toBeNull();
+  });
+
+  test("neutral_verdict_returns_null", () => {
+    const sentence = buildVerdictTagReconciler(
+      "neutral",
+      [{ label: "Above 9 EMA" }],
+      [{ label: "Weak Volume" }],
+      false
+    );
+    expect(sentence).toBeNull();
+  });
+
+  test("strips_parenthetical_detail_from_chip_labels_in_reconciler", () => {
+    const sentence = buildVerdictTagReconciler(
+      "bearish",
+      [{ label: "Bullish Catalyst" }],
+      [{ label: "Weak Volume (0.42× avg)" }],
+      false
+    );
+    expect(sentence).not.toBeNull();
+    expect(sentence!).toContain("Weak Volume");
+    expect(sentence!).not.toContain("(0.42× avg)");
+  });
+
+  test("when_geopolitical_drag_active_appends_geopolitical_factor", () => {
+    const sentence = buildVerdictTagReconciler(
+      "bearish",
+      [{ label: "Above 9 EMA" }, { label: "Bullish Catalyst" }],
+      [{ label: "VWAP conflict" }, { label: "Weak Volume" }],
+      true
+    );
+    expect(sentence).not.toBeNull();
+    expect(sentence!).toMatch(/geopolitical drag/i);
+  });
+
+  test("when_geopolitical_chip_already_present_does_not_duplicate", () => {
+    const sentence = buildVerdictTagReconciler(
+      "bearish",
+      [{ label: "Bullish Catalyst" }],
+      [{ label: "Geopolitical Risk" }],
+      true
+    );
+    expect(sentence).not.toBeNull();
+    const matches = sentence!.toLowerCase().match(/geopolit/g) ?? [];
+    expect(matches.length).toBe(1);
+  });
+
+  test("bullish_verdict_with_bearish_conflicting_chips_returns_symmetric_reconciler", () => {
+    const sentence = buildVerdictTagReconciler(
+      "bullish",
+      [{ label: "Above 9 EMA" }],
+      [{ label: "Weak Volume" }, { label: "Sector conflict" }],
+      false
+    );
+    expect(sentence).not.toBeNull();
+    expect(sentence!).toMatch(/Bearish inputs present/i);
+    expect(sentence!).toContain("Above 9 EMA");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SignalEvidenceCard renders the reconciler under the chip group
+// ---------------------------------------------------------------------------
+
+describe("SignalEvidenceCard verdict-tag reconciler rendering", () => {
+  test("bearish_verdict_with_bullish_chips_renders_reconciler_line", () => {
+    const base = buildEvidenceFromSetup(
+      { ...baseSetup, direction: "short" },
+      undefined,
+      { symbolNewsArticles: [] }
+    );
+    const evidence = {
+      ...base,
+      direction: "bearish" as const,
+      confluence: {
+        confirming_signals: [
+          { label: "Above 9 EMA", detail: "" },
+          { label: "Bullish Catalyst", detail: "" }
+        ],
+        conflicting_signals: [
+          { label: "VWAP conflict", detail: "" },
+          { label: "Weak Volume (0.42× avg)", detail: "" }
+        ],
+        score: 50,
+        max_score: 100,
+        confluence_strength: "moderate",
+        narrative: "",
+        disclaimer: ""
+      }
+    };
+    const html = renderToStaticMarkup(
+      createElement(
+        ThemeProvider,
+        null,
+        createElement(
+          UserProfileProvider,
+          { value: { profile: null, loaded: true } },
+          createElement(SignalEvidenceCard, { evidence })
+        )
+      )
+    );
+    expect(html).toContain("verdict-tag-reconciler");
+    expect(html).toMatch(/Bullish inputs present/i);
+    expect(html).toContain("VWAP conflict");
+    expect(html).toContain("Weak Volume");
+    const reconcilerMatch = html.match(
+      /data-testid="verdict-tag-reconciler"[^>]*>([^<]+)</
+    );
+    expect(reconcilerMatch).not.toBeNull();
+    const reconcilerText = reconcilerMatch![1];
+    expect(reconcilerText).not.toContain("(0.42× avg)");
+  });
+
+  test("geopolitical_drag_badge_renders_when_live_high_tier_events_present", () => {
+    const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
+    const evidence = {
+      ...base,
+      direction: "bearish" as const,
+      layers: base.layers.map((l) =>
+        l.key === "geopolitical"
+          ? {
+              ...l,
+              geo: {
+                impactSectorKey: "semiconductors",
+                impactSectorLabel: "Semiconductors",
+                stockExposureScore: 3.2,
+                exposureBand: "high" as const,
+                exposureSummary: "Tariff and chip-control headlines.",
+                activeEvents: [
+                  { event_type: "trade_tension", score: 2.0 },
+                  { event_type: "export_controls", score: 1.8 }
+                ],
+                eventDetails: [],
+                geoHasLiveEvents: true,
+                geoPrimaryTheme: "trade_tension"
+              }
+            }
+          : l
+      )
+    };
+    const html = renderToStaticMarkup(
+      createElement(
+        ThemeProvider,
+        null,
+        createElement(
+          UserProfileProvider,
+          { value: { profile: null, loaded: true } },
+          createElement(SignalEvidenceCard, { evidence })
+        )
+      )
+    );
+    expect(html).toContain("geopolitical-drag-badge");
+    expect(html).toContain("GEOPOLITICAL DRAG");
+  });
+
+  test("geopolitical_drag_badge_does_NOT_render_when_no_live_events", () => {
+    const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
+    const html = renderToStaticMarkup(
+      createElement(
+        ThemeProvider,
+        null,
+        createElement(
+          UserProfileProvider,
+          { value: { profile: null, loaded: true } },
+          createElement(SignalEvidenceCard, { evidence: base })
+        )
+      )
+    );
+    expect(html).not.toContain("geopolitical-drag-badge");
+    expect(html).not.toContain("GEOPOLITICAL DRAG");
+  });
+
+  test("geopolitical_drag_badge_does_NOT_render_when_exposure_band_is_low", () => {
+    const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
+    const evidence = {
+      ...base,
+      layers: base.layers.map((l) =>
+        l.key === "geopolitical"
+          ? {
+              ...l,
+              geo: {
+                impactSectorKey: "retail",
+                impactSectorLabel: "Retail",
+                stockExposureScore: 0.2,
+                exposureBand: "low" as const,
+                exposureSummary: "Background sensitivity only.",
+                activeEvents: [{ event_type: "background", score: 0.1 }],
+                eventDetails: [],
+                geoHasLiveEvents: true,
+                geoPrimaryTheme: null
+              }
+            }
+          : l
+      )
+    };
+    const html = renderToStaticMarkup(
+      createElement(
+        ThemeProvider,
+        null,
+        createElement(
+          UserProfileProvider,
+          { value: { profile: null, loaded: true } },
+          createElement(SignalEvidenceCard, { evidence })
+        )
+      )
+    );
+    expect(html).not.toContain("GEOPOLITICAL DRAG");
+  });
+
+  test("aligned_verdict_does_NOT_render_reconciler", () => {
+    const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
+    const evidence = {
+      ...base,
+      direction: "bullish" as const,
+      confluence: {
+        confirming_signals: [
+          { label: "Above 9 EMA", detail: "" },
+          { label: "Bullish Catalyst", detail: "" }
+        ],
+        conflicting_signals: [],
+        score: 80,
+        max_score: 100,
+        confluence_strength: "strong",
+        narrative: "",
+        disclaimer: ""
+      }
+    };
+    const html = renderToStaticMarkup(
+      createElement(
+        ThemeProvider,
+        null,
+        createElement(
+          UserProfileProvider,
+          { value: { profile: null, loaded: true } },
+          createElement(SignalEvidenceCard, { evidence })
+        )
+      )
+    );
+    expect(html).not.toContain("verdict-tag-reconciler");
   });
 });

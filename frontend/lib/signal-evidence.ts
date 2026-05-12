@@ -235,6 +235,69 @@ export function getVWAPDisplay(
   };
 }
 
+/**
+ * Reconciler sentence for the confluence panel when the composite verdict
+ * polarity conflicts with the chips' implied polarity.
+ *
+ * Why this exists: the Confirming/Conflicting chip group is scoped to the
+ * setup *direction* being evaluated (long / short), while the verdict is the
+ * composite-resolved direction (bullish / bearish / neutral). When those
+ * disagree — e.g. a long setup whose composite resolves bearish — users see
+ * "✅ Above 9 EMA" and "✅ Bullish Catalyst" next to a "Final verdict:
+ * Bearish" headline and reasonably ask which is right. A single, calm,
+ * structured sentence under the chip group reconciles that dissonance by
+ * naming the inputs that overrode the bullish-looking tags.
+ *
+ * Returns `null` when there is no dissonance to explain (e.g. verdict
+ * neutral, or chip polarity aligned with verdict, or no chips at all).
+ */
+export function buildVerdictTagReconciler(
+  direction: EvidenceDirection,
+  confirming: ReadonlyArray<{ label: string }>,
+  conflicting: ReadonlyArray<{ label: string }>,
+  geopoliticalDragActive: boolean = false
+): string | null {
+  const dir = direction;
+  if (dir !== "bullish" && dir !== "bearish") return null;
+
+  const overridden: ReadonlyArray<{ label: string }> =
+    dir === "bearish" ? confirming : conflicting;
+  const overriders: ReadonlyArray<{ label: string }> =
+    dir === "bearish" ? conflicting : confirming;
+
+  if (overridden.length === 0) return null;
+
+  const overriddenSentiment = dir === "bearish" ? "Bullish" : "Bearish";
+
+  const factors = overriders
+    .map((c) => stripChipParenthetical(c.label))
+    .filter((s) => s.length > 0)
+    .slice(0, 4);
+
+  if (geopoliticalDragActive) {
+    if (!factors.some((f) => /geopolit/i.test(f))) {
+      factors.push("geopolitical drag");
+    }
+  }
+
+  if (factors.length === 0) {
+    return `${overriddenSentiment} inputs present, but overridden by the composite read.`;
+  }
+
+  return `${overriddenSentiment} inputs present, but overridden by ${joinFactors(factors)}.`;
+}
+
+function stripChipParenthetical(label: string): string {
+  return label.replace(/\s*\(.*?\)\s*/g, " ").trim();
+}
+
+function joinFactors(parts: ReadonlyArray<string>): string {
+  if (parts.length === 0) return "";
+  if (parts.length === 1) return parts[0];
+  if (parts.length === 2) return `${parts[0]} + ${parts[1]}`;
+  return `${parts.slice(0, -1).join(" + ")} + ${parts[parts.length - 1]}`;
+}
+
 /** Client-side mirror of intraday-only chip markers (defense when API mis-scopes). */
 const INTRADAY_CHIP_MARKERS = ["(session)", "session", "orb", "opening range", "opening drive", "intraday"] as const;
 

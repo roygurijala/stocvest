@@ -53,6 +53,82 @@ def test_vwap_none_when_zero_volume(mock_parameter_store) -> None:
     assert r.vwap_from_bars is None
 
 
+# ---------------------------------------------------------------------------
+# VWAP anomaly guard — corrupted bars must not surface a misleading number
+# ---------------------------------------------------------------------------
+#
+# Regression guard: if upstream bars feed a VWAP that deviates from the latest
+# close by far more than any plausible intraday VWAP/price drift (e.g. cached
+# bars from a different symbol, unadjusted prices crossing a corporate
+# action), the analyzer must DROP the value rather than render a misleading
+# tiny number on the Evidence card. The user-facing fallback is the existing
+# "VWAP Forming" state.
+
+
+def test_vwap_anomaly_suppressed_when_value_deviates_far_from_price(
+    mock_parameter_store, caplog
+) -> None:
+    """A computed VWAP that sits far below the latest close must be dropped
+    (mirrors the GOOGL ~$389 vs reported $28.77 sanity violation)."""
+    from stocvest.data.models import Bar, Timeframe
+    from datetime import datetime, timezone, timedelta
+    from zoneinfo import ZoneInfo
+
+    ta = TechnicalAnalyzer()
+    et = ZoneInfo("America/New_York")
+    base = datetime(2026, 5, 4, 9, 30, tzinfo=et)
+
+    bars: list[Bar] = []
+    for i in range(20):
+        bar_dt = (base + timedelta(minutes=i)).astimezone(timezone.utc)
+        bars.append(
+            Bar(
+                symbol="T",
+                timestamp=bar_dt,
+                timeframe=Timeframe.MIN_1,
+                open=18.0,
+                high=19.0,
+                low=17.5,
+                close=18.0,
+                volume=1_000_000.0,
+            )
+        )
+    last_close = 380.0
+    bars.append(
+        Bar(
+            symbol="T",
+            timestamp=(base + timedelta(minutes=21)).astimezone(timezone.utc),
+            timeframe=Timeframe.MIN_1,
+            open=last_close,
+            high=last_close * 1.001,
+            low=last_close * 0.999,
+            close=last_close,
+            volume=1.0,
+        )
+    )
+
+    with caplog.at_level("WARNING"):
+        r = ta.analyze("T", bars, make_snapshot(price=last_close), mock_parameter_store.technical)
+
+    assert r.status == "available"
+    assert r.vwap_from_bars is None, (
+        "VWAP anomaly guard must drop values that deviate far from the latest close"
+    )
+    assert any(
+        "vwap_anomaly_suppressed" in rec.message for rec in caplog.records
+    ), "Anomaly suppression must emit a WARNING log for triage"
+
+
+def test_vwap_plausible_value_is_preserved(mock_parameter_store) -> None:
+    """A normal intraday VWAP (within ~30% of price) must NOT be suppressed."""
+    ta = TechnicalAnalyzer()
+    bars = make_bars(30, base_price=100.0, trend=0.0005)
+    snap = make_snapshot(price=bars[-1].close)
+    r = ta.analyze("T", bars, snap, mock_parameter_store.technical)
+    assert r.vwap_from_bars is not None
+    assert abs(r.vwap_from_bars - bars[-1].close) / bars[-1].close < 0.30
+
+
 def test_orb_forming_during_opening_range(mock_parameter_store) -> None:
     ta = TechnicalAnalyzer()
     r = ta.analyze("T", make_bars(10), make_snapshot(), mock_parameter_store.technical)
