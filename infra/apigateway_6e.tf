@@ -39,6 +39,18 @@ locals {
     "GET /v1/signals/historical-validation/summary"        = { module_key = "signals", authorizer = true }
     "GET /v1/signals/historical-validation/public-summary" = { module_key = "signals", authorizer = false }
 
+    # D10 Phase 3a — admin proposal-review surface. All four routes require
+    # the authorizer; admin gating happens inside the handlers via
+    # `analysis_authorized()` (same gate as PATCH /v1/admin/users/{user_id}/beta-access
+    # and GET /v1/admin/audit/*). Promotion is the ONLY production code
+    # path that mutates the live `stocvest/signal-parameters` Secrets
+    # Manager secret under admin authority; that's the entire reason
+    # D10 exists.
+    "GET /v1/admin/proposals"                        = { module_key = "signals", authorizer = true }
+    "GET /v1/admin/proposals/{proposal_id}"          = { module_key = "signals", authorizer = true }
+    "POST /v1/admin/proposals/{proposal_id}/promote" = { module_key = "signals", authorizer = true }
+    "POST /v1/admin/proposals/{proposal_id}/reject"  = { module_key = "signals", authorizer = true }
+
     "GET /v1/brokers/health"    = { module_key = "brokers", authorizer = true }
     "GET /v1/brokers/accounts"  = { module_key = "brokers", authorizer = true }
     "GET /v1/brokers/positions" = { module_key = "brokers", authorizer = true }

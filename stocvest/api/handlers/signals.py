@@ -1340,6 +1340,25 @@ def public_historical_validation_summary_handler(
 def signals_http_dispatch(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
     """Route signals module requests including parameterized outcome-tracking paths."""
     route = http_route_descriptor(event)
+    # D10 Phase 3a — admin proposal review surface. Parameterized routes
+    # are checked BEFORE the flat-route table because the {proposal_id}
+    # path-param shape doesn't match a literal route key.
+    if route.startswith("POST /v1/admin/proposals/") and route.endswith("/promote"):
+        from stocvest.api.handlers.admin_proposals import admin_proposals_promote_handler
+
+        return admin_proposals_promote_handler(event, context)
+    if route.startswith("POST /v1/admin/proposals/") and route.endswith("/reject"):
+        from stocvest.api.handlers.admin_proposals import admin_proposals_reject_handler
+
+        return admin_proposals_reject_handler(event, context)
+    if route.startswith("GET /v1/admin/proposals/"):
+        from stocvest.api.handlers.admin_proposals import admin_proposals_get_handler
+
+        return admin_proposals_get_handler(event, context)
+    if route == "GET /v1/admin/proposals" or route.startswith("GET /v1/admin/proposals?"):
+        from stocvest.api.handlers.admin_proposals import admin_proposals_list_handler
+
+        return admin_proposals_list_handler(event, context)
     if route.startswith("GET /v1/signals/records/"):
         return public_platform_signal_record_handler(event, context)
     if route.startswith("GET /v1/signals/me/records/"):
