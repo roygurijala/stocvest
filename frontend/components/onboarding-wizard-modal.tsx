@@ -56,7 +56,7 @@ export function OnboardingWizardModal({ onCompleted, onRemindLater }: Onboarding
       >
         <h2 style={{ margin: 0, fontSize: 20, color: "#f8fafc" }}>Welcome to STOCVEST</h2>
         <p style={{ margin: "12px 0 0", fontSize: 14, lineHeight: 1.5, color: "rgba(226,232,240,0.88)" }}>
-          Explore the scanner for intraday setups, connect your broker from Portfolio when you are ready, and review the Performance page for historical signal outcomes. You can complete this walkthrough any time from Settings.
+          Explore the scanner for intraday setups, build watchlists to track names you care about, and review the Performance page for historical signal outcomes. You can complete this walkthrough any time from Settings.
         </p>
         {err ? <p style={{ color: "#f87171", marginTop: 12, fontSize: 13 }}>{err}</p> : null}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 22, justifyContent: "flex-end" }}>

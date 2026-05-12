@@ -38,7 +38,7 @@ export function JournalPanel({ entries }: JournalPanelProps) {
           <input name="quantity" type="number" min="0.0001" step="0.0001" defaultValue="1" />
         </label>
         <label>
-          Day Trade
+          Day Trade (PDT)
           <select name="is_day_trade" defaultValue="true">
             <option value="true">true</option>
             <option value="false">false</option>

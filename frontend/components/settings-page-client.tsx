@@ -7,6 +7,7 @@ import { CuteLoader } from "@/components/cute-loader";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
+import { brokersEnabled } from "@/lib/nav-features";
 import { DEFAULT_UI_PLAN, PLAN_TIERS, planTierById } from "@/lib/subscription-plans";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -168,59 +169,62 @@ export function SettingsPageClient({ email }: SettingsPageClientProps) {
         <ThemeToggle />
       </article>
 
-      <article
-        className={surfaceGlowClassName}
-        style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
-      >
-        <h3 style={{ marginTop: 0 }}>Connected Brokers</h3>
-        <div style={{ display: "grid", gap: spacing[2] }}>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <span>IBKR</span>
-            <button type="button" className="min-h-11 w-full rounded-md border px-3 sm:w-auto" style={{ borderColor: colors.border }}>
-              Connect IB Gateway
-            </button>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <span className="flex items-center gap-2">
-              E*TRADE
+      {brokersEnabled() ? (
+        <article
+          data-testid="settings-connected-brokers-card"
+          className={surfaceGlowClassName}
+          style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
+        >
+          <h3 style={{ marginTop: 0 }}>Connected Brokers</h3>
+          <div style={{ display: "grid", gap: spacing[2] }}>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <span>IBKR</span>
+              <button type="button" className="min-h-11 w-full rounded-md border px-3 sm:w-auto" style={{ borderColor: colors.border }}>
+                Connect IB Gateway
+              </button>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <span className="flex items-center gap-2">
+                E*TRADE
+                {etradeConnected ? (
+                  <span className="inline-flex h-2 w-2 rounded-full" style={{ background: colors.bullish }} aria-hidden />
+                ) : null}
+              </span>
               {etradeConnected ? (
-                <span className="inline-flex h-2 w-2 rounded-full" style={{ background: colors.bullish }} aria-hidden />
-              ) : null}
-            </span>
-            {etradeConnected ? (
-              <div className="flex flex-col items-stretch gap-1 text-sm sm:items-end" style={{ color: colors.textMuted }}>
-                <span>
-                  Account <span style={{ color: colors.text }}>****1234</span>
-                </span>
-                {etradeLastSync ? <span>Last sync: {new Date(etradeLastSync).toLocaleString()}</span> : null}
-                <button
-                  type="button"
-                  className="text-left sm:text-right"
-                  style={{ color: colors.bearish, background: "none", border: "none", cursor: "pointer", padding: 0 }}
-                  onClick={() => {
-                    setEtradeConnected(false);
-                    setEtradeLastSync(null);
-                  }}
+                <div className="flex flex-col items-stretch gap-1 text-sm sm:items-end" style={{ color: colors.textMuted }}>
+                  <span>
+                    Account <span style={{ color: colors.text }}>****1234</span>
+                  </span>
+                  {etradeLastSync ? <span>Last sync: {new Date(etradeLastSync).toLocaleString()}</span> : null}
+                  <button
+                    type="button"
+                    className="text-left sm:text-right"
+                    style={{ color: colors.bearish, background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                    onClick={() => {
+                      setEtradeConnected(false);
+                      setEtradeLastSync(null);
+                    }}
+                  >
+                    Disconnect
+                  </button>
+                </div>
+              ) : (
+                <Link
+                  href="/api/auth/etrade/start"
+                  className="inline-flex min-h-11 items-center justify-center rounded-md border px-3 sm:w-auto"
+                  style={{ borderColor: colors.border, color: colors.accent }}
                 >
-                  Disconnect
-                </button>
-              </div>
-            ) : (
-              <Link
-                href="/api/auth/etrade/start"
-                className="inline-flex min-h-11 items-center justify-center rounded-md border px-3 sm:w-auto"
-                style={{ borderColor: colors.border, color: colors.accent }}
-              >
-                Connect E*TRADE
-              </Link>
-            )}
+                  Connect E*TRADE
+                </Link>
+              )}
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", color: colors.bullish }}>
+              <span>MOCK</span>
+              <span>Connected</span>
+            </div>
           </div>
-          <div style={{ display: "flex", justifyContent: "space-between", color: colors.bullish }}>
-            <span>MOCK</span>
-            <span>Connected</span>
-          </div>
-        </div>
-      </article>
+        </article>
+      ) : null}
 
       <article
         id="alerts"

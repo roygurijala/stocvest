@@ -136,6 +136,46 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
 
             return _with_cors_and_audit(event=event, response=alerts_dispatch_handler(event, context), module=module)
 
+        # Admin user-management surface ships in its own handler module
+        # but routes through the `brokers` lambda because that's where
+        # the existing `PATCH /v1/admin/users/{user_id}/beta-access` and
+        # `GET /v1/admin/audit/users/{user_id}` endpoints live. Keeping
+        # the admin hub in one Lambda matches the IAM blast radius
+        # (Cognito + Users + AuditEvents permissions all on this role).
+        if route.startswith(
+            ("GET /v1/admin/users", "POST /v1/admin/users", "DELETE /v1/admin/users")
+        ) and route != "PATCH /v1/admin/users/{user_id}/beta-access":
+            from stocvest.api.handlers.admin_users import (
+                admin_users_add_group_handler,
+                admin_users_detail_handler,
+                admin_users_remove_group_handler,
+                admin_users_reset_password_handler,
+                admin_users_search_handler,
+            )
+
+            admin_user_routes: dict[str, _Handler] = {
+                "GET /v1/admin/users/search": admin_users_search_handler,
+                "GET /v1/admin/users/{user_id}": admin_users_detail_handler,
+                "POST /v1/admin/users/{user_id}/reset-password": admin_users_reset_password_handler,
+                "POST /v1/admin/users/{user_id}/groups/{group}": admin_users_add_group_handler,
+                "DELETE /v1/admin/users/{user_id}/groups/{group}": admin_users_remove_group_handler,
+            }
+            return _with_cors_and_audit(
+                event=event,
+                module=module,
+                response=_dispatch_http_routes(event, context, admin_user_routes),
+            )
+        if route == "GET /v1/admin/audit/recent" or route.startswith(
+            "GET /v1/admin/audit/recent?"
+        ):
+            from stocvest.api.handlers.admin_audit import admin_audit_recent_handler
+
+            return _with_cors_and_audit(
+                event=event,
+                module=module,
+                response=admin_audit_recent_handler(event, context),
+            )
+
         from stocvest.api.handlers.brokers import (
             broker_accounts_handler,
             broker_cancel_order_handler,
@@ -244,6 +284,15 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
         # EventBridge events so we skip the wrapper to keep the response
         # body pristine for CloudWatch debugging.
         return weight_proposer_scheduled_handler(event, context)
+
+    if module == "weight_rotation_monitor":
+        from stocvest.api.handlers.weight_rotation_monitor import (
+            weight_rotation_monitor_scheduled_handler,
+        )
+
+        # D10 Phase 4 — daily post-rotation accuracy publisher. Same
+        # rationale as weight_proposer: scheduled, no audit wrapper.
+        return weight_rotation_monitor_scheduled_handler(event, context)
 
     if module == "geo_themes":
         from stocvest.workers.geo_themes_updater import handler as geo_themes_job_handler

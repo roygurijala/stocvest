@@ -1,8 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
-import { MessageCircle, X } from "lucide-react";
+import { ChevronDown, ChevronRight, MessageCircle, ShieldCheck, X } from "lucide-react";
 import { logoutAction } from "@/app/login/actions";
 import { clearAssistantSession } from "@/lib/assistant/session-reset";
 import { openCrispChat } from "@/components/crisp-chat";
@@ -30,6 +31,13 @@ export function MobileNavDrawer({
   const pathname = usePathname();
   const { colors } = useTheme();
   const adminItems = isAdmin ? DASHBOARD_ADMIN_NAV_ITEMS : [];
+  const pathInAdmin =
+    pathname === "/dashboard/admin" || pathname.startsWith("/dashboard/admin/");
+  const adminActive = isAdmin && pathInAdmin;
+  const [adminExpanded, setAdminExpanded] = useState<boolean>(false);
+  useEffect(() => {
+    if (pathInAdmin) setAdminExpanded(true);
+  }, [pathInAdmin]);
 
   return (
     <AnimatePresence>
@@ -131,49 +139,89 @@ export function MobileNavDrawer({
                     paddingTop: spacing[3],
                     borderTop: `1px solid ${colors.border}`,
                     display: "grid",
-                    gap: spacing[2]
+                    gap: spacing[1]
                   }}
                 >
-                  <span
+                  <button
+                    type="button"
+                    data-testid="mobile-nav-admin-toggle"
+                    data-expanded={adminExpanded}
+                    aria-expanded={adminExpanded}
+                    aria-controls="mobile-nav-admin-items"
+                    onClick={() => setAdminExpanded(!adminExpanded)}
                     style={{
-                      padding: `0 ${spacing[3]}`,
-                      color: colors.textMuted,
-                      fontSize: typography.scale.xs,
-                      textTransform: "uppercase",
-                      letterSpacing: "0.08em",
-                      fontWeight: 600
+                      display: "flex",
+                      alignItems: "center",
+                      gap: spacing[3],
+                      width: "100%",
+                      borderRadius: borderRadius.md,
+                      padding: `${spacing[3]} ${spacing[3]}`,
+                      borderLeft: `3px solid ${adminActive ? colors.accent : "transparent"}`,
+                      border: "none",
+                      borderTop: "none",
+                      borderRight: "none",
+                      borderBottom: "none",
+                      background:
+                        adminActive && !adminExpanded
+                          ? "rgba(59,130,246,0.12)"
+                          : "transparent",
+                      color: adminActive ? colors.accent : colors.text,
+                      fontSize: typography.scale.sm,
+                      fontWeight: adminActive ? 600 : 500,
+                      cursor: "pointer",
+                      textAlign: "left",
+                      minHeight: 44
                     }}
                   >
-                    Admin
-                  </span>
-                  {adminItems.map((item) => {
-                    const Icon = item.icon;
-                    const isActive = isDashboardNavItemActive(pathname, item.href);
-                    return (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        onClick={onClose}
-                        data-testid={`mobile-nav-admin-item-${item.href}`}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: spacing[3],
-                          borderRadius: borderRadius.md,
-                          padding: `${spacing[3]} ${spacing[3]}`,
-                          borderLeft: `3px solid ${isActive ? colors.accent : "transparent"}`,
-                          background: isActive ? "rgba(59,130,246,0.12)" : "transparent",
-                          color: isActive ? colors.accent : colors.text,
-                          fontSize: typography.scale.sm,
-                          fontWeight: isActive ? 600 : 500,
-                          minHeight: 44
-                        }}
-                      >
-                        <Icon size={18} />
-                        <span>{item.label}</span>
-                      </Link>
-                    );
-                  })}
+                    <ShieldCheck size={18} />
+                    <span style={{ flex: 1 }}>Admin</span>
+                    {adminExpanded ? (
+                      <ChevronDown size={14} aria-hidden />
+                    ) : (
+                      <ChevronRight size={14} aria-hidden />
+                    )}
+                  </button>
+                  {adminExpanded ? (
+                    <div
+                      id="mobile-nav-admin-items"
+                      style={{
+                        display: "grid",
+                        gap: spacing[1],
+                        paddingLeft: spacing[3]
+                      }}
+                    >
+                      {adminItems.map((item) => {
+                        const Icon = item.icon;
+                        const isActive = isDashboardNavItemActive(pathname, item.href);
+                        return (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            onClick={onClose}
+                            data-testid={`mobile-nav-admin-item-${item.href}`}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: spacing[3],
+                              borderRadius: borderRadius.md,
+                              padding: `${spacing[3]} ${spacing[3]}`,
+                              borderLeft: `2px solid ${isActive ? colors.accent : colors.border}`,
+                              background: isActive
+                                ? "rgba(59,130,246,0.12)"
+                                : "transparent",
+                              color: isActive ? colors.accent : colors.text,
+                              fontSize: typography.scale.sm,
+                              fontWeight: isActive ? 600 : 500,
+                              minHeight: 44
+                            }}
+                          >
+                            <Icon size={16} />
+                            <span>{item.label}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
             </nav>

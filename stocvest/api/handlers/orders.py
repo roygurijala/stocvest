@@ -279,7 +279,27 @@ def orders_status_handler(
     return _run_order_op(_run)
 
 
-def _serialize_user_profile(profile: UserProfile) -> dict[str, Any]:
+def _serialize_user_profile(
+    profile: UserProfile,
+    *,
+    is_admin: bool = False,
+) -> dict[str, Any]:
+    """Serialize a ``UserProfile`` for the ``GET /v1/users/me`` response.
+
+    ``is_admin`` is set by callers that have admin-claims context for
+    **this** user (the one whose profile is being returned). When ``True``
+    we OR-bump ``has_full_access`` and ``has_ai_explanations`` so an admin
+    transparently gets every paid feature regardless of their subscription
+    plan or beta flag — admins are the safety net, so they need the
+    superset of all capabilities while inspecting the app.
+
+    For handlers where the caller is an admin viewing **another** user's
+    profile (``admin_beta_access_patch_handler``) ``is_admin`` is left
+    ``False``: bumping the target's flags based on the actor's group
+    would be a privilege confusion bug.
+    """
+    has_full = profile.has_full_access or is_admin
+    has_ai = profile.has_ai_explanations or is_admin
     return {
         "user_id": profile.user_id,
         "trading_mode": profile.trading_mode.value,
@@ -292,9 +312,27 @@ def _serialize_user_profile(profile: UserProfile) -> dict[str, Any]:
         "beta_full_access": profile.beta_full_access,
         "beta_access_until": profile.beta_access_until,
         "beta_access_granted_at": profile.beta_access_granted_at,
-        "has_full_access": profile.has_full_access,
-        "has_ai_explanations": profile.has_ai_explanations,
+        "has_full_access": has_full,
+        "has_ai_explanations": has_ai,
+        "is_admin": is_admin,
     }
+
+
+def _caller_is_admin(event: LambdaEvent, request_context: Any) -> bool:
+    """Compute the admin flag for the caller in one place.
+
+    Same gate as ``analysis_authorized()`` so the entitlement bump and
+    the admin-only endpoints stay in lockstep — there is no way to be
+    "admin for nav" without also being "admin for backend".
+    """
+    headers = event.get("headers") or {}
+    if not isinstance(headers, dict):
+        headers = {}
+    return analysis_authorized(
+        user_id=request_context.user_id,
+        claims=request_context.claims,
+        headers=headers,
+    )
 
 
 def users_me_get_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
@@ -303,7 +341,8 @@ def users_me_get_handler(event: LambdaEvent, context: LambdaContext) -> dict[str
     if not request_context.user_id:
         return unauthorized("Authenticated user is required.")
     profile = get_user_profile_store().get_profile(request_context.user_id)
-    return ok(_serialize_user_profile(profile))
+    is_admin = _caller_is_admin(event, request_context)
+    return ok(_serialize_user_profile(profile, is_admin=is_admin))
 
 
 def users_me_patch_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
@@ -361,12 +400,13 @@ def users_me_patch_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
             updates["legal_acknowledged_at"] = None
             updates["legal_acknowledged_version"] = None
 
+    is_admin = _caller_is_admin(event, request_context)
     if not updates:
-        return ok(_serialize_user_profile(cur))
+        return ok(_serialize_user_profile(cur, is_admin=is_admin))
 
     merged = cur.model_copy(update=updates)
     store.put_profile(merged)
-    return ok(_serialize_user_profile(merged))
+    return ok(_serialize_user_profile(merged, is_admin=is_admin))
 
 
 def admin_beta_access_patch_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:

@@ -351,6 +351,11 @@ export function AdminProposalsPageClient() {
         ) : null}
       </div>
 
+      {/* D10 Phase 5 — the parameter rollback panel that used to live
+          here was relocated to `/dashboard/admin/parameters` so every
+          parameter-related tool sits in one place. Proposals stay
+          focused on review-and-promote only. */}
+
       <style jsx>{`
         @media (min-width: 1100px) {
           :global(.admin-proposals-layout) {

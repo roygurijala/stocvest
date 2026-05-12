@@ -17,6 +17,7 @@ import {
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { isoDateInNewYork } from "@/lib/market-hours-et";
+import { SUBHEADING_DAY_CADENCE, SUBHEADING_SWING_CADENCE } from "@/lib/mode-terminology";
 import { useTheme } from "@/lib/theme-provider";
 
 function outcomeLabel(outcome: PublicSignal["outcome"]): string {
@@ -339,7 +340,7 @@ export function PublicValidationSection({
       <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className={surfaceClass} style={metricCardStyle} data-testid="pv-swing-track">
           <p className="text-xs uppercase tracking-wide" style={{ color: colors.textMuted }}>
-            Swing track (1d, multi-day cadence)
+            {SUBHEADING_SWING_CADENCE}
           </p>
           <p className="mt-2 text-2xl font-bold" style={{ fontFamily: typography.fontFamilyMono }}>
             {swing ? formatAccuracyPercent(swing.accuracy) : "—"}
@@ -347,13 +348,13 @@ export function PublicValidationSection({
           <p className="mt-1 text-[11px] leading-snug" style={{ color: colors.textMuted }}>
             {swing && swing.correct + swing.incorrect > 0
               ? `${swing.correct} correct of ${swing.correct + swing.incorrect} resolved`
-              : "Awaiting resolved swing trades"}
+              : "Awaiting resolved swing signals"}
           </p>
         </div>
 
         <div className={surfaceClass} style={metricCardStyle} data-testid="pv-day-track">
           <p className="text-xs uppercase tracking-wide" style={{ color: colors.textMuted }}>
-            Day track (1d, intraday cadence)
+            {SUBHEADING_DAY_CADENCE}
           </p>
           <p className="mt-2 text-2xl font-bold" style={{ fontFamily: typography.fontFamilyMono }}>
             {day ? formatAccuracyPercent(day.accuracy) : "—"}
@@ -361,7 +362,7 @@ export function PublicValidationSection({
           <p className="mt-1 text-[11px] leading-snug" style={{ color: colors.textMuted }}>
             {day && day.correct + day.incorrect > 0
               ? `${day.correct} correct of ${day.correct + day.incorrect} resolved`
-              : "Awaiting resolved day trades"}
+              : "Awaiting resolved day signals"}
           </p>
         </div>
       </div>

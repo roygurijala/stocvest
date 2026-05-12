@@ -18,6 +18,8 @@ import { useRouter } from "next/navigation";
 import { AddToWatchlistButton } from "@/components/add-to-watchlist-button";
 import { GapCatalystNewsDrawer } from "@/components/gap-catalyst-news-drawer";
 import { NewsPanel } from "@/components/news-panel";
+import { BuildScenarioButton } from "@/components/scenario-builder/build-scenario-button";
+import { ScannerEmptyStateCard } from "@/components/scanner-empty-state-card";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { loadScannerDataWithoutBrief } from "@/lib/api/scanner-client-load";
@@ -36,7 +38,38 @@ import type {
 import type { EarningsEvent } from "@/lib/api/earnings";
 import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
+import { brokersEnabled } from "@/lib/nav-features";
+import {
+  TAB_LABEL_BOTH,
+  TAB_LABEL_DAY,
+  TAB_LABEL_SWING
+} from "@/lib/mode-terminology";
+import {
+  buildDayEmptyStateContext,
+  buildSwingEmptyStateContext
+} from "@/lib/scanner-empty-state";
+import type { ScenarioInput, VolatilityRegime } from "@/lib/scenario/types";
+import { roleAccents } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
+
+/**
+ * Map the macro regime label the scanner overview carries (engine form
+ * — `"risk_on"` / `"neutral"` / `"risk_off"` / `"avoid"` / `"unknown"`,
+ * or arbitrary free text from cached responses) onto the closed-set
+ * volatility regime the Scenario Builder consumes. The mapping is
+ * conservative: anything we don't recognize falls through to
+ * `"unknown"`, which the eligibility gate treats as "not enough
+ * volatility context to scaffold a stop."
+ */
+function regimeLabelToVolatilityRegime(label: string | null | undefined): VolatilityRegime {
+  const norm = (label ?? "").trim().toLowerCase();
+  if (!norm) return "unknown";
+  if (norm.includes("risk_on") || norm === "risk-on" || norm.includes("low")) return "low";
+  if (norm.includes("neutral") || norm.includes("normal")) return "normal";
+  if (norm.includes("risk_off") || norm === "risk-off" || norm.includes("elevated")) return "elevated";
+  if (norm.includes("avoid") || norm.includes("extreme")) return "extreme";
+  return "unknown";
+}
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
 import { fetchSymbolMinuteBars } from "@/lib/fetch-symbol-bars";
 import { buildEvidenceFromSetup, enrichEvidenceWithComposite, type SignalEvidenceData } from "@/lib/signal-evidence";
@@ -115,7 +148,7 @@ function isSecondarySharedCatalyst(item: GapIntelligenceItem): boolean {
 }
 
 export function ScannerPageClient({ initialOverview, initialTimestampIso, earningsBySymbol }: ScannerPageClientProps) {
-  const { colors } = useTheme();
+  const { colors, theme } = useTheme();
   const [overview, setOverview] = useState<ScannerOverview>(initialOverview);
   const [scannerSetupMode, setScannerSetupMode] = useState<ScannerSetupLoadMode>("swing");
   const [isPending, startTransition] = useTransition();
@@ -689,39 +722,66 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
             {evidenceLoading ? "Preparing signal..." : "View Signal"}
           </button>
           <AddToWatchlistButton symbol={item.symbol} />
-          <span title="ORB window has closed for today" style={{ display: "inline-flex" }}>
-            <button
-              type="button"
-              onClick={() => {
-                const sym = item.symbol.trim().toUpperCase();
-                const setupFor = overview.setups.find((s) => s.symbol.trim().toUpperCase() === sym);
-                goToPortfolioOrder({
-                  symbol: sym,
-                  side: item.gap_pct >= 0 ? "buy" : "sell",
-                  pattern: "pre_market_gap",
-                  signal_strength: String(Math.min(100, Math.max(0, Math.round(item.gap_quality_score)))),
-                  signal_direction: item.gap_pct >= 0 ? "bullish" : "bearish",
-                  ...(setupFor?.confluence_score != null
-                    ? { confluence_score: String(Math.round(setupFor.confluence_score)) }
-                    : {})
-                });
-              }}
-              style={{
-                border: `1px solid ${colors.accent}`,
-                borderRadius: borderRadius.md,
-                background: "rgba(59,130,246,0.22)",
-                color: colors.accent,
-                padding: `${spacing[2]} ${spacing[3]}`,
-                cursor: "pointer",
-                fontSize: typography.scale.sm,
-                fontWeight: 700,
-                letterSpacing: "0.02em",
-                boxShadow: "0 0 14px rgba(59,130,246,0.18)"
-              }}
-            >
-              Open order entry
-            </button>
-          </span>
+          {(() => {
+            // Build the Scenario Builder input from the gap card's
+            // structural fields. The eligibility helper decides whether
+            // the button renders enabled or disabled-with-tooltip; we
+            // don't pre-judge here.
+            const sym = item.symbol.trim().toUpperCase();
+            const gapDirection: ScenarioInput["direction"] =
+              item.gap_pct > 0 ? "bullish" : item.gap_pct < 0 ? "bearish" : "neutral";
+            const scenarioInput: ScenarioInput = {
+              symbol: sym,
+              direction: gapDirection,
+              mode: "day",
+              generated_at: new Date().toISOString(),
+              reference: {
+                current_price: item.current_price,
+                prev_close: item.prev_close
+              },
+              volatility_regime: regimeLabelToVolatilityRegime(overview.regimeLabel),
+              tags: [
+                `Gap ${item.gap_pct >= 0 ? "+" : ""}${item.gap_pct.toFixed(2)}%`,
+                item.has_catalyst ? "With catalyst" : "Momentum-only"
+              ]
+            };
+            return <BuildScenarioButton input={scenarioInput} testId={`build-scenario-gap-${sym}`} />;
+          })()}
+          {brokersEnabled() ? (
+            <span title="ORB window has closed for today" style={{ display: "inline-flex" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  const sym = item.symbol.trim().toUpperCase();
+                  const setupFor = overview.setups.find((s) => s.symbol.trim().toUpperCase() === sym);
+                  goToPortfolioOrder({
+                    symbol: sym,
+                    side: item.gap_pct >= 0 ? "buy" : "sell",
+                    pattern: "pre_market_gap",
+                    signal_strength: String(Math.min(100, Math.max(0, Math.round(item.gap_quality_score)))),
+                    signal_direction: item.gap_pct >= 0 ? "bullish" : "bearish",
+                    ...(setupFor?.confluence_score != null
+                      ? { confluence_score: String(Math.round(setupFor.confluence_score)) }
+                      : {})
+                  });
+                }}
+                style={{
+                  border: `1px solid ${colors.accent}`,
+                  borderRadius: borderRadius.md,
+                  background: "rgba(59,130,246,0.22)",
+                  color: colors.accent,
+                  padding: `${spacing[2]} ${spacing[3]}`,
+                  cursor: "pointer",
+                  fontSize: typography.scale.sm,
+                  fontWeight: 700,
+                  letterSpacing: "0.02em",
+                  boxShadow: "0 0 14px rgba(59,130,246,0.18)"
+                }}
+              >
+                Open order entry
+              </button>
+            </span>
+          ) : null}
         </div>
         <p
           style={{
@@ -1068,29 +1128,75 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
         aria-label="Scanner setup source"
         className="flex flex-wrap gap-2"
         style={{ marginTop: 0 }}
+        data-testid="scanner-mode-tablist"
       >
         {(["swing", "day", "both"] as const).map((m) => {
           const active = scannerSetupMode === m;
-          const label = m === "swing" ? "Swing" : m === "day" ? "Day" : "Both";
+          // Tab labels and role accents live in `lib/mode-terminology` +
+          // `lib/design-system.roleAccents`. The role accent is the SAME
+          // hue family used on the dashboard's Swing Desk / Day Desk /
+          // Shared Context master cards — so the user reading a Swing
+          // pill anywhere in the app gets the same indigo-violet at a
+          // glance. Active-state tab gets the role's `borderAccent` (the
+          // "rail line" hue) and a tinted background mixed from that
+          // same accent, so peripheral vision can resolve mode without
+          // reading copy.
+          const role = m === "swing" ? "swing" : m === "day" ? "day" : "shared";
+          const accent = roleAccents[theme][role];
+          const railHue = accent.borderAccent;
+          const label = m === "swing" ? TAB_LABEL_SWING : m === "day" ? TAB_LABEL_DAY : TAB_LABEL_BOTH;
+          const cadence = m === "swing" ? "Multi-day" : m === "day" ? "Intraday" : "Two desks";
           return (
             <button
               key={m}
               type="button"
               role="tab"
               aria-selected={active}
+              // Pin the accessible name to the short tab label so
+              // screen-readers and `getByRole("tab", { name: "Swing" })`
+              // assertions don't catch the secondary cadence sub-line
+              // ("Multi-day" / "Intraday" / "Two desks"). The cadence
+              // word is decorative — it reinforces what the tab means
+              // for sighted users but should not bloat the accessible
+              // name.
+              aria-label={label}
+              data-testid={`scanner-mode-tab-${m}`}
+              data-active={active ? "true" : "false"}
+              data-role={role}
               onClick={() => persistScannerMode(m)}
               style={{
+                position: "relative",
+                display: "inline-flex",
+                flexDirection: "column",
+                alignItems: "flex-start",
+                gap: 2,
                 borderRadius: borderRadius.md,
-                border: `1px solid ${active ? colors.accent : colors.border}`,
-                padding: `${spacing[1]} ${spacing[3]}`,
+                border: `${active ? 2 : 1}px solid ${active ? railHue : colors.border}`,
+                padding: `${spacing[2]} ${spacing[4]}`,
                 fontSize: typography.scale.sm,
                 fontWeight: active ? 700 : 500,
-                background: active ? `color-mix(in srgb, ${colors.accent} 12%, transparent)` : colors.surface,
-                color: active ? colors.accent : colors.text,
-                cursor: "pointer"
+                background: active
+                  ? `color-mix(in srgb, ${railHue} 14%, ${colors.surface})`
+                  : colors.surface,
+                color: active ? accent.accentStrong : colors.text,
+                cursor: "pointer",
+                minWidth: 84,
+                transition: "background 120ms ease, border-color 120ms ease"
               }}
             >
-              {label}
+              <span style={{ fontSize: typography.scale.sm, lineHeight: 1.1 }}>{label}</span>
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  letterSpacing: "0.05em",
+                  textTransform: "uppercase",
+                  color: active ? railHue : colors.textMuted,
+                  lineHeight: 1.1
+                }}
+              >
+                {cadence}
+              </span>
             </button>
           );
         })}
@@ -1154,7 +1260,33 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
             }}
           >
             {overview.gapIntelligence.length === 0 ? (
-              <p style={{ margin: 0, color: colors.textMuted }}>No gap intelligence matches right now.</p>
+              // Rich empty state for the Gap Intelligence column. We
+              // use the day-side context when the user is explicitly on
+              // the Day tab (gaps feed day-side ORB/momentum reads more
+              // directly than swing daily-bars), and the swing-side
+              // context otherwise — the swing-side card explains the
+              // regime + structure gates that drive swing entries on
+              // gap names. `compact` drops the cross-link nav so this
+              // card doesn't dominate the half-width column.
+              <ScannerEmptyStateCard
+                context={
+                  scannerSetupMode === "day"
+                    ? buildDayEmptyStateContext({
+                        regimeLabel: overview.regimeLabel,
+                        spyPct: overview.spyPct,
+                        qqqPct: overview.qqqPct,
+                        swingUniverseSymbolCount: overview.swingUniverseSymbolCount
+                      })
+                    : buildSwingEmptyStateContext({
+                        regimeLabel: overview.regimeLabel,
+                        spyPct: overview.spyPct,
+                        qqqPct: overview.qqqPct,
+                        swingUniverseSymbolCount: overview.swingUniverseSymbolCount
+                      })
+                }
+                compact
+                testId="scanner-gap-empty-state"
+              />
             ) : (
               <>
                 {gapIntelGrouped.withCat.map((item, idx) => renderGapIntelCard(item, idx, false))}
@@ -1211,7 +1343,36 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                   </h4>
                 ) : null}
                 {group.setups.length === 0 ? (
-                  <p style={{ margin: 0, color: colors.textMuted, lineHeight: 1.45 }}>{group.emptyMessage}</p>
+                  // Rich empty state per render group — swing group
+                  // uses the swing-side context, day group uses the
+                  // day-side context, so the user gets mode-appropriate
+                  // re-enable copy in the `Both` view where both groups
+                  // render side-by-side. Full width (NOT compact) here
+                  // because the setups column is the primary surface
+                  // and the cross-link nav belongs on the dominant
+                  // empty state.
+                  (() => {
+                    const isDayGroup = group.key === "day" || group.key === "day-only";
+                    const context = isDayGroup
+                      ? buildDayEmptyStateContext({
+                          regimeLabel: overview.regimeLabel,
+                          spyPct: overview.spyPct,
+                          qqqPct: overview.qqqPct,
+                          swingUniverseSymbolCount: overview.swingUniverseSymbolCount
+                        })
+                      : buildSwingEmptyStateContext({
+                          regimeLabel: overview.regimeLabel,
+                          spyPct: overview.spyPct,
+                          qqqPct: overview.qqqPct,
+                          swingUniverseSymbolCount: overview.swingUniverseSymbolCount
+                        });
+                    return (
+                      <ScannerEmptyStateCard
+                        context={context}
+                        testId={`scanner-setups-empty-state-${group.key}`}
+                      />
+                    );
+                  })()
                 ) : (
                   group.setups.map((setup, idx) => {
                 /**
@@ -1487,44 +1648,78 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                       />
                     </div>
                     <div style={{ display: "inline-flex", flexWrap: "wrap", gap: spacing[2], alignItems: "center" }}>
-                      <span
-                        title={orbExpired ? "ORB window has closed for today" : undefined}
-                        style={{ display: "inline-flex", cursor: orbExpired ? "not-allowed" : undefined }}
-                      >
-                        <button
-                          type="button"
-                          disabled={orbExpired}
-                          onClick={() => {
-                            if (orbExpired) return;
-                            const sym = setup.symbol.trim().toUpperCase();
-                            goToPortfolioOrder({
-                              symbol: sym,
-                              side: isLongDirection(setup.direction) ? "buy" : "sell",
-                              pattern: setup.triggers[0] || "intraday_setup",
-                              signal_strength: String(topSignalStrengthPercent(setup)),
-                              signal_direction: setup.direction,
-                              ...(setup.confluence_score != null
-                                ? { confluence_score: String(Math.round(setup.confluence_score)) }
-                                : {})
-                            });
-                          }}
-                          style={{
-                            border: `1px solid ${orbExpired ? "var(--color-border)" : colors.accent}`,
-                            borderRadius: borderRadius.md,
-                            background: orbExpired ? "var(--color-background-secondary)" : "rgba(59,130,246,0.22)",
-                            color: orbExpired ? "var(--color-text-tertiary)" : colors.accent,
-                            padding: `${spacing[2]} ${spacing[3]}`,
-                            cursor: orbExpired ? "not-allowed" : "pointer",
-                            fontSize: typography.scale.sm,
-                            fontWeight: orbExpired ? 500 : 700,
-                            letterSpacing: orbExpired ? undefined : "0.02em",
-                            boxShadow: orbExpired ? undefined : "0 0 14px rgba(59,130,246,0.18)",
-                            opacity: orbExpired ? 0.4 : 1
-                          }}
+                      {(() => {
+                        // Build the Scenario Builder input from this
+                        // setup row. We forward whatever structural
+                        // data we have; eligibility decides enabled vs
+                        // disabled.
+                        const sym = setup.symbol.trim().toUpperCase();
+                        const setupDirection: ScenarioInput["direction"] =
+                          isLongDirection(setup.direction)
+                            ? "bullish"
+                            : /short|bear/i.test(setup.direction)
+                              ? "bearish"
+                              : "neutral";
+                        const setupMode: ScenarioInput["mode"] =
+                          setup.scanner_mode === "swing_daily" ? "swing" : "day";
+                        const scenarioInput: ScenarioInput = {
+                          symbol: sym,
+                          direction: setupDirection,
+                          mode: setupMode,
+                          generated_at: setup.timestamp_iso,
+                          reference: {
+                            current_price: setup.last_price ?? null
+                          },
+                          volatility_regime: regimeLabelToVolatilityRegime(overview.regimeLabel),
+                          tags: setup.triggers && setup.triggers.length > 0 ? setup.triggers.slice(0, 3) : undefined
+                        };
+                        return (
+                          <BuildScenarioButton
+                            input={scenarioInput}
+                            testId={`build-scenario-setup-${sym}`}
+                          />
+                        );
+                      })()}
+                      {brokersEnabled() ? (
+                        <span
+                          title={orbExpired ? "ORB window has closed for today" : undefined}
+                          style={{ display: "inline-flex", cursor: orbExpired ? "not-allowed" : undefined }}
                         >
-                          Open order entry
-                        </button>
-                      </span>
+                          <button
+                            type="button"
+                            disabled={orbExpired}
+                            onClick={() => {
+                              if (orbExpired) return;
+                              const sym = setup.symbol.trim().toUpperCase();
+                              goToPortfolioOrder({
+                                symbol: sym,
+                                side: isLongDirection(setup.direction) ? "buy" : "sell",
+                                pattern: setup.triggers[0] || "intraday_setup",
+                                signal_strength: String(topSignalStrengthPercent(setup)),
+                                signal_direction: setup.direction,
+                                ...(setup.confluence_score != null
+                                  ? { confluence_score: String(Math.round(setup.confluence_score)) }
+                                  : {})
+                              });
+                            }}
+                            style={{
+                              border: `1px solid ${orbExpired ? "var(--color-border)" : colors.accent}`,
+                              borderRadius: borderRadius.md,
+                              background: orbExpired ? "var(--color-background-secondary)" : "rgba(59,130,246,0.22)",
+                              color: orbExpired ? "var(--color-text-tertiary)" : colors.accent,
+                              padding: `${spacing[2]} ${spacing[3]}`,
+                              cursor: orbExpired ? "not-allowed" : "pointer",
+                              fontSize: typography.scale.sm,
+                              fontWeight: orbExpired ? 500 : 700,
+                              letterSpacing: orbExpired ? undefined : "0.02em",
+                              boxShadow: orbExpired ? undefined : "0 0 14px rgba(59,130,246,0.18)",
+                              opacity: orbExpired ? 0.4 : 1
+                            }}
+                          >
+                            Open order entry
+                          </button>
+                        </span>
+                      ) : null}
                       <button
                         type="button"
                         onClick={async () => {

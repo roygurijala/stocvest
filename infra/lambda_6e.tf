@@ -220,6 +220,27 @@ resource "aws_iam_role_policy" "lambda_api_data_access" {
         Action   = ["ses:SendEmail", "ses:SendRawEmail"]
         Resource = "*"
       },
+      {
+        # D10 Admin hub — Cognito idp surface needed by
+        # `/v1/admin/users/*` and `/v1/admin/system-status`. Scoped to
+        # the project user pool ARN so the role cannot enumerate or
+        # mutate identities in any unrelated pool. Group mutations
+        # land on `signal-analytics-admin` (whitelisted at the handler
+        # layer) but the IAM permission is broader so the same role
+        # can support future whitelist entries without IAM churn.
+        Sid    = "CognitoAdminUserDirectory"
+        Effect = "Allow"
+        Action = [
+          "cognito-idp:ListUsers",
+          "cognito-idp:ListUsersInGroup",
+          "cognito-idp:AdminGetUser",
+          "cognito-idp:AdminListGroupsForUser",
+          "cognito-idp:AdminResetUserPassword",
+          "cognito-idp:AdminAddUserToGroup",
+          "cognito-idp:AdminRemoveUserFromGroup",
+        ]
+        Resource = aws_cognito_user_pool.main.arn
+      },
     ]
   })
 }

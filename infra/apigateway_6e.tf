@@ -51,6 +51,30 @@ locals {
     "POST /v1/admin/proposals/{proposal_id}/promote" = { module_key = "signals", authorizer = true }
     "POST /v1/admin/proposals/{proposal_id}/reject"  = { module_key = "signals", authorizer = true }
 
+    # D10 Phase 4 — admin parameter-rollback surface. Same admin gate
+    # (`analysis_authorized()`) as the proposal review routes; same atomic
+    # write primitive (`ParameterStore.save_parameters_sync`) so promotion
+    # and rollback both write honest `ParameterHistory` audit rows. The
+    # rollback button is the operator's one-click answer to the CloudWatch
+    # post-rotation degradation alarm.
+    "GET /v1/admin/parameters/history"   = { module_key = "signals", authorizer = true }
+    "POST /v1/admin/parameters/rollback" = { module_key = "signals", authorizer = true }
+
+    # D10 Admin Hub — operational maintenance surface. Read-only
+    # endpoints (`parameters/current`, `system-status`, `audit/recent`)
+    # and Cognito-backed user management. Every route is gated by
+    # `analysis_authorized()` inside the handler; admins get full app
+    # access via the JWT group claim (no DynamoDB admin flag).
+    "GET /v1/admin/parameters/current" = { module_key = "signals", authorizer = true }
+    "GET /v1/admin/system-status"      = { module_key = "signals", authorizer = true }
+    "GET /v1/admin/audit/recent"       = { module_key = "brokers", authorizer = true }
+
+    "GET /v1/admin/users/search"                          = { module_key = "brokers", authorizer = true }
+    "GET /v1/admin/users/{user_id}"                       = { module_key = "brokers", authorizer = true }
+    "POST /v1/admin/users/{user_id}/reset-password"       = { module_key = "brokers", authorizer = true }
+    "POST /v1/admin/users/{user_id}/groups/{group}"       = { module_key = "brokers", authorizer = true }
+    "DELETE /v1/admin/users/{user_id}/groups/{group}"     = { module_key = "brokers", authorizer = true }
+
     "GET /v1/brokers/health"    = { module_key = "brokers", authorizer = true }
     "GET /v1/brokers/accounts"  = { module_key = "brokers", authorizer = true }
     "GET /v1/brokers/positions" = { module_key = "brokers", authorizer = true }

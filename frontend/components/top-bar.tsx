@@ -6,6 +6,7 @@ import { Menu } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { TradingModeBadge } from "@/components/trading-mode-badge";
 import { spacing } from "@/lib/design-system";
+import { brokersEnabled } from "@/lib/nav-features";
 import { useTheme } from "@/lib/theme-provider";
 
 const TITLE_BY_PATH: Record<string, string> = {
@@ -57,7 +58,7 @@ export function TopBar({ onMenuClick }: TopBarProps) {
       </button>
       <h1 className="m-0 min-w-0 flex-1 truncate text-center text-lg font-bold lg:flex-none lg:text-left lg:text-xl">{title}</h1>
       <div className="flex shrink-0 items-center justify-end gap-2">
-        <TradingModeBadge />
+        {brokersEnabled() ? <TradingModeBadge /> : null}
         <ThemeToggle />
       </div>
     </header>

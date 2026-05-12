@@ -801,6 +801,18 @@ def ai_explanations_handler(event: LambdaEvent, context: LambdaContext) -> dict[
         return bad_request("Body must be a JSON object.")
 
     profile = get_user_profile_store().get_profile(rc.user_id)
+    # Admin entitlement bump: an admin caller transparently gets the
+    # paid (Claude) explanation path so they see exactly what a paying
+    # user sees while inspecting the app. We construct a transient copy
+    # of the profile with the beta-access flag set — the persisted row
+    # is untouched. The bump uses the same gate as the admin-only
+    # endpoints (`analysis_authorized`) so there is no way to be "admin
+    # for AI" without also being "admin for backend".
+    headers = event.get("headers") or {}
+    if isinstance(headers, dict) and analysis_authorized(
+        user_id=rc.user_id, claims=rc.claims, headers=headers
+    ):
+        profile = profile.model_copy(update={"beta_full_access": True})
     typ = str(body.get("type") or "").strip()
     svc = AIExplanationService()
 
@@ -1359,6 +1371,44 @@ def signals_http_dispatch(event: LambdaEvent, context: LambdaContext) -> dict[st
         from stocvest.api.handlers.admin_proposals import admin_proposals_list_handler
 
         return admin_proposals_list_handler(event, context)
+    # D10 Phase 4 — admin parameter rollback surface. Same admin gate
+    # (analysis_authorized) as the proposal review routes; same atomic
+    # write primitive (ParameterStore.save_parameters_sync) so promotion
+    # and rollback both produce honest ParameterHistory audit rows.
+    if route == "POST /v1/admin/parameters/rollback":
+        from stocvest.api.handlers.admin_parameters import (
+            admin_parameters_rollback_handler,
+        )
+
+        return admin_parameters_rollback_handler(event, context)
+    if route == "GET /v1/admin/parameters/history" or route.startswith(
+        "GET /v1/admin/parameters/history?"
+    ):
+        from stocvest.api.handlers.admin_parameters import (
+            admin_parameters_history_handler,
+        )
+
+        return admin_parameters_history_handler(event, context)
+    # D10 Admin hub — readable view of the live SignalParameters secret
+    # + aggregated operations status. Same admin gate as proposals /
+    # rollback above. The hub page uses these to render its overview
+    # tile and its dedicated "current parameters" section.
+    if route == "GET /v1/admin/parameters/current" or route.startswith(
+        "GET /v1/admin/parameters/current?"
+    ):
+        from stocvest.api.handlers.admin_parameters import (
+            admin_parameters_current_handler,
+        )
+
+        return admin_parameters_current_handler(event, context)
+    if route == "GET /v1/admin/system-status" or route.startswith(
+        "GET /v1/admin/system-status?"
+    ):
+        from stocvest.api.handlers.admin_system_status import (
+            admin_system_status_handler,
+        )
+
+        return admin_system_status_handler(event, context)
     if route.startswith("GET /v1/signals/records/"):
         return public_platform_signal_record_handler(event, context)
     if route.startswith("GET /v1/signals/me/records/"):

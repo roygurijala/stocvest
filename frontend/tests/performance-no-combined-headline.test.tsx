@@ -157,9 +157,12 @@ describe("PublicValidationSection (90-day historical mirror)", () => {
       )
     );
     expect(html).not.toMatch(/Overall accuracy/i);
-    // Both per-engine cards must still be present, with their cadence labels.
-    expect(html).toMatch(/Swing track \(1d, multi-day cadence\)/);
-    expect(html).toMatch(/Day track \(1d, intraday cadence\)/);
+    // Both per-engine cards must still be present, with their cadence labels
+    // — pinned to the canonical SUBHEADING_*_CADENCE constants from
+    // `lib/mode-terminology`. A rename there would intentionally trip
+    // this test as a copy-edit-aware safety net.
+    expect(html).toMatch(/Swing \(multi-day cadence\)/);
+    expect(html).toMatch(/Day \(intraday cadence\)/);
     // Numbers from the fixture must surface in the rendered output so we
     // know the cards are wired to the by_mode buckets, not just rendered as
     // empty placeholders.

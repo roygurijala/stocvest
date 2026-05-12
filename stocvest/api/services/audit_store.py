@@ -20,6 +20,22 @@ class AuditStore(Protocol):
     def put_event(self, event: AuditEvent) -> None: ...
     def get_user_events(self, user_id: str, *, limit: int = 200) -> list[AuditEvent]: ...
     def get_session_events(self, session_id: str, *, limit: int = 200) -> list[AuditEvent]: ...
+    def list_recent_events(
+        self,
+        *,
+        limit: int = 100,
+        module: str | None = None,
+        route_prefix: str | None = None,
+    ) -> list[AuditEvent]: ...
+
+
+#: Defensive guardrail on the global feed Scan. ``AuditEvents`` is keyed by
+#: ``pk=user#<id>`` (one partition per user), so a global "give me the
+#: newest N events" view inevitably costs a Scan. Capping the upper bound
+#: lets us bill predictably while still surfacing the latest admin actions
+#: — the page UI only renders a hundred or so at a time and the operator
+#: can filter by ``module`` / ``route_prefix`` when looking further back.
+_MAX_RECENT_SCAN_LIMIT = 1000
 
 
 def _event_to_item(event: AuditEvent) -> dict[str, Any]:
@@ -91,6 +107,21 @@ class InMemoryAuditStore:
         rows.sort(key=lambda e: e.occurred_at, reverse=True)
         return rows[: max(1, limit)]
 
+    def list_recent_events(
+        self,
+        *,
+        limit: int = 100,
+        module: str | None = None,
+        route_prefix: str | None = None,
+    ) -> list[AuditEvent]:
+        rows = list(self._events)
+        if module:
+            rows = [e for e in rows if e.module == module]
+        if route_prefix:
+            rows = [e for e in rows if e.route.startswith(route_prefix)]
+        rows.sort(key=lambda e: e.occurred_at, reverse=True)
+        return rows[: max(1, limit)]
+
 
 @dataclass
 class DynamoAuditStore:
@@ -127,6 +158,48 @@ class DynamoAuditStore:
         rows = [_item_to_event(it) for it in (resp.get("Items") or [])]
         rows.sort(key=lambda e: e.occurred_at, reverse=True)
         return rows[: max(1, limit)]
+
+    def list_recent_events(
+        self,
+        *,
+        limit: int = 100,
+        module: str | None = None,
+        route_prefix: str | None = None,
+    ) -> list[AuditEvent]:
+        """Return the newest events across **every** user partition.
+
+        The table has no time-ordered GSI today (pk is per-user), so a
+        bounded ``Scan`` is the only honest option. The ``_MAX_RECENT_SCAN_LIMIT``
+        ceiling keeps a single call cheap; the page UI is wired to
+        ``limit`` (default 100) and never asks for more than 500.
+
+        ``module`` / ``route_prefix`` are server-side ``FilterExpression``
+        clauses so a busy table doesn't have to hand the client thousands
+        of rows it will discard. The result is sorted in Python by
+        ``occurred_at`` descending because Scan output ordering is
+        undefined.
+        """
+        capped = max(1, min(_MAX_RECENT_SCAN_LIMIT, int(limit)))
+        kwargs: dict[str, Any] = {"Limit": capped}
+        filter_parts: list[str] = []
+        attr_names: dict[str, str] = {}
+        attr_values: dict[str, Any] = {}
+        if module:
+            filter_parts.append("#m = :module")
+            attr_names["#m"] = "module"
+            attr_values[":module"] = str(module).strip()
+        if route_prefix:
+            filter_parts.append("begins_with(#r, :route_prefix)")
+            attr_names["#r"] = "route"
+            attr_values[":route_prefix"] = str(route_prefix).strip()
+        if filter_parts:
+            kwargs["FilterExpression"] = " AND ".join(filter_parts)
+            kwargs["ExpressionAttributeNames"] = attr_names
+            kwargs["ExpressionAttributeValues"] = attr_values
+        resp = self.table.scan(**kwargs)
+        rows = [_item_to_event(it) for it in (resp.get("Items") or [])]
+        rows.sort(key=lambda e: e.occurred_at, reverse=True)
+        return rows[: max(1, int(limit))]
 
 
 def build_default_audit_store() -> AuditStore:

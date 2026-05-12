@@ -5,6 +5,7 @@ import { fetchAllBrokerOverviews } from "@/lib/api/brokers";
 import { fetchJournalAnalytics, fetchJournalEntries } from "@/lib/api/journal";
 import type { JournalAnalyticsPayload } from "@/lib/api/contracts";
 import { getDashboardAuthContext } from "@/lib/auth/dashboard-session";
+import { brokersEnabled } from "@/lib/nav-features";
 
 function emptyAnalytics(userId: string): JournalAnalyticsPayload {
   return {
@@ -29,6 +30,12 @@ export default async function DashboardJournalPage() {
   const { session, isAdmin } = getDashboardAuthContext();
   if (!session) {
     redirect("/login");
+  }
+  if (!brokersEnabled()) {
+    // Journal is broker-coupled today (auto-capture on fill). Gate
+    // direct URL access while broker integration is paused — see
+    // BACKLOG B31 for the re-enable checklist.
+    redirect("/dashboard");
   }
   const [entries, analyticsRaw, brokerOverviews] = await Promise.all([
     fetchJournalEntries({ status: "all", limit: 200 }).catch(() => []),

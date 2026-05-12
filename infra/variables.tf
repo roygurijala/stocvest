@@ -109,3 +109,31 @@ variable "lambda_artifacts_bucket" {
   type        = string
   default     = "stocvest-development-lambda-artifacts-000504292517"
 }
+
+variable "weight_rotation_alert_email" {
+  description = <<-EOT
+    Optional admin email address for the D10 Phase 4 post-rotation accuracy alarm.
+    When set, an SNS topic subscription delivers degradation alerts here.
+    Leave empty in non-production environments to skip the email subscription.
+  EOT
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "weight_rotation_degradation_threshold_pp" {
+  description = <<-EOT
+    Percentage-point degradation threshold for the CloudWatch alarm.
+    The alarm fires when the post-rotation accuracy delta (current - baseline)
+    drops at least this many percentage points below zero, AND the run's
+    Status dimension equals "degraded". Default 5pp matches the constant in
+    stocvest/api/services/post_rotation_monitor.DEFAULT_DEGRADATION_THRESHOLD_PP.
+  EOT
+  type        = number
+  default     = 5
+
+  validation {
+    condition     = var.weight_rotation_degradation_threshold_pp >= 1 && var.weight_rotation_degradation_threshold_pp <= 50
+    error_message = "weight_rotation_degradation_threshold_pp must be between 1 and 50."
+  }
+}

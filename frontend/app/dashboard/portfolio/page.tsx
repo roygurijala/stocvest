@@ -6,6 +6,7 @@ import { fetchAllBrokerOverviews } from "@/lib/api/brokers";
 import { fetchPortfolioOverview } from "@/lib/api/portfolio";
 import { fetchEarningsCalendar } from "@/lib/api/earnings";
 import { getDashboardAuthContext } from "@/lib/auth/dashboard-session";
+import { brokersEnabled } from "@/lib/nav-features";
 
 function pickQuery(
   sp: Record<string, string | string[] | undefined> | undefined,
@@ -47,6 +48,13 @@ export default async function DashboardPortfolioPage({
   const { session, isAdmin } = getDashboardAuthContext();
   if (!session) {
     redirect("/login");
+  }
+  if (!brokersEnabled()) {
+    // Broker integration is currently paused (see BACKLOG B31). Anyone
+    // reaching this URL via a stale bookmark / external link / Scanner's
+    // legacy `goToPortfolioOrder` push gets routed back to the dashboard
+    // so the broker-coupled surface never renders.
+    redirect("/dashboard");
   }
   const orderFromSignal = parseOrderFromSignal(searchParams);
   const brokerOverviews = await fetchAllBrokerOverviews();

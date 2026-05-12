@@ -38,6 +38,10 @@ frontend/node_modules/
 frontend/.next/
 frontend/.env.local
 *.tsbuildinfo
+# Stray root-level node_modules (e.g. from running `npm install` from the
+# repo root by accident) — keep it out of version control even though the
+# canonical install path is frontend/.
+/node_modules/
 
 # AWS / Terraform (for later phases)
 *.tfstate

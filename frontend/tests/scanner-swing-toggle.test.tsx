@@ -184,8 +184,18 @@ describe("ScannerPageClient setup mode toggle", () => {
   test("test_scanner_mode_both_uses_mode_specific_empty_state_copy", async () => {
     // Mode-aware empty-state language rule (assistant_prompts.py): when a
     // mode is suppressed in the both-view, its empty copy must use that
-    // mode's vocabulary — swing emphasises regime/structure alignment, day
-    // emphasises intraday confirmation / session timing. Never identical.
+    // mode's vocabulary — swing emphasises regime / structure alignment,
+    // day emphasises intraday confirmation / session timing. Never identical.
+    //
+    // Under the new rich empty state (<ScannerEmptyStateCard />), each
+    // mode renders its own card with mode-discriminated copy. We assert:
+    //   1. Both cards exist (one per mode) in the both-view.
+    //   2. Each card carries a `data-mode` matching its render group.
+    //   3. The swing card visibly identifies as "Swing Desk".
+    //   4. The day card visibly identifies as "Day Desk".
+    //   5. Neither card leaks the other mode's vocabulary (this is the
+    //      hard rule — a copy edit that swaps them would silently break
+    //      Mode Separation, so we pin it here).
     localStorage.setItem(SCANNER_MODE_STORAGE_KEY, "both");
     // Empty defaults are already installed by beforeEach; no override needed.
 
@@ -201,9 +211,13 @@ describe("ScannerPageClient setup mode toggle", () => {
       expect(screen.getByRole("tab", { name: "Both" })).toHaveAttribute("aria-selected", "true")
     );
 
-    expect(await screen.findByText(/No swing setups — regime and structure not aligned\./)).toBeTruthy();
-    expect(
-      await screen.findByText(/No day setups — intraday confirmation and session timing not aligned\./)
-    ).toBeTruthy();
+    const swingCard = await screen.findByTestId("scanner-setups-empty-state-swing");
+    const dayCard = await screen.findByTestId("scanner-setups-empty-state-day");
+    expect(swingCard.getAttribute("data-mode")).toBe("swing");
+    expect(dayCard.getAttribute("data-mode")).toBe("day");
+    expect(swingCard.textContent).toContain("Swing Desk");
+    expect(dayCard.textContent).toContain("Day Desk");
+    expect(swingCard.textContent?.toLowerCase()).not.toContain("intraday confirmation");
+    expect(dayCard.textContent?.toLowerCase()).not.toContain("regime alignment");
   });
 });

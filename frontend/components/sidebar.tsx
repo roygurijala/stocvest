@@ -1,22 +1,29 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Activity,
   BarChart2,
   BookOpen,
   Bookmark,
   Briefcase,
+  ChevronDown,
+  ChevronRight,
   ClipboardList,
+  History,
   Layers,
   LayoutDashboard,
   LogOut,
   MessageCircle,
   Radio,
   CalendarDays,
+  ScrollText,
   Settings,
   ShieldCheck,
   TrendingUp,
+  Users,
   Zap,
   Percent,
   BadgeCheck
@@ -51,33 +58,88 @@ export const DASHBOARD_NAV_ITEMS: ReadonlyArray<{
   { href: "/dashboard/signals", label: "Signals", icon: Zap },
   { href: "/dashboard/signal-validation", label: "Signal validation", icon: ClipboardList },
   { href: "/dashboard/earnings", label: "Earnings", icon: CalendarDays },
-  { href: "/dashboard/portfolio", label: "Portfolio", icon: Briefcase, feature: "brokerPortfolio" },
+  { href: "/dashboard/portfolio", label: "Portfolio", icon: Briefcase, feature: "brokersEnabled" },
   { href: "/dashboard/options", label: "Options", icon: Layers, feature: "options" },
   { href: "/dashboard/crypto", label: "Crypto", icon: TrendingUp, feature: "crypto" },
   { href: "/dashboard/futures", label: "Futures", icon: BarChart2, feature: "futures" },
-  { href: "/dashboard/journal", label: "Journal", icon: BookOpen },
+  { href: "/dashboard/journal", label: "Journal", icon: BookOpen, feature: "brokersEnabled" },
   { href: "/dashboard/performance", label: "Performance", icon: Percent },
   { href: "/dashboard/legal", label: "Legal & agreements", icon: BadgeCheck },
   { href: "/dashboard/settings", label: "Settings", icon: Settings }
 ];
 
 /**
- * Admin-only nav items. Rendered only when the server-side
- * `isSessionAdmin()` check passes — the backend gate
- * (`analysis_authorized()`) is still the real perimeter on every request.
+ * Admin-only nav items, rendered as a collapsible group when the
+ * server-side `isSessionAdmin()` check passes. Order is intentional:
+ * Overview first (entry point) → high-touch operations → maintenance.
+ *
+ * The backend gate (`analysis_authorized()`) is still the real
+ * perimeter on every request — hiding the nav is a UX courtesy only.
  */
 export const DASHBOARD_ADMIN_NAV_ITEMS: ReadonlyArray<{
   href: string;
   label: string;
   icon: LucideIcon;
 }> = [
-  { href: "/dashboard/admin/proposals", label: "Admin · Proposals", icon: ShieldCheck }
+  { href: "/dashboard/admin", label: "Overview", icon: Activity },
+  { href: "/dashboard/admin/proposals", label: "Weight proposals", icon: ShieldCheck },
+  { href: "/dashboard/admin/parameters", label: "Parameters", icon: History },
+  { href: "/dashboard/admin/users", label: "Users", icon: Users },
+  { href: "/dashboard/admin/audit", label: "Audit log", icon: ScrollText }
 ];
+
+const ADMIN_NAV_STORAGE_KEY = "stocvest:sidebar:admin-expanded";
+
+/**
+ * Hook: persisted-expand state for the Admin collapsible group.
+ *
+ * Defaults to **collapsed** on first paint — admin users care about the
+ * 14 main-nav items 95% of the time. localStorage keeps the choice
+ * across navigations and reloads. The hook is SSR-safe (no `window`
+ * reference until `useEffect`) so the sidebar can server-render the
+ * collapsed state without hydration mismatch.
+ *
+ * Auto-expand override: if the current pathname is under
+ * `/dashboard/admin`, the group is shown expanded regardless of stored
+ * preference. The operator is clearly inside the admin surface, so the
+ * sub-items must be visible to navigate between them.
+ */
+function useAdminNavExpanded(autoExpand: boolean): [boolean, (next: boolean) => void] {
+  const [expanded, setExpanded] = useState<boolean>(false);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(ADMIN_NAV_STORAGE_KEY);
+      if (stored === "1") setExpanded(true);
+    } catch {
+      // SSR / disabled storage — keep collapsed.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (autoExpand) setExpanded(true);
+  }, [autoExpand]);
+
+  const set = (next: boolean) => {
+    setExpanded(next);
+    try {
+      window.localStorage.setItem(ADMIN_NAV_STORAGE_KEY, next ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  };
+
+  return [expanded, set];
+}
 
 export function Sidebar({ userLabel, isAdmin = false }: SidebarProps) {
   const pathname = usePathname();
   const { colors } = useTheme();
   const adminItems = isAdmin ? DASHBOARD_ADMIN_NAV_ITEMS : [];
+  const pathInAdmin =
+    pathname === "/dashboard/admin" || pathname.startsWith("/dashboard/admin/");
+  const [adminExpanded, setAdminExpanded] = useAdminNavExpanded(pathInAdmin && isAdmin);
+  const adminActive = isAdmin && pathInAdmin;
 
   return (
     <aside
@@ -146,48 +208,84 @@ export function Sidebar({ userLabel, isAdmin = false }: SidebarProps) {
               paddingTop: spacing[3],
               borderTop: `1px solid ${colors.border}`,
               display: "grid",
-              gap: spacing[2]
+              gap: spacing[1]
             }}
           >
-            <span
+            <button
+              type="button"
+              data-testid="sidebar-admin-toggle"
+              data-expanded={adminExpanded}
+              aria-expanded={adminExpanded}
+              aria-controls="sidebar-admin-items"
+              onClick={() => setAdminExpanded(!adminExpanded)}
               style={{
-                padding: `0 ${spacing[3]}`,
-                color: colors.textMuted,
-                fontSize: typography.scale.xs,
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                fontWeight: 600
+                display: "flex",
+                alignItems: "center",
+                gap: spacing[3],
+                width: "100%",
+                borderRadius: borderRadius.md,
+                padding: `${spacing[2]} ${spacing[3]}`,
+                borderLeft: `3px solid ${adminActive ? colors.accent : "transparent"}`,
+                border: "none",
+                borderTop: "none",
+                borderRight: "none",
+                borderBottom: "none",
+                background: adminActive && !adminExpanded ? "rgba(59,130,246,0.12)" : "transparent",
+                color: adminActive ? colors.accent : colors.text,
+                fontSize: typography.scale.sm,
+                fontWeight: adminActive ? 600 : 500,
+                cursor: "pointer",
+                textAlign: "left"
               }}
             >
-              Admin
-            </span>
-            {adminItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = isDashboardNavItemActive(pathname, item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="sidebar-nav-item"
-                  data-testid={`sidebar-admin-item-${item.href}`}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: spacing[3],
-                    borderRadius: borderRadius.md,
-                    padding: `${spacing[2]} ${spacing[3]}`,
-                    borderLeft: `3px solid ${isActive ? colors.accent : "transparent"}`,
-                    background: isActive ? "rgba(59,130,246,0.12)" : "transparent",
-                    color: isActive ? colors.accent : colors.text,
-                    fontSize: typography.scale.sm,
-                    fontWeight: isActive ? 600 : 500
-                  }}
-                >
-                  <Icon size={18} />
-                  <span className="sidebar-nav-label">{item.label}</span>
-                </Link>
-              );
-            })}
+              <ShieldCheck size={18} />
+              <span className="sidebar-nav-label" style={{ flex: 1 }}>
+                Admin
+              </span>
+              {adminExpanded ? (
+                <ChevronDown size={14} aria-hidden />
+              ) : (
+                <ChevronRight size={14} aria-hidden />
+              )}
+            </button>
+            {adminExpanded ? (
+              <div
+                id="sidebar-admin-items"
+                style={{
+                  display: "grid",
+                  gap: spacing[1],
+                  paddingLeft: spacing[3]
+                }}
+              >
+                {adminItems.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = isDashboardNavItemActive(pathname, item.href);
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className="sidebar-nav-item"
+                      data-testid={`sidebar-admin-item-${item.href}`}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: spacing[3],
+                        borderRadius: borderRadius.md,
+                        padding: `${spacing[2]} ${spacing[3]}`,
+                        borderLeft: `2px solid ${isActive ? colors.accent : colors.border}`,
+                        background: isActive ? "rgba(59,130,246,0.12)" : "transparent",
+                        color: isActive ? colors.accent : colors.text,
+                        fontSize: typography.scale.sm,
+                        fontWeight: isActive ? 600 : 500
+                      }}
+                    >
+                      <Icon size={16} />
+                      <span className="sidebar-nav-label">{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            ) : null}
           </div>
         ) : null}
       </nav>

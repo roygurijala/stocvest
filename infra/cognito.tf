@@ -63,6 +63,28 @@ resource "aws_cognito_user_pool" "main" {
   })
 }
 
+# D10 Admin hub — the `signal-analytics-admin` Cognito group is the
+# single source of truth for who can hit `/v1/admin/*` endpoints. Every
+# admin handler authorizes against `analysis_authorized()` which checks
+# group membership; the IAM policy in `lambda_6e.tf` (Sid
+# `CognitoAdminUserDirectory`) grants the API role permission to
+# manage membership programmatically so admins can be promoted /
+# demoted from `/dashboard/admin/users`. The bootstrap path for the
+# very first admin (before the UI surface exists for an empty pool) is
+# `scripts/grant_admin.py`.
+#
+# Keep this group resource adjacent to the user pool so a future
+# `terraform destroy` cleanly removes it; do NOT manage admin
+# membership from Terraform — that belongs to the UI / bootstrap
+# script so we don't have to apply infra changes every time admin
+# membership churns.
+resource "aws_cognito_user_group" "admin" {
+  name         = "signal-analytics-admin"
+  user_pool_id = aws_cognito_user_pool.main.id
+  description  = "STOCVEST admin hub — gates /v1/admin/* and the /dashboard/admin/* UI."
+  precedence   = 1
+}
+
 resource "aws_cognito_user_pool_client" "frontend" {
   name         = "stocvest-development-frontend-spa"
   user_pool_id = aws_cognito_user_pool.main.id

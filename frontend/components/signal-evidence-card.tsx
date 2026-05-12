@@ -41,8 +41,10 @@ import {
 import { pickNewsEmptyCopy } from "@/lib/news-empty-copy";
 import { AI_VERDICT_TIP, CONFIDENCE_PERCENT_TIP, LAYER_NAME_HINTS } from "@/lib/ui-tooltips";
 import { AIExplanationDisplay } from "@/components/ai-explanation-display";
+import { BuildScenarioButton } from "@/components/scenario-builder/build-scenario-button";
 import { UpgradePrompt } from "@/components/upgrade-prompt";
 import { useHasAIExplanations, useUserProfileLoaded } from "@/lib/api/user";
+import type { ScenarioInput, VolatilityRegime } from "@/lib/scenario/types";
 
 interface SignalEvidenceCardProps {
   evidence: SignalEvidenceData;
@@ -654,6 +656,23 @@ function GeopoliticalExposurePanel({ geo, colors }: { geo: GeopoliticalLayerExtr
   );
 }
 
+/**
+ * Map `evidence.market_regime` (free-form string from the composite
+ * engine — e.g. "risk_on" / "neutral" / "risk_off" / "avoid" / arbitrary
+ * cached values) onto the Scenario Builder's closed-set volatility
+ * regime. Conservative fallback to `"unknown"` so the eligibility gate
+ * blocks rather than silently passes when the regime is unparseable.
+ */
+function regimeToVolatility(label: string | null | undefined): VolatilityRegime {
+  const norm = (label ?? "").trim().toLowerCase();
+  if (!norm) return "unknown";
+  if (norm.includes("risk_on") || norm === "risk-on" || norm.includes("low")) return "low";
+  if (norm.includes("neutral") || norm.includes("normal")) return "normal";
+  if (norm.includes("risk_off") || norm === "risk-off" || norm.includes("elevated")) return "elevated";
+  if (norm.includes("avoid") || norm.includes("extreme")) return "extreme";
+  return "unknown";
+}
+
 export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidenceCardProps) {
   const { colors } = useTheme();
   const isMobileLayout = useIsMobileLayout();
@@ -876,6 +895,68 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
           {displayUpdatedLabel(evidence)}
         </span>
       </section>
+
+      {/*
+        Scenario Builder CTA. The Evidence card carries the richest
+        reference data we have (explicit stop level, target_1, target_2,
+        VWAP, last price, regime) so this is the natural surface for the
+        button. Eligibility runs on the structural payload — the button
+        renders enabled only when every mechanical input is present.
+
+        Note: we DO NOT pass any conviction signals (confidencePercent,
+        confluence_score, layer scores) into the gating — that would
+        cross into implicit "we recommend this trade." The button is a
+        planning-tool entry point, not an endorsement.
+      */}
+      {(() => {
+        const evidenceDirection: ScenarioInput["direction"] =
+          evidence.direction === "bullish" || evidence.direction === "bearish"
+            ? evidence.direction
+            : "neutral";
+        const evidenceMode: ScenarioInput["mode"] =
+          evidence.compositeMode === "swing" || evidence.signal_basis === "daily_bars_rth"
+            ? "swing"
+            : "day";
+        const scenarioInput: ScenarioInput = {
+          symbol: evidence.symbol,
+          direction: evidenceDirection,
+          mode: evidenceMode,
+          generated_at: evidence.updatedAtIso ?? null,
+          reference: {
+            entry_low: entryZone?.low ?? null,
+            entry_high: entryZone?.high ?? null,
+            stop: stopLvl ?? null,
+            target_1: rt1 ?? null,
+            target_2: rt2 ?? null,
+            current_price: lastPrice ?? null,
+            prev_close: evidence.prevClose ?? null
+          },
+          volatility_regime: regimeToVolatility(insight.market_regime ?? null),
+          tags:
+            evidence.directionBadgeLabel && evidence.directionBadgeLabel.trim()
+              ? [evidence.directionBadgeLabel]
+              : undefined
+        };
+        return (
+          <section
+            data-testid="signal-evidence-scenario-cta"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: spacing[3],
+              padding: `${spacing[2]} ${spacing[3]}`,
+              border: `1px dashed ${colors.border}`,
+              borderRadius: borderRadius.md
+            }}
+          >
+            <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs, lineHeight: 1.4 }}>
+              Plan around the reference levels above. STOCVEST does not submit, queue, or persist any scenario to a broker.
+            </p>
+            <BuildScenarioButton input={scenarioInput} testId="build-scenario-evidence" />
+          </section>
+        );
+      })()}
 
       <section className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         <div

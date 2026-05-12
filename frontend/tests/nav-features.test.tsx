@@ -58,4 +58,20 @@ describe("NAV_FEATURES sidebar", () => {
     wrap(<Sidebar userLabel="u@example.com" />);
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
   });
+
+  // Broker integration paused (BACKLOG B31). The Portfolio + Journal nav
+  // rows carry `feature: "brokersEnabled"` and are filtered out by
+  // `isDashboardNavItemEnabled` until the flag flips back on. These
+  // lock-ins fail loud if a future refactor either drops the `feature`
+  // key from the row or renames the flag without updating both sides.
+
+  test("test_nav_hides_portfolio_when_brokers_disabled", () => {
+    wrap(<Sidebar userLabel="u@example.com" />);
+    expect(screen.queryByText("Portfolio")).not.toBeInTheDocument();
+  });
+
+  test("test_nav_hides_journal_when_brokers_disabled", () => {
+    wrap(<Sidebar userLabel="u@example.com" />);
+    expect(screen.queryByText("Journal")).not.toBeInTheDocument();
+  });
 });
