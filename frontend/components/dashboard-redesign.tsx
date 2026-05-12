@@ -27,7 +27,7 @@ import { earningsTimingLabel } from "@/lib/earnings-timing";
 import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, cardSurfaceStyle, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
-import { buildEvidenceFromSetup, enrichEvidenceWithRealComposite, type SignalEvidenceData } from "@/lib/signal-evidence";
+import { buildEvidenceFromSetup, enrichEvidenceWithComposite, type SignalEvidenceData } from "@/lib/signal-evidence";
 import { tickerNewsTriggerLine } from "@/lib/api/ticker-news-panel";
 import {
   CONFIDENCE_PERCENT_TIP,
@@ -1048,7 +1048,7 @@ export function DashboardRedesign({
                               earningsRiskDays: typeof daysUntil === "number" ? daysUntil : undefined,
                               earningsReportTime: event?.report_time
                             });
-                            setEvidence(await enrichEvidenceWithRealComposite(base));
+                            setEvidence(await enrichEvidenceWithComposite(base, "swing"));
                             setEvidenceOpen(true);
                           }}
                           style={{

@@ -39,7 +39,7 @@ import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/d
 import { useTheme } from "@/lib/theme-provider";
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
 import { fetchSymbolMinuteBars } from "@/lib/fetch-symbol-bars";
-import { buildEvidenceFromSetup, enrichEvidenceWithRealComposite, type SignalEvidenceData } from "@/lib/signal-evidence";
+import { buildEvidenceFromSetup, enrichEvidenceWithComposite, type SignalEvidenceData } from "@/lib/signal-evidence";
 import { topSignalStrengthPercent } from "@/lib/top-signal-strength";
 import {
   CONFIDENCE_PERCENT_TIP,
@@ -775,6 +775,15 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
         : "Day setups (intraday)";
 
   const panelNewsTradingMode = scannerSetupMode === "day" ? "day" : "swing";
+  /**
+   * Trading mode used to enrich Evidence-card composite reads from this surface.
+   * Mirrors `panelNewsTradingMode`'s resolution so the news lookback window and the
+   * composite engine stay in lockstep. In `"both"` view the scanner is swing-first
+   * (Swing Desk is the primary, Day Desk renders below), so we default to swing —
+   * a Day-specific "evaluate as intraday" CTA can be added later without changing
+   * this default. Hard-coding the day route here was the regression we just fixed.
+   */
+  const evidenceTradingMode: "swing" | "day" = scannerSetupMode === "day" ? "day" : "swing";
 
   const earningsBadgeFor = (symbol: string): { label: string; tip: string } | null => {
     const event = earningsBySymbol[symbol.toUpperCase()];
@@ -894,13 +903,13 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
           earningsRiskDays: risk?.daysUntil,
           earningsReportTime: risk?.reportTime
         });
-        setEvidence(await enrichEvidenceWithRealComposite(base));
+        setEvidence(await enrichEvidenceWithComposite(base, evidenceTradingMode));
       } finally {
         setEvidenceLoading(false);
         setEvidenceLoadingSymbol(null);
       }
     },
-    [earningsBySymbol, panelNewsTradingMode]
+    [earningsBySymbol, panelNewsTradingMode, evidenceTradingMode]
   );
 
   return (
@@ -1125,6 +1134,17 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                   <p style={{ margin: 0, color: colors.textMuted, lineHeight: 1.45 }}>{group.emptyMessage}</p>
                 ) : (
                   group.setups.map((setup, idx) => {
+                /**
+                 * Per-row trading mode derived from the render group, so swing rows in
+                 * `scannerSetupMode === "both"` view always open the swing engine and day
+                 * rows always open the day engine. Top-level `evidenceTradingMode` (which
+                 * collapses "both" → swing) is the fallback when a group isn't mode-bound.
+                 */
+                const groupTradingMode: "swing" | "day" = group.key.startsWith("swing")
+                  ? "swing"
+                  : group.key.startsWith("day")
+                    ? "day"
+                    : evidenceTradingMode;
                 const snap = snapBySymbol[setup.symbol] ?? null;
                 const zone = entryZoneFromSnapshot(snap);
                 const vwap = snap?.day_vwap;
@@ -1439,7 +1459,7 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                             let symbolNewsArticles: Awaited<ReturnType<typeof fetchSymbolNews>> = [];
                             try {
                               symbolNewsArticles = await fetchSymbolNews(setup.symbol, 10, {
-                                newsTradingMode: panelNewsTradingMode
+                                newsTradingMode: groupTradingMode
                               });
                             } catch {
                               symbolNewsArticles = [];
@@ -1451,7 +1471,7 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                               earningsRiskDays: risk?.daysUntil,
                               earningsReportTime: risk?.reportTime
                             });
-                            setEvidence(await enrichEvidenceWithRealComposite(base));
+                            setEvidence(await enrichEvidenceWithComposite(base, groupTradingMode));
                           } finally {
                             setEvidenceLoading(false);
                             setEvidenceLoadingSymbol(null);

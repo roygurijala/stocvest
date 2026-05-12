@@ -1761,14 +1761,40 @@ export function applySwingCompositeEnrichment(
 }
 
 /**
- * Merges real-composite API layer chips / reasoning into evidence (same-origin BFF).
- * Use from dashboard or scanner after `buildEvidenceFromSetup` so the modal matches the Signals page.
+ * Trading-mode that selects which composite engine answers an evidence enrichment call.
+ * `"swing"` → `/composite/swing` (daily-bar engine), `"day"` → `/composite/real` (intraday engine).
+ * Wiring must match the row's origin: swing setups → swing engine, day setups → day engine.
+ * Mismatches silently leak intraday chips (VWAP / EMA9 / ORB) into swing reads and vice versa.
  */
-export async function enrichEvidenceWithRealComposite(evidence: SignalEvidenceData): Promise<SignalEvidenceData> {
+export type EvidenceCompositeMode = "swing" | "day";
+
+function compositeRouteForMode(mode: EvidenceCompositeMode): string {
+  return mode === "swing"
+    ? "/api/stocvest/signals/composite/swing"
+    : "/api/stocvest/signals/composite/real";
+}
+
+/**
+ * Merges composite-engine API layer chips / reasoning into evidence (same-origin BFF).
+ *
+ * Callers MUST pass the mode that matches the row that opened the modal:
+ *   - Dashboard Swing Desk → `"swing"`
+ *   - Dashboard Day Desk → `"day"`
+ *   - Signals page → row's `tradingMode`
+ *   - Scanner setup / gap cards → `scannerSetupMode === "day" ? "day" : "swing"`
+ *
+ * The backend response is tagged `body.mode` and that drives the chip-filter (`filterChipsForMode`)
+ * inside `applySwingCompositeEnrichment`, so the only way swing reads can carry intraday-only
+ * chips is if the wrong route was called here.
+ */
+export async function enrichEvidenceWithComposite(
+  evidence: SignalEvidenceData,
+  mode: EvidenceCompositeMode
+): Promise<SignalEvidenceData> {
   const sym = evidence.symbol.trim().toUpperCase();
   if (!sym) return evidence;
   try {
-    const res = await fetch("/api/stocvest/signals/composite/real", {
+    const res = await fetch(compositeRouteForMode(mode), {
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",
@@ -1782,4 +1808,15 @@ export async function enrichEvidenceWithRealComposite(evidence: SignalEvidenceDa
   } catch {
     return { ...evidence, insight: evidence.insight ?? deriveEvidenceInsightFallback(evidence) };
   }
+}
+
+/**
+ * @deprecated Use `enrichEvidenceWithComposite(evidence, mode)` directly so the call site
+ * declares its trading mode. This alias is retained only to preserve back-compat for any
+ * external consumers; new code MUST NOT call this function. It always hits the day engine
+ * regardless of the row's mode, which is the exact regression this rename was intended to
+ * prevent.
+ */
+export async function enrichEvidenceWithRealComposite(evidence: SignalEvidenceData): Promise<SignalEvidenceData> {
+  return enrichEvidenceWithComposite(evidence, "day");
 }
