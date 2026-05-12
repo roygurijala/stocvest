@@ -63,16 +63,30 @@ export function DashboardCard({
     Object.entries(rest).filter(([k]) => k.startsWith("data-"))
   );
   const roleAccent: RoleAccent | null = role ? roleAccents[theme][role] : null;
-  // When a role is active, the card surface, edge stripe, and border lean on the role accent
-  // instead of the global theme accent. Tints are kept SOFT (5-10%) — the goal is unambiguous
-  // hue recognition, not visual shouting. The left-edge stripe (3px) carries the strongest
-  // signal so the role is readable even from a peripheral glance.
+  // Phase 2b "rail line" treatment when role is set:
+  //   - Surface gets a soft 9% role tint blended into the gradient.
+  //   - BORDER becomes a 2px solid bright rail in `borderAccent` — distinctly
+  //     brighter than the surface tint so the master-card boundary is visible
+  //     in peripheral vision without reading any text. This is the structural
+  //     signal that answers "what layer of thinking am I in?" at a glance.
+  //   - A 4px-tall TOP ACCENT STRIP renders in the same borderAccent flush to
+  //     the rounded top of the card (combined with the 3px left stripe inside,
+  //     the role identity is anchored from two orthogonal edges).
+  //   - Outer halo picks up the borderAccent for a faint glow that completes
+  //     the rail-line impression without crossing into "decorative shadow".
+  // Without a role, the card preserves the legacy theme-accent surface (used
+  // for non-desk-taxonomy pages — settings / legal / future).
   const surfaceAccent = roleAccent?.accent ?? colors.accent;
+  const railAccent = roleAccent?.borderAccent ?? colors.accent;
   const cardBackground = roleAccent
     ? `linear-gradient(145deg, color-mix(in srgb, ${surfaceAccent} 9%, ${colors.surface}) 0%, ${colors.surface} 55%, ${colors.surface} 100%)`
     : `linear-gradient(145deg, color-mix(in srgb, ${colors.accent} 7%, ${colors.surface}) 0%, ${colors.surface} 42%, ${colors.surface} 100%)`;
-  const cardBorder = `1px solid color-mix(in srgb, ${colors.border} 80%, ${surfaceAccent} 20%)`;
-  const cardShadow = `0 18px 48px rgba(0,0,0,0.22), 0 0 0 1px color-mix(in srgb, ${surfaceAccent} 14%, transparent)`;
+  const cardBorder = roleAccent
+    ? `2px solid color-mix(in srgb, ${railAccent} 78%, ${colors.border})`
+    : `1px solid color-mix(in srgb, ${colors.border} 80%, ${surfaceAccent} 20%)`;
+  const cardShadow = roleAccent
+    ? `0 18px 48px rgba(0,0,0,0.28), 0 0 0 1px color-mix(in srgb, ${railAccent} 22%, transparent), 0 0 20px color-mix(in srgb, ${railAccent} 8%, transparent)`
+    : `0 18px 48px rgba(0,0,0,0.22), 0 0 0 1px color-mix(in srgb, ${surfaceAccent} 14%, transparent)`;
 
   return (
     <article
@@ -91,11 +105,31 @@ export function DashboardCard({
       }}
     >
       {roleAccent ? (
+        // Top-edge "rail" — 4px-tall solid strip flush to the rounded top corner.
+        // Together with the 2px bright border and the 3px left-edge stripe, this is
+        // the third orthogonal-edge anchor of role identity. Phase 2b ("rail lines,
+        // not soft shadows" per the user directive) — the boundary of each master
+        // card must be visible in peripheral vision without reading text.
+        <span
+          aria-hidden
+          data-testid="dashboard-card-role-top-rail"
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 4,
+            background: railAccent,
+            pointerEvents: "none"
+          }}
+        />
+      ) : null}
+      {roleAccent ? (
         // Left-edge role stripe — 3px solid bar along the inside of the rounded border.
         // Placed BEHIND content (zIndex 0) and the rest of the card sits in the normal
-        // flow so this never intercepts pointer events. This is the strongest visual
-        // signal of role identity and is what makes the card readable from a peripheral
-        // glance.
+        // flow so this never intercepts pointer events. Renders in the surface accent
+        // (softer hue) so the top rail (brighter borderAccent) reads as primary and
+        // this stripe as supporting structure.
         <span
           aria-hidden
           data-testid="dashboard-card-role-stripe"

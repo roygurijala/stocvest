@@ -62,10 +62,24 @@ export const colorTokens: Record<ThemeName, ThemeColors> = {
 export type CardRole = "shared" | "swing" | "day";
 
 export interface RoleAccent {
-  /** Base hue used for the pill background, left-edge stripe, and tint. */
+  /** Surface tint — soft hue blended into the card background. Subtle (~9%). */
   accent: string;
   /** Stronger contrast variant for pill text on the muted surface. */
   accentStrong: string;
+  /**
+   * Border hue — Phase 2b "rail line" treatment. Distinctly BRIGHTER than `accent`
+   * so the master-card boundary is visible in peripheral vision without reading
+   * any text. The user's directive was explicit: "Borders should be clearly
+   * visible even in peripheral vision. Think 'rail lines', not soft shadows."
+   *
+   *   - shared: electric cyan-steel — pops against slate backgrounds
+   *   - swing : bright violet-indigo — pops against deep indigo backgrounds
+   *   - day   : bright aqua-cyan    — pops against dark teal backgrounds
+   *
+   * The border is rendered at 2px solid (vs the legacy 1px) so it reads as a
+   * structural rail, not a decorative outline.
+   */
+  borderAccent: string;
   /** Short uppercase label shown on the role pill. Locked verbatim so screenshots
    *  are self-explanatory and tests can anchor on the exact string. */
   pillLabel: string;
@@ -73,20 +87,49 @@ export interface RoleAccent {
 
 export const roleAccents: Record<ThemeName, Record<CardRole, RoleAccent>> = {
   dark: {
-    // Shared Context — slate / steel. Neutral and authoritative; reads as "weather, not action".
-    shared: { accent: "#64748b", accentStrong: "#cbd5e1", pillLabel: "SHARED CONTEXT" },
-    // Swing Desk — indigo. Cool, deliberate, multi-day. Distinct from the global accent blue
-    // (#3b82f6) which is reserved for interaction cues; indigo (#818cf8) carries deck identity.
-    swing: { accent: "#818cf8", accentStrong: "#a5b4fc", pillLabel: "SWING · MULTI-DAY" },
-    // Day Desk — teal. Energetic and immediate without colliding with bullish/bearish or
-    // caution channels. Teal (not amber) was chosen so the desk identity does not visually
-    // shout "warning" when posture is calm.
-    day: { accent: "#2dd4bf", accentStrong: "#5eead4", pillLabel: "DAY · INTRADAY" }
+    // Shared Context — slate / steel surface, electric cyan-steel rail.
+    shared: {
+      accent: "#64748b",
+      accentStrong: "#cbd5e1",
+      borderAccent: "#22d3ee",
+      pillLabel: "SHARED CONTEXT"
+    },
+    // Swing Desk — indigo surface, bright violet rail. Distinct from the global
+    // accent blue (#3b82f6) which is reserved for interaction cues.
+    swing: {
+      accent: "#818cf8",
+      accentStrong: "#a5b4fc",
+      borderAccent: "#a78bfa",
+      pillLabel: "SWING · MULTI-DAY"
+    },
+    // Day Desk — teal surface, bright aqua rail. Teal (not amber) was chosen so
+    // the desk identity does not visually shout "warning" when posture is calm.
+    day: {
+      accent: "#2dd4bf",
+      accentStrong: "#5eead4",
+      borderAccent: "#67e8f9",
+      pillLabel: "DAY · INTRADAY"
+    }
   },
   light: {
-    shared: { accent: "#475569", accentStrong: "#334155", pillLabel: "SHARED CONTEXT" },
-    swing: { accent: "#4f46e5", accentStrong: "#3730a3", pillLabel: "SWING · MULTI-DAY" },
-    day: { accent: "#0d9488", accentStrong: "#115e59", pillLabel: "DAY · INTRADAY" }
+    shared: {
+      accent: "#475569",
+      accentStrong: "#334155",
+      borderAccent: "#0891b2",
+      pillLabel: "SHARED CONTEXT"
+    },
+    swing: {
+      accent: "#4f46e5",
+      accentStrong: "#3730a3",
+      borderAccent: "#7c3aed",
+      pillLabel: "SWING · MULTI-DAY"
+    },
+    day: {
+      accent: "#0d9488",
+      accentStrong: "#115e59",
+      borderAccent: "#0e7490",
+      pillLabel: "DAY · INTRADAY"
+    }
   }
 };
 

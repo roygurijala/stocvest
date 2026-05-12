@@ -82,10 +82,17 @@ function buildWeeklyRows(
       snap && typeof snap.last_trade_price === "number" && Number.isFinite(snap.last_trade_price)
         ? snap.last_trade_price
         : null;
+    // Take the last 5 daily closes (newest at the end) for the inline sparkline
+    // inside Shared Context · Section A. The Polygon aggregates feed returns
+    // bars oldest → newest, so a tail slice preserves order. Defensive: when
+    // fewer than 5 closes are available, we still pass what we have through —
+    // the sparkline component handles short / empty arrays gracefully.
+    const closes5d = closes.length > 0 ? closes.slice(-5) : undefined;
     return {
       ...row,
       pct5d: pctChangeOverDailySessions(closes, 5),
-      lastPrice
+      lastPrice,
+      closes5d
     };
   });
 }

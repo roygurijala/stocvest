@@ -27,6 +27,14 @@ export type WeeklyIndexRow = {
   label: string;
   pct5d: number | null;
   lastPrice: number | null;
+  /**
+   * Last ~5 daily closes for this index, oldest → newest.
+   *
+   * Drives the inline sparkline in the Shared Context master card (Phase 2b).
+   * `null` / missing means the daily-bar feed was unavailable when the page
+   * rendered — callers should fall back to rendering just the pct5d label.
+   */
+  closes5d?: number[];
 };
 
 type Props = {

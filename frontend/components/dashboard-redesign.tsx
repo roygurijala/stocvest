@@ -9,7 +9,8 @@ import { DashboardRealtime } from "@/components/dashboard-realtime";
 import { DecisionMetric } from "@/components/decision-metric";
 import { EarningsCalendar } from "@/components/earnings-calendar";
 import { InfoTip } from "@/components/info-tip";
-import { WeeklyMarketContextWidget, type WeeklyIndexRow } from "@/components/weekly-market-context-widget";
+import { type WeeklyIndexRow } from "@/components/weekly-market-context-widget";
+import { SharedContextMasterCard, SignalValidationLedgerTertiarySurface } from "@/components/shared-context-master-card";
 import { DayDeskPanel } from "@/components/day-desk-panel";
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import { NewsPanel } from "@/components/news-panel";
@@ -734,31 +735,38 @@ export function DashboardRedesign({
         </div>
       </article>
 
-      <div className="dashboard-grid grid grid-cols-1 gap-7 lg:grid-cols-[7fr_13fr] lg:items-stretch [&>*]:min-w-0">
-          <div className="order-1 min-w-0 lg:col-span-2 lg:col-start-1 lg:row-start-1">
-            <DashboardCard
-              role="shared"
-              eyebrow="Recent Market State"
-              title="Short-Horizon Market State (Last ~5 Sessions)"
-              subtitle="Daily-close price behavior across major indices. Shared background input for all desks; not a trade signal."
-              cardTip={WEEKLY_MARKET_CONTEXT_CARD_TIP}
-              data-testid="shared-market-context-weekly"
-            >
-              <WeeklyMarketContextWidget
-                rows={weeklyIndexRows}
-                marketStatus={marketOverview.status}
-                dataIssue={
-                  weeklyIndexRows.every((r) => r.pct5d == null) && weeklyIndexRows.every((r) => r.lastPrice == null)
-                    ? marketOverview.error || null
-                    : null
-                }
-              />
-            </DashboardCard>
-          </div>
+      {/* Phase 2b layout — three master cards STACKED full-width, equal visual weight.
+          (1) SHARED CONTEXT master card absorbs the four previous shared cards
+              (Short-Horizon Market State, Market Pulse, Sector Rotation, Upcoming
+              Earnings) as sub-sections A-E. Nothing else lives at the same
+              hierarchy level — per the user directive: "No shared context
+              scattered elsewhere. This creates a mental model users can learn
+              once."
+          (2) SWING DESK master card — multi-day decision engine.
+          (3) DAY DESK master card — intraday decision engine.
+          The Signal Validation Ledger is rendered BELOW the three master cards
+          as a low-prominence tertiary link surface (it is tracked outcomes,
+          not market context, so it cannot live inside Shared Context; it is
+          also not a decision engine, so it cannot be a peer master card). */}
+      <div className="dashboard-stack grid grid-cols-1 gap-7 [&>*]:min-w-0">
+          <SharedContextMasterCard
+            weeklyIndexRows={weeklyIndexRows}
+            marketStatus={marketOverview.status}
+            vixSnapshot={vixSnapshot}
+            vixSessionPct={vixPct}
+            sectorRotation={sectorRotation}
+            upcomingEarnings={upcomingCatalystWeek}
+            macroWarningHeadline={macroWarnings[0] ?? null}
+            dataIssue={
+              weeklyIndexRows.every((r) => r.pct5d == null) && weeklyIndexRows.every((r) => r.lastPrice == null)
+                ? marketOverview.error || null
+                : null
+            }
+          />
 
           <DashboardCard
             role="swing"
-            className={`order-2 flex w-full min-h-[200px] flex-col overflow-hidden lg:self-start lg:col-start-1 lg:row-start-2`}
+            className={`flex w-full min-h-[200px] flex-col overflow-hidden`}
             title="Swing Desk"
             eyebrow="Multi-day · evaluated on daily closes"
             subtitle="Multi-day engine — evaluates daily closes. Independent of the Day Desk below. Posture (Active / Monitor / Suppressed) reflects regime + sector + structure + per-symbol DailyBarScanner gates."
@@ -1143,244 +1151,24 @@ export function DashboardRedesign({
             </div>
           </DashboardCard>
 
-          {/* Day Desk panel — Mode Separation B28 (Phase 1). Stacked directly under
-              the Swing Desk on every screen size; equal visual weight regardless of
-              either desk's posture. The panel is self-contained: posture, signals (or
-              suppression copy), re-enable language, and footer link are all owned by
-              the day-side helpers in lib/dashboard-posture.ts. No swing-side state
-              flows in. */}
-          <div className="order-3 min-w-0 lg:col-span-2 lg:col-start-1 lg:row-start-3">
-            <DayDeskPanel
-              setups={scannerOverview.setups}
-              marketStatus={marketOverview.status}
-              scannerError={scannerOverview.error}
-            />
-          </div>
+          {/* Day Desk — third master card, stacked under the Swing Desk on every
+              screen size; equal visual weight regardless of either desk's posture.
+              Mode Separation B28: posture, signals (or suppression copy), re-enable
+              language, and footer link are all owned by the day-side helpers in
+              lib/dashboard-posture.ts; no swing-side state flows in. */}
+          <DayDeskPanel
+            setups={scannerOverview.setups}
+            marketStatus={marketOverview.status}
+            scannerError={scannerOverview.error}
+          />
 
-          <div className="order-4 flex min-w-0 flex-col gap-5 lg:col-start-2 lg:row-start-2">
-          <DashboardCard
-            role="shared"
-            className="flex min-h-[200px] flex-col overflow-hidden lg:self-start"
-            eyebrow="Tape · session change"
-            title="Market pulse"
-            subtitle="SPY · QQQ · VIX session change and regime. Shared input both desks read — informs context, not entries. Numbers match the scanner when it completes; otherwise they come from your overview snapshots."
-            cardTip={MARKET_PULSE_CARD_TIP}
-            data-testid="shared-market-pulse-card"
-          >
-            <div className="flex flex-col gap-3 text-sm" style={{ color: colors.text }}>
-              <div
-                className="grid w-full grid-cols-1 gap-x-6 gap-y-2 text-left font-semibold sm:grid-cols-3"
-                style={{ fontVariantNumeric: "tabular-nums" }}
-              >
-                <span className="min-w-0">
-                  SPY{" "}
-                  <span style={{ color: spyPct != null ? getChangeColor(spyPct, colors) : colors.textMuted }}>
-                    {spyPct != null ? (
-                      <DecisionMetric explanation={SPY_PULSE_NUMBER_TIP} label="How SPY change is used" maxWidth={280}>
-                        <span>{`${spyPct >= 0 ? "+" : ""}${spyPct.toFixed(2)}%`}</span>
-                      </DecisionMetric>
-                    ) : (
-                      "—"
-                    )}
-                  </span>
-                </span>
-                <span className="min-w-0">
-                  QQQ{" "}
-                  <span style={{ color: qqqPct != null ? getChangeColor(qqqPct, colors) : colors.textMuted }}>
-                    {qqqPct != null ? (
-                      <DecisionMetric explanation={QQQ_PULSE_NUMBER_TIP} label="How QQQ change is used" maxWidth={280}>
-                        <span>{`${qqqPct >= 0 ? "+" : ""}${qqqPct.toFixed(2)}%`}</span>
-                      </DecisionMetric>
-                    ) : (
-                      "—"
-                    )}
-                  </span>
-                </span>
-                <span className="min-w-0">
-                  VIX{" "}
-                  <span
-                    className="inline-flex min-w-0 flex-wrap items-baseline gap-x-0.5 align-middle"
-                    style={{ color: vixPct != null ? getChangeColor(vixPct, colors) : colors.textMuted }}
-                  >
-                    {vixPct != null ? (
-                      <DecisionMetric explanation={VIX_PULSE_NUMBER_TIP} label="How VIX move is used" maxWidth={280}>
-                        <span>{`${vixPct > 0.05 ? "▲" : vixPct < -0.05 ? "▼" : "→"} ${vixPct >= 0 ? "+" : ""}${vixPct.toFixed(2)}%`}</span>
-                      </DecisionMetric>
-                    ) : vixSnapshot?.last_trade_price != null ? (
-                      <DecisionMetric explanation={VIX_PULSE_NUMBER_TIP} label="How VIX level is used" maxWidth={280}>
-                        <span>→ {Number(vixSnapshot.last_trade_price).toFixed(2)}</span>
-                      </DecisionMetric>
-                    ) : vixBlankKind ? (
-                      <VixDashExplained kind={vixBlankKind} colors={colors} />
-                    ) : (
-                      "—"
-                    )}
-                  </span>
-                </span>
-              </div>
-              <div className="flex flex-wrap items-center gap-2" style={{ fontSize: typography.scale.sm }}>
-                <span style={{ color: colors.textMuted, fontWeight: 600 }}>Macro risk state</span>
-                <strong style={{ color: colors.text }}>{macroRiskStateHeadline(macroPulse)}</strong>
-                <InfoTip text={macroRiskStateTip(macroPulse)} label="What macro risk state means" maxWidth={320} />
-              </div>
-              {macroWarnings[0] ? (
-                <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.5 }}>
-                  {macroWarnings[0]}
-                </p>
-              ) : null}
-              <DecisionMetric explanation={regimeBadgeExplanation} label="How regime label is used" maxWidth={320}>
-                <motion.div
-                  key={regimeLabel}
-                  initial={{ opacity: 0.82 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.32 }}
-                  className="inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wide"
-                  style={{
-                    borderColor: `color-mix(in srgb, ${pulseRegimeColor(regimeLabel, colors)} 35%, ${colors.border})`,
-                    background: "rgba(148,163,184,0.08)",
-                    color: pulseRegimeBadgeColor(regimeLabel, colors)
-                  }}
-                >
-                  Regime: {regimeLabel}
-                  {regimeBadgePriceBreadthOnly ? (
-                    <span style={{ fontWeight: 700, textTransform: "none", letterSpacing: "0.02em" }}>
-                      {" "}
-                      (price + breadth only)
-                    </span>
-                  ) : null}
-                </motion.div>
-              </DecisionMetric>
-              <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.5 }}>
-                Session tape for context; swing thesis uses weekly panel + Evidence.
-              </p>
-            </div>
-          </DashboardCard>
+          {/* Tertiary surface — Signal Validation Ledger. Not a master card, not
+              role-colored: it deliberately sits BELOW the three master cards with
+              reduced visual weight so the three-card mental model stays clean. */}
+          <SignalValidationLedgerTertiarySurface />
 
-          <DashboardCard
-            role="shared"
-            eyebrow="Sectors · 5-session"
-            title="Sector rotation (5 sessions)"
-            subtitle="ETF 5d buckets — shared multi-session context (same daily-close window as Short-Horizon Market State above). Not today’s session % beside Regime."
-            cardTip={SECTOR_ROTATION_CARD_TIP}
-            data-testid="shared-sector-rotation-card"
-            style={{
-              boxShadow: "0 10px 28px rgba(0,0,0,0.14)",
-              border: `1px solid color-mix(in srgb, ${colors.border} 92%, transparent)`,
-              background: colors.surface,
-              padding: spacing[4]
-            }}
-          >
-            <div className="flex flex-col gap-4">
-              <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45, fontWeight: 400 }}>
-                Timing vs Regime differs —{" "}
-                <InfoTip text={SECTOR_FRAME_TIMING_TIP} label="How sector timing differs from Regime" maxWidth={320} />
-              </p>
-              {sectorFrame.narrative ? (
-                <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.text, lineHeight: 1.55, fontWeight: 500 }}>
-                  {sectorFrame.narrative}
-                </p>
-              ) : null}
-              {sectorFrame.chip && sectorFrame.chipKind ? (
-                <div className="inline-flex flex-wrap items-center gap-2">
-                  <span
-                    className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold tracking-wide"
-                    style={{
-                      textTransform: "none",
-                      letterSpacing: "0.02em",
-                      ...sectorLeadershipChipColors(sectorFrame.chipKind, colors)
-                    }}
-                  >
-                    {sectorFrame.chip.label}
-                    <InfoTip text={sectorFrame.chip.tip} label="How to read leadership vs regime" maxWidth={320} />
-                  </span>
-                </div>
-              ) : null}
-            <div
-              className="flex flex-wrap gap-x-3 gap-y-2 border-t pt-3"
-              style={{
-                fontSize: typography.scale.sm,
-                fontVariantNumeric: "tabular-nums",
-                borderTopColor: `color-mix(in srgb, ${colors.border} 55%, transparent)`
-              }}
-            >
-              {sectorRotation.map((s) => (
-                <span key={s.symbol} style={{ padding: `${spacing[1]} 0`, color: colors.text }}>
-                  <strong style={{ fontWeight: 600 }}>{s.symbol}</strong>{" "}
-                  <span style={{ color: s.pct5d != null ? getChangeColor(s.pct5d, colors) : colors.textMuted }}>
-                    {s.pct5d != null ? `${s.pct5d >= 0 ? "+" : ""}${s.pct5d.toFixed(1)}%` : "—"}
-                  </span>
-                  <span style={{ color: colors.textMuted, fontSize: typography.scale.xs, fontWeight: 400 }}> · {s.label}</span>
-                </span>
-              ))}
-            </div>
-            </div>
-          </DashboardCard>
-
-          <DashboardCard
-            role="shared"
-            eyebrow="Catalysts · upcoming"
-            title="Upcoming earnings this week"
-            subtitle="Dashboard symbol list only — macro prints (Fed, CPI, etc.) live elsewhere. Shared context for both desks."
-            cardTip={UPCOMING_CATALYSTS_CARD_TIP}
-            data-testid="shared-upcoming-catalysts-card"
-            style={{
-              boxShadow: "0 8px 22px rgba(0,0,0,0.12)",
-              border: `1px solid color-mix(in srgb, ${colors.border} 94%, transparent)`,
-              background: colors.surface,
-              padding: spacing[4]
-            }}
-          >
-            {upcomingCatalystWeek.length === 0 ? (
-              <div style={{ display: "grid", gap: spacing[2] }}>
-                <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.text, lineHeight: 1.55 }}>
-                  No tracked earnings in this window.
-                </p>
-                <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.55 }}>
-                  Macro economic events are not shown in this panel — absence of rows does not mean there is nothing on
-                  the calendar.
-                </p>
-              </div>
-            ) : (
-              <ul style={{ margin: 0, paddingLeft: spacing[4], color: colors.text, fontSize: typography.scale.sm, lineHeight: 1.55 }}>
-                {upcomingCatalystWeek.map((e) => (
-                  <li key={`${e.symbol}-${e.report_date}`}>
-                    <strong>{e.symbol}</strong> · {earningsTimingLabel(e.report_time)} · {e.report_date.slice(5).replace("-", "/")}
-                    {e.company_name ? (
-                      <span style={{ color: colors.textMuted }}> — {e.company_name}</span>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </DashboardCard>
-
-          <DashboardCard
-            role="shared"
-            eyebrow="Validation · tracked outcomes"
-            title="Signal validation ledger"
-            subtitle="Tracked outcomes — not a brokerage account. Shared link surface; the ledger itself is mode-segmented inside the Signal Validation page."
-            cardTip={SIGNAL_VALIDATION_LEDGER_CARD_TIP}
-            data-testid="shared-signal-validation-ledger-card"
-          >
-            <div className="mb-2">
-              <Link
-                href="/dashboard/signal-validation"
-                style={{ fontSize: typography.scale.xs, color: colors.accent, fontWeight: 600 }}
-              >
-                Open ledger (Swing / Day) →
-              </Link>
-            </div>
-            <div style={{ display: "grid", gap: spacing[2] }}>
-              <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted, lineHeight: 1.55 }}>
-                This page logs historical outcomes of STOCVEST decisions using fixed rules — for audit and learning, not
-                investment advice or performance marketing.
-              </p>
-            </div>
-          </DashboardCard>
-          </div>
 
           <EarningsCalendar
-            className="order-4 lg:col-span-2 lg:col-start-1 lg:row-start-3"
             events={earningsEvents}
             title="Upcoming Earnings (Next 7 Days)"
             maxDays={7}

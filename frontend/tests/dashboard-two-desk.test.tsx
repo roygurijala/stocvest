@@ -116,11 +116,13 @@ describe("dashboard two-desk render contract (Mode Separation B28 Phase 1)", () 
   });
 
   test("shared_market_context_is_role_tagged_NOT_swing_coded", () => {
-    // The Short-Horizon Market State card is a SHARED input (both desks read it).
-    // The role pill carries the verbatim "SHARED CONTEXT" label — that's the
-    // canonical signal of shared-context identity (was previously the eyebrow).
-    // The eyebrow now carries the OBSERVATIONAL category ("Recent Market State"),
-    // freeing the role pill to do the disambiguation work.
+    // Phase 2b: the dashboard now has ONE Shared Context master card (id
+    // `shared-context-master-card`) that owns ALL environmental context the
+    // two decision desks read. It replaces the four previous separate shared
+    // cards (Short-Horizon Market State, Market Pulse, Sector Rotation,
+    // Upcoming Catalysts) with sub-sections A-E inside a single surface.
+    // The role pill carries the verbatim "SHARED CONTEXT" label — the
+    // canonical structural signal of shared-context identity.
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
@@ -131,7 +133,7 @@ describe("dashboard two-desk render contract (Mode Separation B28 Phase 1)", () 
         sectorRotation={[]}
       />
     );
-    const weekly = screen.getByTestId("shared-market-context-weekly");
+    const weekly = screen.getByTestId("shared-context-master-card");
     expect(weekly).toBeInTheDocument();
     // (a) Role attribute carries `shared` — the structural signal.
     expect(weekly.getAttribute("data-card-role")).toBe("shared");
