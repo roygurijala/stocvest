@@ -6,11 +6,16 @@ import { borderRadius, roleAccents, spacing, typography } from "@/lib/design-sys
 import {
   formatTapeReadout,
   type DayEmptyStateContext,
+  type GapIntelEmptyStateContext,
   type ScannerEmptyStateContext,
   type SwingEmptyStateContext
 } from "@/lib/scanner-empty-state";
 import { SECTION_LABEL_DAY_DESK, SECTION_LABEL_SWING_DESK } from "@/lib/mode-terminology";
 import { useTheme } from "@/lib/theme-provider";
+
+function isGapContext(ctx: ScannerEmptyStateContext): ctx is GapIntelEmptyStateContext {
+  return "surface" in ctx && ctx.surface === "gap";
+}
 
 interface ScannerEmptyStateCardProps {
   context: ScannerEmptyStateContext;
@@ -62,6 +67,14 @@ export function ScannerEmptyStateCard({
   const accent = roleAccents[theme][role];
   const railHue = accent.borderAccent;
   const deskLabel = context.mode === "swing" ? SECTION_LABEL_SWING_DESK : SECTION_LABEL_DAY_DESK;
+  const gap = isGapContext(context);
+  const surfaceSlug = gap ? `gap-${context.mode}` : context.mode;
+  const reenableSummary = gap
+    ? "What would surface a gap candidate"
+    : `What would re-enable ${context.mode === "swing" ? "swing" : "day"} rows`;
+  const disclaimer = gap
+    ? "These are the gates the gap scanner evaluates against the overnight tape — not a prediction of outcomes. Satisfying a single gate does not produce a gap candidate."
+    : `These are the gates the ${context.mode === "swing" ? "swing" : "day"} engine evaluates — not a prediction of outcomes. Satisfying a single gate does not produce a setup.`;
   const tape = formatTapeReadout(context.spyPct, context.qqqPct);
   const universeChip =
     typeof context.universeSize === "number" && context.universeSize > 0
@@ -76,8 +89,9 @@ export function ScannerEmptyStateCard({
 
   return (
     <div
-      data-testid={testId ?? `scanner-empty-state-${context.mode}`}
+      data-testid={testId ?? `scanner-empty-state-${surfaceSlug}`}
       data-mode={context.mode}
+      data-surface={gap ? "gap" : "setups"}
       style={{
         display: "grid",
         gap: spacing[3],
@@ -122,7 +136,7 @@ export function ScannerEmptyStateCard({
       </div>
 
       <h4
-        data-testid={`scanner-empty-state-${context.mode}-headline`}
+        data-testid={`scanner-empty-state-${surfaceSlug}-headline`}
         style={{
           margin: 0,
           color: colors.text,
@@ -147,7 +161,7 @@ export function ScannerEmptyStateCard({
 
       {chips.length > 0 ? (
         <div
-          data-testid={`scanner-empty-state-${context.mode}-context-strip`}
+          data-testid={`scanner-empty-state-${surfaceSlug}-context-strip`}
           style={{
             display: "flex",
             flexWrap: "wrap",
@@ -182,7 +196,7 @@ export function ScannerEmptyStateCard({
       ) : null}
 
       <details
-        data-testid={`scanner-empty-state-${context.mode}-reenable`}
+        data-testid={`scanner-empty-state-${surfaceSlug}-reenable`}
         style={{
           background: colors.background,
           border: `1px solid ${colors.border}`,
@@ -199,7 +213,7 @@ export function ScannerEmptyStateCard({
             listStyle: "revert"
           }}
         >
-          What would re-enable {context.mode === "swing" ? "swing" : "day"} rows
+          {reenableSummary}
         </summary>
         <ul
           style={{
@@ -231,13 +245,13 @@ export function ScannerEmptyStateCard({
             lineHeight: 1.4
           }}
         >
-          These are the gates the {context.mode === "swing" ? "swing" : "day"} engine evaluates — not a prediction of outcomes. Satisfying a single gate does not produce a setup.
+          {disclaimer}
         </p>
       </details>
 
       {compact ? null : (
         <nav
-          data-testid={`scanner-empty-state-${context.mode}-crosslinks`}
+          data-testid={`scanner-empty-state-${surfaceSlug}-crosslinks`}
           aria-label={`What to do while ${deskLabel} is quiet`}
           style={{
             display: "flex",
@@ -329,7 +343,7 @@ export function ScannerEmptyStateCardCompact({
   context,
   testId
 }: {
-  context: SwingEmptyStateContext | DayEmptyStateContext;
+  context: SwingEmptyStateContext | DayEmptyStateContext | GapIntelEmptyStateContext;
   testId?: string;
 }) {
   return <ScannerEmptyStateCard context={context} compact testId={testId} />;

@@ -5,6 +5,7 @@ import { beforeAll, describe, expect, test, vi } from "vitest";
 import { ScannerEmptyStateCard } from "@/components/scanner-empty-state-card";
 import {
   buildDayEmptyStateContext,
+  buildGapIntelEmptyStateContext,
   buildSwingEmptyStateContext
 } from "@/lib/scanner-empty-state";
 import { ThemeProvider } from "@/lib/theme-provider";
@@ -126,6 +127,54 @@ describe("<ScannerEmptyStateCard /> — day variant", () => {
     const ctx = buildDayEmptyStateContext(baseInput);
     wrap(<ScannerEmptyStateCard context={ctx} />);
     expect(screen.getByTestId("scanner-empty-state-day").getAttribute("data-mode")).toBe("day");
+  });
+});
+
+describe("<ScannerEmptyStateCard /> — gap intelligence variant", () => {
+  test("test_gap_swing_variant_renders_distinct_testid_and_data_surface", () => {
+    const ctx = buildGapIntelEmptyStateContext(baseInput, "swing");
+    wrap(<ScannerEmptyStateCard context={ctx} />);
+    const card = screen.getByTestId("scanner-empty-state-gap-swing");
+    expect(card.getAttribute("data-surface")).toBe("gap");
+    expect(card.getAttribute("data-mode")).toBe("swing");
+  });
+
+  test("test_gap_card_summary_says_surface_a_gap_candidate", () => {
+    const ctx = buildGapIntelEmptyStateContext(baseInput, "swing");
+    wrap(<ScannerEmptyStateCard context={ctx} />);
+    // The summary on the setups card reads "What would re-enable
+    // swing rows" — the gap card replaces that with a gap-specific
+    // verb so the two side-by-side cards no longer read identically.
+    expect(screen.getByText(/What would surface a gap candidate/i)).toBeTruthy();
+  });
+
+  test("test_gap_card_disclaimer_names_the_gap_scanner_not_swing_or_day_engine", () => {
+    const ctx = buildGapIntelEmptyStateContext(baseInput, "swing");
+    wrap(<ScannerEmptyStateCard context={ctx} />);
+    const card = screen.getByTestId("scanner-empty-state-gap-swing");
+    const text = card.textContent?.toLowerCase() ?? "";
+    expect(text).toContain("gap scanner evaluates");
+  });
+
+  test("test_side_by_side_gap_and_swing_setups_render_different_text_REGRESSION", () => {
+    // Direct regression guard for the user-reported bug: Gap
+    // Intelligence and Swing setups columns showed identical copy.
+    const gapCtx = buildGapIntelEmptyStateContext(baseInput, "swing");
+    const swingCtx = buildSwingEmptyStateContext(baseInput);
+    wrap(
+      <>
+        <ScannerEmptyStateCard context={gapCtx} testId="gap-emp" />
+        <ScannerEmptyStateCard context={swingCtx} testId="swing-emp" />
+      </>
+    );
+    const gapText = screen.getByTestId("gap-emp").textContent ?? "";
+    const swingText = screen.getByTestId("swing-emp").textContent ?? "";
+    expect(gapText.length).toBeGreaterThan(0);
+    expect(swingText.length).toBeGreaterThan(0);
+    // The two cards must not be byte-identical. (They share desk
+    // label and pill — that's by design — but headline, one-liner,
+    // bullets, and disclaimer must all differ.)
+    expect(gapText).not.toBe(swingText);
   });
 });
 

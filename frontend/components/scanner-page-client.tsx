@@ -46,6 +46,7 @@ import {
 } from "@/lib/mode-terminology";
 import {
   buildDayEmptyStateContext,
+  buildGapIntelEmptyStateContext,
   buildSwingEmptyStateContext
 } from "@/lib/scanner-empty-state";
 import type { ScenarioInput, VolatilityRegime } from "@/lib/scenario/types";
@@ -1260,30 +1261,30 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
             }}
           >
             {overview.gapIntelligence.length === 0 ? (
-              // Rich empty state for the Gap Intelligence column. We
-              // use the day-side context when the user is explicitly on
-              // the Day tab (gaps feed day-side ORB/momentum reads more
-              // directly than swing daily-bars), and the swing-side
-              // context otherwise — the swing-side card explains the
-              // regime + structure gates that drive swing entries on
-              // gap names. `compact` drops the cross-link nav so this
+              // Gap Intelligence has its OWN empty-state copy — the
+              // gap scanner is gated on magnitude + volume backing,
+              // not on the same regime/structure gates as the setups
+              // column. Reusing the swing-setups copy here made both
+              // side-by-side columns show identical text, which read
+              // as a bug. `compact` drops the cross-link nav so this
               // card doesn't dominate the half-width column.
+              //
+              // Mode mapping: on the Day tab we render the day-side
+              // variant (intraday-survival framing, ORB/RVOL vocab).
+              // On Swing and Both we render the swing-side variant
+              // since the gap rail visually lives in the swing column
+              // and the day desk surfaces gap reads through its own
+              // setup rows.
               <ScannerEmptyStateCard
-                context={
-                  scannerSetupMode === "day"
-                    ? buildDayEmptyStateContext({
-                        regimeLabel: overview.regimeLabel,
-                        spyPct: overview.spyPct,
-                        qqqPct: overview.qqqPct,
-                        swingUniverseSymbolCount: overview.swingUniverseSymbolCount
-                      })
-                    : buildSwingEmptyStateContext({
-                        regimeLabel: overview.regimeLabel,
-                        spyPct: overview.spyPct,
-                        qqqPct: overview.qqqPct,
-                        swingUniverseSymbolCount: overview.swingUniverseSymbolCount
-                      })
-                }
+                context={buildGapIntelEmptyStateContext(
+                  {
+                    regimeLabel: overview.regimeLabel,
+                    spyPct: overview.spyPct,
+                    qqqPct: overview.qqqPct,
+                    swingUniverseSymbolCount: overview.swingUniverseSymbolCount
+                  },
+                  scannerSetupMode === "day" ? "day" : "swing"
+                )}
                 compact
                 testId="scanner-gap-empty-state"
               />

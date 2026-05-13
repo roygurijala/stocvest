@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import {
   buildDayEmptyStateContext,
+  buildGapIntelEmptyStateContext,
   buildSwingEmptyStateContext,
   DAY_VOCABULARY_BAN_FOR_SWING,
   formatTapeReadout,
@@ -127,6 +128,103 @@ describe("empty-state mode separation — vocabulary anti-leak (load-bearing)", 
     for (const banned of ["recommend", "approve", "validated", "qualified to trade", "cleared to trade", "endorsed"]) {
       expect(combined).not.toContain(banned);
     }
+  });
+});
+
+describe("buildGapIntelEmptyStateContext — distinct from setups copy (load-bearing)", () => {
+  // The user reported a real UX bug: on a quiet load, the Gap
+  // Intelligence column and the Swing setups column were showing
+  // *identical text* because both were wired to
+  // `buildSwingEmptyStateContext`. Gap Intelligence is a different
+  // surface (gated on magnitude + volume backing, not regime + per
+  // -symbol score), so it needs its own copy. These tests pin that
+  // contract so a future refactor can't quietly re-collapse the two.
+
+  test("test_gap_swing_variant_returns_gap_surface_discriminator", () => {
+    const ctx = buildGapIntelEmptyStateContext(baseInput, "swing");
+    expect(ctx.surface).toBe("gap");
+    expect(ctx.mode).toBe("swing");
+    expect(ctx.reenableBullets.length).toBeGreaterThanOrEqual(3);
+  });
+
+  test("test_gap_day_variant_carries_session_flag", () => {
+    const ctx = buildGapIntelEmptyStateContext(baseInput, "day");
+    expect(ctx.surface).toBe("gap");
+    expect(ctx.mode).toBe("day");
+    expect(ctx.sessionOpen).toBe(true);
+  });
+
+  test("test_gap_headline_is_NOT_same_as_swing_setups_headline", () => {
+    // The literal bug the user spotted: same text in both columns.
+    const gap = buildGapIntelEmptyStateContext(baseInput, "swing");
+    const swing = buildSwingEmptyStateContext(baseInput);
+    expect(gap.headline).not.toBe(swing.headline);
+    expect(gap.oneLiner).not.toBe(swing.oneLiner);
+    // Bullets shouldn't be byte-identical either.
+    expect(gap.reenableBullets.join("|")).not.toBe(swing.reenableBullets.join("|"));
+  });
+
+  test("test_gap_headline_is_NOT_same_as_day_setups_headline", () => {
+    const gap = buildGapIntelEmptyStateContext(baseInput, "day");
+    const day = buildDayEmptyStateContext(baseInput);
+    expect(gap.headline).not.toBe(day.headline);
+    expect(gap.oneLiner).not.toBe(day.oneLiner);
+    expect(gap.reenableBullets.join("|")).not.toBe(day.reenableBullets.join("|"));
+  });
+
+  test("test_gap_copy_names_the_two_universal_gap_gates", () => {
+    // Magnitude (gap size) + volume confirmation are THE gap gates.
+    // If the copy stops mentioning either, the empty state has
+    // stopped explaining what gap intelligence actually filters on.
+    const swing = buildGapIntelEmptyStateContext(baseInput, "swing");
+    const day = buildGapIntelEmptyStateContext(baseInput, "day");
+    const combinedSwing = `${swing.headline} ${swing.oneLiner} ${swing.reenableBullets.join(" ")}`.toLowerCase();
+    const combinedDay = `${day.headline} ${day.oneLiner} ${day.reenableBullets.join(" ")}`.toLowerCase();
+    for (const text of [combinedSwing, combinedDay]) {
+      expect(text).toMatch(/gap/);
+      expect(text).toMatch(/volume/);
+    }
+  });
+
+  test("test_gap_swing_variant_never_uses_day_vocabulary", () => {
+    // Vocab discipline: when the user is on the Swing tab, the gap
+    // card hue + copy should be swing-aligned. Day-side micro-
+    // structure terms ("VWAP", "ORB", "RVOL") would be confusing
+    // here since the swing engine doesn't reason about them.
+    const ctx = buildGapIntelEmptyStateContext(baseInput, "swing");
+    const text = `${ctx.headline} ${ctx.oneLiner} ${ctx.reenableBullets.join(" ")}`.toLowerCase();
+    for (const banned of DAY_VOCABULARY_BAN_FOR_SWING) {
+      expect(text).not.toContain(banned.toLowerCase());
+    }
+  });
+
+  test("test_gap_day_variant_never_uses_swing_vocabulary", () => {
+    const ctx = buildGapIntelEmptyStateContext(baseInput, "day");
+    const text = `${ctx.headline} ${ctx.oneLiner} ${ctx.reenableBullets.join(" ")}`.toLowerCase();
+    for (const banned of SWING_VOCABULARY_BAN_FOR_DAY) {
+      expect(text).not.toContain(banned.toLowerCase());
+    }
+  });
+
+  test("test_gap_copy_never_uses_recommendation_words", () => {
+    const gapSwing = buildGapIntelEmptyStateContext(baseInput, "swing");
+    const gapDay = buildGapIntelEmptyStateContext(baseInput, "day");
+    const combined = `${gapSwing.headline} ${gapSwing.oneLiner} ${gapSwing.reenableBullets.join(" ")} ${gapDay.headline} ${gapDay.oneLiner} ${gapDay.reenableBullets.join(" ")}`.toLowerCase();
+    for (const banned of ["recommend", "approve", "validated", "qualified to trade", "cleared to trade", "endorsed"]) {
+      expect(combined).not.toContain(banned);
+    }
+  });
+
+  test("test_gap_day_variant_when_session_closed_softens_the_volume_bullet", () => {
+    const ctx = buildGapIntelEmptyStateContext(
+      { ...baseInput, marketStatus: { market: "closed" } },
+      "day"
+    );
+    expect(ctx.sessionOpen).toBe(false);
+    // Outside regular session we should not be asserting opening-
+    // session RVOL — the gap is observed against premarket build.
+    const bullets = ctx.reenableBullets.join(" ").toLowerCase();
+    expect(bullets).toMatch(/premarket|next regular session|next open/);
   });
 });
 

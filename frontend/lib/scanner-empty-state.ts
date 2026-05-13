@@ -101,7 +101,40 @@ export interface DayEmptyStateContext {
   sessionOpen: boolean;
 }
 
-export type ScannerEmptyStateContext = SwingEmptyStateContext | DayEmptyStateContext;
+/**
+ * Wire shape for the Gap Intelligence empty-state context.
+ *
+ * Gap Intelligence is structurally a **different surface** than the
+ * setups list — it flags overnight close→open dislocations gated on
+ * magnitude + volume backing, not regime + per-symbol score. Reusing
+ * the swing-setups empty state on this column made both side-by-side
+ * panels show the exact same text, which reads as a bug.
+ *
+ * `surface: "gap"` is the discriminator. The `mode` field still drives
+ * the role accent (so on the Swing tab the gap-empty card matches the
+ * Swing Desk hue, and on the Day tab it matches the Day Desk hue) but
+ * the headline / one-liner / re-enable copy is all about gap-side
+ * gates: magnitude threshold, volume confirmation, universe coverage.
+ */
+export interface GapIntelEmptyStateContext {
+  surface: "gap";
+  /** Which desk's hue + pill label to render. Inherits from the surrounding scanner tab. */
+  mode: "swing" | "day";
+  universeSize: number | null;
+  regimeLabel: string;
+  spyPct: number | null;
+  qqqPct: number | null;
+  headline: string;
+  oneLiner: string;
+  reenableBullets: string[];
+  /** Day-tab variant carries the session state since intraday gap survival is session-bound. */
+  sessionOpen: boolean | null;
+}
+
+export type ScannerEmptyStateContext =
+  | SwingEmptyStateContext
+  | DayEmptyStateContext
+  | GapIntelEmptyStateContext;
 
 /**
  * Minimal slice of `ScannerOverview` we actually read. Keeping the
@@ -290,3 +323,122 @@ export const DAY_VOCABULARY_BAN_FOR_SWING: readonly string[] = [
   "RVOL",
   "session-structure"
 ];
+
+// ─── Gap Intelligence empty-state ────────────────────────────────────────
+
+/**
+ * Headline for the Gap Intelligence column. Calm, observational, names
+ * the two universal gap gates (magnitude + volume) without committing
+ * to mode-specific framing.
+ */
+function gapHeadline(): string {
+  return "Gap Intelligence is quiet — no overnight prints cleared the gap thresholds.";
+}
+
+/**
+ * Swing-tab one-liner for Gap Intelligence. Gap survival into the swing
+ * window depends on structure holding past the open, not intraday
+ * micro-structure — keep day vocabulary out.
+ */
+function gapOneLinerSwing(universeSize: number | null): string {
+  const ctx =
+    typeof universeSize === "number" && universeSize > 0
+      ? `Scanned ${universeSize} symbols this load. `
+      : "";
+  return `${ctx}Gap Intelligence flags overnight close→open dislocations large enough to be worth a second look — names need both a meaningful gap size AND volume confirmation. None of the universe met both gates together.`;
+}
+
+/**
+ * Day-tab one-liner. Same two universal gates, but the framing is
+ * intraday-survival: does the gap survive the opening session and
+ * confirm with same-direction tape, not whether it holds for days.
+ */
+function gapOneLinerDay(universeSize: number | null, sessionOpen: boolean): string {
+  const ctx =
+    typeof universeSize === "number" && universeSize > 0
+      ? `Scanned ${universeSize} symbols this load. `
+      : "";
+  return sessionOpen
+    ? `${ctx}Gap Intelligence flags overnight close→open dislocations large enough to consider for intraday play — names need both a meaningful gap size AND opening-session volume confirmation. None of the universe met both gates together.`
+    : `${ctx}Gap Intelligence flags overnight close→open dislocations that the next session would have to defend or fade — magnitude + opening volume are the two gates. Outside regular session these are tape observations only; intraday qualification resumes at the next open.`;
+}
+
+/**
+ * Re-enable bullets for the Swing-tab Gap Intelligence empty state.
+ *
+ * Vocabulary discipline: these talk about magnitude / volume / universe
+ * coverage / structure-not-immediately-faded — the gates the gap
+ * scanner actually evaluates against the daily-bar universe. They
+ * deliberately avoid day-side vocabulary ("VWAP", "ORB",
+ * "session-structure", "RVOL") so a Swing-tab user doesn't get
+ * cross-mode language. The day-tab variant below adds those terms
+ * where they're appropriate.
+ */
+function gapReenableBulletsSwing(): string[] {
+  return [
+    "Magnitude: a candidate's overnight gap (yesterday's close vs. today's open) needs to clear the absolute % threshold the gap scanner uses, so small drifts aren't surfaced as actionable dislocations.",
+    "Volume confirmation: the gap needs same-direction premarket volume to flag — pure-news prints without volume conviction are unreliable for either follow-through or mean-reversion reads.",
+    "Universe coverage: Gap Intelligence reads from the same daily-bar universe as the swing engine — symbols with stale or missing daily bars (under the scanner's min-history threshold) don't qualify regardless of gap size."
+  ];
+}
+
+function gapReenableBulletsDay(sessionOpen: boolean): string[] {
+  const b1 =
+    "Magnitude: a candidate's overnight gap (yesterday's close vs. today's open) needs to clear the absolute % threshold the gap scanner uses, so small drifts aren't surfaced as actionable dislocations.";
+  const b2 = sessionOpen
+    ? "Volume confirmation: the gap needs same-direction opening-session volume above the gap scanner's ADV-relative floor so the tape is committing to the level, not just printing on thin overnight liquidity."
+    : "Volume confirmation: the gap needs same-direction premarket volume building toward the open, so the intraday tape is set up to defend the level — gates resume at the next regular session.";
+  const b3 = sessionOpen
+    ? "Universe coverage: Gap Intelligence reads from the same daily-bar universe as the day scanner — symbols with stale or missing daily bars don't qualify, and a gap that immediately full-fills inside the opening session is dropped rather than persisted."
+    : "Universe coverage: Gap Intelligence reads from the same daily-bar universe the scanner uses — symbols with stale or missing daily bars don't qualify regardless of overnight magnitude.";
+  return [b1, b2, b3];
+}
+
+/**
+ * Build the Gap Intelligence empty-state context. `mode` is the
+ * surrounding scanner tab (swing / day) and only drives copy +
+ * accent — the gap surface itself is always one column, not two.
+ *
+ * "Both"-tab callers should pass `"swing"` here since the Gap
+ * Intelligence panel is on the swing-rail side of the scanner grid
+ * and gaps map most naturally to the multi-day frame; the Day Desk
+ * surfaces gap reads through its own setup rows.
+ */
+export function buildGapIntelEmptyStateContext(
+  overview: EmptyStateOverviewInput,
+  mode: "swing" | "day"
+): GapIntelEmptyStateContext {
+  const regimeLabel = (overview.regimeLabel ?? "").trim();
+  const spyPct = typeof overview.spyPct === "number" ? overview.spyPct : null;
+  const qqqPct = typeof overview.qqqPct === "number" ? overview.qqqPct : null;
+  const universeSize =
+    typeof overview.swingUniverseSymbolCount === "number"
+      ? overview.swingUniverseSymbolCount
+      : null;
+  const sessionOpen =
+    mode === "day"
+      ? overview.marketStatus != null
+        ? (overview.marketStatus.market || "").trim().toLowerCase() === "open"
+        : isUsRegularSessionOpenEt()
+      : null;
+  const oneLiner =
+    mode === "swing"
+      ? gapOneLinerSwing(universeSize)
+      : gapOneLinerDay(universeSize, sessionOpen === true);
+  const reenableBullets =
+    mode === "swing"
+      ? gapReenableBulletsSwing()
+      : gapReenableBulletsDay(sessionOpen === true);
+  return {
+    surface: "gap",
+    mode,
+    universeSize,
+    regimeLabel,
+    spyPct,
+    qqqPct,
+    headline: gapHeadline(),
+    oneLiner,
+    reenableBullets,
+    sessionOpen
+  };
+}
