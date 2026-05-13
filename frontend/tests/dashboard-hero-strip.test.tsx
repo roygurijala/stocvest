@@ -312,7 +312,7 @@ describe("Dashboard chatbot contract (Phase A invariance)", () => {
       />
     );
     expect(publishCapture.last).not.toBeNull();
-    const keys = Object.keys(publishCapture.last as Record<string, unknown>).sort();
+    const keys = Object.keys(publishCapture.last as unknown as Record<string, unknown>).sort();
     expect(keys).toEqual(
       [
         "day_desk_posture",

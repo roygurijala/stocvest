@@ -325,7 +325,7 @@ export function DayDeskPanel({ setups, marketStatus, scannerError, topSignalCap 
       title="Day Desk"
       subtitle="Intraday engine — session-bound. Independent of the Swing Desk. Posture (Active / Monitor / Suppressed) reflects today's volume / momentum / session-structure gates, not multi-day cadence."
       cardTip={DAY_DESK_CARD_TIP}
-      headerRight={<DayDeskSignature marketStatus={marketStatus} />}
+      headerRight={<DayDeskSignature marketStatus={marketStatus ?? undefined} />}
       data-testid="day-desk-panel"
       data-day-desk-posture={postureKind}
     >
