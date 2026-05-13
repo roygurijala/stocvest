@@ -7,6 +7,8 @@ import { Brain, ChevronDown, ChevronUp, Clock, Zap } from "lucide-react";
 import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer } from "recharts";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
+import { useSignalComposite } from "@/lib/hooks/use-signal-composite";
+import { useSymbolNews } from "@/lib/hooks/use-symbol-news";
 import { useSymbolSnapshot } from "@/lib/hooks/use-symbol-snapshot";
 import type { MarketOverview, NewsPayload, SnapshotPayload } from "@/lib/api/market";
 import type { ScannerOverview } from "@/lib/api/scanner";
@@ -351,9 +353,17 @@ export function SignalsPageClient({
     "all" | "correct" | "incorrect" | "neutral" | "pending"
   >("all");
   const [historySource, setHistorySource] = useState<"user" | "public">("public");
-  const [compositeResult, setCompositeResult] = useState<Record<string, unknown> | null>(null);
-  const [radarData, setRadarData] = useState<Array<{ layer: string; score: number; hist: number }> | null>(null);
-  const [afterHoursNews, setAfterHoursNews] = useState<NewsPayload[]>([]);
+  // Layer 4 (second slice): per-symbol composite is now SWR-cached.
+  // The hook re-fetches when (symbol, mode) changes; the Layers /
+  // History tab toggle gates via `enabled` so the History tab
+  // never fires a composite call. `keepPreviousData: false`
+  // overrides the global default so the screen-clear UX on
+  // mode-pill toggle (a previous user request) survives the cache
+  // layer — the new mode's pill never renders alongside the
+  // previous mode's 6-layer breakdown / radar / evidence.
+  const { composite: compositeResult } = useSignalComposite(symbol, tradingMode, {
+    enabled: tab === "layers"
+  });
   const [afterHoursInWatchlist, setAfterHoursInWatchlist] = useState(false);
   const [afterHoursWatchlistKnown, setAfterHoursWatchlistKnown] = useState(false);
 
@@ -472,9 +482,12 @@ export function SignalsPageClient({
       setSymbol("");
       setSymbolDraft("");
       setSuggestOpen(false);
-      setCompositeResult(null);
+      // Layer 4 second slice: `compositeResult` and `radarData` are
+      // derived from the SWR-backed `useSignalComposite` hook now.
+      // Clearing the symbol produces an empty SWR cache key, the
+      // hook returns `composite: null`, and `radarData` falls out
+      // via its `useMemo` derivation — no imperative setters needed.
       setSignalEvidence(null);
-      setRadarData(null);
       try {
         sessionStorage.removeItem(SIGNALS_SESSION_SYMBOL_KEY);
       } catch {
@@ -794,9 +807,15 @@ export function SignalsPageClient({
     // We do NOT clear `symbol` or `symbolSnapshot` — those are
     // per-symbol, not per-mode, and the user expects to keep looking
     // at the same ticker after toggling modes.
-    setCompositeResult(null);
+    //
+    // Layer 4 (second slice): `compositeResult` + `radarData` are
+    // SWR-backed and key on (symbol, mode); the mode flip below
+    // produces a fresh cache key. Because `useSignalComposite`
+    // sets `keepPreviousData: false`, the hook returns
+    // `composite: null` synchronously until the new mode resolves
+    // — so the "clear screen between modes" UX survives without
+    // the imperative setters here.
     setSignalEvidence(null);
-    setRadarData(null);
     setHistoryRows([]);
     // If the history tab is the visible one right now, flip its
     // loader on immediately so the table area shows the loader for
@@ -1007,75 +1026,60 @@ export function SignalsPageClient({
   const setupDirectionForEvidence =
     layerSignalSummary === "Bullish" ? "long" : layerSignalSummary === "Bearish" ? "short" : "neutral";
 
+  // Layer 4 (second slice): the composite fetch + radar
+  // projection used to live in a `[symbol, tab, tradingMode]`
+  // useEffect that POST'd to `/api/stocvest/signals/composite/...`
+  // and shoved the response through three `useState` setters
+  // (`compositeResult`, `signalEvidence`, `radarData`). The
+  // composite payload is now SWR-backed via `useSignalComposite`
+  // (set up further up alongside `useSymbolSnapshot`); radar is
+  // a pure projection of `compositeResult` so it becomes a
+  // `useMemo` here, and `signalEvidence` resets via the dedicated
+  // effect immediately below this block. The previous "clear
+  // screen on mode flip" UX (a prior user request) survives
+  // because `useSignalComposite` opts out of the
+  // `keepPreviousData: true` global default — so the cache key
+  // change on mode toggle yields `composite: null` synchronously
+  // until the new fetch resolves.
+  const radarData = useMemo<Array<{ layer: string; score: number; hist: number }> | null>(() => {
+    if (!compositeResult || isInsufficientCompositeResponse(compositeResult)) return null;
+    const raw = compositeResult.layers;
+    if (!Array.isArray(raw)) return null;
+    const baseline = 50;
+    return (raw as Array<Record<string, unknown>>).map((layer) => {
+      const k = String(layer.layer ?? "").toLowerCase();
+      const sectorPending =
+        k === "sector" && String(layer.sector_resolution_state ?? "") === "pending_cache_refresh";
+      const n = typeof layer.score === "number" && Number.isFinite(layer.score) ? Math.round(layer.score) : null;
+      // Pending sector is excluded from composite — plot at baseline so radar/divergence shows no false skew.
+      const score = sectorPending ? baseline : n ?? 0;
+      return {
+        layer: RADAR_LAYER_LABEL[k] ?? k,
+        score,
+        hist: baseline
+      };
+    });
+  }, [compositeResult]);
+
+  // Reset `signalEvidence` whenever the composite cache key
+  // changes (symbol switch, mode flip, or a fresh insufficient
+  // envelope). The evidence card is built from a *different*
+  // source (the user-initiated "Show evidence" click in the
+  // download handler), so we keep it as local state but tie its
+  // lifecycle to the same key the composite hook uses.
   useEffect(() => {
-    const sym = symbol.trim().toUpperCase();
-    if (!sym || tab !== "layers") {
-      setCompositeResult(null);
+    if (!symbol.trim() || tab !== "layers") {
       setSignalEvidence(null);
-      setRadarData(null);
       return;
     }
-    let cancelled = false;
-    const run = async () => {
-      try {
-        const path =
-          tradingMode === "swing" ? "/api/stocvest/signals/composite/swing" : "/api/stocvest/signals/composite/real";
-        const res = await fetch(path, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ symbol: sym }),
-          credentials: "same-origin"
-        });
-        if (cancelled) return;
-        if (!res.ok) {
-          setCompositeResult(null);
-          setSignalEvidence(null);
-          setRadarData(null);
-          return;
-        }
-        const j = (await res.json()) as Record<string, unknown>;
-        if (cancelled) return;
-        if (isInsufficientCompositeResponse(j)) {
-          setCompositeResult(j);
-          setSignalEvidence(null);
-          setRadarData(null);
-          return;
-        }
-        setCompositeResult(j);
-        const raw = j.layers;
-        const baseline = 50;
-        if (Array.isArray(raw)) {
-          setRadarData(
-            (raw as Array<Record<string, unknown>>).map((layer) => {
-              const k = String(layer.layer ?? "").toLowerCase();
-              const sectorPending =
-                k === "sector" && String(layer.sector_resolution_state ?? "") === "pending_cache_refresh";
-              const n = typeof layer.score === "number" && Number.isFinite(layer.score) ? Math.round(layer.score) : null;
-              // Pending sector is excluded from composite — plot at baseline so radar/divergence shows no false skew.
-              const score = sectorPending ? baseline : n ?? 0;
-              return {
-                layer: RADAR_LAYER_LABEL[k] ?? k,
-                score,
-                hist: baseline
-              };
-            })
-          );
-        } else {
-          setRadarData(null);
-        }
-      } catch {
-        if (!cancelled) {
-          setCompositeResult(null);
-          setSignalEvidence(null);
-          setRadarData(null);
-        }
-      }
-    };
-    void run();
-    return () => {
-      cancelled = true;
-    };
-  }, [symbol, tab, tradingMode]);
+    if (compositeResult === null) {
+      setSignalEvidence(null);
+      return;
+    }
+    if (isInsufficientCompositeResponse(compositeResult)) {
+      setSignalEvidence(null);
+    }
+  }, [symbol, tab, tradingMode, compositeResult]);
 
   const insufficientComposite: SwingCompositeMarketStatus | null = isInsufficientCompositeResponse(compositeResult)
     ? compositeResult.market_status
@@ -1094,36 +1098,55 @@ export function SignalsPageClient({
   const showAfterHoursPanel =
     tradingMode === "day" && insufficientComposite?.market_session === "closed";
 
+  // Layer 4 (second slice): after-hours news is now SWR-cached
+  // via `useSymbolNews`. The hook is `enabled` only when the
+  // panel is visible — i.e. day-mode + market closed — so we
+  // don't speculatively fetch news that the user can't see.
+  // Watchlist membership stays in its own `useEffect` because
+  // it's not symbol-mode-keyed (the user's default watchlist is
+  // a global resource) and SWR'ing it would buy nothing here.
+  const { articles: afterHoursNews } = useSymbolNews(symbol, {
+    limit: 5,
+    mode: tradingMode,
+    enabled: showAfterHoursPanel
+  });
+
   useEffect(() => {
     const sym = symbol.trim().toUpperCase();
     if (!sym || !showAfterHoursPanel) {
-      setAfterHoursNews([]);
       setAfterHoursInWatchlist(false);
       setAfterHoursWatchlistKnown(false);
       return;
     }
     let cancelled = false;
     void (async () => {
-      const [news, watchlistSymbols] = await Promise.all([
-        fetchSymbolNews(sym, 5, { newsTradingMode: tradingMode }).catch(() => [] as NewsPayload[]),
-        fetch("/api/stocvest/watchlists/default/symbols", { method: "GET" })
-          .then(async (res) => {
-            if (!res.ok) return [] as string[];
-            const data = (await res.json().catch(() => ({}))) as { symbols?: string[] };
-            if (!Array.isArray(data.symbols)) return [] as string[];
-            return data.symbols.map((row) => String(row).trim().toUpperCase()).filter(Boolean);
-          })
-          .catch(() => [] as string[])
-      ]);
-      if (cancelled) return;
-      setAfterHoursNews(news);
-      setAfterHoursInWatchlist(watchlistSymbols.includes(sym));
-      setAfterHoursWatchlistKnown(true);
+      try {
+        const res = await fetch("/api/stocvest/watchlists/default/symbols", {
+          method: "GET"
+        });
+        if (cancelled) return;
+        let watchlistSymbols: string[] = [];
+        if (res.ok) {
+          const data = (await res.json().catch(() => ({}))) as { symbols?: string[] };
+          if (Array.isArray(data.symbols)) {
+            watchlistSymbols = data.symbols
+              .map((row) => String(row).trim().toUpperCase())
+              .filter(Boolean);
+          }
+        }
+        if (cancelled) return;
+        setAfterHoursInWatchlist(watchlistSymbols.includes(sym));
+        setAfterHoursWatchlistKnown(true);
+      } catch {
+        if (cancelled) return;
+        setAfterHoursInWatchlist(false);
+        setAfterHoursWatchlistKnown(true);
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [showAfterHoursPanel, symbol, tradingMode]);
+  }, [showAfterHoursPanel, symbol]);
 
   /**
    * Build the page-context payload published to the STOCVEST Assistant chatbot.

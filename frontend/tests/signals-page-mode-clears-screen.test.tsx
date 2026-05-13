@@ -30,6 +30,7 @@
 import type { ReactElement } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
+import { SWRConfig } from "swr";
 
 vi.mock("@/lib/hooks/use-is-mobile-layout", () => ({
   useIsMobileLayout: () => false
@@ -111,7 +112,18 @@ afterEach(() => {
 });
 
 function wrap(ui: ReactElement) {
-  return render(<ThemeProvider>{ui}</ThemeProvider>);
+  // Each test gets its OWN SWR cache (a fresh `Map`) so cached
+  // payloads from a previous test don't make a fresh cache-key
+  // transition skip the loader phase. The "clear screen between
+  // modes" UX rule applies to UNCACHED flips — once a (symbol,
+  // mode) is in cache, returning to it is instant (a strictly
+  // better UX). These lock-ins pin the uncached behaviour to
+  // catch the regression class the user originally reported.
+  return render(
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+      <ThemeProvider>{ui}</ThemeProvider>
+    </SWRConfig>
+  );
 }
 
 const EMPTY_MARKET_OVERVIEW: MarketOverview = {

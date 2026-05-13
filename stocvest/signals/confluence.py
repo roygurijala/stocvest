@@ -234,30 +234,41 @@ class ConfluenceDetector:
             )
 
         # 5. Sector alignment
-        if direction == "long" and sector_l == "bullish":
-            confirming.append(
-                {
-                    "source": "sector_alignment",
-                    "label": "Sector Bullish",
-                    "detail": "Sector trending with this setup",
-                }
+        #
+        # Label invariants (BRK-B fix, 2026-05-13):
+        #   - The chip label ALWAYS describes the sector's intrinsic
+        #     direction *relative to SPY* — never the alignment with
+        #     the setup. The ✓ / ✕ column (confirming vs conflicting)
+        #     carries the alignment signal on its own.
+        #   - The previous labels ("Sector Bullish" / "Sector Bearish"
+        #     / "Sector conflict") read as a polarity verdict about
+        #     the sector itself and triggered repeated user reports
+        #     of the form "card says sector is bearish but it should
+        #     be bullish" — the user was reading the chip as a verdict
+        #     instead of a relative-strength readout. The new labels
+        #     ("Sector leads market" / "Sector lags market") make the
+        #     relative-strength framing explicit.
+        sector_chip: dict[str, Any] | None = None
+        if sector_l == "bullish":
+            sector_chip = {
+                "source": "sector_alignment",
+                "label": "Sector leads market",
+                "detail": "Sector ETF outperforming SPY (relative strength).",
+            }
+        elif sector_l == "bearish":
+            sector_chip = {
+                "source": "sector_alignment",
+                "label": "Sector lags market",
+                "detail": "Sector ETF underperforming SPY (relative strength).",
+            }
+        if sector_chip is not None and direction in ("long", "short"):
+            aligned = (direction == "long" and sector_l == "bullish") or (
+                direction == "short" and sector_l == "bearish"
             )
-        elif direction == "short" and sector_l == "bearish":
-            confirming.append(
-                {
-                    "source": "sector_alignment",
-                    "label": "Sector Bearish",
-                    "detail": "Sector trending with this setup",
-                }
-            )
-        elif sector_l in ("bullish", "bearish") and direction in ("long", "short"):
-            conflicting.append(
-                {
-                    "source": "sector_alignment",
-                    "label": "Sector conflict",
-                    "detail": f"Sector is {sector_l} — opposes this setup",
-                }
-            )
+            if aligned:
+                confirming.append(sector_chip)
+            else:
+                conflicting.append(sector_chip)
 
         # 6. Volume confirmation
         vol_vs_avg = float(signal_data.get("volume_vs_avg", 0) or 0)

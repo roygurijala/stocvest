@@ -19,7 +19,7 @@ import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import { NewsPanel } from "@/components/news-panel";
 import { getChangeColor } from "@/components/market-sentiment-score-widget";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
-import { fetchMacroContext } from "@/lib/api/fetch-macro-context";
+import { useMacroContext } from "@/lib/hooks/use-macro-context";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
 import { topSignalStrengthPercent } from "@/lib/top-signal-strength";
@@ -495,24 +495,21 @@ export function DashboardRedesign({
   const [newsPanelSymbol, setNewsPanelSymbol] = useState("");
   const [newsPanelOpen, setNewsPanelOpen] = useState(false);
   const [newsUiTick, setNewsUiTick] = useState(0);
-  const [macroPulse, setMacroPulse] = useState<Awaited<ReturnType<typeof fetchMacroContext>>>(null);
+  // Layer 4 (second slice): macro snapshot is now SWR-cached.
+  // Previously this lived in a one-shot `useEffect` calling
+  // `fetchMacroContext()` on every dashboard mount; on a
+  // navigation round trip back to `/dashboard` that meant a fresh
+  // request even though the payload (yield curve, upcoming
+  // events, macro risk) changes at the hour scale at most. The
+  // hook returns `null` until the first fetch resolves, matching
+  // the previous `useState(null)` contract so downstream consumers
+  // (`macroPulse?.…`) need zero code change.
+  const { data: macroPulse } = useMacroContext();
   // Tier 1 → Layer 4: warm `/dashboard/scanner?mode=swing` only when
   // the user signals intent (hover / focus / pointer-down on the
   // footer link). The link still carries `prefetch={false}` so the
   // mount-time prefetch storm (Tier 1.A) stays disabled.
   const swingScannerHoverPrefetch = useHoverPrefetch("/dashboard/scanner?mode=swing");
-
-  useEffect(() => {
-    let cancelled = false;
-    void fetchMacroContext().then((ctx) => {
-      if (!cancelled) {
-        setMacroPulse(ctx);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
   const snapshotsBySymbol = useMemo(
     () => new Map(marketOverview.snapshots.map((s) => [(s.symbol || "").toUpperCase(), s])),
     [marketOverview.snapshots]

@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { fetchDashboardData, isStale, type DashboardResponse } from "@/lib/api/dashboard";
+import { useSWRConfig } from "swr";
+import { isStale } from "@/lib/api/dashboard";
+import {
+  dashboardPayloadKey,
+  useDashboardPayload
+} from "@/lib/hooks/use-dashboard-payload";
 import { useLiveSignals } from "@/lib/live-signals";
 
 const MODE_STORAGE = "stocvest_trading_mode";
@@ -19,10 +24,21 @@ function readTradingMode(): "swing" | "day" {
 /**
  * Best-effort Edge cache sync: polls /api/dashboard, subscribes to live hints for day mode.
  * Does not replace RSC scanner payload — observability + future hydration hook.
+ *
+ * Layer 4 (second slice): the previous version managed its own
+ * `setInterval(refresh, 60_000)` and local `useState` for the
+ * payload. Both are now delegated to SWR via
+ * `useDashboardPayload(mode)` — same 60s cadence, but the cache
+ * is shared across any future surface that wants to read the
+ * Edge envelope, and the SSE hint handler triggers a refresh by
+ * calling `mutate(dashboardPayloadKey(mode))` instead of running
+ * a parallel `refresh()` closure. The local-mode-state +
+ * `storage` event listener stay — SWR is read-only as far as
+ * the user's mode pill is concerned.
  */
 export function DashboardEdgeSync() {
   const [mode, setMode] = useState<"swing" | "day">("swing");
-  const [data, setData] = useState<DashboardResponse | null>(null);
+  const { mutate } = useSWRConfig();
 
   useEffect(() => {
     setMode(readTradingMode());
@@ -33,26 +49,17 @@ export function DashboardEdgeSync() {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  const refresh = useCallback(async () => {
-    try {
-      const next = await fetchDashboardData(mode);
-      setData(next);
-    } catch {
-      /* ignore — Upstash optional */
-    }
-  }, [mode]);
-
-  useEffect(() => {
-    void refresh();
-    const t = setInterval(refresh, 60_000);
-    return () => clearInterval(t);
-  }, [refresh]);
+  const { data } = useDashboardPayload(mode);
 
   const onHint = useCallback(
     (_expectedVersion: string) => {
-      void refresh();
+      // Force SWR to re-fetch the current mode's cache entry on a
+      // version hint. We deliberately do NOT `await` — the hint
+      // handler is fire-and-forget; the polling interval is the
+      // safety net.
+      void mutate(dashboardPayloadKey(mode));
     },
-    [refresh]
+    [mode, mutate]
   );
 
   useLiveSignals(mode, onHint);

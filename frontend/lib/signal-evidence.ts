@@ -236,20 +236,49 @@ export function getVWAPDisplay(
 }
 
 /**
- * Reconciler sentence for the confluence panel when the composite verdict
- * polarity conflicts with the chips' implied polarity.
+ * Reconciler sentence for the confluence panel when there are chips
+ * on both sides (confirming + conflicting) so the user can see which
+ * way the OPPOSITE-polarity context is pushing without misreading
+ * the chip labels themselves.
  *
- * Why this exists: the Confirming/Conflicting chip group is scoped to the
- * setup *direction* being evaluated (long / short), while the verdict is the
- * composite-resolved direction (bullish / bearish / neutral). When those
- * disagree — e.g. a long setup whose composite resolves bearish — users see
- * "✅ Above 9 EMA" and "✅ Bullish Catalyst" next to a "Final verdict:
- * Bearish" headline and reasonably ask which is right. A single, calm,
- * structured sentence under the chip group reconciles that dissonance by
- * naming the inputs that overrode the bullish-looking tags.
+ * Why this exists — and why the previous design was wrong (BRK-B
+ * report, 2026-05-13):
  *
- * Returns `null` when there is no dissonance to explain (e.g. verdict
- * neutral, or chip polarity aligned with verdict, or no chips at all).
+ *   The Confirming/Conflicting chip group is scoped to the setup
+ *   *direction* (long / short). The confluence engine produces
+ *   chip labels whose semantic polarity MATCHES the setup direction:
+ *   for a long setup the confirming chips are bullish-aligned tags
+ *   ("Sector leads market", "Bullish Regime", "Bullish Catalyst");
+ *   for a short setup they are bearish-aligned tags ("Sector lags
+ *   market", "Bearish Regime", "Bearish Catalyst"). The conflicting
+ *   list is the opposite-polarity context that runs against the
+ *   setup ("VWAP conflict", "EMA conflict", "Weak Volume", etc).
+ *
+ *   The previous reconciler assumed `direction` was the
+ *   composite-resolved verdict (which could disagree with the setup
+ *   direction) and that confirming chips were always bullish-polarity
+ *   irrespective of setup. Both assumptions were false in
+ *   production: `evidence.direction` is derived from the setup
+ *   direction (`evidenceDirectionFromSetup(setup.direction)`), and
+ *   chip polarity flips with setup direction. The combination meant
+ *   short setups got "Bullish inputs present, but overridden by
+ *   VWAP conflict + …" rendered against a chip group whose ONLY
+ *   confirming entry described a bearish-aligned sector readout
+ *   (then labelled "Sector Bearish", since renamed in confluence.py
+ *   to "Sector lags market" for relative-strength clarity). The user
+ *   (correctly) read that combination as a contradiction.
+ *
+ *   The fix: describe the conflicting-list polarity correctly. For
+ *   a long setup, the conflicting chips are bearish-leaning context
+ *   that runs against the long. For a short setup they're
+ *   bullish-leaning context that runs against the short. The
+ *   reconciler now names that opposite-polarity context and
+ *   identifies what's still anchoring the setup (the confirming
+ *   chips), which is symmetric and accurate for both directions.
+ *
+ * Returns `null` when there's nothing to reconcile — direction is
+ * neutral, or there are no conflicting chips (no opposite-polarity
+ * context to surface).
  */
 export function buildVerdictTagReconciler(
   direction: EvidenceDirection,
@@ -257,19 +286,19 @@ export function buildVerdictTagReconciler(
   conflicting: ReadonlyArray<{ label: string }>,
   geopoliticalDragActive: boolean = false
 ): string | null {
-  const dir = direction;
-  if (dir !== "bullish" && dir !== "bearish") return null;
+  if (direction !== "bullish" && direction !== "bearish") return null;
 
-  const overridden: ReadonlyArray<{ label: string }> =
-    dir === "bearish" ? confirming : conflicting;
-  const overriders: ReadonlyArray<{ label: string }> =
-    dir === "bearish" ? conflicting : confirming;
+  // The conflicting list is the OPPOSITE-polarity context regardless
+  // of setup direction (a chip enters `conflicting` only when it
+  // pushes against the setup). Calling this list "bearish-leaning"
+  // for a long setup and "bullish-leaning" for a short setup is the
+  // semantically accurate framing — it matches the actual content
+  // of the chips on screen.
+  const oppositePolarity = direction === "bullish" ? "Bearish-leaning" : "Bullish-leaning";
 
-  if (overridden.length === 0) return null;
+  if (conflicting.length === 0) return null;
 
-  const overriddenSentiment = dir === "bearish" ? "Bullish" : "Bearish";
-
-  const factors = overriders
+  const factors = conflicting
     .map((c) => stripChipParenthetical(c.label))
     .filter((s) => s.length > 0)
     .slice(0, 4);
@@ -280,11 +309,21 @@ export function buildVerdictTagReconciler(
     }
   }
 
-  if (factors.length === 0) {
-    return `${overriddenSentiment} inputs present, but overridden by the composite read.`;
+  if (factors.length === 0) return null;
+
+  // If the confirming list is non-empty, name what's still anchoring
+  // the setup polarity. If empty, surface a calmer fallback that
+  // signals the conflicting context dominates the chip layout.
+  const anchor = confirming
+    .map((c) => stripChipParenthetical(c.label))
+    .filter((s) => s.length > 0)
+    .slice(0, 4);
+
+  if (anchor.length === 0) {
+    return `${oppositePolarity} context present (${joinFactors(factors)}); no opposing chips support the setup.`;
   }
 
-  return `${overriddenSentiment} inputs present, but overridden by ${joinFactors(factors)}.`;
+  return `${oppositePolarity} context present (${joinFactors(factors)}), but the setup is anchored by ${joinFactors(anchor)}.`;
 }
 
 function stripChipParenthetical(label: string): string {

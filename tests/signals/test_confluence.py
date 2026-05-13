@@ -141,6 +141,114 @@ def test_regime_conflicts_long_when_bearish() -> None:
     assert any(x["source"] == "market_regime" for x in r.conflicting_signals)
 
 
+# ---------------------------------------------------------------------------
+# Sector chip label invariants (BRK-B fix, 2026-05-13)
+# ---------------------------------------------------------------------------
+#
+# Repeated user reports of the form "card says sector is bearish but it should
+# be bullish" traced back to the chip labels reading as a polarity verdict on
+# the sector itself rather than as a relative-strength readout vs SPY. The
+# new labels make the relative-strength framing explicit, and the chip's
+# column (confirming vs conflicting) carries the alignment signal.
+#
+# Invariants:
+#   - A bullish sector signal ALWAYS produces label "Sector leads market".
+#   - A bearish sector signal ALWAYS produces label "Sector lags market".
+#   - Alignment is encoded by which list the chip lands in, not by label.
+#   - Neutral sector signal produces no sector chip at all.
+def test_sector_chip_bullish_long_confirms_with_leads_market_label() -> None:
+    d = _det()
+    r = d.calculate_confluence(
+        "S",
+        "long",
+        {"pattern": "x", "volume_vs_avg": 1.0, "gap_pct": 0},
+        {"last_trade_price": 100.0, "day_vwap": 100.0},
+        None,
+        "neutral",
+        "bullish",
+    )
+    matched = [c for c in r.confirming_signals if c["source"] == "sector_alignment"]
+    assert matched, "expected sector_alignment chip in confirming list"
+    assert matched[0]["label"] == "Sector leads market"
+    assert "SPY" in matched[0]["detail"]
+
+
+def test_sector_chip_bearish_short_confirms_with_lags_market_label() -> None:
+    """BRK-B regression: bearish sector + short setup -> 'Sector lags market' confirming."""
+    d = _det()
+    r = d.calculate_confluence(
+        "S",
+        "short",
+        {"pattern": "x", "volume_vs_avg": 1.0, "gap_pct": 0},
+        {"last_trade_price": 100.0, "day_vwap": 100.0},
+        None,
+        "neutral",
+        "bearish",
+    )
+    matched = [c for c in r.confirming_signals if c["source"] == "sector_alignment"]
+    assert matched, "expected sector_alignment chip in confirming list"
+    assert matched[0]["label"] == "Sector lags market"
+    assert "SPY" in matched[0]["detail"]
+    # Critical: the chip text MUST NOT use the old polarity-verdict wording
+    # that triggered user complaints ("Sector Bearish" / "Sector Bullish").
+    assert "Sector Bearish" not in matched[0]["label"]
+    assert "Sector Bullish" not in matched[0]["label"]
+
+
+def test_sector_chip_bullish_short_conflicts_keeping_leads_market_label() -> None:
+    """Bullish sector on a short setup -> chip lands in conflicting but
+    label still says 'Sector leads market' (chip describes sector, not
+    alignment). This is the core symmetry the relabel guarantees."""
+    d = _det()
+    r = d.calculate_confluence(
+        "S",
+        "short",
+        {"pattern": "x", "volume_vs_avg": 1.0, "gap_pct": 0},
+        {"last_trade_price": 100.0, "day_vwap": 100.0},
+        None,
+        "neutral",
+        "bullish",
+    )
+    matched = [c for c in r.conflicting_signals if c["source"] == "sector_alignment"]
+    assert matched, "expected sector_alignment chip in conflicting list"
+    assert matched[0]["label"] == "Sector leads market"
+
+
+def test_sector_chip_bearish_long_conflicts_keeping_lags_market_label() -> None:
+    d = _det()
+    r = d.calculate_confluence(
+        "S",
+        "long",
+        {"pattern": "x", "volume_vs_avg": 1.0, "gap_pct": 0},
+        {"last_trade_price": 100.0, "day_vwap": 100.0},
+        None,
+        "neutral",
+        "bearish",
+    )
+    matched = [c for c in r.conflicting_signals if c["source"] == "sector_alignment"]
+    assert matched, "expected sector_alignment chip in conflicting list"
+    assert matched[0]["label"] == "Sector lags market"
+
+
+def test_sector_chip_absent_on_neutral_signal() -> None:
+    d = _det()
+    r = d.calculate_confluence(
+        "S",
+        "long",
+        {"pattern": "x", "volume_vs_avg": 1.0, "gap_pct": 0},
+        {"last_trade_price": 100.0, "day_vwap": 100.0},
+        None,
+        "neutral",
+        "neutral",
+    )
+    all_sector = [
+        c
+        for c in (*r.confirming_signals, *r.conflicting_signals)
+        if c["source"] == "sector_alignment"
+    ]
+    assert all_sector == []
+
+
 def test_volume_confirms_above_1_5x() -> None:
     d = _det()
     r = d.calculate_confluence(
