@@ -141,8 +141,13 @@ export function DashboardActiveSignalRibbon({
         <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.text, flex: "1 1 auto", lineHeight: 1.5 }}>
           {emptyContext?.scannerError ? emptyContext.scannerError : watchingLine}
         </p>
+        {/* Perf invariant — see docs/PERFORMANCE.md §3.1. The ribbon
+            empty-state CTA points at `/dashboard/scanner`, which is
+            one of the heavy SSR targets we never speculatively
+            prefetch from the dashboard. */}
         <Link
           href="/dashboard/scanner"
+          prefetch={false}
           style={{
             display: "inline-flex",
             alignItems: "center",
@@ -225,10 +230,22 @@ export function DashboardActiveSignalRibbon({
           const modeColor = c.mode === "swing" ? "#a855f7" : "#00C8DC";
           const symbol = c.symbol.trim().toUpperCase();
           return (
+            // Perf invariant — see docs/PERFORMANCE.md §3.1 + §4.
+            // Ribbon chips are an N-of-N container: every chip the
+            // dashboard renders points at the heaviest SSR page in
+            // the app (`/dashboard/signals`). Next.js's default
+            // `prefetch="auto"` would fire one full SSR prefetch
+            // per visible chip on mount, draining the same
+            // connection that's serving the dashboard's own data.
+            // That's the 16.78s "Content Download" the user
+            // captured on 2026-05-13. `prefetch={false}` disables
+            // the speculative fetch without affecting navigation —
+            // clicking a chip still routes normally.
             <Link
               key={`${c.mode}-${symbol}`}
               data-testid={`ribbon-chip-${symbol}`}
               data-ribbon-chip-mode={c.mode}
+              prefetch={false}
               href={`/dashboard/signals?symbol=${encodeURIComponent(symbol)}&ref=dashboard-ribbon&trading_mode=${c.mode}`}
               style={{
                 display: "inline-flex",

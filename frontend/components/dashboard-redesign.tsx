@@ -1313,8 +1313,18 @@ export function DashboardRedesign({
                   marginTop: spacing[1]
                 }}
               >
+                {/* Perf invariant — see docs/PERFORMANCE.md §3.1.
+                    `/dashboard/scanner` is a heavy SSR page. The
+                    desk footer is rendered on every dashboard
+                    mount, so the default `prefetch="auto"` would
+                    fire a full scanner SSR prefetch up to two more
+                    times here (once for swing, again from the Day
+                    Desk for day). `prefetch={false}` removes the
+                    speculative drain; clicking still routes
+                    normally. */}
                 <Link
                   href="/dashboard/scanner?mode=swing"
+                  prefetch={false}
                   className="inline-flex min-h-11 items-center font-semibold"
                   style={{ color: colors.accent, fontSize: typography.scale.sm }}
                 >

@@ -260,8 +260,17 @@ function DayTopSignalRow({
           );
         })()}
       </div>
+      {/* Perf invariant — see docs/PERFORMANCE.md §3.1 + §4.
+          Each day-row chip points at `/dashboard/signals` (a heavy
+          SSR page). The Day Desk renders up to `topSignalCap=4`
+          rows; with `prefetch="auto"` (the Next.js default) this
+          would fire 4 parallel SSR prefetches at mount, stacked on
+          top of the ribbon chips and the swing desk. `prefetch=
+          {false}` keeps clicks fast (router cache still applies)
+          while removing the speculative drain. */}
       <Link
         href={`/dashboard/signals?symbol=${encodeURIComponent(signal.symbol.trim().toUpperCase())}&ref=dashboard-day-desk&trading_mode=day`}
+        prefetch={false}
         style={{
           alignSelf: "flex-start",
           marginTop: spacing[1],
@@ -440,8 +449,15 @@ export function DayDeskPanel({ setups, marketStatus, scannerError, topSignalCap 
             marginTop: spacing[1]
           }}
         >
+          {/* Perf invariant — see docs/PERFORMANCE.md §3.1.
+              `/dashboard/scanner` is a heavy SSR target; the desk
+              footer is on every dashboard render. Default
+              `prefetch="auto"` would prefetch the full scanner SSR
+              page just because the footer is visible below the
+              fold. We disable it. */}
           <Link
             href="/dashboard/scanner?mode=day"
+            prefetch={false}
             className="inline-flex min-h-11 items-center font-semibold"
             style={{ color: colors.accent, fontSize: typography.scale.sm }}
           >
