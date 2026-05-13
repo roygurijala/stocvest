@@ -279,10 +279,15 @@ describe("Shared Context master card structure (Mode Separation B28 Phase 2b)", 
     expect(d.compareDocumentPosition(e) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  test("section_A_renders_three_index_tiles_each_with_a_sparkline", () => {
-    // Per the user directive: "Sub-cards (Row of 3) Each index gets a compact
-    // sub-card: SPY/QQQ/IWM ... 5-day horizontal sparkline (daily closes) ...
-    // Neutral stroke (light slate) · No axes, no labels, no indicators."
+  test("section_A_renders_three_index_tiles_each_with_a_daily_returns_histogram", () => {
+    // Section A revision (2026-05-13): the 5-day line sparkline was replaced
+    // by a 5-bar signed daily-returns histogram. Rationale: at this card
+    // size (~120px) a line conveys little beyond the % label already shown
+    // beneath it, while signed bars expose intra-week shape ("steady grind"
+    // vs "choppy reversal" vs "one-day spike"). Lock-ins for the bar viz
+    // live in frontend/tests/index-returns-histogram.test.tsx; this test
+    // pins the *integration* — each tile in Section A must mount the
+    // histogram and the % label, with no axes/labels inside the SVG.
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
@@ -296,15 +301,18 @@ describe("Shared Context master card structure (Mode Separation B28 Phase 2b)", 
     for (const sym of ["SPY", "QQQ", "IWM"]) {
       const tile = screen.getByTestId(`shared-context-index-tile-${sym}`);
       expect(tile).toBeInTheDocument();
-      const sparkline = tile.querySelector('[data-testid="index-sparkline"]');
-      expect(sparkline).not.toBeNull();
-      // The sparkline is an SVG — no axes/labels: the polyline is the ONLY
-      // shape inside, and there are no <text> children. (We allow a <title>
-      // child for accessibility — that's read by screen readers, not rendered.)
-      expect(sparkline?.querySelector("polyline")).not.toBeNull();
-      const visibleTextNodes = Array.from(sparkline?.querySelectorAll("text") ?? []);
+      const histogram = tile.querySelector('[data-testid="index-returns-histogram"]');
+      expect(histogram).not.toBeNull();
+      // Anti-regression — the old line sparkline must not co-exist on the tile.
+      expect(tile.querySelector('[data-testid="index-sparkline"]')).toBeNull();
+      // The histogram is an SVG — no axes/labels: bars are <rect> children,
+      // no <text> nodes appear inside the chart canvas. (A <title> child per
+      // <rect> is allowed — it's read by screen readers, not rendered.)
+      expect(histogram?.querySelector("polyline")).toBeNull();
+      expect((histogram?.querySelectorAll("rect").length ?? 0)).toBeGreaterThan(0);
+      const visibleTextNodes = Array.from(histogram?.querySelectorAll("text") ?? []);
       expect(visibleTextNodes).toHaveLength(0);
-      // The 5d % number still renders alongside the sparkline.
+      // The 5d % number still renders alongside the histogram.
       expect((tile.textContent || "").toLowerCase()).toContain(`${sym.toLowerCase()}`);
       expect((tile.textContent || "")).toMatch(/[+\-]?\d+\.\d{2}%/);
     }

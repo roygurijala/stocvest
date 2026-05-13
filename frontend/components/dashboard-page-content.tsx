@@ -82,12 +82,19 @@ function buildWeeklyRows(
       snap && typeof snap.last_trade_price === "number" && Number.isFinite(snap.last_trade_price)
         ? snap.last_trade_price
         : null;
-    // Take the last 5 daily closes (newest at the end) for the inline sparkline
-    // inside Shared Context · Section A. The Polygon aggregates feed returns
-    // bars oldest → newest, so a tail slice preserves order. Defensive: when
-    // fewer than 5 closes are available, we still pass what we have through —
-    // the sparkline component handles short / empty arrays gracefully.
-    const closes5d = closes.length > 0 ? closes.slice(-5) : undefined;
+    // Take the last 6 daily closes (newest at the end) for the inline daily-
+    // returns histogram inside Shared Context · Section A. The histogram
+    // renders one bar per *daily return* (close-to-close), so N closes
+    // produce N − 1 bars — passing 6 yields the 5 per-session bars the tile
+    // is designed around. The Polygon aggregates feed returns bars oldest →
+    // newest, so a tail slice preserves order. Defensive: when fewer than 6
+    // closes are available we still pass what we have through and the
+    // histogram component renders whatever bars the data supports.
+    //
+    // (Field is named `closes5d` because the *window it labels* is the 5-day
+    // window — not the array length. The pct5d label and the histogram both
+    // live under that umbrella.)
+    const closes5d = closes.length > 0 ? closes.slice(-6) : undefined;
     return {
       ...row,
       pct5d: pctChangeOverDailySessions(closes, 5),

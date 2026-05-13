@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { DashboardCard } from "@/components/dashboard-card";
-import { IndexSparkline } from "@/components/index-sparkline";
+import { IndexReturnsHistogram } from "@/components/index-returns-histogram";
 import { InfoTip } from "@/components/info-tip";
 import { DecisionMetric } from "@/components/decision-metric";
 import { getChangeColor } from "@/components/market-sentiment-score-widget";
@@ -645,7 +645,10 @@ export function SharedContextMasterCard(props: Props) {
                     <p style={{ margin: 0, fontSize: 10, color: colors.textMuted }}>{r.label}</p>
                   </div>
                   {hasCloses ? (
-                    <IndexSparkline closes={r.closes5d!} ariaLabel={`${r.symbol} 5-session close trajectory`} />
+                    <IndexReturnsHistogram
+                      closes={r.closes5d!}
+                      ariaLabel={`${r.symbol} 5-session daily returns histogram`}
+                    />
                   ) : (
                     <span style={{ fontSize: 10, color: colors.textMuted }}>Sparkline pending</span>
                   )}
