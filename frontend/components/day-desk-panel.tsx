@@ -344,6 +344,7 @@ export function DayDeskPanel({ setups, marketStatus, scannerError, topSignalCap 
           <motion.div
             key={`day-suppression-${postureKind}`}
             data-testid="day-desk-suppression"
+            className={surfaceGlowClassName}
             initial={{ opacity: 0.88, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.38, ease: "easeOut" }}

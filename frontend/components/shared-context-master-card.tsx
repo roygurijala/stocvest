@@ -13,7 +13,7 @@ import {
   type WeeklyIndexRow
 } from "@/components/weekly-market-context-widget";
 import type { ThemeColors } from "@/lib/design-system";
-import { borderRadius, cardSurfaceStyle, spacing, typography } from "@/lib/design-system";
+import { borderRadius, cardSurfaceStyle, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import type { MarketStatusPayload, SnapshotPayload } from "@/lib/api/market";
 import type { EarningsEvent } from "@/lib/api/earnings";
@@ -700,6 +700,7 @@ export function SharedContextMasterCard(props: Props) {
         {collapsed ? (
           <div
             data-testid="shared-context-collapsed-summary"
+            className={surfaceGlowClassName}
             style={{
               display: "flex",
               flexWrap: "wrap",

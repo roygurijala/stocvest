@@ -36,7 +36,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 import { ArrowRight } from "lucide-react";
 import type { IntradaySetupPayload } from "@/lib/api/scanner";
-import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
 export interface DashboardActiveSignalRibbonProps {
@@ -121,6 +121,7 @@ export function DashboardActiveSignalRibbon({
         data-testid="dashboard-active-signal-ribbon"
         data-ribbon-state="empty"
         aria-label="Active signal ribbon — currently empty"
+        className={surfaceGlowClassName}
         style={{
           display: "flex",
           flexWrap: "wrap",
@@ -165,6 +166,7 @@ export function DashboardActiveSignalRibbon({
       data-ribbon-state="active"
       data-ribbon-chip-count={totalChips}
       aria-label={`Active signal ribbon — ${totalChips} firing across both desks`}
+      className={surfaceGlowClassName}
       style={{
         display: "flex",
         alignItems: "center",

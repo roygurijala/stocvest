@@ -956,7 +956,7 @@ export function DashboardRedesign({
                         Scanner runs each morning; full lists and intraday work live on Scanner.
                       </p>
                       <Link
-                        href="/dashboard/scanner"
+                        href="/dashboard/scanner?mode=swing"
                         className="inline-flex min-h-11 items-center font-semibold"
                         style={{ color: colors.accent, fontSize: typography.scale.sm }}
                       >
@@ -1288,6 +1288,33 @@ export function DashboardRedesign({
                     ))}
                   </ul>
                 </div>
+              </div>
+
+              {/*
+               * Swing Desk footer — symmetric to the Day Desk's
+               * "View day scanner →" link. Always rendered (regardless
+               * of empty / populated state) so the path to the full
+               * swing scanner is one click away no matter what the
+               * desk is showing. The link carries `?mode=swing` so the
+               * scanner page's URL-priority mode resolver lands the
+               * user on the Swing tab every time (the matching fix
+               * for "View day scanner takes me to swing scanner").
+               */}
+              <div
+                data-testid="swing-desk-scanner-footer"
+                style={{
+                  borderTop: `1px solid ${colors.border}`,
+                  paddingTop: spacing[3],
+                  marginTop: spacing[1]
+                }}
+              >
+                <Link
+                  href="/dashboard/scanner?mode=swing"
+                  className="inline-flex min-h-11 items-center font-semibold"
+                  style={{ color: colors.accent, fontSize: typography.scale.sm }}
+                >
+                  View swing scanner →
+                </Link>
               </div>
             </div>
           </DashboardCard>

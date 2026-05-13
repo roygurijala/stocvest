@@ -93,7 +93,10 @@ describe("Dashboard Swing Desk (top half of the two-desk layout)", () => {
       /open scanner/i.test(a.textContent || "")
     );
     expect(swingScannerLinks.length).toBeGreaterThan(0);
-    expect(swingScannerLinks[0]!.getAttribute("href")).toBe("/dashboard/scanner");
+    // The swing-side scanner CTA now carries `?mode=swing` so the scanner
+    // page's URL-priority mode resolver lands the user on the Swing tab
+    // every time (the symmetric fix for the Day Desk's `?mode=day` link).
+    expect(swingScannerLinks[0]!.getAttribute("href")).toBe("/dashboard/scanner?mode=swing");
 
     // The intraday setup MUST appear inside the Day Desk panel — the
     // dashboard is a dual-desk surface and intraday rows are no longer

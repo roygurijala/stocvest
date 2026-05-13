@@ -66,6 +66,14 @@ describe("ScannerPageClient setup mode toggle", () => {
     loadScannerDataWithoutBriefMock.mockReset();
     loadScannerDataWithoutBriefMock.mockImplementation(async () => ({ ...EMPTY_SCANNER_PAYLOAD }));
     localStorage.clear();
+    // Reset jsdom URL between tests so `?mode=` left over from a
+    // previous test (the URL-priority resolver now reads/writes this)
+    // cannot bleed into the next test's initial state.
+    try {
+      window.history.replaceState(null, "", "/");
+    } catch {
+      /* ignore — jsdom always supports this */
+    }
   });
 
   afterEach(() => {
@@ -179,6 +187,82 @@ describe("ScannerPageClient setup mode toggle", () => {
     expect(screen.getByText("SWINGB")).toBeTruthy();
     expect(screen.getByText("DAYA")).toBeTruthy();
     expect(screen.getByText("DAYB")).toBeTruthy();
+  });
+
+  test("test_scanner_mode_url_param_overrides_localstorage", async () => {
+    // Regression: the dashboard's Day Desk "View day scanner →" link
+    // sends users to `/dashboard/scanner?mode=day`, but the scanner page
+    // used to ignore the URL and read from localStorage only — so a
+    // user whose last visit was swing-mode would land on Swing every
+    // time, defeating the deep-link. The fix: URL `?mode=` has
+    // priority over localStorage. This test pins the priority.
+    localStorage.setItem(SCANNER_MODE_STORAGE_KEY, "swing");
+    window.history.replaceState(null, "", "/dashboard/scanner?mode=day");
+
+    wrap(
+      <ScannerPageClient
+        initialOverview={{ gapIntelligence: [], setups: [] }}
+        initialTimestampIso="2026-05-06T12:00:00.000Z"
+        earningsBySymbol={{}}
+      />
+    );
+
+    // URL wins — Day tab is selected even though localStorage said swing.
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Day" })).toHaveAttribute("aria-selected", "true")
+    );
+    // And the URL preference is mirrored into localStorage so the next
+    // visit without a URL hint stays on Day (sticky deep-link behaviour).
+    expect(localStorage.getItem(SCANNER_MODE_STORAGE_KEY)).toBe("day");
+
+    // Reset the URL so it doesn't leak into the next test.
+    window.history.replaceState(null, "", "/");
+  });
+
+  test("test_scanner_mode_url_param_swing_lands_on_swing_tab", async () => {
+    // Symmetric to the day case — the new Swing Desk "View swing
+    // scanner →" link sends users to `?mode=swing` and must land on
+    // the Swing tab regardless of any prior localStorage state.
+    localStorage.setItem(SCANNER_MODE_STORAGE_KEY, "day");
+    window.history.replaceState(null, "", "/dashboard/scanner?mode=swing");
+
+    wrap(
+      <ScannerPageClient
+        initialOverview={{ gapIntelligence: [], setups: [] }}
+        initialTimestampIso="2026-05-06T12:00:00.000Z"
+        earningsBySymbol={{}}
+      />
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Swing" })).toHaveAttribute("aria-selected", "true")
+    );
+    expect(localStorage.getItem(SCANNER_MODE_STORAGE_KEY)).toBe("swing");
+    window.history.replaceState(null, "", "/");
+  });
+
+  test("test_scanner_mode_invalid_url_param_falls_back_to_localstorage", async () => {
+    // Graceful fallback — a garbage `?mode=foo` from a malformed external
+    // link must NOT clear or corrupt the user's saved preference. The
+    // resolver should ignore the URL value and fall through to
+    // localStorage.
+    localStorage.setItem(SCANNER_MODE_STORAGE_KEY, "day");
+    window.history.replaceState(null, "", "/dashboard/scanner?mode=foo");
+
+    wrap(
+      <ScannerPageClient
+        initialOverview={{ gapIntelligence: [], setups: [] }}
+        initialTimestampIso="2026-05-06T12:00:00.000Z"
+        earningsBySymbol={{}}
+      />
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Day" })).toHaveAttribute("aria-selected", "true")
+    );
+    // localStorage value untouched.
+    expect(localStorage.getItem(SCANNER_MODE_STORAGE_KEY)).toBe("day");
+    window.history.replaceState(null, "", "/");
   });
 
   test("test_scanner_mode_both_uses_mode_specific_empty_state_copy", async () => {

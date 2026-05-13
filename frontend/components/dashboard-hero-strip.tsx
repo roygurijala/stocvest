@@ -58,7 +58,7 @@ import {
   type RiskHorizonCategory,
   type VolatilityCategory
 } from "@/components/shared-context-master-card";
-import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import type { ThemeColors } from "@/lib/design-system";
 import type { SnapshotPayload } from "@/lib/api/market";
@@ -263,7 +263,12 @@ function HeroCell({
     minHeight: 96
   };
   return (
-    <article data-testid={testId} aria-label={label} style={style}>
+    <article
+      data-testid={testId}
+      aria-label={label}
+      className={surfaceGlowClassName}
+      style={style}
+    >
       <p
         style={{
           margin: 0,

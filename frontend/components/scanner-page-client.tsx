@@ -188,6 +188,39 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
   }, []);
 
   useLayoutEffect(() => {
+    // Resolve initial scanner mode with URL > localStorage > default.
+    //
+    // Priority order matters here:
+    //   1. `?mode=day|swing|both` query param — explicit deep-link from
+    //      the Day Desk / Swing Desk "View scanner →" footer links, the
+    //      sidebar, or any external bookmark. Honoring URL first is the
+    //      reason the user reported "View day scanner takes me to swing
+    //      scanner": before this fix, only localStorage was read, so
+    //      whatever mode the user last visited won regardless of the
+    //      URL. URL-priority makes deep-links authoritative.
+    //   2. `localStorage` (`stocvest_scanner_mode`) — the user's last
+    //      sticky preference. Used when the URL has no `mode`.
+    //   3. Component default ("swing") — first-time visit, no URL hint,
+    //      no localStorage entry.
+    //
+    // Wrapped in try/catch because both `window.location` and
+    // `localStorage` can throw in SSR-style edge cases (jest/jsdom
+    // without origin, Safari private mode for storage, etc.).
+    try {
+      const url = new URL(window.location.href);
+      const urlMode = url.searchParams.get("mode");
+      if (urlMode === "day" || urlMode === "swing" || urlMode === "both") {
+        setScannerSetupMode(urlMode);
+        try {
+          localStorage.setItem(SCANNER_MODE_STORAGE_KEY, urlMode);
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
+    } catch {
+      /* ignore — fall through to localStorage */
+    }
     try {
       const raw = localStorage.getItem(SCANNER_MODE_STORAGE_KEY);
       if (raw === "day" || raw === "swing" || raw === "both") {
@@ -232,6 +265,18 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
     setScannerSetupMode(m);
     try {
       localStorage.setItem(SCANNER_MODE_STORAGE_KEY, m);
+    } catch {
+      /* ignore */
+    }
+    // Mirror the new mode into the URL so refreshes / sharing keep the
+    // active tab. We use `history.replaceState` rather than the router
+    // to avoid an unnecessary navigation + RSC refetch — the page is
+    // already mounted, only the query param needs updating. Wrapped in
+    // try/catch because `window` is not available in SSR.
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set("mode", m);
+      window.history.replaceState(null, "", url.pathname + (url.search || "") + (url.hash || ""));
     } catch {
       /* ignore */
     }
