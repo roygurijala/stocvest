@@ -4,7 +4,7 @@
 
 This file is the **single source of truth** for the long-term performance & responsiveness story of STOCVEST. Any PR that touches latency, payload size, prefetching, caching, streaming SSR, edge caching, or push transport must reference (and update) this doc.
 
-**Last updated:** 2026-05-13 — Tier 1.A shipped: dashboard `<Link>` prefetch storm killed (ribbon chips, day-desk top-signal rows, day / swing scanner footers), removing 5–10 parallel SSR prefetches of `/dashboard/signals` per dashboard mount. Direct cause of the 16.78s "Content Download" the user observed on `/dashboard` (DevTools Network screenshot, 2026-05-13). Same change does not affect navigation behaviour: clicking a chip still routes normally, just without the speculative prefetch fire-and-drain pattern.
+**Last updated:** 2026-05-13 — **Tier 1.A and Tier 1.B both shipped.** Tier 1.A killed the dashboard `<Link>` prefetch storm (ribbon chips, day-desk top-signal rows, day / swing scanner footers all carry `prefetch={false}`), removing 5–10 parallel SSR prefetches of `/dashboard/signals` per dashboard mount — the direct cause of the 16.78s "Content Download" the user observed on `/dashboard` (DevTools Network screenshot, 2026-05-13). Tier 1.B split `/dashboard/signals/page.tsx` into a fast shell + async data island wrapped in `<Suspense fallback={<SignalsPageShell />}>` (plus the matching `loading.tsx` for inter-route transitions) so the user sees the page chrome + skeleton within ~200ms of clicking a ribbon chip instead of staring at a blank screen while four backend reads serialise. Together these changes turn the worst-case dashboard → signals navigation from a 16-second freeze into a sub-second perceived load with the live content streaming in as it resolves.
 
 ---
 
@@ -80,8 +80,9 @@ The order is chosen to **compound** — each layer makes the next one cheaper or
 
 | When | What | Why this order |
 |---|---|---|
-| **Done — 2026-05-13** | **Tier 1.A** (this PR): kill the dashboard `<Link>` prefetch storm — ribbon chips, day-desk top-signal rows, day / swing scanner footers all carry `prefetch={false}`. | Surgical, ~2h, no infra change. Captures 70–90% of dashboard time-to-quiet without touching any data path. |
-| **Next 1–2 weeks** | **Tier 1.B** (separate PR): wrap `/dashboard/signals/page.tsx` heavy fetches in `<Suspense>` boundaries; split `SignalsPageClient` into 3–4 island components that each take only their slice of data. Pre-req: small refactor of the props contract so each island can render independently. | Pure refactor, no new infra. Makes every future page feel fast by default. Captures the remaining 5–10% of dashboard load and unblocks the same pattern on `/dashboard/scanner` and `/dashboard/performance`. |
+| **Done — 2026-05-13** | **Tier 1.A**: kill the dashboard `<Link>` prefetch storm — ribbon chips, day-desk top-signal rows, day / swing scanner footers all carry `prefetch={false}`. | Surgical, ~2h, no infra change. Captures 70–90% of dashboard time-to-quiet without touching any data path. |
+| **Done — 2026-05-13** | **Tier 1.B**: split `/dashboard/signals/page.tsx` into a fast shell (auth + URL parsing) + async data island wrapped in `<Suspense fallback={<SignalsPageShell />}>`. Added `app/dashboard/signals/loading.tsx` rendering the same shell for inter-route transitions. `SignalsPageClient` itself was **not** refactored — the inner async server component (`SignalsPageData`) owns the four heavy fetches and renders the client tree once they all resolve. | Pure refactor, no new infra. Turns the worst-case freeze into a sub-second shell paint. The Suspense boundary is also the anchor for any future per-section island split (when we want earnings to stream independently of scanner). |
+| **Next** | **Tier 1.B+** (optional follow-up): split `SignalsPageData` into 2–3 parallel async children — e.g. `<MarketOverviewIsland />`, `<ScannerIsland />`, `<EarningsIsland />` — each in its OWN Suspense boundary so they paint independently. Requires refactoring `SignalsPageClient` into matching slice components. Real risk: medium. Skip unless a real user reports the current shell-then-everything-at-once swap feels janky. | The simpler Tier 1.B above captured most of the win. Per-section island split is a follow-up that pays off when individual fetches diverge dramatically in latency (e.g. earnings calendar gets very slow). |
 | **Following week** | **Layer 4** (SWR / TanStack Query): pick one, wire it for `/v1/signals/composite/{mode}` + `/v1/scanner/overview` + `/v1/market/overview`. Hover-only prefetch on the dashboard. | Locks in the snappiness from layer 3. Avoids the prefetch problem ever returning. |
 | **Following 2 weeks** | **Layer 2** (thin API projections): add `?view=summary` to the high-traffic list endpoints (scanner, signals, watchlist). Update the ribbon, chips, and table rows to consume the slim variant. | Easier to do **after** the frontend is well-factored because by then we know exactly which fields each surface actually needs. |
 | **Following month** | **Layer 1** (CloudFront edge cache): cache VIX, regime, breadth, sector heatmap, macro context with 10–30s TTL. | Ops-level work — needs distribution config + cache-key discipline. Big cost win once we have meaningful traffic. |
@@ -131,6 +132,45 @@ These are non-negotiable. Any PR that violates one of these must be rejected eve
 **Lock-in tests:**
 - `frontend/tests/dashboard-prefetch.test.tsx` — asserts ribbon chips, day-desk signal rows, scanner footers all render `data-prefetch="false"` (Next.js's `<Link prefetch={false}>` surfaces this attribute in the DOM).
 - Existing dashboard tests in `dashboard-redesign-phase-b-c.test.tsx`, `dashboard-swing-only.test.tsx`, `dashboard-scanner-mode-links.test.tsx`, and `dashboard-two-desk.test.tsx` continue to pass — the change is pure attribute, no semantics change.
+
+---
+
+## 4B. Tier 1.B — what shipped today (2026-05-13)
+
+**Problem this layer attacks:** Once Tier 1.A killed the dashboard prefetch storm, the next bottleneck became the signals page's **own** load. `/dashboard/signals/page.tsx` server-side awaited four backend calls before rendering anything — `Promise.all([fetchPdtStatus, fetchMarketOverview, fetchScannerOverview])` then `await fetchEarningsCalendar(symbols, …)` sequentially. When a user clicked a ribbon chip, the browser saw the previous page's UI frozen until the slowest dependency resolved on the new page. That's a multi-second "did my click register?" UX even when each fetch is healthy.
+
+**Fix:** Split the page into two server components:
+
+1. **`DashboardSignalsPage`** (outer, fast) — does only the cheap work: `getDashboardAuthContext()` + URL-param parsing (`symbol`, `signal_id`, `trading_mode`) + redirect-on-no-session. Renders `<AppShell>` chrome immediately and a `<Suspense fallback={<SignalsPageShell />}>` boundary that holds the slot for the data-bound region. This part streams to the browser inside the first response flush.
+
+2. **`SignalsPageData`** (inner, slow) — async server component that owns the four heavy fetches plus the optional `signal_id → symbol` resolution (`symbolFromUserSignalRecord`). While its promise is pending, React keeps the Suspense fallback on screen; once it resolves, the DOM swaps in `<SignalsPageClient />` with all data populated.
+
+**Pairing file:** `app/dashboard/signals/loading.tsx` re-renders the same `<SignalsPageShell />` during the **inter-route** transition (e.g. when a user clicks a ribbon chip on `/dashboard`). Without that file, Next.js falls back to the previous page's UI during the transition, which is the worst-case for a slow target. Both files render the identical shell so the visual experience matches across both load windows (route transition → page-render Suspense → live swap).
+
+**Why the inner component is `SignalsPageData` not 3–4 islands per section:** The simpler version captured most of the win and carries far less risk. `SignalsPageClient` is a single client component consuming `marketOverview` + `scannerOverview` + `earningsBySymbol` as one prop bundle. Splitting it into 3–4 client slices is a real refactor (medium risk, multi-day work) that pays off only when individual fetches diverge dramatically in latency. Today they all complete in roughly the same window, so the inner Suspense boundary swaps everything at once after the slowest fetch resolves. If a future user reports the swap feels janky, the Suspense boundary inside `SignalsPageData` is the anchor point: replace it with N parallel `<Suspense>` siblings, each rendering its own slice of the live data. PERFORMANCE.md §2 row "Next" tracks this as **Tier 1.B+**.
+
+**Shell design (`components/signals-page-shell.tsx`):**
+
+- **Server component.** No `"use client"`, no React hooks, no data fetches. Required so it can render in both the Suspense fallback path and the `loading.tsx` path before any client state exists.
+- **DOM mirrors the live page.** `signals-grid` two-column breakpoints (`grid-cols-1` on mobile, `lg:grid-cols-[1.35fr_1fr]` on desktop) match the live `signals-page-client.tsx` layout so the swap from skeleton → live content lands in the same slots — no layout jump.
+- **Two mode-tab placeholders** mirror the live `swing | day` pair but render neutral — the live page resolves the mode from `?trading_mode=` on hydration, and pre-committing here would flash the wrong active state.
+- **Six layer-row placeholders** mirror the 6-layer Signal Breakdown card (the leftmost / tallest live element).
+- **Three right-column context cards** named `news`, `earnings`, `after-hours` — same vertical stack as the live page.
+- **`role="status"` + `aria-live="polite"`** with sr-only "Loading signal data…" so AT users hear that the navigation succeeded.
+- **Reuses `stocvest-skeleton` keyframes** from `globals.css` (the existing shimmer used elsewhere for skeleton loaders). Honours `prefers-reduced-motion` via the existing media query.
+
+**Expected impact:** Click a ribbon chip on `/dashboard` → see the AppShell + signals page shell within ~200ms (one server roundtrip to render the shell tree) instead of staying on the previous page's UI for 1–4 seconds. Once the data island resolves, the live content swaps in — no visual jump because the shell mirrors the layout.
+
+**What did NOT change:**
+- `SignalsPageClient` itself. Same props, same hooks, same chatbot context publishing, same Mode Separation perimeter.
+- The data-fetching contract. `fetchPdtStatus` / `fetchMarketOverview` / `fetchScannerOverview` / `fetchEarningsCalendar` are called identically, just from inside the inner async server component.
+- The auth perimeter. `getDashboardAuthContext()` + redirect-on-no-session still happen in the outer page function BEFORE any Suspense boundary, so an unauthenticated request never paints the shell.
+- The signal-id deep-link resolution. `symbolFromUserSignalRecord` now lives inside `SignalsPageData` (so it doesn't block the shell), but the contract — "if `?signal_id=` is present and `?symbol=` is not, resolve via the user's evaluated signal record" — is preserved.
+
+**Lock-in tests** (`frontend/tests/signals-page-streaming.test.tsx`, 12 tests):
+- `SignalsPageShell` renders without throwing, exposes `data-shell-loading="true"`, has two mode-tab placeholders, mirrors the live `signals-grid` breakpoints, renders six layer-row placeholders + three named context cards (`news` / `earnings` / `after-hours`), and announces the loading state via `role="status"` + `aria-live="polite"`.
+- `app/dashboard/signals/loading.tsx` default-export renders the same shell.
+- **Source-level invariants on `page.tsx`** (the hard contract): imports `Suspense` from `react`, imports `SignalsPageShell`, contains the literal JSX `<Suspense fallback={<SignalsPageShell />}>`, and — critically — the four fetcher calls (`fetchMarketOverview`, `fetchScannerOverview`, `fetchEarningsCalendar`, `fetchPdtStatus`) appear in `SignalsPageData` and **not** in the outer `DashboardSignalsPage`. Verified by stripping block + line comments from the source then positionally splitting at the inner-function anchor. **The negative half is the important one**: a future refactor that moves any fetcher back to the outer function fails this test loud with a pointer at `docs/PERFORMANCE.md §4B`.
 
 ---
 
