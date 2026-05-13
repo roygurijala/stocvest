@@ -45,7 +45,7 @@ from stocvest.api.services.admin_user_directory import (
     DEFAULT_SEARCH_LIMIT,
     MAX_SEARCH_LIMIT,
     get_user_detail,
-    search_users,
+    list_users_page,
 )
 from stocvest.api.services.audit_store import get_audit_store
 from stocvest.api.services.signal_analysis import analysis_authorized
@@ -153,7 +153,33 @@ def admin_users_search_handler(
     event: LambdaEvent,
     context: LambdaContext,
 ) -> dict[str, Any]:
-    """``GET /v1/admin/users/search?q=<email-prefix>&limit=`` — Cognito search."""
+    """``GET /v1/admin/users/search`` — list / search Cognito users.
+
+    Query string parameters (all optional):
+
+    * ``q``          — email prefix to filter on; empty (or omitted)
+                       returns the full user pool, paginated.
+    * ``limit``      — page size, clamped to ``[1, MAX_SEARCH_LIMIT]``.
+                       Default ``25`` matches the Admin Users page
+                       contract ("if more than 25, paginate").
+    * ``page_token`` — opaque Cognito ``PaginationToken`` echoed back
+                       from a previous response's ``next_token``.
+
+    Response shape:
+
+    .. code-block:: json
+
+        {
+          "query": "alice",
+          "limit": 25,
+          "items": [ ...summary rows... ],
+          "next_token": "...opaque..." | null
+        }
+
+    ``next_token`` is ``null`` on the last page; clients should
+    surface a "next page" affordance only when it's a non-empty
+    string.
+    """
     _ = context
     deny = _require_admin(event)
     if deny is not None:
@@ -161,20 +187,20 @@ def admin_users_search_handler(
 
     qs = _query_params(event)
     query = (qs.get("q") or "").strip()
-    if not query:
-        return bad_request("q (email prefix) is required.")
     try:
         limit = int(qs.get("limit") or DEFAULT_SEARCH_LIMIT)
     except ValueError:
         return bad_request("limit must be an integer.")
     limit = max(1, min(MAX_SEARCH_LIMIT, limit))
+    page_token = (qs.get("page_token") or "").strip() or None
 
-    records = search_users(query, limit=limit)
+    page = list_users_page(query, limit=limit, page_token=page_token)
     return ok(
         {
             "query": query,
             "limit": limit,
-            "items": [r.to_summary_dict() for r in records],
+            "items": [r.to_summary_dict() for r in page.records],
+            "next_token": page.next_token,
         }
     )
 

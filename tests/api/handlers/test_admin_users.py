@@ -134,12 +134,17 @@ def test_handlers_return_403_without_admin_auth(handler: Any, event: dict[str, A
 
 
 def test_search_handler_returns_items() -> None:
+    from stocvest.api.services.admin_user_directory import UserSearchPage
+
     event = _evt(query_params={"q": "alice", "limit": "10"})
     with patch(
         "stocvest.api.handlers.admin_users.analysis_authorized", return_value=True
     ), patch(
-        "stocvest.api.handlers.admin_users.search_users",
-        return_value=[_cog_rec(sub="sub-1", email="alice@x.com")],
+        "stocvest.api.handlers.admin_users.list_users_page",
+        return_value=UserSearchPage(
+            records=[_cog_rec(sub="sub-1", email="alice@x.com")],
+            next_token=None,
+        ),
     ) as m:
         response = admin_users_search_handler(event, None)
     assert response["statusCode"] == 200
@@ -148,18 +153,70 @@ def test_search_handler_returns_items() -> None:
     assert body["limit"] == 10
     assert body["items"][0]["user_id"] == "sub-1"
     assert body["items"][0]["email"] == "alice@x.com"
+    assert body["next_token"] is None
     m.assert_called_once()
 
 
-def test_search_handler_requires_query() -> None:
+def test_search_handler_empty_query_returns_full_listing() -> None:
+    """No ``q`` ⇒ list every user in the pool (paginated), don't 400.
+
+    Previously the handler required a ``q`` param. The Admin Users page
+    contract is "show all users by default; if more than 25, paginate"
+    so a bare ``GET /v1/admin/users/search`` is now the canonical
+    landing call.
+    """
+    from stocvest.api.services.admin_user_directory import UserSearchPage
+
     event = _evt(query_params=None)
+    fake_records = [
+        _cog_rec(sub=f"sub-{i}", email=f"user{i}@x.com") for i in range(3)
+    ]
+    captured: dict[str, Any] = {}
+
+    def _fake_page(query: str, *, limit: int, page_token: str | None = None) -> UserSearchPage:
+        captured["query"] = query
+        captured["limit"] = limit
+        captured["page_token"] = page_token
+        return UserSearchPage(records=fake_records, next_token="tok-next")
+
     with patch(
         "stocvest.api.handlers.admin_users.analysis_authorized", return_value=True
+    ), patch(
+        "stocvest.api.handlers.admin_users.list_users_page",
+        side_effect=_fake_page,
     ):
         response = admin_users_search_handler(event, None)
-    assert response["statusCode"] == 400
+    assert response["statusCode"] == 200
     body = json.loads(response["body"])
-    assert "q" in body["message"]
+    assert body["query"] == ""
+    assert len(body["items"]) == 3
+    # The opaque token from Cognito is round-tripped to the client so
+    # the UI can request the next page.
+    assert body["next_token"] == "tok-next"
+    # And the handler forwarded the empty query + no page_token.
+    assert captured["query"] == ""
+    assert captured["page_token"] is None
+
+
+def test_search_handler_forwards_page_token() -> None:
+    from stocvest.api.services.admin_user_directory import UserSearchPage
+
+    event = _evt(query_params={"page_token": "tok-from-prev"})
+    captured: dict[str, Any] = {}
+
+    def _fake_page(query: str, *, limit: int, page_token: str | None = None) -> UserSearchPage:
+        captured["page_token"] = page_token
+        return UserSearchPage(records=[], next_token=None)
+
+    with patch(
+        "stocvest.api.handlers.admin_users.analysis_authorized", return_value=True
+    ), patch(
+        "stocvest.api.handlers.admin_users.list_users_page",
+        side_effect=_fake_page,
+    ):
+        response = admin_users_search_handler(event, None)
+    assert response["statusCode"] == 200
+    assert captured["page_token"] == "tok-from-prev"
 
 
 def test_search_handler_rejects_non_integer_limit() -> None:

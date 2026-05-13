@@ -27,6 +27,7 @@ import {
   statusCodeTone,
   type AuditEventRow
 } from "@/lib/api/admin-audit";
+import { AdminListPager } from "@/components/admin/admin-list-pager";
 import {
   borderRadius,
   cardSurfaceStyle,
@@ -36,6 +37,8 @@ import {
 import { useTheme } from "@/lib/theme-provider";
 
 const ADMIN_GROUP = "signal-analytics-admin";
+/** Page size for the Admin Users list. Matches the backend default. */
+const USERS_PAGE_SIZE = 25;
 
 type FlashKind = "success" | "error" | "info";
 interface Flash {
@@ -64,11 +67,31 @@ interface Flash {
 export function AdminUsersPageClient() {
   const { colors } = useTheme();
   const [query, setQuery] = useState("");
+  /**
+   * Pagination state. `queried` is the query the current page belongs
+   * to (separate from the live `query` input so typing in the box
+   * doesn't blow away the rendered list before the user hits Search).
+   * `tokenStack` is the sequence of Cognito PaginationTokens consumed
+   * so far — its length is the 0-indexed page number we're on. Prev
+   * pops one off; Next pushes `nextToken`. `errored` distinguishes a
+   * genuine upstream failure ("Check admin permissions") from a
+   * legitimately empty pool ("no users yet").
+   */
   const [searchState, setSearchState] = useState<{
     loading: boolean;
     items: AdminUserSummaryRow[];
     queried: string;
-  }>({ loading: false, items: [], queried: "" });
+    nextToken: string | null;
+    tokenStack: string[];
+    errored: boolean;
+  }>({
+    loading: true,
+    items: [],
+    queried: "",
+    nextToken: null,
+    tokenStack: [],
+    errored: false
+  });
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [detailState, setDetailState] = useState<{
     loading: boolean;
@@ -79,14 +102,50 @@ export function AdminUsersPageClient() {
   const [actionPending, setActionPending] = useState<string | null>(null);
   const [flash, setFlash] = useState<Flash | null>(null);
 
-  const runSearch = useCallback(async (q: string) => {
-    setSearchState((s) => ({ ...s, loading: true }));
-    const response = await searchUsers(q, { limit: 25 });
-    setSearchState({
-      loading: false,
-      items: response?.items ?? [],
-      queried: q
-    });
+  /**
+   * Fetch one page of results.
+   *
+   * `pageToken === null` ⇒ first page (no token forwarded).
+   * `stackForPage` is the new tokenStack value to set on success —
+   * the caller knows whether we navigated forward (push) or back
+   * (pop) so it owns the stack mutation, not this helper.
+   */
+  const runSearch = useCallback(
+    async (q: string, pageToken: string | null, stackForPage: string[]) => {
+      setSearchState((s) => ({ ...s, loading: true, errored: false }));
+      const response = await searchUsers(q, {
+        limit: USERS_PAGE_SIZE,
+        pageToken
+      });
+      if (response === null) {
+        setSearchState({
+          loading: false,
+          items: [],
+          queried: q,
+          nextToken: null,
+          tokenStack: stackForPage,
+          errored: true
+        });
+        return;
+      }
+      setSearchState({
+        loading: false,
+        items: response.items,
+        queried: q,
+        nextToken: response.next_token,
+        tokenStack: stackForPage,
+        errored: false
+      });
+    },
+    []
+  );
+
+  // First load — render the full user pool on mount, paginated.
+  // Effect runs once; subsequent fetches are driven by the search
+  // form, Prev/Next buttons, or post-mutation refreshes.
+  useEffect(() => {
+    void runSearch("", null, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadDetail = useCallback(async (userId: string) => {
@@ -115,11 +174,39 @@ export function AdminUsersPageClient() {
 
   const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (query.trim()) {
-      setSelectedUserId(null);
-      void runSearch(query.trim());
-    }
+    // Empty search field is now a valid action — it resets the list
+    // to "show everyone again". Submitting always starts at page 1.
+    setSelectedUserId(null);
+    void runSearch(query.trim(), null, []);
   };
+
+  const onNextPage = useCallback(() => {
+    if (!searchState.nextToken || searchState.loading) return;
+    const nextStack = [...searchState.tokenStack, searchState.nextToken];
+    void runSearch(searchState.queried, searchState.nextToken, nextStack);
+  }, [
+    runSearch,
+    searchState.loading,
+    searchState.nextToken,
+    searchState.queried,
+    searchState.tokenStack
+  ]);
+
+  const onPrevPage = useCallback(() => {
+    if (searchState.tokenStack.length === 0 || searchState.loading) return;
+    // Pop the last token to land on the page before it. The new top
+    // of stack (after pop) is the token used to fetch the now-current
+    // page. ``null`` means "first page, no token at all".
+    const popped = searchState.tokenStack.slice(0, -1);
+    const tokenForCurrentPage = popped.length === 0 ? null : popped[popped.length - 1];
+    void runSearch(searchState.queried, tokenForCurrentPage, popped);
+  }, [runSearch, searchState.loading, searchState.queried, searchState.tokenStack]);
+
+  const onClearSearch = useCallback(() => {
+    setQuery("");
+    setSelectedUserId(null);
+    void runSearch("", null, []);
+  }, [runSearch]);
 
   const handleResetPassword = useCallback(async () => {
     if (!detailState.detail) return;
@@ -220,12 +307,14 @@ export function AdminUsersPageClient() {
             lineHeight: 1.55
           }}
         >
-          Search users by email, inspect their profile + Cognito state,
-          and manage beta access or admin group membership. The first
-          admin must be granted via the{" "}
+          Lists every user in the Cognito pool — {USERS_PAGE_SIZE} at a
+          time, paginated. Use the email prefix box to filter, or
+          leave it blank to keep browsing the full pool. Click a row
+          to inspect profile + Cognito state and manage beta access
+          or admin group membership. The first admin must be granted
+          via the{" "}
           <code style={{ color: colors.accent }}>scripts/grant_admin.py</code>{" "}
-          bootstrap script; subsequent grants can happen entirely from
-          this UI.
+          bootstrap script; subsequent grants happen entirely here.
         </p>
       </header>
 
@@ -244,8 +333,8 @@ export function AdminUsersPageClient() {
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Email starts with…"
-          aria-label="Search users by email prefix"
+          placeholder="Filter by email prefix (leave blank for all users)…"
+          aria-label="Filter users by email prefix"
           data-testid="admin-users-search-input"
           style={{
             flex: 1,
@@ -271,8 +360,26 @@ export function AdminUsersPageClient() {
             cursor: "pointer"
           }}
         >
-          Search
+          Filter
         </button>
+        {searchState.queried !== "" ? (
+          <button
+            type="button"
+            onClick={onClearSearch}
+            data-testid="admin-users-search-clear"
+            style={{
+              padding: `${spacing[2]} ${spacing[3]}`,
+              borderRadius: borderRadius.md,
+              border: `1px solid ${colors.border}`,
+              background: "transparent",
+              color: colors.textMuted,
+              fontSize: typography.scale.sm,
+              cursor: "pointer"
+            }}
+          >
+            Show all
+          </button>
+        ) : null}
       </form>
 
       <div
@@ -284,13 +391,22 @@ export function AdminUsersPageClient() {
           alignItems: "start"
         }}
       >
-        <section data-testid="admin-users-results">
-          {searchState.loading ? (
-            <EmptyCard message="Searching…" />
-          ) : searchState.queried === "" ? (
-            <EmptyCard message="Type an email prefix above and hit Search." />
+        <section data-testid="admin-users-results" style={{ display: "grid", gap: spacing[3] }}>
+          {searchState.loading && searchState.items.length === 0 ? (
+            <EmptyCard message="Loading users…" />
+          ) : searchState.errored ? (
+            <EmptyCard
+              message="Failed to load users. Check admin permissions and retry, or hit Filter again."
+              tone="bearish"
+            />
           ) : searchState.items.length === 0 ? (
-            <EmptyCard message={`No users match "${searchState.queried}".`} />
+            <EmptyCard
+              message={
+                searchState.queried
+                  ? `No users match "${searchState.queried}".`
+                  : "No users found in the pool yet."
+              }
+            />
           ) : (
             <ul
               data-testid="admin-users-result-list"
@@ -312,6 +428,24 @@ export function AdminUsersPageClient() {
               ))}
             </ul>
           )}
+          {/* Pager renders whenever there's any pagination state to
+              navigate — either we're past page 1, or the current page
+              has a next-token. If neither is true we skip it entirely
+              so a 0–25-user pool doesn't show a redundant
+              "Page 1 · 0 of 25" footer. */}
+          {searchState.tokenStack.length > 0 || searchState.nextToken ? (
+            <AdminListPager
+              pageIndex={searchState.tokenStack.length}
+              hasPrev={searchState.tokenStack.length > 0}
+              hasNext={searchState.nextToken !== null}
+              loading={searchState.loading}
+              visibleCount={searchState.items.length}
+              pageSize={USERS_PAGE_SIZE}
+              onPrev={onPrevPage}
+              onNext={onNextPage}
+              testId="admin-users-pager"
+            />
+          ) : null}
         </section>
 
         {selectedUserId ? (
@@ -414,16 +548,23 @@ function FlashBanner({
   );
 }
 
-function EmptyCard({ message }: { message: string }) {
+function EmptyCard({
+  message,
+  tone = "neutral"
+}: {
+  message: string;
+  tone?: "neutral" | "bearish";
+}) {
   const { colors } = useTheme();
   return (
     <div
       data-testid="admin-users-empty"
+      data-tone={tone}
       style={{
-        ...cardSurfaceStyle(colors, "neutral"),
+        ...cardSurfaceStyle(colors, tone),
         padding: spacing[4],
         borderRadius: borderRadius.lg,
-        color: colors.textMuted,
+        color: tone === "bearish" ? colors.text : colors.textMuted,
         fontSize: typography.scale.sm
       }}
     >

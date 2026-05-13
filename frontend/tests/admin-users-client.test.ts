@@ -101,15 +101,38 @@ const SAMPLE_DETAIL = {
 // ── searchUsers ───────────────────────────────────────────────────────────
 
 describe("searchUsers", () => {
-  test("empty query short-circuits without firing fetch", async () => {
+  test("empty query fires fetch without q param (list-all behaviour)", async () => {
+    // Contract change vs the original "show after typing" UX: the
+    // Admin Users page now lists everyone by default, so an empty
+    // query is a *valid* request that asks Cognito for the full pool
+    // (paginated upstream). The client MUST hit the BFF, not
+    // short-circuit.
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        query: "",
+        limit: 25,
+        items: [SAMPLE_ROW],
+        next_token: null
+      })
+    );
     const result = await searchUsers("   ");
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(result).toEqual({ query: "", limit: 25, items: [] });
+    expect(fetchMock).toHaveBeenCalled();
+    const { url } = lastCall();
+    // No q= in the URL when query is blank.
+    expect(url).not.toContain("q=");
+    expect(url).toContain("limit=25");
+    expect(result?.items).toHaveLength(1);
+    expect(result?.next_token).toBeNull();
   });
 
-  test("happy path forwards the query and parses items", async () => {
+  test("happy path forwards the query and parses items + next_token", async () => {
     fetchMock.mockResolvedValue(
-      jsonResponse({ query: "ali", limit: 25, items: [SAMPLE_ROW] })
+      jsonResponse({
+        query: "ali",
+        limit: 25,
+        items: [SAMPLE_ROW],
+        next_token: "tok-2"
+      })
     );
     const result = await searchUsers("ali", { limit: 10 });
     expect(result?.items).toHaveLength(1);
@@ -117,10 +140,44 @@ describe("searchUsers", () => {
       user_id: "user-1",
       email: "alice@example.com"
     });
+    expect(result?.next_token).toBe("tok-2");
     const { url, init } = lastCall();
     expect(url).toBe("/api/stocvest/admin/users/search?q=ali&limit=10");
     expect(init?.method).toBe("GET");
     expect(init?.credentials).toBe("include");
+  });
+
+  test("forwards page_token verbatim when provided", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ query: "", limit: 25, items: [], next_token: null })
+    );
+    await searchUsers("", { pageToken: "opaque-token-from-prev" });
+    const { url } = lastCall();
+    expect(url).toContain("page_token=opaque-token-from-prev");
+  });
+
+  test("empty / whitespace page_token is dropped (Cognito chokes on blanks)", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ query: "", limit: 25, items: [], next_token: null })
+    );
+    await searchUsers("", { pageToken: "   " });
+    expect(lastCall().url).not.toContain("page_token");
+  });
+
+  test("next_token of empty string normalises to null", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        query: "",
+        limit: 25,
+        items: [],
+        next_token: ""
+      })
+    );
+    const result = await searchUsers("");
+    // The UI checks `next_token !== null` to decide whether the
+    // "Next page" button is enabled — an empty string would falsely
+    // enable it.
+    expect(result?.next_token).toBeNull();
   });
 
   test("401 surfaces auth error and returns null", async () => {

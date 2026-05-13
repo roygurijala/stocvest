@@ -42,6 +42,12 @@ export interface AdminUserSearchResponse {
   query: string;
   limit: number;
   items: AdminUserSummaryRow[];
+  /**
+   * Opaque Cognito ``PaginationToken`` echoed from the upstream
+   * response. ``null`` on the last page. Round-trip verbatim — never
+   * try to parse, mutate, or fabricate one.
+   */
+  next_token: string | null;
 }
 
 /** Full per-user payload from `GET /[user_id]`. */
@@ -188,20 +194,32 @@ async function readErrorEnvelope(
 // ── Reads ────────────────────────────────────────────────────────────────────
 
 /**
- * Search users by email prefix. Returns `null` on auth failure or
- * non-2xx response so the UI can render a clean empty state without
- * try/catch.
+ * List or search users with token-based pagination.
+ *
+ * Behaviour matches the unified ``GET /v1/admin/users/search``:
+ *
+ * * Empty ``query`` (or omitted) → returns the first page of *all*
+ *   users in the pool, so the Admin Users page can render a useful
+ *   list on mount without making the admin type anything first.
+ * * Non-empty ``query`` → email-prefix search (Cognito ``email ^=``).
+ * * ``pageToken`` (from a previous response's ``next_token``) → fetch
+ *   the next page. Cognito tokens are **opaque** — round-trip only,
+ *   never construct.
+ *
+ * Returns ``null`` on auth failure or any non-2xx upstream so the UI
+ * renders a clean empty state without ad-hoc try/catch.
  */
 export async function searchUsers(
   query: string,
-  options: { limit?: number } = {}
+  options: { limit?: number; pageToken?: string | null } = {}
 ): Promise<AdminUserSearchResponse | null> {
-  const q = query.trim();
-  if (!q) {
-    return { query: "", limit: options.limit ?? 25, items: [] };
-  }
-  const qs = new URLSearchParams({ q });
-  if (options.limit && options.limit > 0) qs.set("limit", String(options.limit));
+  const q = (query ?? "").trim();
+  const limit = options.limit && options.limit > 0 ? options.limit : 25;
+  const qs = new URLSearchParams();
+  if (q) qs.set("q", q);
+  qs.set("limit", String(limit));
+  const token = (options.pageToken ?? "").trim();
+  if (token) qs.set("page_token", token);
   try {
     const response = await fetch(`/api/stocvest/admin/users/search?${qs.toString()}`, {
       method: "GET",
@@ -220,13 +238,16 @@ export async function searchUsers(
           .map(parseSummaryRow)
           .filter(Boolean) as AdminUserSummaryRow[])
       : [];
+    const nextRaw = data.next_token;
+    const next_token = typeof nextRaw === "string" && nextRaw.trim() ? nextRaw : null;
     return {
       query: parseStr(data.query) || q,
       limit:
         typeof data.limit === "number" && Number.isFinite(data.limit)
           ? data.limit
-          : options.limit ?? 25,
-      items
+          : limit,
+      items,
+      next_token
     };
   } catch {
     return null;

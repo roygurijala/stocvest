@@ -86,6 +86,25 @@ class CognitoUserRecord:
 
 
 @dataclass(frozen=True)
+class UserSearchPage:
+    """One page of a paginated Cognito user listing.
+
+    ``next_token`` is the Cognito ``PaginationToken`` for the *next*
+    page (or ``None`` when this is the last page). The token is an
+    opaque string — clients must not try to parse or construct one,
+    only roundtrip it back to the server.
+
+    This is the wire-shape returned by :func:`list_users_page`; the
+    legacy :func:`search_users` helper keeps returning a bare list to
+    avoid breaking its existing call sites (admin proposal review,
+    audit lookup paths) that don't need pagination yet.
+    """
+
+    records: list[CognitoUserRecord]
+    next_token: str | None = None
+
+
+@dataclass(frozen=True)
 class AdminUserDetail:
     """Full per-user payload returned by ``GET /v1/admin/users/{user_id}``."""
 
@@ -186,40 +205,60 @@ def _coerce_record(raw: dict[str, Any]) -> CognitoUserRecord | None:
 # ── Public API ──────────────────────────────────────────────────────────
 
 
-def search_users(
-    query: str,
+def list_users_page(
+    query: str = "",
     *,
     limit: int = DEFAULT_SEARCH_LIMIT,
+    page_token: str | None = None,
     client: Any | None = None,
-) -> list[CognitoUserRecord]:
-    """Find users whose email begins with ``query``.
+) -> UserSearchPage:
+    """One paginated page of Cognito users.
 
-    Returns ``[]`` for an empty query, when Cognito is unconfigured, or
-    when the API call fails. Result is sorted by email ascending so the
-    admin UI is stable across page loads.
+    Unifies "list all" and "search by email prefix" behind one helper.
+    Behaviour matrix:
 
-    ``limit`` is clamped to ``[1, MAX_SEARCH_LIMIT]``; the default of 25
-    is plenty for "type a prefix, pick a row" workflows.
+    * Empty ``query`` → ``cognito-idp:ListUsers`` with **no** filter,
+      yielding all users in the pool, paginated via Cognito's opaque
+      ``PaginationToken``. This is what powers the default Admin Users
+      page render — admins shouldn't have to type to see who exists.
+    * Non-empty ``query`` → same call with ``Filter=email ^= "<q>"``;
+      Cognito still returns ``PaginationToken`` for very wide prefixes
+      (e.g. ``a`` on a 10k-user pool), so we surface it the same way.
+    * ``page_token`` (Cognito's ``PaginationToken``) → forwarded
+      verbatim when present. Callers MUST treat the token as opaque.
+
+    Results are sorted by email ascending within the page, so the UI
+    is stable. NB: cross-page ordering is whatever Cognito returns —
+    that's a Cognito constraint, not ours, and it's stable for the
+    same query/token combination.
+
+    ``limit`` is clamped to ``[1, MAX_SEARCH_LIMIT]``. The default of
+    25 matches the page-size contract the Admin Users UI presents
+    ("if more than 25, paginate").
+
+    Returns an empty :class:`UserSearchPage` (no records, no token)
+    when Cognito is unconfigured or the call fails — same convention
+    the rest of the admin hub uses so dev environments keep rendering.
     """
     q = (query or "").strip()
-    if not q:
-        return []
     capped = max(1, min(MAX_SEARCH_LIMIT, int(limit)))
     pool = _pool_id()
     if not pool:
-        return []
+        return UserSearchPage(records=[], next_token=None)
     c = _build_cognito_client(client)
     if c is None:
-        return []
+        return UserSearchPage(records=[], next_token=None)
+    kwargs: dict[str, Any] = {"UserPoolId": pool, "Limit": capped}
+    if q:
+        kwargs["Filter"] = f'email ^= "{q}"'
+    token = (page_token or "").strip()
+    if token:
+        kwargs["PaginationToken"] = token
     try:
-        resp = c.list_users(
-            UserPoolId=pool,
-            Filter=f'email ^= "{q}"',
-            Limit=capped,
-        )
+        resp = c.list_users(**kwargs)
     except Exception as exc:  # pragma: no cover — defensive
-        _LOG.warning("cognito list_users(search) failed: %s", exc)
-        return []
+        _LOG.warning("cognito list_users(page) failed: %s", exc)
+        return UserSearchPage(records=[], next_token=None)
     users = resp.get("Users") or []
     out: list[CognitoUserRecord] = []
     for raw in users:
@@ -229,7 +268,29 @@ def search_users(
         if rec is not None:
             out.append(rec)
     out.sort(key=lambda r: (r.email or "").lower())
-    return out
+    next_token = resp.get("PaginationToken")
+    if not isinstance(next_token, str) or not next_token:
+        next_token = None
+    return UserSearchPage(records=out, next_token=next_token)
+
+
+def search_users(
+    query: str,
+    *,
+    limit: int = DEFAULT_SEARCH_LIMIT,
+    client: Any | None = None,
+) -> list[CognitoUserRecord]:
+    """Find users whose email begins with ``query``.
+
+    Thin wrapper preserved for backward compatibility — empty query
+    still returns ``[]`` here (it's an *explicit* search), and there's
+    no pagination surface. New callers should use
+    :func:`list_users_page` instead, which unifies search + list-all
+    + pagination behind one helper.
+    """
+    if not (query or "").strip():
+        return []
+    return list_users_page(query, limit=limit, client=client).records
 
 
 def get_cognito_user_by_sub(

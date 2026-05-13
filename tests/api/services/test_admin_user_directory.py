@@ -23,8 +23,10 @@ from stocvest.api.services.admin_user_directory import (
     DEFAULT_SEARCH_LIMIT,
     MAX_SEARCH_LIMIT,
     AdminUserDetail,
+    UserSearchPage,
     get_user_detail,
     list_groups_for_user,
+    list_users_page,
     search_users,
 )
 from stocvest.api.services.user_profile_store import (
@@ -136,6 +138,76 @@ def test_search_users_returns_empty_when_pool_unconfigured(
     cog = _FakeCognito(list_users_payload={"Users": [_cog_user(sub="s", email="e@x")]})
     assert search_users("a", client=cog) == []
     # No call made — short-circuit before hitting the client.
+    assert cog.list_users_calls == []
+
+
+def test_list_users_page_empty_query_omits_filter() -> None:
+    """Empty query = no Filter kwarg, so Cognito returns the whole pool."""
+    cog = _FakeCognito(
+        list_users_payload={
+            "Users": [
+                _cog_user(sub="sub-z", email="z@x.com"),
+                _cog_user(sub="sub-a", email="a@x.com"),
+            ],
+            "PaginationToken": "tok-next",
+        }
+    )
+    page = list_users_page("", limit=10, client=cog)
+    assert isinstance(page, UserSearchPage)
+    assert [r.email for r in page.records] == ["a@x.com", "z@x.com"]
+    assert page.next_token == "tok-next"
+    call = (cog.list_users_calls or [{}])[0]
+    assert "Filter" not in call  # the load-bearing assertion
+    assert call["Limit"] == 10
+
+
+def test_list_users_page_with_query_applies_email_prefix_filter() -> None:
+    cog = _FakeCognito(
+        list_users_payload={"Users": [_cog_user(sub="sub-a", email="alice@x.com")]}
+    )
+    page = list_users_page("alice", client=cog)
+    assert [r.email for r in page.records] == ["alice@x.com"]
+    assert page.next_token is None
+    call = (cog.list_users_calls or [{}])[0]
+    assert call["Filter"] == 'email ^= "alice"'
+
+
+def test_list_users_page_forwards_pagination_token() -> None:
+    cog = _FakeCognito(list_users_payload={"Users": [], "PaginationToken": "next"})
+    page = list_users_page("", page_token="prev-token", client=cog)
+    call = (cog.list_users_calls or [{}])[0]
+    assert call.get("PaginationToken") == "prev-token"
+    assert page.next_token == "next"
+
+
+def test_list_users_page_strips_blank_pagination_token() -> None:
+    """A blank/whitespace token must NOT be forwarded to Cognito (it
+    would treat the kwarg as present and choke). Same defensive shape
+    as the rest of the directory service — caller-provided strings
+    are always sanitised before being forwarded."""
+    cog = _FakeCognito(list_users_payload={"Users": []})
+    list_users_page("", page_token="   ", client=cog)
+    call = (cog.list_users_calls or [{}])[0]
+    assert "PaginationToken" not in call
+
+
+def test_list_users_page_no_token_when_response_has_none() -> None:
+    cog = _FakeCognito(list_users_payload={"Users": []})
+    page = list_users_page("", client=cog)
+    assert page.next_token is None
+
+
+def test_list_users_page_empty_when_pool_unconfigured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("COGNITO_USER_POOL_ID", raising=False)
+    from stocvest.utils import config as cfg
+
+    cfg.get_settings.cache_clear()  # type: ignore[attr-defined]
+    cog = _FakeCognito(list_users_payload={"Users": [_cog_user(sub="s", email="e@x")]})
+    page = list_users_page("", client=cog)
+    assert page.records == []
+    assert page.next_token is None
     assert cog.list_users_calls == []
 
 
