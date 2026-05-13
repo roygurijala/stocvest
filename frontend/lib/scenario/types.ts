@@ -109,6 +109,27 @@ export interface ScenarioInput {
   reference: ReferenceLevels;
   volatility_regime: VolatilityRegime;
   /**
+   * Computed entry-to-target / entry-to-stop ratio (R-multiple) that the
+   * signal engine carries on the underlying setup.
+   *
+   * This is a **structural** property of the reference levels, NOT a
+   * conviction signal — it's pure entry/stop/target arithmetic. The
+   * eligibility helper uses it to reject scenarios whose reference
+   * levels are mechanically degenerate for structured planning (a 0.5:1
+   * sheet plans to lose more than it stands to gain, which is not a
+   * coherent structure regardless of whether the signal is otherwise
+   * "good"). The threshold is `2.0` and matches the same threshold
+   * `trade-decision.ts::synthTradeDecision` uses for its `rrFail` gate,
+   * so the Build Scenario button stays in lock-step with the Decision
+   * line on the same card.
+   *
+   * Optional / nullable so legacy call sites that haven't been wired
+   * yet keep working — when the field is missing or non-finite, the
+   * eligibility helper does NOT gate on it (we cannot reject for a
+   * property we don't know).
+   */
+  risk_reward?: number | null;
+  /**
    * Free-form display tags surfaced to the user inside the modal's
    * Reference block so they remember why this row was actionable in
    * planning terms (e.g. "Gap +3.2%", "ORB break", "Earnings reaction").
@@ -132,7 +153,8 @@ export const SCENARIO_INELIGIBILITY_REASONS = [
   "no_risk_anchor",
   "unknown_volatility",
   "signal_stale",
-  "signal_expired"
+  "signal_expired",
+  "low_risk_reward"
 ] as const;
 
 export type ScenarioIneligibilityReason = (typeof SCENARIO_INELIGIBILITY_REASONS)[number];

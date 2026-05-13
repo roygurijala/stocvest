@@ -189,6 +189,12 @@ describe("isEligibleForScenario — gating does NOT consider conviction signals"
     // Listing every key on ScenarioInput — if a future change adds a
     // conviction field (e.g. "min_confluence"), this assertion fails
     // and forces the author to justify the addition.
+    //
+    // `risk_reward` is allowed (added 2026-05-13, BRK.B feedback): it is
+    // pure entry/stop/target arithmetic on the reference levels the
+    // signal already carries, NOT a quality verdict. The eligibility
+    // helper uses it to reject scenarios whose reference levels are
+    // mechanically degenerate for structured planning (R/R < 2.0).
     const allowedKeys = new Set([
       "symbol",
       "direction",
@@ -197,11 +203,103 @@ describe("isEligibleForScenario — gating does NOT consider conviction signals"
       "expires_at",
       "reference",
       "volatility_regime",
+      "risk_reward",
       "tags"
     ]);
     for (const key of Object.keys(input)) {
       expect(allowedKeys.has(key)).toBe(true);
     }
+  });
+});
+
+describe("isEligibleForScenario — low risk/reward gate (BRK.B feedback, 2026-05-13)", () => {
+  // The user reported on 2026-05-13 that the Build Scenario button on
+  // the BRK.B evidence card was enabled even though the Decision line
+  // said "Monitor only" and the risk/reward read 0.5:1. That is the
+  // exact UX they wanted to avoid — the button should be in lock-step
+  // with the structural threshold synthTradeDecision already uses.
+  //
+  // R/R < 2.0 is treated as a STRUCTURAL failure (the reference levels
+  // do not form a coherent planning sheet), not as a conviction signal,
+  // so the gate is consistent with the eligibility helper's "structural
+  // completeness only" philosophy. The threshold matches
+  // synthTradeDecision::rrFail.
+
+  test("test_rr_below_2_fails_eligibility_with_low_risk_reward_reason", () => {
+    const r = isEligibleForScenario(happyInput({ risk_reward: 0.5 }), NOW);
+    expect(r.eligible).toBe(false);
+    expect(r.reasons).toContain("low_risk_reward");
+  });
+
+  test("test_rr_below_2_brk_b_regression_0p5_to_1", () => {
+    // Exact BRK.B scenario from the screenshot: long direction, R/R
+    // displayed as 0.5:1 — must disable Build Scenario.
+    const r = isEligibleForScenario(
+      happyInput({ symbol: "BRK.B", direction: "bullish", risk_reward: 0.5 }),
+      NOW
+    );
+    expect(r.eligible).toBe(false);
+    expect(r.reasons).toContain("low_risk_reward");
+  });
+
+  test("test_rr_at_threshold_2p0_is_eligible", () => {
+    const r = isEligibleForScenario(happyInput({ risk_reward: 2.0 }), NOW);
+    expect(r.reasons).not.toContain("low_risk_reward");
+    expect(r.eligible).toBe(true);
+  });
+
+  test("test_rr_above_threshold_3p0_is_eligible", () => {
+    const r = isEligibleForScenario(happyInput({ risk_reward: 3.0 }), NOW);
+    expect(r.reasons).not.toContain("low_risk_reward");
+    expect(r.eligible).toBe(true);
+  });
+
+  test("test_rr_below_threshold_1p8_just_under_2_fails", () => {
+    const r = isEligibleForScenario(happyInput({ risk_reward: 1.8 }), NOW);
+    expect(r.reasons).toContain("low_risk_reward");
+  });
+
+  test("test_rr_missing_field_does_not_gate", () => {
+    // Legacy / partial-data path: when risk_reward is not provided, the
+    // gate does NOT fire (we never gate on a property we cannot read).
+    const r = isEligibleForScenario(happyInput({}), NOW);
+    expect(r.reasons).not.toContain("low_risk_reward");
+  });
+
+  test("test_rr_null_does_not_gate", () => {
+    const r = isEligibleForScenario(happyInput({ risk_reward: null }), NOW);
+    expect(r.reasons).not.toContain("low_risk_reward");
+  });
+
+  test("test_rr_non_finite_does_not_gate", () => {
+    const r = isEligibleForScenario(happyInput({ risk_reward: Number.NaN }), NOW);
+    expect(r.reasons).not.toContain("low_risk_reward");
+  });
+
+  test("test_rr_zero_or_negative_does_not_gate", () => {
+    // Zero / negative R/R is treated as "unknown" rather than "low" — it
+    // typically indicates the signal payload didn't carry valid stop
+    // and target levels, which is a different problem (no_risk_anchor)
+    // not a gateable low-R/R structural failure.
+    expect(isEligibleForScenario(happyInput({ risk_reward: 0 }), NOW).reasons).not.toContain(
+      "low_risk_reward"
+    );
+    expect(isEligibleForScenario(happyInput({ risk_reward: -1 }), NOW).reasons).not.toContain(
+      "low_risk_reward"
+    );
+  });
+
+  test("test_low_rr_label_uses_internal_thresholds_framing", () => {
+    // Copy invariant: the label must NOT say "we do not recommend this
+    // trade" or "STOCVEST will not approve this trade." It MUST frame
+    // the gate as an internal threshold on structured scenario building.
+    const label = scenarioIneligibilityLabel("low_risk_reward");
+    expect(label.toLowerCase()).toContain("internal thresholds");
+    expect(label.toLowerCase()).toContain("structured scenario building");
+    // Anti-regression: phrases that imply endorsement.
+    expect(label.toLowerCase()).not.toContain("we do not recommend");
+    expect(label.toLowerCase()).not.toContain("trade permission");
+    expect(label.toLowerCase()).not.toContain("approved");
   });
 });
 

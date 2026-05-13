@@ -16,9 +16,11 @@ import { synthTradeDecision, type TradeDecisionState } from "@/lib/signal-eviden
 import {
   catalystPublishedAgo,
   buildVerdictTagReconciler,
+  conflictTierLabel,
   deriveEvidenceInsightFallback,
   filterChipsForMode,
   layerFreshnessFromIso,
+  rankConflictingSignals,
   sanitizeEvidenceChips,
   structuralBandFromBaselineScore,
   VWAP_STATE,
@@ -958,6 +960,17 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
             prev_close: evidence.prevClose ?? null
           },
           volatility_regime: regimeToVolatility(insight.market_regime ?? null),
+          // Carry R/R through so the eligibility helper can apply the
+          // structural-threshold gate (BRK.B feedback, 2026-05-13): a
+          // 0.5:1 sheet doesn't form a coherent planning structure
+          // regardless of how strong other signal layers are. The
+          // threshold matches the rrFail gate in synthTradeDecision so
+          // the Build Scenario button stays in lock-step with the
+          // Decision line.
+          risk_reward:
+            typeof insight.risk_reward === "number" && Number.isFinite(insight.risk_reward)
+              ? insight.risk_reward
+              : null,
           tags:
             evidence.directionBadgeLabel && evidence.directionBadgeLabel.trim()
               ? [evidence.directionBadgeLabel]
@@ -1575,40 +1588,78 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
               <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted }}>
                 From confluence — signal data only, not investment advice.
               </p>
-              <div className="flex flex-wrap gap-2">
-                {confYes.map((c, i) => (
-                  <span
-                    key={`cf-yes-${i}-${c.label}`}
-                    style={{
-                      borderRadius: borderRadius.full,
-                      padding: "4px 10px",
-                      fontSize: typography.scale.xs,
-                      fontWeight: 600,
-                      border: `1px solid rgba(34,197,94,0.45)`,
-                      background: "rgba(34,197,94,0.12)",
-                      color: colors.bullish
-                    }}
-                  >
-                    {c.label} ✓
-                  </span>
-                ))}
-                {confNo.map((c, i) => (
-                  <span
-                    key={`cf-no-${i}-${c.label}`}
-                    style={{
-                      borderRadius: borderRadius.full,
-                      padding: "4px 10px",
-                      fontSize: typography.scale.xs,
-                      fontWeight: 600,
-                      border: `1px solid rgba(239,68,68,0.45)`,
-                      background: "rgba(239,68,68,0.12)",
-                      color: colors.bearish
-                    }}
-                  >
-                    {c.label} ✗
-                  </span>
-                ))}
-              </div>
+              {/* Conflicting chips get a priority sort (BRK.B feedback,
+                  2026-05-13). When there are 2+ counterweights, the
+                  first three are labelled PRIMARY / SECONDARY / TERTIARY
+                  so the user knows at a glance which conflict matters
+                  most — previously the rail showed e.g. "EMA conflict,
+                  VWAP conflict, Weak volume" in arrival order with no
+                  way to tell which was load-bearing for the setup.
+                  Confirming chips deliberately keep their natural
+                  order — they are co-equal anchors, not a ranked list. */}
+              {(() => {
+                const rankedConfNo = rankConflictingSignals(confNo);
+                return (
+                  <div className="flex flex-wrap gap-2" data-testid="confluence-chip-rail">
+                    {confYes.map((c, i) => (
+                      <span
+                        key={`cf-yes-${i}-${c.label}`}
+                        style={{
+                          borderRadius: borderRadius.full,
+                          padding: "4px 10px",
+                          fontSize: typography.scale.xs,
+                          fontWeight: 600,
+                          border: `1px solid rgba(34,197,94,0.45)`,
+                          background: "rgba(34,197,94,0.12)",
+                          color: colors.bullish
+                        }}
+                      >
+                        {c.label} ✓
+                      </span>
+                    ))}
+                    {rankedConfNo.map((c, i) => {
+                      const tier = conflictTierLabel(i, rankedConfNo.length);
+                      return (
+                        <span
+                          key={`cf-no-${i}-${c.label}`}
+                          data-testid={tier ? `conflict-chip-${tier.toLowerCase()}` : undefined}
+                          data-conflict-tier={tier ?? undefined}
+                          data-conflict-source={c.source ?? undefined}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 6,
+                            borderRadius: borderRadius.full,
+                            padding: "4px 10px",
+                            fontSize: typography.scale.xs,
+                            fontWeight: 600,
+                            border: `1px solid rgba(239,68,68,0.45)`,
+                            background: "rgba(239,68,68,0.12)",
+                            color: colors.bearish
+                          }}
+                        >
+                          {tier ? (
+                            <span
+                              style={{
+                                fontSize: 9,
+                                letterSpacing: 0.6,
+                                opacity: 0.85,
+                                padding: "1px 5px",
+                                borderRadius: borderRadius.sm,
+                                background: "rgba(239,68,68,0.18)",
+                                border: "1px solid rgba(239,68,68,0.35)"
+                              }}
+                            >
+                              {tier}
+                            </span>
+                          ) : null}
+                          <span>{c.label} ✗</span>
+                        </span>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
               {verdictReconcilerText ? (
                 <p
                   data-testid="verdict-tag-reconciler"

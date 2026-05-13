@@ -66,12 +66,30 @@ export function deriveDecisionRationale(
   if (state === "actionable") return null;
   const label = state === "blocked" ? "Why blocked:" : "Why hold:";
 
+  // Copy invariants (BRK.B feedback, 2026-05-13):
+  //
+  // The previous wording threaded "STOCVEST … before granting trade
+  // permission" through every rationale variant. Users read that phrase
+  // as STOCVEST claiming gatekeeper authority over their trade
+  // decisions — which is exactly the implication our legal posture is
+  // built to avoid. STOCVEST does not grant or withhold trade
+  // permission; we surface signal data and the user decides.
+  //
+  // Replacement framing throughout this function: describe the gate as
+  // an *internal threshold for structured scenario building*. That is:
+  // STOCVEST has internal numerical thresholds for when the reference
+  // levels it carries form a coherent planning structure, and the
+  // current setup hasn't cleared those thresholds. The user is free to
+  // proceed however they wish on their own broker — STOCVEST is simply
+  // declining to construct a Scenario Builder sheet against
+  // structurally degenerate inputs.
+
   if (ctx.hasInsufficient || ctx.coverageThin) {
     return {
       category: "data_insufficient",
       label,
       text:
-        "Layer coverage is too thin to evaluate this setup with conviction. STOCVEST waits for complete signal data before granting trade permission."
+        "Layer coverage is too thin to evaluate this setup with conviction. The setup does not meet internal thresholds for structured scenario building until additional layers populate."
     };
   }
   if (ctx.rrFail) {
@@ -79,7 +97,7 @@ export function deriveDecisionRationale(
     return {
       category: "risk_reward",
       label,
-      text: `Current entry offers poor risk/reward (${rrStr}:1). STOCVEST requires favorable asymmetry before granting trade permission.`
+      text: `Risk/reward (${rrStr}:1) does not meet internal thresholds for structured scenario building.`
     };
   }
   if (ctx.weakAgreement) {
@@ -87,7 +105,7 @@ export function deriveDecisionRationale(
       category: "confirmation",
       label,
       text:
-        "Layer agreement is mixed across the signal layers. STOCVEST requires clearer directional confirmation before granting trade permission."
+        "Layer agreement is mixed across the six signal layers. The setup does not meet internal thresholds for structured scenario building until directional confirmation strengthens."
     };
   }
   if (ctx.counterTrend || ctx.regimeConflict) {
@@ -95,14 +113,14 @@ export function deriveDecisionRationale(
       category: "regime",
       label,
       text:
-        "Macro or regime context conflicts with this direction. STOCVEST requires regime alignment before granting trade permission."
+        "Macro or regime context conflicts with this direction. The setup does not meet internal thresholds for structured scenario building while regime alignment is opposed."
     };
   }
   return {
     category: "readiness",
     label,
     text:
-      "Signal readiness is not yet decisive across the six layers. STOCVEST waits for clearer confirmation before granting trade permission."
+      "Signal readiness is not yet decisive across the six layers. The setup does not meet internal thresholds for structured scenario building."
   };
 }
 

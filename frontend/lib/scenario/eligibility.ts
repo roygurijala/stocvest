@@ -21,6 +21,19 @@
  *     trade." Eligibility is "you have enough data to plan," nothing
  *     more.
  *
+ *   Risk/reward sits on the **structural** side of this line by design.
+ *   It is pure entry/stop/target arithmetic on the reference levels the
+ *   signal already carries — nothing about it depends on confluence
+ *   scores, accuracy history, or engine verdicts. A scenario whose
+ *   reference levels mechanically yield a 0.5:1 R-multiple does not
+ *   form a coherent planning sheet (the user would be planning to lose
+ *   more than they stand to gain), so we treat it as a structural
+ *   completeness failure with the user-facing copy framed in
+ *   internal-thresholds terms — never as "we do not recommend this
+ *   trade." The threshold matches `trade-decision.ts::synthTradeDecision`
+ *   (R/R < 2.0) so the Build Scenario button stays in lock-step with
+ *   the Decision line on the same card.
+ *
  * Freshness windows by mode (these match the freshness windows the
  * signal engines themselves use to mark `signal_valid_until` /
  * `signal_expires`):
@@ -148,6 +161,18 @@ export function isEligibleForScenario(
     reasons.push("signal_stale");
   }
 
+  // Risk/reward gate (BRK.B feedback, 2026-05-13). Treats R/R below 2.0
+  // as a structural failure on the reference levels themselves — a
+  // 0.5:1 sheet would plan to lose more than it stands to gain, which
+  // is not a coherent planning structure. The check is intentionally
+  // permissive when the field is missing or non-finite: we never gate
+  // on a property we cannot read (legacy call sites and partial-data
+  // payloads still pass through).
+  const rr = input.risk_reward;
+  if (typeof rr === "number" && Number.isFinite(rr) && rr > 0 && rr < 2.0) {
+    reasons.push("low_risk_reward");
+  }
+
   return { eligible: reasons.length === 0, reasons };
 }
 
@@ -178,6 +203,8 @@ export function scenarioIneligibilityLabel(reason: ScenarioIneligibilityReason):
       return "Signal is outside the freshness window for its mode.";
     case "signal_expired":
       return "Signal carries an explicit expiry that has already passed.";
+    case "low_risk_reward":
+      return "Risk/reward does not meet internal thresholds for structured scenario building.";
     default: {
       // Exhaustiveness check — any future reason that doesn't have a
       // copy line trips this branch at compile time.

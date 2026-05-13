@@ -144,8 +144,8 @@ export interface SignalEvidenceConfluence {
   confluence_score: number;
   confluence_tier: string;
   is_confluence_alert: boolean;
-  confirming_signals: Array<{ label: string; detail?: string }>;
-  conflicting_signals: Array<{ label: string; detail?: string }>;
+  confirming_signals: Array<{ label: string; detail?: string; source?: string }>;
+  conflicting_signals: Array<{ label: string; detail?: string; source?: string }>;
   n_confirming: number;
   n_conflicting: number;
   historical_note: string;
@@ -161,8 +161,8 @@ export interface SignalEvidenceInsight {
   rr_warning?: boolean;
   rr_quality?: "low" | "acceptable" | "good" | "strong";
   market_regime: string;
-  confirming_signals: Array<{ label: string; detail?: string }>;
-  conflicting_signals: Array<{ label: string; detail?: string }>;
+  confirming_signals: Array<{ label: string; detail?: string; source?: string }>;
+  conflicting_signals: Array<{ label: string; detail?: string; source?: string }>;
   catalysts: Array<{ text: string; sentiment: string; source?: string; published_at?: string; sentiment_score?: number }>;
   risk_factors: string[];
   risk_factors_detailed?: Array<{ label: string; severity: "high" | "medium" | "low"; detail: string }>;
@@ -936,11 +936,13 @@ export function buildEvidenceFromSetup(
           is_confluence_alert: Boolean(setup.is_confluence_alert),
           confirming_signals: (setup.confirming_signals ?? []).map((c) => ({
             label: String(c.label ?? ""),
-            detail: c.detail ? String(c.detail) : undefined
+            detail: c.detail ? String(c.detail) : undefined,
+            source: typeof c.source === "string" && c.source.trim().length > 0 ? c.source.trim() : undefined
           })),
           conflicting_signals: (setup.conflicting_signals ?? []).map((c) => ({
             label: String(c.label ?? ""),
-            detail: c.detail ? String(c.detail) : undefined
+            detail: c.detail ? String(c.detail) : undefined,
+            source: typeof c.source === "string" && c.source.trim().length > 0 ? c.source.trim() : undefined
           })),
           n_confirming: typeof setup.n_confirming === "number" ? setup.n_confirming : 0,
           n_conflicting: typeof setup.n_conflicting === "number" ? setup.n_conflicting : 0,
@@ -990,15 +992,81 @@ export function buildEvidenceFromSetup(
   };
 }
 
-function mapConfluenceChipList(raw: unknown): Array<{ label: string; detail?: string }> {
+function mapConfluenceChipList(raw: unknown): Array<{ label: string; detail?: string; source?: string }> {
   if (!Array.isArray(raw)) return [];
   return raw
     .filter((x): x is Record<string, unknown> => Boolean(x) && typeof x === "object")
     .map((c) => ({
       label: String(c.label ?? c.name ?? "").trim(),
-      detail: c.detail != null ? String(c.detail).trim() : undefined
+      detail: c.detail != null ? String(c.detail).trim() : undefined,
+      // Pass the backend's `source` enum value through to the frontend
+      // so `rankConflictingSignals` can sort by priority. Backwards-
+      // compatible: legacy chips without a source still flow through
+      // — they just sort to the tail of the ranked list.
+      source: typeof c.source === "string" && c.source.trim().length > 0 ? c.source.trim() : undefined
     }))
     .filter((c) => c.label.length > 0);
+}
+
+/**
+ * Priority order for conflicting-signal chips (BRK.B feedback,
+ * 2026-05-13). When the chip rail surfaces 2+ counterweights, the
+ * first three are labelled Primary / Secondary / Tertiary so the user
+ * sees at a glance which conflict matters most for the setup. Order
+ * reflects load-bearing weight in intraday/swing decisions:
+ *
+ *   1. VWAP rejection  — primary technical anchor; price on the wrong
+ *                        side of session VWAP is a first-order miss.
+ *   2. Weak volume     — execution-quality friction; low participation
+ *                        meaningfully lowers continuation odds.
+ *   3. EMA misalignment — secondary trend-stack signal; informative
+ *                         but typically downstream of VWAP.
+ *   4. Internals       — broad-market direction off; context.
+ *   5. Sector          — relative-strength context.
+ *   6. Macro regime    — slow-moving context.
+ *   7. News catalyst   — discrete event signal.
+ *   8. Gap confirm     — entry-timing signal.
+ *   9. ORB breakout    — entry-timing signal.
+ *
+ * Any chip whose source is not in the map sorts to the tail (rank
+ * Infinity → preserves original relative order for unknown sources).
+ */
+export const CONFLICT_PRIORITY_BY_SOURCE: Readonly<Record<string, number>> = {
+  vwap_position: 1,
+  volume_confirm: 2,
+  ema_9_position: 3,
+  internals_alignment: 4,
+  sector_alignment: 5,
+  market_regime: 6,
+  news_catalyst: 7,
+  gap_confirm: 8,
+  orb_breakout: 9
+};
+
+export function rankConflictingSignals<T extends { source?: string }>(chips: readonly T[]): T[] {
+  // Stable sort: equal-priority chips keep their original order. We
+  // achieve stability via index pairing because Array.prototype.sort
+  // is only guaranteed stable on TC39 2019+; this guard keeps the
+  // contract explicit so a future engine version can't quietly break
+  // chip ordering.
+  return chips
+    .map((c, idx) => ({ c, idx, rank: CONFLICT_PRIORITY_BY_SOURCE[c.source ?? ""] ?? Number.POSITIVE_INFINITY }))
+    .sort((a, b) => (a.rank - b.rank) || (a.idx - b.idx))
+    .map(({ c }) => c);
+}
+
+/**
+ * Tier label for the top-3 conflicting chips after `rankConflictingSignals`.
+ * Returns `null` for any index past 2 OR when the total conflict count
+ * is below 2 (a single conflict needs no tier label — there is no
+ * ranking to communicate). Exported so the evidence-card render and
+ * its lock-in tests share a single source of truth.
+ */
+export function conflictTierLabel(index: number, total: number): "PRIMARY" | "SECONDARY" | "TERTIARY" | null {
+  if (total < 2 || index < 0 || index > 2) return null;
+  if (index === 0) return "PRIMARY";
+  if (index === 1) return "SECONDARY";
+  return "TERTIARY";
 }
 
 function numOrNull(v: unknown): number | null {
