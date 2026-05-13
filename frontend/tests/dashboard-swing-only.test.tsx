@@ -82,7 +82,18 @@ describe("Dashboard Swing Desk (top half of the two-desk layout)", () => {
       />
     );
     expect(screen.getByText(/No active swing setups right now/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Open Scanner/i })).toHaveAttribute("href", "/dashboard/scanner");
+    // Phase C added an Active Signal Ribbon above the desks that also
+    // renders an "Open scanner" link when there are no firing signals
+    // OR no chip data, so the swing-desk empty-state's CTA is matched
+    // by the swing panel's own scanner link explicitly via test id /
+    // scoping. We assert the swing panel's "Open Scanner" link is
+    // present and points at the scanner.
+    const swingPanel = screen.getByTestId("swing-desk-panel");
+    const swingScannerLinks = Array.from(swingPanel.querySelectorAll("a")).filter((a) =>
+      /open scanner/i.test(a.textContent || "")
+    );
+    expect(swingScannerLinks.length).toBeGreaterThan(0);
+    expect(swingScannerLinks[0]!.getAttribute("href")).toBe("/dashboard/scanner");
 
     // The intraday setup MUST appear inside the Day Desk panel — the
     // dashboard is a dual-desk surface and intraday rows are no longer
@@ -92,8 +103,9 @@ describe("Dashboard Swing Desk (top half of the two-desk layout)", () => {
     expect(dayDesk).toBeInTheDocument();
     expect(dayDesk.querySelector('[data-testid="day-desk-signals"]')).not.toBeNull();
     // The symbol is rendered inside the Day Desk's signal section.
-    const intraNode = screen.getByText("INTRADAY");
-    expect(dayDesk.contains(intraNode)).toBe(true);
+    // (The Active Signal Ribbon also renders this symbol as a chip,
+    // so we scope the lookup to the Day Desk panel.)
+    expect((dayDesk.textContent || "")).toContain("INTRADAY");
   });
 
   test("test_dashboard_shows_swing_setups_when_available", () => {
@@ -132,8 +144,14 @@ describe("Dashboard Swing Desk (top half of the two-desk layout)", () => {
         sectorRotation={[]}
       />
     );
-    expect(screen.getByText("AAA")).toBeInTheDocument();
-    expect(screen.getByText("BBB")).toBeInTheDocument();
-    expect(screen.getByText(/Pattern maturity: 3 sessions/i)).toBeInTheDocument();
+    // Phase C — the Active Signal Ribbon also renders the symbol as a
+    // chip ABOVE the desks. Scope the assertions to the swing desk
+    // panel itself so the test doesn't trip over the (intentional)
+    // duplicate render in the ribbon.
+    const swingPanel = screen.getByTestId("swing-desk-panel");
+    const swingText = swingPanel.textContent || "";
+    expect(swingText).toContain("AAA");
+    expect(swingText).toContain("BBB");
+    expect(swingText).toMatch(/Pattern maturity: 3 sessions/i);
   });
 });

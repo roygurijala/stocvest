@@ -118,6 +118,38 @@ a {
   width: 100%;
 }
 
+/*
+ * Dashboard "scanning" pulse — reused by empty-state indicators
+ * across the Active Signal Ribbon, Swing Desk empty card, and Day
+ * Desk suppression card. The motion is subtle (opacity oscillation
+ * only — no scale, no glow halo) so it reads as "system is still
+ * listening" rather than as decoration. Honors prefers-reduced-motion
+ * by becoming a static dim dot.
+ */
+@keyframes stocvest-pulse-soft {
+  0%, 100% {
+    opacity: 0.32;
+  }
+  50% {
+    opacity: 0.88;
+  }
+}
+
+.stocvest-pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  display: inline-block;
+  animation: stocvest-pulse-soft 2.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stocvest-pulse-dot {
+    animation: none;
+    opacity: 0.55;
+  }
+}
+
 @media (max-width: 1023px) {
   .dashboard-grid {
     grid-template-columns: 1fr !important;

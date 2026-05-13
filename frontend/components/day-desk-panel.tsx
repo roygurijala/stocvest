@@ -30,7 +30,48 @@ import { useMemo } from "react";
 import type { IntradaySetupPayload, ScannerOverview } from "@/lib/api/scanner";
 import type { MarketStatusPayload } from "@/lib/api/market";
 import { DashboardCard } from "@/components/dashboard-card";
+import { DayDeskSignature } from "@/components/desk-visual-signatures";
 import { InfoTip } from "@/components/info-tip";
+
+/**
+ * Phase B+ — day-row intraday meta helpers.
+ *
+ * Mode Separation guard: these helpers consume ONLY day-side fields
+ * from `IntradaySetupPayload` (`vwap`, `last_price`, `timestamp_iso`).
+ * They MUST NOT read swing-coded fields (`pattern_maturity_days`,
+ * `weekly_rsi`, etc.) — the row should feel intraday at a glance,
+ * not "another way to render a swing row".
+ */
+type VwapRelative = { kind: "above" | "below" | "flat"; pct: number } | null;
+
+function vwapRelative(lastPrice: number | null | undefined, vwap: number | null | undefined): VwapRelative {
+  if (
+    typeof lastPrice !== "number" ||
+    !Number.isFinite(lastPrice) ||
+    typeof vwap !== "number" ||
+    !Number.isFinite(vwap) ||
+    vwap === 0
+  ) {
+    return null;
+  }
+  const pct = ((lastPrice - vwap) / vwap) * 100;
+  if (!Number.isFinite(pct)) return null;
+  if (Math.abs(pct) < 0.05) return { kind: "flat", pct };
+  return { kind: pct > 0 ? "above" : "below", pct };
+}
+
+function minutesAgoLabel(timestampIso: string | null | undefined): string | null {
+  if (!timestampIso) return null;
+  const t = Date.parse(timestampIso);
+  if (!Number.isFinite(t)) return null;
+  const deltaSec = Math.max(0, Math.round((Date.now() - t) / 1000));
+  if (deltaSec < 60) return `${deltaSec}s ago`;
+  const m = Math.round(deltaSec / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return null;
+}
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import {
@@ -43,7 +84,7 @@ import {
 } from "@/lib/dashboard-posture";
 
 const DAY_DESK_CARD_TIP =
-  "The Day Desk shows the intraday engine's posture (Active / Monitor-only / Suppressed), top day setups, and what would re-enable rows. It is INDEPENDENT of the Swing Desk above — one desk being Active does not comment on the other. Day signals follow intraday gates (volume / momentum / session structure), not the multi-day cadence used by the Swing Desk.";
+  "The Day Desk shows the intraday engine's posture (Active / Monitor-only / Suppressed), top day setups, and what would re-enable rows. It is INDEPENDENT of the Swing Desk — one desk being Active does not comment on the other. Day signals follow intraday gates (volume / momentum / session structure), not the multi-day cadence used by the Swing Desk.";
 
 const DAY_DESK_PRIMARY_READ_TIP =
   "Day Desk posture answers 'Am I even allowed to act intraday?'. Active = at least one intraday symbol cleared volume + momentum gates this load. Monitor-only = setups present but score below the floor (0.55). Suppressed = either session closed (regular hours not open) or no intraday confirmation in-session.";
@@ -129,7 +170,7 @@ function DayTopSignalRow({
               textTransform: "uppercase",
               letterSpacing: "0.04em"
             }}
-            title="Intraday session-bound setup; cadence differs from the Swing Desk above."
+            title="Intraday session-bound setup; cadence differs from the Swing Desk."
           >
             Intraday
           </span>
@@ -150,11 +191,75 @@ function DayTopSignalRow({
           {signal.triggers.slice(0, 2).join(" · ")}
         </p>
       ) : null}
-      {typeof signal.last_price === "number" && Number.isFinite(signal.last_price) ? (
-        <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, fontVariantNumeric: "tabular-nums" }}>
-          Last <span style={{ color: colors.text, fontWeight: 600 }}>${signal.last_price.toFixed(2)}</span>
-        </p>
-      ) : null}
+      {/*
+       * Phase B+ — intraday-language meta strip. VWAP-relative tag
+       * + last price + time-since-trigger. These three fields are
+       * the canonical intraday "is this still alive?" reads — they
+       * NEVER appear on Swing rows because they are session-scoped
+       * by design (Mode Separation). Each chip is optional so the
+       * row degrades gracefully when payload fields are missing
+       * (older `IntradaySetupPayload` snapshots, day setups built
+       * from gap-with-catalyst flow that lacks VWAP, etc.).
+       */}
+      <div className="flex flex-wrap items-center gap-2" data-testid="day-row-intraday-meta">
+        {(() => {
+          const rel = vwapRelative(signal.last_price, signal.vwap);
+          if (!rel) return null;
+          const tone =
+            rel.kind === "above"
+              ? { fg: colors.bullish, bg: "rgba(34,197,94,0.10)", border: "rgba(34,197,94,0.34)" }
+              : rel.kind === "below"
+                ? { fg: colors.bearish, bg: "rgba(239,68,68,0.10)", border: "rgba(239,68,68,0.34)" }
+                : { fg: colors.textMuted, bg: "rgba(148,163,184,0.08)", border: "rgba(148,163,184,0.28)" };
+          const sign = rel.pct >= 0 ? "+" : "";
+          return (
+            <span
+              data-testid="day-row-vwap-chip"
+              data-vwap-direction={rel.kind}
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                color: tone.fg,
+                background: tone.bg,
+                border: `1px solid ${tone.border}`,
+                borderRadius: borderRadius.full,
+                padding: "2px 8px",
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
+                fontVariantNumeric: "tabular-nums"
+              }}
+            >
+              {rel.kind === "flat"
+                ? "At VWAP"
+                : `${rel.kind === "above" ? "Above" : "Below"} VWAP ${sign}${rel.pct.toFixed(2)}%`}
+            </span>
+          );
+        })()}
+        {typeof signal.last_price === "number" && Number.isFinite(signal.last_price) ? (
+          <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, fontVariantNumeric: "tabular-nums" }}>
+            Last <span style={{ color: colors.text, fontWeight: 600 }}>${signal.last_price.toFixed(2)}</span>
+          </span>
+        ) : null}
+        {(() => {
+          const tLabel = minutesAgoLabel(signal.timestamp_iso);
+          if (!tLabel) return null;
+          return (
+            <span
+              data-testid="day-row-triggered-at"
+              style={{
+                fontSize: 10,
+                fontWeight: 600,
+                color: colors.textMuted,
+                textTransform: "uppercase",
+                letterSpacing: "0.06em"
+              }}
+              title="Time since this intraday signal was last refreshed by the scanner."
+            >
+              · Triggered {tLabel}
+            </span>
+          );
+        })()}
+      </div>
       <Link
         href={`/dashboard/signals?symbol=${encodeURIComponent(signal.symbol.trim().toUpperCase())}&ref=dashboard-day-desk&trading_mode=day`}
         style={{
@@ -218,8 +323,9 @@ export function DayDeskPanel({ setups, marketStatus, scannerError, topSignalCap 
       role="day"
       eyebrow="Intraday · session-bound"
       title="Day Desk"
-      subtitle="Intraday engine — session-bound. Independent of the Swing Desk above. Posture (Active / Monitor / Suppressed) reflects today's volume / momentum / session-structure gates, not multi-day cadence."
+      subtitle="Intraday engine — session-bound. Independent of the Swing Desk. Posture (Active / Monitor / Suppressed) reflects today's volume / momentum / session-structure gates, not multi-day cadence."
       cardTip={DAY_DESK_CARD_TIP}
+      headerRight={<DayDeskSignature marketStatus={marketStatus} />}
       data-testid="day-desk-panel"
       data-day-desk-posture={postureKind}
     >
@@ -258,9 +364,20 @@ export function DayDeskPanel({ setups, marketStatus, scannerError, topSignalCap 
                   letterSpacing: "0.18em",
                   textTransform: "uppercase",
                   fontWeight: 600,
-                  color: colors.textMuted
+                  color: colors.textMuted,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: spacing[2]
                 }}
               >
+                {/* Phase D — subtle pulse next to the day-desk "Primary read"
+                    title to communicate the engine is still listening even
+                    when suppression copy is shown. */}
+                <span
+                  aria-hidden
+                  className="stocvest-pulse-dot"
+                  style={{ background: colors.textMuted }}
+                />
                 Primary read
               </p>
               <InfoTip text={DAY_DESK_PRIMARY_READ_TIP} label="What this day primary read means" maxWidth={340} />

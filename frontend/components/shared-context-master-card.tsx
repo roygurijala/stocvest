@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { DashboardCard } from "@/components/dashboard-card";
 import { IndexSparkline } from "@/components/index-sparkline";
 import { InfoTip } from "@/components/info-tip";
@@ -461,6 +462,21 @@ function indexTileBorderForDirection(
 // Master card
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * localStorage key for the "Show / hide full breakdown" toggle on the
+ * Shared Context master card. Phase A2 of the dashboard redesign.
+ *
+ * Default state is COLLAPSED: the Hero Strip above already answers the
+ * "what's the market doing right now?" question at a glance, and most
+ * users don't need the full A–E ladder on every page load. Power users
+ * who do want the prose ladder open across sessions get their
+ * preference persisted here — the chevron toggle writes "1" / "0" and
+ * subsequent visits read it back during the post-mount effect.
+ *
+ * `1` = collapsed (default), `0` = expanded.
+ */
+const SHARED_CONTEXT_COLLAPSED_STORAGE_KEY = "stocvest_shared_context_collapsed";
+
 export function SharedContextMasterCard(props: Props) {
   const {
     weeklyIndexRows,
@@ -519,6 +535,44 @@ export function SharedContextMasterCard(props: Props) {
     () => buildEnvironmentSummary(weeklyAvgPct5d, volatility, participation, risk),
     [weeklyAvgPct5d, volatility, participation, risk]
   );
+
+  /*
+   * Phase A2 — collapsed-by-default UX. Default state matches the SSR
+   * render (collapsed = true) to avoid hydration-mismatch flicker; the
+   * post-mount effect reads localStorage and may flip to expanded if
+   * the user previously chose to keep the full ladder open. The
+   * `data-shared-context-collapsed` attribute on the card surface
+   * gives integration tests and CSS a stable anchor to read state from.
+   *
+   * IMPORTANT: every sub-section (A–E) is ALWAYS mounted in the DOM
+   * regardless of collapsed state — the regression-locking test
+   * `master_card_renders_all_five_subsections_A_through_E_in_order`
+   * uses `getByTestId` + `compareDocumentPosition`, both of which work
+   * on hidden-via-CSS nodes. We hide B–E with `style={{ display: none }}`
+   * when collapsed; Section A (index tiles + sparklines) is the only
+   * one ALWAYS visually rendered because it's already at-a-glance value.
+   */
+  const [collapsed, setCollapsed] = useState(true);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(SHARED_CONTEXT_COLLAPSED_STORAGE_KEY);
+      if (raw === "0") setCollapsed(false);
+      else if (raw === "1") setCollapsed(true);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(SHARED_CONTEXT_COLLAPSED_STORAGE_KEY, next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
 
   return (
     <DashboardCard
@@ -637,6 +691,58 @@ export function SharedContextMasterCard(props: Props) {
           ) : null}
         </section>
 
+        {/*
+         * Phase A2 — slim summary line shown when the full ladder is
+         * collapsed. Uses the same `buildEnvironmentSummary` derivation
+         * as Section E so the two surfaces stay in sync; this is just
+         * a single-line projection of the same data.
+         */}
+        {collapsed ? (
+          <div
+            data-testid="shared-context-collapsed-summary"
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: spacing[2],
+              padding: `${spacing[3]} ${spacing[3]}`,
+              borderRadius: borderRadius.md,
+              border: `1px dashed color-mix(in srgb, ${colors.border} 70%, transparent)`,
+              background: "rgba(148,163,184,0.04)"
+            }}
+          >
+            <span style={{ fontSize: typography.scale.sm, fontWeight: 600, color: colors.text, lineHeight: 1.5, flex: "1 1 240px" }}>
+              {environmentSummary}
+            </span>
+            <button
+              type="button"
+              data-testid="shared-context-toggle"
+              data-shared-context-collapsed="true"
+              aria-expanded={false}
+              onClick={toggleCollapsed}
+              className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-md px-2.5 text-xs font-semibold"
+              style={{
+                border: `1px solid ${colors.border}`,
+                color: colors.text,
+                background: colors.surfaceMuted
+              }}
+            >
+              <ChevronDown size={14} aria-hidden />
+              Show full breakdown
+            </button>
+          </div>
+        ) : null}
+
+        {/*
+         * Sections B–E always mount in the DOM (regression-locking
+         * tests require it), but visually hide with display:none when
+         * collapsed. The wrapper preserves DOM order B → C → D → E.
+         */}
+        <div
+          data-testid="shared-context-expanded-body"
+          aria-hidden={collapsed}
+          style={{ display: collapsed ? "none" : "grid", gap: spacing[5] }}
+        >
         <SubsectionDivider colors={colors} />
 
         {/* ───────────────────────────── Section B ───────────────────────────── */}
@@ -796,6 +902,29 @@ export function SharedContextMasterCard(props: Props) {
             <p style={{ margin: 0 }}>{SHORT_HORIZON_WHY_THIS_MATTERS}</p>
           </div>
         </SubsectionCard>
+
+        {/* Phase A2 — collapse-back button at the bottom of the expanded ladder. */}
+        {!collapsed ? (
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: spacing[1] }}>
+            <button
+              type="button"
+              data-testid="shared-context-toggle"
+              data-shared-context-collapsed="false"
+              aria-expanded={true}
+              onClick={toggleCollapsed}
+              className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-md px-2.5 text-xs font-semibold"
+              style={{
+                border: `1px solid ${colors.border}`,
+                color: colors.textMuted,
+                background: colors.surfaceMuted
+              }}
+            >
+              <ChevronUp size={14} aria-hidden />
+              Hide full breakdown
+            </button>
+          </div>
+        ) : null}
+        </div>
       </div>
     </DashboardCard>
   );

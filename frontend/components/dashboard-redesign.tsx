@@ -3,10 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { motion } from "framer-motion";
+import { DashboardActiveSignalRibbon } from "@/components/dashboard-active-signal-ribbon";
 import { DashboardCard } from "@/components/dashboard-card";
 import { DashboardEdgeSync } from "@/components/dashboard-edge-sync";
+import { DashboardHeroStrip } from "@/components/dashboard-hero-strip";
 import { DashboardRealtime } from "@/components/dashboard-realtime";
 import { DecisionMetric } from "@/components/decision-metric";
+import { SwingDeskSignature } from "@/components/desk-visual-signatures";
 import { EarningsCalendar } from "@/components/earnings-calendar";
 import { InfoTip } from "@/components/info-tip";
 import { type WeeklyIndexRow } from "@/components/weekly-market-context-widget";
@@ -678,6 +681,21 @@ export function DashboardRedesign({
 
   const macroWarnings = macroPulse?.warnings ?? [];
 
+  // Hero strip absorbs Sections B / C-summary / D-summary / E of the Shared
+  // Context master card into a one-row "glance" surface above the master
+  // cards. The four cells share their classifiers with Shared Context
+  // (classifyVolatility / classifyParticipation / classifyRiskHorizon)
+  // so the two surfaces can NEVER drift — they are projections of the
+  // same derivation. The hero strip carries NO `data-card-role`, so the
+  // dashboard "exactly 3 master cards" invariant is preserved.
+  const vixBlankTagForHero = vixBlankKind
+    ? vixBlankKind === "market_closed"
+      ? "(market closed)"
+      : vixBlankKind === "data_pending"
+        ? "(data pending)"
+        : "(unavailable)"
+    : null;
+
   return (
     <section className="stocvest-dashboard-v2" style={{ display: "grid", gap: spacing[8] }}>
       <article
@@ -730,10 +748,32 @@ export function DashboardRedesign({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <DashboardRealtime />
           <InfoTip text={SESSION_STATUS_STRIP_TIP} label="About the session status strip" maxWidth={300} />
         </div>
       </article>
+
+      {/*
+       * HERO STRIP — Phase A1 of the dashboard redesign. Sits above the
+       * three master cards and provides a one-row glance answer to
+       * "what's the market doing right now?". It is a PROJECTION of the
+       * Shared Context master card's data (uses the same classifiers),
+       * not a new source of truth. Strictly environment-only — no
+       * swing-/day-coded language, no rankings, no cross-mode score.
+       * The realtime WS pulse dot is promoted into the regime cell so
+       * users see live-data state without scanning the top of the page.
+       */}
+      <DashboardHeroStrip
+        regimeLabel={regimeLabel}
+        vixPulseOk={vixPulseOk}
+        regimeBadgePriceBreadthOnly={regimeBadgePriceBreadthOnly}
+        vixSnapshot={vixSnapshot}
+        vixSessionPct={vixPct}
+        sectorRotation={sectorRotation}
+        weeklyIndexRows={weeklyIndexRows}
+        upcomingEarnings={upcomingCatalystWeek}
+        macroWarningHeadline={macroWarnings[0] ?? null}
+        vixBlankTag={vixBlankTagForHero}
+      />
 
       {/* Phase 2b layout — three master cards STACKED full-width, equal visual weight.
           (1) SHARED CONTEXT master card absorbs the four previous shared cards
@@ -749,6 +789,15 @@ export function DashboardRedesign({
           not market context, so it cannot live inside Shared Context; it is
           also not a decision engine, so it cannot be a peer master card). */}
       <div className="dashboard-stack grid grid-cols-1 gap-7 [&>*]:min-w-0">
+          {/*
+           * SHARED CONTEXT — full-width regardless of viewport.
+           * Phase A2 made this card collapsible by default, so it
+           * presents a slim summary line + chevron most of the time
+           * and only opens to the full A–E ladder on demand. Anchoring
+           * the dashboard with the context surface before the desks
+           * preserves the "read environment first, then act" reading
+           * flow that the Mode Separation prompt encodes.
+           */}
           <SharedContextMasterCard
             weeklyIndexRows={weeklyIndexRows}
             marketStatus={marketOverview.status}
@@ -764,13 +813,46 @@ export function DashboardRedesign({
             }
           />
 
+          {/*
+           * Phase C — ACTIVE SIGNAL RIBBON. Surfaces the top firing
+           * signals from BOTH desks as a single horizontal scroll
+           * strip; on empty it folds into a thoughtful "watching N
+           * tickers" line. The ribbon DOES NOT cross-mode rank —
+           * it interleaves swing and day to give equal visual weight
+           * to both engines. Mode Separation discipline preserved.
+           */}
+          <DashboardActiveSignalRibbon
+            swingSignals={swingTopSignals.slice(0, 4)}
+            daySignals={dayTopSignals.slice(0, 4)}
+            emptyContext={{
+              swingUniverseSymbolCount: scannerOverview.swingUniverseSymbolCount ?? null,
+              scannerError: scannerOverview.error
+            }}
+          />
+
+          {/*
+           * Phase B1 — DECISION-DESK GRID. The two decision engines
+           * now sit side-by-side on `lg+` (≥1024px) and stack on
+           * narrower viewports. DOM order is preserved (Swing first,
+           * Day second) so the existing
+           * `day_desk_follows_swing_desk_in_dom_order_stacked` test
+           * stays green: `compareDocumentPosition` is DOM-order
+           * dependent, not CSS-order dependent. The grid uses
+           * `items-stretch` so both cards reach the same height
+           * regardless of which one has a longer empty-state block.
+           */}
+          <div
+            data-testid="dashboard-desks-grid"
+            className="dashboard-desks-grid grid grid-cols-1 items-stretch gap-7 lg:grid-cols-2 [&>*]:min-w-0"
+          >
           <DashboardCard
             role="swing"
-            className={`flex w-full min-h-[200px] flex-col overflow-hidden`}
+            className={`flex h-full w-full min-h-[200px] flex-col overflow-hidden`}
             title="Swing Desk"
             eyebrow="Multi-day · evaluated on daily closes"
-            subtitle="Multi-day engine — evaluates daily closes. Independent of the Day Desk below. Posture (Active / Monitor / Suppressed) reflects regime + sector + structure + per-symbol DailyBarScanner gates."
+            subtitle="Multi-day engine — evaluates daily closes. Independent of the Day Desk. Posture (Active / Monitor / Suppressed) reflects regime + sector + structure + per-symbol DailyBarScanner gates."
             cardTip={TOP_SIGNALS_CARD_TIP}
+            headerRight={<SwingDeskSignature />}
             data-testid="swing-desk-panel"
             data-swing-desk-posture={swingDeskPosture}
           >
@@ -781,8 +863,28 @@ export function DashboardRedesign({
                     <p style={{ margin: 0, color: colors.textMuted }}>{scannerOverview.error}</p>
                   ) : (
                     <>
-                      <p style={{ margin: 0, color: colors.textMuted, lineHeight: 1.5, fontSize: typography.scale.sm, fontWeight: 400 }}>
-                        No active swing setups right now.
+                      <p
+                        style={{
+                          margin: 0,
+                          color: colors.textMuted,
+                          lineHeight: 1.5,
+                          fontSize: typography.scale.sm,
+                          fontWeight: 400,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: spacing[2]
+                        }}
+                      >
+                        {/* Phase D — subtle "still scanning" pulse next to the
+                            empty-state line. Communicates that the engine is
+                            actively watching, not stuck. Honors
+                            prefers-reduced-motion via globals.css. */}
+                        <span
+                          aria-hidden
+                          className="stocvest-pulse-dot"
+                          style={{ background: colors.textMuted }}
+                        />
+                        No active swing setups right now — engine still scanning.
                       </p>
                       {/*
                        * "Primary read" card — the swing desk's dominant
@@ -913,6 +1015,31 @@ export function DashboardRedesign({
                             }}
                           >
                             {signal.direction}
+                          </span>
+                          {/*
+                           * Phase B+ — "Multi-day" pill, symmetric to the
+                           * Day Desk's "Intraday" tag. Reinforces mode
+                           * language at a glance so two rows with the
+                           * same symbol on the two desks read as clearly
+                           * different machines. Color = neutral muted
+                           * (NOT the role accent) so the pill works as
+                           * a label, not a verdict.
+                           */}
+                          <span
+                            data-testid="swing-row-multiday-tag"
+                            style={{
+                              background: "rgba(148,163,184,0.14)",
+                              color: colors.textMuted,
+                              borderRadius: borderRadius.full,
+                              padding: "2px 8px",
+                              fontSize: typography.scale.xs,
+                              fontWeight: 600,
+                              textTransform: "uppercase",
+                              letterSpacing: "0.04em"
+                            }}
+                            title="Multi-day swing setup; cadence differs from the Day Desk."
+                          >
+                            Multi-day
                           </span>
                         </div>
                         <div style={{ display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
@@ -1165,16 +1292,21 @@ export function DashboardRedesign({
             </div>
           </DashboardCard>
 
-          {/* Day Desk — third master card, stacked under the Swing Desk on every
-              screen size; equal visual weight regardless of either desk's posture.
-              Mode Separation B28: posture, signals (or suppression copy), re-enable
-              language, and footer link are all owned by the day-side helpers in
-              lib/dashboard-posture.ts; no swing-side state flows in. */}
+          {/* Day Desk — third master card. On `lg+` it sits to the
+              right of the Swing Desk inside the desks grid above; on
+              narrower viewports it stacks below. Equal visual weight
+              regardless of either desk's posture. Mode Separation
+              B28: posture, signals (or suppression copy), re-enable
+              language, and footer link are all owned by the day-side
+              helpers in lib/dashboard-posture.ts; no swing-side
+              state flows in. */}
           <DayDeskPanel
             setups={scannerOverview.setups}
             marketStatus={marketOverview.status}
             scannerError={scannerOverview.error}
           />
+          </div>
+          {/* /Phase B1 desks grid */}
 
           {/* Phase 2c — the Signal Validation Ledger has been MOVED off the
               dashboard and onto the Performance page. Tracked outcomes describe
