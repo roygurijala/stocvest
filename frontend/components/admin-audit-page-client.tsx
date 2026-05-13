@@ -9,6 +9,8 @@ import {
   type AuditEventRow,
   type RecentAuditResponse
 } from "@/lib/api/admin-audit";
+import { AdminListPager } from "@/components/admin/admin-list-pager";
+import { useClientPaginator } from "@/components/admin/use-client-paginator";
 import {
   borderRadius,
   cardSurfaceStyle,
@@ -35,7 +37,20 @@ const ROUTE_PREFIXES: { value: string; label: string }[] = [
   { value: "DELETE /v1/admin", label: "Admin deletes" }
 ];
 
-const LIMIT_OPTIONS = [50, 100, 200, 500];
+/**
+ * Page size for the client-side pager. Matches the Users page so the
+ * admin section feels uniform — "show all by default, paginate at 25"
+ * is the same contract everywhere.
+ */
+const AUDIT_PAGE_SIZE = 25;
+/**
+ * Upper-bound batch we ask the backend for on every (re)load. The
+ * audit endpoint caps server-side; we deliberately fetch enough to
+ * cover several days of normal traffic so the client-side pager can
+ * provide deep navigation without re-querying. Bumped above the
+ * previous 100 default so paging beyond page 4 still works.
+ */
+const AUDIT_FETCH_LIMIT = 500;
 
 /**
  * Admin audit page — `/dashboard/admin/audit`.
@@ -53,7 +68,6 @@ export function AdminAuditPageClient() {
   const { colors } = useTheme();
   const [module, setModule] = useState<string>("");
   const [routePrefix, setRoutePrefix] = useState<string>("");
-  const [limit, setLimit] = useState<number>(100);
   const [state, setState] = useState<{
     loading: boolean;
     data: RecentAuditResponse | null;
@@ -63,7 +77,7 @@ export function AdminAuditPageClient() {
   const load = useCallback(async () => {
     setState({ loading: true, data: null, error: null });
     const data = await fetchRecentAuditEvents({
-      limit,
+      limit: AUDIT_FETCH_LIMIT,
       module: module || undefined,
       routePrefix: routePrefix || undefined
     });
@@ -72,11 +86,26 @@ export function AdminAuditPageClient() {
       data,
       error: data === null ? "Failed to load audit events. Retry or check upstream." : null
     });
-  }, [module, routePrefix, limit]);
+  }, [module, routePrefix]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  /**
+   * Client-side pager — the audit endpoint doesn't expose a cursor,
+   * so we slice the fetched batch in groups of 25 client-side. Reset
+   * to page 0 whenever filters change so a freshly-filtered list
+   * always starts on its most useful page.
+   */
+  const items = useMemo(() => state.data?.items ?? [], [state.data]);
+  const pager = useClientPaginator({
+    allItems: items,
+    pageSize: AUDIT_PAGE_SIZE
+  });
+  useEffect(() => {
+    pager.goToFirstPage();
+  }, [module, routePrefix, pager.goToFirstPage]);
 
   return (
     <div style={{ display: "grid", gap: spacing[5] }}>
@@ -135,13 +164,12 @@ export function AdminAuditPageClient() {
           onChange={setRoutePrefix}
           testId="audit-filter-route"
         />
-        <SelectField
-          label="Limit"
-          value={String(limit)}
-          options={LIMIT_OPTIONS.map((l) => ({ value: String(l), label: `${l} rows` }))}
-          onChange={(v) => setLimit(Number(v) || 100)}
-          testId="audit-filter-limit"
-        />
+        {/*
+         * The old "Limit" dropdown (50/100/200/500) was removed in
+         * favour of always fetching `AUDIT_FETCH_LIMIT` rows and
+         * paginating client-side. Users no longer have to guess how
+         * many rows they want up front — the pager handles depth.
+         */}
         <button
           type="button"
           onClick={() => void load()}
@@ -184,25 +212,43 @@ export function AdminAuditPageClient() {
           >
             {state.error}
           </p>
-        ) : !state.data || state.data.items.length === 0 ? (
+        ) : items.length === 0 ? (
           <p style={{ margin: 0, padding: spacing[3], color: colors.textMuted }}>
             No audit events match the current filters.
           </p>
         ) : (
-          <ul
-            data-testid="audit-list"
-            style={{
-              listStyle: "none",
-              margin: 0,
-              padding: 0,
-              display: "grid",
-              gap: spacing[2]
-            }}
-          >
-            {state.data.items.map((row) => (
-              <AuditRow key={row.event_id} row={row} />
-            ))}
-          </ul>
+          <div style={{ display: "grid", gap: spacing[3] }}>
+            <ul
+              data-testid="audit-list"
+              style={{
+                listStyle: "none",
+                margin: 0,
+                padding: 0,
+                display: "grid",
+                gap: spacing[2]
+              }}
+            >
+              {pager.pageItems.map((row) => (
+                <AuditRow key={row.event_id} row={row} />
+              ))}
+            </ul>
+            {/* Pager is gated on `shouldShowPager`: a list with <=25
+                rows renders without a pagination footer, matching the
+                Users page contract. */}
+            {pager.shouldShowPager ? (
+              <AdminListPager
+                pageIndex={pager.pageIndex}
+                hasPrev={pager.hasPrev}
+                hasNext={pager.hasNext}
+                loading={state.loading}
+                visibleCount={pager.pageItems.length}
+                pageSize={pager.pageSize}
+                onPrev={pager.goToPrevPage}
+                onNext={pager.goToNextPage}
+                testId="admin-audit-pager"
+              />
+            ) : null}
+          </div>
         )}
       </section>
     </div>

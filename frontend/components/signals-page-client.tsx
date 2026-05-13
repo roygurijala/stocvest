@@ -36,6 +36,7 @@ import {
   type PublicSignal
 } from "@/lib/api/public-signals";
 import { tickerNewsTriggerLine } from "@/lib/api/ticker-news-panel";
+import { rankSymbolCandidates } from "@/lib/symbol-suggestion-rank";
 import { LAYER_NAME_HINTS } from "@/lib/ui-tooltips";
 import { isInsufficientCompositeResponse, type SwingCompositeMarketStatus } from "@/lib/api/swing-composite";
 import { synthTradeDecision } from "@/lib/signal-evidence/trade-decision";
@@ -427,15 +428,27 @@ export function SignalsPageClient({
   }, [symbolDraft]);
 
   const suggestionRows = useMemo(() => {
-    const q = symbolDraft.trim().toLowerCase();
-    const localMatches = !q
-      ? symbolCandidates.slice(0, 8)
-      : symbolCandidates
-          .filter((c) => c.symbol.toLowerCase().startsWith(q) || c.label.toLowerCase().includes(q))
-          .slice(0, 8);
-    const seen = new Set(localMatches.map((c) => c.symbol));
-    const fromRemote = remoteCandidates.filter((c) => !seen.has(c.symbol));
-    return [...localMatches, ...fromRemote].slice(0, 12);
+    const q = symbolDraft.trim();
+    // No query yet — show the first chunk of the local pool so the
+    // dropdown isn't empty when the user clicks into the input.
+    if (!q) return symbolCandidates.slice(0, 8);
+    // With a query we apply the shared ticker-first ranker
+    // (`rankSymbolCandidates`) to BOTH the local and the remote
+    // (Polygon) candidates so the merged list ends up consistently
+    // ordered: exact symbol → symbol prefix → symbol contains →
+    // company-name contains. Without ranking remote rows the same
+    // way, a remote `AAPL — Apple` could slip in front of a local
+    // `APP — AppLovin` for query "AP", which is the bug the user
+    // reported.
+    const seen = new Set<string>();
+    const merged: SymbolCandidate[] = [];
+    for (const c of [...symbolCandidates, ...remoteCandidates]) {
+      const sym = c.symbol.toUpperCase();
+      if (seen.has(sym)) continue;
+      seen.add(sym);
+      merged.push(c);
+    }
+    return rankSymbolCandidates(merged, q).slice(0, 12);
   }, [symbolCandidates, symbolDraft, remoteCandidates]);
 
   const applyCommittedSymbol = useCallback((sym: string | null | undefined) => {
@@ -578,15 +591,21 @@ export function SignalsPageClient({
   }, [histSymbolDraft]);
 
   const histSuggestionRows = useMemo(() => {
-    const q = histSymbolDraft.trim().toLowerCase();
-    const localMatches = !q
-      ? symbolCandidates.slice(0, 8)
-      : symbolCandidates
-          .filter((c) => c.symbol.toLowerCase().startsWith(q) || c.label.toLowerCase().includes(q))
-          .slice(0, 8);
-    const seen = new Set(localMatches.map((c) => c.symbol));
-    const fromRemote = histRemoteCandidates.filter((c) => !seen.has(c.symbol));
-    return [...localMatches, ...fromRemote].slice(0, 12);
+    const q = histSymbolDraft.trim();
+    if (!q) return symbolCandidates.slice(0, 8);
+    // Same ticker-first ranking as the committed-symbol typeahead.
+    // The two dropdowns share a candidate pool and share the same
+    // user mental model ("show me the ticker first") so they must
+    // share the same ordering function.
+    const seen = new Set<string>();
+    const merged: SymbolCandidate[] = [];
+    for (const c of [...symbolCandidates, ...histRemoteCandidates]) {
+      const sym = c.symbol.toUpperCase();
+      if (seen.has(sym)) continue;
+      seen.add(sym);
+      merged.push(c);
+    }
+    return rankSymbolCandidates(merged, q).slice(0, 12);
   }, [symbolCandidates, histSymbolDraft, histRemoteCandidates]);
 
   /** Commit a typeahead choice (or empty string) to the past-signals symbol filter. */

@@ -147,6 +147,32 @@ describe("Swing Desk scanner footer (mode plumbing)", () => {
     expect(link?.getAttribute("href")).toBe("/dashboard/scanner?mode=swing");
   });
 
+  test("swing_desk_does_NOT_double_up_scanner_links_in_the_empty_state", () => {
+    // Anti-regression: the swing empty state used to render a
+    // redundant inline `Open Scanner →` CTA AND the persistent
+    // `View swing scanner →` footer right below it, producing two
+    // near-identical CTAs stacked vertically. The footer is the
+    // canonical link because it's also visible when the desk is
+    // populated, so we lock that only ONE scanner link exists in
+    // the entire swing desk subtree regardless of state.
+    wrap(
+      <DashboardRedesign
+        marketOverview={baseMarket}
+        scannerOverview={baseScanner}
+        earningsEvents={[]}
+        earningsRecent={[]}
+        weeklyIndexRows={baseWeekly}
+        sectorRotation={[]}
+      />
+    );
+    const swing = screen.getByTestId("swing-desk-panel");
+    const scannerLinks = Array.from(swing.querySelectorAll("a")).filter((a) =>
+      /(view|open)\s+(swing\s+)?scanner/i.test(a.textContent || "")
+    );
+    expect(scannerLinks).toHaveLength(1);
+    expect(scannerLinks[0]!.getAttribute("href")).toBe("/dashboard/scanner?mode=swing");
+  });
+
   test("swing_desk_footer_block_carries_NO_data_card_role", () => {
     // Anti-regression on the "exactly 3 master cards" invariant.
     wrap(

@@ -955,13 +955,18 @@ export function DashboardRedesign({
                       <p style={{ margin: 0, color: colors.textMuted, lineHeight: 1.5, fontSize: typography.scale.xs, fontWeight: 400 }}>
                         Scanner runs each morning; full lists and intraday work live on Scanner.
                       </p>
-                      <Link
-                        href="/dashboard/scanner?mode=swing"
-                        className="inline-flex min-h-11 items-center font-semibold"
-                        style={{ color: colors.accent, fontSize: typography.scale.sm }}
-                      >
-                        Open Scanner →
-                      </Link>
+                      {/*
+                       * The redundant inline `Open Scanner ->` CTA used
+                       * to live here, but the persistent footer link
+                       * `View swing scanner ->` (rendered just below
+                       * this card, outside the empty-state branch) now
+                       * carries the exact same destination
+                       * (`/dashboard/scanner?mode=swing`). Keeping both
+                       * gave the empty state two near-identical CTAs
+                       * stacked vertically; the footer wins because
+                       * it's also visible when the desk is populated,
+                       * so users see one consistent affordance.
+                       */}
                     </>
                   )}
                 </div>

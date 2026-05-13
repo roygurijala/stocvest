@@ -82,21 +82,20 @@ describe("Dashboard Swing Desk (top half of the two-desk layout)", () => {
       />
     );
     expect(screen.getByText(/No active swing setups right now/i)).toBeInTheDocument();
-    // Phase C added an Active Signal Ribbon above the desks that also
-    // renders an "Open scanner" link when there are no firing signals
-    // OR no chip data, so the swing-desk empty-state's CTA is matched
-    // by the swing panel's own scanner link explicitly via test id /
-    // scoping. We assert the swing panel's "Open Scanner" link is
-    // present and points at the scanner.
+    // The Swing Desk has exactly one persistent scanner CTA — the
+    // `View swing scanner →` footer link. The redundant inline
+    // `Open Scanner →` CTA that used to live inside the empty
+    // state has been removed (it pointed at the same destination as
+    // the footer immediately below it). Both queries below scoped to
+    // the swing panel so the Active Signal Ribbon's own
+    // "Open scanner" link doesn't intrude on this assertion.
     const swingPanel = screen.getByTestId("swing-desk-panel");
     const swingScannerLinks = Array.from(swingPanel.querySelectorAll("a")).filter((a) =>
-      /open scanner/i.test(a.textContent || "")
+      /(view|open)\s+(swing\s+)?scanner/i.test(a.textContent || "")
     );
-    expect(swingScannerLinks.length).toBeGreaterThan(0);
-    // The swing-side scanner CTA now carries `?mode=swing` so the scanner
-    // page's URL-priority mode resolver lands the user on the Swing tab
-    // every time (the symmetric fix for the Day Desk's `?mode=day` link).
+    expect(swingScannerLinks.length).toBe(1);
     expect(swingScannerLinks[0]!.getAttribute("href")).toBe("/dashboard/scanner?mode=swing");
+    expect(swingScannerLinks[0]!.textContent?.toLowerCase()).toContain("view swing scanner");
 
     // The intraday setup MUST appear inside the Day Desk panel — the
     // dashboard is a dual-desk surface and intraday rows are no longer

@@ -25,6 +25,8 @@ import {
   type ProposalSummaryRow,
   type PromotionResult
 } from "@/lib/api/admin-proposals";
+import { AdminListPager } from "@/components/admin/admin-list-pager";
+import { useClientPaginator } from "@/components/admin/use-client-paginator";
 import {
   borderRadius,
   cardSurfaceStyle,
@@ -39,6 +41,14 @@ const STATUS_OPTIONS: { value: ProposalStatus; label: string }[] = [
   { value: "rejected", label: "Rejected" },
   { value: "superseded", label: "Superseded" }
 ];
+
+/**
+ * Page size + fetch ceiling for the proposals list. Mirrors the Users
+ * page (25/page) and the Audit page (500-row batch) to keep the admin
+ * section UX uniform — see `useClientPaginator` docstring.
+ */
+const PROPOSALS_PAGE_SIZE = 25;
+const PROPOSALS_FETCH_LIMIT = 200;
 
 const WEIGHT_KEYS: (keyof CompositeOverrideBlock)[] = [
   "technical_weight",
@@ -79,7 +89,7 @@ export function AdminProposalsPageClient() {
 
   const loadList = useCallback(async (status: ProposalStatus) => {
     setListState({ loading: true, response: null, error: null });
-    const response = await fetchProposals({ status, limit: 50 });
+    const response = await fetchProposals({ status, limit: PROPOSALS_FETCH_LIMIT });
     setListState({
       loading: false,
       response,
@@ -90,6 +100,22 @@ export function AdminProposalsPageClient() {
   useEffect(() => {
     void loadList(statusFilter);
   }, [statusFilter, loadList]);
+
+  /**
+   * Client-side paginator — keeps the admin section's "show all by
+   * default, paginate at 25" rule uniform with the Users and Audit
+   * pages. Switching the status filter snaps the view back to page 0
+   * so the most useful slice of a freshly filtered list is what the
+   * admin sees first.
+   */
+  const allProposals = useMemo(() => listState.response?.items ?? [], [listState.response]);
+  const pager = useClientPaginator({
+    allItems: allProposals,
+    pageSize: PROPOSALS_PAGE_SIZE
+  });
+  useEffect(() => {
+    pager.goToFirstPage();
+  }, [statusFilter, pager.goToFirstPage]);
 
   const loadDetail = useCallback(async (proposalId: string) => {
     setDetailState({ loading: true, detail: null, error: null });
@@ -111,7 +137,10 @@ export function AdminProposalsPageClient() {
     }
   }, [selectedId, loadDetail]);
 
-  const items = listState.response?.items ?? [];
+  // ⚠ `items` historically meant "everything the API returned" and is
+  // still used by the empty-state copy below ("No pending proposals.").
+  // For row rendering we now go through the pager.
+  const items = allProposals;
 
   const onPromote = useCallback(async () => {
     if (!selectedId) return;
@@ -320,14 +349,32 @@ export function AdminProposalsPageClient() {
               message={`No ${statusFilter} proposals.`}
             />
           ) : (
-            items.map((item) => (
-              <ProposalSummaryCard
-                key={item.proposal_id}
-                row={item}
-                selected={item.proposal_id === selectedId}
-                onSelect={() => setSelectedId(item.proposal_id)}
-              />
-            ))
+            <>
+              {pager.pageItems.map((item) => (
+                <ProposalSummaryCard
+                  key={item.proposal_id}
+                  row={item}
+                  selected={item.proposal_id === selectedId}
+                  onSelect={() => setSelectedId(item.proposal_id)}
+                />
+              ))}
+              {/* Pager footer — only when the unfiltered batch has
+                  more rows than fit on a single page. Mirrors the
+                  Users and Audit pages exactly. */}
+              {pager.shouldShowPager ? (
+                <AdminListPager
+                  pageIndex={pager.pageIndex}
+                  hasPrev={pager.hasPrev}
+                  hasNext={pager.hasNext}
+                  loading={listState.loading}
+                  visibleCount={pager.pageItems.length}
+                  pageSize={pager.pageSize}
+                  onPrev={pager.goToPrevPage}
+                  onNext={pager.goToNextPage}
+                  testId="admin-proposals-pager"
+                />
+              ) : null}
+            </>
           )}
         </section>
 
