@@ -736,6 +736,39 @@ export function SignalsPageClient({
   }, [histSymbolDraft, histSuggestOpen]);
 
   const updateTradingMode = (m: TradingMode) => {
+    // Same-mode click is a no-op — don't tear down state if the user
+    // re-clicks the currently active pill (still need to fire the URL
+    // / localStorage writes? No — those are already correct).
+    if (m === tradingMode) return;
+
+    // Wipe every piece of mode-bound state SYNCHRONOUSLY before the
+    // mode flips. The data-fetch effects below ([symbol, tab,
+    // tradingMode] for composite + [tab, tradingMode] for history)
+    // re-fire on this mode change, but they only call their setters
+    // AFTER the async fetch resolves. Without an eager clear here,
+    // React renders the *new* mode pill alongside the *old* mode's
+    // 6-layer breakdown, radar, evidence article, history rows, and
+    // after-hours news — the confusing transient the user reported.
+    //
+    // After clearing, the 6-Layer Signal Breakdown card renders its
+    // CuteLoader fallback (added in this commit), the history tab
+    // shows its existing `histLoading` loader, and the after-hours
+    // panel/news disappear naturally because their visibility
+    // derives from `compositeResult` (now null) — the dependency
+    // chain unwinds itself.
+    //
+    // We do NOT clear `symbol` or `symbolSnapshot` — those are
+    // per-symbol, not per-mode, and the user expects to keep looking
+    // at the same ticker after toggling modes.
+    setCompositeResult(null);
+    setSignalEvidence(null);
+    setRadarData(null);
+    setHistoryRows([]);
+    // If the history tab is the visible one right now, flip its
+    // loader on immediately so the table area shows the loader for
+    // the full transition, not "empty table → loader → new rows".
+    if (tab === "history") setHistLoading(true);
+
     setTradingMode(m);
     try {
       localStorage.setItem(TRADING_MODE_STORAGE_KEY, m);
@@ -1839,8 +1872,9 @@ export function SignalsPageClient({
               border: tradingMode === "swing" ? "1px solid rgba(168,85,247,0.45)" : "1px solid transparent"
             }}
           >
-            <span className="inline-flex items-center justify-center gap-1.5" aria-hidden>
-              📈 Swing trade
+            <span className="inline-flex items-center justify-center gap-1.5">
+              <span aria-hidden>📈</span>
+              Swing trade
             </span>
           </button>
         </div>
@@ -1857,7 +1891,33 @@ export function SignalsPageClient({
           style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
         >
           <h3 style={{ marginTop: 0, marginBottom: spacing[2] }}>6-Layer Signal Breakdown</h3>
-          {insufficientComposite ? (
+          {compositeResult === null ? (
+            /*
+             * Composite is in-flight (either initial load after a
+             * symbol is committed, or a fresh fetch after the user
+             * toggled the trading mode — `updateTradingMode` clears
+             * `compositeResult` synchronously). Show a calm loader
+             * instead of the `rows.map` fallback that would otherwise
+             * render six "Unavailable" cards from `layerMeta` defaults.
+             *
+             * NB: `insufficientComposite` cannot be truthy when
+             * `compositeResult === null` (the former is derived from
+             * the latter via `isInsufficientCompositeResponse`), so
+             * this branch and the insufficient-data branch are
+             * mutually exclusive — the order of the checks is
+             * structural, not arbitrary.
+             */
+            <div
+              data-testid="signals-layers-loader"
+              style={{ padding: `${spacing[6]} ${spacing[4]}` }}
+            >
+              <CuteLoader
+                label={`Loading ${tradingMode === "swing" ? "swing" : "day"} signal`}
+                sublabel={`Refreshing the 6-layer breakdown for ${symbol.trim().toUpperCase() || "this symbol"}.`}
+                compact
+              />
+            </div>
+          ) : insufficientComposite ? (
             <div
               style={{
                 background: "rgba(245,197,66,0.06)",
