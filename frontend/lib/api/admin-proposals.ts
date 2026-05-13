@@ -1,5 +1,9 @@
 "use client";
 
+import {
+  classifyAdminReadStatus,
+  type AdminApiReadOutcome
+} from "@/lib/api/admin-users";
 import { surfaceAuthErrorIfAny } from "@/lib/auth/surface-auth-error";
 
 /**
@@ -255,36 +259,99 @@ export interface FetchProposalsParams {
 export async function fetchProposals(
   params?: FetchProposalsParams
 ): Promise<ProposalListResponse | null> {
+  const outcome = await fetchProposalsDiagnostic(params);
+  return outcome.kind === "ok" ? outcome.data : null;
+}
+
+/**
+ * Diagnostic variant — pairs with the equivalent helpers on the
+ * users / audit APIs so every admin list page can render the actual
+ * HTTP status + an actionable hint via {@link AdminApiErrorCard}.
+ */
+export async function fetchProposalsDiagnostic(
+  params?: FetchProposalsParams
+): Promise<AdminApiReadOutcome<ProposalListResponse>> {
   const qs = new URLSearchParams();
   if (params?.status) qs.set("status", params.status);
   if (params?.limit && params.limit > 0) qs.set("limit", String(params.limit));
   const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  let response: Response;
   try {
-    const response = await fetch(`/api/stocvest/admin/proposals${suffix}`, {
+    response = await fetch(`/api/stocvest/admin/proposals${suffix}`, {
       method: "GET",
       credentials: "include",
       cache: "no-store"
     });
-    if (response.status === 401) {
-      void surfaceAuthErrorIfAny(response);
-      return null;
-    }
-    if (!response.ok) return null;
-    const data = (await response.json()) as unknown;
-    if (!isRecord(data)) return null;
-    const status = parseStatus(data.status);
-    if (!status) return null;
-    const items = Array.isArray(data.items)
-      ? (data.items.map(parseSummaryRow).filter(Boolean) as ProposalSummaryRow[])
-      : [];
+  } catch (exc) {
     return {
+      kind: "error",
+      error: {
+        code: "network_error",
+        status: 0,
+        message:
+          exc instanceof Error ? exc.message : "Network error reaching the backend.",
+        hint: "Check your connection or the BFF dev server."
+      }
+    };
+  }
+  if (response.status === 401) {
+    void surfaceAuthErrorIfAny(response);
+    return { kind: "error", error: classifyAdminReadStatus(401, "Unauthenticated.") };
+  }
+  if (!response.ok) {
+    return {
+      kind: "error",
+      error: classifyAdminReadStatus(response.status, "Request failed.")
+    };
+  }
+  let data: unknown;
+  try {
+    data = await response.json();
+  } catch {
+    return {
+      kind: "error",
+      error: {
+        code: "malformed_response",
+        status: response.status,
+        message: "The backend returned a non-JSON response.",
+        hint: "Check the API Lambda logs for an unhandled exception."
+      }
+    };
+  }
+  if (!isRecord(data)) {
+    return {
+      kind: "error",
+      error: {
+        code: "malformed_response",
+        status: response.status,
+        message: "The backend response was the wrong shape.",
+        hint: "The frontend and backend may be on incompatible versions."
+      }
+    };
+  }
+  const status = parseStatus(data.status);
+  if (!status) {
+    return {
+      kind: "error",
+      error: {
+        code: "malformed_response",
+        status: response.status,
+        message: "Proposal list response missing a valid status.",
+        hint: "Check the API Lambda logs and verify the response shape."
+      }
+    };
+  }
+  const items = Array.isArray(data.items)
+    ? (data.items.map(parseSummaryRow).filter(Boolean) as ProposalSummaryRow[])
+    : [];
+  return {
+    kind: "ok",
+    data: {
       status,
       limit: parseInt0(data.limit) || 20,
       items
-    };
-  } catch {
-    return null;
-  }
+    }
+  };
 }
 
 /**

@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  classifyAdminReadStatus,
+  type AdminApiReadError,
+  type AdminApiReadOutcome
+} from "@/lib/api/admin-users";
 import { surfaceAuthErrorIfAny } from "@/lib/auth/surface-auth-error";
 
 /**
@@ -106,6 +111,21 @@ export interface FetchRecentAuditParams {
 export async function fetchRecentAuditEvents(
   params: FetchRecentAuditParams = {}
 ): Promise<RecentAuditResponse | null> {
+  const outcome = await fetchRecentAuditEventsDiagnostic(params);
+  return outcome.kind === "ok" ? outcome.data : null;
+}
+
+/**
+ * Diagnostic variant of {@link fetchRecentAuditEvents}. Returns the
+ * typed `AdminApiReadOutcome` envelope so the Audit page can render
+ * the actual HTTP status + an actionable hint (e.g.
+ * "404 → admin routes aren't deployed"). Pairs with the equivalent
+ * helper on the users API and keeps every admin list surface using
+ * the same diagnostic UX.
+ */
+export async function fetchRecentAuditEventsDiagnostic(
+  params: FetchRecentAuditParams = {}
+): Promise<AdminApiReadOutcome<RecentAuditResponse>> {
   const qs = new URLSearchParams();
   if (params.limit && params.limit > 0) qs.set("limit", String(params.limit));
   if (params.module && params.module.trim()) qs.set("module", params.module.trim());
@@ -113,31 +133,75 @@ export async function fetchRecentAuditEvents(
     qs.set("route_prefix", params.routePrefix.trim());
   }
   const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  let response: Response;
   try {
-    const response = await fetch(`/api/stocvest/admin/audit/recent${suffix}`, {
+    response = await fetch(`/api/stocvest/admin/audit/recent${suffix}`, {
       method: "GET",
       credentials: "include",
       cache: "no-store"
     });
-    if (response.status === 401) {
-      void surfaceAuthErrorIfAny(response);
-      return null;
-    }
-    if (!response.ok) return null;
-    const data = (await response.json()) as unknown;
-    if (!isRecord(data)) return null;
-    const items = Array.isArray(data.items)
-      ? (data.items.map(parseAuditEvent).filter(Boolean) as AuditEventRow[])
-      : [];
+  } catch (exc) {
     return {
+      kind: "error",
+      error: makeNetworkError(exc)
+    };
+  }
+  if (response.status === 401) {
+    void surfaceAuthErrorIfAny(response);
+    return { kind: "error", error: classifyAdminReadStatus(401, "Unauthenticated.") };
+  }
+  if (!response.ok) {
+    return {
+      kind: "error",
+      error: classifyAdminReadStatus(response.status, "Request failed.")
+    };
+  }
+  let data: unknown;
+  try {
+    data = await response.json();
+  } catch {
+    return {
+      kind: "error",
+      error: {
+        code: "malformed_response",
+        status: response.status,
+        message: "The backend returned a non-JSON response.",
+        hint: "Check the API Lambda logs for an unhandled exception."
+      }
+    };
+  }
+  if (!isRecord(data)) {
+    return {
+      kind: "error",
+      error: {
+        code: "malformed_response",
+        status: response.status,
+        message: "The backend response was the wrong shape.",
+        hint: "The frontend and backend may be on incompatible versions."
+      }
+    };
+  }
+  const items = Array.isArray(data.items)
+    ? (data.items.map(parseAuditEvent).filter(Boolean) as AuditEventRow[])
+    : [];
+  return {
+    kind: "ok",
+    data: {
       limit: parseNum0(data.limit) || 100,
       module: parseStrOrNull(data.module),
       route_prefix: parseStrOrNull(data.route_prefix),
       items
-    };
-  } catch {
-    return null;
-  }
+    }
+  };
+}
+
+function makeNetworkError(exc: unknown): AdminApiReadError {
+  return {
+    code: "network_error",
+    status: 0,
+    message: exc instanceof Error ? exc.message : "Network error reaching the backend.",
+    hint: "Check your connection or the BFF dev server."
+  };
 }
 
 export async function fetchUserAuditEvents(

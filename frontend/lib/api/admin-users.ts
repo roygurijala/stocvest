@@ -50,6 +50,88 @@ export interface AdminUserSearchResponse {
   next_token: string | null;
 }
 
+/**
+ * Diagnostic detail captured when a read fails. Surfaces the HTTP
+ * status so the UI can render an actionable error message (e.g.
+ * "404 → admin routes not deployed; run terraform apply") instead of
+ * a generic "Failed to load users." Replaces the previous
+ * `null`-on-failure convention which silently hid the real cause.
+ */
+export interface AdminApiReadError {
+  /** Lowercase short code for switch/case branching in the UI. */
+  code:
+    | "unauthenticated"
+    | "forbidden"
+    | "not_deployed"
+    | "upstream_error"
+    | "network_error"
+    | "malformed_response";
+  /** Raw HTTP status from the BFF response, or 0 on network failure. */
+  status: number;
+  /** Human-readable single-line summary of what went wrong. */
+  message: string;
+  /** Suggested next action — surfaced under the error message. */
+  hint: string;
+}
+
+export type AdminApiReadOutcome<T> =
+  | { kind: "ok"; data: T }
+  | { kind: "error"; error: AdminApiReadError };
+
+/**
+ * Pure mapper from HTTP status -> diagnostic envelope. Centralised so
+ * every admin read renders the same hint copy for the same failure
+ * mode. Bumping a hint here propagates to every list page at once.
+ */
+export function classifyAdminReadStatus(
+  status: number,
+  fallbackMessage: string
+): AdminApiReadError {
+  if (status === 401) {
+    return {
+      code: "unauthenticated",
+      status,
+      message: "Your session expired.",
+      hint: "Sign out and back in to refresh your credentials."
+    };
+  }
+  if (status === 403) {
+    return {
+      code: "forbidden",
+      status,
+      message: "The backend rejected your admin claim.",
+      hint:
+        "If you were just added to the admin group, sign out and back in so " +
+        "your token picks up the `cognito:groups` claim."
+    };
+  }
+  if (status === 404) {
+    return {
+      code: "not_deployed",
+      status,
+      message: "The admin API isn't deployed yet on this environment.",
+      hint:
+        "Run `terraform apply` from /infra and redeploy the API Lambda. " +
+        "The route is wired in source but the deployed API Gateway / " +
+        "Lambda code is stale."
+    };
+  }
+  if (status >= 500 && status < 600) {
+    return {
+      code: "upstream_error",
+      status,
+      message: "The backend returned an error.",
+      hint: "Retry; if it persists, check the API Lambda logs in CloudWatch."
+    };
+  }
+  return {
+    code: "upstream_error",
+    status,
+    message: fallbackMessage,
+    hint: "Retry; if it persists, check the API Lambda logs in CloudWatch."
+  };
+}
+
 /** Full per-user payload from `GET /[user_id]`. */
 export interface AdminUserDetail {
   user_id: string;
@@ -213,6 +295,26 @@ export async function searchUsers(
   query: string,
   options: { limit?: number; pageToken?: string | null } = {}
 ): Promise<AdminUserSearchResponse | null> {
+  const outcome = await searchUsersDiagnostic(query, options);
+  return outcome.kind === "ok" ? outcome.data : null;
+}
+
+/**
+ * Diagnostic variant of {@link searchUsers} that returns either the
+ * parsed page or a typed error envelope with the HTTP status and a
+ * human-friendly hint. Use this in the Admin Users page so the
+ * "Failed to load users" empty state can render an actionable
+ * message ("404 — route not deployed; run terraform apply") instead
+ * of a generic fallback.
+ *
+ * The original `null`-on-failure helper is retained for callers that
+ * don't need diagnostics (e.g. background refreshes after a
+ * mutation); migrate them opportunistically.
+ */
+export async function searchUsersDiagnostic(
+  query: string,
+  options: { limit?: number; pageToken?: string | null } = {}
+): Promise<AdminApiReadOutcome<AdminUserSearchResponse>> {
   const q = (query ?? "").trim();
   const limit = options.limit && options.limit > 0 ? options.limit : 25;
   const qs = new URLSearchParams();
@@ -220,27 +322,68 @@ export async function searchUsers(
   qs.set("limit", String(limit));
   const token = (options.pageToken ?? "").trim();
   if (token) qs.set("page_token", token);
+  let response: Response;
   try {
-    const response = await fetch(`/api/stocvest/admin/users/search?${qs.toString()}`, {
+    response = await fetch(`/api/stocvest/admin/users/search?${qs.toString()}`, {
       method: "GET",
       credentials: "include",
       cache: "no-store"
     });
-    if (response.status === 401) {
-      void surfaceAuthErrorIfAny(response);
-      return null;
-    }
-    if (!response.ok) return null;
-    const data = (await response.json()) as unknown;
-    if (!isRecord(data)) return null;
-    const items = Array.isArray(data.items)
-      ? (data.items
-          .map(parseSummaryRow)
-          .filter(Boolean) as AdminUserSummaryRow[])
-      : [];
-    const nextRaw = data.next_token;
-    const next_token = typeof nextRaw === "string" && nextRaw.trim() ? nextRaw : null;
+  } catch (exc) {
     return {
+      kind: "error",
+      error: {
+        code: "network_error",
+        status: 0,
+        message:
+          exc instanceof Error ? exc.message : "Network error reaching the backend.",
+        hint: "Check your connection or the BFF dev server."
+      }
+    };
+  }
+  if (response.status === 401) {
+    void surfaceAuthErrorIfAny(response);
+    return { kind: "error", error: classifyAdminReadStatus(401, "Unauthenticated.") };
+  }
+  if (!response.ok) {
+    return {
+      kind: "error",
+      error: classifyAdminReadStatus(response.status, "Request failed.")
+    };
+  }
+  let data: unknown;
+  try {
+    data = await response.json();
+  } catch {
+    return {
+      kind: "error",
+      error: {
+        code: "malformed_response",
+        status: response.status,
+        message: "The backend returned a non-JSON response.",
+        hint: "Check the API Lambda logs for an unhandled exception."
+      }
+    };
+  }
+  if (!isRecord(data)) {
+    return {
+      kind: "error",
+      error: {
+        code: "malformed_response",
+        status: response.status,
+        message: "The backend response was the wrong shape.",
+        hint: "The frontend and backend may be on incompatible versions."
+      }
+    };
+  }
+  const items = Array.isArray(data.items)
+    ? (data.items.map(parseSummaryRow).filter(Boolean) as AdminUserSummaryRow[])
+    : [];
+  const nextRaw = data.next_token;
+  const next_token = typeof nextRaw === "string" && nextRaw.trim() ? nextRaw : null;
+  return {
+    kind: "ok",
+    data: {
       query: parseStr(data.query) || q,
       limit:
         typeof data.limit === "number" && Number.isFinite(data.limit)
@@ -248,10 +391,8 @@ export async function searchUsers(
           : limit,
       items,
       next_token
-    };
-  } catch {
-    return null;
-  }
+    }
+  };
 }
 
 /**

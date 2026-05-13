@@ -16,8 +16,9 @@ import {
   fetchUserDetail,
   removeUserFromGroup,
   resetUserPassword,
-  searchUsers,
+  searchUsersDiagnostic,
   userMutationErrorLabel,
+  type AdminApiReadError,
   type AdminUserDetail,
   type AdminUserMutationOutcome,
   type AdminUserSummaryRow
@@ -27,6 +28,7 @@ import {
   statusCodeTone,
   type AuditEventRow
 } from "@/lib/api/admin-audit";
+import { AdminApiErrorCard } from "@/components/admin/admin-api-error-card";
 import { AdminListPager } from "@/components/admin/admin-list-pager";
 import {
   borderRadius,
@@ -83,14 +85,22 @@ export function AdminUsersPageClient() {
     queried: string;
     nextToken: string | null;
     tokenStack: string[];
-    errored: boolean;
+    /**
+     * Typed diagnostic envelope for the most recent failed fetch.
+     * `null` means "no error". The previous `errored: boolean` flag
+     * collapsed every failure mode to one opaque "Failed to load
+     * users" line; carrying the full envelope lets the empty state
+     * render the actual HTTP status + an actionable hint
+     * (e.g. 404 → "route not deployed; run terraform apply").
+     */
+    error: AdminApiReadError | null;
   }>({
     loading: true,
     items: [],
     queried: "",
     nextToken: null,
     tokenStack: [],
-    errored: false
+    error: null
   });
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [detailState, setDetailState] = useState<{
@@ -112,29 +122,29 @@ export function AdminUsersPageClient() {
    */
   const runSearch = useCallback(
     async (q: string, pageToken: string | null, stackForPage: string[]) => {
-      setSearchState((s) => ({ ...s, loading: true, errored: false }));
-      const response = await searchUsers(q, {
+      setSearchState((s) => ({ ...s, loading: true, error: null }));
+      const outcome = await searchUsersDiagnostic(q, {
         limit: USERS_PAGE_SIZE,
         pageToken
       });
-      if (response === null) {
+      if (outcome.kind === "error") {
         setSearchState({
           loading: false,
           items: [],
           queried: q,
           nextToken: null,
           tokenStack: stackForPage,
-          errored: true
+          error: outcome.error
         });
         return;
       }
       setSearchState({
         loading: false,
-        items: response.items,
+        items: outcome.data.items,
         queried: q,
-        nextToken: response.next_token,
+        nextToken: outcome.data.next_token,
         tokenStack: stackForPage,
-        errored: false
+        error: null
       });
     },
     []
@@ -394,10 +404,13 @@ export function AdminUsersPageClient() {
         <section data-testid="admin-users-results" style={{ display: "grid", gap: spacing[3] }}>
           {searchState.loading && searchState.items.length === 0 ? (
             <EmptyCard message="Loading users…" />
-          ) : searchState.errored ? (
-            <EmptyCard
-              message="Failed to load users. Check admin permissions and retry, or hit Filter again."
-              tone="bearish"
+          ) : searchState.error ? (
+            <AdminApiErrorCard
+              error={searchState.error}
+              onRetry={() =>
+                void runSearch(searchState.queried, null, [])
+              }
+              testId="admin-users-error-card"
             />
           ) : searchState.items.length === 0 ? (
             <EmptyCard

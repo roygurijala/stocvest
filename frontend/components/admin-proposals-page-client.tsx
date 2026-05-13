@@ -13,7 +13,7 @@ import {
 import {
   compositeWeightLabel,
   fetchProposalDetail,
-  fetchProposals,
+  fetchProposalsDiagnostic,
   formatAccuracyLift,
   promoteProposal,
   rejectProposal,
@@ -25,6 +25,8 @@ import {
   type ProposalSummaryRow,
   type PromotionResult
 } from "@/lib/api/admin-proposals";
+import type { AdminApiReadError } from "@/lib/api/admin-users";
+import { AdminApiErrorCard } from "@/components/admin/admin-api-error-card";
 import { AdminListPager } from "@/components/admin/admin-list-pager";
 import { useClientPaginator } from "@/components/admin/use-client-paginator";
 import {
@@ -72,7 +74,12 @@ export function AdminProposalsPageClient() {
   const [listState, setListState] = useState<{
     loading: boolean;
     response: ProposalListResponse | null;
-    error: string | null;
+    /**
+     * Typed diagnostic envelope; rendered via `AdminApiErrorCard` so
+     * a deploy gap (404) or stale admin claim (403) is surfaced with
+     * an actionable hint instead of a generic "Failed to load" line.
+     */
+    error: AdminApiReadError | null;
   }>({ loading: true, response: null, error: null });
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -89,12 +96,12 @@ export function AdminProposalsPageClient() {
 
   const loadList = useCallback(async (status: ProposalStatus) => {
     setListState({ loading: true, response: null, error: null });
-    const response = await fetchProposals({ status, limit: PROPOSALS_FETCH_LIMIT });
-    setListState({
-      loading: false,
-      response,
-      error: response === null ? "Failed to load proposals. Check admin permissions and retry." : null
-    });
+    const outcome = await fetchProposalsDiagnostic({ status, limit: PROPOSALS_FETCH_LIMIT });
+    if (outcome.kind === "error") {
+      setListState({ loading: false, response: null, error: outcome.error });
+      return;
+    }
+    setListState({ loading: false, response: outcome.data, error: null });
   }, []);
 
   useEffect(() => {
@@ -342,7 +349,11 @@ export function AdminProposalsPageClient() {
           {listState.loading ? (
             <EmptyCard colors={colors} message="Loading proposals…" />
           ) : listState.error ? (
-            <EmptyCard colors={colors} tone="bearish" message={listState.error} />
+            <AdminApiErrorCard
+              error={listState.error}
+              onRetry={() => void loadList(statusFilter)}
+              testId="admin-proposals-error-card"
+            />
           ) : items.length === 0 ? (
             <EmptyCard
               colors={colors}

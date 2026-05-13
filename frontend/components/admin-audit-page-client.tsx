@@ -4,11 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Filter, RefreshCw, ScrollText } from "lucide-react";
 
 import {
-  fetchRecentAuditEvents,
+  fetchRecentAuditEventsDiagnostic,
   statusCodeTone,
   type AuditEventRow,
   type RecentAuditResponse
 } from "@/lib/api/admin-audit";
+import type { AdminApiReadError } from "@/lib/api/admin-users";
+import { AdminApiErrorCard } from "@/components/admin/admin-api-error-card";
 import { AdminListPager } from "@/components/admin/admin-list-pager";
 import { useClientPaginator } from "@/components/admin/use-client-paginator";
 import {
@@ -71,21 +73,26 @@ export function AdminAuditPageClient() {
   const [state, setState] = useState<{
     loading: boolean;
     data: RecentAuditResponse | null;
-    error: string | null;
+    /**
+     * Typed diagnostic envelope (see `AdminApiErrorCard`). Renders
+     * the actual HTTP status + a hint so a deploy gap doesn't get
+     * swallowed by a generic "Failed to load" string.
+     */
+    error: AdminApiReadError | null;
   }>({ loading: true, data: null, error: null });
 
   const load = useCallback(async () => {
     setState({ loading: true, data: null, error: null });
-    const data = await fetchRecentAuditEvents({
+    const outcome = await fetchRecentAuditEventsDiagnostic({
       limit: AUDIT_FETCH_LIMIT,
       module: module || undefined,
       routePrefix: routePrefix || undefined
     });
-    setState({
-      loading: false,
-      data,
-      error: data === null ? "Failed to load audit events. Retry or check upstream." : null
-    });
+    if (outcome.kind === "error") {
+      setState({ loading: false, data: null, error: outcome.error });
+      return;
+    }
+    setState({ loading: false, data: outcome.data, error: null });
   }, [module, routePrefix]);
 
   useEffect(() => {
@@ -206,12 +213,11 @@ export function AdminAuditPageClient() {
             Loading…
           </p>
         ) : state.error ? (
-          <p
-            data-testid="audit-error"
-            style={{ margin: 0, padding: spacing[3], color: colors.bearish }}
-          >
-            {state.error}
-          </p>
+          <AdminApiErrorCard
+            error={state.error}
+            onRetry={() => void load()}
+            testId="audit-error"
+          />
         ) : items.length === 0 ? (
           <p style={{ margin: 0, padding: spacing[3], color: colors.textMuted }}>
             No audit events match the current filters.
