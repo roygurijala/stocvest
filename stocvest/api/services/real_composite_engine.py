@@ -33,6 +33,7 @@ from stocvest.config.signal_parameters import SignalParameters
 from stocvest.data.benzinga_client import BenzingaClient, BenzingaMultiResult
 from stocvest.data.models import Bar, SignalRecord, Snapshot, Timeframe
 from stocvest.data.polygon_client import PolygonClient, PolygonError
+from stocvest.data.symbol_normalize import to_polygon_symbol
 from stocvest.signals.confluence import ConfluenceDetector, confluence_result_to_response_fields, normalize_direction
 from stocvest.signals.composite_score import (
     CompositeSignal,
@@ -223,7 +224,9 @@ async def run_real_composite_engine_phase(
     :class:`RealCompositeEnginePhase` for callers that build a full HTTP body or
     a narrow verdict read.
     """
-    sym = symbol.strip().upper()
+    # Class-share tickers like BRK-B must be canonicalised to BRK.B before
+    # any Polygon call. Idempotent for already-normalised symbols.
+    sym = to_polygon_symbol(symbol)
     settings = get_settings()
     sector_cache = DynamoSectorCache(settings.dynamodb_sector_cache_table)
 
@@ -402,7 +405,10 @@ async def build_real_composite_response(
     user_email: str | None,
     params: SignalParameters,
 ) -> dict[str, Any]:
-    sym = symbol.strip().upper()
+    # See stocvest/data/symbol_normalize.py — Polygon's REST endpoints
+    # reject the dash form of class-share tickers (BRK-B → 404). Normalising
+    # here keeps every downstream Polygon call on the dot form.
+    sym = to_polygon_symbol(symbol)
     phase = await run_real_composite_engine_phase(symbol=sym, params=params)
     if isinstance(phase, dict):
         return phase

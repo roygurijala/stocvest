@@ -37,6 +37,7 @@ from stocvest.config.signal_parameters import SignalParameters
 from stocvest.data.benzinga_client import BenzingaClient, BenzingaMultiResult
 from stocvest.data.models import Bar, SignalRecord, Snapshot, Timeframe
 from stocvest.data.polygon_client import PolygonClient, PolygonError
+from stocvest.data.symbol_normalize import to_polygon_symbol
 from stocvest.signals.confluence import ConfluenceDetector, confluence_result_to_response_fields, normalize_direction
 from stocvest.signals.composite_score import (
     CompositeVerdict,
@@ -93,7 +94,12 @@ async def build_swing_composite_response(
     user_email: str | None,
     params: SignalParameters,
 ) -> dict[str, Any]:
-    sym = symbol.strip().upper()
+    # Polygon's REST endpoints reject the dash form of class-share tickers
+    # (BRK-B → 404), so canonicalise once at engine entry. Without this
+    # the technical and sector layers silently went `unavailable` for
+    # BRK-B / BRK-A / RDS-A / BF-B etc., and the composite collapsed to
+    # neutral. See stocvest/data/symbol_normalize.py for the full rule.
+    sym = to_polygon_symbol(symbol)
     settings = get_settings()
     sector_cache = DynamoSectorCache(settings.dynamodb_sector_cache_table)
     benzinga = BenzingaClient()
