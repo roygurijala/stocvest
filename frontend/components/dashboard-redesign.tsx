@@ -29,6 +29,7 @@ import type { EarningsEvent } from "@/lib/api/earnings";
 import { earningsTimingLabel } from "@/lib/earnings-timing";
 import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, cardSurfaceStyle, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
+import { useHoverPrefetch } from "@/lib/hooks/use-hover-prefetch";
 import { useTheme } from "@/lib/theme-provider";
 import { buildEvidenceFromSetup, enrichEvidenceWithComposite, type SignalEvidenceData } from "@/lib/signal-evidence";
 import { tickerNewsTriggerLine } from "@/lib/api/ticker-news-panel";
@@ -495,6 +496,11 @@ export function DashboardRedesign({
   const [newsPanelOpen, setNewsPanelOpen] = useState(false);
   const [newsUiTick, setNewsUiTick] = useState(0);
   const [macroPulse, setMacroPulse] = useState<Awaited<ReturnType<typeof fetchMacroContext>>>(null);
+  // Tier 1 → Layer 4: warm `/dashboard/scanner?mode=swing` only when
+  // the user signals intent (hover / focus / pointer-down on the
+  // footer link). The link still carries `prefetch={false}` so the
+  // mount-time prefetch storm (Tier 1.A) stays disabled.
+  const swingScannerHoverPrefetch = useHoverPrefetch("/dashboard/scanner?mode=swing");
 
   useEffect(() => {
     let cancelled = false;
@@ -1325,6 +1331,10 @@ export function DashboardRedesign({
                 <Link
                   href="/dashboard/scanner?mode=swing"
                   prefetch={false}
+                  data-hover-prefetch="true"
+                  onMouseEnter={swingScannerHoverPrefetch.onMouseEnter}
+                  onFocus={swingScannerHoverPrefetch.onFocus}
+                  onPointerDown={swingScannerHoverPrefetch.onPointerDown}
                   className="inline-flex min-h-11 items-center font-semibold"
                   style={{ color: colors.accent, fontSize: typography.scale.sm }}
                 >

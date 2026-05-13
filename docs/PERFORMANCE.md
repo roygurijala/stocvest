@@ -4,7 +4,7 @@
 
 This file is the **single source of truth** for the long-term performance & responsiveness story of STOCVEST. Any PR that touches latency, payload size, prefetching, caching, streaming SSR, edge caching, or push transport must reference (and update) this doc.
 
-**Last updated:** 2026-05-13 — **Tier 1.A and Tier 1.B both shipped.** Tier 1.A killed the dashboard `<Link>` prefetch storm (ribbon chips, day-desk top-signal rows, day / swing scanner footers all carry `prefetch={false}`), removing 5–10 parallel SSR prefetches of `/dashboard/signals` per dashboard mount — the direct cause of the 16.78s "Content Download" the user observed on `/dashboard` (DevTools Network screenshot, 2026-05-13). Tier 1.B split `/dashboard/signals/page.tsx` into a fast shell + async data island wrapped in `<Suspense fallback={<SignalsPageShell />}>` (plus the matching `loading.tsx` for inter-route transitions) so the user sees the page chrome + skeleton within ~200ms of clicking a ribbon chip instead of staring at a blank screen while four backend reads serialise. Together these changes turn the worst-case dashboard → signals navigation from a 16-second freeze into a sub-second perceived load with the live content streaming in as it resolves.
+**Last updated:** 2026-05-13 — **Tier 1.A, Tier 1.B, and Layer 4 (first slice) all shipped.** Tier 1.A killed the dashboard `<Link>` prefetch storm (ribbon chips, day-desk top-signal rows, day / swing scanner footers all carry `prefetch={false}`), removing 5–10 parallel SSR prefetches of `/dashboard/signals` per dashboard mount — the direct cause of the 16.78s "Content Download" the user observed on `/dashboard` (DevTools Network screenshot, 2026-05-13). Tier 1.B split `/dashboard/signals/page.tsx` into a fast shell + async data island wrapped in `<Suspense fallback={<SignalsPageShell />}>` (plus the matching `loading.tsx` for inter-route transitions) so the user sees the page chrome + skeleton within ~200ms of clicking a ribbon chip instead of staring at a blank screen while four backend reads serialise. Layer 4 added **SWR** (chosen over TanStack Query — smaller, simpler, Vercel-native) with conservative app-wide defaults (`revalidateOnFocus: false`, `dedupingInterval: 30s`, `errorRetryCount: 1`, `keepPreviousData: true`, never-retry on 401), wrapped the highest-traffic symbol-keyed read (`useSymbolSnapshot`) so symbol-switching is now stale-while-revalidate instead of a fresh round-trip every time, and wired **intent-driven hover-prefetch** onto every heavy-target dashboard `<Link>` (ribbon chips, ribbon empty-state CTA, day-desk rows, day-desk footer, swing-desk footer) — preserving the Tier 1.A no-mount-prefetch invariant while warming the route the moment the user's cursor / focus / pointer-down arrives. Together these changes turn the worst-case dashboard → signals navigation from a 16-second freeze into a sub-second perceived load with the live content streaming in as it resolves, and make repeat symbol views inside the signals page feel instant.
 
 ---
 
@@ -82,8 +82,9 @@ The order is chosen to **compound** — each layer makes the next one cheaper or
 |---|---|---|
 | **Done — 2026-05-13** | **Tier 1.A**: kill the dashboard `<Link>` prefetch storm — ribbon chips, day-desk top-signal rows, day / swing scanner footers all carry `prefetch={false}`. | Surgical, ~2h, no infra change. Captures 70–90% of dashboard time-to-quiet without touching any data path. |
 | **Done — 2026-05-13** | **Tier 1.B**: split `/dashboard/signals/page.tsx` into a fast shell (auth + URL parsing) + async data island wrapped in `<Suspense fallback={<SignalsPageShell />}>`. Added `app/dashboard/signals/loading.tsx` rendering the same shell for inter-route transitions. `SignalsPageClient` itself was **not** refactored — the inner async server component (`SignalsPageData`) owns the four heavy fetches and renders the client tree once they all resolve. | Pure refactor, no new infra. Turns the worst-case freeze into a sub-second shell paint. The Suspense boundary is also the anchor for any future per-section island split (when we want earnings to stream independently of scanner). |
+| **Done — 2026-05-13** | **Layer 4 (first slice)**: SWR added (`swr@^2.4.1`), global provider mounted in `app/layout.tsx`, app-wide defaults pinned in `lib/swr/config.ts`. Single SWR-backed hook shipped: `useSymbolSnapshot(symbol)` replaces the imperative `useEffect → fetchSymbolSnapshot` on `signals-page-client.tsx`, so symbol-switching is now stale-while-revalidate (instant render from cache on repeat, silent background refresh). New `useHoverPrefetch(href)` wired onto every Tier-1.A `<Link prefetch={false}>` (ribbon chips, ribbon empty-state CTA, day-desk rows, day-desk footer, swing-desk footer) so the route warms on hover / focus / pointer-down — never on mount. Tier 1.A invariant preserved (asserted by `dashboard-hover-prefetch.test.tsx`). See §4C for the full rationale. | Locks in the snappiness from layers 1.A + 1.B. Avoids the prefetch problem ever returning. |
 | **Next** | **Tier 1.B+** (optional follow-up): split `SignalsPageData` into 2–3 parallel async children — e.g. `<MarketOverviewIsland />`, `<ScannerIsland />`, `<EarningsIsland />` — each in its OWN Suspense boundary so they paint independently. Requires refactoring `SignalsPageClient` into matching slice components. Real risk: medium. Skip unless a real user reports the current shell-then-everything-at-once swap feels janky. | The simpler Tier 1.B above captured most of the win. Per-section island split is a follow-up that pays off when individual fetches diverge dramatically in latency (e.g. earnings calendar gets very slow). |
-| **Following week** | **Layer 4** (SWR / TanStack Query): pick one, wire it for `/v1/signals/composite/{mode}` + `/v1/scanner/overview` + `/v1/market/overview`. Hover-only prefetch on the dashboard. | Locks in the snappiness from layer 3. Avoids the prefetch problem ever returning. |
+| **Next** | **Layer 4 (second slice)**: extend SWR coverage to the dashboard's own data path (`/api/dashboard?mode=...`, `/api/macro-context`, `/api/live?mode=day`) and the signals page's news/composite fetches. Add `useSymbolNews` + `useSignalComposite` hooks alongside `useSymbolSnapshot`. The first slice landed the infrastructure and one canonical hook; the second slice paves the path so every render-state read on a frequently-revisited surface goes through SWR. | The infra is in place — adding hooks is mechanical. Defer until we see a real "I keep re-fetching the same composite" pattern in the network panel. |
 | **Following 2 weeks** | **Layer 2** (thin API projections): add `?view=summary` to the high-traffic list endpoints (scanner, signals, watchlist). Update the ribbon, chips, and table rows to consume the slim variant. | Easier to do **after** the frontend is well-factored because by then we know exactly which fields each surface actually needs. |
 | **Following month** | **Layer 1** (CloudFront edge cache): cache VIX, regime, breadth, sector heatmap, macro context with 10–30s TTL. | Ops-level work — needs distribution config + cache-key discipline. Big cost win once we have meaningful traffic. |
 | **Quarter 2 (post-B5 launch)** | **Layer 5** (WebSocket push): live regime + active-signal deltas. | Only after the product has retained users who lean on it during market hours. Polling is fine and 10× cheaper until then. |
@@ -171,6 +172,91 @@ These are non-negotiable. Any PR that violates one of these must be rejected eve
 - `SignalsPageShell` renders without throwing, exposes `data-shell-loading="true"`, has two mode-tab placeholders, mirrors the live `signals-grid` breakpoints, renders six layer-row placeholders + three named context cards (`news` / `earnings` / `after-hours`), and announces the loading state via `role="status"` + `aria-live="polite"`.
 - `app/dashboard/signals/loading.tsx` default-export renders the same shell.
 - **Source-level invariants on `page.tsx`** (the hard contract): imports `Suspense` from `react`, imports `SignalsPageShell`, contains the literal JSX `<Suspense fallback={<SignalsPageShell />}>`, and — critically — the four fetcher calls (`fetchMarketOverview`, `fetchScannerOverview`, `fetchEarningsCalendar`, `fetchPdtStatus`) appear in `SignalsPageData` and **not** in the outer `DashboardSignalsPage`. Verified by stripping block + line comments from the source then positionally splitting at the inner-function anchor. **The negative half is the important one**: a future refactor that moves any fetcher back to the outer function fails this test loud with a pointer at `docs/PERFORMANCE.md §4B`.
+
+---
+
+## 4C. Layer 4 (first slice) — what shipped today (2026-05-13)
+
+**Problem this layer attacks:** Tier 1.A and 1.B made the **first** dashboard → signals navigation fast. Layer 4 makes **subsequent** navigations to the same data feel instant. Before this slice, switching from AAPL → NVDA → AAPL on the signals page meant three round trips, not two; the second AAPL view was an identical network call to the first because we had no client-side cache. Layer 4 fixes that with stale-while-revalidate caching, AND it adds the missing piece of the Tier 1.A story: links shouldn't prefetch on mount (Tier 1.A), but they SHOULD prefetch on **intent** (hover / focus / pointer-down).
+
+**Library choice — SWR over TanStack Query:** Decided on **SWR**. Reasoning:
+
+| Dimension | SWR | TanStack Query |
+|---|---|---|
+| Bundle size (gzipped) | ~5 KB | ~13 KB |
+| API surface | tight (`useSWR`, `SWRConfig`, `mutate`) | broad (queries, mutations, optimistic, infinite, suspense) |
+| Author | Vercel (same as Next.js) | TanStack |
+| Layer 4 use case fit | Exact | Overkill |
+| Future fit | Add later if needed | Could swap in if we add complex mutations / optimistic UX |
+
+Our Layer 4 use case is pure GET-and-cache. We have no mutations, no optimistic updates, no infinite-scroll queries today. Picking SWR keeps the bundle small now; if we ever ship a feature that needs TanStack Query's heavier surface (e.g. complex paginated lists with optimistic insert), we can introduce it then for THAT surface without ripping out SWR for the rest. The two libraries co-exist fine.
+
+**Global defaults (`lib/swr/config.ts`, locked in by `tests/swr-config.test.ts`):**
+
+| Option | Value | Why |
+|---|---|---|
+| `revalidateOnFocus` | `false` | Our data isn't tick-by-tick. Refetching on every alt-tab burns API budget without adding signal. |
+| `revalidateOnReconnect` | `true` | After a wifi blip ends, refetching cached views once is cheap and prevents acting on stale data. |
+| `dedupingInterval` | `30_000` ms | 30s is the sweet spot — rapid clicks across the ribbon don't fan out to N calls for the same symbol; per-hook overrides for surfaces that need fresher reads. |
+| `errorRetryCount` | `1` | Server-side our Lambdas are mostly stateless; a 5xx is usually a code issue, not a flake. Retrying 3+ times (SWR default) just makes the user wait longer. |
+| `keepPreviousData` | `true` | Switching symbols keeps showing the previous symbol's snapshot until the new one resolves — no blank flash. Caller is responsible for not painting STALE data as if it were fresh. |
+| `shouldRetryOnError` | predicate | Never retry on 401 (would re-fire `surfaceAuthErrorIfAny` and re-surface the session-expired banner — the exact UX bug fixed in the session-expiry PR). Retry on 5xx, 429, network errors. |
+
+**Files added (all under `lib/swr/` + `lib/hooks/`):**
+
+- **`lib/swr/config.ts`** — `STOCVEST_SWR_DEFAULTS` + `STOCVEST_SWR_CACHE_NS` ("stocvest:"). Pure module, no React. Importable from tests without React runtime.
+- **`lib/swr/fetcher.ts`** — `swrFetcher` + `SwrFetcherError`. JSON fetcher that throws typed errors on non-2xx, includes credentials, fires `surfaceAuthErrorIfAny` on 401. The fetcher passed via `SWRConfig` for BFF endpoints I might add later; today's hooks wrap the existing `lib/api/*` fetchers (see next bullet).
+- **`lib/swr/provider.tsx`** — `StocvestSwrProvider`, a `"use client"` wrapper around `<SWRConfig>` that pulls in defaults + fetcher. Mounted once in `app/layout.tsx` above every page.
+- **`lib/hooks/use-symbol-snapshot.ts`** — `useSymbolSnapshot(symbol)`. Wraps the existing `fetchSymbolSnapshot` imperative call (which itself reads a non-HttpOnly WS token from `document.cookie` and adds a Bearer header — keeping that auth plumbing in one place was the reason to wrap rather than have SWR call the URL directly). Cache key: `["stocvest:symbol-snapshot", upperCaseSymbol]`. Empty / whitespace symbol → SWR skips (returns `{ snapshot: null }`). Preserves the upstream ticker-mismatch guard from the original effect.
+- **`lib/hooks/use-hover-prefetch.ts`** — `useHoverPrefetch(href, options?)`. Returns `{ onMouseEnter, onFocus, onPointerDown }` handlers. Each handler calls `router.prefetch(href)` once per hook instance (re-hovering does NOT re-fire). Optional `router` override for tests; optional `enabled: false` to disable without changing call-site shape. Errors from `router.prefetch` are swallowed (best-effort).
+
+**Files refactored:**
+
+- **`app/layout.tsx`** — wrapped the app body in `<StocvestSwrProvider>` between `<ThemeProvider>` and the assistant/disclaimer tree.
+- **`components/signals-page-client.tsx`** — dropped the `symbolSnapshot` useState + the `useEffect → fetchSymbolSnapshot` block. Replaced with `useSymbolSnapshot(symbolForSwr)` where `symbolForSwr` is `""` whenever the market overview already carries the snapshot for the current symbol (preserving the original short-circuit). The legacy import of `fetchSymbolSnapshot` stays — it's still used by the evidence-modal one-shot fetch.
+- **`components/dashboard-active-signal-ribbon.tsx`** — extracted `<RibbonChip>` sub-component (so each chip can call `useHoverPrefetch(href)` inside without violating the Rules of Hooks across a `.map`). Both the chips AND the empty-state "Open scanner" CTA carry `data-prefetch="false"` (Tier 1.A) AND `data-hover-prefetch="true"` (Layer 4).
+- **`components/day-desk-panel.tsx`** — added hover-prefetch to both the per-row "Open Day Signals →" links (inside `<DayTopSignalRow>`) and the desk footer "View day scanner →" link.
+- **`components/dashboard-redesign.tsx`** — added hover-prefetch to the swing-desk footer "View swing scanner →" link.
+- **`vitest.setup.ts`** — added a **default** `next/navigation` mock so every test that renders a dashboard subtree containing `useHoverPrefetch` works without needing its own `vi.mock(...)`. Tests that want richer router behaviour (assertions on `router.push(...)`, etc.) still declare their own `vi.mock("next/navigation", …)` at the top of the file — those declarations are hoisted by vitest and override this default. Six existing tests already follow that pattern; they continue to work unchanged.
+
+**The Tier 1.A ↔ Layer 4 contract — both must hold simultaneously:**
+
+Every heavy-target dashboard `<Link>` now carries BOTH attributes:
+
+```html
+<a href="/dashboard/signals?..." data-prefetch="false" data-hover-prefetch="true">
+```
+
+- `data-prefetch="false"` — Tier 1.A invariant. No speculative SSR prefetch on mount. Asserted by `dashboard-prefetch.test.tsx`.
+- `data-hover-prefetch="true"` — Layer 4 marker. Route warms on intent only. Asserted by the NEW `dashboard-hover-prefetch.test.tsx`.
+
+A future refactor that drops EITHER attribute breaks one of the two test suites. The pair lock prevents the silent "they both look the same — let me clean up by removing one" regression.
+
+**Expected impact:**
+
+- **Symbol re-views on the signals page**: instant render from cache on the second / third / N-th visit to the same ticker, with a silent background refresh after the 30s dedupe window. Network panel shows one `fetchSymbolSnapshot` for the first AAPL view, zero for the next view inside 30s.
+- **Dashboard chip clicks**: the moment the user hovers a ribbon chip / focuses a day-desk row / points-down on a footer link, the target route starts fetching its RSC payload. By click-time (typically 150–400ms after hover) the payload is in flight or in cache, so the navigation feels significantly snappier without re-introducing the 16-second prefetch storm.
+
+**What did NOT change:**
+
+- Auth perimeter. The SWR fetcher uses `credentials: "include"` (HttpOnly session cookies) and never touches the Cognito JWT directly. `fetchSymbolSnapshot` still does its own non-HttpOnly WS-token-cookie read for the Bearer header.
+- Mode Separation invariant. SWR cache keys are symbol-keyed; the snapshot is mode-agnostic. The trading-mode toggle continues to clear `compositeResult` etc. independently of the SWR cache.
+- Chatbot context publishing. `usePublishAssistantContext` was untouched. The published payload still settles when the live data resolves.
+- Click navigation behaviour. `router.prefetch` is a hint, not a redirect; clicking a link still routes normally even if prefetch failed.
+
+**Lock-in tests** (`frontend/tests/`):
+
+- `swr-config.test.ts` (10 tests) — every default value is pinned individually with a comment explaining why. The `shouldRetryOnError` predicate is tested against 401, 5xx, 4xx-non-401, and non-status errors.
+- `swr-fetcher.test.ts` (7 tests) — 2xx parses JSON, non-2xx throws `SwrFetcherError` with status + body, 401 fires `surfaceAuthErrorIfAny`, 200 does not, 500 does not (only 401 triggers the banner), credentials + accept header always sent.
+- `use-symbol-snapshot.test.tsx` (6 tests) — empty + whitespace symbol → no fetch; happy path returns snapshot; case + whitespace normalisation; ticker-mismatch guard returns `null` not stale data; dedupe window: two hooks for the same symbol → fetcher called exactly once.
+- `use-hover-prefetch.test.tsx` (6 tests) — fires on first `onMouseEnter`, never re-fires; `onFocus` and `onPointerDown` are equivalent triggers; `null` / empty / undefined `href` are no-ops; `enabled: false` is a no-op; `router.prefetch` throwing is swallowed.
+- `dashboard-hover-prefetch.test.tsx` (5 tests) — ribbon chip, ribbon empty-state CTA, day-desk per-row, day-desk footer, swing-desk footer ALL carry BOTH `data-prefetch="false"` AND `data-hover-prefetch="true"`. **This is the critical invariant for the Tier 1.A ↔ Layer 4 contract** — any future PR that drops either marker fails this test with a pointer at this doc.
+
+**What's deliberately deferred to a second slice:**
+
+- `useSymbolNews` — news data shows up in render state but the existing imperative `fetchSymbolNews` is also used inside async button handlers (evidence-modal expansion, post-mode-switch news refresh). A clean hook wrapper requires deciding which call sites flip to declarative reads vs stay imperative; not worth the complexity for one PR.
+- `useSignalComposite` — same shape. The composite fetch lives inside `signals-page-client.tsx`'s mode-toggle flow, which already has bespoke clearing semantics that don't trivially map to SWR's `keepPreviousData`. Defer until we see the specific symbol-revisit pattern that needs caching here.
+- BFF-route SWR coverage (`/api/dashboard?mode=...`, `/api/macro-context`, `/api/live?mode=day`) — the infrastructure (`swrFetcher`, `<SWRConfig>`, defaults) is now in place; converting the dashboard fetchers is mechanical. Defer until we see a network-panel pattern that calls for it.
 
 ---
 

@@ -73,6 +73,7 @@ function minutesAgoLabel(timestampIso: string | null | undefined): string | null
   return null;
 }
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
+import { useHoverPrefetch } from "@/lib/hooks/use-hover-prefetch";
 import { useTheme } from "@/lib/theme-provider";
 import {
   buildDayReenableBulletsShort,
@@ -128,6 +129,8 @@ function DayTopSignalRow({
   const pct = typeof signal.score === "number" && Number.isFinite(signal.score)
     ? Math.round(signal.score * 100)
     : null;
+  const rowHref = `/dashboard/signals?symbol=${encodeURIComponent(signal.symbol.trim().toUpperCase())}&ref=dashboard-day-desk&trading_mode=day`;
+  const rowHoverPrefetch = useHoverPrefetch(rowHref);
   return (
     <motion.article
       key={`day-${signal.symbol}-${index}`}
@@ -260,17 +263,23 @@ function DayTopSignalRow({
           );
         })()}
       </div>
-      {/* Perf invariant — see docs/PERFORMANCE.md §3.1 + §4.
+      {/* Perf invariant — see docs/PERFORMANCE.md §3.1 + §4C.
           Each day-row chip points at `/dashboard/signals` (a heavy
           SSR page). The Day Desk renders up to `topSignalCap=4`
           rows; with `prefetch="auto"` (the Next.js default) this
           would fire 4 parallel SSR prefetches at mount, stacked on
           top of the ribbon chips and the swing desk. `prefetch=
           {false}` keeps clicks fast (router cache still applies)
-          while removing the speculative drain. */}
+          while removing the speculative drain. Layer 4 adds
+          hover-prefetch so the route warms when the user is about
+          to click instead of on mount. */}
       <Link
-        href={`/dashboard/signals?symbol=${encodeURIComponent(signal.symbol.trim().toUpperCase())}&ref=dashboard-day-desk&trading_mode=day`}
+        href={rowHref}
         prefetch={false}
+        data-hover-prefetch="true"
+        onMouseEnter={rowHoverPrefetch.onMouseEnter}
+        onFocus={rowHoverPrefetch.onFocus}
+        onPointerDown={rowHoverPrefetch.onPointerDown}
         style={{
           alignSelf: "flex-start",
           marginTop: spacing[1],
@@ -287,6 +296,7 @@ function DayTopSignalRow({
 
 export function DayDeskPanel({ setups, marketStatus, scannerError, topSignalCap = 4 }: DayDeskPanelProps) {
   const { colors } = useTheme();
+  const dayScannerHoverPrefetch = useHoverPrefetch("/dashboard/scanner?mode=day");
 
   const daySetups = useMemo(
     () =>
@@ -458,6 +468,10 @@ export function DayDeskPanel({ setups, marketStatus, scannerError, topSignalCap 
           <Link
             href="/dashboard/scanner?mode=day"
             prefetch={false}
+            data-hover-prefetch="true"
+            onMouseEnter={dayScannerHoverPrefetch.onMouseEnter}
+            onFocus={dayScannerHoverPrefetch.onFocus}
+            onPointerDown={dayScannerHoverPrefetch.onPointerDown}
             className="inline-flex min-h-11 items-center font-semibold"
             style={{ color: colors.accent, fontSize: typography.scale.sm }}
           >

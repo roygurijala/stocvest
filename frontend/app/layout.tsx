@@ -5,6 +5,7 @@ import { CrispChat } from "@/components/crisp-chat";
 import { GlobalDisclaimer } from "@/components/global-disclaimer";
 import { AssistantContextProvider } from "@/lib/assistant/context";
 import { getServerSession } from "@/lib/auth/session";
+import { StocvestSwrProvider } from "@/lib/swr/provider";
 import { ThemeProvider } from "@/lib/theme-provider";
 import "./globals.css";
 
@@ -51,12 +52,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en" className="theme-dark" data-theme="dark" suppressHydrationWarning>
       <body>
         <ThemeProvider>
-          <CrispChat userEmail={crispUserEmail} />
-          <AssistantContextProvider>
-            {appBody}
-            <StocvestAssistant isAuthenticated={isAuthenticated} />
-          </AssistantContextProvider>
-          <GlobalDisclaimer />
+          <StocvestSwrProvider>
+            <CrispChat userEmail={crispUserEmail} />
+            <AssistantContextProvider>
+              {appBody}
+              <StocvestAssistant isAuthenticated={isAuthenticated} />
+            </AssistantContextProvider>
+            <GlobalDisclaimer />
+          </StocvestSwrProvider>
         </ThemeProvider>
       </body>
     </html>

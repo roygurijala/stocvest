@@ -7,6 +7,7 @@ import { Brain, ChevronDown, ChevronUp, Clock, Zap } from "lucide-react";
 import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer } from "recharts";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
+import { useSymbolSnapshot } from "@/lib/hooks/use-symbol-snapshot";
 import type { MarketOverview, NewsPayload, SnapshotPayload } from "@/lib/api/market";
 import type { ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
@@ -319,7 +320,21 @@ export function SignalsPageClient({
   const [newsUiTick, setNewsUiTick] = useState(0);
   /** Radar is detail-dense; collapsed by default so narrative layers stay primary. */
   const [signalRadarExpanded, setSignalRadarExpanded] = useState(false);
-  const [symbolSnapshot, setSymbolSnapshot] = useState<SnapshotPayload | null>(null);
+  // Tier 1 → Layer 4: per-symbol snapshot is now backed by SWR.
+  // The cache lives under `stocvest:symbol-snapshot:<TICKER>` and
+  // returns stale data instantly on repeat visits while silently
+  // refreshing in the background. We pass `""` (which SWR treats
+  // as "skip") whenever the market overview already carries the
+  // snapshot for the current symbol — preserving the original
+  // semantics (`useEffect` used to short-circuit in that case).
+  // See `lib/hooks/use-symbol-snapshot.ts` for the full rationale.
+  const symbolForSwr = useMemo(() => {
+    const sym = symbol.trim().toUpperCase();
+    if (!sym) return "";
+    const inOverview = marketOverview.snapshots.some((s) => s.symbol === sym);
+    return inOverview ? "" : sym;
+  }, [symbol, marketOverview.snapshots]);
+  const { snapshot: symbolSnapshot } = useSymbolSnapshot(symbolForSwr);
   const [historyRows, setHistoryRows] = useState<PublicSignal[]>([]);
   const [histLoading, setHistLoading] = useState(false);
   /** Committed symbol used to filter the past-signals table; "" means no filter. */
@@ -818,28 +833,12 @@ export function SignalsPageClient({
     });
   };
 
-  useEffect(() => {
-    const sym = symbol.trim().toUpperCase();
-    if (!sym) {
-      setSymbolSnapshot(null);
-      return;
-    }
-    const fromOverview = marketOverview.snapshots.find((s) => s.symbol === sym);
-    if (fromOverview) {
-      setSymbolSnapshot(null);
-      return;
-    }
-    setSymbolSnapshot(null);
-    let cancelled = false;
-    void fetchSymbolSnapshot(sym).then((row) => {
-      if (!cancelled) {
-        setSymbolSnapshot(row && row.symbol.toUpperCase() === sym ? row : null);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [symbol, marketOverview.snapshots]);
+  // Per-symbol snapshot is now handled by `useSymbolSnapshot` above
+  // (Tier 1 → Layer 4). The previous `useEffect` here did the same
+  // job imperatively but without a cache — every symbol switch was
+  // a fresh round trip even when the user had just looked at that
+  // ticker seconds ago. SWR replaces that with stale-while-
+  // revalidate semantics; no extra effect is needed here.
 
   useEffect(() => {
     if (tab !== "history") return;

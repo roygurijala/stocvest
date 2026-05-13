@@ -37,6 +37,7 @@ import { useMemo } from "react";
 import { ArrowRight } from "lucide-react";
 import type { IntradaySetupPayload } from "@/lib/api/scanner";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
+import { useHoverPrefetch } from "@/lib/hooks/use-hover-prefetch";
 import { useTheme } from "@/lib/theme-provider";
 
 export interface DashboardActiveSignalRibbonProps {
@@ -90,12 +91,134 @@ function interleave(swing: RibbonChip[], day: RibbonChip[]): RibbonChip[] {
   return out;
 }
 
+/**
+ * Per-chip sub-component. Extracted so each chip can call
+ * `useHoverPrefetch(href)` independently — calling hooks inside
+ * `chips.map((c) => useHoverPrefetch(...))` would violate the
+ * Rules of Hooks. The chip is otherwise a 1:1 inline render of
+ * the previous body.
+ *
+ * Tier 1 → Layer 4: each chip warms the Signals route on hover /
+ * focus / pointer-down, so by the time the user clicks the RSC
+ * payload is already fetching or cached. Mount-time prefetch
+ * stays disabled (`prefetch={false}`) — Tier 1.A invariant.
+ */
+function RibbonChip({
+  chip,
+  colors
+}: {
+  chip: RibbonChip;
+  colors: ReturnType<typeof useTheme>["colors"];
+}) {
+  const symbol = chip.symbol.trim().toUpperCase();
+  const href = `/dashboard/signals?symbol=${encodeURIComponent(symbol)}&ref=dashboard-ribbon&trading_mode=${chip.mode}`;
+  const hoverHandlers = useHoverPrefetch(href);
+  const dirColor =
+    chip.direction === "bullish"
+      ? colors.bullish
+      : chip.direction === "bearish"
+        ? colors.bearish
+        : colors.textMuted;
+  const dirBg =
+    chip.direction === "bullish"
+      ? "rgba(34,197,94,0.10)"
+      : chip.direction === "bearish"
+        ? "rgba(239,68,68,0.10)"
+        : "rgba(148,163,184,0.08)";
+  const dirBorder =
+    chip.direction === "bullish"
+      ? "rgba(34,197,94,0.36)"
+      : chip.direction === "bearish"
+        ? "rgba(239,68,68,0.36)"
+        : "rgba(148,163,184,0.28)";
+  const modeColor = chip.mode === "swing" ? "#a855f7" : "#00C8DC";
+  return (
+    // Perf invariant — see docs/PERFORMANCE.md §3.1 + §4.
+    // Ribbon chips are an N-of-N container: every chip the
+    // dashboard renders points at the heaviest SSR page in
+    // the app (`/dashboard/signals`). Next.js's default
+    // `prefetch="auto"` would fire one full SSR prefetch
+    // per visible chip on mount, draining the same
+    // connection that's serving the dashboard's own data.
+    // That's the 16.78s "Content Download" the user
+    // captured on 2026-05-13. `prefetch={false}` disables
+    // the speculative fetch without affecting navigation —
+    // clicking a chip still routes normally. Layer 4 adds
+    // `useHoverPrefetch` so the prefetch fires on intent
+    // (hover / focus / pointer-down) instead of on mount.
+    <Link
+      data-testid={`ribbon-chip-${symbol}`}
+      data-ribbon-chip-mode={chip.mode}
+      data-hover-prefetch="true"
+      prefetch={false}
+      href={href}
+      onMouseEnter={hoverHandlers.onMouseEnter}
+      onFocus={hoverHandlers.onFocus}
+      onPointerDown={hoverHandlers.onPointerDown}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: spacing[1],
+        flexShrink: 0,
+        padding: "4px 10px 4px 8px",
+        borderRadius: borderRadius.full,
+        background: dirBg,
+        border: `1px solid ${dirBorder}`,
+        color: dirColor,
+        fontSize: typography.scale.xs,
+        fontWeight: 700,
+        textDecoration: "none",
+        lineHeight: 1
+      }}
+    >
+      <span
+        aria-hidden
+        style={{
+          width: 6,
+          height: 6,
+          borderRadius: 999,
+          background: modeColor,
+          display: "inline-block",
+          marginRight: 4
+        }}
+      />
+      <span style={{ letterSpacing: "0.04em" }}>{symbol}</span>
+      <span
+        style={{
+          fontSize: 9,
+          fontWeight: 700,
+          letterSpacing: "0.12em",
+          textTransform: "uppercase",
+          color: modeColor,
+          marginLeft: 2
+        }}
+      >
+        {chip.mode}
+      </span>
+      {typeof chip.score === "number" ? (
+        <span
+          style={{
+            fontSize: typography.scale.xs,
+            fontWeight: 700,
+            color: colors.text,
+            marginLeft: 4,
+            fontVariantNumeric: "tabular-nums"
+          }}
+        >
+          {Math.round(chip.score * 100)}%
+        </span>
+      ) : null}
+    </Link>
+  );
+}
+
 export function DashboardActiveSignalRibbon({
   swingSignals,
   daySignals,
   emptyContext
 }: DashboardActiveSignalRibbonProps) {
   const { colors } = useTheme();
+  const emptyScannerHover = useHoverPrefetch("/dashboard/scanner");
 
   // Cap each mode at 4 chips before interleaving. This bounds the total
   // ribbon contents to ≤ 8 chips on wide viewports, which keeps the
@@ -141,13 +264,19 @@ export function DashboardActiveSignalRibbon({
         <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.text, flex: "1 1 auto", lineHeight: 1.5 }}>
           {emptyContext?.scannerError ? emptyContext.scannerError : watchingLine}
         </p>
-        {/* Perf invariant — see docs/PERFORMANCE.md §3.1. The ribbon
-            empty-state CTA points at `/dashboard/scanner`, which is
-            one of the heavy SSR targets we never speculatively
-            prefetch from the dashboard. */}
+        {/* Perf invariant — see docs/PERFORMANCE.md §3.1 + §4C.
+            The ribbon empty-state CTA points at `/dashboard/scanner`,
+            which is one of the heavy SSR targets we never
+            speculatively prefetch from the dashboard. Layer 4 adds
+            hover-prefetch so the route warms when the user is about
+            to click, not when the dashboard mounts. */}
         <Link
           href="/dashboard/scanner"
           prefetch={false}
+          data-hover-prefetch="true"
+          onMouseEnter={emptyScannerHover.onMouseEnter}
+          onFocus={emptyScannerHover.onFocus}
+          onPointerDown={emptyScannerHover.onPointerDown}
           style={{
             display: "inline-flex",
             alignItems: "center",
@@ -208,101 +337,13 @@ export function DashboardActiveSignalRibbon({
           scrollbarWidth: "thin"
         }}
       >
-        {chips.map((c) => {
-          const dirColor =
-            c.direction === "bullish"
-              ? colors.bullish
-              : c.direction === "bearish"
-                ? colors.bearish
-                : colors.textMuted;
-          const dirBg =
-            c.direction === "bullish"
-              ? "rgba(34,197,94,0.10)"
-              : c.direction === "bearish"
-                ? "rgba(239,68,68,0.10)"
-                : "rgba(148,163,184,0.08)";
-          const dirBorder =
-            c.direction === "bullish"
-              ? "rgba(34,197,94,0.36)"
-              : c.direction === "bearish"
-                ? "rgba(239,68,68,0.36)"
-                : "rgba(148,163,184,0.28)";
-          const modeColor = c.mode === "swing" ? "#a855f7" : "#00C8DC";
-          const symbol = c.symbol.trim().toUpperCase();
-          return (
-            // Perf invariant — see docs/PERFORMANCE.md §3.1 + §4.
-            // Ribbon chips are an N-of-N container: every chip the
-            // dashboard renders points at the heaviest SSR page in
-            // the app (`/dashboard/signals`). Next.js's default
-            // `prefetch="auto"` would fire one full SSR prefetch
-            // per visible chip on mount, draining the same
-            // connection that's serving the dashboard's own data.
-            // That's the 16.78s "Content Download" the user
-            // captured on 2026-05-13. `prefetch={false}` disables
-            // the speculative fetch without affecting navigation —
-            // clicking a chip still routes normally.
-            <Link
-              key={`${c.mode}-${symbol}`}
-              data-testid={`ribbon-chip-${symbol}`}
-              data-ribbon-chip-mode={c.mode}
-              prefetch={false}
-              href={`/dashboard/signals?symbol=${encodeURIComponent(symbol)}&ref=dashboard-ribbon&trading_mode=${c.mode}`}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: spacing[1],
-                flexShrink: 0,
-                padding: "4px 10px 4px 8px",
-                borderRadius: borderRadius.full,
-                background: dirBg,
-                border: `1px solid ${dirBorder}`,
-                color: dirColor,
-                fontSize: typography.scale.xs,
-                fontWeight: 700,
-                textDecoration: "none",
-                lineHeight: 1
-              }}
-            >
-              <span
-                aria-hidden
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: 999,
-                  background: modeColor,
-                  display: "inline-block",
-                  marginRight: 4
-                }}
-              />
-              <span style={{ letterSpacing: "0.04em" }}>{symbol}</span>
-              <span
-                style={{
-                  fontSize: 9,
-                  fontWeight: 700,
-                  letterSpacing: "0.12em",
-                  textTransform: "uppercase",
-                  color: modeColor,
-                  marginLeft: 2
-                }}
-              >
-                {c.mode}
-              </span>
-              {typeof c.score === "number" ? (
-                <span
-                  style={{
-                    fontSize: typography.scale.xs,
-                    fontWeight: 700,
-                    color: colors.text,
-                    marginLeft: 4,
-                    fontVariantNumeric: "tabular-nums"
-                  }}
-                >
-                  {Math.round(c.score * 100)}%
-                </span>
-              ) : null}
-            </Link>
-          );
-        })}
+        {chips.map((c) => (
+          <RibbonChip
+            key={`${c.mode}-${c.symbol.trim().toUpperCase()}`}
+            chip={c}
+            colors={colors}
+          />
+        ))}
       </div>
     </section>
   );
