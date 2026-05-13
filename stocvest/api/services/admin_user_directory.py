@@ -244,6 +244,20 @@ def list_users_page(
     capped = max(1, min(MAX_SEARCH_LIMIT, int(limit)))
     pool = _pool_id()
     if not pool:
+        # The HTTP handlers gate on this *before* calling us (see
+        # ``_require_cognito_pool`` in ``api/handlers/admin_users.py``)
+        # — production callers should never reach this branch. Tests,
+        # the system-status best-effort tile, and any future callers
+        # that bypass the gate still end up here, so log loudly and
+        # return the empty-page fallback to preserve backward
+        # compatibility. The loud log is the breadcrumb operators will
+        # see in CloudWatch when the env var regresses.
+        _LOG.error(
+            "list_users_page called without COGNITO_USER_POOL_ID set — "
+            "returning empty page. The HTTP gate in admin_users handlers "
+            "normally prevents this; if you see this in production, "
+            "check the Lambda environment variables."
+        )
         return UserSearchPage(records=[], next_token=None)
     c = _build_cognito_client(client)
     if c is None:

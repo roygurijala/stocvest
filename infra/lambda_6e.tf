@@ -56,6 +56,20 @@ locals {
     STOCVEST_EMAIL_SENDER             = "signals@stocvest.app"
     STOCVEST_PUBLIC_APP_URL           = "https://stocvest.app"
     DYNAMODB_AUDIT_EVENTS_TABLE       = aws_dynamodb_table.audit_events.name
+    # Cognito identifiers needed by the D10 Admin hub
+    # (`/v1/admin/users/*` + `/v1/admin/system-status`). Without these
+    # the runtime `_pool_id()` helper resolves to "", `list_users_page`
+    # silently returns an empty page, and the Admin Users screen
+    # renders the misleading "No users found in the pool yet." copy.
+    # See `docs/CONTEXT.md` row 14 for the regression that motivated
+    # wiring these here. Values come from the same Cognito resources
+    # the API Gateway JWT authorizer references — they are not
+    # secrets (they're already published via `outputs.tf`), so they
+    # live in the function environment rather than the runtime
+    # Secrets Manager payload.
+    COGNITO_USER_POOL_ID  = aws_cognito_user_pool.main.id
+    COGNITO_REGION        = var.aws_region
+    COGNITO_APP_CLIENT_ID = aws_cognito_user_pool_client.frontend.id
   }
 
   lambda_dynamodb_resources = flatten([

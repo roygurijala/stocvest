@@ -7,7 +7,16 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, ".")
+      "@": path.resolve(__dirname, "."),
+      // ``server-only`` is a runtime marker package shipped by Next.js
+      // that throws if a server module is imported on the client. In a
+      // unit-test (jsdom) environment we just want the import to be a
+      // silent no-op so tests can mount client components whose
+      // transitive imports touch server-only-marked modules (e.g.
+      // ``<Sidebar>`` → ``logoutAction`` → ``lib/auth/cognito``).
+      // The empty stub here preserves the production guard while
+      // unblocking jsdom rendering of dashboard chrome.
+      "server-only": path.resolve(__dirname, "tests/mocks/server-only-stub.ts")
     }
   },
   test: {

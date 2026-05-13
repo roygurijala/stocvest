@@ -83,6 +83,66 @@ export type AdminApiReadOutcome<T> =
  * every admin read renders the same hint copy for the same failure
  * mode. Bumping a hint here propagates to every list page at once.
  */
+/**
+ * Read a non-2xx admin response and translate its body into a typed
+ * {@link AdminApiReadError}. When the backend returns the structured
+ * ``{ error, message, hint }`` envelope used by the admin handlers
+ * (e.g. the 503 ``config_error`` body returned when
+ * ``COGNITO_USER_POOL_ID`` is unset), we prefer the backend's own
+ * ``message``/``hint`` over the generic
+ * {@link classifyAdminReadStatus} copy — the backend is the only
+ * thing that knows *which* dependency is mis-wired.
+ *
+ * Falls back to {@link classifyAdminReadStatus} when the body is
+ * missing, non-JSON, or doesn't match the envelope shape.
+ */
+export async function readAdminErrorEnvelope(
+  response: Response
+): Promise<AdminApiReadError> {
+  let body: unknown = null;
+  try {
+    body = await response.json();
+  } catch {
+    return classifyAdminReadStatus(response.status, "Request failed.");
+  }
+  if (!isRecord(body)) {
+    return classifyAdminReadStatus(response.status, "Request failed.");
+  }
+  const message = typeof body.message === "string" ? body.message.trim() : "";
+  const hint = typeof body.hint === "string" ? body.hint.trim() : "";
+  // 503 + ``code: cognito_pool_unset`` is the explicit signal that the
+  // API Lambda's environment is missing ``COGNITO_USER_POOL_ID``. Map
+  // it to ``not_deployed`` so the error card uses the same "fix the
+  // infra" affordance as the 404 case, but with the backend's
+  // message/hint verbatim.
+  if (
+    response.status === 503 &&
+    typeof body.code === "string" &&
+    body.code === "cognito_pool_unset"
+  ) {
+    return {
+      code: "not_deployed",
+      status: 503,
+      message:
+        message ||
+        "The backend cannot reach Cognito — COGNITO_USER_POOL_ID is not set on the API Lambda.",
+      hint:
+        hint ||
+        "Run `terraform apply` from /infra and redeploy the API Lambda."
+    };
+  }
+  if (!message && !hint) {
+    return classifyAdminReadStatus(response.status, "Request failed.");
+  }
+  const base = classifyAdminReadStatus(response.status, "Request failed.");
+  return {
+    code: base.code,
+    status: response.status,
+    message: message || base.message,
+    hint: hint || base.hint
+  };
+}
+
 export function classifyAdminReadStatus(
   status: number,
   fallbackMessage: string
@@ -346,9 +406,15 @@ export async function searchUsersDiagnostic(
     return { kind: "error", error: classifyAdminReadStatus(401, "Unauthenticated.") };
   }
   if (!response.ok) {
+    // Read the body so backend-provided ``message`` / ``hint`` (e.g.
+    // the 503 ``config_error`` envelope returned when
+    // ``COGNITO_USER_POOL_ID`` is unset on the API Lambda) flow into
+    // the ``AdminApiErrorCard`` instead of being collapsed to the
+    // generic ``classifyAdminReadStatus`` copy. Falls back to the
+    // generic envelope when the body is missing / malformed.
     return {
       kind: "error",
-      error: classifyAdminReadStatus(response.status, "Request failed.")
+      error: await readAdminErrorEnvelope(response)
     };
   }
   let data: unknown;

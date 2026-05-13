@@ -34,7 +34,17 @@ export function TopBar({ onMenuClick }: TopBarProps) {
 
   return (
     <header
-      className="flex min-h-14 items-center gap-2 px-4 lg:justify-between lg:px-6"
+      data-testid="app-top-bar"
+      // ``sticky top-0`` + a high z-index keeps the page chrome
+      // visible while the body scrolls. The AppShell right column
+      // intentionally avoids ``overflow-*`` properties so this
+      // element pins to the viewport rather than to an inner scroll
+      // container. ``z-30`` sits below modals/drawers (which use 40+)
+      // but above page content. ``backdrop-blur-sm`` softens the
+      // boundary when content scrolls underneath; the background is
+      // still mostly opaque so legibility is preserved on themes that
+      // don't support backdrop filters.
+      className="sticky top-0 z-30 flex min-h-14 items-center gap-2 px-4 backdrop-blur-sm lg:justify-between lg:px-6"
       style={{
         paddingTop: spacing[3],
         paddingBottom: spacing[3],

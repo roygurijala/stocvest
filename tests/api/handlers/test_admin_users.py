@@ -26,6 +26,7 @@ from unittest.mock import patch
 import pytest
 
 from stocvest.api.handlers.admin_users import (
+    _require_cognito_pool as _REAL_REQUIRE_COGNITO_POOL,
     admin_users_add_group_handler,
     admin_users_detail_handler,
     admin_users_remove_group_handler,
@@ -38,6 +39,28 @@ from stocvest.api.services.admin_user_directory import (
     CognitoUserRecord,
 )
 from stocvest.data.models import UserProfile
+
+
+@pytest.fixture(autouse=True)
+def _cognito_pool_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Bypass the ``_require_cognito_pool`` 503 short-circuit by default.
+
+    The admin handlers now refuse to call Cognito when
+    ``COGNITO_USER_POOL_ID`` is unset (see
+    ``api/handlers/admin_users.py::_require_cognito_pool`` and
+    ``docs/CONTEXT.md`` row 14). The unit tests in this file don't
+    care about that gate — they're focused on the auth + Cognito
+    contract — so we short-circuit it to "ok" for every test, then
+    add dedicated tests for the gate's positive + negative behaviour
+    below.
+
+    Individual tests that *do* want to exercise the gate can override
+    by re-patching ``_require_cognito_pool`` inside the test body.
+    """
+    monkeypatch.setattr(
+        "stocvest.api.handlers.admin_users._require_cognito_pool",
+        lambda: None,
+    )
 
 
 def _evt(
@@ -440,3 +463,115 @@ def test_group_handler_404_when_user_missing() -> None:
     ):
         response = admin_users_add_group_handler(event, None)
     assert response["statusCode"] == 404
+
+
+# ── cognito-pool gate ───────────────────────────────────────────────────
+
+
+def test_require_cognito_pool_returns_503_with_actionable_body_when_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The gate returns the structured ``config_error`` envelope.
+
+    The frontend's ``readAdminErrorEnvelope`` looks for
+    ``code: "cognito_pool_unset"`` and routes the response to the
+    ``not_deployed`` branch of the error card (same affordance as a
+    404), surfacing the backend's own message + hint verbatim.
+    Anything that breaks this shape will regress the user back into
+    the misleading "No users found in the pool yet." empty state.
+    """
+    fake_settings = type("S", (), {"cognito_user_pool_id": ""})()
+    monkeypatch.setattr(
+        "stocvest.api.handlers.admin_users.get_settings",
+        lambda: fake_settings,
+    )
+
+    # Call the captured real function (the autouse fixture replaced
+    # the module attribute with a no-op stub for every other test).
+    resp = _REAL_REQUIRE_COGNITO_POOL()
+    assert resp is not None
+    assert resp["statusCode"] == 503
+    body = json.loads(resp["body"])
+    assert body["error"] == "config_error"
+    assert body["code"] == "cognito_pool_unset"
+    assert "COGNITO_USER_POOL_ID" in body["message"]
+    assert "terraform apply" in body["hint"]
+
+
+def test_require_cognito_pool_passes_when_id_is_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_settings = type("S", (), {"cognito_user_pool_id": "us-east-1_TEST"})()
+    monkeypatch.setattr(
+        "stocvest.api.handlers.admin_users.get_settings",
+        lambda: fake_settings,
+    )
+    assert _REAL_REQUIRE_COGNITO_POOL() is None
+
+
+@pytest.mark.parametrize(
+    "handler,event",
+    [
+        (
+            admin_users_search_handler,
+            _evt(query_params={"q": ""}),
+        ),
+        (
+            admin_users_detail_handler,
+            _evt(path_params={"user_id": "sub-1"}),
+        ),
+        (
+            admin_users_reset_password_handler,
+            _evt(method="POST", path_params={"user_id": "sub-1"}),
+        ),
+        (
+            admin_users_add_group_handler,
+            _evt(
+                method="POST",
+                path_params={"user_id": "sub-1", "group": ADMIN_COGNITO_GROUP},
+            ),
+        ),
+        (
+            admin_users_remove_group_handler,
+            _evt(
+                method="DELETE",
+                path_params={"user_id": "sub-1", "group": ADMIN_COGNITO_GROUP},
+            ),
+        ),
+    ],
+)
+def test_admin_handlers_short_circuit_to_503_when_pool_unset(
+    monkeypatch: pytest.MonkeyPatch,
+    handler: Any,
+    event: dict[str, Any],
+) -> None:
+    """Every admin user handler must short-circuit on the gate.
+
+    This is the lock-in for the regression documented in CONTEXT
+    row 14: if the env var is missing, the handler MUST surface the
+    config error instead of silently returning empty data.
+    """
+    monkeypatch.setattr(
+        "stocvest.api.handlers.admin_users.analysis_authorized",
+        lambda **_: True,
+    )
+    monkeypatch.setattr(
+        "stocvest.api.handlers.admin_users._require_cognito_pool",
+        lambda: {
+            "statusCode": 503,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps(
+                {
+                    "error": "config_error",
+                    "code": "cognito_pool_unset",
+                    "message": "Cognito pool id missing.",
+                    "hint": "Run terraform apply.",
+                }
+            ),
+        },
+    )
+
+    response = handler(event, None)
+    assert response["statusCode"] == 503
+    body = json.loads(response["body"])
+    assert body["code"] == "cognito_pool_unset"

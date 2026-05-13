@@ -86,6 +86,53 @@ def _require_admin(event: LambdaEvent) -> dict[str, Any] | None:
     return forbidden("Admin authorization required.")
 
 
+def _require_cognito_pool() -> dict[str, Any] | None:
+    """Return a structured 503 when ``COGNITO_USER_POOL_ID`` is unset.
+
+    Previously the admin services swallowed a missing pool id and
+    returned an empty page (``records=[]``), which the Admin Users UI
+    rendered as the misleading copy "No users found in the pool yet."
+    Production debugging of that regression cost us a round-trip — see
+    ``docs/CONTEXT.md`` row 14 — so every admin handler that reaches
+    into Cognito short-circuits *here* with an explicit, typed body
+    instead. The frontend reads ``message`` / ``hint`` and surfaces
+    them through ``AdminApiErrorCard``.
+
+    The body shape mirrors the rest of the admin error vocabulary:
+    ``error`` is a short code suitable for switch/case branching,
+    ``message`` is the one-line summary the UI shows in bold, and
+    ``hint`` is the actionable second line ("run terraform apply",
+    "set $env:COGNITO_USER_POOL_ID=…").
+    """
+    settings = get_settings()
+    pool = (settings.cognito_user_pool_id or "").strip()
+    if pool:
+        return None
+    _LOG.error(
+        "admin handler invoked but COGNITO_USER_POOL_ID is empty — "
+        "the function environment is missing the wiring added in "
+        "infra/lambda_6e.tf (lambda_common_env). Run `terraform apply` "
+        "from /infra and redeploy the API Lambda to pick it up."
+    )
+    return json_response(
+        503,
+        {
+            "error": "config_error",
+            "code": "cognito_pool_unset",
+            "message": (
+                "The backend cannot reach Cognito — COGNITO_USER_POOL_ID "
+                "is not set on the API Lambda environment."
+            ),
+            "hint": (
+                "Run `terraform apply` from /infra; the env var is wired "
+                "in lambda_6e.tf under `lambda_common_env`. If you are "
+                "running the API locally, export "
+                "`COGNITO_USER_POOL_ID` before starting the dev server."
+            ),
+        },
+    )
+
+
 def _emit_audit(
     *,
     event: LambdaEvent,
@@ -184,6 +231,9 @@ def admin_users_search_handler(
     deny = _require_admin(event)
     if deny is not None:
         return deny
+    misconfigured = _require_cognito_pool()
+    if misconfigured is not None:
+        return misconfigured
 
     qs = _query_params(event)
     query = (qs.get("q") or "").strip()
@@ -214,6 +264,9 @@ def admin_users_detail_handler(
     deny = _require_admin(event)
     if deny is not None:
         return deny
+    misconfigured = _require_cognito_pool()
+    if misconfigured is not None:
+        return misconfigured
 
     user_id = _path_params(event).get("user_id", "").strip()
     if not user_id:
@@ -242,6 +295,9 @@ def admin_users_reset_password_handler(
     deny = _require_admin(event)
     if deny is not None:
         return deny
+    misconfigured = _require_cognito_pool()
+    if misconfigured is not None:
+        return misconfigured
     rc = build_request_context(event)
 
     target_user_id = _path_params(event).get("user_id", "").strip()
@@ -330,6 +386,9 @@ def _mutate_group(
     deny = _require_admin(event)
     if deny is not None:
         return deny
+    misconfigured = _require_cognito_pool()
+    if misconfigured is not None:
+        return misconfigured
     rc = build_request_context(event)
 
     target_user_id = _path_params(event).get("user_id", "").strip()
