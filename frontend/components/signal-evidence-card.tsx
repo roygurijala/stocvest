@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AlignJustify, ArrowDown, ArrowUp, Brain, Clock } from "lucide-react";
@@ -13,6 +13,14 @@ import { DecisionMetric } from "@/components/decision-metric";
 import { InfoTip } from "@/components/info-tip";
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import { synthTradeDecision, type TradeDecisionState } from "@/lib/signal-evidence/trade-decision";
+import {
+  buildCompressedContextSummary,
+  buildNewsNeutralParenthetical,
+  isLayerCompressible,
+  layerEmphasisTier,
+  shouldCompressContextLayers,
+  type LayerEmphasisTier
+} from "@/lib/signal-evidence/layer-emphasis";
 import {
   catalystPublishedAgo,
   buildVerdictTagReconciler,
@@ -83,6 +91,40 @@ function toneFromStatus(status: EvidenceStatus): CardTone {
  */
 function elevatedCardStyle(colors: ThemeColors, tone: CardTone = "neutral"): CSSProperties {
   return cardSurfaceStyle(colors, tone);
+}
+
+/**
+ * Tier-based visual overrides for layer-card rendering (B35,
+ * 2026-05-13). Maps the pure `LayerEmphasisTier` value returned by
+ * `lib/signal-evidence/layer-emphasis::layerEmphasisTier` into the
+ * actual padding / font / opacity values the article uses. Keeps the
+ * tier→style mapping in one place so the cards stay consistent across
+ * desktop and mobile.
+ *
+ *   - `primary`   — slightly larger padding, default font size, full
+ *                   opacity. Visually dominant in the breakdown grid.
+ *   - `secondary` — current default render (no override). Used for
+ *                   News, Macro, Internals when they have content.
+ *   - `tertiary`  — compact padding, smaller font, slight opacity
+ *                   reduction. Used for Sector / Geopolitical when
+ *                   they have no active content; promotes back to
+ *                   secondary the moment either lights up. We
+ *                   deliberately do NOT drop opacity below 0.78 so the
+ *                   chip text remains legible on the dark surface.
+ */
+function tierVisualOverrides(tier: LayerEmphasisTier): {
+  padding: string;
+  fontScale: "base" | "sm" | "xs";
+  opacity: number;
+  headerWeight: 600 | 700;
+} {
+  if (tier === "primary") {
+    return { padding: spacing[4], fontScale: "base", opacity: 1, headerWeight: 700 };
+  }
+  if (tier === "tertiary") {
+    return { padding: spacing[2], fontScale: "xs", opacity: 0.82, headerWeight: 600 };
+  }
+  return { padding: spacing[3], fontScale: "sm", opacity: 1, headerWeight: 600 };
 }
 
 function formatLevel(n: number | null | undefined): string {
@@ -1271,41 +1313,167 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
       <section>
         <h3 style={{ marginTop: 0 }}>Signal Layer Breakdown</h3>
         <div style={{ display: "grid", gap: spacing[3] }}>
-          {evidence.layers.map((layer) => (
-            <article
-              key={layer.key}
-              style={{
-                borderRadius: borderRadius.lg,
-                padding: spacing[3],
-                display: "grid",
-                gap: spacing[2],
-                ...elevatedCardStyle(colors, toneFromStatus(layer.status))
-              }}
-            >
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  <span>{layer.icon}</span>
-                  <strong className="inline-flex items-center gap-1.5 text-sm sm:text-base">
-                    {layer.name}
-                    <InfoTip text={LAYER_NAME_HINTS[layer.key] || "Signal layer readout."} label={layer.name} />
-                  </strong>
-                </div>
-                <span
-                  className="w-fit text-sm"
-                  style={{
-                    borderRadius: borderRadius.full,
-                    padding: "2px 8px",
-                    background: "rgba(148,163,184,0.15)",
-                    color: statusColor(layer.status, colors)
-                  }}
-                >
-                  {layer.status}
-                </span>
-              </div>
-              <p className="text-sm leading-relaxed sm:text-base" style={{ margin: 0, color: colors.textMuted }}>
-                {layer.explanation}
-              </p>
-              {layer.key === "macro" ? (
+          {/* B35 (BRK.B feedback, 2026-05-13): the layer-breakdown
+              grid now applies an emphasis hierarchy and consolidates
+              the three context layers (News + Macro + Geopolitical)
+              into a single "Context" card when all three are Neutral
+              with no active content. Layer-by-layer behaviour:
+
+                - Technical always renders at `primary` tier — bigger
+                  padding, full opacity. It is the load-bearing layer.
+                - Sector + Geopolitical default to `tertiary` (compact,
+                  muted) and promote to `secondary` the moment they
+                  have active content.
+                - News / Macro / Internals render at `secondary`.
+                - Any layer that is Neutral + has nothing active to
+                  surface collapses its body behind a `<details>`
+                  disclosure — the header (icon + name + status) stays
+                  visible so the user can see the layer is there.
+                - The News-neutral chip carries a small italic
+                  parenthetical reframing it as a soft headwind
+                  ("no catalyst support → lowers continuation
+                  probability"), which stays visible even when the
+                  body is collapsed.
+
+              Helpers live in `lib/signal-evidence/layer-emphasis.ts`
+              and are pure / unit-tested in `tests/layer-emphasis.test.ts`. */}
+          {(() => {
+            const compressContext = shouldCompressContextLayers(evidence.layers);
+            const contextSummary = compressContext
+              ? buildCompressedContextSummary(evidence.layers)
+              : null;
+            const collapsedKeys = new Set(contextSummary?.collapsedLayerKeys ?? []);
+            let contextCardRendered = false;
+            const nodes: ReactNode[] = [];
+            for (const layer of evidence.layers) {
+              if (collapsedKeys.has(layer.key)) {
+                if (contextCardRendered) continue;
+                contextCardRendered = true;
+                nodes.push(
+                  <article
+                    key="layer-compressed-context"
+                    data-testid="layer-compressed-context"
+                    data-collapsed-layer-keys={(contextSummary?.collapsedLayerKeys ?? []).join(",")}
+                    style={{
+                      borderRadius: borderRadius.lg,
+                      padding: spacing[3],
+                      display: "grid",
+                      gap: spacing[2],
+                      ...elevatedCardStyle(colors)
+                    }}
+                  >
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        {contextSummary!.layers.map((inner) => (
+                          <span key={`context-icon-${inner.key}`} aria-hidden="true">
+                            {inner.icon}
+                          </span>
+                        ))}
+                        <strong className="inline-flex items-center gap-1.5 text-sm sm:text-base">
+                          {contextSummary!.title}
+                          <InfoTip
+                            text="News, Macro, and Geopolitical layers are all Neutral with no active content. Combined here to keep the breakdown focused on the load-bearing layers."
+                            label="Context layer cluster"
+                          />
+                        </strong>
+                      </div>
+                      <span
+                        className="w-fit text-sm"
+                        style={{
+                          borderRadius: borderRadius.full,
+                          padding: "2px 8px",
+                          background: "rgba(148,163,184,0.15)",
+                          color: statusColor(contextSummary!.statusLabel, colors)
+                        }}
+                      >
+                        {contextSummary!.statusLabel}
+                      </span>
+                    </div>
+                    <p
+                      className="text-sm leading-relaxed sm:text-base"
+                      style={{ margin: 0, color: colors.textMuted }}
+                      data-testid="layer-compressed-context-headline"
+                    >
+                      {contextSummary!.headline}
+                    </p>
+                    <details data-testid="layer-compressed-context-details">
+                      <summary
+                        style={{
+                          cursor: "pointer",
+                          color: colors.accent,
+                          fontSize: typography.scale.xs,
+                          listStyle: "none"
+                        }}
+                      >
+                        Show News, Macro, and Geopolitical layer detail
+                      </summary>
+                      <div style={{ marginTop: spacing[2], display: "grid", gap: spacing[2] }}>
+                        {contextSummary!.layers.map((inner) => (
+                          <div
+                            key={`context-inner-${inner.key}`}
+                            data-testid={`layer-compressed-context-inner-${inner.key}`}
+                            style={{
+                              display: "grid",
+                              gap: 4,
+                              padding: spacing[2],
+                              borderRadius: borderRadius.md,
+                              border: `1px solid ${colors.border}`,
+                              background: "rgba(148,163,184,0.04)"
+                            }}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <span aria-hidden="true">{inner.icon}</span>
+                                <strong className="text-xs">{inner.name}</strong>
+                              </div>
+                              <span
+                                style={{
+                                  fontSize: typography.scale.xs,
+                                  color: statusColor(inner.status, colors)
+                                }}
+                              >
+                                {inner.status}
+                              </span>
+                            </div>
+                            <p
+                              style={{
+                                margin: 0,
+                                fontSize: typography.scale.xs,
+                                color: colors.textMuted,
+                                lineHeight: 1.45
+                              }}
+                            >
+                              {inner.explanation}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  </article>
+                );
+                continue;
+              }
+
+              const tier = layerEmphasisTier(layer);
+              const compressible = isLayerCompressible(layer);
+              const newsParen = buildNewsNeutralParenthetical(layer);
+              const overrides = tierVisualOverrides(tier);
+              const bodyFontSize =
+                overrides.fontScale === "base"
+                  ? typography.scale.base
+                  : overrides.fontScale === "xs"
+                    ? typography.scale.xs
+                    : typography.scale.sm;
+
+              const layerBody = (
+                <>
+                  <p
+                    className="text-sm leading-relaxed sm:text-base"
+                    style={{ margin: 0, color: colors.textMuted, fontSize: bodyFontSize }}
+                  >
+                    {layer.explanation}
+                  </p>
+                  {layer.key === "macro" ? (
                 <div className="flex flex-col gap-2">
                   {layer.macro_risk_level === "critical" && (layer.macro_warnings?.length ?? 0) > 0 ? (
                     <div className="mb-1 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2">
@@ -1500,9 +1668,93 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
                   <GeoStructuralBaselinePanel geo={layer.geo} colors={colors} />
                 )
               ) : null}
-              <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>{displayLayerFreshness(layer, evidence)}</span>
-            </article>
-          ))}
+                  <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>
+                    {displayLayerFreshness(layer, evidence)}
+                  </span>
+                </>
+              );
+
+              nodes.push(
+                <article
+                  key={layer.key}
+                  data-testid={`layer-card-${layer.key}`}
+                  data-layer-tier={tier}
+                  data-layer-compressible={compressible ? "true" : "false"}
+                  style={{
+                    borderRadius: borderRadius.lg,
+                    padding: overrides.padding,
+                    display: "grid",
+                    gap: tier === "tertiary" ? 4 : spacing[2],
+                    opacity: overrides.opacity,
+                    ...elevatedCardStyle(colors, toneFromStatus(layer.status))
+                  }}
+                >
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <span aria-hidden="true">{layer.icon}</span>
+                      <strong
+                        className="inline-flex items-center gap-1.5"
+                        style={{
+                          fontSize: tier === "primary" ? typography.scale.base : typography.scale.sm,
+                          fontWeight: overrides.headerWeight
+                        }}
+                      >
+                        {layer.name}
+                        <InfoTip
+                          text={LAYER_NAME_HINTS[layer.key] || "Signal layer readout."}
+                          label={layer.name}
+                        />
+                      </strong>
+                    </div>
+                    <span
+                      className="w-fit text-sm"
+                      style={{
+                        borderRadius: borderRadius.full,
+                        padding: "2px 8px",
+                        background: "rgba(148,163,184,0.15)",
+                        color: statusColor(layer.status, colors)
+                      }}
+                    >
+                      {layer.status}
+                    </span>
+                  </div>
+                  {newsParen ? (
+                    <span
+                      data-testid={`layer-${layer.key}-neutral-parenthetical`}
+                      style={{
+                        fontSize: typography.scale.xs,
+                        fontStyle: "italic",
+                        color: colors.textMuted,
+                        marginTop: -spacing[1]
+                      }}
+                    >
+                      {newsParen}
+                    </span>
+                  ) : null}
+                  {compressible ? (
+                    <details data-testid={`layer-${layer.key}-collapsed`}>
+                      <summary
+                        style={{
+                          cursor: "pointer",
+                          color: colors.accent,
+                          fontSize: typography.scale.xs,
+                          listStyle: "none"
+                        }}
+                      >
+                        Show evaluation detail
+                      </summary>
+                      <div style={{ marginTop: spacing[2], display: "grid", gap: spacing[2] }}>
+                        {layerBody}
+                      </div>
+                    </details>
+                  ) : (
+                    layerBody
+                  )}
+                </article>
+              );
+            }
+            return nodes;
+          })()}
         </div>
       </section>
 
