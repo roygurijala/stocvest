@@ -514,3 +514,117 @@ def test_confluence_in_intraday_setup_response() -> None:
     assert "confluence_score" in row
     assert "is_confluence_alert" in row
     assert "confluence_tier" in row
+
+
+# ---------------------------------------------------------------------------
+# Internals-alignment chip invariants (BRK-B Issue 4 fix, 2026-05-13)
+# ---------------------------------------------------------------------------
+#
+# The user reported that on a BRK-B SHORT setup the Internals layer card
+# showed a loud "bullish" verdict (breadth strong-up, participation broad-up)
+# but the Confirming/Conflicting chip rail at the bottom of the evidence
+# card did NOT surface that as a conflict. The most important counter-signal
+# on the page was invisible. The fix wires an internals_alignment chip
+# through ConfluenceDetector.calculate_confluence(), mirroring the
+# sector_alignment chip design: the label describes the breadth/participation
+# state intrinsically; placement in confirming or conflicting is decided
+# by setup direction.
+
+
+def _internals_base_kwargs() -> dict[str, object]:
+    """Args that won't generate other chips, so internals chip is the only delta."""
+    return dict(
+        signal_data={"pattern": "flat", "volume_vs_avg": 1.0, "gap_pct": 0},
+        snapshot={},
+        news_catalyst=None,
+        regime="neutral",
+        sector_signal="neutral",
+    )
+
+
+def test_internals_bullish_on_long_setup_lands_in_confirming() -> None:
+    d = _det()
+    r = d.calculate_confluence(
+        symbol="X", direction="long", internals_signal="bullish", **_internals_base_kwargs()
+    )
+    labels_conf = [c["label"] for c in r.confirming_signals]
+    labels_conflict = [c["label"] for c in r.conflicting_signals]
+    assert "Internals bullish" in labels_conf
+    assert "Internals bullish" not in labels_conflict
+
+
+def test_internals_bearish_on_short_setup_lands_in_confirming() -> None:
+    d = _det()
+    r = d.calculate_confluence(
+        symbol="X", direction="short", internals_signal="bearish", **_internals_base_kwargs()
+    )
+    labels_conf = [c["label"] for c in r.confirming_signals]
+    labels_conflict = [c["label"] for c in r.conflicting_signals]
+    assert "Internals bearish" in labels_conf
+    assert "Internals bearish" not in labels_conflict
+
+
+def test_internals_bullish_on_short_setup_lands_in_conflicting_BRK_B_regression() -> None:
+    """Direct BRK-B regression: bullish internals on a short setup MUST show up as a counterweight."""
+    d = _det()
+    r = d.calculate_confluence(
+        symbol="BRK.B", direction="short", internals_signal="bullish", **_internals_base_kwargs()
+    )
+    labels_conflict = [c["label"] for c in r.conflicting_signals]
+    labels_conf = [c["label"] for c in r.confirming_signals]
+    assert "Internals bullish" in labels_conflict, (
+        "Bullish broad-market internals on a short setup MUST appear in the conflicting "
+        "rail — that's the entire point of the Issue 4 fix."
+    )
+    assert "Internals bullish" not in labels_conf
+    # And the chip carries a useful detail that explains what's going on.
+    internals_chip = next(c for c in r.conflicting_signals if c["label"] == "Internals bullish")
+    assert "broad market" in internals_chip["detail"].lower()
+
+
+def test_internals_bearish_on_long_setup_lands_in_conflicting() -> None:
+    d = _det()
+    r = d.calculate_confluence(
+        symbol="X", direction="long", internals_signal="bearish", **_internals_base_kwargs()
+    )
+    labels_conflict = [c["label"] for c in r.conflicting_signals]
+    assert "Internals bearish" in labels_conflict
+
+
+def test_internals_neutral_does_not_emit_chip() -> None:
+    """Neutral internals should not crowd the rail with a no-op chip."""
+    d = _det()
+    r = d.calculate_confluence(
+        symbol="X", direction="short", internals_signal="neutral", **_internals_base_kwargs()
+    )
+    all_labels = {c["label"] for c in r.confirming_signals} | {
+        c["label"] for c in r.conflicting_signals
+    }
+    assert "Internals bullish" not in all_labels
+    assert "Internals bearish" not in all_labels
+
+
+def test_internals_default_argument_keeps_backwards_compatibility() -> None:
+    """Old callers (signal_dto.py, /v1/signals/composite handler) call without internals_signal."""
+    d = _det()
+    r = d.calculate_confluence(
+        symbol="X",
+        direction="long",
+        signal_data={"pattern": "flat", "volume_vs_avg": 1.0, "gap_pct": 0},
+        snapshot={},
+        news_catalyst=None,
+        regime="neutral",
+        sector_signal="neutral",
+        # internals_signal intentionally omitted
+    )
+    # No internals chip generated when omitted (default = "neutral").
+    all_labels = {c["label"] for c in r.confirming_signals} | {
+        c["label"] for c in r.conflicting_signals
+    }
+    assert "Internals bullish" not in all_labels
+    assert "Internals bearish" not in all_labels
+
+
+def test_internals_chip_signal_source_listed_in_class_constants() -> None:
+    """Wire-up sanity: the chip source must be in SIGNAL_SOURCES so downstream filters know it exists."""
+    assert "internals_alignment" in ConfluenceDetector.SIGNAL_SOURCES

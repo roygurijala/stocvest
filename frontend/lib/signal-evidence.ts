@@ -287,43 +287,51 @@ export function buildVerdictTagReconciler(
   geopoliticalDragActive: boolean = false
 ): string | null {
   if (direction !== "bullish" && direction !== "bearish") return null;
-
-  // The conflicting list is the OPPOSITE-polarity context regardless
-  // of setup direction (a chip enters `conflicting` only when it
-  // pushes against the setup). Calling this list "bearish-leaning"
-  // for a long setup and "bullish-leaning" for a short setup is the
-  // semantically accurate framing — it matches the actual content
-  // of the chips on screen.
-  const oppositePolarity = direction === "bullish" ? "Bearish-leaning" : "Bullish-leaning";
-
   if (conflicting.length === 0) return null;
 
-  const factors = conflicting
+  // Direction-word that appears in the body of the sentence — "long"
+  // for a bullish setup, "short" for a bearish one. Reads more
+  // naturally than "bullish setup" / "bearish setup" once embedded
+  // ("anchor the short" >> "anchor the bearish setup").
+  const directionWord = direction === "bullish" ? "long" : "short";
+
+  const anchorList = confirming
     .map((c) => stripChipParenthetical(c.label))
     .filter((s) => s.length > 0)
     .slice(0, 4);
 
-  if (geopoliticalDragActive) {
-    if (!factors.some((f) => /geopolit/i.test(f))) {
-      factors.push("geopolitical drag");
-    }
-  }
-
-  if (factors.length === 0) return null;
-
-  // If the confirming list is non-empty, name what's still anchoring
-  // the setup polarity. If empty, surface a calmer fallback that
-  // signals the conflicting context dominates the chip layout.
-  const anchor = confirming
+  const counterList = conflicting
     .map((c) => stripChipParenthetical(c.label))
     .filter((s) => s.length > 0)
     .slice(0, 4);
 
-  if (anchor.length === 0) {
-    return `${oppositePolarity} context present (${joinFactors(factors)}); no opposing chips support the setup.`;
+  // Geopolitical drag is surfaced from the macro layer (not always a chip
+  // on the evidence card), so we splice it into the counterweights list
+  // explicitly when active.
+  if (geopoliticalDragActive && !counterList.some((f) => /geopolit/i.test(f))) {
+    counterList.push("geopolitical drag");
   }
 
-  return `${oppositePolarity} context present (${joinFactors(factors)}), but the setup is anchored by ${joinFactors(anchor)}.`;
+  if (counterList.length === 0) return null;
+
+  // Shape of the sentence (BRK-B feedback, 2026-05-13):
+  //   "Anchored by X; counterweight(s): Y." (confirming-first)
+  // The previous shape led with the *opposite-polarity context* and the
+  // word "Bullish-leaning" appearing on a short setup made the sentence
+  // read as if the chip layout favoured the wrong direction. Leading
+  // with the anchors makes it obvious what's supporting the setup
+  // (which is what a trader needs first when scanning the verdict tag)
+  // and the counterweights are still right there for risk awareness.
+  const counterLabel = counterList.length === 1 ? "Counterweight" : "Counterweights";
+
+  if (anchorList.length === 0) {
+    // No confirming chips at all — the setup polarity isn't supported by
+    // the chip rail. Say so plainly without leading with the conflicting
+    // chips as if they were the headline.
+    return `No confirming signals for the ${directionWord} setup; only opposing context: ${joinFactors(counterList)}.`;
+  }
+
+  return `Anchored by ${joinFactors(anchorList)}; ${counterLabel.toLowerCase()}: ${joinFactors(counterList)}.`;
 }
 
 function stripChipParenthetical(label: string): string {

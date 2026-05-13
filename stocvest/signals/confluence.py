@@ -104,6 +104,7 @@ class ConfluenceDetector:
         "ema_9_position",
         "market_regime",
         "sector_alignment",
+        "internals_alignment",
         "volume_confirm",
         "news_catalyst",
         "gap_confirm",
@@ -118,12 +119,14 @@ class ConfluenceDetector:
         news_catalyst: dict[str, Any] | None,
         regime: str,
         sector_signal: str,
+        internals_signal: str = "neutral",
     ) -> ConfluenceResult:
         confirming: list[dict[str, Any]] = []
         conflicting: list[dict[str, Any]] = []
         direction = (direction or "").strip().lower()
         regime_l = normalize_direction(regime)
         sector_l = normalize_direction(sector_signal)
+        internals_l = normalize_direction(internals_signal)
 
         pattern = str(signal_data.get("pattern", "") or "").lower()
 
@@ -270,7 +273,41 @@ class ConfluenceDetector:
             else:
                 conflicting.append(sector_chip)
 
-        # 6. Volume confirmation
+        # 6. Internals alignment (breadth + participation).
+        #
+        # Why this exists (BRK-B short-setup feedback, 2026-05-13):
+        # Before this chip the Internals layer could be loudly bullish
+        # (breadth strong-up, participation broad-up) on the layer-detail
+        # card AND simultaneously absent from the Confirming/Conflicting
+        # rail at the bottom of the evidence card. That made the most
+        # important counter-signal to a short setup ("broad market is
+        # rising while you're trying to short an individual name") invisible
+        # to the user. Mirrors the sector_alignment design: the chip label
+        # describes the breadth/participation state intrinsically; whether
+        # it lands in confirming or conflicting is decided by setup direction.
+        internals_chip: dict[str, Any] | None = None
+        if internals_l == "bullish":
+            internals_chip = {
+                "source": "internals_alignment",
+                "label": "Internals bullish",
+                "detail": "Breadth and participation broadly up — broad market is rising.",
+            }
+        elif internals_l == "bearish":
+            internals_chip = {
+                "source": "internals_alignment",
+                "label": "Internals bearish",
+                "detail": "Breadth and participation broadly down — broad market is falling.",
+            }
+        if internals_chip is not None and direction in ("long", "short"):
+            aligned = (direction == "long" and internals_l == "bullish") or (
+                direction == "short" and internals_l == "bearish"
+            )
+            if aligned:
+                confirming.append(internals_chip)
+            else:
+                conflicting.append(internals_chip)
+
+        # 7. Volume confirmation
         vol_vs_avg = float(signal_data.get("volume_vs_avg", 0) or 0)
         if vol_vs_avg >= 1.5:
             confirming.append(
@@ -289,7 +326,7 @@ class ConfluenceDetector:
                 }
             )
 
-        # 7. News catalyst
+        # 8. News catalyst
         if news_catalyst:
             sentiment_raw = str(news_catalyst.get("sentiment", "mixed") or "mixed").lower()
             sentiment = normalize_direction(sentiment_raw)
@@ -335,7 +372,7 @@ class ConfluenceDetector:
                     }
                 )
 
-        # 8. Gap confirmation
+        # 9. Gap confirmation
         gap_pct = float(signal_data.get("gap_pct", 0) or 0)
         if direction == "long" and gap_pct >= 1.0:
             confirming.append(

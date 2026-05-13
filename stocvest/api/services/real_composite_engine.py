@@ -554,6 +554,7 @@ async def build_real_composite_response(
             news_catalyst=nc,
             regime=normalize_direction(macro.market_regime),
             sector_signal=normalize_direction(sector.sector_signal),
+            internals_signal=normalize_direction(getattr(internals, "verdict", "neutral")),
         )
         response_body.update(confluence_result_to_response_fields(cf))
         cf_subset = {

@@ -97,6 +97,99 @@ class TestGetBars:
 
         assert bars[0].timestamp.tzinfo is not None
 
+    # ------------------------------------------------------------------
+    # Recency / sort regression (BRK-B Issue 3 fix, 2026-05-13)
+    # ------------------------------------------------------------------
+    #
+    # Before the fix get_bars sent sort=asc with a default
+    # from_date="2000-01-01", which on Polygon returns the OLDEST
+    # N bars in the date range — i.e. bars from 2003-era data.
+    # Every technical analyzer in the codebase was running on
+    # 22-year-old prices. Tests below pin the corrected behaviour:
+    #
+    #   1. "recent N bars" mode (no dates provided) MUST request
+    #      sort=desc so the most recent bars are returned, and the
+    #      caller-facing list MUST still be oldest-first (reversed).
+    #   2. Explicit-date-range mode MUST keep sort=asc (callers like
+    #      sector_daily_cache and orb_compute_worker rely on it).
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_recent_mode_sends_sort_desc_and_returns_oldest_first(self) -> None:
+        """No from/to provided → sort=desc on the wire, oldest-first on return."""
+        route = respx.get(
+            url__regex=r"https://api\.polygon\.io/v2/aggs/ticker/AAPL/range/1/day/2000-01-01/.+"
+        ).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "status": "OK",
+                    # Polygon returns newest-first when sort=desc.
+                    "results": [
+                        agg_bar(2_000_000_000_000),  # newest
+                        agg_bar(1_000_000_000_000),  # mid
+                        agg_bar(500_000_000_000),    # oldest
+                    ],
+                },
+            )
+        )
+        async with PolygonClient(FAKE_KEY) as client:
+            bars = await client.get_bars("AAPL", Timeframe.DAY_1)
+        assert route.called
+        sent_params = dict(route.calls[0].request.url.params)
+        assert sent_params.get("sort") == "desc", (
+            "Recent-N-bars mode MUST send sort=desc so Polygon returns the newest bars, "
+            "not the oldest in the [2000-01-01, today] range."
+        )
+        # The reverse on our side restores oldest-first chronology so
+        # every analyzer downstream (SMA windows, RSI seed, MACD seed)
+        # keeps working unchanged.
+        ts_ms = [int(b.timestamp.timestamp() * 1000) for b in bars]
+        assert ts_ms == sorted(ts_ms), (
+            "Bars returned to the caller MUST be oldest-first regardless of how Polygon ordered them."
+        )
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_explicit_date_range_keeps_sort_asc(self) -> None:
+        """Date range mode (case B) must NOT regress to desc — callers depend on asc-within-range."""
+        route = respx.get(
+            "https://api.polygon.io/v2/aggs/ticker/AAPL/range/1/day/2024-01-01/2024-01-10"
+        ).mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "OK", "results": [agg_bar(1_704_182_400_000)]},
+            )
+        )
+        async with PolygonClient(FAKE_KEY) as client:
+            await client.get_bars("AAPL", Timeframe.DAY_1, from_date="2024-01-01", to_date="2024-01-10")
+        assert route.called
+        sent_params = dict(route.calls[0].request.url.params)
+        assert sent_params.get("sort") == "asc", (
+            "When both from_date and to_date are explicitly provided, get_bars must keep "
+            "sort=asc — sector_daily_cache and orb_compute_worker rely on oldest-first within the window."
+        )
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_partial_dates_still_treated_as_range_mode(self) -> None:
+        """If only one of from/to is provided, that's still a range request (not recent-N)."""
+        # Caller pinned to_date only — they still mean "bars up to this date".
+        route = respx.get(
+            url__regex=r"https://api\.polygon\.io/v2/aggs/ticker/AAPL/range/1/day/2000-01-01/2024-01-02"
+        ).mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "OK", "results": [agg_bar(1_704_182_400_000)]},
+            )
+        )
+        async with PolygonClient(FAKE_KEY) as client:
+            await client.get_bars("AAPL", Timeframe.DAY_1, to_date="2024-01-02")
+        sent_params = dict(route.calls[0].request.url.params)
+        # Partial-date mode is treated as explicit range (sort=asc) to
+        # avoid surprising callers who pinned one edge.
+        assert sent_params.get("sort") == "asc"
+
 
 class TestGetEvaluatedPriceAfterSignal:
     @pytest.mark.asyncio

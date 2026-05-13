@@ -230,25 +230,77 @@ class PolygonClient:
         Args:
             symbol:     Ticker e.g. "AAPL"
             timeframe:  Timeframe enum value
-            from_date:  Start date (inclusive).  Defaults to 200 bars back.
-            to_date:    End date (inclusive).    Defaults to today.
+            from_date:  Start date (inclusive).  Optional.
+            to_date:    End date (inclusive).    Optional.
             limit:      Max bars to return (Polygon cap: 50,000).
             adjusted:   True = split/dividend adjusted prices.
 
         Returns:
             List of Bar objects, oldest-first.
+
+        Two calling modes (and they MUST behave differently):
+
+        1. "Recent N bars" — callers pass `limit=N` and leave the date range
+           open (``from_date=None`` and ``to_date=None``). They want the most
+           recent N bars from today's perspective. This is by far the dominant
+           use case across the codebase (every composite-engine technical
+           layer, the scanner pipeline, the public ``/v1/bars`` handler when
+           no dates are supplied, etc.).
+        2. "Bars within an explicit date range" — callers pass concrete dates
+           and want every bar inside that window, oldest-first, capped by
+           ``limit``. Examples: ``sector_daily_cache`` for a trailing 7-day
+           audit, ``orb_compute_worker`` for a single trading day's minute
+           bars.
+
+        Why this matters — the BRK-B regression of 2026-05-13
+        ===================================================
+        The previous implementation always sent ``sort=asc`` with a
+        default ``from_date="2000-01-01"``. The comment claimed Polygon
+        "ignores from_date if limit is set" — that comment was wrong.
+        Polygon honours both: with ``sort=asc`` and a date range, you get
+        the OLDEST N bars in the range. So when a caller asked for "last
+        60 minute bars" of BRK.B, the engine actually received 60 minute
+        bars from **2003-09-10**. Live probe before fix::
+
+            get_bars('BRK.B', MIN_1, limit=60)
+              → FIRST bar 2003-09-10T13:33:00, close ≈ $50
+              → LAST  bar 2003-09-10T15:50:00, close ≈ $50
+            get_bars('BRK.B', DAY_1, limit=210)
+              → FIRST bar 2003-09-10, close ≈ $58
+              → LAST  bar 2004-07-12, close ≈ $61
+
+        Every technical computation downstream (SMA50, SMA200, RSI,
+        MACD, VWAP, EMAs, golden cross, ATR, volatility regime, breakout
+        detection) was running against 22-year-old prices instead of
+        the current tape. The visible symptom was BRK.B's intraday VWAP
+        rendering as ``$50.36`` (the price post the 2010 50:1 split) on
+        a stock that trades near ``$485`` today, and almost every name
+        rendering "Above SMA50 / Above SMA200" because today's price is
+        of course higher than 2003-era prices for nearly any equity.
+
+        The fix below makes mode 1 actually return the most recent bars
+        (``sort=desc`` then reverse on the wire to maintain the
+        oldest-first contract callers expect) while leaving mode 2
+        untouched (explicit dates → explicit asc-within-range).
         """
         multiplier, timespan = _TIMEFRAME_MAP[timeframe]
 
-        # Default date range
+        # "Recent N bars" mode: caller did not pin either edge of the
+        # range, so they want the most recent N. Anchor the to_date at
+        # today, the from_date at the earliest data Polygon has, and
+        # ask Polygon to walk BACKWARDS from today (sort=desc) up to
+        # ``limit`` bars. The result is then reversed to oldest-first
+        # so every caller still receives bars in chronological order.
+        recent_mode = from_date is None and to_date is None
+
         if to_date is None:
             to_date = date.today().isoformat()
         if from_date is None:
-            from_date = "2000-01-01"  # Polygon ignores if limit is set
+            from_date = "2000-01-01"
 
         params = {
             "adjusted": str(adjusted).lower(),
-            "sort":     "asc",
+            "sort":     "desc" if recent_mode else "asc",
             "limit":    str(limit),
         }
 
@@ -256,6 +308,12 @@ class PolygonClient:
         data = await self._get(path, params)
 
         results = data.get("results") or []
+        if recent_mode:
+            # Polygon returned newest-first; flip to the oldest-first
+            # contract every caller expects (and every downstream analyzer
+            # assumes — SMA windows, RSI seed, MACD seed, etc.).
+            results = list(reversed(results))
+
         bars: list[Bar] = []
         for r in results:
             bars.append(Bar(
@@ -270,7 +328,13 @@ class PolygonClient:
                 vwap=r.get("vw"),
                 transactions=r.get("n"),
             ))
-        log.debug("get_bars(%s, %s) → %d bars", symbol, timeframe.value, len(bars))
+        log.debug(
+            "get_bars(%s, %s) → %d bars (mode=%s)",
+            symbol,
+            timeframe.value,
+            len(bars),
+            "recent" if recent_mode else "range",
+        )
         return bars
 
     async def get_evaluated_price_after_signal(

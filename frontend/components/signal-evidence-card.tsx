@@ -739,7 +739,33 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
     evidence.updatedAtIso
   ]);
 
-  const captureDisplayText = captureEx?.text && captureEx.text.length > 0 ? captureEx.text : evidence.aiVerdict;
+  const captureDisplayText = (() => {
+    // Defensive fallback chain (BRK-B Issue 5 fix, 2026-05-13). If the BFF
+    // /api/stocvest/signals/ai/explanations call returns 5xx or an empty
+    // text body we used to render an empty italic quote ("...") in the
+    // "AI Signal Analysis" section. That looked like a broken render to
+    // users. We now degrade through:
+    //   1. AI-cached / AI-live text                  (captureEx.text)
+    //   2. Deterministic short verdict copy          (evidence.aiVerdict)
+    //   3. Last-resort symbol/direction sentence     (built here)
+    // so the section always shows a sensible sentence even when the
+    // upstream provider is down or the cache is cold.
+    if (captureEx?.text && captureEx.text.trim().length > 0) {
+      return captureEx.text;
+    }
+    if (evidence.aiVerdict && evidence.aiVerdict.trim().length > 0) {
+      return evidence.aiVerdict;
+    }
+    const dir = evidence.direction;
+    const sym = evidence.symbol;
+    if (dir === "bullish") {
+      return `${sym} setup leans bullish based on layer agreement. Open Evidence for layer detail.`;
+    }
+    if (dir === "bearish") {
+      return `${sym} setup leans bearish based on layer agreement. Open Evidence for layer detail.`;
+    }
+    return `${sym} signal layers are mixed. Open Evidence for layer detail.`;
+  })();
   const captureCachedFlag = Boolean(captureEx?.cached);
   const showUpgradeAfterCapture =
     Boolean(captureEx?.upgrade) || (profileLoaded && !hasAIExplanations && captureEx !== null);
@@ -1763,7 +1789,10 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
           cached={captureCachedFlag}
           colors={colors}
         />
-        <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>Signal summary</span>
+        {/* Removed the dangling "Signal summary" caption (BRK-B Issue 5
+            fix, 2026-05-13). It was a label with no value bound to it and
+            users were reading it as a "Signal summary: (blank)" defect.
+            The h3 above already explains what this section is. */}
         <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>{evidence.aiFreshnessLabel}</span>
         {showUpgradeAfterCapture ? (
           <UpgradePrompt

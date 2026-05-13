@@ -1638,23 +1638,23 @@ describe("Macro layer warning surface", () => {
 // opposite-polarity context running against the setup.
 //
 // Regression pinned by these tests (BRK-B short-setup report,
-// 2026-05-13): the previous reconciler labelled confirming chips as
-// "Bullish inputs" regardless of setup direction, producing the
-// nonsensical "Bullish inputs present, but overridden by VWAP conflict
-// + EMA conflict + Weak Volume" caption next to a chip group whose
-// ONLY confirming entry was "Sector lags market" (formerly labelled
-// "Sector Bearish" — see confluence.py for that backend rename). The
-// fix describes the CONFLICTING list's opposite-polarity correctly:
-// for a long setup the conflicting context is bearish-leaning; for a
-// short setup it is bullish-leaning. The reconciler then identifies
-// the confirming list as the anchor that keeps the setup in its
-// direction.
+// 2026-05-13 — second pass): the previous reconciler led with the
+// opposite-polarity context ("Bullish-leaning context present (X, Y, Z),
+// but the setup is anchored by W") and the wording made a short setup
+// read as if the chip layout favoured the wrong direction. The user
+// also reported confusion when scanning the sentence ("Bullish-leaning
+// context" on a short signal looked like a contradiction to anyone not
+// reading the full clause). The new sentence leads with the anchors
+// (what's supporting the setup) and lists the counterweights second,
+// which is the order a trader needs when scanning the verdict tag.
+// Anti-regression: still must NOT mislabel confirming chips as
+// "Bullish inputs" — that was the original BRK-B symptom.
 
 describe("buildVerdictTagReconciler", () => {
-  test("short_setup (dir=bearish): conflicting list is bullish-leaning context running against the short", () => {
+  test("short_setup (dir=bearish): leads with confirming anchors, lists counterweights second", () => {
     // For a SHORT setup, the confluence engine builds bearish-aligned
-    // confirming chips ("Sector lags market") and bullish-leaning
-    // conflicting chips ("VWAP conflict" = price above VWAP, etc).
+    // confirming chips ("Sector lags market") and conflicting chips
+    // that push back against the short ("VWAP conflict" etc).
     const sentence = buildVerdictTagReconciler(
       "bearish",
       [{ label: "Sector lags market" }, { label: "Bearish Regime" }],
@@ -1662,20 +1662,28 @@ describe("buildVerdictTagReconciler", () => {
       false
     );
     expect(sentence).not.toBeNull();
-    // CRITICAL: the conflicting list must be labelled BULLISH-leaning
-    // (the opposite of the short setup direction). The previous bug
-    // labelled the confirming list "Bullish inputs" which was wrong.
-    expect(sentence!).toMatch(/Bullish-leaning context present/i);
+    // CRITICAL: the sentence must LEAD with the anchor list. "Anchored by"
+    // appears before the counterweights so a quick scan sees the support
+    // first, not the opposition.
+    expect(sentence!).toMatch(/^Anchored by /);
+    // Anchor list must reference the confirming chips.
+    expect(sentence!).toContain("Sector lags market");
+    expect(sentence!).toContain("Bearish Regime");
+    // Counterweights must list the conflicting chips.
+    expect(sentence!).toMatch(/counterweights?:/i);
     expect(sentence!).toContain("VWAP conflict");
     expect(sentence!).toContain("Weak Volume");
-    // The anchor sentence must name what's still holding the setup
-    // direction — i.e. the confirming chips.
-    expect(sentence!).toContain("Sector lags market");
-    // And must NOT call confirming chips "Bullish inputs."
+    // ANTI-REGRESSION: the previous wording is gone.
+    expect(sentence!).not.toMatch(/Bullish-leaning context present/i);
     expect(sentence!).not.toMatch(/Bullish inputs/i);
+    // Order check — anchor sentence comes BEFORE the counterweights clause.
+    const anchorIdx = sentence!.indexOf("Sector lags market");
+    const counterIdx = sentence!.toLowerCase().indexOf("counterweight");
+    expect(anchorIdx).toBeGreaterThan(-1);
+    expect(counterIdx).toBeGreaterThan(anchorIdx);
   });
 
-  test("long_setup (dir=bullish): conflicting list is bearish-leaning context running against the long", () => {
+  test("long_setup (dir=bullish): same anchor-first shape", () => {
     const sentence = buildVerdictTagReconciler(
       "bullish",
       [{ label: "Above 9 EMA" }, { label: "Bullish Catalyst" }],
@@ -1683,14 +1691,27 @@ describe("buildVerdictTagReconciler", () => {
       false
     );
     expect(sentence).not.toBeNull();
-    expect(sentence!).toMatch(/Bearish-leaning context present/i);
-    expect(sentence!).toContain("VWAP conflict");
-    expect(sentence!).toContain("Weak Volume");
+    expect(sentence!).toMatch(/^Anchored by /);
     expect(sentence!).toContain("Above 9 EMA");
+    expect(sentence!).toContain("Bullish Catalyst");
+    expect(sentence!).toMatch(/counterweights?:/i);
+    expect(sentence!).toContain("VWAP conflict");
+    expect(sentence!).not.toMatch(/Bearish-leaning context present/i);
+  });
+
+  test("singular counterweight uses singular label (counterweight, not counterweights)", () => {
+    const sentence = buildVerdictTagReconciler(
+      "bullish",
+      [{ label: "Above 9 EMA" }],
+      [{ label: "Weak Volume" }],
+      false
+    );
+    expect(sentence).not.toBeNull();
+    expect(sentence!.toLowerCase()).toContain("counterweight:");
+    expect(sentence!.toLowerCase()).not.toContain("counterweights:");
   });
 
   test("no_conflicting_chips: returns null (nothing to reconcile)", () => {
-    // Long setup with full confluence — no opposite-polarity context.
     expect(
       buildVerdictTagReconciler(
         "bullish",
@@ -1699,7 +1720,6 @@ describe("buildVerdictTagReconciler", () => {
         false
       )
     ).toBeNull();
-    // Short setup with full confluence — same.
     expect(
       buildVerdictTagReconciler(
         "bearish",
@@ -1710,7 +1730,7 @@ describe("buildVerdictTagReconciler", () => {
     ).toBeNull();
   });
 
-  test("no_confirming_chips_with_conflicting_only: surfaces a calm fallback (does not crash, does not invent anchor)", () => {
+  test("no_confirming_chips_with_conflicting_only: emits the direction-aware no-support fallback", () => {
     const sentence = buildVerdictTagReconciler(
       "bearish",
       [],
@@ -1718,10 +1738,14 @@ describe("buildVerdictTagReconciler", () => {
       false
     );
     expect(sentence).not.toBeNull();
-    expect(sentence!).toMatch(/Bullish-leaning context present/i);
-    // No anchor to name, so the sentence ends with the calmer
-    // "no opposing chips support the setup" tail.
-    expect(sentence!).toMatch(/no opposing chips support the setup/i);
+    // Must name the direction word so the user knows which way the
+    // setup is pointed without flipping back up the page.
+    expect(sentence!).toMatch(/short setup/i);
+    expect(sentence!).toMatch(/No confirming signals/i);
+    expect(sentence!).toContain("Weak Volume");
+    expect(sentence!).toContain("VWAP conflict");
+    // ANTI-REGRESSION: the old "Bullish-leaning context present" wording is gone.
+    expect(sentence!).not.toMatch(/Bullish-leaning context present/i);
   });
 
   test("neutral_verdict_returns_null (no chip polarity to reason about)", () => {
@@ -1747,7 +1771,7 @@ describe("buildVerdictTagReconciler", () => {
     expect(sentence!).not.toContain("(0.42× avg)");
   });
 
-  test("when_geopolitical_drag_active_appends_geopolitical_factor", () => {
+  test("when_geopolitical_drag_active_appends_geopolitical_factor_into_counterweights", () => {
     const sentence = buildVerdictTagReconciler(
       "bullish",
       [{ label: "Above 9 EMA" }, { label: "Bullish Catalyst" }],
@@ -1770,32 +1794,32 @@ describe("buildVerdictTagReconciler", () => {
     expect(matches.length).toBe(1);
   });
 
-  test("brk_b_short_setup_regression: full chip set from the user-reported screenshot reconciles correctly", () => {
-    // Reproduces the chip group from the BRK-B evidence-card report:
-    //   confirming: [Sector lags market]   (was: "Sector Bearish")
-    //   conflicting: [VWAP conflict, EMA conflict, Weak Volume (<0.05× avg)]
+  test("brk_b_short_setup_regression: anchor-first sentence with internals chip in counterweights", () => {
+    // Reproduces the full BRK-B chip rail from the second report
+    // (2026-05-13 — second pass):
+    //   confirming: [Sector lags market]
+    //   conflicting: [Internals bullish, Weak Volume]
     //   direction: bearish (short setup)
-    // The bug was that the reconciler labelled the single confirming
-    // chip as a "Bullish input." This test pins the symptom directly,
-    // and uses the relabelled chip text the confluence engine now
-    // emits (so the test reflects what users actually see on screen).
+    // (Once Issue 3 — stale 2003 bars — is fixed, VWAP/EMA chips no
+    //  longer mis-fire as conflicts, so the genuine counterweight on
+    //  a BRK.B short becomes Internals bullish — the chip we just
+    //  added to confluence.py for Issue 4.)
     const sentence = buildVerdictTagReconciler(
       "bearish",
       [{ label: "Sector lags market" }],
-      [
-        { label: "VWAP conflict" },
-        { label: "EMA conflict" },
-        { label: "Weak Volume (<0.05× avg)" }
-      ],
+      [{ label: "Internals bullish" }, { label: "Weak Volume (<0.05× avg)" }],
       false
     );
     expect(sentence).not.toBeNull();
-    expect(sentence!).not.toMatch(/Bullish inputs present/i);
-    expect(sentence!).toMatch(/Bullish-leaning context present/i);
-    expect(sentence!).toContain("Sector lags market");
-    expect(sentence!).toContain("VWAP conflict");
-    expect(sentence!).toContain("EMA conflict");
+    // Anchor-first shape.
+    expect(sentence!).toMatch(/^Anchored by Sector lags market/);
+    // Counterweights enumerate the real opposing context.
+    expect(sentence!).toContain("Internals bullish");
     expect(sentence!).toContain("Weak Volume");
+    // Anti-regression on every deprecated form.
+    expect(sentence!).not.toMatch(/Bullish inputs present/i);
+    expect(sentence!).not.toMatch(/Bullish-leaning context present/i);
+    expect(sentence!).not.toMatch(/Sector Bearish/);
   });
 });
 
@@ -1804,14 +1828,12 @@ describe("buildVerdictTagReconciler", () => {
 // ---------------------------------------------------------------------------
 
 describe("SignalEvidenceCard verdict-tag reconciler rendering", () => {
-  test("short_setup_with_conflicting_chips_renders_reconciler_line_with_bullish_leaning_context", () => {
-    // Reproduces the BRK-B short-setup chip layout. The previous
-    // reconciler mislabelled the single confirming chip (originally
-    // emitted as "Sector Bearish", now relabelled to "Sector lags
-    // market") as a "Bullish input." The new reconciler labels the
-    // CONFLICTING list as bullish-leaning context (correctly opposite
-    // of the short setup direction), and names the confirming list as
-    // the anchor.
+  test("short_setup_with_conflicting_chips_renders_anchor_first_reconciler_line", () => {
+    // Reproduces the BRK-B short-setup chip layout (2026-05-13 second
+    // pass). The reconciler must lead with the anchor and list the
+    // counterweights second, not the other way around. Anti-regression
+    // for every prior shape ("Bullish inputs present", "Bullish-leaning
+    // context present", "Sector Bearish").
     const base = buildEvidenceFromSetup(
       { ...baseSetup, direction: "short" },
       undefined,
@@ -1823,8 +1845,7 @@ describe("SignalEvidenceCard verdict-tag reconciler rendering", () => {
       confluence: {
         confirming_signals: [{ label: "Sector lags market", detail: "" }],
         conflicting_signals: [
-          { label: "VWAP conflict", detail: "" },
-          { label: "EMA conflict", detail: "" },
+          { label: "Internals bullish", detail: "" },
           { label: "Weak Volume (0.42× avg)", detail: "" }
         ],
         score: 30,
@@ -1846,17 +1867,16 @@ describe("SignalEvidenceCard verdict-tag reconciler rendering", () => {
       )
     );
     expect(html).toContain("verdict-tag-reconciler");
-    // CRITICAL regression guard: must NOT label the confirming chip
-    // as a "Bullish input" — this was the BRK-B symptom.
-    expect(html).not.toMatch(/Bullish inputs present/i);
-    // Must label the bullish-leaning conflicting context correctly.
-    expect(html).toMatch(/Bullish-leaning context present/i);
-    expect(html).toContain("VWAP conflict");
-    expect(html).toContain("EMA conflict");
-    expect(html).toContain("Weak Volume");
     // The relabelled chip must render unchanged from backend wire.
     expect(html).toContain("Sector lags market");
-    // And the deprecated label must never reappear via fallback.
+    expect(html).toContain("Internals bullish");
+    expect(html).toContain("Weak Volume");
+    // Anchor-first sentence shape — "Anchored by X; counterweight(s): Y".
+    expect(html).toMatch(/Anchored by Sector lags market/);
+    expect(html).toMatch(/counterweights?:/i);
+    // ANTI-REGRESSION guards on every deprecated phrasing.
+    expect(html).not.toMatch(/Bullish inputs present/i);
+    expect(html).not.toMatch(/Bullish-leaning context present/i);
     expect(html).not.toContain("Sector Bearish");
     const reconcilerMatch = html.match(
       /data-testid="verdict-tag-reconciler"[^>]*>([^<]+)</
