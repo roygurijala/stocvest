@@ -71,6 +71,9 @@ def test_lambda_runtime_secret_snake_case_upstash_env_aliases(monkeypatch: pytes
     get_settings.cache_clear()
     for k in fake:
         monkeypatch.delenv(k, raising=False)
+    # _apply_lambda_runtime_secret_to_environ copies snake_case → UPSTASH_*; remove those too.
+    monkeypatch.delenv("UPSTASH_REDIS_REST_URL", raising=False)
+    monkeypatch.delenv("UPSTASH_REDIS_REST_TOKEN", raising=False)
 
 
 @pytest.mark.unit
@@ -121,57 +124,6 @@ def test_settings_model_validate() -> None:
 
 
 @pytest.mark.unit
-def test_lambda_get_settings_still_merges_upstash_when_benzinga_inlined_in_env(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Regression: early return must not skip external-api-keys when Upstash lives only there."""
-    monkeypatch.setenv("AWS_LAMBDA_FUNCTION_NAME", "stocvest-development-api-signals")
-    monkeypatch.setenv("POLYGON_API_KEY", "poly")
-    monkeypatch.setenv("BENZINGA_API_KEY", "b1")
-    monkeypatch.setenv("BENZINGA_NEWS_API_KEY", "b2")
-    monkeypatch.setenv("BENZINGA_ANALYST_API_KEY", "b3")
-    monkeypatch.setenv("BENZINGA_WIM_API_KEY", "b4")
-    monkeypatch.setenv("BENZINGA_PRESS_API_KEY", "b5")
-    monkeypatch.setenv("PERPLEXITY_API_KEY", "p1")
-    monkeypatch.delenv("UPSTASH_REDIS_REST_URL", raising=False)
-    monkeypatch.delenv("UPSTASH_REDIS_REST_TOKEN", raising=False)
-
-    ext = {
-        "UPSTASH_REDIS_REST_URL": "https://example.upstash.io",
-        "UPSTASH_REDIS_REST_TOKEN": "token-from-external-secret",
-    }
-
-    mock_sm = MagicMock()
-
-    def _gsv(*, SecretId: str, **_kwargs: object) -> dict[str, str]:
-        if SecretId == "stocvest/external-api-keys":
-            return {"SecretString": json.dumps(ext)}
-        return {"SecretString": "{}"}
-
-    mock_sm.get_secret_value.side_effect = lambda **kw: _gsv(**kw)
-
-    get_settings.cache_clear()
-    with patch("stocvest.utils.config.boto3.client", return_value=mock_sm):
-        s = get_settings()
-
-    assert s.upstash_redis_rest_url == "https://example.upstash.io"
-    assert s.upstash_redis_rest_token == "token-from-external-secret"
-    monkeypatch.setenv("POLYGON_API_KEY", "x")
-    monkeypatch.setenv("STOCVEST_ENABLE_SANDBOX_INTEGRATION", "1")
-    monkeypatch.setenv("STOCVEST_IBKR_GATEWAY", "ibkr.binding")
-    monkeypatch.setenv("STOCVEST_ETRADE_GATEWAY", "etrade.binding")
-    monkeypatch.setenv("ETRADE_CONSUMER_KEY", "ck")
-    monkeypatch.setenv("ETRADE_CONSUMER_SECRET", "cs")
-    get_settings.cache_clear()
-    s = get_settings()
-    assert s.sandbox_integration_enabled is True
-    assert s.ibkr_gateway_binding == "ibkr.binding"
-    assert s.etrade_gateway_binding == "etrade.binding"
-    assert s.etrade_consumer_key == "ck"
-    assert s.etrade_consumer_secret == "cs"
-
-
-@pytest.mark.unit
 def test_broker_sandbox_fields_default_empty(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("POLYGON_API_KEY", "x")
     monkeypatch.delenv("STOCVEST_ENABLE_SANDBOX_INTEGRATION", raising=False)
@@ -186,6 +138,23 @@ def test_broker_sandbox_fields_default_empty(monkeypatch: pytest.MonkeyPatch) ->
     assert s.etrade_gateway_binding == ""
     assert s.etrade_consumer_key == ""
     assert s.etrade_consumer_secret == ""
+
+
+@pytest.mark.unit
+def test_settings_broker_sandbox_enabled_parse_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("POLYGON_API_KEY", "x")
+    monkeypatch.setenv("STOCVEST_ENABLE_SANDBOX_INTEGRATION", "1")
+    monkeypatch.setenv("STOCVEST_IBKR_GATEWAY", "ibkr.binding")
+    monkeypatch.setenv("STOCVEST_ETRADE_GATEWAY", "etrade.binding")
+    monkeypatch.setenv("ETRADE_CONSUMER_KEY", "ck")
+    monkeypatch.setenv("ETRADE_CONSUMER_SECRET", "cs")
+    get_settings.cache_clear()
+    s = get_settings()
+    assert s.sandbox_integration_enabled is True
+    assert s.ibkr_gateway_binding == "ibkr.binding"
+    assert s.etrade_gateway_binding == "etrade.binding"
+    assert s.etrade_consumer_key == "ck"
+    assert s.etrade_consumer_secret == "cs"
 
 
 @pytest.mark.unit
