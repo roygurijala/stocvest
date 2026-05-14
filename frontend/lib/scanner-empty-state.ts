@@ -146,10 +146,21 @@ export interface EmptyStateOverviewInput {
   spyPct?: number | null;
   qqqPct?: number | null;
   swingUniverseSymbolCount?: number | null;
+  /** From gap-intelligence API `snapshot_symbol_count` when client sent empty snapshots. */
+  gapIntelligenceSnapshotSymbolCount?: number | null;
   /** Sector ETF 5-day percents for the dashboard sector-rotation helper. */
   sectorPct5d?: Array<number | null | undefined>;
   /** Optional explicit market status; defaults to `isUsRegularSessionOpenEt()`. */
   marketStatus?: MarketStatusLite | null;
+}
+
+/** Prefer full gap-scan breadth when the API reports it; else bars/swing universe size. */
+export function effectiveScannerUniverseDisplayCount(overview: EmptyStateOverviewInput): number | null {
+  const g = overview.gapIntelligenceSnapshotSymbolCount;
+  if (typeof g === "number" && g > 0) return g;
+  const s = overview.swingUniverseSymbolCount;
+  if (typeof s === "number" && s > 0) return s;
+  return null;
 }
 
 function tapeWord(pct: number | null | undefined): string {
@@ -218,10 +229,7 @@ export function buildSwingEmptyStateContext(
   const regimeLabel = (overview.regimeLabel ?? "").trim();
   const spyPct = typeof overview.spyPct === "number" ? overview.spyPct : null;
   const qqqPct = typeof overview.qqqPct === "number" ? overview.qqqPct : null;
-  const universeSize =
-    typeof overview.swingUniverseSymbolCount === "number"
-      ? overview.swingUniverseSymbolCount
-      : null;
+  const universeSize = effectiveScannerUniverseDisplayCount(overview);
   const sectorTape = sectorTapeKindFromPct5d(overview.sectorPct5d ?? []);
   const r = regimeLabel.toLowerCase();
   const weeklyAvgPctHint: number | null = r.includes("bear") ? -0.8 : r.includes("bull") ? 0.8 : 0;
@@ -254,10 +262,7 @@ export function buildDayEmptyStateContext(
   const regimeLabel = (overview.regimeLabel ?? "").trim();
   const spyPct = typeof overview.spyPct === "number" ? overview.spyPct : null;
   const qqqPct = typeof overview.qqqPct === "number" ? overview.qqqPct : null;
-  const universeSize =
-    typeof overview.swingUniverseSymbolCount === "number"
-      ? overview.swingUniverseSymbolCount
-      : null;
+  const universeSize = effectiveScannerUniverseDisplayCount(overview);
   const sessionOpen =
     overview.marketStatus != null
       ? (overview.marketStatus.market || "").trim().toLowerCase() === "open"
@@ -411,10 +416,7 @@ export function buildGapIntelEmptyStateContext(
   const regimeLabel = (overview.regimeLabel ?? "").trim();
   const spyPct = typeof overview.spyPct === "number" ? overview.spyPct : null;
   const qqqPct = typeof overview.qqqPct === "number" ? overview.qqqPct : null;
-  const universeSize =
-    typeof overview.swingUniverseSymbolCount === "number"
-      ? overview.swingUniverseSymbolCount
-      : null;
+  const universeSize = effectiveScannerUniverseDisplayCount(overview);
   const sessionOpen =
     mode === "day"
       ? overview.marketStatus != null

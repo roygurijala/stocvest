@@ -5,6 +5,7 @@ import {
   buildGapIntelEmptyStateContext,
   buildSwingEmptyStateContext,
   DAY_VOCABULARY_BAN_FOR_SWING,
+  effectiveScannerUniverseDisplayCount,
   formatTapeReadout,
   SWING_VOCABULARY_BAN_FOR_DAY
 } from "@/lib/scanner-empty-state";
@@ -17,6 +18,21 @@ const baseInput = {
   sectorPct5d: [0.4, -0.1, 0.2],
   marketStatus: { market: "open" } as { market: string }
 };
+
+describe("effectiveScannerUniverseDisplayCount", () => {
+  test("prefers gap intelligence snapshot count when present", () => {
+    expect(
+      effectiveScannerUniverseDisplayCount({
+        swingUniverseSymbolCount: 6,
+        gapIntelligenceSnapshotSymbolCount: 8_432
+      })
+    ).toBe(8_432);
+  });
+
+  test("falls back to swing universe count", () => {
+    expect(effectiveScannerUniverseDisplayCount({ swingUniverseSymbolCount: 6 })).toBe(6);
+  });
+});
 
 describe("buildSwingEmptyStateContext — structural shape", () => {
   test("test_returns_swing_discriminated_mode_and_universe_size", () => {

@@ -270,7 +270,8 @@ export function ScannerPageClient({
         spyPct: core.spyPct,
         qqqPct: core.qqqPct,
         regimeLabel: core.regimeLabel,
-        swingUniverseSymbolCount: core.swingUniverseSymbolCount ?? null
+        swingUniverseSymbolCount: core.swingUniverseSymbolCount ?? null,
+        gapIntelligenceSnapshotSymbolCount: core.gapIntelligenceSnapshotSymbolCount ?? null
       }));
     })();
     return () => {
@@ -973,7 +974,8 @@ export function ScannerPageClient({
           spyPct: core.spyPct,
           qqqPct: core.qqqPct,
           regimeLabel: core.regimeLabel,
-          swingUniverseSymbolCount: core.swingUniverseSymbolCount ?? null
+          swingUniverseSymbolCount: core.swingUniverseSymbolCount ?? null,
+          gapIntelligenceSnapshotSymbolCount: core.gapIntelligenceSnapshotSymbolCount ?? null
         }));
       }
       router.refresh();
@@ -1422,7 +1424,8 @@ export function ScannerPageClient({
                     regimeLabel: overview.regimeLabel,
                     spyPct: overview.spyPct,
                     qqqPct: overview.qqqPct,
-                    swingUniverseSymbolCount: overview.swingUniverseSymbolCount
+                    swingUniverseSymbolCount: overview.swingUniverseSymbolCount,
+                    gapIntelligenceSnapshotSymbolCount: overview.gapIntelligenceSnapshotSymbolCount
                   },
                   scannerSetupMode === "day" ? "day" : "swing"
                 )}
@@ -1542,13 +1545,15 @@ export function ScannerPageClient({
                           regimeLabel: overview.regimeLabel,
                           spyPct: overview.spyPct,
                           qqqPct: overview.qqqPct,
-                          swingUniverseSymbolCount: overview.swingUniverseSymbolCount
+                          swingUniverseSymbolCount: overview.swingUniverseSymbolCount,
+                          gapIntelligenceSnapshotSymbolCount: overview.gapIntelligenceSnapshotSymbolCount
                         })
                       : buildSwingEmptyStateContext({
                           regimeLabel: overview.regimeLabel,
                           spyPct: overview.spyPct,
                           qqqPct: overview.qqqPct,
-                          swingUniverseSymbolCount: overview.swingUniverseSymbolCount
+                          swingUniverseSymbolCount: overview.swingUniverseSymbolCount,
+                          gapIntelligenceSnapshotSymbolCount: overview.gapIntelligenceSnapshotSymbolCount
                         });
                     return (
                       <ScannerEmptyStateCard

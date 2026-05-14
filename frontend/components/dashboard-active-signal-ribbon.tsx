@@ -48,6 +48,7 @@ export interface DashboardActiveSignalRibbonProps {
   /** When the universe was empty / scanner errored, an empty-ish summary string. */
   emptyContext?: {
     swingUniverseSymbolCount?: number | null;
+    gapIntelligenceSnapshotSymbolCount?: number | null;
     scannerError?: string;
   };
   /** When false (Swing Pro), copy and labels describe the swing engine only — no day desk. */
@@ -237,7 +238,11 @@ export function DashboardActiveSignalRibbon({
 
   // ── Empty state ─────────────────────────────────────────────────────────
   if (totalChips === 0) {
-    const universeN = emptyContext?.swingUniverseSymbolCount;
+    const universeN =
+      typeof emptyContext?.gapIntelligenceSnapshotSymbolCount === "number" &&
+      emptyContext.gapIntelligenceSnapshotSymbolCount > 0
+        ? emptyContext.gapIntelligenceSnapshotSymbolCount
+        : emptyContext?.swingUniverseSymbolCount;
     const watchingLine =
       typeof universeN === "number" && universeN > 0
         ? dualDeskSurfaces

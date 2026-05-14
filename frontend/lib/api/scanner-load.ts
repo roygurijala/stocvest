@@ -194,17 +194,18 @@ export async function runScannerLoadWithoutBrief(
   daySetupsExtras: DaySetupsRequestExtras | null = null
 ): Promise<ScannerCoreData> {
   try {
-    const gapIntelPromise = jsonFetch<{ items: GapIntelligenceItem[]; disclaimer?: string }>(
-      "/v1/scanner/gap-intelligence",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          snapshots: [],
-          min_abs_gap_percent: 2.0,
-          min_day_volume: 500_000
-        })
-      }
-    );
+    const gapIntelPromise = jsonFetch<{
+      items: GapIntelligenceItem[];
+      disclaimer?: string;
+      snapshot_symbol_count?: number;
+    }>("/v1/scanner/gap-intelligence", {
+      method: "POST",
+      body: JSON.stringify({
+        snapshots: [],
+        min_abs_gap_percent: 2.0,
+        min_day_volume: 500_000
+      })
+    });
     const watchlistPromise =
       tuning?.parallelDefaultWatchlist === true
         ? fetchDefaultWatchlistSymbolsFn().catch(() => [] as string[])
@@ -218,9 +219,17 @@ export async function runScannerLoadWithoutBrief(
         qqqPct: null,
         regimeLabel: "Neutral",
         swingUniverseSymbolCount: null,
+        gapIntelligenceSnapshotSymbolCount: null,
         error: "Service temporarily unavailable. Please try again."
       };
     }
+
+    const gapIntelSnapshotCount =
+      typeof gapIntelResp.snapshot_symbol_count === "number" &&
+      Number.isFinite(gapIntelResp.snapshot_symbol_count) &&
+      gapIntelResp.snapshot_symbol_count > 0
+        ? Math.floor(gapIntelResp.snapshot_symbol_count)
+        : null;
 
     let gapItems = gapIntelResp.items;
     const gapSyms = gapItems.map((g) => g.symbol.trim().toUpperCase()).filter(Boolean);
@@ -372,6 +381,7 @@ export async function runScannerLoadWithoutBrief(
           qqqPct,
           regimeLabel,
           swingUniverseSymbolCount: universe.length,
+          gapIntelligenceSnapshotSymbolCount: gapIntelSnapshotCount,
           error: "Service temporarily unavailable. Please try again."
         };
       }
@@ -392,6 +402,7 @@ export async function runScannerLoadWithoutBrief(
           qqqPct,
           regimeLabel,
           swingUniverseSymbolCount: universe.length,
+          gapIntelligenceSnapshotSymbolCount: gapIntelSnapshotCount,
           error: "Service temporarily unavailable. Please try again."
         };
       }
@@ -416,7 +427,8 @@ export async function runScannerLoadWithoutBrief(
       spyPct,
       qqqPct,
       regimeLabel,
-      swingUniverseSymbolCount: universe.length
+      swingUniverseSymbolCount: universe.length,
+      gapIntelligenceSnapshotSymbolCount: gapIntelSnapshotCount
     };
   } catch (error: unknown) {
     if (isNextRedirect(error)) throw error;
@@ -427,6 +439,7 @@ export async function runScannerLoadWithoutBrief(
       qqqPct: null,
       regimeLabel: "Neutral",
       swingUniverseSymbolCount: null,
+      gapIntelligenceSnapshotSymbolCount: null,
       error: error instanceof Error ? error.message : "Unable to connect. Check your connection."
     };
   }

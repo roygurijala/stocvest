@@ -137,6 +137,7 @@ export async function DashboardPageContent() {
     qqqPct: null,
     regimeLabel: "Neutral",
     swingUniverseSymbolCount: null,
+    gapIntelligenceSnapshotSymbolCount: null,
     error: "Scanner timed out."
   };
   const earningsFallback: EarningsResponse = {
@@ -175,7 +176,8 @@ export async function DashboardPageContent() {
     spyPct: scannerCore.spyPct,
     qqqPct: scannerCore.qqqPct,
     regimeLabel: scannerCore.regimeLabel,
-    swingUniverseSymbolCount: scannerCore.swingUniverseSymbolCount ?? null
+    swingUniverseSymbolCount: scannerCore.swingUniverseSymbolCount ?? null,
+    gapIntelligenceSnapshotSymbolCount: scannerCore.gapIntelligenceSnapshotSymbolCount ?? null
   };
 
   return (

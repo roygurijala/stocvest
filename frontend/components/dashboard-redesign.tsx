@@ -816,6 +816,7 @@ export function DashboardRedesign({
             daySignals={daySignalsForRibbon.slice(0, 4)}
             emptyContext={{
               swingUniverseSymbolCount: scannerOverview.swingUniverseSymbolCount ?? null,
+              gapIntelligenceSnapshotSymbolCount: scannerOverview.gapIntelligenceSnapshotSymbolCount ?? null,
               scannerError: scannerOverview.error
             }}
             dualDeskSurfaces={dayTradingSurfaces}

@@ -358,7 +358,13 @@ async def _gap_intelligence_async(payload: dict[str, Any], user_id: str | None) 
         sym_map = {s.symbol: s for s in snapshots}
         items = build_gap_intelligence_items(gaps, sym_map, news)
         await _enrich_gap_company_names(client, items)
-    return ok({"items": items, "disclaimer": API_SIGNAL_DISCLAIMER})
+    return ok(
+        {
+            "items": items,
+            "disclaimer": API_SIGNAL_DISCLAIMER,
+            "snapshot_symbol_count": len(snapshots),
+        }
+    )
 
 
 def scanner_gap_intelligence_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:

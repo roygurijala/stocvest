@@ -163,8 +163,10 @@ export interface ScannerOverview {
   spyPct?: number | null;
   qqqPct?: number | null;
   regimeLabel?: string;
-  /** Symbols considered for swing daily scan on this load (capped universe when `maxUniverseSymbols` is set). */
+  /** Symbols with bars fetched for swing/day setups (anchors + gap rows + watchlist, after `maxUniverseSymbols` cap). */
   swingUniverseSymbolCount?: number | null;
+  /** Gap-intelligence snapshot size from API when present (full-US or bounded Polygon load). */
+  gapIntelligenceSnapshotSymbolCount?: number | null;
 }
 
 /** Snapshot + gap pipeline through intraday setups (no morning briefing). */
@@ -176,6 +178,7 @@ export type ScannerCoreData = {
   regimeLabel: string;
   error?: string;
   swingUniverseSymbolCount?: number | null;
+  gapIntelligenceSnapshotSymbolCount?: number | null;
 };
 
 /** Which setup endpoints power the scanner core (dashboard defaults to both via `includeSwingDailySetups`). */
@@ -276,7 +279,8 @@ export async function fetchScannerOverview(
       gapIntelligence: [],
       setups: [],
       error: core.error,
-      swingUniverseSymbolCount: null
+      swingUniverseSymbolCount: null,
+      gapIntelligenceSnapshotSymbolCount: null
     };
   }
   let morningBrief: MorningBriefPayload | undefined;
@@ -291,7 +295,7 @@ export async function fetchScannerOverview(
     spyPct: core.spyPct,
     qqqPct: core.qqqPct,
     regimeLabel: core.regimeLabel,
-    /** Same capped universe length the dashboard ribbon uses — keeps empty-state copy in sync. */
-    swingUniverseSymbolCount: core.swingUniverseSymbolCount ?? null
+    swingUniverseSymbolCount: core.swingUniverseSymbolCount ?? null,
+    gapIntelligenceSnapshotSymbolCount: core.gapIntelligenceSnapshotSymbolCount ?? null
   };
 }
