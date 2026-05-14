@@ -60,11 +60,47 @@ import { AIExplanationDisplay } from "@/components/ai-explanation-display";
 import { BuildScenarioButton } from "@/components/scenario-builder/build-scenario-button";
 import { UpgradePrompt } from "@/components/upgrade-prompt";
 import { useHasAIExplanations, useUserProfileLoaded } from "@/lib/api/user";
+import type { GapIntelSnapshot } from "@/lib/api/gap-intel";
 import type { ScenarioInput, VolatilityRegime } from "@/lib/scenario/types";
 
 interface SignalEvidenceCardProps {
   evidence: SignalEvidenceData;
   onOpenNewsPanel?: (symbol: string) => void;
+  /** Server Gap Intelligence snapshot for Scenario Builder gating + assistant context. */
+  gapIntelSnapshot?: GapIntelSnapshot | null;
+}
+
+function gapIntelStructuralBanner(reasons: readonly string[]): string | null {
+  if (!reasons.length) return null;
+  const r = reasons[0] ?? "";
+  const map: Record<string, string> = {
+    swing_premarket_planning_only:
+      "Pre-market planning only — confirmation requires regular-session participation.",
+    day_open_phase_volatility:
+      "Open-phase volatility: early prints can reverse; risk framework may be unstable until 10:30 ET.",
+    swing_after_hours_next_session_only:
+      "After-hours planning only — confirm during the next regular session.",
+    day_planning_requires_rth_structure: "Day-mode drafting requires regular-session structure.",
+    day_after_hours_no_rth_context: "Day-mode drafting is unavailable after regular session."
+  };
+  return map[r] ?? "Planning-only context — confirm when regular-session data is available.";
+}
+
+function augmentScenarioInputWithGapIntel(
+  input: ScenarioInput,
+  snap: GapIntelSnapshot | null | undefined
+): ScenarioInput {
+  if (!snap) return input;
+  const st = snap.scenario_builder.state;
+  const reasons = snap.scenario_builder.reasons ?? [];
+  if (st === "DISABLED") {
+    return { ...input, gap_intel_gate: { scenario_builder_state: "DISABLED", reasons } };
+  }
+  if (st === "LIMITED") {
+    const b = gapIntelStructuralBanner(reasons);
+    return b ? { ...input, structural_planning_banner: b } : input;
+  }
+  return input;
 }
 
 function statusColor(status: EvidenceStatus, colors: ThemeColors): string {
@@ -746,7 +782,7 @@ function regimeToVolatility(label: string | null | undefined): VolatilityRegime 
   return "unknown";
 }
 
-export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidenceCardProps) {
+export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot }: SignalEvidenceCardProps) {
   const { colors } = useTheme();
   const isMobileLayout = useIsMobileLayout();
   const hasAIExplanations = useHasAIExplanations();
@@ -1077,6 +1113,49 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
         </span>
       </section>
 
+      {gapIntelSnapshot ? (
+        <section
+          data-testid="signal-evidence-gap-intel"
+          style={{
+            marginTop: spacing[3],
+            marginBottom: spacing[2],
+            padding: spacing[3],
+            borderRadius: borderRadius.md,
+            border: `1px solid ${colors.border}`,
+            background: colors.surfaceMuted
+          }}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <span style={{ fontSize: typography.scale.xs, fontWeight: 700, color: colors.textMuted }}>
+              GAP INTELLIGENCE
+            </span>
+            <span style={{ fontSize: typography.scale.xs, fontWeight: 700, color: colors.accent }}>
+              {gapIntelSnapshot.phase.label}
+            </span>
+            <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>
+              {gapIntelSnapshot.phase.window_start_et}–{gapIntelSnapshot.phase.window_end_et} ET
+              {gapIntelSnapshot.phase.cadence_seconds > 0
+                ? ` · ~${Math.max(1, Math.round(gapIntelSnapshot.phase.cadence_seconds / 60))} min cadence`
+                : null}
+            </span>
+          </div>
+          <p className="m-0 mt-1 text-xs leading-relaxed" style={{ color: colors.text }}>
+            Direction {gapIntelSnapshot.gap.direction}, structure {gapIntelSnapshot.gap.status}, resolution{" "}
+            {gapIntelSnapshot.gap.resolution_state}
+            {typeof gapIntelSnapshot.levels.fill_level === "number"
+              ? `, fill reference ${gapIntelSnapshot.levels.fill_level.toFixed(2)} (${gapIntelSnapshot.levels.fill_source})`
+              : ""}
+            . Scenario builder state: {gapIntelSnapshot.scenario_builder.state}.
+          </p>
+          <p
+            className="m-0 mt-1 text-xs leading-relaxed"
+            style={{ color: colors.textMuted, fontStyle: "italic" }}
+          >
+            Signal data only. Not investment advice.
+          </p>
+        </section>
+      ) : null}
+
       {/*
         Scenario Builder CTA. The Evidence card carries the richest
         reference data we have (explicit stop level, target_1, target_2,
@@ -1129,6 +1208,7 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
               ? [evidence.directionBadgeLabel]
               : undefined
         };
+        const scenarioForBuild = augmentScenarioInputWithGapIntel(scenarioInput, gapIntelSnapshot);
         return (
           <section
             data-testid="signal-evidence-scenario-cta"
@@ -1145,7 +1225,7 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
             <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs, lineHeight: 1.4 }}>
               Plan around the reference levels above. STOCVEST does not submit, queue, or persist any scenario to a broker.
             </p>
-            <BuildScenarioButton input={scenarioInput} testId="build-scenario-evidence" />
+            <BuildScenarioButton input={scenarioForBuild} testId="build-scenario-evidence" />
           </section>
         );
       })()}

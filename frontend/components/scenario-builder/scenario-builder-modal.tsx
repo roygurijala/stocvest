@@ -415,6 +415,21 @@ export function ScenarioBuilderModal({ open, input, onClose }: ScenarioBuilderMo
               </button>
             </header>
 
+            {input.structural_planning_banner ? (
+              <p
+                className="mb-4 rounded-md border px-3 py-2 text-xs leading-relaxed"
+                style={{
+                  borderColor: colors.caution,
+                  color: colors.text,
+                  background: "rgba(245,158,11,.08)"
+                }}
+                role="status"
+                data-testid="scenario-structural-planning-banner"
+              >
+                {input.structural_planning_banner}
+              </p>
+            ) : null}
+
             <section
               data-testid="scenario-reference-block"
               style={{

@@ -114,6 +114,10 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
         )
 
     if module == "signals":
+        if isinstance(event, dict) and event.get("gap_intel_cache_tick") is True:
+            from stocvest.workers.gap_intel_cache_tick import gap_intel_cache_tick_handler
+
+            return gap_intel_cache_tick_handler(event, context)
         from stocvest.api.handlers.signals import signals_http_dispatch
 
         return _with_cors_and_audit(event=event, response=signals_http_dispatch(event, context), module=module)

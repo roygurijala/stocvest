@@ -8,6 +8,7 @@ import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, Responsi
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
 import { useSignalComposite } from "@/lib/hooks/use-signal-composite";
+import { useGapIntel } from "@/lib/hooks/use-gap-intel";
 import { useSymbolNews } from "@/lib/hooks/use-symbol-news";
 import { useSymbolSnapshot } from "@/lib/hooks/use-symbol-snapshot";
 import type { MarketOverview, NewsPayload, SnapshotPayload } from "@/lib/api/market";
@@ -44,6 +45,7 @@ import { LAYER_NAME_HINTS } from "@/lib/ui-tooltips";
 import { isInsufficientCompositeResponse, type SwingCompositeMarketStatus } from "@/lib/api/swing-composite";
 import { synthTradeDecision } from "@/lib/signal-evidence/trade-decision";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
+import { narrowGapIntelForAssistant } from "@/lib/assistant/gap-intel-context";
 import type { AssistantPageContext, AssistantLayerKey, AssistantLayerStatus } from "@/lib/assistant/types";
 
 type LayerStatus = "Bullish" | "Bearish" | "Neutral" | "Unavailable" | "As of close";
@@ -379,6 +381,9 @@ export function SignalsPageClient({
 
   const symbolCommitted = symbol.trim().length > 0;
 
+  const { snapshot: gapIntelSnapshot } = useGapIntel(symbol, tradingMode, {
+    enabled: tab === "layers" && symbolCommitted
+  });
   const symbolCandidates = useMemo(() => {
     const m = new Map<string, SymbolCandidate>();
     const add = (sym: string, name?: string | null) => {
@@ -1215,13 +1220,16 @@ export function SignalsPageClient({
     }
     const layerStatusForCtx = Object.keys(layerStatus).length > 0 ? layerStatus : undefined;
 
+    const gapIntelForAssistant = sym ? narrowGapIntelForAssistant(gapIntelSnapshot) : undefined;
+
     if (!signalEvidence || !signalEvidence.insight) {
       return {
         page: pageId,
         trading_mode: tradingMode,
         symbol: sym || undefined,
         analysis_status: sym ? "loading" : undefined,
-        layer_status: layerStatusForCtx
+        layer_status: layerStatusForCtx,
+        ...(gapIntelForAssistant ? { gap_intel: gapIntelForAssistant } : {})
       };
     }
     const insight = signalEvidence.insight;
@@ -1249,9 +1257,10 @@ export function SignalsPageClient({
         insight.alignment_ratio != null && Number.isFinite(insight.alignment_ratio)
           ? Math.round(Math.max(0, Math.min(1, insight.alignment_ratio)) * 100)
           : null,
-      layer_status: layerStatusForCtx
+      layer_status: layerStatusForCtx,
+      ...(gapIntelForAssistant ? { gap_intel: gapIntelForAssistant } : {})
     };
-  }, [tab, tradingMode, symbol, signalEvidence]);
+  }, [tab, tradingMode, symbol, signalEvidence, gapIntelSnapshot]);
 
   usePublishAssistantContext(assistantContext);
 
@@ -2503,6 +2512,7 @@ export function SignalsPageClient({
         open={evidenceOpen}
         evidence={signalEvidence}
         onClose={() => setEvidenceOpen(false)}
+        gapIntelSnapshot={gapIntelSnapshot}
         onOpenNewsPanel={(sym) => {
           setNewsPanelSymbol(sym.trim().toUpperCase());
           setNewsPanelOpen(true);

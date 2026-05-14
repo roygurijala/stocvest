@@ -89,6 +89,7 @@ locals {
       aws_dynamodb_table.pdt_state,
       aws_dynamodb_table.sector_cache,
       aws_dynamodb_table.audit_events,
+      aws_dynamodb_table.gap_intel_cache,
     ] : [t.arn, "${t.arn}/index/*"]
   ])
 }
@@ -212,6 +213,12 @@ resource "aws_iam_role_policy" "lambda_api_data_access" {
         ]
       },
       {
+        Sid      = "CloudWatchGapIntelMetrics"
+        Effect   = "Allow"
+        Action   = ["cloudwatch:PutMetricData"]
+        Resource = "*"
+      },
+      {
         Sid    = "CloudWatchLogsLambda"
         Effect = "Allow"
         Action = [
@@ -313,6 +320,10 @@ resource "aws_lambda_function" "api" {
       } : {},
       each.key == "market_pulse_refresher" ? {
         STOCVEST_DISABLE_REDIS = "0"
+      } : {},
+      each.key == "signals" ? {
+        DYNAMODB_GAP_INTEL_CACHE_TABLE = aws_dynamodb_table.gap_intel_cache.name
+        GAP_INTEL_TICK_SYMBOLS         = "SPY,QQQ,IWM"
       } : {},
     )
   }

@@ -125,6 +125,26 @@ export interface AssistantPageContext {
     | "suppressed_scanner_error";
   /** Number of intraday setups visible on the dashboard's Day Desk (cap respected). */
   day_setups_count?: number;
+
+  /**
+   * Server-shaped Gap Intelligence snapshot subset (Signals page). The
+   * backend serializer only forwards these keys to the assistant.
+   */
+  gap_intel?: AssistantGapIntel;
+}
+
+/** Keys whitelisted for assistant serialization — nested object from gap-intel API. */
+export interface AssistantGapIntel {
+  phase: { state?: string; label?: string };
+  gap: { direction?: string; status?: string; resolution_state?: string };
+  levels: {
+    fill_level?: number | null;
+    fill_source?: string;
+    fill_reliability?: string;
+  };
+  liquidity: { is_high_liquidity?: boolean };
+  scenario_builder: { state?: string; reasons?: string[] };
+  flags: { calendar_state?: string; stale?: boolean };
 }
 
 export type AssistantMessageRole = "user" | "assistant";

@@ -30,6 +30,8 @@ locals {
     "GET /v1/signals/records/{signal_id}"    = { module_key = "signals", authorizer = false }
     "GET /v1/signals/founding-members"       = { module_key = "signals", authorizer = false }
     "GET /v1/signals/me/history"             = { module_key = "signals", authorizer = true }
+    "GET /v1/signals/gap-intel"              = { module_key = "signals", authorizer = true }
+    "POST /v1/signals/gap-intel/batch"       = { module_key = "signals", authorizer = true }
     "GET /v1/signals/me/records/{signal_id}" = { module_key = "signals", authorizer = true }
     "GET /v1/signals/analysis"               = { module_key = "signals", authorizer = true }
     # D2 Historical Signal Validation — Phase 3a backend surface. Auth-required; every

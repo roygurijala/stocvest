@@ -6,6 +6,7 @@ import { CuteLoader } from "@/components/cute-loader";
 import { SignalEvidenceCard } from "@/components/signal-evidence-card";
 import { spacing, surfaceGlowClassName } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
+import type { GapIntelSnapshot } from "@/lib/api/gap-intel";
 import type { SignalEvidenceData } from "@/lib/signal-evidence";
 
 interface SignalEvidenceModalProps {
@@ -15,6 +16,7 @@ interface SignalEvidenceModalProps {
   loadingSymbol?: string | null;
   onClose: () => void;
   onOpenNewsPanel?: (symbol: string) => void;
+  gapIntelSnapshot?: GapIntelSnapshot | null;
 }
 
 export function SignalEvidenceModal({
@@ -23,7 +25,8 @@ export function SignalEvidenceModal({
   loading = false,
   loadingSymbol = null,
   onClose,
-  onOpenNewsPanel
+  onOpenNewsPanel,
+  gapIntelSnapshot = null
 }: SignalEvidenceModalProps) {
   const { colors } = useTheme();
   return (
@@ -82,7 +85,11 @@ export function SignalEvidenceModal({
                 />
               </div>
             ) : (
-              <SignalEvidenceCard evidence={evidence} onOpenNewsPanel={onOpenNewsPanel} />
+              <SignalEvidenceCard
+                evidence={evidence}
+                onOpenNewsPanel={onOpenNewsPanel}
+                gapIntelSnapshot={gapIntelSnapshot}
+              />
             )}
           </motion.div>
         </motion.div>

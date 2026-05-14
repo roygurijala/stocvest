@@ -7,7 +7,7 @@ import math
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 from uuid import uuid4
 
 from stocvest.api.legal_copy import API_SIGNAL_DISCLAIMER, HISTORICAL_VALIDATION_DISCLAIMER
@@ -52,7 +52,8 @@ from stocvest.data.dashboard_cache import (
     read_dashboard_cache,
     write_dashboard_cache,
 )
-from stocvest.data.models import Bar, SignalRecord
+from stocvest.data import PolygonClient, PolygonError, Timeframe
+from stocvest.data.models import Bar, MarketStatus, SignalRecord, Snapshot
 from stocvest.signals.ai_explanations import AIExplanationService, news_articles_from_payload
 from stocvest.signals.assistant_chat import AssistantChatService
 from stocvest.signals.historical_validation import (
@@ -72,7 +73,11 @@ from stocvest.signals import (
 from stocvest.signals.daily_bar_scanner import DailyBarScanner
 from stocvest.signals.confluence import ConfluenceDetector, confluence_result_to_response_fields
 from stocvest.signals.morning_brief import build_morning_brief_payload
+from stocvest.api.services.gap_intel_compute import compute_gap_intel_body
+from stocvest.data.gap_intel_cache_store import gap_intel_cache_key, get_gap_intel_cache_row, put_gap_intel_cache_row
+from stocvest.signals.gap_intel_alerts import next_last_disable_metric_timestamp
 from stocvest.utils.circuit_breaker import CircuitOpenError, polygon_circuit
+from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
@@ -1349,6 +1354,118 @@ def public_historical_validation_summary_handler(
         return internal_error("Public historical validation summary failed.")
 
 
+def gap_intel_snapshot_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    """GET /v1/signals/gap-intel — server-computed gap lifecycle snapshot (auth required)."""
+    _ = context
+    rc = build_request_context(event)
+    if not rc.user_id:
+        return unauthorized("Authentication required.")
+    qs = event.get("queryStringParameters") or {}
+    symbol_raw = str(qs.get("symbol") or "").strip().upper()
+    if not symbol_raw:
+        return bad_request("Query parameter 'symbol' is required.")
+    mode_raw = str(qs.get("trading_mode") or "day").strip().lower()
+    mode: Literal["day", "swing"] = "swing" if mode_raw == "swing" else "day"
+
+    now_utc = datetime.now(tz=timezone.utc)
+    session_date_et = now_utc.astimezone(ZoneInfo("America/New_York")).date().isoformat()
+    ck = gap_intel_cache_key(symbol_raw, mode, session_date_et)
+    now_epoch = int(now_utc.timestamp())
+
+    cached = get_gap_intel_cache_row(ck)
+    if cached is not None and cached.soft_expire > now_epoch:
+        return ok(cached.payload)
+
+    old_sb = cached.last_sb_state if cached else None
+    prior_dm = cached.last_disable_metric_at if cached else None
+    try:
+        body = asyncio.run(compute_gap_intel_body(symbol_raw, mode, now_utc=now_utc))
+    except PolygonError as exc:
+        return bad_request(str(exc))
+    except Exception as exc:  # noqa: BLE001 — defensive
+        _LOG.exception("gap_intel_snapshot transport failed: %s", exc)
+        return internal_error("Gap intelligence failed.")
+
+    merged_dm = next_last_disable_metric_timestamp(
+        old_sb_state=old_sb,
+        prior_last_disable_metric_at=prior_dm,
+        new_body=body,
+        symbol=symbol_raw,
+        trading_mode=mode,
+    )
+    put_gap_intel_cache_row(ck, body, last_disable_metric_at=merged_dm)
+    return ok(body)
+
+
+_GAP_INTEL_BATCH_MAX = 24
+
+
+def gap_intel_batch_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    """POST /v1/signals/gap-intel/batch — bounded multi-symbol gap intel (auth required)."""
+    _ = context
+    rc = build_request_context(event)
+    if not rc.user_id:
+        return unauthorized("Authentication required.")
+    payload = parse_json_body(event)
+    if not isinstance(payload, dict):
+        return bad_request("JSON body required.")
+    raw_syms = payload.get("symbols")
+    if not isinstance(raw_syms, list) or not raw_syms:
+        return bad_request("Field 'symbols' must be a non-empty array.")
+    mode_raw = str(payload.get("trading_mode") or "day").strip().lower()
+    mode: Literal["day", "swing"] = "swing" if mode_raw == "swing" else "day"
+
+    seen: list[str] = []
+    for s in raw_syms:
+        if len(seen) >= _GAP_INTEL_BATCH_MAX:
+            break
+        u = str(s or "").strip().upper()
+        if u and u not in seen:
+            seen.append(u)
+
+    if not seen:
+        return bad_request("No valid symbols in 'symbols'.")
+
+    now_utc = datetime.now(tz=timezone.utc)
+    session_date_et = now_utc.astimezone(ZoneInfo("America/New_York")).date().isoformat()
+    items: dict[str, Any] = {}
+    errors: dict[str, str] = {}
+    for sym in seen:
+        ck = gap_intel_cache_key(sym, mode, session_date_et)
+        now_epoch = int(now_utc.timestamp())
+        cached = get_gap_intel_cache_row(ck)
+        if cached is not None and cached.soft_expire > now_epoch:
+            items[sym] = cached.payload
+            continue
+        old_sb = cached.last_sb_state if cached else None
+        prior_dm = cached.last_disable_metric_at if cached else None
+        try:
+            body = asyncio.run(compute_gap_intel_body(sym, mode, now_utc=now_utc))
+        except PolygonError as exc:
+            errors[sym] = str(exc)
+            continue
+        except Exception as exc:  # noqa: BLE001
+            _LOG.warning("gap_intel_batch failed for %s: %s", sym, exc)
+            errors[sym] = "gap intelligence failed"
+            continue
+        merged_dm = next_last_disable_metric_timestamp(
+            old_sb_state=old_sb,
+            prior_last_disable_metric_at=prior_dm,
+            new_body=body,
+            symbol=sym,
+            trading_mode=mode,
+        )
+        put_gap_intel_cache_row(ck, body, last_disable_metric_at=merged_dm)
+        items[sym] = body
+
+    out: dict[str, Any] = {
+        "items": items,
+        "errors": errors,
+        "disclaimer": API_SIGNAL_DISCLAIMER,
+    }
+    return ok(out)
+
+
 def signals_http_dispatch(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
     """Route signals module requests including parameterized outcome-tracking paths."""
     route = http_route_descriptor(event)
@@ -1442,6 +1559,8 @@ def signals_http_dispatch(event: LambdaEvent, context: LambdaContext) -> dict[st
         "POST /v1/signals/day/briefing": day_briefing_handler,
         "GET /v1/signals/recent": public_recent_signals_handler,
         "GET /v1/signals/performance/summary": public_performance_summary_handler,
+        "GET /v1/signals/gap-intel": gap_intel_snapshot_handler,
+        "POST /v1/signals/gap-intel/batch": gap_intel_batch_handler,
     }
     target = routes.get(route)
     if target is None:

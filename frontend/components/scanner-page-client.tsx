@@ -73,6 +73,7 @@ function regimeLabelToVolatilityRegime(label: string | null | undefined): Volati
   return "unknown";
 }
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
+import { useScannerGapIntelBatch } from "@/lib/hooks/use-scanner-gap-intel-batch";
 import { fetchSymbolMinuteBars } from "@/lib/fetch-symbol-bars";
 import { buildEvidenceFromSetup, enrichEvidenceWithComposite, type SignalEvidenceData } from "@/lib/signal-evidence";
 import {
@@ -494,6 +495,17 @@ export function ScannerPageClient({
     return { withCat, without };
   }, [gapIntelForDisplay]);
 
+  const gapIntelBatchMode = scannerSetupMode === "swing" ? "swing" : "day";
+  const gapSymbolsForLifecycle = useMemo(
+    () => gapIntelForDisplay.map((g) => g.symbol.trim().toUpperCase()).filter(Boolean),
+    [gapIntelForDisplay]
+  );
+  const { snapshots: scannerGapIntelBySymbol } = useScannerGapIntelBatch(
+    gapSymbolsForLifecycle,
+    gapIntelBatchMode,
+    gapSymbolsForLifecycle.length > 0
+  );
+
   function qualityBarStyle(score: number, colors: ThemeColors): { fill: string; glow?: string } {
     if (score >= 80) return { fill: "#4ade80", glow: "0 0 12px rgba(74,222,128,0.45)" };
     if (score >= 60) return { fill: colors.bullish };
@@ -514,6 +526,7 @@ export function ScannerPageClient({
   function renderGapIntelCard(item: GapIntelligenceItem, idx: number, noCatSection: boolean) {
     const snap = snapBySymbol[item.symbol] ?? null;
     const pmh = pmhBySymbol[item.symbol];
+    const giSnap = scannerGapIntelBySymbol[item.symbol.trim().toUpperCase()] ?? null;
     const ctx = gapDirectionContext({ gap_percent: item.gap_pct }, snap);
     const vol = item.volume || 0;
     const qStyle = qualityBarStyle(item.gap_quality_score, colors);
@@ -643,6 +656,21 @@ export function ScannerPageClient({
         ) : null}
         {ctx ? (
           <p style={{ margin: `${spacing[1]} 0 0`, color: colors.text, fontSize: typography.scale.xs }}>{ctx}</p>
+        ) : null}
+        {giSnap ? (
+          <p
+            data-testid={`scanner-gap-intel-lifecycle-${item.symbol.trim().toUpperCase()}`}
+            style={{
+              margin: `${spacing[1]} 0 0`,
+              color: colors.textMuted,
+              fontSize: typography.scale.xs,
+              fontFamily: MONO,
+              lineHeight: 1.4
+            }}
+          >
+            Gap lifecycle: {giSnap.phase.label} · Scenario builder {giSnap.scenario_builder.state}
+            {giSnap.flags.stale ? " · data may be stale" : ""}
+          </p>
         ) : null}
         {item.has_catalyst && item.catalyst ? (
           <div
@@ -2033,6 +2061,10 @@ export function ScannerPageClient({
           setEvidenceLoading(false);
           setEvidenceLoadingSymbol(null);
         }}
+        gapIntelSnapshot={(() => {
+          const sym = (evidence?.symbol ?? evidenceLoadingSymbol ?? "").trim().toUpperCase();
+          return sym ? scannerGapIntelBySymbol[sym] ?? null : null;
+        })()}
         onOpenNewsPanel={(sym) => {
           setNewsPanelSymbol(sym.trim().toUpperCase());
           setNewsPanelOpen(true);

@@ -1,6 +1,6 @@
 # STOCVEST — API contracts (immutable sections)
 
-**Last reviewed:** 2026-05-10
+**Last reviewed:** 2026-05-14
 
 Sections referenced from **`docs/CONTEXT.md`** §7 must not change without explicit review and coordinated code updates.
 
@@ -61,6 +61,8 @@ All REST routes are versioned under `/v1/`.
 - `POST /v1/signals/day/briefing` — render daily briefing markdown from structured inputs
 - `GET /v1/signals/recent` — public historical signal data (last 50 platform rows); optional `?landing=true`
 - `GET /v1/signals/performance/summary` — directional accuracy over evaluated platform signals (1d horizon); JSON uses `correct_direction_count`, `incorrect_direction_count`, `neutral_direction_count` (legacy `win_count` / `loss_count` accepted on read in clients only)
+- `GET /v1/signals/gap-intel` — **authenticated**. Query **`symbol`** (required), **`trading_mode`** (`day` \| `swing`, default **`day`**). Server fetches Polygon snapshot, same-session **1min** aggregates, optional prior-session daily bar, and optional market-status; returns a deterministic **Gap Intelligence** JSON object (`phase`, `gap`, `levels`, `liquidity`, `scenario_builder`, `flags`, `session_date`, `computed_at_utc`) plus **`disclaimer`**. Clients may forward a whitelisted subset as **`page_context.gap_intel`** to **`POST /v1/signals/assistant/chat`** (see serializer in `stocvest.signals.assistant_prompts.serialize_page_context`).
+- `POST /v1/signals/gap-intel/batch` — **authenticated**. JSON body **`symbols`** (non-empty string array, max **24**), **`trading_mode`** (`day` \| `swing`). Returns **`items`** (map symbol → same snapshot shape as GET), **`errors`** (map symbol → message for per-symbol failures), and **`disclaimer`**. When **`DYNAMODB_GAP_INTEL_CACHE_TABLE`** is set, GET and batch may return cached rows keyed by symbol × mode × ET session date (soft TTL ~120s).
 - `GET /v1/signals/records/{signal_id}` — single **platform** signal (404 if row is user-scoped)
 - `GET /v1/signals/me/history` — authenticated user’s evaluated signals. Query: `symbol`, `days` (1–365), optional `mode` (`day` \| `swing`), optional **`page_size`** (**25** \| **50** \| **75** \| **100**, default **25**), optional **`cursor`** (opaque token from prior response’s **`next_cursor`**), optional **`ledger_only`** (`true` to return only **`ledger_qualified`** rows for the validation ledger). Legacy **`limit`**: if **`page_size`** is omitted, **`limit`** may be used; values in **25/50/75/100** map to **`page_size`**; other values clamp to **100** or **25** as implemented. Response body: **`{ "items": [ ... ], "next_cursor": string | null, "page_size": number }`**. Each row includes core D1 fields plus optional ledger keys when present: `ledger_qualified`, `closed_at`, `ledger_entry_date_et`, `ledger_exit_date_et`, `entry_rationale`, `exit_reason`, `decision_state_entry`, `decision_state_exit`, `market_regime_exit`, `gate_status` (object, parsed from `gate_status_json`), `setup_type`, `exit_rule`, `max_adverse_excursion_pct`, `max_favorable_excursion_pct`, `hold_duration_minutes`, `layer_scores`, `mode`, `status`.
 - `GET /v1/signals/me/records/{signal_id}` — single signal for the signed-in user only

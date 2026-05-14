@@ -108,3 +108,18 @@ def test_dispatch_uses_stocvest_lambda_module_from_os() -> None:
         assert r["statusCode"] == 200
     finally:
         del os.environ["STOCVEST_LAMBDA_MODULE"]
+
+
+def test_signals_gap_intel_cache_tick_short_circuits(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("STOCVEST_LAMBDA_MODULE", "signals")
+
+    def fake_tick(event: dict, ctx: dict) -> dict:  # noqa: ANN001
+        _ = ctx
+        assert event.get("gap_intel_cache_tick") is True
+        return {"statusCode": 200, "body": json.dumps({"warmed": []})}
+
+    monkeypatch.setattr(
+        "stocvest.workers.gap_intel_cache_tick.gap_intel_cache_tick_handler", fake_tick
+    )
+    r = lambda_handler({"gap_intel_cache_tick": True}, {})
+    assert r["statusCode"] == 200

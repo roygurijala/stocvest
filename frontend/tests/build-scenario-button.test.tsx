@@ -100,6 +100,21 @@ describe("BuildScenarioButton — ineligible states", () => {
       expect(content).not.toContain(banned);
     }
   });
+
+  test("test_disabled_when_gap_intel_gate_blocks", () => {
+    wrap(
+      <BuildScenarioButton
+        input={{
+          ...eligibleInput(),
+          gap_intel_gate: { scenario_builder_state: "DISABLED", reasons: ["market_closed"] }
+        }}
+      />
+    );
+    const btn = screen.getByTestId("build-scenario-button");
+    expect(btn).toHaveAttribute("disabled");
+    const title = btn.getAttribute("title") ?? "";
+    expect(title).toContain("Gap Intelligence");
+  });
 });
 
 describe("BuildScenarioButton — never implies execution", () => {

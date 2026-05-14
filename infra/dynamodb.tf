@@ -304,3 +304,24 @@ resource "aws_dynamodb_table" "audit_events" {
     Name = "stocvest-development-ddb-audit-events"
   })
 }
+
+# Gap Intelligence read-through snapshot cache (symbol#mode#ET-session-date → JSON payload).
+resource "aws_dynamodb_table" "gap_intel_cache" {
+  name         = "GapIntelCache"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "cacheKey"
+
+  attribute {
+    name = "cacheKey"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "stocvest-development-ddb-gap-intel-cache"
+  })
+}

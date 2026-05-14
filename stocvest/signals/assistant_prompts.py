@@ -740,6 +740,67 @@ def serialize_page_context(ctx: dict[str, Any] | None) -> str:
                 parts.append(f"sentiment={sent}")
             lines.append(f"top_gap_{idx + 1}={'|'.join(parts)}")
 
+    gap_intel = ctx.get("gap_intel")
+    if isinstance(gap_intel, dict):
+        ph = gap_intel.get("phase") if isinstance(gap_intel.get("phase"), dict) else {}
+        st = _coerce_str(ph.get("state"), limit=24).upper()
+        if st in (
+            "MARKET_CLOSED",
+            "OFF_PRE",
+            "PRE_MARKET",
+            "SESSION_OPEN",
+            "SESSION",
+            "AFTER_HOURS",
+            "OFF_POST",
+        ):
+            lines.append(f"gap_intel_phase_state={st}")
+        lab = _coerce_str(ph.get("label"), limit=48)
+        if lab:
+            lines.append(f"gap_intel_phase_label={lab}")
+
+        g = gap_intel.get("gap") if isinstance(gap_intel.get("gap"), dict) else {}
+        d = _coerce_str(g.get("direction"), limit=12).upper()
+        if d in ("UP", "DOWN", "NONE", "UNKNOWN"):
+            lines.append(f"gap_intel_gap_direction={d}")
+        gs = _coerce_str(g.get("status"), limit=24).upper()
+        if gs:
+            lines.append(f"gap_intel_gap_status={gs}")
+        gr = _coerce_str(g.get("resolution_state"), limit=24).upper()
+        if gr in ("PENDING", "CONFIRMED", "INVALIDATED", "RESOLVED"):
+            lines.append(f"gap_intel_resolution_state={gr}")
+
+        lv = gap_intel.get("levels") if isinstance(gap_intel.get("levels"), dict) else {}
+        fl = lv.get("fill_level")
+        if isinstance(fl, (int, float)) and fl == fl:  # not NaN
+            lines.append(f"gap_intel_fill_level={_coerce_num(fl)}")
+        fs = _coerce_str(lv.get("fill_source"), limit=32).upper()
+        if fs in ("PRIOR_CLOSE", "PREVIOUS_SESSION_BAR", "NOT_DERIVABLE"):
+            lines.append(f"gap_intel_fill_source={fs}")
+        fr = _coerce_str(lv.get("fill_reliability"), limit=16).upper()
+        if fr in ("HIGH", "EMERGING", "OFF", "PARTIAL"):
+            lines.append(f"gap_intel_fill_reliability={fr}")
+
+        lq = gap_intel.get("liquidity") if isinstance(gap_intel.get("liquidity"), dict) else {}
+        if isinstance(lq.get("is_high_liquidity"), bool):
+            lines.append(f"gap_intel_high_liquidity={'true' if lq['is_high_liquidity'] else 'false'}")
+
+        sb = gap_intel.get("scenario_builder") if isinstance(gap_intel.get("scenario_builder"), dict) else {}
+        sbs = _coerce_str(sb.get("state"), limit=16).upper()
+        if sbs in ("DISABLED", "LIMITED", "ENABLED"):
+            lines.append(f"gap_intel_scenario_builder_state={sbs}")
+        rsns = sb.get("reasons")
+        if isinstance(rsns, list):
+            joined = ";".join(_coerce_str(x, limit=48) for x in rsns[:4] if x is not None)
+            if joined:
+                lines.append(f"gap_intel_scenario_builder_reasons={joined[:200]}")
+
+        flg = gap_intel.get("flags") if isinstance(gap_intel.get("flags"), dict) else {}
+        cs = _coerce_str(flg.get("calendar_state"), limit=20).upper()
+        if cs in ("CONFIRMED", "UNCONFIRMED"):
+            lines.append(f"gap_intel_calendar_state={cs}")
+        if isinstance(flg.get("stale"), bool):
+            lines.append(f"gap_intel_stale={'true' if flg['stale'] else 'false'}")
+
     return "\n".join(lines) + "\n"
 
 

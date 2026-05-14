@@ -130,6 +130,20 @@ export interface ScenarioInput {
    */
   risk_reward?: number | null;
   /**
+   * When Gap Intelligence marks Scenario Builder structurally unavailable
+   * (phase / fill / calendar), the Build Scenario button is disabled with
+   * `gap_intel_blocked` — this is not a conviction gate.
+   */
+  gap_intel_gate?: {
+    scenario_builder_state: "DISABLED";
+    reasons?: readonly string[];
+  };
+  /**
+   * Optional amber banner inside the Scenario Builder modal for LIMITED
+   * phases (e.g. pre-market swing planning, day open volatility).
+   */
+  structural_planning_banner?: string | null;
+  /**
    * Free-form display tags surfaced to the user inside the modal's
    * Reference block so they remember why this row was actionable in
    * planning terms (e.g. "Gap +3.2%", "ORB break", "Earnings reaction").
@@ -154,7 +168,8 @@ export const SCENARIO_INELIGIBILITY_REASONS = [
   "unknown_volatility",
   "signal_stale",
   "signal_expired",
-  "low_risk_reward"
+  "low_risk_reward",
+  "gap_intel_blocked"
 ] as const;
 
 export type ScenarioIneligibilityReason = (typeof SCENARIO_INELIGIBILITY_REASONS)[number];

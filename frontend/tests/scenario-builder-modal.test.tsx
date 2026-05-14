@@ -68,6 +68,20 @@ describe("ScenarioBuilderModal — structural blocks present", () => {
     expect(refSymbol.textContent).toContain("AAPL");
     expect(refSymbol.textContent).toContain("Reference");
   });
+
+  test("test_structural_planning_banner_renders_when_set", () => {
+    wrap(
+      <ScenarioBuilderModal
+        open
+        input={{
+          ...baseInput,
+          structural_planning_banner: "Pre-market planning only — confirmation requires regular-session participation."
+        }}
+        onClose={vi.fn()}
+      />
+    );
+    expect(screen.getByTestId("scenario-structural-planning-banner")).toBeInTheDocument();
+  });
 });
 
 describe("ScenarioBuilderModal — terminal actions are NOT submit", () => {

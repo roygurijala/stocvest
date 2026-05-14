@@ -251,6 +251,32 @@ def test_serialize_page_context_dashboard_dual_desk_omits_swing_only_fields() ->
     assert "gap_with_catalyst_count" not in out
 
 
+def test_serialize_page_context_emits_gap_intel_whitelist() -> None:
+    ctx = {
+        "page": "signals/layers",
+        "symbol": "AAPL",
+        "trading_mode": "day",
+        "gap_intel": {
+            "phase": {"state": "SESSION", "label": "GAP ACCEPTANCE/REVERSION"},
+            "gap": {"direction": "UP", "status": "HOLDING", "resolution_state": "CONFIRMED"},
+            "levels": {
+                "fill_level": 100.0,
+                "fill_source": "PRIOR_CLOSE",
+                "fill_reliability": "HIGH",
+            },
+            "liquidity": {"is_high_liquidity": True},
+            "scenario_builder": {"state": "ENABLED", "reasons": []},
+            "flags": {"calendar_state": "CONFIRMED", "stale": False},
+        },
+    }
+    out = serialize_page_context(ctx)
+    assert "gap_intel_phase_state=SESSION" in out
+    assert "gap_intel_phase_label=GAP ACCEPTANCE/REVERSION" in out
+    assert "gap_intel_gap_direction=UP" in out
+    assert "gap_intel_scenario_builder_state=ENABLED" in out
+    assert "gap_intel_high_liquidity=true" in out
+
+
 # ---------------------------------------------------------------------------
 # _mode_from_context — page identifier alone is sufficient context
 # ---------------------------------------------------------------------------

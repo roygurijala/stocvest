@@ -173,6 +173,10 @@ export function isEligibleForScenario(
     reasons.push("low_risk_reward");
   }
 
+  if (input.gap_intel_gate?.scenario_builder_state === "DISABLED") {
+    reasons.push("gap_intel_blocked");
+  }
+
   return { eligible: reasons.length === 0, reasons };
 }
 
@@ -205,6 +209,8 @@ export function scenarioIneligibilityLabel(reason: ScenarioIneligibilityReason):
       return "Signal carries an explicit expiry that has already passed.";
     case "low_risk_reward":
       return "Risk/reward does not meet internal thresholds for structured scenario building.";
+    case "gap_intel_blocked":
+      return "Scenario drafting is not structurally available for this market phase or data state (Gap Intelligence).";
     default: {
       // Exhaustiveness check — any future reason that doesn't have a
       // copy line trips this branch at compile time.
