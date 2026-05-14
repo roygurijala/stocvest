@@ -44,6 +44,7 @@ def _session_pct(s: Snapshot | None) -> float | None:
 
 async def refresh_market_pulse() -> dict[str, Any]:
     if not _within_equity_rth_et():
+        _LOG.info("market_pulse_refresher skip reason=outside_rth (NY weekday 09:30-16:00 ET only)")
         return {"statusCode": 200, "skipped": True, "reason": "outside_rth"}
     settings = get_settings()
     async with PolygonClient(api_key=settings.polygon_api_key) as client:
@@ -67,6 +68,7 @@ async def refresh_market_pulse() -> dict[str, Any]:
         "market_pulse",
         "day",
     )
+    _LOG.info("market_pulse_refresher written=%s regime=%s", ok, regime)
     return {"statusCode": 200, "written": ok, "regime": regime}
 
 
