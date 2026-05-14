@@ -46,9 +46,9 @@ _LOG = get_logger(__name__)
 _SCHEDULED_SCAN_TYPES = frozenset({"premarket", "intraday", "eod_summary"})
 
 # Gap intelligence: prefer Polygon full-US snapshot, rank top N by |gap| + liquidity gates.
-# API Gateway integrates at 30s — leave headroom for news + scoring after snapshots return.
+# API Gateway integrates at ~30s — leave headroom for bounded fallback + news + scoring.
 _GAP_INTEL_TOP_N = 20
-_GAP_INTEL_FULL_SNAPSHOT_TIMEOUT_SEC = 22.0
+_GAP_INTEL_FULL_SNAPSHOT_TIMEOUT_SEC = 12.0
 
 
 async def _enrich_gap_company_names(client: PolygonClient, items: list[dict[str, Any]]) -> None:
@@ -346,7 +346,8 @@ async def _gap_intelligence_async(payload: dict[str, Any], user_id: str | None) 
     )
     settings = get_settings()
     gap_symbols = [g.symbol for g in gaps]
-    global_cap = max(50, min(news_limit, 500))
+    # Default client news_limit is 400; a single huge global news pull can dominate latency.
+    global_cap = min(120, max(50, min(news_limit, 500)))
     async with PolygonClient(api_key=settings.polygon_api_key) as client:
         news = await collect_news_for_gap_intelligence(
             client,

@@ -270,7 +270,7 @@ export function ScannerEmptyStateCard({
             sublabel="Historical accuracy by mode"
           />
           <EmptyStateLink
-            href="/dashboard/watchlist"
+            href="/dashboard/watchlists"
             railHue={railHue}
             borderColor={colors.border}
             textColor={colors.text}
