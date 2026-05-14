@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Build a single deployment zip for all stocvest-development-api-* Lambdas (Phase 6i).
 # Runtime deps are installed explicitly so pytest/respx/etc. from pyproject do not push
-# the unzipped bundle over Lambda's ~250 MiB limit.
+# the unzipped bundle over Lambda's ~250 MiB limit. Include Upstash here: ``pip install
+# . --no-deps`` does not pull optional/declared deps from pyproject into the zip.
 # Usage: build_lambda_package.sh [output.zip]
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -18,6 +19,7 @@ trap cleanup EXIT
 
 RUNTIME_PKGS=(
   "redis>=5.0"
+  "upstash-redis>=1.2.0"
   "httpx>=0.27"
   "websockets>=12.0"
   "pandas>=2.2"
