@@ -25,6 +25,9 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  gapIntelligenceHiddenCountForModeDefault,
+  gapIntelligenceRowMatchesScannerModeDefault,
+  normalizeGapModeBestFit,
   resolveEvidenceTradingMode,
   resolveGapCardTradingMode,
   resolveSetupRowTradingMode,
@@ -151,5 +154,42 @@ describe("resolveGapCardTradingMode — per-gap-row classifier-driven routing (B
     // 'both → swing' default so no user-visible regression appears during the
     // cache TTL window.
     expect(resolveGapCardTradingMode("both", undefined)).toBe("swing");
+  });
+});
+
+describe("normalizeGapModeBestFit + gap list default filter helpers", () => {
+  test("undefined verdict normalizes to either", () => {
+    expect(normalizeGapModeBestFit(undefined)).toBe("either");
+  });
+
+  test("swing tab default includes swing and either rows, excludes day", () => {
+    expect(gapIntelligenceRowMatchesScannerModeDefault("swing", "swing")).toBe(true);
+    expect(gapIntelligenceRowMatchesScannerModeDefault("swing", "either")).toBe(true);
+    expect(gapIntelligenceRowMatchesScannerModeDefault("swing", "day")).toBe(false);
+  });
+
+  test("day tab default includes day and either rows, excludes swing", () => {
+    expect(gapIntelligenceRowMatchesScannerModeDefault("day", "day")).toBe(true);
+    expect(gapIntelligenceRowMatchesScannerModeDefault("day", "either")).toBe(true);
+    expect(gapIntelligenceRowMatchesScannerModeDefault("day", "swing")).toBe(false);
+  });
+
+  test("both tab does not filter by verdict", () => {
+    expect(gapIntelligenceRowMatchesScannerModeDefault("both", "day")).toBe(true);
+    expect(gapIntelligenceRowMatchesScannerModeDefault("both", "swing")).toBe(true);
+  });
+
+  test("hidden count in swing tab counts only day-verdict rows", () => {
+    const rows = [{ mode_best_fit: "day" as const }, { mode_best_fit: "swing" as const }, { mode_best_fit: "either" as const }];
+    expect(gapIntelligenceHiddenCountForModeDefault("swing", rows)).toBe(1);
+  });
+
+  test("hidden count in day tab counts only swing-verdict rows", () => {
+    const rows = [{ mode_best_fit: "swing" as const }, { mode_best_fit: "day" as const }];
+    expect(gapIntelligenceHiddenCountForModeDefault("day", rows)).toBe(1);
+  });
+
+  test("hidden count is zero for both tab", () => {
+    expect(gapIntelligenceHiddenCountForModeDefault("both", [{ mode_best_fit: "day" }])).toBe(0);
   });
 });

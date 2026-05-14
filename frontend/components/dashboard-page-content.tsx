@@ -95,11 +95,22 @@ function buildWeeklyRows(
     // window — not the array length. The pct5d label and the histogram both
     // live under that umbrella.)
     const closes5d = closes.length > 0 ? closes.slice(-6) : undefined;
+    const dh =
+      snap && typeof snap.day_high === "number" && Number.isFinite(snap.day_high) ? snap.day_high : null;
+    const dl = snap && typeof snap.day_low === "number" && Number.isFinite(snap.day_low) ? snap.day_low : null;
+    const dOpen = snap && typeof snap.day_open === "number" && Number.isFinite(snap.day_open) ? snap.day_open : null;
+    const pxc =
+      snap && typeof snap.prev_close === "number" && Number.isFinite(snap.prev_close) ? snap.prev_close : null;
+    const sessionDayRange =
+      dh != null && dl != null && dh > dl && lastPrice != null
+        ? { low: dl, high: dh, last: lastPrice, open: dOpen, prevClose: pxc }
+        : undefined;
     return {
       ...row,
       pct5d: pctChangeOverDailySessions(closes, 5),
       lastPrice,
-      closes5d
+      closes5d,
+      sessionDayRange
     };
   });
 }

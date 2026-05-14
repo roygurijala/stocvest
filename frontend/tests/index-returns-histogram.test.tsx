@@ -1,28 +1,19 @@
 /**
- * Lock-in tests for the SPY/QQQ/IWM daily-returns histogram (replaces the
- * line sparkline that used to sit inside Shared Context · Section A).
+ * Lock-in tests for the SPY/QQQ/IWM daily-returns histogram (horizontal layout
+ * inside Shared Context · Section A).
  *
  * Invariants worth pinning:
  *   • Bar count = closes.length − 1 (one bar per *daily return*, not per close).
  *   • Polarity:
- *       - Bar `data-sign` = "up" for returns above the neutral band,
- *         "down" below, "flat" inside ±0.1%.
- *       - Up bars sit ABOVE the zero baseline; down bars sit AT/BELOW the
- *         baseline. Position carries the signal independently of color.
- *   • Color:
- *       - Up bars get the bullish token. Down bars get the bearish token.
- *         Flat bars get the muted token. This matches the `getChangeColor`
- *         neutral-band already used by the % label next to the histogram —
- *         color invariants live in one place, not two.
- *   • Magnitude:
- *       - Per-card scaling: the tallest bar reaches its full vertical budget
- *         independent of what the *other* tiles are showing. We do NOT
- *         compare magnitudes across tiles in the bar viz; that's the % label's job.
- *   • Empty / degenerate input:
- *       - Fewer than 2 valid closes → component renders nothing (returns null).
- *       - Non-finite / zero / negative values are stripped before computing returns.
- *       - All-flat session does not collapse to invisible bars (we always
- *         render at least a 1px stub so the day count is preserved).
+ *       - Bar `data-sign` = "up" / "down" / "flat" with the same neutral band
+ *         as the % label (±0.1%).
+ *       - Positive bars extend RIGHT from the vertical zero line; negative
+ *         bars extend LEFT toward the line. Position carries the signal for
+ *         colorblind users even if color is suppressed.
+ *   • Color: matches `getChangeColor` (bullish / bearish / muted) — we only
+ *     assert up vs down differ, not literal hex.
+ *   • Magnitude: per-card scaling — larger |return| → longer bar (width).
+ *   • Empty / degenerate input: same rules as the legacy vertical chart.
  */
 
 import React from "react";
@@ -40,7 +31,6 @@ afterEach(() => cleanup());
 
 describe("IndexReturnsHistogram — bar count + axis", () => {
   test("renders N - 1 bars from N closes", () => {
-    // 6 closes → 5 daily returns → 5 bars
     wrap(<IndexReturnsHistogram closes={[100, 101, 102, 103, 104, 105]} />);
     const bars = screen.getAllByTestId(/^histogram-bar-\d+$/);
     expect(bars).toHaveLength(5);
@@ -63,7 +53,6 @@ describe("IndexReturnsHistogram — bar count + axis", () => {
   });
 
   test("strips non-finite / zero / negative closes before computing returns", () => {
-    // After stripping: [100, 102, 104] → 2 returns
     wrap(
       <IndexReturnsHistogram
         closes={[100, NaN, 102, 0, 104, -5 as number]}
@@ -73,23 +62,27 @@ describe("IndexReturnsHistogram — bar count + axis", () => {
     expect(bars).toHaveLength(2);
   });
 
-  test("the zero-line baseline is rendered above the bars", () => {
+  test("the zero-line is vertical (horizontal histogram)", () => {
     wrap(<IndexReturnsHistogram closes={[100, 101, 102]} />);
-    expect(screen.getByTestId("histogram-zero-line")).toBeInTheDocument();
+    const svg = screen.getByTestId("index-returns-histogram");
+    expect(svg.getAttribute("data-orientation")).toBe("horizontal");
+    const zeroLine = screen.getByTestId("histogram-zero-line");
+    const x1 = Number(zeroLine.getAttribute("x1"));
+    const x2 = Number(zeroLine.getAttribute("x2"));
+    expect(x1).toBe(x2);
+    const y1 = Number(zeroLine.getAttribute("y1"));
+    const y2 = Number(zeroLine.getAttribute("y2"));
+    expect(Math.abs(y2 - y1)).toBeGreaterThan(1);
   });
 });
 
 describe("IndexReturnsHistogram — polarity (color + position)", () => {
   test("positive return → sign=up, fill matches bullish token", () => {
-    // 100 → 101 = +1.00% (clearly above the ±0.1% neutral band)
     wrap(<IndexReturnsHistogram closes={[100, 101]} />);
     const bar = screen.getByTestId("histogram-bar-0");
     expect(bar.getAttribute("data-sign")).toBe("up");
     const fill = (bar.getAttribute("fill") || "").toLowerCase();
     expect(fill).not.toBe("");
-    // The bullish/bearish/muted tokens come from the live theme — we don't
-    // pin literal hex values here (theme can change). What we DO pin is
-    // that an up bar and a down bar in the same render get DIFFERENT fills.
     wrap(<IndexReturnsHistogram closes={[100, 99]} />);
     const downBar = screen.getAllByTestId("histogram-bar-0").at(-1)!;
     expect(downBar.getAttribute("data-sign")).toBe("down");
@@ -97,40 +90,34 @@ describe("IndexReturnsHistogram — polarity (color + position)", () => {
     expect(downFill).not.toBe(fill);
   });
 
-  test("negative return → sign=down and the bar sits AT or below the zero line", () => {
-    // 100 → 99 = -1.00%
-    wrap(<IndexReturnsHistogram closes={[100, 99]} height={22} />);
+  test("negative return → sign=down and the bar ends at the vertical zero line", () => {
+    wrap(<IndexReturnsHistogram closes={[100, 99]} />);
     const bar = screen.getByTestId("histogram-bar-0");
     expect(bar.getAttribute("data-sign")).toBe("down");
     const zeroLine = screen.getByTestId("histogram-zero-line");
-    const zeroY = Number(zeroLine.getAttribute("y1"));
-    const barY = Number(bar.getAttribute("y"));
-    // Down bars hang DOWN from the baseline, so their top edge sits at the
-    // baseline (or fractionally above due to subpixel rounding).
-    expect(barY).toBeGreaterThanOrEqual(zeroY - 0.5);
+    const centerX = Number(zeroLine.getAttribute("x1"));
+    const bx = Number(bar.getAttribute("x"));
+    const bw = Number(bar.getAttribute("width"));
+    expect(bx + bw).toBeCloseTo(centerX, 1);
   });
 
-  test("positive return → bar TOP sits above the zero line (positional polarity)", () => {
-    wrap(<IndexReturnsHistogram closes={[100, 101]} height={22} />);
+  test("positive return → bar starts at the vertical zero line and extends right", () => {
+    wrap(<IndexReturnsHistogram closes={[100, 101]} />);
     const bar = screen.getByTestId("histogram-bar-0");
     const zeroLine = screen.getByTestId("histogram-zero-line");
-    const zeroY = Number(zeroLine.getAttribute("y1"));
-    const barY = Number(bar.getAttribute("y"));
-    // Up bars grow UPWARD, so their y (top edge) is strictly above zeroY.
-    expect(barY).toBeLessThan(zeroY);
+    const centerX = Number(zeroLine.getAttribute("x1"));
+    const bx = Number(bar.getAttribute("x"));
+    expect(bx).toBeCloseTo(centerX, 1);
   });
 
-  test("near-flat return (|Δ| ≤ 0.1%) → sign=flat with a visible 1px stub", () => {
-    // 100 → 100.05 = +0.05% — inside the neutral band
+  test("near-flat return (|Δ| ≤ 0.1%) → sign=flat with a visible stub on the zero line", () => {
     wrap(<IndexReturnsHistogram closes={[100, 100.05]} />);
     const bar = screen.getByTestId("histogram-bar-0");
     expect(bar.getAttribute("data-sign")).toBe("flat");
-    expect(Number(bar.getAttribute("height"))).toBeGreaterThanOrEqual(1);
+    expect(Number(bar.getAttribute("width"))).toBeGreaterThanOrEqual(1);
   });
 
   test("five-bar mixed week renders each bar with the correct polarity", () => {
-    // closes:    100  101  99   100  98   99
-    // returns:    +1%  -1.98%  +1.01%  -2%   +1.02%
     wrap(<IndexReturnsHistogram closes={[100, 101, 99, 100, 98, 99]} />);
     const bars = screen.getAllByTestId(/^histogram-bar-\d+$/);
     expect(bars).toHaveLength(5);
@@ -143,25 +130,21 @@ describe("IndexReturnsHistogram — polarity (color + position)", () => {
 });
 
 describe("IndexReturnsHistogram — magnitude scaling", () => {
-  test("the larger absolute return produces a taller bar (per-card scaling)", () => {
-    // +0.5% small green, +3% big green
-    wrap(<IndexReturnsHistogram closes={[100, 100.5, 103.515]} height={22} />);
+  test("the larger absolute return produces a longer bar (per-card scaling)", () => {
+    wrap(<IndexReturnsHistogram closes={[100, 100.5, 103.515]} />);
     const small = screen.getByTestId("histogram-bar-0");
     const big = screen.getByTestId("histogram-bar-1");
-    const smallH = Number(small.getAttribute("height"));
-    const bigH = Number(big.getAttribute("height"));
-    expect(bigH).toBeGreaterThan(smallH);
+    const smallW = Number(small.getAttribute("width"));
+    const bigW = Number(big.getAttribute("width"));
+    expect(bigW).toBeGreaterThan(smallW);
   });
 
-  test("the tallest bar in the card is bounded by the half-canvas budget", () => {
-    // Two returns: +0.1% (flat) and +5% (huge). The +5% bar should fill the
-    // upper half of the canvas without exceeding it.
-    const height = 22;
-    wrap(<IndexReturnsHistogram closes={[100, 100.1, 105.105]} height={height} />);
-    const tall = screen.getByTestId("histogram-bar-1");
-    const tallH = Number(tall.getAttribute("height"));
-    expect(tallH).toBeGreaterThan(0);
-    expect(tallH).toBeLessThanOrEqual(height / 2);
+  test("the longest single-sided bar does not cross the full half-viewport", () => {
+    wrap(<IndexReturnsHistogram closes={[100, 100.1, 105.105]} />);
+    const longBar = screen.getByTestId("histogram-bar-1");
+    const w = Number(longBar.getAttribute("width"));
+    expect(w).toBeGreaterThan(0);
+    expect(w).toBeLessThan(50);
   });
 });
 
@@ -202,8 +185,6 @@ describe("IndexReturnsHistogram — anti-regression (line sparkline replaced)", 
   });
 
   test("does NOT mount under the old data-testid='index-sparkline'", () => {
-    // Anti-regression so a future refactor doesn't accidentally rename the
-    // bar viz back into the line-sparkline test surface.
     const { container } = wrap(<IndexReturnsHistogram closes={[100, 101]} />);
     expect(container.querySelector('[data-testid="index-sparkline"]')).toBeNull();
   });

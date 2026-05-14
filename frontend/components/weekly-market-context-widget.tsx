@@ -30,11 +30,22 @@ export type WeeklyIndexRow = {
   /**
    * Last ~5 daily closes for this index, oldest → newest.
    *
-   * Drives the inline sparkline in the Shared Context master card (Phase 2b).
+   * Drives the per-session returns chart in the Shared Context master card (Phase 2b).
    * `null` / missing means the daily-bar feed was unavailable when the page
    * rendered — callers should fall back to rendering just the pct5d label.
    */
   closes5d?: number[];
+  /**
+   * Cash-session high/low from the snapshot feed plus last, for a compact
+   * “where last sits in today’s range” readout. Omitted when H/L are missing.
+   */
+  sessionDayRange?: {
+    low: number;
+    high: number;
+    last: number;
+    open: number | null;
+    prevClose: number | null;
+  };
 };
 
 type Props = {

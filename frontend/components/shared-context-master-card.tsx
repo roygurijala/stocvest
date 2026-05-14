@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { DashboardCard } from "@/components/dashboard-card";
 import { IndexReturnsHistogram } from "@/components/index-returns-histogram";
+import { IndexSessionRangeBar } from "@/components/index-session-range-bar";
 import { InfoTip } from "@/components/info-tip";
 import { DecisionMetric } from "@/components/decision-metric";
 import { getChangeColor } from "@/components/market-sentiment-score-widget";
@@ -36,10 +37,9 @@ import {
  * master card containing five strictly-ordered sub-sections:
  *
  *   A. RECENT SESSION MARKET STATE (Last ~5 Sessions)
- *      Three index sub-cards (SPY / QQQ / IWM): name, inline neutral
- *      sparkline (5 daily closes), and net % change. Path-and-smoothness
- *      readout for both day traders (chop vs trend expectations) and swing
- *      traders (progress vs congestion).
+ *      Three index sub-cards (SPY / QQQ / IWM): name, horizontal per-session
+ *      return bars (5 daily closes), optional cash-session range track, and
+ *      net % change. Path readout for both day traders and swing traders.
  *
  *   B. VOLATILITY ENVIRONMENT
  *      Category-only readout ("Contained / Expanding / Compressed") derived
@@ -602,12 +602,12 @@ export function SharedContextMasterCard(props: Props) {
           <SubsectionHeader
             letter="A"
             label="Recent Session Market State (Last ~5 Sessions)"
-            cardTip="Inline 5-day daily-close sparklines + net % change for SPY, QQQ, IWM. Shared backdrop both desks read; descriptive, not a setup signal."
+            cardTip="Per-session close-to-close returns (horizontal bars), optional today cash-session range vs prior close, and 5-session net % for SPY, QQQ, IWM. Shared backdrop both desks read; descriptive, not a setup signal."
             colors={colors}
           />
           <div
             className="grid gap-3"
-            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}
+            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}
             data-testid="shared-context-index-grid"
           >
             {weeklyIndexRows.map((r) => {
@@ -645,13 +645,30 @@ export function SharedContextMasterCard(props: Props) {
                     <p style={{ margin: 0, fontSize: 10, color: colors.textMuted }}>{r.label}</p>
                   </div>
                   {hasCloses ? (
-                    <IndexReturnsHistogram
-                      closes={r.closes5d!}
-                      ariaLabel={`${r.symbol} 5-session daily returns histogram`}
-                    />
+                    <div style={{ width: "100%", minWidth: 0 }}>
+                      <IndexReturnsHistogram
+                        closes={r.closes5d!}
+                        ariaLabel={`${r.symbol} 5-session daily returns histogram`}
+                      />
+                    </div>
                   ) : (
-                    <span style={{ fontSize: 10, color: colors.textMuted }}>Sparkline pending</span>
+                    <span style={{ fontSize: 10, color: colors.textMuted }}>Daily returns chart pending</span>
                   )}
+                  {r.sessionDayRange ? (
+                    <div style={{ width: "100%", minWidth: 0 }}>
+                      <p style={{ margin: 0, fontSize: 9, color: colors.textMuted, letterSpacing: "0.04em" }}>
+                        TODAY&apos;S RANGE (CASH)
+                      </p>
+                      <IndexSessionRangeBar
+                        low={r.sessionDayRange.low}
+                        high={r.sessionDayRange.high}
+                        last={r.sessionDayRange.last}
+                        open={r.sessionDayRange.open}
+                        prevClose={r.sessionDayRange.prevClose}
+                        colors={colors}
+                      />
+                    </div>
+                  ) : null}
                   <div
                     style={{
                       fontSize: typography.scale.base,

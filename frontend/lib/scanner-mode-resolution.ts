@@ -22,7 +22,7 @@
  * components where they were previously hidden.
  */
 
-import type { ScannerSetupLoadMode } from "@/lib/api/scanner";
+import type { GapModeBestFit, ScannerSetupLoadMode } from "@/lib/api/scanner";
 
 /** Trading mode used to select the Evidence-card composite engine and chip filter. */
 export type EvidenceTradingMode = "swing" | "day";
@@ -129,4 +129,44 @@ export function resolveGapCardTradingMode(
   if (modeBestFit === "swing") return "swing";
   if (modeBestFit === "day") return "day";
   return "swing";
+}
+
+/**
+ * Normalize backend `mode_best_fit` for UI filtering. Missing verdicts behave
+ * like `"either"` (visible under both Swing and Day default filters) — same
+ * default as {@link resolveGapCardTradingMode} back-compat for cached rows.
+ */
+export function normalizeGapModeBestFit(verdict: GapModeBestFit | undefined): GapModeBestFit {
+  return verdict ?? "either";
+}
+
+/**
+ * Whether a gap row appears in the scanner's **default** gap list for the
+ * active tab. `"either"` rows appear in both Swing and Day default views.
+ * `scannerSetupMode === "both"` does not filter — the full list is shown.
+ */
+export function gapIntelligenceRowMatchesScannerModeDefault(
+  scannerSetupMode: ScannerSetupLoadMode,
+  modeBestFit: GapModeBestFit | undefined
+): boolean {
+  if (scannerSetupMode === "both") return true;
+  const v = normalizeGapModeBestFit(modeBestFit);
+  if (scannerSetupMode === "swing") return v === "swing" || v === "either";
+  if (scannerSetupMode === "day") return v === "day" || v === "either";
+  return true;
+}
+
+/** Count of rows hidden by the default tab filter (0 when not filtering). */
+export function gapIntelligenceHiddenCountForModeDefault(
+  scannerSetupMode: ScannerSetupLoadMode,
+  items: ReadonlyArray<{ mode_best_fit?: GapModeBestFit }>
+): number {
+  if (scannerSetupMode === "both") return 0;
+  let n = 0;
+  for (const row of items) {
+    const v = normalizeGapModeBestFit(row.mode_best_fit);
+    if (scannerSetupMode === "swing" && v === "day") n += 1;
+    else if (scannerSetupMode === "day" && v === "swing") n += 1;
+  }
+  return n;
 }

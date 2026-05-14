@@ -13,49 +13,36 @@ export type IndexReturnsHistogramProps = {
    * regular trading session over the trailing week.
    */
   closes: number[];
-  /** Pixel width. Default 80px — matches the small sub-card density inside Shared Context. */
-  width?: number;
-  /** Pixel height. Default 22px. */
+  /**
+   * CSS pixel height of the SVG (width always stretches to the container).
+   * Default scales slightly with the number of return bars so five sessions
+   * stay legible inside the index tiles.
+   */
   height?: number;
   /** Optional accessible label override. Defaults to "5-session daily returns histogram". */
   ariaLabel?: string;
 };
 
+const VIEW_W = 100;
+
 /**
  * Daily-returns histogram for the SPY / QQQ / IWM tiles in the Shared Context
- * master card. Replaces the line sparkline that previously sat in the same
- * pixel budget.
- *
- * Why bars, not a line, at this size:
- *   The card is ~120px wide. A line sparkline at that resolution is
- *   decorative — you can tell direction but not how the week unfolded.
- *   The headline % number already conveys the net result. Per-day signed
- *   bars convey the *shape* of the move (steady grind vs choppy reversal
- *   vs one-day spike) that the line cannot at this size.
+ * master card. Horizontal layout: each row is one session’s close-to-close
+ * return; bars extend left/right from a central zero line so polarity is
+ * visible without wasting horizontal space in wide tiles.
  *
  * Encoding rules (locked in by tests/index-returns-histogram.test.tsx):
- *   1. One bar per *daily return*, oldest-leftmost / today-rightmost.
+ *   1. One bar per *daily return*, oldest at the top, newest at the bottom.
  *   2. Color follows the same `getChangeColor` neutral-band as the % label
- *      beside it (±0.1%): up → bullish, down → bearish, in-band → muted.
- *      The bar viz inherits the dashboard's role-color vocabulary; we do
- *      NOT invent new palette entries.
- *   3. Height encodes |return %| scaled per-card (max abs hits ~80% of the
- *      vertical budget). Per-card scaling so the *shape of the week* is
- *      legible on each tile; cross-card magnitude comparison lives in the
- *      % label, not in the bars.
- *   4. Polarity also lives in position — positive bars grow up from the
- *      baseline, negative bars hang down. Position carries the signal for
- *      colorblind users even if color is suppressed.
- *   5. Neutral / near-flat sessions render a thin 1px-tall stub on the
- *      zero baseline so the bar is visible and counts toward the day
- *      tally; we never silently drop a session.
+ *      (±0.1%): up → bullish, down → bearish, in-band → muted.
+ *   3. Bar length encodes |return %| scaled per-card (max abs uses ~92% of
+ *      the half-width budget). Cross-tile magnitude comparison stays on the
+ *      % label.
+ *   4. Polarity also lives in position — positive bars extend right from the
+ *      vertical zero line, negative bars extend left. Colorblind-safe.
+ *   5. Neutral sessions render a 1px-wide stub on the zero line.
  */
-export function IndexReturnsHistogram({
-  closes,
-  width = 80,
-  height = 22,
-  ariaLabel
-}: IndexReturnsHistogramProps) {
+export function IndexReturnsHistogram({ closes, height: heightProp, ariaLabel }: IndexReturnsHistogramProps) {
   const { colors } = useTheme();
   const reactId = useId();
 
@@ -66,66 +53,58 @@ export function IndexReturnsHistogram({
     );
     if (clean.length < 2) return null;
 
-    // Daily returns in PERCENT. `returns[i]` is the close-to-close % move
-    // between session i and session i+1, so newer at the end.
     const returns: number[] = [];
     for (let i = 1; i < clean.length; i++) {
       returns.push((clean[i] / clean[i - 1] - 1) * 100);
     }
     if (returns.length === 0) return null;
 
-    // Per-card scaling — tallest bar reaches ~80% of the half-canvas height.
-    // The floor (0.05%) prevents a degenerate "all five days were flat"
-    // session from blowing magnitudes up to fill the canvas.
     const maxAbs = Math.max(...returns.map((r) => Math.abs(r)), 0.05);
 
-    // Reserve 1px top/bottom padding so the strokes don't clip on devices
-    // that anti-alias to subpixel boundaries.
-    const usableH = height - 2;
-    const halfH = usableH / 2;
-    const zeroY = 1 + halfH;
+    const topPad = 3;
+    const rowPitch = 14;
+    const barH = 9;
+    const viewH = topPad + returns.length * rowPitch + 3;
+    const centerX = VIEW_W / 2;
+    const maxHalfW = (VIEW_W / 2 - 4) * 0.92;
 
-    // Bar widths from the canvas: divide usable width into N equal slots
-    // and gap them by 2px. Minimum 2px bar so single-session histograms
-    // (early-week, post-holiday) still render visibly.
-    const gap = 2;
-    const slotW = (width - (returns.length - 1) * gap) / returns.length;
-    const barW = Math.max(2, slotW - 1);
+    const bars = returns.map((r, i) => {
+      const magnitude = Math.min(1, Math.abs(r) / maxAbs);
+      const inNeutralBand = Math.abs(r) <= 0.1;
+      const sign: "up" | "down" | "flat" = inNeutralBand ? "flat" : r > 0 ? "up" : "down";
+      const rowTop = topPad + i * rowPitch;
+      const y = rowTop + (rowPitch - barH) / 2;
 
-    return {
-      zeroY,
-      halfH,
-      bars: returns.map((r, i) => {
-        const magnitude = Math.min(1, Math.abs(r) / maxAbs);
-        const inNeutralBand = Math.abs(r) <= 0.1;
-        const sign: "up" | "down" | "flat" = inNeutralBand ? "flat" : r > 0 ? "up" : "down";
-
-        // Flat sessions: a 1px stub straddling the baseline. NOT zero
-        // height — bars need to be visible so the user can still count
-        // five days.
-        if (sign === "flat") {
-          return {
-            x: i * (slotW + gap) + (slotW - barW) / 2,
-            y: zeroY - 0.5,
-            w: barW,
-            h: 1,
-            returnPct: r,
-            sign
-          };
-        }
-
-        const barH = Math.max(1, magnitude * (halfH - 1));
+      if (sign === "flat") {
         return {
-          x: i * (slotW + gap) + (slotW - barW) / 2,
-          y: sign === "up" ? zeroY - barH : zeroY,
-          w: barW,
+          x: centerX - 0.5,
+          y,
+          w: 1,
           h: barH,
           returnPct: r,
           sign
         };
-      })
+      }
+
+      const len = Math.max(0.4, magnitude * maxHalfW);
+      if (sign === "up") {
+        return { x: centerX, y, w: len, h: barH, returnPct: r, sign };
+      }
+      return { x: centerX - len, y, w: len, h: barH, returnPct: r, sign };
+    });
+
+    return {
+      viewH,
+      centerX,
+      zeroY1: topPad - 1,
+      zeroY2: viewH - 2,
+      bars
     };
-  }, [closes, width, height]);
+  }, [closes]);
+
+  const pixelHeight =
+    heightProp ??
+    (layout ? Math.round(20 + (layout.bars.length > 0 ? layout.bars.length : 1) * 10) : 22);
 
   if (!layout) return null;
 
@@ -136,20 +115,21 @@ export function IndexReturnsHistogram({
       role="img"
       aria-label={label}
       data-testid="index-returns-histogram"
-      width={width}
-      height={height}
-      viewBox={`0 0 ${width} ${height}`}
-      style={{ display: "block" }}
+      data-orientation="horizontal"
+      width="100%"
+      height={pixelHeight}
+      viewBox={`0 0 ${VIEW_W} ${layout.viewH}`}
+      preserveAspectRatio="none"
+      style={{ display: "block", minHeight: pixelHeight }}
     >
       <title id={`hist-title-${reactId}`}>{label}</title>
-      {/* Faint zero-line so the polarity of each bar is also positional. */}
       <line
-        x1={0}
-        x2={width}
-        y1={layout.zeroY}
-        y2={layout.zeroY}
+        x1={layout.centerX}
+        x2={layout.centerX}
+        y1={layout.zeroY1}
+        y2={layout.zeroY2}
         stroke={`color-mix(in srgb, ${colors.textMuted} 40%, transparent)`}
-        strokeWidth={0.5}
+        strokeWidth={0.55}
         data-testid="histogram-zero-line"
       />
       {layout.bars.map((b, i) => (

@@ -75,6 +75,8 @@ import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
 import { fetchSymbolMinuteBars } from "@/lib/fetch-symbol-bars";
 import { buildEvidenceFromSetup, enrichEvidenceWithComposite, type SignalEvidenceData } from "@/lib/signal-evidence";
 import {
+  gapIntelligenceHiddenCountForModeDefault,
+  gapIntelligenceRowMatchesScannerModeDefault,
   resolveEvidenceTradingMode,
   resolveGapCardTradingMode,
   resolveSetupRowTradingMode
@@ -152,6 +154,7 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
   const { colors, theme } = useTheme();
   const [overview, setOverview] = useState<ScannerOverview>(initialOverview);
   const [scannerSetupMode, setScannerSetupMode] = useState<ScannerSetupLoadMode>("swing");
+  const [showAllGaps, setShowAllGaps] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [evidenceLoading, setEvidenceLoading] = useState(false);
@@ -259,6 +262,10 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
     return () => {
       cancelled = true;
     };
+  }, [scannerSetupMode]);
+
+  useEffect(() => {
+    setShowAllGaps(false);
   }, [scannerSetupMode]);
 
   const persistScannerMode = useCallback((m: ScannerSetupLoadMode) => {
@@ -421,14 +428,25 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
     [overview.gapIntelligence]
   );
 
+  const gapIntelHiddenCount = useMemo(
+    () => gapIntelligenceHiddenCountForModeDefault(scannerSetupMode, overview.gapIntelligence),
+    [scannerSetupMode, overview.gapIntelligence]
+  );
+
+  const gapIntelForDisplay = useMemo(() => {
+    const raw = overview.gapIntelligence;
+    if (scannerSetupMode === "both" || showAllGaps) return raw;
+    return raw.filter((g) => gapIntelligenceRowMatchesScannerModeDefault(scannerSetupMode, g.mode_best_fit));
+  }, [overview.gapIntelligence, scannerSetupMode, showAllGaps]);
+
   const gapIntelGrouped = useMemo(() => {
-    const items = [...overview.gapIntelligence].sort(
+    const items = [...gapIntelForDisplay].sort(
       (a, b) => b.gap_quality_score - a.gap_quality_score
     );
     const withCat = items.filter((x) => x.has_catalyst);
     const without = items.filter((x) => !x.has_catalyst);
     return { withCat, without };
-  }, [overview.gapIntelligence]);
+  }, [gapIntelForDisplay]);
 
   function qualityBarStyle(score: number, colors: ThemeColors): { fill: string; glow?: string } {
     if (score >= 80) return { fill: "#4ade80", glow: "0 0 12px rgba(74,222,128,0.45)" };
@@ -1296,6 +1314,44 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
             </div>
             <InfoTip text={GAP_INTELLIGENCE_TIP} label="About gap intelligence" />
           </div>
+          {(scannerSetupMode === "swing" || scannerSetupMode === "day") && overview.gapIntelligence.length > 0 ? (
+            <div
+              style={{
+                marginBottom: spacing[2],
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                gap: spacing[2]
+              }}
+            >
+              {!showAllGaps && gapIntelHiddenCount > 0 ? (
+                <span
+                  data-testid="scanner-gap-hidden-count"
+                  style={{ fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45 }}
+                >
+                  + {gapIntelHiddenCount}{" "}
+                  {scannerSetupMode === "swing" ? "day-fit" : "swing-fit"} gaps hidden
+                </span>
+              ) : null}
+              <button
+                type="button"
+                data-testid={showAllGaps ? "scanner-gap-filter-show-matched-only" : "scanner-gap-filter-show-all"}
+                onClick={() => setShowAllGaps((v) => !v)}
+                style={{
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: borderRadius.md,
+                  background: colors.surfaceMuted,
+                  color: colors.text,
+                  padding: `${spacing[1]} ${spacing[3]}`,
+                  fontSize: typography.scale.xs,
+                  fontWeight: 600,
+                  cursor: "pointer"
+                }}
+              >
+                {showAllGaps ? "Show mode-matched gaps only" : "Show all gaps"}
+              </button>
+            </div>
+          ) : null}
           <div
             style={{
               display: "grid",
@@ -1333,6 +1389,48 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
                 compact
                 testId="scanner-gap-empty-state"
               />
+            ) : gapIntelForDisplay.length === 0 ? (
+              <div
+                data-testid="scanner-gap-filter-empty"
+                style={{
+                  borderRadius: borderRadius.md,
+                  border: `1px dashed ${colors.border}`,
+                  background: "rgba(148,163,184,0.06)",
+                  padding: spacing[3]
+                }}
+              >
+                <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.text, fontWeight: 600 }}>
+                  No gaps match this tab&apos;s default filter
+                </p>
+                <p
+                  style={{
+                    margin: `${spacing[2]} 0 0`,
+                    fontSize: typography.scale.xs,
+                    color: colors.textMuted,
+                    lineHeight: 1.5
+                  }}
+                >
+                  Loaded gaps are classified as a better fit for the other desk. Open the full list to see them.
+                </p>
+                <button
+                  type="button"
+                  data-testid="scanner-gap-filter-show-all-from-empty"
+                  onClick={() => setShowAllGaps(true)}
+                  style={{
+                    marginTop: spacing[2],
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: borderRadius.md,
+                    background: colors.surfaceMuted,
+                    color: colors.text,
+                    padding: `${spacing[1]} ${spacing[3]}`,
+                    fontSize: typography.scale.xs,
+                    fontWeight: 600,
+                    cursor: "pointer"
+                  }}
+                >
+                  Show all gaps
+                </button>
+              </div>
             ) : (
               <>
                 {gapIntelGrouped.withCat.map((item, idx) => renderGapIntelCard(item, idx, false))}
