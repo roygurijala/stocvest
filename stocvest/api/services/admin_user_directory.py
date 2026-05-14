@@ -123,6 +123,7 @@ class AdminUserDetail:
             "is_admin": self.is_admin,
             "profile": {
                 "subscription_plan": self.profile.subscription_plan,
+                "last_active_at": self.profile.last_active_at,
                 "trading_mode": self.profile.trading_mode.value,
                 "onboarding_completed": self.profile.onboarding_completed,
                 "onboarding_completed_at": self.profile.onboarding_completed_at,

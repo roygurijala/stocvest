@@ -1,26 +1,22 @@
 /**
- * Lock-in: the dashboard TopBar is sticky to the viewport while the
+ * Lock-in: the dashboard TopBar stays pinned to the viewport while the
  * body scrolls.
  *
- * Two invariants together produce sticky behaviour:
+ * Two invariants together produce that behaviour:
  *
- *   1. The ``<header>`` element rendered by ``TopBar`` carries
- *      ``position: sticky`` + ``top: 0`` + a z-index high enough to
- *      sit above page content (we target ``z-30``, which is below
- *      our modal/drawer layer at 40+).
+ *   1. The ``<header>`` rendered by ``TopBar`` uses ``position: fixed``
+ *      + ``top: 0`` + ``left-0`` / ``lg:left-[248px]`` (sidebar width)
+ *      + ``z-30`` (below modals at 40+).
  *
  *   2. The ``AppShell`` right-column wrapper does NOT apply any
  *      ``overflow`` property — that would promote the wrapper to a
- *      scroll container and capture the sticky against the wrapper
- *      instead of the viewport, defeating the whole point. Horizontal
- *      overflow protection lives on ``<main>`` instead.
+ *      scroll container and complicate layout. Horizontal overflow
+ *      protection lives on ``<main>``, which also carries extra
+ *      ``padding-top`` so content clears the fixed bar.
  *
- * The two assertions in this file fail loudly if a future refactor
- * either drops the sticky classes from ``TopBar`` or re-introduces
- * ``overflow-x-hidden`` (or anything else that promotes a scroll
- * container) onto the right column wrapper. See
- * ``docs/CONTEXT.md`` row 14 for the regression that motivated the
- * change.
+ * These assertions fail loudly if a future refactor drops the fixed
+ * positioning classes or re-introduces ``overflow-x-hidden`` (or any
+ * scroll-container promotion) onto the right column wrapper.
  */
 
 import { render, screen } from "@testing-library/react";
@@ -47,20 +43,20 @@ const SESSION: AuthSession = {
   isAdmin: false
 } as unknown as AuthSession;
 
-describe("TopBar sticky positioning", () => {
-  test("header carries the sticky classes that pin it during scroll", () => {
+describe("TopBar viewport pinning", () => {
+  test("header carries the fixed-position classes that pin it during scroll", () => {
     wrap(<TopBar />);
     const header = screen.getByTestId("app-top-bar");
     const cls = header.className;
-    // ``sticky`` + ``top-0`` together produce ``position: sticky; top: 0``.
-    // ``z-30`` keeps it above page content but below modals (40+).
-    expect(cls).toMatch(/(^|\s)sticky(\s|$)/);
+    expect(cls).toMatch(/(^|\s)fixed(\s|$)/);
     expect(cls).toMatch(/(^|\s)top-0(\s|$)/);
+    expect(cls).toMatch(/(^|\s)left-0(\s|$)/);
     expect(cls).toMatch(/(^|\s)z-30(\s|$)/);
+    expect(cls).toMatch(/lg:left-\[248px\]/);
   });
 });
 
-describe("AppShell sticky-friendly layout", () => {
+describe("AppShell layout (no scroll trap on right column)", () => {
   test("right column wrapper does NOT create a scroll container that breaks sticky", () => {
     wrap(
       <AppShell session={SESSION} isAdmin={false}>

@@ -227,8 +227,10 @@ class UserProfile(BaseModel):
     legal_acknowledged: bool = False
     legal_acknowledged_at: str | None = None
     legal_acknowledged_version: str | None = None
-    """Billing sets this (e.g. Stripe webhook). Not user-editable via PATCH /v1/users/me."""
+    # Billing sets subscription_plan (e.g. Stripe webhook); not user-editable via PATCH /v1/users/me.
     subscription_plan: str = "free"
+    # Best-effort UTC ISO from GET /v1/users/me (throttled) for admin "last active".
+    last_active_at: str | None = None
     # Admin-only override for invited beta users to unlock full app access.
     beta_full_access: bool = False
     beta_access_until: str | None = None

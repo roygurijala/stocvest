@@ -36,6 +36,10 @@ export interface AdminUserSummaryRow {
   enabled: boolean;
   created_at: string;
   updated_at: string;
+  /** From UserProfile (billing). */
+  subscription_plan: string;
+  /** ISO timestamp from throttled GET /v1/users/me; null if never seen. */
+  last_active_at: string | null;
 }
 
 export interface AdminUserSearchResponse {
@@ -217,6 +221,7 @@ export interface AdminUserDetail {
     beta_access_granted_at: string | null;
     has_full_access: boolean;
     has_ai_explanations: boolean;
+    last_active_at: string | null;
   };
 }
 
@@ -257,7 +262,12 @@ function parseSummaryRow(raw: unknown): AdminUserSummaryRow | null {
     status: parseStr(raw.status),
     enabled: raw.enabled === undefined ? true : parseBool(raw.enabled),
     created_at: parseStr(raw.created_at),
-    updated_at: parseStr(raw.updated_at)
+    updated_at: parseStr(raw.updated_at),
+    subscription_plan: parseStr(raw.subscription_plan) || "free",
+    last_active_at:
+      typeof raw.last_active_at === "string" && raw.last_active_at.trim()
+        ? raw.last_active_at.trim()
+        : null
   };
 }
 
@@ -298,7 +308,11 @@ function parseDetail(raw: unknown): AdminUserDetail | null {
           ? profileRaw.beta_access_granted_at
           : null,
       has_full_access: parseBool(profileRaw.has_full_access),
-      has_ai_explanations: parseBool(profileRaw.has_ai_explanations)
+      has_ai_explanations: parseBool(profileRaw.has_ai_explanations),
+      last_active_at:
+        typeof profileRaw.last_active_at === "string" && profileRaw.last_active_at.trim()
+          ? profileRaw.last_active_at.trim()
+          : null
     }
   };
 }

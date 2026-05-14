@@ -76,6 +76,19 @@ def test_users_me_get_returns_defaults(fresh_profile_store: InMemoryUserProfileS
     assert b["onboarding_completed"] is False
     assert b.get("subscription_plan") == "free"
     assert b.get("has_ai_explanations") is False
+    p = fresh_profile_store.get_profile("user-me-test")
+    assert p.last_active_at is not None and len(p.last_active_at) > 10
+
+
+def test_users_me_second_get_within_window_does_not_refresh_last_active(
+    fresh_profile_store: InMemoryUserProfileStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("STOCVEST_LAMBDA_MODULE", "brokers")
+    lambda_handler(_event("GET"), {})
+    first = fresh_profile_store.get_profile("user-me-test").last_active_at
+    lambda_handler(_event("GET"), {})
+    second = fresh_profile_store.get_profile("user-me-test").last_active_at
+    assert first == second
 
 
 def test_users_me_patch_ignores_subscription_plan(

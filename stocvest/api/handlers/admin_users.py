@@ -48,6 +48,7 @@ from stocvest.api.services.admin_user_directory import (
     list_users_page,
 )
 from stocvest.api.services.audit_store import get_audit_store
+from stocvest.api.services.user_profile_store import get_user_profile_store
 from stocvest.api.services.signal_analysis import analysis_authorized
 from stocvest.api.shared import build_request_context
 from stocvest.api.types import LambdaContext, LambdaEvent
@@ -245,11 +246,19 @@ def admin_users_search_handler(
     page_token = (qs.get("page_token") or "").strip() or None
 
     page = list_users_page(query, limit=limit, page_token=page_token)
+    store = get_user_profile_store()
+    items: list[dict[str, Any]] = []
+    for r in page.records:
+        row = r.to_summary_dict()
+        prof = store.get_profile(r.sub)
+        row["subscription_plan"] = prof.subscription_plan
+        row["last_active_at"] = prof.last_active_at
+        items.append(row)
     return ok(
         {
             "query": query,
             "limit": limit,
-            "items": [r.to_summary_dict() for r in page.records],
+            "items": items,
             "next_token": page.next_token,
         }
     )

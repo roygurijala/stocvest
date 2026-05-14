@@ -9,6 +9,12 @@ import { spacing } from "@/lib/design-system";
 import { brokersEnabled } from "@/lib/nav-features";
 import { useTheme } from "@/lib/theme-provider";
 
+/**
+ * Block height of the fixed dashboard TopBar (`min-h-14` + vertical padding).
+ * Keep in sync with padding math in `AppShell` so `<main>` content clears the bar.
+ */
+export const APP_TOP_BAR_LAYOUT_HEIGHT = `calc(${spacing[3]} + 3.5rem + ${spacing[3]})`;
+
 const TITLE_BY_PATH: Record<string, string> = {
   "/dashboard": "Dashboard",
   "/dashboard/scanner": "Scanner",
@@ -35,16 +41,12 @@ export function TopBar({ onMenuClick }: TopBarProps) {
   return (
     <header
       data-testid="app-top-bar"
-      // ``sticky top-0`` + a high z-index keeps the page chrome
-      // visible while the body scrolls. The AppShell right column
-      // intentionally avoids ``overflow-*`` properties so this
-      // element pins to the viewport rather than to an inner scroll
-      // container. ``z-30`` sits below modals/drawers (which use 40+)
-      // but above page content. ``backdrop-blur-sm`` softens the
-      // boundary when content scrolls underneath; the background is
-      // still mostly opaque so legibility is preserved on themes that
-      // don't support backdrop filters.
-      className="sticky top-0 z-30 flex min-h-14 items-center gap-2 px-4 backdrop-blur-sm lg:justify-between lg:px-6"
+      // ``position: fixed`` pins the chrome to the viewport regardless of
+      // flex/grid ancestors or ``overflow-x`` on ``<main>`` — patterns
+      // that often defeat ``position: sticky`` in real layouts. On
+      // ``lg+`` the bar starts after the 248px sidebar. ``z-30`` sits
+      // below modals/drawers (40+) but above page content.
+      className="fixed left-0 right-0 top-0 z-30 flex min-h-14 items-center gap-2 px-4 backdrop-blur-sm lg:left-[248px] lg:justify-between lg:px-6"
       style={{
         paddingTop: spacing[3],
         paddingBottom: spacing[3],

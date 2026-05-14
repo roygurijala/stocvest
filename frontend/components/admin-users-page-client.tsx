@@ -586,6 +586,24 @@ function EmptyCard({
   );
 }
 
+function subscriptionPlanLabel(plan: string): string {
+  const p = (plan || "free").trim().toLowerCase();
+  if (p === "swing_day_pro") return "Swing + Day Pro";
+  if (p === "swing_pro") return "Swing Pro";
+  return "Free";
+}
+
+function formatLastActiveDisplay(iso: string | null | undefined): string {
+  if (!iso || !String(iso).trim()) return "—";
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "—";
+    return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  } catch {
+    return "—";
+  }
+}
+
 function ResultRow({
   row,
   selected,
@@ -634,6 +652,11 @@ function ResultRow({
           }}
         >
           sub: {row.user_id}
+        </span>
+        <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>
+          Plan: {subscriptionPlanLabel(row.subscription_plan)}
+          {" · "}
+          Last active: {formatLastActiveDisplay(row.last_active_at)}
         </span>
       </button>
     </li>
@@ -763,7 +786,9 @@ function DetailPanel({
           <DT>Email verified</DT>
           <dd style={{ margin: 0 }}>{detail.email_verified ? "yes" : "no"}</dd>
           <DT>Plan</DT>
-          <dd style={{ margin: 0 }}>{detail.profile.subscription_plan}</dd>
+          <dd style={{ margin: 0 }}>{subscriptionPlanLabel(detail.profile.subscription_plan)}</dd>
+          <DT>Last active</DT>
+          <dd style={{ margin: 0 }}>{formatLastActiveDisplay(detail.profile.last_active_at)}</dd>
           <DT>Beta access</DT>
           <dd style={{ margin: 0 }}>
             {detail.profile.beta_full_access

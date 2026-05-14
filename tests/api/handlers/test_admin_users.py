@@ -38,6 +38,7 @@ from stocvest.api.services.admin_user_directory import (
     AdminUserDetail,
     CognitoUserRecord,
 )
+from stocvest.api.services.user_profile_store import InMemoryUserProfileStore
 from stocvest.data.models import UserProfile
 
 
@@ -168,7 +169,10 @@ def test_search_handler_returns_items() -> None:
             records=[_cog_rec(sub="sub-1", email="alice@x.com")],
             next_token=None,
         ),
-    ) as m:
+    ) as m, patch(
+        "stocvest.api.handlers.admin_users.get_user_profile_store",
+        return_value=InMemoryUserProfileStore(),
+    ):
         response = admin_users_search_handler(event, None)
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
@@ -176,8 +180,41 @@ def test_search_handler_returns_items() -> None:
     assert body["limit"] == 10
     assert body["items"][0]["user_id"] == "sub-1"
     assert body["items"][0]["email"] == "alice@x.com"
+    assert body["items"][0]["subscription_plan"] == "free"
+    assert body["items"][0]["last_active_at"] is None
     assert body["next_token"] is None
     m.assert_called_once()
+
+
+def test_search_handler_merges_subscription_and_last_active_from_profile_store() -> None:
+    from stocvest.api.services.admin_user_directory import UserSearchPage
+
+    store = InMemoryUserProfileStore()
+    store.put_profile(
+        UserProfile(
+            user_id="sub-1",
+            subscription_plan="swing_day_pro",
+            last_active_at="2026-05-10T15:00:00+00:00",
+        )
+    )
+    event = _evt(query_params={"q": "alice", "limit": "10"})
+    with patch(
+        "stocvest.api.handlers.admin_users.analysis_authorized", return_value=True
+    ), patch(
+        "stocvest.api.handlers.admin_users.list_users_page",
+        return_value=UserSearchPage(
+            records=[_cog_rec(sub="sub-1", email="alice@x.com")],
+            next_token=None,
+        ),
+    ), patch(
+        "stocvest.api.handlers.admin_users.get_user_profile_store",
+        return_value=store,
+    ):
+        response = admin_users_search_handler(event, None)
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["items"][0]["subscription_plan"] == "swing_day_pro"
+    assert body["items"][0]["last_active_at"] == "2026-05-10T15:00:00+00:00"
 
 
 def test_search_handler_empty_query_returns_full_listing() -> None:
@@ -207,6 +244,9 @@ def test_search_handler_empty_query_returns_full_listing() -> None:
     ), patch(
         "stocvest.api.handlers.admin_users.list_users_page",
         side_effect=_fake_page,
+    ), patch(
+        "stocvest.api.handlers.admin_users.get_user_profile_store",
+        return_value=InMemoryUserProfileStore(),
     ):
         response = admin_users_search_handler(event, None)
     assert response["statusCode"] == 200
@@ -236,6 +276,9 @@ def test_search_handler_forwards_page_token() -> None:
     ), patch(
         "stocvest.api.handlers.admin_users.list_users_page",
         side_effect=_fake_page,
+    ), patch(
+        "stocvest.api.handlers.admin_users.get_user_profile_store",
+        return_value=InMemoryUserProfileStore(),
     ):
         response = admin_users_search_handler(event, None)
     assert response["statusCode"] == 200

@@ -280,6 +280,7 @@ def test_get_user_detail_composes_cognito_profile_groups(monkeypatch: pytest.Mon
     assert payload["groups"] == [ADMIN_COGNITO_GROUP]
     assert payload["profile"]["has_full_access"] is True
     assert payload["profile"]["subscription_plan"] == "swing_pro"
+    assert payload["profile"]["last_active_at"] is None
 
 
 def test_get_user_detail_returns_none_when_cognito_user_missing() -> None:

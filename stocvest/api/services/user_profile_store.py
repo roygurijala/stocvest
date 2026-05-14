@@ -43,6 +43,7 @@ def _item_to_profile(user_id: str, item: dict[str, Any]) -> UserProfile:
         legal_acknowledged_at=_s(item.get("legalAcknowledgedAt")),
         legal_acknowledged_version=_s(item.get("legalAcknowledgedVersion")),
         subscription_plan=subscription_plan,
+        last_active_at=_s(item.get("lastActiveAt")),
         beta_full_access=bool(item.get("betaFullAccess")),
         beta_access_until=_s(item.get("betaAccessUntil")),
         beta_access_granted_at=_s(item.get("betaAccessGrantedAt")),
@@ -65,6 +66,8 @@ def _profile_to_item(profile: UserProfile) -> dict[str, Any]:
         "subscriptionPlan": profile.subscription_plan,
         "betaFullAccess": bool(profile.beta_full_access),
     }
+    if profile.last_active_at:
+        item["lastActiveAt"] = profile.last_active_at
     if profile.email:
         item["email"] = profile.email
     if profile.onboarding_completed_at:
@@ -134,6 +137,8 @@ class DynamoDBUserProfileStore:
             merged.pop("betaAccessUntil", None)
         if not (profile.beta_access_granted_at or "").strip():
             merged.pop("betaAccessGrantedAt", None)
+        if not (profile.last_active_at or "").strip():
+            merged.pop("lastActiveAt", None)
         self.table.put_item(Item=merged)
 
 

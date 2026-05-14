@@ -71,10 +71,11 @@ body {
   /*
    * Horizontal bleed must be clipped, but ``overflow-x: hidden`` on the
    * root forces ``overflow-y`` to ``auto`` (CSS 2.1), which promotes
-   * ``html``/``body`` to scroll containers and breaks ``position: sticky``
-   * on the dashboard TopBar (it no longer pins to the viewport). ``clip``
-   * trims overflow on the x axis without that side effect. See
-   * ``tests/top-bar-sticky.test.tsx`` + AppShell comments.
+   * ``html``/``body`` to scroll containers and can interfere with
+   * ``position: sticky`` on in-flow headers. The dashboard TopBar is
+   * ``position: fixed`` instead; ``clip`` still trims overflow on the x
+   * axis without that side effect. See ``tests/top-bar-sticky.test.tsx``
+   * + AppShell comments.
    */
   overflow-x: clip;
 }

@@ -6,7 +6,7 @@ import asyncio
 import dataclasses
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from stocvest.api.broker_gateway_provider import DEFAULT_BROKER_GATEWAY_PROVIDER, BrokerGatewayProvider
@@ -335,12 +335,34 @@ def _caller_is_admin(event: LambdaEvent, request_context: Any) -> bool:
     )
 
 
+def _touch_last_active_if_stale(store: Any, profile: UserProfile) -> UserProfile:
+    """Persist ``last_active_at`` at most once per five minutes per user."""
+    raw = (profile.last_active_at or "").strip()
+    now = datetime.now(timezone.utc)
+    should_touch = True
+    if raw:
+        try:
+            last = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            if last.tzinfo is None:
+                last = last.replace(tzinfo=timezone.utc)
+            should_touch = (now - last) > timedelta(minutes=5)
+        except ValueError:
+            should_touch = True
+    if not should_touch:
+        return profile
+    merged = profile.model_copy(update={"last_active_at": now.isoformat()})
+    store.put_profile(merged)
+    return merged
+
+
 def users_me_get_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
     _ = context
     request_context = build_request_context(event)
     if not request_context.user_id:
         return unauthorized("Authenticated user is required.")
-    profile = get_user_profile_store().get_profile(request_context.user_id)
+    store = get_user_profile_store()
+    profile = store.get_profile(request_context.user_id)
+    profile = _touch_last_active_if_stale(store, profile)
     is_admin = _caller_is_admin(event, request_context)
     return ok(_serialize_user_profile(profile, is_admin=is_admin))
 

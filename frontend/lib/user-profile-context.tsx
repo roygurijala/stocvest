@@ -25,6 +25,12 @@ export function UserProfileProvider({
   return <UserProfileContext.Provider value={value}>{children}</UserProfileContext.Provider>;
 }
 
+/** True once the dashboard profile fetch has settled (success or failure). */
+export function useUserProfileLoaded(): boolean {
+  const { loaded } = useContext(UserProfileContext);
+  return loaded;
+}
+
 /** Safe default false until profile is loaded with paid flag. */
 export function useHasAIExplanations(): boolean {
   const { profile, loaded } = useContext(UserProfileContext);
