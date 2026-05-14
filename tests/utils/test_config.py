@@ -1,12 +1,28 @@
 from __future__ import annotations
 
 import json
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
 from pydantic import ValidationError
 
 from stocvest.utils.config import Settings, get_settings
+
+# Upstash keys are merged into os.environ by _apply_lambda_runtime_secret_to_environ.
+# Do not use monkeypatch.delenv for them: pytest would restore a polluted pre-test value
+# at teardown and break tests that expect Upstash to come only from external-api-keys.
+_UPSTASH_ENV_KEYS = (
+    "UPSTASH_REDIS_REST_URL",
+    "UPSTASH_REDIS_REST_TOKEN",
+    "upstash_redis_rest_url",
+    "upstash_redis_rest_token",
+)
+
+
+def _pop_upstash_env() -> None:
+    for k in _UPSTASH_ENV_KEYS:
+        os.environ.pop(k, None)
 
 
 @pytest.fixture(autouse=True)
@@ -46,10 +62,9 @@ def test_lambda_runtime_secret_hydrates_env_in_lambda(monkeypatch: pytest.Monkey
 @pytest.mark.unit
 def test_lambda_runtime_secret_snake_case_upstash_env_aliases(monkeypatch: pytest.MonkeyPatch) -> None:
     """Console key/value secrets may expose only snake_case Upstash keys."""
+    _pop_upstash_env()
     monkeypatch.setenv("AWS_LAMBDA_FUNCTION_NAME", "stocvest-development-api-health")
     monkeypatch.setenv("STOCVEST_LAMBDA_RUNTIME_SECRET", "stocvest/lambda-runtime")
-    monkeypatch.delenv("UPSTASH_REDIS_REST_URL", raising=False)
-    monkeypatch.delenv("UPSTASH_REDIS_REST_TOKEN", raising=False)
     fake = {
         "POLYGON_API_KEY": "poly-from-sm",
         "BENZINGA_API_KEY": "b1",
@@ -71,9 +86,7 @@ def test_lambda_runtime_secret_snake_case_upstash_env_aliases(monkeypatch: pytes
     get_settings.cache_clear()
     for k in fake:
         monkeypatch.delenv(k, raising=False)
-    # _apply_lambda_runtime_secret_to_environ copies snake_case → UPSTASH_*; remove those too.
-    monkeypatch.delenv("UPSTASH_REDIS_REST_URL", raising=False)
-    monkeypatch.delenv("UPSTASH_REDIS_REST_TOKEN", raising=False)
+    _pop_upstash_env()
 
 
 @pytest.mark.unit
@@ -232,6 +245,7 @@ def test_lambda_get_settings_still_merges_upstash_when_benzinga_inlined_in_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Regression: early return must not skip external-api-keys when Upstash lives only there."""
+    _pop_upstash_env()
     monkeypatch.setenv("AWS_LAMBDA_FUNCTION_NAME", "stocvest-development-api-signals")
     monkeypatch.setenv("POLYGON_API_KEY", "poly")
     monkeypatch.setenv("BENZINGA_API_KEY", "b1")
@@ -240,8 +254,6 @@ def test_lambda_get_settings_still_merges_upstash_when_benzinga_inlined_in_env(
     monkeypatch.setenv("BENZINGA_WIM_KEY", "b4")
     monkeypatch.setenv("BENZINGA_PRESS_KEY", "b5")
     monkeypatch.setenv("PERPLEXITY_API_KEY", "p1")
-    monkeypatch.delenv("UPSTASH_REDIS_REST_URL", raising=False)
-    monkeypatch.delenv("UPSTASH_REDIS_REST_TOKEN", raising=False)
 
     ext = {
         "UPSTASH_REDIS_REST_URL": "https://example.upstash.io",
@@ -263,3 +275,4 @@ def test_lambda_get_settings_still_merges_upstash_when_benzinga_inlined_in_env(
 
     assert s.upstash_redis_rest_url == "https://example.upstash.io"
     assert s.upstash_redis_rest_token == "token-from-external-secret"
+    _pop_upstash_env()
