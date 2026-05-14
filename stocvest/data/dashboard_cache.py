@@ -9,14 +9,14 @@ of truth; live hints use a short-lived key (REST has no blocking subscribe).
 from __future__ import annotations
 
 import json
-import logging
 from datetime import date, datetime, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
 from stocvest.utils.config import get_settings
+from stocvest.utils.logging import get_logger
 
-_LOG = logging.getLogger(__name__)
+_LOG = get_logger(__name__)
 
 ET = ZoneInfo("America/New_York")
 

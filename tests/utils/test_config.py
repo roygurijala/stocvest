@@ -44,6 +44,36 @@ def test_lambda_runtime_secret_hydrates_env_in_lambda(monkeypatch: pytest.Monkey
 
 
 @pytest.mark.unit
+def test_lambda_runtime_secret_snake_case_upstash_env_aliases(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Console key/value secrets may expose only snake_case Upstash keys."""
+    monkeypatch.setenv("AWS_LAMBDA_FUNCTION_NAME", "stocvest-development-api-health")
+    monkeypatch.setenv("STOCVEST_LAMBDA_RUNTIME_SECRET", "stocvest/lambda-runtime")
+    monkeypatch.delenv("UPSTASH_REDIS_REST_URL", raising=False)
+    monkeypatch.delenv("UPSTASH_REDIS_REST_TOKEN", raising=False)
+    fake = {
+        "POLYGON_API_KEY": "poly-from-sm",
+        "BENZINGA_API_KEY": "b1",
+        "BENZINGA_NEWS_API_KEY": "b2",
+        "BENZINGA_ANALYST_KEY": "b3",
+        "BENZINGA_WIM_KEY": "b4",
+        "BENZINGA_PRESS_KEY": "b5",
+        "PERPLEXITY_API_KEY": "px",
+        "upstash_redis_rest_url": "https://example.upstash.io",
+        "upstash_redis_rest_token": "tok-snake",
+    }
+    mock_sm = MagicMock()
+    mock_sm.get_secret_value.return_value = {"SecretString": json.dumps(fake)}
+    get_settings.cache_clear()
+    with patch("stocvest.utils.config.boto3.client", return_value=mock_sm):
+        s = get_settings()
+    assert s.upstash_redis_rest_url == "https://example.upstash.io"
+    assert s.upstash_redis_rest_token == "tok-snake"
+    get_settings.cache_clear()
+    for k in fake:
+        monkeypatch.delenv(k, raising=False)
+
+
+@pytest.mark.unit
 def test_get_settings_loads_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("POLYGON_API_KEY", "poly-test-key")
     monkeypatch.setenv("STOCVEST_ENV", "production")

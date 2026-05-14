@@ -79,6 +79,14 @@ def _apply_lambda_runtime_secret_to_environ() -> None:
         if not s:
             continue
         os.environ[str(key)] = s
+    # Secrets Manager key/value JSON may use snake_case; pydantic-settings reads UPSTASH_* aliases.
+    for low, up in (
+        ("upstash_redis_rest_url", "UPSTASH_REDIS_REST_URL"),
+        ("upstash_redis_rest_token", "UPSTASH_REDIS_REST_TOKEN"),
+    ):
+        v = (os.environ.get(low) or "").strip()
+        if v and not (os.environ.get(up) or "").strip():
+            os.environ[up] = v
 
 
 class Settings(BaseSettings):
