@@ -386,6 +386,17 @@ export interface SignalEvidenceData {
   };
   /** Snapshot last when `buildEvidenceFromSetup` had a quote; aligns client R/R with swing composite geometry. */
   lastTradePrice?: number | null;
+  /**
+   * Price the engine used when it computed this signal (T0). Sourced
+   * from `IntradaySetupPayload.last_price` — the scanner persists the
+   * snapshot price at signal-emit time onto every row it returns. The
+   * evidence card pairs this with `lastTradePrice` (T1, captured at
+   * card-open time) to surface drift since the engine ran; see
+   * `lib/signal-evidence/signal-price-display.ts` for the display
+   * helper and tier banding. Null when the upstream row didn't carry
+   * a price (e.g. synthetic-from-gap path, manual test fixtures).
+   */
+  priceAtSignal?: number | null;
   prevClose?: number | null;
   updatedLabel: string;
   newsFreshnessLabel: string;
@@ -955,6 +966,19 @@ export function buildEvidenceFromSetup(
   const prevClose =
     typeof prevCloseRaw === "number" && Number.isFinite(prevCloseRaw) && prevCloseRaw > 0 ? prevCloseRaw : null;
 
+  // Scanner persists the snapshot price at signal-emit time onto every
+  // row via `IntradaySetupPayload.last_price`. We hold it on the
+  // evidence payload as the "computed at" anchor for the drift row
+  // (see `lib/signal-evidence/signal-price-display.ts`). Defensive on
+  // every shape the scanner has historically emitted: missing,
+  // non-finite, zero, and negative all degrade to `null` so the drift
+  // row renders only when the data is real.
+  const setupPriceRaw = setup.last_price;
+  const priceAtSignal =
+    typeof setupPriceRaw === "number" && Number.isFinite(setupPriceRaw) && setupPriceRaw > 0
+      ? setupPriceRaw
+      : null;
+
   return {
     symbol: setup.symbol,
     direction,
@@ -963,6 +987,7 @@ export function buildEvidenceFromSetup(
     layers,
     confluence,
     lastTradePrice: typeof last === "number" && Number.isFinite(last) && last > 0 ? last : null,
+    priceAtSignal,
     prevClose,
     aiVerdict:
       direction === "bullish"

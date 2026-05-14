@@ -22,6 +22,12 @@ import {
   type LayerEmphasisTier
 } from "@/lib/signal-evidence/layer-emphasis";
 import {
+  computeSignalPriceDisplay,
+  formatSignalPrice,
+  formatSignalPriceDeltaPct,
+  type SignalPriceDriftTier
+} from "@/lib/signal-evidence/signal-price-display";
+import {
   catalystPublishedAgo,
   buildVerdictTagReconciler,
   conflictTierLabel,
@@ -112,6 +118,29 @@ function elevatedCardStyle(colors: ThemeColors, tone: CardTone = "neutral"): CSS
  *                   deliberately do NOT drop opacity below 0.78 so the
  *                   chip text remains legible on the dark surface.
  */
+/**
+ * Map the Signal Price drift tier to the platform's color tokens.
+ *
+ *   - `none` / `marginal` — `textMuted`: drift is below noise floor,
+ *     the row is informational rather than load-bearing.
+ *   - `moderate`           — `text`: drift is real but the reference
+ *     levels still apply; render with the default body color.
+ *   - `elevated`           — `caution` (amber): drift is enough to
+ *     question the reference geometry — the user should know.
+ *   - `stale`              — `bearish` (red): drift has materially
+ *     invalidated the reference levels for planning purposes.
+ *
+ * Direction-agnostic on purpose: we band on |Δ|, not sign. A short
+ * setup with the price up 5% is just as stale as a long setup with
+ * the price up 5% — both invalidate the reference geometry.
+ */
+function signalPriceDriftColor(tier: SignalPriceDriftTier, colors: ThemeColors): string {
+  if (tier === "stale") return colors.bearish;
+  if (tier === "elevated") return colors.caution;
+  if (tier === "moderate") return colors.text;
+  return colors.textMuted;
+}
+
 function tierVisualOverrides(tier: LayerEmphasisTier): {
   padding: string;
   fontScale: "base" | "sm" | "xs";
@@ -960,6 +989,88 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel }: SignalEvidence
               {evidence.signal_basis_label?.trim() || "Derived from daily bars (RTH)"}
             </div>
           ) : null}
+          {/*
+            Signal Price drift row (B36, 2026-05-13). Pairs the price
+            the engine used when it computed the signal (T0, sourced
+            from the scanner row's `last_price`) with the price the
+            evidence card has on hand right now (T1, sourced from the
+            most recent snapshot). The Δ tells the user whether the
+            reference levels (entry zone, targets, stop, R/R) still
+            describe the live setup or whether the price has drifted
+            past them.
+
+            The row renders only when at least one side is usable;
+            when both sides are present it bands the Δ into one of
+            five tiers (`none` / `marginal` / `moderate` / `elevated`
+            / `stale`) and colors the Δ with the matching token. The
+            band thresholds (1% / 3% / 5%) are pinned in
+            `lib/signal-evidence/signal-price-display.ts`.
+
+            Direction-agnostic on purpose: a positive Δ helps a long
+            and hurts a short, but the user reads the card with full
+            direction context elsewhere — we surface the drift, the
+            user decides whether the geometry is still actionable.
+          */}
+          {(() => {
+            const sp = computeSignalPriceDisplay(evidence.priceAtSignal, evidence.lastTradePrice);
+            if (sp == null) return null;
+            const deltaColor =
+              sp.driftTier != null ? signalPriceDriftColor(sp.driftTier, colors) : colors.textMuted;
+            return (
+              <div
+                data-testid="signal-evidence-price-drift"
+                data-drift-tier={sp.driftTier ?? "unavailable"}
+                aria-label={sp.accessibleLabel}
+                style={{
+                  display: "inline-flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  gap: spacing[1],
+                  marginTop: 2,
+                  fontSize: typography.scale.xs,
+                  color: colors.textMuted,
+                  fontVariantNumeric: "tabular-nums"
+                }}
+              >
+                <span style={{ fontWeight: 600, color: colors.textMuted }}>Signal price</span>
+                {sp.priceAtSignal != null ? (
+                  <span data-testid="signal-evidence-price-drift-at-signal" style={{ color: colors.text }}>
+                    {formatSignalPrice(sp.priceAtSignal)}
+                  </span>
+                ) : (
+                  <span style={{ color: colors.textMuted, fontStyle: "italic" }}>computed-at price n/a</span>
+                )}
+                {sp.priceAtSignal != null && sp.currentPrice != null ? (
+                  <span aria-hidden="true" style={{ color: colors.textMuted }}>
+                    →
+                  </span>
+                ) : null}
+                {sp.currentPrice != null ? (
+                  <span data-testid="signal-evidence-price-drift-current" style={{ color: colors.text }}>
+                    {formatSignalPrice(sp.currentPrice)}
+                  </span>
+                ) : (
+                  <span style={{ color: colors.textMuted, fontStyle: "italic" }}>current price n/a</span>
+                )}
+                {sp.deltaPct != null ? (
+                  <span
+                    data-testid="signal-evidence-price-drift-delta"
+                    style={{
+                      marginLeft: spacing[1],
+                      color: deltaColor,
+                      fontWeight: 600
+                    }}
+                  >
+                    Δ {formatSignalPriceDeltaPct(sp.deltaPct)}
+                  </span>
+                ) : null}
+                <InfoTip
+                  text="Price the engine used when it computed this signal (left) versus the most recent price the card has on hand (right). Larger drift means the reference levels (entry zone, targets, stop, R/R) describe a setup that has shifted; this is data, not advice."
+                  label="Signal price drift"
+                />
+              </div>
+            );
+          })()}
         </div>
         <span className="text-sm" style={{ color: colors.textMuted }}>
           {displayUpdatedLabel(evidence)}
