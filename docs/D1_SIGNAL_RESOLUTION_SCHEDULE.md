@@ -10,7 +10,7 @@ The `SignalHistory` DynamoDB table and `DYNAMODB_SIGNAL_HISTORY_TABLE` env var a
 
 ## What the job does
 
-On each invocation it runs (async, **Polygon 1-minute aggregates**, not live snapshot):
+On each invocation it loads **one** full `SignalHistory` scan (via `list_raw_signal_items`) and passes that row list into both horizon passes so DynamoDB is not scanned twice per tick. It runs (async, **Polygon 1-minute aggregates**, not live snapshot):
 
 1. `resolve_signals(cutoff_minutes=60, horizon="1h")` — unresolved public/user rows older than 60 minutes get `price_1h_after`, `outcome_1h`, `resolved_1h`. The evaluated price is the **close of the last 1m bar whose bar start is at or before** `generated_at + 60 minutes` (query window extends forward for thin tape / weekends).
 2. `resolve_signals(cutoff_minutes=1440, horizon="1d")` — same for 1d fields using **`generated_at + 1440` minutes** (rolling 24h wall-clock).

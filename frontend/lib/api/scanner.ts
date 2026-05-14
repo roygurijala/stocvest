@@ -163,7 +163,7 @@ export interface ScannerOverview {
   spyPct?: number | null;
   qqqPct?: number | null;
   regimeLabel?: string;
-  /** Symbols considered for swing daily scan on this load (capped universe); dashboard copy only. */
+  /** Symbols considered for swing daily scan on this load (capped universe when `maxUniverseSymbols` is set). */
   swingUniverseSymbolCount?: number | null;
 }
 
@@ -275,7 +275,8 @@ export async function fetchScannerOverview(
     return {
       gapIntelligence: [],
       setups: [],
-      error: core.error
+      error: core.error,
+      swingUniverseSymbolCount: null
     };
   }
   let morningBrief: MorningBriefPayload | undefined;
@@ -289,6 +290,8 @@ export async function fetchScannerOverview(
     error: undefined,
     spyPct: core.spyPct,
     qqqPct: core.qqqPct,
-    regimeLabel: core.regimeLabel
+    regimeLabel: core.regimeLabel,
+    /** Same capped universe length the dashboard ribbon uses — keeps empty-state copy in sync. */
+    swingUniverseSymbolCount: core.swingUniverseSymbolCount ?? null
   };
 }

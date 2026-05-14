@@ -337,6 +337,57 @@ def test_get_signal_history_filters_by_days() -> None:
     assert len(rows) == 0
 
 
+def test_list_raw_signal_items_matches_in_memory_store() -> None:
+    rec = InMemorySignalRecorder()
+    now = datetime.now(timezone.utc)
+    rec.record_signal(
+        SignalRecord(
+            signal_id="x1",
+            symbol="AAA",
+            direction="neutral",
+            signal_strength=50,
+            pattern="p",
+            layer_scores={},
+            price_at_signal=1.0,
+            generated_at=now,
+        )
+    )
+    raw = rec.list_raw_signal_items()
+    assert len(raw) == 1
+    assert raw[0].get("signal_id") == "x1"
+
+
+def test_resolve_signals_accepts_preloaded_items() -> None:
+    rec = InMemorySignalRecorder()
+    past = datetime.now(timezone.utc) - timedelta(hours=2)
+    rec.record_signal(
+        SignalRecord(
+            signal_id="s-pre",
+            symbol="ZZZ",
+            direction="bullish",
+            signal_strength=80,
+            pattern="test",
+            layer_scores={},
+            price_at_signal=100.0,
+            generated_at=past,
+        )
+    )
+    raw = rec.list_raw_signal_items()
+
+    class _FakePoly:
+        async def get_evaluated_price_after_signal(self, symbol: str, generated_at: datetime, *, horizon: str) -> float:
+            _ = symbol
+            _ = generated_at
+            _ = horizon
+            return 101.0
+
+    async def _run() -> int:
+        return await rec.resolve_signals(60, _FakePoly(), horizon="1h", items=raw)
+
+    n = asyncio.run(_run())
+    assert n == 1
+
+
 def test_get_signal_recorder_returns_memory_when_no_table(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("POLYGON_API_KEY", "k")
     monkeypatch.setenv("STOCVEST_ENV", "development")

@@ -45,6 +45,11 @@ _LOG = get_logger(__name__)
 
 _SCHEDULED_SCAN_TYPES = frozenset({"premarket", "intraday", "eod_summary"})
 
+# Gap intelligence: prefer Polygon full-US snapshot, rank top N by |gap| + liquidity gates.
+# API Gateway integrates at 30s — leave headroom for news + scoring after snapshots return.
+_GAP_INTEL_TOP_N = 20
+_GAP_INTEL_FULL_SNAPSHOT_TIMEOUT_SEC = 22.0
+
 
 async def _enrich_gap_company_names(client: PolygonClient, items: list[dict[str, Any]]) -> None:
     """Polygon aggregate snapshots often omit ticker name; fill from v3 reference/tickers."""
@@ -119,6 +124,29 @@ async def _load_snapshots_for_dynamic_gaps(user_id: str | None = None, *, bounde
                 )
                 return await client.get_snapshots_many(merged, chunk_size=50)
             raise
+
+
+async def _snapshots_for_gap_intelligence(user_id: str | None) -> list[Snapshot]:
+    """Load snapshots across the broadest universe we can afford under API Gateway latency.
+
+    Prefer Polygon's paginated full-US feed (same as ``POST /v1/scanner/gaps`` with empty snapshots).
+    On slow responses (common with very large feeds) or unexpected errors, fall back to the bounded
+    watchlist + system-default universe so the route still answers within the integration window.
+    """
+    try:
+        return await asyncio.wait_for(
+            _load_snapshots_for_dynamic_gaps(user_id, bounded=False),
+            timeout=_GAP_INTEL_FULL_SNAPSHOT_TIMEOUT_SEC,
+        )
+    except TimeoutError:
+        _LOG.warning(
+            "gap_intelligence full US snapshot exceeded %.0fs; bounded_fallback",
+            _GAP_INTEL_FULL_SNAPSHOT_TIMEOUT_SEC,
+        )
+        return await _load_snapshots_for_dynamic_gaps(user_id, bounded=True)
+    except Exception as exc:  # noqa: BLE001 — never 500 gap-intel on snapshot transport quirks
+        _LOG.warning("gap_intelligence full_universe_snapshot_failed err=%s; bounded_fallback", str(exc)[:200])
+        return await _load_snapshots_for_dynamic_gaps(user_id, bounded=True)
 
 
 def _is_eventbridge_schedule_event(event: LambdaEvent) -> bool:
@@ -304,14 +332,14 @@ async def _gap_intelligence_async(payload: dict[str, Any], user_id: str | None) 
     news_limit = min(1000, max(50, int(payload.get("news_limit", 400))))
 
     if len(snapshots_raw) == 0:
-        snapshots = await _load_snapshots_for_dynamic_gaps(user_id, bounded=True)
+        snapshots = await _snapshots_for_gap_intelligence(user_id)
     else:
         snapshots = [Snapshot.model_validate(item) for item in snapshots_raw]
 
     dyn_min_vol = max(500_000.0, min_day_volume)
     gaps = dynamic_gap_candidates_from_snapshots(
         snapshots,
-        limit=60,
+        limit=_GAP_INTEL_TOP_N,
         min_abs_gap_percent=min_abs_gap_percent,
         min_day_volume=dyn_min_vol,
         min_trade_price=5.0,
@@ -325,7 +353,7 @@ async def _gap_intelligence_async(payload: dict[str, Any], user_id: str | None) 
             gap_symbols,
             global_limit=global_cap,
             per_symbol_limit=5,
-            max_symbols=10,
+            max_symbols=_GAP_INTEL_TOP_N,
         )
         sym_map = {s.symbol: s for s in snapshots}
         items = build_gap_intelligence_items(gaps, sym_map, news)

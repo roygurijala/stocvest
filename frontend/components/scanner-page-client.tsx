@@ -269,7 +269,8 @@ export function ScannerPageClient({
         error: undefined,
         spyPct: core.spyPct,
         qqqPct: core.qqqPct,
-        regimeLabel: core.regimeLabel
+        regimeLabel: core.regimeLabel,
+        swingUniverseSymbolCount: core.swingUniverseSymbolCount ?? null
       }));
     })();
     return () => {
@@ -971,7 +972,8 @@ export function ScannerPageClient({
           error: undefined,
           spyPct: core.spyPct,
           qqqPct: core.qqqPct,
-          regimeLabel: core.regimeLabel
+          regimeLabel: core.regimeLabel,
+          swingUniverseSymbolCount: core.swingUniverseSymbolCount ?? null
         }));
       }
       router.refresh();

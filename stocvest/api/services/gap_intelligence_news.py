@@ -46,10 +46,13 @@ async def collect_news_for_gap_intelligence(
             _LOG.debug("get_news symbol=%s failed: %s", sym, exc)
             return []
 
-    chunks = await asyncio.gather(*[one(s) for s in uniq]) if uniq else []
     symbol_news: list[NewsArticle] = []
-    for ch in chunks:
-        symbol_news.extend(ch)
+    _SYMBOL_NEWS_CONCURRENCY = 6
+    for i in range(0, len(uniq), _SYMBOL_NEWS_CONCURRENCY):
+        batch = uniq[i : i + _SYMBOL_NEWS_CONCURRENCY]
+        chunks = await asyncio.gather(*[one(s) for s in batch]) if batch else []
+        for ch in chunks:
+            symbol_news.extend(ch)
 
     seen_ids: set[str] = set()
     out: list[NewsArticle] = []

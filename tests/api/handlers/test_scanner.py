@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -270,8 +271,8 @@ def test_scanner_gap_intelligence_handler_merges_news(monkeypatch: pytest.Monkey
     assert "GAP1" in syms
 
 
-def test_scanner_gap_intelligence_empty_snapshots_uses_bounded_feed(monkeypatch: pytest.MonkeyPatch) -> None:
-    """HTTP gap-intelligence must not pull the full US snapshot feed (often exceeds API Gateway ~30s)."""
+def test_scanner_gap_intelligence_empty_snapshots_prefers_full_us_feed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Empty client snapshots → full-US Polygon feed (bounded only on timeout / hard errors)."""
     scanner_response_cache._MEMORY.clear()
     called = {"us": 0, "many": 0}
 
@@ -288,7 +289,88 @@ def test_scanner_gap_intelligence_empty_snapshots_uses_bounded_feed(monkeypatch:
         async def get_us_stocks_market_snapshots(self, *, include_otc: bool = False) -> list[Snapshot]:
             _ = include_otc
             called["us"] += 1
-            raise AssertionError("full US snapshot must not be used for bounded gap-intelligence")
+            return [
+                Snapshot(
+                    symbol="ZZZ",
+                    prev_close=100.0,
+                    last_trade_price=101.0,
+                    day_volume=2_000_000.0,
+                    prev_day_volume=1_200_000.0,
+                    company_name="Zed",
+                ),
+                Snapshot(
+                    symbol="GAPWIN",
+                    prev_close=50.0,
+                    last_trade_price=55.0,
+                    day_volume=2_000_000.0,
+                    prev_day_volume=1_200_000.0,
+                    company_name="Gap Winner",
+                ),
+            ]
+
+        async def get_snapshots_many(self, symbols: list[str], chunk_size: int = 50) -> list[Snapshot]:
+            _ = chunk_size
+            called["many"] += 1
+            raise AssertionError("bounded fallback should not run when full US succeeds")
+
+        async def get_news(self, symbol=None, limit: int = 50):
+            _ = limit
+            if symbol is None:
+                return [
+                    NewsArticle(
+                        article_id="n-gw",
+                        published_at=datetime.now(timezone.utc),
+                        title="GAPWIN upgraded",
+                        description="",
+                        url="https://example.com/gw",
+                        source="Reuters",
+                        tickers=["GAPWIN"],
+                        keywords=["upgrade"],
+                    )
+                ]
+            return []
+
+        async def get_ticker_details(self, sym: str) -> dict:
+            _ = sym
+            return {"name": ""}
+
+    monkeypatch.setattr("stocvest.api.handlers.scanner.PolygonClient", _FakePoly)
+    monkeypatch.setattr("stocvest.api.handlers.scanner.get_settings", lambda: SimpleNamespace(polygon_api_key="k"))
+
+    event = {
+        "version": "2.0",
+        "routeKey": "POST /v1/scanner/gap-intelligence",
+        "body": json.dumps({"snapshots": []}),
+    }
+    response = scanner_gap_intelligence_handler(event, {})
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["items"]
+    assert body["items"][0]["symbol"] == "GAPWIN"
+    assert called["us"] == 1
+    assert called["many"] == 0
+
+
+def test_scanner_gap_intelligence_timeout_falls_back_to_bounded_universe(monkeypatch: pytest.MonkeyPatch) -> None:
+    scanner_response_cache._MEMORY.clear()
+    monkeypatch.setattr("stocvest.api.handlers.scanner._GAP_INTEL_FULL_SNAPSHOT_TIMEOUT_SEC", 0.05)
+    called = {"us": 0, "many": 0}
+
+    class _FakePoly:
+        def __init__(self, api_key: str) -> None:
+            _ = api_key
+
+        async def __aenter__(self) -> "_FakePoly":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            _ = args
+
+        async def get_us_stocks_market_snapshots(self, *, include_otc: bool = False) -> list[Snapshot]:
+            _ = include_otc
+            called["us"] += 1
+            await asyncio.sleep(0.2)
+            return []
 
         async def get_snapshots_many(self, symbols: list[str], chunk_size: int = 50) -> list[Snapshot]:
             _ = chunk_size
@@ -339,7 +421,7 @@ def test_scanner_gap_intelligence_empty_snapshots_uses_bounded_feed(monkeypatch:
     body = json.loads(response["body"])
     assert body["items"]
     assert body["items"][0]["symbol"] == "GAP99"
-    assert called["us"] == 0
+    assert called["us"] >= 1
     assert called["many"] >= 1
 
 

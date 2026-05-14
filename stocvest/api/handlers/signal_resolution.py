@@ -35,10 +35,11 @@ def signal_resolution_scheduled_handler(event: LambdaEvent, context: LambdaConte
     async def _run() -> dict[str, int]:
         settings = get_settings()
         rec = get_signal_recorder()
+        raw_items = rec.list_raw_signal_items()
         async with PolygonClient(api_key=settings.polygon_api_key) as client:
             ledger_counts = await run_ledger_position_monitor(client, rec)
-            resolved_1h = await rec.resolve_signals(60, client, horizon="1h")
-            resolved_24h = await rec.resolve_signals(1440, client, horizon="1d")
+            resolved_1h = await rec.resolve_signals(60, client, horizon="1h", items=raw_items)
+            resolved_24h = await rec.resolve_signals(1440, client, horizon="1d", items=raw_items)
         out = {"resolved_1h": resolved_1h, "resolved_24h": resolved_24h, **ledger_counts}
         return out
 

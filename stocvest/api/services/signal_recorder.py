@@ -308,12 +308,17 @@ class InMemorySignalRecorder:
         """Full table scan (admin / analysis only)."""
         return [_item_to_record(it) for it in self._items.values() if isinstance(it, dict)]
 
+    def list_raw_signal_items(self) -> list[dict[str, Any]]:
+        """In-memory store snapshot for batched resolution (mirrors DynamoDB recorder API)."""
+        return [it for it in self._items.values() if isinstance(it, dict)]
+
     async def resolve_signals(
         self,
         cutoff_minutes: int,
         polygon: SignalOutcomePriceSource,
         *,
         horizon: str,
+        items: list[dict[str, Any]] | None = None,
     ) -> int:
         if horizon not in {"1h", "1d"}:
             raise ValueError("horizon must be 1h or 1d")
@@ -323,7 +328,8 @@ class InMemorySignalRecorder:
         price_attr = "price_1h_after" if horizon == "1h" else "price_1d_after"
         outcome_attr = "outcome_1h" if horizon == "1h" else "outcome_1d"
         updated = 0
-        for sid, it in list(self._items.items()):
+        source = list(self._items.values()) if items is None else items
+        for it in source:
             if _item_ledger_validation_still_open(it):
                 continue
             if it.get(resolved_attr):
@@ -340,6 +346,9 @@ class InMemorySignalRecorder:
             price_at = float(it["price_at_signal"])
             direction = str(it["direction"])
             outcome = outcome_from_prices(direction, price_at, float(price_after))
+            sid = str(it.get("signal_id") or "")
+            if not sid:
+                continue
             it[price_attr] = Decimal(str(float(price_after)))
             it[outcome_attr] = outcome
             it[resolved_attr] = True
@@ -621,6 +630,10 @@ class DynamoDBSignalRecorder:
         """Full table scan (admin / analysis only)."""
         return [_item_to_record(x) for x in self._scan_all() if isinstance(x, dict)]
 
+    def list_raw_signal_items(self) -> list[dict[str, Any]]:
+        """Single DynamoDB scan — reuse for multiple resolution passes in one Lambda invocation."""
+        return self._scan_all()
+
     def _scan_all(self) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
         scan_kwargs: dict[str, Any] = {}
@@ -646,6 +659,7 @@ class DynamoDBSignalRecorder:
         polygon: SignalOutcomePriceSource,
         *,
         horizon: str,
+        items: list[dict[str, Any]] | None = None,
     ) -> int:
         if horizon not in {"1h", "1d"}:
             raise ValueError("horizon must be 1h or 1d")
@@ -655,7 +669,8 @@ class DynamoDBSignalRecorder:
         price_attr = "price_1h_after" if horizon == "1h" else "price_1d_after"
         outcome_attr = "outcome_1h" if horizon == "1h" else "outcome_1d"
         updated = 0
-        for item in self._scan_all():
+        source = self._scan_all() if items is None else items
+        for item in source:
             if not item.get("signal_id"):
                 continue
             if _item_ledger_validation_still_open(item):

@@ -119,6 +119,8 @@ describe("scanner API overview", () => {
     expect(result.error).toBeUndefined();
     expect(result.gapIntelligence).toHaveLength(1);
     expect(result.morningBrief?.conditions.label).toBe("CHOPPY");
+    // SPY + QQQ anchors + one gap symbol — must match dashboard `loadScannerDataWithoutBrief` contract.
+    expect(result.swingUniverseSymbolCount).toBe(3);
   }, 25000);
 
   test("fetchScannerOverview handles scanner failures", async () => {
@@ -127,6 +129,7 @@ describe("scanner API overview", () => {
     const result = await fetchScannerOverview(null, [], { includeMorningBrief: true });
     expect(result.error).toContain("500");
     expect(result.gapIntelligence).toHaveLength(0);
+    expect(result.swingUniverseSymbolCount).toBeNull();
   }, 25000);
 });
 
