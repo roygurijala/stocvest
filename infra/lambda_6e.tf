@@ -70,6 +70,8 @@ locals {
     COGNITO_USER_POOL_ID  = aws_cognito_user_pool.main.id
     COGNITO_REGION        = var.aws_region
     COGNITO_APP_CLIENT_ID = aws_cognito_user_pool_client.frontend.id
+    # Admin → CloudWatch Logs Insights (`GET /v1/admin/error-logs`); matches log_group for_each naming.
+    CLOUDWATCH_ADMIN_ERROR_LOG_PREFIX = "/aws/lambda/stocvest-development-api-"
   }
 
   lambda_dynamodb_resources = flatten([
@@ -219,6 +221,17 @@ resource "aws_iam_role_policy" "lambda_api_data_access" {
           "logs:DescribeLogStreams",
         ]
         Resource = "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/stocvest-development-api-*"
+      },
+      {
+        Sid    = "CloudWatchLogsInsightsAdmin"
+        Effect = "Allow"
+        Action = [
+          "logs:DescribeLogGroups",
+          "logs:StartQuery",
+          "logs:GetQueryResults",
+          "logs:StopQuery",
+        ]
+        Resource = "*"
       },
       {
         Sid    = "APIGatewayWebSocketManageConnections"

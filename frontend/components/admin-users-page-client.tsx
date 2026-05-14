@@ -5,6 +5,7 @@ import {
   AlertCircle,
   CheckCircle2,
   KeyRound,
+  ScrollText,
   Search,
   ShieldCheck,
   ShieldOff,
@@ -24,6 +25,7 @@ import {
   type AdminUserSummaryRow
 } from "@/lib/api/admin-users";
 import {
+  fetchUserActivityErrors,
   fetchUserAuditEvents,
   statusCodeTone,
   type AuditEventRow
@@ -58,8 +60,9 @@ interface Flash {
  *      client; results render in a list below the input.
  *   2. Results list (left) — click a row to load that user's detail.
  *   3. Detail panel (right) — Cognito + UserProfile + group membership
- *      with four mutation buttons: grant/revoke admin, reset password,
- *      and (link to) the per-user audit feed.
+ *      with action buttons: grant/revoke admin, reset password, grant/revoke
+ *      beta, show/hide per-user error activity (last 7 days), plus the
+ *      per-user audit feed below.
  *
  * Beta-access toggle still lives on the legacy `PATCH /v1/admin/users/{id}/beta-access`
  * endpoint that shipped pre-hub. We surface it here as a button so the
@@ -107,10 +110,20 @@ export function AdminUsersPageClient() {
     loading: boolean;
     detail: AdminUserDetail | null;
     audit: AuditEventRow[];
+    activityErrors: AuditEventRow[];
+    activityErrorsLoaded: boolean;
     error: string | null;
-  }>({ loading: false, detail: null, audit: [], error: null });
+  }>({
+    loading: false,
+    detail: null,
+    audit: [],
+    activityErrors: [],
+    activityErrorsLoaded: false,
+    error: null
+  });
   const [actionPending, setActionPending] = useState<string | null>(null);
   const [flash, setFlash] = useState<Flash | null>(null);
+  const [errorLogsExpanded, setErrorLogsExpanded] = useState(false);
 
   /**
    * Fetch one page of results.
@@ -159,28 +172,58 @@ export function AdminUsersPageClient() {
   }, []);
 
   const loadDetail = useCallback(async (userId: string) => {
-    setDetailState({ loading: true, detail: null, audit: [], error: null });
-    const detail = await fetchUserDetail(userId);
+    setDetailState({
+      loading: true,
+      detail: null,
+      audit: [],
+      activityErrors: [],
+      activityErrorsLoaded: false,
+      error: null
+    });
+    const [detail, audit, activityErr] = await Promise.all([
+      fetchUserDetail(userId),
+      fetchUserAuditEvents(userId, { limit: 20 }),
+      fetchUserActivityErrors(userId, { days: 7 })
+    ]);
     if (!detail) {
       setDetailState({
         loading: false,
         detail: null,
         audit: [],
+        activityErrors: [],
+        activityErrorsLoaded: true,
         error: "User detail unavailable — verify Cognito sub and admin permissions."
       });
       return;
     }
-    const audit = (await fetchUserAuditEvents(userId, { limit: 20 })) || [];
-    setDetailState({ loading: false, detail, audit, error: null });
+    setDetailState({
+      loading: false,
+      detail,
+      audit: audit || [],
+      activityErrors: activityErr?.items ?? [],
+      activityErrorsLoaded: true,
+      error: null
+    });
   }, []);
 
   useEffect(() => {
     if (selectedUserId) {
       void loadDetail(selectedUserId);
     } else {
-      setDetailState({ loading: false, detail: null, audit: [], error: null });
+      setDetailState({
+        loading: false,
+        detail: null,
+        audit: [],
+        activityErrors: [],
+        activityErrorsLoaded: false,
+        error: null
+      });
     }
   }, [selectedUserId, loadDetail]);
+
+  useEffect(() => {
+    setErrorLogsExpanded(false);
+  }, [selectedUserId]);
 
   const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -467,6 +510,10 @@ export function AdminUsersPageClient() {
               loading={detailState.loading}
               detail={detailState.detail}
               audit={detailState.audit}
+              activityErrors={detailState.activityErrors}
+              activityErrorsLoaded={detailState.activityErrorsLoaded}
+              errorLogsExpanded={errorLogsExpanded}
+              onToggleErrorLogs={() => setErrorLogsExpanded((v) => !v)}
               error={detailState.error}
               actionPending={actionPending}
               onResetPassword={() => void handleResetPassword()}
@@ -656,7 +703,7 @@ function ResultRow({
         <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>
           Plan: {subscriptionPlanLabel(row.subscription_plan)}
           {" · "}
-          Last active: {formatLastActiveDisplay(row.last_active_at)}
+          Last activity: {formatLastActiveDisplay(row.last_active_at)}
         </span>
       </button>
     </li>
@@ -667,6 +714,10 @@ function DetailPanel({
   loading,
   detail,
   audit,
+  activityErrors,
+  activityErrorsLoaded,
+  errorLogsExpanded,
+  onToggleErrorLogs,
   error,
   actionPending,
   onResetPassword,
@@ -677,6 +728,10 @@ function DetailPanel({
   loading: boolean;
   detail: AdminUserDetail | null;
   audit: AuditEventRow[];
+  activityErrors: AuditEventRow[];
+  activityErrorsLoaded: boolean;
+  errorLogsExpanded: boolean;
+  onToggleErrorLogs: () => void;
   error: string | null;
   actionPending: string | null;
   onResetPassword: () => void;
@@ -685,6 +740,12 @@ function DetailPanel({
   onClose: () => void;
 }) {
   const { colors } = useTheme();
+  const hasErrorActivity =
+    activityErrorsLoaded && activityErrors.length > 0;
+  const errorLogsButtonDisabled =
+    actionPending !== null ||
+    !activityErrorsLoaded ||
+    (!errorLogsExpanded && !hasErrorActivity);
   if (loading) return <EmptyCard message="Loading user…" />;
   if (error) {
     return (
@@ -785,10 +846,25 @@ function DetailPanel({
           </dd>
           <DT>Email verified</DT>
           <dd style={{ margin: 0 }}>{detail.email_verified ? "yes" : "no"}</dd>
+          <DT>Last activity</DT>
+          <dd style={{ margin: 0, display: "grid", gap: spacing[1] }}>
+            <span data-testid="detail-last-activity">{formatLastActiveDisplay(detail.profile.last_active_at)}</span>
+            {!(detail.profile.last_active_at && String(detail.profile.last_active_at).trim()) ? (
+              <span
+                style={{
+                  color: colors.textMuted,
+                  fontSize: typography.scale.xs,
+                  lineHeight: 1.45,
+                  maxWidth: "42ch"
+                }}
+              >
+                No timestamp yet — this updates when the user opens the app (session touch on{" "}
+                <code style={{ color: colors.accent }}>/v1/users/me</code>).
+              </span>
+            ) : null}
+          </dd>
           <DT>Plan</DT>
           <dd style={{ margin: 0 }}>{subscriptionPlanLabel(detail.profile.subscription_plan)}</dd>
-          <DT>Last active</DT>
-          <dd style={{ margin: 0 }}>{formatLastActiveDisplay(detail.profile.last_active_at)}</dd>
           <DT>Beta access</DT>
           <dd style={{ margin: 0 }}>
             {detail.profile.beta_full_access
@@ -833,7 +909,97 @@ function DetailPanel({
             onClick={() => onBetaToggle(!detail.profile.beta_full_access)}
             testId="action-beta-toggle"
           />
+          <ActionButton
+            label={errorLogsExpanded ? "Hide error logs" : "Show error logs"}
+            icon={<ScrollText size={14} />}
+            disabled={errorLogsButtonDisabled}
+            pending={false}
+            onClick={onToggleErrorLogs}
+            testId="action-show-error-logs"
+          />
         </div>
+
+        {errorLogsExpanded && hasErrorActivity ? (
+          <div
+            data-testid="detail-error-activity-panel"
+            style={{
+              display: "grid",
+              gap: spacing[2],
+              paddingTop: spacing[2],
+              borderTop: `1px solid ${colors.border}`
+            }}
+          >
+            <p
+              style={{
+                margin: 0,
+                color: colors.textMuted,
+                fontSize: typography.scale.xs,
+                lineHeight: 1.5
+              }}
+            >
+              Failed or error responses from this user&apos;s API calls in the last 7 days (from the
+              audit store). For Lambda-level fleet logs, use the separate admin Error logs page.
+            </p>
+            <ul
+              style={{
+                listStyle: "none",
+                margin: 0,
+                padding: 0,
+                display: "grid",
+                gap: spacing[2]
+              }}
+            >
+              {activityErrors.map((evt) => {
+                const tone = statusCodeTone(evt.status_code);
+                return (
+                  <li
+                    key={evt.event_id}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "auto 1fr auto",
+                      gap: spacing[2],
+                      alignItems: "center",
+                      padding: `${spacing[2]} ${spacing[3]}`,
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: borderRadius.md,
+                      fontSize: typography.scale.xs
+                    }}
+                  >
+                    <span
+                      style={{
+                        color:
+                          tone === "success"
+                            ? colors.bullish
+                            : tone === "warning"
+                              ? colors.caution
+                              : tone === "error"
+                                ? colors.bearish
+                                : colors.textMuted,
+                        fontWeight: 600
+                      }}
+                    >
+                      {evt.status_code || "—"}
+                    </span>
+                    <span style={{ color: colors.text, fontSize: typography.scale.xs }}>
+                      {evt.route}
+                      {evt.outcome ? (
+                        <span style={{ color: colors.textMuted }}> · {evt.outcome}</span>
+                      ) : null}
+                    </span>
+                    <span
+                      style={{
+                        color: colors.textMuted,
+                        fontVariantNumeric: "tabular-nums"
+                      }}
+                    >
+                      {evt.occurred_at}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ) : null}
       </div>
 
       <div

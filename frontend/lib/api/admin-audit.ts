@@ -52,6 +52,14 @@ export interface RecentAuditResponse {
   items: AuditEventRow[];
 }
 
+/** Response from ``GET /v1/admin/users/{user_id}/activity-errors``. */
+export interface UserActivityErrorsResponse {
+  user_id: string;
+  days: number;
+  cutoff_utc: string;
+  items: AuditEventRow[];
+}
+
 // ── Validation helpers ───────────────────────────────────────────────────────
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -202,6 +210,40 @@ function makeNetworkError(exc: unknown): AdminApiReadError {
     message: exc instanceof Error ? exc.message : "Network error reaching the backend.",
     hint: "Check your connection or the BFF dev server."
   };
+}
+
+export async function fetchUserActivityErrors(
+  userId: string,
+  options: { days?: number } = {}
+): Promise<UserActivityErrorsResponse | null> {
+  const trimmed = userId.trim();
+  if (!trimmed) return null;
+  const qs = new URLSearchParams();
+  if (options.days != null && options.days > 0) qs.set("days", String(options.days));
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  try {
+    const response = await fetch(
+      `/api/stocvest/admin/users/${encodeURIComponent(trimmed)}/activity-errors${suffix}`,
+      { method: "GET", credentials: "include", cache: "no-store" }
+    );
+    if (response.status === 401) {
+      void surfaceAuthErrorIfAny(response);
+      return null;
+    }
+    if (!response.ok) return null;
+    const data = (await response.json()) as unknown;
+    if (!isRecord(data)) return null;
+    const user_id = parseStr(data.user_id);
+    const days = parseNum0(data.days) || 7;
+    const cutoff_utc = parseStr(data.cutoff_utc);
+    const rawItems = data.items;
+    if (!Array.isArray(rawItems)) return null;
+    const items = rawItems.map(parseAuditEvent).filter(Boolean) as AuditEventRow[];
+    if (!user_id) return null;
+    return { user_id, days, cutoff_utc: cutoff_utc || "", items };
+  } catch {
+    return null;
+  }
 }
 
 export async function fetchUserAuditEvents(

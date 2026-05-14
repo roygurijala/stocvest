@@ -176,7 +176,7 @@ Supported default actions:
 
 Authenticated:
 
-- `GET /v1/users/me` — returns **`UserProfile`** JSON: **`user_id`**, **`trading_mode`**, onboarding/legal fields, **`subscription_plan`** (billing; not client-writable here), **`beta_full_access`**, **`beta_access_until`**, **`beta_access_granted_at`**, derived **`has_full_access`** (**true** when paid **`subscription_plan`** or **active** beta window), **`has_ai_explanations`** (mirrors **`has_full_access`** for gating Claude explanations).
+- `GET /v1/users/me` — returns **`UserProfile`** JSON: **`user_id`**, **`trading_mode`**, onboarding/legal fields, **`subscription_plan`** (billing; not client-writable here), **`last_active_at`** (optional ISO timestamp; throttled server-side touch so admins can see recent app opens), **`beta_full_access`**, **`beta_access_until`**, **`beta_access_granted_at`**, derived **`has_full_access`** (**true** when paid **`subscription_plan`** or **active** beta window), **`has_ai_explanations`** (mirrors **`has_full_access`** for gating Claude explanations).
 
 - `PATCH /v1/users/me` — updates onboarding/legal/trading-mode fields **only**. Body keys **`subscription_plan`**, **`beta_full_access`**, **`beta_access_until`**, **`beta_access_granted_at`** are **stripped** (billing + admin concern).
 
@@ -186,7 +186,11 @@ Admin (same authorization mode as **`GET /v1/signals/analysis`** — internal an
 
 - `GET /v1/admin/audit/users/{user_id}` — newest-first audit items for **`user_id`**; optional query **`limit`** (1–500, default **200**). Each item aligns with **`AuditEvent`** (**`route`**, **`method`**, **`statusCode`**, redacted **`requestSummary`** / **`responseSummary`**, optional **`marketSnapshot`**, entitlement/pricing snapshots).
 
+- `GET /v1/admin/users/{user_id}/activity-errors` — admin-only; Cognito user must exist (same **`analysis_authorized()`** gate as other admin user routes). Optional query **`days`** (1–30, default **7**) defines a rolling UTC window. Reads up to **1000** newest partition rows for that user from the audit store and returns **`items`** where **`occurred_at` ≥ cutoff** and the row is error-like: HTTP **`status_code` ≥ 400** and/or **`outcome`** ∈ {**`error`**, **`failure`**}. Response JSON: **`user_id`**, **`days`**, **`cutoff_utc`**, **`items`** (each object matches **`AuditEvent`** **`model_dump`** / snake_case fields as other audit feeds).
+
 - `GET /v1/admin/audit/sessions/{session_id}` — same item shape filtered by **`sessionId`** (**best-effort `Scan`** in Dynamo implementation; callers should keep **`limit`** reasonable).
+
+- `GET /v1/admin/error-logs` — optional query **`days`** (1–14, default **7**) and **`limit`** (1–500, default **300**). Admin-only; runs CloudWatch Logs Insights across Lambda log groups whose names match **`CLOUDWATCH_ADMIN_ERROR_LOG_PREFIX`** (or the default `/aws/lambda/stocvest-{STOCVEST_ENV}-api-`). Response JSON includes **`items`** (`timestamp`, `log_group`, `message`), **`log_groups`** queried, **`statistics`**, and optional **`query_error`** when Insights does not complete.
 
 ### 4.11 HTTP audit + correlation headers
 

@@ -102,6 +102,8 @@ class Settings(BaseSettings):
     # ── AWS ──────────────────────────────────────────────────────
     aws_region: str = Field("us-east-1", alias="AWS_REGION")
     dynamodb_endpoint_url: str | None = Field(None, alias="DYNAMODB_ENDPOINT_URL")
+    #: Prefix for ``GET /v1/admin/error-logs`` (Insights over API Lambda groups). Empty → ``/aws/lambda/stocvest-{env}-api-``.
+    cloudwatch_admin_error_log_group_prefix: str = Field("", alias="CLOUDWATCH_ADMIN_ERROR_LOG_PREFIX")
 
     # ── Anthropic ─────────────────────────────────────────────────
     anthropic_api_key: str = Field("", alias="ANTHROPIC_API_KEY")

@@ -1,9 +1,10 @@
 """Lock-in tests for admin user-management HTTP handlers.
 
-Five routes under ``/v1/admin/users``:
+Six routes under ``/v1/admin/users`` (plus beta-access elsewhere):
 
 * ``GET    /search`` — Cognito email-prefix search.
 * ``GET    /{user_id}`` — Cognito + UserProfile + groups detail.
+* ``GET    /{user_id}/activity-errors`` — per-user error-like audit rows.
 * ``POST   /{user_id}/reset-password`` — Cognito ``AdminResetUserPassword``.
 * ``POST   /{user_id}/groups/{group}`` — add to whitelisted group.
 * ``DELETE /{user_id}/groups/{group}`` — remove from whitelisted group.
@@ -20,13 +21,15 @@ Every test asserts:
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from stocvest.api.handlers.admin_users import (
     _require_cognito_pool as _REAL_REQUIRE_COGNITO_POOL,
+    admin_users_activity_errors_handler,
     admin_users_add_group_handler,
     admin_users_detail_handler,
     admin_users_remove_group_handler,
@@ -39,7 +42,7 @@ from stocvest.api.services.admin_user_directory import (
     CognitoUserRecord,
 )
 from stocvest.api.services.user_profile_store import InMemoryUserProfileStore
-from stocvest.data.models import UserProfile
+from stocvest.data.models import AuditEvent, UserProfile
 
 
 @pytest.fixture(autouse=True)
@@ -142,6 +145,13 @@ def _silence_audit() -> Any:
             _evt(
                 method="DELETE",
                 path_params={"user_id": "sub-1", "group": ADMIN_COGNITO_GROUP},
+            ),
+        ),
+        (
+            admin_users_activity_errors_handler,
+            _evt(
+                path="/v1/admin/users/sub-1/activity-errors",
+                path_params={"user_id": "sub-1"},
             ),
         ),
     ],
@@ -331,6 +341,103 @@ def test_detail_handler_400_for_blank_user_id() -> None:
         "stocvest.api.handlers.admin_users.analysis_authorized", return_value=True
     ):
         response = admin_users_detail_handler(event, None)
+    assert response["statusCode"] == 400
+
+
+def test_activity_errors_returns_filtered_rows() -> None:
+    now = datetime.now(timezone.utc)
+    events = [
+        AuditEvent(
+            event_id="ok1",
+            occurred_at=now - timedelta(days=1),
+            module="brokers",
+            route="GET /v1/ok",
+            method="GET",
+            path="/v1/ok",
+            status_code=200,
+            outcome="success",
+        ),
+        AuditEvent(
+            event_id="err1",
+            occurred_at=now - timedelta(days=1),
+            module="brokers",
+            route="GET /v1/bad",
+            method="GET",
+            path="/v1/bad",
+            status_code=502,
+            outcome="error",
+        ),
+        AuditEvent(
+            event_id="old",
+            occurred_at=now - timedelta(days=10),
+            module="brokers",
+            route="GET /v1/old",
+            method="GET",
+            path="/v1/old",
+            status_code=500,
+            outcome="error",
+        ),
+        AuditEvent(
+            event_id="fail1",
+            occurred_at=now - timedelta(hours=2),
+            module="brokers",
+            route="POST /v1/admin/x",
+            method="POST",
+            path="/v1/admin/x",
+            status_code=200,
+            outcome="failure",
+        ),
+    ]
+    fake_store = MagicMock()
+    fake_store.get_user_events = MagicMock(return_value=events)
+    event = _evt(
+        path="/v1/admin/users/sub-1/activity-errors",
+        path_params={"user_id": "sub-1"},
+        query_params={"days": "7"},
+    )
+    with patch(
+        "stocvest.api.handlers.admin_users.analysis_authorized", return_value=True
+    ), patch(
+        "stocvest.api.handlers.admin_users.get_user_detail",
+        return_value=_detail(sub="sub-1"),
+    ), patch(
+        "stocvest.api.handlers.admin_users.get_audit_store",
+        return_value=fake_store,
+    ):
+        response = admin_users_activity_errors_handler(event, None)
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["user_id"] == "sub-1"
+    assert body["days"] == 7
+    ids = {row["event_id"] for row in body["items"]}
+    assert ids == {"err1", "fail1"}
+
+
+def test_activity_errors_404_when_user_missing() -> None:
+    event = _evt(
+        path="/v1/admin/users/missing/activity-errors",
+        path_params={"user_id": "missing"},
+    )
+    with patch(
+        "stocvest.api.handlers.admin_users.analysis_authorized", return_value=True
+    ), patch("stocvest.api.handlers.admin_users.get_user_detail", return_value=None):
+        response = admin_users_activity_errors_handler(event, None)
+    assert response["statusCode"] == 404
+
+
+def test_activity_errors_400_bad_days() -> None:
+    event = _evt(
+        path="/v1/admin/users/sub-1/activity-errors",
+        path_params={"user_id": "sub-1"},
+        query_params={"days": "nan"},
+    )
+    with patch(
+        "stocvest.api.handlers.admin_users.analysis_authorized", return_value=True
+    ), patch(
+        "stocvest.api.handlers.admin_users.get_user_detail",
+        return_value=_detail(sub="sub-1"),
+    ):
+        response = admin_users_activity_errors_handler(event, None)
     assert response["statusCode"] == 400
 
 
@@ -579,6 +686,13 @@ def test_require_cognito_pool_passes_when_id_is_set(
             _evt(
                 method="DELETE",
                 path_params={"user_id": "sub-1", "group": ADMIN_COGNITO_GROUP},
+            ),
+        ),
+        (
+            admin_users_activity_errors_handler,
+            _evt(
+                path="/v1/admin/users/sub-1/activity-errors",
+                path_params={"user_id": "sub-1"},
             ),
         ),
     ],

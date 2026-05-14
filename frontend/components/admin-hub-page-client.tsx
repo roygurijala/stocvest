@@ -8,6 +8,7 @@ import {
   History,
   RefreshCw,
   ScrollText,
+  AlertTriangle,
   ShieldCheck,
   Sparkles,
   Users
@@ -33,8 +34,8 @@ import { useTheme } from "@/lib/theme-provider";
  *   1. **Operations tile** — at-a-glance status from
  *      `/v1/admin/system-status`: current parameter version, pending
  *      proposals, admin count, founding members, latest history.
- *   2. **Admin tools navigation** — four tiles linking to the
- *      operational pages (proposals, parameters, users, audit).
+ *   2. **Admin tools navigation** — tiles linking to the operational
+ *      pages (proposals, parameters, users, audit, error logs).
  *   3. **Recent activity** — the latest five audit events, mirrored
  *      from the system-status payload so the operator sees what
  *      changed without having to navigate to the audit page.
@@ -68,6 +69,12 @@ const NAV_TILES: {
     label: "Audit log",
     description: "Newest-first feed of every server-side action.",
     Icon: ScrollText
+  },
+  {
+    href: "/dashboard/admin/error-logs",
+    label: "Error logs",
+    description: "Last 7 days of Lambda errors from CloudWatch Logs Insights.",
+    Icon: AlertTriangle
   }
 ];
 

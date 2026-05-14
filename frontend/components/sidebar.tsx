@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity,
+  AlertTriangle,
   BarChart2,
   BookOpen,
   Bookmark,
@@ -85,7 +86,8 @@ export const DASHBOARD_ADMIN_NAV_ITEMS: ReadonlyArray<{
   { href: "/dashboard/admin/proposals", label: "Weight proposals", icon: ShieldCheck },
   { href: "/dashboard/admin/parameters", label: "Parameters", icon: History },
   { href: "/dashboard/admin/users", label: "Users", icon: Users },
-  { href: "/dashboard/admin/audit", label: "Audit log", icon: ScrollText }
+  { href: "/dashboard/admin/audit", label: "Audit log", icon: ScrollText },
+  { href: "/dashboard/admin/error-logs", label: "Error logs", icon: AlertTriangle }
 ];
 
 const ADMIN_NAV_STORAGE_KEY = "stocvest:sidebar:admin-expanded";

@@ -288,7 +288,43 @@ describe("BFF: PATCH beta-access", () => {
   });
 });
 
-// ── GET /api/stocvest/admin/audit/recent ─────────────────────────────────
+// ── GET /api/stocvest/admin/users/[user_id]/activity-errors ─────────────
+
+describe("BFF: GET /api/stocvest/admin/users/[user_id]/activity-errors", () => {
+  test("forwards encoded user_id and days query", async () => {
+    mocks.stocvestAuthedFetch.mockResolvedValueOnce(
+      jsonUpstreamResponse({ user_id: "u1", days: 7, cutoff_utc: "", items: [] })
+    );
+    const { GET } = await import(
+      "@/app/api/stocvest/admin/users/[user_id]/activity-errors/route"
+    );
+    await GET(
+      new Request(
+        "http://test.local/api/stocvest/admin/users/user-1/activity-errors?days=14"
+      ),
+      { params: { user_id: "user-1" } }
+    );
+    expect(lastUpstreamCall().path).toBe(
+      "/v1/admin/users/user-1/activity-errors?days=14"
+    );
+  });
+
+  test("no query forwards bare activity-errors path", async () => {
+    mocks.stocvestAuthedFetch.mockResolvedValueOnce(
+      jsonUpstreamResponse({ user_id: "u1", days: 7, cutoff_utc: "", items: [] })
+    );
+    const { GET } = await import(
+      "@/app/api/stocvest/admin/users/[user_id]/activity-errors/route"
+    );
+    await GET(
+      new Request("http://test.local/api/stocvest/admin/users/aws%3Acognito/activity-errors"),
+      { params: { user_id: "aws:cognito" } }
+    );
+    expect(lastUpstreamCall().path).toBe(
+      "/v1/admin/users/aws%3Acognito/activity-errors"
+    );
+  });
+});
 
 describe("BFF: GET /audit/recent", () => {
   test("forwards query verbatim", async () => {

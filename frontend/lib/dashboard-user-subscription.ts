@@ -1,4 +1,5 @@
 import type { SubscriptionPlan, UserMePayload } from "@/lib/api/contracts";
+import { stocvestAuthedFetch } from "@/lib/bff/stocvest-authed";
 
 /**
  * Reads `/v1/users/me` on the server (dashboard RSC) so scanner tuning and

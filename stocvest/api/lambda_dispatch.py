@@ -146,6 +146,7 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
             ("GET /v1/admin/users", "POST /v1/admin/users", "DELETE /v1/admin/users")
         ) and route != "PATCH /v1/admin/users/{user_id}/beta-access":
             from stocvest.api.handlers.admin_users import (
+                admin_users_activity_errors_handler,
                 admin_users_add_group_handler,
                 admin_users_detail_handler,
                 admin_users_remove_group_handler,
@@ -155,6 +156,7 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
 
             admin_user_routes: dict[str, _Handler] = {
                 "GET /v1/admin/users/search": admin_users_search_handler,
+                "GET /v1/admin/users/{user_id}/activity-errors": admin_users_activity_errors_handler,
                 "GET /v1/admin/users/{user_id}": admin_users_detail_handler,
                 "POST /v1/admin/users/{user_id}/reset-password": admin_users_reset_password_handler,
                 "POST /v1/admin/users/{user_id}/groups/{group}": admin_users_add_group_handler,
@@ -174,6 +176,14 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
                 event=event,
                 module=module,
                 response=admin_audit_recent_handler(event, context),
+            )
+        if route == "GET /v1/admin/error-logs" or route.startswith("GET /v1/admin/error-logs?"):
+            from stocvest.api.handlers.admin_error_logs import admin_error_logs_recent_handler
+
+            return _with_cors_and_audit(
+                event=event,
+                module=module,
+                response=admin_error_logs_recent_handler(event, context),
             )
 
         from stocvest.api.handlers.brokers import (

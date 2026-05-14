@@ -5,14 +5,10 @@ import { surfaceAuthErrorIfAny } from "@/lib/auth/surface-auth-error";
 /**
  * Client-side typed access to the admin user-management surface.
  *
- * Talks to five BFF routes under `/api/stocvest/admin/users` which
- * proxy verbatim to the upstream backend under `/v1/admin/users/*`:
- *
- *   * `GET    /search`            — email-prefix lookup
- *   * `GET    /[user_id]`         — full per-user detail
- *   * `POST   /[user_id]/reset-password`
- *   * `POST   /[user_id]/groups/[group]`
- *   * `DELETE /[user_id]/groups/[group]`
+ * Talks to BFF routes under `/api/stocvest/admin/users` which
+ * proxy verbatim to the upstream backend under `/v1/admin/users/*`
+ * (search, detail, activity-errors, reset-password, groups, plus
+ * beta-access under a sibling path).
  *
  * Every function is admin-only at the API layer — the backend
  * `analysis_authorized()` gate is the real perimeter. A 403 here always

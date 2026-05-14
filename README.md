@@ -98,6 +98,6 @@ Historical phase labels in older READMEs are obsolete; use **git `main`** + **CO
 - Never hardcode credentials — always AWS Secrets Manager
 - Never log prices, accounts, or credentials; use structured logging and redaction helpers where user-supplied text or tokens could reach logs (`stocvest/utils/log_privacy.py`)
 - Treat API **`user_id`** as server-derived from the JWT on protected routes — do not trust client body fields for identity
-- **Ops / replay:** HTTP handlers wrapped with **audit capture** when **`DYNAMODB_AUDIT_EVENTS_TABLE`** is set (Terraform); optional browser header **`x-stocvest-session-id`** for session-aligned admin queries (**`docs/API_CONTRACTS.md`**)
+- **Ops / replay:** HTTP handlers wrapped with **audit capture** when **`DYNAMODB_AUDIT_EVENTS_TABLE`** is set (Terraform); optional browser header **`x-stocvest-session-id`** for session-aligned admin queries; per-user error window **`GET /v1/admin/users/{user_id}/activity-errors`** (see **`docs/API_CONTRACTS.md`**)
 - PDT rule is non-negotiable — always enforced, never bypassed
 - Paper trading required (minimum 2 weeks) before live trading

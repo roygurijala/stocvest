@@ -1,10 +1,13 @@
 """Admin user-management HTTP handlers.
 
-Five routes under ``/v1/admin/users``:
+Six routes under ``/v1/admin/users``:
 
 * ``GET    /v1/admin/users/search?q=&limit=`` — Cognito email-prefix search.
 * ``GET    /v1/admin/users/{user_id}`` — Cognito + ``UserProfile`` + groups
   composition.
+* ``GET    /v1/admin/users/{user_id}/activity-errors?days=`` — audit rows for
+  that user in the last *N* days with HTTP errors or failed outcomes
+  (admin-only; Cognito user must exist).
 * ``POST   /v1/admin/users/{user_id}/reset-password`` — trigger Cognito
   ``AdminResetUserPassword`` so the user gets a fresh reset email.
 * ``POST   /v1/admin/users/{user_id}/groups/{group}`` — add user to a
@@ -12,7 +15,7 @@ Five routes under ``/v1/admin/users``:
 * ``DELETE /v1/admin/users/{user_id}/groups/{group}`` — remove user from
   a whitelisted group.
 
-All five gates through
+All routes gate through
 :func:`stocvest.api.services.signal_analysis.analysis_authorized` so a
 compromised non-admin JWT cannot reach any of them. The group endpoints
 double-check the requested group is in
@@ -27,7 +30,7 @@ admins shows up in the audit trail.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
 
@@ -284,6 +287,67 @@ def admin_users_detail_handler(
     if detail is None:
         return not_found(f"User {user_id!r} not found in Cognito.")
     return ok(detail.to_dict())
+
+
+def _audit_event_is_error_row(evt: AuditEvent) -> bool:
+    """True when the row represents a client/server failure or explicit failure outcome."""
+    oc = (evt.outcome or "").strip().lower()
+    if oc in ("error", "failure"):
+        return True
+    return evt.status_code >= 400
+
+
+def admin_users_activity_errors_handler(
+    event: LambdaEvent,
+    context: LambdaContext,
+) -> dict[str, Any]:
+    """``GET /v1/admin/users/{user_id}/activity-errors`` — error-like audit rows.
+
+    Query ``days`` (optional, default ``7``, clamped to ``[1, 30]``) defines the
+    rolling UTC window. The handler reads up to ``1000`` newest audit events for
+    the user partition and returns those matching the window and
+    :func:`_audit_event_is_error_row`.
+    """
+    _ = context
+    deny = _require_admin(event)
+    if deny is not None:
+        return deny
+    misconfigured = _require_cognito_pool()
+    if misconfigured is not None:
+        return misconfigured
+
+    user_id = _path_params(event).get("user_id", "").strip()
+    if not user_id:
+        return bad_request("user_id path parameter is required.")
+
+    detail: AdminUserDetail | None = get_user_detail(user_id)
+    if detail is None:
+        return not_found(f"User {user_id!r} not found in Cognito.")
+
+    qs = _query_params(event)
+    try:
+        days = int(qs.get("days") or "7")
+    except ValueError:
+        return bad_request("days must be an integer.")
+    days = max(1, min(30, days))
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    rows = get_audit_store().get_user_events(user_id, limit=1000)
+    filtered: list[AuditEvent] = []
+    for evt in rows:
+        if evt.occurred_at < cutoff:
+            continue
+        if _audit_event_is_error_row(evt):
+            filtered.append(evt)
+
+    return ok(
+        {
+            "user_id": user_id,
+            "days": days,
+            "cutoff_utc": cutoff.isoformat(),
+            "items": [r.model_dump(mode="json") for r in filtered],
+        }
+    )
 
 
 # ── Mutation handlers ───────────────────────────────────────────────────
