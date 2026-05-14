@@ -350,7 +350,7 @@ def test_scanner_gap_intelligence_empty_snapshots_prefers_full_us_feed(monkeypat
     assert body["items"][0]["symbol"] == "GAPWIN"
     assert called["us"] == 1
     assert called["many"] == 0
-    assert body.get("snapshot_symbol_count") == 2
+    assert body.get("snapshot_symbol_count") == 1
 
 
 def test_scanner_gap_intelligence_timeout_falls_back_to_bounded_universe(monkeypatch: pytest.MonkeyPatch) -> None:

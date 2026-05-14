@@ -35,7 +35,10 @@ from stocvest.signals import (
     PremarketGapScanner,
     parse_liquidity_by_symbol_payload,
 )
-from stocvest.signals.day_trading_scanner import dynamic_gap_candidates_from_snapshots
+from stocvest.signals.day_trading_scanner import (
+    dynamic_gap_candidates_from_snapshots,
+    dynamic_gap_candidates_from_snapshots_with_stats,
+)
 from stocvest.signals.gap_intelligence import build_gap_intelligence_items
 from stocvest.signals.morning_brief import build_morning_brief_payload
 from stocvest.utils.config import get_settings
@@ -337,15 +340,17 @@ async def _gap_intelligence_async(payload: dict[str, Any], user_id: str | None) 
         snapshots = [Snapshot.model_validate(item) for item in snapshots_raw]
 
     dyn_min_vol = max(500_000.0, min_day_volume)
-    gaps = dynamic_gap_candidates_from_snapshots(
+    gap_scan = dynamic_gap_candidates_from_snapshots_with_stats(
         snapshots,
         limit=_GAP_INTEL_TOP_N,
         min_abs_gap_percent=min_abs_gap_percent,
         min_day_volume=dyn_min_vol,
         min_trade_price=5.0,
     )
+    gaps = gap_scan.candidates
     settings = get_settings()
     gap_symbols = [g.symbol for g in gaps]
+    sym_need = frozenset(gap_symbols)
     # Default client news_limit is 400; a single huge global news pull can dominate latency.
     global_cap = min(120, max(50, min(news_limit, 500)))
     async with PolygonClient(api_key=settings.polygon_api_key) as client:
@@ -356,14 +361,14 @@ async def _gap_intelligence_async(payload: dict[str, Any], user_id: str | None) 
             per_symbol_limit=5,
             max_symbols=_GAP_INTEL_TOP_N,
         )
-        sym_map = {s.symbol: s for s in snapshots}
+        sym_map = {s.symbol: s for s in snapshots if s.symbol in sym_need}
         items = build_gap_intelligence_items(gaps, sym_map, news)
         await _enrich_gap_company_names(client, items)
     return ok(
         {
             "items": items,
             "disclaimer": API_SIGNAL_DISCLAIMER,
-            "snapshot_symbol_count": len(snapshots),
+            "snapshot_symbol_count": gap_scan.eligible_symbol_count,
         }
     )
 

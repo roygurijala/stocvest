@@ -146,7 +146,10 @@ export interface EmptyStateOverviewInput {
   spyPct?: number | null;
   qqqPct?: number | null;
   swingUniverseSymbolCount?: number | null;
-  /** From gap-intelligence API `snapshot_symbol_count` when client sent empty snapshots. */
+  /**
+   * From gap-intelligence `snapshot_symbol_count`: symbols that passed gap-intel gates
+   * (price, volume, prior-day volume, min |gap| %) before the top-N cap — not raw Polygon row count.
+   */
   gapIntelligenceSnapshotSymbolCount?: number | null;
   /** Sector ETF 5-day percents for the dashboard sector-rotation helper. */
   sectorPct5d?: Array<number | null | undefined>;
@@ -154,7 +157,7 @@ export interface EmptyStateOverviewInput {
   marketStatus?: MarketStatusLite | null;
 }
 
-/** Prefer full gap-scan breadth when the API reports it; else bars/swing universe size. */
+/** Prefer gap-intel eligible-universe count when the API reports it; else bars/swing universe size. */
 export function effectiveScannerUniverseDisplayCount(overview: EmptyStateOverviewInput): number | null {
   const g = overview.gapIntelligenceSnapshotSymbolCount;
   if (typeof g === "number" && g > 0) return g;

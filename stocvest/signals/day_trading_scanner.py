@@ -11,6 +11,7 @@ from collections import deque
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import NamedTuple
 from zoneinfo import ZoneInfo
 
 from stocvest.data.models import Bar, Snapshot, Timeframe
@@ -28,20 +29,29 @@ class PremarketGapCandidate:
     rank_score: float
 
 
-def dynamic_gap_candidates_from_snapshots(
+class GapCandidateScanResult(NamedTuple):
+    """Gap scan over a snapshot iterable: ranked top-N plus how many rows passed all gates."""
+
+    candidates: list[PremarketGapCandidate]
+    eligible_symbol_count: int
+
+
+def dynamic_gap_candidates_from_snapshots_with_stats(
     snapshots: Iterable[Snapshot],
     *,
     limit: int = 20,
     min_abs_gap_percent: float = 2.0,
     min_day_volume: float = 500_000.0,
     min_trade_price: float = 5.0,
-) -> list[PremarketGapCandidate]:
+) -> GapCandidateScanResult:
     """
     Rank gap candidates from Polygon snapshots using session price vs prior close.
 
     Uses ``last_trade_price`` when present; otherwise ``day_open`` if that is the
-    only session price available. Filters: min |gap| %, liquidity, and price floor.
-    Sorted by ``abs(gap_percent)`` descending.
+    only session price available. Filters: min |gap| %, liquidity, price floor, and
+    prior-day volume ≥ 1M (same as :func:`dynamic_gap_candidates_from_snapshots`).
+    ``eligible_symbol_count`` is the number of snapshots that pass **all** filters
+    before applying ``limit`` (the breadth users should see as "scanned eligible").
     """
     scored: list[tuple[float, PremarketGapCandidate]] = []
     for snap in snapshots:
@@ -79,8 +89,28 @@ def dynamic_gap_candidates_from_snapshots(
             rank_score=round(mag, 4),
         )
         scored.append((mag, cand))
+    eligible_symbol_count = len(scored)
     scored.sort(key=lambda x: x[0], reverse=True)
-    return [c for _, c in scored[: max(0, limit)]]
+    candidates = [c for _, c in scored[: max(0, limit)]]
+    return GapCandidateScanResult(candidates=candidates, eligible_symbol_count=eligible_symbol_count)
+
+
+def dynamic_gap_candidates_from_snapshots(
+    snapshots: Iterable[Snapshot],
+    *,
+    limit: int = 20,
+    min_abs_gap_percent: float = 2.0,
+    min_day_volume: float = 500_000.0,
+    min_trade_price: float = 5.0,
+) -> list[PremarketGapCandidate]:
+    """Same filters as :func:`dynamic_gap_candidates_from_snapshots_with_stats`; returns top ``limit`` only."""
+    return dynamic_gap_candidates_from_snapshots_with_stats(
+        snapshots,
+        limit=limit,
+        min_abs_gap_percent=min_abs_gap_percent,
+        min_day_volume=min_day_volume,
+        min_trade_price=min_trade_price,
+    ).candidates
 
 
 class PremarketGapScanner:

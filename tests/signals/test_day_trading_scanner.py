@@ -3,7 +3,11 @@ from __future__ import annotations
 import pytest
 
 from stocvest.data.models import Snapshot
-from stocvest.signals.day_trading_scanner import PremarketGapScanner, dynamic_gap_candidates_from_snapshots
+from stocvest.signals.day_trading_scanner import (
+    PremarketGapScanner,
+    dynamic_gap_candidates_from_snapshots,
+    dynamic_gap_candidates_from_snapshots_with_stats,
+)
 
 
 def snapshot(
@@ -132,3 +136,48 @@ def test_dynamic_gap_candidates_filters_penny_and_volume():
     out = dynamic_gap_candidates_from_snapshots(snaps, limit=10, min_abs_gap_percent=2.0, min_day_volume=500_000.0)
     assert len(out) == 1
     assert out[0].symbol == "OK"
+
+
+@pytest.mark.unit
+def test_dynamic_gap_candidates_with_stats_eligible_before_limit():
+    snaps = [
+        Snapshot(
+            symbol="NOGAP",
+            prev_close=100.0,
+            last_trade_price=100.5,
+            day_volume=600_000.0,
+            prev_day_volume=2_000_000.0,
+        ),
+        Snapshot(
+            symbol="YES",
+            prev_close=100.0,
+            last_trade_price=110.0,
+            day_volume=600_000.0,
+            prev_day_volume=2_000_000.0,
+        ),
+    ]
+    res = dynamic_gap_candidates_from_snapshots_with_stats(
+        snaps, limit=10, min_abs_gap_percent=2.0, min_day_volume=500_000.0
+    )
+    assert res.eligible_symbol_count == 1
+    assert len(res.candidates) == 1
+    assert res.candidates[0].symbol == "YES"
+
+
+@pytest.mark.unit
+def test_dynamic_gap_candidates_with_stats_eligible_can_exceed_returned_limit():
+    snaps = [
+        Snapshot(
+            symbol=f"S{i}",
+            prev_close=100.0,
+            last_trade_price=110.0,
+            day_volume=600_000.0,
+            prev_day_volume=2_000_000.0,
+        )
+        for i in range(15)
+    ]
+    res = dynamic_gap_candidates_from_snapshots_with_stats(
+        snaps, limit=5, min_abs_gap_percent=2.0, min_day_volume=500_000.0
+    )
+    assert res.eligible_symbol_count == 15
+    assert len(res.candidates) == 5

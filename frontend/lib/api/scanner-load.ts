@@ -197,6 +197,7 @@ export async function runScannerLoadWithoutBrief(
     const gapIntelPromise = jsonFetch<{
       items: GapIntelligenceItem[];
       disclaimer?: string;
+      /** Symbols that passed gap-intel liquidity/price/gap gates (before top-N), not raw Polygon row count. */
       snapshot_symbol_count?: number;
     }>("/v1/scanner/gap-intelligence", {
       method: "POST",

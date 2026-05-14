@@ -35,7 +35,7 @@ describe("scanner API overview", () => {
               no_catalyst_warning: "x"
             }
           ],
-          snapshot_symbol_count: 9_900
+          snapshot_symbol_count: 412
         };
       }
       if (path.startsWith("/v1/market/snapshots?")) {
@@ -122,7 +122,7 @@ describe("scanner API overview", () => {
     expect(result.morningBrief?.conditions.label).toBe("CHOPPY");
     // SPY + QQQ + one gap symbol — bars/swing universe; gap-intel may report full-feed scan size separately.
     expect(result.swingUniverseSymbolCount).toBe(3);
-    expect(result.gapIntelligenceSnapshotSymbolCount).toBe(9_900);
+    expect(result.gapIntelligenceSnapshotSymbolCount).toBe(412);
   }, 25000);
 
   test("fetchScannerOverview handles scanner failures", async () => {

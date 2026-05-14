@@ -12,7 +12,7 @@ from stocvest.data.models import EarningsEvent, Snapshot
 from stocvest.data.scan_symbols import get_scan_symbols
 from stocvest.data.scanner_universe import LIQUID_SYMBOLS_FALLBACK
 from stocvest.data.watchlist_store import get_watchlist_store
-from stocvest.signals.day_trading_scanner import dynamic_gap_candidates_from_snapshots
+from stocvest.signals.day_trading_scanner import dynamic_gap_candidates_from_snapshots_with_stats
 from stocvest.signals.gap_intelligence import build_gap_intelligence_items
 from stocvest.signals.morning_brief import (
     EarningsBriefRow,
@@ -117,14 +117,16 @@ async def fetch_morning_brief_context_live(
         )
 
     snaps = await _load_snapshots_for_dynamic_gaps(user_id)
-    gaps = dynamic_gap_candidates_from_snapshots(
+    gap_scan = dynamic_gap_candidates_from_snapshots_with_stats(
         snaps,
         limit=40,
         min_abs_gap_percent=2.0,
         min_day_volume=500_000.0,
         min_trade_price=5.0,
     )
-    sym_map = {s.symbol: s for s in snaps}
+    gaps = gap_scan.candidates
+    sym_need = frozenset(g.symbol for g in gaps)
+    sym_map = {s.symbol: s for s in snaps if s.symbol in sym_need}
     gap_symbols = [g.symbol for g in gaps]
     async with PolygonClient(api_key=settings.polygon_api_key) as client:
         news = await collect_news_for_gap_intelligence(
