@@ -89,6 +89,11 @@ export function DashboardEdgeSync() {
           edge: Redis keys empty — warmers may be idle or keys expired (see market_pulse_refresher / scanner schedule).
         </div>
       ) : null}
+      {dev && data?.source === "edge_cache_error" ? (
+        <div className="text-rose-400/80">
+          edge: read failed — check Vercel logs for dashboard_edge_read_failed; verify Upstash URL (https://…) and token.
+        </div>
+      ) : null}
       {pulseStale ? (
         <div className="text-amber-500/80" style={{ color: "rgba(245,158,11,0.75)" }}>
           Refreshing cache…
