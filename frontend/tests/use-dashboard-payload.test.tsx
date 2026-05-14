@@ -78,7 +78,13 @@ const SAMPLE_PAYLOAD = {
   source: "edge_cache",
   swing_signals: null,
   day_signals: null,
-  market_pulse: null,
+  market_pulse: {
+    state_version: "swing_2026_05_13",
+    computed_at: new Date().toISOString(),
+    market_date: "2026-05-13",
+    ttl_seconds: 300,
+    data: {}
+  },
   sector_rotation: null,
   upcoming_events: null,
   active_positions: null,

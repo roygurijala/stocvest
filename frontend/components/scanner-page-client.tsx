@@ -35,6 +35,7 @@ import type {
   ScannerOverview,
   ScannerSetupLoadMode
 } from "@/lib/api/scanner";
+import { fetchEarningsCalendarClient } from "@/lib/api/earnings-client";
 import type { EarningsEvent } from "@/lib/api/earnings";
 import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
@@ -105,7 +106,10 @@ import type { SnapshotPayload } from "@/lib/api/market";
 interface ScannerPageClientProps {
   initialOverview: ScannerOverview;
   initialTimestampIso: string;
-  earningsBySymbol: Record<string, EarningsEvent>;
+  /** Subscription-derived default before URL/localStorage override. */
+  initialScannerSetupLoadMode?: ScannerSetupLoadMode;
+  /** Optional SSR seed; otherwise filled after client scanner + earnings loads. */
+  earningsBySymbol?: Record<string, EarningsEvent>;
   /** Swing Pro omits Day / Both scanner modes and intraday-only payloads. */
   dayTradingSurfaces?: boolean;
 }
@@ -155,12 +159,16 @@ function isSecondarySharedCatalyst(item: GapIntelligenceItem): boolean {
 export function ScannerPageClient({
   initialOverview,
   initialTimestampIso,
-  earningsBySymbol,
+  initialScannerSetupLoadMode = "swing",
+  earningsBySymbol: initialEarningsBySymbol = {},
   dayTradingSurfaces = true
 }: ScannerPageClientProps) {
   const { colors, theme } = useTheme();
   const [overview, setOverview] = useState<ScannerOverview>(initialOverview);
-  const [scannerSetupMode, setScannerSetupMode] = useState<ScannerSetupLoadMode>("swing");
+  const [scannerSetupMode, setScannerSetupMode] = useState<ScannerSetupLoadMode>(initialScannerSetupLoadMode);
+  const [earningsBySymbol, setEarningsBySymbol] = useState<Record<string, EarningsEvent>>(() => ({
+    ...initialEarningsBySymbol
+  }));
   const [showAllGaps, setShowAllGaps] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [evidenceOpen, setEvidenceOpen] = useState(false);
@@ -320,6 +328,25 @@ export function ScannerPageClient({
         .join(","),
     [overview.gapIntelligence, overview.setups]
   );
+
+  useEffect(() => {
+    const symbols = symbolsKey.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean);
+    if (!symbols.length) {
+      setEarningsBySymbol({});
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const res = await fetchEarningsCalendarClient(symbols, 2);
+      if (cancelled) return;
+      setEarningsBySymbol(
+        Object.fromEntries([...res.upcoming, ...res.recent].map((e) => [e.symbol.toUpperCase(), e]))
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [symbolsKey]);
 
   const gapMeanVolume = useMemo(() => {
     const vs = overview.gapIntelligence.map((g) => g.volume || 0).filter((v) => v > 0);

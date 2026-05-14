@@ -1,11 +1,21 @@
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { ScannerPageClient } from "@/components/scanner-page-client";
-import { fetchScannerOverview } from "@/lib/api/scanner";
-import { fetchEarningsCalendar } from "@/lib/api/earnings";
+import type { ScannerOverview } from "@/lib/api/scanner";
 import { getDashboardAuthContext } from "@/lib/auth/dashboard-session";
 import { fetchDashboardUserMe, subscriptionPlanFromMe } from "@/lib/dashboard-user-subscription";
 import { scannerSetupLoadModeForSubscription, subscriptionAllowsDayTradingSurfaces } from "@/lib/subscription-access";
+
+/** RSC shell only — heavy scanner + earnings load client-side to avoid multi‑MB RSC flights. */
+const SCANNER_PAGE_SHELL_OVERVIEW: ScannerOverview = {
+  gapIntelligence: [],
+  setups: [],
+  spyPct: null,
+  qqqPct: null,
+  regimeLabel: "Neutral",
+  swingUniverseSymbolCount: null,
+  gapIntelligenceSnapshotSymbolCount: null
+};
 
 export default async function DashboardScannerPage() {
   const { session, isAdmin } = getDashboardAuthContext();
@@ -16,22 +26,13 @@ export default async function DashboardScannerPage() {
   const plan = subscriptionPlanFromMe(me);
   const dayTradingSurfaces = subscriptionAllowsDayTradingSurfaces(plan, me?.has_full_access === true);
   const scannerSetupLoadMode = scannerSetupLoadModeForSubscription(plan, me?.has_full_access === true);
-  const overview = await fetchScannerOverview(null, [], {
-    loadTuning: { parallelDefaultWatchlist: true, scannerSetupLoadMode }
-  });
-  const scannerSymbols = Array.from(
-    new Set([...overview.gapIntelligence.map((g) => g.symbol), ...overview.setups.map((s) => s.symbol)])
-  );
-  const earnings = await fetchEarningsCalendar(scannerSymbols, 2);
-  const earningsBySymbol = Object.fromEntries(
-    [...earnings.upcoming, ...earnings.recent].map((e) => [e.symbol.toUpperCase(), e])
-  );
   return (
     <AppShell session={session} isAdmin={isAdmin}>
       <ScannerPageClient
-        initialOverview={overview}
+        initialOverview={SCANNER_PAGE_SHELL_OVERVIEW}
+        initialScannerSetupLoadMode={scannerSetupLoadMode}
         initialTimestampIso={new Date().toISOString()}
-        earningsBySymbol={earningsBySymbol}
+        earningsBySymbol={{}}
         dayTradingSurfaces={dayTradingSurfaces}
       />
     </AppShell>

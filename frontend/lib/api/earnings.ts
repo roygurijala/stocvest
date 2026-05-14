@@ -26,15 +26,12 @@ export const DEFAULT_EARNINGS_SYMBOLS = [
   "V", "MA", "JPM", "HD", "PG", "XOM", "CVX", "LLY", "AVGO", "MRK"
 ];
 
-export async function fetchEarningsCalendar(symbols: string[], days = 7): Promise<EarningsResponse> {
-  const cleanSymbols = symbols.map((s) => s.trim().toUpperCase()).filter(Boolean);
+export function normalizeEarningsResponse(
+  cleanSymbols: string[],
+  days: number,
+  payload: EarningsResponse | null
+): EarningsResponse {
   const fallback: EarningsResponse = { symbols: cleanSymbols, days, upcoming: [], recent: [], notice: null };
-  if (cleanSymbols.length === 0) {
-    return fallback;
-  }
-  const payload = await apiFetch<EarningsResponse>(
-    `/v1/market/earnings?symbols=${encodeURIComponent(cleanSymbols.join(","))}&days=${days}`
-  );
   if (!payload) {
     return fallback;
   }
@@ -45,6 +42,17 @@ export async function fetchEarningsCalendar(symbols: string[], days = 7): Promis
     recent: Array.isArray(payload.recent) ? payload.recent : [],
     notice: typeof payload.notice === "string" && payload.notice.trim() ? payload.notice.trim() : null
   };
+}
+
+export async function fetchEarningsCalendar(symbols: string[], days = 7): Promise<EarningsResponse> {
+  const cleanSymbols = symbols.map((s) => s.trim().toUpperCase()).filter(Boolean);
+  if (cleanSymbols.length === 0) {
+    return { symbols: cleanSymbols, days, upcoming: [], recent: [], notice: null };
+  }
+  const payload = await apiFetch<EarningsResponse>(
+    `/v1/market/earnings?symbols=${encodeURIComponent(cleanSymbols.join(","))}&days=${days}`
+  );
+  return normalizeEarningsResponse(cleanSymbols, days, payload);
 }
 
 export const earningsTimingLabel = earningsTimingLabelImpl;

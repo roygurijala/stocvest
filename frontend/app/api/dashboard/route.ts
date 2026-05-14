@@ -64,17 +64,34 @@ export async function GET(request: Request) {
   const getValue = (result: PromiseSettledResult<unknown>) =>
     result.status === "fulfilled" ? result.value : null;
 
+  const swing_signals = getValue(swingSignals);
+  const day_signals = getValue(daySignals);
+  const market_pulse = getValue(marketPulse);
+  const sector_rotation = getValue(sectorRotation);
+  const upcoming_events = getValue(upcomingEvents);
+  const active_positions = getValue(activePositions);
+  const geo_themes = getValue(geoThemes);
+
+  const allMiss =
+    swing_signals == null &&
+    day_signals == null &&
+    market_pulse == null &&
+    sector_rotation == null &&
+    upcoming_events == null &&
+    active_positions == null &&
+    geo_themes == null;
+
   const response = {
     mode,
     served_at: new Date().toISOString(),
-    source: "edge_cache" as const,
-    swing_signals: getValue(swingSignals),
-    day_signals: getValue(daySignals),
-    market_pulse: getValue(marketPulse),
-    sector_rotation: getValue(sectorRotation),
-    upcoming_events: getValue(upcomingEvents),
-    active_positions: getValue(activePositions),
-    geo_themes: getValue(geoThemes)
+    source: (allMiss ? "edge_cache_miss" : "edge_cache") as const,
+    swing_signals,
+    day_signals,
+    market_pulse,
+    sector_rotation,
+    upcoming_events,
+    active_positions,
+    geo_themes
   };
 
   return NextResponse.json(response, {

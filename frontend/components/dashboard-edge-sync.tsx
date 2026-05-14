@@ -84,6 +84,11 @@ export function DashboardEdgeSync() {
       style={{ color: "rgba(148,163,184,0.45)" }}
     >
       {dev && swingEnv?.state_version ? <div>edge: {swingEnv.state_version}</div> : null}
+      {dev && data?.source === "edge_cache_miss" ? (
+        <div className="text-sky-400/80">
+          edge: Redis keys empty — warmers may be idle or keys expired (see market_pulse_refresher / scanner schedule).
+        </div>
+      ) : null}
       {pulseStale ? (
         <div className="text-amber-500/80" style={{ color: "rgba(245,158,11,0.75)" }}>
           Refreshing cache…

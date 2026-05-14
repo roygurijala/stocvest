@@ -68,4 +68,27 @@ describe("fetchDashboardData", () => {
     expect(res.source).toBe("edge_cache");
     expect(spy).toHaveBeenCalledWith(expect.stringContaining("/api/dashboard?mode=swing"), expect.any(Object));
   });
+
+  test("all_null_payloads_use_edge_cache_miss_semantics", async () => {
+    const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          mode: "swing",
+          served_at: "",
+          source: "edge_cache_miss",
+          swing_signals: null,
+          day_signals: null,
+          market_pulse: null,
+          sector_rotation: null,
+          upcoming_events: null,
+          active_positions: null,
+          geo_themes: null
+        }),
+        { status: 200 }
+      )
+    );
+    const res = await fetchDashboardData("swing");
+    expect(res.source).toBe("edge_cache_miss");
+    expect(spy).toHaveBeenCalled();
+  });
 });

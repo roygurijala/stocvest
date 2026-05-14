@@ -14,7 +14,7 @@ export interface CacheEnvelope<T = unknown> {
 export interface DashboardResponse {
   mode: string;
   served_at: string;
-  source: "edge_cache" | "edge_cache_unconfigured" | string;
+  source: "edge_cache" | "edge_cache_miss" | "edge_cache_unconfigured" | string;
   swing_signals: CacheEnvelope | null;
   day_signals: CacheEnvelope | null;
   market_pulse: CacheEnvelope | null;

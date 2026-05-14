@@ -42,6 +42,16 @@ vi.mock("@/lib/api/scanner-client-load", () => ({
   loadScannerDataWithoutBrief: loadScannerDataWithoutBriefMock
 }));
 
+vi.mock("@/lib/api/earnings-client", () => ({
+  fetchEarningsCalendarClient: vi.fn(async () => ({
+    symbols: [] as string[],
+    days: 2,
+    upcoming: [],
+    recent: [],
+    notice: null as string | null
+  }))
+}));
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     refresh: vi.fn(),
