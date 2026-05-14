@@ -1,6 +1,6 @@
 import { browserApiFetch } from "@/lib/api/browser-api-fetch";
-import type { EarningsResponse } from "@/lib/api/earnings";
-import { normalizeEarningsResponse } from "@/lib/api/earnings";
+import type { EarningsResponse } from "@/lib/api/earnings-types";
+import { normalizeEarningsResponse } from "@/lib/api/earnings-types";
 
 /** Browser-only earnings fetch (cookie session). */
 export async function fetchEarningsCalendarClient(symbols: string[], days = 7): Promise<EarningsResponse> {

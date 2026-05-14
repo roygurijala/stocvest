@@ -84,7 +84,7 @@ export async function GET(request: Request) {
   const response = {
     mode,
     served_at: new Date().toISOString(),
-    source: (allMiss ? "edge_cache_miss" : "edge_cache") as const,
+    source: allMiss ? "edge_cache_miss" : "edge_cache",
     swing_signals,
     day_signals,
     market_pulse,
