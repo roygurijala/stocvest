@@ -209,6 +209,10 @@ def get_settings() -> Settings:
     """Return cached Settings instance. Call this everywhere instead of reading env directly."""
     _apply_lambda_runtime_secret_to_environ()
     settings = Settings()
+    # Do not return early until optional vendor keys that may live *only* in
+    # ``stocvest/external-api-keys`` (e.g. Upstash) are also present. Otherwise
+    # Lambda env that inlines all Benzinga + Perplexity keys would skip the SM
+    # merge entirely and ``upstash_configured()`` would stay false forever.
     if (
         settings.benzinga_api_key
         and settings.benzinga_news_api_key
@@ -216,6 +220,8 @@ def get_settings() -> Settings:
         and settings.benzinga_wim_key
         and settings.benzinga_press_key
         and settings.perplexity_api_key
+        and str(settings.upstash_redis_rest_url or "").strip()
+        and str(settings.upstash_redis_rest_token or "").strip()
     ):
         return settings
     if not os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):

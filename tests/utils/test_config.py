@@ -91,7 +91,41 @@ def test_settings_model_validate() -> None:
 
 
 @pytest.mark.unit
-def test_broker_sandbox_fields_parse_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_lambda_get_settings_still_merges_upstash_when_benzinga_inlined_in_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: early return must not skip external-api-keys when Upstash lives only there."""
+    monkeypatch.setenv("AWS_LAMBDA_FUNCTION_NAME", "stocvest-development-api-signals")
+    monkeypatch.setenv("POLYGON_API_KEY", "poly")
+    monkeypatch.setenv("BENZINGA_API_KEY", "b1")
+    monkeypatch.setenv("BENZINGA_NEWS_API_KEY", "b2")
+    monkeypatch.setenv("BENZINGA_ANALYST_API_KEY", "b3")
+    monkeypatch.setenv("BENZINGA_WIM_API_KEY", "b4")
+    monkeypatch.setenv("BENZINGA_PRESS_API_KEY", "b5")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "p1")
+    monkeypatch.delenv("UPSTASH_REDIS_REST_URL", raising=False)
+    monkeypatch.delenv("UPSTASH_REDIS_REST_TOKEN", raising=False)
+
+    ext = {
+        "UPSTASH_REDIS_REST_URL": "https://example.upstash.io",
+        "UPSTASH_REDIS_REST_TOKEN": "token-from-external-secret",
+    }
+
+    mock_sm = MagicMock()
+
+    def _gsv(*, SecretId: str, **_kwargs: object) -> dict[str, str]:
+        if SecretId == "stocvest/external-api-keys":
+            return {"SecretString": json.dumps(ext)}
+        return {"SecretString": "{}"}
+
+    mock_sm.get_secret_value.side_effect = lambda **kw: _gsv(**kw)
+
+    get_settings.cache_clear()
+    with patch("stocvest.utils.config.boto3.client", return_value=mock_sm):
+        s = get_settings()
+
+    assert s.upstash_redis_rest_url == "https://example.upstash.io"
+    assert s.upstash_redis_rest_token == "token-from-external-secret"
     monkeypatch.setenv("POLYGON_API_KEY", "x")
     monkeypatch.setenv("STOCVEST_ENABLE_SANDBOX_INTEGRATION", "1")
     monkeypatch.setenv("STOCVEST_IBKR_GATEWAY", "ibkr.binding")
@@ -192,3 +226,41 @@ def test_journal_pdt_tables_default_empty(monkeypatch: pytest.MonkeyPatch) -> No
     s = get_settings()
     assert s.trade_journal_table == ""
     assert s.pdt_state_table == ""
+
+
+@pytest.mark.unit
+def test_lambda_get_settings_still_merges_upstash_when_benzinga_inlined_in_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: early return must not skip external-api-keys when Upstash lives only there."""
+    monkeypatch.setenv("AWS_LAMBDA_FUNCTION_NAME", "stocvest-development-api-signals")
+    monkeypatch.setenv("POLYGON_API_KEY", "poly")
+    monkeypatch.setenv("BENZINGA_API_KEY", "b1")
+    monkeypatch.setenv("BENZINGA_NEWS_API_KEY", "b2")
+    monkeypatch.setenv("BENZINGA_ANALYST_KEY", "b3")
+    monkeypatch.setenv("BENZINGA_WIM_KEY", "b4")
+    monkeypatch.setenv("BENZINGA_PRESS_KEY", "b5")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "p1")
+    monkeypatch.delenv("UPSTASH_REDIS_REST_URL", raising=False)
+    monkeypatch.delenv("UPSTASH_REDIS_REST_TOKEN", raising=False)
+
+    ext = {
+        "UPSTASH_REDIS_REST_URL": "https://example.upstash.io",
+        "UPSTASH_REDIS_REST_TOKEN": "token-from-external-secret",
+    }
+
+    mock_sm = MagicMock()
+
+    def _gsv(*, SecretId: str, **_kwargs: object) -> dict[str, str]:
+        if SecretId == "stocvest/external-api-keys":
+            return {"SecretString": json.dumps(ext)}
+        return {"SecretString": "{}"}
+
+    mock_sm.get_secret_value.side_effect = lambda **kw: _gsv(**kw)
+
+    get_settings.cache_clear()
+    with patch("stocvest.utils.config.boto3.client", return_value=mock_sm):
+        s = get_settings()
+
+    assert s.upstash_redis_rest_url == "https://example.upstash.io"
+    assert s.upstash_redis_rest_token == "token-from-external-secret"
