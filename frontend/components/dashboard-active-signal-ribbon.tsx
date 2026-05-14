@@ -50,6 +50,8 @@ export interface DashboardActiveSignalRibbonProps {
     swingUniverseSymbolCount?: number | null;
     scannerError?: string;
   };
+  /** When false (Swing Pro), copy and labels describe the swing engine only — no day desk. */
+  dualDeskSurfaces?: boolean;
 }
 
 type RibbonChip = {
@@ -215,7 +217,8 @@ function RibbonChip({
 export function DashboardActiveSignalRibbon({
   swingSignals,
   daySignals,
-  emptyContext
+  emptyContext,
+  dualDeskSurfaces = true
 }: DashboardActiveSignalRibbonProps) {
   const { colors } = useTheme();
   const emptyScannerHover = useHoverPrefetch("/dashboard/scanner");
@@ -237,8 +240,12 @@ export function DashboardActiveSignalRibbon({
     const universeN = emptyContext?.swingUniverseSymbolCount;
     const watchingLine =
       typeof universeN === "number" && universeN > 0
-        ? `Watching ${universeN.toLocaleString()} tickers across both desks. No firing signals at the moment — both engines are still scanning.`
-        : "No firing signals at the moment — both engines are still scanning. The ribbon will populate as setups come through.";
+        ? dualDeskSurfaces
+          ? `Watching ${universeN.toLocaleString()} tickers across both desks. No firing signals at the moment — both engines are still scanning.`
+          : `Watching ${universeN.toLocaleString()} swing-universe tickers. No firing swing setups at the moment — the swing engine is still scanning.`
+        : dualDeskSurfaces
+          ? "No firing signals at the moment — both engines are still scanning. The ribbon will populate as setups come through."
+          : "No firing swing setups at the moment — the swing engine is still scanning. The ribbon will populate as setups come through.";
     return (
       <section
         data-testid="dashboard-active-signal-ribbon"
@@ -299,7 +306,11 @@ export function DashboardActiveSignalRibbon({
       data-testid="dashboard-active-signal-ribbon"
       data-ribbon-state="active"
       data-ribbon-chip-count={totalChips}
-      aria-label={`Active signal ribbon — ${totalChips} firing across both desks`}
+      aria-label={
+        dualDeskSurfaces
+          ? `Active signal ribbon — ${totalChips} firing across both desks`
+          : `Active signal ribbon — ${totalChips} swing setups firing`
+      }
       className={surfaceGlowClassName}
       style={{
         display: "flex",
@@ -322,7 +333,7 @@ export function DashboardActiveSignalRibbon({
           flexShrink: 0
         }}
       >
-        Live across desks
+        {dualDeskSurfaces ? "Live across desks" : "Live swing setups"}
       </span>
       <div
         data-testid="dashboard-active-signal-ribbon-track"

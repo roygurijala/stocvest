@@ -106,6 +106,8 @@ interface ScannerPageClientProps {
   initialOverview: ScannerOverview;
   initialTimestampIso: string;
   earningsBySymbol: Record<string, EarningsEvent>;
+  /** Swing Pro omits Day / Both scanner modes and intraday-only payloads. */
+  dayTradingSurfaces?: boolean;
 }
 
 const SCANNER_MODE_STORAGE_KEY = "stocvest_scanner_mode";
@@ -150,7 +152,12 @@ function isSecondarySharedCatalyst(item: GapIntelligenceItem): boolean {
   return typeof h === "string" && h.trim() === SECONDARY_SHARED_CATALYST_HEADLINE;
 }
 
-export function ScannerPageClient({ initialOverview, initialTimestampIso, earningsBySymbol }: ScannerPageClientProps) {
+export function ScannerPageClient({
+  initialOverview,
+  initialTimestampIso,
+  earningsBySymbol,
+  dayTradingSurfaces = true
+}: ScannerPageClientProps) {
   const { colors, theme } = useTheme();
   const [overview, setOverview] = useState<ScannerOverview>(initialOverview);
   const [scannerSetupMode, setScannerSetupMode] = useState<ScannerSetupLoadMode>("swing");
@@ -191,48 +198,54 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
   }, []);
 
   useLayoutEffect(() => {
-    // Resolve initial scanner mode with URL > localStorage > default.
-    //
-    // Priority order matters here:
-    //   1. `?mode=day|swing|both` query param — explicit deep-link from
-    //      the Day Desk / Swing Desk "View scanner →" footer links, the
-    //      sidebar, or any external bookmark. Honoring URL first is the
-    //      reason the user reported "View day scanner takes me to swing
-    //      scanner": before this fix, only localStorage was read, so
-    //      whatever mode the user last visited won regardless of the
-    //      URL. URL-priority makes deep-links authoritative.
-    //   2. `localStorage` (`stocvest_scanner_mode`) — the user's last
-    //      sticky preference. Used when the URL has no `mode`.
-    //   3. Component default ("swing") — first-time visit, no URL hint,
-    //      no localStorage entry.
-    //
-    // Wrapped in try/catch because both `window.location` and
-    // `localStorage` can throw in SSR-style edge cases (jest/jsdom
-    // without origin, Safari private mode for storage, etc.).
+    let next: ScannerSetupLoadMode = "swing";
     try {
       const url = new URL(window.location.href);
       const urlMode = url.searchParams.get("mode");
       if (urlMode === "day" || urlMode === "swing" || urlMode === "both") {
-        setScannerSetupMode(urlMode);
+        next = urlMode;
+      } else {
         try {
-          localStorage.setItem(SCANNER_MODE_STORAGE_KEY, urlMode);
+          const raw = localStorage.getItem(SCANNER_MODE_STORAGE_KEY);
+          if (raw === "day" || raw === "swing" || raw === "both") {
+            next = raw;
+          }
         } catch {
           /* ignore */
         }
-        return;
       }
     } catch {
-      /* ignore — fall through to localStorage */
+      try {
+        const raw = localStorage.getItem(SCANNER_MODE_STORAGE_KEY);
+        if (raw === "day" || raw === "swing" || raw === "both") {
+          next = raw;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    if (!dayTradingSurfaces && (next === "day" || next === "both")) {
+      next = "swing";
     }
     try {
-      const raw = localStorage.getItem(SCANNER_MODE_STORAGE_KEY);
-      if (raw === "day" || raw === "swing" || raw === "both") {
-        setScannerSetupMode(raw);
-      }
+      localStorage.setItem(SCANNER_MODE_STORAGE_KEY, next);
     } catch {
       /* ignore */
     }
-  }, []);
+    setScannerSetupMode(next);
+    if (!dayTradingSurfaces) {
+      try {
+        const url = new URL(window.location.href);
+        const um = url.searchParams.get("mode");
+        if (um === "day" || um === "both") {
+          url.searchParams.set("mode", "swing");
+          window.history.replaceState(null, "", `${url.pathname}${url.search || ""}${url.hash || ""}`);
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [dayTradingSurfaces]);
 
   useEffect(() => {
     let cancelled = false;
@@ -268,13 +281,15 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
     setShowAllGaps(false);
   }, [scannerSetupMode]);
 
-  const persistScannerMode = useCallback((m: ScannerSetupLoadMode) => {
-    setScannerSetupMode(m);
-    try {
-      localStorage.setItem(SCANNER_MODE_STORAGE_KEY, m);
-    } catch {
-      /* ignore */
-    }
+  const persistScannerMode = useCallback(
+    (m: ScannerSetupLoadMode) => {
+      if (!dayTradingSurfaces && m !== "swing") return;
+      setScannerSetupMode(m);
+      try {
+        localStorage.setItem(SCANNER_MODE_STORAGE_KEY, m);
+      } catch {
+        /* ignore */
+      }
     // Mirror the new mode into the URL so refreshes / sharing keep the
     // active tab. We use `history.replaceState` rather than the router
     // to avoid an unnecessary navigation + RSC refetch — the page is
@@ -287,7 +302,9 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
     } catch {
       /* ignore */
     }
-  }, []);
+  },
+  [dayTradingSurfaces]
+);
 
   const symbolsKey = useMemo(
     () =>
@@ -1187,6 +1204,7 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
         </button>
       </header>
 
+      {dayTradingSurfaces ? (
       <div
         role="tablist"
         aria-label="Scanner setup source"
@@ -1265,6 +1283,26 @@ export function ScannerPageClient({ initialOverview, initialTimestampIso, earnin
           );
         })}
       </div>
+      ) : (
+        <div
+          data-testid="scanner-swing-pro-plan-banner"
+          className={surfaceGlowClassName}
+          style={{
+            marginTop: 0,
+            borderRadius: borderRadius.lg,
+            border: "1px solid color-mix(in srgb, rgba(168,85,247,0.45) 55%, rgba(148,163,184,0.35))",
+            background: "rgba(168,85,247,0.08)",
+            padding: `${spacing[3]} ${spacing[4]}`
+          }}
+        >
+          <p style={{ margin: 0, fontSize: typography.scale.sm, fontWeight: 700, color: "#A855F7" }}>
+            Swing scanner (your plan)
+          </p>
+          <p style={{ margin: `${spacing[2]} 0 0 0`, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.5 }}>
+            {`Day and combined "both" views are not included on Swing Pro. This page shows multi-day swing setups only.`}
+          </p>
+        </div>
+      )}
 
       {showSwingScanContextBanner ? (
         <div

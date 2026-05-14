@@ -2,6 +2,7 @@
 
 import { createContext, useContext, type ReactNode } from "react";
 import type { UserMePayload } from "@/lib/api/contracts";
+import { subscriptionAllowsDayTradingSurfaces } from "@/lib/subscription-access";
 
 export interface UserProfileContextValue {
   profile: UserMePayload | null;
@@ -31,6 +32,9 @@ export function useHasAIExplanations(): boolean {
   return profile.has_ai_explanations === true;
 }
 
-export function useUserProfileLoaded(): boolean {
-  return useContext(UserProfileContext).loaded;
+/** False only for Swing Pro (no day add-on) after profile load; true while loading or on error. */
+export function useSubscriptionAllowsDayTrading(): boolean {
+  const { profile, loaded } = useContext(UserProfileContext);
+  if (!loaded || !profile) return true;
+  return subscriptionAllowsDayTradingSurfaces(profile.subscription_plan, profile.has_full_access === true);
 }

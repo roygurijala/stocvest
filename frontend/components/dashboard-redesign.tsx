@@ -86,6 +86,12 @@ interface DashboardRedesignProps {
   earningsRecent: EarningsEvent[];
   weeklyIndexRows: WeeklyIndexRow[];
   sectorRotation: SectorRotationChip[];
+  /**
+   * When false (Swing Pro without day add-on), the Day Desk, day ribbon chips,
+   * and intraday-only assistant fields are omitted. Server fetch uses the same
+   * rule so scanner payloads stay swing-only.
+   */
+  dayTradingSurfaces?: boolean;
 }
 
 function SkeletonLine({ width = "100%", height = 14 }: { width?: string; height?: number }) {
@@ -487,7 +493,8 @@ export function DashboardRedesign({
   earningsEvents,
   earningsRecent,
   weeklyIndexRows,
-  sectorRotation
+  sectorRotation,
+  dayTradingSurfaces = true
 }: DashboardRedesignProps) {
   const { colors } = useTheme();
   const [evidence, setEvidence] = useState<SignalEvidenceData | null>(null);
@@ -534,15 +541,16 @@ export function DashboardRedesign({
       ),
     [scannerOverview.setups]
   );
+  const daySignalsForRibbon = dayTradingSurfaces ? dayTopSignals : [];
   const dayTopScore = useMemo(() => {
     let best: number | null = null;
-    for (const s of dayTopSignals) {
+    for (const s of daySignalsForRibbon) {
       if (typeof s.score === "number" && Number.isFinite(s.score)) {
         if (best == null || s.score > best) best = s.score;
       }
     }
     return best;
-  }, [dayTopSignals]);
+  }, [daySignalsForRibbon]);
   const vixSnapshot =
     findVixSnapshot(marketOverview.snapshots) ||
     snapshotsBySymbol.get("I:VIX") ||
@@ -595,11 +603,11 @@ export function DashboardRedesign({
     () =>
       dayDeskPostureKind({
         marketStatus: marketOverview.status,
-        daySetupCount: dayTopSignals.length,
+        daySetupCount: daySignalsForRibbon.length,
         daySetupTopScore: dayTopScore,
         scannerError: scannerOverview.error
       }),
-    [marketOverview.status, dayTopSignals.length, dayTopScore, scannerOverview.error]
+    [marketOverview.status, daySignalsForRibbon.length, dayTopScore, scannerOverview.error]
   );
   const swingDeskPosture: "active" | "monitor" | "suppressed" = useMemo(() => {
     if (scannerOverview.error) return "suppressed";
@@ -618,8 +626,9 @@ export function DashboardRedesign({
     market_regime: regimeLabel,
     ranked_setups_count: topSignals.length,
     swing_desk_posture: swingDeskPosture,
-    day_desk_posture: dayDeskPosture,
-    day_setups_count: dayTopSignals.length
+    ...(dayTradingSurfaces
+      ? { day_desk_posture: dayDeskPosture, day_setups_count: daySignalsForRibbon.length }
+      : {})
   });
 
   const emptySwingSuppressionLine = useMemo(() => emptySwingSuppressionStatusLine(regimeLabel), [regimeLabel]);
@@ -698,6 +707,20 @@ export function DashboardRedesign({
         ? "(data pending)"
         : "(unavailable)"
     : null;
+
+  const sharedContextPayload = {
+    weeklyIndexRows,
+    marketStatus: marketOverview.status,
+    vixSnapshot,
+    vixSessionPct: vixPct,
+    sectorRotation,
+    upcomingEarnings: upcomingCatalystWeek,
+    macroWarningHeadline: macroWarnings[0] ?? null,
+    dataIssue:
+      weeklyIndexRows.every((r) => r.pct5d == null) && weeklyIndexRows.every((r) => r.lastPrice == null)
+        ? marketOverview.error || null
+        : null
+  };
 
   return (
     <section className="stocvest-dashboard-v2" style={{ display: "grid", gap: spacing[8] }}>
@@ -778,59 +801,24 @@ export function DashboardRedesign({
         vixBlankTag={vixBlankTagForHero}
       />
 
-      {/* Phase 2b layout — three master cards STACKED full-width, equal visual weight.
-          (1) SHARED CONTEXT master card absorbs the four previous shared cards
-              (Short-Horizon Market State, Market Pulse, Sector Rotation, Upcoming
-              Earnings) as sub-sections A-E. Nothing else lives at the same
-              hierarchy level — per the user directive: "No shared context
-              scattered elsewhere. This creates a mental model users can learn
-              once."
-          (2) SWING DESK master card — multi-day decision engine.
-          (3) DAY DESK master card — intraday decision engine.
-          The Signal Validation Ledger is rendered BELOW the three master cards
-          as a low-prominence tertiary link surface (it is tracked outcomes,
-          not market context, so it cannot live inside Shared Context; it is
-          also not a decision engine, so it cannot be a peer master card). */}
+      {/* Phase 2b layout — dual-desk: Shared Context master + ribbon + two-desk grid.
+          Swing Pro: no standalone Shared Context; the same A–E ladder is embedded at the top of the Swing Desk. */}
       <div className="dashboard-stack grid grid-cols-1 gap-7 [&>*]:min-w-0">
-          {/*
-           * SHARED CONTEXT — full-width regardless of viewport.
-           * Phase A2 made this card collapsible by default, so it
-           * presents a slim summary line + chevron most of the time
-           * and only opens to the full A–E ladder on demand. Anchoring
-           * the dashboard with the context surface before the desks
-           * preserves the "read environment first, then act" reading
-           * flow that the Mode Separation prompt encodes.
-           */}
-          <SharedContextMasterCard
-            weeklyIndexRows={weeklyIndexRows}
-            marketStatus={marketOverview.status}
-            vixSnapshot={vixSnapshot}
-            vixSessionPct={vixPct}
-            sectorRotation={sectorRotation}
-            upcomingEarnings={upcomingCatalystWeek}
-            macroWarningHeadline={macroWarnings[0] ?? null}
-            dataIssue={
-              weeklyIndexRows.every((r) => r.pct5d == null) && weeklyIndexRows.every((r) => r.lastPrice == null)
-                ? marketOverview.error || null
-                : null
-            }
-          />
+          {dayTradingSurfaces ? (
+          <SharedContextMasterCard {...sharedContextPayload} />
+          ) : null}
 
           {/*
-           * Phase C — ACTIVE SIGNAL RIBBON. Surfaces the top firing
-           * signals from BOTH desks as a single horizontal scroll
-           * strip; on empty it folds into a thoughtful "watching N
-           * tickers" line. The ribbon DOES NOT cross-mode rank —
-           * it interleaves swing and day to give equal visual weight
-           * to both engines. Mode Separation discipline preserved.
+           * Phase C — ACTIVE SIGNAL RIBBON.
            */}
           <DashboardActiveSignalRibbon
             swingSignals={swingTopSignals.slice(0, 4)}
-            daySignals={dayTopSignals.slice(0, 4)}
+            daySignals={daySignalsForRibbon.slice(0, 4)}
             emptyContext={{
               swingUniverseSymbolCount: scannerOverview.swingUniverseSymbolCount ?? null,
               scannerError: scannerOverview.error
             }}
+            dualDeskSurfaces={dayTradingSurfaces}
           />
 
           {/*
@@ -846,20 +834,29 @@ export function DashboardRedesign({
            */}
           <div
             data-testid="dashboard-desks-grid"
-            className="dashboard-desks-grid grid grid-cols-1 items-stretch gap-7 lg:grid-cols-2 [&>*]:min-w-0"
+            className={`dashboard-desks-grid grid grid-cols-1 items-stretch gap-7 [&>*]:min-w-0${dayTradingSurfaces ? " lg:grid-cols-2" : ""}`}
           >
           <DashboardCard
             role="swing"
             className={`flex h-full w-full min-h-[200px] flex-col overflow-hidden`}
             title="Swing Desk"
-            eyebrow="Multi-day · evaluated on daily closes"
-            subtitle="Multi-day engine — evaluates daily closes. Independent of the Day Desk. Posture (Active / Monitor / Suppressed) reflects regime + sector + structure + per-symbol DailyBarScanner gates."
+            eyebrow={
+              dayTradingSurfaces
+                ? "Multi-day · evaluated on daily closes"
+                : "Swing Pro · multi-day desk (plan excludes day trading)"
+            }
+            subtitle={
+              dayTradingSurfaces
+                ? "Multi-day engine — evaluates daily closes. Independent of the Day Desk. Posture (Active / Monitor / Suppressed) reflects regime + sector + structure + per-symbol DailyBarScanner gates."
+                : "Market backdrop (indexes, volatility, breadth, catalysts) and swing setups live together on this desk. Posture reflects regime + sector + structure + DailyBarScanner gates. Intraday day-trading surfaces are not on your plan."
+            }
             cardTip={TOP_SIGNALS_CARD_TIP}
             headerRight={<SwingDeskSignature />}
             data-testid="swing-desk-panel"
             data-swing-desk-posture={swingDeskPosture}
           >
             <div className="flex flex-col gap-3">
+              {!dayTradingSurfaces ? <SharedContextMasterCard {...sharedContextPayload} layout="embedded" /> : null}
               {topSignals.length === 0 ? (
                 <div className="flex flex-col justify-center gap-4 py-2" style={{ padding: spacing[1] }}>
                   {scannerOverview.error ? (
@@ -1349,11 +1346,13 @@ export function DashboardRedesign({
               language, and footer link are all owned by the day-side
               helpers in lib/dashboard-posture.ts; no swing-side
               state flows in. */}
+          {dayTradingSurfaces ? (
           <DayDeskPanel
             setups={scannerOverview.setups}
             marketStatus={marketOverview.status}
             scannerError={scannerOverview.error}
           />
+          ) : null}
           </div>
           {/* /Phase B1 desks grid */}
 

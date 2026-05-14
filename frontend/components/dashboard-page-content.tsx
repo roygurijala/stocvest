@@ -1,6 +1,8 @@
 import { DashboardRedesign } from "@/components/dashboard-redesign";
+import { fetchDashboardUserMe, subscriptionPlanFromMe } from "@/lib/dashboard-user-subscription";
 import { fetchDailyBarClosesBySymbol, fetchMarketOverview } from "@/lib/api/market";
 import { loadScannerDataWithoutBrief } from "@/lib/api/scanner";
+import { scannerSetupLoadModeForSubscription, subscriptionAllowsDayTradingSurfaces } from "@/lib/subscription-access";
 import { DEFAULT_EARNINGS_SYMBOLS, fetchEarningsCalendar } from "@/lib/api/earnings";
 import type { MarketOverview, SnapshotPayload } from "@/lib/api/market";
 import type { ScannerCoreData } from "@/lib/api/scanner";
@@ -11,21 +13,14 @@ import type { SectorRotationChip } from "@/components/dashboard-redesign";
 import type { WeeklyIndexRow } from "@/components/weekly-market-context-widget";
 
 /**
- * Dashboard renders TWO independent decision desks (Swing Desk + Day Desk),
- * each with its own posture and "what would re-enable" copy. Both setup
- * sources load on every dashboard mount — `POST /v1/signals/swing/setups`
- * (daily cadence) and `POST /v1/signals/day/setups` (intraday cadence) —
- * so the Day Desk can render real posture instead of a placeholder.
- * The render layer partitions results by `setup.scanner_mode` so the two
- * engines never share a row, a score, or a verdict.
- * Gap intelligence + market context load here for the shared Market Context
- * region above the two desks.
+ * Dashboard loads swing + day scanner payloads when the subscription includes
+ * day trading (`swing_day_pro` / `free` / unknown). `swing_pro` loads swing only.
+ * Desk visibility matches the same rule on the client (`dayTradingSurfaces`).
  */
-export const DASHBOARD_SCANNER_TUNING = {
+export const DASHBOARD_SCANNER_TUNING_BASE = {
   maxUniverseSymbols: 24,
   intradayBarLimit: 60,
   parallelDefaultWatchlist: true,
-  scannerSetupLoadMode: "both" as const,
   swingDailyBarLimit: 220,
   swingSetupsLimit: 4,
   daySetupsLimit: 4
@@ -124,6 +119,15 @@ function buildSectorRows(dailyCloses: Record<string, number[]>): SectorRotationC
 
 /** Server component: all dashboard API work runs here inside Suspense so the shell can paint first. */
 export async function DashboardPageContent() {
+  const me = await fetchDashboardUserMe();
+  const plan = subscriptionPlanFromMe(me);
+  const dayTradingSurfaces = subscriptionAllowsDayTradingSurfaces(plan, me?.has_full_access === true);
+  const scannerSetupLoadMode = scannerSetupLoadModeForSubscription(plan, me?.has_full_access === true);
+  const dashboardScannerTuning = {
+    ...DASHBOARD_SCANNER_TUNING_BASE,
+    scannerSetupLoadMode
+  } as const;
+
   const earningsSymbols = DEFAULT_EARNINGS_SYMBOLS.slice(0, 8);
   const marketFallback: MarketOverview = { snapshots: [], news: [], error: "Market data timed out." };
   const scannerFallback: ScannerCoreData = {
@@ -152,7 +156,7 @@ export async function DashboardPageContent() {
       marketFallback
     ),
     timeoutFallback(
-      loadScannerDataWithoutBrief(null, [], DASHBOARD_SCANNER_TUNING, null),
+      loadScannerDataWithoutBrief(null, [], dashboardScannerTuning, null),
       DASHBOARD_SCANNER_TIMEOUT_MS,
       scannerFallback
     ),
@@ -182,6 +186,7 @@ export async function DashboardPageContent() {
       earningsRecent={earnings.recent}
       weeklyIndexRows={weeklyIndexRows}
       sectorRotation={sectorRotation}
+      dayTradingSurfaces={dayTradingSurfaces}
     />
   );
 }

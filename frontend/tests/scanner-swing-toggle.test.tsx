@@ -305,3 +305,45 @@ describe("ScannerPageClient setup mode toggle", () => {
     expect(dayCard.textContent?.toLowerCase()).not.toContain("regime alignment");
   });
 });
+
+describe("ScannerPageClient Swing Pro (dayTradingSurfaces=false)", () => {
+  test("does not render mode tablist or day/both tabs; shows plan banner", async () => {
+    wrap(
+      <ScannerPageClient
+        initialOverview={{ gapIntelligence: [], setups: [] }}
+        initialTimestampIso="2026-05-06T12:00:00.000Z"
+        earningsBySymbol={{}}
+        dayTradingSurfaces={false}
+      />
+    );
+    expect(screen.queryByTestId("scanner-mode-tablist")).toBeNull();
+    expect(screen.getByTestId("scanner-swing-pro-plan-banner")).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Day" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "Both" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "Swing" })).toBeNull();
+    await waitFor(() => expect(loadScannerDataWithoutBriefMock).toHaveBeenCalled());
+    const swingCalls = loadScannerDataWithoutBriefMock.mock.calls.filter(
+      (c) => c[2]?.scannerSetupLoadMode === "swing"
+    );
+    expect(swingCalls.length).toBeGreaterThan(0);
+  });
+
+  test("coerces day URL and localStorage to swing when plan excludes day surfaces", async () => {
+    localStorage.setItem(SCANNER_MODE_STORAGE_KEY, "day");
+    window.history.replaceState(null, "", "/dashboard/scanner?mode=day");
+
+    wrap(
+      <ScannerPageClient
+        initialOverview={{ gapIntelligence: [], setups: [] }}
+        initialTimestampIso="2026-05-06T12:00:00.000Z"
+        earningsBySymbol={{}}
+        dayTradingSurfaces={false}
+      />
+    );
+
+    await waitFor(() => expect(localStorage.getItem(SCANNER_MODE_STORAGE_KEY)).toBe("swing"));
+    expect(window.location.search).toContain("mode=swing");
+
+    window.history.replaceState(null, "", "/");
+  });
+});

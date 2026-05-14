@@ -362,3 +362,38 @@ describe("SignalsPageClient — mode toggle clears the screen (load-bearing UX g
     expect(swingFetchCountAfter).toBe(swingFetchCountBefore);
   });
 });
+
+describe("SignalsPageClient — Swing Pro (dayTradingSurfaces=false)", () => {
+  test("hides mode tablist and stays on swing even when prefill asked for day", async () => {
+    const swingPayload = compositePayload({ summary: "Bullish", fingerprint: "SWING_PRO_FP" });
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : (input as Request | URL).toString();
+      if (url.endsWith("/api/stocvest/signals/composite/swing")) {
+        return mockCompositeOk(swingPayload);
+      }
+      return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+    });
+
+    wrap(
+      <SignalsPageClient
+        marketOverview={EMPTY_MARKET_OVERVIEW}
+        scannerOverview={EMPTY_SCANNER_OVERVIEW}
+        earningsBySymbol={{}}
+        dayTradingSurfaces={false}
+        signalsPrefill={{
+          urlSymbol: "AAPL",
+          signalIdForResolve: null,
+          hadSignalIdQuery: false,
+          initialTradingMode: "day"
+        }}
+      />
+    );
+
+    expect(screen.queryByRole("tablist", { name: /Trading mode/i })).toBeNull();
+    expect(screen.getByText(/Swing trade \(your plan\)/)).toBeInTheDocument();
+
+    await waitFor(() =>
+      expect(screen.getByText(/SWING_PRO_FP — technical reasoning marker/)).toBeTruthy()
+    );
+  });
+});

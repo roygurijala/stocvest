@@ -77,6 +77,11 @@ type Props = {
   macroWarningHeadline?: string | null;
   /** Surfaced when the daily-bar / snapshot feed timed out — A-section falls back to a hint. */
   dataIssue?: string | null;
+  /**
+   * `master` — standalone Shared Context card (dual-desk dashboard).
+   * `embedded` — same A–E ladder nested under the Swing Desk (Swing Pro / no day surfaces).
+   */
+  layout?: "master" | "embedded";
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -486,7 +491,8 @@ export function SharedContextMasterCard(props: Props) {
     sectorRotation,
     upcomingEarnings,
     macroWarningHeadline,
-    dataIssue
+    dataIssue,
+    layout = "master"
   } = props;
   const { colors } = useTheme();
   const mkt = (marketStatus?.market || "").toLowerCase();
@@ -574,25 +580,17 @@ export function SharedContextMasterCard(props: Props) {
     });
   };
 
-  return (
-    <DashboardCard
-      role="shared"
-      eyebrow="All timeframes · used by both desks"
-      title="Shared Context"
-      subtitle="Market environment and constraints used by all desks. Not a trade signal."
-      cardTip={WEEKLY_MARKET_CONTEXT_CARD_TIP}
-      data-testid="shared-context-master-card"
-      headerRight={
-        marketStatus ? (
-          <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, alignSelf: "center" }}>
-            Cash session:{" "}
-            <strong style={{ color: mkt === "open" ? colors.bullish : colors.textMuted }}>
-              {mkt === "open" ? "Open" : "Closed"}
-            </strong>
-          </span>
-        ) : null
-      }
-    >
+  const sessionStatusStrip =
+    marketStatus ? (
+      <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, alignSelf: "center" }}>
+        Cash session:{" "}
+        <strong style={{ color: mkt === "open" ? colors.bullish : colors.textMuted }}>
+          {mkt === "open" ? "Open" : "Closed"}
+        </strong>
+      </span>
+    ) : null;
+
+  const contextGrid = (
       <div style={{ display: "grid", gap: spacing[5] }}>
         {/* ───────────────────────────── Section A ───────────────────────────── */}
         <section
@@ -947,6 +945,64 @@ export function SharedContextMasterCard(props: Props) {
         ) : null}
         </div>
       </div>
+  );
+
+  if (layout === "embedded") {
+    return (
+      <div
+        data-testid="swing-desk-market-backdrop"
+        className={surfaceGlowClassName}
+        style={{
+          borderRadius: borderRadius.lg,
+          border: `1px solid color-mix(in srgb, ${colors.border} 82%, rgba(168,85,247,0.38))`,
+          background: `linear-gradient(165deg, color-mix(in srgb, rgba(168,85,247,0.09), ${colors.surfaceMuted}) 0%, ${colors.surfaceMuted} 100%)`,
+          padding: spacing[4],
+          marginBottom: spacing[2]
+        }}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3" style={{ marginBottom: spacing[3] }}>
+          <div style={{ minWidth: 0, flex: "1 1 220px" }}>
+            <p
+              style={{
+                margin: 0,
+                fontSize: 10,
+                letterSpacing: "0.18em",
+                textTransform: "uppercase",
+                fontWeight: 600,
+                color: colors.textMuted
+              }}
+            >
+              Market backdrop
+            </p>
+            <p
+              style={{
+                margin: `${spacing[2]} 0 0 0`,
+                fontSize: typography.scale.sm,
+                color: colors.textMuted,
+                lineHeight: 1.5
+              }}
+            >
+              Indexes, volatility, breadth, and catalysts that frame swing decisions — consolidated here on Swing Pro (no separate shared card).
+            </p>
+          </div>
+          {sessionStatusStrip}
+        </div>
+        {contextGrid}
+      </div>
+    );
+  }
+
+  return (
+    <DashboardCard
+      role="shared"
+      eyebrow="All timeframes · used by both desks"
+      title="Shared Context"
+      subtitle="Market environment and constraints used by all desks. Not a trade signal."
+      cardTip={WEEKLY_MARKET_CONTEXT_CARD_TIP}
+      data-testid="shared-context-master-card"
+      headerRight={sessionStatusStrip}
+    >
+      {contextGrid}
     </DashboardCard>
   );
 }

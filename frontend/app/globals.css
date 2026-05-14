@@ -68,7 +68,15 @@ body {
   background: var(--color-bg);
   color: var(--color-text);
   transition: background-color 240ms ease, color 240ms ease;
-  overflow-x: hidden;
+  /*
+   * Horizontal bleed must be clipped, but ``overflow-x: hidden`` on the
+   * root forces ``overflow-y`` to ``auto`` (CSS 2.1), which promotes
+   * ``html``/``body`` to scroll containers and breaks ``position: sticky``
+   * on the dashboard TopBar (it no longer pins to the viewport). ``clip``
+   * trims overflow on the x axis without that side effect. See
+   * ``tests/top-bar-sticky.test.tsx`` + AppShell comments.
+   */
+  overflow-x: clip;
 }
 
 @media (max-width: 1023px) {

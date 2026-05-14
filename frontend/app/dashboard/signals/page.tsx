@@ -8,6 +8,8 @@ import { fetchPdtStatus } from "@/lib/api/pdt";
 import { fetchScannerOverview } from "@/lib/api/scanner";
 import { fetchEarningsCalendar } from "@/lib/api/earnings";
 import { getDashboardAuthContext } from "@/lib/auth/dashboard-session";
+import { fetchDashboardUserMe, subscriptionPlanFromMe } from "@/lib/dashboard-user-subscription";
+import { subscriptionAllowsDayTradingSurfaces } from "@/lib/subscription-access";
 import { stocvestAuthedFetch } from "@/lib/bff/stocvest-authed";
 
 /**
@@ -176,11 +178,17 @@ async function SignalsPageData({
   // PDT status is fire-and-forget (catch -> null) because a PDT
   // miss must not block the signals page render. Market overview
   // and scanner overview are required.
-  const [pdtStatus, marketOverview, scannerOverview] = await Promise.all([
+  const [pdtStatus, marketOverview, scannerOverview, me] = await Promise.all([
     fetchPdtStatus().catch(() => null),
     fetchMarketOverview(undefined, { sparklineBarLimit: 12 }),
-    fetchScannerOverview(null, [], { loadTuning: { parallelDefaultWatchlist: true } })
+    fetchScannerOverview(null, [], { loadTuning: { parallelDefaultWatchlist: true } }),
+    fetchDashboardUserMe()
   ]);
+
+  const plan = subscriptionPlanFromMe(me);
+  const dayTradingSurfaces = subscriptionAllowsDayTradingSurfaces(plan, me?.has_full_access === true);
+  const coercedInitialTradingMode =
+    !dayTradingSurfaces && initialTradingMode === "day" ? "swing" : initialTradingMode;
 
   // Earnings depends on the symbol set surfaced by the scanner —
   // this is a real sequential dependency, not laziness. If/when
@@ -200,11 +208,12 @@ async function SignalsPageData({
       marketOverview={marketOverview}
       scannerOverview={scannerOverview}
       earningsBySymbol={earningsBySymbol}
+      dayTradingSurfaces={dayTradingSurfaces}
       signalsPrefill={{
         urlSymbol: resolvedUrlSymbol,
         signalIdForResolve: signalIdRaw && !resolvedUrlSymbol ? signalIdRaw : null,
         hadSignalIdQuery: Boolean(signalIdRaw),
-        initialTradingMode
+        initialTradingMode: coercedInitialTradingMode
       }}
     />
   );

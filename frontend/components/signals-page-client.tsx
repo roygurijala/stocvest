@@ -81,6 +81,8 @@ interface SignalsPageClientProps {
   scannerOverview: ScannerOverview;
   earningsBySymbol: Record<string, EarningsEvent>;
   signalsPrefill?: SignalsPagePrefill;
+  /** Swing Pro hides intraday engine UI; server coerces deep-links the same way. */
+  dayTradingSurfaces?: boolean;
 }
 
 const SIGNALS_SESSION_SYMBOL_KEY = "stocvest_signals_session_symbol";
@@ -272,7 +274,8 @@ export function SignalsPageClient({
     signalIdForResolve: null,
     hadSignalIdQuery: false,
     initialTradingMode: null
-  }
+  },
+  dayTradingSurfaces = true
 }: SignalsPageClientProps) {
   const { colors, theme } = useTheme();
   const historyFilterSelectStyle: CSSProperties = {
@@ -293,9 +296,11 @@ export function SignalsPageClient({
   const histSymbolComboRef = useRef<HTMLDivElement | null>(null);
   const signalIdUrlStrippedRef = useRef(false);
   const [tab, setTab] = useState<"layers" | "history">("layers");
-  const [tradingMode, setTradingMode] = useState<TradingMode>(
-    () => signalsPrefill.initialTradingMode ?? "swing"
-  );
+  const [tradingMode, setTradingMode] = useState<TradingMode>(() => {
+    const raw = signalsPrefill.initialTradingMode;
+    const base: TradingMode = raw === "day" || raw === "swing" ? raw : "swing";
+    return dayTradingSurfaces ? base : "swing";
+  });
   const [symbol, setSymbol] = useState(() => signalsPrefill.urlSymbol ?? "");
   const [symbolDraft, setSymbolDraft] = useState(() => signalsPrefill.urlSymbol ?? "");
   const [suggestOpen, setSuggestOpen] = useState(false);
@@ -675,6 +680,23 @@ export function SignalsPageClient({
   const snapshot = useMemo(() => coerceSnapshotForReferenceLevels(rawSnapshot), [rawSnapshot]);
 
   useEffect(() => {
+    if (!dayTradingSurfaces) setTradingMode("swing");
+  }, [dayTradingSurfaces]);
+
+  useEffect(() => {
+    if (dayTradingSurfaces) return;
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get("trading_mode") !== "day") return;
+      url.searchParams.set("trading_mode", "swing");
+      const q = url.searchParams.toString();
+      window.history.replaceState(null, "", `${url.pathname}${q ? `?${q}` : ""}`);
+    } catch {
+      /* ignore */
+    }
+  }, [dayTradingSurfaces]);
+
+  useEffect(() => {
     // URL-driven trading_mode takes precedence over localStorage. Skip the
     // localStorage restore when the user landed here via a deep link that
     // specified the mode explicitly — per the Mode Separation rule, that URL
@@ -682,11 +704,11 @@ export function SignalsPageClient({
     if (signalsPrefill.initialTradingMode != null) return;
     try {
       const raw = localStorage.getItem(TRADING_MODE_STORAGE_KEY);
-      if (raw === "swing" || raw === "day") setTradingMode(raw);
+      if (raw === "swing" || (raw === "day" && dayTradingSurfaces)) setTradingMode(raw);
     } catch {
       /* ignore */
     }
-  }, [signalsPrefill.initialTradingMode]);
+  }, [signalsPrefill.initialTradingMode, dayTradingSurfaces]);
 
   useEffect(() => {
     try {
@@ -746,13 +768,13 @@ export function SignalsPageClient({
       // state, not transient nav state.
       const next = new URLSearchParams();
       const mode = new URL(window.location.href).searchParams.get("trading_mode");
-      if (mode === "swing" || mode === "day") next.set("trading_mode", mode);
+      if (mode === "swing" || (mode === "day" && dayTradingSurfaces)) next.set("trading_mode", mode);
       const suffix = next.toString() ? `?${next.toString()}` : "";
       window.history.replaceState(null, "", `/dashboard/signals${suffix}`);
     } catch {
       /* ignore */
     }
-  }, [symbol, signalsPrefill.hadSignalIdQuery]);
+  }, [symbol, signalsPrefill.hadSignalIdQuery, dayTradingSurfaces]);
 
   useEffect(() => {
     if (!suggestOpen) return;
@@ -783,6 +805,7 @@ export function SignalsPageClient({
   }, [histSymbolDraft, histSuggestOpen]);
 
   const updateTradingMode = (m: TradingMode) => {
+    if (!dayTradingSurfaces && m === "day") return;
     // Same-mode click is a no-op — don't tear down state if the user
     // re-clicks the currently active pill (still need to fire the URL
     // / localStorage writes? No — those are already correct).
@@ -1878,6 +1901,7 @@ export function SignalsPageClient({
       </div>
 
       <div className="flex max-w-lg flex-col gap-2">
+        {dayTradingSurfaces ? (
         <div
           className="grid grid-cols-2 gap-1 rounded-lg p-1"
           style={{ border: `1px solid ${colors.border}`, background: colors.background }}
@@ -1919,6 +1943,18 @@ export function SignalsPageClient({
             </span>
           </button>
         </div>
+        ) : (
+          <div
+            className="inline-flex min-h-10 items-center rounded-lg px-3 text-sm font-semibold"
+            style={{
+              border: `1px solid rgba(168,85,247,0.45)`,
+              background: "rgba(168,85,247,0.15)",
+              color: "#A855F7"
+            }}
+          >
+            Swing trade (your plan)
+          </div>
+        )}
         <p className="m-0 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
           {tradingMode === "day"
             ? "Same-session structure from live tape; valid through regular session close (see signal_valid_until on the API response)."
