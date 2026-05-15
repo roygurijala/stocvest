@@ -632,6 +632,7 @@ function DashboardRedesignBody({
           <Link
             href="/dashboard/scanner?mode=swing"
             prefetch={false}
+            data-hover-prefetch="true"
             {...interactionLevelProps("deep")}
             onMouseEnter={swingScannerHoverPrefetch.onMouseEnter}
             onFocus={swingScannerHoverPrefetch.onFocus}
@@ -644,6 +645,7 @@ function DashboardRedesignBody({
           <Link
             href="/dashboard/watchlists"
             prefetch={false}
+            data-hover-prefetch="true"
             {...interactionLevelProps("deep")}
             onMouseEnter={watchlistHoverPrefetch.onMouseEnter}
             onFocus={watchlistHoverPrefetch.onFocus}

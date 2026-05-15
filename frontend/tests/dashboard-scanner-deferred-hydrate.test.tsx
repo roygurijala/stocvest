@@ -60,8 +60,8 @@ afterEach(() => {
   cleanup();
 });
 
-describe("Tier 1.C — deferred scanner hydrate → ribbon", () => {
-  test("hydrate_in_deferred_slot_updates_ribbon_when_initial_scanner_is_empty", () => {
+describe("Tier 1.C — deferred scanner hydrate → dashboard surfaces", () => {
+  test("hydrate_in_deferred_slot_updates_system_banner_when_initial_scanner_is_empty", () => {
     const daySetup: IntradaySetupPayload = {
       symbol: "HYDRIBB",
       direction: "bullish",
@@ -88,9 +88,12 @@ describe("Tier 1.C — deferred scanner hydrate → ribbon", () => {
       />
     );
 
-    const ribbon = screen.getByTestId("dashboard-active-signal-ribbon");
-    expect(ribbon.getAttribute("data-ribbon-state")).toBe("active");
-    expect(ribbon.querySelector('[data-testid="ribbon-chip-HYDRIBB"]')).not.toBeNull();
-    expect(ribbon.getAttribute("data-ribbon-chip-count")).toBe("1");
+    const banner = screen.getByTestId("dashboard-system-state-banner");
+    expect(banner.textContent).toMatch(/ACTIONABLE/i);
+    expect(banner.textContent).toMatch(/Day Desk:\s*Active/i);
+
+    const deskStatus = screen.getByTestId("dashboard-desk-status");
+    expect(deskStatus.textContent).toMatch(/Day Desk:/i);
+    expect(deskStatus.textContent).toMatch(/Active/i);
   });
 });

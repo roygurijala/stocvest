@@ -8,12 +8,11 @@
  * `/dashboard/signals?symbol=AAPL&ref=dashboard-ribbon...` request.
  * The waveform — long content download, short server wait — is the
  * fingerprint of multiple RSC payloads being drained in parallel
- * over one connection. Root cause: every `<Link>` in the ribbon,
- * day-desk top-signal rows, and desk scanner footers omitted the
- * `prefetch={false}` flag, so Next.js 14.2's default
+ * over one connection. Root cause: heavy dashboard `<Link>` targets
+ * omitted the `prefetch={false}` flag, so Next.js 14.2's default
  * `prefetch="auto"` behaviour speculatively SSR-rendered the
- * heaviest target in the app (`/dashboard/signals`) once per
- * visible link on mount.
+ * heaviest targets (`/dashboard/signals`, scanner routes) from many
+ * visible anchors on mount.
  *
  * The fix is one attribute per Link. The risk is regression — a
  * future refactor could trivially drop the flag and re-introduce
@@ -22,24 +21,20 @@
  * a regression breaks CI loudly, with a comment pointing at this
  * doc.
  *
- * What we assert:
+ * What we assert (focus-layout dashboard):
  *
- *   1. Ribbon chips (N-of-N container, biggest offender) carry
+ *   1. Desk status "Swing scanner →" and "Day scanner →" carry
  *      `prefetch={false}`.
- *   2. Ribbon's "Open scanner" CTA in the empty state carries
- *      `prefetch={false}`.
- *   3. Day Desk's per-row "Open Day Signals →" link carries
- *      `prefetch={false}` for every populated top-signal row.
- *   4. Day Desk footer "View day scanner →" carries
- *      `prefetch={false}`.
- *   5. Swing Desk footer "View swing scanner →" carries
- *      `prefetch={false}`.
+ *   2. Next actions "Open Scanner →", "View Watchlist →", and
+ *      "Signals →" carry `prefetch={false}`.
+ *   3. Watchlist status strip "View watchlist →" carries
+ *      `prefetch={false}` when that strip renders.
  *
  * What we deliberately do NOT assert:
  *
  *   * That the sidebar / top-bar nav links carry `prefetch={false}`.
  *     Those are 1-of-N targets (one Settings link, one Performance
- *     link, etc.), not N-of-N like the ribbon. Next.js's default
+ *     link, etc.), not N-of-N like repeated heavy CTAs. Next.js's default
  *     prefetch is fine for those.
  *
  *   * That clicking a link still navigates. `prefetch={false}` is
@@ -168,12 +163,101 @@ function assertLinkHasPrefetchDisabled(
   ).toBe("false");
 }
 
+function anchorByHref(root: HTMLElement, href: string): HTMLAnchorElement | null {
+  return root.querySelector(`a[href="${href}"]`) as HTMLAnchorElement | null;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-// (1) Ribbon chips — the dominant offender pre-fix.
+// (1) Desk status scanner CTAs
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("Active Signal Ribbon chips (Tier 1.A prefetch invariant)", () => {
-  test("ribbon_chips_carry_prefetch_false_when_both_modes_have_setups", () => {
+describe("Desk status panel (Tier 1.A prefetch invariant)", () => {
+  test("swing_and_day_scanner_links_carry_prefetch_false", () => {
+    wrap(
+      <DashboardRedesign
+        marketOverview={baseMarket}
+        scannerOverview={baseScanner}
+        earningsEvents={[]}
+        earningsRecent={[]}
+        weeklyIndexRows={baseWeekly}
+        sectorRotation={[]}
+      />
+    );
+    const desk = screen.getByTestId("dashboard-desk-status");
+    const swing = anchorByHref(desk, "/dashboard/scanner?mode=swing");
+    const day = anchorByHref(desk, "/dashboard/scanner?mode=day");
+    assertLinkHasPrefetchDisabled(swing, "desk status Swing scanner");
+    assertLinkHasPrefetchDisabled(day, "desk status Day scanner");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// (2) Next actions row
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("Next actions (Tier 1.A prefetch invariant)", () => {
+  test("open_scanner_watchlist_and_signals_links_carry_prefetch_false", () => {
+    wrap(
+      <DashboardRedesign
+        marketOverview={baseMarket}
+        scannerOverview={baseScanner}
+        earningsEvents={[]}
+        earningsRecent={[]}
+        weeklyIndexRows={baseWeekly}
+        sectorRotation={[]}
+      />
+    );
+    const next = screen.getByTestId("dashboard-next-actions");
+    assertLinkHasPrefetchDisabled(
+      anchorByHref(next, "/dashboard/scanner?mode=swing"),
+      "next actions Open Scanner"
+    );
+    assertLinkHasPrefetchDisabled(
+      anchorByHref(next, "/dashboard/watchlists"),
+      "next actions View Watchlist"
+    );
+    assertLinkHasPrefetchDisabled(
+      anchorByHref(next, "/dashboard/signals"),
+      "next actions Signals"
+    );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// (3) Watchlist status strip (optional surface)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("Watchlist status strip (Tier 1.A prefetch invariant)", () => {
+  test("view_watchlist_link_carries_prefetch_false_when_strip_renders", () => {
+    const scannerWithWatchlist: ScannerOverview = {
+      ...baseScanner,
+      watchlistStatus: { monitored: 3, actionable: 1, developing: 1, inactive: 1 }
+    };
+    wrap(
+      <DashboardRedesign
+        marketOverview={baseMarket}
+        scannerOverview={scannerWithWatchlist}
+        earningsEvents={[]}
+        earningsRecent={[]}
+        weeklyIndexRows={baseWeekly}
+        sectorRotation={[]}
+      />
+    );
+    const strip = screen.getByTestId("dashboard-watchlist-status");
+    const watchlist = Array.from(strip.querySelectorAll("a")).find((a) =>
+      /view watchlist/i.test(a.textContent || "")
+    ) as HTMLAnchorElement | undefined;
+    assertLinkHasPrefetchDisabled(watchlist ?? null, "watchlist strip View watchlist");
+    expect(watchlist?.getAttribute("href")).toBe("/dashboard/watchlists");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// (4) Heavy navigations still disabled when setups exist (regression guard)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("Dashboard heavy links (Tier 1.A prefetch invariant, with setups)", () => {
+  test("desk_and_next_actions_still_disable_prefetch_when_scanner_has_setups", () => {
     const swingSetup: IntradaySetupPayload = {
       symbol: "SWGPF1",
       direction: "bullish",
@@ -199,127 +283,14 @@ describe("Active Signal Ribbon chips (Tier 1.A prefetch invariant)", () => {
         sectorRotation={[]}
       />
     );
-    const ribbon = screen.getByTestId("dashboard-active-signal-ribbon");
-    const chips = Array.from(ribbon.querySelectorAll("a")).filter((a) =>
-      (a.getAttribute("data-testid") || "").startsWith("ribbon-chip-")
-    ) as HTMLAnchorElement[];
-    expect(chips.length).toBeGreaterThan(0);
-    // Every ribbon chip MUST disable speculative prefetch — they
-    // are N-of-N pointers at the heaviest SSR page in the app.
-    chips.forEach((a) =>
-      assertLinkHasPrefetchDisabled(a, `ribbon chip ${a.getAttribute("data-testid")}`)
+    const desk = screen.getByTestId("dashboard-desk-status");
+    const next = screen.getByTestId("dashboard-next-actions");
+    assertLinkHasPrefetchDisabled(anchorByHref(desk, "/dashboard/scanner?mode=swing"), "desk swing");
+    assertLinkHasPrefetchDisabled(anchorByHref(desk, "/dashboard/scanner?mode=day"), "desk day");
+    assertLinkHasPrefetchDisabled(
+      anchorByHref(next, "/dashboard/scanner?mode=swing"),
+      "next Open Scanner"
     );
-  });
-
-  test("ribbon_empty_state_open_scanner_cta_carries_prefetch_false", () => {
-    // Empty state: no setups -> ribbon renders its "Watching for…"
-    // line + "Open scanner →" link. That link points at
-    // `/dashboard/scanner` (a heavy SSR target) and must also be
-    // exempt from speculative prefetch.
-    wrap(
-      <DashboardRedesign
-        marketOverview={baseMarket}
-        scannerOverview={baseScanner}
-        earningsEvents={[]}
-        earningsRecent={[]}
-        weeklyIndexRows={baseWeekly}
-        sectorRotation={[]}
-      />
-    );
-    const ribbon = screen.getByTestId("dashboard-active-signal-ribbon");
-    const openScannerLink = Array.from(ribbon.querySelectorAll("a")).find((a) =>
-      /open scanner/i.test(a.textContent || "")
-    ) as HTMLAnchorElement | undefined;
-    assertLinkHasPrefetchDisabled(openScannerLink ?? null, "ribbon empty-state Open Scanner");
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// (2) Day Desk top-signal rows + scanner footer.
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe("Day Desk panel (Tier 1.A prefetch invariant)", () => {
-  test("each_day_top_signal_row_open_day_signals_link_carries_prefetch_false", () => {
-    // Populate the day side with two intraday setups so the desk
-    // renders its top-signal row pair.
-    const dayA: IntradaySetupPayload = {
-      symbol: "DAYTOP1",
-      direction: "bullish",
-      score: 0.81,
-      triggers: ["orb_breakout"],
-      timestamp_iso: "2026-05-01T14:30:00Z"
-    };
-    const dayB: IntradaySetupPayload = {
-      symbol: "DAYTOP2",
-      direction: "bullish",
-      score: 0.79,
-      triggers: ["orb_breakout"],
-      timestamp_iso: "2026-05-01T14:35:00Z"
-    };
-    wrap(
-      <DashboardRedesign
-        marketOverview={baseMarket}
-        scannerOverview={{ ...baseScanner, setups: [dayA, dayB] }}
-        earningsEvents={[]}
-        earningsRecent={[]}
-        weeklyIndexRows={baseWeekly}
-        sectorRotation={[]}
-      />
-    );
-    const dayPanel = screen.getByTestId("day-desk-panel");
-    const signalLinks = Array.from(dayPanel.querySelectorAll("a")).filter((a) =>
-      /open day signals/i.test(a.textContent || "")
-    ) as HTMLAnchorElement[];
-    expect(signalLinks.length).toBeGreaterThan(0);
-    signalLinks.forEach((a) => {
-      // href must still be the signals page — we don't break
-      // navigation, we just disable speculative prefetch.
-      expect(a.getAttribute("href") || "").toContain("/dashboard/signals?symbol=");
-      assertLinkHasPrefetchDisabled(a, `day-row link to ${a.getAttribute("href")}`);
-    });
-  });
-
-  test("day_desk_footer_view_day_scanner_link_carries_prefetch_false", () => {
-    wrap(
-      <DashboardRedesign
-        marketOverview={baseMarket}
-        scannerOverview={baseScanner}
-        earningsEvents={[]}
-        earningsRecent={[]}
-        weeklyIndexRows={baseWeekly}
-        sectorRotation={[]}
-      />
-    );
-    const dayPanel = screen.getByTestId("day-desk-panel");
-    const footerLink = Array.from(dayPanel.querySelectorAll("a")).find((a) =>
-      /view day scanner/i.test(a.textContent || "")
-    ) as HTMLAnchorElement | undefined;
-    expect(footerLink, "day desk footer link must exist").toBeTruthy();
-    expect(footerLink?.getAttribute("href")).toBe("/dashboard/scanner?mode=day");
-    assertLinkHasPrefetchDisabled(footerLink ?? null, "day desk scanner footer");
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// (3) Swing Desk footer.
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe("Swing Desk panel (Tier 1.A prefetch invariant)", () => {
-  test("swing_desk_footer_view_swing_scanner_link_carries_prefetch_false", () => {
-    wrap(
-      <DashboardRedesign
-        marketOverview={baseMarket}
-        scannerOverview={baseScanner}
-        earningsEvents={[]}
-        earningsRecent={[]}
-        weeklyIndexRows={baseWeekly}
-        sectorRotation={[]}
-      />
-    );
-    const footer = screen.getByTestId("swing-desk-scanner-footer");
-    const footerLink = footer.querySelector("a") as HTMLAnchorElement | null;
-    expect(footerLink, "swing desk footer link must exist").toBeTruthy();
-    expect(footerLink?.getAttribute("href")).toBe("/dashboard/scanner?mode=swing");
-    assertLinkHasPrefetchDisabled(footerLink, "swing desk scanner footer");
+    assertLinkHasPrefetchDisabled(anchorByHref(next, "/dashboard/signals"), "next Signals");
   });
 });

@@ -9,16 +9,12 @@
  * carries `data-hover-prefetch="true"` so the route warms on
  * intent (hover / focus / pointer-down) instead of on mount.
  *
- * What we assert:
+ * What we assert (focus-layout dashboard):
  *
- *   1. Ribbon chips (N-of-N container) carry
- *      `data-hover-prefetch="true"` AND `data-prefetch="false"`.
- *      Both markers must hold simultaneously — that's the whole
- *      Layer 4 contract (no mount prefetch + intent prefetch).
- *   2. Ribbon's "Open scanner" empty-state CTA carries both.
- *   3. Day Desk per-row "Open Day Signals →" links carry both.
- *   4. Day Desk footer "View day scanner →" carries both.
- *   5. Swing Desk footer "View swing scanner →" carries both.
+ *   1. Desk status "Swing scanner →" and "Day scanner →" carry
+ *      both `data-prefetch="false"` and `data-hover-prefetch="true"`.
+ *   2. Next actions "Open Scanner →" and "View Watchlist →" carry both.
+ *   3. Watchlist status strip "View watchlist →" carries both when rendered.
  *
  * If a future refactor drops either marker the failure pinpoints
  * which invariant was broken and points the reader at this doc.
@@ -69,7 +65,7 @@ vi.mock("next/link", () => ({
 import { DashboardRedesign } from "@/components/dashboard-redesign";
 import { ThemeProvider } from "@/lib/theme-provider";
 import type { MarketOverview, MarketStatusPayload } from "@/lib/api/market";
-import type { IntradaySetupPayload, ScannerOverview } from "@/lib/api/scanner";
+import type { ScannerOverview } from "@/lib/api/scanner";
 
 beforeAll(() => {
   Object.defineProperty(window, "matchMedia", {
@@ -143,32 +139,12 @@ function assertLayer4Link(anchor: HTMLAnchorElement | null, label: string) {
   ).toBe("true");
 }
 
+function anchorByHref(root: HTMLElement, href: string): HTMLAnchorElement | null {
+  return root.querySelector(`a[href="${href}"]`) as HTMLAnchorElement | null;
+}
+
 describe("Layer 4 — dashboard hover-prefetch markers", () => {
-  test("ribbon chip carries both Tier 1.A and Layer 4 markers", () => {
-    const chipSetup: IntradaySetupPayload = {
-      symbol: "AAPL",
-      direction: "long",
-      score: 0.82,
-      scanner_mode: "swing_daily",
-      company_name: "Apple Inc.",
-      timestamp_iso: "2026-05-13T18:00:00Z",
-      triggers: ["gap up"]
-    } as unknown as IntradaySetupPayload;
-    wrap(
-      <DashboardRedesign
-        marketOverview={baseMarket}
-        scannerOverview={{ ...baseScanner, setups: [chipSetup] }}
-        earningsEvents={[]}
-        earningsRecent={[]}
-        weeklyIndexRows={baseWeekly}
-        sectorRotation={[]}
-      />
-    );
-    const chip = screen.getByTestId("ribbon-chip-AAPL") as HTMLAnchorElement;
-    assertLayer4Link(chip, 'ribbon chip "AAPL"');
-  });
-
-  test("ribbon empty-state 'Open scanner' CTA carries both markers", () => {
+  test("desk status swing and day scanner carry Tier 1.A + Layer 4 markers", () => {
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
@@ -179,41 +155,12 @@ describe("Layer 4 — dashboard hover-prefetch markers", () => {
         sectorRotation={[]}
       />
     );
-    const ribbon = screen.getByTestId("dashboard-active-signal-ribbon");
-    expect(ribbon.getAttribute("data-ribbon-state")).toBe("empty");
-    const openScanner = ribbon.querySelector(
-      'a[href="/dashboard/scanner"]'
-    ) as HTMLAnchorElement | null;
-    assertLayer4Link(openScanner, "ribbon empty-state Open scanner");
+    const desk = screen.getByTestId("dashboard-desk-status");
+    assertLayer4Link(anchorByHref(desk, "/dashboard/scanner?mode=swing"), "desk Swing scanner");
+    assertLayer4Link(anchorByHref(desk, "/dashboard/scanner?mode=day"), "desk Day scanner");
   });
 
-  test("Day Desk per-row Open Day Signals link carries both markers", () => {
-    const daySetup: IntradaySetupPayload = {
-      symbol: "TSLA",
-      direction: "bullish",
-      score: 0.75,
-      scanner_mode: "intraday",
-      company_name: "Tesla Inc.",
-      timestamp_iso: "2026-05-13T18:00:00Z"
-    } as unknown as IntradaySetupPayload;
-    wrap(
-      <DashboardRedesign
-        marketOverview={baseMarket}
-        scannerOverview={{ ...baseScanner, setups: [daySetup] }}
-        earningsEvents={[]}
-        earningsRecent={[]}
-        weeklyIndexRows={baseWeekly}
-        sectorRotation={[]}
-      />
-    );
-    const dayDeskRoot = screen.getByTestId("day-desk-panel");
-    const dayRowLink = dayDeskRoot.querySelector(
-      'a[href*="trading_mode=day"][href*="symbol=TSLA"]'
-    ) as HTMLAnchorElement | null;
-    assertLayer4Link(dayRowLink, 'Day Desk row "TSLA" Open Day Signals');
-  });
-
-  test("Day Desk footer 'View day scanner' carries both markers", () => {
+  test("next actions open scanner and watchlist carry Tier 1.A + Layer 4 markers", () => {
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
@@ -224,30 +171,30 @@ describe("Layer 4 — dashboard hover-prefetch markers", () => {
         sectorRotation={[]}
       />
     );
-    const dayDeskRoot = screen.getByTestId("day-desk-panel");
-    const dayFooter = dayDeskRoot.querySelector(
-      'a[href="/dashboard/scanner?mode=day"]'
-    ) as HTMLAnchorElement | null;
-    assertLayer4Link(dayFooter, "Day Desk footer View day scanner");
+    const next = screen.getByTestId("dashboard-next-actions");
+    assertLayer4Link(anchorByHref(next, "/dashboard/scanner?mode=swing"), "next actions Open Scanner");
+    assertLayer4Link(anchorByHref(next, "/dashboard/watchlists"), "next actions View Watchlist");
   });
 
-  test("Swing Desk footer 'View swing scanner' carries both markers", () => {
+  test("watchlist strip link carries Tier 1.A + Layer 4 markers when strip renders", () => {
+    const scannerWithWatchlist: ScannerOverview = {
+      ...baseScanner,
+      watchlistStatus: { monitored: 2, actionable: 0, developing: 1, inactive: 1 }
+    };
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
-        scannerOverview={baseScanner}
+        scannerOverview={scannerWithWatchlist}
         earningsEvents={[]}
         earningsRecent={[]}
         weeklyIndexRows={baseWeekly}
         sectorRotation={[]}
       />
     );
-    // `swing-desk-scanner-footer` is the wrapper <div>; the actual
-    // <Link> is the first anchor inside.
-    const swingFooterWrap = screen.getByTestId("swing-desk-scanner-footer");
-    const swingFooter = swingFooterWrap.querySelector(
-      'a[href="/dashboard/scanner?mode=swing"]'
+    const strip = screen.getByTestId("dashboard-watchlist-status");
+    const watchlist = Array.from(strip.querySelectorAll("a")).find((a) =>
+      /view watchlist/i.test(a.textContent || "")
     ) as HTMLAnchorElement | null;
-    assertLayer4Link(swingFooter, "Swing Desk footer View swing scanner");
+    assertLayer4Link(watchlist, "watchlist strip View watchlist");
   });
 });
