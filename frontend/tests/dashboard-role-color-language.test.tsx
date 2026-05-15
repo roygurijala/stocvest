@@ -31,7 +31,7 @@
  */
 
 import type { ReactElement } from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { beforeAll, describe, expect, test, vi } from "vitest";
 
 import { DashboardRedesign } from "@/components/dashboard-redesign";
@@ -43,6 +43,7 @@ import {
 import { roleAccents } from "@/lib/design-system";
 import type { MarketOverview, MarketStatusPayload } from "@/lib/api/market";
 import type { ScannerOverview } from "@/lib/api/scanner";
+import { WEEKLY_MARKET_CONTEXT_CARD_TIP } from "@/lib/ui-tooltips";
 
 vi.mock("@/lib/hooks/use-is-mobile-layout", () => ({
   useIsMobileLayout: () => false
@@ -536,6 +537,10 @@ describe("Shared Context master card structure (Mode Separation B28 Phase 2b)", 
   });
 
   test("master_card_subtitle_explicitly_disclaims_trade_signal_status", () => {
+    const tipLc = WEEKLY_MARKET_CONTEXT_CARD_TIP.toLowerCase();
+    expect(tipLc).toContain("not a trade signal");
+    expect(tipLc).toContain("market backdrop and constraints");
+
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
@@ -547,9 +552,9 @@ describe("Shared Context master card structure (Mode Separation B28 Phase 2b)", 
       />
     );
     const card = screen.getByTestId("shared-context-master-card");
-    const text = (card.textContent || "").toLowerCase();
-    expect(text).toContain("not a trade signal");
-    expect(text).toContain("market backdrop and constraints");
+    expect(
+      within(card).getByRole("button", { name: /about shared context/i })
+    ).toBeInTheDocument();
   });
 
   test("dashboard_does_NOT_render_signal_validation_ledger_anymore", () => {

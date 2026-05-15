@@ -61,7 +61,7 @@ import {
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import type { ThemeColors } from "@/lib/design-system";
-import type { SnapshotPayload } from "@/lib/api/market";
+import { type SnapshotPayload, vixSnapshotDisplayLevel } from "@/lib/api/market";
 import type { EarningsEvent } from "@/lib/api/earnings";
 import { earningsTimingLabel } from "@/lib/earnings-timing";
 import {
@@ -306,10 +306,7 @@ export function DashboardHeroStrip({
     [regimeLabel, regimeBadgePriceBreadthOnly]
   );
 
-  const vixLast =
-    vixSnapshot && typeof vixSnapshot.last_trade_price === "number" && Number.isFinite(vixSnapshot.last_trade_price)
-      ? vixSnapshot.last_trade_price
-      : null;
+  const vixLast = vixSnapshotDisplayLevel(vixSnapshot);
   const volatility: VolatilityCategory = useMemo(
     () => classifyVolatility(vixLast, vixSessionPct),
     [vixLast, vixSessionPct]

@@ -115,6 +115,9 @@ def _dashboard_snapshots_have_usable_vix(snapshots: list[dict[str, Any]]) -> boo
         lp = raw.get("last_trade_price")
         if isinstance(lp, (int, float)) and lp == lp and lp > 0:
             return True
+        dc = raw.get("day_close")
+        if isinstance(dc, (int, float)) and dc == dc and dc > 0:
+            return True
         for k in ("change_percent", "pre_market_change_percent", "after_hours_change_percent"):
             v = raw.get(k)
             if isinstance(v, (int, float)) and v == v and v > -99.5:

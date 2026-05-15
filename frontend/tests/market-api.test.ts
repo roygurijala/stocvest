@@ -48,3 +48,39 @@ describe("market API overview fetch", () => {
     expect(result.snapshots).toHaveLength(0);
   });
 });
+
+describe("VIX snapshot helpers", () => {
+  test("vixSnapshotDisplayLevel prefers last trade over day close", async () => {
+    const {
+      vixSnapshotDisplayLevel,
+      vixSnapshotSessionChangePct,
+      vixPulseDataAvailable
+    } = await import("@/lib/api/market");
+    const s = {
+      symbol: "I:VIX",
+      last_trade_price: 18.2,
+      day_close: 18.5,
+      prev_close: 18.0
+    };
+    expect(vixSnapshotDisplayLevel(s)).toBe(18.2);
+    expect(vixSnapshotSessionChangePct(s)).not.toBeNull();
+    expect(vixPulseDataAvailable(s, null)).toBe(true);
+  });
+
+  test("vixSnapshotDisplayLevel falls back to day close for index-style gaps", async () => {
+    const { vixSnapshotDisplayLevel, vixPulseDataAvailable, vixSnapshotSessionChangePct } = await import(
+      "@/lib/api/market"
+    );
+    const s = {
+      symbol: "I:VIX",
+      last_trade_price: null,
+      day_close: 18.45,
+      prev_close: 18.0
+    };
+    expect(vixSnapshotDisplayLevel(s)).toBe(18.45);
+    expect(vixPulseDataAvailable(s, null)).toBe(true);
+    const pct = vixSnapshotSessionChangePct(s);
+    expect(pct).not.toBeNull();
+    expect(pct!).toBeGreaterThan(0);
+  });
+});

@@ -6,7 +6,6 @@ import { DashboardCard } from "@/components/dashboard-card";
 import { IndexReturnsHistogram } from "@/components/index-returns-histogram";
 import { IndexSessionRangeBar } from "@/components/index-session-range-bar";
 import { InfoTip } from "@/components/info-tip";
-import { DecisionMetric } from "@/components/decision-metric";
 import { getChangeColor } from "@/components/market-sentiment-score-widget";
 import {
   SHORT_HORIZON_TIMEFRAME_LINE,
@@ -17,13 +16,14 @@ import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, cardSurfaceStyle, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import type { MarketStatusPayload, SnapshotPayload } from "@/lib/api/market";
+import { vixSnapshotDisplayLevel } from "@/lib/api/market";
 import type { EarningsEvent } from "@/lib/api/earnings";
 import { earningsTimingLabel } from "@/lib/earnings-timing";
 import type { SectorRotationChip } from "@/components/dashboard-redesign";
 import {
   WEEKLY_MARKET_CONTEXT_CARD_TIP,
-  SHARED_CONTEXT_HISTOGRAM_TIP,
-  SHARED_CONTEXT_INTRADAY_GAUGE_TIP,
+  SHARED_CONTEXT_INDEX_TILE_TIP,
+  SHARED_CONTEXT_SECTION_A_TIP,
   SECTOR_ROTATION_CARD_TIP,
   UPCOMING_CATALYSTS_CARD_TIP,
   VIX_PULSE_NUMBER_TIP
@@ -507,10 +507,7 @@ export function SharedContextMasterCard(props: Props) {
     return vals.reduce((a, b) => a + b, 0) / vals.length;
   }, [weeklyIndexRows]);
 
-  const vixLevel =
-    vixSnapshot && typeof vixSnapshot.last_trade_price === "number" && Number.isFinite(vixSnapshot.last_trade_price)
-      ? vixSnapshot.last_trade_price
-      : null;
+  const vixLevel = vixSnapshotDisplayLevel(vixSnapshot);
   const volatility = useMemo(() => classifyVolatility(vixLevel, vixSessionPct), [vixLevel, vixSessionPct]);
   const participation = useMemo(
     () =>
@@ -601,8 +598,8 @@ export function SharedContextMasterCard(props: Props) {
         >
           <SubsectionHeader
             letter="A"
-            label="Recent Session Market State (Last ~5 Sessions)"
-            cardTip="Short-term **bias** from daily closes (5‑session net + per-day bars) vs **today’s behavior** (intraday position in the cash high–low). Shared backdrop for both desks — descriptive tape context only, not permission to trade."
+            label="Index tape (~5 sessions)"
+            cardTip={SHARED_CONTEXT_SECTION_A_TIP}
             colors={colors}
           />
           <div
@@ -627,128 +624,75 @@ export function SharedContextMasterCard(props: Props) {
                   }
                   style={{
                     borderRadius: borderRadius.md,
-                    // Direction-aware highlighted border: green when 5-session
-                    // net % is up, red when down, neutral when flat/unknown.
-                    // The role border (slate rail) lives on the MASTER card —
-                    // these inner tiles only encode price direction.
                     border: indexTileBorderForDirection(r.pct5d, colors),
                     background: "rgba(148,163,184,0.06)",
-                    padding: spacing[3],
+                    padding: spacing[2],
                     display: "grid",
-                    gap: spacing[2]
+                    gap: spacing[1]
                   }}
                 >
-                  <div>
-                    <p style={{ margin: 0, fontWeight: 700, fontSize: typography.scale.sm, color: colors.text }}>
-                      {r.symbol}
-                    </p>
-                    <p style={{ margin: 0, fontSize: 10, color: colors.textMuted }}>{r.label}</p>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      justifyContent: "space-between",
+                      gap: spacing[2]
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <p style={{ margin: 0, fontWeight: 700, fontSize: typography.scale.sm, color: colors.text }}>
+                        {r.symbol}
+                      </p>
+                      <p style={{ margin: 0, fontSize: 10, color: colors.textMuted }}>{r.label}</p>
+                    </div>
+                    <InfoTip
+                      text={SHARED_CONTEXT_INDEX_TILE_TIP}
+                      label={`How to read ${r.symbol}`}
+                      maxWidth={340}
+                    />
                   </div>
                   {hasCloses ? (
-                    <div style={{ width: "100%", minWidth: 0, display: "grid", gap: spacing[1] }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "flex-start",
-                          justifyContent: "space-between",
-                          gap: spacing[2]
-                        }}
-                      >
-                        <div style={{ minWidth: 0, flex: "1 1 auto" }}>
-                          <p
-                            style={{
-                              margin: 0,
-                              fontSize: 9,
-                              color: colors.textMuted,
-                              lineHeight: 1.35,
-                              fontWeight: 600
-                            }}
-                          >
-                            Daily close‑to‑close returns (last ~5 sessions)
-                          </p>
-                        </div>
-                        <InfoTip text={SHARED_CONTEXT_HISTOGRAM_TIP} label="About daily return bars" maxWidth={320} />
-                      </div>
-                      <IndexReturnsHistogram
-                        closes={r.closes5d!}
-                        ariaLabel={`${r.symbol} 5-session daily returns histogram`}
-                      />
-                    </div>
+                    <IndexReturnsHistogram
+                      closes={r.closes5d!}
+                      ariaLabel={`${r.symbol} 5-session daily returns histogram`}
+                    />
                   ) : (
-                    <span style={{ fontSize: 10, color: colors.textMuted }}>Daily returns chart pending</span>
+                    <span style={{ fontSize: 10, color: colors.textMuted }}>Chart pending</span>
                   )}
                   {r.sessionDayRange ? (
-                    <div style={{ width: "100%", minWidth: 0, display: "grid", gap: spacing[1] }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          gap: spacing[2]
-                        }}
-                      >
-                        <p
-                          style={{
-                            margin: 0,
-                            fontSize: 9,
-                            color: colors.textMuted,
-                            letterSpacing: "0.04em",
-                            textTransform: "uppercase",
-                            lineHeight: 1.3,
-                            fontWeight: 600
-                          }}
-                        >
-                          Intraday position (low → high)
-                        </p>
-                        <InfoTip text={SHARED_CONTEXT_INTRADAY_GAUGE_TIP} label="About intraday position" maxWidth={320} />
-                      </div>
-                      <p style={{ margin: 0, fontSize: 8, color: colors.textMuted, lineHeight: 1.35 }}>
-                        Today&apos;s cash session — how price sits inside today&apos;s range (not the 5‑session net above)
-                      </p>
-                      <IndexSessionRangeBar
-                        low={r.sessionDayRange.low}
-                        high={r.sessionDayRange.high}
-                        last={r.sessionDayRange.last}
-                        open={r.sessionDayRange.open}
-                        prevClose={r.sessionDayRange.prevClose}
-                        colors={colors}
-                      />
-                    </div>
+                    <IndexSessionRangeBar
+                      low={r.sessionDayRange.low}
+                      high={r.sessionDayRange.high}
+                      last={r.sessionDayRange.last}
+                      open={r.sessionDayRange.open}
+                      prevClose={r.sessionDayRange.prevClose}
+                      colors={colors}
+                    />
                   ) : null}
                   <div
                     style={{
-                      fontSize: typography.scale.base,
-                      fontWeight: 700,
-                      fontVariantNumeric: "tabular-nums",
-                      color: colors.text
+                      display: "flex",
+                      flexWrap: "wrap",
+                      alignItems: "baseline",
+                      justifyContent: "space-between",
+                      gap: `${spacing[1]} ${spacing[2]}`,
+                      fontVariantNumeric: "tabular-nums"
                     }}
                   >
                     {r.pct5d != null ? (
-                      <DecisionMetric
-                        explanation="Change from the daily close roughly five sessions ago to the latest daily close for this index. Uses calendar trading days returned by Polygon — descriptive of recent price behavior across all desks, not a swing-only signal."
-                        label="How 5-session net is computed"
-                        maxWidth={300}
-                      >
-                        <span style={{ color: colors.textMuted, fontWeight: 600 }}>
-                          5‑Session Net Return:{" "}
-                        </span>
+                      <span style={{ fontSize: typography.scale.base, fontWeight: 700, color: colors.text }}>
+                        <span style={{ color: colors.textMuted, fontWeight: 600 }}>5d </span>
                         <span style={{ color: getChangeColor(r.pct5d, colors) }}>{`${r.pct5d >= 0 ? "+" : ""}${r.pct5d.toFixed(2)}%`}</span>
-                      </DecisionMetric>
+                      </span>
                     ) : (
-                      "—"
+                      <span style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>5d —</span>
                     )}
+                    {r.lastPrice != null ? (
+                      <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>
+                        Last <span style={{ color: colors.text, fontWeight: 600 }}>${r.lastPrice.toFixed(2)}</span>
+                      </span>
+                    ) : null}
                   </div>
-                  {r.lastPrice != null ? (
-                    <div
-                      style={{
-                        fontSize: typography.scale.xs,
-                        color: colors.textMuted,
-                        fontVariantNumeric: "tabular-nums"
-                      }}
-                    >
-                      Last <span style={{ color: colors.text }}>${r.lastPrice.toFixed(2)}</span>
-                    </div>
-                  ) : null}
                 </div>
               );
             })}
@@ -1052,7 +996,6 @@ export function SharedContextMasterCard(props: Props) {
       role="shared"
       eyebrow="All timeframes · used by both desks"
       title="Shared Context"
-      subtitle="Market backdrop and constraints — descriptive context only. Not a trade signal; red/green here is tape state, not desk permission to trade."
       cardTip={WEEKLY_MARKET_CONTEXT_CARD_TIP}
       data-testid="shared-context-master-card"
       headerRight={sessionStatusStrip}

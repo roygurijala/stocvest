@@ -77,7 +77,32 @@ export const LAYER_NAME_HINTS: Record<string, string> = {
 export const DASHBOARD_MARKET_SENTIMENT_CARD_TIP =
   "This panel summarizes how large-cap, tech, and small-cap indices are moving versus yesterday’s close. STOCVEST uses it as a fast tape read for swing workflow—risk appetite and breadth—before you drill into a symbol’s Evidence or six-layer composite. It is not a trade signal by itself.";
 
+/** Section A — long-form read; the subsection title on the card stays short. */
+export const SHARED_CONTEXT_SECTION_A_TIP =
+  "**Recent session market state** — SPY, QQQ, and IWM side by side.\n\n" +
+  "**What each tile shows**\n" +
+  "• Five **daily close-to-close** sessions (bars)\n" +
+  "• **Today’s** cash **high-low** position (dot on the track)\n" +
+  "• **5-session net %** and **last** print\n\n" +
+  "**How to use it**\n" +
+  "Same **tape context** for Swing and Day — **descriptive only**. Red/green is **market state**, not desk **permission** to trade.";
+
+/** One SPY / QQQ / IWM tile — explanatory copy consolidated (surface stays minimal). */
+export const SHARED_CONTEXT_INDEX_TILE_TIP =
+  "**1 · Daily return bars**\n" +
+  "• One row per **cash session**: **close vs prior close**.\n" +
+  "• **Top** = oldest, **bottom** = newest; the **most-recent** pill marks the latest bar.\n" +
+  "• Bar **length** scales to that symbol’s **max |day|** in the window — compare **within this ticker**, not across tickers.\n\n" +
+  "**2 · Today’s range**\n" +
+  "• **Dot** = **last** inside **today’s** session **high-low** (cash).\n" +
+  "• **Separate** from the 5-row history above (intraday vs multi-day).\n" +
+  "• **Left** ≈ pressed low, **right** ≈ bid toward the high.\n\n" +
+  "**3 · 5d & last**\n" +
+  "• **5d** = **cumulative** close-to-close over the same ~5 sessions as the bars.\n" +
+  "• **Last** = latest snapshot / trade for the index.";
+
 export const WEEKLY_MARKET_CONTEXT_CARD_TIP =
+  "Market backdrop and constraints for both desks — **descriptive context only**. Not a trade signal; red/green here is **tape state**, not permission to trade.\n\n" +
   "Shows roughly five **trading sessions** of change on SPY, QQQ, and IWM using **daily** closes (Polygon aggregates), plus last price from the snapshot. **Green and red here describe tape context** (short-term bias and how today is trading inside its range) — **not** buy/sell permission; actionable gates live on the desks with their own indicators. Used by **Swing and Day** workflows to frame risk and constraints — descriptive only, not a directive to trade.";
 
 /** Section A — SPY/QQQ/IWM horizontal daily-return bars (InfoTip on chart). */

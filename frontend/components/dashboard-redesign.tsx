@@ -30,7 +30,14 @@ import { useMacroContext } from "@/lib/hooks/use-macro-context";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
 import { topSignalStrengthPercent } from "@/lib/top-signal-strength";
-import type { MarketOverview, NewsPayload, SnapshotPayload } from "@/lib/api/market";
+import {
+  type MarketOverview,
+  type NewsPayload,
+  type SnapshotPayload,
+  vixPulseDataAvailable,
+  vixSnapshotDisplayLevel,
+  vixSnapshotSessionChangePct
+} from "@/lib/api/market";
 import type { IntradayGeoPreview, IntradaySetupPayload, ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
 import { earningsTimingLabel } from "@/lib/earnings-timing";
@@ -235,14 +242,6 @@ function snapshotSessionChangePct(s: SnapshotPayload | null | undefined): number
   return null;
 }
 
-/** True when the pulse can show a usable VIX session % or last index level (matches Market pulse row). */
-function vixPulseDataAvailable(snapshot: SnapshotPayload | undefined, sessionPct: number | null): boolean {
-  if (sessionPct != null && Number.isFinite(sessionPct)) return true;
-  if (!snapshot) return false;
-  const p = snapshot.last_trade_price;
-  return typeof p === "number" && Number.isFinite(p);
-}
-
 /** Prefer a VIX row we can actually render (Polygon sometimes omits last trade on `I:VIX` while `^VIX` is usable). */
 function findVixSnapshot(snapshots: SnapshotPayload[]): SnapshotPayload | undefined {
   const order = ["I:VIX", "^VIX", "VIX"];
@@ -256,7 +255,7 @@ function findVixSnapshot(snapshots: SnapshotPayload[]): SnapshotPayload | undefi
   for (const k of order) {
     const hit = bySym.get(k);
     if (!hit) continue;
-    const pct = snapshotSessionChangePct(hit);
+    const pct = vixSnapshotSessionChangePct(hit);
     if (vixPulseDataAvailable(hit, pct)) return hit;
   }
   for (const k of order) {
@@ -629,7 +628,7 @@ function DashboardRedesignBody({
   const regimeLabel = useScannerRegime
     ? (scannerOverview.regimeLabel ?? "Neutral")
     : regimeFromSpyQqq(spyPct, qqqPct, scannerOverview.regimeLabel ?? "Neutral");
-  const vixPct = snapshotSessionChangePct(vixSnapshot);
+  const vixPct = vixSnapshotSessionChangePct(vixSnapshot);
   const vixPulseOk = vixPulseDataAvailable(vixSnapshot, vixPct);
   const vixBlankKind = resolveVixBlankKind(vixPulseOk, marketOverview.status, marketOverview.error, spyPct, qqqPct);
   const regimeBadgePriceBreadthOnly = !vixPulseOk && regimeLabelIsDirectional(regimeLabel);
@@ -837,8 +836,8 @@ function DashboardRedesignBody({
             </span>
             <span style={{ color: colors.textMuted }} className="inline-flex items-center gap-1">
               <strong style={{ color: colors.text }}>VIX</strong>
-              {vixPulseOk && vixSnapshot && toPrice(vixSnapshot.last_trade_price) ? (
-                <span>{toPrice(vixSnapshot.last_trade_price)}</span>
+              {vixPulseOk && vixSnapshot && vixSnapshotDisplayLevel(vixSnapshot) ? (
+                <span>{toPrice(vixSnapshotDisplayLevel(vixSnapshot))}</span>
               ) : vixPct != null ? (
                 <span>{`${vixPct >= 0 ? "+" : ""}${vixPct.toFixed(2)}%`}</span>
               ) : vixBlankKind ? (
