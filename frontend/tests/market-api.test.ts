@@ -55,7 +55,7 @@ describe("VIX snapshot helpers", () => {
       vixSnapshotDisplayLevel,
       vixSnapshotSessionChangePct,
       vixPulseDataAvailable
-    } = await import("@/lib/api/market");
+    } = await import("@/lib/api/market-snapshot-helpers");
     const s = {
       symbol: "I:VIX",
       last_trade_price: 18.2,
@@ -69,7 +69,7 @@ describe("VIX snapshot helpers", () => {
 
   test("vixSnapshotDisplayLevel falls back to day close for index-style gaps", async () => {
     const { vixSnapshotDisplayLevel, vixPulseDataAvailable, vixSnapshotSessionChangePct } = await import(
-      "@/lib/api/market"
+      "@/lib/api/market-snapshot-helpers"
     );
     const s = {
       symbol: "I:VIX",

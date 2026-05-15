@@ -16,7 +16,7 @@ import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, cardSurfaceStyle, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import type { MarketStatusPayload, SnapshotPayload } from "@/lib/api/market";
-import { vixSnapshotDisplayLevel } from "@/lib/api/market";
+import { vixSnapshotDisplayLevel } from "@/lib/api/market-snapshot-helpers";
 import type { EarningsEvent } from "@/lib/api/earnings";
 import { earningsTimingLabel } from "@/lib/earnings-timing";
 import type { SectorRotationChip } from "@/components/dashboard-redesign";

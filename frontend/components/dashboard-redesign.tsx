@@ -30,14 +30,12 @@ import { useMacroContext } from "@/lib/hooks/use-macro-context";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
 import { topSignalStrengthPercent } from "@/lib/top-signal-strength";
+import type { MarketOverview, NewsPayload, SnapshotPayload } from "@/lib/api/market";
 import {
-  type MarketOverview,
-  type NewsPayload,
-  type SnapshotPayload,
   vixPulseDataAvailable,
   vixSnapshotDisplayLevel,
   vixSnapshotSessionChangePct
-} from "@/lib/api/market";
+} from "@/lib/api/market-snapshot-helpers";
 import type { IntradayGeoPreview, IntradaySetupPayload, ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
 import { earningsTimingLabel } from "@/lib/earnings-timing";

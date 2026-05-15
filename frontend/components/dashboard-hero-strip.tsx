@@ -61,7 +61,8 @@ import {
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import type { ThemeColors } from "@/lib/design-system";
-import { type SnapshotPayload, vixSnapshotDisplayLevel } from "@/lib/api/market";
+import type { SnapshotPayload } from "@/lib/api/market";
+import { vixSnapshotDisplayLevel } from "@/lib/api/market-snapshot-helpers";
 import type { EarningsEvent } from "@/lib/api/earnings";
 import { earningsTimingLabel } from "@/lib/earnings-timing";
 import {
