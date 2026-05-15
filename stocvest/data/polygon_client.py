@@ -530,12 +530,17 @@ class PolygonClient:
 
         prev_close = prev.get("c")
         prev_day_volume = prev.get("v")
-        last_price = last.get("p")
-        change = None
-        change_pct = None
-        if last_price is not None and prev_close not in (None, 0):
-            change = last_price - prev_close
-            change_pct = (change / prev_close) * 100
+        raw_lp = last.get("p")
+        last_price: float | None
+        if raw_lp is None or raw_lp == "":
+            last_price = None
+        else:
+            try:
+                last_price = float(raw_lp)
+                if last_price <= 0 or last_price != last_price:
+                    last_price = None
+            except (TypeError, ValueError):
+                last_price = None
 
         pre_market_price = PolygonClient._first_present(
             pre_market.get("p"),
@@ -570,6 +575,28 @@ class PolygonClient:
         day_close = day.get("c")
         day_volume = day.get("v")
         day_vwap = day.get("vw")
+
+        # Index tape (notably VIX / I:VIX) often ships an updating session `day` bar
+        # while `lastTrade.p` is absent between official prints.
+        if last_price is None and day_close is not None:
+            try:
+                dc = float(day_close)
+                if dc == dc and dc > 0:
+                    last_price = dc
+            except (TypeError, ValueError):
+                pass
+
+        change = None
+        change_pct = None
+        if last_price is not None and prev_close not in (None, 0):
+            try:
+                pc = float(prev_close)
+                lp = float(last_price)
+                change = lp - pc
+                change_pct = (change / pc) * 100
+            except (TypeError, ValueError):
+                pass
+
         should_validate = last_price is not None and last_price > 0
         if should_validate and not PolygonClient._session_day_prices_align_with_last(
             last_price, day_open, day_high, day_low, day_close, day_vwap

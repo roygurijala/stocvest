@@ -147,7 +147,7 @@ export async function fetchDashboardMarketDailySlice() {
   const [marketOverview, dailyCloses] = await Promise.all([
     timeDashboardPhase("market_overview", () =>
       timeoutFallback(
-        fetchMarketOverview(["SPY", "QQQ", "IWM", "I:VIX"], { sparklineBarLimit: 12 }),
+        fetchMarketOverview(["SPY", "QQQ", "IWM", "I:VIX", "^VIX"], { sparklineBarLimit: 12 }),
         DASHBOARD_MARKET_TIMEOUT_MS,
         marketFallback
       )

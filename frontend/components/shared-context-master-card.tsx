@@ -22,6 +22,8 @@ import { earningsTimingLabel } from "@/lib/earnings-timing";
 import type { SectorRotationChip } from "@/components/dashboard-redesign";
 import {
   WEEKLY_MARKET_CONTEXT_CARD_TIP,
+  SHARED_CONTEXT_HISTOGRAM_TIP,
+  SHARED_CONTEXT_INTRADAY_GAUGE_TIP,
   SECTOR_ROTATION_CARD_TIP,
   UPCOMING_CATALYSTS_CARD_TIP,
   VIX_PULSE_NUMBER_TIP
@@ -600,7 +602,7 @@ export function SharedContextMasterCard(props: Props) {
           <SubsectionHeader
             letter="A"
             label="Recent Session Market State (Last ~5 Sessions)"
-            cardTip="Per-session close-to-close returns (horizontal bars), optional today cash-session range vs prior close, and 5-session net % for SPY, QQQ, IWM. Shared backdrop both desks read; descriptive, not a setup signal."
+            cardTip="Short-term **bias** from daily closes (5‑session net + per-day bars) vs **today’s behavior** (intraday position in the cash high–low). Shared backdrop for both desks — descriptive tape context only, not permission to trade."
             colors={colors}
           />
           <div
@@ -643,7 +645,33 @@ export function SharedContextMasterCard(props: Props) {
                     <p style={{ margin: 0, fontSize: 10, color: colors.textMuted }}>{r.label}</p>
                   </div>
                   {hasCloses ? (
-                    <div style={{ width: "100%", minWidth: 0 }}>
+                    <div style={{ width: "100%", minWidth: 0, display: "grid", gap: spacing[1] }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "flex-start",
+                          justifyContent: "space-between",
+                          gap: spacing[2]
+                        }}
+                      >
+                        <div style={{ minWidth: 0 }}>
+                          <p
+                            style={{
+                              margin: 0,
+                              fontSize: 9,
+                              color: colors.textMuted,
+                              lineHeight: 1.35,
+                              fontWeight: 600
+                            }}
+                          >
+                            Daily returns (last ~5 sessions)
+                          </p>
+                          <p style={{ margin: "2px 0 0", fontSize: 8, color: colors.textMuted, lineHeight: 1.35 }}>
+                            Oldest at top → newest at bottom
+                          </p>
+                        </div>
+                        <InfoTip text={SHARED_CONTEXT_HISTOGRAM_TIP} label="About daily return bars" maxWidth={320} />
+                      </div>
                       <IndexReturnsHistogram
                         closes={r.closes5d!}
                         ariaLabel={`${r.symbol} 5-session daily returns histogram`}
@@ -653,9 +681,32 @@ export function SharedContextMasterCard(props: Props) {
                     <span style={{ fontSize: 10, color: colors.textMuted }}>Daily returns chart pending</span>
                   )}
                   {r.sessionDayRange ? (
-                    <div style={{ width: "100%", minWidth: 0 }}>
-                      <p style={{ margin: 0, fontSize: 9, color: colors.textMuted, letterSpacing: "0.04em" }}>
-                        TODAY&apos;S RANGE (CASH)
+                    <div style={{ width: "100%", minWidth: 0, display: "grid", gap: spacing[1] }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: spacing[2]
+                        }}
+                      >
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: 9,
+                            color: colors.textMuted,
+                            letterSpacing: "0.04em",
+                            textTransform: "uppercase",
+                            lineHeight: 1.3,
+                            fontWeight: 600
+                          }}
+                        >
+                          Intraday position (low → high)
+                        </p>
+                        <InfoTip text={SHARED_CONTEXT_INTRADAY_GAUGE_TIP} label="About intraday position" maxWidth={320} />
+                      </div>
+                      <p style={{ margin: 0, fontSize: 8, color: colors.textMuted, lineHeight: 1.35 }}>
+                        Today&apos;s cash session — how price sits inside today&apos;s range (not the 5‑session net above)
                       </p>
                       <IndexSessionRangeBar
                         low={r.sessionDayRange.low}
@@ -672,16 +723,19 @@ export function SharedContextMasterCard(props: Props) {
                       fontSize: typography.scale.base,
                       fontWeight: 700,
                       fontVariantNumeric: "tabular-nums",
-                      color: r.pct5d != null ? getChangeColor(r.pct5d, colors) : colors.textMuted
+                      color: colors.text
                     }}
                   >
                     {r.pct5d != null ? (
                       <DecisionMetric
                         explanation="Change from the daily close roughly five sessions ago to the latest daily close for this index. Uses calendar trading days returned by Polygon — descriptive of recent price behavior across all desks, not a swing-only signal."
-                        label="How 5-session % is computed"
+                        label="How 5-session net is computed"
                         maxWidth={300}
                       >
-                        <span>{`${r.pct5d >= 0 ? "+" : ""}${r.pct5d.toFixed(2)}%`}</span>
+                        <span style={{ color: colors.textMuted, fontWeight: 600 }}>
+                          5‑Session Net Return:{" "}
+                        </span>
+                        <span style={{ color: getChangeColor(r.pct5d, colors) }}>{`${r.pct5d >= 0 ? "+" : ""}${r.pct5d.toFixed(2)}%`}</span>
                       </DecisionMetric>
                     ) : (
                       "—"
@@ -919,6 +973,10 @@ export function SharedContextMasterCard(props: Props) {
           >
             <p style={{ margin: 0 }}>{SHORT_HORIZON_TIMEFRAME_LINE}</p>
             <p style={{ margin: 0 }}>{SHORT_HORIZON_WHY_THIS_MATTERS}</p>
+            <p style={{ margin: 0, fontWeight: 600 }}>
+              Shared Context is descriptive backdrop — not an entry trigger on its own. Desk gates elsewhere mark
+              actionability; red and green here describe short-term bias and intraday position only.
+            </p>
           </div>
         </SubsectionCard>
 
@@ -997,7 +1055,7 @@ export function SharedContextMasterCard(props: Props) {
       role="shared"
       eyebrow="All timeframes · used by both desks"
       title="Shared Context"
-      subtitle="Market environment and constraints used by all desks. Not a trade signal."
+      subtitle="Market backdrop and constraints — descriptive context only. Not a trade signal; red/green here is tape state, not desk permission to trade."
       cardTip={WEEKLY_MARKET_CONTEXT_CARD_TIP}
       data-testid="shared-context-master-card"
       headerRight={sessionStatusStrip}

@@ -172,7 +172,24 @@ describe("IndexReturnsHistogram — accessibility", () => {
     wrap(<IndexReturnsHistogram closes={[100, 101]} />);
     const bar = screen.getByTestId("histogram-bar-0");
     const title = bar.querySelector("title");
-    expect(title?.textContent || "").toMatch(/Session 1: \+1\.00%/);
+    expect(title?.textContent || "").toMatch(/Daily return \(close-to-close, only session in window\): \+1\.00%/);
+  });
+
+  test("tags oldest, middle, and most-recent rows in a five-return window", () => {
+    wrap(<IndexReturnsHistogram closes={[100, 101, 102, 103, 104, 105]} />);
+    expect(screen.getByTestId("histogram-bar-0").getAttribute("data-session-order")).toBe("oldest");
+    expect(screen.getByTestId("histogram-bar-1").getAttribute("data-session-order")).toBe("middle");
+    expect(screen.getByTestId("histogram-bar-4").getAttribute("data-session-order")).toBe("most-recent");
+    expect(screen.getByTestId("histogram-bar-4").getAttribute("data-most-recent")).toBe("true");
+    expect(screen.getByTestId("histogram-bar-0").getAttribute("data-most-recent")).toBe("false");
+  });
+
+  test("multi-day first bar title names the oldest session", () => {
+    wrap(<IndexReturnsHistogram closes={[100, 101, 102]} />);
+    const oldest = screen.getByTestId("histogram-bar-0").querySelector("title");
+    const newest = screen.getByTestId("histogram-bar-1").querySelector("title");
+    expect(oldest?.textContent || "").toMatch(/Oldest session:/);
+    expect(newest?.textContent || "").toMatch(/Most recent session:/);
   });
 });
 

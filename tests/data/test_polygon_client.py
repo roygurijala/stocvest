@@ -857,6 +857,21 @@ class TestRetries:
 # PolygonClient initialisation
 # ──────────────────────────────────────────────────────────────────────────────
 
+
+class TestParseSnapshotIndexFallback:
+    def test_vix_like_payload_without_last_trade_uses_day_close(self):
+        ticker = {
+            "ticker": "I:VIX",
+            "day": {"o": 18.0, "h": 19.0, "l": 17.5, "c": 18.5, "v": 1},
+            "prevDay": {"c": 18.0, "v": 100},
+            "lastTrade": {},
+        }
+        snap = PolygonClient._parse_snapshot("I:VIX", ticker)
+        assert snap.last_trade_price == pytest.approx(18.5)
+        assert snap.change is not None and snap.change_percent is not None
+        assert snap.change == pytest.approx(0.5)
+
+
 class TestClientInit:
     def test_empty_api_key_raises(self):
         with pytest.raises(ValueError, match="POLYGON_API_KEY"):

@@ -168,16 +168,17 @@ export function WeeklyMarketContextWidget({ rows, marketStatus, dataIssue }: Pro
                 fontSize: typography.scale.lg,
                 fontWeight: 700,
                 fontVariantNumeric: "tabular-nums",
-                color: r.pct5d != null ? getChangeColor(r.pct5d, colors) : colors.textMuted
+                color: colors.text
               }}
             >
               {r.pct5d != null ? (
                 <DecisionMetric
                   explanation="Change from the daily close roughly five sessions ago to the latest daily close for this index. Uses calendar trading days returned by Polygon — descriptive of recent price behavior across all desks, not a swing-only signal."
-                  label="How 5-session % is computed"
+                  label="How 5-session net is computed"
                   maxWidth={300}
                 >
-                  <span>{`${r.pct5d >= 0 ? "+" : ""}${r.pct5d.toFixed(2)}%`}</span>
+                  <span style={{ color: colors.textMuted, fontWeight: 600 }}>5‑Session Net Return: </span>
+                  <span style={{ color: getChangeColor(r.pct5d, colors) }}>{`${r.pct5d >= 0 ? "+" : ""}${r.pct5d.toFixed(2)}%`}</span>
                 </DecisionMetric>
               ) : (
                 "—"

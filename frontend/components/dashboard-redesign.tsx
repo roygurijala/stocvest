@@ -207,15 +207,6 @@ function toPrice(n: number | null | undefined): string {
   return `$${n.toFixed(2)}`;
 }
 
-function findVixSnapshot(snapshots: SnapshotPayload[]): SnapshotPayload | undefined {
-  const order = ["I:VIX", "^VIX", "VIX"];
-  for (const k of order) {
-    const hit = snapshots.find((x) => (x.symbol || "").toUpperCase() === k);
-    if (hit) return hit;
-  }
-  return undefined;
-}
-
 /** Session change % for pulse widgets (aligns with scanner `snapPct`: regular → pre → after → derived). */
 function snapshotSessionChangePct(s: SnapshotPayload | null | undefined): number | null {
   if (!s) return null;
@@ -250,6 +241,29 @@ function vixPulseDataAvailable(snapshot: SnapshotPayload | undefined, sessionPct
   if (!snapshot) return false;
   const p = snapshot.last_trade_price;
   return typeof p === "number" && Number.isFinite(p);
+}
+
+/** Prefer a VIX row we can actually render (Polygon sometimes omits last trade on `I:VIX` while `^VIX` is usable). */
+function findVixSnapshot(snapshots: SnapshotPayload[]): SnapshotPayload | undefined {
+  const order = ["I:VIX", "^VIX", "VIX"];
+  const bySym = new Map<string, SnapshotPayload>();
+  for (const x of snapshots) {
+    const u = (x.symbol || "").toUpperCase();
+    if (order.includes(u)) {
+      bySym.set(u, x);
+    }
+  }
+  for (const k of order) {
+    const hit = bySym.get(k);
+    if (!hit) continue;
+    const pct = snapshotSessionChangePct(hit);
+    if (vixPulseDataAvailable(hit, pct)) return hit;
+  }
+  for (const k of order) {
+    const hit = bySym.get(k);
+    if (hit) return hit;
+  }
+  return undefined;
 }
 
 function regimeLabelIsDirectional(regimeLabel: string): boolean {

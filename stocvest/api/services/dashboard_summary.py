@@ -12,7 +12,7 @@ from stocvest.data.models import Bar, EarningsEvent, Snapshot
 from stocvest.utils.config import Settings, get_settings
 
 # Keep in lockstep with `frontend/lib/dashboard/dashboard-page-data.ts` symbol lists.
-DASHBOARD_TAPE_SYMBOLS: tuple[str, ...] = ("SPY", "QQQ", "IWM", "I:VIX")
+DASHBOARD_TAPE_SYMBOLS: tuple[str, ...] = ("SPY", "QQQ", "IWM", "I:VIX", "^VIX")
 DASHBOARD_DAILY_SYMBOLS: tuple[str, ...] = (
     "SPY",
     "QQQ",

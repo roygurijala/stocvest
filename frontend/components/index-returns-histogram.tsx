@@ -25,6 +25,14 @@ export type IndexReturnsHistogramProps = {
 
 const VIEW_W = 100;
 
+function histogramBarTitle(r: number, i: number, n: number): string {
+  const pct = `${r >= 0 ? "+" : ""}${r.toFixed(2)}%`;
+  if (n === 1) return `Daily return (close-to-close, only session in window): ${pct}`;
+  if (i === 0) return `Oldest session: ${pct} (close-to-close)`;
+  if (i === n - 1) return `Most recent session: ${pct} (close-to-close)`;
+  return `Session ${i + 1} of ${n}: ${pct} (close-to-close)`;
+}
+
 /**
  * Daily-returns histogram for the SPY / QQQ / IWM tiles in the Shared Context
  * master card. Horizontal layout: each row is one session’s close-to-close
@@ -32,15 +40,16 @@ const VIEW_W = 100;
  * visible without wasting horizontal space in wide tiles.
  *
  * Encoding rules (locked in by tests/index-returns-histogram.test.tsx):
- *   1. One bar per *daily return*, oldest at the top, newest at the bottom.
+ *   1. One bar per *daily return*, **oldest session at the top**, **newest at the bottom**.
  *   2. Color follows the same `getChangeColor` neutral-band as the % label
  *      (±0.1%): up → bullish, down → bearish, in-band → muted.
- *   3. Bar length encodes |return %| scaled per-card (max abs uses ~92% of
- *      the half-width budget). Cross-tile magnitude comparison stays on the
- *      % label.
+ *   3. Bar length encodes |return %| scaled **per symbol** (this `closes` array only):
+ *      max |return| in the window maps to ~92% of half-width — SPY/QQQ/IWM cards
+ *      do not share a common scale (cross-tile comparison uses the **5‑session net %** label).
  *   4. Polarity also lives in position — positive bars extend right from the
  *      vertical zero line, negative bars extend left. Colorblind-safe.
  *   5. Neutral sessions render a 1px-wide stub on the zero line.
+ *   6. The **most recent** session bar is outlined slightly so it reads as “today’s” daily return.
  */
 export function IndexReturnsHistogram({ closes, height: heightProp, ariaLabel }: IndexReturnsHistogramProps) {
   const { colors } = useTheme();
@@ -60,6 +69,7 @@ export function IndexReturnsHistogram({ closes, height: heightProp, ariaLabel }:
     if (returns.length === 0) return null;
 
     const maxAbs = Math.max(...returns.map((r) => Math.abs(r)), 0.05);
+    /* Per-symbol only: `returns` is derived from this tile's `closes` — never mix SPY/QQQ/IWM. */
 
     const topPad = 3;
     const rowPitch = 14;
@@ -68,12 +78,15 @@ export function IndexReturnsHistogram({ closes, height: heightProp, ariaLabel }:
     const centerX = VIEW_W / 2;
     const maxHalfW = (VIEW_W / 2 - 4) * 0.92;
 
+    const n = returns.length;
     const bars = returns.map((r, i) => {
+      const isMostRecent = i === n - 1;
       const magnitude = Math.min(1, Math.abs(r) / maxAbs);
       const inNeutralBand = Math.abs(r) <= 0.1;
       const sign: "up" | "down" | "flat" = inNeutralBand ? "flat" : r > 0 ? "up" : "down";
       const rowTop = topPad + i * rowPitch;
       const y = rowTop + (rowPitch - barH) / 2;
+      const title = histogramBarTitle(r, i, n);
 
       if (sign === "flat") {
         return {
@@ -82,15 +95,35 @@ export function IndexReturnsHistogram({ closes, height: heightProp, ariaLabel }:
           w: 1,
           h: barH,
           returnPct: r,
-          sign
+          sign,
+          isMostRecent,
+          title
         };
       }
 
       const len = Math.max(0.4, magnitude * maxHalfW);
       if (sign === "up") {
-        return { x: centerX, y, w: len, h: barH, returnPct: r, sign };
+        return {
+          x: centerX,
+          y,
+          w: len,
+          h: barH,
+          returnPct: r,
+          sign,
+          isMostRecent,
+          title
+        };
       }
-      return { x: centerX - len, y, w: len, h: barH, returnPct: r, sign };
+      return {
+        x: centerX - len,
+        y,
+        w: len,
+        h: barH,
+        returnPct: r,
+        sign,
+        isMostRecent,
+        title
+      };
     });
 
     return {
@@ -138,14 +171,19 @@ export function IndexReturnsHistogram({ closes, height: heightProp, ariaLabel }:
           data-testid={`histogram-bar-${i}`}
           data-sign={b.sign}
           data-return-pct={b.returnPct.toFixed(4)}
+          data-most-recent={b.isMostRecent ? "true" : "false"}
+          data-session-order={b.isMostRecent ? "most-recent" : i === 0 ? "oldest" : "middle"}
           x={b.x}
           y={b.y}
           width={b.w}
           height={b.h}
           fill={getChangeColor(b.returnPct, colors)}
+          opacity={b.isMostRecent ? 1 : 0.82}
+          stroke={b.isMostRecent ? `color-mix(in srgb, ${colors.text} 78%, transparent)` : "none"}
+          strokeWidth={b.isMostRecent ? 0.45 : 0}
           rx={0.5}
         >
-          <title>{`Session ${i + 1}: ${b.returnPct >= 0 ? "+" : ""}${b.returnPct.toFixed(2)}%`}</title>
+          <title>{b.title}</title>
         </rect>
       ))}
     </svg>

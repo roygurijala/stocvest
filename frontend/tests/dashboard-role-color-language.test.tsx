@@ -549,7 +549,7 @@ describe("Shared Context master card structure (Mode Separation B28 Phase 2b)", 
     const card = screen.getByTestId("shared-context-master-card");
     const text = (card.textContent || "").toLowerCase();
     expect(text).toContain("not a trade signal");
-    expect(text).toContain("market environment and constraints used by all desks");
+    expect(text).toContain("market backdrop and constraints");
   });
 
   test("dashboard_does_NOT_render_signal_validation_ledger_anymore", () => {

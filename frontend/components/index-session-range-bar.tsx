@@ -32,7 +32,7 @@ export function IndexSessionRangeBar({ low, high, last, open, prevClose, colors 
   const H = 10;
   const pad = 1;
   const trackY = H / 2;
-  const trackH = 3;
+  const trackH = 4;
   const dotR = 2.25;
 
   return (
@@ -46,14 +46,16 @@ export function IndexSessionRangeBar({ low, high, last, open, prevClose, colors 
       preserveAspectRatio="none"
       style={{ display: "block" }}
     >
-      <title>{`Session range ${low.toFixed(2)}–${high.toFixed(2)}, last ${last.toFixed(2)}`}</title>
+      <title>{`Intraday range ${low.toFixed(2)}–${high.toFixed(2)} (cash); last ${last.toFixed(2)} — dot is position inside today high–low, not the 5-session net above.`}</title>
       <rect
         x={pad}
         y={trackY - trackH / 2}
         width={W - pad * 2}
         height={trackH}
-        rx={1}
-        fill={`color-mix(in srgb, ${colors.textMuted} 22%, transparent)`}
+        rx={1.25}
+        fill={`color-mix(in srgb, ${colors.textMuted} 46%, ${colors.border})`}
+        stroke={`color-mix(in srgb, ${colors.text} 26%, transparent)`}
+        strokeWidth={0.45}
       />
       {prevT != null ? (
         <line

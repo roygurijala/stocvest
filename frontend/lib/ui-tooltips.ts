@@ -78,7 +78,15 @@ export const DASHBOARD_MARKET_SENTIMENT_CARD_TIP =
   "This panel summarizes how large-cap, tech, and small-cap indices are moving versus yesterday’s close. STOCVEST uses it as a fast tape read for swing workflow—risk appetite and breadth—before you drill into a symbol’s Evidence or six-layer composite. It is not a trade signal by itself.";
 
 export const WEEKLY_MARKET_CONTEXT_CARD_TIP =
-  "Shows roughly five **trading sessions** of change on SPY, QQQ, and IWM using **daily** closes (Polygon aggregates), plus last price from the snapshot. The summary line is suffixed **(background)** and uses softer color on purpose—swing context only, not a trade signal. It is not intraday ORB/VWAP noise.";
+  "Shows roughly five **trading sessions** of change on SPY, QQQ, and IWM using **daily** closes (Polygon aggregates), plus last price from the snapshot. **Green and red here describe tape context** (short-term bias and how today is trading inside its range) — **not** buy/sell permission; actionable gates live on the desks with their own indicators. Used by **Swing and Day** workflows to frame risk and constraints — descriptive only, not a directive to trade.";
+
+/** Section A — SPY/QQQ/IWM horizontal daily-return bars (InfoTip on chart). */
+export const SHARED_CONTEXT_HISTOGRAM_TIP =
+  "• **Horizontal bars:** daily **close‑to‑close** returns (last ~5 cash sessions), oldest row at the **top**, most recent at the **bottom**.\n• **Bar length:** scaled **per index** to that symbol’s **largest |daily return|** in the window — compare magnitudes **within** one card (SPY vs SPY), not across cards.\n• **Number below:** **cumulative** return over those same sessions (5‑session net).\n• **Purpose:** shared **market context** only — not a trade signal.";
+
+/** Intraday position gauge under each index tile (Section A). */
+export const SHARED_CONTEXT_INTRADAY_GAUGE_TIP =
+  "**Intraday position** — where the **last price** sits inside **today’s cash‑session high–low** (today only; separate from the 5‑session bars above).\n\n• **Near the left** → weak session (pressed toward the low)\n• **Near the right** → strong session (bid toward the high)\n• **Middle** → balanced / chop inside the range\n\nDay traders: pair **5‑session net** (short‑term trend/bias) with this **dot** (how **today** is behaving) — e.g. “down on the week but recovering intraday.” Context only, not entry permission.";
 
 export const MARKET_PULSE_CARD_TIP =
   "SPY, QQQ, and VIX session change plus a simple regime label—useful context for how today’s session sits next to a swing thesis. When the scanner finishes, these numbers match the same tape inputs used in gap and setup context; otherwise they come from your market overview snapshots. They inform macro-style context in the engine, not individual entry prices.";
