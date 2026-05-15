@@ -1,0 +1,9 @@
+2026-05-15T14:00:01.000Z info [dashboard-load] user_me 88ms
+2026-05-15T14:00:01.100Z info [dashboard-load] dashboard_summary 742ms
+2026-05-15T14:00:02.200Z info [dashboard-load] scanner_core 2850ms
+2026-05-15T14:00:15.000Z info [dashboard-load] user_me 102ms
+2026-05-15T14:00:15.250Z info [dashboard-load] dashboard_summary 910ms
+2026-05-15T14:00:16.800Z info [dashboard-load] scanner_core 4020ms
+2026-05-15T14:00:30.000Z info [dashboard-load] user_me 91ms
+2026-05-15T14:00:30.120Z info [dashboard-load] dashboard_summary 680ms
+2026-05-15T14:00:31.100Z info [dashboard-load] scanner_core 3100ms
