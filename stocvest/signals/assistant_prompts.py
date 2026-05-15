@@ -587,6 +587,85 @@ def _coerce_num(value: Any) -> str:
         return ""
 
 
+def _append_gap_summary_lines(
+    lines: list[str],
+    raw_list: Any,
+    line_prefix: str,
+    limit: int,
+) -> None:
+    """Emit qualitative gap rows (symbol, direction, quality, optional catalyst)."""
+    if not isinstance(raw_list, list):
+        return
+    for idx, raw in enumerate(raw_list[:limit]):
+        if not isinstance(raw, dict):
+            continue
+        sym = _coerce_str(raw.get("symbol"), limit=12).upper()
+        gap_dir = _coerce_str(raw.get("gap_direction"), limit=8).lower()
+        quality = _coerce_str(raw.get("quality_bucket"), limit=12).lower()
+        if not sym or gap_dir not in ("up", "down") or quality not in ("high", "medium", "low"):
+            continue
+        cat = _coerce_str(raw.get("catalyst_category"), limit=40).lower()
+        sent = _coerce_str(raw.get("catalyst_sentiment"), limit=12).lower()
+        parts = [f"symbol={sym}", f"gap={gap_dir}", f"quality={quality}"]
+        if cat:
+            parts.append(f"catalyst={cat}")
+        if sent in ("bullish", "bearish", "neutral"):
+            parts.append(f"sentiment={sent}")
+        lines.append(f"{line_prefix}_{idx + 1}={'|'.join(parts)}")
+
+
+def _serialize_dashboard_context_v1(lines: list[str], dc: dict[str, Any]) -> None:
+    """Tier 1.C Phase 4 — nested dashboard_context version 1 block."""
+    if dc.get("version") != 1:
+        return
+    lines.append("dashboard_context_version=1")
+
+    reg = _coerce_str(dc.get("regime"), limit=24)
+    if reg:
+        lines.append(f"dashboard_regime={reg}")
+
+    disc = dc.get("discovery")
+    if isinstance(disc, dict):
+        lc = _coerce_num(disc.get("leader_count"))
+        if lc:
+            lines.append(f"discovery_leader_count={lc}")
+        wc = _coerce_num(disc.get("with_catalyst_count"))
+        if wc:
+            lines.append(f"discovery_with_catalyst_count={wc}")
+        prev = disc.get("preview_symbols")
+        if isinstance(prev, list):
+            syms = [_coerce_str(x, limit=12).upper() for x in prev[:5]]
+            syms = [s for s in syms if s]
+            if syms:
+                lines.append(f"discovery_preview_symbols={','.join(syms)}")
+
+    uni = dc.get("universe")
+    if isinstance(uni, dict):
+        swing_n = _coerce_num(uni.get("swing_universe_symbol_count"))
+        if swing_n:
+            lines.append(f"universe_swing_symbol_count={swing_n}")
+        gap_n = _coerce_num(uni.get("gap_snapshot_symbol_count"))
+        if gap_n:
+            lines.append(f"universe_gap_snapshot_count={gap_n}")
+
+    macros = dc.get("macro_events")
+    if isinstance(macros, list):
+        for idx, raw in enumerate(macros[:5]):
+            if not isinstance(raw, dict):
+                continue
+            sym = _coerce_str(raw.get("symbol"), limit=12).upper()
+            date = _coerce_str(raw.get("report_date"), limit=12)
+            rtime = _coerce_str(raw.get("report_time"), limit=24).lower()
+            if not sym or not date:
+                continue
+            parts = [f"symbol={sym}", f"date={date}"]
+            if rtime in ("before_market", "after_market", "during_market", "unknown"):
+                parts.append(f"time={rtime}")
+            lines.append(f"macro_event_{idx + 1}={'|'.join(parts)}")
+
+    _append_gap_summary_lines(lines, dc.get("gap_leaders_detail"), "gap_leader", 10)
+
+
 def serialize_page_context(ctx: dict[str, Any] | None) -> str:
     """Render the structured page context as a short tail block for the system message.
 
@@ -721,24 +800,11 @@ def serialize_page_context(ctx: dict[str, Any] | None) -> str:
                 parts.append("orb_expired=true")
             lines.append(f"top_setup_{idx + 1}={'|'.join(parts)}")
 
-    top_gaps = ctx.get("top_gaps_with_catalyst")
-    if isinstance(top_gaps, list):
-        for idx, raw in enumerate(top_gaps[:3]):
-            if not isinstance(raw, dict):
-                continue
-            sym = _coerce_str(raw.get("symbol"), limit=12).upper()
-            gap_dir = _coerce_str(raw.get("gap_direction"), limit=8).lower()
-            quality = _coerce_str(raw.get("quality_bucket"), limit=12).lower()
-            if not sym or gap_dir not in ("up", "down") or quality not in ("high", "medium", "low"):
-                continue
-            cat = _coerce_str(raw.get("catalyst_category"), limit=40).lower()
-            sent = _coerce_str(raw.get("catalyst_sentiment"), limit=12).lower()
-            parts = [f"symbol={sym}", f"gap={gap_dir}", f"quality={quality}"]
-            if cat:
-                parts.append(f"catalyst={cat}")
-            if sent in ("bullish", "bearish", "neutral"):
-                parts.append(f"sentiment={sent}")
-            lines.append(f"top_gap_{idx + 1}={'|'.join(parts)}")
+    _append_gap_summary_lines(lines, ctx.get("top_gaps_with_catalyst"), "top_gap", 3)
+
+    dc = ctx.get("dashboard_context")
+    if isinstance(dc, dict):
+        _serialize_dashboard_context_v1(lines, dc)
 
     gap_intel = ctx.get("gap_intel")
     if isinstance(gap_intel, dict):

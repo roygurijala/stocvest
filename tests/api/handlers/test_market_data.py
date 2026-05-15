@@ -8,6 +8,7 @@ import pytest
 from stocvest.api.handlers.market_data import (
     bars_batch_handler,
     bars_handler,
+    dashboard_summary_handler,
     earnings_calendar_handler,
     market_status_handler,
     news_handler,
@@ -178,6 +179,26 @@ def _clear_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
+
+
+def test_dashboard_summary_handler_returns_aggregate_payload() -> None:
+    event = {
+        "queryStringParameters": {
+            "earnings_symbols": "AAPL,MSFT",
+            "earnings_days": "7",
+            "sparkline_limit": "12",
+            "daily_limit": "8",
+        }
+    }
+    response = dashboard_summary_handler(event, {}, client_factory=_FakePolygonClient)
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["status"]["market"] == "stocks"
+    assert isinstance(body["snapshots"], list) and len(body["snapshots"]) >= 1
+    assert isinstance(body["daily_closes"], dict)
+    assert "SPY" in body["daily_closes"] or "QQQ" in body["daily_closes"]
+    assert body["earnings"]["symbols"] == ["AAPL", "MSFT"]
+    assert isinstance(body["earnings"]["upcoming"], list)
 
 
 def test_market_status_handler_returns_payload() -> None:

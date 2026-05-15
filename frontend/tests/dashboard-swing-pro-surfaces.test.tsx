@@ -16,10 +16,6 @@ vi.mock("@/lib/hooks/use-is-mobile-layout", () => ({
   useIsMobileLayout: () => false
 }));
 
-vi.mock("@/components/dashboard-edge-sync", () => ({
-  DashboardEdgeSync: () => null
-}));
-
 beforeAll(() => {
   Object.defineProperty(window, "matchMedia", {
     writable: true,

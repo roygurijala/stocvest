@@ -125,6 +125,78 @@ describe("scanner API overview", () => {
     expect(result.gapIntelligenceSnapshotSymbolCount).toBe(412);
   }, 25000);
 
+  test("fetchScannerOverview continues when gap-intelligence is null (degraded)", async () => {
+    const { fetchScannerOverview } = await import("@/lib/api/scanner");
+    apiFetchMock.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === "/v1/scanner/gap-intelligence") {
+        return null;
+      }
+      if (path.startsWith("/v1/market/snapshots?")) {
+        const q = path.includes("?") ? path.split("?")[1] : "";
+        const syms = (new URLSearchParams(q).get("symbols") ?? "").split(",").filter(Boolean);
+        return {
+          snapshots: syms.map((sym) => ({
+            symbol: sym,
+            prev_close: 100,
+            pre_market_price: 104,
+            day_volume: 1_000_000
+          }))
+        };
+      }
+      if (path.startsWith("/v1/market/snapshot?symbol=")) {
+        const q = path.includes("?") ? path.split("?")[1] : "";
+        const sym = new URLSearchParams(q).get("symbol") ?? "UNK";
+        return {
+          symbol: sym,
+          prev_close: 100,
+          pre_market_price: 104,
+          day_volume: 1_000_000
+        };
+      }
+      if (path === "/v1/market/bars-batch") {
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          requests?: Array<{ symbol?: string }>;
+        };
+        const syms = (body.requests ?? []).map((r) => String(r.symbol ?? "").toUpperCase());
+        const bar = {
+          timestamp: "2026-04-29T10:00:00+00:00",
+          timeframe: "1min",
+          open: 100,
+          high: 101,
+          low: 99,
+          close: 100.5,
+          volume: 120000
+        };
+        const bars_by_symbol: Record<string, typeof bar[]> = {};
+        for (const s of syms) bars_by_symbol[s] = [bar];
+        return { bars_by_symbol };
+      }
+      if (path.includes("/v1/market/bars?")) {
+        return [
+          {
+            timestamp: "2026-04-29T10:00:00+00:00",
+            timeframe: "1min",
+            open: 100,
+            high: 101,
+            low: 99,
+            close: 100.5,
+            volume: 120000
+          }
+        ];
+      }
+      if (path === "/v1/signals/day/setups") {
+        return [{ symbol: "SPY", direction: "long", score: 0.62, triggers: [], timestamp_iso: "x" }];
+      }
+      throw new Error(`Unhandled path ${path}`);
+    });
+
+    const result = await fetchScannerOverview(null, [], { includeMorningBrief: false });
+    expect(result.error).toBeUndefined();
+    expect(result.gapIntelligence).toHaveLength(0);
+    expect(result.setups.length).toBeGreaterThan(0);
+    expect(result.gapIntelligenceSnapshotSymbolCount).toBeNull();
+  }, 25000);
+
   test("fetchScannerOverview handles scanner failures", async () => {
     const { fetchScannerOverview } = await import("@/lib/api/scanner");
     apiFetchMock.mockRejectedValueOnce(new Error("API request failed (500): scanner"));

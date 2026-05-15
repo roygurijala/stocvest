@@ -127,11 +127,47 @@ export interface AssistantPageContext {
   day_setups_count?: number;
 
   /**
+   * Tier 1.C Phase 4 — nested dashboard surface summary (version 1).
+   * Stable keys: regime, discovery, universe, desk postures, top_setups,
+   * optional gap_leaders_detail when discovery is expanded, macro_events.
+   */
+  dashboard_context?: DashboardAssistantContextV1;
+
+  /**
    * Server-shaped Gap Intelligence snapshot subset (Signals page). The
    * backend serializer only forwards these keys to the assistant.
    */
   gap_intel?: AssistantGapIntel;
 }
+
+/** Versioned dashboard assistant block — keep in lockstep with `serialize_page_context`. */
+export type DashboardAssistantContextV1 = {
+  version: 1;
+  regime: string;
+  discovery: {
+    leader_count: number;
+    with_catalyst_count: number;
+    preview_symbols: string[];
+  };
+  universe: {
+    swing_universe_symbol_count: number | null;
+    gap_snapshot_symbol_count: number | null;
+  };
+  swing_desk_posture: "active" | "monitor" | "suppressed";
+  day_desk_posture?:
+    | "active"
+    | "monitor"
+    | "suppressed_session_closed"
+    | "suppressed_no_confirmation"
+    | "suppressed_scanner_error";
+  top_setups: AssistantScannerSetupSummary[];
+  gap_leaders_detail?: AssistantScannerGapSummary[];
+  macro_events: Array<{
+    symbol: string;
+    report_date: string;
+    report_time: "before_market" | "after_market" | "during_market" | "unknown";
+  }>;
+};
 
 /** Keys whitelisted for assistant serialization — nested object from gap-intel API. */
 export interface AssistantGapIntel {

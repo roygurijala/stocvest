@@ -233,6 +233,67 @@ def test_serialize_page_context_emits_day_setups_count_when_nonzero() -> None:
     assert "day_setups_count=3" in out
 
 
+def test_serialize_page_context_emits_dashboard_context_v1() -> None:
+    """Tier 1.C Phase 4 — nested dashboard_context block serializes stable section keys."""
+    ctx = {
+        "page": "dashboard",
+        "market_regime": "Risk-on",
+        "swing_desk_posture": "active",
+        "day_desk_posture": "monitor",
+        "ranked_setups_count": 2,
+        "top_setups": [
+            {
+                "symbol": "AAA",
+                "direction": "long",
+                "strength_bucket": "strong",
+                "confluence": True,
+                "orb_expired": False,
+            }
+        ],
+        "dashboard_context": {
+            "version": 1,
+            "regime": "Risk-on",
+            "discovery": {
+                "leader_count": 3,
+                "with_catalyst_count": 2,
+                "preview_symbols": ["GAP1", "GAP2"],
+            },
+            "universe": {
+                "swing_universe_symbol_count": 200,
+                "gap_snapshot_symbol_count": 150,
+            },
+            "swing_desk_posture": "active",
+            "day_desk_posture": "monitor",
+            "top_setups": [],
+            "macro_events": [
+                {
+                    "symbol": "AAPL",
+                    "report_date": "2026-05-20",
+                    "report_time": "after_market",
+                }
+            ],
+            "gap_leaders_detail": [
+                {
+                    "symbol": "GAP1",
+                    "gap_direction": "up",
+                    "quality_bucket": "high",
+                    "catalyst_category": "earnings",
+                    "catalyst_sentiment": "bullish",
+                }
+            ],
+        },
+    }
+    out = serialize_page_context(ctx)
+    assert "dashboard_context_version=1" in out
+    assert "dashboard_regime=Risk-on" in out
+    assert "discovery_leader_count=3" in out
+    assert "discovery_preview_symbols=GAP1,GAP2" in out
+    assert "universe_swing_symbol_count=200" in out
+    assert "macro_event_1=symbol=AAPL|date=2026-05-20|time=after_market" in out
+    assert "gap_leader_1=symbol=GAP1|gap=up|quality=high" in out
+    assert "top_setup_1=symbol=AAA|direction=long|strength=strong|confluence=true" in out
+
+
 def test_serialize_page_context_dashboard_dual_desk_omits_swing_only_fields() -> None:
     """The dashboard's dual-desk page-context block doesn't carry scanner-overview
     fields like `top_setup_1` or `gap_with_catalyst_count`. Make sure the new

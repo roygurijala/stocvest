@@ -35,6 +35,7 @@ from stocvest.data.models import EconomicCalendarEvent
 from stocvest.data.polygon_client import LIQUID_NEWS_TICKERS
 from stocvest.data.watchlist_store import get_watchlist_store
 from stocvest.utils.config import get_settings
+from stocvest.api.services.dashboard_summary import build_dashboard_summary
 from stocvest.signals.macro_context import get_macro_context
 
 
@@ -637,6 +638,58 @@ def options_chain_handler(
                 limit=limit,
             )
         return ok([contract.model_dump(mode="json") for contract in contracts])
+
+    try:
+        return asyncio.run(_run())
+    except PolygonError as exc:
+        return internal_error(str(exc))
+
+
+def dashboard_summary_handler(
+    event: LambdaEvent,
+    context: LambdaContext,
+    client_factory: Callable[..., PolygonClient] = PolygonClient,
+) -> dict[str, Any]:
+    """
+    GET ``/v1/dashboard/summary`` — market tape + index/sector daily closes + earnings
+    in one Lambda invocation (Tier 1.C Phase 2).
+    """
+    _ = context
+    query = _query_params(event)
+
+    symbols_raw = str(query.get("earnings_symbols") or "").strip()
+    earnings_symbols = [s.strip().upper() for s in symbols_raw.split(",") if s.strip()]
+
+    try:
+        earnings_days = int(query.get("earnings_days") or query.get("days") or 7)
+    except ValueError:
+        return bad_request("Invalid earnings_days.")
+    if earnings_days < 1 or earnings_days > 30:
+        return bad_request("earnings_days must be between 1 and 30.")
+
+    try:
+        sparkline_limit = int(query.get("sparkline_limit") or 12)
+    except ValueError:
+        return bad_request("Invalid sparkline_limit.")
+    if sparkline_limit < 1 or sparkline_limit > 50:
+        return bad_request("sparkline_limit must be between 1 and 50.")
+
+    try:
+        daily_limit = int(query.get("daily_limit") or 8)
+    except ValueError:
+        return bad_request("Invalid daily_limit.")
+    if daily_limit < 1 or daily_limit > 30:
+        return bad_request("daily_limit must be between 1 and 30.")
+
+    async def _run() -> dict[str, Any]:
+        payload = await build_dashboard_summary(
+            earnings_symbols=earnings_symbols,
+            earnings_days=earnings_days,
+            sparkline_limit=sparkline_limit,
+            daily_limit=daily_limit,
+            client_factory=client_factory,
+        )
+        return ok(payload)
 
     try:
         return asyncio.run(_run())

@@ -38,3 +38,14 @@ vi.mock("next/navigation", () => ({
     throw new Error("redirect() called in test — mock or import the real module if you need this");
   }
 }));
+
+/**
+ * `DashboardEdgeSync` wires SWR + live hints + `useEffect` mode reads that
+ * update state after mount — dashboard suites rendering `DashboardRedesign`
+ * otherwise spam React `act(...)` warnings. Override with a file-level
+ * `vi.mock("@/components/dashboard-edge-sync", …)` when a test needs the
+ * real component.
+ */
+vi.mock("@/components/dashboard-edge-sync", () => ({
+  DashboardEdgeSync: () => null
+}));

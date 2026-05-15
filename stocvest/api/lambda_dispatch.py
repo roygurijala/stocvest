@@ -82,6 +82,7 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
         from stocvest.api.handlers.market_data import (
             bars_batch_handler,
             bars_handler,
+            dashboard_summary_handler,
             earnings_calendar_handler,
             macro_context_handler,
             market_status_handler,
@@ -109,6 +110,7 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
                     "GET /v1/market/news": news_handler,
                     "GET /v1/market/options": options_chain_handler,
                     "GET /v1/market/earnings": earnings_calendar_handler,
+                    "GET /v1/dashboard/summary": dashboard_summary_handler,
                 },
             ),
         )

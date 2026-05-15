@@ -37,6 +37,7 @@ import { useMemo } from "react";
 import { ArrowRight } from "lucide-react";
 import type { IntradaySetupPayload } from "@/lib/api/scanner";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
+import { interactionLevelProps } from "@/lib/dashboard/click-hierarchy";
 import { useHoverPrefetch } from "@/lib/hooks/use-hover-prefetch";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -153,6 +154,7 @@ function RibbonChip({
       data-testid={`ribbon-chip-${symbol}`}
       data-ribbon-chip-mode={chip.mode}
       data-hover-prefetch="true"
+      {...interactionLevelProps("deep")}
       prefetch={false}
       href={href}
       onMouseEnter={hoverHandlers.onMouseEnter}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { motion } from "framer-motion";
 import { DashboardActiveSignalRibbon } from "@/components/dashboard-active-signal-ribbon";
@@ -8,6 +8,13 @@ import { DashboardCard } from "@/components/dashboard-card";
 import { DashboardEdgeSync } from "@/components/dashboard-edge-sync";
 import { DashboardHeroStrip } from "@/components/dashboard-hero-strip";
 import { DashboardRealtime } from "@/components/dashboard-realtime";
+import { ScannerOverviewProvider, useScannerOverview } from "@/components/dashboard/scanner-overview-context";
+import { DashboardEarningsProvider, useDashboardEarnings } from "@/components/dashboard/dashboard-earnings-context";
+import { DashboardDiscoveryRow } from "@/components/dashboard/dashboard-discovery-row";
+import { DashboardDeskPostureSummary } from "@/components/dashboard/dashboard-desk-posture-summary";
+import { DashboardUniverseStrip } from "@/components/dashboard/dashboard-universe-strip";
+import { interactionLevelProps } from "@/lib/dashboard/click-hierarchy";
+import { buildDashboardAssistantPageContext } from "@/lib/dashboard/dashboard-assistant-context";
 import { DecisionMetric } from "@/components/decision-metric";
 import { SwingDeskSignature } from "@/components/desk-visual-signatures";
 import { EarningsCalendar } from "@/components/earnings-calendar";
@@ -81,6 +88,7 @@ export type SectorRotationChip = { symbol: string; label: string; pct5d: number 
 
 interface DashboardRedesignProps {
   marketOverview: MarketOverview;
+  /** Initial scanner snapshot; superseded by context after deferred hydration. */
   scannerOverview: ScannerOverview;
   earningsEvents: EarningsEvent[];
   earningsRecent: EarningsEvent[];
@@ -92,6 +100,16 @@ interface DashboardRedesignProps {
    * rule so scanner payloads stay swing-only.
    */
   dayTradingSurfaces?: boolean;
+  /**
+   * Tier 1.C: RSC `Suspense` subtree that resolves to `<DashboardEarningsHydrate />`.
+   * When set, pass empty `earningsEvents` / `earningsRecent` until hydrate runs.
+   */
+  deferredEarningsSlot?: ReactNode;
+  /**
+   * Tier 1.C: RSC `Suspense` subtree that resolves to `<DashboardScannerHydrate />`.
+   * When set, `scannerOverview` should be `EMPTY_SCANNER_OVERVIEW` until hydrate runs.
+   */
+  deferredScannerSlot?: ReactNode;
 }
 
 function SkeletonLine({ width = "100%", height = 14 }: { width?: string; height?: number }) {
@@ -487,21 +505,33 @@ function VixDashExplained({ kind, colors }: { kind: VixBlankKind; colors: ThemeC
   );
 }
 
-export function DashboardRedesign({
+export function DashboardRedesign(props: DashboardRedesignProps) {
+  return (
+    <ScannerOverviewProvider initialOverview={props.scannerOverview}>
+      <DashboardEarningsProvider initialUpcoming={props.earningsEvents} initialRecent={props.earningsRecent}>
+        <DashboardRedesignBody {...props} />
+      </DashboardEarningsProvider>
+    </ScannerOverviewProvider>
+  );
+}
+
+function DashboardRedesignBody({
   marketOverview,
-  scannerOverview,
-  earningsEvents,
-  earningsRecent,
   weeklyIndexRows,
   sectorRotation,
-  dayTradingSurfaces = true
+  dayTradingSurfaces = true,
+  deferredEarningsSlot,
+  deferredScannerSlot
 }: DashboardRedesignProps) {
+  const scannerOverview = useScannerOverview();
+  const { upcoming: earningsEvents, recent: earningsRecent } = useDashboardEarnings();
   const { colors } = useTheme();
   const [evidence, setEvidence] = useState<SignalEvidenceData | null>(null);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [newsPanelSymbol, setNewsPanelSymbol] = useState("");
   const [newsPanelOpen, setNewsPanelOpen] = useState(false);
   const [newsUiTick, setNewsUiTick] = useState(0);
+  const [discoveryExpanded, setDiscoveryExpanded] = useState(false);
   // Layer 4 (second slice): macro snapshot is now SWR-cached.
   // Previously this lived in a one-shot `useEffect` calling
   // `fetchMacroContext()` on every dashboard mount; on a
@@ -615,21 +645,19 @@ export function DashboardRedesign({
     return "suppressed";
   }, [scannerOverview.error, swingTopSignals.length]);
 
-  // Publish a qualitative summary of the home dashboard to the STOCVEST Assistant.
-  // Dashboard is now a TWO-DESK surface (Mode Separation B28 Phase 1): the assistant
-  // sees both `swing_desk_posture` and `day_desk_posture` side-by-side and must use
-  // the Priority 3 STRUCTURED DUAL ANSWER template when an ambiguous question lands
-  // here. `trading_mode` is deliberately OMITTED so the LLM does not inherit a
-  // single mode via Priority 1 — the dashboard is the canonical multi-mode surface.
-  usePublishAssistantContext({
-    page: "dashboard",
-    market_regime: regimeLabel,
-    ranked_setups_count: topSignals.length,
-    swing_desk_posture: swingDeskPosture,
-    ...(dayTradingSurfaces
-      ? { day_desk_posture: dayDeskPosture, day_setups_count: daySignalsForRibbon.length }
-      : {})
-  });
+  const scannerDataSettled = useMemo(
+    () =>
+      Boolean(scannerOverview.error) ||
+      scannerOverview.swingUniverseSymbolCount != null ||
+      scannerOverview.gapIntelligence.length > 0 ||
+      scannerOverview.setups.length > 0,
+    [
+      scannerOverview.error,
+      scannerOverview.swingUniverseSymbolCount,
+      scannerOverview.gapIntelligence.length,
+      scannerOverview.setups.length
+    ]
+  );
 
   const emptySwingSuppressionLine = useMemo(() => emptySwingSuppressionStatusLine(regimeLabel), [regimeLabel]);
   const sectorFrame = useMemo(
@@ -690,6 +718,40 @@ export function DashboardRedesign({
     () => [...earningsEvents].sort((a, b) => a.report_date.localeCompare(b.report_date)).slice(0, 10),
     [earningsEvents]
   );
+
+  // Tier 1.C Phase 4 — versioned `dashboard_context` + flat dual-desk fields for the assistant.
+  const assistantPageContext = useMemo(
+    () =>
+      buildDashboardAssistantPageContext({
+        regimeLabel,
+        swingDeskPosture,
+        dayDeskPosture: dayTradingSurfaces ? dayDeskPosture : undefined,
+        daySetupsCount: daySignalsForRibbon.length,
+        dayTradingSurfaces,
+        swingTopSignals,
+        gapIntelligence: scannerOverview.gapIntelligence,
+        swingUniverseSymbolCount: scannerOverview.swingUniverseSymbolCount ?? null,
+        gapSnapshotSymbolCount: scannerOverview.gapIntelligenceSnapshotSymbolCount ?? null,
+        upcomingEarnings: upcomingCatalystWeek,
+        scannerDataSettled,
+        discoveryExpanded
+      }),
+    [
+      regimeLabel,
+      swingDeskPosture,
+      dayDeskPosture,
+      daySignalsForRibbon.length,
+      dayTradingSurfaces,
+      swingTopSignals,
+      scannerOverview.gapIntelligence,
+      scannerOverview.swingUniverseSymbolCount,
+      scannerOverview.gapIntelligenceSnapshotSymbolCount,
+      upcomingCatalystWeek,
+      scannerDataSettled,
+      discoveryExpanded
+    ]
+  );
+  usePublishAssistantContext(assistantPageContext);
 
   const macroWarnings = macroPulse?.warnings ?? [];
 
@@ -788,18 +850,20 @@ export function DashboardRedesign({
        * The realtime WS pulse dot is promoted into the regime cell so
        * users see live-data state without scanning the top of the page.
        */}
-      <DashboardHeroStrip
-        regimeLabel={regimeLabel}
-        vixPulseOk={vixPulseOk}
-        regimeBadgePriceBreadthOnly={regimeBadgePriceBreadthOnly}
-        vixSnapshot={vixSnapshot}
-        vixSessionPct={vixPct}
-        sectorRotation={sectorRotation}
-        weeklyIndexRows={weeklyIndexRows}
-        upcomingEarnings={upcomingCatalystWeek}
-        macroWarningHeadline={macroWarnings[0] ?? null}
-        vixBlankTag={vixBlankTagForHero}
-      />
+      <div {...interactionLevelProps("light")}>
+        <DashboardHeroStrip
+          regimeLabel={regimeLabel}
+          vixPulseOk={vixPulseOk}
+          regimeBadgePriceBreadthOnly={regimeBadgePriceBreadthOnly}
+          vixSnapshot={vixSnapshot}
+          vixSessionPct={vixPct}
+          sectorRotation={sectorRotation}
+          weeklyIndexRows={weeklyIndexRows}
+          upcomingEarnings={upcomingCatalystWeek}
+          macroWarningHeadline={macroWarnings[0] ?? null}
+          vixBlankTag={vixBlankTagForHero}
+        />
+      </div>
 
       {/* Phase 2b layout — dual-desk: Shared Context master + ribbon + two-desk grid.
           Swing Pro: no standalone Shared Context; the same A–E ladder is embedded at the top of the Swing Desk. */}
@@ -821,6 +885,28 @@ export function DashboardRedesign({
             }}
             dualDeskSurfaces={dayTradingSurfaces}
           />
+
+          {scannerDataSettled ? (
+            <>
+              <DashboardUniverseStrip
+                swingUniverseSymbolCount={scannerOverview.swingUniverseSymbolCount ?? null}
+                gapSnapshotSymbolCount={scannerOverview.gapIntelligenceSnapshotSymbolCount ?? null}
+                scannerError={scannerOverview.error}
+                dualDeskSurfaces={dayTradingSurfaces}
+              />
+              <DashboardDiscoveryRow
+                gapIntelligence={scannerOverview.gapIntelligence}
+                scannerError={scannerOverview.error}
+                dualDeskSurfaces={dayTradingSurfaces}
+                onDiscoveryExpandedChange={setDiscoveryExpanded}
+              />
+              <DashboardDeskPostureSummary
+                swingPosture={swingDeskPosture}
+                dayPosture={dayDeskPosture}
+                showDayDesk={dayTradingSurfaces}
+              />
+            </>
+          ) : null}
 
           {/*
            * Phase B1 — DECISION-DESK GRID. The two decision engines
@@ -1393,6 +1479,8 @@ export function DashboardRedesign({
         }}
         onLoaded={() => setNewsUiTick((t) => t + 1)}
       />
+      {deferredEarningsSlot}
+      {deferredScannerSlot}
       <DashboardEdgeSync />
     </section>
   );

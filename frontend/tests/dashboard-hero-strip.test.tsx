@@ -300,7 +300,7 @@ describe("DashboardHeroStrip — projection of Shared Context (Phase A1)", () =>
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("Dashboard chatbot contract (Phase A invariance)", () => {
-  test("dashboard_publishes_six_assistant_context_keys_exactly", () => {
+  test("dashboard_publishes_phase4_assistant_context_keys", () => {
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
@@ -315,14 +315,18 @@ describe("Dashboard chatbot contract (Phase A invariance)", () => {
     const keys = Object.keys(publishCapture.last as unknown as Record<string, unknown>).sort();
     expect(keys).toEqual(
       [
+        "dashboard_context",
         "day_desk_posture",
         "day_setups_count",
         "market_regime",
         "page",
         "ranked_setups_count",
-        "swing_desk_posture"
+        "swing_desk_posture",
+        "top_setups"
       ].sort()
     );
+    const dc = (publishCapture.last as { dashboard_context?: { version?: number } }).dashboard_context;
+    expect(dc?.version).toBe(1);
   });
 
   test("dashboard_assistant_context_page_field_is_dashboard", () => {

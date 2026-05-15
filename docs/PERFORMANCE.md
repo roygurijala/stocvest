@@ -1,10 +1,10 @@
 # STOCVEST — Performance plan & architecture target
 
-**Use with [`CONTEXT.md`](./CONTEXT.md) (current state, ops, test baselines), [`BACKLOG.md`](./BACKLOG.md) (planned work), and [`IMPLEMENTED.md`](./IMPLEMENTED.md) (shipped work archive).**
+**Use with [`CONTEXT.md`](./CONTEXT.md) (current state, ops, test baselines), [`BACKLOG.md`](./BACKLOG.md) (planned work), [`IMPLEMENTED.md`](./IMPLEMENTED.md) (shipped work archive), and [`DASHBOARD_TERMINAL_UX_PLAN.md`](./DASHBOARD_TERMINAL_UX_PLAN.md) (dashboard IA + terminal-grade SLOs + click hierarchy).**
 
 This file is the **single source of truth** for the long-term performance & responsiveness story of STOCVEST. Any PR that touches latency, payload size, prefetching, caching, streaming SSR, edge caching, or push transport must reference (and update) this doc.
 
-**Last updated:** 2026-05-13 — **Tier 1.A, Tier 1.B, and Layer 4 (first slice) all shipped.** Tier 1.A killed the dashboard `<Link>` prefetch storm (ribbon chips, day-desk top-signal rows, day / swing scanner footers all carry `prefetch={false}`), removing 5–10 parallel SSR prefetches of `/dashboard/signals` per dashboard mount — the direct cause of the 16.78s "Content Download" the user observed on `/dashboard` (DevTools Network screenshot, 2026-05-13). Tier 1.B split `/dashboard/signals/page.tsx` into a fast shell + async data island wrapped in `<Suspense fallback={<SignalsPageShell />}>` (plus the matching `loading.tsx` for inter-route transitions) so the user sees the page chrome + skeleton within ~200ms of clicking a ribbon chip instead of staring at a blank screen while four backend reads serialise. Layer 4 added **SWR** (chosen over TanStack Query — smaller, simpler, Vercel-native) with conservative app-wide defaults (`revalidateOnFocus: false`, `dedupingInterval: 30s`, `errorRetryCount: 1`, `keepPreviousData: true`, never-retry on 401), wrapped the highest-traffic symbol-keyed read (`useSymbolSnapshot`) so symbol-switching is now stale-while-revalidate instead of a fresh round-trip every time, and wired **intent-driven hover-prefetch** onto every heavy-target dashboard `<Link>` (ribbon chips, ribbon empty-state CTA, day-desk rows, day-desk footer, swing-desk footer) — preserving the Tier 1.A no-mount-prefetch invariant while warming the route the moment the user's cursor / focus / pointer-down arrives. Together these changes turn the worst-case dashboard → signals navigation from a 16-second freeze into a sub-second perceived load with the live content streaming in as it resolves, and make repeat symbol views inside the signals page feel instant.
+**Last updated:** 2026-05-15 — **Tier 1.C Phase 0–5** shipped (timing, deferred scanner, **`GET /v1/dashboard/summary`**, dashboard IA, assistant `dashboard_context` v1, load/chaos lock-ins + SLO table below). Tier 1.A, Tier 1.B, and Layer 4 slices unchanged. **Optional next:** hero vs desks visual islands — see [`DASHBOARD_TERMINAL_UX_PLAN.md`](./DASHBOARD_TERMINAL_UX_PLAN.md). Tier 1.A killed the dashboard `<Link>` prefetch storm (ribbon chips, day-desk top-signal rows, day / swing scanner footers all carry `prefetch={false}`), removing 5–10 parallel SSR prefetches of `/dashboard/signals` per dashboard mount — the direct cause of the 16.78s "Content Download" the user observed on `/dashboard` (DevTools Network screenshot, 2026-05-13). Tier 1.B split `/dashboard/signals/page.tsx` into a fast shell + async data island wrapped in `<Suspense fallback={<SignalsPageShell />}>` (plus the matching `loading.tsx` for inter-route transitions) so the user sees the page chrome + skeleton within ~200ms of clicking a ribbon chip instead of staring at a blank screen while four backend reads serialise. Layer 4 added **SWR** (chosen over TanStack Query — smaller, simpler, Vercel-native) with conservative app-wide defaults (`revalidateOnFocus: false`, `dedupingInterval: 30s`, `errorRetryCount: 1`, `keepPreviousData: true`, never-retry on 401), wrapped the highest-traffic symbol-keyed read (`useSymbolSnapshot`) so symbol-switching is now stale-while-revalidate instead of a fresh round-trip every time, and wired **intent-driven hover-prefetch** onto every heavy-target dashboard `<Link>` (ribbon chips, ribbon empty-state CTA, day-desk rows, day-desk footer, swing-desk footer) — preserving the Tier 1.A no-mount-prefetch invariant while warming the route the moment the user's cursor / focus / pointer-down arrives. Together these changes turn the worst-case dashboard → signals navigation from a 16-second freeze into a sub-second perceived load with the live content streaming in as it resolves, and make repeat symbol views inside the signals page feel instant.
 
 ---
 
@@ -20,9 +20,43 @@ This is **not** a generic perf checklist. The items here are picked specifically
 
 ---
 
-## 1. The five-layer target architecture
+## 1. Dashboard terminal SLOs (Tier 1.C Phase 5)
 
-Top-to-bottom, the layered model every serious trading UI converges on. We are at the top of the ladder today (no layers in place). Each layer is **independently shippable** and additive — none of them require ripping out earlier work.
+**Code:** `frontend/lib/dashboard/dashboard-slo.ts` (targets + helpers), `dashboard-fetch-resilience.ts` (`timeoutFallback`), fetch budgets in `dashboard-page-data.ts`. **Lock-in:** `tests/dashboard-load-chaos.test.ts`, `tests/dashboard-degraded-shell.test.tsx`.
+
+### Product targets (draft — tune with production `[dashboard-load]` samples)
+
+| Milestone | Target (warm, P75) | How we measure |
+|-----------|---------------------|----------------|
+| First contentful dashboard | **< 2s** | `dashboard_summary` phase duration when aggregate API is deployed; first RSC segment returns tape + weekly rows. |
+| Scanner + desks usable | **< 8s** | `scanner_core` phase + client hydrate; ribbon chips / desk rows populated. |
+| Hard ceiling (degraded) | **< 15s** | End-to-end until partial UI + explicit error copy — never a silent 30s+ blank. |
+
+### Measured baselines (2026-05-15)
+
+| Environment | First segment (`dashboard_summary`) | Scanner (`scanner_core`) | Notes |
+|-------------|-------------------------------------|--------------------------|--------|
+| **Local dev** (Vitest chaos suite) | Fallback path verified at **58s** server timeout budget | Same **58s** budget → `"Scanner timed out."` fallback | Not a latency benchmark — proves soft-failure wiring. |
+| **Production** | *Pending* — collect after `terraform apply` for `/v1/dashboard/summary` | *Pending* | Enable `STOCVEST_DASHBOARD_TIMING=1` on the Next server or use development logs; grep `[dashboard-load]`. |
+
+**How to collect:** Set `STOCVEST_DASHBOARD_TIMING=1` (or run in `NODE_ENV=development`), load `/dashboard` five times during US market hours, record P75 per phase label (`dashboard_summary`, `market_overview`, `scanner_core`, …). Paste results into this table on the next perf pass.
+
+### Server fetch budgets (defensive ceilings)
+
+| Phase | Timeout (ms) | Fallback behavior |
+|-------|-------------|-------------------|
+| `dashboard_summary` / `market_overview` | 58_000 | Empty tape + `error: "Market data timed out."`; legacy parallel slice if summary null. |
+| `daily_bar_closes` | 14_000 | Empty closes → neutral weekly/sector rows. |
+| `earnings_calendar` | 5_000 | Empty calendar + `notice: "Earnings feed timed out."` (deferred leg only on legacy path). |
+| `scanner_core` | 58_000 | `EMPTY_SCANNER_OVERVIEW` + `error: "Scanner timed out."` |
+
+Per-fetch timeouts are **upper bounds** for hung upstreams; Tier 1.C streaming means users see the hero / shell before `scanner_core` resolves. The **15s product ceiling** applies to perceived end-to-end readiness, not each individual `timeoutFallback` ms value.
+
+---
+
+## 2. The five-layer target architecture
+
+Top-to-bottom, the layered model every serious trading UI converges on. **Progress (2026-05-15):** Tier 1.A + Tier 1.B (signals shell), Layer 4 (SWR slices), and **Layer 3 `/dashboard` streaming (Tier 1.C Phase 0–1)** — first segment **market + daily**; **earnings** + **scanner** in nested `Suspense` — are **shipped**; see §2. **Still open:** Layer 3 **full per-panel** islanding on `/dashboard` (Tier 1.C Phase 2+), Layer 2 summary projections, Layer 1 edge cache, Layer 5 WebSocket. Each layer remains **independently shippable**.
 
 ### Layer 1 — Edge cache for user-agnostic market context (CloudFront / Vercel Edge)
 **What it caches:** Market regime, VIX, breadth, sector heatmap, macro calendar — anything that is **identical for every logged-in user**.
@@ -48,9 +82,9 @@ Typical impact: 80–95% reduction on list-endpoint bytes-over-wire. Bigger than
 **Lock-in:** Medium. It's a contract change but additive (existing `detail` clients keep working; new `summary` callers opt in).
 
 ### Layer 3 — Streaming SSR with island Suspense (Next.js App Router)
-**Today:** `/dashboard/signals/page.tsx` does `await Promise.all([fetchPdtStatus(), fetchMarketOverview(), fetchScannerOverview()])` and then `await fetchEarningsCalendar(...)` before rendering **anything**. The browser sees a blank screen until the slowest dependency resolves.
+**Today:** `/dashboard/signals/page.tsx` does `await Promise.all([fetchPdtStatus(), fetchMarketOverview(), fetchScannerOverview()])` and then `await fetchEarningsCalendar(...)` before rendering **anything**. The browser sees a blank screen until the slowest dependency resolves. **`/dashboard`** (`dashboard-page-content.tsx`) **now** streams **earnings** and **scanner** each inside nested `<Suspense>` after **`fetchDashboardMarketDailySlice`** (market + daily bars); hero / Shared Context / tape can paint before the earnings calendar and gap-intelligence + setups finish.
 
-**Target:** Render the page **shell** in <100ms. Each panel (market header, scanner panel, top setup, earnings) lives behind its own `<Suspense fallback={<Skeleton />}>` and streams in independently. A slow earnings call no longer blocks the chart.
+**Target:** Render the page **shell** in <100ms. Each panel (market header, scanner panel, top setup, earnings) lives behind its own `<Suspense fallback={<Skeleton />}>` and streams in independently. **`/dashboard`:** **market + daily** in the first RSC segment; **earnings** and **scanner** each in nested `Suspense` (Tier 1.C Phase 1+). Further splits (e.g. hero vs desks only) are Tier 1.C Phase 2+.
 
 **Why this is the highest-leverage move:** Next.js App Router does all the heavy lifting. The refactor is mechanical — split the page into async server components, wrap each in `<Suspense>`. No infra change, no new library, no contract change.
 
@@ -74,7 +108,7 @@ Typical impact: 80–95% reduction on list-endpoint bytes-over-wire. Bigger than
 
 ---
 
-## 2. Sequencing — concrete and dated
+## 3. Sequencing — concrete and dated
 
 The order is chosen to **compound** — each layer makes the next one cheaper or unnecessary.
 
@@ -85,13 +119,14 @@ The order is chosen to **compound** — each layer makes the next one cheaper or
 | **Done — 2026-05-13** | **Layer 4 (first slice)**: SWR added (`swr@^2.4.1`), global provider mounted in `app/layout.tsx`, app-wide defaults pinned in `lib/swr/config.ts`. Single SWR-backed hook shipped: `useSymbolSnapshot(symbol)` replaces the imperative `useEffect → fetchSymbolSnapshot` on `signals-page-client.tsx`, so symbol-switching is now stale-while-revalidate (instant render from cache on repeat, silent background refresh). New `useHoverPrefetch(href)` wired onto every Tier-1.A `<Link prefetch={false}>` (ribbon chips, ribbon empty-state CTA, day-desk rows, day-desk footer, swing-desk footer) so the route warms on hover / focus / pointer-down — never on mount. Tier 1.A invariant preserved (asserted by `dashboard-hover-prefetch.test.tsx`). See §4C for the full rationale. | Locks in the snappiness from layers 1.A + 1.B. Avoids the prefetch problem ever returning. |
 | **Next** | **Tier 1.B+** (optional follow-up): split `SignalsPageData` into 2–3 parallel async children — e.g. `<MarketOverviewIsland />`, `<ScannerIsland />`, `<EarningsIsland />` — each in its OWN Suspense boundary so they paint independently. Requires refactoring `SignalsPageClient` into matching slice components. Real risk: medium. Skip unless a real user reports the current shell-then-everything-at-once swap feels janky. | The simpler Tier 1.B above captured most of the win. Per-section island split is a follow-up that pays off when individual fetches diverge dramatically in latency (e.g. earnings calendar gets very slow). |
 | **Done — 2026-05-13** | **Layer 4 (second slice)**: SWR coverage extended to the dashboard's own data path (`useDashboardPayload` wraps `/api/dashboard?mode=...`; `useMacroContext` wraps `/api/market/macro-context`) and the signals page's composite + news fetches (`useSignalComposite` wraps `POST /api/stocvest/signals/composite/{swing\|real}`; `useSymbolNews` wraps `fetchSymbolNews`). The dashboard live-hint SSE stream (`useLiveSignals`) now invalidates the dashboard cache via `mutate(dashboardPayloadKey(mode))` instead of running a parallel polling closure — `/api/signals/live` itself stays as `EventSource` because it's a push channel, not GET-and-cache. The `useSignalComposite` hook overrides the global `keepPreviousData:true` default to `false` to preserve the user-requested "clear screen between mode pills" UX (lock-ins in `tests/signals-page-mode-clears-screen.test.tsx`). 23 new lock-in tests across `tests/use-signal-composite.test.tsx`, `tests/use-symbol-news.test.tsx`, `tests/use-dashboard-payload.test.tsx`, `tests/use-macro-context.test.tsx`. The mode-clears-screen test got a targeted infra fix: it now wraps each render in a fresh `<SWRConfig provider={() => new Map()} dedupingInterval={0}>` so SWR cache state does NOT leak between tests — the clear-screen rule applies to UNCACHED flips; cached flips are instant (strictly better UX). | Closes the second-slice plan. The frequently-revisited render-state reads on the two heaviest-traffic surfaces (`/dashboard` and `/dashboard/signals`) now share dedupe + stale-while-revalidate semantics. Any future PR adding a fifth `useEffect → fetch` block on these surfaces should prefer a new SWR hook — patterns are now in-tree. |
+| **Done — 2026-05-14 / 2026-05-15** | **Tier 1.C — `/dashboard` RSC streaming (Phase 0–2).** **Phase 0:** `load-timing.ts`. **Phase 1:** **scanner** in nested `<Suspense>` + hydrate. **Phase 2:** **`GET /v1/dashboard/summary`** — one Lambda call for tape + daily + earnings (`dashboard_summary.py`); frontend `fetchDashboardFirstSegment` with legacy fallback; earnings on first paint when aggregate succeeds. **Lock-in:** `dashboard-summary-api.test.ts`, deferred-hydrate tests, `test_dashboard_summary_handler_returns_aggregate_payload`. **Deploy note:** run **`terraform apply`** for the new API Gateway route. Plan: [`DASHBOARD_TERMINAL_UX_PLAN.md`](./DASHBOARD_TERMINAL_UX_PLAN.md). | First paint: one Next↔Lambda round-trip for market slice when summary is deployed; scanner still streams. |
 | **Following 2 weeks** | **Layer 2** (thin API projections): add `?view=summary` to the high-traffic list endpoints (scanner, signals, watchlist). Update the ribbon, chips, and table rows to consume the slim variant. | Easier to do **after** the frontend is well-factored because by then we know exactly which fields each surface actually needs. |
 | **Following month** | **Layer 1** (CloudFront edge cache): cache VIX, regime, breadth, sector heatmap, macro context with 10–30s TTL. | Ops-level work — needs distribution config + cache-key discipline. Big cost win once we have meaningful traffic. |
 | **Quarter 2 (post-B5 launch)** | **Layer 5** (WebSocket push): live regime + active-signal deltas. | Only after the product has retained users who lean on it during market hours. Polling is fine and 10× cheaper until then. |
 
 ---
 
-## 3. Invariants (every perf PR must respect)
+## 4. Invariants (every perf PR must respect)
 
 These are non-negotiable. Any PR that violates one of these must be rejected even if it improves a metric.
 
@@ -111,7 +146,7 @@ These are non-negotiable. Any PR that violates one of these must be rejected eve
 
 ---
 
-## 4. Tier 1.A — what shipped today (2026-05-13)
+## 5. Tier 1.A — what shipped today (2026-05-13)
 
 **Diagnosis:** DevTools Network panel on `/dashboard` showed `/dashboard/signals?symbol=AAPL&ref=dashboard-ribbon...` taking 16.78s end-to-end with **14.61s in Content Download** and only 1.71s in TTFB. That waveform — long content-download / short server-wait — is **not** a slow backend; it's a large RSC payload being **drained slowly** over a connection that is also serving 5–10 other parallel RSC prefetches.
 
@@ -136,7 +171,7 @@ These are non-negotiable. Any PR that violates one of these must be rejected eve
 
 ---
 
-## 4B. Tier 1.B — what shipped today (2026-05-13)
+## 5B. Tier 1.B — what shipped today (2026-05-13)
 
 **Problem this layer attacks:** Once Tier 1.A killed the dashboard prefetch storm, the next bottleneck became the signals page's **own** load. `/dashboard/signals/page.tsx` server-side awaited four backend calls before rendering anything — `Promise.all([fetchPdtStatus, fetchMarketOverview, fetchScannerOverview])` then `await fetchEarningsCalendar(symbols, …)` sequentially. When a user clicked a ribbon chip, the browser saw the previous page's UI frozen until the slowest dependency resolved on the new page. That's a multi-second "did my click register?" UX even when each fetch is healthy.
 
@@ -175,7 +210,7 @@ These are non-negotiable. Any PR that violates one of these must be rejected eve
 
 ---
 
-## 4C. Layer 4 (first slice) — what shipped today (2026-05-13)
+## 5C. Layer 4 (first slice) — what shipped today (2026-05-13)
 
 **Problem this layer attacks:** Tier 1.A and 1.B made the **first** dashboard → signals navigation fast. Layer 4 makes **subsequent** navigations to the same data feel instant. Before this slice, switching from AAPL → NVDA → AAPL on the signals page meant three round trips, not two; the second AAPL view was an identical network call to the first because we had no client-side cache. Layer 4 fixes that with stale-while-revalidate caching, AND it adds the missing piece of the Tier 1.A story: links shouldn't prefetch on mount (Tier 1.A), but they SHOULD prefetch on **intent** (hover / focus / pointer-down).
 
@@ -263,7 +298,7 @@ A future refactor that drops EITHER attribute breaks one of the two test suites.
 
 ---
 
-## 5. Measurement & verification
+## 6. Measurement & verification
 
 We don't ship perf changes blind. Every Tier-N PR must include:
 
@@ -275,7 +310,7 @@ We don't ship perf changes blind. Every Tier-N PR must include:
 
 ---
 
-## 6. Cross-references
+## 7. Cross-references
 
 - **Backlog rows for Tier 1.B → Tier 5:** `BACKLOG.md` (D11 perf row).
 - **Shipped work archive:** `IMPLEMENTED.md` (Tier 1.A will move here once the doc settles).

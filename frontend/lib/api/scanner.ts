@@ -169,6 +169,17 @@ export interface ScannerOverview {
   gapIntelligenceSnapshotSymbolCount?: number | null;
 }
 
+/** Placeholder before deferred scanner RSC hydrates (Tier 1.C — `/dashboard`). */
+export const EMPTY_SCANNER_OVERVIEW: ScannerOverview = {
+  gapIntelligence: [],
+  setups: [],
+  spyPct: null,
+  qqqPct: null,
+  regimeLabel: "Neutral",
+  swingUniverseSymbolCount: null,
+  gapIntelligenceSnapshotSymbolCount: null
+};
+
 /** Snapshot + gap pipeline through intraday setups (no morning briefing). */
 export type ScannerCoreData = {
   gapIntelligence: GapIntelligenceItem[];

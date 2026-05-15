@@ -212,27 +212,31 @@ export async function runScannerLoadWithoutBrief(
         ? fetchDefaultWatchlistSymbolsFn().catch(() => [] as string[])
         : Promise.resolve(watchlistSymbols);
     const [gapIntelResp, resolvedWatchlist] = await Promise.all([gapIntelPromise, watchlistPromise]);
-    if (gapIntelResp == null || !Array.isArray(gapIntelResp.items)) {
-      return {
-        gapIntelligence: [],
-        setups: [],
-        spyPct: null,
-        qqqPct: null,
-        regimeLabel: "Neutral",
-        swingUniverseSymbolCount: null,
-        gapIntelligenceSnapshotSymbolCount: null,
-        error: "Service temporarily unavailable. Please try again."
-      };
+    /**
+     * Gap-intelligence is best-effort for the dashboard/scanner shell: Polygon full-feed +
+     * news can 5xx or time out. When the response is missing or malformed, continue with an
+     * empty gap list and the liquid fallback universe so tape + setups still load.
+     */
+    const rawItems =
+      gapIntelResp != null && typeof gapIntelResp === "object"
+        ? (gapIntelResp as { items?: unknown }).items
+        : undefined;
+    const gapItemsOk = Array.isArray(rawItems);
+    let gapItems: GapIntelligenceItem[] = gapItemsOk ? (rawItems as GapIntelligenceItem[]) : [];
+    if (!gapItemsOk && gapIntelResp != null) {
+      console.warn("scanner-load: gap-intelligence response missing items[]; using empty gaps + fallback universe");
+    } else if (gapIntelResp == null) {
+      console.warn("scanner-load: gap-intelligence request failed; using empty gaps + fallback universe");
     }
 
     const gapIntelSnapshotCount =
-      typeof gapIntelResp.snapshot_symbol_count === "number" &&
-      Number.isFinite(gapIntelResp.snapshot_symbol_count) &&
-      gapIntelResp.snapshot_symbol_count > 0
-        ? Math.floor(gapIntelResp.snapshot_symbol_count)
+      gapIntelResp != null &&
+      typeof gapIntelResp === "object" &&
+      typeof (gapIntelResp as { snapshot_symbol_count?: unknown }).snapshot_symbol_count === "number" &&
+      Number.isFinite((gapIntelResp as { snapshot_symbol_count: number }).snapshot_symbol_count) &&
+      (gapIntelResp as { snapshot_symbol_count: number }).snapshot_symbol_count > 0
+        ? Math.floor((gapIntelResp as { snapshot_symbol_count: number }).snapshot_symbol_count)
         : null;
-
-    let gapItems = gapIntelResp.items;
     const gapSyms = gapItems.map((g) => g.symbol.trim().toUpperCase()).filter(Boolean);
     const wlSource = tuning?.parallelDefaultWatchlist === true ? resolvedWatchlist : watchlistSymbols;
     const watchUpper = wlSource.map((s) => s.trim().toUpperCase()).filter(Boolean);
