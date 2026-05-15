@@ -519,6 +519,16 @@ class PolygonClient:
         return True
 
     @staticmethod
+    def _snapshot_last_trade_may_use_day_close(symbol: str) -> bool:
+        """True for Polygon index-style tickers where `day.c` updates without `lastTrade.p`.
+
+        Equities must keep `last_trade_price` None when there is no last print so reference
+        levels and scale checks stay honest (see tests/signals/test_reference_levels.py).
+        """
+        u = (symbol or "").strip().upper()
+        return u.startswith("I:") or u.startswith("^") or u == "VIX"
+
+    @staticmethod
     def _parse_snapshot(symbol: str, ticker: dict) -> Snapshot:
         day   = ticker.get("day",       {}) or {}
         prev  = ticker.get("prevDay",   {}) or {}
@@ -577,8 +587,13 @@ class PolygonClient:
         day_vwap = day.get("vw")
 
         # Index tape (notably VIX / I:VIX) often ships an updating session `day` bar
-        # while `lastTrade.p` is absent between official prints.
-        if last_price is None and day_close is not None:
+        # while `lastTrade.p` is absent between official prints. Do not apply this to
+        # equities — without a last print, `last_trade_price` must stay None.
+        if (
+            last_price is None
+            and day_close is not None
+            and PolygonClient._snapshot_last_trade_may_use_day_close(symbol)
+        ):
             try:
                 dc = float(day_close)
                 if dc == dc and dc > 0:
