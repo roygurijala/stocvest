@@ -10,6 +10,7 @@ from stocvest.api.services.scanner_scheduled_pipeline import _parse_scanner_symb
 from stocvest.data.models import Timeframe
 from stocvest.data.orb_store import store_orb_record
 from stocvest.data.polygon_client import PolygonClient
+from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
@@ -86,8 +87,9 @@ def handler(event, context):
     symbols = [str(s).strip() for s in symbols if str(s).strip()]
 
     async def _run():
-        client = PolygonClient()
-        return await compute_orb_for_symbols(symbols, client)
+        settings = get_settings()
+        async with PolygonClient(api_key=settings.polygon_api_key) as client:
+            return await compute_orb_for_symbols(symbols, client)
 
     results = asyncio.run(_run())
     return {
