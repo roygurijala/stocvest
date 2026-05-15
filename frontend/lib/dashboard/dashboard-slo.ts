@@ -2,7 +2,8 @@
  * Dashboard terminal UX SLO targets + fetch budgets (Tier 1.C Phase 5).
  *
  * Product targets live in `docs/DASHBOARD_TERMINAL_UX_PLAN.md` §3.
- * Measure with `[dashboard-load]` logs (`STOCVEST_DASHBOARD_TIMING=1` or development).
+ * Measure with `[dashboard-load]` logs when dashboard timing is enabled
+ * (`STOCVEST_DASHBOARD_TIMING`, Redis admin toggle, or `development` — see `load-timing.ts`).
  */
 
 import {

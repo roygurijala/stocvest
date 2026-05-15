@@ -37,11 +37,11 @@ This is **not** a generic perf checklist. The items here are picked specifically
 | Environment | First segment (`dashboard_summary`) | Scanner (`scanner_core`) | Notes |
 |-------------|-------------------------------------|--------------------------|--------|
 | **Local dev** (Vitest chaos suite) | Fallback path verified at **58s** server timeout budget | Same **58s** budget → `"Scanner timed out."` fallback | Not a latency benchmark — proves soft-failure wiring. |
-| **Production** | *Pending* — collect after `terraform apply` for `/v1/dashboard/summary` | *Pending* | Enable `STOCVEST_DASHBOARD_TIMING=1` on the Next server or use development logs; grep `[dashboard-load]`. |
+| **Production** | *Pending* — collect after `terraform apply` for `/v1/dashboard/summary` | *Pending* | Enable timing via **`/dashboard/admin/dashboard-timing`** (Redis + admin group) or `STOCVEST_DASHBOARD_TIMING=1` on the Next server; grep `[dashboard-load]`. |
 
 **How to collect**
 
-1. **Enable timing** on the Next.js host (Vercel → Project → Settings → Environment Variables): `STOCVEST_DASHBOARD_TIMING=1` for Preview/Production (or use local `npm run dev` where `NODE_ENV=development` logs automatically).
+1. **Enable timing** — in order of precedence: `STOCVEST_DASHBOARD_TIMING=0` forces **off**; `=1` forces **on**; otherwise **`/dashboard/admin/dashboard-timing`** can set a Redis-backed **On / Off / Default** when Upstash is configured; if unset, **development** is on and **production** is off. (`load-timing.ts`.)
 2. **Generate traffic:** sign in and load `/dashboard` at least **5×** during US market hours (cold + warm mixes are fine).
 3. **Export logs** from your host (Vercel *Logs*, CloudWatch for Lambda-only paths, or local terminal stdout).
 4. **Parse and summarize:**
@@ -61,6 +61,8 @@ Get-Content path\to\logs.txt | node --experimental-strip-types scripts/parse_das
 ```
 
 The script prints per-phase **min / p50 / p75 / p95 / max**, milestone proxies vs the 2s / 8s / 15s targets (`PASS`/`FAIL`), and a short markdown snippet to paste into the table below. Implementation: `frontend/lib/dashboard/parse-load-timing-logs.ts`; lock-in: `frontend/tests/parse-dashboard-load-timing.test.ts`; sample fixture: `frontend/tests/fixtures/dashboard-load-sample.log`.
+
+**Admin UI:** **`/dashboard/admin/dashboard-timing`** (requires `signal-analytics-admin`): **Instrumentation** card sets Redis key `stocvest:admin:dashboard_timing_toggle` (`On` / `Off` / `Default`) when **`STOCVEST_DASHBOARD_TIMING` is not set** in Vercel env and Upstash **`UPSTASH_REDIS_*`** is configured. The report panel uses samples from list **`stocvest:admin:dashboard_load_timing`** (last 500 phase rows) while timing is **effectively** on.
 
 ### Server fetch budgets (defensive ceilings)
 

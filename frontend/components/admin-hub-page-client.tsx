@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   ShieldCheck,
   Sparkles,
+  Timer,
   Users
 } from "lucide-react";
 
@@ -75,6 +76,12 @@ const NAV_TILES: {
     label: "Error logs",
     description: "Last 7 days of Lambda errors from CloudWatch Logs Insights.",
     Icon: AlertTriangle
+  },
+  {
+    href: "/dashboard/admin/dashboard-timing",
+    label: "Dashboard timing",
+    description: "Recent /dashboard RSC phase timings vs SLOs (Redis-buffered when configured).",
+    Icon: Timer
   }
 ];
 

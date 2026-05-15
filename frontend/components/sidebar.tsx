@@ -23,6 +23,7 @@ import {
   ScrollText,
   Settings,
   ShieldCheck,
+  Timer,
   TrendingUp,
   Users,
   Zap,
@@ -87,7 +88,8 @@ export const DASHBOARD_ADMIN_NAV_ITEMS: ReadonlyArray<{
   { href: "/dashboard/admin/parameters", label: "Parameters", icon: History },
   { href: "/dashboard/admin/users", label: "Users", icon: Users },
   { href: "/dashboard/admin/audit", label: "Audit log", icon: ScrollText },
-  { href: "/dashboard/admin/error-logs", label: "Error logs", icon: AlertTriangle }
+  { href: "/dashboard/admin/error-logs", label: "Error logs", icon: AlertTriangle },
+  { href: "/dashboard/admin/dashboard-timing", label: "Dashboard timing", icon: Timer }
 ];
 
 const ADMIN_NAV_STORAGE_KEY = "stocvest:sidebar:admin-expanded";

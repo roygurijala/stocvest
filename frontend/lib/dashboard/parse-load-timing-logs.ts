@@ -191,7 +191,9 @@ export function formatDashboardTimingReport(report: DashboardTimingReport): stri
   lines.push("");
 
   if (report.byPhase.length === 0) {
-    lines.push("No [dashboard-load] lines found. Enable STOCVEST_DASHBOARD_TIMING=1 and load /dashboard.");
+    lines.push(
+      "No [dashboard-load] lines found. Enable timing (admin Dashboard timing page, STOCVEST_DASHBOARD_TIMING=1, or development) and load /dashboard."
+    );
     return lines.join("\n");
   }
 
