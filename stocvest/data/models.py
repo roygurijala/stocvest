@@ -279,6 +279,7 @@ class AlertType(str, Enum):
     CONFLUENCE_ALERT = "confluence_alert"
     GAP_DETECTED = "gap_detected"
     SIGNAL_EXPIRED = "signal_expired"
+    WATCHLIST_MATURATION = "watchlist_maturation"
 
 
 class AlertChannel(str, Enum):
@@ -299,6 +300,7 @@ class AlertPreferences(BaseModel):
     on_pdt_warning: bool = True
     on_pdt_blocked: bool = True
     on_gap_detected: bool = False
+    on_watchlist_maturation: bool = True
     watchlist_only: bool = True
     quiet_hours_enabled: bool = False
     quiet_hours_start: str = "22:00"

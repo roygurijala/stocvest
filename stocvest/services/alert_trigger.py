@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from stocvest.data.alert_store import DynamoDBAlertStore, new_history_alert_id
 from stocvest.data.models import AlertChannel, AlertPreferences, AlertRecord, AlertStatus, AlertType
 from stocvest.data.watchlist_store import WatchlistStore
+from stocvest.models.watchlist import STATE_LABELS, WatchlistMode, WatchlistState
 from stocvest.services.email_service import EmailService, preview_context_json
 from stocvest.utils.log_privacy import user_ref_for_logs
 from stocvest.utils.logging import get_logger
@@ -112,6 +114,81 @@ class AlertTriggerService:
             alert_type=alert_type,
             channel=AlertChannel.EMAIL,
             symbol=None,
+            title=subj,
+            body=preview_context_json(ctx),
+            status=AlertStatus.SENT if success else AlertStatus.FAILED,
+            created_at=now,
+            sent_at=now if success else None,
+            error=None if success else "send_failed",
+        )
+        self.alert_store.create_alert_record(rec)
+
+    def trigger_watchlist_maturation_change(
+        self,
+        *,
+        user_id: str,
+        user_email: str,
+        symbol: str,
+        mode: WatchlistMode,
+        previous_state: WatchlistState,
+        new_state: WatchlistState,
+    ) -> None:
+        if previous_state == new_state:
+            return
+        prefs = self.alert_store.get_preferences(user_id)
+        if not prefs.email_enabled or not prefs.on_watchlist_maturation:
+            return
+        sym_u = symbol.strip().upper()
+        if prefs.watchlist_only:
+            wl = self.watchlist_store.get_default_watchlist(user_id)
+            if wl and sym_u not in {s.upper() for s in wl.symbols}:
+                _LOG.debug(
+                    "maturation alert skipped: %s not on default watchlist for %s",
+                    sym_u,
+                    user_ref_for_logs(user_id),
+                )
+                return
+        if self._in_quiet_hours(prefs):
+            _LOG.debug("maturation alert skipped: quiet hours user=%s", user_ref_for_logs(user_id))
+            return
+        if self.alert_store.had_watchlist_maturation_transition_on_et_calendar_day(
+            user_id,
+            sym_u,
+            str(mode),
+            previous_state.value,
+            new_state.value,
+        ):
+            _LOG.debug(
+                "maturation alert deduped (ET day + transition) user=%s sym=%s %s→%s",
+                user_ref_for_logs(user_id),
+                sym_u,
+                previous_state.value,
+                new_state.value,
+            )
+            return
+        prev_label = STATE_LABELS.get(previous_state, previous_state.value)
+        new_label = STATE_LABELS.get(new_state, new_state.value)
+        ctx: dict[str, Any] = {
+            "symbol": sym_u,
+            "mode": mode,
+            "previous_state": previous_state.value,
+            "new_state": new_state.value,
+            "previous_label": prev_label,
+            "new_label": new_label,
+        }
+        success = self.email_service.send_alert_email(
+            to_email=user_email,
+            alert_type=AlertType.WATCHLIST_MATURATION,
+            context=ctx,
+        )
+        now = datetime.now(timezone.utc).isoformat()
+        subj = self.email_service._build_subject(AlertType.WATCHLIST_MATURATION, ctx)
+        rec = AlertRecord(
+            alert_id=new_history_alert_id(),
+            user_id=user_id,
+            alert_type=AlertType.WATCHLIST_MATURATION,
+            channel=AlertChannel.EMAIL,
+            symbol=sym_u,
             title=subj,
             body=preview_context_json(ctx),
             status=AlertStatus.SENT if success else AlertStatus.FAILED,

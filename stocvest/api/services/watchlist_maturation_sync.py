@@ -1,0 +1,231 @@
+"""Persist watchlist maturation from a successful composite (evidence) payload.
+
+Dual-writes to ``WatchlistMaturation`` when ``DYNAMODB_WATCHLIST_MATURATION_TABLE`` is set.
+Only updates symbols on the user's **default** watchlist to avoid maturing arbitrary tickers.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Any, Literal, cast
+
+from stocvest.data.watchlist_maturation_repository import (
+    WatchlistMaturationRepository,
+    get_watchlist_maturation_repository,
+)
+from stocvest.data.watchlist_store import WatchlistStore, get_watchlist_store
+from stocvest.models.watchlist import (
+    MATURATION_LAYER_KEYS,
+    WatchlistEntry,
+    WatchlistMode,
+    WatchlistState,
+    derive_state,
+)
+from stocvest.utils.logging import get_logger
+
+_LOG = get_logger(__name__)
+
+_REASON = "evidence_composite"
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _skip_body(body: dict[str, Any]) -> bool:
+    if body.get("error"):
+        return True
+    st = str(body.get("status") or "").strip().lower()
+    if st in ("insufficient_data", "incomplete"):
+        return True
+    return False
+
+
+def _layer_row_available(row: dict[str, Any]) -> bool:
+    if str(row.get("status") or "").strip().lower() == "unavailable":
+        return False
+    if row.get("score") is None:
+        return False
+    return True
+
+
+def _composite_bias(signal_summary: str) -> Literal["long", "short", "neutral"]:
+    s = (signal_summary or "").strip().lower()
+    if s == "bullish":
+        return "long"
+    if s == "bearish":
+        return "short"
+    return "neutral"
+
+
+def _layer_verdict(row: dict[str, Any]) -> str:
+    return str(row.get("verdict") or "neutral").strip().lower()
+
+
+def _layer_aligned_with_composite(
+    row: dict[str, Any],
+    *,
+    composite_bias: Literal["long", "short", "neutral"],
+) -> bool:
+    if not _layer_row_available(row):
+        return False
+    if composite_bias == "neutral":
+        return True
+    v = _layer_verdict(row)
+    if composite_bias == "long":
+        return v == "bullish"
+    if composite_bias == "short":
+        return v == "bearish"
+    return False
+
+
+def _layers_index(body: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    raw = body.get("layers")
+    if not isinstance(raw, list):
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        lid = str(item.get("layer") or "").strip().lower()
+        if lid:
+            out[lid] = item
+    return out
+
+
+def _alignment_fields(
+    body: dict[str, Any],
+) -> tuple[int, list[str], float, str, Literal["long", "short", "neutral"]]:
+    by_layer = _layers_index(body)
+    summary = str(body.get("signal_summary") or "")
+    cb = _composite_bias(summary)
+    bias = cast(Literal["long", "short", "neutral"], cb)
+    missing: list[str] = []
+    aligned = 0
+    top_reason = ""
+    for lid in MATURATION_LAYER_KEYS:
+        row = by_layer.get(lid)
+        if row is None:
+            missing.append(lid)
+            if not top_reason:
+                top_reason = f"{lid}: no layer row"
+            continue
+        if _layer_aligned_with_composite(row, composite_bias=cb):
+            aligned += 1
+        else:
+            missing.append(lid)
+            if not top_reason:
+                reason = str(row.get("reasoning") or row.get("status") or "").strip()
+                top_reason = (f"{lid}: {reason}" if reason else f"{lid}: not aligned")[:240]
+    total = len(MATURATION_LAYER_KEYS)
+    pct = (100.0 * float(aligned)) / float(total) if total else 0.0
+    return aligned, missing, pct, top_reason, bias
+
+
+def sync_watchlist_maturation_from_composite(
+    *,
+    user_id: str,
+    symbol: str,
+    mode: WatchlistMode,
+    composite_body: dict[str, Any],
+    maturation_repo: WatchlistMaturationRepository | None = None,
+    watchlist_store: WatchlistStore | None = None,
+    email_on_state_change: bool = True,
+) -> None:
+    """Best-effort maturation upsert; logs and returns on any failure."""
+    if not (user_id or "").strip():
+        return
+    sym_u = (symbol or "").strip().upper()
+    if not sym_u:
+        return
+    if _skip_body(composite_body):
+        return
+
+    repo = maturation_repo if maturation_repo is not None else get_watchlist_maturation_repository()
+    if repo is None:
+        return
+
+    store = watchlist_store if watchlist_store is not None else get_watchlist_store()
+    wl = store.get_default_watchlist(user_id)
+    if not wl:
+        return
+    if sym_u not in {s.strip().upper() for s in wl.symbols}:
+        return
+
+    wl_mode: WatchlistMode = mode if mode in ("swing", "day") else "swing"
+    layers_aligned, missing_layers, alignment_pct, top_missing_reason, bias = _alignment_fields(composite_body)
+
+    prev = repo.get_entry(user_id, sym_u, wl_mode)
+    prev_state = prev.state if prev else None
+    was_invalidated = prev_state == WatchlistState.INVALIDATED
+    new_state = derive_state(layers_aligned, prev_state, was_invalidated=was_invalidated)
+
+    now = _utc_now()
+    state_changed = prev_state is None or new_state != prev_state
+    state_changed_at = now if state_changed else (prev.state_changed_at if prev else now)
+
+    invalidated_at = prev.invalidated_at if prev else None
+    invalidation_reason = prev.invalidation_reason if prev else None
+    if new_state == WatchlistState.INVALIDATED and prev_state != WatchlistState.INVALIDATED:
+        invalidated_at = now
+        invalidation_reason = "layers_below_viability"
+    elif new_state != WatchlistState.INVALIDATED:
+        invalidated_at = None
+        invalidation_reason = None
+
+    if state_changed:
+        previous_state_on_row: WatchlistState | None = None if prev_state is None else prev_state
+    else:
+        previous_state_on_row = prev.previous_state if prev else None
+
+    added_at = prev.added_at if prev and prev.added_at else now
+    added_from = prev.added_from if prev and prev.added_from else "evidence"
+
+    entry = WatchlistEntry(
+        user_id=user_id,
+        symbol=sym_u,
+        mode=wl_mode,
+        state=new_state,
+        previous_state=previous_state_on_row,
+        state_changed_at=state_changed_at,
+        state_change_reason=_REASON if state_changed else (prev.state_change_reason if prev else _REASON),
+        layers_aligned=layers_aligned,
+        layers_total=len(MATURATION_LAYER_KEYS),
+        alignment_pct=alignment_pct,
+        bias=bias,
+        missing_layers=missing_layers,
+        top_missing_reason=top_missing_reason,
+        added_at=added_at,
+        added_from=added_from,
+        last_evaluated_at=now,
+        last_evaluated_session=wl_mode,
+        invalidated_at=invalidated_at,
+        invalidation_reason=invalidation_reason,
+        archive_after=prev.archive_after if prev else None,
+    )
+    try:
+        repo.put_entry(entry)
+    except Exception as exc:  # noqa: BLE001 — never break composite response
+        _LOG.warning("watchlist maturation put_entry failed user=%s sym=%s: %s", user_id, sym_u, exc)
+        return
+
+    if (
+        email_on_state_change
+        and state_changed
+        and prev_state is not None
+        and new_state != prev_state
+    ):
+        try:
+            from stocvest.api.services.watchlist_maturation_notify import (
+                try_notify_watchlist_maturation_state_change,
+            )
+
+            try_notify_watchlist_maturation_state_change(
+                user_id=user_id,
+                symbol=sym_u,
+                mode=wl_mode,
+                previous_state=prev_state,
+                new_state=new_state,
+            )
+        except Exception as exc:  # noqa: BLE001
+            _LOG.warning("watchlist maturation notify failed user=%s sym=%s: %s", user_id, sym_u, exc)

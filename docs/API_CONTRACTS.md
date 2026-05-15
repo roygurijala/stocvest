@@ -1,6 +1,6 @@
 # STOCVEST — API contracts (immutable sections)
 
-**Last reviewed:** 2026-05-14
+**Last reviewed:** 2026-05-15
 
 Sections referenced from **`docs/CONTEXT.md`** §7 must not change without explicit review and coordinated code updates.
 
@@ -205,3 +205,19 @@ Terraform table **`AuditEvents`**: **`pk`** = `user#{userId|anon}`, **`sk`** = `
 ### 4.12 Beta access script
 
 - Repo script **`scripts/beta_access.py`** — operator CLI: updates **`Users`** Dynamo attributes **`betaFullAccess`**, **`betaAccessUntil`**, **`betaAccessGrantedAt`** (requires **`DYNAMODB_USERS_TABLE`** + AWS creds). Mirrors **`PATCH .../beta-access`** semantics (**`--enable` / `--disable`**). **`--until`** is optional; **`--no-expiry`** with **`--enable`** leaves beta open-ended. If **`--enable`** without **`--until`** or **`--no-expiry`**, expiry defaults to **21 days** from now (UTC). **`scripts/cognito_sub_for_email.py`** prints a user’s **`sub`** from their login email (needs **`COGNITO_USER_POOL_ID`** + **`cognito-idp:AdminGetUser`**).
+
+### 4.13 Watchlists — maturation summary (brokers Lambda)
+
+- `GET /v1/watchlists/maturation-summary` — **authenticated**. Query **`mode`** = **`day`** \| **`swing`** (default **`day`**). Response JSON: **`{ "mode": "<echoed>", "by_symbol": { "AAPL": { ... } } }`**. Keys in **`by_symbol`** are uppercase symbols intersected with the user’s **default** watchlist only; symbols not on the default list never appear even if a maturation row exists in Dynamo.
+
+- Each **`by_symbol`** value always includes **`state`** (string enum value) and **`label`** (short state label). **`readiness_label`** (longer layer-alignment summary) is included **only** when the user’s profile qualifies for full detail: **`subscription_plan`** ∈ {**`swing_pro`**, **`swing_day_pro`**} or **`beta_access_active`** is true (see **`stocvest/api/services/watchlist_maturation_gates.py`**). Free-tier responses omit the key.
+
+- When **`DYNAMODB_WATCHLIST_MATURATION_TABLE`** is unset or the repository is unavailable, **`by_symbol`** is **`{}`** (HTTP 200).
+
+### 4.14 User alerts — preferences + delivery history (brokers Lambda)
+
+- `GET /v1/alerts/preferences` — **authenticated**; returns **`AlertPreferences`** JSON (snake_case keys).
+
+- `PATCH /v1/alerts/preferences` — **authenticated**; partial JSON body merges into stored preferences.
+
+- `GET /v1/alerts/history` — **authenticated**. Query **`limit`**: integer **1–50**, default **20**. Optional **`alert_type`**: a valid **`AlertType`** value (e.g. **`watchlist_maturation`**, **`signal_fired`**). Optional **`symbols`**: comma-separated tickers (uppercased server-side; each token alphanumeric plus **`.`** / **`-`**, max length **12**, up to **50** tokens). When **`alert_type`** and/or **`symbols`** is set, the service reads up to **50** newest rows, applies filters in order (**type** then **symbol**), then returns at most **`limit`** rows. Invalid **`alert_type`** → **400** (`Invalid alert_type: '…'`). When both filters are omitted, returns the newest **`limit`** rows of any type.

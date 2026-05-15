@@ -8,6 +8,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { brokersEnabled } from "@/lib/nav-features";
+import { watchlistSignalsOpenAriaLabel, watchlistToSignalsHref } from "@/lib/nav/watchlist-signals-deeplink";
 import { DEFAULT_UI_PLAN, PLAN_TIERS, planTierById } from "@/lib/subscription-plans";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -22,13 +23,36 @@ type AlertPrefs = {
   on_pdt_warning: boolean;
   on_pdt_blocked: boolean;
   on_gap_detected: boolean;
+  on_watchlist_maturation: boolean;
   watchlist_only: boolean;
   quiet_hours_enabled: boolean;
   quiet_hours_start: string;
   quiet_hours_end: string;
 };
 
-type AlertRow = { title: string; created_at: string; status: string };
+type AlertRow = {
+  title: string;
+  created_at: string;
+  status: string;
+  symbol?: string | null;
+  alert_type?: string | null;
+};
+
+/** Short label for `alert_type` values from `GET /v1/alerts/history`. */
+function alertHistoryTypeLabel(raw: string | null | undefined): string {
+  if (!raw || typeof raw !== "string") return "";
+  const t = raw.trim();
+  const map: Record<string, string> = {
+    signal_fired: "Signal",
+    confluence_alert: "Confluence",
+    pdt_warning: "PDT warning",
+    pdt_blocked: "PDT blocked",
+    gap_detected: "Gap",
+    signal_expired: "Expired",
+    watchlist_maturation: "Maturation"
+  };
+  return map[t] ?? t.replace(/_/g, " ");
+}
 
 export function SettingsPageClient({ email }: SettingsPageClientProps) {
   const { colors } = useTheme();
@@ -312,6 +336,20 @@ export function SettingsPageClient({ email }: SettingsPageClientProps) {
               When a quality gap is detected on your watchlist (off by default — noisy).
             </p>
             <label className={`flex min-h-11 items-center justify-between gap-3 ${!prefs.email_enabled ? "opacity-50" : ""}`}>
+              <span>Watchlist maturation updates</span>
+              <input
+                type="checkbox"
+                className="h-6 w-6 shrink-0"
+                disabled={!prefs.email_enabled}
+                checked={prefs.on_watchlist_maturation ?? true}
+                onChange={(e) => void patchPref({ on_watchlist_maturation: e.target.checked })}
+              />
+            </label>
+            <p className="text-xs" style={{ margin: `-${spacing[2]} 0 0`, color: colors.textMuted }}>
+              When a symbol on your default watchlist moves between maturation states after you run evidence (e.g. Developing →
+              Actionable).
+            </p>
+            <label className={`flex min-h-11 items-center justify-between gap-3 ${!prefs.email_enabled ? "opacity-50" : ""}`}>
               <span>
                 Watchlist symbols only <span style={{ color: colors.accent, fontSize: 10 }}>Recommended</span>
               </span>
@@ -359,13 +397,37 @@ export function SettingsPageClient({ email }: SettingsPageClientProps) {
               {history.length === 0 ? (
                 <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.sm }}>No alerts sent yet.</p>
               ) : (
-                <ul style={{ margin: 0, paddingLeft: spacing[4], color: colors.text, fontSize: typography.scale.sm }}>
-                  {history.map((h, i) => (
-                    <li key={`${h.title}-${i}`} style={{ marginBottom: spacing[1] }}>
-                      {h.title}{" "}
-                      <span style={{ color: colors.textMuted }}>· {h.created_at?.slice(0, 16) || ""}</span>
-                    </li>
-                  ))}
+                <ul
+                  data-testid="settings-recent-alerts-list"
+                  style={{ margin: 0, paddingLeft: spacing[4], color: colors.text, fontSize: typography.scale.sm }}
+                >
+                  {history.map((h, i) => {
+                    const symRaw = h.symbol != null ? String(h.symbol).trim() : "";
+                    const sym = symRaw ? symRaw.toUpperCase() : "—";
+                    const kind = alertHistoryTypeLabel(h.alert_type);
+                    return (
+                      <li key={`${h.created_at}-${h.title}-${i}`} style={{ marginBottom: spacing[1], lineHeight: 1.45 }}>
+                        {symRaw ? (
+                          <Link
+                            href={watchlistToSignalsHref(symRaw)}
+                            prefetch={false}
+                            aria-label={watchlistSignalsOpenAriaLabel(symRaw)}
+                            style={{ color: colors.text, fontWeight: 700, textDecoration: "none" }}
+                            className="hover:underline"
+                          >
+                            {sym}
+                          </Link>
+                        ) : (
+                          <strong style={{ color: colors.text }}>{sym}</strong>
+                        )}
+                        {kind ? (
+                          <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}> ({kind})</span>
+                        ) : null}
+                        <span style={{ color: colors.text }}> — {h.title}</span>{" "}
+                        <span style={{ color: colors.textMuted }}>· {h.created_at?.slice(0, 16) || ""}</span>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>

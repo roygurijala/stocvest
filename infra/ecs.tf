@@ -8,6 +8,7 @@ locals {
       aws_dynamodb_table.users,
       aws_dynamodb_table.broker_connections,
       aws_dynamodb_table.watchlists,
+      aws_dynamodb_table.watchlist_maturation,
       aws_dynamodb_table.alerts,
       aws_dynamodb_table.orders,
       aws_dynamodb_table.day_trading_setups,

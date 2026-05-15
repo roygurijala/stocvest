@@ -61,7 +61,7 @@ function wrap(ui: ReactElement) {
 }
 
 describe("dashboard two-desk status (focus layout)", () => {
-  test("system_banner_and_desk_status_reference_swing_and_day", () => {
+  test("system_banner_lists_swing_and_day_desk_lines", () => {
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
@@ -75,12 +75,9 @@ describe("dashboard two-desk status (focus layout)", () => {
     const banner = screen.getByTestId("dashboard-system-state-banner");
     expect(banner.textContent || "").toMatch(/Swing Desk/i);
     expect(banner.textContent || "").toMatch(/Day Desk/i);
-    const desk = screen.getByTestId("dashboard-desk-status");
-    expect(desk.textContent || "").toMatch(/Swing Desk/i);
-    expect(desk.textContent || "").toMatch(/Day Desk/i);
   });
 
-  test("desk_status_lists_swing_before_day_in_dom_order", () => {
+  test("scanner_shortcut_row_lists_swing_link_before_day_link_in_dom_order", () => {
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
@@ -92,9 +89,9 @@ describe("dashboard two-desk status (focus layout)", () => {
       />
     );
     const desk = screen.getByTestId("dashboard-desk-status");
-    const items = Array.from(desk.querySelectorAll("li"));
-    const swingIdx = items.findIndex((li) => (li.textContent || "").includes("Swing Desk"));
-    const dayIdx = items.findIndex((li) => (li.textContent || "").includes("Day Desk"));
+    const anchors = Array.from(desk.querySelectorAll("a")) as HTMLAnchorElement[];
+    const swingIdx = anchors.findIndex((a) => a.getAttribute("href") === "/dashboard/scanner?mode=swing");
+    const dayIdx = anchors.findIndex((a) => a.getAttribute("href") === "/dashboard/scanner?mode=day");
     expect(swingIdx).toBeGreaterThan(-1);
     expect(dayIdx).toBeGreaterThan(-1);
     expect(swingIdx).toBeLessThan(dayIdx);

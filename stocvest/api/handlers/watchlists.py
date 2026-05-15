@@ -10,7 +10,11 @@ from stocvest.api.shared import build_request_context, parse_json_body
 from stocvest.api.text_sanitize import WATCHLIST_NAME_MAX, sanitize_free_text
 from stocvest.api.types import LambdaContext, LambdaEvent
 from stocvest.data.scan_symbols import SYSTEM_DEFAULTS
+from stocvest.api.services.user_profile_store import get_user_profile_store
+from stocvest.api.services.watchlist_maturation_gates import maturation_summary_include_readiness_label
+from stocvest.data.watchlist_maturation_repository import get_watchlist_maturation_repository
 from stocvest.data.watchlist_store import WatchlistItem, get_watchlist_store
+from stocvest.models.watchlist import WatchlistMode
 from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
@@ -33,6 +37,8 @@ def watchlists_dispatch_handler(event: LambdaEvent, context: LambdaContext) -> d
     method = route.split(" ", 1)[0] if " " in route else ""
     if route.startswith("GET /v1/watchlists/default/symbols"):
         return watchlists_default_symbols_get_handler(event, context)
+    if route == "GET /v1/watchlists/maturation-summary":
+        return watchlists_maturation_summary_handler(event, context)
     if route.startswith("POST /v1/watchlists/default/symbols"):
         return watchlists_default_symbols_post_handler(event, context)
     if method == "DELETE" and "/symbols/" in route and route.startswith("DELETE /v1/watchlists/"):
@@ -184,6 +190,46 @@ def watchlists_remove_symbol_handler(event: LambdaEvent, context: LambdaContext)
     if out is None:
         return not_found("Watchlist not found.")
     return ok(_serialize(out))
+
+
+def watchlists_maturation_summary_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    """GET /v1/watchlists/maturation-summary — default-list symbols only; ``mode=day|swing`` (default day).
+
+    Response rows always include ``state`` and ``label``. ``readiness_label`` is included only for paid
+    plans (``swing_pro``, ``swing_day_pro``) or when ``beta_access_active`` on the user's profile.
+    """
+    _ = context
+    rc = build_request_context(event)
+    if not rc.user_id:
+        return unauthorized("Authenticated user is required.")
+    qs = event.get("queryStringParameters") or {}
+    if not isinstance(qs, dict):
+        qs = {}
+    mode_raw = str(qs.get("mode") or "day").strip().lower()
+    mode: WatchlistMode = "swing" if mode_raw == "swing" else "day"
+
+    repo = get_watchlist_maturation_repository()
+    if repo is None:
+        return ok({"mode": mode, "by_symbol": {}})
+
+    wl = get_watchlist_store().get_default_watchlist(rc.user_id)
+    if not wl or not wl.symbols:
+        return ok({"mode": mode, "by_symbol": {}})
+
+    allowed = {s.strip().upper() for s in wl.symbols if str(s).strip()}
+    entries = repo.list_for_user(rc.user_id, mode=mode, exclude_archived=True)
+    profile = get_user_profile_store().get_profile(rc.user_id)
+    include_readiness = maturation_summary_include_readiness_label(profile)
+    by_symbol: dict[str, dict[str, str]] = {}
+    for e in entries:
+        su = e.symbol.strip().upper()
+        if su not in allowed:
+            continue
+        row: dict[str, str] = {"state": e.state.value, "label": e.label}
+        if include_readiness:
+            row["readiness_label"] = e.readiness_label
+        by_symbol[su] = row
+    return ok({"mode": mode, "by_symbol": by_symbol})
 
 
 def watchlists_default_symbols_get_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:

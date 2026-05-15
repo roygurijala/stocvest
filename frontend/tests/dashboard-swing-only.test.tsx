@@ -111,7 +111,7 @@ describe("Dashboard scanner partition (focus layout)", () => {
         sectorRotation={[]}
       />
     );
-    expect(screen.getByTestId("dashboard-desk-status").textContent || "").toMatch(/Swing Desk:.*Active/i);
+    expect(screen.getByTestId("dashboard-system-state-banner").textContent || "").toMatch(/Swing Desk:.*Active/i);
     expect(screen.queryByTestId("swing-desk-panel")).toBeNull();
     const dash = document.querySelector(".stocvest-dashboard-v2");
     expect((dash?.textContent || "").toLowerCase()).not.toContain("pattern maturity");

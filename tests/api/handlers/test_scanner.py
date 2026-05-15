@@ -40,6 +40,20 @@ def test_handler_routes_eventbridge_schedule_payload(monkeypatch: pytest.MonkeyP
         assert body["status"] == "completed"
 
 
+def test_handler_routes_maturation_refresh_schedule(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _fake_refresh() -> dict:
+        return {"job": "watchlist_maturation_refresh", "composite_calls": 0}
+
+    monkeypatch.setattr(
+        "stocvest.workers.watchlist_maturation_refresh.run_watchlist_maturation_refresh_sync",
+        _fake_refresh,
+    )
+    response = handler({"source": "eventbridge", "scan_type": "maturation_refresh"}, {})
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body.get("job") == "watchlist_maturation_refresh"
+
+
 def test_handler_rejects_unknown_eventbridge_scan_type() -> None:
     response = handler({"source": "eventbridge", "scan_type": "overnight"}, {})
     assert response["statusCode"] == 400

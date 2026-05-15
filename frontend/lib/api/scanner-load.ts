@@ -79,22 +79,38 @@ function mergeSwingAndDaySetups(swing: IntradaySetupPayload[], day: IntradaySetu
 }
 
 /** Dashboard strip only — omit when the user has no default watchlist symbols this load. */
-function buildWatchlistDashboardStatus(
+export function buildWatchlistDashboardStatus(
   watchUpper: string[],
   universe: string[],
-  setups: IntradaySetupPayload[]
+  setups: IntradaySetupPayload[],
+  maturationBySymbol?: Record<string, string> | null
 ): WatchlistDashboardStatus | null {
   const w = [...new Set(watchUpper.map((s) => s.trim().toUpperCase()).filter(Boolean))];
   if (w.length === 0) return null;
   const u = new Set(universe.map((s) => s.trim().toUpperCase()));
   const setupSyms = new Set(setups.map((s) => s.symbol.trim().toUpperCase()).filter(Boolean));
+  const mat = maturationBySymbol ?? null;
   let actionable = 0;
   let developing = 0;
   let inactive = 0;
   for (const sym of w) {
-    if (setupSyms.has(sym)) actionable += 1;
-    else if (u.has(sym)) developing += 1;
-    else inactive += 1;
+    const m = mat?.[sym];
+    if (setupSyms.has(sym)) {
+      actionable += 1;
+    } else if (m === "actionable") {
+      actionable += 1;
+    } else if (
+      m === "developing" ||
+      m === "re_evaluating" ||
+      m === "not_aligned" ||
+      m === "invalidated"
+    ) {
+      developing += 1;
+    } else if (u.has(sym)) {
+      developing += 1;
+    } else {
+      inactive += 1;
+    }
   }
   return { monitored: w.length, actionable, developing, inactive };
 }
@@ -276,6 +292,28 @@ export async function runScannerLoadWithoutBrief(
     const fetchDailyBars = setupLoadMode === "swing" || setupLoadMode === "both";
     const loadDaySetups = setupLoadMode === "day" || setupLoadMode === "both";
     const loadSwingSetups = setupLoadMode === "swing" || setupLoadMode === "both";
+    const maturationListMode: "day" | "swing" = setupLoadMode === "swing" ? "swing" : "day";
+    const maturationSummaryPromise: Promise<Record<string, string> | null> =
+      watchUpper.length === 0
+        ? Promise.resolve(null)
+        : jsonFetch<{ by_symbol?: Record<string, { state?: string }> }>(
+            `/v1/watchlists/maturation-summary?mode=${encodeURIComponent(maturationListMode)}`
+          )
+            .then((payload) => {
+              const raw = payload?.by_symbol;
+              if (!raw || typeof raw !== "object") return null;
+              const out: Record<string, string> = {};
+              for (const [k, v] of Object.entries(raw)) {
+                const sym = k.trim().toUpperCase();
+                const st =
+                  v && typeof v === "object" && typeof (v as { state?: unknown }).state === "string"
+                    ? (v as { state: string }).state.trim().toLowerCase()
+                    : "";
+                if (sym && st) out[sym] = st;
+              }
+              return Object.keys(out).length ? out : null;
+            })
+            .catch(() => null);
     /** Intraday bars only feed `POST /v1/signals/day/setups`; swing-only loads skip them (large critical-path savings). */
     const needIntradayBars = loadDaySetups;
     const swingDailyBarLimit = tuning?.swingDailyBarLimit ?? 220;
@@ -450,6 +488,8 @@ export async function runScannerLoadWithoutBrief(
       }
     }
 
+    const maturationBySymbol = await maturationSummaryPromise;
+
     return {
       gapIntelligence: gapItems,
       setups,
@@ -458,7 +498,7 @@ export async function runScannerLoadWithoutBrief(
       regimeLabel,
       swingUniverseSymbolCount: universe.length,
       gapIntelligenceSnapshotSymbolCount: gapIntelSnapshotCount,
-      watchlistStatus: buildWatchlistDashboardStatus(watchUpper, universe, setups)
+      watchlistStatus: buildWatchlistDashboardStatus(watchUpper, universe, setups, maturationBySymbol)
     };
   } catch (error: unknown) {
     if (isNextRedirect(error)) throw error;

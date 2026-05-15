@@ -33,7 +33,8 @@ output "dynamodb_table_names" {
   value = {
     users              = aws_dynamodb_table.users.name
     broker_connections = aws_dynamodb_table.broker_connections.name
-    watchlists         = aws_dynamodb_table.watchlists.name
+    watchlists           = aws_dynamodb_table.watchlists.name
+    watchlist_maturation = aws_dynamodb_table.watchlist_maturation.name
     alerts             = aws_dynamodb_table.alerts.name
     orders             = aws_dynamodb_table.orders.name
     day_trading_setups = aws_dynamodb_table.day_trading_setups.name
@@ -48,7 +49,8 @@ output "dynamodb_table_arns" {
   value = {
     users              = aws_dynamodb_table.users.arn
     broker_connections = aws_dynamodb_table.broker_connections.arn
-    watchlists         = aws_dynamodb_table.watchlists.arn
+    watchlists           = aws_dynamodb_table.watchlists.arn
+    watchlist_maturation = aws_dynamodb_table.watchlist_maturation.arn
     alerts             = aws_dynamodb_table.alerts.arn
     orders             = aws_dynamodb_table.orders.arn
     day_trading_setups = aws_dynamodb_table.day_trading_setups.arn

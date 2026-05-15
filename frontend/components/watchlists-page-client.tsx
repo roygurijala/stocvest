@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CuteLoader } from "@/components/cute-loader";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
-import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
+import { borderRadius, colorTokens, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
+import { watchlistSignalsOpenAriaLabel, watchlistToSignalsHref } from "@/lib/nav/watchlist-signals-deeplink";
 import { useTheme } from "@/lib/theme-provider";
 
 type WatchlistRow = {
@@ -16,7 +17,43 @@ type WatchlistRow = {
 
 const QUICK = ["SPY", "QQQ", "AAPL", "NVDA", "TSLA"];
 
-export function WatchlistsPageClient() {
+type MaturationRow = {
+  state?: string;
+  readiness_label?: string;
+  label?: string;
+};
+
+type MaturationAlertFeedItem = {
+  title: string;
+  created_at: string;
+  symbol?: string | null;
+};
+
+type ThemeColors = (typeof colorTokens)["dark"];
+
+function maturationAccent(state: string | undefined, colors: ThemeColors): string {
+  switch ((state || "").toLowerCase()) {
+    case "actionable":
+      return colors.bullish;
+    case "developing":
+    case "re_evaluating":
+      return "#f59e0b";
+    case "not_aligned":
+      return colors.bearish;
+    case "invalidated":
+      return colors.textMuted;
+    default:
+      return colors.textMuted;
+  }
+}
+
+type WatchlistsPageClientProps = {
+  /** Matches dashboard scanner-load: ``swing`` for Swing Pro only; ``day`` for Swing+Day / free. */
+  maturationSummaryMode?: "day" | "swing";
+};
+
+export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
+  const { maturationSummaryMode = "day" } = props;
   const { colors, theme } = useTheme();
   const [rows, setRows] = useState<WatchlistRow[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -27,6 +64,10 @@ export function WatchlistsPageClient() {
   const [addInput, setAddInput] = useState("");
   const [symErr, setSymErr] = useState<string | null>(null);
   const [rename, setRename] = useState<string | null>(null);
+  const [maturationBySymbol, setMaturationBySymbol] = useState<Record<string, MaturationRow>>({});
+  const [maturationFetchStatus, setMaturationFetchStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [maturationAlerts, setMaturationAlerts] = useState<MaturationAlertFeedItem[]>([]);
+  const [maturationAlertsStatus, setMaturationAlertsStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
 
   usePublishAssistantContext({ page: "dashboard/watchlists" });
 
@@ -52,6 +93,95 @@ export function WatchlistsPageClient() {
   }, [load]);
 
   const active = useMemo(() => rows.find((w) => w.watchlist_id === activeId) ?? rows[0] ?? null, [rows, activeId]);
+
+  useEffect(() => {
+    if (!active?.is_default || active.symbols.length === 0) {
+      setMaturationBySymbol({});
+      setMaturationFetchStatus("idle");
+      return;
+    }
+    setMaturationFetchStatus("loading");
+    let cancelled = false;
+    void (async () => {
+      try {
+        const qs = new URLSearchParams({ mode: maturationSummaryMode });
+        const res = await fetch(`/api/stocvest/watchlists/maturation-summary?${qs.toString()}`, { cache: "no-store" });
+        const data = (await res.json()) as { by_symbol?: Record<string, MaturationRow> };
+        if (cancelled) return;
+        if (!res.ok) {
+          setMaturationBySymbol({});
+          setMaturationFetchStatus("error");
+          return;
+        }
+        setMaturationBySymbol(data.by_symbol ?? {});
+        setMaturationFetchStatus("ready");
+      } catch {
+        if (!cancelled) {
+          setMaturationBySymbol({});
+          setMaturationFetchStatus("error");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [active?.watchlist_id, active?.is_default, active?.symbols?.join(",") ?? "", maturationSummaryMode]);
+
+  useEffect(() => {
+    if (!active?.is_default || active.symbols.length === 0) {
+      setMaturationAlerts([]);
+      setMaturationAlertsStatus("idle");
+      return;
+    }
+    setMaturationAlertsStatus("loading");
+    let cancelled = false;
+    void (async () => {
+      try {
+        const listSyms = active.symbols
+          .map((s) => s.trim().toUpperCase())
+          .filter(Boolean)
+          .slice(0, 50);
+        const qs = new URLSearchParams({
+          limit: "12",
+          alert_type: "watchlist_maturation",
+          symbols: listSyms.join(",")
+        });
+        const res = await fetch(`/api/stocvest/alerts/history?${qs.toString()}`, { cache: "no-store" });
+        const data = (await res.json().catch(() => ({}))) as { alerts?: unknown[] };
+        if (cancelled) return;
+        if (!res.ok) {
+          setMaturationAlerts([]);
+          setMaturationAlertsStatus("error");
+          return;
+        }
+        const out: MaturationAlertFeedItem[] = [];
+        for (const raw of data.alerts ?? []) {
+          if (!raw || typeof raw !== "object") continue;
+          const a = raw as Record<string, unknown>;
+          if (String(a.alert_type ?? "").trim() !== "watchlist_maturation") continue;
+          const sym = String(a.symbol ?? "")
+            .trim()
+            .toUpperCase();
+          if (!sym) continue;
+          out.push({
+            title: String(a.title ?? "Maturation update"),
+            created_at: String(a.created_at ?? ""),
+            symbol: sym
+          });
+        }
+        setMaturationAlerts(out.slice(0, 8));
+        setMaturationAlertsStatus("ready");
+      } catch {
+        if (!cancelled) {
+          setMaturationAlerts([]);
+          setMaturationAlertsStatus("error");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [active?.watchlist_id, active?.is_default, active?.symbols?.join(",") ?? ""]);
 
   async function patchWatchlist(id: string, body: Record<string, unknown>) {
     const res = await fetch(`/api/stocvest/watchlists/${encodeURIComponent(id)}`, {
@@ -346,12 +476,110 @@ export function WatchlistsPageClient() {
             ) : null}
           </div>
 
+          {active && !active.is_default && rows.length > 1 ? (
+            <p
+              style={{
+                marginTop: spacing[3],
+                marginBottom: 0,
+                padding: spacing[3],
+                borderRadius: borderRadius.md,
+                background: colors.surfaceMuted,
+                border: `1px solid ${colors.border}`,
+                color: colors.textMuted,
+                fontSize: typography.scale.sm,
+                lineHeight: 1.45
+              }}
+            >
+              <strong>Maturation</strong> (readiness vs the engine) is shown only on your <strong>default</strong>{" "}
+              watchlist. Switch to the list marked ★ to see per-symbol status.
+            </p>
+          ) : null}
+
+          {active.is_default && active.symbols.length > 0 ? (
+            <div
+              data-testid="watchlist-maturation-alerts-feed"
+              style={{
+                marginTop: spacing[3],
+                padding: spacing[3],
+                borderRadius: borderRadius.lg,
+                background: "rgba(0, 180, 255, 0.06)",
+                border: `1px solid rgba(0, 180, 255, 0.22)`
+              }}
+            >
+              <p
+                style={{
+                  margin: `0 0 ${spacing[2]}`,
+                  fontSize: typography.scale.xs,
+                  fontWeight: 700,
+                  letterSpacing: "0.1em",
+                  color: colors.textMuted
+                }}
+              >
+                RECENT MATURATION ALERTS (EMAIL)
+              </p>
+              {maturationAlertsStatus === "loading" ? (
+                <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted }}>Loading alert history…</p>
+              ) : null}
+              {maturationAlertsStatus === "error" ? (
+                <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.bearish }}>Could not load alert history.</p>
+              ) : null}
+              {maturationAlertsStatus === "ready" && maturationAlerts.length === 0 ? (
+                <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted, lineHeight: 1.5 }}>
+                  No maturation emails yet for symbols on this list. They appear when maturation state changes after you run
+                  evidence from Signals.
+                </p>
+              ) : null}
+              {maturationAlertsStatus === "ready" && maturationAlerts.length > 0 ? (
+                <ul style={{ margin: 0, paddingLeft: spacing[4], color: colors.text }}>
+                  {maturationAlerts.map((row, i) => (
+                    <li key={`${row.created_at}-${i}`} style={{ marginBottom: spacing[1], fontSize: typography.scale.sm, lineHeight: 1.45 }}>
+                      <Link
+                        href={watchlistToSignalsHref(row.symbol ?? "", maturationSummaryMode)}
+                        prefetch={false}
+                        aria-label={watchlistSignalsOpenAriaLabel(row.symbol ?? "")}
+                        style={{ color: colors.text, fontWeight: 700, textDecoration: "none" }}
+                        className="hover:underline"
+                      >
+                        {row.symbol}
+                      </Link>
+                      <span style={{ color: colors.textMuted }}> — {row.title}</span>
+                      <span style={{ color: colors.textMuted }}> · {row.created_at ? row.created_at.slice(0, 16) : ""}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              <p style={{ margin: maturationAlertsStatus === "idle" ? 0 : `${spacing[2]} 0 0`, fontSize: typography.scale.xs }}>
+                <Link href="/dashboard/settings#alerts" style={{ color: colors.accent, fontWeight: 600 }}>
+                  Alert preferences
+                </Link>
+              </p>
+            </div>
+          ) : null}
+
           <div style={{ marginTop: spacing[4] }}>
-            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: spacing[2], marginBottom: spacing[2] }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "baseline",
+                justifyContent: "space-between",
+                gap: spacing[2],
+                marginBottom: spacing[2],
+                flexWrap: "wrap"
+              }}
+            >
               <p style={{ margin: 0, fontSize: typography.scale.xs, fontWeight: 700, letterSpacing: "0.12em", color: colors.textMuted }}>
                 SYMBOLS
               </p>
-              <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>{active.symbols.length} total</span>
+              <div style={{ display: "flex", alignItems: "baseline", gap: spacing[3], flexWrap: "wrap", marginLeft: "auto" }}>
+                {active.is_default && active.symbols.length > 0 ? (
+                  maturationFetchStatus === "loading" ? (
+                    <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Loading maturation…</span>
+                  ) : maturationFetchStatus === "error" ? (
+                    <span style={{ fontSize: typography.scale.xs, color: colors.bearish }}>Maturation unavailable</span>
+                  ) : null
+                ) : null}
+                <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>{active.symbols.length} total</span>
+              </div>
             </div>
             <div
               style={{
@@ -398,7 +626,15 @@ export function WatchlistsPageClient() {
                   </div>
                 </div>
               ) : (
-                active.symbols.map((s) => (
+                active.symbols.map((s) => {
+                  const symU = s.trim().toUpperCase();
+                  const m = active.is_default ? maturationBySymbol[symU] : undefined;
+                  const accent = maturationAccent(m?.state, colors as ThemeColors);
+                  const caption =
+                    m?.readiness_label ||
+                    m?.label ||
+                    (m?.state ? m.state.replace(/_/g, " ") : active.is_default ? "Not evaluated yet" : "");
+                  return (
                   <div
                     key={s}
                     className="tabular-nums"
@@ -420,12 +656,23 @@ export function WatchlistsPageClient() {
                     <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                       <span>{s}</span>
                       <Link
-                        href={`/dashboard/signals?symbol=${encodeURIComponent(s)}&ref=watchlist`}
+                        href={watchlistToSignalsHref(s, maturationSummaryMode)}
+                        prefetch={false}
+                        aria-label={watchlistSignalsOpenAriaLabel(s)}
                         className="text-[10px] font-semibold uppercase tracking-wide no-underline hover:underline"
                         style={{ color: colors.accent }}
                       >
                         Signals
                       </Link>
+                      {active.is_default && caption ? (
+                        <span
+                          className="line-clamp-2 text-[10px] font-medium leading-snug"
+                          style={{ color: accent }}
+                          title={caption}
+                        >
+                          {caption}
+                        </span>
+                      ) : null}
                     </span>
                     <button
                       type="button"
@@ -445,7 +692,8 @@ export function WatchlistsPageClient() {
                       ×
                     </button>
                   </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
@@ -467,6 +715,10 @@ export function WatchlistsPageClient() {
         }}
       >
         Your default watchlist powers the scanner. Add symbols here to see their signals in the morning brief and Gap Intelligence.
+        {" "}
+        For your <strong>default</strong> list, each ticker shows <strong>{maturationSummaryMode}</strong> maturation
+        (readiness from the last View Evidence run or the scheduled refresh). <strong>Paid</strong> plans receive the
+        detailed readiness line in the API; <strong>free</strong> plans still see state and the short state label.
       </div>
 
     </div>

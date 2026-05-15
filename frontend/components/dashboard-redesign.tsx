@@ -43,6 +43,12 @@ export type { WeeklyIndexRow } from "@/components/weekly-market-context-widget";
 
 export type SectorRotationChip = { symbol: string; label: string; pct5d: number | null };
 
+/** Watchlist dot legend — surfaced only via the (i) next to “Watchlist status”, not inline. */
+const DASHBOARD_WATCHLIST_STATUS_DOT_HELP =
+  "● Actionable — returned a setup row this scan.\n" +
+  "● Developing — in the scan universe, no row yet.\n" +
+  "● Inactive — not in this scan's capped universe.";
+
 interface DashboardRedesignProps {
   marketOverview: MarketOverview;
   scannerOverview: ScannerOverview;
@@ -477,18 +483,28 @@ function DashboardRedesignBody({
             padding: spacing[3]
           }}
         >
-          <p
-            style={{
-              margin: 0,
-              fontSize: typography.scale.xs,
-              fontWeight: 700,
-              letterSpacing: "0.12em",
-              textTransform: "uppercase",
-              color: colors.textMuted
-            }}
+          <div
+            className="flex flex-wrap items-center gap-2"
+            style={{ margin: 0, alignItems: "center" }}
           >
-            Watchlist status
-          </p>
+            <p
+              style={{
+                margin: 0,
+                fontSize: typography.scale.xs,
+                fontWeight: 700,
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+                color: colors.textMuted
+              }}
+            >
+              Watchlist status
+            </p>
+            <InfoTip
+              text={DASHBOARD_WATCHLIST_STATUS_DOT_HELP}
+              label="What the watchlist status dots mean"
+              maxWidth={320}
+            />
+          </div>
           <p style={{ margin: `${spacing[2]} 0 0`, fontSize: typography.scale.sm, color: colors.text, fontWeight: 600 }}>
             {watchlistStrip.monitored} symbol{watchlistStrip.monitored === 1 ? "" : "s"} monitored ·{" "}
             <span style={{ color: colors.bullish }}>● {watchlistStrip.actionable} actionable</span>
@@ -496,27 +512,6 @@ function DashboardRedesignBody({
             <span style={{ color: colors.caution }}>● {watchlistStrip.developing} developing</span>
             {" · "}
             <span style={{ color: colors.textMuted }}>● {watchlistStrip.inactive} inactive</span>
-          </p>
-          <p
-            style={{
-              margin: `${spacing[2]} 0 0`,
-              fontSize: typography.scale.xs,
-              color: colors.textMuted,
-              lineHeight: 1.45
-            }}
-          >
-            <span style={{ color: colors.bullish }} aria-hidden>
-              ●
-            </span>{" "}
-            Actionable — returned a setup row this scan ·{" "}
-            <span style={{ color: colors.caution }} aria-hidden>
-              ●
-            </span>{" "}
-            Developing — in the scan universe, no row yet ·{" "}
-            <span style={{ color: colors.textMuted }} aria-hidden>
-              ●
-            </span>{" "}
-            Inactive — not in this scan&apos;s capped universe.
           </p>
           <Link
             href="/dashboard/watchlists"
@@ -534,78 +529,40 @@ function DashboardRedesignBody({
         </div>
       ) : null}
 
-      <div
-        role="region"
-        aria-label="Desk status"
+      <nav
         data-testid="dashboard-desk-status"
-        className={surfaceGlowClassName}
-        style={{
-          borderRadius: borderRadius.lg,
-          border: `1px solid ${colors.border}`,
-          background: colors.surface,
-          padding: spacing[3]
-        }}
+        aria-label="Scanner shortcuts"
+        className="flex flex-wrap items-center gap-x-6 gap-y-1"
       >
-        <p
-          style={{
-            margin: 0,
-            fontSize: typography.scale.xs,
-            fontWeight: 700,
-            letterSpacing: "0.12em",
-            textTransform: "uppercase",
-            color: colors.textMuted
-          }}
+        <Link
+          href="/dashboard/scanner?mode=swing"
+          prefetch={false}
+          data-hover-prefetch="true"
+          {...interactionLevelProps("deep")}
+          onMouseEnter={swingScannerHoverPrefetch.onMouseEnter}
+          onFocus={swingScannerHoverPrefetch.onFocus}
+          onPointerDown={swingScannerHoverPrefetch.onPointerDown}
+          className="inline-flex min-h-10 items-center text-sm font-semibold"
+          style={{ color: colors.accent }}
         >
-          Desk status
-        </p>
-        <ul style={{ margin: `${spacing[2]} 0 0`, paddingLeft: spacing[4], color: colors.text, fontSize: typography.scale.sm }}>
-          <li>
-            Swing Desk:{" "}
-            <span style={{ fontWeight: 700 }}>
-              {swingDeskPosture === "active" ? "✓" : "✗"} {swingDeskStatusPhrase(swingDeskPosture)}
-            </span>
-          </li>
-          {dayTradingSurfaces ? (
-            <li>
-              Day Desk:{" "}
-              <span style={{ fontWeight: 700 }}>
-                {dayDeskPosture === "active" ? "✓" : dayDeskPosture === "monitor" ? "◐" : "✗"}{" "}
-                {dayDeskStatusPhrase(dayDeskPosture)}
-              </span>
-            </li>
-          ) : null}
-        </ul>
-        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
+          Swing scanner →
+        </Link>
+        {dayTradingSurfaces ? (
           <Link
-            href="/dashboard/scanner?mode=swing"
+            href="/dashboard/scanner?mode=day"
             prefetch={false}
             data-hover-prefetch="true"
             {...interactionLevelProps("deep")}
-            onMouseEnter={swingScannerHoverPrefetch.onMouseEnter}
-            onFocus={swingScannerHoverPrefetch.onFocus}
-            onPointerDown={swingScannerHoverPrefetch.onPointerDown}
+            onMouseEnter={dayScannerHoverPrefetch.onMouseEnter}
+            onFocus={dayScannerHoverPrefetch.onFocus}
+            onPointerDown={dayScannerHoverPrefetch.onPointerDown}
             className="inline-flex min-h-10 items-center text-sm font-semibold"
             style={{ color: colors.accent }}
           >
-            Swing scanner →
+            Day scanner →
           </Link>
-          {dayTradingSurfaces ? (
-            <Link
-              href="/dashboard/scanner?mode=day"
-              prefetch={false}
-              data-hover-prefetch="true"
-              {...interactionLevelProps("deep")}
-              onMouseEnter={dayScannerHoverPrefetch.onMouseEnter}
-              onFocus={dayScannerHoverPrefetch.onFocus}
-              onPointerDown={dayScannerHoverPrefetch.onPointerDown}
-              className="inline-flex min-h-10 items-center text-sm font-semibold"
-              style={{ color: colors.accent }}
-            >
-              Day scanner →
-            </Link>
-          ) : null}
-        </div>
-      </div>
+        ) : null}
+      </nav>
 
       {dayTradingSurfaces ? (
         <SharedContextMasterCard {...sharedContextPayload} layout="strip" />

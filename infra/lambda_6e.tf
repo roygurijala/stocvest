@@ -44,7 +44,8 @@ locals {
     DYNAMODB_USERS_TABLE              = aws_dynamodb_table.users.name
     DYNAMODB_ORDERS_TABLE             = aws_dynamodb_table.orders.name
     DYNAMODB_ALERTS                   = aws_dynamodb_table.alerts.name
-    DYNAMODB_WATCHLISTS_TABLE         = aws_dynamodb_table.watchlists.name
+    DYNAMODB_WATCHLISTS_TABLE            = aws_dynamodb_table.watchlists.name
+    DYNAMODB_WATCHLIST_MATURATION_TABLE  = aws_dynamodb_table.watchlist_maturation.name
     DYNAMODB_BROKER_CONNECTIONS_TABLE = aws_dynamodb_table.broker_connections.name
     DYNAMODB_DAY_TRADING_SETUPS       = aws_dynamodb_table.day_trading_setups.name
     DYNAMODB_SIGNAL_HISTORY_TABLE     = aws_dynamodb_table.signal_history.name
@@ -79,6 +80,7 @@ locals {
       aws_dynamodb_table.users,
       aws_dynamodb_table.broker_connections,
       aws_dynamodb_table.watchlists,
+      aws_dynamodb_table.watchlist_maturation,
       aws_dynamodb_table.alerts,
       aws_dynamodb_table.orders,
       aws_dynamodb_table.day_trading_setups,

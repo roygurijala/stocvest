@@ -29,6 +29,32 @@ def test_subject_line_pdt_warning() -> None:
     assert "2" in s and "PDT Warning" in s
 
 
+def test_subject_watchlist_maturation() -> None:
+    es = EmailService()
+    s = es._build_subject(
+        AlertType.WATCHLIST_MATURATION,
+        {
+            "symbol": "AAPL",
+            "mode": "swing",
+            "previous_state": "actionable",
+            "new_state": "developing",
+            "previous_label": "Actionable",
+            "new_label": "Developing",
+        },
+    )
+    assert "AAPL" in s and "swing" in s.lower() and "Actionable" in s and "Developing" in s
+
+
+def test_html_maturation_links_watchlists() -> None:
+    es = EmailService()
+    html_out = es._build_html_body(
+        AlertType.WATCHLIST_MATURATION,
+        {"symbol": "X", "mode": "day", "previous_label": "A", "new_label": "B"},
+    )
+    assert "dashboard/watchlists" in html_out
+    assert "View watchlists" in html_out
+
+
 def test_html_contains_disclaimer() -> None:
     es = EmailService()
     html = es._build_html_body(AlertType.SIGNAL_FIRED, {"symbol": "X", "direction": "long", "strength": 50})

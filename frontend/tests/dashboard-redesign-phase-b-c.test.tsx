@@ -127,6 +127,9 @@ describe("Dashboard focus shell", () => {
       />
     );
     expect(screen.getByTestId("dashboard-watchlist-status")).toBeInTheDocument();
-    expect(screen.getByText(/Actionable — returned a setup row/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /what the watchlist status dots mean/i })
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Actionable — returned a setup row this scan/i)).toBeNull();
   });
 });

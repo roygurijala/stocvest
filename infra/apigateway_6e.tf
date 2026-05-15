@@ -103,6 +103,7 @@ locals {
 
     "GET /v1/watchlists/default/symbols"                    = { module_key = "brokers", authorizer = true }
     "POST /v1/watchlists/default/symbols"                   = { module_key = "brokers", authorizer = true }
+    "GET /v1/watchlists/maturation-summary"                 = { module_key = "brokers", authorizer = true }
     "GET /v1/watchlists"                                    = { module_key = "brokers", authorizer = true }
     "POST /v1/watchlists"                                   = { module_key = "brokers", authorizer = true }
     "GET /v1/watchlists/{watchlist_id}"                     = { module_key = "brokers", authorizer = true }

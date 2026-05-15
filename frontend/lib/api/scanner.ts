@@ -306,7 +306,8 @@ export async function fetchScannerOverview(
       setups: [],
       error: core.error,
       swingUniverseSymbolCount: null,
-      gapIntelligenceSnapshotSymbolCount: null
+      gapIntelligenceSnapshotSymbolCount: null,
+      watchlistStatus: core.watchlistStatus ?? null
     };
   }
   let morningBrief: MorningBriefPayload | undefined;
@@ -322,6 +323,7 @@ export async function fetchScannerOverview(
     qqqPct: core.qqqPct,
     regimeLabel: core.regimeLabel,
     swingUniverseSymbolCount: core.swingUniverseSymbolCount ?? null,
-    gapIntelligenceSnapshotSymbolCount: core.gapIntelligenceSnapshotSymbolCount ?? null
+    gapIntelligenceSnapshotSymbolCount: core.gapIntelligenceSnapshotSymbolCount ?? null,
+    watchlistStatus: core.watchlistStatus ?? null
   };
 }

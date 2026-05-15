@@ -46,7 +46,7 @@ from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
 
-_SCHEDULED_SCAN_TYPES = frozenset({"premarket", "intraday", "eod_summary"})
+_SCHEDULED_SCAN_TYPES = frozenset({"premarket", "intraday", "eod_summary", "maturation_refresh"})
 
 # Gap intelligence: prefer Polygon full-US snapshot, rank top N by |gap| + liquidity gates.
 # API Gateway integrates at ~30s — leave headroom for bounded fallback + news + scoring.
@@ -165,6 +165,11 @@ def _handle_eventbridge_schedule(event: LambdaEvent, context: LambdaContext) -> 
     scan_type = str(event.get("scan_type"))
     _LOG.info("scanner schedule invocation scan_type=%s", scan_type)
     try:
+        if scan_type == "maturation_refresh":
+            from stocvest.workers.watchlist_maturation_refresh import run_watchlist_maturation_refresh_sync
+
+            result = run_watchlist_maturation_refresh_sync()
+            return ok(result)
         result = run_scheduled_scan_sync(scan_type)
         return ok(result)
     except Exception as exc:
@@ -176,7 +181,10 @@ def handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
     """Scanner Lambda entry: EventBridge Scheduler payloads or API Gateway HTTP routes."""
     if event.get("source") == "eventbridge":
         if not _is_eventbridge_schedule_event(event):
-            return bad_request("Scheduled scanner event requires scan_type premarket|intraday|eod_summary.")
+            return bad_request(
+                "Scheduled scanner event requires scan_type "
+                "premarket|intraday|eod_summary|maturation_refresh."
+            )
         return _handle_eventbridge_schedule(event, context)
 
     route = http_route_descriptor(event)

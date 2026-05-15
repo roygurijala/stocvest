@@ -46,6 +46,22 @@ def test_scanner_schedule_through_dispatch(monkeypatch: pytest.MonkeyPatch) -> N
     assert body["invocation"] == "schedule"
 
 
+def test_scanner_maturation_refresh_through_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("STOCVEST_LAMBDA_MODULE", "scanner")
+
+    def _fake_refresh() -> dict:
+        return {"job": "watchlist_maturation_refresh", "composite_calls": 0}
+
+    monkeypatch.setattr(
+        "stocvest.workers.watchlist_maturation_refresh.run_watchlist_maturation_refresh_sync",
+        _fake_refresh,
+    )
+    r = lambda_handler({"source": "eventbridge", "scan_type": "maturation_refresh"}, {})
+    assert r["statusCode"] == 200
+    body = json.loads(r["body"])
+    assert body.get("job") == "watchlist_maturation_refresh"
+
+
 def test_websocket_connect_route(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("STOCVEST_LAMBDA_MODULE", "websocket")
     event = {

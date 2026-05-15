@@ -92,8 +92,8 @@ describe("Tier 1.C — deferred scanner hydrate → dashboard surfaces", () => {
     expect(banner.textContent).toMatch(/ACTIONABLE/i);
     expect(banner.textContent).toMatch(/Day Desk:\s*Active/i);
 
-    const deskStatus = screen.getByTestId("dashboard-desk-status");
-    expect(deskStatus.textContent).toMatch(/Day Desk:/i);
-    expect(deskStatus.textContent).toMatch(/Active/i);
+    const deskShortcuts = screen.getByTestId("dashboard-desk-status");
+    expect(deskShortcuts.querySelector('a[href="/dashboard/scanner?mode=swing"]')).not.toBeNull();
+    expect(deskShortcuts.querySelector('a[href="/dashboard/scanner?mode=day"]')).not.toBeNull();
   });
 });

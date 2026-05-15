@@ -96,11 +96,11 @@ function wrap(ui: ReactElement) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// (A) FOCUS LAYOUT — system banner, desk status, compact shared context strip
+// (A) FOCUS LAYOUT — system banner, compact scanner links, next actions, strip shared context
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("dashboard focus layout", () => {
-  test("renders_system_state_desk_status_next_actions_and_strip_shared_context", () => {
+  test("renders_system_state_scanner_shortcuts_next_actions_and_strip_shared_context", () => {
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}

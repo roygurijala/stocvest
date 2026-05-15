@@ -62,6 +62,13 @@ class EmailService:
             return f"STOCVEST · {sym} gap detected — {gap_s}% pre-market"
         if alert_type == AlertType.SIGNAL_EXPIRED:
             return f"STOCVEST · {sym} ORB window closed"
+        if alert_type == AlertType.WATCHLIST_MATURATION:
+            mode_s = str(context.get("mode") or "").strip().lower()
+            mode_part = f" ({mode_s})" if mode_s in ("swing", "day") else ""
+            prev_l = str(context.get("previous_label") or context.get("previous_state") or "").strip()
+            new_l = str(context.get("new_label") or context.get("new_state") or "").strip()
+            arrow = f"{prev_l} → {new_l}" if prev_l and new_l else "state update"
+            return f"STOCVEST · {sym}{mode_part} maturation: {arrow}"
         return "STOCVEST · Alert"
 
     def _build_html_body(self, alert_type: AlertType, context: dict[str, Any]) -> str:
@@ -76,7 +83,17 @@ class EmailService:
             for k, v in context.items()
             if v is not None
         )
-        cta = f"{base}/dashboard/signals"
+        if alert_type == AlertType.WATCHLIST_MATURATION:
+            cta = f"{base}/dashboard/watchlists"
+            cta_label = "View watchlists"
+            disclaimer = (
+                "Watchlist maturation reflects how many evidence layers align with the composite; "
+                "informational only. Not investment advice."
+            )
+        else:
+            cta = f"{base}/dashboard/signals"
+            cta_label = "View signal"
+            disclaimer = "Signal data for informational purposes only. Not investment advice."
         return f"""<!DOCTYPE html>
 <html><body style="margin:0;padding:24px;background:#0a1628;color:#c8dff0;font-family:system-ui,sans-serif;">
   <div style="max-width:560px;margin:0 auto;">
@@ -84,9 +101,9 @@ class EmailService:
     <h1 style="font-size:20px;margin:12px 0 16px;color:#e8f4ff;">{title}</h1>
     <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">{detail_rows}</table>
     <a href="{cta}" style="display:inline-block;padding:12px 20px;background:#00b4ff;color:#041018;
-      text-decoration:none;border-radius:8px;font-weight:600;">View signal</a>
+      text-decoration:none;border-radius:8px;font-weight:600;">{html.escape(cta_label)}</a>
     <p style="margin-top:28px;font-size:12px;color:#6b8799;line-height:1.5;">
-      Signal data for informational purposes only. Not investment advice.
+      {disclaimer}
     </p>
     <p style="font-size:12px;color:#6b8799;">
       <a href="{prefs_url}" style="color:#00b4ff;">Manage alert preferences</a>

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import time
 import uuid
-from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Protocol
+from zoneinfo import ZoneInfo
 
 from stocvest.data.models import AlertChannel, AlertPreferences, AlertRecord, AlertStatus, AlertType
 from stocvest.utils.config import get_settings
@@ -14,6 +16,7 @@ from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
 
+_ET = ZoneInfo("America/New_York")
 PREFS_ALERT_ID = "preferences"
 HIST_PREFIX = "hist#"
 _HISTORY_TTL_SECONDS = 90 * 86400
@@ -36,6 +39,26 @@ def _parse_alert_created_at(created_at: str) -> datetime | None:
     return dt
 
 
+def _et_calendar_date(utc_dt: datetime) -> date:
+    if utc_dt.tzinfo is None:
+        utc_dt = utc_dt.replace(tzinfo=timezone.utc)
+    return utc_dt.astimezone(_ET).date()
+
+
+def _maturation_transition_tuple_from_body(body: str) -> tuple[str, str, str] | None:
+    """Parse stored ``preview_context_json`` body; return ``(mode, previous_state, new_state)`` lowercased."""
+    try:
+        d = json.loads(body or "{}")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    mode = str(d.get("mode") or "").strip().lower()
+    prev_s = str(d.get("previous_state") or "").strip().lower()
+    new_s = str(d.get("new_state") or "").strip().lower()
+    if not mode or not prev_s or not new_s:
+        return None
+    return (mode, prev_s, new_s)
+
+
 class DynamoDBAlertStore(Protocol):
     def get_preferences(self, user_id: str) -> AlertPreferences: ...
     def save_preferences(self, user_id: str, prefs: AlertPreferences) -> AlertPreferences: ...
@@ -43,6 +66,22 @@ class DynamoDBAlertStore(Protocol):
     def get_recent_alerts(self, user_id: str, limit: int = 20) -> list[AlertRecord]: ...
     def had_signal_email_for_symbol_within_hours(
         self, user_id: str, symbol: str, *, hours: float = 4.0
+    ) -> bool: ...
+    def had_watchlist_maturation_email_for_symbol_within_hours(
+        self, user_id: str, symbol: str, *, hours: float = 24.0
+    ) -> bool: ...
+    def had_watchlist_maturation_email_for_symbol_on_et_calendar_day(
+        self, user_id: str, symbol: str, *, reference_utc: datetime | None = None
+    ) -> bool: ...
+    def had_watchlist_maturation_transition_on_et_calendar_day(
+        self,
+        user_id: str,
+        symbol: str,
+        mode: str,
+        previous_state: str,
+        new_state: str,
+        *,
+        reference_utc: datetime | None = None,
     ) -> bool: ...
 
 
@@ -82,6 +121,64 @@ class InMemoryAlertStore:
                 return True
         return False
 
+    def had_watchlist_maturation_email_for_symbol_within_hours(
+        self, user_id: str, symbol: str, *, hours: float = 24.0
+    ) -> bool:
+        sym_u = symbol.strip().upper()
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+        for rec in self.history.get(user_id, [])[:50]:
+            if rec.symbol != sym_u:
+                continue
+            if rec.alert_type != AlertType.WATCHLIST_MATURATION:
+                continue
+            ts = _parse_alert_created_at(rec.created_at)
+            if ts is not None and ts >= cutoff:
+                return True
+        return False
+
+    def had_watchlist_maturation_email_for_symbol_on_et_calendar_day(
+        self, user_id: str, symbol: str, *, reference_utc: datetime | None = None
+    ) -> bool:
+        sym_u = symbol.strip().upper()
+        ref = reference_utc if reference_utc is not None else datetime.now(timezone.utc)
+        target = _et_calendar_date(ref)
+        for rec in self.history.get(user_id, [])[:50]:
+            if rec.symbol != sym_u:
+                continue
+            if rec.alert_type != AlertType.WATCHLIST_MATURATION:
+                continue
+            ts = _parse_alert_created_at(rec.created_at)
+            if ts is not None and _et_calendar_date(ts) == target:
+                return True
+        return False
+
+    def had_watchlist_maturation_transition_on_et_calendar_day(
+        self,
+        user_id: str,
+        symbol: str,
+        mode: str,
+        previous_state: str,
+        new_state: str,
+        *,
+        reference_utc: datetime | None = None,
+    ) -> bool:
+        sym_u = symbol.strip().upper()
+        mode_l = mode.strip().lower()
+        prev_l = previous_state.strip().lower()
+        new_l = new_state.strip().lower()
+        ref = reference_utc if reference_utc is not None else datetime.now(timezone.utc)
+        target = _et_calendar_date(ref)
+        for rec in self.history.get(user_id, [])[:50]:
+            if rec.symbol != sym_u or rec.alert_type != AlertType.WATCHLIST_MATURATION:
+                continue
+            ts = _parse_alert_created_at(rec.created_at)
+            if ts is None or _et_calendar_date(ts) != target:
+                continue
+            tup = _maturation_transition_tuple_from_body(rec.body)
+            if tup == (mode_l, prev_l, new_l):
+                return True
+        return False
+
 
 @dataclass
 class DynamoDBUserAlertStore:
@@ -100,6 +197,7 @@ class DynamoDBUserAlertStore:
             on_pdt_warning=bool(it.get("onPdtWarning", True)),
             on_pdt_blocked=bool(it.get("onPdtBlocked", True)),
             on_gap_detected=bool(it.get("onGapDetected", False)),
+            on_watchlist_maturation=bool(it.get("onWatchlistMaturation", True)),
             watchlist_only=bool(it.get("watchlistOnly", True)),
             quiet_hours_enabled=bool(it.get("quietHoursEnabled", False)),
             quiet_hours_start=str(it.get("quietHoursStart") or "22:00"),
@@ -116,6 +214,7 @@ class DynamoDBUserAlertStore:
             "onPdtWarning": prefs.on_pdt_warning,
             "onPdtBlocked": prefs.on_pdt_blocked,
             "onGapDetected": prefs.on_gap_detected,
+            "onWatchlistMaturation": prefs.on_watchlist_maturation,
             "watchlistOnly": prefs.watchlist_only,
             "quietHoursEnabled": prefs.quiet_hours_enabled,
             "quietHoursStart": prefs.quiet_hours_start,
@@ -187,6 +286,67 @@ class DynamoDBUserAlertStore:
                 continue
             ts = _parse_alert_created_at(rec.created_at)
             if ts is not None and ts >= cutoff:
+                return True
+        return False
+
+    def had_watchlist_maturation_email_for_symbol_within_hours(
+        self, user_id: str, symbol: str, *, hours: float = 24.0
+    ) -> bool:
+        sym_u = symbol.strip().upper()
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+        recent = self.get_recent_alerts(user_id, limit=50)
+        for rec in recent:
+            if rec.symbol != sym_u:
+                continue
+            if rec.alert_type != AlertType.WATCHLIST_MATURATION:
+                continue
+            ts = _parse_alert_created_at(rec.created_at)
+            if ts is not None and ts >= cutoff:
+                return True
+        return False
+
+    def had_watchlist_maturation_email_for_symbol_on_et_calendar_day(
+        self, user_id: str, symbol: str, *, reference_utc: datetime | None = None
+    ) -> bool:
+        sym_u = symbol.strip().upper()
+        ref = reference_utc if reference_utc is not None else datetime.now(timezone.utc)
+        target = _et_calendar_date(ref)
+        recent = self.get_recent_alerts(user_id, limit=50)
+        for rec in recent:
+            if rec.symbol != sym_u:
+                continue
+            if rec.alert_type != AlertType.WATCHLIST_MATURATION:
+                continue
+            ts = _parse_alert_created_at(rec.created_at)
+            if ts is not None and _et_calendar_date(ts) == target:
+                return True
+        return False
+
+    def had_watchlist_maturation_transition_on_et_calendar_day(
+        self,
+        user_id: str,
+        symbol: str,
+        mode: str,
+        previous_state: str,
+        new_state: str,
+        *,
+        reference_utc: datetime | None = None,
+    ) -> bool:
+        sym_u = symbol.strip().upper()
+        mode_l = mode.strip().lower()
+        prev_l = previous_state.strip().lower()
+        new_l = new_state.strip().lower()
+        ref = reference_utc if reference_utc is not None else datetime.now(timezone.utc)
+        target = _et_calendar_date(ref)
+        recent = self.get_recent_alerts(user_id, limit=50)
+        for rec in recent:
+            if rec.symbol != sym_u or rec.alert_type != AlertType.WATCHLIST_MATURATION:
+                continue
+            ts = _parse_alert_created_at(rec.created_at)
+            if ts is None or _et_calendar_date(ts) != target:
+                continue
+            tup = _maturation_transition_tuple_from_body(rec.body)
+            if tup == (mode_l, prev_l, new_l):
                 return True
         return False
 

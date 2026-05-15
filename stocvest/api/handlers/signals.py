@@ -157,6 +157,20 @@ def composite_response_with_evidence_cache(
     )
     out = dict(body)
     out["source"] = "computed"
+    if user_id:
+        try:
+            from stocvest.api.services.watchlist_maturation_sync import (
+                sync_watchlist_maturation_from_composite,
+            )
+
+            sync_watchlist_maturation_from_composite(
+                user_id=user_id,
+                symbol=symbol,
+                mode="day" if mode == "day" else "swing",
+                composite_body=out,
+            )
+        except Exception as exc:  # noqa: BLE001 — maturation must not break composite
+            _LOG.warning("watchlist maturation sync skipped: %s", exc)
     return out
 
 
