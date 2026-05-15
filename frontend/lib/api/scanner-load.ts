@@ -6,7 +6,8 @@ import type {
   IntradaySetupPayload,
   ScannerCoreData,
   ScannerLoadTuning,
-  ScannerSetupLoadMode
+  ScannerSetupLoadMode,
+  WatchlistDashboardStatus
 } from "@/lib/api/scanner";
 
 /** Always load tape anchors so Market Pulse (spy/qqq %) and regime are populated even when gaps omit indices. */
@@ -75,6 +76,27 @@ function mergeSwingAndDaySetups(swing: IntradaySetupPayload[], day: IntradaySetu
   const merged = [...swing, ...rest];
   merged.sort((a, b) => (Number(b.score) || 0) - (Number(a.score) || 0));
   return merged;
+}
+
+/** Dashboard strip only — omit when the user has no default watchlist symbols this load. */
+function buildWatchlistDashboardStatus(
+  watchUpper: string[],
+  universe: string[],
+  setups: IntradaySetupPayload[]
+): WatchlistDashboardStatus | null {
+  const w = [...new Set(watchUpper.map((s) => s.trim().toUpperCase()).filter(Boolean))];
+  if (w.length === 0) return null;
+  const u = new Set(universe.map((s) => s.trim().toUpperCase()));
+  const setupSyms = new Set(setups.map((s) => s.symbol.trim().toUpperCase()).filter(Boolean));
+  let actionable = 0;
+  let developing = 0;
+  let inactive = 0;
+  for (const sym of w) {
+    if (setupSyms.has(sym)) actionable += 1;
+    else if (u.has(sym)) developing += 1;
+    else inactive += 1;
+  }
+  return { monitored: w.length, actionable, developing, inactive };
 }
 
 function capScannerUniverse(universe: string[], max: number): string[] {
@@ -387,6 +409,7 @@ export async function runScannerLoadWithoutBrief(
           regimeLabel,
           swingUniverseSymbolCount: universe.length,
           gapIntelligenceSnapshotSymbolCount: gapIntelSnapshotCount,
+          watchlistStatus: buildWatchlistDashboardStatus(watchUpper, universe, []),
           error: "Service temporarily unavailable. Please try again."
         };
       }
@@ -408,6 +431,7 @@ export async function runScannerLoadWithoutBrief(
           regimeLabel,
           swingUniverseSymbolCount: universe.length,
           gapIntelligenceSnapshotSymbolCount: gapIntelSnapshotCount,
+          watchlistStatus: buildWatchlistDashboardStatus(watchUpper, universe, []),
           error: "Service temporarily unavailable. Please try again."
         };
       }
@@ -433,7 +457,8 @@ export async function runScannerLoadWithoutBrief(
       qqqPct,
       regimeLabel,
       swingUniverseSymbolCount: universe.length,
-      gapIntelligenceSnapshotSymbolCount: gapIntelSnapshotCount
+      gapIntelligenceSnapshotSymbolCount: gapIntelSnapshotCount,
+      watchlistStatus: buildWatchlistDashboardStatus(watchUpper, universe, setups)
     };
   } catch (error: unknown) {
     if (isNextRedirect(error)) throw error;
@@ -445,6 +470,7 @@ export async function runScannerLoadWithoutBrief(
       regimeLabel: "Neutral",
       swingUniverseSymbolCount: null,
       gapIntelligenceSnapshotSymbolCount: null,
+      watchlistStatus: null,
       error: error instanceof Error ? error.message : "Unable to connect. Check your connection."
     };
   }

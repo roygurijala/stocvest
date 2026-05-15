@@ -31,7 +31,7 @@
  */
 
 import type { ReactElement } from "react";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, test, vi } from "vitest";
 
 import { DashboardRedesign } from "@/components/dashboard-redesign";
@@ -96,11 +96,11 @@ function wrap(ui: ReactElement) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// (A) ROLE IDENTITY — three master cards, labelled role pill + 4px borderLeft
+// (A) FOCUS LAYOUT — system banner, desk status, compact shared context strip
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("dashboard role-color language (Mode Separation B28 Phase 2b)", () => {
-  test("swing_desk_panel_carries_role_swing_and_role_pill_SWING_MULTI_DAY", () => {
+describe("dashboard focus layout", () => {
+  test("renders_system_state_desk_status_next_actions_and_strip_shared_context", () => {
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
@@ -111,15 +111,15 @@ describe("dashboard role-color language (Mode Separation B28 Phase 2b)", () => {
         sectorRotation={[]}
       />
     );
-    const swing = screen.getByTestId("swing-desk-panel");
-    expect(swing.getAttribute("data-card-role")).toBe("swing");
-    const pill = swing.querySelector('[data-testid="dashboard-card-role-pill"]');
-    expect(pill).not.toBeNull();
-    expect(pill?.getAttribute("data-card-role-pill")).toBe("swing");
-    expect((pill?.textContent || "").trim().toUpperCase()).toContain("SWING · MULTI-DAY");
+    expect(screen.getByTestId("dashboard-system-state-banner")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-desk-status")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-next-actions")).toBeInTheDocument();
+    const sc = screen.getByTestId("shared-context-master-card");
+    expect(sc.getAttribute("data-shared-layout")).toBe("strip");
+    expect(sc.hasAttribute("data-card-role")).toBe(false);
   });
 
-  test("day_desk_panel_carries_role_day_and_role_pill_DAY_INTRADAY", () => {
+  test("dashboard_does_not_render_legacy_swing_or_day_master_desk_panels", () => {
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
@@ -130,62 +130,11 @@ describe("dashboard role-color language (Mode Separation B28 Phase 2b)", () => {
         sectorRotation={[]}
       />
     );
-    const day = screen.getByTestId("day-desk-panel");
-    expect(day.getAttribute("data-card-role")).toBe("day");
-    const pill = day.querySelector('[data-testid="dashboard-card-role-pill"]');
-    expect(pill).not.toBeNull();
-    expect(pill?.getAttribute("data-card-role-pill")).toBe("day");
-    expect((pill?.textContent || "").trim().toUpperCase()).toContain("DAY · INTRADAY");
-  });
-
-  test("shared_context_master_card_carries_role_shared_and_role_pill_SHARED_CONTEXT", () => {
-    wrap(
-      <DashboardRedesign
-        marketOverview={baseMarket}
-        scannerOverview={baseScanner}
-        earningsEvents={[]}
-        earningsRecent={[]}
-        weeklyIndexRows={baseWeekly}
-        sectorRotation={[]}
-      />
-    );
-    const card = screen.getByTestId("shared-context-master-card");
-    expect(card.getAttribute("data-card-role")).toBe("shared");
-    const pill = card.querySelector('[data-testid="dashboard-card-role-pill"]');
-    expect(pill).not.toBeNull();
-    expect(pill?.getAttribute("data-card-role-pill")).toBe("shared");
-    expect((pill?.textContent || "").trim().toUpperCase()).toContain("SHARED CONTEXT");
-  });
-
-  test("dashboard_has_exactly_three_master_cards_at_top_hierarchy_level", () => {
-    // Phase 2b "nothing else at the same hierarchy level" invariant — the
-    // dashboard renders EXACTLY three role-tinted master cards: one shared,
-    // one swing, one day. Any future card that needs role color must justify
-    // its presence at the same structural weight; the default is to either
-    // fold into Shared Context (if it's environmental) or go to a tertiary
-    // surface (if it's neither environmental nor decision-engine).
-    wrap(
-      <DashboardRedesign
-        marketOverview={baseMarket}
-        scannerOverview={baseScanner}
-        earningsEvents={[]}
-        earningsRecent={[]}
-        weeklyIndexRows={baseWeekly}
-        sectorRotation={[]}
-      />
-    );
-    const roleCards = document.querySelectorAll("[data-card-role]");
-    const masterRoles = Array.from(roleCards)
-      .map((el) => el.getAttribute("data-card-role"))
-      .filter((r): r is string => typeof r === "string" && r.length > 0);
-    expect(masterRoles).toHaveLength(3);
-    expect(new Set(masterRoles)).toEqual(new Set(["shared", "swing", "day"]));
+    expect(screen.queryByTestId("swing-desk-panel")).toBeNull();
+    expect(screen.queryByTestId("day-desk-panel")).toBeNull();
   });
 
   test("role_accents_each_define_a_distinct_surface_accent_for_the_borderLeft_marker", () => {
-    // The surface `accent` is what the {@link DashboardCard} 4px borderLeft
-    // marker uses to encode role identity. Each role must claim a distinct
-    // hue so the marker is unambiguous.
     const dark = roleAccents.dark;
     const light = roleAccents.light;
     for (const theme of [dark, light]) {
@@ -193,61 +142,8 @@ describe("dashboard role-color language (Mode Separation B28 Phase 2b)", () => {
       expect(new Set(accents).size).toBe(3);
     }
   });
-
-  test("every_master_card_renders_a_role_pill_AND_NOT_the_legacy_loud_rail_treatment", () => {
-    // Locks the "uniform look-and-feel" decision: every role-tinted master
-    // card carries a labelled role pill (matches the small-pill pattern used
-    // for NOT INVESTMENT ADVICE on the Evidence card) and must NOT reintroduce
-    // the retired Phase 2b loud rail treatment (4px top rail strip + 3px
-    // left stripe). A regression that brings back either dead element makes
-    // dashboard cards visually inconsistent with the rest of the app.
-    wrap(
-      <DashboardRedesign
-        marketOverview={baseMarket}
-        scannerOverview={baseScanner}
-        earningsEvents={[]}
-        earningsRecent={[]}
-        weeklyIndexRows={baseWeekly}
-        sectorRotation={[]}
-      />
-    );
-    for (const tid of ["swing-desk-panel", "day-desk-panel", "shared-context-master-card"]) {
-      const card = screen.getByTestId(tid);
-      const pill = card.querySelector('[data-testid="dashboard-card-role-pill"]');
-      const stripe = card.querySelector('[data-testid="dashboard-card-role-stripe"]');
-      const topRail = card.querySelector('[data-testid="dashboard-card-role-top-rail"]');
-      expect(pill).not.toBeNull();
-      expect(stripe).toBeNull();
-      expect(topRail).toBeNull();
-    }
-  });
-
-  test("every_master_card_uses_borderRadius_xl_and_a_4px_role_tinted_borderLeft", () => {
-    // Canonical dashboard card shell: borderRadius.xl (16px, matches Signals
-    // / Scanner / Performance cards) + a 4px borderLeft in the role's
-    // surface accent. The borderLeft is the single channel that anchors role
-    // identity visually; the rest of the shell is identical to every other
-    // card in the app.
-    wrap(
-      <DashboardRedesign
-        marketOverview={baseMarket}
-        scannerOverview={baseScanner}
-        earningsEvents={[]}
-        earningsRecent={[]}
-        weeklyIndexRows={baseWeekly}
-        sectorRotation={[]}
-      />
-    );
-    for (const tid of ["swing-desk-panel", "day-desk-panel", "shared-context-master-card"]) {
-      const card = screen.getByTestId(tid);
-      const style = card.getAttribute("style") || "";
-      expect(style.toLowerCase()).toContain("border-radius: 1rem");
-      // 4px borderLeft is the role marker — assert it explicitly so a future
-      // flatten can't quietly strip role identity off the card.
-      expect(style.toLowerCase()).toMatch(/border-left:\s*4px\s+solid/);
-    }
-  });
 });
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // (B) SHARED CONTEXT MASTER CARD — sub-sections A through E
@@ -465,9 +361,13 @@ describe("Shared Context master card structure (Mode Separation B28 Phase 2b)", 
     expect(catText).toContain("risk horizon:");
     expect(catText).toMatch(/quiet|active|elevated/);
     const list = d.querySelector('[data-testid="shared-context-earnings-list"]');
-    expect(list).not.toBeNull();
-    expect((list?.textContent || "")).toContain("AAPL");
-    expect((list?.textContent || "")).toContain("MSFT");
+    if (screen.getByTestId("shared-context-master-card").getAttribute("data-shared-layout") === "strip") {
+      expect(list).toBeNull();
+    } else {
+      expect(list).not.toBeNull();
+      expect((list?.textContent || "")).toContain("AAPL");
+      expect((list?.textContent || "")).toContain("MSFT");
+    }
   });
 
   test("section_E_renders_an_environment_summary_sentence_plus_guardrails", () => {
@@ -497,9 +397,13 @@ describe("Shared Context master card structure (Mode Separation B28 Phase 2b)", 
     expect(summaryText).toContain("participation");
     // Guardrails — both rendered verbatim under the summary.
     const guardrails = e.querySelector('[data-testid="shared-context-guardrails"]');
-    expect(guardrails).not.toBeNull();
-    expect(guardrails?.textContent || "").toContain(SHORT_HORIZON_TIMEFRAME_LINE);
-    expect(guardrails?.textContent || "").toContain(SHORT_HORIZON_WHY_THIS_MATTERS);
+    if (screen.getByTestId("shared-context-master-card").getAttribute("data-shared-layout") === "strip") {
+      expect(guardrails).toBeNull();
+    } else {
+      expect(guardrails).not.toBeNull();
+      expect(guardrails?.textContent || "").toContain(SHORT_HORIZON_TIMEFRAME_LINE);
+      expect(guardrails?.textContent || "").toContain(SHORT_HORIZON_WHY_THIS_MATTERS);
+    }
   });
 
   test("master_card_is_strategy_agnostic_NO_setup_continuation_constructive_words", () => {
@@ -551,10 +455,7 @@ describe("Shared Context master card structure (Mode Separation B28 Phase 2b)", 
         sectorRotation={[]}
       />
     );
-    const card = screen.getByTestId("shared-context-master-card");
-    expect(
-      within(card).getByRole("button", { name: /about shared context/i })
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("shared-context-master-card").getAttribute("data-shared-layout")).toBe("strip");
   });
 
   test("dashboard_does_NOT_render_signal_validation_ledger_anymore", () => {
@@ -661,10 +562,6 @@ describe("Shared Context master card structure (Mode Separation B28 Phase 2b)", 
       />
     );
     const card = screen.queryByTestId("swing-desk-primary-read-card");
-    expect(card).not.toBeNull();
-    const style = (card?.getAttribute("style") || "").toLowerCase();
-    expect(style).not.toMatch(/border:\s*1\.5px/);
-    expect(style).not.toMatch(/border:\s*2px/);
-    expect(style).not.toContain("borderaccent");
+    expect(card).toBeNull();
   });
 });

@@ -154,6 +154,17 @@ export interface MorningBriefPayload {
   title?: string;
 }
 
+/** Aggregated default-watchlist posture for the dashboard strip (no tickers). */
+export type WatchlistDashboardStatus = {
+  monitored: number;
+  /** Watchlist symbols that returned a setup row this scan (swing or day). */
+  actionable: number;
+  /** In this scan's universe but no setup row (still being evaluated / below floor). */
+  developing: number;
+  /** Not in the capped evaluation universe this scan. */
+  inactive: number;
+};
+
 export interface ScannerOverview {
   gapIntelligence: GapIntelligenceItem[];
   setups: IntradaySetupPayload[];
@@ -167,6 +178,8 @@ export interface ScannerOverview {
   swingUniverseSymbolCount?: number | null;
   /** Gap-intelligence snapshot size from API when present (full-US or bounded Polygon load). */
   gapIntelligenceSnapshotSymbolCount?: number | null;
+  /** Present when the user default watchlist had at least one symbol this scan. */
+  watchlistStatus?: WatchlistDashboardStatus | null;
 }
 
 /** Placeholder before deferred scanner RSC hydrates (Tier 1.C — `/dashboard`). */
@@ -177,7 +190,8 @@ export const EMPTY_SCANNER_OVERVIEW: ScannerOverview = {
   qqqPct: null,
   regimeLabel: "Neutral",
   swingUniverseSymbolCount: null,
-  gapIntelligenceSnapshotSymbolCount: null
+  gapIntelligenceSnapshotSymbolCount: null,
+  watchlistStatus: null
 };
 
 /** Snapshot + gap pipeline through intraday setups (no morning briefing). */
@@ -190,6 +204,7 @@ export type ScannerCoreData = {
   error?: string;
   swingUniverseSymbolCount?: number | null;
   gapIntelligenceSnapshotSymbolCount?: number | null;
+  watchlistStatus?: WatchlistDashboardStatus | null;
 };
 
 /** Which setup endpoints power the scanner core (dashboard defaults to both via `includeSwingDailySetups`). */

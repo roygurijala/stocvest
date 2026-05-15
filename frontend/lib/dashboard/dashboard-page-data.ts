@@ -85,6 +85,7 @@ const scannerFallback: ScannerCoreData = {
   regimeLabel: "Neutral",
   swingUniverseSymbolCount: null,
   gapIntelligenceSnapshotSymbolCount: null,
+  watchlistStatus: null,
   error: "Scanner timed out."
 };
 

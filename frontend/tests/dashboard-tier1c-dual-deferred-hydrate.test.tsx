@@ -97,9 +97,8 @@ describe("Tier 1.C — dual deferred hydrate (earnings + scanner)", () => {
       />
     );
 
-    const ribbon = screen.getByTestId("dashboard-active-signal-ribbon");
-    expect(ribbon.getAttribute("data-ribbon-state")).toBe("active");
-    expect(ribbon.querySelector('[data-testid="ribbon-chip-DUALSIG"]')).not.toBeNull();
+    expect(screen.getByTestId("dashboard-system-state-banner").textContent || "").toMatch(/ACTIONABLE/i);
+    expect(screen.queryByTestId("dashboard-active-signal-ribbon")).toBeNull();
 
     const calendarHeading = screen.getByRole("heading", { name: /Upcoming Earnings \(Next 7 Days\)/i });
     const calendarSection = calendarHeading.closest("section");

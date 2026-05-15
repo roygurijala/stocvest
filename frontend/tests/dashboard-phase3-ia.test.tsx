@@ -3,7 +3,7 @@
  */
 
 import type { ReactElement } from "react";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 
 import { DashboardDiscoveryRow } from "@/components/dashboard/dashboard-discovery-row";
@@ -13,7 +13,7 @@ import { DashboardRedesign } from "@/components/dashboard-redesign";
 import { DATA_INTERACTION_LEVEL } from "@/lib/dashboard/click-hierarchy";
 import { ThemeProvider } from "@/lib/theme-provider";
 import type { MarketOverview, MarketStatusPayload } from "@/lib/api/market";
-import type { GapIntelligenceItem } from "@/lib/api/scanner";
+import type { GapIntelligenceItem, IntradaySetupPayload } from "@/lib/api/scanner";
 import { EMPTY_SCANNER_OVERVIEW } from "@/lib/api/scanner";
 
 vi.mock("@/lib/hooks/use-is-mobile-layout", () => ({
@@ -139,7 +139,7 @@ describe("DashboardDeskPostureSummary", () => {
 });
 
 describe("DashboardRedesign Phase 3 integration", () => {
-  test("shows_phase3_surfaces_after_scanner_hydrates", () => {
+  test("discovery_universe_ribbon_and_posture_summary_not_on_dashboard", () => {
     const overview = {
       ...EMPTY_SCANNER_OVERVIEW,
       setups: [],
@@ -161,14 +161,14 @@ describe("DashboardRedesign Phase 3 integration", () => {
       />
     );
 
-    expect(screen.getByTestId("dashboard-universe-strip")).toBeInTheDocument();
-    expect(screen.getByTestId("dashboard-discovery-row")).toBeInTheDocument();
-    expect(screen.getByTestId("dashboard-desk-posture-summary")).toBeInTheDocument();
-    const ribbon = screen.getByTestId("dashboard-active-signal-ribbon");
-    expect(ribbon.getAttribute("data-ribbon-state")).toBe("empty");
+    expect(screen.queryByTestId("dashboard-universe-strip")).toBeNull();
+    expect(screen.queryByTestId("dashboard-discovery-row")).toBeNull();
+    expect(screen.queryByTestId("dashboard-desk-posture-summary")).toBeNull();
+    expect(screen.queryByTestId("dashboard-active-signal-ribbon")).toBeNull();
+    expect(screen.getByTestId("dashboard-desk-status")).toBeInTheDocument();
   });
 
-  test("desk_deep_links_carry_interaction_level_deep", () => {
+  test("desk_scanner_links_carry_deep_interaction_level", () => {
     const daySetup: IntradaySetupPayload = {
       symbol: "DAYLVL",
       direction: "bullish",
@@ -194,26 +194,9 @@ describe("DashboardRedesign Phase 3 integration", () => {
       />
     );
 
-    const daySignalsLink = screen.getByRole("link", { name: /Open Day Signals/i });
-    expect(daySignalsLink.getAttribute("data-interaction-level")).toBe("deep");
-    const dayScannerFooter = screen.getByRole("link", { name: /View day scanner/i });
-    expect(dayScannerFooter.getAttribute("data-interaction-level")).toBe("deep");
-    const swingScannerFooter = screen.getByRole("link", { name: /View swing scanner/i });
-    expect(swingScannerFooter.getAttribute("data-interaction-level")).toBe("deep");
-  });
-
-  test("hides_phase3_until_scanner_settles", () => {
-    wrap(
-      <DashboardRedesign
-        marketOverview={baseMarket}
-        scannerOverview={EMPTY_SCANNER_OVERVIEW}
-        earningsEvents={[]}
-        earningsRecent={[]}
-        weeklyIndexRows={baseWeekly}
-        sectorRotation={[]}
-      />
-    );
-    expect(screen.queryByTestId("dashboard-universe-strip")).toBeNull();
-    expect(screen.queryByTestId("dashboard-discovery-row")).toBeNull();
+    const swingScanner = screen.getByRole("link", { name: /swing scanner/i });
+    expect(swingScanner.getAttribute("data-interaction-level")).toBe("deep");
+    const dayScanner = screen.getByRole("link", { name: /day scanner/i });
+    expect(dayScanner.getAttribute("data-interaction-level")).toBe("deep");
   });
 });

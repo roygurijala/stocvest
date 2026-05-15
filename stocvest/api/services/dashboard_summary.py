@@ -106,21 +106,46 @@ async def _fetch_earnings(
     }
 
 
+def _snapshot_symbol_is_vix(sym: str) -> bool:
+    u = str(sym or "").strip().upper()
+    return u in ("I:VIX", "^VIX", "VIX") or u.endswith(":VIX")
+
+
+def _json_numeric_positive(v: Any) -> bool:
+    if isinstance(v, (int, float)) and v == v and v > 0:
+        return True
+    if isinstance(v, str) and v.strip():
+        try:
+            x = float(v.strip())
+            return x == x and x > 0
+        except ValueError:
+            return False
+    return False
+
+
+def _json_numeric_pct(v: Any) -> bool:
+    if isinstance(v, (int, float)) and v == v and v > -99.5:
+        return True
+    if isinstance(v, str) and v.strip():
+        try:
+            x = float(v.strip())
+            return x == x and x > -99.5
+        except ValueError:
+            return False
+    return False
+
+
 def _dashboard_snapshots_have_usable_vix(snapshots: list[dict[str, Any]]) -> bool:
     """True when tape already includes a VIX row the UI can pulse (level and/or session %)."""
     for raw in snapshots:
-        sym = str(raw.get("symbol", "")).strip().upper()
-        if sym not in ("I:VIX", "^VIX", "VIX"):
+        if not _snapshot_symbol_is_vix(str(raw.get("symbol", ""))):
             continue
-        lp = raw.get("last_trade_price")
-        if isinstance(lp, (int, float)) and lp == lp and lp > 0:
+        if _json_numeric_positive(raw.get("last_trade_price")):
             return True
-        dc = raw.get("day_close")
-        if isinstance(dc, (int, float)) and dc == dc and dc > 0:
+        if _json_numeric_positive(raw.get("day_close")):
             return True
         for k in ("change_percent", "pre_market_change_percent", "after_hours_change_percent"):
-            v = raw.get(k)
-            if isinstance(v, (int, float)) and v == v and v > -99.5:
+            if _json_numeric_pct(raw.get(k)):
                 return True
     return False
 

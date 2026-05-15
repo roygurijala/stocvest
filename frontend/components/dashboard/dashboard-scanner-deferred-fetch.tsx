@@ -14,7 +14,8 @@ export async function DashboardScannerDeferredFetch({ tuning }: { tuning: Scanne
     qqqPct: scannerCore.qqqPct,
     regimeLabel: scannerCore.regimeLabel,
     swingUniverseSymbolCount: scannerCore.swingUniverseSymbolCount ?? null,
-    gapIntelligenceSnapshotSymbolCount: scannerCore.gapIntelligenceSnapshotSymbolCount ?? null
+    gapIntelligenceSnapshotSymbolCount: scannerCore.gapIntelligenceSnapshotSymbolCount ?? null,
+    watchlistStatus: scannerCore.watchlistStatus ?? null
   };
   return <DashboardScannerHydrate overview={overview} />;
 }

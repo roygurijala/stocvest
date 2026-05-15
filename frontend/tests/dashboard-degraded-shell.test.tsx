@@ -74,12 +74,10 @@ describe("Dashboard degraded shell (Phase 5)", () => {
       />
     );
 
-    expect(screen.getByTestId("dashboard-hero-strip")).toBeInTheDocument();
-    const ribbon = screen.getByTestId("dashboard-active-signal-ribbon");
-    expect(ribbon.getAttribute("data-ribbon-state")).toBe("empty");
-    expect(ribbon.textContent).toContain("Scanner timed out.");
-    const universe = screen.getByTestId("dashboard-universe-strip");
-    expect(universe.textContent).toContain("Scanner timed out.");
+    expect(screen.getByTestId("dashboard-system-state-banner")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-system-state-banner").textContent || "").toMatch(/scanner incomplete/i);
+    expect(screen.queryByTestId("dashboard-active-signal-ribbon")).toBeNull();
+    expect(screen.queryByTestId("dashboard-universe-strip")).toBeNull();
     expect(screen.queryByTestId("dashboard-discovery-row")).toBeNull();
   });
 });

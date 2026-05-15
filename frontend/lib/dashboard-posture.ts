@@ -389,3 +389,27 @@ export function buildDayReenableBulletsShort(opts: {
 
   return [b1, b2, b3];
 }
+
+/** Single headline for the dashboard system-state banner (both desks summarized). */
+export type DashboardSystemStateKind = "actionable" | "monitor" | "suppressed";
+
+export function dashboardSystemStateKind(opts: {
+  swingDeskActive: boolean;
+  dayDeskPosture: DayDeskPostureKind;
+  dayTradingSurfaces: boolean;
+}): DashboardSystemStateKind {
+  if (opts.swingDeskActive || opts.dayDeskPosture === "active") return "actionable";
+  if (opts.dayTradingSurfaces && opts.dayDeskPosture === "monitor") return "monitor";
+  return "suppressed";
+}
+
+export function dashboardSystemStateLabel(kind: DashboardSystemStateKind): string {
+  switch (kind) {
+    case "actionable":
+      return "ACTIONABLE";
+    case "monitor":
+      return "MONITOR ONLY";
+    default:
+      return "SUPPRESSED";
+  }
+}

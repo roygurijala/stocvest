@@ -81,9 +81,10 @@ type Props = {
   dataIssue?: string | null;
   /**
    * `master` — standalone Shared Context card (dual-desk dashboard).
-   * `embedded` — same A–E ladder nested under the Swing Desk (Swing Pro / no day surfaces).
+   * `embedded` — same ladder nested under the Swing Desk (Swing Pro / no day surfaces).
+   * `strip` — compact index tape + optional expand; no instructional guardrails by default.
    */
-  layout?: "master" | "embedded";
+  layout?: "master" | "embedded" | "strip";
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -451,18 +452,20 @@ function SubsectionCard({
  */
 function indexTileBorderForDirection(
   pct5d: number | null | undefined,
-  colors: ThemeColors
+  colors: ThemeColors,
+  thin: boolean
 ): string {
+  const w = thin ? "1px" : "1.5px";
   if (typeof pct5d !== "number" || !Number.isFinite(pct5d)) {
-    return `1.5px solid color-mix(in srgb, ${colors.border} 55%, ${colors.textMuted} 30%)`;
+    return `${w} solid color-mix(in srgb, ${colors.border} 55%, ${colors.textMuted} 30%)`;
   }
   if (pct5d > 0.1) {
-    return `1.5px solid color-mix(in srgb, ${colors.bullish} 70%, ${colors.border})`;
+    return `${w} solid color-mix(in srgb, ${colors.bullish} 70%, ${colors.border})`;
   }
   if (pct5d < -0.1) {
-    return `1.5px solid color-mix(in srgb, ${colors.bearish} 70%, ${colors.border})`;
+    return `${w} solid color-mix(in srgb, ${colors.bearish} 70%, ${colors.border})`;
   }
-  return `1.5px solid color-mix(in srgb, ${colors.border} 55%, ${colors.textMuted} 30%)`;
+  return `${w} solid color-mix(in srgb, ${colors.border} 55%, ${colors.textMuted} 30%)`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -497,6 +500,8 @@ export function SharedContextMasterCard(props: Props) {
     layout = "master"
   } = props;
   const { colors } = useTheme();
+  const stripLike = layout === "strip" || layout === "embedded";
+  const sectionGap = stripLike ? spacing[3] : spacing[5];
   const mkt = (marketStatus?.market || "").toLowerCase();
 
   const weeklyAvgPct5d = useMemo(() => {
@@ -590,18 +595,36 @@ export function SharedContextMasterCard(props: Props) {
     ) : null;
 
   const contextGrid = (
-      <div style={{ display: "grid", gap: spacing[5] }}>
+      <div style={{ display: "grid", gap: sectionGap }}>
         {/* ───────────────────────────── Section A ───────────────────────────── */}
         <section
           data-testid="shared-context-section-A"
-          style={{ display: "grid", gap: spacing[3] }}
+          style={{ display: "grid", gap: stripLike ? spacing[2] : spacing[3] }}
         >
-          <SubsectionHeader
-            letter="A"
-            label="Index tape (~5 sessions)"
-            cardTip={SHARED_CONTEXT_SECTION_A_TIP}
-            colors={colors}
-          />
+          {stripLike ? (
+            <div className="flex flex-wrap items-center justify-between gap-2" style={{ marginBottom: spacing[1] }}>
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 10,
+                  letterSpacing: "0.14em",
+                  textTransform: "uppercase",
+                  fontWeight: 700,
+                  color: colors.textMuted
+                }}
+              >
+                Market context · SPY / QQQ / IWM (~5 sessions)
+              </p>
+              {sessionStatusStrip}
+            </div>
+          ) : (
+            <SubsectionHeader
+              letter="A"
+              label="Index tape (~5 sessions)"
+              cardTip={SHARED_CONTEXT_SECTION_A_TIP}
+              colors={colors}
+            />
+          )}
           <div
             className="grid gap-3"
             style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}
@@ -624,9 +647,9 @@ export function SharedContextMasterCard(props: Props) {
                   }
                   style={{
                     borderRadius: borderRadius.md,
-                    border: indexTileBorderForDirection(r.pct5d, colors),
+                    border: indexTileBorderForDirection(r.pct5d, colors, stripLike),
                     background: "rgba(148,163,184,0.06)",
-                    padding: spacing[2],
+                    padding: stripLike ? spacing[2] : spacing[2],
                     display: "grid",
                     gap: spacing[1]
                   }}
@@ -755,7 +778,7 @@ export function SharedContextMasterCard(props: Props) {
         <div
           data-testid="shared-context-expanded-body"
           aria-hidden={collapsed}
-          style={{ display: collapsed ? "none" : "grid", gap: spacing[5] }}
+          style={{ display: collapsed ? "none" : "grid", gap: sectionGap }}
         >
         <SubsectionDivider colors={colors} />
 
@@ -858,7 +881,7 @@ export function SharedContextMasterCard(props: Props) {
               {riskHorizonPlainLine(risk, sortedEarnings.length, macroWarningHeadline ?? null, soonest?.symbol, soonestDateLabel)}
             </span>
           </div>
-          {sortedEarnings.length > 0 ? (
+          {sortedEarnings.length > 0 && !stripLike ? (
             <ul
               style={{
                 margin: 0,
@@ -901,6 +924,7 @@ export function SharedContextMasterCard(props: Props) {
           >
             {environmentSummary}
           </p>
+          {!stripLike ? (
           <div
             data-testid="shared-context-guardrails"
             style={{
@@ -919,6 +943,7 @@ export function SharedContextMasterCard(props: Props) {
               actionability; red and green here describe short-term bias and intraday position only.
             </p>
           </div>
+          ) : null}
         </SubsectionCard>
 
         {/* Phase A2 — collapse-back button at the bottom of the expanded ladder. */}
@@ -946,6 +971,24 @@ export function SharedContextMasterCard(props: Props) {
       </div>
   );
 
+  if (layout === "strip") {
+    return (
+      <div
+        data-testid="shared-context-master-card"
+        data-shared-layout="strip"
+        className={surfaceGlowClassName}
+        style={{
+          borderRadius: borderRadius.lg,
+          border: `1px solid color-mix(in srgb, ${colors.border} 92%, transparent)`,
+          background: colors.surface,
+          padding: spacing[3]
+        }}
+      >
+        {contextGrid}
+      </div>
+    );
+  }
+
   if (layout === "embedded") {
     return (
       <div
@@ -955,11 +998,11 @@ export function SharedContextMasterCard(props: Props) {
           borderRadius: borderRadius.lg,
           border: `1px solid color-mix(in srgb, ${colors.border} 82%, rgba(168,85,247,0.38))`,
           background: `linear-gradient(165deg, color-mix(in srgb, rgba(168,85,247,0.09), ${colors.surfaceMuted}) 0%, ${colors.surfaceMuted} 100%)`,
-          padding: spacing[4],
+          padding: spacing[3],
           marginBottom: spacing[2]
         }}
       >
-        <div className="flex flex-wrap items-start justify-between gap-3" style={{ marginBottom: spacing[3] }}>
+        <div className="flex flex-wrap items-start justify-between gap-3" style={{ marginBottom: spacing[2] }}>
           <div style={{ minWidth: 0, flex: "1 1 220px" }}>
             <p
               style={{
@@ -972,16 +1015,6 @@ export function SharedContextMasterCard(props: Props) {
               }}
             >
               Market backdrop
-            </p>
-            <p
-              style={{
-                margin: `${spacing[2]} 0 0 0`,
-                fontSize: typography.scale.sm,
-                color: colors.textMuted,
-                lineHeight: 1.5
-              }}
-            >
-              Indexes, volatility, breadth, and catalysts that frame swing decisions — consolidated here on Swing Pro (no separate shared card).
             </p>
           </div>
           {sessionStatusStrip}

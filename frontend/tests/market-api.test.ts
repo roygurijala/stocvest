@@ -83,4 +83,18 @@ describe("VIX snapshot helpers", () => {
     expect(pct).not.toBeNull();
     expect(pct!).toBeGreaterThan(0);
   });
+
+  test("vixSnapshotDisplayLevel accepts string numbers from JSON", async () => {
+    const { vixSnapshotDisplayLevel, vixPulseDataAvailable, vixSnapshotSessionChangePct } = await import(
+      "@/lib/api/market-snapshot-helpers"
+    );
+    const s = {
+      symbol: "I:VIX",
+      last_trade_price: "18.42" as unknown as number,
+      prev_close: "18.00" as unknown as number
+    };
+    expect(vixSnapshotDisplayLevel(s as never)).toBeCloseTo(18.42, 4);
+    expect(vixPulseDataAvailable(s as never, null)).toBe(true);
+    expect(vixSnapshotSessionChangePct(s as never)).not.toBeNull();
+  });
 });
