@@ -529,6 +529,33 @@ class PolygonClient:
         return u.startswith("I:") or u.startswith("^") or u == "VIX"
 
     @staticmethod
+    def _index_last_from_nbbo_quote(quote: dict) -> float | None:
+        """Synthetic last from NBBO when Polygon omits lastTrade on index symbols."""
+        bid_raw = quote.get("P")
+        ask_raw = quote.get("p")
+        bid: float | None
+        ask: float | None
+        try:
+            bid = float(bid_raw) if bid_raw not in (None, "") else None
+            if bid is not None and (bid <= 0 or bid != bid):
+                bid = None
+        except (TypeError, ValueError):
+            bid = None
+        try:
+            ask = float(ask_raw) if ask_raw not in (None, "") else None
+            if ask is not None and (ask <= 0 or ask != ask):
+                ask = None
+        except (TypeError, ValueError):
+            ask = None
+        if bid is not None and ask is not None:
+            return (bid + ask) / 2.0
+        if bid is not None:
+            return bid
+        if ask is not None:
+            return ask
+        return None
+
+    @staticmethod
     def _parse_snapshot(symbol: str, ticker: dict) -> Snapshot:
         day   = ticker.get("day",       {}) or {}
         prev  = ticker.get("prevDay",   {}) or {}
@@ -586,20 +613,17 @@ class PolygonClient:
         day_volume = day.get("v")
         day_vwap = day.get("vw")
 
-        # Index tape (notably VIX / I:VIX) often ships an updating session `day` bar
-        # while `lastTrade.p` is absent between official prints. Do not apply this to
-        # equities — without a last print, `last_trade_price` must stay None.
-        if (
-            last_price is None
-            and day_close is not None
-            and PolygonClient._snapshot_last_trade_may_use_day_close(symbol)
-        ):
-            try:
-                dc = float(day_close)
-                if dc == dc and dc > 0:
-                    last_price = dc
-            except (TypeError, ValueError):
-                pass
+        # Index tape (VIX / I:VIX / ^VIX): Polygon often omits `lastTrade.p` while NBBO
+        # or `day.c` still updates. Never use quote or day for equities (reference levels).
+        if PolygonClient._snapshot_last_trade_may_use_day_close(symbol) and last_price is None:
+            last_price = PolygonClient._index_last_from_nbbo_quote(quote)
+            if last_price is None and day_close is not None:
+                try:
+                    dc = float(day_close)
+                    if dc == dc and dc > 0:
+                        last_price = dc
+                except (TypeError, ValueError):
+                    pass
 
         change = None
         change_pct = None

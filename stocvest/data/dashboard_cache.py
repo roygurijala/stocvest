@@ -112,7 +112,15 @@ def write_dashboard_cache(
         "data": data,
     }
     if not upstash_configured():
-        _LOG.info("upstash_skip_write key=%s reason=not_configured", key)
+        s = get_settings()
+        has_url = bool(str(s.upstash_redis_rest_url or "").strip())
+        has_token = bool(str(s.upstash_redis_rest_token or "").strip())
+        _LOG.info(
+            "upstash_skip_write key=%s reason=not_configured has_url=%s has_token=%s",
+            key,
+            has_url,
+            has_token,
+        )
         return False
     try:
         r = get_upstash()

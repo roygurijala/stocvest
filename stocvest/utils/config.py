@@ -87,6 +87,19 @@ def _apply_lambda_runtime_secret_to_environ() -> None:
         v = (os.environ.get(low) or "").strip()
         if v and not (os.environ.get(up) or "").strip():
             os.environ[up] = v
+    # Informal aliases — REST cache writes require *both* URL and TOKEN.
+    if not (os.environ.get("UPSTASH_REDIS_REST_URL") or "").strip():
+        for alt in ("UPSTASH_URL", "upstash_url"):
+            v = (os.environ.get(alt) or "").strip()
+            if v:
+                os.environ["UPSTASH_REDIS_REST_URL"] = v
+                break
+    if not (os.environ.get("UPSTASH_REDIS_REST_TOKEN") or "").strip():
+        for alt in ("UPSTASH_TOKEN", "upstash_token"):
+            v = (os.environ.get(alt) or "").strip()
+            if v:
+                os.environ["UPSTASH_REDIS_REST_TOKEN"] = v
+                break
 
 
 class Settings(BaseSettings):

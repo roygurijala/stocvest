@@ -654,7 +654,7 @@ export function SharedContextMasterCard(props: Props) {
                           gap: spacing[2]
                         }}
                       >
-                        <div style={{ minWidth: 0 }}>
+                        <div style={{ minWidth: 0, flex: "1 1 auto" }}>
                           <p
                             style={{
                               margin: 0,
@@ -664,10 +664,7 @@ export function SharedContextMasterCard(props: Props) {
                               fontWeight: 600
                             }}
                           >
-                            Daily returns (last ~5 sessions)
-                          </p>
-                          <p style={{ margin: "2px 0 0", fontSize: 8, color: colors.textMuted, lineHeight: 1.35 }}>
-                            Oldest at top → newest at bottom
+                            Daily close‑to‑close returns (last ~5 sessions)
                           </p>
                         </div>
                         <InfoTip text={SHARED_CONTEXT_HISTOGRAM_TIP} label="About daily return bars" maxWidth={320} />

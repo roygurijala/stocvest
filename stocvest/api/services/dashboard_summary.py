@@ -7,6 +7,7 @@ from collections.abc import Callable
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
+from stocvest.api.services.morning_brief_fetch import get_vix_snapshot_with_fallback
 from stocvest.data import PolygonClient, PolygonError, Timeframe
 from stocvest.data.models import Bar, EarningsEvent, Snapshot
 from stocvest.utils.config import Settings, get_settings
@@ -105,6 +106,22 @@ async def _fetch_earnings(
     }
 
 
+def _dashboard_snapshots_have_usable_vix(snapshots: list[dict[str, Any]]) -> bool:
+    """True when tape already includes a VIX row the UI can pulse (level and/or session %)."""
+    for raw in snapshots:
+        sym = str(raw.get("symbol", "")).strip().upper()
+        if sym not in ("I:VIX", "^VIX", "VIX"):
+            continue
+        lp = raw.get("last_trade_price")
+        if isinstance(lp, (int, float)) and lp == lp and lp > 0:
+            return True
+        for k in ("change_percent", "pre_market_change_percent", "after_hours_change_percent"):
+            v = raw.get(k)
+            if isinstance(v, (int, float)) and v == v and v > -99.5:
+                return True
+    return False
+
+
 def _earnings_entitlement_fallback(symbols: list[str], days: int, exc: PolygonError) -> dict[str, Any]:
     msg_l = str(exc).lower()
     if not (
@@ -166,13 +183,18 @@ async def build_dashboard_summary(
         else:
             earnings = {"symbols": [], "days": earnings_days, "upcoming": [], "recent": []}
 
-    snapshots: list[dict[str, Any]] = []
-    if isinstance(snaps, list):
-        for snap in snaps:
-            if isinstance(snap, Snapshot):
-                snapshots.append(snap.model_dump(mode="json"))
-            elif isinstance(snap, dict):
-                snapshots.append(snap)
+        snapshots: list[dict[str, Any]] = []
+        if isinstance(snaps, list):
+            for snap in snaps:
+                if isinstance(snap, Snapshot):
+                    snapshots.append(snap.model_dump(mode="json"))
+                elif isinstance(snap, dict):
+                    snapshots.append(snap)
+
+        if not _dashboard_snapshots_have_usable_vix(snapshots):
+            vix_snap = await get_vix_snapshot_with_fallback(client)
+            if vix_snap is not None:
+                snapshots.append(vix_snap.model_dump(mode="json"))
 
     return {
         "status": status.model_dump(mode="json"),

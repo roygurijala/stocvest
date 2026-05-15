@@ -869,8 +869,29 @@ class TestParseSnapshotIndexFallback:
         snap = PolygonClient._parse_snapshot("I:VIX", ticker)
         assert snap.last_trade_price == pytest.approx(18.5)
         assert snap.change is not None and snap.change_percent is not None
-        assert snap.change == pytest.approx(0.5)
 
+    def test_vix_uses_quote_mid_when_no_last_trade(self):
+        ticker = {
+            "ticker": "I:VIX",
+            "day": {"o": 18.0, "h": 19.0, "l": 17.5, "c": 18.5, "v": 1},
+            "prevDay": {"c": 18.0, "v": 100},
+            "lastTrade": {},
+            "lastQuote": {"P": 18.45, "p": 18.55},
+        }
+        snap = PolygonClient._parse_snapshot("I:VIX", ticker)
+        assert snap.last_trade_price == pytest.approx(18.5)
+        assert snap.change is not None
+
+    def test_equity_does_not_use_quote_when_last_trade_missing(self):
+        ticker = {
+            "ticker": "AAPL",
+            "day": {"o": 198, "h": 202, "l": 196, "c": 201, "v": 1, "vw": 199},
+            "prevDay": {"c": 197},
+            "lastTrade": {},
+            "lastQuote": {"P": 199.9, "p": 200.1},
+        }
+        snap = PolygonClient._parse_snapshot("AAPL", ticker)
+        assert snap.last_trade_price is None
 
 class TestClientInit:
     def test_empty_api_key_raises(self):

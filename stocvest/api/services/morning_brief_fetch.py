@@ -48,8 +48,15 @@ async def get_vix_snapshot_with_fallback(client: SupportsPolygonSnapshotFetch) -
     for vix_sym in VIX_SNAPSHOT_FALLBACK_SYMBOLS:
         try:
             vix_snap = await client.get_snapshot(vix_sym)
-            if vix_snap and vix_snap.last_trade_price:
+            if vix_snap is None:
+                continue
+            lp = vix_snap.last_trade_price
+            if isinstance(lp, (int, float)) and lp == lp and lp > 0:
                 return vix_snap
+            for attr in ("change_percent", "pre_market_change_percent", "after_hours_change_percent"):
+                v = getattr(vix_snap, attr, None)
+                if isinstance(v, (int, float)) and v == v and v > -99.5:
+                    return vix_snap
         except PolygonError:
             continue
     return None

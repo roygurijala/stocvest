@@ -3,22 +3,25 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useIsMobileLayout } from "@/lib/hooks/use-is-mobile-layout";
+import { useTheme } from "@/lib/theme-provider";
 
 const DEFAULT_MAX_WIDTH_PX = 260;
 const VIEW_MARGIN = 8;
 const GAP_PX = 8;
 
-const TIP_BG = "#1e293b";
-const TIP_BORDER = "#334155";
-const ICON_GREY = "#6b7280";
-const ICON_BLUE = "#3b82f6";
+/** Tooltips store emphasis as markdown `**` in source; strip for plain UI text. */
+function tipBodyDisplay(raw: string): string {
+  return raw.replace(/\*\*([^*]+)\*\*/g, "$1");
+}
 
 export function InfoTip({ text, label, maxWidth }: { text: string; label?: string; maxWidth?: number }) {
   const maxW = maxWidth ?? DEFAULT_MAX_WIDTH_PX;
+  const { colors } = useTheme();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const tooltipId = useId();
   const isMobile = useIsMobileLayout();
+  const displayText = tipBodyDisplay(text);
 
   const [open, setOpen] = useState(false);
   const [hover, setHover] = useState(false);
@@ -95,7 +98,7 @@ export function InfoTip({ text, label, maxWidth }: { text: string; label?: strin
       window.removeEventListener("scroll", onReposition, true);
       window.removeEventListener("resize", onReposition);
     };
-  }, [open, mounted, placeTooltip, text, maxW]);
+  }, [open, mounted, placeTooltip, displayText, maxW]);
 
   useEffect(() => {
     if (!isMobile || !open) return;
@@ -116,8 +119,10 @@ export function InfoTip({ text, label, maxWidth }: { text: string; label?: strin
   }, [isMobile, open]);
 
   const active = hover || focused;
-  const borderColor = active ? ICON_BLUE : ICON_GREY;
-  const fg = active ? ICON_BLUE : ICON_GREY;
+  const iconBorderIdle = `color-mix(in srgb, ${colors.textMuted} 72%, ${colors.border})`;
+  const iconBorderActive = `color-mix(in srgb, ${colors.bullish} 55%, ${colors.border})`;
+  const borderColor = active ? iconBorderActive : iconBorderIdle;
+  const fg = active ? colors.bullish : colors.textMuted;
 
   const showTooltip = mounted && open;
 
@@ -133,14 +138,15 @@ export function InfoTip({ text, label, maxWidth }: { text: string; label?: strin
         top: coords.top,
         maxWidth: maxW,
         zIndex: 9999,
-        background: TIP_BG,
-        color: "#ffffff",
-        border: `1px solid ${TIP_BORDER}`,
-        borderRadius: 8,
-        padding: "8px 12px",
-        fontSize: 13,
-        lineHeight: 1.5,
+        background: `linear-gradient(180deg, color-mix(in srgb, ${colors.surfaceMuted} 96%, ${colors.border}) 0%, ${colors.surfaceMuted} 100%)`,
+        color: colors.text,
+        border: `1px solid color-mix(in srgb, ${colors.border} 88%, transparent)`,
+        borderRadius: 10,
+        padding: "10px 14px",
+        fontSize: 12,
+        lineHeight: 1.55,
         whiteSpace: "pre-line",
+        boxShadow: `0 10px 30px color-mix(in srgb, #000 45%, transparent), 0 0 0 1px color-mix(in srgb, ${colors.text} 6%, transparent)`,
         opacity: tipReady ? 1 : 0,
         transition: "opacity 150ms ease"
       }}
@@ -167,7 +173,7 @@ export function InfoTip({ text, label, maxWidth }: { text: string; label?: strin
               justifyContent: "center",
               border: "none",
               background: "transparent",
-              color: "#94a3b8",
+              color: colors.textMuted,
               cursor: "pointer",
               fontSize: 18,
               lineHeight: 1,
@@ -176,10 +182,10 @@ export function InfoTip({ text, label, maxWidth }: { text: string; label?: strin
           >
             ×
           </button>
-          {text}
+          {displayText}
         </div>
       ) : (
-        text
+        displayText
       )}
     </div>
   ) : null;
@@ -217,19 +223,21 @@ export function InfoTip({ text, label, maxWidth }: { text: string; label?: strin
           e.stopPropagation();
           setOpen((v) => !v);
         }}
-        className="inline-flex h-11 w-11 shrink-0 items-center justify-center border-0 bg-transparent p-0 leading-none"
+        className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center border-0 bg-transparent p-0 leading-none md:min-h-[22px] md:min-w-[22px]"
         style={{ cursor: "pointer" }}
       >
         <span
-          className="inline-flex items-center justify-center font-bold transition-[color,border-color] duration-150 ease-out"
+          className="inline-flex items-center justify-center font-semibold transition-[color,border-color,box-shadow] duration-150 ease-out"
           style={{
-            width: 16,
-            height: 16,
+            width: 15,
+            height: 15,
             borderRadius: "50%",
-            border: `1.5px solid ${borderColor}`,
-            background: "transparent",
+            border: `1px solid ${borderColor}`,
+            background: active ? `color-mix(in srgb, ${colors.bullish} 14%, transparent)` : `color-mix(in srgb, ${colors.textMuted} 10%, transparent)`,
             color: fg,
-            fontSize: 10
+            fontSize: 9,
+            lineHeight: 1,
+            boxShadow: active ? `0 0 0 2px color-mix(in srgb, ${colors.bullish} 22%, transparent)` : "none"
           }}
         >
           i

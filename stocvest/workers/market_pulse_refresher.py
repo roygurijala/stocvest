@@ -32,6 +32,19 @@ def _within_equity_rth_et(now: datetime | None = None) -> bool:
     return 9 * 60 + 30 <= minutes < 16 * 60
 
 
+def _vix_level(s: Snapshot | None) -> float | None:
+    """Level for regime + cache: prefer last print; then Polygon session close on index snapshots."""
+    if s is None:
+        return None
+    lp = s.last_trade_price
+    if isinstance(lp, (int, float)) and lp == lp and lp > 0:
+        return float(lp)
+    dc = s.day_close
+    if isinstance(dc, (int, float)) and dc == dc and dc > 0:
+        return float(dc)
+    return None
+
+
 def _session_pct(s: Snapshot | None) -> float | None:
     if s is None:
         return None
@@ -54,7 +67,7 @@ async def refresh_market_pulse() -> dict[str, Any]:
         vix_snap = await get_vix_snapshot_with_fallback(client)
         spy_pct = _session_pct(spy)
         qqq_pct = _session_pct(qqq)
-        vix_level = float(vix_snap.last_trade_price) if vix_snap and vix_snap.last_trade_price else None
+        vix_level = _vix_level(vix_snap)
         regime = infer_regime(spy_pct, qqq_pct, vix_level)
         payload = {
             "spy_pct": spy_pct,

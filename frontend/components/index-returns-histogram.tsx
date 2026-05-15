@@ -128,6 +128,8 @@ export function IndexReturnsHistogram({ closes, height: heightProp, ariaLabel }:
 
     return {
       viewH,
+      topPad,
+      rowPitch,
       centerX,
       zeroY1: topPad - 1,
       zeroY2: viewH - 2,
@@ -143,49 +145,83 @@ export function IndexReturnsHistogram({ closes, height: heightProp, ariaLabel }:
 
   const label = ariaLabel ?? "5-session daily returns histogram";
 
+  const nBars = layout.bars.length;
+  const lastBarRowCenterFrac =
+    nBars > 0
+      ? (layout.topPad + (nBars - 1) * layout.rowPitch + layout.rowPitch / 2) / layout.viewH
+      : 0;
+
   return (
-    <svg
-      role="img"
-      aria-label={label}
-      data-testid="index-returns-histogram"
-      data-orientation="horizontal"
-      width="100%"
-      height={pixelHeight}
-      viewBox={`0 0 ${VIEW_W} ${layout.viewH}`}
-      preserveAspectRatio="none"
-      style={{ display: "block", minHeight: pixelHeight }}
-    >
-      <title id={`hist-title-${reactId}`}>{label}</title>
-      <line
-        x1={layout.centerX}
-        x2={layout.centerX}
-        y1={layout.zeroY1}
-        y2={layout.zeroY2}
-        stroke={`color-mix(in srgb, ${colors.textMuted} 40%, transparent)`}
-        strokeWidth={0.55}
-        data-testid="histogram-zero-line"
-      />
-      {layout.bars.map((b, i) => (
-        <rect
-          key={i}
-          data-testid={`histogram-bar-${i}`}
-          data-sign={b.sign}
-          data-return-pct={b.returnPct.toFixed(4)}
-          data-most-recent={b.isMostRecent ? "true" : "false"}
-          data-session-order={b.isMostRecent ? "most-recent" : i === 0 ? "oldest" : "middle"}
-          x={b.x}
-          y={b.y}
-          width={b.w}
-          height={b.h}
-          fill={getChangeColor(b.returnPct, colors)}
-          opacity={b.isMostRecent ? 1 : 0.82}
-          stroke={b.isMostRecent ? `color-mix(in srgb, ${colors.text} 78%, transparent)` : "none"}
-          strokeWidth={b.isMostRecent ? 0.45 : 0}
-          rx={0.5}
+    <div style={{ position: "relative", width: "100%", paddingRight: 68 }}>
+      <svg
+        role="img"
+        aria-label={label}
+        data-testid="index-returns-histogram"
+        data-orientation="horizontal"
+        width="100%"
+        height={pixelHeight}
+        viewBox={`0 0 ${VIEW_W} ${layout.viewH}`}
+        preserveAspectRatio="none"
+        style={{ display: "block", minHeight: pixelHeight }}
+      >
+        <title id={`hist-title-${reactId}`}>{label}</title>
+        <line
+          x1={layout.centerX}
+          x2={layout.centerX}
+          y1={layout.zeroY1}
+          y2={layout.zeroY2}
+          stroke={`color-mix(in srgb, ${colors.textMuted} 40%, transparent)`}
+          strokeWidth={0.55}
+          data-testid="histogram-zero-line"
+        />
+        {layout.bars.map((b, i) => (
+          <rect
+            key={i}
+            data-testid={`histogram-bar-${i}`}
+            data-sign={b.sign}
+            data-return-pct={b.returnPct.toFixed(4)}
+            data-most-recent={b.isMostRecent ? "true" : "false"}
+            data-session-order={b.isMostRecent ? "most-recent" : i === 0 ? "oldest" : "middle"}
+            x={b.x}
+            y={b.y}
+            width={b.w}
+            height={b.h}
+            fill={getChangeColor(b.returnPct, colors)}
+            opacity={b.isMostRecent ? 1 : 0.82}
+            stroke={b.isMostRecent ? `color-mix(in srgb, ${colors.text} 78%, transparent)` : "none"}
+            strokeWidth={b.isMostRecent ? 0.45 : 0}
+            rx={0.5}
+          >
+            <title>{b.title}</title>
+          </rect>
+        ))}
+      </svg>
+      {nBars > 0 ? (
+        <span
+          data-testid="histogram-most-recent-label"
+          aria-hidden
+          style={{
+            position: "absolute",
+            top: `${lastBarRowCenterFrac * 100}%`,
+            transform: "translateY(-50%)",
+            right: 0,
+            fontSize: 7,
+            fontWeight: 700,
+            letterSpacing: "0.08em",
+            textTransform: "lowercase",
+            color: colors.text,
+            lineHeight: 1,
+            padding: "3px 6px",
+            borderRadius: 6,
+            background: `linear-gradient(180deg, color-mix(in srgb, ${colors.textMuted} 28%, ${colors.surfaceMuted}) 0%, color-mix(in srgb, ${colors.textMuted} 14%, ${colors.surfaceMuted}) 100%)`,
+            border: `1px solid color-mix(in srgb, ${colors.bullish} 35%, ${colors.border})`,
+            boxShadow: `0 0 0 1px color-mix(in srgb, ${colors.text} 12%, transparent), 0 1px 3px color-mix(in srgb, #000 35%, transparent)`,
+            pointerEvents: "none"
+          }}
         >
-          <title>{b.title}</title>
-        </rect>
-      ))}
-    </svg>
+          most-recent
+        </span>
+      ) : null}
+    </div>
   );
 }
