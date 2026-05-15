@@ -32,6 +32,7 @@ export const DASHBOARD_FETCH_BUDGETS = {
 
 /** Labels emitted by `timeDashboardPhase` / `[dashboard-load]` (Phase 0). */
 export const DASHBOARD_LOAD_PHASES = [
+  "user_me",
   "dashboard_summary",
   "market_overview",
   "daily_bar_closes",

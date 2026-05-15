@@ -66,7 +66,7 @@ export function DashboardDiscoveryRow({
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h3 style={{ margin: 0, fontSize: typography.scale.md, fontWeight: 700 }}>Discovery engine</h3>
+          <h3 style={{ margin: 0, fontSize: typography.scale.base, fontWeight: 700 }}>Discovery engine</h3>
           <p style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.sm, color: colors.textMuted }}>
             {leaders.length === 0
               ? "No symbols passed gap filters this session."

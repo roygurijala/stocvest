@@ -85,6 +85,7 @@ describe("dashboard SLO helpers", () => {
     expect(DASHBOARD_FETCH_BUDGETS.scannerTimeoutMs).toBeGreaterThan(
       DASHBOARD_SLO_TARGETS.productHardCeilingMs
     );
+    expect(DASHBOARD_LOAD_PHASES).toContain("user_me");
     expect(DASHBOARD_LOAD_PHASES).toContain("dashboard_summary");
     expect(DASHBOARD_LOAD_PHASES).toContain("scanner_core");
   });

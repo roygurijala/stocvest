@@ -1072,6 +1072,7 @@ function DashboardRedesignBody({
                   return (
                   <motion.article
                     key={`${signal.symbol}-${idx}`}
+                    {...interactionLevelProps("none")}
                     className={`flex flex-col gap-2 ${surfaceGlowClassName}`}
                     initial={{ opacity: 0, x: -8 }}
                     animate={{ opacity: 1, x: 0 }}
@@ -1240,6 +1241,7 @@ function DashboardRedesignBody({
                         <button
                           type="button"
                           className="min-h-11 w-full text-sm font-semibold sm:w-auto"
+                          {...interactionLevelProps("medium")}
                           onClick={async () => {
                             const sym = signal.symbol.trim().toUpperCase();
                             let snapshot = snapshotsBySymbol.get(sym);
@@ -1413,6 +1415,7 @@ function DashboardRedesignBody({
                   href="/dashboard/scanner?mode=swing"
                   prefetch={false}
                   data-hover-prefetch="true"
+                  {...interactionLevelProps("deep")}
                   onMouseEnter={swingScannerHoverPrefetch.onMouseEnter}
                   onFocus={swingScannerHoverPrefetch.onFocus}
                   onPointerDown={swingScannerHoverPrefetch.onPointerDown}

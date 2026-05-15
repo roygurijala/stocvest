@@ -3,6 +3,7 @@ import { DashboardRedesign } from "@/components/dashboard-redesign";
 import { DashboardScannerDeferredFetch } from "@/components/dashboard/dashboard-scanner-deferred-fetch";
 import { DashboardScannerSuspenseFallback } from "@/components/dashboard/dashboard-scanner-suspense-fallback";
 import { DEFAULT_EARNINGS_SYMBOLS, fetchDashboardFirstSegment } from "@/lib/dashboard/dashboard-page-data";
+import { timeDashboardPhase } from "@/lib/dashboard/load-timing";
 import { fetchDashboardUserMe, subscriptionPlanFromMe } from "@/lib/dashboard-user-subscription";
 import { EMPTY_SCANNER_OVERVIEW } from "@/lib/api/scanner";
 import { scannerSetupLoadModeForSubscription, subscriptionAllowsDayTradingSurfaces } from "@/lib/subscription-access";

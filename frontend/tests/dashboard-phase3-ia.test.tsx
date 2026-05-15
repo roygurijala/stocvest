@@ -168,6 +168,40 @@ describe("DashboardRedesign Phase 3 integration", () => {
     expect(ribbon.getAttribute("data-ribbon-state")).toBe("empty");
   });
 
+  test("desk_deep_links_carry_interaction_level_deep", () => {
+    const daySetup: IntradaySetupPayload = {
+      symbol: "DAYLVL",
+      direction: "bullish",
+      score: 0.81,
+      triggers: ["orb_breakout"],
+      timestamp_iso: "2026-05-01T14:30:00Z"
+    };
+    const overview = {
+      ...EMPTY_SCANNER_OVERVIEW,
+      setups: [daySetup],
+      swingUniverseSymbolCount: 1,
+      gapIntelligenceSnapshotSymbolCount: 1
+    };
+
+    wrap(
+      <DashboardRedesign
+        marketOverview={baseMarket}
+        scannerOverview={overview}
+        earningsEvents={[]}
+        earningsRecent={[]}
+        weeklyIndexRows={baseWeekly}
+        sectorRotation={[]}
+      />
+    );
+
+    const daySignalsLink = screen.getByRole("link", { name: /Open Day Signals/i });
+    expect(daySignalsLink.getAttribute("data-interaction-level")).toBe("deep");
+    const dayScannerFooter = screen.getByRole("link", { name: /View day scanner/i });
+    expect(dayScannerFooter.getAttribute("data-interaction-level")).toBe("deep");
+    const swingScannerFooter = screen.getByRole("link", { name: /View swing scanner/i });
+    expect(swingScannerFooter.getAttribute("data-interaction-level")).toBe("deep");
+  });
+
   test("hides_phase3_until_scanner_settles", () => {
     wrap(
       <DashboardRedesign

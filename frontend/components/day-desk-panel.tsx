@@ -74,6 +74,7 @@ function minutesAgoLabel(timestampIso: string | null | undefined): string | null
 }
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useHoverPrefetch } from "@/lib/hooks/use-hover-prefetch";
+import { interactionLevelProps } from "@/lib/dashboard/click-hierarchy";
 import { useTheme } from "@/lib/theme-provider";
 import {
   buildDayReenableBulletsShort,
@@ -134,6 +135,7 @@ function DayTopSignalRow({
   return (
     <motion.article
       key={`day-${signal.symbol}-${index}`}
+      {...interactionLevelProps("none")}
       className={`flex flex-col gap-2 ${surfaceGlowClassName}`}
       initial={{ opacity: 0, x: -8 }}
       animate={{ opacity: 1, x: 0 }}
@@ -277,6 +279,7 @@ function DayTopSignalRow({
         href={rowHref}
         prefetch={false}
         data-hover-prefetch="true"
+        {...interactionLevelProps("deep")}
         onMouseEnter={rowHoverPrefetch.onMouseEnter}
         onFocus={rowHoverPrefetch.onFocus}
         onPointerDown={rowHoverPrefetch.onPointerDown}
@@ -469,6 +472,7 @@ export function DayDeskPanel({ setups, marketStatus, scannerError, topSignalCap 
             href="/dashboard/scanner?mode=day"
             prefetch={false}
             data-hover-prefetch="true"
+            {...interactionLevelProps("deep")}
             onMouseEnter={dayScannerHoverPrefetch.onMouseEnter}
             onFocus={dayScannerHoverPrefetch.onFocus}
             onPointerDown={dayScannerHoverPrefetch.onPointerDown}
