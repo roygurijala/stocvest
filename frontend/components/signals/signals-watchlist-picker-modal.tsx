@@ -3,6 +3,13 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { formatWatchlistMaturationLabel, type WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
+import {
+  EVALUATION_MODE_LINES,
+  evaluationStatusTitle,
+  formatLastEvaluatedShort,
+  newestLastEvaluatedAt,
+  pickerRowIsEvaluated
+} from "@/lib/watchlist-evaluation-present";
 import { borderRadius, spacing } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -18,11 +25,7 @@ export function formatPickerMaturationLabel(row: WatchlistMaturationRow | undefi
   const name = base === "—" ? st.replace(/_/g, " ") : base;
   const aligned = row?.layers_aligned;
   const total = row?.layers_total ?? 6;
-  if (
-    typeof aligned === "number" &&
-    Number.isFinite(aligned) &&
-    (st === "developing" || st === "re_evaluating" || st === "actionable")
-  ) {
+  if (typeof aligned === "number" && Number.isFinite(aligned)) {
     return `${name} (${aligned}/${total})`;
   }
   return name;
@@ -38,6 +41,14 @@ export function maturationPickerBadge(row: WatchlistMaturationRow | undefined): 
   if (st === "re_evaluating") return { label, tone: "caution" };
   if (st === "invalidated") return { label, tone: "bearish" };
   return { label, tone: "muted" };
+}
+
+function badgeEmoji(tone: WatchlistPickerMaturationBadge["tone"], evaluated: boolean): string {
+  if (!evaluated) return "○";
+  if (tone === "bullish") return "🟢";
+  if (tone === "caution") return "🟠";
+  if (tone === "bearish") return "🔴";
+  return "⚪";
 }
 
 type Props = {
@@ -69,6 +80,8 @@ export function SignalsWatchlistPickerModal({
     return list.filter((s) => s.includes(q));
   }, [query, symbols]);
 
+  const newestEval = useMemo(() => newestLastEvaluatedAt(maturationBySymbol), [maturationBySymbol]);
+
   if (!open) return null;
 
   const badgeColor = (tone: WatchlistPickerMaturationBadge["tone"]) => {
@@ -77,6 +90,8 @@ export function SignalsWatchlistPickerModal({
     if (tone === "caution") return colors.caution;
     return colors.textMuted;
   };
+
+  const deskLabel = tradingMode === "swing" ? "Swing" : "Day";
 
   return (
     <div
@@ -88,15 +103,42 @@ export function SignalsWatchlistPickerModal({
       data-testid="signals-watchlist-picker"
     >
       <div
-        className="flex max-h-[min(80vh,520px)] w-full max-w-md flex-col overflow-hidden rounded-xl border p-4"
+        className="flex max-h-[min(85vh,560px)] w-full max-w-md flex-col overflow-hidden rounded-xl border p-4"
         style={{ borderColor: colors.border, background: colors.surface }}
       >
-        <h3 className="m-0" style={{ color: colors.text }}>
+        <p className="m-0 text-[10px] font-semibold uppercase tracking-[0.14em]" style={{ color: colors.textMuted }}>
           Default watchlist
-        </h3>
-        <p className="m-0 mt-1 text-xs" style={{ color: colors.textMuted }}>
-          {tradingMode === "swing" ? "Swing" : "Day"} maturation · pick a symbol
         </p>
+        <h3 className="m-0 mt-1 text-base font-semibold" style={{ color: colors.text }} data-testid="signals-watchlist-picker-title">
+          {evaluationStatusTitle(tradingMode)}
+        </h3>
+        <ul
+          className="m-0 mt-2 list-disc space-y-1 pl-4 text-xs leading-relaxed"
+          style={{ color: colors.textMuted }}
+          data-testid="signals-watchlist-picker-guidance"
+        >
+          <li>Evaluated after daily close (~4:30 PM ET)</li>
+          <li>Select a symbol below to evaluate immediately</li>
+        </ul>
+        <div
+          className="mt-3 rounded-md border px-3 py-2 text-xs leading-relaxed"
+          style={{ borderColor: colors.border, background: colors.background, color: colors.textMuted }}
+          data-testid="signals-watchlist-picker-evaluation-mode"
+        >
+          <p className="m-0 font-semibold" style={{ color: colors.text }}>
+            Evaluation mode
+          </p>
+          <ul className="m-0 mt-1 list-disc space-y-0.5 pl-4">
+            {EVALUATION_MODE_LINES.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+          {newestEval ? (
+            <p className="m-0 mt-2" data-testid="signals-watchlist-picker-last-eval">
+              Most recent evaluation in this list: {newestEval}
+            </p>
+          ) : null}
+        </div>
         <input
           type="search"
           className="mt-3 w-full rounded-md border px-3 py-2 text-sm"
@@ -131,12 +173,15 @@ export function SignalsWatchlistPickerModal({
           ) : (
             <ul className="m-0 list-none p-0" style={{ display: "grid", gap: spacing[1] }}>
               {filtered.map((s) => {
-                const badge = maturationPickerBadge(maturationBySymbol[s]);
+                const row = maturationBySymbol[s];
+                const evaluated = pickerRowIsEvaluated(row);
+                const badge = maturationPickerBadge(row);
+                const lastEval = formatLastEvaluatedShort(row?.last_evaluated_at);
                 return (
                   <li key={s}>
                     <button
                       type="button"
-                      className="flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-sm"
+                      className="flex w-full items-start justify-between gap-3 rounded-md px-3 py-2.5 text-left text-sm"
                       style={{
                         border: `1px solid ${colors.border}`,
                         background: colors.background,
@@ -144,15 +189,30 @@ export function SignalsWatchlistPickerModal({
                       }}
                       onClick={() => onSelect(s)}
                       data-testid={`signals-watchlist-picker-row-${s}`}
+                      title={!evaluated ? `Open ${s} on ${deskLabel} Signals to run evaluation` : undefined}
                     >
                       <span className="font-semibold tracking-wide">{s}</span>
-                      <span
-                        className="shrink-0 text-[11px] font-medium"
-                        style={{ color: badgeColor(badge.tone) }}
-                        data-testid={`signals-watchlist-picker-badge-${s}`}
-                      >
-                        {badge.tone === "bullish" ? "🟢" : badge.tone === "caution" ? "🟠" : badge.tone === "bearish" ? "🔴" : "⚪"}{" "}
-                        {badge.label}
+                      <span className="flex min-w-0 flex-col items-end gap-0.5">
+                        <span
+                          className="shrink-0 text-right text-[11px] font-medium leading-snug"
+                          style={{ color: badgeColor(badge.tone) }}
+                          data-testid={`signals-watchlist-picker-badge-${s}`}
+                        >
+                          {badgeEmoji(badge.tone, evaluated)} {badge.label}
+                        </span>
+                        {!evaluated ? (
+                          <span
+                            className="text-[10px] font-medium"
+                            style={{ color: colors.accent }}
+                            data-testid={`signals-watchlist-picker-hint-${s}`}
+                          >
+                            Tap to evaluate
+                          </span>
+                        ) : lastEval ? (
+                          <span className="text-[10px]" style={{ color: colors.textMuted }}>
+                            Last: {lastEval}
+                          </span>
+                        ) : null}
                       </span>
                     </button>
                   </li>

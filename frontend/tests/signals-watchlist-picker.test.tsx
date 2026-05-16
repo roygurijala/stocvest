@@ -43,8 +43,14 @@ describe("SignalsWatchlistPickerModal", () => {
           open
           symbols={["AAPL", "TSLA", "NVDA"]}
           maturationBySymbol={{
-            AAPL: { state: "developing", label: "Developing", layers_aligned: 4, layers_total: 6 },
-            TSLA: { state: "not_aligned", label: "Not aligned" }
+            AAPL: {
+              state: "developing",
+              label: "Developing",
+              layers_aligned: 4,
+              layers_total: 6,
+              last_evaluated_at: "2026-05-16T12:00:00+00:00"
+            },
+            TSLA: { state: "not_aligned", label: "Not aligned", layers_aligned: 0, layers_total: 6 }
           }}
           loading={false}
           tradingMode="swing"
@@ -53,8 +59,12 @@ describe("SignalsWatchlistPickerModal", () => {
         />
       </ThemeProvider>
     );
+    expect(screen.getByTestId("signals-watchlist-picker-title")).toHaveTextContent(/Swing evaluation status/i);
+    expect(screen.getByTestId("signals-watchlist-picker-evaluation-mode")).toBeInTheDocument();
     expect(screen.getByTestId("signals-watchlist-picker-search")).toBeInTheDocument();
     expect(screen.getByTestId("signals-watchlist-picker-badge-TSLA")).toHaveTextContent(/Not aligned/i);
+    expect(screen.getByTestId("signals-watchlist-picker-badge-AAPL")).toHaveTextContent(/Developing \(4\/6\)/);
+    expect(screen.getByTestId("signals-watchlist-picker-hint-NVDA")).toHaveTextContent(/Tap to evaluate/i);
     fireEvent.change(screen.getByTestId("signals-watchlist-picker-search"), { target: { value: "TS" } });
     expect(screen.queryByTestId("signals-watchlist-picker-row-AAPL")).not.toBeInTheDocument();
     expect(screen.getByTestId("signals-watchlist-picker-row-TSLA")).toBeInTheDocument();

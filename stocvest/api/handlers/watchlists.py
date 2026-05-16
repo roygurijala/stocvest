@@ -273,6 +273,7 @@ def watchlists_maturation_summary_handler(event: LambdaEvent, context: LambdaCon
             "label": e.label,
             "layers_aligned": e.layers_aligned,
             "layers_total": e.layers_total,
+            "last_evaluated_at": e.last_evaluated_at,
         }
         if include_readiness:
             row["readiness_label"] = e.readiness_label
