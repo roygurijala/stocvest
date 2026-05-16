@@ -13,7 +13,7 @@
  *
  *   1. Desk status "Swing scanner →" and "Day scanner →" carry
  *      both `data-prefetch="false"` and `data-hover-prefetch="true"`.
- *   2. Next actions "Open Scanner →" and "View Watchlist →" carry both.
+ *   2. Next actions "Open Scanner →", "View Watchlist →", and "Signals →" carry both.
  *   3. Watchlist status strip "View watchlist →" carries both when rendered.
  *
  * If a future refactor drops either marker the failure pinpoints
@@ -174,6 +174,7 @@ describe("Layer 4 — dashboard hover-prefetch markers", () => {
     const next = screen.getByTestId("dashboard-next-actions");
     assertLayer4Link(anchorByHref(next, "/dashboard/scanner?mode=swing"), "next actions Open Scanner");
     assertLayer4Link(anchorByHref(next, "/dashboard/watchlists"), "next actions View Watchlist");
+    assertLayer4Link(anchorByHref(next, "/dashboard/signals"), "next actions Signals");
   });
 
   test("watchlist strip link carries Tier 1.A + Layer 4 markers when strip renders", () => {

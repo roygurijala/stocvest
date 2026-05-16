@@ -236,6 +236,7 @@ function DashboardRedesignBody({
   const swingScannerHoverPrefetch = useHoverPrefetch("/dashboard/scanner?mode=swing");
   const dayScannerHoverPrefetch = useHoverPrefetch("/dashboard/scanner?mode=day");
   const watchlistHoverPrefetch = useHoverPrefetch("/dashboard/watchlists");
+  const signalsHubHoverPrefetch = useHoverPrefetch("/dashboard/signals");
 
   const snapshotsBySymbol = useMemo(
     () => new Map(marketOverview.snapshots.map((s) => [(s.symbol || "").toUpperCase(), s])),
@@ -615,7 +616,11 @@ function DashboardRedesignBody({
           <Link
             href="/dashboard/signals"
             prefetch={false}
+            data-hover-prefetch="true"
             {...interactionLevelProps("medium")}
+            onMouseEnter={signalsHubHoverPrefetch.onMouseEnter}
+            onFocus={signalsHubHoverPrefetch.onFocus}
+            onPointerDown={signalsHubHoverPrefetch.onPointerDown}
             className="inline-flex min-h-10 items-center text-sm font-semibold"
             style={{ color: colors.textMuted }}
           >
