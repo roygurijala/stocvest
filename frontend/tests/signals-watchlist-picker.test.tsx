@@ -1,6 +1,10 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
-import { SignalsWatchlistPickerModal, maturationPickerBadge } from "@/components/signals/signals-watchlist-picker-modal";
+import {
+  SignalsWatchlistPickerModal,
+  formatPickerMaturationLabel,
+  maturationPickerBadge
+} from "@/components/signals/signals-watchlist-picker-modal";
 import { ThemeProvider } from "@/lib/theme-provider";
 
 beforeAll(() => {
@@ -19,9 +23,15 @@ beforeAll(() => {
 });
 
 describe("maturationPickerBadge", () => {
-  test("maps developing and not_aligned", () => {
-    expect(maturationPickerBadge({ state: "developing", label: "Developing" }).label).toBe("Developing");
-    expect(maturationPickerBadge({ state: "not_aligned" }).label).toBe("Not aligned");
+  test("maps developing with alignment and not_aligned", () => {
+    expect(
+      formatPickerMaturationLabel({ state: "developing", label: "Developing", layers_aligned: 3, layers_total: 6 })
+    ).toBe("Developing (3/6)");
+    expect(maturationPickerBadge({ state: "not_aligned", label: "Not aligned" }).label).toBe("Not aligned");
+  });
+
+  test("missing maturation row is not evaluated yet", () => {
+    expect(maturationPickerBadge(undefined).label).toBe("Not evaluated yet");
   });
 });
 
@@ -33,7 +43,7 @@ describe("SignalsWatchlistPickerModal", () => {
           open
           symbols={["AAPL", "TSLA", "NVDA"]}
           maturationBySymbol={{
-            AAPL: { state: "developing", label: "Developing" },
+            AAPL: { state: "developing", label: "Developing", layers_aligned: 4, layers_total: 6 },
             TSLA: { state: "not_aligned", label: "Not aligned" }
           }}
           loading={false}

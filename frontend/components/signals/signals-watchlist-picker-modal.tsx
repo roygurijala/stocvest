@@ -11,16 +11,33 @@ export type WatchlistPickerMaturationBadge = {
   tone: "bullish" | "bearish" | "caution" | "muted";
 };
 
+export function formatPickerMaturationLabel(row: WatchlistMaturationRow | undefined): string {
+  const st = (row?.state || "").trim().toLowerCase();
+  if (!st) return "Not evaluated yet";
+  const base = formatWatchlistMaturationLabel(row);
+  const name = base === "—" ? st.replace(/_/g, " ") : base;
+  const aligned = row?.layers_aligned;
+  const total = row?.layers_total ?? 6;
+  if (
+    typeof aligned === "number" &&
+    Number.isFinite(aligned) &&
+    (st === "developing" || st === "re_evaluating" || st === "actionable")
+  ) {
+    return `${name} (${aligned}/${total})`;
+  }
+  return name;
+}
+
 export function maturationPickerBadge(row: WatchlistMaturationRow | undefined): WatchlistPickerMaturationBadge {
   const st = (row?.state || "").trim().toLowerCase();
-  const label = formatWatchlistMaturationLabel(row);
-  if (st === "actionable") return { label: label === "—" ? "Actionable" : label, tone: "bullish" };
-  if (st === "developing") return { label: label === "—" ? "Developing" : label, tone: "caution" };
-  if (st === "not_aligned") return { label: "Not aligned", tone: "bearish" };
-  if (st === "re_evaluating") return { label: "Re-evaluating", tone: "caution" };
-  if (st === "invalidated") return { label: "Invalidated", tone: "bearish" };
-  if (label !== "—") return { label, tone: "muted" };
-  return { label: "On list", tone: "muted" };
+  const label = formatPickerMaturationLabel(row);
+  if (!st) return { label, tone: "muted" };
+  if (st === "actionable") return { label, tone: "bullish" };
+  if (st === "developing") return { label, tone: "caution" };
+  if (st === "not_aligned") return { label, tone: "bearish" };
+  if (st === "re_evaluating") return { label, tone: "caution" };
+  if (st === "invalidated") return { label, tone: "bearish" };
+  return { label, tone: "muted" };
 }
 
 type Props = {

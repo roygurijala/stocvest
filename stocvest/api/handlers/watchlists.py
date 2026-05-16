@@ -268,7 +268,12 @@ def watchlists_maturation_summary_handler(event: LambdaEvent, context: LambdaCon
         su = e.symbol.strip().upper()
         if su not in allowed:
             continue
-        row: dict[str, str] = {"state": e.state.value, "label": e.label}
+        row: dict[str, str | int | float] = {
+            "state": e.state.value,
+            "label": e.label,
+            "layers_aligned": e.layers_aligned,
+            "layers_total": e.layers_total,
+        }
         if include_readiness:
             row["readiness_label"] = e.readiness_label
         by_symbol[su] = row

@@ -4,6 +4,8 @@ export type WatchlistMaturationRow = {
   state?: string;
   readiness_label?: string;
   label?: string;
+  layers_aligned?: number;
+  layers_total?: number;
 };
 
 export type WatchlistViewMode = "swing" | "day" | "both";
@@ -66,10 +68,14 @@ export function normalizeWatchlistMaturationBySymbol(payload: unknown): Record<s
     const label = String(o.label ?? "").trim();
     const readinessRaw = o.readiness_label ?? o.readinessLabel;
     const readiness = typeof readinessRaw === "string" ? readinessRaw.trim() : "";
+    const alignedRaw = o.layers_aligned ?? o.layersAligned;
+    const totalRaw = o.layers_total ?? o.layersTotal;
     const row: WatchlistMaturationRow = {};
     if (state) row.state = state;
     if (label) row.label = label;
     if (readiness) row.readiness_label = readiness;
+    if (typeof alignedRaw === "number" && Number.isFinite(alignedRaw)) row.layers_aligned = alignedRaw;
+    if (typeof totalRaw === "number" && Number.isFinite(totalRaw)) row.layers_total = totalRaw;
     if (!row.state && !row.label) continue;
     out[sym] = row;
   }
