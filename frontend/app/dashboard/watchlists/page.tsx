@@ -3,7 +3,14 @@ import { AppShell } from "@/components/app-shell";
 import { WatchlistsPageClient } from "@/components/watchlists-page-client";
 import { getDashboardAuthContext } from "@/lib/auth/dashboard-session";
 import { fetchDashboardUserMe, subscriptionPlanFromMe } from "@/lib/dashboard-user-subscription";
-import { scannerSetupLoadModeForSubscription } from "@/lib/subscription-access";
+import { watchlistAllowsDualDeskModes } from "@/lib/subscription-access";
+import type { SubscriptionPlan } from "@/lib/api/contracts";
+
+function watchlistPlanBadgeLabel(plan: SubscriptionPlan | undefined): string {
+  if (plan === "swing_day_pro") return "Swing + Day Pro";
+  if (plan === "swing_pro") return "Swing Pro";
+  return "Free";
+}
 
 export default async function DashboardWatchlistsPage() {
   const { session, isAdmin } = getDashboardAuthContext();
@@ -12,11 +19,10 @@ export default async function DashboardWatchlistsPage() {
   }
   const me = await fetchDashboardUserMe();
   const plan = subscriptionPlanFromMe(me);
-  const scannerSetupLoadMode = scannerSetupLoadModeForSubscription(plan, me?.has_full_access === true);
-  const maturationSummaryMode: "day" | "swing" = scannerSetupLoadMode === "swing" ? "swing" : "day";
+  const dualDeskMaturation = watchlistAllowsDualDeskModes(plan, me?.has_full_access === true);
   return (
     <AppShell session={session} isAdmin={isAdmin}>
-      <WatchlistsPageClient maturationSummaryMode={maturationSummaryMode} />
+      <WatchlistsPageClient dualDeskMaturation={dualDeskMaturation} planBadgeLabel={watchlistPlanBadgeLabel(plan)} />
     </AppShell>
   );
 }

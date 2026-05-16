@@ -21,3 +21,16 @@ export function scannerSetupLoadModeForSubscription(
 ): ScannerSetupLoadMode {
   return subscriptionAllowsDayTradingSurfaces(plan, hasFullAccess) ? "both" : "swing";
 }
+
+/**
+ * Watchlist maturation UI: Swing / Day / "Both" toggles and dual-column rows are
+ * **Swing + Day Pro** (and full-access overrides) only. Free and Swing Pro use
+ * swing-only maturation on this page (scanner/signals may still show day for free).
+ */
+export function watchlistAllowsDualDeskModes(
+  plan: SubscriptionPlan | undefined,
+  hasFullAccess: boolean | undefined
+): boolean {
+  if (hasFullAccess === true) return true;
+  return plan === "swing_day_pro";
+}

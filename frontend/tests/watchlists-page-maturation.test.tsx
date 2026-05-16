@@ -71,12 +71,12 @@ describe("WatchlistsPageClient maturation", () => {
     const urls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.map((c) =>
       typeof c[0] === "string" ? c[0] : String(c[0])
     );
-    expect(urls.some((u) => u.includes("/maturation-summary?mode=day"))).toBe(true);
+    expect(urls.some((u) => u.includes("/maturation-summary?mode=swing"))).toBe(true);
     expect(urls.some((u) => u.includes("alert_type=watchlist_maturation"))).toBe(true);
     expect(urls.some((u) => u.includes("symbols=AAPL"))).toBe(true);
   });
 
-  it("uses swing mode in the maturation-summary query when maturationSummaryMode is swing", async () => {
+  it("uses swing mode in the maturation-summary query when dualDeskMaturation is false", async () => {
     global.fetch = vi.fn((input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input.toString();
       if (url.includes("/alerts/history")) {
@@ -110,13 +110,57 @@ describe("WatchlistsPageClient maturation", () => {
       return Promise.reject(new Error(`unexpected fetch: ${url}`));
     }) as unknown as typeof fetch;
 
-    wrap(<WatchlistsPageClient maturationSummaryMode="swing" />);
+    wrap(<WatchlistsPageClient dualDeskMaturation={false} />);
 
     await waitFor(() => expect(screen.getByText("AAPL")).toBeInTheDocument());
     const urls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.map((c) =>
       typeof c[0] === "string" ? c[0] : String(c[0])
     );
     expect(urls.some((u) => u.includes("mode=swing"))).toBe(true);
+  });
+
+  it("fetches swing and day maturation when dualDeskMaturation is true", async () => {
+    global.fetch = vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/alerts/history")) {
+        return emptyAlertsHistory();
+      }
+      if (url.includes("/maturation-summary")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            by_symbol: {
+              AAPL: { state: "actionable", label: "Actionable", readiness_label: "Ok" }
+            }
+          })
+        });
+      }
+      if (url.includes("/api/stocvest/watchlists") && !url.includes("/watchlists/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            watchlists: [
+              {
+                watchlist_id: "wl-default",
+                name: "Main",
+                symbols: ["AAPL"],
+                is_default: true
+              }
+            ]
+          })
+        });
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    }) as unknown as typeof fetch;
+
+    wrap(<WatchlistsPageClient dualDeskMaturation={true} />);
+
+    await waitFor(() => expect(screen.getByText("AAPL")).toBeInTheDocument());
+    const urls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.map((c) =>
+      typeof c[0] === "string" ? c[0] : String(c[0])
+    );
+    expect(urls.filter((u) => u.includes("maturation-summary") && u.includes("mode=swing")).length).toBeGreaterThanOrEqual(1);
+    expect(urls.filter((u) => u.includes("maturation-summary") && u.includes("mode=day")).length).toBeGreaterThanOrEqual(1);
   });
 
   it("does not request maturation-summary when the only list is not default", async () => {
@@ -270,7 +314,7 @@ describe("WatchlistsPageClient maturation", () => {
       return Promise.reject(new Error(`unexpected fetch: ${url}`));
     }) as unknown as typeof fetch;
 
-    wrap(<WatchlistsPageClient maturationSummaryMode="swing" />);
+    wrap(<WatchlistsPageClient dualDeskMaturation={false} />);
 
     await waitFor(() => expect(screen.getByTestId("watchlist-maturation-alerts-feed")).toBeInTheDocument());
     await waitFor(() => expect(screen.getByText(/STOCVEST · AAPL \(swing\) maturation: Actionable → Developing/)).toBeInTheDocument());
