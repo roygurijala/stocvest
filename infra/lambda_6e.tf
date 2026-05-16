@@ -40,23 +40,23 @@ locals {
     STOCVEST_DISABLE_REDIS         = "1"
     ECS_CLUSTER_ARN                = aws_ecs_cluster.development.arn
     # Do not set AWS_REGION — Lambda reserves it; runtime still exposes it to the handler.
-    STOCVEST_ENV                      = "development"
-    DYNAMODB_USERS_TABLE              = aws_dynamodb_table.users.name
-    DYNAMODB_ORDERS_TABLE             = aws_dynamodb_table.orders.name
-    DYNAMODB_ALERTS                   = aws_dynamodb_table.alerts.name
-    DYNAMODB_WATCHLISTS_TABLE            = aws_dynamodb_table.watchlists.name
-    DYNAMODB_WATCHLIST_MATURATION_TABLE  = aws_dynamodb_table.watchlist_maturation.name
-    DYNAMODB_BROKER_CONNECTIONS_TABLE = aws_dynamodb_table.broker_connections.name
-    DYNAMODB_DAY_TRADING_SETUPS       = aws_dynamodb_table.day_trading_setups.name
-    DYNAMODB_SIGNAL_HISTORY_TABLE     = aws_dynamodb_table.signal_history.name
-    DYNAMODB_PARAMETER_HISTORY_TABLE  = aws_dynamodb_table.parameter_history.name
-    DYNAMODB_PARAMETER_PROPOSAL_TABLE = aws_dynamodb_table.parameter_proposal.name
-    DYNAMODB_SECTOR_CACHE_TABLE       = aws_dynamodb_table.sector_cache.name
-    STOCVEST_TRADE_JOURNAL_TABLE      = aws_dynamodb_table.trade_journal.name
-    STOCVEST_PDT_STATE_TABLE          = aws_dynamodb_table.pdt_state.name
-    STOCVEST_EMAIL_SENDER             = "signals@stocvest.app"
-    STOCVEST_PUBLIC_APP_URL           = "https://stocvest.app"
-    DYNAMODB_AUDIT_EVENTS_TABLE       = aws_dynamodb_table.audit_events.name
+    STOCVEST_ENV                        = "development"
+    DYNAMODB_USERS_TABLE                = aws_dynamodb_table.users.name
+    DYNAMODB_ORDERS_TABLE               = aws_dynamodb_table.orders.name
+    DYNAMODB_ALERTS                     = aws_dynamodb_table.alerts.name
+    DYNAMODB_WATCHLISTS_TABLE           = aws_dynamodb_table.watchlists.name
+    DYNAMODB_WATCHLIST_MATURATION_TABLE = aws_dynamodb_table.watchlist_maturation.name
+    DYNAMODB_BROKER_CONNECTIONS_TABLE   = aws_dynamodb_table.broker_connections.name
+    DYNAMODB_DAY_TRADING_SETUPS         = aws_dynamodb_table.day_trading_setups.name
+    DYNAMODB_SIGNAL_HISTORY_TABLE       = aws_dynamodb_table.signal_history.name
+    DYNAMODB_PARAMETER_HISTORY_TABLE    = aws_dynamodb_table.parameter_history.name
+    DYNAMODB_PARAMETER_PROPOSAL_TABLE   = aws_dynamodb_table.parameter_proposal.name
+    DYNAMODB_SECTOR_CACHE_TABLE         = aws_dynamodb_table.sector_cache.name
+    STOCVEST_TRADE_JOURNAL_TABLE        = aws_dynamodb_table.trade_journal.name
+    STOCVEST_PDT_STATE_TABLE            = aws_dynamodb_table.pdt_state.name
+    STOCVEST_EMAIL_SENDER               = "signals@stocvest.app"
+    STOCVEST_PUBLIC_APP_URL             = "https://stocvest.app"
+    DYNAMODB_AUDIT_EVENTS_TABLE         = aws_dynamodb_table.audit_events.name
     # Cognito identifiers needed by the D10 Admin hub
     # (`/v1/admin/users/*` + `/v1/admin/system-status`). Without these
     # the runtime `_pool_id()` helper resolves to "", `list_users_page`
