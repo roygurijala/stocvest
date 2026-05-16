@@ -41,6 +41,7 @@ import {
 } from "@/lib/api/public-signals";
 import { tickerNewsTriggerLine } from "@/lib/api/ticker-news-panel";
 import { rankSymbolCandidates } from "@/lib/symbol-suggestion-rank";
+import { WATCHLIST_SYMBOLS_CHANGED_EVENT } from "@/lib/watchlist-membership-client";
 import { LAYER_NAME_HINTS } from "@/lib/ui-tooltips";
 import { isInsufficientCompositeResponse, type SwingCompositeMarketStatus } from "@/lib/api/swing-composite";
 import { synthTradeDecision } from "@/lib/signal-evidence/trade-decision";
@@ -535,6 +536,32 @@ export function SignalsPageClient({
     })();
     return () => {
       cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const reload = () => {
+      void (async () => {
+        try {
+          const res = await fetch("/api/stocvest/watchlists/default/symbols", { method: "GET" });
+          if (!res.ok || cancelled) return;
+          const data = (await res.json().catch(() => ({}))) as { symbols?: unknown };
+          const list = Array.isArray(data.symbols)
+            ? data.symbols
+                .map((x) => normalizeTickerInput(String(x)))
+                .filter((x): x is string => Boolean(x))
+            : [];
+          if (!cancelled) setUserWatchlistSyms(list);
+        } catch {
+          /* non-fatal */
+        }
+      })();
+    };
+    window.addEventListener(WATCHLIST_SYMBOLS_CHANGED_EVENT, reload);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(WATCHLIST_SYMBOLS_CHANGED_EVENT, reload);
     };
   }, []);
 
@@ -1906,7 +1933,7 @@ export function SignalsPageClient({
       {symbolCommitted ? (
         <>
       <div className="flex flex-wrap items-center gap-2">
-        <AddToWatchlistButton symbol={symbol} />
+        <AddToWatchlistButton symbol={symbol} dualDeskTracking={dayTradingSurfaces} />
       </div>
 
       <div className="flex max-w-lg flex-col gap-2">
@@ -2502,6 +2529,7 @@ export function SignalsPageClient({
           newsArticles={afterHoursNews}
           isInDefaultWatchlist={afterHoursInWatchlist}
           watchlistCheckComplete={afterHoursWatchlistKnown}
+          dualDeskTracking={dayTradingSurfaces}
         />
       ) : null}
         </>

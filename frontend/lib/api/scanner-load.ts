@@ -9,6 +9,14 @@ import type {
   ScannerSetupLoadMode,
   WatchlistDashboardStatus
 } from "@/lib/api/scanner";
+import type { DefaultWatchlistSnapshot } from "@/lib/api/watchlists";
+import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
+import {
+  presentationMaturationState,
+  type SymbolTrackingMap
+} from "@/lib/watchlist-tracking-presentation";
+
+export type DefaultWatchlistFetch = () => Promise<DefaultWatchlistSnapshot>;
 
 /** Always load tape anchors so Market Pulse (spy/qqq %) and regime are populated even when gaps omit indices. */
 const MARKET_PULSE_ANCHORS = ["SPY", "QQQ"] as const;
@@ -113,6 +121,55 @@ export function buildWatchlistDashboardStatus(
     }
   }
   return { monitored: w.length, actionable, developing, inactive };
+}
+
+function parseMaturationSummaryRows(
+  payload: { by_symbol?: Record<string, { state?: string }> } | null | undefined
+): Record<string, WatchlistMaturationRow> {
+  const raw = payload?.by_symbol;
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, WatchlistMaturationRow> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    const sym = k.trim().toUpperCase();
+    if (!sym || !v || typeof v !== "object") continue;
+    const st =
+      typeof (v as { state?: unknown }).state === "string"
+        ? (v as { state: string }).state.trim().toLowerCase()
+        : "";
+    if (st) out[sym] = { state: st };
+  }
+  return out;
+}
+
+/** Presentation lens: best state among user-tracked desks (engine still evaluates all). */
+async function loadPresentationMaturationBySymbol(
+  jsonFetch: ScannerJsonFetch,
+  watchUpper: string[],
+  trackingMap: SymbolTrackingMap
+): Promise<Record<string, string> | null> {
+  if (watchUpper.length === 0) return null;
+  try {
+    const [swingPayload, dayPayload] = await Promise.all([
+      jsonFetch<{ by_symbol?: Record<string, { state?: string }> }>(
+        "/v1/watchlists/maturation-summary?mode=swing"
+      ),
+      jsonFetch<{ by_symbol?: Record<string, { state?: string }> }>(
+        "/v1/watchlists/maturation-summary?mode=day"
+      ).catch(() => null)
+    ]);
+    const swing = parseMaturationSummaryRows(swingPayload);
+    const day = parseMaturationSummaryRows(dayPayload ?? undefined);
+    const dualDesk =
+      Object.keys(day).length > 0 || Object.values(trackingMap).some((t) => t.day);
+    const out: Record<string, string> = {};
+    for (const sym of watchUpper) {
+      const st = presentationMaturationState(sym, trackingMap, swing[sym], day[sym], dualDesk);
+      if (st) out[sym] = st;
+    }
+    return Object.keys(out).length ? out : null;
+  } catch {
+    return null;
+  }
 }
 
 function capScannerUniverse(universe: string[], max: number): string[] {
@@ -225,7 +282,7 @@ async function fetchBarsMatrix(
 
 export async function runScannerLoadWithoutBrief(
   jsonFetch: ScannerJsonFetch,
-  fetchDefaultWatchlistSymbolsFn: () => Promise<string[]>,
+  fetchDefaultWatchlistFn: DefaultWatchlistFetch,
   _pdtStatus: PDTStatusPayload | null,
   watchlistSymbols: string[] = [],
   tuning: ScannerLoadTuning | null = null,
@@ -245,11 +302,14 @@ export async function runScannerLoadWithoutBrief(
         min_day_volume: 500_000
       })
     });
-    const watchlistPromise =
+    const watchlistPromise: Promise<DefaultWatchlistSnapshot> =
       tuning?.parallelDefaultWatchlist === true
-        ? fetchDefaultWatchlistSymbolsFn().catch(() => [] as string[])
-        : Promise.resolve(watchlistSymbols);
-    const [gapIntelResp, resolvedWatchlist] = await Promise.all([gapIntelPromise, watchlistPromise]);
+        ? fetchDefaultWatchlistFn().catch(() => ({ symbols: [], symbol_tracking: {} }))
+        : Promise.resolve({
+            symbols: watchlistSymbols,
+            symbol_tracking: {} as SymbolTrackingMap
+          });
+    const [gapIntelResp, wlSnap] = await Promise.all([gapIntelPromise, watchlistPromise]);
     /**
      * Gap-intelligence is best-effort for the dashboard/scanner shell: Polygon full-feed +
      * news can 5xx or time out. When the response is missing or malformed, continue with an
@@ -276,8 +336,9 @@ export async function runScannerLoadWithoutBrief(
         ? Math.floor((gapIntelResp as { snapshot_symbol_count: number }).snapshot_symbol_count)
         : null;
     const gapSyms = gapItems.map((g) => g.symbol.trim().toUpperCase()).filter(Boolean);
-    const wlSource = tuning?.parallelDefaultWatchlist === true ? resolvedWatchlist : watchlistSymbols;
+    const wlSource = tuning?.parallelDefaultWatchlist === true ? wlSnap.symbols : watchlistSymbols;
     const watchUpper = wlSource.map((s) => s.trim().toUpperCase()).filter(Boolean);
+    const trackingMap: SymbolTrackingMap = tuning?.parallelDefaultWatchlist === true ? wlSnap.symbol_tracking : {};
     let universe = [...new Set([...MARKET_PULSE_ANCHORS, ...gapSyms, ...watchUpper])];
     if (universe.length === 0) {
       universe = [...INTRADAY_FALLBACK_SYMBOLS];
@@ -292,28 +353,7 @@ export async function runScannerLoadWithoutBrief(
     const fetchDailyBars = setupLoadMode === "swing" || setupLoadMode === "both";
     const loadDaySetups = setupLoadMode === "day" || setupLoadMode === "both";
     const loadSwingSetups = setupLoadMode === "swing" || setupLoadMode === "both";
-    const maturationListMode: "day" | "swing" = setupLoadMode === "swing" ? "swing" : "day";
-    const maturationSummaryPromise: Promise<Record<string, string> | null> =
-      watchUpper.length === 0
-        ? Promise.resolve(null)
-        : jsonFetch<{ by_symbol?: Record<string, { state?: string }> }>(
-            `/v1/watchlists/maturation-summary?mode=${encodeURIComponent(maturationListMode)}`
-          )
-            .then((payload) => {
-              const raw = payload?.by_symbol;
-              if (!raw || typeof raw !== "object") return null;
-              const out: Record<string, string> = {};
-              for (const [k, v] of Object.entries(raw)) {
-                const sym = k.trim().toUpperCase();
-                const st =
-                  v && typeof v === "object" && typeof (v as { state?: unknown }).state === "string"
-                    ? (v as { state: string }).state.trim().toLowerCase()
-                    : "";
-                if (sym && st) out[sym] = st;
-              }
-              return Object.keys(out).length ? out : null;
-            })
-            .catch(() => null);
+    const maturationSummaryPromise = loadPresentationMaturationBySymbol(jsonFetch, watchUpper, trackingMap);
     /** Intraday bars only feed `POST /v1/signals/day/setups`; swing-only loads skip them (large critical-path savings). */
     const needIntradayBars = loadDaySetups;
     const swingDailyBarLimit = tuning?.swingDailyBarLimit ?? 220;

@@ -207,7 +207,15 @@ Terraform table **`AuditEvents`**: **`pk`** = `user#{userId|anon}`, **`sk`** = `
 
 - Repo script **`scripts/beta_access.py`** — operator CLI: updates **`Users`** Dynamo attributes **`betaFullAccess`**, **`betaAccessUntil`**, **`betaAccessGrantedAt`** (requires **`DYNAMODB_USERS_TABLE`** + AWS creds). Mirrors **`PATCH .../beta-access`** semantics (**`--enable` / `--disable`**). **`--until`** is optional; **`--no-expiry`** with **`--enable`** leaves beta open-ended. If **`--enable`** without **`--until`** or **`--no-expiry`**, expiry defaults to **21 days** from now (UTC). **`scripts/cognito_sub_for_email.py`** prints a user’s **`sub`** from their login email (needs **`COGNITO_USER_POOL_ID`** + **`cognito-idp:AdminGetUser`**).
 
-### 4.13 Watchlists — maturation summary (brokers Lambda)
+### 4.13 Watchlists — symbols, desk tracking, maturation (brokers Lambda)
+
+- `GET /v1/watchlists/default/symbols` — **authenticated**; **`{ "symbols": [...], "watchlist_name": "...", "symbol_tracking": { "TSLA": { "swing": true, "day": true } } }`**. **`symbol_tracking`** keys are uppercase tickers on the user’s default list; missing keys default to **`{ "swing": true, "day": true }`**.
+
+- `POST /v1/watchlists/default/symbols` — body **`{ "symbol": "TSLA", "track_swing"?: boolean, "track_day"?: boolean }`** (desk flags default **true** when omitted). At least one desk must be enabled.
+
+- `PATCH /v1/watchlists/{watchlist_id}/symbols/{symbol}/tracking` — body **`{ "track_swing": boolean, "track_day": boolean }`**; persists user desk **observation** prefs (does not mutate maturation engine state). At least one desk must be **true**.
+
+- Watchlist list/detail responses (**`GET /v1/watchlists`**, **`GET /v1/watchlists/{id}`**, symbol add/remove) include **`symbol_tracking`** on each row (same shape as above).
 
 - `GET /v1/watchlists/maturation-summary` — **authenticated**. Query **`mode`** = **`day`** \| **`swing`** (default **`day`**). Response JSON: **`{ "mode": "<echoed>", "by_symbol": { "AAPL": { ... } } }`**. Keys in **`by_symbol`** are uppercase symbols intersected with the user’s **default** watchlist only; symbols not on the default list never appear even if a maturation row exists in Dynamo.
 

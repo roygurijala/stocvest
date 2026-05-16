@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Columns2, TrendingUp, Zap } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CuteLoader } from "@/components/cute-loader";
@@ -21,6 +22,15 @@ import {
   type WatchlistViewMode
 } from "@/lib/watchlist-page-utils";
 import { useTheme } from "@/lib/theme-provider";
+import {
+  compareSymbolsByPresentationPriority,
+  maturationAlertPassesTracking,
+  parseMaturationModeFromAlertBody,
+  presentationMaturationState,
+  shouldShowDeskRow,
+  trackingForSymbol,
+  type SymbolTrackingMap
+} from "@/lib/watchlist-tracking-presentation";
 
 const WATCHLIST_MAX_SYMBOLS = 50;
 
@@ -29,6 +39,7 @@ type WatchlistRow = {
   name: string;
   symbols: string[];
   is_default: boolean;
+  symbol_tracking?: SymbolTrackingMap;
 };
 
 const QUICK = ["SPY", "QQQ", "AAPL", "NVDA", "TSLA"];
@@ -37,6 +48,7 @@ type MaturationAlertFeedItem = {
   title: string;
   created_at: string;
   symbol?: string | null;
+  mode?: "swing" | "day";
 };
 
 type SymbolCandidate = { symbol: string; label: string };
@@ -63,18 +75,6 @@ function normalizeTickerFromApi(raw: string): string | null {
   return null;
 }
 
-const STATE_RANK: Record<string, number> = {
-  actionable: 5,
-  developing: 4,
-  re_evaluating: 3,
-  not_aligned: 2,
-  invalidated: 1
-};
-
-function stateRank(state: string | undefined): number {
-  return STATE_RANK[(state || "").toLowerCase()] ?? 0;
-}
-
 function maturationAccent(state: string | undefined, colors: ThemeColors): string {
   switch ((state || "").toLowerCase()) {
     case "actionable":
@@ -93,16 +93,12 @@ function maturationAccent(state: string | undefined, colors: ThemeColors): strin
 
 function displayStateForSymbol(
   sym: string,
-  viewMode: WatchlistViewMode,
+  trackingMap: SymbolTrackingMap | undefined,
   swing: Record<string, MaturationRow>,
-  day: Record<string, MaturationRow>
+  day: Record<string, MaturationRow>,
+  dualDesk: boolean
 ): string | undefined {
-  const s = swing[sym]?.state;
-  const d = day[sym]?.state;
-  if (viewMode === "swing") return s;
-  if (viewMode === "day") return d;
-  if (stateRank(s) >= stateRank(d)) return s || d;
-  return d || s;
+  return presentationMaturationState(sym, trackingMap, swing[sym], day[sym], dualDesk);
 }
 
 function tradingModeForSignalsNav(viewMode: WatchlistViewMode, dualDesk: boolean): "day" | "swing" | undefined {
@@ -120,6 +116,7 @@ type WatchlistsPageClientProps = {
 
 export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   const { dualDeskMaturation = false, planBadgeLabel = "Free" } = props;
+  const searchParams = useSearchParams();
   const { colors, theme } = useTheme();
   const [rows, setRows] = useState<WatchlistRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -144,6 +141,21 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   const [snapshotFetchStatus, setSnapshotFetchStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
 
   usePublishAssistantContext({ page: "dashboard/watchlists" });
+
+  useEffect(() => {
+    if (loading) return;
+    const focus = (searchParams.get("focus") ?? "").trim().toUpperCase();
+    if (!focus) return;
+    const el = document.getElementById(`watchlist-row-${focus}`);
+    if (!el) return;
+    window.requestAnimationFrame(() => {
+      el.scrollIntoView({ block: "center", behavior: "smooth" });
+      el.style.outline = `2px solid ${colors.accent}`;
+      window.setTimeout(() => {
+        el.style.outline = "";
+      }, 2400);
+    });
+  }, [loading, searchParams, colors.accent]);
 
   useEffect(() => {
     if (!dualDeskMaturation && viewMode !== "swing") setViewMode("swing");
@@ -187,6 +199,19 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   const active = useMemo(() => rows[0] ?? null, [rows]);
 
   const activeSymbolsDeduped = useMemo(() => dedupeSymbolsUpper(active?.symbols ?? []), [active?.symbols]);
+
+  const symbolTrackingMap = useMemo((): SymbolTrackingMap => {
+    const raw = active?.symbol_tracking;
+    if (!raw || typeof raw !== "object") return {};
+    const out: SymbolTrackingMap = {};
+    for (const sym of activeSymbolsDeduped) {
+      const row = raw[sym];
+      if (row && typeof row === "object") {
+        out[sym] = { swing: Boolean(row.swing), day: Boolean(row.day) };
+      }
+    }
+    return out;
+  }, [active?.symbol_tracking, activeSymbolsDeduped]);
 
   useEffect(() => {
     if (!active?.is_default || activeSymbolsDeduped.length === 0) {
@@ -329,10 +354,13 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
             .trim()
             .toUpperCase();
           if (!sym) continue;
+          const mode = parseMaturationModeFromAlertBody(a.body);
+          if (!maturationAlertPassesTracking(sym, mode, symbolTrackingMap, dualDeskMaturation)) continue;
           out.push({
             title: String(a.title ?? "Maturation update"),
             created_at: String(a.created_at ?? ""),
-            symbol: sym
+            symbol: sym,
+            mode
           });
         }
         setMaturationAlerts(out.slice(0, 8));
@@ -347,7 +375,13 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     return () => {
       cancelled = true;
     };
-  }, [active?.watchlist_id, active?.is_default, activeSymbolsDeduped.join(",")]);
+  }, [
+    active?.watchlist_id,
+    active?.is_default,
+    activeSymbolsDeduped.join(","),
+    symbolTrackingMap,
+    dualDeskMaturation
+  ]);
 
   const localAddCandidates = useMemo((): SymbolCandidate[] => {
     const onList = new Set(activeSymbolsDeduped);
@@ -632,16 +666,25 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     if (!active.is_default || maturationFetchStatus !== "ready") {
       return [...syms].sort();
     }
-    const rankFor = (sym: string) => {
-      const disp = displayStateForSymbol(sym, viewMode, maturationSwing, maturationDay);
-      return stateRank(disp);
-    };
-    return [...syms].sort((a, b) => {
-      const dr = rankFor(b) - rankFor(a);
-      if (dr !== 0) return dr;
-      return a.localeCompare(b);
-    });
-  }, [active, activeSymbolsDeduped, maturationFetchStatus, maturationSwing, maturationDay, viewMode]);
+    return [...syms].sort((a, b) =>
+      compareSymbolsByPresentationPriority(
+        a,
+        b,
+        symbolTrackingMap,
+        maturationSwing,
+        maturationDay,
+        dualDeskMaturation
+      )
+    );
+  }, [
+    active,
+    activeSymbolsDeduped,
+    maturationFetchStatus,
+    maturationSwing,
+    maturationDay,
+    symbolTrackingMap,
+    dualDeskMaturation
+  ]);
 
   const filteredSymbolsForList = useMemo(() => {
     const q = addDraft.trim();
@@ -680,14 +723,24 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     };
     if (!active?.is_default || maturationFetchStatus !== "ready") return out;
     for (const sym of activeSymbolsDeduped) {
-      const disp = (displayStateForSymbol(sym, viewMode, maturationSwing, maturationDay) || "").toLowerCase();
+      const disp = (
+        displayStateForSymbol(sym, symbolTrackingMap, maturationSwing, maturationDay, dualDeskMaturation) || ""
+      ).toLowerCase();
       if (disp === "actionable") out.actionable += 1;
       else if (disp === "developing" || disp === "re_evaluating") out.developing += 1;
       else if (disp === "not_aligned") out.not_aligned += 1;
       else if (disp === "invalidated") out.invalidated += 1;
     }
     return out;
-  }, [active, activeSymbolsDeduped, maturationFetchStatus, maturationSwing, maturationDay, viewMode]);
+  }, [
+    active,
+    activeSymbolsDeduped,
+    maturationFetchStatus,
+    maturationSwing,
+    maturationDay,
+    symbolTrackingMap,
+    dualDeskMaturation
+  ]);
 
   const tabBtn = (mode: WatchlistViewMode, label: string, icon: ReactNode) => {
     const on = viewMode === mode;
@@ -1045,8 +1098,8 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                     Day ·{" "}
                   </>
                 ) : null}
-                Sorted by best maturation state
-                {viewMode === "both" || viewMode === "day" ? " (per active tab)" : ""}.
+                Sorted by best maturation among desks you track
+                {viewMode === "both" || viewMode === "day" ? " (rows respect tab + tracking)" : ""}.
               </p>
             ) : null}
 
@@ -1138,8 +1191,15 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                       const symU = s.trim().toUpperCase();
                       const ms = active.is_default ? maturationSwing[symU] : undefined;
                       const md = active.is_default && dualDeskMaturation ? maturationDay[symU] : undefined;
+                      const rowTracking = trackingForSymbol(symbolTrackingMap, symU, dualDeskMaturation);
                       const displaySt = active.is_default
-                        ? displayStateForSymbol(symU, viewMode, maturationSwing, maturationDay)
+                        ? displayStateForSymbol(
+                            symU,
+                            symbolTrackingMap,
+                            maturationSwing,
+                            maturationDay,
+                            dualDeskMaturation
+                          )
                         : undefined;
                       const accent = maturationAccent(displaySt, colors as ThemeColors);
                       const href = watchlistToSignalsHref(s, tradingModeForSignalsNav(viewMode, dualDeskMaturation));
@@ -1202,10 +1262,12 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                                     </span>
                                   ) : null}
                                 </div>
-                                {active.is_default && (viewMode === "both" || viewMode === "swing" || !dualDeskMaturation) ? (
+                                {active.is_default &&
+                                shouldShowDeskRow(rowTracking, "swing", viewMode, dualDeskMaturation) ? (
                                   <div className="mt-2 space-y-1.5">{rowLine("swing", ms)}</div>
                                 ) : null}
-                                {active.is_default && dualDeskMaturation && (viewMode === "both" || viewMode === "day") ? (
+                                {active.is_default &&
+                                shouldShowDeskRow(rowTracking, "day", viewMode, dualDeskMaturation) ? (
                                   <div className="mt-2 space-y-1.5">{rowLine("day", md)}</div>
                                 ) : null}
                               </div>

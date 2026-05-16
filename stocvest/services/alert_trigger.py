@@ -139,8 +139,8 @@ class AlertTriggerService:
         if not prefs.email_enabled or not prefs.on_watchlist_maturation:
             return
         sym_u = symbol.strip().upper()
+        wl = self.watchlist_store.get_default_watchlist(user_id)
         if prefs.watchlist_only:
-            wl = self.watchlist_store.get_default_watchlist(user_id)
             if wl and sym_u not in {s.upper() for s in wl.symbols}:
                 _LOG.debug(
                     "maturation alert skipped: %s not on default watchlist for %s",
@@ -148,6 +148,16 @@ class AlertTriggerService:
                     user_ref_for_logs(user_id),
                 )
                 return
+        from stocvest.api.services.watchlist_tracking_prefs import is_desk_tracked_for_symbol
+
+        if not is_desk_tracked_for_symbol(wl, sym_u, mode):
+            _LOG.debug(
+                "maturation alert skipped: %s desk not tracked for %s user=%s",
+                mode,
+                sym_u,
+                user_ref_for_logs(user_id),
+            )
+            return
         if self._in_quiet_hours(prefs):
             _LOG.debug("maturation alert skipped: quiet hours user=%s", user_ref_for_logs(user_id))
             return

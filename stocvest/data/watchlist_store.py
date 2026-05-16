@@ -30,8 +30,49 @@ def _normalize_symbol(sym: str) -> str:
     return s
 
 
-def _pick_keeper_merge_plan(rows: list[WatchlistItem]) -> tuple[WatchlistItem, list[str], list[WatchlistItem]]:
-    """Return keeper row, merged symbols (deduped, capped), and other rows to drop."""
+SymbolTrackingMap = dict[str, dict[str, bool]]
+
+
+def _default_symbol_tracking() -> dict[str, bool]:
+    return {"swing": True, "day": True}
+
+
+def _coerce_tracking_modes(raw: Any) -> dict[str, bool]:
+    if not isinstance(raw, dict):
+        return _default_symbol_tracking()
+    return {
+        "swing": bool(raw.get("swing", raw.get("track_swing", True))),
+        "day": bool(raw.get("day", raw.get("track_day", True))),
+    }
+
+
+def _parse_symbol_tracking_map(raw: Any) -> SymbolTrackingMap:
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+    if not isinstance(raw, dict):
+        return {}
+    out: SymbolTrackingMap = {}
+    for k, v in raw.items():
+        sym = str(k).strip().upper()
+        if not sym:
+            continue
+        out[sym] = _coerce_tracking_modes(v)
+    return out
+
+
+def _validate_tracking_modes(track_swing: bool, track_day: bool) -> dict[str, bool]:
+    if not track_swing and not track_day:
+        raise ValueError("At least one desk (swing or day) must be enabled.")
+    return {"swing": bool(track_swing), "day": bool(track_day)}
+
+
+def _pick_keeper_merge_plan(
+    rows: list[WatchlistItem],
+) -> tuple[WatchlistItem, list[str], SymbolTrackingMap, list[WatchlistItem]]:
+    """Return keeper row, merged symbols (deduped, capped), merged tracking, and other rows to drop."""
     if not rows:
         raise ValueError("internal: merge requires at least one watchlist row")
     sorted_rows = sorted(rows, key=lambda w: (not w.is_default, w.created_at))
@@ -41,6 +82,7 @@ def _pick_keeper_merge_plan(rows: list[WatchlistItem]) -> tuple[WatchlistItem, l
         key=lambda w: w.created_at,
     )
     merged: list[str] = []
+    merged_tracking: SymbolTrackingMap = {}
     seen: set[str] = set()
     for w in (keeper, *others_sorted):
         for sym in w.symbols:
@@ -48,8 +90,10 @@ def _pick_keeper_merge_plan(rows: list[WatchlistItem]) -> tuple[WatchlistItem, l
             if su and su not in seen and len(merged) < _MAX_SYMBOLS:
                 seen.add(su)
                 merged.append(su)
+                if su in w.symbol_tracking:
+                    merged_tracking[su] = dict(w.symbol_tracking[su])
     to_delete = [w for w in rows if w.watchlist_id != keeper.watchlist_id]
-    return keeper, merged, to_delete
+    return keeper, merged, merged_tracking, to_delete
 
 
 @dataclass
@@ -61,13 +105,26 @@ class WatchlistItem:
     is_default: bool
     created_at: str
     updated_at: str
+    symbol_tracking: SymbolTrackingMap = field(default_factory=dict)
+
+    def tracking_for_symbol(self, symbol: str) -> dict[str, bool]:
+        sym = str(symbol).strip().upper()
+        if sym in self.symbol_tracking:
+            return _coerce_tracking_modes(self.symbol_tracking[sym])
+        return _default_symbol_tracking()
 
     def to_api_dict(self) -> dict[str, Any]:
+        tracking_api: dict[str, dict[str, bool]] = {}
+        for sym in self.symbols:
+            su = str(sym).strip().upper()
+            if su:
+                tracking_api[su] = self.tracking_for_symbol(su)
         return {
             "watchlist_id": self.watchlist_id,
             "user_id": self.user_id,
             "name": self.name,
             "symbols": list(self.symbols),
+            "symbol_tracking": tracking_api,
             "is_default": self.is_default,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
@@ -90,6 +147,7 @@ class WatchlistItem:
             if su and su not in seen_sym:
                 seen_sym.add(su)
                 symbols.append(su)
+        tracking = _parse_symbol_tracking_map(item.get("symbolTracking") or item.get("symbol_tracking"))
         return cls(
             user_id=user_id,
             watchlist_id=str(item.get("watchlistId") or ""),
@@ -98,6 +156,7 @@ class WatchlistItem:
             is_default=bool(item.get("isDefault")),
             created_at=str(item.get("createdAt") or ""),
             updated_at=str(item.get("updatedAt") or ""),
+            symbol_tracking=tracking,
         )
 
 
@@ -127,8 +186,25 @@ class WatchlistStore(Protocol):
         is_default: bool | None = None,
     ) -> WatchlistItem | None: ...
     def delete_watchlist(self, user_id: str, watchlist_id: str) -> bool: ...
-    def add_symbol(self, user_id: str, watchlist_id: str, symbol: str) -> WatchlistItem | None: ...
+    def add_symbol(
+        self,
+        user_id: str,
+        watchlist_id: str,
+        symbol: str,
+        *,
+        track_swing: bool = True,
+        track_day: bool = True,
+    ) -> WatchlistItem | None: ...
     def remove_symbol(self, user_id: str, watchlist_id: str, symbol: str) -> WatchlistItem | None: ...
+    def set_symbol_tracking(
+        self,
+        user_id: str,
+        watchlist_id: str,
+        symbol: str,
+        *,
+        track_swing: bool,
+        track_day: bool,
+    ) -> WatchlistItem | None: ...
 
 
 @dataclass
@@ -145,8 +221,9 @@ class InMemoryWatchlistStore:
                     only.updated_at = _utc_now()
             return
         rows = list(u.values())
-        keeper, merged, to_delete = _pick_keeper_merge_plan(rows)
+        keeper, merged, merged_tracking, to_delete = _pick_keeper_merge_plan(rows)
         keeper.symbols = merged
+        keeper.symbol_tracking = merged_tracking
         keeper.is_default = True
         keeper.updated_at = _utc_now()
         for w in to_delete:
@@ -246,16 +323,28 @@ class InMemoryWatchlistStore:
             first.updated_at = _utc_now()
         return True
 
-    def add_symbol(self, user_id: str, watchlist_id: str, symbol: str) -> WatchlistItem | None:
+    def add_symbol(
+        self,
+        user_id: str,
+        watchlist_id: str,
+        symbol: str,
+        *,
+        track_swing: bool = True,
+        track_day: bool = True,
+    ) -> WatchlistItem | None:
         w = self._by_user.get(user_id, {}).get(watchlist_id)
         if not w:
             return None
         sym = _normalize_symbol(symbol)
+        modes = _validate_tracking_modes(track_swing, track_day)
         if sym in w.symbols:
+            w.symbol_tracking[sym] = modes
+            w.updated_at = _utc_now()
             return w
         if len(w.symbols) >= _MAX_SYMBOLS:
             raise ValueError("Watchlist may contain at most 50 symbols.")
         w.symbols = [*w.symbols, sym]
+        w.symbol_tracking[sym] = modes
         w.updated_at = _utc_now()
         return w
 
@@ -265,6 +354,26 @@ class InMemoryWatchlistStore:
             return None
         sym = str(symbol).strip().upper()
         w.symbols = [s for s in w.symbols if s != sym]
+        w.symbol_tracking.pop(sym, None)
+        w.updated_at = _utc_now()
+        return w
+
+    def set_symbol_tracking(
+        self,
+        user_id: str,
+        watchlist_id: str,
+        symbol: str,
+        *,
+        track_swing: bool,
+        track_day: bool,
+    ) -> WatchlistItem | None:
+        w = self._by_user.get(user_id, {}).get(watchlist_id)
+        if not w:
+            return None
+        sym = _normalize_symbol(symbol)
+        if sym not in w.symbols:
+            return None
+        w.symbol_tracking[sym] = _validate_tracking_modes(track_swing, track_day)
         w.updated_at = _utc_now()
         return w
 
@@ -333,13 +442,14 @@ class DynamoDBWatchlistStore:
                     ExpressionAttributeValues={":t": True, ":u": now},
                 )
             return
-        keeper, merged, to_delete = _pick_keeper_merge_plan(rows)
+        keeper, merged, merged_tracking, to_delete = _pick_keeper_merge_plan(rows)
         now = _utc_now()
         item = {
             "userId": user_id,
             "watchlistId": keeper.watchlist_id,
             "name": keeper.name.strip() or "Watchlist",
             "symbols": merged,
+            "symbolTracking": merged_tracking,
             "isDefault": True,
             "createdAt": keeper.created_at,
             "updatedAt": now,
@@ -473,22 +583,39 @@ class DynamoDBWatchlistStore:
             )
         return True
 
-    def add_symbol(self, user_id: str, watchlist_id: str, symbol: str) -> WatchlistItem | None:
+    def add_symbol(
+        self,
+        user_id: str,
+        watchlist_id: str,
+        symbol: str,
+        *,
+        track_swing: bool = True,
+        track_day: bool = True,
+    ) -> WatchlistItem | None:
         w = self._get_one(user_id, watchlist_id)
         if not w:
             return None
         sym = _normalize_symbol(symbol)
+        modes = _validate_tracking_modes(track_swing, track_day)
+        tracking = dict(w.symbol_tracking)
+        tracking[sym] = modes
         if sym in w.symbols:
-            return w
+            now = _utc_now()
+            self.table.update_item(
+                Key={"userId": user_id, "watchlistId": watchlist_id},
+                UpdateExpression="SET symbolTracking = :t, updatedAt = :u",
+                ExpressionAttributeValues={":t": tracking, ":u": now},
+            )
+            out = self.table.get_item(Key={"userId": user_id, "watchlistId": watchlist_id})
+            return WatchlistItem.from_item(user_id, out["Item"])
         if len(w.symbols) >= _MAX_SYMBOLS:
             raise ValueError("Watchlist may contain at most 50 symbols.")
         now = _utc_now()
         new_syms = [*w.symbols, sym]
         self.table.update_item(
             Key={"userId": user_id, "watchlistId": watchlist_id},
-            UpdateExpression="SET symbols = :s, updatedAt = :u",
-            ExpressionAttributeValues={":s": new_syms, ":u": now},
-            ReturnValues="ALL_NEW",
+            UpdateExpression="SET symbols = :s, symbolTracking = :t, updatedAt = :u",
+            ExpressionAttributeValues={":s": new_syms, ":t": tracking, ":u": now},
         )
         out = self.table.get_item(Key={"userId": user_id, "watchlistId": watchlist_id})
         return WatchlistItem.from_item(user_id, out["Item"])
@@ -499,11 +626,38 @@ class DynamoDBWatchlistStore:
             return None
         sym = str(symbol).strip().upper()
         new_syms = [s for s in w.symbols if s != sym]
+        tracking = {k: v for k, v in w.symbol_tracking.items() if k != sym}
         now = _utc_now()
         self.table.update_item(
             Key={"userId": user_id, "watchlistId": watchlist_id},
-            UpdateExpression="SET symbols = :s, updatedAt = :u",
-            ExpressionAttributeValues={":s": new_syms, ":u": now},
+            UpdateExpression="SET symbols = :s, symbolTracking = :t, updatedAt = :u",
+            ExpressionAttributeValues={":s": new_syms, ":t": tracking, ":u": now},
+        )
+        out = self.table.get_item(Key={"userId": user_id, "watchlistId": watchlist_id})
+        return WatchlistItem.from_item(user_id, out["Item"])
+
+    def set_symbol_tracking(
+        self,
+        user_id: str,
+        watchlist_id: str,
+        symbol: str,
+        *,
+        track_swing: bool,
+        track_day: bool,
+    ) -> WatchlistItem | None:
+        w = self._get_one(user_id, watchlist_id)
+        if not w:
+            return None
+        sym = _normalize_symbol(symbol)
+        if sym not in w.symbols:
+            return None
+        tracking = dict(w.symbol_tracking)
+        tracking[sym] = _validate_tracking_modes(track_swing, track_day)
+        now = _utc_now()
+        self.table.update_item(
+            Key={"userId": user_id, "watchlistId": watchlist_id},
+            UpdateExpression="SET symbolTracking = :t, updatedAt = :u",
+            ExpressionAttributeValues={":t": tracking, ":u": now},
         )
         out = self.table.get_item(Key={"userId": user_id, "watchlistId": watchlist_id})
         return WatchlistItem.from_item(user_id, out["Item"])

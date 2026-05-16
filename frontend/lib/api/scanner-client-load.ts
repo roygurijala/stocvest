@@ -3,15 +3,28 @@ import { runScannerLoadWithoutBrief } from "@/lib/api/scanner-load";
 import type { PDTStatusPayload } from "@/lib/api/pdt";
 import type { DaySetupsRequestExtras, ScannerCoreData, ScannerLoadTuning } from "@/lib/api/scanner";
 
-async function fetchDefaultWatchlistSymbolsBrowser(): Promise<string[]> {
+async function fetchDefaultWatchlistSnapshotBrowser() {
   try {
-    const data = await browserApiFetch<{ symbols?: string[] }>("/v1/watchlists/default/symbols");
+    const data = await browserApiFetch<{
+      symbols?: string[];
+      symbol_tracking?: Record<string, { swing?: boolean; day?: boolean }>;
+    }>("/v1/watchlists/default/symbols");
     if (!data || !Array.isArray(data.symbols)) {
-      return [];
+      return { symbols: [] as string[], symbol_tracking: {} as Record<string, { swing: boolean; day: boolean }> };
     }
-    return data.symbols.map((s) => String(s).trim().toUpperCase()).filter(Boolean);
+    const symbols = data.symbols.map((s) => String(s).trim().toUpperCase()).filter(Boolean);
+    const symbol_tracking: Record<string, { swing: boolean; day: boolean }> = {};
+    const raw = data.symbol_tracking ?? {};
+    for (const sym of symbols) {
+      const row = raw[sym];
+      symbol_tracking[sym] = {
+        swing: Boolean(row?.swing ?? true),
+        day: Boolean(row?.day ?? true)
+      };
+    }
+    return { symbols, symbol_tracking };
   } catch {
-    return [];
+    return { symbols: [] as string[], symbol_tracking: {} as Record<string, { swing: boolean; day: boolean }> };
   }
 }
 
@@ -24,7 +37,7 @@ export async function loadScannerDataWithoutBrief(
 ): Promise<ScannerCoreData> {
   return runScannerLoadWithoutBrief(
     browserApiFetch,
-    fetchDefaultWatchlistSymbolsBrowser,
+    fetchDefaultWatchlistSnapshotBrowser,
     _pdtStatus,
     watchlistSymbols,
     tuning,

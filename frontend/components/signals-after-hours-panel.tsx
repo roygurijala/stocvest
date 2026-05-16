@@ -16,6 +16,8 @@ type SignalsAfterHoursPanelProps = {
   newsArticles: NewsPayload[];
   isInDefaultWatchlist: boolean;
   watchlistCheckComplete: boolean;
+  /** Swing + Day Pro: dual desk tracking toggles in the in-watchlist popover. */
+  dualDeskTracking?: boolean;
 };
 
 function sentimentDot(sentiment: string | null | undefined, score: number | null | undefined): string {
@@ -54,7 +56,8 @@ export function SignalsAfterHoursPanel({
   earningsEvent,
   newsArticles,
   isInDefaultWatchlist,
-  watchlistCheckComplete
+  watchlistCheckComplete,
+  dualDeskTracking = true
 }: SignalsAfterHoursPanelProps) {
   const { colors } = useTheme();
   const sym = symbol.trim().toUpperCase() || "—";
@@ -83,7 +86,7 @@ export function SignalsAfterHoursPanel({
       <section style={{ marginTop: spacing[4], display: "grid", gap: spacing[2] }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing[2], flexWrap: "wrap" }}>
           <h4 style={{ margin: 0 }}>{sym}</h4>
-          <AddToWatchlistButton symbol={sym} />
+          <AddToWatchlistButton symbol={sym} dualDeskTracking={dualDeskTracking} />
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: spacing[3], color: colors.textMuted, fontSize: typography.scale.sm }}>
           <span>Last: {formatUsd(last)}</span>
@@ -160,7 +163,7 @@ export function SignalsAfterHoursPanel({
       {watchlistCheckComplete && !isInDefaultWatchlist ? (
         <section style={{ marginTop: spacing[4], display: "grid", gap: spacing[2] }}>
           <p style={{ margin: 0, color: colors.textMuted }}>Get notified when {sym} signal fires.</p>
-          <AddToWatchlistButton symbol={sym} />
+          <AddToWatchlistButton symbol={sym} dualDeskTracking={dualDeskTracking} />
         </section>
       ) : null}
 

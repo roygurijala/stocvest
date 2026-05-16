@@ -38,3 +38,15 @@
 - **Plan gate (API):** ``GET /v1/watchlists/maturation-summary`` omits **``readiness_label``** for users on the **free** plan unless **``beta_access_active``**; **``swing_pro``** and **``swing_day_pro``** receive the full object. Logic: ``stocvest/api/services/watchlist_maturation_gates.py``; handler: ``watchlists_maturation_summary_handler``.
 - **Scanner load:** ``frontend/lib/api/scanner-load.ts`` may request the same summary to merge maturation into dashboard status (see ``buildWatchlistDashboardStatus``). Stable HTTP contract: ``docs/API_CONTRACTS.md`` §**4.13**.
 - **Signals deep links:** ``frontend/lib/nav/watchlist-signals-deeplink.ts`` builds **``/dashboard/signals?ref=watchlist&symbol=…``** (optional **``trading_mode``**). Used on the Watchlists page for the maturation email strip (ticker links + per-symbol **Signals** row link, with **``trading_mode``** = **``maturationSummaryMode``**) and on **Settings → Recent Alerts** for any row with a ticker (**``trading_mode``** omitted so the Signals client keeps its usual default). Ticker links carry an **``aria-label``** (e.g. “Open AAPL on Signals”).
+
+## Evaluation vs presentation (`symbol_tracking`)
+
+**Engine (system truth):** Scheduled maturation refresh, evidence dual-write, and composite/signal generation **always** evaluate swing and day for symbols on the default watchlist. **`symbol_tracking` must not gate** refresh eligibility or Dynamo upserts.
+
+**Presentation (user lens):** Per-symbol **`symbol_tracking`** on the default watchlist (`{ swing, day }`, persisted via **`PATCH …/symbols/{symbol}/tracking`**) affects:
+
+- **UI:** hide desk rows when unchecked; sort/status counts use **tracked desks only** (`frontend/lib/watchlist-tracking-presentation.ts`).
+- **Alerts:** maturation emails suppressed for untracked desks (`stocvest/api/services/watchlist_tracking_prefs.py` + `AlertTriggerService.trigger_watchlist_maturation_change`).
+- **Dashboard strip:** `scanner-load` merges swing+day maturation then applies the tracking lens for `buildWatchlistDashboardStatus`.
+
+Re-enabling a desk surfaces existing maturation state without re-running evaluation.

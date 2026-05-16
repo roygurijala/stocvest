@@ -230,6 +230,34 @@ def test_maturation_alert_sent_when_prefs_on(monkeypatch: pytest.MonkeyPatch) ->
     assert send.call_args.kwargs["alert_type"] == AlertType.WATCHLIST_MATURATION
 
 
+def test_maturation_alert_skipped_when_desk_not_tracked(monkeypatch: pytest.MonkeyPatch) -> None:
+    send = MagicMock(return_value=True)
+    monkeypatch.setattr(EmailService, "send_alert_email", send)
+    store = get_in_memory_alert_store()
+    wl = get_watchlist_store()
+    w = wl.create_watchlist("u1", "D", ["AAPL"], is_default=True)
+    wl.set_symbol_tracking("u1", w.watchlist_id, "AAPL", track_swing=True, track_day=False)
+    trig = AlertTriggerService(store, EmailService(), wl)
+    trig.trigger_watchlist_maturation_change(
+        user_id="u1",
+        user_email="a@b.com",
+        symbol="AAPL",
+        mode="day",
+        previous_state=WatchlistState.ACTIONABLE,
+        new_state=WatchlistState.DEVELOPING,
+    )
+    send.assert_not_called()
+    trig.trigger_watchlist_maturation_change(
+        user_id="u1",
+        user_email="a@b.com",
+        symbol="AAPL",
+        mode="swing",
+        previous_state=WatchlistState.ACTIONABLE,
+        new_state=WatchlistState.DEVELOPING,
+    )
+    send.assert_called_once()
+
+
 def test_maturation_alert_skipped_when_pref_off(monkeypatch: pytest.MonkeyPatch) -> None:
     send = MagicMock(return_value=True)
     monkeypatch.setattr(EmailService, "send_alert_email", send)

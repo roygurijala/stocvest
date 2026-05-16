@@ -1,7 +1,7 @@
 import { apiFetch } from "@/lib/api/client";
 import type { NewsPayload } from "@/lib/api/market";
 import type { PDTStatusPayload } from "@/lib/api/pdt";
-import { fetchDefaultWatchlistSymbols } from "@/lib/api/watchlists";
+import { fetchDefaultWatchlistSnapshot } from "@/lib/api/watchlists";
 import { runScannerLoadWithoutBrief } from "@/lib/api/scanner-load";
 import { topSignalStrengthPercent } from "@/lib/top-signal-strength";
 
@@ -241,7 +241,7 @@ export async function loadScannerDataWithoutBrief(
 ): Promise<ScannerCoreData> {
   return runScannerLoadWithoutBrief(
     apiFetch,
-    fetchDefaultWatchlistSymbols,
+    fetchDefaultWatchlistSnapshot,
     _pdtStatus,
     watchlistSymbols,
     tuning,

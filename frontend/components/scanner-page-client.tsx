@@ -879,7 +879,7 @@ export function ScannerPageClient({
           >
             {evidenceLoading ? "Preparing signal..." : "View Signal"}
           </button>
-          <AddToWatchlistButton symbol={item.symbol} />
+          <AddToWatchlistButton symbol={item.symbol} dualDeskTracking={dayTradingSurfaces} />
           {(() => {
             // Build the Scenario Builder input from the gap card's
             // structural fields. The eligibility helper decides whether

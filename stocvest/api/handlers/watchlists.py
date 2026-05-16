@@ -41,6 +41,8 @@ def watchlists_dispatch_handler(event: LambdaEvent, context: LambdaContext) -> d
         return watchlists_maturation_summary_handler(event, context)
     if route.startswith("POST /v1/watchlists/default/symbols"):
         return watchlists_default_symbols_post_handler(event, context)
+    if method == "PATCH" and "/symbols/" in route and route.endswith("/tracking"):
+        return watchlists_symbol_tracking_patch_handler(event, context)
     if method == "DELETE" and "/symbols/" in route and route.startswith("DELETE /v1/watchlists/"):
         return watchlists_remove_symbol_handler(event, context)
     if method == "POST" and "/symbols" in route and route.startswith("POST /v1/watchlists/"):
@@ -167,12 +169,48 @@ def watchlists_add_symbol_handler(event: LambdaEvent, context: LambdaContext) ->
     sym = str(body.get("symbol") or "").strip()
     if not sym:
         return bad_request("symbol is required.")
+    track_swing = body.get("track_swing")
+    track_day = body.get("track_day")
+    swing = True if track_swing is None else bool(track_swing)
+    day = True if track_day is None else bool(track_day)
     try:
-        out = get_watchlist_store().add_symbol(rc.user_id, wid, sym)
+        out = get_watchlist_store().add_symbol(rc.user_id, wid, sym, track_swing=swing, track_day=day)
     except ValueError as exc:
-        return json_response(400, {"error": "symbol_limit", "message": str(exc)})
+        msg = str(exc)
+        if "desk" in msg.lower():
+            return bad_request(msg)
+        return json_response(400, {"error": "symbol_limit", "message": msg})
     if out is None:
         return not_found("Watchlist not found.")
+    return ok(_serialize(out))
+
+
+def watchlists_symbol_tracking_patch_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    _ = context
+    rc = build_request_context(event)
+    if not rc.user_id:
+        return unauthorized("Authenticated user is required.")
+    pp = _path_params(event)
+    wid = str(pp.get("watchlist_id") or "").strip()
+    sym = str(pp.get("symbol") or "").strip()
+    if not wid or not sym:
+        return bad_request("watchlist_id and symbol path parameters are required.")
+    try:
+        body = parse_json_body(event)
+    except ValueError as exc:
+        return bad_request(str(exc))
+    if "track_swing" not in body and "track_day" not in body:
+        return bad_request("track_swing and/or track_day are required.")
+    track_swing = bool(body.get("track_swing", False))
+    track_day = bool(body.get("track_day", False))
+    try:
+        out = get_watchlist_store().set_symbol_tracking(
+            rc.user_id, wid, sym, track_swing=track_swing, track_day=track_day
+        )
+    except ValueError as exc:
+        return bad_request(str(exc))
+    if out is None:
+        return not_found("Watchlist or symbol not found.")
     return ok(_serialize(out))
 
 
@@ -239,8 +277,9 @@ def watchlists_default_symbols_get_handler(event: LambdaEvent, context: LambdaCo
         return unauthorized("Authenticated user is required.")
     wl = get_watchlist_store().get_default_watchlist(rc.user_id)
     if wl and wl.symbols:
-        return ok({"symbols": list(wl.symbols), "watchlist_name": wl.name})
-    return ok({"symbols": list(SYSTEM_DEFAULTS), "watchlist_name": "System defaults"})
+        tracking = {s: wl.tracking_for_symbol(s) for s in wl.symbols}
+        return ok({"symbols": list(wl.symbols), "watchlist_name": wl.name, "symbol_tracking": tracking})
+    return ok({"symbols": list(SYSTEM_DEFAULTS), "watchlist_name": "System defaults", "symbol_tracking": {}})
 
 
 def watchlists_default_symbols_post_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
@@ -259,10 +298,17 @@ def watchlists_default_symbols_post_handler(event: LambdaEvent, context: LambdaC
     wl = store.get_default_watchlist(rc.user_id)
     if wl is None:
         wl = store.create_watchlist(rc.user_id, "My Watchlist", [], is_default=True)
+    track_swing = body.get("track_swing")
+    track_day = body.get("track_day")
+    swing = True if track_swing is None else bool(track_swing)
+    day = True if track_day is None else bool(track_day)
     try:
-        out = store.add_symbol(rc.user_id, wl.watchlist_id, sym)
+        out = store.add_symbol(rc.user_id, wl.watchlist_id, sym, track_swing=swing, track_day=day)
     except ValueError as exc:
-        return json_response(400, {"error": "symbol_limit", "message": str(exc)})
+        msg = str(exc)
+        if "desk" in msg.lower():
+            return bad_request(msg)
+        return json_response(400, {"error": "symbol_limit", "message": msg})
     if out is None:
         return not_found("Watchlist not found.")
     return ok(_serialize(out))
