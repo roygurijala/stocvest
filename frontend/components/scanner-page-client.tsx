@@ -20,6 +20,7 @@ import { NewsPanel } from "@/components/news-panel";
 import { BuildScenarioButton } from "@/components/scenario-builder/build-scenario-button";
 import { ScannerEmptyStateCard } from "@/components/scanner-empty-state-card";
 import { ScannerNearQualificationSection } from "@/components/scanner/scanner-near-qualification-section";
+import { ScannerEvaluationTraceSection } from "@/components/scanner/scanner-evaluation-trace-section";
 import { ScannerScanEducation } from "@/components/scanner/scanner-scan-education";
 import { ScannerScanResultHero } from "@/components/scanner/scanner-scan-result-hero";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
@@ -1096,6 +1097,9 @@ export function ScannerPageClient({
   }, [scanSummary.qualifying.total, scannerSetupMode, dayTradingSurfaces, emptyOverviewInput]);
 
   const useCompactColumnEmpty = scanSummary.qualifying.total === 0;
+  const evaluationTrace = overview.evaluationTrace ?? [];
+  const evaluationTraceDeskFilter: "swing" | "day" | "all" =
+    scannerSetupMode === "swing" ? "swing" : scannerSetupMode === "day" ? "day" : "all";
 
   const setupsPanelTitle =
     scannerSetupMode === "swing"
@@ -1296,6 +1300,9 @@ export function ScannerPageClient({
         nearQualification={scanSummary.near_qualification}
         watchlistProgression={scanSummary.watchlist_progression}
       />
+      {scanSummary.qualifying.total === 0 && evaluationTrace.length > 0 ? (
+        <ScannerEvaluationTraceSection rows={evaluationTrace} deskFilter={evaluationTraceDeskFilter} />
+      ) : null}
       {scanEducationPanels.length > 0 ? <ScannerScanEducation panels={scanEducationPanels} /> : null}
 
       {dayTradingSurfaces ? (

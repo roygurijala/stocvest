@@ -80,3 +80,23 @@ def bundle_setups_response(
         "qualifying": serialize(qualifying, payload),
         "near_qualification": annotate_near_qualification_rows(serialize(near, payload)),
     }
+
+
+def ensure_setups_v2_bundle(rows: dict[str, Any] | list[Any]) -> dict[str, Any]:
+    if isinstance(rows, dict):
+        return rows
+    return {"qualifying": list(rows), "near_qualification": []}
+
+
+def excluded_symbols_from_bundle(bundle: dict[str, Any]) -> set[str]:
+    syms: set[str] = set()
+    for key in ("qualifying", "near_qualification"):
+        block = bundle.get(key)
+        if not isinstance(block, list):
+            continue
+        for row in block:
+            if isinstance(row, dict):
+                sym = str(row.get("symbol", "")).strip().upper()
+                if sym:
+                    syms.add(sym)
+    return syms

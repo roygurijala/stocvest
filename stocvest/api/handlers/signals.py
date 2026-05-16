@@ -21,7 +21,15 @@ from stocvest.api.services.signal_snapshot_builders import build_swing_composite
 from stocvest.config.parameter_store import ParameterStore
 from stocvest.api.services.composite_market_context import fetch_composite_market_status_payload_sync
 from stocvest.api.services.day_setups_geo_preview import attach_geo_preview_to_intraday_rows
-from stocvest.api.services.scanner_setups_bundle import bundle_setups_response
+from stocvest.api.services.scanner_setups_bundle import (
+    bundle_setups_response,
+    ensure_setups_v2_bundle,
+    excluded_symbols_from_bundle,
+)
+from stocvest.signals.scanner_evaluation_trace import (
+    build_intraday_evaluation_traces,
+    build_swing_evaluation_traces,
+)
 from stocvest.api.services.signal_dto import (
     parse_bar,
     parse_pdt_assessment,
@@ -622,8 +630,10 @@ def day_setups_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, 
         include_near = bool(payload.get("include_near_qualification"))
         near_min_score = float(payload.get("near_min_score", 0.35))
         near_limit = int(payload.get("near_limit", 5))
+        include_trace = bool(payload.get("include_evaluation_trace"))
+        trace_limit = int(payload.get("evaluation_trace_limit", 20))
     except ValueError:
-        return bad_request("Invalid 'limit', 'min_score', or near-qualification fields.")
+        return bad_request("Invalid 'limit', 'min_score', near-qualification, or evaluation-trace fields.")
 
     try:
         bars_by_symbol: dict[str, list[Bar]] = {}
@@ -662,6 +672,17 @@ def day_setups_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, 
                 attach_geo_preview_to_intraday_rows(rows.get("near_qualification") or [], payload)
         except Exception as exc:
             _LOG.warning("day setups geo preview failed: %s", exc)
+        if include_trace:
+            bundle = ensure_setups_v2_bundle(rows)
+            excluded = excluded_symbols_from_bundle(bundle)
+            bundle["evaluation_trace"] = build_intraday_evaluation_traces(
+                bars_by_symbol,
+                liquidity_by_symbol=liq,
+                min_score=min_score,
+                exclude_symbols=excluded,
+                limit=max(1, min(trace_limit, 50)),
+            )
+            rows = bundle
         return ok(rows)
     except (KeyError, TypeError, ValueError) as exc:
         return bad_request(f"Invalid day setup request: {exc}")
@@ -688,8 +709,12 @@ def swing_setups_handler(event: LambdaEvent, context: LambdaContext) -> dict[str
         include_near = bool(payload.get("include_near_qualification"))
         near_min_score = float(payload.get("near_min_score", 0.28))
         near_limit = int(payload.get("near_limit", 5))
+        include_trace = bool(payload.get("include_evaluation_trace"))
+        trace_limit = int(payload.get("evaluation_trace_limit", 20))
     except ValueError:
-        return bad_request("Invalid 'limit', 'min_score', 'min_daily_bars', or near-qualification fields.")
+        return bad_request(
+            "Invalid 'limit', 'min_score', 'min_daily_bars', near-qualification, or evaluation-trace fields."
+        )
 
     try:
         bars_by_symbol: dict[str, list[Bar]] = {}
@@ -729,6 +754,18 @@ def swing_setups_handler(event: LambdaEvent, context: LambdaContext) -> dict[str
                 attach_geo_preview_to_intraday_rows(rows.get("near_qualification") or [], payload)
         except Exception as exc:
             _LOG.warning("swing setups geo preview failed: %s", exc)
+        if include_trace:
+            bundle = ensure_setups_v2_bundle(rows)
+            excluded = excluded_symbols_from_bundle(bundle)
+            bundle["evaluation_trace"] = build_swing_evaluation_traces(
+                bars_by_symbol,
+                liquidity_by_symbol=liq,
+                min_score=min_score,
+                min_bars=min_bars,
+                exclude_symbols=excluded,
+                limit=max(1, min(trace_limit, 50)),
+            )
+            rows = bundle
         return ok(rows)
     except (KeyError, TypeError, ValueError) as exc:
         return bad_request(f"Invalid swing setup request: {exc}")

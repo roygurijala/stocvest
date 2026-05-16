@@ -22,6 +22,7 @@ import {
 import {
   mergeDeskSetupBundles,
   parseScannerSetupsDeskResponse,
+  type ScannerEvaluationTraceRow,
   type ScannerSetupsDeskBundle
 } from "@/lib/scanner-setups-response";
 
@@ -478,7 +479,9 @@ export async function runScannerLoadWithoutBrief(
     const setupsV2Near = {
       include_near_qualification: true,
       near_limit: 5,
-      near_min_score: 0.35
+      near_min_score: 0.35,
+      include_evaluation_trace: true,
+      evaluation_trace_limit: 20
     };
     const daySetupsBody: Record<string, unknown> = {
       bars_by_symbol: cleanBarsBySymbol,
@@ -512,7 +515,12 @@ export async function runScannerLoadWithoutBrief(
 
     let setups: IntradaySetupPayload[] = [];
     let nearQualificationSetups: IntradaySetupPayload[] = [];
-    const emptySwingBundle: ScannerSetupsDeskBundle = { qualifying: [], nearQualification: [] };
+    const emptySwingBundle: ScannerSetupsDeskBundle = {
+      qualifying: [],
+      nearQualification: [],
+      evaluationTrace: []
+    };
+    let evaluationTrace: ScannerEvaluationTraceRow[] = [];
 
     if (loadDaySetups && swingReady) {
       const [dayRaw, swingRaw] = await Promise.all([
@@ -540,8 +548,10 @@ export async function runScannerLoadWithoutBrief(
       }
       const dayBundle = parseScannerSetupsDeskResponse(dayRaw);
       const swingBundle = swingRaw != null ? parseScannerSetupsDeskResponse(swingRaw) : emptySwingBundle;
+      const mergedBundles = mergeDeskSetupBundles(swingBundle, dayBundle);
       setups = mergeSwingAndDaySetups(swingBundle.qualifying, dayBundle.qualifying);
-      nearQualificationSetups = mergeDeskSetupBundles(swingBundle, dayBundle).nearQualification;
+      nearQualificationSetups = mergedBundles.nearQualification;
+      evaluationTrace = mergedBundles.evaluationTrace;
     } else if (loadDaySetups) {
       const dayRaw = await jsonFetch<unknown>("/v1/signals/day/setups", {
         method: "POST",
@@ -563,6 +573,7 @@ export async function runScannerLoadWithoutBrief(
       const dayBundle = parseScannerSetupsDeskResponse(dayRaw);
       setups = dayBundle.qualifying;
       nearQualificationSetups = dayBundle.nearQualification;
+      evaluationTrace = dayBundle.evaluationTrace;
     } else if (swingReady) {
       try {
         const swingRaw = await jsonFetch<unknown>("/v1/signals/swing/setups", {
@@ -572,6 +583,7 @@ export async function runScannerLoadWithoutBrief(
         const swingBundle = parseScannerSetupsDeskResponse(swingRaw);
         setups = swingBundle.qualifying;
         nearQualificationSetups = swingBundle.nearQualification;
+        evaluationTrace = swingBundle.evaluationTrace;
       } catch {
         /* swing-only path: leave setups empty if request fails */
       }
@@ -620,7 +632,8 @@ export async function runScannerLoadWithoutBrief(
       swingUniverseSymbolCount: universe.length,
       gapIntelligenceSnapshotSymbolCount: gapIntelSnapshotCount,
       watchlistStatus,
-      scanSummary
+      scanSummary,
+      evaluationTrace
     };
   } catch (error: unknown) {
     if (isNextRedirect(error)) throw error;

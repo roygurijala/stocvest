@@ -5,6 +5,7 @@ import { fetchDefaultWatchlistSnapshot } from "@/lib/api/watchlists";
 import { runScannerLoadWithoutBrief } from "@/lib/api/scanner-load";
 import { topSignalStrengthPercent } from "@/lib/top-signal-strength";
 import type { ScannerScanSummary } from "@/lib/scanner-scan-summary";
+import type { ScannerEvaluationTraceRow } from "@/lib/scanner-setups-response";
 
 export interface GapIntelligenceCatalyst {
   article_id?: string;
@@ -186,6 +187,8 @@ export interface ScannerOverview {
   watchlistStatus?: WatchlistDashboardStatus | null;
   /** Unified scan summary for hero, next actions, and near-qualification lane. */
   scanSummary?: ScannerScanSummary | null;
+  /** Per-symbol gate failures from setups v2 (`include_evaluation_trace`). */
+  evaluationTrace?: ScannerEvaluationTraceRow[];
 }
 
 /** Placeholder before deferred scanner RSC hydrates (Tier 1.C — `/dashboard`). */
@@ -198,7 +201,8 @@ export const EMPTY_SCANNER_OVERVIEW: ScannerOverview = {
   swingUniverseSymbolCount: null,
   gapIntelligenceSnapshotSymbolCount: null,
   watchlistStatus: null,
-  scanSummary: null
+  scanSummary: null,
+  evaluationTrace: []
 };
 
 /** Snapshot + gap pipeline through intraday setups (no morning briefing). */
@@ -213,6 +217,7 @@ export type ScannerCoreData = {
   gapIntelligenceSnapshotSymbolCount?: number | null;
   watchlistStatus?: WatchlistDashboardStatus | null;
   scanSummary?: ScannerScanSummary | null;
+  evaluationTrace?: ScannerEvaluationTraceRow[];
 };
 
 /** Which setup endpoints power the scanner core (dashboard defaults to both via `includeSwingDailySetups`). */
@@ -316,7 +321,8 @@ export async function fetchScannerOverview(
       swingUniverseSymbolCount: null,
       gapIntelligenceSnapshotSymbolCount: null,
       watchlistStatus: core.watchlistStatus ?? null,
-      scanSummary: core.scanSummary ?? null
+      scanSummary: core.scanSummary ?? null,
+      evaluationTrace: core.evaluationTrace ?? []
     };
   }
   let morningBrief: MorningBriefPayload | undefined;

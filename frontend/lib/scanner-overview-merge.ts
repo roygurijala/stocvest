@@ -13,6 +13,7 @@ export function mergeScannerCoreIntoOverview(prev: ScannerOverview, core: Scanne
     swingUniverseSymbolCount: core.swingUniverseSymbolCount ?? null,
     gapIntelligenceSnapshotSymbolCount: core.gapIntelligenceSnapshotSymbolCount ?? null,
     watchlistStatus: core.watchlistStatus ?? null,
-    scanSummary: core.scanSummary ?? null
+    scanSummary: core.scanSummary ?? null,
+    evaluationTrace: core.evaluationTrace ?? []
   };
 }
