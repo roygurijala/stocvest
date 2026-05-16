@@ -25,7 +25,16 @@ def test_refresh_calls_composite_and_sync(monkeypatch: pytest.MonkeyPatch) -> No
         _ = user_email
         return {"symbol": symbol, "signal_summary": "bullish", "layers": []}
 
-    def fake_sync(*, user_id: str, symbol: str, mode: str, composite_body: object) -> None:
+    def fake_sync(
+        *,
+        user_id: str,
+        symbol: str,
+        mode: str,
+        composite_body: object,
+        email_on_state_change: bool = True,
+        **_: object,
+    ) -> None:
+        _ = email_on_state_change
         sync_calls.append((user_id, symbol, mode))
 
     class _Repo:
