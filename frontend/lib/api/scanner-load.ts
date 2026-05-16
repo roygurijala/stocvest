@@ -15,6 +15,15 @@ import {
   presentationMaturationState,
   type SymbolTrackingMap
 } from "@/lib/watchlist-tracking-presentation";
+import {
+  buildScannerScanSummary,
+  buildWatchlistProgressionRows
+} from "@/lib/scanner-scan-summary";
+import {
+  mergeDeskSetupBundles,
+  parseScannerSetupsDeskResponse,
+  type ScannerSetupsDeskBundle
+} from "@/lib/scanner-setups-response";
 
 export type DefaultWatchlistFetch = () => Promise<DefaultWatchlistSnapshot>;
 
@@ -136,18 +145,30 @@ function parseMaturationSummaryRows(
       typeof (v as { state?: unknown }).state === "string"
         ? (v as { state: string }).state.trim().toLowerCase()
         : "";
-    if (st) out[sym] = { state: st };
+    if (st) {
+      const row = v as { readiness_label?: unknown; label?: unknown };
+      out[sym] = {
+        state: st,
+        readiness_label:
+          typeof row.readiness_label === "string" ? row.readiness_label.trim() : undefined,
+        label: typeof row.label === "string" ? row.label.trim() : undefined
+      };
+    }
   }
   return out;
 }
 
-/** Presentation lens: best state among user-tracked desks (engine still evaluates all). */
-async function loadPresentationMaturationBySymbol(
+async function loadWatchlistMaturationMaps(
   jsonFetch: ScannerJsonFetch,
-  watchUpper: string[],
-  trackingMap: SymbolTrackingMap
-): Promise<Record<string, string> | null> {
-  if (watchUpper.length === 0) return null;
+  watchUpper: string[]
+): Promise<{
+  swing: Record<string, WatchlistMaturationRow>;
+  day: Record<string, WatchlistMaturationRow>;
+  dualDesk: boolean;
+}> {
+  if (watchUpper.length === 0) {
+    return { swing: {}, day: {}, dualDesk: false };
+  }
   try {
     const [swingPayload, dayPayload] = await Promise.all([
       jsonFetch<{ by_symbol?: Record<string, { state?: string }> }>(
@@ -159,8 +180,23 @@ async function loadPresentationMaturationBySymbol(
     ]);
     const swing = parseMaturationSummaryRows(swingPayload);
     const day = parseMaturationSummaryRows(dayPayload ?? undefined);
-    const dualDesk =
-      Object.keys(day).length > 0 || Object.values(trackingMap).some((t) => t.day);
+    const dualDesk = Object.keys(day).length > 0;
+    return { swing, day, dualDesk };
+  } catch {
+    return { swing: {}, day: {}, dualDesk: false };
+  }
+}
+
+/** Presentation lens: best state among user-tracked desks (engine still evaluates all). */
+async function loadPresentationMaturationBySymbol(
+  jsonFetch: ScannerJsonFetch,
+  watchUpper: string[],
+  trackingMap: SymbolTrackingMap
+): Promise<Record<string, string> | null> {
+  if (watchUpper.length === 0) return null;
+  try {
+    const { swing, day, dualDesk: dualFromApi } = await loadWatchlistMaturationMaps(jsonFetch, watchUpper);
+    const dualDesk = dualFromApi || Object.values(trackingMap).some((t) => t.day);
     const out: Record<string, string> = {};
     for (const sym of watchUpper) {
       const st = presentationMaturationState(sym, trackingMap, swing[sym], day[sym], dualDesk);
@@ -439,13 +475,19 @@ export async function runScannerLoadWithoutBrief(
     });
 
     const setupsLimit = tuning?.daySetupsLimit ?? 10;
+    const setupsV2Near = {
+      include_near_qualification: true,
+      near_limit: 5,
+      near_min_score: 0.35
+    };
     const daySetupsBody: Record<string, unknown> = {
       bars_by_symbol: cleanBarsBySymbol,
       limit: setupsLimit,
       min_score: 0.55,
       liquidity_by_symbol: liquidity_by_symbol,
       snapshots_by_symbol,
-      regime: regimeForSetups
+      regime: regimeForSetups,
+      ...setupsV2Near
     };
     if (daySetupsExtras?.geoScanArticles?.length) {
       daySetupsBody.geo_scan_articles = daySetupsExtras.geoScanArticles;
@@ -459,26 +501,31 @@ export async function runScannerLoadWithoutBrief(
       min_score: 0.48,
       liquidity_by_symbol: liquidity_by_symbol,
       snapshots_by_symbol,
-      regime: regimeForSetups
+      regime: regimeForSetups,
+      include_near_qualification: true,
+      near_limit: 5,
+      near_min_score: 0.28
     };
     if (daySetupsExtras?.geoScanArticles?.length) {
       swingBody.geo_scan_articles = daySetupsExtras.geoScanArticles;
     }
 
     let setups: IntradaySetupPayload[] = [];
+    let nearQualificationSetups: IntradaySetupPayload[] = [];
+    const emptySwingBundle: ScannerSetupsDeskBundle = { qualifying: [], nearQualification: [] };
 
     if (loadDaySetups && swingReady) {
-      const [dayRows, swingSetups] = await Promise.all([
-        jsonFetch<IntradaySetupPayload[]>("/v1/signals/day/setups", {
+      const [dayRaw, swingRaw] = await Promise.all([
+        jsonFetch<unknown>("/v1/signals/day/setups", {
           method: "POST",
           body: JSON.stringify(daySetupsBody)
         }),
-        jsonFetch<IntradaySetupPayload[]>("/v1/signals/swing/setups", {
+        jsonFetch<unknown>("/v1/signals/swing/setups", {
           method: "POST",
           body: JSON.stringify(swingBody)
-        }).catch(() => null as IntradaySetupPayload[] | null)
+        }).catch(() => null)
       ]);
-      if (dayRows == null) {
+      if (dayRaw == null) {
         return {
           gapIntelligence: [],
           setups: [],
@@ -491,16 +538,16 @@ export async function runScannerLoadWithoutBrief(
           error: "Service temporarily unavailable. Please try again."
         };
       }
-      setups = dayRows;
-      if (Array.isArray(swingSetups) && swingSetups.length > 0) {
-        setups = mergeSwingAndDaySetups(swingSetups, setups);
-      }
+      const dayBundle = parseScannerSetupsDeskResponse(dayRaw);
+      const swingBundle = swingRaw != null ? parseScannerSetupsDeskResponse(swingRaw) : emptySwingBundle;
+      setups = mergeSwingAndDaySetups(swingBundle.qualifying, dayBundle.qualifying);
+      nearQualificationSetups = mergeDeskSetupBundles(swingBundle, dayBundle).nearQualification;
     } else if (loadDaySetups) {
-      const dayRows = await jsonFetch<IntradaySetupPayload[]>("/v1/signals/day/setups", {
+      const dayRaw = await jsonFetch<unknown>("/v1/signals/day/setups", {
         method: "POST",
         body: JSON.stringify(daySetupsBody)
       });
-      if (dayRows == null) {
+      if (dayRaw == null) {
         return {
           gapIntelligence: [],
           setups: [],
@@ -513,22 +560,56 @@ export async function runScannerLoadWithoutBrief(
           error: "Service temporarily unavailable. Please try again."
         };
       }
-      setups = dayRows;
+      const dayBundle = parseScannerSetupsDeskResponse(dayRaw);
+      setups = dayBundle.qualifying;
+      nearQualificationSetups = dayBundle.nearQualification;
     } else if (swingReady) {
       try {
-        const swingSetups = await jsonFetch<IntradaySetupPayload[]>("/v1/signals/swing/setups", {
+        const swingRaw = await jsonFetch<unknown>("/v1/signals/swing/setups", {
           method: "POST",
           body: JSON.stringify(swingBody)
         });
-        if (Array.isArray(swingSetups)) {
-          setups = swingSetups;
-        }
+        const swingBundle = parseScannerSetupsDeskResponse(swingRaw);
+        setups = swingBundle.qualifying;
+        nearQualificationSetups = swingBundle.nearQualification;
       } catch {
         /* swing-only path: leave setups empty if request fails */
       }
     }
 
-    const maturationBySymbol = await maturationSummaryPromise;
+    const [maturationBySymbol, maturationMaps] = await Promise.all([
+      maturationSummaryPromise,
+      loadWatchlistMaturationMaps(jsonFetch, watchUpper)
+    ]);
+    const watchlistStatus = buildWatchlistDashboardStatus(
+      watchUpper,
+      universe,
+      setups,
+      maturationBySymbol
+    );
+    const watchlistProgression = buildWatchlistProgressionRows(
+      watchUpper,
+      trackingMap,
+      maturationMaps.swing,
+      maturationMaps.day,
+      maturationMaps.dualDesk
+    );
+    const scannedAtIso = new Date().toISOString();
+    const scanSummary = buildScannerScanSummary({
+      scannedAtIso,
+      overview: {
+        setups,
+        gapIntelligence: gapItems,
+        regimeLabel,
+        spyPct,
+        qqqPct,
+        swingUniverseSymbolCount: universe.length,
+        gapIntelligenceSnapshotSymbolCount: gapIntelSnapshotCount,
+        watchlistStatus
+      },
+      nearQualificationSetups,
+      watchlistProgression
+    });
 
     return {
       gapIntelligence: gapItems,
@@ -538,7 +619,8 @@ export async function runScannerLoadWithoutBrief(
       regimeLabel,
       swingUniverseSymbolCount: universe.length,
       gapIntelligenceSnapshotSymbolCount: gapIntelSnapshotCount,
-      watchlistStatus: buildWatchlistDashboardStatus(watchUpper, universe, setups, maturationBySymbol)
+      watchlistStatus,
+      scanSummary
     };
   } catch (error: unknown) {
     if (isNextRedirect(error)) throw error;

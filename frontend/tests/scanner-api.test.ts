@@ -92,7 +92,33 @@ describe("scanner API overview", () => {
         ];
       }
       if (path === "/v1/signals/day/setups") {
+        const body = init?.body ? (JSON.parse(String(init.body)) as { include_near_qualification?: boolean }) : {};
+        if (body.include_near_qualification) {
+          return {
+            qualifying: [{ symbol: "GAP1", direction: "long", score: 0.7, triggers: ["vwap_reclaim"], timestamp_iso: "x" }],
+            near_qualification: [
+              {
+                symbol: "NEAR1",
+                direction: "long",
+                score: 0.4,
+                triggers: ["a", "b"],
+                timestamp_iso: "x",
+                qualification_tier: "near",
+                alignment: { aligned: 2, total: 6, label: "2/6 aligned" }
+              }
+            ]
+          };
+        }
         return [{ symbol: "GAP1", direction: "long", score: 0.7, triggers: [], timestamp_iso: "x" }];
+      }
+      if (path === "/v1/watchlists/maturation-summary?mode=swing") {
+        return { by_symbol: {} };
+      }
+      if (path === "/v1/watchlists/maturation-summary?mode=day") {
+        return { by_symbol: {} };
+      }
+      if (path === "/v1/watchlists/default/symbols") {
+        return { symbols: [], symbol_tracking: {} };
       }
       if (path === "/v1/signals/day/briefing") {
         return {
@@ -123,6 +149,9 @@ describe("scanner API overview", () => {
     // SPY + QQQ + one gap symbol — bars/swing universe; gap-intel may report full-feed scan size separately.
     expect(result.swingUniverseSymbolCount).toBe(3);
     expect(result.gapIntelligenceSnapshotSymbolCount).toBe(412);
+    expect(result.scanSummary?.qualifying.total).toBe(1);
+    expect(result.scanSummary?.near_qualification).toHaveLength(1);
+    expect(result.scanSummary?.near_qualification[0]?.symbol).toBe("NEAR1");
   }, 25000);
 
   test("fetchScannerOverview continues when gap-intelligence is null (degraded)", async () => {

@@ -42,3 +42,15 @@ export function barIsPremarketEt(barIso: string): boolean {
   const t = hour * 60 + minute;
   return t >= 4 * 60 && t < 9 * 60 + 30;
 }
+
+/** Human label for when the regular session next opens (ET). */
+export function nextRegularSessionOpenLabel(now = new Date()): string {
+  if (isUsRegularSessionOpenEt(now)) return "Regular session is open";
+  const { hour, minute, weekday } = getEtClock(now);
+  if (weekday === "Sat") return "Monday 9:30 AM ET";
+  if (weekday === "Sun") return "Monday 9:30 AM ET";
+  const t = hour * 60 + minute;
+  const open = 9 * 60 + 30;
+  if (t < open) return "Today 9:30 AM ET";
+  return "Next trading day 9:30 AM ET";
+}

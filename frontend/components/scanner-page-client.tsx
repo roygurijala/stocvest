@@ -12,7 +12,6 @@ import {
   type CSSProperties
 } from "react";
 import { motion } from "framer-motion";
-import { RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AddToWatchlistButton } from "@/components/add-to-watchlist-button";
@@ -20,6 +19,9 @@ import { GapCatalystNewsDrawer } from "@/components/gap-catalyst-news-drawer";
 import { NewsPanel } from "@/components/news-panel";
 import { BuildScenarioButton } from "@/components/scenario-builder/build-scenario-button";
 import { ScannerEmptyStateCard } from "@/components/scanner-empty-state-card";
+import { ScannerNearQualificationSection } from "@/components/scanner/scanner-near-qualification-section";
+import { ScannerScanEducation } from "@/components/scanner/scanner-scan-education";
+import { ScannerScanResultHero } from "@/components/scanner/scanner-scan-result-hero";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { loadScannerDataWithoutBrief } from "@/lib/api/scanner-client-load";
@@ -35,6 +37,8 @@ import type {
   ScannerOverview,
   ScannerSetupLoadMode
 } from "@/lib/api/scanner";
+import { mergeScannerCoreIntoOverview } from "@/lib/scanner-overview-merge";
+import { buildScannerScanSummary } from "@/lib/scanner-scan-summary";
 import { fetchEarningsCalendarClient } from "@/lib/api/earnings-client";
 import type { EarningsEvent } from "@/lib/api/earnings";
 import type { ThemeColors } from "@/lib/design-system";
@@ -48,7 +52,8 @@ import {
 import {
   buildDayEmptyStateContext,
   buildGapIntelEmptyStateContext,
-  buildSwingEmptyStateContext
+  buildSwingEmptyStateContext,
+  type ScannerEmptyStateContext
 } from "@/lib/scanner-empty-state";
 import type { ScenarioInput, VolatilityRegime } from "@/lib/scenario/types";
 import { roleAccents } from "@/lib/design-system";
@@ -291,17 +296,7 @@ export function ScannerPageClient({
         setOverview((prev) => ({ ...prev, error: core.error }));
         return;
       }
-      setOverview((prev) => ({
-        gapIntelligence: core.gapIntelligence,
-        setups: core.setups,
-        morningBrief: prev.morningBrief,
-        error: undefined,
-        spyPct: core.spyPct,
-        qqqPct: core.qqqPct,
-        regimeLabel: core.regimeLabel,
-        swingUniverseSymbolCount: core.swingUniverseSymbolCount ?? null,
-        gapIntelligenceSnapshotSymbolCount: core.gapIntelligenceSnapshotSymbolCount ?? null
-      }));
+      setOverview((prev) => mergeScannerCoreIntoOverview(prev, core));
     })();
     return () => {
       cancelled = true;
@@ -1041,17 +1036,7 @@ export function ScannerPageClient({
       if (core.error) {
         setOverview((prev) => ({ ...prev, error: core.error }));
       } else {
-        setOverview((prev) => ({
-          gapIntelligence: core.gapIntelligence,
-          setups: core.setups,
-          morningBrief: prev.morningBrief,
-          error: undefined,
-          spyPct: core.spyPct,
-          qqqPct: core.qqqPct,
-          regimeLabel: core.regimeLabel,
-          swingUniverseSymbolCount: core.swingUniverseSymbolCount ?? null,
-          gapIntelligenceSnapshotSymbolCount: core.gapIntelligenceSnapshotSymbolCount ?? null
-        }));
+        setOverview((prev) => mergeScannerCoreIntoOverview(prev, core));
       }
       router.refresh();
     });
@@ -1060,6 +1045,57 @@ export function ScannerPageClient({
   const marketOpen = isUsRegularSessionOpenEt();
   const secondsToScan = Math.max(0, Math.ceil((nextScanRef.current - Date.now()) / 1000));
   const scanCountdownLabel = `${Math.floor(secondsToScan / 60)}:${String(secondsToScan % 60).padStart(2, "0")}`;
+
+  const emptyOverviewInput = useMemo(
+    () => ({
+      regimeLabel: overview.regimeLabel,
+      spyPct: overview.spyPct,
+      qqqPct: overview.qqqPct,
+      swingUniverseSymbolCount: overview.swingUniverseSymbolCount,
+      gapIntelligenceSnapshotSymbolCount: overview.gapIntelligenceSnapshotSymbolCount
+    }),
+    [overview]
+  );
+
+  const scanSummary = useMemo(() => {
+    if (overview.scanSummary) return overview.scanSummary;
+    return buildScannerScanSummary({
+      scannedAtIso: initialTimestampIso,
+      overview,
+      nearQualificationSetups: [],
+      watchlistProgression: []
+    });
+  }, [overview, initialTimestampIso]);
+
+  const scanEducationPanels = useMemo(() => {
+    if (scanSummary.qualifying.total > 0) return [];
+    const gapMode: "swing" | "day" =
+      scannerSetupMode === "day" ? "day" : "swing";
+    const panels: Array<{ id: string; title: string; context: ScannerEmptyStateContext }> = [
+      {
+        id: "gap",
+        title: "How gap intelligence works",
+        context: buildGapIntelEmptyStateContext(emptyOverviewInput, gapMode)
+      }
+    ];
+    if (scannerSetupMode === "swing" || scannerSetupMode === "both") {
+      panels.push({
+        id: "swing",
+        title: "Why swing setups may be quiet",
+        context: buildSwingEmptyStateContext(emptyOverviewInput)
+      });
+    }
+    if (dayTradingSurfaces && (scannerSetupMode === "day" || scannerSetupMode === "both")) {
+      panels.push({
+        id: "day",
+        title: "Why day setups may be quiet",
+        context: buildDayEmptyStateContext(emptyOverviewInput)
+      });
+    }
+    return panels;
+  }, [scanSummary.qualifying.total, scannerSetupMode, dayTradingSurfaces, emptyOverviewInput]);
+
+  const useCompactColumnEmpty = scanSummary.qualifying.total === 0;
 
   const setupsPanelTitle =
     scannerSetupMode === "swing"
@@ -1250,38 +1286,17 @@ export function ScannerPageClient({
         </div>
       ) : null}
 
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0" style={{ display: "grid", gap: spacing[1] }}>
-          <p className="text-sm sm:text-base" style={{ margin: 0, color: colors.textMuted }}>
-            Last scan: {new Date(initialTimestampIso).toLocaleString()}
-          </p>
-          <p className="text-xs sm:text-sm" style={{ margin: 0, color: colors.textMuted }}>
-            {marketOpen ? (
-              <>
-                Next scan in <strong style={{ color: colors.text }}>{scanCountdownLabel}</strong>
-              </>
-            ) : (
-              <>Market closed — showing last scan</>
-            )}
-          </p>
-        </div>
-        <button
-          type="button"
-          className="inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-2 sm:w-auto"
-          onClick={onManualRefresh}
-          style={{
-            border: `1px solid ${colors.border}`,
-            borderRadius: borderRadius.md,
-            background: colors.surface,
-            color: colors.text,
-            padding: `${spacing[2]} ${spacing[3]}`,
-            cursor: "pointer"
-          }}
-        >
-          <RefreshCw size={14} style={{ animation: isPending ? "spin 1s linear infinite" : undefined }} />
-          {isPending ? "Refreshing..." : "Refresh"}
-        </button>
-      </header>
+      <ScannerScanResultHero summary={scanSummary} isRefreshing={isPending} onRefresh={onManualRefresh} />
+      {marketOpen ? (
+        <p className="m-0 text-xs" style={{ color: colors.textMuted }}>
+          Auto-refresh in <strong style={{ color: colors.text }}>{scanCountdownLabel}</strong>
+        </p>
+      ) : null}
+      <ScannerNearQualificationSection
+        nearQualification={scanSummary.near_qualification}
+        watchlistProgression={scanSummary.watchlist_progression}
+      />
+      {scanEducationPanels.length > 0 ? <ScannerScanEducation panels={scanEducationPanels} /> : null}
 
       {dayTradingSurfaces ? (
       <div
@@ -1504,7 +1519,7 @@ export function ScannerPageClient({
                   },
                   scannerSetupMode === "day" ? "day" : "swing"
                 )}
-                compact
+                compact={useCompactColumnEmpty}
                 testId="scanner-gap-empty-state"
               />
             ) : gapIntelForDisplay.length === 0 ? (
@@ -1572,6 +1587,8 @@ export function ScannerPageClient({
         </section>
 
         <section
+          id="scanner-setups-section"
+          data-testid="scanner-setups-section"
           className={`min-w-0 ${surfaceGlowClassName}`}
           style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
         >
@@ -1633,6 +1650,7 @@ export function ScannerPageClient({
                     return (
                       <ScannerEmptyStateCard
                         context={context}
+                        compact={useCompactColumnEmpty}
                         testId={`scanner-setups-empty-state-${group.key}`}
                       />
                     );

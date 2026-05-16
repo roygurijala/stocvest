@@ -4,6 +4,7 @@ import type { PDTStatusPayload } from "@/lib/api/pdt";
 import { fetchDefaultWatchlistSnapshot } from "@/lib/api/watchlists";
 import { runScannerLoadWithoutBrief } from "@/lib/api/scanner-load";
 import { topSignalStrengthPercent } from "@/lib/top-signal-strength";
+import type { ScannerScanSummary } from "@/lib/scanner-scan-summary";
 
 export interface GapIntelligenceCatalyst {
   article_id?: string;
@@ -118,6 +119,9 @@ export interface IntradaySetupPayload {
   geo_preview?: IntradayGeoPreview | null;
   /** Set by `POST /v1/signals/swing/setups` (daily-bar swing scanner). */
   scanner_mode?: "swing_daily";
+  /** Present on near-qualification rows from setups v2 bundle. */
+  qualification_tier?: "near" | "qualifying";
+  alignment?: { aligned: number; total: number; label: string };
   ema_daily_crossovers?: string[];
   weekly_rsi_recovery?: boolean;
   weekly_rsi?: number | null;
@@ -180,6 +184,8 @@ export interface ScannerOverview {
   gapIntelligenceSnapshotSymbolCount?: number | null;
   /** Present when the user default watchlist had at least one symbol this scan. */
   watchlistStatus?: WatchlistDashboardStatus | null;
+  /** Unified scan summary for hero, next actions, and near-qualification lane. */
+  scanSummary?: ScannerScanSummary | null;
 }
 
 /** Placeholder before deferred scanner RSC hydrates (Tier 1.C — `/dashboard`). */
@@ -191,7 +197,8 @@ export const EMPTY_SCANNER_OVERVIEW: ScannerOverview = {
   regimeLabel: "Neutral",
   swingUniverseSymbolCount: null,
   gapIntelligenceSnapshotSymbolCount: null,
-  watchlistStatus: null
+  watchlistStatus: null,
+  scanSummary: null
 };
 
 /** Snapshot + gap pipeline through intraday setups (no morning briefing). */
@@ -205,6 +212,7 @@ export type ScannerCoreData = {
   swingUniverseSymbolCount?: number | null;
   gapIntelligenceSnapshotSymbolCount?: number | null;
   watchlistStatus?: WatchlistDashboardStatus | null;
+  scanSummary?: ScannerScanSummary | null;
 };
 
 /** Which setup endpoints power the scanner core (dashboard defaults to both via `includeSwingDailySetups`). */
@@ -307,7 +315,8 @@ export async function fetchScannerOverview(
       error: core.error,
       swingUniverseSymbolCount: null,
       gapIntelligenceSnapshotSymbolCount: null,
-      watchlistStatus: core.watchlistStatus ?? null
+      watchlistStatus: core.watchlistStatus ?? null,
+      scanSummary: core.scanSummary ?? null
     };
   }
   let morningBrief: MorningBriefPayload | undefined;
@@ -324,6 +333,7 @@ export async function fetchScannerOverview(
     regimeLabel: core.regimeLabel,
     swingUniverseSymbolCount: core.swingUniverseSymbolCount ?? null,
     gapIntelligenceSnapshotSymbolCount: core.gapIntelligenceSnapshotSymbolCount ?? null,
-    watchlistStatus: core.watchlistStatus ?? null
+    watchlistStatus: core.watchlistStatus ?? null,
+    scanSummary: core.scanSummary ?? null
   };
 }

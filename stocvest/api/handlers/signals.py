@@ -21,6 +21,7 @@ from stocvest.api.services.signal_snapshot_builders import build_swing_composite
 from stocvest.config.parameter_store import ParameterStore
 from stocvest.api.services.composite_market_context import fetch_composite_market_status_payload_sync
 from stocvest.api.services.day_setups_geo_preview import attach_geo_preview_to_intraday_rows
+from stocvest.api.services.scanner_setups_bundle import bundle_setups_response
 from stocvest.api.services.signal_dto import (
     parse_bar,
     parse_pdt_assessment,
@@ -618,8 +619,11 @@ def day_setups_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, 
     try:
         limit = int(payload.get("limit", 8))
         min_score = float(payload.get("min_score", 0.55))
+        include_near = bool(payload.get("include_near_qualification"))
+        near_min_score = float(payload.get("near_min_score", 0.35))
+        near_limit = int(payload.get("near_limit", 5))
     except ValueError:
-        return bad_request("Invalid 'limit' or 'min_score'.")
+        return bad_request("Invalid 'limit', 'min_score', or near-qualification fields.")
 
     try:
         bars_by_symbol: dict[str, list[Bar]] = {}
@@ -629,12 +633,33 @@ def day_setups_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, 
             bars_by_symbol[symbol.upper()] = [parse_bar(item, symbol.upper()) for item in bars]
 
         liq = parse_liquidity_by_symbol_payload(payload.get("liquidity_by_symbol"))
-        setups = IntradaySetupScanner(min_score=min_score).scan(
-            bars_by_symbol, liquidity_by_symbol=liq, limit=limit
-        )
-        rows = serialize_intraday_setups_with_confluence(setups, payload)
+        scanner = IntradaySetupScanner(min_score=min_score)
+        setups = scanner.scan(bars_by_symbol, liquidity_by_symbol=liq, limit=limit)
+        if include_near:
+            near_scanner = IntradaySetupScanner(min_score=near_min_score)
+            near_pool = near_scanner.scan(
+                bars_by_symbol,
+                liquidity_by_symbol=liq,
+                limit=max(near_limit * 6, limit),
+            )
+            rows = bundle_setups_response(
+                setups,
+                near_pool,
+                payload,
+                serialize_intraday_setups_with_confluence,
+                min_score=min_score,
+                near_min_score=near_min_score,
+                near_limit=max(1, near_limit),
+            )
+        else:
+            rows = serialize_intraday_setups_with_confluence(setups, payload)
         try:
-            attach_geo_preview_to_intraday_rows(rows, payload)
+            attach_geo_preview_to_intraday_rows(
+                rows["qualifying"] if isinstance(rows, dict) else rows,
+                payload,
+            )
+            if isinstance(rows, dict):
+                attach_geo_preview_to_intraday_rows(rows.get("near_qualification") or [], payload)
         except Exception as exc:
             _LOG.warning("day setups geo preview failed: %s", exc)
         return ok(rows)
@@ -660,8 +685,11 @@ def swing_setups_handler(event: LambdaEvent, context: LambdaContext) -> dict[str
         limit = int(payload.get("limit", 8))
         min_score = float(payload.get("min_score", 0.48))
         min_daily_bars = int(payload.get("min_daily_bars", 205))
+        include_near = bool(payload.get("include_near_qualification"))
+        near_min_score = float(payload.get("near_min_score", 0.28))
+        near_limit = int(payload.get("near_limit", 5))
     except ValueError:
-        return bad_request("Invalid 'limit', 'min_score', or 'min_daily_bars'.")
+        return bad_request("Invalid 'limit', 'min_score', 'min_daily_bars', or near-qualification fields.")
 
     try:
         bars_by_symbol: dict[str, list[Bar]] = {}
@@ -671,12 +699,34 @@ def swing_setups_handler(event: LambdaEvent, context: LambdaContext) -> dict[str
             bars_by_symbol[symbol.upper()] = [parse_bar(item, symbol.upper()) for item in bars]
 
         liq = parse_liquidity_by_symbol_payload(payload.get("liquidity_by_symbol"))
-        setups = DailyBarScanner(min_score=min_score, min_bars=max(60, min_daily_bars)).scan(
-            bars_by_symbol, liquidity_by_symbol=liq, limit=limit
-        )
-        rows = serialize_daily_bar_setups_with_confluence(setups, payload)
+        min_bars = max(60, min_daily_bars)
+        scanner = DailyBarScanner(min_score=min_score, min_bars=min_bars)
+        setups = scanner.scan(bars_by_symbol, liquidity_by_symbol=liq, limit=limit)
+        if include_near:
+            near_scanner = DailyBarScanner(min_score=near_min_score, min_bars=min_bars)
+            near_pool = near_scanner.scan(
+                bars_by_symbol,
+                liquidity_by_symbol=liq,
+                limit=max(near_limit * 6, limit),
+            )
+            rows = bundle_setups_response(
+                setups,
+                near_pool,
+                payload,
+                serialize_daily_bar_setups_with_confluence,
+                min_score=min_score,
+                near_min_score=near_min_score,
+                near_limit=max(1, near_limit),
+            )
+        else:
+            rows = serialize_daily_bar_setups_with_confluence(setups, payload)
         try:
-            attach_geo_preview_to_intraday_rows(rows, payload)
+            attach_geo_preview_to_intraday_rows(
+                rows["qualifying"] if isinstance(rows, dict) else rows,
+                payload,
+            )
+            if isinstance(rows, dict):
+                attach_geo_preview_to_intraday_rows(rows.get("near_qualification") or [], payload)
         except Exception as exc:
             _LOG.warning("swing setups geo preview failed: %s", exc)
         return ok(rows)
