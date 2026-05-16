@@ -8,10 +8,9 @@ import {
   countLayerAlignment,
   formatDriversStrip,
   pickLeadingLayers,
-  pickMissingConfirmationLayers,
-  type SignalsLayerRowInput,
-  type SignalsSetupBias
+  pickMissingConfirmationLayers
 } from "@/lib/signal-evidence/evidence-card-present";
+import type { SignalsLayerRowInput, SignalsSetupBias } from "@/lib/signals-page-present";
 import { useTheme } from "@/lib/theme-provider";
 
 type Props = {
