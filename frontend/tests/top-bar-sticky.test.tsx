@@ -15,8 +15,8 @@
  *      ``padding-top`` so content clears the fixed bar.
  *
  * These assertions fail loudly if a future refactor drops the fixed
- * positioning classes or re-introduces ``overflow-x-hidden`` (or any
- * scroll-container promotion) onto the right column wrapper.
+ * positioning classes or re-introduces horizontal/vertical overflow
+ * (scroll-container promotion) onto the right column wrapper.
  */
 
 import { render, screen } from "@testing-library/react";
@@ -73,7 +73,7 @@ describe("AppShell layout (no scroll trap on right column)", () => {
     expect(rightCol.className).not.toMatch(/(^|\s)overflow-auto(\s|$)/);
   });
 
-  test("<main> still carries overflow-x-hidden so wide content can't blow the column out", () => {
+  test("<main> uses overflow-x-clip so wide content is clipped without breaking sticky", () => {
     wrap(
       <AppShell session={SESSION} isAdmin={false}>
         <p data-testid="page-marker">Page content</p>
@@ -81,6 +81,8 @@ describe("AppShell layout (no scroll trap on right column)", () => {
     );
     const main = screen.getByTestId("page-marker").closest("main");
     expect(main).not.toBeNull();
-    expect(main!.className).toMatch(/(^|\s)overflow-x-hidden(\s|$)/);
+    // ``overflow-x-hidden`` on ``<main>`` can promote a scroll container
+    // that traps ``position: sticky``; ``clip`` clips overflow without that.
+    expect(main!.className).toMatch(/(^|\s)overflow-x-clip(\s|$)/);
   });
 });
