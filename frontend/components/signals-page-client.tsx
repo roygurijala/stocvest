@@ -1,9 +1,9 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Brain, ChevronDown, ChevronUp, Clock, Zap } from "lucide-react";
+import { ChevronDown, ChevronUp, Clock } from "lucide-react";
 import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer } from "recharts";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
@@ -15,6 +15,17 @@ import type { MarketOverview, NewsPayload, SnapshotPayload } from "@/lib/api/mar
 import type { ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
 import { AddToWatchlistButton } from "@/components/add-to-watchlist-button";
+import { SignalsCommandBar } from "@/components/signals/signals-command-bar";
+import { SignalsLayerBreakdown } from "@/components/signals/signals-layer-breakdown";
+import { SignalsReferenceLevels } from "@/components/signals/signals-reference-levels";
+import { SignalsSetupRead } from "@/components/signals/signals-setup-read";
+import { useWatchlistMaturationLine } from "@/lib/hooks/use-watchlist-maturation-line";
+import {
+  buildSignalsPageDecision,
+  normalizeSetupBias,
+  pickPreviewLayers,
+  type SignalsLayerRowInput
+} from "@/lib/signals-page-present";
 import { CuteLoader } from "@/components/cute-loader";
 import { SignalLayerDivergenceChart } from "@/components/signal-layer-divergence-chart";
 import { SignalsAfterHoursPanel } from "@/components/signals-after-hours-panel";
@@ -39,7 +50,6 @@ import {
   formatHorizonOutcome,
   type PublicSignal
 } from "@/lib/api/public-signals";
-import { tickerNewsTriggerLine } from "@/lib/api/ticker-news-panel";
 import { rankSymbolCandidates } from "@/lib/symbol-suggestion-rank";
 import { WATCHLIST_SYMBOLS_CHANGED_EVENT } from "@/lib/watchlist-membership-client";
 import { LAYER_NAME_HINTS } from "@/lib/ui-tooltips";
@@ -221,53 +231,6 @@ function verdictToLayerStatus(verdict: string, status: string): LayerStatus {
   return "Neutral";
 }
 
-/** One-line framing: why trade readiness / neutrals look capped — discipline, not broken logic. */
-function buildSignalsPageVerdict(input: {
-  rows: LayerRow[];
-  layerAgreementPercent: number | null;
-  tradeReadiness: number | null;
-  rrWarning: boolean;
-}): string {
-  const { rows, layerAgreementPercent, tradeReadiness, rrWarning } = input;
-  const unavailable = rows.filter((r) => r.status === "Unavailable").length;
-  const neutral = rows.filter((r) => r.status === "Neutral").length;
-  const directional = rows.filter((r) => r.status === "Bullish" || r.status === "Bearish").length;
-  const technical = rows[0];
-  const techConstructive = technical?.status === "Bullish" || technical?.status === "Bearish";
-  const anyLayerLeanConstructive = rows.some(
-    (r) => (r.status === "Bullish" || r.status === "Bearish") && r.score >= 55
-  );
-  const sectorRow = rows.find((r) => r.name === "Sector");
-  const sectorCachePending = sectorRow?.sectorCachePending === true;
-  const sectorStale =
-    !sectorCachePending &&
-    (sectorRow?.status === "Unavailable" || sectorRow?.status === "As of close");
-  const agreement = layerAgreementPercent;
-  const weakConfirmation =
-    (agreement != null && agreement < 52) || (agreement == null && neutral >= 4);
-  const readinessSoft = tradeReadiness == null || tradeReadiness < 58;
-
-  if (unavailable >= 2) {
-    return "Several layers lack fresh data right now — the read stays intentionally conservative until coverage improves.";
-  }
-  if (sectorStale && unavailable >= 1 && neutral >= 2) {
-    return "Some layers (including sector) are still resolving or stale — capped scores reflect data gates, not a fault in the engine.";
-  }
-  if ((techConstructive || anyLayerLeanConstructive) && (weakConfirmation || rrWarning)) {
-    return "Technically constructive in places, but confirmation and/or risk thresholds are not fully cleared — trade readiness reflects that discipline.";
-  }
-  if (neutral >= 4 && readinessSoft) {
-    return "Most layers read mixed or neutral — capped trade readiness reflects alignment gates, not missing logic.";
-  }
-  if (directional >= 4 && (agreement ?? 0) >= 58 && !rrWarning) {
-    return "Multiple layers agree and risk checks pass — trade readiness reflects that alignment.";
-  }
-  if (directional >= 3 && (agreement ?? 0) >= 48 && !rrWarning) {
-    return "Cross-layer agreement is reasonable — trade readiness blends structure with context; muted layers still weigh in.";
-  }
-  return "Trade readiness blends all six layers; yellow or neutral reads usually mean intentional gates, not broken logic.";
-}
-
 export function SignalsPageClient({
   marketOverview,
   scannerOverview,
@@ -374,11 +337,6 @@ export function SignalsPageClient({
   });
   const [afterHoursInWatchlist, setAfterHoursInWatchlist] = useState(false);
   const [afterHoursWatchlistKnown, setAfterHoursWatchlistKnown] = useState(false);
-
-  const signalsNewsTrigger = useMemo(() => {
-    void newsUiTick;
-    return tickerNewsTriggerLine(symbol);
-  }, [symbol, newsUiTick]);
 
   const symbolCommitted = symbol.trim().length > 0;
 
@@ -1062,24 +1020,106 @@ export function SignalsPageClient({
     return insight?.signal_score ?? null;
   }, [compositeResult]);
 
-  const signalsPageVerdictLine = useMemo(() => {
+  const setupBias = useMemo(() => normalizeSetupBias(layerSignalSummary), [layerSignalSummary]);
+  const signalsPresentRows: SignalsLayerRowInput[] = useMemo(
+    () =>
+      rows.map((row, idx) => ({
+        key: SIGNAL_LAYER_KEYS[idx] ?? row.name.toLowerCase(),
+        name: row.name,
+        status: row.status,
+        statusLabel: row.statusLabel,
+        explanation: row.explanation,
+        score: row.score,
+        sectorCachePending: row.sectorCachePending
+      })),
+    [rows]
+  );
+
+  const maturationLine = useWatchlistMaturationLine(symbol, tradingMode, dayTradingSurfaces);
+
+  const pageDecision = useMemo(() => {
     if (!compositeResult || isInsufficientCompositeResponse(compositeResult)) return null;
     const c = compositeResult as Record<string, unknown>;
     const rr = typeof c.risk_reward === "number" && Number.isFinite(c.risk_reward) ? c.risk_reward : 1.5;
     const rrWarning = Boolean(c.rr_warning) || rr < 2.0;
-    return buildSignalsPageVerdict({
-      rows,
-      layerAgreementPercent,
-      tradeReadiness: aiStripSignalScore,
-      rrWarning
+    const ar = typeof c.alignment_ratio === "number" ? c.alignment_ratio : null;
+    return buildSignalsPageDecision({
+      bias: setupBias,
+      rows: signalsPresentRows,
+      signalScore: aiStripSignalScore,
+      alignmentRatio: ar,
+      riskReward: rr,
+      rrWarning,
+      isComplete: c.is_complete !== false
     });
-  }, [compositeResult, rows, layerAgreementPercent, aiStripSignalScore]);
+  }, [compositeResult, setupBias, signalsPresentRows, aiStripSignalScore]);
 
-  const aiStripBarPct = useMemo(() => aiStripSignalScore ?? aiStripAgreementPct, [aiStripSignalScore, aiStripAgreementPct]);
-  const summaryTone =
-    layerSignalSummary === "Bullish" ? colors.bullish : layerSignalSummary === "Bearish" ? colors.bearish : colors.caution;
+  const previewBlockingLayers = useMemo(
+    () => pickPreviewLayers(signalsPresentRows, setupBias, 3),
+    [signalsPresentRows, setupBias]
+  );
+
   const setupDirectionForEvidence =
     layerSignalSummary === "Bullish" ? "long" : layerSignalSummary === "Bearish" ? "short" : "neutral";
+
+  const openEvidenceModal = useCallback(async () => {
+    const setupLike = setup || {
+      symbol: symbol.toUpperCase(),
+      direction: setupDirectionForEvidence,
+      score: overall / 100,
+      triggers: ["Multi-layer synthesis"],
+      timestamp_iso: new Date().toISOString()
+    };
+    let snapForEvidence: SnapshotPayload | undefined = snapshot ?? undefined;
+    if (!snapshotHasTradeableLast(rawSnapshot)) {
+      try {
+        const row = await fetchSymbolSnapshot(symbol.toUpperCase());
+        if (row && row.symbol.toUpperCase() === symbol.toUpperCase()) {
+          const coerced = coerceSnapshotForReferenceLevels(row);
+          if (snapshotHasTradeableLast(coerced)) {
+            snapForEvidence = coerced ?? undefined;
+          }
+        }
+      } catch {
+        /* keep snapForEvidence */
+      }
+    }
+    let symbolNewsArticles: Awaited<ReturnType<typeof fetchSymbolNews>> = [];
+    try {
+      symbolNewsArticles = await fetchSymbolNews(symbol.toUpperCase(), 10, {
+        newsTradingMode: tradingMode
+      });
+    } catch {
+      symbolNewsArticles = [];
+    }
+    const event = earningsBySymbol[symbol.toUpperCase()];
+    const today = new Date().toISOString().slice(0, 10);
+    const daysUntil =
+      event != null
+        ? Math.floor((Date.parse(`${event.report_date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000)
+        : undefined;
+    setSignalEvidence(
+      applySwingCompositeEnrichment(
+        buildEvidenceFromSetup(setupLike, snapForEvidence, {
+          symbolNewsArticles,
+          earningsRiskDays: daysUntil,
+          earningsReportTime: event?.report_time
+        }),
+        compositeResult
+      )
+    );
+    setEvidenceOpen(true);
+  }, [
+    setup,
+    symbol,
+    setupDirectionForEvidence,
+    overall,
+    snapshot,
+    rawSnapshot,
+    tradingMode,
+    earningsBySymbol,
+    compositeResult
+  ]);
 
   // Layer 4 (second slice): the composite fetch + radar
   // projection used to live in a `[symbol, tab, tradingMode]`
@@ -1140,6 +1180,42 @@ export function SignalsPageClient({
     ? compositeResult.market_status
     : null;
   const hasValidSignal = compositeResult !== null && !isInsufficientCompositeResponse(compositeResult);
+
+  const insufficientLayerMessage: ReactNode = insufficientComposite ? (
+    <div
+      style={{
+        background: "rgba(245,197,66,0.06)",
+        border: "1px solid rgba(245,197,66,0.2)",
+        borderRadius: 12,
+        padding: 24
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "flex-start", gap: spacing[3] }}>
+        <Clock size={22} color="#f5c542" strokeWidth={2} style={{ flexShrink: 0, marginTop: 2 }} aria-hidden />
+        <div style={{ minWidth: 0 }}>
+          <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "#f5c542" }}>Market Data Unavailable</p>
+          <p style={{ margin: `${spacing[2]} 0 0 0`, fontSize: 13, lineHeight: 1.55, color: colors.textMuted }}>
+            Real-time data is needed to generate a reliable signal. At least 3 of 6 layers must have live data.
+          </p>
+          {insufficientComposite.market_session === "closed" ? (
+            <p style={{ margin: `${spacing[2]} 0 0 0`, fontSize: 13, lineHeight: 1.55, color: colors.textMuted }}>
+              Market is closed right now.
+              {insufficientComposite.next_open ? ` Next session: ${insufficientComposite.next_open}.` : null}
+            </p>
+          ) : null}
+          {insufficientComposite.market_session === "pre_market" ||
+          insufficientComposite.market_session === "after_hours" ? (
+            <p style={{ margin: `${spacing[2]} 0 0 0`, fontSize: 13, lineHeight: 1.55, color: colors.textMuted }}>
+              {insufficientComposite.market_session === "pre_market"
+                ? "Pre-market data is limited."
+                : "After-hours data is limited."}{" "}
+              Full signals are available at market open 9:30 AM ET.
+            </p>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   useEffect(() => {
     if (!symbol.trim() || compositeResult === null) return;
@@ -1313,6 +1389,7 @@ export function SignalsPageClient({
           <button
             key={key}
             type="button"
+            data-signals-tab={key}
             className="min-h-11 rounded-md px-4 text-sm"
             onClick={() => setTab(key)}
             aria-current={tab === key ? "page" : undefined}
@@ -1932,230 +2009,47 @@ export function SignalsPageClient({
 
       {symbolCommitted ? (
         <>
-      <div className="flex flex-wrap items-center gap-2">
-        <AddToWatchlistButton symbol={symbol} dualDeskTracking={dayTradingSurfaces} />
-      </div>
+      <SignalsCommandBar
+        symbol={symbol}
+        tradingMode={tradingMode}
+        dayTradingSurfaces={dayTradingSurfaces}
+        watchlistControl={<AddToWatchlistButton symbol={symbol} dualDeskTracking={dayTradingSurfaces} />}
+        maturationLine={maturationLine}
+        onTradingModeChange={updateTradingMode}
+      />
 
-      <div className="flex max-w-lg flex-col gap-2">
-        {dayTradingSurfaces ? (
-        <div
-          className="grid grid-cols-2 gap-1 rounded-lg p-1"
-          style={{ border: `1px solid ${colors.border}`, background: colors.background }}
-          role="tablist"
-          aria-label="Trading mode"
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tradingMode === "day"}
-            className="min-h-10 rounded-md px-3 text-sm font-medium transition-colors"
-            onClick={() => updateTradingMode("day")}
-            style={{
-              background: tradingMode === "day" ? "rgba(0,200,220,0.25)" : "transparent",
-              color: tradingMode === "day" ? "#00C8DC" : colors.textMuted,
-              border: tradingMode === "day" ? "1px solid rgba(0,200,220,0.45)" : "1px solid transparent"
-            }}
-          >
-            <span className="inline-flex items-center justify-center gap-1.5">
-              <Zap size={16} aria-hidden />
-              Day trade
-            </span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tradingMode === "swing"}
-            className="min-h-10 rounded-md px-3 text-sm font-medium transition-colors"
-            onClick={() => updateTradingMode("swing")}
-            style={{
-              background: tradingMode === "swing" ? "rgba(168,85,247,0.22)" : "transparent",
-              color: tradingMode === "swing" ? "#A855F7" : colors.textMuted,
-              border: tradingMode === "swing" ? "1px solid rgba(168,85,247,0.45)" : "1px solid transparent"
-            }}
-          >
-            <span className="inline-flex items-center justify-center gap-1.5">
-              <span aria-hidden>📈</span>
-              Swing trade
-            </span>
-          </button>
-        </div>
-        ) : (
-          <div
-            className="inline-flex min-h-10 items-center rounded-lg px-3 text-sm font-semibold"
-            style={{
-              border: `1px solid rgba(168,85,247,0.45)`,
-              background: "rgba(168,85,247,0.15)",
-              color: "#A855F7"
-            }}
-          >
-            Swing trade (your plan)
-          </div>
-        )}
-        <p className="m-0 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
-          {tradingMode === "day"
-            ? "Same-session structure from live tape; valid through regular session close (see signal_valid_until on the API response)."
-            : "Multi-day setups evaluated on daily closes. Valid ~5 calendar days (signal_expires on the API response)."}
-        </p>
-      </div>
+      {hasValidSignal && pageDecision ? (
+        <SignalsSetupRead
+          symbol={symbol}
+          tradingMode={tradingMode}
+          bias={setupBias}
+          rows={signalsPresentRows}
+          decision={pageDecision}
+          previewLayers={previewBlockingLayers}
+          onOpenEvidence={() => void openEvidenceModal()}
+          onSwitchToHistory={() => setTab("history")}
+        />
+      ) : null}
+
+      {hasValidSignal ? (
+        <SignalsReferenceLevels
+          levels={referenceLevels}
+          setupPattern={setup?.triggers[0] ?? null}
+        />
+      ) : null}
 
       <div className="signals-grid grid grid-cols-1 items-start gap-4 lg:grid-cols-[1.35fr_1fr] [&>*]:min-w-0">
-        <section
-          className={`order-2 min-w-0 lg:order-1 ${surfaceGlowClassName}`}
-          style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
-        >
-          <h3 style={{ marginTop: 0, marginBottom: spacing[2] }}>6-Layer Signal Breakdown</h3>
-          {compositeResult === null ? (
-            /*
-             * Composite is in-flight (either initial load after a
-             * symbol is committed, or a fresh fetch after the user
-             * toggled the trading mode — `updateTradingMode` clears
-             * `compositeResult` synchronously). Show a calm loader
-             * instead of the `rows.map` fallback that would otherwise
-             * render six "Unavailable" cards from `layerMeta` defaults.
-             *
-             * NB: `insufficientComposite` cannot be truthy when
-             * `compositeResult === null` (the former is derived from
-             * the latter via `isInsufficientCompositeResponse`), so
-             * this branch and the insufficient-data branch are
-             * mutually exclusive — the order of the checks is
-             * structural, not arbitrary.
-             */
-            <div
-              data-testid="signals-layers-loader"
-              style={{ padding: `${spacing[6]} ${spacing[4]}` }}
-            >
-              <CuteLoader
-                label={`Loading ${tradingMode === "swing" ? "swing" : "day"} signal`}
-                sublabel={`Refreshing the 6-layer breakdown for ${symbol.trim().toUpperCase() || "this symbol"}.`}
-                compact
-              />
-            </div>
-          ) : insufficientComposite ? (
-            <div
-              style={{
-                background: "rgba(245,197,66,0.06)",
-                border: "1px solid rgba(245,197,66,0.2)",
-                borderRadius: 12,
-                padding: 24
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "flex-start", gap: spacing[3] }}>
-                <Clock size={22} color="#f5c542" strokeWidth={2} style={{ flexShrink: 0, marginTop: 2 }} aria-hidden />
-                <div style={{ minWidth: 0 }}>
-                  <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "#f5c542" }}>Market Data Unavailable</p>
-                  <p
-                    style={{
-                      margin: `${spacing[2]} 0 0 0`,
-                      fontSize: 13,
-                      lineHeight: 1.55,
-                      color: colors.textMuted
-                    }}
-                  >
-                    Real-time data is needed to generate a reliable signal. At least 3 of 6 layers must have live data.
-                  </p>
-                  {insufficientComposite.market_session === "closed" ? (
-                    <p
-                      style={{
-                        margin: `${spacing[2]} 0 0 0`,
-                        fontSize: 13,
-                        lineHeight: 1.55,
-                        color: colors.textMuted
-                      }}
-                    >
-                      Market is closed right now.
-                      {insufficientComposite.next_open ? ` Next session: ${insufficientComposite.next_open}.` : null}
-                    </p>
-                  ) : null}
-                  {insufficientComposite.market_session === "pre_market" ||
-                  insufficientComposite.market_session === "after_hours" ? (
-                    <p
-                      style={{
-                        margin: `${spacing[2]} 0 0 0`,
-                        fontSize: 13,
-                        lineHeight: 1.55,
-                        color: colors.textMuted
-                      }}
-                    >
-                      {insufficientComposite.market_session === "pre_market"
-                        ? "Pre-market data is limited."
-                        : "After-hours data is limited."}{" "}
-                      Full signals are available at market open 9:30 AM ET.
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div style={{ display: "grid", gap: spacing[2] }}>
-              {rows.map((row, rowIdx) => {
-                const techRow = rows[0];
-                const explanation = row.explanation;
-                const showInternalsReconciliation =
-                  rowIdx === 5 &&
-                  techRow?.status === "Bearish" &&
-                  typeof techRow.score === "number" &&
-                  techRow.score <= TECHNICAL_CLEAR_BEARISH_MAX_SCORE &&
-                  row.status === "Bullish" &&
-                  typeof row.score === "number" &&
-                  row.score <= INTERNALS_LEAN_BULLISH_MAX_SCORE;
-                return (
-                  <article
-                    key={row.name}
-                    style={{
-                      display: "grid",
-                      gap: spacing[2],
-                      borderBottom: `1px solid ${colors.border}`,
-                      paddingBottom: spacing[2]
-                    }}
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2] }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: spacing[2], minWidth: 0 }}>
-                        <span>{row.icon}</span>
-                        <strong style={{ margin: 0 }}>{row.name}</strong>
-                      </div>
-                      <InfoTip
-                        text={(() => {
-                          const k = SIGNAL_LAYER_KEYS[rowIdx];
-                          return k ? LAYER_NAME_HINTS[k] : "Layer readout for this symbol.";
-                        })()}
-                        label={row.name}
-                      />
-                    </div>
-                    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start">
-                      <span
-                        className="text-sm shrink-0"
-                        style={{
-                          borderRadius: borderRadius.full,
-                          padding: "2px 8px",
-                          background: "rgba(148,163,184,0.12)",
-                          color: statusColor(row.status, colors)
-                        }}
-                      >
-                        {row.statusLabel ?? row.status}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <span className="block text-sm leading-snug sm:text-sm" style={{ color: colors.textMuted }}>
-                          {explanation}
-                        </span>
-                        {rowIdx === 2 ? (
-                          <p className="m-0 mt-1 text-xs leading-snug" style={{ color: colors.textMuted, opacity: 0.88 }}>
-                            {macroVerdictContextNote(row.status)}
-                          </p>
-                        ) : null}
-                        {showInternalsReconciliation ? (
-                          <p className="m-0 mt-1 text-xs leading-snug" style={{ color: colors.textMuted, opacity: 0.88 }}>
-                            Internals show improving participation, but price structure remains bearish; breadth alone has not
-                            confirmed a durable shift.
-                          </p>
-                        ) : null}
-                      </div>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          )}
-        </section>
+        <div className="order-2 min-w-0 lg:order-1">
+          <SignalsLayerBreakdown
+            symbol={symbol}
+            tradingMode={tradingMode}
+            bias={setupBias}
+            rows={signalsPresentRows}
+            loading={compositeResult === null}
+            insufficient={Boolean(insufficientComposite)}
+            insufficientMessage={insufficientLayerMessage}
+          />
+        </div>
 
         {hasValidSignal && radarData ? (
           <section
@@ -2302,224 +2196,9 @@ export function SignalsPageClient({
             )}
           </section>
         ) : null}
+
       </div>
 
-      {hasValidSignal ? (
-      <article
-        className={surfaceGlowClassName}
-        style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
-      >
-        <h3 style={{ marginTop: 0, display: "flex", alignItems: "center", gap: spacing[2] }}>
-          <Brain size={18} />
-          AI Signal Analysis
-        </h3>
-        <p style={{ margin: 0, fontStyle: "italic" }}>
-          “{symbol.toUpperCase()} currently shows a <strong style={{ color: summaryTone }}>{layerSignalSummary}</strong> profile
-          {aiStripSignalScore != null ? (
-            <>
-              {" "}
-              with trade readiness <strong style={{ color: summaryTone }}>{aiStripSignalScore}/100</strong>
-              {layerAgreementPercent != null ? (
-                <>
-                  {" "}
-                  and <strong>{layerAgreementPercent}%</strong> six-layer agreement (by weighted direction)
-                </>
-              ) : null}
-              .”
-            </>
-          ) : (
-            <>
-              {" "}
-              with <strong>{aiStripAgreementPct}%</strong> six-layer agreement (by weighted direction).”
-            </>
-          )}
-        </p>
-        {signalsPageVerdictLine ? (
-          <p className="text-sm leading-relaxed" style={{ margin: `${spacing[2]} 0 0 0`, color: colors.text }}>
-            <strong style={{ color: colors.textMuted, fontWeight: 600 }}>Verdict: </strong>
-            {signalsPageVerdictLine}
-          </p>
-        ) : null}
-        {aiStripSignalScore != null && layerAgreementPercent != null ? (
-          <p className="text-xs" style={{ margin: `${spacing[2]} 0 0 0`, color: colors.textMuted }}>
-            Bar width follows trade readiness (matches View Evidence), not the agreement %.
-          </p>
-        ) : null}
-        <div style={{ marginTop: spacing[3], height: 10, background: colors.surfaceMuted, borderRadius: borderRadius.full }}>
-          <div
-            style={{
-              height: "100%",
-              width: `${aiStripBarPct}%`,
-              borderRadius: borderRadius.full,
-              background: summaryTone
-            }}
-          />
-        </div>
-        <p className="m-0 text-xs leading-snug" style={{ marginTop: spacing[2], color: colors.textMuted }}>
-          Trade readiness reflects cross-layer alignment and gates, not win probability or a prompt to trade.
-        </p>
-        <div
-          style={{
-            background: "rgba(255,193,7,0.06)",
-            border: "1px solid rgba(255,193,7,0.2)",
-            borderRadius: "8px",
-            padding: "12px 16px",
-            fontSize: "12px",
-            color: "#8a9ab0",
-            lineHeight: "1.6",
-            marginTop: spacing[3],
-            marginBottom: spacing[2]
-          }}
-        >
-          <strong style={{ color: "#f5c542" }}>Signal Data Only</strong>
-          <br />
-          This analysis surfaces technical patterns and signal data for informational purposes. It is not investment advice. Reference
-          levels shown are derived from historical patterns — not predictions. You are solely responsible for all trading decisions.
-        </div>
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: spacing[2], marginTop: spacing[3] }}>
-          <button
-            type="button"
-            className="min-h-11 text-sm"
-            onClick={() => {
-              setNewsPanelSymbol(symbol.toUpperCase());
-              setNewsPanelOpen(true);
-            }}
-            style={{
-              border: "none",
-              background: "transparent",
-              color: colors.textMuted,
-              padding: `${spacing[2]} 0`,
-              cursor: "pointer",
-              fontWeight: 500,
-              fontSize: typography.scale.xs
-            }}
-          >
-            {signalsNewsTrigger}
-          </button>
-          <button
-            type="button"
-            className="min-h-11 text-sm"
-            onClick={async () => {
-              const setupLike = setup || {
-                symbol: symbol.toUpperCase(),
-                direction: setupDirectionForEvidence,
-                score: overall / 100,
-                triggers: ["Multi-layer synthesis"],
-                timestamp_iso: new Date().toISOString()
-              };
-              let snapForEvidence: SnapshotPayload | undefined = snapshot ?? undefined;
-              if (!snapshotHasTradeableLast(rawSnapshot)) {
-                try {
-                  const row = await fetchSymbolSnapshot(symbol.toUpperCase());
-                  if (row && row.symbol.toUpperCase() === symbol.toUpperCase()) {
-                    const coerced = coerceSnapshotForReferenceLevels(row);
-                    if (snapshotHasTradeableLast(coerced)) {
-                      snapForEvidence = coerced ?? undefined;
-                    }
-                  }
-                } catch {
-                  /* keep snapForEvidence */
-                }
-              }
-              let symbolNewsArticles: Awaited<ReturnType<typeof fetchSymbolNews>> = [];
-              try {
-                symbolNewsArticles = await fetchSymbolNews(symbol.toUpperCase(), 10, {
-                  newsTradingMode: tradingMode
-                });
-              } catch {
-                symbolNewsArticles = [];
-              }
-              const event = earningsBySymbol[symbol.toUpperCase()];
-              const today = new Date().toISOString().slice(0, 10);
-              const daysUntil =
-                event != null
-                  ? Math.floor((Date.parse(`${event.report_date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000)
-                  : undefined;
-              setSignalEvidence(
-                applySwingCompositeEnrichment(
-                  buildEvidenceFromSetup(setupLike, snapForEvidence, {
-                    symbolNewsArticles,
-                    earningsRiskDays: daysUntil,
-                    earningsReportTime: event?.report_time
-                  }),
-                  compositeResult
-                )
-              );
-              setEvidenceOpen(true);
-            }}
-            style={{
-              border: `1px solid ${colors.border}`,
-              borderRadius: borderRadius.md,
-              background: colors.surfaceMuted,
-              color: colors.text,
-              padding: `${spacing[2]} ${spacing[3]}`,
-              cursor: "pointer",
-              fontWeight: 500
-            }}
-          >
-            View Evidence
-          </button>
-        </div>
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: spacing[2] }}>
-          <SignalDisclaimerChip />
-        </div>
-      </article>
-      ) : null}
-
-      {hasValidSignal ? (
-      <article
-        className={surfaceGlowClassName}
-        style={{
-          background: colors.surface,
-          border: `1px solid ${colors.border}`,
-          borderRadius: borderRadius.xl,
-          padding: spacing[4],
-          position: "relative",
-          paddingBottom: spacing[5]
-        }}
-      >
-        <h3 style={{ marginTop: 0 }}>Reference Levels</h3>
-        <p className="m-0 text-xs leading-snug" style={{ margin: `0 0 ${spacing[2]} 0`, color: colors.textMuted }}>
-          Reference levels (context, not entry signals)
-        </p>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-          <div>
-            <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>VWAP</p>
-            <strong>
-              {referenceLevels.vwap != null ? `$${referenceLevels.vwap.toFixed(2)}` : "n/a"}
-            </strong>
-          </div>
-          <div>
-            <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>Support</p>
-            <strong>{referenceLevels.support != null ? `$${referenceLevels.support.toFixed(2)}` : "n/a"}</strong>
-          </div>
-          <div>
-            <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>Resistance</p>
-            <strong>{referenceLevels.resistance != null ? `$${referenceLevels.resistance.toFixed(2)}` : "n/a"}</strong>
-          </div>
-          <div>
-            <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>OR High</p>
-            <strong>
-              {referenceLevels.resistance != null ? `$${(referenceLevels.resistance * 1.003).toFixed(2)}` : "n/a"}
-            </strong>
-          </div>
-          <div>
-            <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>OR Low</p>
-            <strong>
-              {referenceLevels.support != null ? `$${(referenceLevels.support * 0.997).toFixed(2)}` : "n/a"}
-            </strong>
-          </div>
-        </div>
-        {setup ? (
-          <p style={{ margin: `${spacing[3]} 0 0 0`, color: colors.textMuted, fontSize: typography.scale.sm }}>
-            Active signal pattern: {setup.triggers[0] || "Intraday pattern"}
-          </p>
-        ) : null}
-        <div style={{ position: "absolute", right: spacing[3], bottom: spacing[3] }}>
-          <SignalDisclaimerChip />
-        </div>
-      </article>
-      ) : null}
       {showAfterHoursPanel ? (
         <SignalsAfterHoursPanel
           symbol={symbol}

@@ -263,7 +263,7 @@ describe("SignalsPageClient — mode toggle clears the screen (load-bearing UX g
     );
 
     // Click the Day trade tab.
-    fireEvent.click(screen.getByRole("tab", { name: /Day trade/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /^Day$/i }));
 
     // SYNCHRONOUSLY after the click, the swing rows MUST be gone and
     // the loader MUST be visible. We use a tight assertion (no async
@@ -312,7 +312,7 @@ describe("SignalsPageClient — mode toggle clears the screen (load-bearing UX g
       expect(screen.getByText(/DAY_FP — technical reasoning marker/)).toBeTruthy()
     );
 
-    fireEvent.click(screen.getByRole("tab", { name: /Swing trade/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /^Swing$/i }));
 
     expect(screen.queryByText(/DAY_FP — technical reasoning marker/)).toBeNull();
     expect(screen.getByTestId("signals-layers-loader")).toBeTruthy();
@@ -346,7 +346,7 @@ describe("SignalsPageClient — mode toggle clears the screen (load-bearing UX g
     // Re-click the already-active Swing pill. The contract is:
     // same-mode click is a no-op — it MUST NOT clear state (no
     // loader flash) and MUST NOT re-fire the fetch.
-    fireEvent.click(screen.getByRole("tab", { name: /Swing trade/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /^Swing$/i }));
 
     expect(screen.queryByTestId("signals-layers-loader")).toBeNull();
     expect(screen.getByText(/SWING_FP — technical reasoning marker/)).toBeTruthy();
@@ -390,7 +390,7 @@ describe("SignalsPageClient — Swing Pro (dayTradingSurfaces=false)", () => {
     );
 
     expect(screen.queryByRole("tablist", { name: /Trading mode/i })).toBeNull();
-    expect(screen.getByText(/Swing trade \(your plan\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Swing \(your plan\)/)).toBeInTheDocument();
 
     await waitFor(() =>
       expect(screen.getByText(/SWING_PRO_FP — technical reasoning marker/)).toBeTruthy()
