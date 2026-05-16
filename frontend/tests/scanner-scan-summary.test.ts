@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   buildScannerNextActions,
   buildScannerScanSummary,
+  buildWatchlistProgressionRows,
   nearRowsFromSetups
 } from "@/lib/scanner-scan-summary";
-import { parseScannerSetupsDeskResponse } from "@/lib/scanner-setups-response";
+import { mergeDeskSetupBundles, parseScannerSetupsDeskResponse } from "@/lib/scanner-setups-response";
 
 describe("scanner-scan-summary", () => {
   it("parses v2 setups bundle", () => {
@@ -67,5 +68,71 @@ describe("scanner-scan-summary", () => {
       }
     ]);
     expect(rows[0]?.alignment?.label).toBe("2/6 aligned");
+  });
+
+  it("merges swing and day near-qualification bundles by score", () => {
+    const merged = mergeDeskSetupBundles(
+      parseScannerSetupsDeskResponse({
+        qualifying: [],
+        near_qualification: [
+          { symbol: "LOW", score: 0.3, direction: "long", triggers: ["a"], scanner_mode: "swing_daily" }
+        ]
+      }),
+      parseScannerSetupsDeskResponse({
+        qualifying: [],
+        near_qualification: [{ symbol: "HIGH", score: 0.44, direction: "long", triggers: ["a", "b"] }]
+      })
+    );
+    expect(merged.nearQualification[0]?.symbol).toBe("HIGH");
+    expect(merged.nearQualification.map((r) => r.symbol)).toEqual(["HIGH", "LOW"]);
+  });
+
+  it("buildWatchlistProgressionRows respects desk tracking and maturation states", () => {
+    const rows = buildWatchlistProgressionRows(
+      ["AAPL", "MSFT"],
+      { AAPL: { swing: true, day: false }, MSFT: { swing: true, day: true } },
+      {
+        AAPL: {
+          symbol: "AAPL",
+          state: "developing",
+          readiness_label: "Swing developing",
+          label: "Developing"
+        }
+      },
+      {
+        MSFT: {
+          symbol: "MSFT",
+          state: "re_evaluating",
+          readiness_label: "Day re-evaluating",
+          label: "Re-evaluating"
+        }
+      },
+      true,
+      5
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows.find((r) => r.symbol === "AAPL")?.desk).toBe("swing");
+    expect(rows.find((r) => r.symbol === "MSFT")?.desk).toBe("day");
+  });
+
+  it("buildScannerNextActions omits watchlist tracking when nothing monitored", () => {
+    const summary = buildScannerScanSummary({
+      scannedAtIso: new Date().toISOString(),
+      overview: {
+        setups: [{ symbol: "X", score: 0.9, direction: "long", triggers: [], timestamp_iso: "x" }],
+        gapIntelligence: [],
+        regimeLabel: "Neutral",
+        spyPct: null,
+        qqqPct: null,
+        swingUniverseSymbolCount: null,
+        gapIntelligenceSnapshotSymbolCount: null,
+        watchlistStatus: { monitored: 0, actionable: 0, developing: 0, inactive: 0 }
+      },
+      nearQualificationSetups: [],
+      watchlistProgression: []
+    });
+    const ids = buildScannerNextActions(summary).map((a) => a.id);
+    expect(ids).toContain("qualifying");
+    expect(ids).not.toContain("tracking");
   });
 });

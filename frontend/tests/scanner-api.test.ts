@@ -325,6 +325,35 @@ describe("loadScannerDataWithoutBrief swing-only (dashboard)", () => {
         ];
       }
       if (path === "/v1/signals/swing/setups") {
+        const body = init?.body
+          ? (JSON.parse(String(init.body)) as { include_near_qualification?: boolean })
+          : {};
+        if (body.include_near_qualification) {
+          return {
+            qualifying: [
+              {
+                symbol: "SW1",
+                direction: "bullish",
+                score: 0.82,
+                triggers: ["ema50_cross_above_200"],
+                timestamp_iso: "2026-05-01T12:00:00Z",
+                scanner_mode: "swing_daily",
+                pattern_maturity_days: 4
+              }
+            ],
+            near_qualification: [
+              {
+                symbol: "SW_NEAR",
+                direction: "bullish",
+                score: 0.38,
+                triggers: ["a", "b"],
+                timestamp_iso: "2026-05-01T12:00:00Z",
+                scanner_mode: "swing_daily",
+                qualification_tier: "near"
+              }
+            ]
+          };
+        }
         return [
           {
             symbol: "SW1",
@@ -336,6 +365,15 @@ describe("loadScannerDataWithoutBrief swing-only (dashboard)", () => {
             pattern_maturity_days: 4
           }
         ];
+      }
+      if (path === "/v1/watchlists/maturation-summary?mode=swing") {
+        return { by_symbol: {} };
+      }
+      if (path === "/v1/watchlists/maturation-summary?mode=day") {
+        return { by_symbol: {} };
+      }
+      if (path === "/v1/watchlists/default/symbols") {
+        return { symbols: [], symbol_tracking: {} };
       }
       throw new Error(`Unhandled path ${path}`);
     });
@@ -361,6 +399,15 @@ describe("loadScannerDataWithoutBrief swing-only (dashboard)", () => {
     expect(requests1min).toBe(false);
     expect(core.setups).toHaveLength(1);
     expect(core.setups[0]?.scanner_mode).toBe("swing_daily");
+    const swingCall = apiFetchMock.mock.calls.find((c) => c[0] === "/v1/signals/swing/setups");
+    expect(swingCall).toBeTruthy();
+    const swingBody = JSON.parse(String(swingCall?.[1]?.body ?? "{}")) as {
+      include_near_qualification?: boolean;
+      near_min_score?: number;
+    };
+    expect(swingBody.include_near_qualification).toBe(true);
+    expect(swingBody.near_min_score).toBe(0.28);
+    expect(core.scanSummary?.near_qualification.some((r) => r.symbol === "SW_NEAR")).toBe(true);
   }, 25000);
 });
 
