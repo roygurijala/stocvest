@@ -42,10 +42,11 @@ export function AppShell({ session, children, isAdmin = false }: AppShellProps) 
       {loading ? <PageLoader /> : null}
       <div className="app-shell-layout grid min-h-screen grid-cols-1 lg:grid-cols-[248px_1fr]">
         <Sidebar userLabel={userLabel} isAdmin={isAdmin} />
-        {/* Right column drops ``overflow-x-hidden`` so we never promote
-            this wrapper to a scroll container. Horizontal clipping lives
-            on ``<main>``. The TopBar is ``position: fixed`` (see
-            ``top-bar.tsx``); ``main`` padding-top clears that chrome. */}
+        {/* Right column avoids ``overflow-x-hidden`` on this wrapper so we never
+            promote it to a scroll container. Horizontal clipping lives on ``<main>``
+            via ``overflow-x-clip`` (keeps ``position: sticky`` working on long pages).
+            The TopBar is ``position: fixed`` (see ``top-bar.tsx``); ``main`` padding-top
+            clears that chrome. */}
         <div
           className="flex min-w-0 flex-col"
           data-testid="app-shell-right-column"
@@ -53,7 +54,7 @@ export function AppShell({ session, children, isAdmin = false }: AppShellProps) 
         >
           <TopBar onMenuClick={() => setDrawerOpen(true)} />
           <main
-            className="min-w-0 overflow-x-hidden px-4 pb-6 lg:px-6"
+            className="min-w-0 overflow-x-clip px-4 pb-6 lg:px-6"
             style={{
               paddingTop: `calc(${APP_TOP_BAR_LAYOUT_HEIGHT} + ${spacing[6]})`
             }}

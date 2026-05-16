@@ -192,7 +192,7 @@ describe("WatchlistsPageClient maturation", () => {
 
     wrap(<WatchlistsPageClient />);
 
-    await waitFor(() => expect(screen.getByText("Main")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("heading", { name: /^Watchlist$/ })).toBeInTheDocument());
     const urls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.map((c) =>
       typeof c[0] === "string" ? c[0] : String(c[0])
     );

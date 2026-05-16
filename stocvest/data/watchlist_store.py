@@ -83,7 +83,13 @@ class WatchlistItem:
                 syms = []
         if not isinstance(syms, list):
             syms = []
-        symbols = [str(s).strip().upper() for s in syms if str(s).strip()]
+        symbols: list[str] = []
+        seen_sym: set[str] = set()
+        for s in syms:
+            su = str(s).strip().upper()
+            if su and su not in seen_sym:
+                seen_sym.add(su)
+                symbols.append(su)
         return cls(
             user_id=user_id,
             watchlist_id=str(item.get("watchlistId") or ""),

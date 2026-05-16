@@ -171,3 +171,18 @@ def test_legacy_multiple_lists_consolidated_on_get(brokers: None, monkeypatch: p
 
 def test_get_watchlist_store_returns_memory_when_table_cleared() -> None:
     assert isinstance(get_watchlist_store(), InMemoryWatchlistStore)
+
+
+def test_watchlist_item_from_item_dedupes_symbols_case_insensitive() -> None:
+    w = WatchlistItem.from_item(
+        "u1",
+        {
+            "watchlistId": "w1",
+            "name": "Main",
+            "symbols": ["aapl", "AAPL", " msft ", "NVDA", "nvda"],
+            "isDefault": True,
+            "createdAt": "t0",
+            "updatedAt": "t1",
+        },
+    )
+    assert w.symbols == ["AAPL", "MSFT", "NVDA"]

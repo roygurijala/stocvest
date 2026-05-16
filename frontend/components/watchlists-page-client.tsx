@@ -8,7 +8,17 @@ import { APP_TOP_BAR_LAYOUT_HEIGHT } from "@/components/top-bar";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, colorTokens, spacing, surfaceGlowClassName } from "@/lib/design-system";
 import { watchlistSignalsOpenAriaLabel, watchlistToSignalsHref } from "@/lib/nav/watchlist-signals-deeplink";
+import type { SnapshotPayload } from "@/lib/api/market";
 import { rankSymbolCandidates } from "@/lib/symbol-suggestion-rank";
+import {
+  dedupeWatchlistSymbolsUpper as dedupeSymbolsUpper,
+  formatWatchlistMaturationLabel as formatStateLabel,
+  normalizeWatchlistMaturationBySymbol as normalizeMaturationBySymbol,
+  watchlistQuoteFromSnapshot,
+  watchlistSymbolMatchesSearch,
+  type WatchlistMaturationRow as MaturationRow,
+  type WatchlistViewMode
+} from "@/lib/watchlist-page-utils";
 import { useTheme } from "@/lib/theme-provider";
 
 const WATCHLIST_MAX_SYMBOLS = 50;
@@ -22,12 +32,6 @@ type WatchlistRow = {
 
 const QUICK = ["SPY", "QQQ", "AAPL", "NVDA", "TSLA"];
 
-type MaturationRow = {
-  state?: string;
-  readiness_label?: string;
-  label?: string;
-};
-
 type MaturationAlertFeedItem = {
   title: string;
   created_at: string;
@@ -36,9 +40,9 @@ type MaturationAlertFeedItem = {
 
 type SymbolCandidate = { symbol: string; label: string };
 
-type ThemeColors = (typeof colorTokens)["dark"];
+type WatchlistAddSuggestion = SymbolCandidate & { kind: "watchlist" | "add" };
 
-type WatchlistViewMode = "swing" | "day" | "both";
+type ThemeColors = (typeof colorTokens)["dark"];
 
 function normalizeTickerInput(raw: string): string | null {
   const u = raw.trim().toUpperCase();
@@ -84,12 +88,6 @@ function maturationAccent(state: string | undefined, colors: ThemeColors): strin
     default:
       return colors.textMuted;
   }
-}
-
-function formatStateLabel(m: MaturationRow | undefined): string {
-  const raw = (m?.label || m?.state || "").trim();
-  if (!raw) return "—";
-  return raw.replace(/_/g, " ");
 }
 
 function displayStateForSymbol(
@@ -141,6 +139,8 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   const [addRemoteSearchLoading, setAddRemoteSearchLoading] = useState(false);
   const [addRemoteSearchError, setAddRemoteSearchError] = useState<string | null>(null);
   const addComboRef = useRef<HTMLDivElement | null>(null);
+  const [snapshotsBySymbol, setSnapshotsBySymbol] = useState<Record<string, SnapshotPayload>>({});
+  const [snapshotFetchStatus, setSnapshotFetchStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
 
   usePublishAssistantContext({ page: "dashboard/watchlists" });
 
@@ -166,7 +166,12 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
         if (!cr.ok) throw new Error(created.message || "Failed to create watchlist");
         list = [created];
       }
-      setRows(list);
+      setRows(
+        list.map((w) => ({
+          ...w,
+          symbols: dedupeSymbolsUpper(w.symbols)
+        }))
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
     } finally {
@@ -180,8 +185,10 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
 
   const active = useMemo(() => rows[0] ?? null, [rows]);
 
+  const activeSymbolsDeduped = useMemo(() => dedupeSymbolsUpper(active?.symbols ?? []), [active?.symbols]);
+
   useEffect(() => {
-    if (!active?.is_default || active.symbols.length === 0) {
+    if (!active?.is_default || activeSymbolsDeduped.length === 0) {
       setMaturationSwing({});
       setMaturationDay({});
       setMaturationFetchStatus("idle");
@@ -201,8 +208,8 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
               cache: "no-store"
             })
           ]);
-          const swData = (await swRes.json().catch(() => ({}))) as { by_symbol?: Record<string, MaturationRow> };
-          const dyData = (await dyRes.json().catch(() => ({}))) as { by_symbol?: Record<string, MaturationRow> };
+          const swJson = (await swRes.json().catch(() => ({}))) as unknown;
+          const dyJson = (await dyRes.json().catch(() => ({}))) as unknown;
           if (cancelled) return;
           if (!swRes.ok || !dyRes.ok) {
             setMaturationSwing({});
@@ -210,13 +217,13 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
             setMaturationFetchStatus("error");
             return;
           }
-          setMaturationSwing(swData.by_symbol ?? {});
-          setMaturationDay(dyData.by_symbol ?? {});
+          setMaturationSwing(normalizeMaturationBySymbol(swJson));
+          setMaturationDay(normalizeMaturationBySymbol(dyJson));
         } else {
           const res = await fetch(`/api/stocvest/watchlists/maturation-summary?${new URLSearchParams({ mode: "swing" })}`, {
             cache: "no-store"
           });
-          const data = (await res.json().catch(() => ({}))) as { by_symbol?: Record<string, MaturationRow> };
+          const json = (await res.json().catch(() => ({}))) as unknown;
           if (cancelled) return;
           if (!res.ok) {
             setMaturationSwing({});
@@ -224,7 +231,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
             setMaturationFetchStatus("error");
             return;
           }
-          setMaturationSwing(data.by_symbol ?? {});
+          setMaturationSwing(normalizeMaturationBySymbol(json));
           setMaturationDay({});
         }
         setMaturationFetchStatus("ready");
@@ -240,10 +247,56 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     return () => {
       cancelled = true;
     };
-  }, [active?.watchlist_id, active?.is_default, active?.symbols?.join(",") ?? "", dualDeskMaturation]);
+  }, [active?.watchlist_id, active?.is_default, activeSymbolsDeduped.join(","), dualDeskMaturation]);
 
   useEffect(() => {
-    if (!active?.is_default || active.symbols.length === 0) {
+    const syms = activeSymbolsDeduped.slice(0, WATCHLIST_MAX_SYMBOLS);
+    if (syms.length === 0) {
+      setSnapshotsBySymbol({});
+      setSnapshotFetchStatus("idle");
+      return;
+    }
+    let cancelled = false;
+    setSnapshotFetchStatus("loading");
+    void (async () => {
+      const merged: Record<string, SnapshotPayload> = {};
+      try {
+        for (let i = 0; i < syms.length; i += 40) {
+          const chunk = syms.slice(i, i + 40);
+          if (chunk.length === 0) break;
+          const res = await fetch(`/api/stocvest/market/snapshots?symbols=${encodeURIComponent(chunk.join(","))}`, {
+            cache: "no-store",
+            credentials: "same-origin"
+          });
+          if (!res.ok) continue;
+          const data = (await res.json().catch(() => ({}))) as { snapshots?: unknown[] };
+          for (const raw of data.snapshots ?? []) {
+            if (!raw || typeof raw !== "object") continue;
+            const row = raw as SnapshotPayload;
+            const sym = String(row.symbol ?? "")
+              .trim()
+              .toUpperCase();
+            if (sym) merged[sym] = row;
+          }
+        }
+        if (!cancelled) {
+          setSnapshotsBySymbol(merged);
+          setSnapshotFetchStatus("ready");
+        }
+      } catch {
+        if (!cancelled) {
+          setSnapshotsBySymbol({});
+          setSnapshotFetchStatus("error");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [active?.watchlist_id, activeSymbolsDeduped.join(",")]);
+
+  useEffect(() => {
+    if (!active?.is_default || activeSymbolsDeduped.length === 0) {
       setMaturationAlerts([]);
       setMaturationAlertsStatus("idle");
       return;
@@ -252,10 +305,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     let cancelled = false;
     void (async () => {
       try {
-        const listSyms = active.symbols
-          .map((s) => s.trim().toUpperCase())
-          .filter(Boolean)
-          .slice(0, 50);
+        const listSyms = activeSymbolsDeduped.slice(0, 50);
         const qs = new URLSearchParams({
           limit: "12",
           alert_type: "watchlist_maturation",
@@ -296,10 +346,10 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     return () => {
       cancelled = true;
     };
-  }, [active?.watchlist_id, active?.is_default, active?.symbols?.join(",") ?? ""]);
+  }, [active?.watchlist_id, active?.is_default, activeSymbolsDeduped.join(",")]);
 
   const localAddCandidates = useMemo((): SymbolCandidate[] => {
-    const onList = new Set((active?.symbols ?? []).map((s) => s.trim().toUpperCase()).filter(Boolean));
+    const onList = new Set(activeSymbolsDeduped);
     const m = new Map<string, SymbolCandidate>();
     for (const raw of QUICK) {
       const sym = normalizeTickerFromApi(raw) || normalizeTickerInput(raw);
@@ -307,7 +357,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
       m.set(sym, { symbol: sym, label: sym });
     }
     return Array.from(m.values()).sort((a, b) => a.symbol.localeCompare(b.symbol));
-  }, [active?.symbols]);
+  }, [activeSymbolsDeduped]);
 
   useEffect(() => {
     const q = addDraft.trim();
@@ -366,26 +416,66 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     };
   }, [addDraft]);
 
-  const addSuggestionRows = useMemo(() => {
+  const addSuggestionRows = useMemo((): WatchlistAddSuggestion[] => {
     const q = addDraft.trim();
-    const onList = new Set((active?.symbols ?? []).map((s) => s.trim().toUpperCase()).filter(Boolean));
-    const localFiltered = localAddCandidates.filter((c) => !onList.has(c.symbol));
-    if (!q) return localFiltered.slice(0, 8);
-    const seen = new Set<string>();
-    const merged: SymbolCandidate[] = [];
-    for (const c of [...localFiltered, ...addRemoteCandidates]) {
-      const sym = c.symbol.toUpperCase();
-      if (seen.has(sym) || onList.has(sym)) continue;
-      seen.add(sym);
-      merged.push(c);
+    const onListSet = new Set(activeSymbolsDeduped);
+    const onListAsCandidates: SymbolCandidate[] = activeSymbolsDeduped.map((sym) => {
+      const snap = snapshotsBySymbol[sym];
+      const name = (snap?.company_name ?? "").trim();
+      const ms = maturationSwing[sym];
+      const md = maturationDay[sym];
+      let matSnippet = "";
+      if (!(viewMode === "both" && dualDeskMaturation)) {
+        if (viewMode === "swing" || !dualDeskMaturation) {
+          matSnippet = [formatStateLabel(ms), ms?.readiness_label].filter(Boolean).join(" ").trim();
+        } else if (viewMode === "day") {
+          matSnippet = [formatStateLabel(md), md?.readiness_label].filter(Boolean).join(" ").trim();
+        }
+      }
+      const base = name ? `${sym} — ${name}` : sym;
+      const label = matSnippet && matSnippet !== "—" ? `${base} ${matSnippet}` : base;
+      return { symbol: sym, label };
+    });
+    let rankedOnList: WatchlistAddSuggestion[] = [];
+    if (q) {
+      rankedOnList = rankSymbolCandidates(onListAsCandidates, q)
+        .slice(0, 8)
+        .map((c) => ({ ...c, kind: "watchlist" as const }));
     }
-    return rankSymbolCandidates(merged, q).slice(0, 12);
-  }, [addDraft, addRemoteCandidates, localAddCandidates, active?.symbols]);
+    const localFiltered = localAddCandidates.filter((c) => !onListSet.has(c.symbol));
+    let rankedAdd: WatchlistAddSuggestion[] = [];
+    if (!q) {
+      rankedAdd = localFiltered.slice(0, 8).map((c) => ({ ...c, kind: "add" as const }));
+    } else {
+      const seenSym = new Set<string>(rankedOnList.map((r) => r.symbol));
+      const merged: SymbolCandidate[] = [];
+      for (const c of [...localFiltered, ...addRemoteCandidates]) {
+        const sym = c.symbol.toUpperCase();
+        if (seenSym.has(sym) || onListSet.has(sym)) continue;
+        seenSym.add(sym);
+        merged.push(c);
+      }
+      rankedAdd = rankSymbolCandidates(merged, q)
+        .slice(0, 12)
+        .map((c) => ({ ...c, kind: "add" as const }));
+    }
+    return [...rankedOnList, ...rankedAdd];
+  }, [
+    addDraft,
+    addRemoteCandidates,
+    localAddCandidates,
+    activeSymbolsDeduped,
+    snapshotsBySymbol,
+    viewMode,
+    dualDeskMaturation,
+    maturationSwing,
+    maturationDay
+  ]);
 
   const isAddCorroborated = useCallback(
     (sym: string) => {
       const u = sym.trim().toUpperCase();
-      return addSuggestionRows.some((r) => r.symbol === u);
+      return addSuggestionRows.some((r) => r.symbol === u && r.kind === "add");
     },
     [addSuggestionRows]
   );
@@ -434,7 +524,8 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
       setSymErr("No matching ticker. Choose from the list or verify the symbol.");
       return;
     }
-    if (active.symbols.some((s) => s.trim().toUpperCase() === sym)) {
+    const cur = dedupeSymbolsUpper(active.symbols);
+    if (cur.includes(sym)) {
       setSymErr("That symbol is already on your watchlist.");
       return;
     }
@@ -442,9 +533,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     const w0 = rows[0];
     if (!w0) return;
     const optimistic: WatchlistRow[] = [
-      w0.watchlist_id === active.watchlist_id
-        ? { ...w0, symbols: w0.symbols.includes(sym) ? w0.symbols : [...w0.symbols, sym] }
-        : w0
+      w0.watchlist_id === active.watchlist_id ? { ...w0, symbols: [...cur, sym] } : w0
     ];
     setRows(optimistic);
     try {
@@ -467,7 +556,8 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
       setRows((r) => {
         const z = r[0];
         if (!z || z.watchlist_id !== active.watchlist_id) return r;
-        return [data as WatchlistRow];
+        const row = data as WatchlistRow;
+        return [{ ...row, symbols: dedupeSymbolsUpper(row.symbols) }];
       });
       setAddDraft("");
       setAddSuggestOpen(false);
@@ -483,7 +573,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     setRows((r) => {
       const z = r[0];
       if (!z || z.watchlist_id !== active.watchlist_id) return r;
-      return [{ ...z, symbols: z.symbols.filter((s) => s !== sym) }];
+      return [{ ...z, symbols: dedupeSymbolsUpper(z.symbols.filter((s) => s.trim().toUpperCase() !== sym)) }];
     });
     try {
       const res = await fetch(
@@ -499,7 +589,8 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
       setRows((r) => {
         const z = r[0];
         if (!z || z.watchlist_id !== active.watchlist_id) return r;
-        return [data as WatchlistRow];
+        const row = data as WatchlistRow;
+        return [{ ...row, symbols: dedupeSymbolsUpper(row.symbols) }];
       });
     } catch {
       setRows(prev);
@@ -514,16 +605,16 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   }
 
   const evaluatedLabel = useMemo(() => {
-    if (!active?.is_default || active.symbols.length === 0) return null;
+    if (!active?.is_default || activeSymbolsDeduped.length === 0) return null;
     if (maturationFetchStatus === "loading") return "Loading…";
     if (maturationFetchStatus === "error") return "Unavailable";
     if (!lastEvaluatedAt) return null;
     return lastEvaluatedAt.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-  }, [active?.is_default, active?.symbols?.length, maturationFetchStatus, lastEvaluatedAt]);
+  }, [active?.is_default, activeSymbolsDeduped.length, maturationFetchStatus, lastEvaluatedAt]);
 
   const sortedSymbols = useMemo(() => {
     if (!active) return [];
-    const syms = active.symbols.map((s) => s.trim().toUpperCase()).filter(Boolean);
+    const syms = activeSymbolsDeduped;
     if (!active.is_default || maturationFetchStatus !== "ready") {
       return [...syms].sort();
     }
@@ -536,7 +627,24 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
       if (dr !== 0) return dr;
       return a.localeCompare(b);
     });
-  }, [active, maturationFetchStatus, maturationSwing, maturationDay, viewMode]);
+  }, [active, activeSymbolsDeduped, maturationFetchStatus, maturationSwing, maturationDay, viewMode]);
+
+  const filteredSymbolsForList = useMemo(() => {
+    const q = addDraft.trim();
+    if (!q) return sortedSymbols;
+    return sortedSymbols.filter((s) => {
+      const symU = s.trim().toUpperCase();
+      return watchlistSymbolMatchesSearch(
+        symU,
+        q,
+        viewMode,
+        dualDeskMaturation,
+        snapshotsBySymbol[symU],
+        maturationSwing[symU],
+        maturationDay[symU]
+      );
+    });
+  }, [sortedSymbols, addDraft, viewMode, dualDeskMaturation, snapshotsBySymbol, maturationSwing, maturationDay]);
 
   const statusCounts = useMemo(() => {
     const keys = ["actionable", "developing", "not_aligned", "invalidated"] as const;
@@ -547,7 +655,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
       invalidated: 0
     };
     if (!active?.is_default || maturationFetchStatus !== "ready") return out;
-    for (const sym of active.symbols.map((s) => s.trim().toUpperCase()).filter(Boolean)) {
+    for (const sym of activeSymbolsDeduped) {
       const disp = (displayStateForSymbol(sym, viewMode, maturationSwing, maturationDay) || "").toLowerCase();
       if (disp === "actionable") out.actionable += 1;
       else if (disp === "developing" || disp === "re_evaluating") out.developing += 1;
@@ -555,7 +663,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
       else if (disp === "invalidated") out.invalidated += 1;
     }
     return out;
-  }, [active, maturationFetchStatus, maturationSwing, maturationDay, viewMode]);
+  }, [active, activeSymbolsDeduped, maturationFetchStatus, maturationSwing, maturationDay, viewMode]);
 
   const tabBtn = (mode: WatchlistViewMode, label: string, icon: ReactNode) => {
     const on = viewMode === mode;
@@ -584,7 +692,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     return <p style={{ color: colors.bearish }}>{error}</p>;
   }
 
-  const slotUsed = active?.symbols.length ?? 0;
+  const slotUsed = activeSymbolsDeduped.length;
   const slotsLeft = Math.max(0, WATCHLIST_MAX_SYMBOLS - slotUsed);
   const headerStickyStyle = {
     top: APP_TOP_BAR_LAYOUT_HEIGHT,
@@ -593,15 +701,42 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   } as const;
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-col" style={{ gap: spacing[3] }}>
+    <div className="relative flex min-h-0 min-w-0 flex-col overflow-visible" style={{ gap: spacing[3] }}>
       {active ? (
         <>
-          <header className="sticky z-20 -mx-4 px-4 pb-3 pt-0 lg:-mx-6 lg:px-6" style={headerStickyStyle}>
+          <header
+            className="sticky z-30 w-full max-w-none self-start -mx-4 px-4 pb-3 pt-0 lg:-mx-6 lg:px-6"
+            style={headerStickyStyle}
+          >
             <div className="flex flex-wrap items-start justify-between gap-2 pb-2">
-              <div className="min-w-0">
-                <h1 className="m-0 truncate text-xl font-bold tracking-tight sm:text-2xl" style={{ color: colors.text }}>
-                  Watchlist
-                </h1>
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                {rename === active.watchlist_id ? (
+                  <input
+                    autoFocus
+                    defaultValue={active.name}
+                    onBlur={(e) => void saveRename(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                    }}
+                    className="min-h-10 w-full max-w-xs rounded-md border px-2 text-base font-semibold"
+                    style={{ borderColor: colors.border, color: colors.text, background: colors.surface }}
+                    aria-label="Watchlist name"
+                  />
+                ) : (
+                  <>
+                    <h1 className="m-0 truncate text-xl font-bold tracking-tight sm:text-2xl" style={{ color: colors.text }}>
+                      Watchlist
+                    </h1>
+                    <button
+                      type="button"
+                      onClick={() => setRename(active.watchlist_id)}
+                      className="shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold hover:underline"
+                      style={{ color: colors.textMuted }}
+                    >
+                      Rename list
+                    </button>
+                  </>
+                )}
               </div>
               <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                 <span
@@ -657,6 +792,15 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                       const pick = addSuggestionRows[addSuggestHighlight];
                       if (pick) {
                         e.preventDefault();
+                        if (pick.kind === "watchlist") {
+                          document.getElementById(`watchlist-row-${pick.symbol}`)?.scrollIntoView({
+                            block: "nearest",
+                            behavior: "smooth"
+                          });
+                          setAddDraft("");
+                          setAddSuggestOpen(false);
+                          return;
+                        }
                         void addSymbol(pick.symbol);
                         return;
                       }
@@ -666,7 +810,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                       void addSymbol(addDraft.trim());
                     }
                   }}
-                  placeholder="Ticker or company name"
+                  placeholder="Search watchlist or add ticker (symbol first, then name)"
                   className="min-h-11 w-full flex-1 rounded-lg border px-3"
                   style={{
                     borderColor: colors.border,
@@ -688,6 +832,15 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                   }}
                   onClick={() => {
                     const pick = addSuggestionRows[addSuggestHighlight];
+                    if (pick?.kind === "watchlist") {
+                      document.getElementById(`watchlist-row-${pick.symbol}`)?.scrollIntoView({
+                        block: "nearest",
+                        behavior: "smooth"
+                      });
+                      setAddDraft("");
+                      setAddSuggestOpen(false);
+                      return;
+                    }
                     if (pick) void addSymbol(pick.symbol);
                     else void addSymbol(addDraft.trim());
                   }}
@@ -723,7 +876,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                     </li>
                   ) : null}
                   {addSuggestionRows.map((row, idx) => (
-                    <li key={row.symbol} role="option" aria-selected={idx === addSuggestHighlight}>
+                    <li key={`${row.kind}-${row.symbol}`} role="option" aria-selected={idx === addSuggestHighlight}>
                       <button
                         type="button"
                         className="w-full px-3 py-2 text-left text-sm"
@@ -734,9 +887,23 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                           cursor: "pointer"
                         }}
                         onMouseDown={(ev) => ev.preventDefault()}
-                        onClick={() => void addSymbol(row.symbol)}
+                        onClick={() => {
+                          if (row.kind === "watchlist") {
+                            document.getElementById(`watchlist-row-${row.symbol}`)?.scrollIntoView({
+                              block: "nearest",
+                              behavior: "smooth"
+                            });
+                            setAddDraft("");
+                            setAddSuggestOpen(false);
+                            return;
+                          }
+                          void addSymbol(row.symbol);
+                        }}
                       >
-                        <span className="font-semibold tracking-wide">{row.symbol}</span>
+                        <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: colors.textMuted }}>
+                          {row.kind === "watchlist" ? "On your list" : "Add"}
+                        </span>
+                        <span className="mt-0.5 block font-semibold tracking-wide">{row.symbol}</span>
                         {row.label !== row.symbol ? (
                           <span className="block text-xs" style={{ color: colors.textMuted }}>
                             {row.label.includes("—") ? row.label.split("—").slice(1).join("—").trim() : row.label}
@@ -781,7 +948,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
           </header>
 
           <div style={{ display: "grid", gap: spacing[3] }}>
-            {active.is_default && active.symbols.length > 0 ? (
+            {active.is_default && activeSymbolsDeduped.length > 0 ? (
               <div
                 className="grid gap-3 rounded-xl border px-3 py-3 sm:grid-cols-2 sm:px-4"
                 style={{ borderColor: colors.border, background: colors.surface }}
@@ -840,7 +1007,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
               </div>
             ) : null}
 
-            {active.is_default && active.symbols.length > 0 ? (
+            {active.is_default && activeSymbolsDeduped.length > 0 ? (
               <p className="m-0 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
                 <span className="font-semibold" style={{ color: "#a78bfa" }}>
                   ■
@@ -863,36 +1030,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
               className={surfaceGlowClassName}
               style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl }}
             >
-              <div className="flex flex-wrap items-start justify-between gap-3 border-b px-4 py-3" style={{ borderColor: colors.border }}>
-                <div className="min-w-0">
-                  {rename === active.watchlist_id ? (
-                    <input
-                      autoFocus
-                      defaultValue={active.name}
-                      onBlur={(e) => void saveRename(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                      }}
-                      className="min-h-10 w-full max-w-xs rounded-md border px-2 text-base font-semibold"
-                      style={{ borderColor: colors.border, color: colors.text }}
-                    />
-                  ) : (
-                    <h2
-                      className="m-0 cursor-pointer text-lg font-semibold"
-                      style={{ color: colors.text }}
-                      onClick={() => setRename(active.watchlist_id)}
-                      title="Click to rename"
-                    >
-                      {active.name}
-                    </h2>
-                  )}
-                  <p className="m-0 mt-0.5 text-xs" style={{ color: colors.textMuted }}>
-                    Powers scanner & gap intel
-                  </p>
-                </div>
-              </div>
-
-              {active.is_default && active.symbols.length > 0 ? (
+              {active.is_default && activeSymbolsDeduped.length > 0 ? (
                 <div
                   data-testid="watchlist-maturation-alerts-feed"
                   className="mx-4 mt-3 rounded-lg border px-3 py-2"
@@ -943,7 +1081,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
               ) : null}
 
               <div className="p-3 sm:p-4">
-                {active.symbols.length === 0 ? (
+                {activeSymbolsDeduped.length === 0 ? (
                   <div>
                     <p className="m-0 mb-3 text-sm" style={{ color: colors.textMuted }}>
                       No symbols yet. Use the bar above or tap a popular name.
@@ -963,8 +1101,16 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                     </div>
                   </div>
                 ) : (
-                  <ul className="m-0 flex list-none flex-col gap-2 p-0">
-                    {sortedSymbols.map((s) => {
+                  <>
+                    {activeSymbolsDeduped.length > 0 && addDraft.trim() && filteredSymbolsForList.length === 0 ? (
+                      <p className="m-0 mb-3 text-sm" style={{ color: colors.textMuted }}>
+                        No symbols match &quot;{addDraft.trim()}&quot; in this {viewMode} view (symbol and company name
+                        {viewMode === "both" && dualDeskMaturation ? "" : "; maturation text for this desk only"}). Clear
+                        the bar to see all rows, or pick &quot;Add&quot; below to add a new ticker.
+                      </p>
+                    ) : null}
+                    <ul className="m-0 flex list-none flex-col gap-2 p-0">
+                    {filteredSymbolsForList.map((s) => {
                       const symU = s.trim().toUpperCase();
                       const ms = active.is_default ? maturationSwing[symU] : undefined;
                       const md = active.is_default && dualDeskMaturation ? maturationDay[symU] : undefined;
@@ -973,34 +1119,45 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                         : undefined;
                       const accent = maturationAccent(displaySt, colors as ThemeColors);
                       const href = watchlistToSignalsHref(s, tradingModeForSignalsNav(viewMode, dualDeskMaturation));
-                      const rowLine = (mode: "swing" | "day", m: MaturationRow | undefined) => (
-                        <div className="flex min-w-0 flex-wrap items-baseline gap-2 text-xs sm:text-sm">
-                          <span
-                            className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide"
-                            style={{
-                              background: mode === "swing" ? "rgba(167,139,250,0.2)" : "rgba(45,212,191,0.15)",
-                              color: mode === "swing" ? "#c4b5fd" : "#5eead4"
-                            }}
-                          >
-                            {mode === "swing" ? "Swing" : "Day"}
-                          </span>
-                          <span className="min-w-0 text-[11px] font-medium leading-snug sm:text-sm" style={{ color: colors.text }}>
-                            ● {formatStateLabel(m)}
-                            {m?.readiness_label ? (
-                              <span
-                                className="text-[10px] font-normal sm:text-xs"
-                                style={{ color: colors.textMuted }}
-                                title={m.readiness_label}
-                              >
-                                {" "}
-                                · {m.readiness_label.length > 48 ? `${m.readiness_label.slice(0, 48)}…` : m.readiness_label}
-                              </span>
-                            ) : null}
-                          </span>
-                        </div>
-                      );
+                      const quote = watchlistQuoteFromSnapshot(snapshotsBySymbol[symU]);
+                      const rowLine = (mode: "swing" | "day", m: MaturationRow | undefined) => {
+                        const hasMat = Boolean(m?.state || m?.label);
+                        const detail = hasMat
+                          ? formatStateLabel(m)
+                          : maturationFetchStatus === "ready" && active.is_default
+                            ? "No maturation yet — run evidence on Signals"
+                            : maturationFetchStatus === "error" && active.is_default
+                              ? "Could not load maturation"
+                              : "…";
+                        return (
+                          <div className="flex min-w-0 flex-wrap items-baseline gap-2 text-xs sm:text-sm">
+                            <span
+                              className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+                              style={{
+                                background: mode === "swing" ? "rgba(167,139,250,0.2)" : "rgba(45,212,191,0.15)",
+                                color: mode === "swing" ? "#c4b5fd" : "#5eead4"
+                              }}
+                            >
+                              {mode === "swing" ? "Swing" : "Day"}
+                            </span>
+                            <span className="flex-1 text-left text-[11px] font-medium leading-snug sm:text-sm" style={{ color: colors.text }}>
+                              ● {detail}
+                              {m?.readiness_label ? (
+                                <span
+                                  className="text-[10px] font-normal sm:text-xs"
+                                  style={{ color: colors.textMuted }}
+                                  title={m.readiness_label}
+                                >
+                                  {" "}
+                                  · {m.readiness_label.length > 48 ? `${m.readiness_label.slice(0, 48)}…` : m.readiness_label}
+                                </span>
+                              ) : null}
+                            </span>
+                          </div>
+                        );
+                      };
                       return (
-                        <li key={s}>
+                        <li key={symU} id={`watchlist-row-${symU}`}>
                           <div className="relative flex items-stretch gap-3 rounded-xl border px-3 py-3 transition hover:brightness-[1.03] sm:px-4" style={{ borderColor: colors.border, background: colors.background }}>
                             <Link
                               href={href}
@@ -1011,20 +1168,48 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                               <span className="sr-only">Open {symU} on Signals</span>
                             </Link>
                             <span className="relative z-[1] mt-1 h-2.5 w-2.5 shrink-0 rounded-full pointer-events-none" style={{ background: accent }} aria-hidden />
-                            <div className="relative z-[1] min-w-0 flex-1 pointer-events-none">
-                              <div className="flex flex-wrap items-baseline gap-2">
-                                <span className="font-mono text-lg font-bold tracking-wide">{symU}</span>
-                                {maturationFetchStatus === "loading" && active.is_default ? (
-                                  <span className="text-[10px] uppercase" style={{ color: colors.textMuted }}>
-                                    …
-                                  </span>
+                            <div className="relative z-[1] flex min-h-0 min-w-0 flex-1 items-start gap-3 pointer-events-none sm:gap-4">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-baseline gap-2">
+                                  <span className="font-mono text-lg font-bold tracking-wide">{symU}</span>
+                                  {maturationFetchStatus === "loading" && active.is_default ? (
+                                    <span className="text-[10px] uppercase" style={{ color: colors.textMuted }}>
+                                      …
+                                    </span>
+                                  ) : null}
+                                </div>
+                                {active.is_default && (viewMode === "both" || viewMode === "swing" || !dualDeskMaturation) ? (
+                                  <div className="mt-2 space-y-1.5">{rowLine("swing", ms)}</div>
+                                ) : null}
+                                {active.is_default && dualDeskMaturation && (viewMode === "both" || viewMode === "day") ? (
+                                  <div className="mt-2 space-y-1.5">{rowLine("day", md)}</div>
                                 ) : null}
                               </div>
-                              {active.is_default && (viewMode === "both" || viewMode === "swing" || !dualDeskMaturation) ? (
-                                <div className="mt-2 space-y-1.5">{rowLine("swing", ms)}</div>
-                              ) : null}
-                              {active.is_default && dualDeskMaturation && (viewMode === "both" || viewMode === "day") ? (
-                                <div className="mt-2 space-y-1.5">{rowLine("day", md)}</div>
+                              {quote ? (
+                                <div className="flex shrink-0 flex-col items-end gap-0.5 text-right tabular-nums">
+                                  <span className="font-mono text-sm font-semibold" style={{ color: colors.text }}>
+                                    {quote.price}
+                                  </span>
+                                  {quote.pct ? (
+                                    <span
+                                      className="text-xs font-semibold"
+                                      style={{
+                                        color:
+                                          quote.bullish === true
+                                            ? colors.bullish
+                                            : quote.bullish === false
+                                              ? colors.bearish
+                                              : colors.textMuted
+                                      }}
+                                    >
+                                      {quote.pct}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              ) : snapshotFetchStatus === "loading" ? (
+                                <span className="shrink-0 pt-0.5 text-xs" style={{ color: colors.textMuted }}>
+                                  …
+                                </span>
                               ) : null}
                             </div>
                             {evaluatedLabel && active.is_default ? (
@@ -1049,6 +1234,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                       );
                     })}
                   </ul>
+                  </>
                 )}
               </div>
             </article>
