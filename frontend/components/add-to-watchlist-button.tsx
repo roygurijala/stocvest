@@ -70,7 +70,7 @@ export function AddToWatchlistButton({ symbol, dualDeskTracking = true, classNam
   );
   const [maturationPreview, setMaturationPreview] = useState<DeskMaturationPreview>({ status: "idle" });
   const anchorRef = useRef<HTMLButtonElement | null>(null);
-  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
   const [popoverPos, setPopoverPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const popoverId = useId();
 
@@ -413,7 +413,7 @@ function WatchlistInListPopover({
   onRemove
 }: {
   id: string;
-  popoverRef: React.RefObject<HTMLDivElement | null>;
+  popoverRef: React.RefObject<HTMLDivElement>;
   symU: string;
   dualDeskTracking: boolean;
   draftTracking: WatchlistDeskTracking;
