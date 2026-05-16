@@ -92,6 +92,7 @@ locals {
       aws_dynamodb_table.sector_cache,
       aws_dynamodb_table.audit_events,
       aws_dynamodb_table.gap_intel_cache,
+      aws_dynamodb_table.scanner_evaluation_trace,
     ] : [t.arn, "${t.arn}/index/*"]
   ])
 }
@@ -324,8 +325,9 @@ resource "aws_lambda_function" "api" {
         STOCVEST_DISABLE_REDIS = "0"
       } : {},
       each.key == "signals" ? {
-        DYNAMODB_GAP_INTEL_CACHE_TABLE = aws_dynamodb_table.gap_intel_cache.name
-        GAP_INTEL_TICK_SYMBOLS         = "SPY,QQQ,IWM"
+        DYNAMODB_GAP_INTEL_CACHE_TABLE          = aws_dynamodb_table.gap_intel_cache.name
+        DYNAMODB_SCANNER_EVALUATION_TRACE_TABLE = aws_dynamodb_table.scanner_evaluation_trace.name
+        GAP_INTEL_TICK_SYMBOLS                  = "SPY,QQQ,IWM"
       } : {},
     )
   }

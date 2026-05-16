@@ -10,7 +10,11 @@ from zoneinfo import ZoneInfo
 from typing import Any, Callable, Literal
 from uuid import uuid4
 
-from stocvest.api.legal_copy import API_SIGNAL_DISCLAIMER, HISTORICAL_VALIDATION_DISCLAIMER
+from stocvest.api.legal_copy import (
+    API_SIGNAL_DISCLAIMER,
+    HISTORICAL_VALIDATION_DISCLAIMER,
+    SCANNER_EVALUATION_TRACE_DISCLAIMER,
+)
 from stocvest.api.http_route import http_route_descriptor
 from stocvest.api.response import bad_request, internal_error, not_found, ok, unauthorized
 from stocvest.api.services.historical_validation_service import HistoricalValidationService
@@ -25,6 +29,11 @@ from stocvest.api.services.scanner_setups_bundle import (
     bundle_setups_response,
     ensure_setups_v2_bundle,
     excluded_symbols_from_bundle,
+)
+from stocvest.api.services.scanner_trace_persist import persist_evaluation_trace_rows
+from stocvest.data.scanner_evaluation_trace_store import (
+    get_scanner_evaluation_traces_merged,
+    session_date_et,
 )
 from stocvest.signals.scanner_evaluation_trace import (
     build_intraday_evaluation_traces,
@@ -636,6 +645,7 @@ def day_setups_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, 
         return bad_request("Invalid 'limit', 'min_score', near-qualification, or evaluation-trace fields.")
 
     try:
+        rc = build_request_context(event)
         bars_by_symbol: dict[str, list[Bar]] = {}
         for symbol, bars in bars_by_symbol_raw.items():
             if not isinstance(symbol, str) or not isinstance(bars, list):
@@ -682,12 +692,44 @@ def day_setups_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, 
                 exclude_symbols=excluded,
                 limit=max(1, min(trace_limit, 50)),
             )
+            persist_evaluation_trace_rows(rc.user_id, "day", bundle["evaluation_trace"])
             rows = bundle
         return ok(rows)
     except (KeyError, TypeError, ValueError) as exc:
         return bad_request(f"Invalid day setup request: {exc}")
     except Exception as exc:
         return internal_error(str(exc))
+
+
+def scanner_trace_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    """GET /v1/signals/scanner-trace — persisted per-symbol evaluation trace (48h TTL)."""
+    _ = context
+    rc = build_request_context(event)
+    if not rc.user_id:
+        return unauthorized("Authenticated user is required.")
+    qs = event.get("queryStringParameters") or {}
+    mode_raw = str(qs.get("mode") or "both").strip().lower()
+    if mode_raw not in ("day", "swing", "both"):
+        return bad_request("Query param 'mode' must be day, swing, or both.")
+    session_date = str(qs.get("session_date") or "").strip() or session_date_et()
+    try:
+        limit = max(1, min(50, int(str(qs.get("limit") or "20"))))
+    except (TypeError, ValueError):
+        limit = 20
+    rows = get_scanner_evaluation_traces_merged(
+        rc.user_id,
+        mode=mode_raw,
+        session_date=session_date,
+        limit=limit,
+    )
+    return ok(
+        {
+            "session_date_et": session_date,
+            "mode": mode_raw,
+            "evaluation_trace": rows,
+            "disclaimer": SCANNER_EVALUATION_TRACE_DISCLAIMER,
+        }
+    )
 
 
 def swing_setups_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
@@ -717,6 +759,7 @@ def swing_setups_handler(event: LambdaEvent, context: LambdaContext) -> dict[str
         )
 
     try:
+        rc = build_request_context(event)
         bars_by_symbol: dict[str, list[Bar]] = {}
         for symbol, bars in bars_by_symbol_raw.items():
             if not isinstance(symbol, str) or not isinstance(bars, list):
@@ -765,6 +808,7 @@ def swing_setups_handler(event: LambdaEvent, context: LambdaContext) -> dict[str
                 exclude_symbols=excluded,
                 limit=max(1, min(trace_limit, 50)),
             )
+            persist_evaluation_trace_rows(rc.user_id, "swing", bundle["evaluation_trace"])
             rows = bundle
         return ok(rows)
     except (KeyError, TypeError, ValueError) as exc:
@@ -1645,6 +1689,8 @@ def signals_http_dispatch(event: LambdaEvent, context: LambdaContext) -> dict[st
         or route.startswith("GET /v1/signals/historical-validation/summary?")
     ):
         return historical_validation_summary_handler(event, context)
+    if route == "GET /v1/signals/scanner-trace" or route.startswith("GET /v1/signals/scanner-trace?"):
+        return scanner_trace_handler(event, context)
 
     routes: dict[str, Callable[[LambdaEvent, LambdaContext], dict[str, Any]]] = {
         "GET /v1/signals/founding-members": founding_members_count_handler,

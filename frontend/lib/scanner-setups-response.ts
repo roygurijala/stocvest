@@ -23,6 +23,10 @@ export function isSwingSetupRow(row: IntradaySetupPayload): boolean {
   return row.scanner_mode === "swing_daily";
 }
 
+export function parseEvaluationTraceFromResponse(data: unknown): ScannerEvaluationTraceRow[] {
+  return parseEvaluationTrace(data);
+}
+
 function parseEvaluationTrace(data: unknown): ScannerEvaluationTraceRow[] {
   if (!Array.isArray(data)) return [];
   const out: ScannerEvaluationTraceRow[] = [];

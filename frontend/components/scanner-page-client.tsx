@@ -26,6 +26,7 @@ import { ScannerScanResultHero } from "@/components/scanner/scanner-scan-result-
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { loadScannerDataWithoutBrief } from "@/lib/api/scanner-client-load";
+import { fetchScannerEvaluationTrace } from "@/lib/api/scanner-trace";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import type {
   AssistantPageContext,
@@ -40,6 +41,7 @@ import type {
 } from "@/lib/api/scanner";
 import { mergeScannerCoreIntoOverview } from "@/lib/scanner-overview-merge";
 import { buildScannerScanSummary } from "@/lib/scanner-scan-summary";
+import type { ScannerEvaluationTraceRow } from "@/lib/scanner-setups-response";
 import { fetchEarningsCalendarClient } from "@/lib/api/earnings-client";
 import type { EarningsEvent } from "@/lib/api/earnings";
 import type { ThemeColors } from "@/lib/design-system";
@@ -1097,9 +1099,32 @@ export function ScannerPageClient({
   }, [scanSummary.qualifying.total, scannerSetupMode, dayTradingSurfaces, emptyOverviewInput]);
 
   const useCompactColumnEmpty = scanSummary.qualifying.total === 0;
-  const evaluationTrace = overview.evaluationTrace ?? [];
   const evaluationTraceDeskFilter: "swing" | "day" | "all" =
     scannerSetupMode === "swing" ? "swing" : scannerSetupMode === "day" ? "day" : "all";
+  const [evaluationTrace, setEvaluationTrace] = useState<ScannerEvaluationTraceRow[]>(
+    () => overview.evaluationTrace ?? []
+  );
+
+  useEffect(() => {
+    setEvaluationTrace(overview.evaluationTrace ?? []);
+  }, [overview.evaluationTrace]);
+
+  useEffect(() => {
+    if (scanSummary.qualifying.total > 0) return;
+    if ((overview.evaluationTrace ?? []).length > 0) return;
+    let cancelled = false;
+    const mode = evaluationTraceDeskFilter === "all" ? "both" : evaluationTraceDeskFilter;
+    void fetchScannerEvaluationTrace(mode, 20)
+      .then((rows) => {
+        if (!cancelled && rows.length > 0) setEvaluationTrace(rows);
+      })
+      .catch(() => {
+        /* persisted trace is optional hydration */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [scanSummary.qualifying.total, overview.evaluationTrace, evaluationTraceDeskFilter]);
 
   const setupsPanelTitle =
     scannerSetupMode === "swing"

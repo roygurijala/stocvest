@@ -185,6 +185,9 @@ class Settings(BaseSettings):
     dynamodb_parameter_proposal_table: str = Field("", alias="DYNAMODB_PARAMETER_PROPOSAL_TABLE")
     dynamodb_sector_cache_table: str = Field("", alias="DYNAMODB_SECTOR_CACHE_TABLE")
     dynamodb_gap_intel_cache_table: str = Field("", alias="DYNAMODB_GAP_INTEL_CACHE_TABLE")
+    dynamodb_scanner_evaluation_trace_table: str = Field(
+        "", alias="DYNAMODB_SCANNER_EVALUATION_TRACE_TABLE"
+    )
 
     # ── Signal tuning / analysis (optional) ───────────────────────
     stocvest_internal_analysis_key: str = Field("", alias="STOCVEST_INTERNAL_ANALYSIS_KEY")

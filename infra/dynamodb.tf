@@ -370,3 +370,29 @@ resource "aws_dynamodb_table" "gap_intel_cache" {
     Name = "stocvest-development-ddb-gap-intel-cache"
   })
 }
+
+# B33 — per-user scanner evaluation trace (userId × trace#desk#ET-session-date); 48h TTL.
+resource "aws_dynamodb_table" "scanner_evaluation_trace" {
+  name         = "ScannerEvaluationTrace"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "userId"
+  range_key    = "sk"
+
+  attribute {
+    name = "userId"
+    type = "S"
+  }
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "stocvest-development-ddb-scanner-evaluation-trace"
+  })
+}
