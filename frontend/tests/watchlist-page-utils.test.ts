@@ -5,6 +5,7 @@ import {
   dedupeWatchlistSymbolsUpper,
   formatWatchlistMaturationLabel,
   normalizeWatchlistMaturationBySymbol,
+  parseCompanyNameFromTickerCandidateLabel,
   watchlistQuoteFromSnapshot,
   watchlistSymbolMatchesSearch
 } from "@/lib/watchlist-page-utils";
@@ -20,6 +21,24 @@ describe("dedupeWatchlistSymbolsUpper", () => {
 
   test("empty input", () => {
     expect(dedupeWatchlistSymbolsUpper([])).toEqual([]);
+  });
+});
+
+describe("parseCompanyNameFromTickerCandidateLabel", () => {
+  test("parses em-dash label", () => {
+    expect(parseCompanyNameFromTickerCandidateLabel("TSLA — Tesla, Inc.", "TSLA")).toBe("Tesla, Inc.");
+  });
+
+  test("parses hyphen label", () => {
+    expect(parseCompanyNameFromTickerCandidateLabel("AAPL - Apple Inc.", "AAPL")).toBe("Apple Inc.");
+  });
+
+  test("ticker-only label", () => {
+    expect(parseCompanyNameFromTickerCandidateLabel("TSLA", "TSLA")).toBe("");
+  });
+
+  test("wrong prefix", () => {
+    expect(parseCompanyNameFromTickerCandidateLabel("MSFT — Microsoft", "TSLA")).toBe("");
   });
 });
 
@@ -91,6 +110,10 @@ describe("watchlistSymbolMatchesSearch", () => {
   test("matches company name from snapshot", () => {
     const s = snap({ company_name: "Apple Inc." });
     expect(watchlistSymbolMatchesSearch("AAPL", "apple", "both", true, s, ms, md)).toBe(true);
+  });
+
+  test("matches company via fallback when snapshot has no name", () => {
+    expect(watchlistSymbolMatchesSearch("TSLA", "tesla", "swing", false, snap(), ms, md, "Tesla, Inc.")).toBe(true);
   });
 
   test("swing mode searches swing maturation blob", () => {

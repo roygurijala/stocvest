@@ -14,6 +14,7 @@ import {
   dedupeWatchlistSymbolsUpper as dedupeSymbolsUpper,
   formatWatchlistMaturationLabel as formatStateLabel,
   normalizeWatchlistMaturationBySymbol as normalizeMaturationBySymbol,
+  parseCompanyNameFromTickerCandidateLabel,
   watchlistQuoteFromSnapshot,
   watchlistSymbolMatchesSearch,
   type WatchlistMaturationRow as MaturationRow,
@@ -416,12 +417,24 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     };
   }, [addDraft]);
 
+  /** Issuer names from Polygon ticker-search — used when row snapshots are still empty. */
+  const remoteCompanyBySymbol = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of addRemoteCandidates) {
+      const sym = c.symbol.trim().toUpperCase();
+      const nm = parseCompanyNameFromTickerCandidateLabel(c.label, sym);
+      if (nm) m.set(sym, nm);
+    }
+    return m;
+  }, [addRemoteCandidates]);
+
   const addSuggestionRows = useMemo((): WatchlistAddSuggestion[] => {
     const q = addDraft.trim();
     const onListSet = new Set(activeSymbolsDeduped);
     const onListAsCandidates: SymbolCandidate[] = activeSymbolsDeduped.map((sym) => {
       const snap = snapshotsBySymbol[sym];
-      const name = (snap?.company_name ?? "").trim();
+      const name =
+        (snap?.company_name ?? "").trim() || remoteCompanyBySymbol.get(sym) || "";
       const ms = maturationSwing[sym];
       const md = maturationDay[sym];
       let matSnippet = "";
@@ -469,7 +482,8 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     viewMode,
     dualDeskMaturation,
     maturationSwing,
-    maturationDay
+    maturationDay,
+    remoteCompanyBySymbol
   ]);
 
   const isAddCorroborated = useCallback(
@@ -641,10 +655,20 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
         dualDeskMaturation,
         snapshotsBySymbol[symU],
         maturationSwing[symU],
-        maturationDay[symU]
+        maturationDay[symU],
+        remoteCompanyBySymbol.get(symU)
       );
     });
-  }, [sortedSymbols, addDraft, viewMode, dualDeskMaturation, snapshotsBySymbol, maturationSwing, maturationDay]);
+  }, [
+    sortedSymbols,
+    addDraft,
+    viewMode,
+    dualDeskMaturation,
+    snapshotsBySymbol,
+    maturationSwing,
+    maturationDay,
+    remoteCompanyBySymbol
+  ]);
 
   const statusCounts = useMemo(() => {
     const keys = ["actionable", "developing", "not_aligned", "invalidated"] as const;

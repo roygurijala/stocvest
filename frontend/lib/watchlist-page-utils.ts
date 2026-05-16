@@ -8,6 +8,25 @@ export type WatchlistMaturationRow = {
 
 export type WatchlistViewMode = "swing" | "day" | "both";
 
+/**
+ * Parse the company / issuer portion from typeahead labels such as
+ * ``TSLA — Tesla, Inc.`` (em-dash, en-dash, hyphen, or pipe after the ticker).
+ * Returns empty when the label is ticker-only.
+ */
+export function parseCompanyNameFromTickerCandidateLabel(label: string, symbolUpper: string): string {
+  const raw = label.trim();
+  const sym = symbolUpper.trim().toUpperCase();
+  if (!raw || !sym) return "";
+  if (raw.toUpperCase() === sym) return "";
+  if (!raw.toUpperCase().startsWith(sym)) return "";
+  let rest = raw.slice(sym.length).trimStart();
+  if (!rest) return "";
+  if (rest.startsWith("—") || rest.startsWith("–") || rest.startsWith("-") || rest.startsWith("|")) {
+    return rest.replace(/^[—–\-|]\s*/, "").trim();
+  }
+  return "";
+}
+
 /** Uppercase unique symbols, first occurrence wins (stable order). */
 export function dedupeWatchlistSymbolsUpper(symbols: readonly string[]): string[] {
   const seen = new Set<string>();
@@ -68,13 +87,15 @@ export function watchlistSymbolMatchesSearch(
   dualDeskMaturation: boolean,
   snap: SnapshotPayload | undefined,
   ms: WatchlistMaturationRow | undefined,
-  md: WatchlistMaturationRow | undefined
+  md: WatchlistMaturationRow | undefined,
+  /** When snapshots have not loaded yet, e.g. issuer from ticker-search results. */
+  companyNameFallback?: string | null
 ): boolean {
   const q = rawQuery.trim().toLowerCase();
   if (!q) return true;
   const symU = sym.trim().toUpperCase();
   if (symU.toLowerCase().includes(q)) return true;
-  const company = (snap?.company_name ?? "").trim().toLowerCase();
+  const company = ((snap?.company_name ?? "").trim() || (companyNameFallback ?? "").trim()).toLowerCase();
   if (company.includes(q)) return true;
   if (viewMode === "both" && dualDeskMaturation) return false;
   const swingBlob = `${formatWatchlistMaturationLabel(ms)} ${ms?.readiness_label ?? ""}`.toLowerCase();
