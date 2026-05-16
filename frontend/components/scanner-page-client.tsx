@@ -26,7 +26,7 @@ import { ScannerScanResultHero } from "@/components/scanner/scanner-scan-result-
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { loadScannerDataWithoutBrief } from "@/lib/api/scanner-client-load";
-import { fetchScannerEvaluationTrace } from "@/lib/api/scanner-trace";
+import { fetchScannerEvaluationTraceClient } from "@/lib/api/scanner-trace-client";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import type {
   AssistantPageContext,
@@ -1114,7 +1114,7 @@ export function ScannerPageClient({
     if ((overview.evaluationTrace ?? []).length > 0) return;
     let cancelled = false;
     const mode = evaluationTraceDeskFilter === "all" ? "both" : evaluationTraceDeskFilter;
-    void fetchScannerEvaluationTrace(mode, 20)
+    void fetchScannerEvaluationTraceClient(mode, 20)
       .then((rows) => {
         if (!cancelled && rows.length > 0) setEvaluationTrace(rows);
       })

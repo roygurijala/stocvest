@@ -1,19 +1,19 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-const apiFetchMock = vi.fn();
+const browserApiFetchMock = vi.fn();
 
-vi.mock("@/lib/api/client", () => ({
-  apiFetch: apiFetchMock
+vi.mock("@/lib/api/browser-api-fetch", () => ({
+  browserApiFetch: browserApiFetchMock
 }));
 
-describe("fetchScannerEvaluationTrace", () => {
+describe("fetchScannerEvaluationTraceClient", () => {
   beforeEach(() => {
-    apiFetchMock.mockReset();
+    browserApiFetchMock.mockReset();
   });
 
   test("parses GET scanner-trace response", async () => {
-    const { fetchScannerEvaluationTrace } = await import("@/lib/api/scanner-trace");
-    apiFetchMock.mockResolvedValue({
+    const { fetchScannerEvaluationTraceClient } = await import("@/lib/api/scanner-trace-client");
+    browserApiFetchMock.mockResolvedValue({
       session_date_et: "2026-05-16",
       mode: "both",
       disclaimer: "not a watchlist",
@@ -27,9 +27,9 @@ describe("fetchScannerEvaluationTrace", () => {
         }
       ]
     });
-    const rows = await fetchScannerEvaluationTrace("both", 20);
+    const rows = await fetchScannerEvaluationTraceClient("both", 20);
     expect(rows).toHaveLength(1);
     expect(rows[0]?.symbol).toBe("NVDA");
-    expect(apiFetchMock.mock.calls[0]?.[0]).toContain("/v1/signals/scanner-trace");
+    expect(browserApiFetchMock.mock.calls[0]?.[0]).toContain("/v1/signals/scanner-trace");
   });
 });
