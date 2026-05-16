@@ -8,6 +8,7 @@ import { APP_TOP_BAR_LAYOUT_HEIGHT } from "@/components/top-bar";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, colorTokens, spacing, surfaceGlowClassName } from "@/lib/design-system";
 import { watchlistSignalsOpenAriaLabel, watchlistToSignalsHref } from "@/lib/nav/watchlist-signals-deeplink";
+import { rankSymbolCandidates } from "@/lib/symbol-suggestion-rank";
 import { useTheme } from "@/lib/theme-provider";
 
 const WATCHLIST_MAX_SYMBOLS = 50;
@@ -124,7 +125,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   const [rows, setRows] = useState<WatchlistRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [addInput, setAddInput] = useState("");
+  const [addDraft, setAddDraft] = useState("");
   const [symErr, setSymErr] = useState<string | null>(null);
   const [rename, setRename] = useState<string | null>(null);
   const [maturationSwing, setMaturationSwing] = useState<Record<string, MaturationRow>>({});
@@ -134,11 +135,12 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   const [viewMode, setViewMode] = useState<WatchlistViewMode>("swing");
   const [maturationAlerts, setMaturationAlerts] = useState<MaturationAlertFeedItem[]>([]);
   const [maturationAlertsStatus, setMaturationAlertsStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
-  const [tickerSuggest, setTickerSuggest] = useState<SymbolCandidate[]>([]);
-  const [tickerSuggestOpen, setTickerSuggestOpen] = useState(false);
-  const [tickerSuggestLoading, setTickerSuggestLoading] = useState(false);
-  const suggestTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const addWrapRef = useRef<HTMLDivElement | null>(null);
+  const [addSuggestOpen, setAddSuggestOpen] = useState(false);
+  const [addSuggestHighlight, setAddSuggestHighlight] = useState(0);
+  const [addRemoteCandidates, setAddRemoteCandidates] = useState<SymbolCandidate[]>([]);
+  const [addRemoteSearchLoading, setAddRemoteSearchLoading] = useState(false);
+  const [addRemoteSearchError, setAddRemoteSearchError] = useState<string | null>(null);
+  const addComboRef = useRef<HTMLDivElement | null>(null);
 
   usePublishAssistantContext({ page: "dashboard/watchlists" });
 
@@ -296,57 +298,117 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     };
   }, [active?.watchlist_id, active?.is_default, active?.symbols?.join(",") ?? ""]);
 
-  useEffect(() => {
-    const q = addInput.trim();
-    if (suggestTimer.current) clearTimeout(suggestTimer.current);
-    if (q.length < 1) {
-      setTickerSuggest([]);
-      setTickerSuggestOpen(false);
-      setTickerSuggestLoading(false);
-      return;
+  const localAddCandidates = useMemo((): SymbolCandidate[] => {
+    const onList = new Set((active?.symbols ?? []).map((s) => s.trim().toUpperCase()).filter(Boolean));
+    const m = new Map<string, SymbolCandidate>();
+    for (const raw of QUICK) {
+      const sym = normalizeTickerFromApi(raw) || normalizeTickerInput(raw);
+      if (!sym || onList.has(sym)) continue;
+      m.set(sym, { symbol: sym, label: sym });
     }
-    suggestTimer.current = setTimeout(() => {
-      void (async () => {
-        setTickerSuggestLoading(true);
-        try {
-          const res = await fetch(`/api/stocvest/market/tickers-search?q=${encodeURIComponent(q)}`, { cache: "no-store" });
-          const data = (await res.json().catch(() => ({}))) as { results?: unknown[] };
-          const rawList = Array.isArray(data.results) ? data.results : [];
-          const out: SymbolCandidate[] = [];
-          for (const item of rawList) {
-            if (!item || typeof item !== "object") continue;
-            const o = item as Record<string, unknown>;
-            const sym = normalizeTickerFromApi(String(o.symbol ?? ""));
-            if (!sym) continue;
-            const name = String(o.name ?? o.description ?? "").trim();
-            out.push({ symbol: sym, label: name ? `${sym} — ${name}` : sym });
-            if (out.length >= 8) break;
-          }
-          setTickerSuggest(out);
-          setTickerSuggestOpen(out.length > 0);
-        } catch {
-          setTickerSuggest([]);
-          setTickerSuggestOpen(false);
-        } finally {
-          setTickerSuggestLoading(false);
-        }
-      })();
-    }, 220);
-    return () => {
-      if (suggestTimer.current) clearTimeout(suggestTimer.current);
-    };
-  }, [addInput]);
+    return Array.from(m.values()).sort((a, b) => a.symbol.localeCompare(b.symbol));
+  }, [active?.symbols]);
 
   useEffect(() => {
-    function onDocMouseDown(ev: MouseEvent) {
-      const el = addWrapRef.current;
-      if (!el || !el.contains(ev.target as Node)) {
-        setTickerSuggestOpen(false);
-      }
+    const q = addDraft.trim();
+    if (q.length < 2) {
+      setAddRemoteCandidates([]);
+      setAddRemoteSearchLoading(false);
+      setAddRemoteSearchError(null);
+      return;
     }
-    document.addEventListener("mousedown", onDocMouseDown);
-    return () => document.removeEventListener("mousedown", onDocMouseDown);
-  }, []);
+    let cancelled = false;
+    setAddRemoteSearchLoading(true);
+    setAddRemoteSearchError(null);
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const res = await fetch(`/api/stocvest/market/tickers-search?q=${encodeURIComponent(q)}`, {
+            credentials: "same-origin",
+            cache: "no-store"
+          });
+          if (cancelled) return;
+          if (!res.ok) {
+            setAddRemoteSearchError(`Search failed (${res.status}). Try a known symbol.`);
+            setAddRemoteCandidates([]);
+            return;
+          }
+          const j = (await res.json().catch(() => ({}))) as { items?: unknown; error?: unknown };
+          const items = Array.isArray(j.items) ? j.items : [];
+          const next: SymbolCandidate[] = [];
+          for (const it of items) {
+            if (!it || typeof it !== "object") continue;
+            const o = it as { symbol?: unknown; name?: unknown };
+            const sym = normalizeTickerFromApi(String(o.symbol ?? ""));
+            if (!sym) continue;
+            const name = String(o.name ?? "").trim();
+            next.push({ symbol: sym, label: name ? `${sym} — ${name}` : sym });
+          }
+          const bodyError = typeof j.error === "string" ? j.error.trim() : "";
+          if (!cancelled) {
+            setAddRemoteCandidates(next);
+            setAddRemoteSearchError(next.length === 0 && bodyError ? bodyError : null);
+          }
+        } catch {
+          if (!cancelled) {
+            setAddRemoteCandidates([]);
+            setAddRemoteSearchError("Network error while searching tickers.");
+          }
+        } finally {
+          if (!cancelled) setAddRemoteSearchLoading(false);
+        }
+      })();
+    }, 280);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      setAddRemoteSearchLoading(false);
+    };
+  }, [addDraft]);
+
+  const addSuggestionRows = useMemo(() => {
+    const q = addDraft.trim();
+    const onList = new Set((active?.symbols ?? []).map((s) => s.trim().toUpperCase()).filter(Boolean));
+    const localFiltered = localAddCandidates.filter((c) => !onList.has(c.symbol));
+    if (!q) return localFiltered.slice(0, 8);
+    const seen = new Set<string>();
+    const merged: SymbolCandidate[] = [];
+    for (const c of [...localFiltered, ...addRemoteCandidates]) {
+      const sym = c.symbol.toUpperCase();
+      if (seen.has(sym) || onList.has(sym)) continue;
+      seen.add(sym);
+      merged.push(c);
+    }
+    return rankSymbolCandidates(merged, q).slice(0, 12);
+  }, [addDraft, addRemoteCandidates, localAddCandidates, active?.symbols]);
+
+  const isAddCorroborated = useCallback(
+    (sym: string) => {
+      const u = sym.trim().toUpperCase();
+      return addSuggestionRows.some((r) => r.symbol === u);
+    },
+    [addSuggestionRows]
+  );
+
+  useEffect(() => {
+    if (!addSuggestOpen) return;
+    const onDown = (e: MouseEvent) => {
+      const el = addComboRef.current;
+      if (el && e.target instanceof Node && !el.contains(e.target)) setAddSuggestOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [addSuggestOpen]);
+
+  useEffect(() => {
+    setAddSuggestHighlight(0);
+  }, [addDraft, addSuggestOpen]);
+
+  useEffect(() => {
+    setAddSuggestHighlight((h) =>
+      addSuggestionRows.length ? Math.min(h, addSuggestionRows.length - 1) : 0
+    );
+  }, [addSuggestionRows]);
 
   async function patchWatchlist(id: string, body: Record<string, unknown>) {
     const res = await fetch(`/api/stocvest/watchlists/${encodeURIComponent(id)}`, {
@@ -359,12 +421,21 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     return data as WatchlistRow;
   }
 
-  async function addSymbol(symRaw: string) {
+  async function addSymbol(symOrRaw: string, options?: { skipCorroboration?: boolean }) {
     if (!active) return;
-    const sym = symRaw.trim().toUpperCase();
+    const raw = symOrRaw.trim();
+    const sym = normalizeTickerFromApi(raw) || normalizeTickerInput(raw);
     setSymErr(null);
-    if (!sym || sym.length > 6 || !/^[A-Z]+$/.test(sym)) {
-      setSymErr("Use 1–6 uppercase letters.");
+    if (!sym) {
+      setSymErr("Enter a valid ticker.");
+      return;
+    }
+    if (!options?.skipCorroboration && !isAddCorroborated(sym)) {
+      setSymErr("No matching ticker. Choose from the list or verify the symbol.");
+      return;
+    }
+    if (active.symbols.some((s) => s.trim().toUpperCase() === sym)) {
+      setSymErr("That symbol is already on your watchlist.");
       return;
     }
     const prev = rows;
@@ -398,12 +469,12 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
         if (!z || z.watchlist_id !== active.watchlist_id) return r;
         return [data as WatchlistRow];
       });
+      setAddDraft("");
+      setAddSuggestOpen(false);
     } catch {
       setRows(prev);
       setSymErr("Network error");
     }
-    setAddInput("");
-    setTickerSuggestOpen(false);
   }
 
   async function removeSymbol(sym: string) {
@@ -546,18 +617,56 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
               </div>
             </div>
 
-            <div ref={addWrapRef} className="relative pb-2">
+            <div ref={addComboRef} className="relative pb-2">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
                 <input
-                  value={addInput}
-                  onChange={(e) => setAddInput(e.target.value.toUpperCase().replace(/[^A-Z.]/g, "").slice(0, 12))}
+                  id="watchlist-add-ticker"
+                  role="combobox"
+                  aria-expanded={addSuggestOpen}
+                  aria-controls="watchlist-add-ticker-suggestions"
+                  aria-autocomplete="list"
+                  autoComplete="off"
+                  value={addDraft}
+                  maxLength={80}
+                  onChange={(e) => {
+                    setAddDraft(e.target.value);
+                    setAddSuggestOpen(true);
+                    setSymErr(null);
+                  }}
+                  onFocus={() => setAddSuggestOpen(true)}
+                  onBlur={() => {
+                    window.setTimeout(() => setAddSuggestOpen(false), 120);
+                  }}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") void addSymbol(addInput);
+                    if (e.key === "Escape") {
+                      setAddSuggestOpen(false);
+                      return;
+                    }
+                    if (e.key === "ArrowDown" && addSuggestionRows.length) {
+                      e.preventDefault();
+                      setAddSuggestOpen(true);
+                      setAddSuggestHighlight((i) => Math.min(i + 1, addSuggestionRows.length - 1));
+                      return;
+                    }
+                    if (e.key === "ArrowUp" && addSuggestionRows.length) {
+                      e.preventDefault();
+                      setAddSuggestHighlight((i) => Math.max(i - 1, 0));
+                      return;
+                    }
+                    if (e.key === "Enter") {
+                      const pick = addSuggestionRows[addSuggestHighlight];
+                      if (pick) {
+                        e.preventDefault();
+                        void addSymbol(pick.symbol);
+                        return;
+                      }
+                      const t = normalizeTickerFromApi(addDraft.trim()) || normalizeTickerInput(addDraft.trim());
+                      if (!t) return;
+                      e.preventDefault();
+                      void addSymbol(addDraft.trim());
+                    }
                   }}
-                  onFocus={() => {
-                    if (tickerSuggest.length) setTickerSuggestOpen(true);
-                  }}
-                  placeholder="Add ticker — MSFT, AMD, JPM…"
+                  placeholder="Ticker or company name"
                   className="min-h-11 w-full flex-1 rounded-lg border px-3"
                   style={{
                     borderColor: colors.border,
@@ -567,8 +676,6 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                     letterSpacing: "0.04em",
                     fontWeight: 600
                   }}
-                  aria-autocomplete="list"
-                  aria-expanded={tickerSuggestOpen}
                 />
                 <button
                   type="button"
@@ -579,42 +686,74 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                     border: "none",
                     cursor: "pointer"
                   }}
-                  onClick={() => void addSymbol(addInput)}
+                  onClick={() => {
+                    const pick = addSuggestionRows[addSuggestHighlight];
+                    if (pick) void addSymbol(pick.symbol);
+                    else void addSymbol(addDraft.trim());
+                  }}
                 >
                   Add
                 </button>
               </div>
-              {tickerSuggestOpen && tickerSuggest.length > 0 ? (
+              {addSuggestOpen &&
+              (addSuggestionRows.length > 0 ||
+                (addRemoteSearchLoading && addDraft.trim().length >= 2) ||
+                (Boolean(addRemoteSearchError) && addDraft.trim().length >= 2)) ? (
                 <ul
-                  className="absolute left-0 right-0 top-full z-30 mt-1 max-h-48 overflow-auto rounded-lg border shadow-lg sm:right-auto sm:min-w-[min(100%,420px)]"
+                  id="watchlist-add-ticker-suggestions"
+                  role="listbox"
+                  className="absolute left-0 right-0 top-full z-30 mt-1 max-h-60 overflow-y-auto rounded-lg border py-1 shadow-lg sm:right-auto sm:min-w-[min(100%,420px)]"
                   style={{
                     background: colors.surface,
-                    borderColor: colors.border
+                    borderColor: colors.border,
+                    boxShadow: "0 12px 40px rgba(0,0,0,0.35)"
                   }}
-                  role="listbox"
                 >
-                  {tickerSuggest.map((c) => (
-                    <li key={c.symbol} role="option">
+                  {addRemoteSearchError && addDraft.trim().length >= 2 ? (
+                    <li className="px-3 py-2 text-sm leading-snug" style={{ color: colors.bearish }}>
+                      {addRemoteSearchError}
+                    </li>
+                  ) : null}
+                  {addRemoteSearchLoading &&
+                  addSuggestionRows.length === 0 &&
+                  addDraft.trim().length >= 2 &&
+                  !addRemoteSearchError ? (
+                    <li className="px-3 py-2 text-sm" style={{ color: colors.textMuted }}>
+                      Searching…
+                    </li>
+                  ) : null}
+                  {addSuggestionRows.map((row, idx) => (
+                    <li key={row.symbol} role="option" aria-selected={idx === addSuggestHighlight}>
                       <button
                         type="button"
-                        className="w-full px-3 py-2 text-left text-sm hover:brightness-110"
-                        style={{ color: colors.text }}
-                        onClick={() => {
-                          setAddInput(c.symbol);
-                          setTickerSuggestOpen(false);
-                          void addSymbol(c.symbol);
+                        className="w-full px-3 py-2 text-left text-sm"
+                        style={{
+                          background: idx === addSuggestHighlight ? "rgba(59,130,246,0.15)" : "transparent",
+                          color: colors.text,
+                          border: "none",
+                          cursor: "pointer"
                         }}
+                        onMouseDown={(ev) => ev.preventDefault()}
+                        onClick={() => void addSymbol(row.symbol)}
                       >
-                        {c.label}
+                        <span className="font-semibold tracking-wide">{row.symbol}</span>
+                        {row.label !== row.symbol ? (
+                          <span className="block text-xs" style={{ color: colors.textMuted }}>
+                            {row.label.includes("—") ? row.label.split("—").slice(1).join("—").trim() : row.label}
+                          </span>
+                        ) : null}
                       </button>
                     </li>
                   ))}
+                  {!addRemoteSearchLoading &&
+                  !addRemoteSearchError &&
+                  addSuggestionRows.length === 0 &&
+                  addDraft.trim().length >= 2 ? (
+                    <li className="px-3 py-2 text-sm" style={{ color: colors.textMuted }}>
+                      No matching tickers. Try a symbol (e.g. AAPL) or another spelling.
+                    </li>
+                  ) : null}
                 </ul>
-              ) : null}
-              {tickerSuggestLoading ? (
-                <p className="m-0 pt-1 text-xs" style={{ color: colors.textMuted }}>
-                  Searching…
-                </p>
               ) : null}
               {symErr ? (
                 <p className="m-0 pt-1 text-xs" style={{ color: colors.bearish }}>
@@ -814,7 +953,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                         <button
                           key={s}
                           type="button"
-                          onClick={() => void addSymbol(s)}
+                          onClick={() => void addSymbol(s, { skipCorroboration: true })}
                           className="min-h-10 rounded-md border px-3 text-sm font-bold tracking-wide"
                           style={{ borderColor: colors.accent, color: colors.text }}
                         >
