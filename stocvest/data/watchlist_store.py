@@ -13,7 +13,7 @@ from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
 
-_MAX_WATCHLISTS = 5
+_MAX_WATCHLISTS = 1
 _MAX_SYMBOLS = 50
 
 
@@ -28,6 +28,28 @@ def _normalize_symbol(sym: str) -> str:
     if not s.isalnum():
         raise ValueError("symbol must be alphanumeric")
     return s
+
+
+def _pick_keeper_merge_plan(rows: list[WatchlistItem]) -> tuple[WatchlistItem, list[str], list[WatchlistItem]]:
+    """Return keeper row, merged symbols (deduped, capped), and other rows to drop."""
+    if not rows:
+        raise ValueError("internal: merge requires at least one watchlist row")
+    sorted_rows = sorted(rows, key=lambda w: (not w.is_default, w.created_at))
+    keeper = sorted_rows[0]
+    others_sorted = sorted(
+        [w for w in rows if w.watchlist_id != keeper.watchlist_id],
+        key=lambda w: w.created_at,
+    )
+    merged: list[str] = []
+    seen: set[str] = set()
+    for w in (keeper, *others_sorted):
+        for sym in w.symbols:
+            su = str(sym).strip().upper()
+            if su and su not in seen and len(merged) < _MAX_SYMBOLS:
+                seen.add(su)
+                merged.append(su)
+    to_delete = [w for w in rows if w.watchlist_id != keeper.watchlist_id]
+    return keeper, merged, to_delete
 
 
 @dataclass
@@ -107,7 +129,31 @@ class WatchlistStore(Protocol):
 class InMemoryWatchlistStore:
     _by_user: dict[str, dict[str, WatchlistItem]] = field(default_factory=dict)
 
+    def _ensure_single_watchlist(self, user_id: str) -> None:
+        u = self._by_user.setdefault(user_id, {})
+        if len(u) <= 1:
+            if len(u) == 1:
+                only = next(iter(u.values()))
+                if not only.is_default:
+                    only.is_default = True
+                    only.updated_at = _utc_now()
+            return
+        rows = list(u.values())
+        keeper, merged, to_delete = _pick_keeper_merge_plan(rows)
+        keeper.symbols = merged
+        keeper.is_default = True
+        keeper.updated_at = _utc_now()
+        for w in to_delete:
+            del u[w.watchlist_id]
+        _LOG.info(
+            "watchlist consolidated (memory) user=%s removed_lists=%d symbols=%d",
+            user_id,
+            len(to_delete),
+            len(merged),
+        )
+
     def get_watchlists(self, user_id: str) -> list[WatchlistItem]:
+        self._ensure_single_watchlist(user_id)
         rows = list(self._by_user.get(user_id, {}).values())
         return sorted(rows, key=lambda w: (not w.is_default, w.created_at))
 
@@ -124,8 +170,10 @@ class InMemoryWatchlistStore:
         self, user_id: str, name: str, symbols: list[str], *, is_default: bool = False
     ) -> WatchlistItem:
         uid = user_id
-        if len(self._by_user.get(uid, {})) >= _MAX_WATCHLISTS:
-            raise ValueError("Maximum of 5 watchlists per user.")
+        self._ensure_single_watchlist(uid)
+        existing = self.get_watchlists(uid)
+        if len(existing) >= _MAX_WATCHLISTS:
+            raise ValueError("You already have a watchlist. Additional lists are not supported.")
         norm = [_normalize_symbol(s) for s in symbols][: _MAX_SYMBOLS]
         norm = list(dict.fromkeys(norm))
         wid = str(uuid.uuid4())
@@ -169,6 +217,9 @@ class InMemoryWatchlistStore:
             for o in self._by_user[user_id].values():
                 o.is_default = False
             w.is_default = True
+        elif is_default is False:
+            others = [x for x in self.get_watchlists(user_id) if x.watchlist_id != watchlist_id]
+            w.is_default = True if not others else False
         w.updated_at = _utc_now()
         return w
 
@@ -176,8 +227,12 @@ class InMemoryWatchlistStore:
         u = self._by_user.get(user_id)
         if not u or watchlist_id not in u:
             return False
+        self._ensure_single_watchlist(user_id)
+        u = self._by_user.get(user_id)
+        if not u or watchlist_id not in u:
+            return False
         if len(u) <= 1:
-            raise ValueError("Cannot delete the last watchlist.")
+            raise ValueError("Cannot delete your watchlist.")
         del u[watchlist_id]
         if not any(w.is_default for w in u.values()) and u:
             first = sorted(u.values(), key=lambda x: x.created_at)[0]
@@ -208,6 +263,8 @@ class InMemoryWatchlistStore:
         return w
 
     def scan_default_watchlists(self, limit: int) -> list[WatchlistItem]:
+        for uid in list(self._by_user.keys()):
+            self._ensure_single_watchlist(uid)
         cap = max(0, min(int(limit), 500))
         out: list[WatchlistItem] = []
         for _uid, wmap in sorted(self._by_user.items()):
@@ -230,8 +287,7 @@ class InMemoryWatchlistStore:
             n += 1
             if n > max_items_evaluated:
                 break
-            wmap = self._by_user[uid]
-            rows = sorted(wmap.values(), key=lambda x: (not x.is_default, x.created_at))
+            rows = self.get_watchlists(uid)
             default = next((w for w in rows if w.is_default), None) or (rows[0] if rows else None)
             if default and sym in {s.upper() for s in default.symbols}:
                 out.append(uid)
@@ -242,10 +298,59 @@ class InMemoryWatchlistStore:
 class DynamoDBWatchlistStore:
     table: Any
 
+    def _list_rows_raw(self, user_id: str) -> list[WatchlistItem]:
+        items: list[dict[str, Any]] = []
+        eks: dict[str, Any] | None = None
+        while True:
+            kw: dict[str, Any] = {
+                "KeyConditionExpression": "userId = :u",
+                "ExpressionAttributeValues": {":u": user_id},
+            }
+            if eks:
+                kw["ExclusiveStartKey"] = eks
+            resp = self.table.query(**kw)
+            items.extend(resp.get("Items") or [])
+            eks = resp.get("LastEvaluatedKey")
+            if not eks:
+                break
+        return [WatchlistItem.from_item(user_id, it) for it in items if it.get("watchlistId")]
+
+    def _ensure_single_watchlist(self, user_id: str) -> None:
+        rows = self._list_rows_raw(user_id)
+        if len(rows) <= 1:
+            if len(rows) == 1 and not rows[0].is_default:
+                w = rows[0]
+                now = _utc_now()
+                self.table.update_item(
+                    Key={"userId": user_id, "watchlistId": w.watchlist_id},
+                    UpdateExpression="SET isDefault = :t, updatedAt = :u",
+                    ExpressionAttributeValues={":t": True, ":u": now},
+                )
+            return
+        keeper, merged, to_delete = _pick_keeper_merge_plan(rows)
+        now = _utc_now()
+        item = {
+            "userId": user_id,
+            "watchlistId": keeper.watchlist_id,
+            "name": keeper.name.strip() or "Watchlist",
+            "symbols": merged,
+            "isDefault": True,
+            "createdAt": keeper.created_at,
+            "updatedAt": now,
+        }
+        self.table.put_item(Item=item)
+        for w in to_delete:
+            self.table.delete_item(Key={"userId": user_id, "watchlistId": w.watchlist_id})
+        _LOG.info(
+            "watchlist consolidated (dynamo) user=%s removed_lists=%d symbols=%d",
+            user_id,
+            len(to_delete),
+            len(merged),
+        )
+
     def get_watchlists(self, user_id: str) -> list[WatchlistItem]:
-        resp = self.table.query(KeyConditionExpression="userId = :u", ExpressionAttributeValues={":u": user_id})
-        items = resp.get("Items") or []
-        rows = [WatchlistItem.from_item(user_id, it) for it in items if it.get("watchlistId")]
+        self._ensure_single_watchlist(user_id)
+        rows = self._list_rows_raw(user_id)
         return sorted(rows, key=lambda w: (not w.is_default, w.created_at))
 
     def get_default_watchlist(self, user_id: str) -> WatchlistItem | None:
@@ -260,9 +365,10 @@ class DynamoDBWatchlistStore:
     def create_watchlist(
         self, user_id: str, name: str, symbols: list[str], *, is_default: bool = False
     ) -> WatchlistItem:
+        self._ensure_single_watchlist(user_id)
         existing = self.get_watchlists(user_id)
         if len(existing) >= _MAX_WATCHLISTS:
-            raise ValueError("Maximum of 5 watchlists per user.")
+            raise ValueError("You already have a watchlist. Additional lists are not supported.")
         norm = [_normalize_symbol(s) for s in symbols][: _MAX_SYMBOLS]
         norm = list(dict.fromkeys(norm))
         wid = str(uuid.uuid4())
@@ -321,7 +427,8 @@ class DynamoDBWatchlistStore:
         if is_default is True:
             def_f = True
         elif is_default is False:
-            def_f = False
+            others = [w for w in self.get_watchlists(user_id) if w.watchlist_id != watchlist_id]
+            def_f = False if others else True
         else:
             def_f = cur.is_default
         item = {
@@ -345,10 +452,10 @@ class DynamoDBWatchlistStore:
 
     def delete_watchlist(self, user_id: str, watchlist_id: str) -> bool:
         rows = self.get_watchlists(user_id)
-        if len(rows) <= 1:
-            raise ValueError("Cannot delete the last watchlist.")
         if not any(w.watchlist_id == watchlist_id for w in rows):
             return False
+        if len(rows) <= 1:
+            raise ValueError("Cannot delete your watchlist.")
         self.table.delete_item(Key={"userId": user_id, "watchlistId": watchlist_id})
         remaining = [w for w in rows if w.watchlist_id != watchlist_id]
         if remaining and not any(w.is_default for w in remaining):

@@ -163,7 +163,7 @@ describe("WatchlistsPageClient maturation", () => {
     expect(urls.filter((u) => u.includes("maturation-summary") && u.includes("mode=day")).length).toBeGreaterThanOrEqual(1);
   });
 
-  it("does not request maturation-summary when the only list is not default", async () => {
+  it("does not request maturation-summary when the watchlist has no symbols", async () => {
     global.fetch = vi.fn((input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input.toString();
       if (url.includes("/alerts/history")) {
@@ -171,52 +171,6 @@ describe("WatchlistsPageClient maturation", () => {
       }
       if (url.includes("/maturation-summary")) {
         return Promise.resolve({ ok: true, json: async () => ({ by_symbol: {} }) });
-      }
-      return Promise.resolve({
-        ok: true,
-        json: async () => ({
-          watchlists: [
-            {
-              watchlist_id: "wl-custom",
-              name: "Custom",
-              symbols: ["AAPL"],
-              is_default: false
-            }
-          ]
-        })
-      });
-    }) as unknown as typeof fetch;
-
-    wrap(<WatchlistsPageClient />);
-
-    await waitFor(() => expect(screen.getByText("AAPL")).toBeInTheDocument());
-    const urls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.map((c) =>
-      typeof c[0] === "string" ? c[0] : String(c[0])
-    );
-    expect(urls.some((u) => u.includes("maturation-summary"))).toBe(false);
-  });
-
-  it("clears maturation UI on a non-default list and refetches when returning to default", async () => {
-    let maturationCalls = 0;
-    global.fetch = vi.fn((input: RequestInfo | URL) => {
-      const url = typeof input === "string" ? input : input.toString();
-      if (url.includes("/alerts/history")) {
-        return emptyAlertsHistory();
-      }
-      if (url.includes("/maturation-summary")) {
-        maturationCalls += 1;
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({
-            by_symbol: {
-              AAPL: {
-                state: "actionable",
-                label: "Actionable",
-                readiness_label: "Ready on default"
-              }
-            }
-          })
-        });
       }
       if (url.includes("/api/stocvest/watchlists") && !url.includes("/watchlists/")) {
         return Promise.resolve({
@@ -226,14 +180,8 @@ describe("WatchlistsPageClient maturation", () => {
               {
                 watchlist_id: "wl-default",
                 name: "Main",
-                symbols: ["AAPL"],
+                symbols: [],
                 is_default: true
-              },
-              {
-                watchlist_id: "wl-other",
-                name: "Other",
-                symbols: ["MSFT"],
-                is_default: false
               }
             ]
           })
@@ -244,20 +192,11 @@ describe("WatchlistsPageClient maturation", () => {
 
     wrap(<WatchlistsPageClient />);
 
-    await waitFor(() => expect(screen.getByTitle("Ready on default")).toBeInTheDocument());
-    expect(maturationCalls).toBe(1);
-
-    fireEvent.click(screen.getByRole("button", { name: "Other" }));
-
-    await waitFor(() => expect(screen.queryByTitle("Ready on default")).not.toBeInTheDocument());
-    expect(screen.getByText(/readiness vs the engine/i)).toBeInTheDocument();
-    expect(screen.getByText("MSFT")).toBeInTheDocument();
-    expect(maturationCalls).toBe(1);
-
-    fireEvent.click(screen.getByRole("button", { name: /Main/i }));
-
-    await waitFor(() => expect(screen.getByTitle("Ready on default")).toBeInTheDocument());
-    expect(maturationCalls).toBe(2);
+    await waitFor(() => expect(screen.getByText("Main")).toBeInTheDocument());
+    const urls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.map((c) =>
+      typeof c[0] === "string" ? c[0] : String(c[0])
+    );
+    expect(urls.some((u) => u.includes("maturation-summary"))).toBe(false);
   });
 
   it("shows recent watchlist_maturation rows from alert history on the default list", async () => {

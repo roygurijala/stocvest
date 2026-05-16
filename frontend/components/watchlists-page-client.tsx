@@ -122,11 +122,8 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   const { dualDeskMaturation = false, planBadgeLabel = "Free" } = props;
   const { colors, theme } = useTheme();
   const [rows, setRows] = useState<WatchlistRow[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [newOpen, setNewOpen] = useState(false);
-  const [newName, setNewName] = useState("");
   const [addInput, setAddInput] = useState("");
   const [symErr, setSymErr] = useState<string | null>(null);
   const [rename, setRename] = useState<string | null>(null);
@@ -156,9 +153,18 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
       const res = await fetch("/api/stocvest/watchlists", { cache: "no-store" });
       const data = (await res.json()) as { watchlists?: WatchlistRow[]; message?: string };
       if (!res.ok) throw new Error(data.message || "Failed to load watchlists");
-      const list = data.watchlists ?? [];
+      let list = data.watchlists ?? [];
+      if (list.length === 0) {
+        const cr = await fetch("/api/stocvest/watchlists", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: "My Watchlist", symbols: [], is_default: true })
+        });
+        const created = (await cr.json()) as WatchlistRow & { message?: string };
+        if (!cr.ok) throw new Error(created.message || "Failed to create watchlist");
+        list = [created];
+      }
       setRows(list);
-      setActiveId((id) => id && list.some((w) => w.watchlist_id === id) ? id : list[0]?.watchlist_id ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
     } finally {
@@ -170,7 +176,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     void load();
   }, [load]);
 
-  const active = useMemo(() => rows.find((w) => w.watchlist_id === activeId) ?? rows[0] ?? null, [rows, activeId]);
+  const active = useMemo(() => rows[0] ?? null, [rows]);
 
   useEffect(() => {
     if (!active?.is_default || active.symbols.length === 0) {
@@ -353,24 +359,6 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     return data as WatchlistRow;
   }
 
-  async function createWatchlist() {
-    const name = newName.trim() || "New Watchlist";
-    const res = await fetch("/api/stocvest/watchlists", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name, symbols: [], is_default: rows.length === 0 })
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setError((data as { message?: string }).message || "Could not create");
-      return;
-    }
-    setNewOpen(false);
-    setNewName("");
-    await load();
-    setActiveId((data as WatchlistRow).watchlist_id);
-  }
-
   async function addSymbol(symRaw: string) {
     if (!active) return;
     const sym = symRaw.trim().toUpperCase();
@@ -380,9 +368,13 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
       return;
     }
     const prev = rows;
-    const optimistic = rows.map((w) =>
-      w.watchlist_id === active.watchlist_id ? { ...w, symbols: w.symbols.includes(sym) ? w.symbols : [...w.symbols, sym] } : w
-    );
+    const w0 = rows[0];
+    if (!w0) return;
+    const optimistic: WatchlistRow[] = [
+      w0.watchlist_id === active.watchlist_id
+        ? { ...w0, symbols: w0.symbols.includes(sym) ? w0.symbols : [...w0.symbols, sym] }
+        : w0
+    ];
     setRows(optimistic);
     try {
       const res = await fetch(`/api/stocvest/watchlists/${encodeURIComponent(active.watchlist_id)}/symbols`, {
@@ -401,7 +393,11 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
         setSymErr("Add failed");
         return;
       }
-      setRows((r) => r.map((w) => (w.watchlist_id === active.watchlist_id ? (data as WatchlistRow) : w)));
+      setRows((r) => {
+        const z = r[0];
+        if (!z || z.watchlist_id !== active.watchlist_id) return r;
+        return [data as WatchlistRow];
+      });
     } catch {
       setRows(prev);
       setSymErr("Network error");
@@ -413,9 +409,11 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   async function removeSymbol(sym: string) {
     if (!active) return;
     const prev = rows;
-    setRows((r) =>
-      r.map((w) => (w.watchlist_id === active.watchlist_id ? { ...w, symbols: w.symbols.filter((s) => s !== sym) } : w))
-    );
+    setRows((r) => {
+      const z = r[0];
+      if (!z || z.watchlist_id !== active.watchlist_id) return r;
+      return [{ ...z, symbols: z.symbols.filter((s) => s !== sym) }];
+    });
     try {
       const res = await fetch(
         `/api/stocvest/watchlists/${encodeURIComponent(active.watchlist_id)}/symbols/${encodeURIComponent(sym)}`,
@@ -427,33 +425,13 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
         setError((data as { message?: string }).message || "Remove failed");
         return;
       }
-      setRows((r) => r.map((w) => (w.watchlist_id === active.watchlist_id ? (data as WatchlistRow) : w)));
+      setRows((r) => {
+        const z = r[0];
+        if (!z || z.watchlist_id !== active.watchlist_id) return r;
+        return [data as WatchlistRow];
+      });
     } catch {
       setRows(prev);
-    }
-  }
-
-  async function setDefault() {
-    if (!active) return;
-    await patchWatchlist(active.watchlist_id, { is_default: true });
-    await load();
-  }
-
-  async function deleteList() {
-    if (!active) return;
-    if (!window.confirm("Delete this watchlist?")) return;
-    try {
-      const res = await fetch(`/api/stocvest/watchlists/${encodeURIComponent(active.watchlist_id)}`, {
-        method: "DELETE"
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError((data as { message?: string }).message || "Cannot delete");
-        return;
-      }
-      await load();
-    } catch {
-      setError("Delete failed");
     }
   }
 
@@ -545,36 +523,6 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
 
   return (
     <div className="flex min-h-0 min-w-0 flex-col" style={{ gap: spacing[3] }}>
-      {newOpen ? (
-        <div
-          className={surfaceGlowClassName}
-          style={{
-            background: colors.surface,
-            border: `1px solid ${colors.border}`,
-            borderRadius: borderRadius.lg,
-            padding: spacing[3],
-            display: "flex",
-            flexWrap: "wrap",
-            gap: spacing[2],
-            alignItems: "center"
-          }}
-        >
-          <input
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder="Watchlist name"
-            className="min-h-11 rounded-md border px-3"
-            style={{ borderColor: colors.border, background: colors.surfaceMuted, color: colors.text, minWidth: 200 }}
-          />
-          <button type="button" className="min-h-11 rounded-md px-3" style={{ border: `1px solid ${colors.border}` }} onClick={() => void createWatchlist()}>
-            Create
-          </button>
-          <button type="button" className="min-h-11 rounded-md px-3 text-sm" style={{ color: colors.textMuted }} onClick={() => setNewOpen(false)}>
-            Cancel
-          </button>
-        </div>
-      ) : null}
-
       {active ? (
         <>
           <header className="sticky z-20 -mx-4 px-4 pb-3 pt-0 lg:-mx-6 lg:px-6" style={headerStickyStyle}>
@@ -583,29 +531,6 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                 <h1 className="m-0 truncate text-xl font-bold tracking-tight sm:text-2xl" style={{ color: colors.text }}>
                   Watchlist
                 </h1>
-                {rows.length > 1 ? (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {rows.map((w) => {
-                      const isAct = active?.watchlist_id === w.watchlist_id;
-                      return (
-                        <button
-                          key={w.watchlist_id}
-                          type="button"
-                          onClick={() => setActiveId(w.watchlist_id)}
-                          className="rounded-md px-2.5 py-1 text-xs font-semibold"
-                          style={{
-                            border: `1px solid ${isAct ? "rgba(0,180,255,0.45)" : colors.border}`,
-                            background: isAct ? "rgba(0,180,255,0.1)" : colors.surface,
-                            color: isAct ? colors.accent : colors.text
-                          }}
-                        >
-                          {w.is_default ? "★ " : ""}
-                          {w.name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null}
               </div>
               <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                 <span
@@ -618,14 +543,6 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                 >
                   {planBadgeLabel} · {slotUsed}/{WATCHLIST_MAX_SYMBOLS}
                 </span>
-                <button
-                  type="button"
-                  className="min-h-9 rounded-md px-3 text-xs font-semibold sm:text-sm"
-                  style={{ border: `1px solid ${colors.border}`, color: colors.text }}
-                  onClick={() => setNewOpen(true)}
-                >
-                  + List
-                </button>
               </div>
             </div>
 
@@ -725,16 +642,6 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
           </header>
 
           <div style={{ display: "grid", gap: spacing[3] }}>
-            {active && !active.is_default && rows.length > 1 ? (
-              <p
-                className="m-0 rounded-lg border px-3 py-2 text-sm leading-snug"
-                style={{ borderColor: colors.border, background: colors.surfaceMuted, color: colors.textMuted }}
-              >
-                <strong style={{ color: colors.text }}>Maturation</strong> (readiness vs the engine) is shown only on your{" "}
-                <strong>default</strong> watchlist (★). Switch lists above to see per-symbol status on the default list.
-              </p>
-            ) : null}
-
             {active.is_default && active.symbols.length > 0 ? (
               <div
                 className="grid gap-3 rounded-xl border px-3 py-3 sm:grid-cols-2 sm:px-4"
@@ -841,28 +748,8 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                     </h2>
                   )}
                   <p className="m-0 mt-0.5 text-xs" style={{ color: colors.textMuted }}>
-                    {active.is_default ? "Default · powers scanner & gap intel" : "Custom list"}
+                    Powers scanner & gap intel
                   </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {!active.is_default ? (
-                    <button
-                      type="button"
-                      className="min-h-9 rounded-md border px-3 text-xs font-semibold"
-                      style={{ borderColor: colors.border, color: colors.text }}
-                      onClick={() => void setDefault()}
-                    >
-                      Set default
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="min-h-9 rounded-md border px-3 text-xs font-semibold"
-                    style={{ borderColor: colors.bearish, color: colors.bearish }}
-                    onClick={() => void deleteList()}
-                  >
-                    Delete list
-                  </button>
                 </div>
               </div>
 
@@ -998,12 +885,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                                 <div className="mt-2 space-y-1.5">{rowLine("swing", ms)}</div>
                               ) : null}
                               {active.is_default && dualDeskMaturation && (viewMode === "both" || viewMode === "day") ? (
-                                <div className={viewMode === "both" ? "mt-2 space-y-1.5" : "mt-2 space-y-1.5"}>{rowLine("day", md)}</div>
-                              ) : null}
-                              {!active.is_default ? (
-                                <p className="m-0 mt-1 text-xs" style={{ color: colors.textMuted }}>
-                                  Open Signals for full context.
-                                </p>
+                                <div className="mt-2 space-y-1.5">{rowLine("day", md)}</div>
                               ) : null}
                             </div>
                             {evaluatedLabel && active.is_default ? (
@@ -1033,7 +915,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
             </article>
 
             <p className="m-0 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
-              Default watchlist symbols feed the scanner. Maturation reflects your last evidence run or the scheduled refresh.
+              Your watchlist feeds the scanner. Maturation reflects your last evidence run or the scheduled refresh.
               <Link href="/dashboard/signals" className="ml-1 font-semibold" style={{ color: colors.accent }}>
                 Open Signals
               </Link>
@@ -1041,7 +923,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
           </div>
         </>
       ) : (
-        <p style={{ color: colors.textMuted }}>No watchlists yet. Create one with + List.</p>
+        <p style={{ color: colors.textMuted }}>Could not load your watchlist.</p>
       )}
     </div>
   );

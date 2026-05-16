@@ -7,7 +7,7 @@ import pytest
 
 from stocvest.api.lambda_dispatch import lambda_handler
 from stocvest.data.scan_symbols import SYSTEM_DEFAULTS, get_scan_symbols
-from stocvest.data.watchlist_store import InMemoryWatchlistStore, get_watchlist_store
+from stocvest.data.watchlist_store import InMemoryWatchlistStore, WatchlistItem, get_watchlist_store, _utc_now
 
 
 def _ev(
@@ -98,12 +98,13 @@ def test_max_50_symbols_enforced(brokers: None) -> None:
     assert r["statusCode"] == 400
 
 
-def test_max_5_watchlists_enforced(brokers: None) -> None:
-    for i in range(5):
-        rr = lambda_handler(_ev("POST", "/v1/watchlists", body={"name": f"W{i}", "symbols": []}), {})
-        assert rr["statusCode"] == 200, i
-    r6 = lambda_handler(_ev("POST", "/v1/watchlists", body={"name": "Six", "symbols": []}), {})
-    assert r6["statusCode"] == 400
+def test_second_watchlist_create_rejected(brokers: None) -> None:
+    r1 = lambda_handler(_ev("POST", "/v1/watchlists", body={"name": "First", "symbols": ["AAPL"]}), {})
+    assert r1["statusCode"] == 200
+    r2 = lambda_handler(_ev("POST", "/v1/watchlists", body={"name": "Second", "symbols": ["MSFT"]}), {})
+    assert r2["statusCode"] == 400
+    body = _body(r2)
+    assert body.get("error") == "watchlist_limit"
 
 
 def test_default_watchlist_returned_for_scanner(brokers: None) -> None:
@@ -132,14 +133,40 @@ def test_delete_last_watchlist_blocked(brokers: None) -> None:
     assert r["statusCode"] == 400
 
 
-def test_set_default_unsets_others(brokers: None) -> None:
-    w1 = _body(lambda_handler(_ev("POST", "/v1/watchlists", body={"name": "A", "symbols": [], "is_default": True}), {}))
-    w2 = _body(lambda_handler(_ev("POST", "/v1/watchlists", body={"name": "B", "symbols": [], "is_default": True}), {}))
-    assert w2["is_default"] is True
+def test_patch_watchlist_name(brokers: None) -> None:
+    w = _body(lambda_handler(_ev("POST", "/v1/watchlists", body={"name": "Old", "symbols": ["SPY"]}), {}))
+    wid = w["watchlist_id"]
+    r = lambda_handler(
+        _ev("PATCH", f"/v1/watchlists/{wid}", body={"name": "Renamed"}, path_parameters={"watchlist_id": wid}),
+        {},
+    )
+    assert r["statusCode"] == 200
+    assert _body(r)["name"] == "Renamed"
+
+
+def test_legacy_multiple_lists_consolidated_on_get(brokers: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    """If storage somehow has two rows for one user, GET /v1/watchlists merges and deletes extras."""
+    import uuid
+
+    store = InMemoryWatchlistStore()
+    monkeypatch.setattr("stocvest.api.handlers.watchlists.get_watchlist_store", lambda: store)
+    now = _utc_now()
+    w1 = store.create_watchlist("wl-user-1", "Main", ["AAPL"], is_default=True)
+    wid2 = str(uuid.uuid4())
+    store._by_user["wl-user-1"][wid2] = WatchlistItem(
+        user_id="wl-user-1",
+        watchlist_id=wid2,
+        name="Extra",
+        symbols=["NVDA", "MSFT"],
+        is_default=False,
+        created_at=now,
+        updated_at=now,
+    )
     lst = _body(lambda_handler(_ev("GET", "/v1/watchlists"), {}))["watchlists"]
-    by_id = {x["watchlist_id"]: x for x in lst}
-    assert by_id[w2["watchlist_id"]]["is_default"] is True
-    assert by_id[w1["watchlist_id"]]["is_default"] is False
+    assert len(lst) == 1
+    assert lst[0]["watchlist_id"] == w1.watchlist_id
+    syms = set(lst[0]["symbols"])
+    assert syms == {"AAPL", "NVDA", "MSFT"}
 
 
 def test_get_watchlist_store_returns_memory_when_table_cleared() -> None:
