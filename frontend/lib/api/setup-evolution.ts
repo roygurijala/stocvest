@@ -1,5 +1,3 @@
-import { browserApiFetch } from "@/lib/browser-api-fetch";
-
 export type SetupEvolutionTransition = {
   recorded_at: string;
   session_date: string;
@@ -31,10 +29,14 @@ export async function fetchSetupEvolution(
   const sym = symbol.trim().toUpperCase();
   if (!sym) return null;
   const qs = new URLSearchParams({ mode }).toString();
-  const res = await browserApiFetch(
-    `/api/stocvest/watchlists/symbols/${encodeURIComponent(sym)}/setup-evolution?${qs}`,
-    { method: "GET" }
-  );
-  if (!res.ok) return null;
-  return (await res.json()) as SetupEvolutionResponse;
+  try {
+    const res = await fetch(
+      `/api/stocvest/watchlists/symbols/${encodeURIComponent(sym)}/setup-evolution?${qs}`,
+      { cache: "no-store", credentials: "same-origin" }
+    );
+    if (!res.ok) return null;
+    return (await res.json()) as SetupEvolutionResponse;
+  } catch {
+    return null;
+  }
 }
