@@ -11,7 +11,7 @@ import {
   layerPolarity,
   layerPolarityDotColor,
   layerPolarityLabel,
-  pickPreviewLayers,
+  pickCollapsedLayerPreview,
   type SignalsLayerRowInput,
   type SignalsSetupBias
 } from "@/lib/signals-page-present";
@@ -40,7 +40,7 @@ export function SignalsLayerBreakdown({
   const { colors } = useTheme();
   const [expanded, setExpanded] = useState(false);
   const alignment = countLayerAlignment(rows, bias);
-  const preview = pickPreviewLayers(rows, bias, 3);
+  const preview = pickCollapsedLayerPreview(rows, bias, 2, 2);
   const visible = expanded ? rows : preview.length > 0 ? preview : rows.slice(0, 3);
 
   return (

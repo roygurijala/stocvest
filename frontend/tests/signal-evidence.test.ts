@@ -78,16 +78,16 @@ describe("buildEvidenceFromSetup news layer", () => {
     expect(data.newsFreshnessLabel).not.toContain("News unavailable");
   });
 
-  test("shows No recent news for SYMBOL when article list is empty", () => {
+  test("shows no active catalyst when article list is empty", () => {
     const data = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
     const newsLayer = data.layers.find((l) => l.key === "news");
     expect(newsLayer?.keyPoints[0]).toBe("Articles 0");
-    expect(newsLayer?.keyPoints[2]).toBe("No recent news for AAPL");
-    expect(newsLayer?.freshnessLabel).toBe("No recent news for AAPL");
-    expect(data.newsFreshnessLabel).toBe("No recent news for AAPL");
+    expect(newsLayer?.keyPoints[2]).toBe("No active catalyst");
+    expect(newsLayer?.freshnessLabel).toBe("No active catalyst");
+    expect(data.newsFreshnessLabel).toBe("No active catalyst");
   });
 
-  test("does not show No recent news when articles exist but first row lacks title", () => {
+  test("does not show no active catalyst line when articles exist but first row lacks title", () => {
     const articles: NewsPayload[] = Array.from({ length: 9 }, (_, i) => ({
       article_id: `x${i}`,
       title: i === 3 ? "Fed minutes lift tech sentiment into close" : "",
@@ -99,7 +99,7 @@ describe("buildEvidenceFromSetup news layer", () => {
     const newsLayer = data.layers.find((l) => l.key === "news");
     expect(newsLayer?.keyPoints[0]).toBe("Articles 9");
     expect(newsLayer?.keyPoints[2]).toContain("Fed minutes");
-    expect(newsLayer?.freshnessLabel).not.toContain("No recent news");
+    expect(newsLayer?.freshnessLabel).not.toBe("No active catalyst");
   });
 
   test("uses count line when articles exist but no snippet text on any row", () => {
@@ -777,8 +777,10 @@ describe("SignalEvidenceCard sector + cross-layer alignment", () => {
         )
       )
     );
-    expect(html).toContain("LAYER ALIGNMENT");
-    expect(html).toContain("Mixed but constructive");
+    expect(html).toContain("evidence-card-header");
+    expect(html).toContain("Bias");
+    expect(html).toContain("Alignment");
+    expect(html).toContain("Layer contribution (directional pressure)");
     expect(html).toContain("Tech bid");
     expect(html).toContain("Resolved");
   });

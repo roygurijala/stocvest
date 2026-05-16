@@ -131,7 +131,7 @@ describe("composite layer UI surfaces Benzinga + geo baseline", () => {
       freshnessLabel: "Updated 8h ago"
     });
     const html = renderCard({ ...ev, insight: ev.insight ?? deriveEvidenceInsightFallback(ev) });
-    expect(html).toContain("No qualifying news");
+    expect(html).toContain("No active catalyst");
     expect(html).not.toContain("Unavailable");
   });
 });

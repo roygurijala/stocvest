@@ -131,13 +131,36 @@ export function pickPreviewLayers(
   bias: SignalsSetupBias,
   limit = 3
 ): SignalsLayerRowInput[] {
-  return [...rows]
-    .sort((a, b) => layerBlockingScore(a, bias) - layerBlockingScore(b, bias))
+  return pickCollapsedLayerPreview(rows, bias, limit, limit);
+}
+
+/** Collapsed breakdown: strongest drivers + top blockers (not arbitrary first three). */
+export function pickCollapsedLayerPreview(
+  rows: SignalsLayerRowInput[],
+  bias: SignalsSetupBias,
+  maxDriving = 2,
+  maxBlocking = 2
+): SignalsLayerRowInput[] {
+  const driving = rows
+    .filter((r) => layerPolarity(r, bias) === "supportive")
+    .sort((a, b) => b.score - a.score)
+    .slice(0, maxDriving);
+  const blocking = [...rows]
     .filter((r) => {
       const p = layerPolarity(r, bias);
       return p === "blocking" || p === "mixed";
     })
-    .slice(0, limit);
+    .sort((a, b) => layerBlockingScore(a, bias) - layerBlockingScore(b, bias))
+    .slice(0, maxBlocking);
+  const seen = new Set<string>();
+  const out: SignalsLayerRowInput[] = [];
+  for (const row of [...driving, ...blocking]) {
+    if (seen.has(row.key)) continue;
+    seen.add(row.key);
+    out.push(row);
+  }
+  if (out.length > 0) return out;
+  return rows.slice(0, Math.min(3, rows.length));
 }
 
 export function buildLayerInsightLine(row: SignalsLayerRowInput, bias: SignalsSetupBias): string {
@@ -216,7 +239,7 @@ export function buildSignalsPageDecision(input: {
   };
 
   const reinforcements: string[] = [];
-  if (rrFail) reinforcements.push(`Risk/reward below internal threshold (${riskReward.toFixed(1)}:1).`);
+  if (rrFail) reinforcements.push(`Risk/reward too low (${riskReward.toFixed(1)}:1) — below threshold.`);
   if (weakAgreement) reinforcements.push("Layer agreement is mixed across desks.");
 
   if (hasInsufficient || (rrFail && weakAgreement && lowReadiness) || availableLayers < 4) {

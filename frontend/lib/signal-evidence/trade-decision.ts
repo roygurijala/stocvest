@@ -97,7 +97,7 @@ export function deriveDecisionRationale(
     return {
       category: "risk_reward",
       label,
-      text: `Risk/reward (${rrStr}:1) does not meet internal thresholds for structured scenario building.`
+      text: `Risk/reward too low (${rrStr}:1) — below threshold; does not meet internal thresholds for structured scenario building.`
     };
   }
   if (ctx.weakAgreement) {

@@ -7,6 +7,7 @@ import {
   countLayerAlignment,
   layerPolarity,
   normalizeSetupBias,
+  pickCollapsedLayerPreview,
   pickPreviewLayers,
   type SignalsLayerRowInput
 } from "@/lib/signals-page-present";
@@ -35,6 +36,12 @@ describe("signals-page-present", () => {
     const preview = pickPreviewLayers(bearishRows, "Bearish", 3);
     expect(preview.some((r) => r.key === "internals")).toBe(true);
     expect(preview.length).toBeGreaterThan(0);
+  });
+
+  test("pickCollapsedLayerPreview includes supportive and blocking", () => {
+    const preview = pickCollapsedLayerPreview(bearishRows, "Bearish", 2, 2);
+    expect(preview.some((r) => r.key === "technical")).toBe(true);
+    expect(preview.some((r) => r.key === "internals" || r.key === "sector")).toBe(true);
   });
 
   test("buildLayerInsightLine avoids generic close-state copy", () => {

@@ -17,6 +17,9 @@ import type { EarningsEvent } from "@/lib/api/earnings";
 import { AddToWatchlistButton } from "@/components/add-to-watchlist-button";
 import { SignalsCommandBar } from "@/components/signals/signals-command-bar";
 import { SignalsLayerBreakdown } from "@/components/signals/signals-layer-breakdown";
+import { SignalsWatchlistPickerModal } from "@/components/signals/signals-watchlist-picker-modal";
+import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
+import { normalizeWatchlistMaturationBySymbol } from "@/lib/watchlist-page-utils";
 import { SignalsReferenceLevels } from "@/components/signals/signals-reference-levels";
 import { SignalsSetupRead } from "@/components/signals/signals-setup-read";
 import { useWatchlistMaturationLine } from "@/lib/hooks/use-watchlist-maturation-line";
@@ -273,6 +276,9 @@ export function SignalsPageClient({
   const [suggestHighlight, setSuggestHighlight] = useState(0);
   const [watchlistPickerOpen, setWatchlistPickerOpen] = useState(false);
   const [watchlistPickerSyms, setWatchlistPickerSyms] = useState<string[]>([]);
+  const [watchlistPickerMaturation, setWatchlistPickerMaturation] = useState<
+    Record<string, WatchlistMaturationRow>
+  >({});
   const [watchlistPickerLoading, setWatchlistPickerLoading] = useState(false);
   /**
    * Symbols on the user's default watchlist — used as one of four corroboration sources for the
@@ -649,18 +655,31 @@ export function SignalsPageClient({
     setWatchlistPickerOpen(true);
     setWatchlistPickerLoading(true);
     try {
-      const res = await fetch("/api/stocvest/watchlists/default/symbols", { method: "GET" });
-      const data = (await res.json().catch(() => ({}))) as { symbols?: string[] };
+      const mode = tradingMode;
+      const [symRes, matRes] = await Promise.all([
+        fetch("/api/stocvest/watchlists/default/symbols", { method: "GET" }),
+        fetch(`/api/stocvest/watchlists/maturation-summary?mode=${encodeURIComponent(mode)}`, {
+          cache: "no-store"
+        })
+      ]);
+      const data = (await symRes.json().catch(() => ({}))) as { symbols?: string[] };
       const list = Array.isArray(data.symbols)
         ? data.symbols.map((x) => String(x)).map((x) => normalizeTickerInput(x)).filter((x): x is string => Boolean(x))
         : [];
       setWatchlistPickerSyms(list);
+      if (matRes.ok) {
+        const matJson = await matRes.json().catch(() => ({}));
+        setWatchlistPickerMaturation(normalizeWatchlistMaturationBySymbol(matJson));
+      } else {
+        setWatchlistPickerMaturation({});
+      }
     } catch {
       setWatchlistPickerSyms([]);
+      setWatchlistPickerMaturation({});
     } finally {
       setWatchlistPickerLoading(false);
     }
-  }, []);
+  }, [tradingMode]);
 
   const rawSnapshot = useMemo(() => {
     const sym = symbol.toUpperCase();
@@ -1953,59 +1972,18 @@ export function SignalsPageClient({
         </article>
       ) : null}
 
-      {watchlistPickerOpen ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: "rgba(0,0,0,0.55)" }}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Choose symbol from watchlist"
-        >
-          <div
-            className="max-h-[min(80vh,480px)] w-full max-w-md overflow-hidden rounded-xl border p-4"
-            style={{ borderColor: colors.border, background: colors.surface }}
-          >
-            <h3 style={{ margin: `0 0 ${spacing[2]}`, color: colors.text }}>Default watchlist</h3>
-            {watchlistPickerLoading ? (
-              <p style={{ color: colors.textMuted, margin: 0 }}>Loading…</p>
-            ) : watchlistPickerSyms.length === 0 ? (
-              <p style={{ color: colors.textMuted, margin: 0 }}>
-                No symbols yet.{" "}
-                <Link href="/dashboard/watchlists" className="font-medium no-underline" style={{ color: colors.accent }}>
-                  Add tickers on Watchlists
-                </Link>
-                .
-              </p>
-            ) : (
-              <ul className="m-0 max-h-72 list-none overflow-y-auto p-0" style={{ display: "grid", gap: spacing[1] }}>
-                {watchlistPickerSyms.map((s) => (
-                  <li key={s}>
-                    <button
-                      type="button"
-                      className="w-full rounded-md px-3 py-2 text-left text-sm font-semibold tracking-wide"
-                      style={{ border: `1px solid ${colors.border}`, background: colors.background, color: colors.text }}
-                      onClick={() => {
-                        applyCommittedSymbol(s);
-                        setWatchlistPickerOpen(false);
-                      }}
-                    >
-                      {s}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <button
-              type="button"
-              className="mt-4 min-h-10 w-full rounded-md text-sm"
-              style={{ border: `1px solid ${colors.border}`, background: "transparent", color: colors.textMuted }}
-              onClick={() => setWatchlistPickerOpen(false)}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      ) : null}
+      <SignalsWatchlistPickerModal
+        open={watchlistPickerOpen}
+        symbols={watchlistPickerSyms}
+        maturationBySymbol={watchlistPickerMaturation}
+        loading={watchlistPickerLoading}
+        tradingMode={tradingMode}
+        onSelect={(s) => {
+          applyCommittedSymbol(s);
+          setWatchlistPickerOpen(false);
+        }}
+        onClose={() => setWatchlistPickerOpen(false)}
+      />
 
       {symbolCommitted ? (
         <>
@@ -2099,13 +2077,14 @@ export function SignalsPageClient({
             </div>
             {!signalRadarExpanded ? (
               <p className="m-0 text-sm leading-relaxed" style={{ color: colors.textMuted }}>
-                Six-layer shape vs a typical baseline — expand when you want the chart and per-layer gap bars; the written
-                breakdown stays the main read.
+                Shows how current conditions differ from a typical baseline — expand for the chart and per-layer gap
+                bars; the written breakdown stays the main read.
               </p>
             ) : (
               <>
                 <p className="text-sm" style={{ margin: `0 0 ${spacing[2]} 0`, color: colors.textMuted }}>
-                  At-a-glance shape vs a typical baseline — dashed ring is a typical baseline, solid fill is today.
+                  Shows how current conditions differ from a typical baseline — dashed ring is typical, solid fill is
+                  today.
                 </p>
                 <div
                   className="flex flex-wrap items-center gap-x-4 gap-y-2"
@@ -2189,7 +2168,8 @@ export function SignalsPageClient({
                   Today vs typical (per layer)
                 </h4>
                 <p className="text-xs leading-snug" style={{ margin: `0 0 ${spacing[2]} 0`, color: colors.textMuted }}>
-                  Point gap vs the dashed typical-baseline ring on the radar (today − typical). Color key is directly above the bars.
+                  Shows how each layer today differs from its typical baseline (today − typical on the radar). Color key
+                  is directly above the bars.
                 </p>
                 <SignalLayerDivergenceChart data={radarData} colors={colors} height={isMobileLayout ? 348 : 312} />
               </>

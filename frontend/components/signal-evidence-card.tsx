@@ -4,15 +4,19 @@ import type { CSSProperties, ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AlignJustify, ArrowDown, ArrowUp, Brain, Clock } from "lucide-react";
-import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { CardTone, ThemeColors } from "@/lib/design-system";
 import { borderRadius, cardSurfaceStyle, spacing, typography } from "@/lib/design-system";
-import { useIsMobileLayout } from "@/lib/hooks/use-is-mobile-layout";
 import { useTheme } from "@/lib/theme-provider";
-import { DecisionMetric } from "@/components/decision-metric";
+import { EvidenceCardHeader } from "@/components/signal-evidence/evidence-card-header";
+import { EvidenceLayerContribution } from "@/components/signal-evidence/evidence-layer-contribution";
 import { InfoTip } from "@/components/info-tip";
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
-import { synthTradeDecision, type TradeDecisionState } from "@/lib/signal-evidence/trade-decision";
+import {
+  buildLayerInsightLine,
+  evidenceDirectionToBias,
+  evidenceLayerToRow,
+  evidenceLayersToRows
+} from "@/lib/signal-evidence/evidence-card-present";
 import {
   buildCompressedContextSummary,
   buildNewsNeutralParenthetical,
@@ -39,7 +43,6 @@ import {
   structuralBandFromBaselineScore,
   VWAP_STATE,
   getVWAPDisplay,
-  type CompositeAlignmentWire,
   type EvidenceLayer,
   type EvidenceStatus,
   type GeopoliticalLayerExtras,
@@ -48,14 +51,8 @@ import {
   type SignalEvidenceData,
   type SignalEvidenceInsight
 } from "@/lib/signal-evidence";
-import {
-  compositeSignalScoreTooltip,
-  marketRegimeDecisionTooltip,
-  riskRewardEntryDecisionTooltip,
-  trendStrengthDecisionTooltip
-} from "@/lib/metric-decision-copy";
 import { pickNewsEmptyCopy } from "@/lib/news-empty-copy";
-import { AI_VERDICT_TIP, CONFIDENCE_PERCENT_TIP, LAYER_NAME_HINTS } from "@/lib/ui-tooltips";
+import { AI_VERDICT_TIP, LAYER_NAME_HINTS } from "@/lib/ui-tooltips";
 import { AIExplanationDisplay } from "@/components/ai-explanation-display";
 import { BuildScenarioButton } from "@/components/scenario-builder/build-scenario-button";
 import { UpgradePrompt } from "@/components/upgrade-prompt";
@@ -109,12 +106,6 @@ function statusColor(status: EvidenceStatus, colors: ThemeColors): string {
   if (status === "Neutral") return colors.caution;
   if (status === "As of close") return colors.text;
   return colors.textMuted;
-}
-
-function decisionLineColor(state: TradeDecisionState, colors: ThemeColors): string {
-  if (state === "actionable") return colors.bullish;
-  if (state === "blocked") return colors.bearish;
-  return colors.caution;
 }
 
 function toneFromStatus(status: EvidenceStatus): CardTone {
@@ -230,52 +221,11 @@ function displayLayerFreshness(layer: EvidenceLayer, evidence: SignalEvidenceDat
   return layer.freshnessLabel;
 }
 
-function scoreHeaderColor(score: number, colors: ThemeColors): string {
-  if (score >= 70) return colors.bullish;
-  if (score >= 50) return colors.caution;
-  return colors.bearish;
-}
-
-function trendStrengthColor(strength: string, colors: ThemeColors): string {
-  const s = strength.toLowerCase();
-  if (s === "strong") return colors.bullish;
-  if (s === "moderate") return colors.caution;
-  return colors.bearish;
-}
-
-function rrChipColor(rr: number, colors: ThemeColors): string {
-  if (rr >= 4) return colors.bullish;
-  if (rr >= 3) return "#86efac";
-  if (rr >= 2) return colors.text;
-  if (rr >= 1.5) return colors.caution;
-  return colors.bearish;
-}
-
-function regimeColor(regime: string, colors: ThemeColors): string {
-  const r = regime.toLowerCase();
-  if (r === "bullish") return colors.bullish;
-  if (r === "bearish") return colors.bearish;
-  return colors.caution;
-}
-
 function sectorResolutionLabel(state: SectorResolutionStateWire | null | undefined): string {
   if (!state) return "";
   if (state === "resolved") return "Resolved";
   if (state === "pending_cache_refresh") return "Unavailable (not factored)";
   return "Unmapped";
-}
-
-function alignmentAccent(level: CompositeAlignmentWire["level"], colors: ThemeColors): string {
-  if (level === "full" || level === "strong") return colors.bullish;
-  if (level === "conflict") return colors.bearish;
-  return colors.caution;
-}
-
-function formatDirShort(d: string): string {
-  const x = (d || "neutral").trim().toLowerCase();
-  if (x === "bullish") return "Bull";
-  if (x === "bearish") return "Bear";
-  return "Neutral";
 }
 
 function sectorLayerHasMomentumDetails(layer: EvidenceLayer): boolean {
@@ -391,11 +341,6 @@ function SectorMomentumPanel({ layer, colors }: { layer: EvidenceLayer; colors: 
       ) : null}
     </div>
   );
-}
-
-function rrMarkerPct(rr: number): number {
-  const clamped = Math.max(0.5, Math.min(3.5, rr));
-  return ((clamped - 0.5) / 3.0) * 100;
 }
 
 /** VWAP chips from the technical layer — always non-empty server copy. */
@@ -784,7 +729,6 @@ function regimeToVolatility(label: string | null | undefined): VolatilityRegime 
 
 export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot }: SignalEvidenceCardProps) {
   const { colors } = useTheme();
-  const isMobileLayout = useIsMobileLayout();
   const hasAIExplanations = useHasAIExplanations();
   const profileLoaded = useUserProfileLoaded();
   const [captureEx, setCaptureEx] = useState<{
@@ -852,7 +796,7 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
     // Defensive fallback chain (BRK-B Issue 5 fix, 2026-05-13). If the BFF
     // /api/stocvest/signals/ai/explanations call returns 5xx or an empty
     // text body we used to render an empty italic quote ("...") in the
-    // "AI Signal Analysis" section. That looked like a broken render to
+    // "Layer synthesis (informational)" section. That looked like a broken render to
     // users. We now degrade through:
     //   1. AI-cached / AI-live text                  (captureEx.text)
     //   2. Deterministic short verdict copy          (evidence.aiVerdict)
@@ -878,8 +822,6 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
   const captureCachedFlag = Boolean(captureEx?.cached);
   const showUpgradeAfterCapture =
     Boolean(captureEx?.upgrade) || (profileLoaded && !hasAIExplanations && captureEx !== null);
-  const directionTone =
-    evidence.direction === "bullish" ? colors.bullish : evidence.direction === "bearish" ? colors.bearish : colors.caution;
   const { yes: confYes, no: confNo } = confluenceChips(evidence, insight);
   const showConfluencePanel = confYes.length > 0 || confNo.length > 0;
   const geopoliticalDragActive = evidence.layers.some(
@@ -895,29 +837,8 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
     confNo,
     geopoliticalDragActive
   );
-  const tradeDecision = synthTradeDecision(evidence, insight);
-  const riskReinforcementBullets = tradeDecision.reinforcements;
-  const readinessTone: CardTone =
-    tradeDecision.state === "actionable" ? "bullish" : tradeDecision.state === "blocked" ? "bearish" : "caution";
-  const trendTone: CardTone =
-    insight.trend_strength.toLowerCase() === "strong"
-      ? "bullish"
-      : insight.trend_strength.toLowerCase() === "weak"
-        ? "bearish"
-        : "caution";
-  const rrTone: CardTone = insight.risk_reward >= 2.5 ? "bullish" : insight.risk_reward < 1.5 ? "bearish" : "caution";
-  const regimeTone: CardTone =
-    insight.market_regime.toLowerCase() === "bullish"
-      ? "bullish"
-      : insight.market_regime.toLowerCase() === "bearish"
-        ? "bearish"
-        : "caution";
-  const alignmentTone: CardTone =
-    evidence.alignment?.level === "full" || evidence.alignment?.level === "strong"
-      ? "bullish"
-      : evidence.alignment?.level === "conflict"
-        ? "bearish"
-        : "caution";
+  const setupBias = evidenceDirectionToBias(evidence.direction);
+  const layerRows = evidenceLayersToRows(evidence.layers);
   const entryZone =
     insight.historical_entry_zone ??
     (typeof evidence.keyLevels.support === "number" && typeof evidence.keyLevels.resistance === "number"
@@ -970,148 +891,96 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
         </section>
       ) : null}
 
-      <section className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <h2 className="text-xl sm:text-2xl" style={{ margin: 0 }}>
-              {evidence.symbol}
-            </h2>
-            <span
-              style={{
-                borderRadius: borderRadius.full,
-                padding: "4px 10px",
-                fontSize: typography.scale.xs,
-                fontWeight: 700,
-                background: "rgba(148,163,184,0.14)",
-                color: directionTone
-              }}
-            >
-              {evidence.directionBadgeLabel}
-            </span>
-            <span
-              style={{
-                borderRadius: borderRadius.full,
-                padding: "4px 10px",
-                fontSize: typography.scale.xs,
-                fontWeight: 700,
-                letterSpacing: "0.04em",
-                background: "rgba(59,130,246,0.12)",
-                color: colors.textMuted
-              }}
-            >
-              NOT INVESTMENT ADVICE
-            </span>
-            {geopoliticalDragActive ? (
-              <span
-                data-testid="geopolitical-drag-badge"
-                title="Elevated geopolitical headlines are weighing on the composite read for this symbol's sector."
-                style={{
-                  borderRadius: borderRadius.full,
-                  padding: "4px 10px",
-                  fontSize: typography.scale.xs,
-                  fontWeight: 700,
-                  letterSpacing: "0.04em",
-                  background: "rgba(239,68,68,0.12)",
-                  color: colors.bearish,
-                  border: `1px solid rgba(239,68,68,0.45)`
-                }}
-              >
-                GEOPOLITICAL DRAG
-              </span>
-            ) : null}
+      <EvidenceCardHeader
+        symbol={evidence.symbol}
+        bias={setupBias}
+        rows={layerRows}
+        updatedLabel={displayUpdatedLabel(evidence)}
+      >
+        {geopoliticalDragActive ? (
+          <span
+            data-testid="geopolitical-drag-badge"
+            title="Elevated geopolitical headlines are weighing on the composite read for this symbol's sector."
+            style={{
+              borderRadius: borderRadius.full,
+              padding: "4px 10px",
+              fontSize: typography.scale.xs,
+              fontWeight: 700,
+              letterSpacing: "0.04em",
+              background: "rgba(239,68,68,0.12)",
+              color: colors.bearish,
+              border: `1px solid rgba(239,68,68,0.45)`,
+              width: "fit-content"
+            }}
+          >
+            GEOPOLITICAL DRAG
+          </span>
+        ) : null}
+        {evidence.compositeMode === "swing" || evidence.signal_basis === "daily_bars_rth" ? (
+          <div className="text-xs text-muted-foreground tracking-wide">
+            {evidence.signal_basis_label?.trim() || "Derived from daily bars (RTH)"}
           </div>
-          {evidence.compositeMode === "swing" || evidence.signal_basis === "daily_bars_rth" ? (
-            <div className="text-xs text-muted-foreground tracking-wide">
-              {evidence.signal_basis_label?.trim() || "Derived from daily bars (RTH)"}
+        ) : null}
+        {(() => {
+          const sp = computeSignalPriceDisplay(evidence.priceAtSignal, evidence.lastTradePrice);
+          if (sp == null) return null;
+          const deltaColor =
+            sp.driftTier != null ? signalPriceDriftColor(sp.driftTier, colors) : colors.textMuted;
+          return (
+            <div
+              data-testid="signal-evidence-price-drift"
+              data-drift-tier={sp.driftTier ?? "unavailable"}
+              aria-label={sp.accessibleLabel}
+              style={{
+                display: "inline-flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                gap: spacing[1],
+                fontSize: typography.scale.xs,
+                color: colors.textMuted,
+                fontVariantNumeric: "tabular-nums"
+              }}
+            >
+              <span style={{ fontWeight: 600, color: colors.textMuted }}>Signal price</span>
+              {sp.priceAtSignal != null ? (
+                <span data-testid="signal-evidence-price-drift-at-signal" style={{ color: colors.text }}>
+                  {formatSignalPrice(sp.priceAtSignal)}
+                </span>
+              ) : (
+                <span style={{ color: colors.textMuted, fontStyle: "italic" }}>computed-at price n/a</span>
+              )}
+              {sp.priceAtSignal != null && sp.currentPrice != null ? (
+                <span aria-hidden="true" style={{ color: colors.textMuted }}>
+                  →
+                </span>
+              ) : null}
+              {sp.currentPrice != null ? (
+                <span data-testid="signal-evidence-price-drift-current" style={{ color: colors.text }}>
+                  {formatSignalPrice(sp.currentPrice)}
+                </span>
+              ) : (
+                <span style={{ color: colors.textMuted, fontStyle: "italic" }}>current price n/a</span>
+              )}
+              {sp.deltaPct != null ? (
+                <span
+                  data-testid="signal-evidence-price-drift-delta"
+                  style={{
+                    marginLeft: spacing[1],
+                    color: deltaColor,
+                    fontWeight: 600
+                  }}
+                >
+                  Δ {formatSignalPriceDeltaPct(sp.deltaPct)}
+                </span>
+              ) : null}
+              <InfoTip
+                text="Price the engine used when it computed this signal (left) versus the most recent price the card has on hand (right). Larger drift means the reference levels may describe a setup that has shifted; this is data, not advice."
+                label="Signal price drift"
+              />
             </div>
-          ) : null}
-          {/*
-            Signal Price drift row (B36, 2026-05-13). Pairs the price
-            the engine used when it computed the signal (T0, sourced
-            from the scanner row's `last_price`) with the price the
-            evidence card has on hand right now (T1, sourced from the
-            most recent snapshot). The Δ tells the user whether the
-            reference levels (entry zone, targets, stop, R/R) still
-            describe the live setup or whether the price has drifted
-            past them.
-
-            The row renders only when at least one side is usable;
-            when both sides are present it bands the Δ into one of
-            five tiers (`none` / `marginal` / `moderate` / `elevated`
-            / `stale`) and colors the Δ with the matching token. The
-            band thresholds (1% / 3% / 5%) are pinned in
-            `lib/signal-evidence/signal-price-display.ts`.
-
-            Direction-agnostic on purpose: a positive Δ helps a long
-            and hurts a short, but the user reads the card with full
-            direction context elsewhere — we surface the drift, the
-            user decides whether the geometry is still actionable.
-          */}
-          {(() => {
-            const sp = computeSignalPriceDisplay(evidence.priceAtSignal, evidence.lastTradePrice);
-            if (sp == null) return null;
-            const deltaColor =
-              sp.driftTier != null ? signalPriceDriftColor(sp.driftTier, colors) : colors.textMuted;
-            return (
-              <div
-                data-testid="signal-evidence-price-drift"
-                data-drift-tier={sp.driftTier ?? "unavailable"}
-                aria-label={sp.accessibleLabel}
-                style={{
-                  display: "inline-flex",
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                  gap: spacing[1],
-                  marginTop: 2,
-                  fontSize: typography.scale.xs,
-                  color: colors.textMuted,
-                  fontVariantNumeric: "tabular-nums"
-                }}
-              >
-                <span style={{ fontWeight: 600, color: colors.textMuted }}>Signal price</span>
-                {sp.priceAtSignal != null ? (
-                  <span data-testid="signal-evidence-price-drift-at-signal" style={{ color: colors.text }}>
-                    {formatSignalPrice(sp.priceAtSignal)}
-                  </span>
-                ) : (
-                  <span style={{ color: colors.textMuted, fontStyle: "italic" }}>computed-at price n/a</span>
-                )}
-                {sp.priceAtSignal != null && sp.currentPrice != null ? (
-                  <span aria-hidden="true" style={{ color: colors.textMuted }}>
-                    →
-                  </span>
-                ) : null}
-                {sp.currentPrice != null ? (
-                  <span data-testid="signal-evidence-price-drift-current" style={{ color: colors.text }}>
-                    {formatSignalPrice(sp.currentPrice)}
-                  </span>
-                ) : (
-                  <span style={{ color: colors.textMuted, fontStyle: "italic" }}>current price n/a</span>
-                )}
-                {sp.deltaPct != null ? (
-                  <span
-                    data-testid="signal-evidence-price-drift-delta"
-                    style={{
-                      marginLeft: spacing[1],
-                      color: deltaColor,
-                      fontWeight: 600
-                    }}
-                  >
-                    Δ {formatSignalPriceDeltaPct(sp.deltaPct)}
-                  </span>
-                ) : null}
-                <InfoTip
-                  text="Price the engine used when it computed this signal (left) versus the most recent price the card has on hand (right). Larger drift means the reference levels (entry zone, targets, stop, R/R) describe a setup that has shifted; this is data, not advice."
-                  label="Signal price drift"
-                />
-              </div>
-            );
-          })()}
-        </div>
-        <span className="text-sm" style={{ color: colors.textMuted }}>
-          {displayUpdatedLabel(evidence)}
-        </span>
-      </section>
+          );
+        })()}
+      </EvidenceCardHeader>
 
       {gapIntelSnapshot ? (
         <section
@@ -1151,7 +1020,6 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
             className="m-0 mt-1 text-xs leading-relaxed"
             style={{ color: colors.textMuted, fontStyle: "italic" }}
           >
-            Signal data only. Not investment advice.
           </p>
         </section>
       ) : null}
@@ -1230,279 +1098,10 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
         );
       })()}
 
-      <section className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-        <div
-          style={{
-            borderRadius: borderRadius.lg,
-            padding: spacing[3],
-            display: "grid",
-            gap: spacing[1],
-            ...elevatedCardStyle(colors, readinessTone)
-          }}
-        >
-          <span style={{ fontSize: typography.scale.xs, fontWeight: 700, letterSpacing: "0.06em", color: colors.textMuted }}>
-            TRADE READINESS
-          </span>
-          <span
-            className="text-3xl font-bold tabular-nums sm:text-4xl"
-            style={{ color: scoreHeaderColor(insight.signal_score, colors), lineHeight: 1.1 }}
-          >
-            <DecisionMetric explanation={compositeSignalScoreTooltip(insight.signal_score)} label="How trade readiness is used" maxWidth={300}>
-              <span>
-                {insight.signal_score}
-                <span style={{ fontSize: typography.scale.sm, color: colors.textMuted, fontWeight: 600 }}> / 100</span>
-              </span>
-            </DecisionMetric>
-          </span>
-          <span className="inline-flex items-center gap-1 text-xs" style={{ color: colors.textMuted }}>
-            Composite read
-            <InfoTip text={CONFIDENCE_PERCENT_TIP} label="Scanner vs composite score detail" />
-          </span>
-          <p
-            style={{
-              margin: 0,
-              fontSize: typography.scale.xs,
-              color: decisionLineColor(tradeDecision.state, colors),
-              fontWeight: 600,
-              lineHeight: 1.45
-            }}
-          >
-            {tradeDecision.line}
-          </p>
-          {insight.is_complete === false ? (
-            <span style={{ color: colors.caution, fontSize: typography.scale.xs, fontWeight: 700 }}>Incomplete</span>
-          ) : null}
-        </div>
-        <div
-          style={{
-            borderRadius: borderRadius.lg,
-            padding: spacing[3],
-            display: "grid",
-            gap: spacing[1],
-            ...elevatedCardStyle(colors, trendTone)
-          }}
-        >
-          <span style={{ fontSize: typography.scale.xs, fontWeight: 700, letterSpacing: "0.06em", color: colors.textMuted }}>
-            TREND STRENGTH
-          </span>
-          <span className="text-xl font-bold sm:text-2xl" style={{ color: trendStrengthColor(insight.trend_strength, colors) }}>
-            <DecisionMetric explanation={trendStrengthDecisionTooltip(insight.trend_strength)} label="How trend strength is used" maxWidth={300}>
-              <span>{insight.trend_strength}</span>
-            </DecisionMetric>
-          </span>
-          <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>{insight.trend_direction}</span>
-        </div>
-        <div
-          style={{
-            borderRadius: borderRadius.lg,
-            padding: spacing[3],
-            display: "grid",
-            gap: spacing[1],
-            ...elevatedCardStyle(colors, rrTone)
-          }}
-        >
-          <span style={{ fontSize: typography.scale.xs, fontWeight: 700, letterSpacing: "0.06em", color: colors.textMuted }}>
-            RISK / REWARD
-          </span>
-          <span className="text-xl font-bold tabular-nums sm:text-2xl" style={{ color: rrChipColor(insight.risk_reward, colors) }}>
-            <DecisionMetric
-              explanation={riskRewardEntryDecisionTooltip(insight.risk_reward, { incomplete: insight.is_complete === false })}
-              label="How entry risk/reward is used"
-              maxWidth={320}
-            >
-              <span>{insight.risk_reward.toFixed(1)}:1</span>
-            </DecisionMetric>
-          </span>
-          {insight.rr_warning ? (
-            <span style={{ color: colors.caution, fontSize: typography.scale.xs, fontWeight: 700 }}>Low R/R - below 2:1</span>
-          ) : null}
-          {insight.rr_quality ? (
-            <span style={{ color: colors.textMuted, fontSize: typography.scale.xs, textTransform: "capitalize" }}>
-              R/R quality: {insight.rr_quality}
-            </span>
-          ) : null}
-          <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Entry R/R</span>
-          <div
-            style={{
-              position: "relative",
-              height: 8,
-              borderRadius: borderRadius.full,
-              background: "linear-gradient(90deg, rgba(239,68,68,0.85), rgba(245,158,11,0.7), rgba(34,197,94,0.9))",
-              marginTop: 4
-            }}
-          >
-            <span
-              style={{
-                position: "absolute",
-                top: -2,
-                width: 4,
-                height: 12,
-                borderRadius: 2,
-                background: colors.text,
-                left: `calc(${rrMarkerPct(insight.risk_reward)}% - 2px)`,
-                boxShadow: "0 0 0 2px rgba(15,23,42,0.35)"
-              }}
-            />
-          </div>
-        </div>
-        <div
-          style={{
-            borderRadius: borderRadius.lg,
-            padding: spacing[3],
-            display: "grid",
-            gap: spacing[1],
-            ...elevatedCardStyle(colors, regimeTone)
-          }}
-        >
-          <span style={{ fontSize: typography.scale.xs, fontWeight: 700, letterSpacing: "0.06em", color: colors.textMuted }}>
-            MARKET REGIME
-          </span>
-          <span className="text-xl font-bold sm:text-2xl" style={{ color: regimeColor(insight.market_regime, colors) }}>
-            <DecisionMetric explanation={marketRegimeDecisionTooltip(insight.market_regime)} label="How market regime is used" maxWidth={300}>
-              <span>{insight.market_regime}</span>
-            </DecisionMetric>
-          </span>
-          <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Macro / regime layer</span>
-        </div>
-      </section>
-
-      {tradeDecision.rationale ? (
-        <section
-          aria-label="Decision rationale"
-          style={{
-            borderRadius: borderRadius.lg,
-            padding: spacing[3],
-            ...elevatedCardStyle(
-              colors,
-              tradeDecision.state === "blocked" ? "bearish" : "caution"
-            )
-          }}
-        >
-          <p
-            style={{
-              margin: 0,
-              fontSize: typography.scale.sm,
-              color: colors.text,
-              lineHeight: 1.55
-            }}
-          >
-            <strong style={{ color: decisionLineColor(tradeDecision.state, colors) }}>
-              {tradeDecision.rationale.label}
-            </strong>{" "}
-            {tradeDecision.rationale.text}
-          </p>
-        </section>
-      ) : null}
-
-      {(evidence.alignment != null ||
-        (insight.alignment_ratio != null && Number.isFinite(insight.alignment_ratio)) ||
-        (insight.conflicted_layers != null && insight.conflicted_layers.length > 0)) ? (
-        <section
-          style={{
-            borderRadius: borderRadius.lg,
-            padding: spacing[3],
-            display: "grid",
-            gap: spacing[2],
-            ...elevatedCardStyle(colors, alignmentTone)
-          }}
-        >
-          <h3
-            style={{
-              margin: 0,
-              fontSize: typography.scale.sm,
-              fontWeight: 700,
-              letterSpacing: "0.06em",
-              color: colors.textMuted
-            }}
-          >
-            LAYER ALIGNMENT
-          </h3>
-          {evidence.alignment ? (
-            <div style={{ display: "grid", gap: spacing[2] }}>
-              <div className="flex flex-wrap items-center gap-2">
-                <span
-                  className="rounded-full px-2.5 py-1 text-xs font-bold"
-                  style={{
-                    border: `1px solid ${alignmentAccent(evidence.alignment.level, colors)}`,
-                    color: alignmentAccent(evidence.alignment.level, colors),
-                    background: "rgba(148,163,184,0.08)"
-                  }}
-                >
-                  {evidence.alignment.chip}
-                </span>
-                <span className="text-xs font-semibold text-muted-foreground">{evidence.alignment.label}</span>
-                <span className="text-xs tabular-nums text-muted-foreground">
-                  Score adj:{" "}
-                  <strong style={{ color: evidence.alignment.score_modifier >= 0 ? colors.bullish : colors.bearish }}>
-                    {evidence.alignment.score_modifier >= 0 ? "+" : ""}
-                    {evidence.alignment.score_modifier}
-                  </strong>
-                </span>
-              </div>
-              <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.text, lineHeight: 1.5 }}>{evidence.alignment.detail}</p>
-              <div className="flex flex-wrap gap-3" style={{ fontSize: typography.scale.xs }}>
-                {(
-                  [
-                    ["Macro", evidence.alignment.macro_supports, evidence.alignment.macro_direction],
-                    ["Sector", evidence.alignment.sector_supports, evidence.alignment.sector_direction],
-                    ["Technical", evidence.alignment.technical_supports, evidence.alignment.technical_direction]
-                  ] as const
-                ).map(([label, supports, dir]) => (
-                  <div key={label} className="flex items-center gap-1.5">
-                    <span
-                      title={supports ? "Supports direction" : "Does not support direction"}
-                      style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: "50%",
-                        background: supports ? colors.bullish : colors.textMuted,
-                        opacity: supports ? 1 : 0.35
-                      }}
-                    />
-                    <span className="text-muted-foreground">{label}:</span>
-                    <span style={{ fontWeight: 600, color: colors.text }}>{formatDirShort(dir)}</span>
-                  </div>
-                ))}
-              </div>
-              {evidence.alignment.is_counter_trend ? (
-                <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.caution, fontWeight: 600 }}>
-                  Counter-trend vs macro or sector — size and risk accordingly.
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-          {insight.alignment_ratio != null && Number.isFinite(insight.alignment_ratio) ? (
-            <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.text }}>
-              <strong style={{ color: colors.text }}>Agreement:</strong>{" "}
-              {Math.round(insight.alignment_ratio * 100)}% of weighted layers align with the composite direction.
-            </p>
-          ) : null}
-          {insight.conflicted_layers && insight.conflicted_layers.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
-              {insight.conflicted_layers.map((key) => (
-                <span
-                  key={key}
-                  style={{
-                    borderRadius: borderRadius.full,
-                    padding: "4px 10px",
-                    fontSize: typography.scale.xs,
-                    border: `1px solid ${colors.caution}`,
-                    background: "rgba(245,158,11,0.1)",
-                    color: colors.caution,
-                    fontWeight: 600,
-                    textTransform: "lowercase"
-                  }}
-                >
-                  {key}: divergent
-                </span>
-              ))}
-            </div>
-          ) : null}
-        </section>
-      ) : null}
+      <EvidenceLayerContribution layers={evidence.layers} bias={setupBias} />
 
       <section>
-        <h3 style={{ marginTop: 0 }}>Signal Layer Breakdown</h3>
+        <h3 style={{ marginTop: 0 }}>Layer breakdown</h3>
         <div style={{ display: "grid", gap: spacing[3] }}>
           {/* B35 (BRK.B feedback, 2026-05-13): the layer-breakdown
               grid now applies an emphasis hierarchy and consolidates
@@ -1909,6 +1508,18 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
                       {layer.status}
                     </span>
                   </div>
+                  {(() => {
+                    const layerInsight = buildLayerInsightLine(evidenceLayerToRow(layer), setupBias);
+                    return (
+                      <p
+                        className="m-0 text-xs leading-snug"
+                        style={{ color: colors.textMuted, fontStyle: "italic" }}
+                        data-testid={`layer-${layer.key}-insight`}
+                      >
+                        {layerInsight}
+                      </p>
+                    );
+                  })()}
                   {newsParen ? (
                     <span
                       data-testid={`layer-${layer.key}-neutral-parenthetical`}
@@ -2028,9 +1639,6 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
               }}
             >
               <h3 style={{ margin: 0 }}>Confirming Signals</h3>
-              <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted }}>
-                From confluence — signal data only, not investment advice.
-              </p>
               {/* Conflicting chips get a priority sort (BRK.B feedback,
                   2026-05-13). When there are 2+ counterweights, the
                   first three are labelled PRIMARY / SECONDARY / TERTIARY
@@ -2234,15 +1842,15 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
               padding: spacing[3],
               display: "grid",
               gap: spacing[2],
-              ...elevatedCardStyle(colors, riskReinforcementBullets.length > 0 ? "caution" : "neutral")
+              ...elevatedCardStyle(colors)
             }}
           >
             <h3 style={{ margin: 0 }}>Risk Factors</h3>
-            {riskReinforcementBullets.length === 0 && insight.risk_factors.length === 0 ? (
+            {insight.risk_factors.length === 0 ? (
               <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted }}>No significant risk factors detected</p>
             ) : (
             <ul style={{ margin: 0, paddingInlineStart: 0, listStyle: "none", display: "grid", gap: spacing[2] }}>
-              {(riskReinforcementBullets.length > 0 ? riskReinforcementBullets : insight.risk_factors.slice(0, 6)).map((r, i) => (
+              {insight.risk_factors.slice(0, 6).map((r, i) => (
                 <li key={`risk-${i}`} className="flex gap-2 text-sm" style={{ color: colors.text }}>
                   <span
                     style={{
@@ -2274,7 +1882,7 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
       >
         <h3 style={{ margin: 0, display: "flex", alignItems: "center", gap: spacing[2] }}>
           <Brain size={18} />
-          AI Signal Analysis
+          Layer synthesis (informational)
           <InfoTip text={AI_VERDICT_TIP} label="About AI signal analysis" />
         </h3>
         <AIExplanationDisplay
@@ -2297,19 +1905,26 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
         ) : null}
       </section>
 
-      <section
+      <details
         style={{
           borderRadius: borderRadius.lg,
           padding: spacing[3],
-          display: "grid",
-          gap: spacing[2],
           ...elevatedCardStyle(colors)
         }}
       >
-        <h3 style={{ margin: 0 }}>Signal Parameters</h3>
+        <summary
+          style={{
+            cursor: "pointer",
+            fontWeight: 600,
+            color: colors.text,
+            fontSize: typography.scale.sm
+          }}
+        >
+          Signal parameters (reference context)
+        </summary>
         <p
           style={{
-            margin: 0,
+            margin: `${spacing[2]} 0 0 0`,
             borderLeft: "2px solid rgba(0,180,255,0.3)",
             paddingLeft: 16,
             fontSize: 13,
@@ -2319,107 +1934,7 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
         >
           {insight.signal_parameters}
         </p>
-      </section>
-
-      <div
-        style={{
-          background: "linear-gradient(180deg, rgba(59,130,246,0.08), rgba(148,163,184,0.08))",
-          border: "1px solid rgba(59,130,246,0.24)",
-          borderRadius: borderRadius.lg,
-          padding: "12px 16px",
-          fontSize: "12px",
-          color: colors.textMuted,
-          lineHeight: "1.6",
-          marginBottom: "4px",
-          boxShadow: "0 0 0 1px rgba(59,130,246,0.1), 0 0 20px rgba(37,99,235,0.08)"
-        }}
-      >
-        <strong style={{ color: colors.accent }}>Signal Data Only</strong>
-        <br />
-        This analysis surfaces technical patterns and signal data for informational purposes. It is not investment advice. Reference
-        levels shown are derived from historical patterns — not predictions. You are solely responsible for all trading decisions.
-      </div>
-
-      <section
-        style={{
-          borderRadius: borderRadius.lg,
-          padding: spacing[3],
-          display: "grid",
-          gap: spacing[2],
-          ...elevatedCardStyle(colors)
-        }}
-      >
-        <h3 style={{ margin: 0 }}>Signal Strength Breakdown</h3>
-        <div className="h-[208px] w-full max-w-full min-w-0 lg:h-[236px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={evidence.layers.map((l) => ({
-                layer: l.name,
-                score: Math.round(l.contributionScore),
-                status: l.status
-              }))}
-              layout="vertical"
-              margin={
-                isMobileLayout
-                  ? { top: 4, right: 8, left: 0, bottom: 8 }
-                  : { top: 4, right: 14, left: 2, bottom: 4 }
-              }
-              barCategoryGap={isMobileLayout ? "14%" : "16%"}
-            >
-              <XAxis
-                type="number"
-                domain={[0, 100]}
-                tick={{ fontSize: isMobileLayout ? 9 : 10, fill: colors.textMuted }}
-                axisLine={{ stroke: colors.border }}
-                tickLine={{ stroke: colors.border }}
-              />
-              <YAxis
-                type="category"
-                dataKey="layer"
-                width={isMobileLayout ? 108 : 124}
-                interval={0}
-                tick={{ fontSize: isMobileLayout ? 9 : 10, fill: colors.textMuted }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <Tooltip
-                cursor={{ fill: "rgba(148,163,184,0.07)" }}
-                content={({ active, payload }) => {
-                  if (!active || !payload?.[0]) return null;
-                  const row = payload[0].payload as { layer: string; score: number; status: EvidenceStatus };
-                  return (
-                    <div
-                      style={{
-                        background: colors.surface,
-                        border: `1px solid ${colors.border}`,
-                        borderRadius: 8,
-                        padding: "8px 10px",
-                        fontSize: 12,
-                        color: colors.text
-                      }}
-                    >
-                      <div style={{ fontWeight: 600 }}>{row.layer}</div>
-                      <div style={{ color: colors.textMuted, marginTop: 4 }}>
-                        {row.status === "Unavailable"
-                          ? "Unavailable"
-                          : row.status === "As of close"
-                            ? `As of close: ${row.score}`
-                            : `Score: ${row.score}`}
-                      </div>
-                    </div>
-                  );
-                }}
-              />
-              <Bar dataKey="score" radius={[0, 6, 6, 0]} maxBarSize={isMobileLayout ? 18 : 20} isAnimationActive={false}>
-                {evidence.layers.map((l) => (
-                  <Cell key={l.key} fill={statusColor(l.status, colors)} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-        <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>{evidence.newsFreshnessLabel}</span>
-      </section>
+      </details>
 
       <footer style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: spacing[2] }}>
         <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>{displayUpdatedLabel(evidence)}</span>
