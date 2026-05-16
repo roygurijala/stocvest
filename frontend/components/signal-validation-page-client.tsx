@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import {
   fetchUserSignalHistoryPage,
   type PublicSignal,
@@ -11,6 +11,7 @@ import { CuteLoader } from "@/components/cute-loader";
 import { HistoricalValidationPanel } from "@/components/historical-validation-panel";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
+import { useHoverPrefetch } from "@/lib/hooks/use-hover-prefetch";
 import { useTheme } from "@/lib/theme-provider";
 
 type LedgerTab = "swing" | "day";
@@ -26,6 +27,29 @@ type LedgerTab = "swing" | "day";
 type ValidationView = "ledger" | "historical";
 
 const PAGE_SIZE_OPTIONS: UserSignalHistoryPageSize[] = [25, 50, 75, 100];
+
+function ValidationLedgerSignalsLink(props: {
+  href: string;
+  className?: string;
+  style?: CSSProperties;
+  children: ReactNode;
+}) {
+  const hp = useHoverPrefetch(props.href);
+  return (
+    <Link
+      prefetch={false}
+      data-hover-prefetch="true"
+      href={props.href}
+      onMouseEnter={hp.onMouseEnter}
+      onFocus={hp.onFocus}
+      onPointerDown={hp.onPointerDown}
+      className={props.className}
+      style={props.style}
+    >
+      {props.children}
+    </Link>
+  );
+}
 
 function formatEtLine(iso: string): string {
   try {
@@ -423,18 +447,19 @@ export function SignalValidationPageClient() {
                       return (
                         <tr key={r.signal_id ?? `${r.symbol}-${r.timestamp_iso}`} style={{ color: colors.text }}>
                           <td style={{ ...td, fontWeight: 600 }}>
-                            <Link
-                              prefetch={false}
-                              // Mode Separation: validation ledger is per-mode
-                              // (swing tab vs day tab), so the deep link must
-                              // open Signals in the same engine the user was
-                              // reviewing — never silently the other one.
+                            {/*
+                             Mode Separation: validation ledger is per-mode
+                             (swing tab vs day tab), so the deep link must
+                             open Signals in the same engine the user was
+                             reviewing — never silently the other one.
+                            */}
+                            <ValidationLedgerSignalsLink
                               href={`/dashboard/signals?symbol=${encodeURIComponent(r.symbol.trim().toUpperCase())}&ref=validation&trading_mode=${tab}`}
                               className="font-semibold no-underline hover:underline"
                               style={{ color: colors.text }}
                             >
                               {r.symbol}
-                            </Link>
+                            </ValidationLedgerSignalsLink>
                           </td>
                           <td style={{ ...td, whiteSpace: "nowrap" }}>{dash(entryD)}</td>
                           <td style={{ ...td, whiteSpace: "nowrap" }}>{dash(exitD)}</td>
@@ -503,18 +528,19 @@ export function SignalValidationPageClient() {
                       return (
                         <tr key={r.signal_id ?? `${r.symbol}-${r.timestamp_iso}`} style={{ color: colors.text }}>
                           <td style={{ ...td, fontWeight: 600 }}>
-                            <Link
-                              prefetch={false}
-                              // Mode Separation: validation ledger is per-mode
-                              // (swing tab vs day tab), so the deep link must
-                              // open Signals in the same engine the user was
-                              // reviewing — never silently the other one.
+                            {/*
+                             Mode Separation: validation ledger is per-mode
+                             (swing tab vs day tab), so the deep link must
+                             open Signals in the same engine the user was
+                             reviewing — never silently the other one.
+                            */}
+                            <ValidationLedgerSignalsLink
                               href={`/dashboard/signals?symbol=${encodeURIComponent(r.symbol.trim().toUpperCase())}&ref=validation&trading_mode=${tab}`}
                               className="font-semibold no-underline hover:underline"
                               style={{ color: colors.text }}
                             >
                               {r.symbol}
-                            </Link>
+                            </ValidationLedgerSignalsLink>
                           </td>
                           <td style={{ ...td, whiteSpace: "nowrap" }}>{formatEtLine(r.timestamp_iso)}</td>
                           <td style={{ ...td, whiteSpace: "nowrap" }}>

@@ -73,6 +73,7 @@ function regimeLabelToVolatilityRegime(label: string | null | undefined): Volati
   return "unknown";
 }
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
+import { useHoverPrefetch } from "@/lib/hooks/use-hover-prefetch";
 import { useScannerGapIntelBatch } from "@/lib/hooks/use-scanner-gap-intel-batch";
 import { fetchSymbolMinuteBars } from "@/lib/fetch-symbol-bars";
 import { buildEvidenceFromSetup, enrichEvidenceWithComposite, type SignalEvidenceData } from "@/lib/signal-evidence";
@@ -113,6 +114,25 @@ interface ScannerPageClientProps {
   earningsBySymbol?: Record<string, EarningsEvent>;
   /** Swing Pro omits Day / Both scanner modes and intraday-only payloads. */
   dayTradingSurfaces?: boolean;
+}
+
+/** Per-setup Signals deep link — hover-prefetch without mount prefetch (PERFORMANCE.md §4). */
+function ScannerOpenSignalsLink(props: { href: string; borderColor: string; accentColor: string }) {
+  const hoverPrefetch = useHoverPrefetch(props.href);
+  return (
+    <Link
+      prefetch={false}
+      data-hover-prefetch="true"
+      href={props.href}
+      onMouseEnter={hoverPrefetch.onMouseEnter}
+      onFocus={hoverPrefetch.onFocus}
+      onPointerDown={hoverPrefetch.onPointerDown}
+      className="inline-flex min-h-8 items-center rounded-md px-2 text-xs font-medium no-underline"
+      style={{ border: `1px solid ${props.borderColor}`, color: props.accentColor, alignSelf: "center" }}
+    >
+      Open Signals
+    </Link>
+  );
 }
 
 const SCANNER_MODE_STORAGE_KEY = "stocvest_scanner_mode";
@@ -2009,20 +2029,19 @@ export function ScannerPageClient({
                       >
                         {evidenceLoading ? "Preparing signal..." : "View Evidence"}
                       </button>
-                      <Link
-                        prefetch={false}
-                        // Mode Separation: each setup carries its own engine
-                        // (swing_daily → swing engine; everything else → day
-                        // engine). Propagating trading_mode in the deep link
-                        // ensures the user lands in the same engine they
-                        // clicked on, never the other one's localStorage
-                        // default.
+                      {/*
+                       Mode Separation: each setup carries its own engine
+                       (swing_daily → swing engine; everything else → day
+                       engine). Propagating trading_mode in the deep link
+                       ensures the user lands in the same engine they
+                       clicked on, never the other one's localStorage
+                       default.
+                      */}
+                      <ScannerOpenSignalsLink
                         href={`/dashboard/signals?symbol=${encodeURIComponent(setup.symbol.trim().toUpperCase())}&ref=scanner&trading_mode=${setup.scanner_mode === "swing_daily" ? "swing" : "day"}`}
-                        className="inline-flex min-h-8 items-center rounded-md px-2 text-xs font-medium no-underline"
-                        style={{ border: `1px solid ${colors.border}`, color: colors.accent, alignSelf: "center" }}
-                      >
-                        Open Signals
-                      </Link>
+                        borderColor={colors.border}
+                        accentColor={colors.accent}
+                      />
                       <InfoTip text={SETUP_RELATIVE_VOLUME_TIP} label="Relative volume" />
                     </div>
                     <div style={{ position: "absolute", right: spacing[3], bottom: spacing[3] }}>

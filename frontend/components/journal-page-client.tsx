@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useEffect, useMemo, useState, useTransition } from "react";
+import { Fragment, useEffect, useMemo, useState, useTransition, type CSSProperties, type ReactNode } from "react";
 import type { CreateJournalEntryRequest, JournalAnalyticsPayload, JournalEntryPayload } from "@/lib/api/contracts";
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
 import { Area, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { InfoTip } from "@/components/info-tip";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
+import { useHoverPrefetch } from "@/lib/hooks/use-hover-prefetch";
 import { useTheme } from "@/lib/theme-provider";
 import { AVG_LOSER_TIP, AVG_WINNER_TIP, EXPECTANCY_TIP, STREAK_TIP, WIN_RATE_TIP } from "@/lib/ui-tooltips";
 
@@ -31,6 +32,24 @@ function setupChipMeta(setupType: string | null | undefined, strategyTags: strin
     intraday_setup: "Intraday"
   };
   return { label: map[raw] || raw.replace(/_/g, " ").slice(0, 18) };
+}
+
+function JournalSignalsDeepLink(props: { href: string; className: string; style: CSSProperties; children: ReactNode }) {
+  const hp = useHoverPrefetch(props.href);
+  return (
+    <Link
+      prefetch={false}
+      data-hover-prefetch="true"
+      href={props.href}
+      onMouseEnter={hp.onMouseEnter}
+      onFocus={hp.onFocus}
+      onPointerDown={hp.onPointerDown}
+      className={props.className}
+      style={props.style}
+    >
+      {props.children}
+    </Link>
+  );
 }
 
 function positionSideLabel(openingSide: "buy" | "sell"): string {
@@ -386,8 +405,7 @@ export function JournalPageClient({ initialEntries, initialAnalytics, connectedB
                         {entry.signal_id || entry.signal_strength != null ? (
                           <div className="flex flex-wrap items-center gap-1">
                             {typeof entry.signal_strength === "number" ? (
-                              <Link
-                                prefetch={false}
+                              <JournalSignalsDeepLink
                                 href={
                                   entry.signal_id
                                     ? `/dashboard/signals?${new URLSearchParams({ signal_id: entry.signal_id }).toString()}`
@@ -402,10 +420,9 @@ export function JournalPageClient({ initialEntries, initialAnalytics, connectedB
                                 }}
                               >
                                 {entry.signal_strength}% signal
-                              </Link>
+                              </JournalSignalsDeepLink>
                             ) : (
-                              <Link
-                                prefetch={false}
+                              <JournalSignalsDeepLink
                                 href={
                                   entry.signal_id
                                     ? `/dashboard/signals?${new URLSearchParams({ signal_id: entry.signal_id }).toString()}`
@@ -415,7 +432,7 @@ export function JournalPageClient({ initialEntries, initialAnalytics, connectedB
                                 style={{ color: colors.accent }}
                               >
                                 Linked
-                              </Link>
+                              </JournalSignalsDeepLink>
                             )}
                           </div>
                         ) : (
