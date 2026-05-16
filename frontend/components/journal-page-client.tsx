@@ -387,6 +387,7 @@ export function JournalPageClient({ initialEntries, initialAnalytics, connectedB
                           <div className="flex flex-wrap items-center gap-1">
                             {typeof entry.signal_strength === "number" ? (
                               <Link
+                                prefetch={false}
                                 href={
                                   entry.signal_id
                                     ? `/dashboard/signals?${new URLSearchParams({ signal_id: entry.signal_id }).toString()}`
@@ -404,6 +405,7 @@ export function JournalPageClient({ initialEntries, initialAnalytics, connectedB
                               </Link>
                             ) : (
                               <Link
+                                prefetch={false}
                                 href={
                                   entry.signal_id
                                     ? `/dashboard/signals?${new URLSearchParams({ signal_id: entry.signal_id }).toString()}`

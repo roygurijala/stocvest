@@ -2010,6 +2010,7 @@ export function ScannerPageClient({
                         {evidenceLoading ? "Preparing signal..." : "View Evidence"}
                       </button>
                       <Link
+                        prefetch={false}
                         // Mode Separation: each setup carries its own engine
                         // (swing_daily → swing engine; everything else → day
                         // engine). Propagating trading_mode in the deep link

@@ -424,6 +424,7 @@ export function SignalValidationPageClient() {
                         <tr key={r.signal_id ?? `${r.symbol}-${r.timestamp_iso}`} style={{ color: colors.text }}>
                           <td style={{ ...td, fontWeight: 600 }}>
                             <Link
+                              prefetch={false}
                               // Mode Separation: validation ledger is per-mode
                               // (swing tab vs day tab), so the deep link must
                               // open Signals in the same engine the user was
@@ -503,6 +504,7 @@ export function SignalValidationPageClient() {
                         <tr key={r.signal_id ?? `${r.symbol}-${r.timestamp_iso}`} style={{ color: colors.text }}>
                           <td style={{ ...td, fontWeight: 600 }}>
                             <Link
+                              prefetch={false}
                               // Mode Separation: validation ledger is per-mode
                               // (swing tab vs day tab), so the deep link must
                               // open Signals in the same engine the user was
