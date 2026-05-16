@@ -100,6 +100,36 @@ resource "aws_dynamodb_table" "watchlist_maturation" {
   })
 }
 
+# Append-only setup evolution log (state / alignment transitions); 90d TTL.
+resource "aws_dynamodb_table" "watchlist_maturation_transition" {
+  name         = "WatchlistMaturationTransition"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "stocvest-development-ddb-watchlist-maturation-transition"
+  })
+}
+
 resource "aws_dynamodb_table" "alerts" {
   name         = "Alerts"
   billing_mode = "PAY_PER_REQUEST"

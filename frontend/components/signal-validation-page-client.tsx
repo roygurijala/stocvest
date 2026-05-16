@@ -434,8 +434,11 @@ export function SignalValidationPageClient() {
                 <tbody>
                   {rows.length === 0 ? (
                     <tr>
-                      <td colSpan={13} style={{ padding: spacing[4], color: colors.textMuted }}>
-                        No rows in this track yet. Only signals that pass logging rules appear here.
+                      <td colSpan={13} style={{ padding: spacing[5], color: colors.textMuted }}>
+                        <p style={{ margin: 0, fontWeight: 600, color: colors.text }}>No outcomes recorded yet</p>
+                        <p style={{ margin: `${spacing[2]}px 0 0`, lineHeight: 1.55 }}>
+                          We track setups once they reach measurable states. Check back after signals begin resolving.
+                        </p>
                       </td>
                     </tr>
                   ) : (
@@ -512,8 +515,11 @@ export function SignalValidationPageClient() {
                 <tbody>
                   {rows.length === 0 ? (
                     <tr>
-                      <td colSpan={12} style={{ padding: spacing[4], color: colors.textMuted }}>
-                        No rows in this track yet. Only signals that pass logging rules appear here.
+                      <td colSpan={12} style={{ padding: spacing[5], color: colors.textMuted }}>
+                        <p style={{ margin: 0, fontWeight: 600, color: colors.text }}>No outcomes recorded yet</p>
+                        <p style={{ margin: `${spacing[2]}px 0 0`, lineHeight: 1.55 }}>
+                          We track setups once they reach measurable states. Check back after signals begin resolving.
+                        </p>
                       </td>
                     </tr>
                   ) : (

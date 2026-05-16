@@ -168,6 +168,9 @@ class Settings(BaseSettings):
     dynamodb_watchlists_table: str = Field("", alias="DYNAMODB_WATCHLISTS_TABLE")
     #: Per-(user, symbol, mode) maturation rows; see docs/WATCHLIST_MATURATION_ARCH.md
     dynamodb_watchlist_maturation_table: str = Field("", alias="DYNAMODB_WATCHLIST_MATURATION_TABLE")
+    dynamodb_watchlist_maturation_transition_table: str = Field(
+        "", alias="DYNAMODB_WATCHLIST_MATURATION_TRANSITION_TABLE"
+    )
 
     # ── Journal + PDT persistence ────────────────────────────────
     trade_journal_table: str = Field("", alias="STOCVEST_TRADE_JOURNAL_TABLE")

@@ -224,6 +224,8 @@ Terraform table **`AuditEvents`**: **`pk`** = `user#{userId|anon}`, **`sk`** = `
 
 - When **`DYNAMODB_WATCHLIST_MATURATION_TABLE`** is unset or the repository is unavailable, **`by_symbol`** is **`{}`** (HTTP 200).
 
+- `GET /v1/watchlists/symbols/{symbol}/setup-evolution` — **authenticated**. Query **`mode`** = **`swing`** \| **`day`** (default **`swing`**). Optional **`limit`** (1–500, default 120). Symbol must be on the user’s **default** watchlist. Response: **`{ symbol, mode, started_tracking_at, evaluation_cadence, transitions[] }`**. Each transition includes **`from_state`**, **`to_state`**, **`layers_aligned`**, **`previous_layers_aligned`**, **`alignment_pct`**, **`bias`**, **`transition_type`** (`initial` \| `improved` \| `worsened` \| `unchanged`), **`missing_layers`**, **`evaluation_source`** (`evidence` \| `maturation_refresh`), optional **`parameter_version`**. Rows are append-only in DynamoDB **`WatchlistMaturationTransition`** (90-day TTL). Written when maturation state or meaningful alignment changes after evidence composite or scheduler refresh.
+
 ### 4.14 User alerts — preferences + delivery history (brokers Lambda)
 
 - `GET /v1/alerts/preferences` — **authenticated**; returns **`AlertPreferences`** JSON (snake_case keys).

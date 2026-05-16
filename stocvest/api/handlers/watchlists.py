@@ -13,6 +13,9 @@ from stocvest.data.scan_symbols import SYSTEM_DEFAULTS
 from stocvest.api.services.user_profile_store import get_user_profile_store
 from stocvest.api.services.watchlist_maturation_gates import maturation_summary_include_readiness_label
 from stocvest.data.watchlist_maturation_repository import get_watchlist_maturation_repository
+from stocvest.data.watchlist_maturation_transition_repository import (
+    get_watchlist_maturation_transition_repository,
+)
 from stocvest.data.watchlist_store import WatchlistItem, get_watchlist_store
 from stocvest.models.watchlist import WatchlistMode
 from stocvest.utils.logging import get_logger
@@ -39,6 +42,8 @@ def watchlists_dispatch_handler(event: LambdaEvent, context: LambdaContext) -> d
         return watchlists_default_symbols_get_handler(event, context)
     if route == "GET /v1/watchlists/maturation-summary":
         return watchlists_maturation_summary_handler(event, context)
+    if route.startswith("GET /v1/watchlists/symbols/") and route.endswith("/setup-evolution"):
+        return watchlists_setup_evolution_handler(event, context)
     if route.startswith("POST /v1/watchlists/default/symbols"):
         return watchlists_default_symbols_post_handler(event, context)
     if method == "PATCH" and "/symbols/" in route and route.endswith("/tracking"):
@@ -268,6 +273,58 @@ def watchlists_maturation_summary_handler(event: LambdaEvent, context: LambdaCon
             row["readiness_label"] = e.readiness_label
         by_symbol[su] = row
     return ok({"mode": mode, "by_symbol": by_symbol})
+
+
+def watchlists_setup_evolution_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    """GET /v1/watchlists/symbols/{symbol}/setup-evolution — transition timeline for default-list symbol."""
+    _ = context
+    rc = build_request_context(event)
+    if not rc.user_id:
+        return unauthorized("Authenticated user is required.")
+    params = _path_params(event)
+    sym = str(params.get("symbol") or "").strip().upper()
+    if not sym:
+        return bad_request("symbol path parameter is required.")
+    qs = event.get("queryStringParameters") or {}
+    if not isinstance(qs, dict):
+        qs = {}
+    mode_raw = str(qs.get("mode") or "swing").strip().lower()
+    mode: WatchlistMode = "swing" if mode_raw == "swing" else "day"
+    limit_raw = qs.get("limit")
+    try:
+        limit = int(limit_raw) if limit_raw is not None else 120
+    except (TypeError, ValueError):
+        return bad_request("limit must be an integer")
+    limit = max(1, min(limit, 500))
+
+    wl = get_watchlist_store().get_default_watchlist(rc.user_id)
+    if not wl or sym not in {s.strip().upper() for s in wl.symbols}:
+        return not_found("Symbol is not on your default watchlist.")
+
+    mat_repo = get_watchlist_maturation_repository()
+    started_tracking_at: str | None = None
+    if mat_repo is not None:
+        entry = mat_repo.get_entry(rc.user_id, sym, mode)
+        if entry and entry.added_at:
+            started_tracking_at = entry.added_at
+
+    trans_repo = get_watchlist_maturation_transition_repository()
+    transitions: list[dict[str, Any]] = []
+    if trans_repo is not None:
+        rows = trans_repo.list_for_symbol(rc.user_id, sym, mode, limit=limit, scan_forward=True)
+        transitions = [r.to_api_dict() for r in rows]
+
+    return ok(
+        {
+            "symbol": sym,
+            "mode": mode,
+            "started_tracking_at": started_tracking_at,
+            "evaluation_cadence": (
+                "Recorded when you view Evidence and on weekday maturation refresh (~4:30 PM ET after cash close)."
+            ),
+            "transitions": transitions,
+        }
+    )
 
 
 def watchlists_default_symbols_get_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:

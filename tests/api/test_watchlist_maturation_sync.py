@@ -12,6 +12,9 @@ from stocvest.api.services.watchlist_maturation_sync import (
     sync_watchlist_maturation_from_composite,
 )
 from stocvest.data.watchlist_maturation_repository import WatchlistMaturationRepository
+from stocvest.data.watchlist_maturation_transition_repository import (
+    WatchlistMaturationTransitionRepository,
+)
 from stocvest.data.watchlist_store import InMemoryWatchlistStore
 from stocvest.models.watchlist import WatchlistState
 from tests.data.test_watchlist_maturation_repository import _FakeDynamoTable
@@ -199,6 +202,67 @@ def test_sync_notifies_on_state_change_after_initial_row(monkeypatch: pytest.Mon
         watchlist_store=store,
     )
     assert calls == [(WatchlistState.ACTIONABLE, WatchlistState.DEVELOPING)]
+
+
+def test_sync_logs_transition_on_alignment_change() -> None:
+    mat_table = _FakeDynamoTable()
+    trans_table = _FakeDynamoTable()
+    mat_repo = WatchlistMaturationRepository(mat_table)
+    trans_repo = WatchlistMaturationTransitionRepository(trans_table)
+    store = InMemoryWatchlistStore()
+    store.create_watchlist("u1", "Main", ["AAPL"], is_default=True)
+    sync_watchlist_maturation_from_composite(
+        user_id="u1",
+        symbol="AAPL",
+        mode="swing",
+        composite_body=_bullish_body(),
+        maturation_repo=mat_repo,
+        transition_repo=trans_repo,
+        watchlist_store=store,
+    )
+    sync_watchlist_maturation_from_composite(
+        user_id="u1",
+        symbol="AAPL",
+        mode="swing",
+        composite_body=_four_bullish_two_bear_body(),
+        maturation_repo=mat_repo,
+        transition_repo=trans_repo,
+        watchlist_store=store,
+    )
+    rows = trans_repo.list_for_symbol("u1", "AAPL", "swing")
+    assert len(rows) == 2
+    assert rows[0].to_state == "actionable"
+    assert rows[1].to_state == "developing"
+    assert rows[1].previous_layers_aligned == 6
+
+
+def test_sync_skips_transition_when_nothing_changed() -> None:
+    mat_table = _FakeDynamoTable()
+    trans_table = _FakeDynamoTable()
+    mat_repo = WatchlistMaturationRepository(mat_table)
+    trans_repo = WatchlistMaturationTransitionRepository(trans_table)
+    store = InMemoryWatchlistStore()
+    store.create_watchlist("u1", "Main", ["AAPL"], is_default=True)
+    body = _bullish_body()
+    sync_watchlist_maturation_from_composite(
+        user_id="u1",
+        symbol="AAPL",
+        mode="swing",
+        composite_body=body,
+        maturation_repo=mat_repo,
+        transition_repo=trans_repo,
+        watchlist_store=store,
+    )
+    sync_watchlist_maturation_from_composite(
+        user_id="u1",
+        symbol="AAPL",
+        mode="swing",
+        composite_body=body,
+        maturation_repo=mat_repo,
+        transition_repo=trans_repo,
+        watchlist_store=store,
+    )
+    assert len(trans_repo.list_for_symbol("u1", "AAPL", "swing")) == 1
 
 
 def test_sync_skips_notify_when_email_on_state_change_false(monkeypatch: pytest.MonkeyPatch) -> None:

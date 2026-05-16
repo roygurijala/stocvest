@@ -1,0 +1,76 @@
+"""Write setup-evolution transition rows after maturation upsert."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from stocvest.data.scanner_evaluation_trace_store import session_date_et
+from stocvest.data.watchlist_maturation_transition_repository import (
+    WatchlistMaturationTransitionRepository,
+    get_watchlist_maturation_transition_repository,
+)
+from stocvest.models.watchlist import WatchlistEntry
+from stocvest.models.watchlist_transition import (
+    EvaluationSource,
+    WatchlistMaturationTransition,
+    derive_transition_type,
+    should_log_maturation_transition,
+)
+from stocvest.utils.logging import get_logger
+
+_LOG = get_logger(__name__)
+
+
+def _parameter_version(body: dict[str, Any]) -> str | None:
+    raw = body.get("parameter_version")
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    return s or None
+
+
+def try_log_maturation_transition(
+    *,
+    prev: WatchlistEntry | None,
+    next_entry: WatchlistEntry,
+    recorded_at: str,
+    composite_body: dict[str, Any],
+    evaluation_source: EvaluationSource = "evidence",
+    transition_repo: WatchlistMaturationTransitionRepository | None = None,
+) -> None:
+    if not should_log_maturation_transition(prev, next_entry):
+        return
+    repo = (
+        transition_repo
+        if transition_repo is not None
+        else get_watchlist_maturation_transition_repository()
+    )
+    if repo is None:
+        return
+    transition = WatchlistMaturationTransition(
+        user_id=next_entry.user_id,
+        symbol=next_entry.symbol,
+        mode=next_entry.mode,
+        recorded_at=recorded_at,
+        session_date=session_date_et(),
+        from_state=prev.state.value if prev else None,
+        to_state=next_entry.state.value,
+        layers_aligned=next_entry.layers_aligned,
+        previous_layers_aligned=prev.layers_aligned if prev else None,
+        layers_total=next_entry.layers_total,
+        alignment_pct=next_entry.alignment_pct,
+        bias=next_entry.bias,
+        transition_type=derive_transition_type(prev, next_entry),
+        missing_layers=list(next_entry.missing_layers),
+        evaluation_source=evaluation_source,
+        parameter_version=_parameter_version(composite_body),
+    )
+    try:
+        repo.put_transition(transition)
+    except Exception as exc:  # noqa: BLE001
+        _LOG.warning(
+            "maturation transition put failed user=%s sym=%s: %s",
+            next_entry.user_id,
+            next_entry.symbol,
+            exc,
+        )

@@ -13,6 +13,9 @@ from stocvest.data.watchlist_maturation_repository import (
     WatchlistMaturationRepository,
     get_watchlist_maturation_repository,
 )
+from stocvest.data.watchlist_maturation_transition_repository import (
+    WatchlistMaturationTransitionRepository,
+)
 from stocvest.data.watchlist_store import WatchlistStore, get_watchlist_store
 from stocvest.models.watchlist import (
     MATURATION_LAYER_KEYS,
@@ -21,6 +24,7 @@ from stocvest.models.watchlist import (
     WatchlistState,
     derive_state,
 )
+from stocvest.models.watchlist_transition import EvaluationSource
 from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
@@ -129,8 +133,10 @@ def sync_watchlist_maturation_from_composite(
     mode: WatchlistMode,
     composite_body: dict[str, Any],
     maturation_repo: WatchlistMaturationRepository | None = None,
+    transition_repo: WatchlistMaturationTransitionRepository | None = None,
     watchlist_store: WatchlistStore | None = None,
     email_on_state_change: bool = True,
+    evaluation_source: EvaluationSource = "evidence",
 ) -> None:
     """Best-effort maturation upsert; logs and returns on any failure."""
     if not (user_id or "").strip():
@@ -208,6 +214,22 @@ def sync_watchlist_maturation_from_composite(
     except Exception as exc:  # noqa: BLE001 — never break composite response
         _LOG.warning("watchlist maturation put_entry failed user=%s sym=%s: %s", user_id, sym_u, exc)
         return
+
+    try:
+        from stocvest.api.services.watchlist_maturation_transition_log import (
+            try_log_maturation_transition,
+        )
+
+        try_log_maturation_transition(
+            prev=prev,
+            next_entry=entry,
+            recorded_at=now,
+            composite_body=composite_body,
+            evaluation_source=evaluation_source,
+            transition_repo=transition_repo,
+        )
+    except Exception as exc:  # noqa: BLE001
+        _LOG.warning("maturation transition log failed user=%s sym=%s: %s", user_id, sym_u, exc)
 
     if (
         email_on_state_change

@@ -149,14 +149,11 @@ export function PerformanceTrackingContent({ showHomeLink = false }: Performance
 
       {!showTable ? (
         <section className={`${surfaceGlowClassName} ${showHomeLink ? "mt-8" : "mt-6"}`} style={bodyPanelStyle}>
-          <h2 className="text-2xl font-bold">Accuracy Tracking Starts Now</h2>
-          <p className="mt-3" style={{ color: colors.textMuted }}>
-            We launched on {launchDate} (US/Eastern). Signal accuracy data accumulates as composite signals are recorded with
-            symbol and price.
-            <br />
-            Every signal is evaluated for directional accuracy only (not dollar P&amp;L).
-            <br />
-            Check back after market hours once signals have been generated and resolved.
+          <h2 className="text-2xl font-bold">Tracking initialized</h2>
+          <p className="mt-3 leading-relaxed" style={{ color: colors.textMuted }}>
+            Performance metrics populate after first resolved setups. We launched on {launchDate} (US/Eastern). Every
+            signal is evaluated for directional accuracy only — not dollar P&amp;L. Historical signal accuracy does not
+            guarantee future results.
           </p>
           {showHomeLink ? (
             <Link

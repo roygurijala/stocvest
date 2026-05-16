@@ -96,6 +96,7 @@ def run_watchlist_maturation_refresh_sync() -> dict[str, Any]:
                 mode="day",
                 composite_body=body,
                 email_on_state_change=False,
+                evaluation_source="maturation_refresh",
             )
             day_ok += 1
         except Exception as exc:  # noqa: BLE001
@@ -112,6 +113,7 @@ def run_watchlist_maturation_refresh_sync() -> dict[str, Any]:
                     mode="swing",
                     composite_body=body_s,
                     email_on_state_change=False,
+                    evaluation_source="maturation_refresh",
                 )
                 swing_ok += 1
             except Exception as exc:  # noqa: BLE001

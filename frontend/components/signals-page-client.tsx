@@ -22,6 +22,7 @@ import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
 import { normalizeWatchlistMaturationBySymbol } from "@/lib/watchlist-page-utils";
 import { SignalsReferenceLevels } from "@/components/signals/signals-reference-levels";
 import { SignalsSetupRead } from "@/components/signals/signals-setup-read";
+import { SetupEvolutionPanel } from "@/components/signals/setup-evolution-panel";
 import { useWatchlistMaturationLine } from "@/lib/hooks/use-watchlist-maturation-line";
 import {
   buildSignalsPageDecision,
@@ -2007,6 +2008,12 @@ export function SignalsPageClient({
           onOpenEvidence={() => void openEvidenceModal()}
           onSwitchToHistory={() => setTab("history")}
         />
+      ) : null}
+
+      {symbolCommitted ? (
+        <div className="mt-4">
+          <SetupEvolutionPanel symbol={symbol} tradingMode={tradingMode} />
+        </div>
       ) : null}
 
       {hasValidSignal ? (

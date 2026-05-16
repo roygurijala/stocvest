@@ -20,6 +20,8 @@
 
 7. **TTL:** Attribute `ttl` (Unix epoch) enabled on the table for physical cleanup of invalidated / archived rows. `archive_after` remains ISO string for UX “hide from active list” before TTL deletes.
 
+8. **Setup evolution log (2026-05-16):** Table **`WatchlistMaturationTransition`** stores append-only rows when maturation **state** changes or **alignment** meaningfully changes (layer count, missing set, or bias). Keys: `pk` = `USER#{user_id}#SYM#{SYMBOL}#MODE#{mode}`, `sk` = `TS#{recorded_at_iso}`. TTL **90 days**. Written from `sync_watchlist_maturation_from_composite` (evidence + scheduler refresh). API: **`GET /v1/watchlists/symbols/{symbol}/setup-evolution?mode=swing|day`**.
+
 ## Related code
 
 - Existing lists: `stocvest/data/watchlist_store.py`
