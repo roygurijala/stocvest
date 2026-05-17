@@ -206,15 +206,17 @@ function MessageBody({
   if (message.role === "assistant" && message.fresh) {
     return <FreshAssistantText text={message.content} colors={colors} />;
   }
+  const textColor = align === "right" ? "#bae6fd" : "#e2e8f0";
   return (
     <p
       style={{
         margin: 0,
-        color: colors.text,
+        color: textColor,
         fontSize: typography.scale.sm,
         lineHeight: 1.6,
         whiteSpace: "pre-wrap",
-        textAlign: align
+        textAlign: align,
+        fontWeight: align === "right" ? 500 : 400
       }}
     >
       {message.content}
@@ -233,7 +235,7 @@ function FreshAssistantText({ text, colors }: { text: string; colors: ThemeColor
     <p
       style={{
         margin: 0,
-        color: colors.text,
+        color: "#e2e8f0",
         fontSize: typography.scale.sm,
         lineHeight: 1.6,
         whiteSpace: "pre-wrap"

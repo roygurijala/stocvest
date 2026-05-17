@@ -353,11 +353,25 @@ a {
 
 .stocvest-assistant-launcher-pulse {
   position: absolute;
-  inset: 0;
+  inset: -4px;
   border-radius: 9999px;
   pointer-events: none;
-  border: 1px solid rgba(56, 189, 248, 0.55);
-  animation: stocvest-assistant-launcher-pulse 3.6s ease-out infinite;
+  border: 2px solid rgba(56, 189, 248, 0.75);
+  animation: stocvest-assistant-launcher-pulse 2.8s ease-out infinite;
+}
+
+.stocvest-assistant-launcher-pulse--delay {
+  animation-delay: 1.4s;
+  border-color: rgba(125, 211, 252, 0.55);
+}
+
+.stocvest-assistant-launcher-button:hover {
+  transform: translateY(-1px);
+}
+
+.stocvest-assistant-launcher-button:focus-visible {
+  outline: 2px solid rgba(56, 189, 248, 0.9);
+  outline-offset: 3px;
 }
 
 @keyframes stocvest-assistant-panel-rise {

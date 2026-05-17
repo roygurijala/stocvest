@@ -21,6 +21,7 @@ import type {
   AssistantPageContext
 } from "@/lib/assistant/types";
 import { AssistantConversationRail } from "@/components/assistant/assistant-conversation-rail";
+import { buildContextualEmptyState, buildContextualQuickPrompts } from "@/lib/assistant/quick-prompts";
 
 interface AssistantPanelProps {
   colors: ThemeColors;
@@ -66,61 +67,6 @@ function decisionContextTone(
   if (ctx.decision_state === "actionable") return "bullish";
   if (ctx.decision_state === "blocked") return "bearish";
   return "caution";
-}
-
-function buildQuickPrompts(
-  ctx: AssistantPageContext | null,
-  isAuthenticated: boolean
-): string[] {
-  if (!ctx) {
-    if (!isAuthenticated) {
-      return [
-        "What is STOCVEST?",
-        "How is STOCVEST different from signal-alert services?",
-        "How do the six layers work together?",
-        "Explain risk/reward in plain terms"
-      ];
-    }
-    return [
-      "What is STOCVEST?",
-      "How do I read a signal decision?",
-      "What's the difference between Monitor and Blocked?"
-    ];
-  }
-  if (ctx.page === "signals/history") {
-    return [
-      "How do I read Signal State History?",
-      "What does Alignment mean?",
-      "What is the difference between Signal bias and a recommendation?"
-    ];
-  }
-  const state = ctx.decision_state;
-  if (state === "monitor") {
-    return [
-      "Why is this signal in Monitor?",
-      "What would change this Decision?",
-      "What does Alignment mean here?"
-    ];
-  }
-  if (state === "blocked") {
-    return [
-      "Why is this signal Blocked?",
-      "Which factor is the dominant block?",
-      "What is risk/reward and why does it matter?"
-    ];
-  }
-  if (state === "actionable") {
-    return [
-      "What confirms this Decision?",
-      "What does six-layer agreement mean?",
-      "How should I read Trade Readiness?"
-    ];
-  }
-  return [
-    "What is STOCVEST evaluating right now?",
-    "What does Signal bias mean?",
-    "How do the six layers work together?"
-  ];
 }
 
 export const AssistantPanel = forwardRef<HTMLDivElement, AssistantPanelProps>(function AssistantPanel(
@@ -196,7 +142,11 @@ export const AssistantPanel = forwardRef<HTMLDivElement, AssistantPanelProps>(fu
 
   const showQuickPrompts = messages.length === 0 && !loading;
   const quickPrompts = useMemo(
-    () => buildQuickPrompts(context, isAuthenticated),
+    () => buildContextualQuickPrompts(context, isAuthenticated),
+    [context, isAuthenticated]
+  );
+  const emptyCopy = useMemo(
+    () => buildContextualEmptyState(context, isAuthenticated),
     [context, isAuthenticated]
   );
   const mode: "general" | "contextual" = context ? "contextual" : "general";
@@ -258,7 +208,7 @@ export const AssistantPanel = forwardRef<HTMLDivElement, AssistantPanelProps>(fu
         }}
       >
         {messages.length === 0 ? (
-          <EmptyState colors={colors} context={context} isAuthenticated={isAuthenticated} />
+          <EmptyState colors={colors} title={emptyCopy.title} subtitle={emptyCopy.subtitle} />
         ) : (
           <AssistantConversationRail messages={messages} colors={colors} contextTone={tone} />
         )}
@@ -286,78 +236,65 @@ export const AssistantPanel = forwardRef<HTMLDivElement, AssistantPanelProps>(fu
           </p>
         ) : null}
 
-        {showQuickPrompts ? (
-          <ul
-            style={{
-              listStyle: "none",
-              margin: 0,
-              padding: 0,
-              display: "flex",
-              flexWrap: "wrap",
-              gap: spacing[1]
-            }}
-          >
-            {quickPrompts.map((q) => (
-              <li key={q}>
-                <button
-                  type="button"
-                  onClick={() => onSubmit(q)}
-                  disabled={loading}
-                  style={{
-                    border: `1px solid ${colors.border}`,
-                    background: "rgba(56,189,248,0.06)",
-                    color: colors.text,
-                    borderRadius: borderRadius.full,
-                    padding: "6px 12px",
-                    fontSize: typography.scale.xs,
-                    cursor: loading ? "default" : "pointer",
-                    opacity: loading ? 0.5 : 1
-                  }}
-                >
-                  {q}
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-
         <div
+          className="stocvest-assistant-composer"
+          data-focused={composerFocused ? "true" : "false"}
           style={{
-            display: "flex",
-            alignItems: "flex-end",
+            display: "grid",
             gap: spacing[2],
-            border: `1px solid ${composerFocused ? colors.accent : colors.border}`,
+            padding: spacing[3],
             borderRadius: borderRadius.lg,
-            padding: spacing[1],
-            background: colors.surface,
-            transition: "border-color 160ms ease"
+            border: `2px solid ${composerFocused ? colors.accent : colors.border}`,
+            background: `color-mix(in srgb, ${colors.background} 88%, ${colors.surfaceMuted})`,
+            boxShadow: composerFocused
+              ? `0 0 0 3px color-mix(in srgb, ${colors.accent} 22%, transparent)`
+              : `inset 0 1px 0 rgba(255,255,255,0.04)`,
+            transition: "border-color 160ms ease, box-shadow 160ms ease"
           }}
         >
+          <label
+            htmlFor="stocvest-assistant-composer-input"
+            style={{
+              margin: 0,
+              fontSize: typography.scale.xs,
+              fontWeight: 700,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              color: composerFocused ? colors.accent : colors.textMuted
+            }}
+          >
+            Your question
+          </label>
+          <div style={{ display: "flex", alignItems: "flex-end", gap: spacing[2] }}>
           <textarea
+            id="stocvest-assistant-composer-input"
             value={composerValue}
             onChange={(e) => setComposerValue(e.target.value)}
             onKeyDown={onKeyDown}
             onFocus={() => setComposerFocused(true)}
             onBlur={() => setComposerFocused(false)}
             placeholder={
-              context
-                ? "Ask about this screen — STOCVEST will explain, not advise."
-                : "Ask how STOCVEST works."
+              context?.symbol
+                ? `Ask about ${context.symbol.toUpperCase()} on this screen…`
+                : context
+                  ? "Ask about what you see on this screen…"
+                  : "Ask how STOCVEST works…"
             }
-            rows={1}
+            rows={2}
             aria-label="Message STOCVEST Assistant"
             style={{
               flex: 1,
-              minHeight: 36,
-              maxHeight: 140,
-              resize: "none",
-              border: "none",
+              minHeight: 52,
+              maxHeight: 160,
+              resize: "vertical",
+              border: `1px solid ${colors.border}`,
+              borderRadius: borderRadius.md,
               outline: "none",
-              background: "transparent",
+              background: colors.surface,
               color: colors.text,
               fontSize: typography.scale.sm,
-              lineHeight: 1.5,
-              padding: `${spacing[1]} ${spacing[2]}`,
+              lineHeight: 1.55,
+              padding: `${spacing[2]} ${spacing[3]}`,
               fontFamily: "inherit"
             }}
           />
@@ -367,8 +304,8 @@ export const AssistantPanel = forwardRef<HTMLDivElement, AssistantPanelProps>(fu
             disabled={loading || composerValue.trim().length === 0}
             aria-label="Send message"
             style={{
-              minWidth: 36,
-              minHeight: 36,
+              minWidth: 44,
+              minHeight: 44,
               borderRadius: borderRadius.md,
               border: "none",
               background: loading || composerValue.trim().length === 0 ? colors.surfaceMuted : colors.accent,
@@ -376,24 +313,79 @@ export const AssistantPanel = forwardRef<HTMLDivElement, AssistantPanelProps>(fu
               display: "inline-flex",
               alignItems: "center",
               justifyContent: "center",
-              cursor: loading || composerValue.trim().length === 0 ? "default" : "pointer"
+              cursor: loading || composerValue.trim().length === 0 ? "default" : "pointer",
+              boxShadow:
+                loading || composerValue.trim().length === 0
+                  ? "none"
+                  : `0 4px 14px color-mix(in srgb, ${colors.accent} 35%, transparent)`
             }}
           >
-            <Send size={14} aria-hidden />
+            <Send size={16} aria-hidden />
           </button>
+          </div>
         </div>
+
+        {showQuickPrompts ? (
+          <div style={{ display: "grid", gap: spacing[1] }}>
+            <p
+              style={{
+                margin: 0,
+                fontSize: 10,
+                fontWeight: 700,
+                letterSpacing: "0.1em",
+                textTransform: "uppercase",
+                color: colors.textMuted
+              }}
+            >
+              Suggested for this screen
+            </p>
+            <ul
+              style={{
+                listStyle: "none",
+                margin: 0,
+                padding: 0,
+                display: "flex",
+                flexWrap: "wrap",
+                gap: spacing[1]
+              }}
+            >
+              {quickPrompts.map((q) => (
+                <li key={q}>
+                  <button
+                    type="button"
+                    onClick={() => onSubmit(q)}
+                    disabled={loading}
+                    style={{
+                      border: `1px solid color-mix(in srgb, ${colors.accent} 45%, ${colors.border})`,
+                      background: `color-mix(in srgb, ${colors.accent} 12%, ${colors.surface})`,
+                      color: colors.text,
+                      borderRadius: borderRadius.full,
+                      padding: "7px 12px",
+                      fontSize: typography.scale.xs,
+                      lineHeight: 1.35,
+                      cursor: loading ? "default" : "pointer",
+                      opacity: loading ? 0.5 : 1,
+                      textAlign: "left"
+                    }}
+                  >
+                    {q}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
         <p
           style={{
             margin: 0,
             fontSize: 10,
             color: colors.textMuted,
-            letterSpacing: "0.04em",
-            lineHeight: 1.5
+            letterSpacing: "0.02em",
+            lineHeight: 1.45
           }}
         >
-          STOCVEST Assistant explains analysis and decisions. It does not provide trading advice or
-          price predictions.
+          Explanations only — not trading advice or price predictions.
         </p>
       </div>
     </div>
@@ -531,95 +523,13 @@ function ConstellationStrip({
 
 function EmptyState({
   colors,
-  context,
-  isAuthenticated
+  title,
+  subtitle
 }: {
   colors: ThemeColors;
-  context: AssistantPageContext | null;
-  isAuthenticated: boolean;
+  title: string;
+  subtitle: string;
 }) {
-  /**
-   * Three distinct empty-state surfaces:
-   *
-   *  - **Contextual** (any signed-in dashboard page that publishes a `page_context`):
-   *    a one-line invitation tailored to the current Decision and metrics on screen.
-   *
-   *  - **Marketing / anonymous** (no auth, no context — `/`, `/login`, `/signup`):
-   *    a welcoming pitch that explains in one paragraph *what* STOCVEST is and *how*
-   *    it helps, followed by the kinds of questions the visitor can ask. This is the
-   *    first impression for prospects, so it leads with the six-layer thesis instead
-   *    of a generic "ask me anything" line.
-   *
-   *  - **Signed-in, no context** (logged-in user on a route that publishes no page
-   *    context, e.g. they navigated to `/`): a calm "ask me anything" prompt that
-   *    keeps the same trade-disclaimer footer.
-   */
-  if (context) {
-    return (
-      <div style={{ display: "grid", gap: spacing[2] }}>
-        <p
-          style={{
-            margin: 0,
-            color: colors.text,
-            fontSize: typography.scale.sm,
-            lineHeight: 1.55,
-            fontWeight: 600
-          }}
-        >
-          I can explain what&apos;s driving this Decision and how to read the layers.
-        </p>
-        <p
-          style={{
-            margin: 0,
-            color: colors.textMuted,
-            fontSize: typography.scale.xs,
-            lineHeight: 1.55
-          }}
-        >
-          I explain analysis and product behavior. I never give trading advice or predict prices.
-        </p>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <div style={{ display: "grid", gap: spacing[2] }}>
-        <p
-          style={{
-            margin: 0,
-            color: colors.text,
-            fontSize: typography.scale.sm,
-            lineHeight: 1.55,
-            fontWeight: 700
-          }}
-        >
-          Welcome to STOCVEST.
-        </p>
-        <p
-          style={{
-            margin: 0,
-            color: colors.text,
-            fontSize: typography.scale.sm,
-            lineHeight: 1.6
-          }}
-        >
-          STOCVEST is a market analysis and decision-support platform. It evaluates every setup across six independent layers — technical, news, macro, sector, geopolitical, and internals — and only flags trades when they agree. I&apos;m here to explain how STOCVEST thinks, not to tell you what to do.
-        </p>
-        <p
-          style={{
-            margin: 0,
-            color: colors.textMuted,
-            fontSize: typography.scale.xs,
-            lineHeight: 1.55
-          }}
-        >
-          Ask me what STOCVEST is, how it&apos;s different from signal-alert services, or for a plain-English explanation of any trading term (R/R, EMA, VWAP, ORB, expectancy, drawdown, position sizing — anything). I do not give trade recommendations or price predictions.
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div style={{ display: "grid", gap: spacing[2] }}>
       <p
@@ -631,7 +541,7 @@ function EmptyState({
           fontWeight: 600
         }}
       >
-        Ask about STOCVEST&apos;s analysis, Decisions, or anything on screen.
+        {title}
       </p>
       <p
         style={{
@@ -641,7 +551,7 @@ function EmptyState({
           lineHeight: 1.55
         }}
       >
-        I explain analysis and product behavior. I never give trading advice or predict prices.
+        {subtitle}
       </p>
     </div>
   );

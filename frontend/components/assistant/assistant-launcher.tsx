@@ -5,10 +5,8 @@ import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius } from "@/lib/design-system";
 
 /**
- * Floating STOCVEST Assistant launcher. Deliberately not a chat bubble:
- * a custom lens glyph (concentric ring with an offset dot) sits inside a
- * glass disc, and a slow pulse ring breathes behind it so the affordance
- * reads as "ambient companion" rather than "ping for attention".
+ * Floating STOCVEST Assistant launcher. High-contrast accent disc so the affordance
+ * is easy to spot on dark dashboards; pulse ring draws the eye without chat-bubble clichés.
  */
 interface AssistantLauncherProps {
   open: boolean;
@@ -29,43 +27,46 @@ export function AssistantLauncher({
 }: AssistantLauncherProps) {
   const buttonStyle: CSSProperties = {
     position: "relative",
-    width: 56,
-    height: 56,
+    width: 60,
+    height: 60,
     borderRadius: borderRadius.full,
-    background: `radial-gradient(circle at 30% 30%, ${colors.surface} 0%, ${colors.surfaceMuted} 100%)`,
-    border: `1px solid ${colors.border}`,
-    boxShadow:
-      "0 10px 30px rgba(2,6,23,0.45), inset 0 1px 0 rgba(255,255,255,0.05), 0 0 0 1px rgba(56,189,248,0.18)",
-    color: colors.text,
+    background: `linear-gradient(145deg, color-mix(in srgb, ${colors.accent} 42%, #0f172a) 0%, color-mix(in srgb, ${colors.accent} 18%, #1e293b) 100%)`,
+    border: `2px solid color-mix(in srgb, ${colors.accent} 75%, white)`,
+    boxShadow: open
+      ? `0 0 0 3px color-mix(in srgb, ${colors.accent} 35%, transparent), 0 12px 32px rgba(2,6,23,0.55)`
+      : `0 0 0 4px color-mix(in srgb, ${colors.accent} 28%, transparent), 0 0 28px color-mix(in srgb, ${colors.accent} 45%, transparent), 0 14px 36px rgba(2,6,23,0.5)`,
+    color: "#f8fafc",
     cursor: "pointer",
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
-    backdropFilter: "blur(10px)"
+    transition: "box-shadow 180ms ease, transform 180ms ease"
   };
 
   return (
     <button
       type="button"
+      className="stocvest-assistant-launcher-button"
       aria-label={open ? "Close STOCVEST Assistant" : "Open STOCVEST Assistant"}
       aria-pressed={open}
       onClick={onToggle}
       style={buttonStyle}
     >
       {!open ? <span className="stocvest-assistant-launcher-pulse" aria-hidden /> : null}
-      <LensGlyph colors={colors} />
+      {!open ? <span className="stocvest-assistant-launcher-pulse stocvest-assistant-launcher-pulse--delay" aria-hidden /> : null}
+      <LensGlyph />
       {contextDotColor ? (
         <span
           aria-hidden
           style={{
             position: "absolute",
-            right: 6,
-            bottom: 6,
-            width: 8,
-            height: 8,
+            right: 4,
+            bottom: 4,
+            width: 10,
+            height: 10,
             borderRadius: borderRadius.full,
             background: contextDotColor,
-            boxShadow: `0 0 0 2px ${colors.surface}`
+            boxShadow: `0 0 0 2px #0f172a, 0 0 8px ${contextDotColor}`
           }}
         />
       ) : null}
@@ -74,13 +75,13 @@ export function AssistantLauncher({
           aria-hidden
           style={{
             position: "absolute",
-            top: 6,
-            right: 6,
-            width: 8,
-            height: 8,
+            top: 4,
+            right: 4,
+            width: 10,
+            height: 10,
             borderRadius: borderRadius.full,
-            background: colors.accent,
-            boxShadow: `0 0 0 2px ${colors.surface}`
+            background: "#fbbf24",
+            boxShadow: "0 0 0 2px #0f172a"
           }}
         />
       ) : null}
@@ -88,19 +89,19 @@ export function AssistantLauncher({
   );
 }
 
-function LensGlyph({ colors }: { colors: ThemeColors }) {
+function LensGlyph() {
   return (
     <svg
-      width="22"
-      height="22"
+      width="26"
+      height="26"
       viewBox="0 0 22 22"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden
     >
-      <circle cx="11" cy="11" r="8" stroke={colors.accent} strokeWidth="1.4" opacity="0.85" />
-      <circle cx="11" cy="11" r="4" stroke={colors.text} strokeWidth="1.1" opacity="0.55" />
-      <circle cx="14.2" cy="7.6" r="1.6" fill={colors.accent} />
+      <circle cx="11" cy="11" r="8" stroke="#e0f2fe" strokeWidth="1.6" opacity="0.95" />
+      <circle cx="11" cy="11" r="4" stroke="#ffffff" strokeWidth="1.2" opacity="0.7" />
+      <circle cx="14.2" cy="7.6" r="1.8" fill="#38bdf8" />
     </svg>
   );
 }

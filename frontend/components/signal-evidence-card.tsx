@@ -54,50 +54,21 @@ import {
 import { pickNewsEmptyCopy } from "@/lib/news-empty-copy";
 import { AI_VERDICT_TIP, LAYER_NAME_HINTS } from "@/lib/ui-tooltips";
 import { AIExplanationDisplay } from "@/components/ai-explanation-display";
-import { BuildScenarioButton } from "@/components/scenario-builder/build-scenario-button";
+import { ScenarioPlanningStrip } from "@/components/scenario-builder/scenario-planning-strip";
+import {
+  augmentScenarioInputWithGapIntel,
+  buildScenarioInputFromEvidenceParts
+} from "@/lib/scenario/scenario-input-present";
 import { UpgradePrompt } from "@/components/upgrade-prompt";
 import { useHasAIExplanations, useUserProfileLoaded } from "@/lib/api/user";
 import type { GapIntelSnapshot } from "@/lib/api/gap-intel";
-import type { ScenarioInput, VolatilityRegime } from "@/lib/scenario/types";
+import type { ScenarioInput, ScenarioMode } from "@/lib/scenario/types";
 
 interface SignalEvidenceCardProps {
   evidence: SignalEvidenceData;
   onOpenNewsPanel?: (symbol: string) => void;
   /** Server Gap Intelligence snapshot for Scenario Builder gating + assistant context. */
   gapIntelSnapshot?: GapIntelSnapshot | null;
-}
-
-function gapIntelStructuralBanner(reasons: readonly string[]): string | null {
-  if (!reasons.length) return null;
-  const r = reasons[0] ?? "";
-  const map: Record<string, string> = {
-    swing_premarket_planning_only:
-      "Pre-market planning only — confirmation requires regular-session participation.",
-    day_open_phase_volatility:
-      "Open-phase volatility: early prints can reverse; risk framework may be unstable until 10:30 ET.",
-    swing_after_hours_next_session_only:
-      "After-hours planning only — confirm during the next regular session.",
-    day_planning_requires_rth_structure: "Day-mode drafting requires regular-session structure.",
-    day_after_hours_no_rth_context: "Day-mode drafting is unavailable after regular session."
-  };
-  return map[r] ?? "Planning-only context — confirm when regular-session data is available.";
-}
-
-function augmentScenarioInputWithGapIntel(
-  input: ScenarioInput,
-  snap: GapIntelSnapshot | null | undefined
-): ScenarioInput {
-  if (!snap) return input;
-  const st = snap.scenario_builder.state;
-  const reasons = snap.scenario_builder.reasons ?? [];
-  if (st === "DISABLED") {
-    return { ...input, gap_intel_gate: { scenario_builder_state: "DISABLED", reasons } };
-  }
-  if (st === "LIMITED") {
-    const b = gapIntelStructuralBanner(reasons);
-    return b ? { ...input, structural_planning_banner: b } : input;
-  }
-  return input;
 }
 
 function statusColor(status: EvidenceStatus, colors: ThemeColors): string {
@@ -710,23 +681,6 @@ function GeopoliticalExposurePanel({ geo, colors }: { geo: GeopoliticalLayerExtr
   );
 }
 
-/**
- * Map `evidence.market_regime` (free-form string from the composite
- * engine — e.g. "risk_on" / "neutral" / "risk_off" / "avoid" / arbitrary
- * cached values) onto the Scenario Builder's closed-set volatility
- * regime. Conservative fallback to `"unknown"` so the eligibility gate
- * blocks rather than silently passes when the regime is unparseable.
- */
-function regimeToVolatility(label: string | null | undefined): VolatilityRegime {
-  const norm = (label ?? "").trim().toLowerCase();
-  if (!norm) return "unknown";
-  if (norm.includes("risk_on") || norm === "risk-on" || norm.includes("low")) return "low";
-  if (norm.includes("neutral") || norm.includes("normal")) return "normal";
-  if (norm.includes("risk_off") || norm === "risk-off" || norm.includes("elevated")) return "elevated";
-  if (norm.includes("avoid") || norm.includes("extreme")) return "extreme";
-  return "unknown";
-}
-
 export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot }: SignalEvidenceCardProps) {
   const { colors } = useTheme();
   const hasAIExplanations = useHasAIExplanations();
@@ -860,6 +814,30 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
     insight.vwap_tooltip ?? evidence.keyLevels.vwap_tooltip
   );
   const levelsComplete = Boolean(entryZone && rt1 != null && stopLvl != null);
+  const evidenceMode: ScenarioMode =
+    evidence.compositeMode === "swing" || evidence.signal_basis === "daily_bars_rth" ? "swing" : "day";
+  const evidenceDirection: ScenarioInput["direction"] =
+    evidence.direction === "bullish" || evidence.direction === "bearish" ? evidence.direction : "neutral";
+  const scenarioForBuild = augmentScenarioInputWithGapIntel(
+    buildScenarioInputFromEvidenceParts({
+      symbol: evidence.symbol,
+      direction: evidenceDirection,
+      mode: evidenceMode,
+      generatedAt: evidence.updatedAtIso ?? null,
+      entryLow: entryZone?.low ?? null,
+      entryHigh: entryZone?.high ?? null,
+      stop: stopLvl ?? null,
+      target1: rt1 ?? null,
+      target2: rt2 ?? null,
+      currentPrice: lastPrice ?? null,
+      prevClose: evidence.prevClose ?? null,
+      marketRegime: insight.market_regime ?? null,
+      riskReward:
+        typeof insight.risk_reward === "number" && Number.isFinite(insight.risk_reward) ? insight.risk_reward : null,
+      directionBadgeLabel: evidence.directionBadgeLabel ?? null
+    }),
+    gapIntelSnapshot
+  );
 
   return (
     <article style={{ display: "grid", gap: spacing[4], position: "relative", paddingBottom: spacing[4] }}>
@@ -982,6 +960,12 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
         })()}
       </EvidenceCardHeader>
 
+      <ScenarioPlanningStrip
+        input={scenarioForBuild}
+        testId="signal-evidence-scenario-cta"
+        className="mt-1"
+      />
+
       {gapIntelSnapshot ? (
         <section
           data-testid="signal-evidence-gap-intel"
@@ -1023,80 +1007,6 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
           </p>
         </section>
       ) : null}
-
-      {/*
-        Scenario Builder CTA. The Evidence card carries the richest
-        reference data we have (explicit stop level, target_1, target_2,
-        VWAP, last price, regime) so this is the natural surface for the
-        button. Eligibility runs on the structural payload — the button
-        renders enabled only when every mechanical input is present.
-
-        Note: we DO NOT pass any conviction signals (confidencePercent,
-        confluence_score, layer scores) into the gating — that would
-        cross into implicit "we recommend this trade." The button is a
-        planning-tool entry point, not an endorsement.
-      */}
-      {(() => {
-        const evidenceDirection: ScenarioInput["direction"] =
-          evidence.direction === "bullish" || evidence.direction === "bearish"
-            ? evidence.direction
-            : "neutral";
-        const evidenceMode: ScenarioInput["mode"] =
-          evidence.compositeMode === "swing" || evidence.signal_basis === "daily_bars_rth"
-            ? "swing"
-            : "day";
-        const scenarioInput: ScenarioInput = {
-          symbol: evidence.symbol,
-          direction: evidenceDirection,
-          mode: evidenceMode,
-          generated_at: evidence.updatedAtIso ?? null,
-          reference: {
-            entry_low: entryZone?.low ?? null,
-            entry_high: entryZone?.high ?? null,
-            stop: stopLvl ?? null,
-            target_1: rt1 ?? null,
-            target_2: rt2 ?? null,
-            current_price: lastPrice ?? null,
-            prev_close: evidence.prevClose ?? null
-          },
-          volatility_regime: regimeToVolatility(insight.market_regime ?? null),
-          // Carry R/R through so the eligibility helper can apply the
-          // structural-threshold gate (BRK.B feedback, 2026-05-13): a
-          // 0.5:1 sheet doesn't form a coherent planning structure
-          // regardless of how strong other signal layers are. The
-          // threshold matches the rrFail gate in synthTradeDecision so
-          // the Build Scenario button stays in lock-step with the
-          // Decision line.
-          risk_reward:
-            typeof insight.risk_reward === "number" && Number.isFinite(insight.risk_reward)
-              ? insight.risk_reward
-              : null,
-          tags:
-            evidence.directionBadgeLabel && evidence.directionBadgeLabel.trim()
-              ? [evidence.directionBadgeLabel]
-              : undefined
-        };
-        const scenarioForBuild = augmentScenarioInputWithGapIntel(scenarioInput, gapIntelSnapshot);
-        return (
-          <section
-            data-testid="signal-evidence-scenario-cta"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: spacing[3],
-              padding: `${spacing[2]} ${spacing[3]}`,
-              border: `1px dashed ${colors.border}`,
-              borderRadius: borderRadius.md
-            }}
-          >
-            <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs, lineHeight: 1.4 }}>
-              Plan around the reference levels above. STOCVEST does not submit, queue, or persist any scenario to a broker.
-            </p>
-            <BuildScenarioButton input={scenarioForBuild} testId="build-scenario-evidence" />
-          </section>
-        );
-      })()}
 
       <EvidenceLayerContribution layers={evidence.layers} bias={setupBias} />
 

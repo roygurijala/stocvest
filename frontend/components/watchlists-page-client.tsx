@@ -5,6 +5,8 @@ import { useSearchParams } from "next/navigation";
 import { Columns2, TrendingUp, Zap } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CuteLoader } from "@/components/cute-loader";
+import { BuildScenarioButton } from "@/components/scenario-builder/build-scenario-button";
+import { buildWatchlistScenarioInput } from "@/lib/scenario/scenario-input-present";
 import { APP_TOP_BAR_LAYOUT_HEIGHT } from "@/components/top-bar";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, colorTokens, spacing, surfaceGlowClassName } from "@/lib/design-system";
@@ -1191,6 +1193,13 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                       const accent = maturationAccent(displaySt, colors as ThemeColors);
                       const href = watchlistToSignalsHref(s, tradingModeForSignalsNav(viewMode, dualDeskMaturation));
                       const quote = watchlistQuoteFromSnapshot(snapshotsBySymbol[symU]);
+                      const planMode = tradingModeForSignalsNav(viewMode, dualDeskMaturation) ?? "swing";
+                      const planInput = buildWatchlistScenarioInput({
+                        symbol: symU,
+                        mode: planMode,
+                        snapshot: snapshotsBySymbol[symU],
+                        quoteBullish: quote?.bullish ?? null
+                      });
                       const rowLine = (mode: "swing" | "day", m: MaturationRow | undefined) => {
                         const hasMat = Boolean(m?.state || m?.label);
                         const detail = hasMat
@@ -1290,6 +1299,14 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                                 {evaluatedLabel}
                               </span>
                             ) : null}
+                            <span className="relative z-10 shrink-0 self-center pointer-events-auto">
+                              <BuildScenarioButton
+                                input={planInput}
+                                variant="prominent"
+                                compact
+                                testId={`build-scenario-watchlist-${symU}`}
+                              />
+                            </span>
                             <button
                               type="button"
                               className="relative z-10 shrink-0 self-start rounded p-1.5 text-lg leading-none hover:bg-white/5"

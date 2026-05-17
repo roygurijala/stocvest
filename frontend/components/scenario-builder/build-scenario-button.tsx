@@ -19,6 +19,8 @@ interface BuildScenarioButtonProps {
    * a compact pill-sized button without changing semantics.
    */
   compact?: boolean;
+  /** Stronger visual weight for primary planning surfaces. */
+  variant?: "default" | "prominent";
   /**
    * Optional override for the `data-testid` so multiple instances in
    * the same DOM tree (e.g. a grid of gap cards) can be distinguished
@@ -46,24 +48,32 @@ interface BuildScenarioButtonProps {
 export function BuildScenarioButton({
   input,
   compact = false,
+  variant = "default",
   testId = "build-scenario-button"
 }: BuildScenarioButtonProps) {
   const { colors } = useTheme();
   const [open, setOpen] = useState(false);
 
-  // Recompute on every render — the input prop changes whenever the
-  // parent re-renders with a new signal payload, and the eligibility
-  // helper is cheap.
   const eligibility = useMemo(() => isEligibleForScenario(input), [input]);
   const tooltip = useMemo(() => buildIneligibilityTooltip(eligibility), [eligibility]);
 
   const label = eligibility.eligible ? "Build scenario" : "Scenario unavailable";
-  // Tooltip body is the canonical helper output so the button and the
-  // disabled-state tooltip stay phrase-locked.
   const labelLong = eligibility.eligible ? tooltip : `Scenario unavailable — ${tooltip}`;
 
-  const pad = compact ? `${spacing[2]} ${spacing[3]}` : `${spacing[2]} ${spacing[4]}`;
-  const fontSize = compact ? typography.scale.xs : typography.scale.sm;
+  const prominent = variant === "prominent";
+  const pad = compact
+    ? `${spacing[2]} ${spacing[3]}`
+    : prominent
+      ? `${spacing[3]} ${spacing[5]}`
+      : `${spacing[2]} ${spacing[4]}`;
+  const fontSize = compact ? typography.scale.xs : prominent ? typography.scale.base : typography.scale.sm;
+  const iconSize = compact ? 13 : prominent ? 16 : 14;
+
+  const eligibleBorder = prominent ? colors.accent : colors.border;
+  const ineligibleBorder = prominent ? "rgba(245, 158, 11, 0.65)" : colors.border;
+  const eligibleBg = prominent
+    ? `color-mix(in srgb, ${colors.accent} 14%, ${colors.surfaceMuted})`
+    : colors.surfaceMuted;
 
   return (
     <>
@@ -71,6 +81,7 @@ export function BuildScenarioButton({
         type="button"
         data-testid={testId}
         data-eligible={eligibility.eligible ? "true" : "false"}
+        data-variant={variant}
         aria-disabled={!eligibility.eligible}
         disabled={!eligibility.eligible}
         title={labelLong}
@@ -80,28 +91,27 @@ export function BuildScenarioButton({
         style={{
           display: "inline-flex",
           alignItems: "center",
+          justifyContent: "center",
           gap: spacing[2],
           padding: pad,
           fontSize,
-          fontWeight: 600,
-          color: eligibility.eligible ? colors.text : colors.textMuted,
-          background: eligibility.eligible ? colors.surfaceMuted : "transparent",
-          border: `1px solid ${eligibility.eligible ? colors.border : colors.border}`,
+          fontWeight: 700,
+          color: eligibility.eligible ? colors.text : prominent ? colors.text : colors.textMuted,
+          background: eligibility.eligible ? eligibleBg : prominent ? colors.surfaceMuted : "transparent",
+          border: `${prominent ? 2 : 1}px solid ${eligibility.eligible ? eligibleBorder : ineligibleBorder}`,
           borderRadius: borderRadius.md,
           cursor: eligibility.eligible ? "pointer" : "not-allowed",
-          opacity: eligibility.eligible ? 1 : 0.55,
-          whiteSpace: "nowrap"
+          opacity: eligibility.eligible ? 1 : prominent ? 0.92 : 0.55,
+          whiteSpace: "nowrap",
+          minHeight: prominent && !compact ? 44 : undefined,
+          boxShadow: prominent && eligibility.eligible ? `0 0 0 1px color-mix(in srgb, ${colors.accent} 25%, transparent)` : undefined
         }}
       >
-        <Calculator size={compact ? 13 : 14} aria-hidden="true" />
+        <Calculator size={iconSize} aria-hidden="true" />
         <span>{label}</span>
       </button>
       {open && eligibility.eligible ? (
-        <ScenarioBuilderModal
-          open={open}
-          input={input}
-          onClose={() => setOpen(false)}
-        />
+        <ScenarioBuilderModal open={open} input={input} onClose={() => setOpen(false)} />
       ) : null}
     </>
   );

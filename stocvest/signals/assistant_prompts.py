@@ -728,10 +728,15 @@ def serialize_page_context(ctx: dict[str, Any] | None) -> str:
 
     layer_status = ctx.get("layer_status")
     if isinstance(layer_status, dict):
+        dissenting: list[str] = []
         for layer in ("technical", "news", "macro", "sector", "geopolitical", "internals"):
             status = _coerce_str(layer_status.get(layer), limit=24)
             if status:
                 lines.append(f"layer_status_{layer}={status}")
+                if status in ("Bearish", "Unavailable"):
+                    dissenting.append(layer)
+        if dissenting:
+            lines.append(f"dissenting_layers={','.join(dissenting[:6])}")
 
     # Scanner-overview fields. These describe a multi-symbol page; they are all qualitative
     # summaries of what is already on screen (counts, top items, buckets — never raw scores).

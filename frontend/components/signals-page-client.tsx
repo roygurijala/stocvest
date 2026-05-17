@@ -23,6 +23,11 @@ import { normalizeWatchlistMaturationBySymbol } from "@/lib/watchlist-page-utils
 import { SignalsReferenceLevels } from "@/components/signals/signals-reference-levels";
 import { SignalsSetupRead } from "@/components/signals/signals-setup-read";
 import { SetupEvolutionPanel } from "@/components/signals/setup-evolution-panel";
+import { ScenarioPlanningStrip } from "@/components/scenario-builder/scenario-planning-strip";
+import {
+  augmentScenarioInputWithGapIntel,
+  buildScenarioInputFromCompositeContext
+} from "@/lib/scenario/scenario-input-present";
 import { useWatchlistMaturationLine } from "@/lib/hooks/use-watchlist-maturation-line";
 import {
   buildSignalsPageDecision,
@@ -1057,6 +1062,22 @@ export function SignalsPageClient({
 
   const maturationLine = useWatchlistMaturationLine(symbol, tradingMode, dayTradingSurfaces);
 
+  const scenarioPlanningInput = useMemo(() => {
+    if (!symbolCommitted) return null;
+    const comp =
+      compositeResult != null && !isInsufficientCompositeResponse(compositeResult)
+        ? (compositeResult as Record<string, unknown>)
+        : null;
+    const base = buildScenarioInputFromCompositeContext({
+      symbol,
+      tradingMode,
+      setupBias,
+      composite: comp,
+      snapshot: snapshot ?? undefined
+    });
+    return augmentScenarioInputWithGapIntel(base, gapIntelSnapshot);
+  }, [symbolCommitted, symbol, tradingMode, setupBias, compositeResult, snapshot, gapIntelSnapshot]);
+
   const pageDecision = useMemo(() => {
     if (!compositeResult || isInsufficientCompositeResponse(compositeResult)) return null;
     const c = compositeResult as Record<string, unknown>;
@@ -1993,6 +2014,14 @@ export function SignalsPageClient({
         onTradingModeChange={updateTradingMode}
       />
 
+      {scenarioPlanningInput ? (
+        <ScenarioPlanningStrip
+          input={scenarioPlanningInput}
+          testId="signals-scenario-planning-strip"
+          className="mt-4"
+        />
+      ) : null}
+
       {hasValidSignal && pageDecision ? (
         <SignalsSetupRead
           symbol={symbol}
@@ -2221,3 +2250,5 @@ export function SignalsPageClient({
     </section>
   );
 }
+
+

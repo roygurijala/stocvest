@@ -58,28 +58,11 @@ import {
   buildSwingEmptyStateContext,
   type ScannerEmptyStateContext
 } from "@/lib/scanner-empty-state";
-import type { ScenarioInput, VolatilityRegime } from "@/lib/scenario/types";
+import type { ScenarioInput } from "@/lib/scenario/types";
+import { overviewRegimeToVolatilityRegime } from "@/lib/scenario/scenario-input-present";
 import { roleAccents } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
-/**
- * Map the macro regime label the scanner overview carries (engine form
- * — `"risk_on"` / `"neutral"` / `"risk_off"` / `"avoid"` / `"unknown"`,
- * or arbitrary free text from cached responses) onto the closed-set
- * volatility regime the Scenario Builder consumes. The mapping is
- * conservative: anything we don't recognize falls through to
- * `"unknown"`, which the eligibility gate treats as "not enough
- * volatility context to scaffold a stop."
- */
-function regimeLabelToVolatilityRegime(label: string | null | undefined): VolatilityRegime {
-  const norm = (label ?? "").trim().toLowerCase();
-  if (!norm) return "unknown";
-  if (norm.includes("risk_on") || norm === "risk-on" || norm.includes("low")) return "low";
-  if (norm.includes("neutral") || norm.includes("normal")) return "normal";
-  if (norm.includes("risk_off") || norm === "risk-off" || norm.includes("elevated")) return "elevated";
-  if (norm.includes("avoid") || norm.includes("extreme")) return "extreme";
-  return "unknown";
-}
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
 import { useHoverPrefetch } from "@/lib/hooks/use-hover-prefetch";
 import { useScannerGapIntelBatch } from "@/lib/hooks/use-scanner-gap-intel-batch";
@@ -895,13 +878,20 @@ export function ScannerPageClient({
                 current_price: item.current_price,
                 prev_close: item.prev_close
               },
-              volatility_regime: regimeLabelToVolatilityRegime(overview.regimeLabel),
+              volatility_regime: overviewRegimeToVolatilityRegime(overview.regimeLabel),
               tags: [
                 `Gap ${item.gap_pct >= 0 ? "+" : ""}${item.gap_pct.toFixed(2)}%`,
                 item.has_catalyst ? "With catalyst" : "Momentum-only"
               ]
             };
-            return <BuildScenarioButton input={scenarioInput} testId={`build-scenario-gap-${sym}`} />;
+            return (
+              <BuildScenarioButton
+                input={scenarioInput}
+                variant="prominent"
+                compact
+                testId={`build-scenario-gap-${sym}`}
+              />
+            );
           })()}
           {brokersEnabled() ? (
             <span title="ORB window has closed for today" style={{ display: "inline-flex" }}>
@@ -1984,12 +1974,14 @@ export function ScannerPageClient({
                           reference: {
                             current_price: setup.last_price ?? null
                           },
-                          volatility_regime: regimeLabelToVolatilityRegime(overview.regimeLabel),
+                          volatility_regime: overviewRegimeToVolatilityRegime(overview.regimeLabel),
                           tags: setup.triggers && setup.triggers.length > 0 ? setup.triggers.slice(0, 3) : undefined
                         };
                         return (
                           <BuildScenarioButton
                             input={scenarioInput}
+                            variant="prominent"
+                            compact
                             testId={`build-scenario-setup-${sym}`}
                           />
                         );

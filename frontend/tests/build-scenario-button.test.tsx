@@ -130,6 +130,14 @@ describe("BuildScenarioButton — never implies execution", () => {
   });
 });
 
+describe("BuildScenarioButton — prominent variant", () => {
+  test("test_prominent_sets_data_variant", () => {
+    wrap(<BuildScenarioButton input={eligibleInput()} variant="prominent" />);
+    const btn = screen.getByTestId("build-scenario-button");
+    expect(btn.getAttribute("data-variant")).toBe("prominent");
+  });
+});
+
 describe("BuildScenarioButton — testId override", () => {
   test("test_custom_testId_applied", () => {
     wrap(<BuildScenarioButton input={eligibleInput()} testId="build-scenario-custom" />);
