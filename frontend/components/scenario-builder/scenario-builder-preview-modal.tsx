@@ -2,22 +2,18 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
-import { ScenarioDetailChip } from "@/components/scenario-builder/scenario-detail-chip";
-import { InfoTip } from "@/components/info-tip";
+import { ScenarioPreviewDrillDown } from "@/components/scenario-builder/scenario-preview-drill-down";
 import {
   scenarioWhyNotBullets,
   type ScenarioReadinessResolved
 } from "@/lib/scenario/scenario-readiness";
+import type { ScenarioBuilderDrillDown } from "@/lib/scenario/scenario-builder-drill-down";
 import {
   SCENARIO_DUAL_UNLOCK_FOOTER,
   biasPreviewLabel,
-  biasPreviewTip,
   executionTierLabel,
-  executionTierTip,
-  layerMissingTip,
   nextUnlockBullets,
-  setupTierLabel,
-  setupTierTip
+  setupTierLabel
 } from "@/lib/scenario/scenario-readiness-present";
 import type { ScenarioInput } from "@/lib/scenario/types";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
@@ -27,10 +23,11 @@ type Props = {
   open: boolean;
   input: ScenarioInput;
   resolved: ScenarioReadinessResolved;
+  drillDown: ScenarioBuilderDrillDown;
   onClose: () => void;
 };
 
-export function ScenarioBuilderPreviewModal({ open, input, resolved, onClose }: Props) {
+export function ScenarioBuilderPreviewModal({ open, input, resolved, drillDown, onClose }: Props) {
   const { colors } = useTheme();
   const sym = input.symbol.trim().toUpperCase();
   const modeLabel = input.mode === "swing" ? "Swing" : "Day";
@@ -40,6 +37,9 @@ export function ScenarioBuilderPreviewModal({ open, input, resolved, onClose }: 
   const setupLabel = setupTierLabel(resolved.setupTier, resolved.aligned, resolved.total);
   const executionLabel = executionTierLabel(resolved.executionTier);
   const biasLabel = biasPreviewLabel(resolved.directionalLabel);
+  const levelsLine = resolved.structurallyComplete
+    ? "Reference levels: available on this symbol"
+    : "Reference levels: still forming";
 
   const sectionStyle = {
     padding: spacing[3],
@@ -48,6 +48,8 @@ export function ScenarioBuilderPreviewModal({ open, input, resolved, onClose }: 
     background: colors.surfaceMuted,
     marginBottom: spacing[3]
   };
+
+  const statusStrong = { color: colors.text, fontWeight: 700 as const };
 
   return (
     <AnimatePresence>
@@ -119,50 +121,50 @@ export function ScenarioBuilderPreviewModal({ open, input, resolved, onClose }: 
             </header>
 
             <section style={sectionStyle} data-testid="scenario-preview-dual-status">
-              <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted }}>
+              <p style={{ margin: 0, fontSize: typography.scale.sm, lineHeight: 1.55, color: colors.textMuted }}>
                 Setup and execution are independent — both must clear for the full planning sheet.
               </p>
-              <div
-                className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center"
-                style={{ fontSize: typography.scale.sm }}
-              >
-                <span style={{ color: colors.textMuted }}>Setup:</span>
-                <ScenarioDetailChip
-                  label={setupLabel}
-                  tip={setupTierTip(resolved.setupTier, resolved.aligned, resolved.total)}
-                  testId="scenario-preview-setup-chip"
-                />
-                <span style={{ color: colors.textMuted }}>Execution:</span>
-                <ScenarioDetailChip
-                  label={executionLabel}
-                  tip={executionTierTip(resolved.executionTier, input)}
-                  testId="scenario-preview-execution-chip"
-                />
-              </div>
+              <p className="m-0 mt-3 text-sm" style={{ color: colors.text }}>
+                <span style={{ color: colors.textMuted }}>Setup: </span>
+                <span data-testid="scenario-preview-setup-status" style={statusStrong}>
+                  {setupLabel}
+                </span>
+              </p>
+              <p className="m-0 mt-1.5 text-sm" style={{ color: colors.text }}>
+                <span style={{ color: colors.textMuted }}>Execution: </span>
+                <span data-testid="scenario-preview-execution-status" style={statusStrong}>
+                  {executionLabel}
+                </span>
+              </p>
               {resolved.maturationLabel ? (
                 <p className="m-0 mt-2 text-xs" style={{ color: colors.textMuted }}>
-                  Watchlist maturation:{" "}
-                  <ScenarioDetailChip
-                    label={resolved.maturationLabel}
-                    tip={`Maturation state from your watchlist evaluation cadence. Setup tier (${resolved.setupTier}) is derived from alignment and decision gates.`}
-                    testId="scenario-preview-maturation-chip"
-                  />
+                  Watchlist maturation: <span style={statusStrong}>{resolved.maturationLabel}</span>
                 </p>
               ) : null}
+            </section>
+
+            <section style={sectionStyle} data-testid="scenario-preview-drill-down-wrap">
+              <ScenarioPreviewDrillDown
+                drillDown={drillDown}
+                executionTier={resolved.executionTier}
+                onClose={onClose}
+              />
             </section>
 
             {whyNot.length > 0 ? (
               <section style={sectionStyle} data-testid="scenario-preview-why-not">
                 <p style={{ margin: 0, fontWeight: 600, color: colors.text }}>Why not?</p>
-                <ul className="m-0 mt-2 list-none space-y-2 p-0">
+                <ul
+                  style={{
+                    margin: `${spacing[2]} 0 0`,
+                    paddingLeft: spacing[4],
+                    color: colors.textMuted,
+                    fontSize: typography.scale.sm,
+                    lineHeight: 1.5
+                  }}
+                >
                   {whyNot.map((bullet) => (
-                    <li key={bullet}>
-                      <ScenarioDetailChip
-                        label={bullet}
-                        tip={layerMissingTip(bullet)}
-                        testId={`scenario-preview-why-${bullet.slice(0, 24).replace(/\W+/g, "-")}`}
-                      />
-                    </li>
+                    <li key={bullet}>{bullet}</li>
                   ))}
                 </ul>
               </section>
@@ -189,7 +191,8 @@ export function ScenarioBuilderPreviewModal({ open, input, resolved, onClose }: 
                 padding: spacing[3],
                 borderRadius: borderRadius.lg,
                 border: `1px dashed ${colors.border}`,
-                background: "transparent"
+                background: "transparent",
+                marginBottom: spacing[3]
               }}
               data-testid="scenario-preview-qualitative"
             >
@@ -205,30 +208,19 @@ export function ScenarioBuilderPreviewModal({ open, input, resolved, onClose }: 
               >
                 Preview (non-executable)
               </p>
-              <div className="mt-2 flex flex-col gap-2">
-                <ScenarioDetailChip
-                  label={biasLabel}
-                  tip={biasPreviewTip(resolved.directionalLabel)}
-                  testId="scenario-preview-bias-chip"
-                />
-                <ScenarioDetailChip
-                  label={`Reference levels: ${resolved.structurallyComplete ? "available on this symbol" : "still forming"}`}
-                  tip={
-                    resolved.structurallyComplete
-                      ? "Structural anchors exist on the payload. Full planning still requires setup + execution gates — prices are not shown until then."
-                      : "Entry zone, stop, and targets are not yet populated. Alignment can progress while reference levels are still forming."
-                  }
-                  testId="scenario-preview-levels-chip"
-                />
-              </div>
+              <p className="m-0 mt-2 text-sm" style={{ color: colors.text }}>
+                {biasLabel}
+              </p>
+              <p className="m-0 mt-1 text-sm" style={{ color: colors.textMuted }}>
+                {levelsLine}
+              </p>
             </section>
 
             <p
-              className="m-0 flex flex-wrap items-start gap-1 text-xs leading-relaxed"
+              className="m-0 text-xs leading-relaxed"
               style={{ color: colors.textMuted }}
               data-testid="scenario-preview-dual-footer"
             >
-              <InfoTip text={SCENARIO_DUAL_UNLOCK_FOOTER} label="When scenario builder unlocks" maxWidth={320} />
               {SCENARIO_DUAL_UNLOCK_FOOTER}
             </p>
 

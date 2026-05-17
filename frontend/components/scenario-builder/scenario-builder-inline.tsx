@@ -3,10 +3,12 @@
 import { BuildScenarioButton } from "@/components/scenario-builder/build-scenario-button";
 import type { ScenarioInput } from "@/lib/scenario/types";
 import type { ScenarioReadinessContext } from "@/lib/scenario/scenario-readiness";
+import type { ScenarioBuilderDrillDown } from "@/lib/scenario/scenario-builder-drill-down";
 
 type ScenarioBuilderInlineProps = {
   input: ScenarioInput;
   readiness?: ScenarioReadinessContext | null;
+  drillDown?: ScenarioBuilderDrillDown;
   testId?: string;
   compact?: boolean;
   /** Watchlist / scanner use subtle styling; Signals / Evidence stay prominent. */
@@ -19,6 +21,7 @@ type ScenarioBuilderInlineProps = {
 export function ScenarioBuilderInline({
   input,
   readiness = null,
+  drillDown,
   testId = "scenario-builder-inline",
   compact = true,
   prominent = false
@@ -31,6 +34,7 @@ export function ScenarioBuilderInline({
         variant={prominent ? "prominent" : "default"}
         compact={compact}
         testId={`${testId}-button`}
+        drillDown={drillDown}
       />
     </span>
   );

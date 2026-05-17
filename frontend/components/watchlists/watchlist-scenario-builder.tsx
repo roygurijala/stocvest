@@ -6,6 +6,7 @@ import type { SnapshotPayload } from "@/lib/api/market";
 import { useGapIntel } from "@/lib/hooks/use-gap-intel";
 import { useSignalComposite } from "@/lib/hooks/use-signal-composite";
 import { buildScenarioPlanningBundle } from "@/lib/scenario/scenario-planning-bundle";
+import { watchlistToSignalsHref } from "@/lib/nav/watchlist-signals-deeplink";
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
 
 type Props = {
@@ -46,6 +47,10 @@ export function WatchlistScenarioBuilder({ symbol, mode, snapshot, maturation, t
       <ScenarioBuilderInline
         input={bundle.input}
         readiness={bundle.readiness}
+        drillDown={{
+          surface: "watchlist",
+          signalsHref: watchlistToSignalsHref(symU, mode)
+        }}
         compact
         testId={`${testId ?? `build-scenario-watchlist-${symU}`}-button`}
       />

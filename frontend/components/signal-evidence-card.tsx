@@ -893,6 +893,7 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
           <ScenarioBuilderInline
             input={scenarioForBuild}
             readiness={evidenceReadiness}
+            drillDown={{ surface: "evidence" }}
             prominent
             testId="signal-evidence-scenario-cta"
           />

@@ -11,6 +11,7 @@ import {
   type ScenarioReadinessContext,
   type ScenarioReadinessResolved
 } from "@/lib/scenario/scenario-readiness";
+import type { ScenarioBuilderDrillDown } from "@/lib/scenario/scenario-builder-drill-down";
 import type { ScenarioInput } from "@/lib/scenario/types";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -26,6 +27,7 @@ interface BuildScenarioButtonProps {
   compact?: boolean;
   variant?: "default" | "prominent";
   testId?: string;
+  drillDown?: ScenarioBuilderDrillDown;
 }
 
 /**
@@ -37,7 +39,8 @@ export function BuildScenarioButton({
   readiness = null,
   compact = false,
   variant = "default",
-  testId = "build-scenario-button"
+  testId = "build-scenario-button",
+  drillDown
 }: BuildScenarioButtonProps) {
   const { colors } = useTheme();
   const [open, setOpen] = useState(false);
@@ -95,6 +98,10 @@ export function BuildScenarioButton({
     setSession(null);
   }, []);
 
+  const drillDownResolved: ScenarioBuilderDrillDown = drillDown ?? {
+    surface: "signals"
+  };
+
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -114,6 +121,7 @@ export function BuildScenarioButton({
               open
               input={session.input}
               resolved={session.resolved}
+              drillDown={drillDownResolved}
               onClose={handleClose}
             />
           ),

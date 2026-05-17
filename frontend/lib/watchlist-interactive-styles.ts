@@ -5,7 +5,3 @@ export const WATCHLIST_ALIGNMENT_CHIP_CLASS =
 
 export const WATCHLIST_EVALUATE_LINK_CLASS =
   "relative z-10 inline-flex cursor-pointer items-center gap-1 rounded-md border border-dashed border-sky-400/60 bg-sky-500/10 px-2 py-0.5 text-[11px] font-semibold text-sky-300 no-underline transition hover:border-sky-300 hover:bg-sky-500/20 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400 pointer-events-auto sm:text-sm";
-
-/** Scenario Builder preview chips — same sky affordance as watchlist alignment. */
-export const SCENARIO_DETAIL_CHIP_CLASS =
-  "inline-flex max-w-full cursor-pointer items-center gap-1 rounded-md border border-sky-400/65 bg-sky-500/12 px-2 py-0.5 text-left text-xs font-semibold text-sky-200 underline-offset-2 transition hover:border-sky-300 hover:bg-sky-500/22 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400";

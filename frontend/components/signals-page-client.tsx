@@ -26,6 +26,7 @@ import { SignalsSetupRead } from "@/components/signals/signals-setup-read";
 import { SetupEvolutionPanel } from "@/components/signals/setup-evolution-panel";
 import { ScenarioBuilderInline } from "@/components/scenario-builder/scenario-builder-inline";
 import { buildScenarioPlanningBundle } from "@/lib/scenario/scenario-planning-bundle";
+import type { ScenarioBuilderDrillDown } from "@/lib/scenario/scenario-builder-drill-down";
 import { useWatchlistMaturationLine } from "@/lib/hooks/use-watchlist-maturation-line";
 import {
   buildSignalsPageDecision,
@@ -1212,6 +1213,26 @@ export function SignalsPageClient({
     compositeResult
   ]);
 
+  const scenarioDrillDown = useMemo(
+    (): ScenarioBuilderDrillDown => ({
+      surface: "signals",
+      onViewLayerBreakdown: () => {
+        document
+          .querySelector('[data-testid="signals-layer-breakdown"]')
+          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      },
+      onOpenEvidence: () => {
+        void openEvidenceModal();
+      },
+      onViewSessionContext: () => {
+        document
+          .querySelector('[data-testid="signals-session-context"]')
+          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }),
+    [openEvidenceModal]
+  );
+
   // Layer 4 (second slice): the composite fetch + radar
   // projection used to live in a `[symbol, tab, tradingMode]`
   // useEffect that POST'd to `/api/stocvest/signals/composite/...`
@@ -2065,6 +2086,7 @@ export function SignalsPageClient({
             <ScenarioBuilderInline
               input={scenarioPlanningInput}
               readiness={scenarioReadiness}
+              drillDown={scenarioDrillDown}
               prominent
               testId="signals-scenario-inline"
             />

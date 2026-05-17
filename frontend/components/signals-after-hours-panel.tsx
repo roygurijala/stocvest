@@ -73,6 +73,7 @@ export function SignalsAfterHoursPanel({
 
   return (
     <article
+      data-testid="signals-session-context"
       className={surfaceGlowClassName}
       style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
     >
