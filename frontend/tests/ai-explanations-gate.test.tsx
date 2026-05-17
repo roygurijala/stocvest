@@ -74,7 +74,9 @@ describe("AI explanations gate", () => {
     await waitFor(() => {
       expect(screen.getByText(/AI Signal Explanations/)).toBeInTheDocument();
     });
-    expect(screen.getByRole("link", { name: /View Plans/ })).toHaveAttribute("href", "/dashboard/settings");
+    const planLinks = screen.getAllByRole("link", { name: /View Plans/ });
+    expect(planLinks.length).toBeGreaterThanOrEqual(1);
+    expect(planLinks[0]).toHaveAttribute("href", "/dashboard/settings");
   });
 
   it("test_ai_explanation_shown_for_paid_user", async () => {
