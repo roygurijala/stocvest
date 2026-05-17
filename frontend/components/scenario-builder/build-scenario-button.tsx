@@ -1,16 +1,23 @@
 "use client";
 
 import { Calculator } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { ScenarioBuilderModal } from "@/components/scenario-builder/scenario-builder-modal";
 import { ScenarioBuilderPreviewModal } from "@/components/scenario-builder/scenario-builder-preview-modal";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import {
   resolveScenarioBuilderCapability,
-  type ScenarioReadinessContext
+  type ScenarioReadinessContext,
+  type ScenarioReadinessResolved
 } from "@/lib/scenario/scenario-readiness";
 import type { ScenarioInput } from "@/lib/scenario/types";
 import { useTheme } from "@/lib/theme-provider";
+
+type ModalSession = {
+  input: ScenarioInput;
+  resolved: ScenarioReadinessResolved;
+};
 
 interface BuildScenarioButtonProps {
   input: ScenarioInput;
@@ -34,6 +41,8 @@ export function BuildScenarioButton({
 }: BuildScenarioButtonProps) {
   const { colors } = useTheme();
   const [open, setOpen] = useState(false);
+  /** Frozen at open so watchlist maturation / snapshot refreshes do not swap modals mid-flight. */
+  const [session, setSession] = useState<ModalSession | null>(null);
 
   const readinessCtx: ScenarioReadinessContext = useMemo(
     () =>
@@ -78,6 +87,42 @@ export function BuildScenarioButton({
     ? `color-mix(in srgb, ${resolved.capability === "full" ? colors.accent : "#f59e0b"} 14%, ${colors.surfaceMuted})`
     : colors.surfaceMuted;
 
+  const handleOpen = useCallback(() => {
+    setSession({ input, resolved });
+    setOpen(true);
+  }, [input, resolved]);
+
+  const handleClose = useCallback(() => {
+    setOpen(false);
+    setSession(null);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
+
+  const modal =
+    open && session && typeof document !== "undefined"
+      ? createPortal(
+          session.resolved.capability === "full" ? (
+            <ScenarioBuilderModal open input={session.input} onClose={handleClose} />
+          ) : (
+            <ScenarioBuilderPreviewModal
+              open
+              input={session.input}
+              resolved={session.resolved}
+              onClose={handleClose}
+            />
+          ),
+          document.body
+        )
+      : null;
+
   return (
     <>
       <button
@@ -87,7 +132,7 @@ export function BuildScenarioButton({
         data-eligible={resolved.capability === "full" ? "true" : "false"}
         data-variant={variant}
         title={tooltip}
-        onClick={() => setOpen(true)}
+        onClick={handleOpen}
         style={{
           display: "inline-flex",
           alignItems: "center",
@@ -112,17 +157,7 @@ export function BuildScenarioButton({
         <Calculator size={iconSize} aria-hidden="true" />
         <span>{label}</span>
       </button>
-      {open && resolved.capability === "full" ? (
-        <ScenarioBuilderModal open={open} input={input} onClose={() => setOpen(false)} />
-      ) : null}
-      {open && resolved.capability !== "full" ? (
-        <ScenarioBuilderPreviewModal
-          open={open}
-          input={input}
-          resolved={resolved}
-          onClose={() => setOpen(false)}
-        />
-      ) : null}
+      {modal}
     </>
   );
 }
