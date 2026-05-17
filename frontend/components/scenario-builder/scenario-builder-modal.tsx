@@ -15,6 +15,7 @@ import type {
   ScenarioInput,
   ScenarioUserInputs
 } from "@/lib/scenario/types";
+import { InfoTip } from "@/components/info-tip";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -121,6 +122,16 @@ function deriveTargetDefault(
   return Number.NaN;
 }
 
+const REFERENCE_ROW_TIPS: Record<string, string> = {
+  Symbol: "Ticker for this planning sheet — informational only.",
+  Direction: "Scenario direction from signal bias — you must confirm before trading.",
+  Entry: "Reference entry anchor from the signal payload — labeled Reference, not a recommendation.",
+  Stop: "Reference stop anchor — override in Your inputs with your own plan.",
+  Target: "Reference target (often T1) — mechanical seed; confirm against your thesis.",
+  "Current price": "Last surfaced price when the scenario was generated.",
+  "Volatility regime": "Regime tag affects default stop width when no explicit stop is carried."
+};
+
 function ReferenceRow({
   label,
   value,
@@ -133,6 +144,7 @@ function ReferenceRow({
   testId?: string;
 }) {
   const { colors } = useTheme();
+  const tip = REFERENCE_ROW_TIPS[label];
   return (
     <div
       data-testid={testId}
@@ -147,6 +159,7 @@ function ReferenceRow({
     >
       <span style={{ display: "inline-flex", alignItems: "center", gap: spacing[2] }}>
         <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>{label}</span>
+        {tip ? <InfoTip text={tip} label={label} maxWidth={280} /> : null}
         {tag ? (
           <span
             style={{

@@ -101,7 +101,7 @@ describe("BuildScenarioButton — gated output not access", () => {
     expect(btn.textContent).toContain("Scenario Builder");
   });
 
-  test("gap intel disabled stays enabled with preview capability", () => {
+  test("gap intel disabled stays enabled with building_soon when setup actionable", () => {
     wrap(
       <BuildScenarioButton
         input={{
@@ -113,14 +113,16 @@ describe("BuildScenarioButton — gated output not access", () => {
     );
     const btn = screen.getByTestId("build-scenario-button");
     expect(btn).not.toHaveAttribute("disabled");
-    expect(btn.getAttribute("data-capability")).toBe("preview");
+    expect(btn.getAttribute("data-capability")).toBe("building_soon");
   });
 
   test("click opens preview modal without trade prices when not full", () => {
     wrap(<BuildScenarioButton input={eligibleInput()} />);
     fireEvent.click(screen.getByTestId("build-scenario-button"));
     expect(screen.getByTestId("scenario-builder-preview-modal")).toBeInTheDocument();
-    expect(screen.getByText(/not yet actionable|approaching validity/i)).toBeInTheDocument();
+    expect(screen.getByTestId("scenario-preview-dual-status")).toBeInTheDocument();
+    expect(screen.getByTestId("scenario-preview-setup-chip")).toBeInTheDocument();
+    expect(screen.getByTestId("scenario-preview-execution-chip")).toBeInTheDocument();
     const body = document.body.textContent ?? "";
     expect(body).not.toMatch(/Entry:\s*\$/i);
     expect(body).not.toMatch(/Stop:\s*\$/i);

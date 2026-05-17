@@ -63,10 +63,8 @@ export function BuildScenarioButton({
   const label = "Scenario Builder";
   const tooltip =
     resolved.capability === "full"
-      ? "Open full scenario planning for this setup."
-      : resolved.capability === "building_soon"
-        ? "Setup approaching validity — preview what is still needed."
-        : "Preview readiness and missing confirmations — full builder unlocks when the setup is actionable.";
+      ? "Open full scenario planning — setup and execution window are both available."
+      : "Preview setup and execution status. Full planning unlocks when both alignment and session conditions clear.";
 
   const prominent = variant === "prominent";
   const pad = compact

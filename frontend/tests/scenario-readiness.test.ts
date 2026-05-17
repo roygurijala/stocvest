@@ -71,15 +71,29 @@ describe("resolveScenarioBuilderCapability", () => {
     expect(r.capability).not.toBe("full");
   });
 
-  test("gap intel disabled forces preview not full", () => {
+  test("gap intel disabled blocks full but keeps developing setup tier", () => {
     const r = resolveScenarioBuilderCapability(
       ctx({ decisionState: "actionable", layersAligned: 6, layersTotal: 6 }),
       baseInput({
         gap_intel_gate: { scenario_builder_state: "DISABLED", reasons: ["closed"] }
       })
     );
-    expect(r.capability).toBe("preview");
+    expect(r.capability).toBe("building_soon");
     expect(r.gapIntelBlocked).toBe(true);
+    expect(r.setupTier).toBe("actionable");
+    expect(r.executionTier).toBe("session_limited");
+  });
+
+  test("4/6 with gap blocked shows developing + session_limited", () => {
+    const r = resolveScenarioBuilderCapability(
+      ctx({ layersAligned: 4, layersTotal: 6, maturationState: "developing" }),
+      baseInput({
+        gap_intel_gate: { scenario_builder_state: "DISABLED", reasons: ["market_closed"] }
+      })
+    );
+    expect(r.setupTier).toBe("developing");
+    expect(r.executionTier).toBe("session_limited");
+    expect(r.capability).toBe("building_soon");
   });
 
   test("directional label from bias without prices in resolved", () => {

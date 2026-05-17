@@ -1,9 +1,12 @@
 /**
  * Scenario Builder capability gating — gate output, not access.
  *
- * The button is always clickable. The modal shows preview / anticipation /
- * or the full planning sheet depending on setup readiness (maturation,
- * layer alignment, decision state) and structural data completeness.
+ * Two axes (always computed together):
+ *   - Setup readiness: alignment / maturation / confirmations
+ *   - Execution readiness: gap/session gates + structural reference levels
+ *
+ * The button is always clickable. `capability` selects preview vs full sheet;
+ * both axes are always shown in the preview modal.
  */
 
 import { isEligibleForScenario } from "@/lib/scenario/eligibility";
@@ -17,6 +20,10 @@ import type { ScenarioInput } from "@/lib/scenario/types";
 import type { TradeDecisionState } from "@/lib/signal-evidence/trade-decision";
 
 export type ScenarioBuilderCapability = "preview" | "building_soon" | "full";
+
+export type ScenarioSetupTier = "not_aligned" | "developing" | "actionable" | "invalidated";
+
+export type ScenarioExecutionTier = "available" | "session_limited" | "structural_incomplete";
 
 export type ScenarioReadinessContext = {
   symbol: string;
@@ -37,6 +44,8 @@ export type ScenarioReadinessContext = {
 
 export type ScenarioReadinessResolved = {
   capability: ScenarioBuilderCapability;
+  setupTier: ScenarioSetupTier;
+  executionTier: ScenarioExecutionTier;
   aligned: number;
   total: number;
   missingLayers: string[];
@@ -57,7 +66,7 @@ function normalizeMaturation(state: string | null | undefined): string {
 function biasToDirectionalLabel(bias: SignalsSetupBias | null | undefined): string | null {
   if (bias === "Bullish") return "Long bias";
   if (bias === "Bearish") return "Short bias";
-  if (bias === "Neutral") return "Neutral / no directional scenario";
+  if (bias === "Neutral") return "Neutral (no directional thesis yet)";
   return null;
 }
 
@@ -91,6 +100,24 @@ function hasReferenceLevels(input: ScenarioInput): boolean {
   );
 }
 
+function resolveSetupTier(
+  aligned: number,
+  maturation: string,
+  decision: TradeDecisionState | null,
+  nearActionable: boolean
+): ScenarioSetupTier {
+  if (maturation === "invalidated") return "invalidated";
+  if (decision === "actionable" || maturation === "actionable") return "actionable";
+  if (nearActionable) return "developing";
+  return "not_aligned";
+}
+
+function resolveExecutionTier(gapIntelBlocked: boolean, structurallyEligible: boolean): ScenarioExecutionTier {
+  if (gapIntelBlocked) return "session_limited";
+  if (!structurallyEligible) return "structural_incomplete";
+  return "available";
+}
+
 /**
  * Resolve which modal experience to show. Does not disable the button.
  */
@@ -105,23 +132,8 @@ export function resolveScenarioBuilderCapability(
   const decision = ctx.decisionState ?? null;
   const directionalLabel = biasToDirectionalLabel(ctx.setupBias ?? null);
   const maturationLabel = maturation ? maturation.replace(/_/g, " ") : null;
-  const refLevels = ctx.hasReferenceLevels ?? hasReferenceLevels(input);
-
-  const setupActionable =
-    decision === "actionable" || maturation === "actionable";
-
-  if (setupActionable && structural.eligible && !gapIntelBlocked) {
-    return {
-      capability: "full",
-      aligned,
-      total,
-      missingLayers: missing,
-      directionalLabel,
-      maturationLabel,
-      structurallyComplete: true,
-      gapIntelBlocked: false
-    };
-  }
+  const structurallyComplete = ctx.hasReferenceLevels ?? hasReferenceLevels(input);
+  const structurallyEligible = structural.eligible;
 
   const nearActionable =
     aligned >= NEAR_ACTIONABLE_ALIGNED ||
@@ -129,28 +141,40 @@ export function resolveScenarioBuilderCapability(
     maturation === "re_evaluating" ||
     (decision === "monitor" && aligned >= NEAR_ACTIONABLE_ALIGNED);
 
-  if (nearActionable && !gapIntelBlocked) {
-    return {
-      capability: "building_soon",
-      aligned,
-      total,
-      missingLayers: missing,
-      directionalLabel,
-      maturationLabel,
-      structurallyComplete: structural.eligible,
-      gapIntelBlocked: false
-    };
-  }
+  const setupTier = resolveSetupTier(aligned, maturation, decision, nearActionable);
+  const executionTier = resolveExecutionTier(gapIntelBlocked, structurallyEligible);
 
-  return {
-    capability: "preview",
+  const shared = {
     aligned,
     total,
     missingLayers: missing,
     directionalLabel,
     maturationLabel,
-    structurallyComplete: structural.eligible,
-    gapIntelBlocked
+    structurallyComplete,
+    gapIntelBlocked,
+    setupTier,
+    executionTier
+  };
+
+  if (setupTier === "actionable" && executionTier === "available" && structurallyEligible) {
+    return {
+      ...shared,
+      capability: "full",
+      structurallyComplete: true,
+      gapIntelBlocked: false
+    };
+  }
+
+  if (nearActionable) {
+    return {
+      ...shared,
+      capability: "building_soon"
+    };
+  }
+
+  return {
+    ...shared,
+    capability: "preview"
   };
 }
 
@@ -158,13 +182,28 @@ export function resolveScenarioBuilderCapability(
 export function defaultMissingBullets(resolved: ScenarioReadinessResolved): string[] {
   if (resolved.missingLayers.length > 0) {
     return resolved.missingLayers.map((name) => {
-      if (name === "Internals") return "Participation / breadth confirmation";
-      if (name === "Technical") return "Trend structure confirmation";
-      return `${name} confirmation`;
+      if (name === "Internals") return "Missing final confirmation: Participation / breadth";
+      if (name === "Technical") return "Missing final confirmation: Trend structure";
+      return `Missing final confirmation: ${name}`;
     });
   }
   if (resolved.aligned < resolved.total) {
     return ["Layer alignment across the six-layer stack", "Risk and confirmation gates"];
   }
   return ["Setup qualification on this symbol"];
+}
+
+/** Why-not bullets including execution when session-limited. */
+export function scenarioWhyNotBullets(
+  resolved: ScenarioReadinessResolved,
+  _input: ScenarioInput
+): string[] {
+  const setup = defaultMissingBullets(resolved);
+  const out = [...setup];
+  if (resolved.executionTier === "session_limited") {
+    out.push("Execution window not open (session / gap conditions)");
+  } else if (resolved.executionTier === "structural_incomplete") {
+    out.push("Reference levels still forming for planning math");
+  }
+  return out;
 }

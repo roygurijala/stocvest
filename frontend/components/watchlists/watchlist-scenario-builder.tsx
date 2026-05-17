@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { ScenarioBuilderInline } from "@/components/scenario-builder/scenario-builder-inline";
 import type { SnapshotPayload } from "@/lib/api/market";
+import { useGapIntel } from "@/lib/hooks/use-gap-intel";
 import { useSignalComposite } from "@/lib/hooks/use-signal-composite";
 import { buildScenarioPlanningBundle } from "@/lib/scenario/scenario-planning-bundle";
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
@@ -16,11 +17,12 @@ type Props = {
 };
 
 /**
- * Watchlist Scenario Builder — uses the same composite-backed bundle as Signals.
+ * Watchlist Scenario Builder — same composite + gap-intel bundle as Signals.
  */
 export function WatchlistScenarioBuilder({ symbol, mode, snapshot, maturation, testId }: Props) {
   const symU = symbol.trim().toUpperCase();
   const { composite } = useSignalComposite(symU, mode, { enabled: Boolean(symU) });
+  const { snapshot: gapIntel } = useGapIntel(symU, mode, { enabled: Boolean(symU) });
 
   const bundle = useMemo(
     () =>
@@ -29,9 +31,10 @@ export function WatchlistScenarioBuilder({ symbol, mode, snapshot, maturation, t
         tradingMode: mode,
         composite,
         snapshot,
-        maturation
+        maturation,
+        gapIntel
       }),
-    [symU, mode, composite, snapshot, maturation]
+    [symU, mode, composite, snapshot, maturation, gapIntel]
   );
 
   return (
