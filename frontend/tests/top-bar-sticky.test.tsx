@@ -1,22 +1,10 @@
 /**
  * Lock-in: the dashboard TopBar stays pinned to the viewport while the
- * body scrolls.
+ * page content scrolls inside ``<main>``.
  *
- * Two invariants together produce that behaviour:
- *
- *   1. The ``<header>`` rendered by ``TopBar`` uses ``position: fixed``
- *      + ``top: 0`` + ``left-0`` / ``lg:left-[248px]`` (sidebar width)
- *      + ``z-30`` (below modals at 40+).
- *
- *   2. The ``AppShell`` right-column wrapper does NOT apply any
- *      ``overflow`` property — that would promote the wrapper to a
- *      scroll container and complicate layout. Horizontal overflow
- *      protection lives on ``<main>``, which also carries extra
- *      ``padding-top`` so content clears the fixed bar.
- *
- * These assertions fail loudly if a future refactor drops the fixed
- * positioning classes or re-introduces horizontal/vertical overflow
- * (scroll-container promotion) onto the right column wrapper.
+ *   1. ``TopBar`` uses ``position: fixed`` + sidebar offset on ``lg+``.
+ *   2. ``AppShell`` right column is viewport-tall; ``<main>`` is the scroll
+ *      container (`data-app-scroll-root` + ``overflow-y-auto``).
  */
 
 import { render, screen } from "@testing-library/react";
@@ -56,24 +44,20 @@ describe("TopBar viewport pinning", () => {
   });
 });
 
-describe("AppShell layout (no scroll trap on right column)", () => {
-  test("right column wrapper does NOT create a scroll container that breaks sticky", () => {
+describe("AppShell layout (main scroll container)", () => {
+  test("right column is viewport-tall without its own overflow scroll", () => {
     wrap(
       <AppShell session={SESSION} isAdmin={false}>
         <p>Page content</p>
       </AppShell>
     );
     const rightCol = screen.getByTestId("app-shell-right-column");
-    // None of these classes should appear on the wrapper — each one
-    // would promote it to a scroll container and capture the sticky
-    // header against the wrapper instead of the viewport.
-    expect(rightCol.className).not.toMatch(/(^|\s)overflow-x-hidden(\s|$)/);
+    expect(rightCol.className).toMatch(/h-\[100dvh\]/);
     expect(rightCol.className).not.toMatch(/(^|\s)overflow-y-auto(\s|$)/);
     expect(rightCol.className).not.toMatch(/(^|\s)overflow-hidden(\s|$)/);
-    expect(rightCol.className).not.toMatch(/(^|\s)overflow-auto(\s|$)/);
   });
 
-  test("<main> does not use overflow classes (document scroll on body)", () => {
+  test("<main> is the scroll root with overflow-y-auto", () => {
     wrap(
       <AppShell session={SESSION} isAdmin={false}>
         <p data-testid="page-marker">Page content</p>
@@ -81,18 +65,8 @@ describe("AppShell layout (no scroll trap on right column)", () => {
     );
     const main = screen.getByTestId("page-marker").closest("main");
     expect(main).not.toBeNull();
-    expect(main!.className).not.toMatch(/(^|\s)overflow-x-clip(\s|$)/);
-    expect(main!.className).not.toMatch(/(^|\s)overflow-x-hidden(\s|$)/);
-    expect(main!.className).not.toMatch(/(^|\s)overflow-hidden(\s|$)/);
-  });
-
-  test("app shell grid uses items-start so columns are not height-trapped", () => {
-    wrap(
-      <AppShell session={SESSION} isAdmin={false}>
-        <p>Page content</p>
-      </AppShell>
-    );
-    const grid = screen.getByTestId("app-shell-right-column").parentElement;
-    expect(grid?.className).toMatch(/(^|\s)items-start(\s|$)/);
+    expect(main).toHaveAttribute("data-app-scroll-root");
+    expect(main!.className).toMatch(/(^|\s)overflow-y-auto(\s|$)/);
+    expect(main!.className).toMatch(/(^|\s)min-h-0(\s|$)/);
   });
 });

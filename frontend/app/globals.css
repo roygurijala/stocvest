@@ -60,11 +60,6 @@ html {
   --color-caution: #d97706;
 }
 
-html {
-  /* Horizontal bleed only — vertical scroll lives on ``body`` (see below). */
-  overflow-x: clip;
-}
-
 body {
   margin: 0;
   padding: 0;
@@ -73,6 +68,8 @@ body {
   color: var(--color-text);
   transition: background-color 240ms ease, color 240ms ease;
   min-height: 100vh;
+  /* Clip horizontal bleed here only — ``overflow-x`` on ``html`` forces a nested
+     scrollport and breaks wheel scroll on dashboard pages. */
   overflow-x: clip;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
