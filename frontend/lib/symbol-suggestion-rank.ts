@@ -27,7 +27,8 @@
  *   0  Exact ticker match           (`symbol === q`)
  *   1  Ticker prefix match          (`symbol.startsWith(q)`)
  *   2  Ticker contains query        (`symbol.includes(q)`)
- *   3  Company name contains query  (`label.includes(q)` only)
+ *   3  Company name starts with     (company portion starts with `q`)
+ *   4  Company name contains query  (company portion includes `q`)
  *   −1 (drop) no field matched
  *
  * Within each bucket we sort alphabetically by ticker so deterministic
@@ -59,7 +60,7 @@ export interface RankableSymbolCandidate {
  * to render the matching reason in the UI (e.g. "by company name")
  * can inspect it.
  */
-export type SymbolMatchBucket = 0 | 1 | 2 | 3 | -1;
+export type SymbolMatchBucket = 0 | 1 | 2 | 3 | 4 | -1;
 
 export function scoreSymbolCandidate(
   candidate: RankableSymbolCandidate,
@@ -76,7 +77,8 @@ export function scoreSymbolCandidate(
   // qualify as a company-name match. Bucket 3 should only fire for
   // candidates whose company name actually contains the query.
   const companyPortion = stripSymbolPrefixFromLabel(label, sym);
-  if (companyPortion.includes(normalizedQuery)) return 3;
+  if (companyPortion.startsWith(normalizedQuery)) return 3;
+  if (companyPortion.includes(normalizedQuery)) return 4;
   return -1;
 }
 

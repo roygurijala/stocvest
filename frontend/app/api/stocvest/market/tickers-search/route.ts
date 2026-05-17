@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { stocvestAuthedFetch } from "@/lib/bff/stocvest-authed";
+import { canonicalUsTickerFromSearch } from "@/lib/symbol-ticker";
 
 function mapPolygonResults(data: unknown): { symbol: string; name: string }[] {
   if (!data || typeof data !== "object") return [];
@@ -8,15 +9,13 @@ function mapPolygonResults(data: unknown): { symbol: string; name: string }[] {
   const out: { symbol: string; name: string }[] = [];
   for (const row of results) {
     if (!row || typeof row !== "object") continue;
-    const t = String((row as { ticker?: unknown }).ticker ?? "")
-      .trim()
-      .toUpperCase();
+    const t = canonicalUsTickerFromSearch(String((row as { ticker?: unknown }).ticker ?? ""));
     if (!t) continue;
     out.push({
       symbol: t,
       name: String((row as { name?: unknown }).name ?? "").trim()
     });
-    if (out.length >= 15) break;
+    if (out.length >= 25) break;
   }
   return out;
 }
@@ -28,7 +27,7 @@ async function polygonDirectSearch(q: string): Promise<{ symbol: string; name: s
   const url = new URL("https://api.polygon.io/v3/reference/tickers");
   url.searchParams.set("search", q);
   url.searchParams.set("active", "true");
-  url.searchParams.set("limit", "15");
+  url.searchParams.set("limit", "25");
   url.searchParams.set("market", "stocks");
   url.searchParams.set("apiKey", key);
   const r = await fetch(url.toString(), { cache: "no-store" });

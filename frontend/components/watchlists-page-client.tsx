@@ -21,6 +21,7 @@ import {
   type WatchlistMaturationRow as MaturationRow,
   type WatchlistViewMode
 } from "@/lib/watchlist-page-utils";
+import { canonicalUsTicker, canonicalUsTickerFromSearch } from "@/lib/symbol-ticker";
 import { useTheme } from "@/lib/theme-provider";
 import {
   compareSymbolsByPresentationPriority,
@@ -57,22 +58,8 @@ type WatchlistAddSuggestion = SymbolCandidate & { kind: "watchlist" | "add" };
 
 type ThemeColors = (typeof colorTokens)["dark"];
 
-function normalizeTickerInput(raw: string): string | null {
-  const u = raw.trim().toUpperCase();
-  if (!u) return null;
-  if (/^[A-Z]{1,6}$/.test(u)) return u;
-  if (/^[A-Z]{1,5}\.[A-Z]$/.test(u)) return u;
-  return null;
-}
-
-function normalizeTickerFromApi(raw: string): string | null {
-  const u = raw.trim().toUpperCase();
-  if (!u) return null;
-  const narrow = normalizeTickerInput(u);
-  if (narrow) return narrow;
-  if (/^[A-Z]{1,10}$/.test(u)) return u;
-  if (/^[A-Z0-9]{1,8}\.[A-Z]{1,3}$/.test(u)) return u;
-  return null;
+function parseTickerInput(raw: string): string | null {
+  return canonicalUsTickerFromSearch(raw) ?? canonicalUsTicker(raw);
 }
 
 function maturationAccent(state: string | undefined, colors: ThemeColors): string {
@@ -387,7 +374,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     const onList = new Set(activeSymbolsDeduped);
     const m = new Map<string, SymbolCandidate>();
     for (const raw of QUICK) {
-      const sym = normalizeTickerFromApi(raw) || normalizeTickerInput(raw);
+      const sym = parseTickerInput(raw) || canonicalUsTicker(raw);
       if (!sym || onList.has(sym)) continue;
       m.set(sym, { symbol: sym, label: sym });
     }
@@ -424,7 +411,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
           for (const it of items) {
             if (!it || typeof it !== "object") continue;
             const o = it as { symbol?: unknown; name?: unknown };
-            const sym = normalizeTickerFromApi(String(o.symbol ?? ""));
+            const sym = parseTickerInput(String(o.symbol ?? ""));
             if (!sym) continue;
             const name = String(o.name ?? "").trim();
             next.push({ symbol: sym, label: name ? `${sym} — ${name}` : sym });
@@ -562,7 +549,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   async function addSymbol(symOrRaw: string, options?: { skipCorroboration?: boolean }) {
     if (!active) return;
     const raw = symOrRaw.trim();
-    const sym = normalizeTickerFromApi(raw) || normalizeTickerInput(raw);
+    const sym = parseTickerInput(raw) || canonicalUsTicker(raw);
     setSymErr(null);
     if (!sym) {
       setSymErr("Enter a valid ticker.");
@@ -881,7 +868,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                         void addSymbol(pick.symbol);
                         return;
                       }
-                      const t = normalizeTickerFromApi(addDraft.trim()) || normalizeTickerInput(addDraft.trim());
+                      const t = parseTickerInput(addDraft.trim()) || canonicalUsTicker(addDraft.trim());
                       if (!t) return;
                       e.preventDefault();
                       void addSymbol(addDraft.trim());

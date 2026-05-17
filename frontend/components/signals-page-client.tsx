@@ -55,6 +55,12 @@ import {
   type PublicSignal
 } from "@/lib/api/public-signals";
 import { rankSymbolCandidates } from "@/lib/symbol-suggestion-rank";
+import {
+  canonicalUsTicker,
+  canonicalUsTickerFromSearch,
+  isWellFormedUsTicker,
+  tickersEquivalent
+} from "@/lib/symbol-ticker";
 import { WATCHLIST_SYMBOLS_CHANGED_EVENT } from "@/lib/watchlist-membership-client";
 import { LAYER_NAME_HINTS } from "@/lib/ui-tooltips";
 import { isInsufficientCompositeResponse, type SwingCompositeMarketStatus } from "@/lib/api/swing-composite";
@@ -106,23 +112,8 @@ const SIGNALS_SESSION_SYMBOL_KEY = "stocvest_signals_session_symbol";
 
 type SymbolCandidate = { symbol: string; label: string };
 
-function normalizeTickerInput(raw: string): string | null {
-  const u = raw.trim().toUpperCase();
-  if (!u) return null;
-  if (/^[A-Z]{1,6}$/.test(u)) return u;
-  if (/^[A-Z]{1,5}\.[A-Z]$/.test(u)) return u;
-  return null;
-}
-
-/** Polygon reference search / manual entry — slightly wider than strict 6-letter US symbols. */
-function normalizeTickerFromApi(raw: string): string | null {
-  const u = raw.trim().toUpperCase();
-  if (!u) return null;
-  const narrow = normalizeTickerInput(u);
-  if (narrow) return narrow;
-  if (/^[A-Z]{1,10}$/.test(u)) return u;
-  if (/^[A-Z0-9]{1,8}\.[A-Z]{1,3}$/.test(u)) return u;
-  return null;
+function parseTickerInput(raw: string): string | null {
+  return canonicalUsTickerFromSearch(raw) ?? canonicalUsTicker(raw);
 }
 
 /**
@@ -353,7 +344,7 @@ export function SignalsPageClient({
   const symbolCandidates = useMemo(() => {
     const m = new Map<string, SymbolCandidate>();
     const add = (sym: string, name?: string | null) => {
-      const u = normalizeTickerInput(sym);
+      const u = canonicalUsTicker(sym);
       if (!u) return;
       const n = (name ?? "").trim();
       const label = n ? `${u} — ${n}` : u;
@@ -401,7 +392,7 @@ export function SignalsPageClient({
           for (const it of items) {
             if (!it || typeof it !== "object") continue;
             const o = it as { symbol?: unknown; name?: unknown };
-            const sym = normalizeTickerFromApi(String(o.symbol ?? ""));
+            const sym = parseTickerInput(String(o.symbol ?? ""));
             if (!sym) continue;
             const name = String(o.name ?? "").trim();
             next.push({ symbol: sym, label: name ? `${sym} — ${name}` : sym });
@@ -453,7 +444,7 @@ export function SignalsPageClient({
   }, [symbolCandidates, symbolDraft, remoteCandidates]);
 
   const applyCommittedSymbol = useCallback((sym: string | null | undefined) => {
-    const t = normalizeTickerFromApi(String(sym ?? ""));
+    const t = parseTickerInput(String(sym ?? ""));
     if (!t) {
       setSymbol("");
       setSymbolDraft("");
@@ -491,7 +482,7 @@ export function SignalsPageClient({
         const data = (await res.json().catch(() => ({}))) as { symbols?: unknown };
         const list = Array.isArray(data.symbols)
           ? data.symbols
-              .map((x) => normalizeTickerInput(String(x)))
+              .map((x) => canonicalUsTicker(String(x)))
               .filter((x): x is string => Boolean(x))
           : [];
         if (!cancelled) setUserWatchlistSyms(list);
@@ -514,7 +505,7 @@ export function SignalsPageClient({
           const data = (await res.json().catch(() => ({}))) as { symbols?: unknown };
           const list = Array.isArray(data.symbols)
             ? data.symbols
-                .map((x) => normalizeTickerInput(String(x)))
+                .map((x) => canonicalUsTicker(String(x)))
                 .filter((x): x is string => Boolean(x))
             : [];
           if (!cancelled) setUserWatchlistSyms(list);
@@ -541,14 +532,23 @@ export function SignalsPageClient({
    */
   const isSymbolCorroborated = useCallback(
     (sym: string): boolean => {
-      const u = sym.toUpperCase();
+      const u = canonicalUsTicker(sym) ?? parseTickerInput(sym);
       if (!u) return false;
-      if (symbolCandidates.some((c) => c.symbol === u)) return true;
-      if (remoteCandidates.some((c) => c.symbol === u)) return true;
-      if (userWatchlistSyms.includes(u)) return true;
+      if (symbolCandidates.some((c) => tickersEquivalent(c.symbol, u))) return true;
+      if (remoteCandidates.some((c) => tickersEquivalent(c.symbol, u))) return true;
+      if (userWatchlistSyms.some((s) => tickersEquivalent(s, u))) return true;
       return false;
     },
     [symbolCandidates, remoteCandidates, userWatchlistSyms]
+  );
+
+  const canCommitTicker = useCallback(
+    (raw: string): boolean => {
+      const t = parseTickerInput(raw);
+      if (!t) return false;
+      return isSymbolCorroborated(t) || isWellFormedUsTicker(raw);
+    },
+    [isSymbolCorroborated]
   );
 
   /** Calm one-line caption used under the symbol input — kept in code so wording lives in one place. */
@@ -593,7 +593,7 @@ export function SignalsPageClient({
           for (const it of items) {
             if (!it || typeof it !== "object") continue;
             const o = it as { symbol?: unknown; name?: unknown };
-            const sym = normalizeTickerFromApi(String(o.symbol ?? ""));
+            const sym = parseTickerInput(String(o.symbol ?? ""));
             if (!sym) continue;
             const name = String(o.name ?? "").trim();
             next.push({ symbol: sym, label: name ? `${sym} — ${name}` : sym });
@@ -640,7 +640,7 @@ export function SignalsPageClient({
 
   /** Commit a typeahead choice (or empty string) to the past-signals symbol filter. */
   const applyHistSymbol = useCallback((sym: string | null | undefined) => {
-    const t = normalizeTickerFromApi(String(sym ?? ""));
+    const t = parseTickerInput(String(sym ?? ""));
     if (!t) {
       setHistSymbolFilter("");
       setHistSymbolDraft("");
@@ -665,7 +665,7 @@ export function SignalsPageClient({
       ]);
       const data = (await symRes.json().catch(() => ({}))) as { symbols?: string[] };
       const list = Array.isArray(data.symbols)
-        ? data.symbols.map((x) => String(x)).map((x) => normalizeTickerInput(x)).filter((x): x is string => Boolean(x))
+        ? data.symbols.map((x) => String(x)).map((x) => canonicalUsTicker(x)).filter((x): x is string => Boolean(x))
         : [];
       setWatchlistPickerSyms(list);
       if (matRes.ok) {
@@ -733,7 +733,7 @@ export function SignalsPageClient({
     if (signalsPrefill.urlSymbol || signalsPrefill.signalIdForResolve) return;
     try {
       const s = sessionStorage.getItem(SIGNALS_SESSION_SYMBOL_KEY);
-      const sym = s ? normalizeTickerInput(s) : null;
+      const sym = s ? canonicalUsTicker(s) : null;
       if (sym) {
         setSymbol(sym);
         setSymbolDraft(sym);
@@ -754,7 +754,7 @@ export function SignalsPageClient({
         if (!res.ok || cancelled) return;
         const data = (await res.json().catch(() => null)) as { symbol?: unknown } | null;
         const raw = data && typeof data === "object" && typeof data.symbol === "string" ? data.symbol : "";
-        const sym = normalizeTickerInput(raw);
+        const sym = canonicalUsTicker(raw);
         if (sym && !cancelled) applyCommittedSymbol(sym);
       } catch {
         /* ignore */
@@ -1493,7 +1493,7 @@ export function SignalsPageClient({
                       applyHistSymbol("");
                       return;
                     }
-                    const t = normalizeTickerFromApi(raw);
+                    const t = parseTickerInput(raw);
                     if (t) applyHistSymbol(t);
                   }, 120);
                 }}
@@ -1520,7 +1520,7 @@ export function SignalsPageClient({
                       applyHistSymbol(pick.symbol);
                       return;
                     }
-                    const t = normalizeTickerFromApi(histSymbolDraft);
+                    const t = parseTickerInput(histSymbolDraft);
                     if (t) {
                       e.preventDefault();
                       applyHistSymbol(t);
@@ -1803,12 +1803,10 @@ export function SignalsPageClient({
                   applyCommittedSymbol("");
                   return;
                 }
-                const t = normalizeTickerFromApi(raw);
+                const t = parseTickerInput(raw);
                 if (!t) return;
-                if (t === symbol.toUpperCase()) return;
-                // Free-text on blur: only commit when corroborated. Otherwise leave the draft
-                // visible and let the user pick from suggestions or correct the spelling.
-                if (isSymbolCorroborated(t)) {
+                if (tickersEquivalent(t, symbol)) return;
+                if (canCommitTicker(raw)) {
                   applyCommittedSymbol(t);
                 } else {
                   setUnverifiedSymbolNote(buildUnverifiedSymbolNote(t));
@@ -1838,12 +1836,10 @@ export function SignalsPageClient({
                   applyCommittedSymbol(pick.symbol);
                   return;
                 }
-                const t = normalizeTickerFromApi(symbolDraft);
+                const t = parseTickerInput(symbolDraft);
                 if (!t) return;
                 e.preventDefault();
-                // Explicit free-text submit: pause and explain rather than silently commit a
-                // ticker the system can't corroborate (typeahead / watchlist / Polygon search).
-                if (isSymbolCorroborated(t)) {
+                if (canCommitTicker(symbolDraft)) {
                   applyCommittedSymbol(t);
                 } else {
                   setUnverifiedSymbolNote(buildUnverifiedSymbolNote(t));

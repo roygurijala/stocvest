@@ -22,11 +22,13 @@ def _utc_now() -> str:
 
 
 def _normalize_symbol(sym: str) -> str:
-    s = str(sym or "").strip().upper()
-    if not s or len(s) > 10:
-        raise ValueError("symbol must be 1–10 uppercase characters")
-    if not s.isalnum():
-        raise ValueError("symbol must be alphanumeric")
+    from stocvest.data.symbol_normalize import to_polygon_symbol
+
+    s = to_polygon_symbol(str(sym or "").strip().upper())
+    if not s or len(s) > 12:
+        raise ValueError("symbol must be 1–12 characters")
+    if not all(ch.isalnum() or ch == "." for ch in s):
+        raise ValueError("symbol must be uppercase letters, digits, or class-share dot")
     return s
 
 

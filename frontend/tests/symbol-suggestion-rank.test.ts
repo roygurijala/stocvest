@@ -148,4 +148,11 @@ describe("rankSymbolCandidates ordering", () => {
     const out = rankSymbolCandidates([AAPL, APP], "  Ap  ".trim().toLowerCase());
     expect(out[0]).toBe(APP);
   });
+
+  test("company name starts with query ranks before substring match", () => {
+    const intc = { symbol: "INTC", label: "INTC — Intel Corporation" };
+    const intel = { symbol: "INTL", label: "INTL — Intellicheck Corp" };
+    const out = rankSymbolCandidates([intel, intc], "intel");
+    expect(out[0]?.symbol).toBe("INTC");
+  });
 });

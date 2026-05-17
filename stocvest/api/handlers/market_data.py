@@ -188,7 +188,7 @@ def tickers_search_handler(
     async def _run() -> dict[str, Any]:
         settings = get_settings()
         async with client_factory(api_key=settings.polygon_api_key) as client:
-            rows = await client.search_reference_tickers(raw, limit=15)
+            rows = await client.search_reference_tickers(raw, limit=25)
         items = [{"symbol": r["ticker"], "name": r.get("name", "")} for r in rows if r.get("ticker")]
         return ok({"items": items})
 
