@@ -6,6 +6,7 @@ import { SUBHEADING_DAY_CADENCE, SUBHEADING_SWING_CADENCE, TAB_LABEL_DAY, TAB_LA
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import type { WatchlistMaturationLine } from "@/lib/hooks/use-watchlist-maturation-line";
+import { WATCHLIST_EVALUATION_HEADER } from "@/lib/product-empty-states";
 
 type TradingMode = "day" | "swing";
 
@@ -124,6 +125,8 @@ export function SignalsCommandBar({
         {tradingMode === "day"
           ? "Evaluated on live session structure · valid through regular session close."
           : "Evaluated on daily close · horizon ~5 calendar days."}
+        <br />
+        {WATCHLIST_EVALUATION_HEADER}
       </p>
     </article>
   );

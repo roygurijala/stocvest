@@ -2043,6 +2043,7 @@ export function SignalsPageClient({
             <ScenarioBuilderInline
               input={scenarioPlanningInput}
               readiness={scenarioReadiness}
+              prominent
               testId="signals-scenario-inline"
             />
           ) : null

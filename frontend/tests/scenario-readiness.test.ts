@@ -36,9 +36,14 @@ describe("resolveScenarioBuilderCapability", () => {
     expect(r.total).toBe(6);
   });
 
-  test("building_soon at 4/6 alignment without actionable state", () => {
-    const r = resolveScenarioBuilderCapability(ctx({ layersAligned: 4, layersTotal: 6 }), baseInput());
+  test("building_soon at 3/6 alignment without actionable state", () => {
+    const r = resolveScenarioBuilderCapability(ctx({ layersAligned: 3, layersTotal: 6 }), baseInput());
     expect(r.capability).toBe("building_soon");
+  });
+
+  test("preview below 3/6 when not developing", () => {
+    const r = resolveScenarioBuilderCapability(ctx({ layersAligned: 2, layersTotal: 6 }), baseInput());
+    expect(r.capability).toBe("preview");
   });
 
   test("building_soon when maturation is developing", () => {

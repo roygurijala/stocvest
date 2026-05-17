@@ -9,6 +9,8 @@ type ScenarioBuilderInlineProps = {
   readiness?: ScenarioReadinessContext | null;
   testId?: string;
   compact?: boolean;
+  /** Watchlist / scanner use subtle styling; Signals / Evidence stay prominent. */
+  prominent?: boolean;
 };
 
 /**
@@ -18,14 +20,15 @@ export function ScenarioBuilderInline({
   input,
   readiness = null,
   testId = "scenario-builder-inline",
-  compact = true
+  compact = true,
+  prominent = false
 }: ScenarioBuilderInlineProps) {
   return (
     <span className="inline-flex shrink-0 items-center" data-testid={testId}>
       <BuildScenarioButton
         input={input}
         readiness={readiness}
-        variant="prominent"
+        variant={prominent ? "prominent" : "default"}
         compact={compact}
         testId={`${testId}-button`}
       />

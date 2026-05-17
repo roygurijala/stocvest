@@ -100,6 +100,8 @@ def test_maturation_summary_default_list_filter(monkeypatch: pytest.MonkeyPatch)
     assert aapl["state"] == "actionable"
     assert "readiness_label" in aapl and isinstance(aapl["readiness_label"], str)
     assert aapl.get("label") == "Actionable"
+    assert aapl.get("missing_layers") == []
+    assert aapl.get("bias") == "neutral"
 
 
 def test_maturation_summary_free_plan_omits_readiness_label(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -48,7 +48,7 @@ export type ScenarioReadinessResolved = {
 };
 
 const LAYER_TOTAL_DEFAULT = 6;
-const NEAR_ACTIONABLE_ALIGNED = 4;
+const NEAR_ACTIONABLE_ALIGNED = 3;
 
 function normalizeMaturation(state: string | null | undefined): string {
   return (state ?? "").trim().toLowerCase().replace(/\s+/g, "_");

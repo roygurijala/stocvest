@@ -23,7 +23,7 @@ export function ScenarioBuilderPreviewModal({ open, input, resolved, onClose }: 
   const sym = input.symbol.trim().toUpperCase();
   const modeLabel = input.mode === "swing" ? "Swing" : "Day";
   const isSoon = resolved.capability === "building_soon";
-  const title = isSoon ? "Scenario building soon" : "Scenario preview";
+  const title = isSoon ? "Setup is progressing" : "Scenario preview";
   const missing = defaultMissingBullets(resolved);
 
   return (
@@ -182,7 +182,7 @@ function PreviewBody({
     return (
       <>
         <section style={sectionStyle} data-testid="scenario-preview-building-soon">
-          <p style={{ margin: 0, fontWeight: 700, color: "#f59e0b" }}>Setup approaching validity</p>
+          <p style={{ margin: 0, fontWeight: 700, color: "#f59e0b" }}>Setup is progressing</p>
           <p style={{ margin: `${spacing[2]} 0 0`, color: colors.textMuted, fontSize: typography.scale.sm, lineHeight: 1.55 }}>
             {sym} is not fully actionable yet. The scenario builder will unlock the full planning sheet once
             confirmation and structural gates clear.

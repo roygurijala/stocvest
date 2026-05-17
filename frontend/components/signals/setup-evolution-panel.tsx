@@ -6,6 +6,7 @@ import {
   formatStartedTracking,
   formatTransitionTimelineRow
 } from "@/lib/setup-evolution-present";
+import { EMPTY_SETUP_EVOLUTION } from "@/lib/product-empty-states";
 import { borderRadius, spacing, surfaceGlowClassName } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -74,10 +75,17 @@ export function SetupEvolutionPanel({ symbol, tradingMode }: Props) {
           </p>
 
           {!hasTransitions ? (
-            <p className="mt-4 text-sm leading-relaxed" style={{ color: colors.textMuted }} data-testid="setup-evolution-warming">
-              First data point will appear after the next evaluation cycle when alignment or state
-              changes.
-            </p>
+            <div className="mt-4" data-testid="setup-evolution-warming">
+              <p className="m-0 text-sm font-semibold" style={{ color: colors.text }}>
+                {EMPTY_SETUP_EVOLUTION.title}
+              </p>
+              <p className="m-0 mt-2 text-sm leading-relaxed" style={{ color: colors.textMuted }}>
+                {EMPTY_SETUP_EVOLUTION.body}
+              </p>
+              <p className="m-0 mt-2 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
+                {EMPTY_SETUP_EVOLUTION.cadence}
+              </p>
+            </div>
           ) : (
             <ul className="mt-4 list-none space-y-2 p-0" data-testid="setup-evolution-timeline">
               {data.transitions.map((t) => {

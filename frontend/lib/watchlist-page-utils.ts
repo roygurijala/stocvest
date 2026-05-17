@@ -7,6 +7,8 @@ export type WatchlistMaturationRow = {
   layers_aligned?: number;
   layers_total?: number;
   last_evaluated_at?: string;
+  missing_layers?: string[];
+  bias?: string;
 };
 
 export type WatchlistViewMode = "swing" | "day" | "both";
@@ -79,6 +81,14 @@ export function normalizeWatchlistMaturationBySymbol(payload: unknown): Record<s
     if (typeof totalRaw === "number" && Number.isFinite(totalRaw)) row.layers_total = totalRaw;
     const lastEvalRaw = o.last_evaluated_at ?? o.lastEvaluatedAt;
     if (typeof lastEvalRaw === "string" && lastEvalRaw.trim()) row.last_evaluated_at = lastEvalRaw.trim();
+    const missingRaw = o.missing_layers ?? o.missingLayers;
+    if (Array.isArray(missingRaw)) {
+      row.missing_layers = missingRaw
+        .map((x) => (typeof x === "string" ? x.trim().toLowerCase() : ""))
+        .filter(Boolean);
+    }
+    const biasRaw = o.bias;
+    if (typeof biasRaw === "string" && biasRaw.trim()) row.bias = biasRaw.trim().toLowerCase();
     if (!row.state && !row.label) continue;
     out[sym] = row;
   }

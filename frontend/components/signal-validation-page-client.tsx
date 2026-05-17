@@ -11,6 +11,7 @@ import { CuteLoader } from "@/components/cute-loader";
 import { HistoricalValidationPanel } from "@/components/historical-validation-panel";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
+import { EMPTY_VALIDATION } from "@/lib/product-empty-states";
 import { useHoverPrefetch } from "@/lib/hooks/use-hover-prefetch";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -435,9 +436,10 @@ export function SignalValidationPageClient() {
                   {rows.length === 0 ? (
                     <tr>
                       <td colSpan={13} style={{ padding: spacing[5], color: colors.textMuted }}>
-                        <p style={{ margin: 0, fontWeight: 600, color: colors.text }}>No outcomes recorded yet</p>
-                        <p style={{ margin: `${spacing[2]}px 0 0`, lineHeight: 1.55 }}>
-                          We track setups once they reach measurable states. Check back after signals begin resolving.
+                        <p style={{ margin: 0, fontWeight: 600, color: colors.text }}>{EMPTY_VALIDATION.title}</p>
+                        <p style={{ margin: `${spacing[2]}px 0 0`, lineHeight: 1.55 }}>{EMPTY_VALIDATION.body}</p>
+                        <p style={{ margin: `${spacing[2]}px 0 0`, fontSize: typography.scale.xs, lineHeight: 1.55, color: colors.textMuted }}>
+                          {EMPTY_VALIDATION.hint}
                         </p>
                       </td>
                     </tr>
@@ -516,9 +518,10 @@ export function SignalValidationPageClient() {
                   {rows.length === 0 ? (
                     <tr>
                       <td colSpan={12} style={{ padding: spacing[5], color: colors.textMuted }}>
-                        <p style={{ margin: 0, fontWeight: 600, color: colors.text }}>No outcomes recorded yet</p>
-                        <p style={{ margin: `${spacing[2]}px 0 0`, lineHeight: 1.55 }}>
-                          We track setups once they reach measurable states. Check back after signals begin resolving.
+                        <p style={{ margin: 0, fontWeight: 600, color: colors.text }}>{EMPTY_VALIDATION.title}</p>
+                        <p style={{ margin: `${spacing[2]}px 0 0`, lineHeight: 1.55 }}>{EMPTY_VALIDATION.body}</p>
+                        <p style={{ margin: `${spacing[2]}px 0 0`, fontSize: typography.scale.xs, lineHeight: 1.55, color: colors.textMuted }}>
+                          {EMPTY_VALIDATION.hint}
                         </p>
                       </td>
                     </tr>

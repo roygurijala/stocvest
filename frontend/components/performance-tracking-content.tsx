@@ -18,6 +18,7 @@ import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { isoDateInNewYork } from "@/lib/market-hours-et";
 import { SUBHEADING_DAY_CADENCE, SUBHEADING_SWING_CADENCE } from "@/lib/mode-terminology";
+import { EMPTY_PERFORMANCE } from "@/lib/product-empty-states";
 import { useTheme } from "@/lib/theme-provider";
 
 function outcomeLabel(outcome: PublicSignal["outcome"]): string {
@@ -149,11 +150,12 @@ export function PerformanceTrackingContent({ showHomeLink = false }: Performance
 
       {!showTable ? (
         <section className={`${surfaceGlowClassName} ${showHomeLink ? "mt-8" : "mt-6"}`} style={bodyPanelStyle}>
-          <h2 className="text-2xl font-bold">Tracking initialized</h2>
+          <h2 className="text-2xl font-bold">{EMPTY_PERFORMANCE.title}</h2>
           <p className="mt-3 leading-relaxed" style={{ color: colors.textMuted }}>
-            Performance metrics populate after first resolved setups. We launched on {launchDate} (US/Eastern). Every
-            signal is evaluated for directional accuracy only — not dollar P&amp;L. Historical signal accuracy does not
-            guarantee future results.
+            {EMPTY_PERFORMANCE.body} Tracking since {launchDate} (US/Eastern).
+          </p>
+          <p className="mt-2 text-sm leading-relaxed" style={{ color: colors.textMuted }}>
+            {EMPTY_PERFORMANCE.hint}
           </p>
           {showHomeLink ? (
             <Link

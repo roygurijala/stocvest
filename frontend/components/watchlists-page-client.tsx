@@ -6,8 +6,12 @@ import { Columns2, TrendingUp, Zap } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CuteLoader } from "@/components/cute-loader";
 import { ScenarioBuilderInline } from "@/components/scenario-builder/scenario-builder-inline";
+import { WatchlistAlignmentSheet } from "@/components/watchlists/watchlist-alignment-sheet";
 import { buildWatchlistScenarioInput } from "@/lib/scenario/scenario-input-present";
 import type { ScenarioReadinessContext } from "@/lib/scenario/scenario-readiness";
+import { WATCHLIST_EVALUATION_HEADER } from "@/lib/product-empty-states";
+import { maturationAlignmentCounts } from "@/lib/watchlist-alignment-present";
+import { formatMaturationStateLine } from "@/lib/setup-evolution-present";
 import { APP_TOP_BAR_LAYOUT_HEIGHT } from "@/components/top-bar";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, colorTokens, spacing, surfaceGlowClassName } from "@/lib/design-system";
@@ -129,6 +133,11 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   const addComboRef = useRef<HTMLDivElement | null>(null);
   const [snapshotsBySymbol, setSnapshotsBySymbol] = useState<Record<string, SnapshotPayload>>({});
   const [snapshotFetchStatus, setSnapshotFetchStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [alignmentSheet, setAlignmentSheet] = useState<{
+    symbol: string;
+    deskMode: "swing" | "day";
+    row: MaturationRow | undefined;
+  } | null>(null);
 
   usePublishAssistantContext({ page: "dashboard/watchlists" });
 
@@ -791,9 +800,16 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                   />
                 ) : (
                   <>
-                    <h1 className="m-0 truncate text-xl font-bold tracking-tight sm:text-2xl" style={{ color: colors.text }}>
-                      Watchlist
-                    </h1>
+                    <div className="min-w-0">
+                      <h1 className="m-0 truncate text-xl font-bold tracking-tight sm:text-2xl" style={{ color: colors.text }}>
+                        Watchlist
+                      </h1>
+                      {active.is_default ? (
+                        <p className="m-0 mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: colors.textMuted }}>
+                          {WATCHLIST_EVALUATION_HEADER}
+                        </p>
+                      ) : null}
+                    </div>
                     <button
                       type="button"
                       onClick={() => setRename(active.watchlist_id)}
@@ -1203,12 +1219,15 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                       });
                       const maturationForPlan =
                         viewMode === "day" ? md : viewMode === "swing" ? ms : ms ?? md;
-                      const planBias =
-                        quote?.bullish === true
+                      const planBiasFromMaturation =
+                        maturationForPlan?.bias === "long"
                           ? "Bullish"
-                          : quote?.bullish === false
+                          : maturationForPlan?.bias === "short"
                             ? "Bearish"
-                            : "Neutral";
+                            : null;
+                      const planBias =
+                        planBiasFromMaturation ??
+                        (quote?.bullish === true ? "Bullish" : quote?.bullish === false ? "Bearish" : "Neutral");
                       const planReadiness: ScenarioReadinessContext = {
                         symbol: symU,
                         mode: planMode,
@@ -1221,15 +1240,19 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                       };
                       const rowLine = (mode: "swing" | "day", m: MaturationRow | undefined) => {
                         const hasMat = Boolean(m?.state || m?.label);
+                        const { aligned, total } = maturationAlignmentCounts(m);
+                        const stateKey = (m?.state ?? m?.label ?? "").trim().toLowerCase().replace(/\s+/g, "_");
                         const detail = hasMat
-                          ? formatStateLabel(m)
+                          ? stateKey
+                            ? formatMaturationStateLine(stateKey, aligned, total)
+                            : formatStateLabel(m)
                           : maturationFetchStatus === "ready" && active.is_default
-                            ? "No maturation yet — run evidence on Signals"
+                            ? null
                             : maturationFetchStatus === "error" && active.is_default
                               ? "Could not load maturation"
                               : "…";
                         return (
-                          <div className="flex min-w-0 flex-wrap items-baseline gap-2 text-xs sm:text-sm">
+                          <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs sm:text-sm">
                             <span
                               className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide"
                               style={{
@@ -1239,19 +1262,54 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                             >
                               {mode === "swing" ? "Swing" : "Day"}
                             </span>
-                            <span className="flex-1 text-left text-[11px] font-medium leading-snug sm:text-sm" style={{ color: colors.text }}>
-                              ● {detail}
-                              {m?.readiness_label ? (
-                                <span
-                                  className="text-[10px] font-normal sm:text-xs"
-                                  style={{ color: colors.textMuted }}
-                                  title={m.readiness_label}
-                                >
-                                  {" "}
-                                  · {m.readiness_label.length > 48 ? `${m.readiness_label.slice(0, 48)}…` : m.readiness_label}
+                            {hasMat ? (
+                              <>
+                                <span className="text-[11px] font-medium sm:text-sm" style={{ color: colors.text }}>
+                                  ● {detail}
                                 </span>
-                              ) : null}
-                            </span>
+                                <button
+                                  type="button"
+                                  className="relative z-10 shrink-0 rounded-md border px-2 py-0.5 text-[11px] font-bold tabular-nums sm:text-xs pointer-events-auto"
+                                  style={{
+                                    borderColor: colors.accent,
+                                    background: "rgba(0,180,255,0.12)",
+                                    color: colors.accent,
+                                    cursor: "pointer"
+                                  }}
+                                  data-testid={`watchlist-alignment-${symU}-${mode}`}
+                                  title="View aligned and missing layers"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setAlignmentSheet({ symbol: symU, deskMode: mode, row: m });
+                                  }}
+                                >
+                                  {aligned}/{total}
+                                </button>
+                              </>
+                            ) : maturationFetchStatus === "ready" && active.is_default ? (
+                              <Link
+                                href={href}
+                                className="relative z-10 text-[11px] font-medium no-underline hover:underline pointer-events-auto sm:text-sm"
+                                style={{ color: colors.accent }}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                Not evaluated yet · Tap to evaluate
+                              </Link>
+                            ) : (
+                              <span className="text-[11px] font-medium sm:text-sm" style={{ color: colors.textMuted }}>
+                                {detail}
+                              </span>
+                            )}
+                            {m?.readiness_label ? (
+                              <span
+                                className="text-[10px] font-normal sm:text-xs"
+                                style={{ color: colors.textMuted }}
+                                title={m.readiness_label}
+                              >
+                                · {m.readiness_label.length > 48 ? `${m.readiness_label.slice(0, 48)}…` : m.readiness_label}
+                              </span>
+                            ) : null}
                           </div>
                         );
                       };
@@ -1275,6 +1333,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                                     <ScenarioBuilderInline
                                       input={planInput}
                                       readiness={planReadiness}
+                                      compact
                                       testId={`build-scenario-watchlist-${symU}`}
                                     />
                                   </span>
@@ -1358,6 +1417,13 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
       ) : (
         <p style={{ color: colors.textMuted }}>Could not load your watchlist.</p>
       )}
+      <WatchlistAlignmentSheet
+        open={alignmentSheet != null}
+        symbol={alignmentSheet?.symbol ?? ""}
+        deskMode={alignmentSheet?.deskMode ?? "swing"}
+        row={alignmentSheet?.row}
+        onClose={() => setAlignmentSheet(null)}
+      />
     </div>
   );
 }

@@ -76,7 +76,7 @@ describe("BuildScenarioButton — always enabled", () => {
     expect(btn.getAttribute("data-eligible")).toBe("false");
   });
 
-  test("building_soon capability at 4/6 alignment", () => {
+  test("building_soon capability at 3/6 alignment", () => {
     wrap(
       <BuildScenarioButton
         input={eligibleInput()}
@@ -84,7 +84,7 @@ describe("BuildScenarioButton — always enabled", () => {
           symbol: "AAPL",
           mode: "day",
           setupBias: "Bullish",
-          layersAligned: 4,
+          layersAligned: 3,
           layersTotal: 6
         }}
       />
