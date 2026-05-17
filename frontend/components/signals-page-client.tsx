@@ -24,10 +24,7 @@ import { SignalsReferenceLevels } from "@/components/signals/signals-reference-l
 import { SignalsSetupRead } from "@/components/signals/signals-setup-read";
 import { SetupEvolutionPanel } from "@/components/signals/setup-evolution-panel";
 import { ScenarioBuilderInline } from "@/components/scenario-builder/scenario-builder-inline";
-import {
-  augmentScenarioInputWithGapIntel,
-  buildScenarioInputFromCompositeContext
-} from "@/lib/scenario/scenario-input-present";
+import { buildScenarioPlanningBundle } from "@/lib/scenario/scenario-planning-bundle";
 import { useWatchlistMaturationLine } from "@/lib/hooks/use-watchlist-maturation-line";
 import {
   buildSignalsPageDecision,
@@ -1064,21 +1061,43 @@ export function SignalsPageClient({
 
   const maturationLine = useWatchlistMaturationLine(symbol, tradingMode, dayTradingSurfaces);
 
-  const scenarioPlanningInput = useMemo(() => {
+  const scenarioPlanningBundle = useMemo(() => {
     if (!symbolCommitted) return null;
     const comp =
       compositeResult != null && !isInsufficientCompositeResponse(compositeResult)
         ? (compositeResult as Record<string, unknown>)
         : null;
-    const base = buildScenarioInputFromCompositeContext({
+    return buildScenarioPlanningBundle({
       symbol,
       tradingMode,
-      setupBias,
       composite: comp,
-      snapshot: snapshot ?? undefined
+      snapshot: snapshot ?? undefined,
+      gapIntel: gapIntelSnapshot,
+      setupBias,
+      layerRows: signalsPresentRows,
+      maturation: maturationLine
+        ? {
+            state: maturationLine.state,
+            layers_aligned: maturationLine.layersAligned,
+            layers_total: maturationLine.layersTotal,
+            readiness_label: maturationLine.readinessLabel
+          }
+        : null,
+      decisionState: null
     });
-    return augmentScenarioInputWithGapIntel(base, gapIntelSnapshot);
-  }, [symbolCommitted, symbol, tradingMode, setupBias, compositeResult, snapshot, gapIntelSnapshot]);
+  }, [
+    symbolCommitted,
+    symbol,
+    tradingMode,
+    setupBias,
+    compositeResult,
+    snapshot,
+    gapIntelSnapshot,
+    signalsPresentRows,
+    maturationLine
+  ]);
+
+  const scenarioPlanningInput = scenarioPlanningBundle?.input ?? null;
 
   const pageDecision = useMemo(() => {
     if (!compositeResult || isInsufficientCompositeResponse(compositeResult)) return null;
@@ -1103,30 +1122,12 @@ export function SignalsPageClient({
   );
 
   const scenarioReadiness = useMemo((): ScenarioReadinessContext | null => {
-    if (!symbolCommitted) return null;
-    const { aligned, total } = countLayerAlignment(signalsPresentRows, setupBias);
+    if (!symbolCommitted || !scenarioPlanningBundle) return null;
     return {
-      symbol,
-      mode: tradingMode,
-      setupBias,
-      layerRows: signalsPresentRows,
-      layersAligned: aligned,
-      layersTotal: total,
-      decisionState: pageDecision?.state ?? null,
-      maturationState: maturationLine?.state ?? null,
-      readinessLabel: maturationLine?.readinessLabel ?? null,
-      hasReferenceLevels: scenarioPlanningInput != null
+      ...scenarioPlanningBundle.readiness,
+      decisionState: pageDecision?.state ?? scenarioPlanningBundle.readiness.decisionState ?? null
     };
-  }, [
-    symbolCommitted,
-    symbol,
-    tradingMode,
-    setupBias,
-    signalsPresentRows,
-    pageDecision?.state,
-    maturationLine,
-    scenarioPlanningInput
-  ]);
+  }, [symbolCommitted, scenarioPlanningBundle, pageDecision?.state]);
 
   const setupDirectionForEvidence =
     layerSignalSummary === "Bullish" ? "long" : layerSignalSummary === "Bearish" ? "short" : "neutral";

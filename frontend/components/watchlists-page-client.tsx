@@ -5,10 +5,12 @@ import { useSearchParams } from "next/navigation";
 import { Columns2, TrendingUp, Zap } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CuteLoader } from "@/components/cute-loader";
-import { ScenarioBuilderInline } from "@/components/scenario-builder/scenario-builder-inline";
 import { WatchlistAlignmentSheet } from "@/components/watchlists/watchlist-alignment-sheet";
-import { buildWatchlistScenarioInput } from "@/lib/scenario/scenario-input-present";
-import type { ScenarioReadinessContext } from "@/lib/scenario/scenario-readiness";
+import { WatchlistScenarioBuilder } from "@/components/watchlists/watchlist-scenario-builder";
+import {
+  WATCHLIST_ALIGNMENT_CHIP_CLASS,
+  WATCHLIST_EVALUATE_LINK_CLASS
+} from "@/lib/watchlist-interactive-styles";
 import { WATCHLIST_EVALUATION_HEADER } from "@/lib/product-empty-states";
 import { maturationAlignmentCounts } from "@/lib/watchlist-alignment-present";
 import { formatMaturationStateLine } from "@/lib/setup-evolution-present";
@@ -1211,33 +1213,8 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                       const href = watchlistToSignalsHref(s, tradingModeForSignalsNav(viewMode, dualDeskMaturation));
                       const quote = watchlistQuoteFromSnapshot(snapshotsBySymbol[symU]);
                       const planMode = tradingModeForSignalsNav(viewMode, dualDeskMaturation) ?? "swing";
-                      const planInput = buildWatchlistScenarioInput({
-                        symbol: symU,
-                        mode: planMode,
-                        snapshot: snapshotsBySymbol[symU],
-                        quoteBullish: quote?.bullish ?? null
-                      });
                       const maturationForPlan =
                         viewMode === "day" ? md : viewMode === "swing" ? ms : ms ?? md;
-                      const planBiasFromMaturation =
-                        maturationForPlan?.bias === "long"
-                          ? "Bullish"
-                          : maturationForPlan?.bias === "short"
-                            ? "Bearish"
-                            : null;
-                      const planBias =
-                        planBiasFromMaturation ??
-                        (quote?.bullish === true ? "Bullish" : quote?.bullish === false ? "Bearish" : "Neutral");
-                      const planReadiness: ScenarioReadinessContext = {
-                        symbol: symU,
-                        mode: planMode,
-                        setupBias: planBias,
-                        maturationState: maturationForPlan?.state ?? displaySt ?? null,
-                        layersAligned: maturationForPlan?.layers_aligned,
-                        layersTotal: maturationForPlan?.layers_total,
-                        readinessLabel: maturationForPlan?.readiness_label ?? null,
-                        hasReferenceLevels: Boolean(snapshotsBySymbol[symU]?.last_trade_price)
-                      };
                       const rowLine = (mode: "swing" | "day", m: MaturationRow | undefined) => {
                         const hasMat = Boolean(m?.state || m?.label);
                         const { aligned, total } = maturationAlignmentCounts(m);
@@ -1269,15 +1246,10 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                                 </span>
                                 <button
                                   type="button"
-                                  className="relative z-10 shrink-0 rounded-md border px-2 py-0.5 text-[11px] font-bold tabular-nums sm:text-xs pointer-events-auto"
-                                  style={{
-                                    borderColor: colors.accent,
-                                    background: "rgba(0,180,255,0.12)",
-                                    color: colors.accent,
-                                    cursor: "pointer"
-                                  }}
+                                  className={WATCHLIST_ALIGNMENT_CHIP_CLASS}
                                   data-testid={`watchlist-alignment-${symU}-${mode}`}
-                                  title="View aligned and missing layers"
+                                  title="View aligned and missing layers — click for layer breakdown"
+                                  aria-label={`${symU} ${mode} alignment ${aligned} of ${total}. Open layer breakdown`}
                                   onClick={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
@@ -1290,11 +1262,10 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                             ) : maturationFetchStatus === "ready" && active.is_default ? (
                               <Link
                                 href={href}
-                                className="relative z-10 text-[11px] font-medium no-underline hover:underline pointer-events-auto sm:text-sm"
-                                style={{ color: colors.accent }}
+                                className={WATCHLIST_EVALUATE_LINK_CLASS}
                                 onClick={(e) => e.stopPropagation()}
                               >
-                                Not evaluated yet · Tap to evaluate
+                                Not evaluated yet · Tap to evaluate →
                               </Link>
                             ) : (
                               <span className="text-[11px] font-medium sm:text-sm" style={{ color: colors.textMuted }}>
@@ -1330,10 +1301,11 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                                 <div className="flex flex-wrap items-center gap-2">
                                   <span className="font-mono text-lg font-bold tracking-wide">{symU}</span>
                                   <span className="relative z-10 shrink-0 pointer-events-auto">
-                                    <ScenarioBuilderInline
-                                      input={planInput}
-                                      readiness={planReadiness}
-                                      compact
+                                    <WatchlistScenarioBuilder
+                                      symbol={symU}
+                                      mode={planMode}
+                                      snapshot={snapshotsBySymbol[symU]}
+                                      maturation={maturationForPlan}
                                       testId={`build-scenario-watchlist-${symU}`}
                                     />
                                   </span>

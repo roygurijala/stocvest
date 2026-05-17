@@ -137,7 +137,8 @@ export function WatchlistAlignmentSheet({ open, symbol, deskMode, row, onClose }
             </section>
 
             <p className="m-0 mt-4 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
-              Tap Scenario Builder for a planning preview, or open Signals for the full layer read and evidence.
+              Scenario Builder on this row uses the same composite evidence as Signals when available. Open{" "}
+              <strong style={{ color: colors.text }}>Signals</strong> for the full layer read and evidence modal.
             </p>
           </motion.div>
         </motion.div>

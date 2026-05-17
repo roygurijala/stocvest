@@ -9,6 +9,7 @@ import {
 } from "@/lib/api/public-signals";
 import { CuteLoader } from "@/components/cute-loader";
 import { HistoricalValidationPanel } from "@/components/historical-validation-panel";
+import { ValidationSystemBehaviorCard } from "@/components/signal-validation/validation-system-behavior-card";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { EMPTY_VALIDATION } from "@/lib/product-empty-states";
@@ -364,6 +365,8 @@ export function SignalValidationPageClient() {
             : "Intraday decisions use session-bound rules (e.g. VWAP, momentum window). Rows reflect discrete evaluation checkpoints, not live execution."}
         </p>
       </section>
+
+      {rows !== null && !loading ? <ValidationSystemBehaviorCard rows={rows} tab={tab} /> : null}
 
       {loading ? (
         <div style={{ display: "flex", justifyContent: "center", padding: spacing[10] }}>
