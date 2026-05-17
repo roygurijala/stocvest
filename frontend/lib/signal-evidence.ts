@@ -5,6 +5,22 @@ import { coerceSnapshotForReferenceLevels } from "@/lib/snapshot-reference-level
 export type EvidenceDirection = "bullish" | "bearish" | "neutral";
 export type EvidenceStatus = "Bullish" | "Bearish" | "Neutral" | "Unavailable" | "As of close";
 
+export type SignalEvidenceFundamentalContext = {
+  backdrop: "positive" | "neutral" | "mixed" | "weak";
+  earnings_trend: "beating" | "missing" | "inline" | "unknown";
+  guidance_direction: "raised" | "lowered" | "maintained" | "unknown";
+  analyst_direction: "upgrading" | "downgrading" | "stable" | "unknown";
+  revenue_trend: "growing" | "flat" | "declining" | "unknown";
+  summary_line: string;
+  data_quality: "high" | "medium" | "low";
+  quarters_beating: number;
+  quarters_missing: number;
+  recent_upgrades: number;
+  recent_downgrades: number;
+  sector_display_name?: string | null;
+  sector_etf?: string | null;
+};
+
 /** Per-theme sector multiplier row from composite `layers[].geo_event_details`. */
 export interface GeoEventDetailRow {
   event_type: string;
@@ -408,7 +424,12 @@ export interface SignalEvidenceData {
   earningsRisk?: {
     daysUntil: number;
     reportTime: "before_market" | "after_market" | "during_market" | "unknown";
+    risk?: "imminent" | "elevated" | "watch" | "normal";
+    reportDate?: string;
+    chip?: string;
   } | null;
+  /** Swing-only fundamental backdrop from composite (paid users; null when gated or unavailable). */
+  fundamentalContext?: SignalEvidenceFundamentalContext | null;
   confluence?: SignalEvidenceConfluence | null;
   /** Populated from swing composite JSON or derived locally for consistent evidence UI. */
   insight?: SignalEvidenceInsight | null;
@@ -422,6 +443,36 @@ export interface SignalEvidenceData {
 
 function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
+}
+
+function parseFundamentalContext(raw: unknown): SignalEvidenceFundamentalContext | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const backdrop = o.backdrop;
+  if (backdrop !== "positive" && backdrop !== "neutral" && backdrop !== "mixed" && backdrop !== "weak") {
+    return null;
+  }
+  const num = (k: string) => (typeof o[k] === "number" && Number.isFinite(o[k] as number) ? (o[k] as number) : 0);
+  const pick = <T extends string>(k: string, allowed: readonly T[], fallback: T): T => {
+    const v = o[k];
+    return typeof v === "string" && (allowed as readonly string[]).includes(v) ? (v as T) : fallback;
+  };
+  return {
+    backdrop,
+    earnings_trend: pick("earnings_trend", ["beating", "missing", "inline", "unknown"], "unknown"),
+    guidance_direction: pick("guidance_direction", ["raised", "lowered", "maintained", "unknown"], "unknown"),
+    analyst_direction: pick("analyst_direction", ["upgrading", "downgrading", "stable", "unknown"], "unknown"),
+    revenue_trend: pick("revenue_trend", ["growing", "flat", "declining", "unknown"], "unknown"),
+    summary_line: typeof o.summary_line === "string" ? o.summary_line : "",
+    data_quality:
+      o.data_quality === "high" || o.data_quality === "medium" || o.data_quality === "low" ? o.data_quality : "low",
+    quarters_beating: num("quarters_beating"),
+    quarters_missing: num("quarters_missing"),
+    recent_upgrades: num("recent_upgrades"),
+    recent_downgrades: num("recent_downgrades"),
+    sector_display_name: typeof o.sector_display_name === "string" ? o.sector_display_name : null,
+    sector_etf: typeof o.sector_etf === "string" ? o.sector_etf : null
+  };
 }
 
 const MAX_LAYER_STALE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -1919,6 +1970,31 @@ export function applySwingCompositeEnrichment(
 
   const alignmentMerged = parseCompositeAlignment(body.alignment) ?? evidence.alignment ?? null;
 
+  let earningsRisk = evidence.earningsRisk;
+  if (cm === "swing") {
+    const daysAway = body.earnings_days_away;
+    const riskRaw = body.earnings_risk;
+    const riskLevel =
+      riskRaw === "imminent" || riskRaw === "elevated" || riskRaw === "watch" || riskRaw === "normal"
+        ? riskRaw
+        : undefined;
+    if (typeof daysAway === "number" && Number.isFinite(daysAway) && daysAway >= 0 && daysAway <= 7 && riskLevel !== "normal") {
+      const rt = body.earnings_report_time;
+      const reportTime =
+        rt === "before_market" || rt === "after_market" || rt === "during_market" ? rt : "unknown";
+      earningsRisk = {
+        daysUntil: Math.round(daysAway),
+        reportTime,
+        risk: riskLevel,
+        reportDate: typeof body.upcoming_earnings_date === "string" ? body.upcoming_earnings_date : undefined,
+        chip: typeof body.earnings_chip === "string" ? body.earnings_chip : undefined
+      };
+    }
+  }
+
+  const fundamentalContext =
+    cm === "swing" ? parseFundamentalContext(body.fundamental_context) ?? evidence.fundamentalContext ?? null : null;
+
   return {
     ...evidence,
     compositeMode: cm ?? evidence.compositeMode,
@@ -1928,7 +2004,9 @@ export function applySwingCompositeEnrichment(
     layers,
     insight,
     confluence,
-    alignment: alignmentMerged
+    alignment: alignmentMerged,
+    earningsRisk,
+    fundamentalContext
   };
 }
 

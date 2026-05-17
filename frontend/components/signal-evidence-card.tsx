@@ -9,6 +9,7 @@ import { borderRadius, cardSurfaceStyle, spacing, typography } from "@/lib/desig
 import { useTheme } from "@/lib/theme-provider";
 import { EvidenceCardHeader } from "@/components/signal-evidence/evidence-card-header";
 import { EvidenceLayerContribution } from "@/components/signal-evidence/evidence-layer-contribution";
+import { FundamentalBackdropPanel } from "@/components/signal-evidence/fundamental-backdrop";
 import { InfoTip } from "@/components/info-tip";
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import {
@@ -897,27 +898,41 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
       {evidence.earningsRisk ? (
         <section
           style={{
-            border: "1px solid rgba(245,158,11,0.5)",
-            background: "rgba(245,158,11,0.14)",
+            border:
+              evidence.earningsRisk.risk === "imminent"
+                ? "1px solid rgba(239,68,68,0.55)"
+                : "1px solid rgba(245,158,11,0.5)",
+            background:
+              evidence.earningsRisk.risk === "imminent"
+                ? "rgba(239,68,68,0.12)"
+                : "rgba(245,158,11,0.14)",
             borderRadius: borderRadius.lg,
             padding: spacing[3]
           }}
         >
-          <p style={{ margin: 0, fontWeight: 700, color: colors.caution }}>
-            ⚠️ Earnings Risk: {evidence.symbol} reports earnings in {evidence.earningsRisk.daysUntil} day
-            {evidence.earningsRisk.daysUntil === 1 ? "" : "s"} (
+          <p
+            style={{
+              margin: 0,
+              fontWeight: 700,
+              color: evidence.earningsRisk.risk === "imminent" ? colors.bearish : colors.caution
+            }}
+          >
+            {evidence.earningsRisk.chip ??
+              `⚠️ Earnings: ${evidence.symbol} reports in ${evidence.earningsRisk.daysUntil} day${
+                evidence.earningsRisk.daysUntil === 1 ? "" : "s"
+              }`}
+            {evidence.earningsRisk.reportDate ? ` · ${evidence.earningsRisk.reportDate}` : ""}
             {evidence.earningsRisk.reportTime === "before_market"
-              ? "before market"
+              ? " · before market"
               : evidence.earningsRisk.reportTime === "after_market"
-                ? "after market close"
+                ? " · after market close"
                 : evidence.earningsRisk.reportTime === "during_market"
-                  ? "during market"
-                  : "timing TBD"}
-            )
+                  ? " · during market"
+                  : ""}
           </p>
           <p style={{ margin: `${spacing[1]} 0 0 0`, color: colors.textMuted }}>
-            All signals carry additional uncertainty until after the earnings report. Signal parameters show elevated event risk —
-            size and timing are solely your decision.
+            Calendar context only — not a composite layer. Signals carry extra event uncertainty until after the report; sizing
+            and timing are solely your decision.
           </p>
         </section>
       ) : null}
@@ -1066,6 +1081,12 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
       ) : null}
 
       <EvidenceLayerContribution layers={evidence.layers} bias={setupBias} />
+
+      <FundamentalBackdropPanel
+        context={evidence.fundamentalContext}
+        isPaid={hasAIExplanations}
+        mode={evidence.compositeMode}
+      />
 
       <section>
         <h3 style={{ marginTop: 0 }}>Layer breakdown</h3>

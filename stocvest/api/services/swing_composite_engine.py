@@ -35,6 +35,9 @@ from stocvest.api.services.swing_composite_evidence import build_swing_composite
 from stocvest.config.parameter_store import ParameterStore
 from stocvest.config.signal_parameters import SignalParameters
 from stocvest.data.benzinga_client import BenzingaClient, BenzingaMultiResult
+from stocvest.api.services.user_profile_store import get_user_profile_store
+from stocvest.data.earnings_calendar import merge_earnings_horizon_into_response, resolve_upcoming_earnings_horizon
+from stocvest.signals.fundamental_context import build_fundamental_context
 from stocvest.data.models import Bar, SignalRecord, Snapshot, Timeframe
 from stocvest.data.polygon_client import PolygonClient, PolygonError
 from stocvest.data.symbol_normalize import to_polygon_symbol
@@ -109,6 +112,7 @@ async def build_swing_composite_response(
     sic_bucket_for_geo: str | None = None
     sector_resolution_state: SectorResolutionState | None = None
     sic_mapping_tier: SicMappingTier | None = None
+    earnings_horizon = None
 
     async with PolygonClient(api_key=settings.polygon_api_key) as client:
         daily_r, sym_r, news_r, spy_r, qqq_r, vix_r, econ_r, bz_r = await asyncio.gather(
@@ -162,6 +166,8 @@ async def build_swing_composite_response(
                         sector_week_bars = _safe_result(sb, [])
             except (PolygonError, Exception) as exc:
                 _LOG.warning("swing sector chain failed for %s: %s", sym, exc)
+
+        earnings_horizon = await resolve_upcoming_earnings_horizon(sym, polygon_client=client)
 
     all_sector_daily = get_all_cached_sector_data()
     sector_momentum: SectorMomentumScore | None = None
@@ -383,6 +389,22 @@ async def build_swing_composite_response(
         "conflicted_layers": list(composite.conflicted_layers or []),
     }
     response_body["alignment"] = alignment_to_response_dict(alignment)
+    merge_earnings_horizon_into_response(response_body, earnings_horizon)
+
+    response_body["fundamental_context"] = None
+    if user_id:
+        try:
+            profile = get_user_profile_store().get_profile(user_id)
+            if profile is not None and profile.has_full_access:
+                fctx = await build_fundamental_context(
+                    sym,
+                    benzinga_multi=bz_data,
+                    sector_display_name=sector_display,
+                    sector_etf=sector_etf_sym or None,
+                )
+                response_body["fundamental_context"] = fctx.to_api_dict()
+        except Exception as exc:
+            _LOG.warning("fundamental_context_failed symbol=%s err=%s", sym, type(exc).__name__)
 
     nc: dict[str, Any] | None = None
     if news.catalyst_headline:

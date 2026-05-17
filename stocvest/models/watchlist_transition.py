@@ -39,6 +39,8 @@ class WatchlistMaturationTransition:
     missing_layers: list[str] = field(default_factory=list)
     evaluation_source: EvaluationSource = "evidence"
     parameter_version: str | None = None
+    fundamental_backdrop: str | None = None
+    earnings_days_away: int | None = None
 
     def to_api_dict(self) -> dict:
         out: dict = {
@@ -57,6 +59,10 @@ class WatchlistMaturationTransition:
         }
         if self.parameter_version:
             out["parameter_version"] = self.parameter_version
+        if self.fundamental_backdrop:
+            out["fundamental_backdrop"] = self.fundamental_backdrop
+        if self.earnings_days_away is not None:
+            out["earnings_days_away"] = self.earnings_days_away
         return out
 
 

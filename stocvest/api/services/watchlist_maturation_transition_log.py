@@ -21,6 +21,18 @@ from stocvest.utils.logging import get_logger
 _LOG = get_logger(__name__)
 
 
+def _fundamental_fields_from_composite(body: dict[str, Any]) -> tuple[str | None, int | None]:
+    fc = body.get("fundamental_context")
+    backdrop: str | None = None
+    if isinstance(fc, dict):
+        raw = fc.get("backdrop")
+        if isinstance(raw, str) and raw.strip():
+            backdrop = raw.strip()
+    days_raw = body.get("earnings_days_away")
+    days: int | None = int(days_raw) if isinstance(days_raw, (int, float)) and days_raw == days_raw else None
+    return backdrop, days
+
+
 def _parameter_version(body: dict[str, Any]) -> str | None:
     raw = body.get("parameter_version")
     if raw is None:
@@ -47,6 +59,7 @@ def try_log_maturation_transition(
     )
     if repo is None:
         return
+    fundamental_backdrop, earnings_days_away = _fundamental_fields_from_composite(composite_body)
     transition = WatchlistMaturationTransition(
         user_id=next_entry.user_id,
         symbol=next_entry.symbol,
@@ -64,6 +77,8 @@ def try_log_maturation_transition(
         missing_layers=list(next_entry.missing_layers),
         evaluation_source=evaluation_source,
         parameter_version=_parameter_version(composite_body),
+        fundamental_backdrop=fundamental_backdrop if next_entry.mode == "swing" else None,
+        earnings_days_away=earnings_days_away if next_entry.mode == "swing" else None,
     )
     try:
         repo.put_transition(transition)

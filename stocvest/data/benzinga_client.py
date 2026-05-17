@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import httpx
@@ -460,6 +460,50 @@ class BenzingaClient:
             )
         out.sort(key=lambda r: r.reported_at, reverse=True)
         return out[: max(1, int(periods))]
+
+    async def get_upcoming_earnings_calendar(self, symbol: str, *, days: int = 30) -> list[date]:
+        """Forward-looking earnings dates for ``symbol`` (today through ``days`` ahead)."""
+        token = self._settings.benzinga_analyst_key.strip()
+        if not token:
+            return []
+        sym = symbol.strip().upper()
+        if not sym:
+            return []
+        today = datetime.now(timezone.utc).date()
+        end = today + timedelta(days=max(1, int(days)))
+        data = await self._get_json(
+            path="/v2.1/calendar/earnings",
+            params={
+                "token": token,
+                "tickers": sym,
+                "dateFrom": str(today),
+                "dateTo": str(end),
+            },
+        )
+        rows = data if isinstance(data, list) else (data.get("earnings") if isinstance(data, dict) else [])
+        if not isinstance(rows, list):
+            return []
+        out: list[date] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            row_sym = str(row.get("ticker") or sym).strip().upper()
+            if row_sym != sym:
+                continue
+            raw = row.get("date") or row.get("report_date") or row.get("earnings_date")
+            if raw is None:
+                continue
+            try:
+                if isinstance(raw, date):
+                    d = raw
+                else:
+                    s = str(raw).strip()[:10]
+                    d = date.fromisoformat(s)
+            except ValueError:
+                continue
+            if today <= d <= end:
+                out.append(d)
+        return sorted(set(out))
 
     async def get_multi(self, symbol: str, mode: str = "day") -> BenzingaMultiResult:
         try:

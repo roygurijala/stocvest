@@ -407,6 +407,56 @@ describe("applySwingCompositeEnrichment", () => {
     expect(enriched.confluence?.confirming_signals[0]?.label).toBe("Above VWAP");
   });
 
+  test("maps swing earnings horizon fields to earningsRisk for display", () => {
+    const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
+    const enriched = applySwingCompositeEnrichment(base, {
+      mode: "swing",
+      upcoming_earnings_date: "2026-05-20",
+      earnings_days_away: 3,
+      earnings_risk: "elevated",
+      earnings_report_time: "after_market",
+      earnings_chip: "⚠️ Earnings in 3 days"
+    });
+    expect(enriched.compositeMode).toBe("swing");
+    expect(enriched.earningsRisk?.daysUntil).toBe(3);
+    expect(enriched.earningsRisk?.risk).toBe("elevated");
+    expect(enriched.earningsRisk?.chip).toContain("Earnings");
+  });
+
+  test("parses fundamental_context on swing composite", () => {
+    const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
+    const enriched = applySwingCompositeEnrichment(base, {
+      mode: "swing",
+      fundamental_context: {
+        backdrop: "positive",
+        earnings_trend: "beating",
+        guidance_direction: "raised",
+        analyst_direction: "upgrading",
+        revenue_trend: "unknown",
+        summary_line: "Fundamentals positive — beating earnings. Signal data only.",
+        data_quality: "high",
+        quarters_beating: 3,
+        quarters_missing: 1,
+        recent_upgrades: 2,
+        recent_downgrades: 0,
+        sector_display_name: "Retail",
+        sector_etf: "XRT"
+      }
+    });
+    expect(enriched.fundamentalContext?.backdrop).toBe("positive");
+    expect(enriched.fundamentalContext?.sector_etf).toBe("XRT");
+  });
+
+  test("does not set earningsRisk for day composite mode", () => {
+    const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
+    const enriched = applySwingCompositeEnrichment(base, {
+      mode: "day",
+      earnings_days_away: 2,
+      earnings_risk: "elevated"
+    });
+    expect(enriched.earningsRisk).toBeNull();
+  });
+
   test("replaces layer keyPoints from composite chips when layers array present", () => {
     const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
     const enriched = applySwingCompositeEnrichment(base, {

@@ -78,6 +78,10 @@ class WatchlistMaturationTransitionRepository:
             item["previous_layers_aligned"] = transition.previous_layers_aligned
         if transition.parameter_version:
             item["parameter_version"] = transition.parameter_version
+        if transition.fundamental_backdrop:
+            item["fundamental_backdrop"] = transition.fundamental_backdrop
+        if transition.earnings_days_away is not None:
+            item["earnings_days_away"] = transition.earnings_days_away
         self._table.put_item(Item=item)
 
     def list_for_symbol(
@@ -138,6 +142,10 @@ def _item_to_transition(item: dict[str, Any]) -> WatchlistMaturationTransition:
             str(item.get("evaluation_source") or "evidence"),
         ),
         parameter_version=str(item["parameter_version"]) if item.get("parameter_version") else None,
+        fundamental_backdrop=str(item["fundamental_backdrop"]) if item.get("fundamental_backdrop") else None,
+        earnings_days_away=_num(item["earnings_days_away"])
+        if item.get("earnings_days_away") is not None
+        else None,
     )
 
 
