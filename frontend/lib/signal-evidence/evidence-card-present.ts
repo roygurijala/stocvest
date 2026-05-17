@@ -99,12 +99,12 @@ export function pickLeadingLayers(rows: SignalsLayerRowInput[], bias: SignalsSet
   const supportive = rows.filter((r) => layerPolarity(r, bias) === "supportive");
   if (supportive.length > 0) {
     return supportive
-      .sort((a, b) => b.score - a.score)
+      .sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
       .slice(0, limit)
       .map((r) => r.name);
   }
   return [...rows]
-    .sort((a, b) => b.score - a.score)
+    .sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
     .slice(0, limit)
     .map((r) => r.name);
 }

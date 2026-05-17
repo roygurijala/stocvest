@@ -655,7 +655,7 @@ function evidencePatchFromApiLayer(match: Record<string, unknown>, layerKey?: st
       patch.status = "Bearish";
     } else if (verdict === "neutral") {
       patch.status = "Neutral";
-    } else if (patch.contributionScore !== undefined) {
+    } else if (patch.contributionScore != null) {
       patch.status = statusFromScore(patch.contributionScore);
     }
     patch.freshnessLabel = "As of close · daily structure";
@@ -688,7 +688,7 @@ function evidencePatchFromApiLayer(match: Record<string, unknown>, layerKey?: st
     patch.status = "Bearish";
   } else if (verdict === "neutral") {
     patch.status = "Neutral";
-  } else if (patch.contributionScore !== undefined) {
+  } else if (patch.contributionScore != null) {
     patch.status = statusFromScore(patch.contributionScore);
   }
 
