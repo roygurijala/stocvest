@@ -326,6 +326,21 @@ export async function runScannerLoadWithoutBrief(
   daySetupsExtras: DaySetupsRequestExtras | null = null
 ): Promise<ScannerCoreData> {
   try {
+    if (tuning?.signalsPageMinimal === true) {
+      return {
+        gapIntelligence: [],
+        setups: [],
+        spyPct: null,
+        qqqPct: null,
+        regimeLabel: "Neutral",
+        swingUniverseSymbolCount: null,
+        gapIntelligenceSnapshotSymbolCount: null,
+        watchlistStatus: null,
+        scanSummary: null,
+        evaluationTrace: []
+      };
+    }
+
     const gapIntelPromise = jsonFetch<{
       items: GapIntelligenceItem[];
       disclaimer?: string;

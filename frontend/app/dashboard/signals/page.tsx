@@ -6,7 +6,7 @@ import { SignalsPageShell } from "@/components/signals-page-shell";
 import { fetchMarketOverview } from "@/lib/api/market";
 import { fetchPdtStatus } from "@/lib/api/pdt";
 import { fetchScannerOverview } from "@/lib/api/scanner";
-import { fetchEarningsCalendar } from "@/lib/api/earnings";
+import { fetchDefaultWatchlistSnapshot } from "@/lib/api/watchlists";
 import { getDashboardAuthContext } from "@/lib/auth/dashboard-session";
 import { fetchDashboardUserMe, subscriptionPlanFromMe } from "@/lib/dashboard-user-subscription";
 import { subscriptionAllowsDayTradingSurfaces } from "@/lib/subscription-access";
@@ -178,11 +178,12 @@ async function SignalsPageData({
   // PDT status is fire-and-forget (catch -> null) because a PDT
   // miss must not block the signals page render. Market overview
   // and scanner overview are required.
-  const [pdtStatus, marketOverview, scannerOverview, me] = await Promise.all([
+  const [pdtStatus, marketOverview, scannerOverview, me, watchlistSnap] = await Promise.all([
     fetchPdtStatus().catch(() => null),
     fetchMarketOverview(undefined, { sparklineBarLimit: 12 }),
-    fetchScannerOverview(null, [], { loadTuning: { parallelDefaultWatchlist: true } }),
-    fetchDashboardUserMe()
+    fetchScannerOverview(null, [], { loadTuning: { signalsPageMinimal: true } }),
+    fetchDashboardUserMe(),
+    fetchDefaultWatchlistSnapshot().catch(() => ({ symbols: [], symbol_tracking: {} }))
   ]);
 
   const plan = subscriptionPlanFromMe(me);
@@ -190,24 +191,13 @@ async function SignalsPageData({
   const coercedInitialTradingMode =
     !dayTradingSurfaces && initialTradingMode === "day" ? "swing" : initialTradingMode;
 
-  // Earnings depends on the symbol set surfaced by the scanner —
-  // this is a real sequential dependency, not laziness. If/when
-  // we add a thin scanner projection (PERFORMANCE.md layer 2),
-  // this becomes a chance to push the earnings call inside its
-  // own Suspense boundary alongside a parallel pre-fetch using a
-  // default top-N universe.
   void pdtStatus; // PDT data threads through the AppShell, not the signals page client.
-  const symbols = Array.from(new Set(scannerOverview.setups.map((s) => s.symbol)));
-  const earnings = await fetchEarningsCalendar(symbols, 3);
-  const earningsBySymbol = Object.fromEntries(
-    [...earnings.upcoming, ...earnings.recent].map((e) => [e.symbol.toUpperCase(), e])
-  );
 
   return (
     <SignalsPageClient
       marketOverview={marketOverview}
       scannerOverview={scannerOverview}
-      earningsBySymbol={earningsBySymbol}
+      defaultWatchlistSymbols={watchlistSnap.symbols}
       dayTradingSurfaces={dayTradingSurfaces}
       signalsPrefill={{
         urlSymbol: resolvedUrlSymbol,

@@ -215,7 +215,6 @@ function renderSignalsWithSymbol(symbol: string, initialMode: "swing" | "day" = 
     <SignalsPageClient
       marketOverview={EMPTY_MARKET_OVERVIEW}
       scannerOverview={EMPTY_SCANNER_OVERVIEW}
-      earningsBySymbol={{}}
       signalsPrefill={{
         urlSymbol: symbol,
         signalIdForResolve: null,
@@ -375,7 +374,6 @@ describe("SignalsPageClient — Swing Pro (dayTradingSurfaces=false)", () => {
       <SignalsPageClient
         marketOverview={EMPTY_MARKET_OVERVIEW}
         scannerOverview={EMPTY_SCANNER_OVERVIEW}
-        earningsBySymbol={{}}
         dayTradingSurfaces={false}
         signalsPrefill={{
           urlSymbol: "AAPL",

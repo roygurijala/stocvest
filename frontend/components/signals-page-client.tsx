@@ -14,6 +14,7 @@ import { useSymbolSnapshot } from "@/lib/hooks/use-symbol-snapshot";
 import type { MarketOverview, NewsPayload, SnapshotPayload } from "@/lib/api/market";
 import type { ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
+import { fetchEarningsCalendarClient } from "@/lib/api/earnings-client";
 import { AddToWatchlistButton } from "@/components/add-to-watchlist-button";
 import { SignalsCommandBar } from "@/components/signals/signals-command-bar";
 import { SignalsLayerBreakdown } from "@/components/signals/signals-layer-breakdown";
@@ -106,7 +107,8 @@ export type SignalsPagePrefill = {
 interface SignalsPageClientProps {
   marketOverview: MarketOverview;
   scannerOverview: ScannerOverview;
-  earningsBySymbol: Record<string, EarningsEvent>;
+  /** Default-list symbols for typeahead (SSR). Earnings load per symbol on the client. */
+  defaultWatchlistSymbols?: string[];
   signalsPrefill?: SignalsPagePrefill;
   /** Swing Pro hides intraday engine UI; server coerces deep-links the same way. */
   dayTradingSurfaces?: boolean;
@@ -233,7 +235,7 @@ function verdictToLayerStatus(verdict: string, status: string): LayerStatus {
 export function SignalsPageClient({
   marketOverview,
   scannerOverview,
-  earningsBySymbol,
+  defaultWatchlistSymbols = [],
   signalsPrefill = {
     urlSymbol: null,
     signalIdForResolve: null,
@@ -243,6 +245,7 @@ export function SignalsPageClient({
   dayTradingSurfaces = true
 }: SignalsPageClientProps) {
   const { colors, theme } = useTheme();
+  const [earningsBySymbol, setEarningsBySymbol] = useState<Record<string, EarningsEvent>>({});
   const historyFilterSelectStyle: CSSProperties = {
     borderRadius: borderRadius.md,
     border: `1px solid ${colors.border}`,
@@ -363,8 +366,26 @@ export function SignalsPageClient({
     for (const snap of marketOverview.snapshots) {
       add(snap.symbol, snap.company_name ?? null);
     }
+    for (const sym of defaultWatchlistSymbols) {
+      add(sym, null);
+    }
     return Array.from(m.values()).sort((a, b) => a.symbol.localeCompare(b.symbol));
-  }, [scannerOverview.setups, scannerOverview.gapIntelligence, marketOverview.snapshots]);
+  }, [scannerOverview.setups, scannerOverview.gapIntelligence, marketOverview.snapshots, defaultWatchlistSymbols]);
+
+  useEffect(() => {
+    if (!symbolCommitted) return;
+    const sym = symbol.trim().toUpperCase();
+    let cancelled = false;
+    void fetchEarningsCalendarClient([sym], 3).then((res) => {
+      if (cancelled) return;
+      const hit = [...res.upcoming, ...res.recent].find((e) => e.symbol.trim().toUpperCase() === sym);
+      if (!hit) return;
+      setEarningsBySymbol((prev) => (prev[sym] ? prev : { ...prev, [sym]: hit }));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [symbol, symbolCommitted]);
 
   useEffect(() => {
     const q = symbolDraft.trim();

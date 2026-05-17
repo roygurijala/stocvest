@@ -239,6 +239,11 @@ export type ScannerLoadTuning = {
   swingDailyBarLimit?: number;
   /** Max rows from swing/setups (default 4). */
   swingSetupsLimit?: number;
+  /**
+   * Signals page only needs watchlist symbols for typeahead — skip gap-intel, bars, and
+   * day/swing setup endpoints on the SSR critical path (saves tens of seconds).
+   */
+  signalsPageMinimal?: boolean;
 };
 
 export type DaySetupsRequestExtras = {
