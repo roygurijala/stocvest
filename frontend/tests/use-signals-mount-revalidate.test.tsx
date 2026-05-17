@@ -61,14 +61,15 @@ describe("useSignalsMountRevalidate", () => {
     await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(1));
   });
 
-  test("symbol change triggers revalidation for new ticker", async () => {
-    const { rerender } = renderHook(
-      ({ sym }: { sym: string }) => Harness({ symbol: sym, mode: "swing" }),
-      { wrapper: Provider, initialProps: { sym: "AAPL" } }
-    );
+  test("rerender does not schedule another page-level revalidate", async () => {
+    const { rerender } = renderHook(() => Harness({ symbol: "AAPL", mode: "swing" }), {
+      wrapper: Provider
+    });
     await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(1));
-    const afterAapl = fetchMock.mock.calls.length;
-    rerender({ sym: "NVDA" });
-    await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(afterAapl));
+    await new Promise((r) => setTimeout(r, 10));
+    const afterMount = fetchMock.mock.calls.length;
+    rerender();
+    await new Promise((r) => setTimeout(r, 30));
+    expect(fetchMock.mock.calls.length).toBe(afterMount);
   });
 });

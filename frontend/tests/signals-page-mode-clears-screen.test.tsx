@@ -40,6 +40,10 @@ vi.mock("@/lib/assistant/context", () => ({
   usePublishAssistantContext: () => undefined
 }));
 
+vi.mock("@/lib/hooks/use-signals-mount-revalidate", () => ({
+  useSignalsMountRevalidate: () => ({ isMountRevalidating: false })
+}));
+
 // Recharts isn't exercised by these tests (radar starts collapsed and
 // we never expand it) but importing the file still registers the
 // component tree. We don't need to mock recharts.
@@ -240,7 +244,12 @@ describe("SignalsPageClient — mode toggle clears the screen (load-bearing UX g
     });
 
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-      const url = typeof input === "string" ? input : (input as Request | URL).toString();
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
       if (url.endsWith("/api/stocvest/signals/composite/swing")) {
         return mockCompositeOk(swingPayload);
       }
@@ -292,7 +301,12 @@ describe("SignalsPageClient — mode toggle clears the screen (load-bearing UX g
     });
 
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-      const url = typeof input === "string" ? input : (input as Request | URL).toString();
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
       if (url.endsWith("/api/stocvest/signals/composite/real")) {
         return mockCompositeOk(dayPayload);
       }
@@ -323,7 +337,12 @@ describe("SignalsPageClient — mode toggle clears the screen (load-bearing UX g
   test("clicking the currently-selected mode is a no-op (does not flash the loader)", async () => {
     const swingPayload = compositePayload({ summary: "Bullish", fingerprint: "SWING_FP" });
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-      const url = typeof input === "string" ? input : (input as Request | URL).toString();
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
       if (url.endsWith("/api/stocvest/signals/composite/swing")) {
         return mockCompositeOk(swingPayload);
       }
@@ -363,7 +382,12 @@ describe("SignalsPageClient — Swing Pro (dayTradingSurfaces=false)", () => {
   test("hides mode tablist and stays on swing even when prefill asked for day", async () => {
     const swingPayload = compositePayload({ summary: "Bullish", fingerprint: "SWING_PRO_FP" });
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-      const url = typeof input === "string" ? input : (input as Request | URL).toString();
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
       if (url.endsWith("/api/stocvest/signals/composite/swing")) {
         return mockCompositeOk(swingPayload);
       }

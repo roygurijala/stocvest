@@ -1,10 +1,9 @@
 /**
- * One background revalidation per (symbol, trading mode) per page visit.
+ * One background revalidation when the Signals page first commits a symbol.
  *
- * Ensures F5 / session restore triggers a network refresh even when SWR
- * would otherwise serve a deduped cache entry from an earlier navigation
- * in the same tab. Uses `mutate(key, undefined, { revalidate: true })` —
- * never `null`, which would clear cached data and flash an empty UI.
+ * Ensures F5 / session restore can refresh cached payloads without racing mode
+ * toggles (mode changes already get a new SWR key + fetch). Uses
+ * `mutate(key, undefined, { revalidate: true })` — never `null`.
  */
 
 "use client";
@@ -34,28 +33,30 @@ export function useSignalsMountRevalidate(
   enabled: boolean
 ): { isMountRevalidating: boolean } {
   const { mutate } = useSWRConfig();
-  const revalidatedTokens = useRef(new Set<string>());
+  const didRevalidateRef = useRef(false);
   const [isMountRevalidating, setIsMountRevalidating] = useState(false);
 
   useEffect(() => {
     const sym = symbol.trim().toUpperCase();
-    if (!enabled || !sym) return;
+    if (!enabled || !sym || didRevalidateRef.current) return;
 
-    const token = `${sym}:${mode}`;
-    if (revalidatedTokens.current.has(token)) return;
-    revalidatedTokens.current.add(token);
-
+    didRevalidateRef.current = true;
     let cancelled = false;
     setIsMountRevalidating(true);
 
     const keys = [compositeKey(sym, mode), snapshotKey(sym), gapIntelKey(sym, mode)] as const;
 
-    void Promise.all(keys.map((key) => mutate(key, undefined, { revalidate: true }))).finally(() => {
-      if (!cancelled) setIsMountRevalidating(false);
-    });
+    // Defer so the SWR hooks' initial subscribe fetch runs first — avoids
+    // aborting an in-flight composite request on mode-toggle tests and first paint.
+    const timer = window.setTimeout(() => {
+      void Promise.all(keys.map((key) => mutate(key, undefined, { revalidate: true }))).finally(() => {
+        if (!cancelled) setIsMountRevalidating(false);
+      });
+    }, 0);
 
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
   }, [symbol, mode, enabled, mutate]);
 
