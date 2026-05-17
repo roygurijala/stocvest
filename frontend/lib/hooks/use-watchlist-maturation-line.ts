@@ -11,6 +11,10 @@ import { useDefaultWatchlistMembership } from "@/lib/watchlist-membership-client
 export type WatchlistMaturationLine = {
   label: string;
   evaluatedAt: string | null;
+  state?: string;
+  layersAligned?: number;
+  layersTotal?: number;
+  readinessLabel?: string;
 };
 
 /** Maturation row for the active desk on the Signals command bar. */
@@ -50,6 +54,16 @@ export function useWatchlistMaturationLine(
 
   if (!isOnList || !symU) return null;
   const label = formatWatchlistMaturationLabel(row);
-  if (label === "—") return { label: "On watchlist", evaluatedAt: null };
-  return { label, evaluatedAt: null };
+  const evaluatedAt =
+    typeof row?.last_evaluated_at === "string" && row.last_evaluated_at.trim()
+      ? row.last_evaluated_at.trim()
+      : null;
+  const base = {
+    state: row?.state,
+    layersAligned: row?.layers_aligned,
+    layersTotal: row?.layers_total,
+    readinessLabel: row?.readiness_label
+  };
+  if (label === "—") return { label: "On watchlist", evaluatedAt, ...base };
+  return { label, evaluatedAt, ...base };
 }

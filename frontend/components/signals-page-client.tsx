@@ -23,7 +23,7 @@ import { normalizeWatchlistMaturationBySymbol } from "@/lib/watchlist-page-utils
 import { SignalsReferenceLevels } from "@/components/signals/signals-reference-levels";
 import { SignalsSetupRead } from "@/components/signals/signals-setup-read";
 import { SetupEvolutionPanel } from "@/components/signals/setup-evolution-panel";
-import { ScenarioPlanningStrip } from "@/components/scenario-builder/scenario-planning-strip";
+import { ScenarioBuilderInline } from "@/components/scenario-builder/scenario-builder-inline";
 import {
   augmentScenarioInputWithGapIntel,
   buildScenarioInputFromCompositeContext
@@ -31,10 +31,12 @@ import {
 import { useWatchlistMaturationLine } from "@/lib/hooks/use-watchlist-maturation-line";
 import {
   buildSignalsPageDecision,
+  countLayerAlignment,
   normalizeSetupBias,
   pickPreviewLayers,
   type SignalsLayerRowInput
 } from "@/lib/signals-page-present";
+import type { ScenarioReadinessContext } from "@/lib/scenario/scenario-readiness";
 import { CuteLoader } from "@/components/cute-loader";
 import { SignalLayerDivergenceChart } from "@/components/signal-layer-divergence-chart";
 import { SignalsAfterHoursPanel } from "@/components/signals-after-hours-panel";
@@ -1100,6 +1102,32 @@ export function SignalsPageClient({
     [signalsPresentRows, setupBias]
   );
 
+  const scenarioReadiness = useMemo((): ScenarioReadinessContext | null => {
+    if (!symbolCommitted) return null;
+    const { aligned, total } = countLayerAlignment(signalsPresentRows, setupBias);
+    return {
+      symbol,
+      mode: tradingMode,
+      setupBias,
+      layerRows: signalsPresentRows,
+      layersAligned: aligned,
+      layersTotal: total,
+      decisionState: pageDecision?.state ?? null,
+      maturationState: maturationLine?.state ?? null,
+      readinessLabel: maturationLine?.readinessLabel ?? null,
+      hasReferenceLevels: scenarioPlanningInput != null
+    };
+  }, [
+    symbolCommitted,
+    symbol,
+    tradingMode,
+    setupBias,
+    signalsPresentRows,
+    pageDecision?.state,
+    maturationLine,
+    scenarioPlanningInput
+  ]);
+
   const setupDirectionForEvidence =
     layerSignalSummary === "Bullish" ? "long" : layerSignalSummary === "Bearish" ? "short" : "neutral";
 
@@ -2010,17 +2038,18 @@ export function SignalsPageClient({
         tradingMode={tradingMode}
         dayTradingSurfaces={dayTradingSurfaces}
         watchlistControl={<AddToWatchlistButton symbol={symbol} dualDeskTracking={dayTradingSurfaces} />}
+        scenarioControl={
+          scenarioPlanningInput ? (
+            <ScenarioBuilderInline
+              input={scenarioPlanningInput}
+              readiness={scenarioReadiness}
+              testId="signals-scenario-inline"
+            />
+          ) : null
+        }
         maturationLine={maturationLine}
         onTradingModeChange={updateTradingMode}
       />
-
-      {scenarioPlanningInput ? (
-        <ScenarioPlanningStrip
-          input={scenarioPlanningInput}
-          testId="signals-scenario-planning-strip"
-          className="mt-4"
-        />
-      ) : null}
 
       {hasValidSignal && pageDecision ? (
         <SignalsSetupRead

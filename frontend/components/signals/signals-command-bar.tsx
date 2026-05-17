@@ -14,6 +14,8 @@ type Props = {
   tradingMode: TradingMode;
   dayTradingSurfaces: boolean;
   watchlistControl: ReactNode;
+  /** Scenario Builder CTA — sits beside watchlist under the symbol. */
+  scenarioControl?: ReactNode;
   maturationLine: WatchlistMaturationLine | null;
   onTradingModeChange: (mode: TradingMode) => void;
 };
@@ -23,6 +25,7 @@ export function SignalsCommandBar({
   tradingMode,
   dayTradingSurfaces,
   watchlistControl,
+  scenarioControl,
   maturationLine,
   onTradingModeChange
 }: Props) {
@@ -48,8 +51,9 @@ export function SignalsCommandBar({
           >
             {symU}
           </h2>
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
             {watchlistControl}
+            {scenarioControl}
             {maturationLine ? (
               <span className="text-xs" style={{ color: colors.textMuted }} data-testid="signals-maturation-line">
                 <span style={{ color: colors.text, fontWeight: 600 }}>{maturationLine.label}</span>

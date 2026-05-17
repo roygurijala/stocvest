@@ -17,7 +17,7 @@ import { useRouter } from "next/navigation";
 import { AddToWatchlistButton } from "@/components/add-to-watchlist-button";
 import { GapCatalystNewsDrawer } from "@/components/gap-catalyst-news-drawer";
 import { NewsPanel } from "@/components/news-panel";
-import { BuildScenarioButton } from "@/components/scenario-builder/build-scenario-button";
+import { ScenarioBuilderInline } from "@/components/scenario-builder/scenario-builder-inline";
 import { ScannerEmptyStateCard } from "@/components/scanner-empty-state-card";
 import { ScannerNearQualificationSection } from "@/components/scanner/scanner-near-qualification-section";
 import { ScannerEvaluationTraceSection } from "@/components/scanner/scanner-evaluation-trace-section";
@@ -885,10 +885,15 @@ export function ScannerPageClient({
               ]
             };
             return (
-              <BuildScenarioButton
+              <ScenarioBuilderInline
                 input={scenarioInput}
-                variant="prominent"
-                compact
+                readiness={{
+                  symbol: sym,
+                  mode: "day",
+                  setupBias:
+                    gapDirection === "bullish" ? "Bullish" : gapDirection === "bearish" ? "Bearish" : "Neutral",
+                  hasReferenceLevels: item.current_price != null
+                }}
                 testId={`build-scenario-gap-${sym}`}
               />
             );
@@ -1978,10 +1983,19 @@ export function ScannerPageClient({
                           tags: setup.triggers && setup.triggers.length > 0 ? setup.triggers.slice(0, 3) : undefined
                         };
                         return (
-                          <BuildScenarioButton
+                          <ScenarioBuilderInline
                             input={scenarioInput}
-                            variant="prominent"
-                            compact
+                            readiness={{
+                              symbol: sym,
+                              mode: setupMode,
+                              setupBias:
+                                setupDirection === "bullish"
+                                  ? "Bullish"
+                                  : setupDirection === "bearish"
+                                    ? "Bearish"
+                                    : "Neutral",
+                              hasReferenceLevels: setup.last_price != null
+                            }}
                             testId={`build-scenario-setup-${sym}`}
                           />
                         );

@@ -18,10 +18,12 @@ type Props = {
   bias: SignalsSetupBias;
   rows: SignalsLayerRowInput[];
   updatedLabel?: string | null;
+  /** Renders under the symbol (e.g. Scenario Builder beside watchlist-style actions). */
+  symbolRowExtras?: ReactNode;
   children?: ReactNode;
 };
 
-export function EvidenceCardHeader({ symbol, bias, rows, updatedLabel, children }: Props) {
+export function EvidenceCardHeader({ symbol, bias, rows, updatedLabel, symbolRowExtras, children }: Props) {
   const { colors } = useTheme();
   const alignment = countLayerAlignment(rows, bias);
   const biasColor =
@@ -58,6 +60,9 @@ export function EvidenceCardHeader({ symbol, bias, rows, updatedLabel, children 
           <h2 className="m-0 mt-1 text-xl font-semibold sm:text-2xl" style={{ color: colors.text }}>
             {symbol.trim().toUpperCase()}
           </h2>
+          {symbolRowExtras ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2">{symbolRowExtras}</div>
+          ) : null}
         </div>
         {updatedLabel ? (
           <span className="text-xs tabular-nums" style={{ color: colors.textMuted }}>

@@ -54,7 +54,7 @@ import {
 import { pickNewsEmptyCopy } from "@/lib/news-empty-copy";
 import { AI_VERDICT_TIP, LAYER_NAME_HINTS } from "@/lib/ui-tooltips";
 import { AIExplanationDisplay } from "@/components/ai-explanation-display";
-import { ScenarioPlanningStrip } from "@/components/scenario-builder/scenario-planning-strip";
+import { ScenarioBuilderInline } from "@/components/scenario-builder/scenario-builder-inline";
 import {
   augmentScenarioInputWithGapIntel,
   buildScenarioInputFromEvidenceParts
@@ -63,6 +63,9 @@ import { UpgradePrompt } from "@/components/upgrade-prompt";
 import { useHasAIExplanations, useUserProfileLoaded } from "@/lib/api/user";
 import type { GapIntelSnapshot } from "@/lib/api/gap-intel";
 import type { ScenarioInput, ScenarioMode } from "@/lib/scenario/types";
+import type { ScenarioReadinessContext } from "@/lib/scenario/scenario-readiness";
+import { synthTradeDecision } from "@/lib/signal-evidence/trade-decision";
+import { countLayerAlignment } from "@/lib/signals-page-present";
 
 interface SignalEvidenceCardProps {
   evidence: SignalEvidenceData;
@@ -838,6 +841,18 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
     }),
     gapIntelSnapshot
   );
+  const evidenceDecision = synthTradeDecision(evidence, insight);
+  const evidenceAlignment = countLayerAlignment(layerRows, setupBias);
+  const evidenceReadiness: ScenarioReadinessContext = {
+    symbol: evidence.symbol,
+    mode: evidenceMode,
+    setupBias,
+    layerRows,
+    layersAligned: evidenceAlignment.aligned,
+    layersTotal: evidenceAlignment.total,
+    decisionState: evidenceDecision.state,
+    hasReferenceLevels: levelsComplete
+  };
 
   return (
     <article style={{ display: "grid", gap: spacing[4], position: "relative", paddingBottom: spacing[4] }}>
@@ -874,6 +889,13 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
         bias={setupBias}
         rows={layerRows}
         updatedLabel={displayUpdatedLabel(evidence)}
+        symbolRowExtras={
+          <ScenarioBuilderInline
+            input={scenarioForBuild}
+            readiness={evidenceReadiness}
+            testId="signal-evidence-scenario-cta"
+          />
+        }
       >
         {geopoliticalDragActive ? (
           <span
@@ -959,12 +981,6 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
           );
         })()}
       </EvidenceCardHeader>
-
-      <ScenarioPlanningStrip
-        input={scenarioForBuild}
-        testId="signal-evidence-scenario-cta"
-        className="mt-1"
-      />
 
       {gapIntelSnapshot ? (
         <section

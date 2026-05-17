@@ -3,50 +3,31 @@
 import { Calculator } from "lucide-react";
 import { useMemo, useState } from "react";
 import { ScenarioBuilderModal } from "@/components/scenario-builder/scenario-builder-modal";
+import { ScenarioBuilderPreviewModal } from "@/components/scenario-builder/scenario-builder-preview-modal";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import {
-  buildIneligibilityTooltip,
-  isEligibleForScenario
-} from "@/lib/scenario/eligibility";
+  resolveScenarioBuilderCapability,
+  type ScenarioReadinessContext
+} from "@/lib/scenario/scenario-readiness";
 import type { ScenarioInput } from "@/lib/scenario/types";
 import { useTheme } from "@/lib/theme-provider";
 
 interface BuildScenarioButtonProps {
-  /** Full scenario payload — eligibility gate runs against this. */
   input: ScenarioInput;
-  /**
-   * Optional layout override for narrow contexts (table rows). Renders
-   * a compact pill-sized button without changing semantics.
-   */
+  /** Layer / maturation / decision context — gates modal content, not button access. */
+  readiness?: ScenarioReadinessContext | null;
   compact?: boolean;
-  /** Stronger visual weight for primary planning surfaces. */
   variant?: "default" | "prominent";
-  /**
-   * Optional override for the `data-testid` so multiple instances in
-   * the same DOM tree (e.g. a grid of gap cards) can be distinguished
-   * in tests. Defaults to `build-scenario-button`.
-   */
   testId?: string;
 }
 
 /**
- * "Build scenario" CTA.
- *
- * UX contract this component honors (intentionally, do not loosen):
- *
- *   - When eligible: button is enabled, the label reads "Build scenario,"
- *     hovering it shows "Ready to build scenario."
- *   - When ineligible: button is disabled, the label reads "Scenario
- *     unavailable," hovering shows the concatenated list of structural
- *     failure reasons.
- *   - The button NEVER reads "Place order," "Stage order," "Draft trade,"
- *     "Recommended," or anything that implies execution / endorsement.
- *   - Visual treatment is *deliberately neutral* (slate, not the accent
- *     blue we used for "Open order entry"). This re-categorizes the
- *     affordance from "execution" to "planning" at a glance.
+ * Scenario Builder — always clickable. Preview / building-soon / full sheet
+ * depends on setup readiness and structural completeness.
  */
 export function BuildScenarioButton({
   input,
+  readiness = null,
   compact = false,
   variant = "default",
   testId = "build-scenario-button"
@@ -54,11 +35,29 @@ export function BuildScenarioButton({
   const { colors } = useTheme();
   const [open, setOpen] = useState(false);
 
-  const eligibility = useMemo(() => isEligibleForScenario(input), [input]);
-  const tooltip = useMemo(() => buildIneligibilityTooltip(eligibility), [eligibility]);
+  const readinessCtx: ScenarioReadinessContext = useMemo(
+    () =>
+      readiness ?? {
+        symbol: input.symbol,
+        mode: input.mode,
+        setupBias: null,
+        hasReferenceLevels: undefined
+      },
+    [readiness, input.symbol, input.mode]
+  );
 
-  const label = eligibility.eligible ? "Build scenario" : "Scenario unavailable";
-  const labelLong = eligibility.eligible ? tooltip : `Scenario unavailable — ${tooltip}`;
+  const resolved = useMemo(
+    () => resolveScenarioBuilderCapability(readinessCtx, input),
+    [readinessCtx, input]
+  );
+
+  const label = "Scenario Builder";
+  const tooltip =
+    resolved.capability === "full"
+      ? "Open full scenario planning for this setup."
+      : resolved.capability === "building_soon"
+        ? "Setup approaching validity — preview what is still needed."
+        : "Preview readiness and missing confirmations — full builder unlocks when the setup is actionable.";
 
   const prominent = variant === "prominent";
   const pad = compact
@@ -69,10 +68,14 @@ export function BuildScenarioButton({
   const fontSize = compact ? typography.scale.xs : prominent ? typography.scale.base : typography.scale.sm;
   const iconSize = compact ? 13 : prominent ? 16 : 14;
 
-  const eligibleBorder = prominent ? colors.accent : colors.border;
-  const ineligibleBorder = prominent ? "rgba(245, 158, 11, 0.65)" : colors.border;
-  const eligibleBg = prominent
-    ? `color-mix(in srgb, ${colors.accent} 14%, ${colors.surfaceMuted})`
+  const accentBorder =
+    resolved.capability === "full"
+      ? colors.accent
+      : resolved.capability === "building_soon"
+        ? "rgba(245, 158, 11, 0.65)"
+        : colors.border;
+  const accentBg = prominent
+    ? `color-mix(in srgb, ${resolved.capability === "full" ? colors.accent : "#f59e0b"} 14%, ${colors.surfaceMuted})`
     : colors.surfaceMuted;
 
   return (
@@ -80,14 +83,11 @@ export function BuildScenarioButton({
       <button
         type="button"
         data-testid={testId}
-        data-eligible={eligibility.eligible ? "true" : "false"}
+        data-capability={resolved.capability}
+        data-eligible={resolved.capability === "full" ? "true" : "false"}
         data-variant={variant}
-        aria-disabled={!eligibility.eligible}
-        disabled={!eligibility.eligible}
-        title={labelLong}
-        onClick={() => {
-          if (eligibility.eligible) setOpen(true);
-        }}
+        title={tooltip}
+        onClick={() => setOpen(true)}
         style={{
           display: "inline-flex",
           alignItems: "center",
@@ -96,22 +96,32 @@ export function BuildScenarioButton({
           padding: pad,
           fontSize,
           fontWeight: 700,
-          color: eligibility.eligible ? colors.text : prominent ? colors.text : colors.textMuted,
-          background: eligibility.eligible ? eligibleBg : prominent ? colors.surfaceMuted : "transparent",
-          border: `${prominent ? 2 : 1}px solid ${eligibility.eligible ? eligibleBorder : ineligibleBorder}`,
+          color: colors.text,
+          background: accentBg,
+          border: `${prominent ? 2 : 1}px solid ${accentBorder}`,
           borderRadius: borderRadius.md,
-          cursor: eligibility.eligible ? "pointer" : "not-allowed",
-          opacity: eligibility.eligible ? 1 : prominent ? 0.92 : 0.55,
+          cursor: "pointer",
           whiteSpace: "nowrap",
           minHeight: prominent && !compact ? 44 : undefined,
-          boxShadow: prominent && eligibility.eligible ? `0 0 0 1px color-mix(in srgb, ${colors.accent} 25%, transparent)` : undefined
+          boxShadow:
+            prominent && resolved.capability === "full"
+              ? `0 0 0 1px color-mix(in srgb, ${colors.accent} 25%, transparent)`
+              : undefined
         }}
       >
         <Calculator size={iconSize} aria-hidden="true" />
         <span>{label}</span>
       </button>
-      {open && eligibility.eligible ? (
+      {open && resolved.capability === "full" ? (
         <ScenarioBuilderModal open={open} input={input} onClose={() => setOpen(false)} />
+      ) : null}
+      {open && resolved.capability !== "full" ? (
+        <ScenarioBuilderPreviewModal
+          open={open}
+          input={input}
+          resolved={resolved}
+          onClose={() => setOpen(false)}
+        />
       ) : null}
     </>
   );

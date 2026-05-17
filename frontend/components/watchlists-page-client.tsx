@@ -5,8 +5,9 @@ import { useSearchParams } from "next/navigation";
 import { Columns2, TrendingUp, Zap } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CuteLoader } from "@/components/cute-loader";
-import { BuildScenarioButton } from "@/components/scenario-builder/build-scenario-button";
+import { ScenarioBuilderInline } from "@/components/scenario-builder/scenario-builder-inline";
 import { buildWatchlistScenarioInput } from "@/lib/scenario/scenario-input-present";
+import type { ScenarioReadinessContext } from "@/lib/scenario/scenario-readiness";
 import { APP_TOP_BAR_LAYOUT_HEIGHT } from "@/components/top-bar";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, colorTokens, spacing, surfaceGlowClassName } from "@/lib/design-system";
@@ -1200,6 +1201,24 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                         snapshot: snapshotsBySymbol[symU],
                         quoteBullish: quote?.bullish ?? null
                       });
+                      const maturationForPlan =
+                        viewMode === "day" ? md : viewMode === "swing" ? ms : ms ?? md;
+                      const planBias =
+                        quote?.bullish === true
+                          ? "Bullish"
+                          : quote?.bullish === false
+                            ? "Bearish"
+                            : "Neutral";
+                      const planReadiness: ScenarioReadinessContext = {
+                        symbol: symU,
+                        mode: planMode,
+                        setupBias: planBias,
+                        maturationState: maturationForPlan?.state ?? displaySt ?? null,
+                        layersAligned: maturationForPlan?.layers_aligned,
+                        layersTotal: maturationForPlan?.layers_total,
+                        readinessLabel: maturationForPlan?.readiness_label ?? null,
+                        hasReferenceLevels: Boolean(snapshotsBySymbol[symU]?.last_trade_price)
+                      };
                       const rowLine = (mode: "swing" | "day", m: MaturationRow | undefined) => {
                         const hasMat = Boolean(m?.state || m?.label);
                         const detail = hasMat
@@ -1250,8 +1269,15 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                             <span className="relative z-[1] mt-1 h-2.5 w-2.5 shrink-0 rounded-full pointer-events-none" style={{ background: accent }} aria-hidden />
                             <div className="relative z-[1] flex min-h-0 min-w-0 flex-1 items-start gap-3 pointer-events-none sm:gap-4">
                               <div className="min-w-0 flex-1">
-                                <div className="flex flex-wrap items-baseline gap-2">
+                                <div className="flex flex-wrap items-center gap-2">
                                   <span className="font-mono text-lg font-bold tracking-wide">{symU}</span>
+                                  <span className="relative z-10 shrink-0 pointer-events-auto">
+                                    <ScenarioBuilderInline
+                                      input={planInput}
+                                      readiness={planReadiness}
+                                      testId={`build-scenario-watchlist-${symU}`}
+                                    />
+                                  </span>
                                   {maturationFetchStatus === "loading" && active.is_default ? (
                                     <span className="text-[10px] uppercase" style={{ color: colors.textMuted }}>
                                       …
@@ -1299,14 +1325,6 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                                 {evaluatedLabel}
                               </span>
                             ) : null}
-                            <span className="relative z-10 shrink-0 self-center pointer-events-auto">
-                              <BuildScenarioButton
-                                input={planInput}
-                                variant="prominent"
-                                compact
-                                testId={`build-scenario-watchlist-${symU}`}
-                              />
-                            </span>
                             <button
                               type="button"
                               className="relative z-10 shrink-0 self-start rounded p-1.5 text-lg leading-none hover:bg-white/5"
