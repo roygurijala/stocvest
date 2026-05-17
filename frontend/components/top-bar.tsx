@@ -42,9 +42,9 @@ export function TopBar({ onMenuClick }: TopBarProps) {
     <header
       data-testid="app-top-bar"
       // ``position: fixed`` pins the chrome to the viewport regardless of
-      // flex/grid ancestors. Dashboard page scroll lives on ``<main>``
-      // (see ``app-shell.tsx``); fixed chrome stays visible while
-      // content scrolls underneath. On
+      // flex/grid ancestors. Page content scrolls on ``body`` (see
+      // ``app-shell.tsx``); fixed chrome stays visible while the
+      // document scrolls. On
       // ``lg+`` the bar starts after the 248px sidebar. ``z-30`` sits
       // below modals/drawers (40+) but above page content.
       className="fixed left-0 right-0 top-0 z-30 flex min-h-14 items-center gap-2 px-4 backdrop-blur-sm lg:left-[248px] lg:justify-between lg:px-6"

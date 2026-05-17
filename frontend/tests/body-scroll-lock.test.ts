@@ -1,14 +1,9 @@
 import { afterEach, describe, expect, test } from "vitest";
 
-import {
-  APP_SCROLL_ROOT_SELECTOR,
-  lockBodyScroll,
-  resetBodyScrollLock
-} from "@/lib/body-scroll-lock";
+import { lockBodyScroll, resetBodyScrollLock } from "@/lib/body-scroll-lock";
 
 afterEach(() => {
   resetBodyScrollLock();
-  document.querySelector(APP_SCROLL_ROOT_SELECTOR)?.remove();
 });
 
 describe("body-scroll-lock", () => {
@@ -19,19 +14,6 @@ describe("body-scroll-lock", () => {
     unlockA();
     expect(document.body.style.overflow).toBe("hidden");
     unlockB();
-    expect(document.body.style.overflow).toBe("");
-  });
-
-  test("locks dashboard main scroll root when present", () => {
-    const main = document.createElement("main");
-    main.setAttribute("data-app-scroll-root", "");
-    document.body.appendChild(main);
-
-    const unlock = lockBodyScroll();
-    expect(main.style.overflow).toBe("hidden");
-    expect(document.body.style.overflow).toBe("hidden");
-    unlock();
-    expect(main.style.overflow).toBe("");
     expect(document.body.style.overflow).toBe("");
   });
 

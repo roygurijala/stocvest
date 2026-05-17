@@ -42,17 +42,16 @@ export function AppShell({ session, children, isAdmin = false }: AppShellProps) 
   return (
     <>
       {loading ? <PageLoader /> : null}
-      <div className="app-shell-layout grid min-h-[100dvh] grid-cols-1 lg:grid-cols-[248px_1fr]">
+      <div className="app-shell-layout grid min-h-screen grid-cols-1 items-start lg:grid-cols-[248px_1fr]">
         <Sidebar userLabel={userLabel} isAdmin={isAdmin} />
         <div
-          className="flex h-[100dvh] max-h-[100dvh] min-h-0 min-w-0 flex-col"
+          className="flex min-w-0 flex-col"
           data-testid="app-shell-right-column"
           style={{ background: colors.background }}
         >
           <TopBar onMenuClick={() => setDrawerOpen(true)} />
           <main
-            data-app-scroll-root
-            className="min-h-0 min-w-0 flex-1 overflow-x-clip overflow-y-auto overscroll-y-contain px-4 pb-6 lg:px-6"
+            className="min-w-0 px-4 pb-6 lg:px-6"
             style={{
               paddingTop: `calc(${APP_TOP_BAR_LAYOUT_HEIGHT} + ${spacing[6]})`
             }}

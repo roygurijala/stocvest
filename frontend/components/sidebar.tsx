@@ -147,7 +147,7 @@ export function Sidebar({ userLabel, isAdmin = false }: SidebarProps) {
 
   return (
     <aside
-      className="relative hidden w-[248px] shrink-0 flex-col lg:sticky lg:top-0 lg:flex lg:h-[100dvh] lg:max-h-[100dvh] lg:flex-col lg:self-start"
+      className="relative hidden w-[248px] shrink-0 flex-col lg:sticky lg:top-0 lg:flex lg:max-h-screen lg:flex-col lg:self-start"
       style={{
         background: colors.surface,
         borderRight: `1px solid ${colors.border}`
