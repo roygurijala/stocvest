@@ -128,8 +128,10 @@ export function buildScenarioPreviewPanelData(args: {
 }
 
 export function layerAlignedWithBias(row: SignalsLayerRowInput, bias: SignalsSetupBias): boolean {
-  const p = layerPolarity(row, bias);
-  return p === "aligned";
+  if (bias === "Neutral") {
+    return row.status === "Neutral" || row.status === "As of close";
+  }
+  return layerPolarity(row, bias) === "supportive";
 }
 
 export function layerPreviewSummary(rows: SignalsLayerRowInput[], bias: SignalsSetupBias): string {
