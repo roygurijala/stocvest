@@ -113,10 +113,12 @@ describe("WatchlistsPageClient maturation", () => {
     wrap(<WatchlistsPageClient dualDeskMaturation={false} />);
 
     await waitFor(() => expect(screen.getByText("AAPL")).toBeInTheDocument());
-    const urls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.map((c) =>
-      typeof c[0] === "string" ? c[0] : String(c[0])
-    );
-    expect(urls.some((u) => u.includes("mode=swing"))).toBe(true);
+    await waitFor(() => {
+      const urls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.map((c) =>
+        typeof c[0] === "string" ? c[0] : String(c[0])
+      );
+      expect(urls.some((u) => u.includes("maturation-summary") && u.includes("mode=swing"))).toBe(true);
+    });
   });
 
   it("fetches swing and day maturation when dualDeskMaturation is true", async () => {
@@ -156,11 +158,17 @@ describe("WatchlistsPageClient maturation", () => {
     wrap(<WatchlistsPageClient dualDeskMaturation={true} />);
 
     await waitFor(() => expect(screen.getByText("AAPL")).toBeInTheDocument());
-    const urls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.map((c) =>
-      typeof c[0] === "string" ? c[0] : String(c[0])
-    );
-    expect(urls.filter((u) => u.includes("maturation-summary") && u.includes("mode=swing")).length).toBeGreaterThanOrEqual(1);
-    expect(urls.filter((u) => u.includes("maturation-summary") && u.includes("mode=day")).length).toBeGreaterThanOrEqual(1);
+    await waitFor(() => {
+      const urls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.map((c) =>
+        typeof c[0] === "string" ? c[0] : String(c[0])
+      );
+      expect(urls.filter((u) => u.includes("maturation-summary") && u.includes("mode=swing")).length).toBeGreaterThanOrEqual(
+        1
+      );
+      expect(urls.filter((u) => u.includes("maturation-summary") && u.includes("mode=day")).length).toBeGreaterThanOrEqual(
+        1
+      );
+    });
   });
 
   it("does not request maturation-summary when the watchlist has no symbols", async () => {
