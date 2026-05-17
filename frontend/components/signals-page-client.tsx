@@ -8,6 +8,7 @@ import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, Responsi
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
 import { useSignalComposite } from "@/lib/hooks/use-signal-composite";
+import { useSignalsMountRevalidate } from "@/lib/hooks/use-signals-mount-revalidate";
 import { useGapIntel } from "@/lib/hooks/use-gap-intel";
 import { useSymbolNews } from "@/lib/hooks/use-symbol-news";
 import { useSymbolSnapshot } from "@/lib/hooks/use-symbol-snapshot";
@@ -28,6 +29,7 @@ import { ScenarioBuilderInline } from "@/components/scenario-builder/scenario-bu
 import { buildScenarioPlanningBundle } from "@/lib/scenario/scenario-planning-bundle";
 import type { ScenarioBuilderDrillDown } from "@/lib/scenario/scenario-builder-drill-down";
 import { useWatchlistMaturationLine } from "@/lib/hooks/use-watchlist-maturation-line";
+import { buildSignalEvaluationFreshness } from "@/lib/signals-evaluation-present";
 import {
   buildSignalsPageDecision,
   countLayerAlignment,
@@ -272,6 +274,7 @@ export function SignalsPageClient({
   });
   const [symbol, setSymbol] = useState(() => signalsPrefill.urlSymbol ?? "");
   const [symbolDraft, setSymbolDraft] = useState(() => signalsPrefill.urlSymbol ?? "");
+  const [resumedFromSession, setResumedFromSession] = useState(false);
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [suggestHighlight, setSuggestHighlight] = useState(0);
   const [watchlistPickerOpen, setWatchlistPickerOpen] = useState(false);
@@ -338,9 +341,14 @@ export function SignalsPageClient({
   // mode-pill toggle (a previous user request) survives the cache
   // layer — the new mode's pill never renders alongside the
   // previous mode's 6-layer breakdown / radar / evidence.
-  const { composite: compositeResult } = useSignalComposite(symbol, tradingMode, {
+  const {
+    composite: compositeResult,
+    isInitialLoading: compositeInitialLoading,
+    isRevalidating: compositeRevalidating
+  } = useSignalComposite(symbol, tradingMode, {
     enabled: tab === "layers"
   });
+  const { isMountRevalidating } = useSignalsMountRevalidate(symbol, tradingMode, tab === "layers");
   const [afterHoursInWatchlist, setAfterHoursInWatchlist] = useState(false);
   const [afterHoursWatchlistKnown, setAfterHoursWatchlistKnown] = useState(false);
 
@@ -481,6 +489,7 @@ export function SignalsPageClient({
       // hook returns `composite: null`, and `radarData` falls out
       // via its `useMemo` derivation — no imperative setters needed.
       setSignalEvidence(null);
+      setResumedFromSession(false);
       try {
         sessionStorage.removeItem(SIGNALS_SESSION_SYMBOL_KEY);
       } catch {
@@ -492,6 +501,7 @@ export function SignalsPageClient({
     setSymbolDraft(t);
     setSuggestOpen(false);
     setUnverifiedSymbolNote(null);
+    setResumedFromSession(false);
   }, []);
 
   /**
@@ -763,6 +773,7 @@ export function SignalsPageClient({
       if (sym) {
         setSymbol(sym);
         setSymbolDraft(sym);
+        setResumedFromSession(true);
       }
     } catch {
       /* ignore */
@@ -1082,6 +1093,30 @@ export function SignalsPageClient({
   );
 
   const maturationLine = useWatchlistMaturationLine(symbol, tradingMode, dayTradingSurfaces);
+
+  const evaluationFreshness = useMemo(
+    () =>
+      buildSignalEvaluationFreshness({
+        symbolCommitted,
+        tab,
+        isInitialLoading: compositeInitialLoading,
+        isRevalidating: compositeRevalidating,
+        isMountRevalidating,
+        composite:
+          compositeResult != null && !isInsufficientCompositeResponse(compositeResult)
+            ? (compositeResult as Record<string, unknown>)
+            : null,
+        isInsufficient: isInsufficientCompositeResponse(compositeResult)
+      }),
+    [
+      symbolCommitted,
+      tab,
+      compositeInitialLoading,
+      compositeRevalidating,
+      isMountRevalidating,
+      compositeResult
+    ]
+  );
 
   const scenarioPlanningBundle = useMemo(() => {
     if (!symbolCommitted) return null;
@@ -2093,6 +2128,8 @@ export function SignalsPageClient({
           ) : null
         }
         maturationLine={maturationLine}
+        evaluationFreshness={evaluationFreshness}
+        resumedFromSession={resumedFromSession}
         onTradingModeChange={updateTradingMode}
       />
 

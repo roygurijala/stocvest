@@ -12,8 +12,13 @@ export function PageLoader() {
       : "radial-gradient(circle at 50% 42%, rgba(255,255,255,0.5) 0%, rgba(248,250,252,0.9) 52%, rgba(248,250,252,0.96) 100%)";
 
   return (
-    <div className="fixed inset-0 z-[120] grid place-items-center" style={{ background: scrim }}>
-      <ContentLoading />
+    <div
+      className="pointer-events-none fixed inset-0 z-[120] grid place-items-center"
+      style={{ background: scrim }}
+    >
+      <div className="pointer-events-auto">
+        <ContentLoading />
+      </div>
     </div>
   );
 }

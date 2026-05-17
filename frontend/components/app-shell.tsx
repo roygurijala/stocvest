@@ -7,6 +7,7 @@ import { PageLoader } from "@/components/page-loader";
 import { Sidebar } from "@/components/sidebar";
 import { APP_TOP_BAR_LAYOUT_HEIGHT, TopBar } from "@/components/top-bar";
 import type { AuthSession } from "@/lib/auth/types";
+import { resetBodyScrollLock } from "@/lib/body-scroll-lock";
 import { spacing } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -33,6 +34,7 @@ export function AppShell({ session, children, isAdmin = false }: AppShellProps) 
 
   useEffect(() => {
     setDrawerOpen(false);
+    resetBodyScrollLock();
   }, [pathname]);
 
   const userLabel = session.email || session.subject;
@@ -40,13 +42,12 @@ export function AppShell({ session, children, isAdmin = false }: AppShellProps) 
   return (
     <>
       {loading ? <PageLoader /> : null}
-      <div className="app-shell-layout grid min-h-screen grid-cols-1 lg:grid-cols-[248px_1fr]">
+      <div className="app-shell-layout grid min-h-screen grid-cols-1 items-start lg:grid-cols-[248px_1fr]">
         <Sidebar userLabel={userLabel} isAdmin={isAdmin} />
-        {/* Right column avoids ``overflow-x-hidden`` on this wrapper so we never
-            promote it to a scroll container. Horizontal clipping lives on ``<main>``
-            via ``overflow-x-clip`` (keeps ``position: sticky`` working on long pages).
-            The TopBar is ``position: fixed`` (see ``top-bar.tsx``); ``main`` padding-top
-            clears that chrome. */}
+        {/* ``items-start`` keeps columns content-sized so the document scrolls on
+            ``body`` instead of trapping overflow inside a ``100vh`` grid cell.
+            No ``overflow-*`` on this wrapper or ``<main>`` — horizontal bleed is
+            clipped on ``html`` only (see ``globals.css``). TopBar is fixed. */}
         <div
           className="flex min-w-0 flex-col"
           data-testid="app-shell-right-column"
@@ -54,7 +55,7 @@ export function AppShell({ session, children, isAdmin = false }: AppShellProps) 
         >
           <TopBar onMenuClick={() => setDrawerOpen(true)} />
           <main
-            className="min-w-0 overflow-x-clip px-4 pb-6 lg:px-6"
+            className="min-w-0 px-4 pb-6 lg:px-6"
             style={{
               paddingTop: `calc(${APP_TOP_BAR_LAYOUT_HEIGHT} + ${spacing[6]})`
             }}

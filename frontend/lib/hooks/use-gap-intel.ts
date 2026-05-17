@@ -1,7 +1,11 @@
 /**
  * SWR-backed `GET /api/stocvest/signals/gap-intel` for the active symbol + mode.
+ *
+ * Uses `keepPreviousData: false` (like `useSignalComposite`) so symbol or mode
+ * changes never paint the previous ticker's gap panel while the new fetch runs.
  */
 
+import { useMemo } from "react";
 import useSWR from "swr";
 
 import { parseGapIntelSnapshot, type GapIntelSnapshot } from "@/lib/api/gap-intel";
@@ -56,11 +60,17 @@ export function useGapIntel(
   const { data, isLoading, isValidating, error } = useSWR(
     key,
     async ([, sym, md]: readonly [string, string, GapIntelMode]) => fetchGapIntel(sym, md),
-    { keepPreviousData: true }
+    { keepPreviousData: false }
   );
 
+  const snapshot = useMemo<GapIntelSnapshot | null>(() => {
+    if (!data || error) return null;
+    if (data.symbol?.toUpperCase() !== normalized) return null;
+    return data;
+  }, [data, error, normalized]);
+
   return {
-    snapshot: error || !data ? null : data,
+    snapshot,
     isInitialLoading: isLoading,
     isRevalidating: isValidating && !isLoading,
     error

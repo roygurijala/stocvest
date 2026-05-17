@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { ScenarioBuilderModal } from "@/components/scenario-builder/scenario-builder-modal";
 import { ScenarioBuilderPreviewModal } from "@/components/scenario-builder/scenario-builder-preview-modal";
+import { lockBodyScroll } from "@/lib/body-scroll-lock";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import {
   resolveScenarioBuilderCapability,
@@ -104,11 +105,7 @@ export function BuildScenarioButton({
 
   useEffect(() => {
     if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
+    return lockBodyScroll();
   }, [open]);
 
   const modal =

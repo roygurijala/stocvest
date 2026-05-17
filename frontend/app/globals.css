@@ -60,7 +60,16 @@ html {
   --color-caution: #d97706;
 }
 
-html,
+html {
+  /*
+   * Clip horizontal bleed on the viewport only. Applying the same rule to
+   * ``body`` promotes two nested scroll containers and can trap wheel input
+   * when dashboard grid items stretch to ``100vh``. The TopBar is
+   * ``position: fixed`` (see ``top-bar.tsx``).
+   */
+  overflow-x: clip;
+}
+
 body {
   margin: 0;
   padding: 0;
@@ -68,16 +77,6 @@ body {
   background: var(--color-bg);
   color: var(--color-text);
   transition: background-color 240ms ease, color 240ms ease;
-  /*
-   * Horizontal bleed must be clipped, but ``overflow-x: hidden`` on the
-   * root forces ``overflow-y`` to ``auto`` (CSS 2.1), which promotes
-   * ``html``/``body`` to scroll containers and can interfere with
-   * ``position: sticky`` on in-flow headers. The dashboard TopBar is
-   * ``position: fixed`` instead; ``clip`` still trims overflow on the x
-   * axis without that side effect. See ``tests/top-bar-sticky.test.tsx``
-   * + AppShell comments.
-   */
-  overflow-x: clip;
 }
 
 @media (max-width: 1023px) {

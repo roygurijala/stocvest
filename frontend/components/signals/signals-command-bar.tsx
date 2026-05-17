@@ -7,6 +7,11 @@ import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/d
 import { useTheme } from "@/lib/theme-provider";
 import type { WatchlistMaturationLine } from "@/lib/hooks/use-watchlist-maturation-line";
 import { WATCHLIST_EVALUATION_HEADER } from "@/lib/product-empty-states";
+import {
+  SIGNALS_UPDATE_MICROCOPY,
+  type SignalEvaluationFreshness
+} from "@/lib/signals-evaluation-present";
+import { formatLastEvaluatedShort } from "@/lib/watchlist-evaluation-present";
 
 type TradingMode = "day" | "swing";
 
@@ -18,6 +23,9 @@ type Props = {
   /** Scenario Builder CTA — sits beside watchlist under the symbol. */
   scenarioControl?: ReactNode;
   maturationLine: WatchlistMaturationLine | null;
+  evaluationFreshness: SignalEvaluationFreshness | null;
+  /** True when symbol was restored from sessionStorage (no URL prefill). */
+  resumedFromSession?: boolean;
   onTradingModeChange: (mode: TradingMode) => void;
 };
 
@@ -28,10 +36,17 @@ export function SignalsCommandBar({
   watchlistControl,
   scenarioControl,
   maturationLine,
+  evaluationFreshness,
+  resumedFromSession = false,
   onTradingModeChange
 }: Props) {
   const { colors } = useTheme();
   const symU = symbol.trim().toUpperCase();
+  const maturationEvaluatedAt = maturationLine?.evaluatedAt
+    ? formatLastEvaluatedShort(maturationLine.evaluatedAt)
+    : null;
+  const freshnessAccent =
+    evaluationFreshness?.phase === "refreshing" || evaluationFreshness?.phase === "loading";
 
   return (
     <article
@@ -52,13 +67,33 @@ export function SignalsCommandBar({
           >
             {symU}
           </h2>
+          {evaluationFreshness ? (
+            <p
+              className="m-0 mt-1 text-xs font-medium"
+              data-testid="signals-evaluation-freshness"
+              style={{
+                color: freshnessAccent ? "#00C8DC" : colors.textMuted
+              }}
+            >
+              {evaluationFreshness.label}
+            </p>
+          ) : null}
+          {resumedFromSession ? (
+            <p
+              className="m-0 mt-0.5 text-[11px] leading-snug"
+              data-testid="signals-resumed-session"
+              style={{ color: colors.textMuted }}
+            >
+              Viewing {symU} (previous selection)
+            </p>
+          ) : null}
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
             {watchlistControl}
             {scenarioControl}
             {maturationLine ? (
               <span className="text-xs" style={{ color: colors.textMuted }} data-testid="signals-maturation-line">
                 <span style={{ color: colors.text, fontWeight: 600 }}>{maturationLine.label}</span>
-                {maturationLine.evaluatedAt ? <> · last evaluated {maturationLine.evaluatedAt}</> : null}
+                {maturationEvaluatedAt ? <> · last evaluated {maturationEvaluatedAt}</> : null}
               </span>
             ) : null}
           </div>
@@ -127,6 +162,8 @@ export function SignalsCommandBar({
           : "Evaluated on daily close · horizon ~5 calendar days."}
         <br />
         {WATCHLIST_EVALUATION_HEADER}
+        <br />
+        {SIGNALS_UPDATE_MICROCOPY}
       </p>
     </article>
   );

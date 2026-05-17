@@ -73,7 +73,7 @@ describe("AppShell layout (no scroll trap on right column)", () => {
     expect(rightCol.className).not.toMatch(/(^|\s)overflow-auto(\s|$)/);
   });
 
-  test("<main> uses overflow-x-clip so wide content is clipped without breaking sticky", () => {
+  test("<main> does not use overflow classes (document scroll on body)", () => {
     wrap(
       <AppShell session={SESSION} isAdmin={false}>
         <p data-testid="page-marker">Page content</p>
@@ -81,8 +81,18 @@ describe("AppShell layout (no scroll trap on right column)", () => {
     );
     const main = screen.getByTestId("page-marker").closest("main");
     expect(main).not.toBeNull();
-    // ``overflow-x-hidden`` on ``<main>`` can promote a scroll container
-    // that traps ``position: sticky``; ``clip`` clips overflow without that.
-    expect(main!.className).toMatch(/(^|\s)overflow-x-clip(\s|$)/);
+    expect(main!.className).not.toMatch(/(^|\s)overflow-x-clip(\s|$)/);
+    expect(main!.className).not.toMatch(/(^|\s)overflow-x-hidden(\s|$)/);
+    expect(main!.className).not.toMatch(/(^|\s)overflow-hidden(\s|$)/);
+  });
+
+  test("app shell grid uses items-start so columns are not height-trapped", () => {
+    wrap(
+      <AppShell session={SESSION} isAdmin={false}>
+        <p>Page content</p>
+      </AppShell>
+    );
+    const grid = screen.getByTestId("app-shell-right-column").parentElement;
+    expect(grid?.className).toMatch(/(^|\s)items-start(\s|$)/);
   });
 });
