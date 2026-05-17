@@ -12,7 +12,12 @@ import {
   type ScenarioReadinessContext,
   type ScenarioReadinessResolved
 } from "@/lib/scenario/scenario-readiness";
+import { useScenarioPreviewPanels } from "@/lib/hooks/use-scenario-preview-panels";
 import type { ScenarioBuilderDrillDown } from "@/lib/scenario/scenario-builder-drill-down";
+import {
+  buildScenarioPreviewPanelData,
+  type ScenarioPreviewPanelData
+} from "@/lib/scenario/scenario-preview-panels";
 import type { ScenarioInput } from "@/lib/scenario/types";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -29,6 +34,8 @@ interface BuildScenarioButtonProps {
   variant?: "default" | "prominent";
   testId?: string;
   drillDown?: ScenarioBuilderDrillDown;
+  /** Pre-built layer/session panels (Signals, Watchlist, Evidence). Scanner omits this to auto-fetch. */
+  previewPanels?: ScenarioPreviewPanelData;
 }
 
 /**
@@ -41,7 +48,8 @@ export function BuildScenarioButton({
   compact = false,
   variant = "default",
   testId = "build-scenario-button",
-  drillDown
+  drillDown,
+  previewPanels: previewPanelsProp
 }: BuildScenarioButtonProps) {
   const { colors } = useTheme();
   const [open, setOpen] = useState(false);
@@ -103,6 +111,31 @@ export function BuildScenarioButton({
     surface: "signals"
   };
 
+  const autoFetchPanels = drillDownResolved.surface === "scanner";
+  const autoPanels = useScenarioPreviewPanels({
+    symbol: input.symbol,
+    mode: input.mode,
+    surface: drillDownResolved.surface,
+    executionTier: session?.resolved.executionTier ?? resolved.executionTier,
+    enabled: open && autoFetchPanels && !previewPanelsProp,
+    setupBias: readinessCtx.setupBias ?? null,
+    gapGate: input.gap_intel_gate
+  });
+
+  const previewPanels: ScenarioPreviewPanelData =
+    previewPanelsProp ??
+    (autoFetchPanels
+      ? autoPanels
+      : buildScenarioPreviewPanelData({
+          symbol: input.symbol,
+          mode: input.mode,
+          setupBias: readinessCtx.setupBias ?? "Neutral",
+          executionTier: session?.resolved.executionTier ?? resolved.executionTier,
+          surface: drillDownResolved.surface,
+          gapGate: input.gap_intel_gate,
+          loadingLayers: true
+        }));
+
   useEffect(() => {
     if (!open) return;
     return lockBodyScroll();
@@ -119,6 +152,7 @@ export function BuildScenarioButton({
               input={session.input}
               resolved={session.resolved}
               drillDown={drillDownResolved}
+              previewPanels={previewPanels}
               onClose={handleClose}
             />
           ),

@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import { ScenarioPreviewDrillDown } from "@/components/scenario-builder/scenario-preview-drill-down";
 import { scenarioWhyNotItems, type ScenarioReadinessResolved } from "@/lib/scenario/scenario-readiness";
 import type { ScenarioBuilderDrillDown } from "@/lib/scenario/scenario-builder-drill-down";
+import type { ScenarioPreviewPanelData } from "@/lib/scenario/scenario-preview-panels";
 import {
   SCENARIO_EXECUTION_UNLOCK_FOOTER,
   biasPreviewLabel,
@@ -21,10 +22,18 @@ type Props = {
   input: ScenarioInput;
   resolved: ScenarioReadinessResolved;
   drillDown: ScenarioBuilderDrillDown;
+  previewPanels: ScenarioPreviewPanelData;
   onClose: () => void;
 };
 
-export function ScenarioBuilderPreviewModal({ open, input, resolved, drillDown, onClose }: Props) {
+export function ScenarioBuilderPreviewModal({
+  open,
+  input,
+  resolved,
+  drillDown,
+  previewPanels,
+  onClose
+}: Props) {
   const { colors } = useTheme();
   const sym = input.symbol.trim().toUpperCase();
   const modeLabel = input.mode === "swing" ? "Swing" : "Day";
@@ -145,6 +154,7 @@ export function ScenarioBuilderPreviewModal({ open, input, resolved, drillDown, 
                 drillDown={drillDown}
                 executionTier={resolved.executionTier}
                 whyNotItems={whyNotItems}
+                previewPanels={previewPanels}
                 onClose={onClose}
               />
             </div>

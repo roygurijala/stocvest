@@ -3,23 +3,26 @@
 import { useId, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, Layers } from "lucide-react";
+import { ScenarioPreviewInlinePanels } from "@/components/scenario-builder/scenario-preview-inline-panels";
 import { ScenarioPreviewWhyNot } from "@/components/scenario-builder/scenario-preview-why-not";
 import type { ScenarioExecutionTier, ScenarioWhyNotItem } from "@/lib/scenario/scenario-readiness";
 import type { ScenarioBuilderDrillDown } from "@/lib/scenario/scenario-builder-drill-down";
-import { borderRadius, typography } from "@/lib/design-system";
+import type { ScenarioPreviewPanelData } from "@/lib/scenario/scenario-preview-panels";
+import { borderRadius } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
 type Props = {
   drillDown: ScenarioBuilderDrillDown;
   executionTier: ScenarioExecutionTier;
   whyNotItems?: ScenarioWhyNotItem[];
+  previewPanels: ScenarioPreviewPanelData;
   onClose: () => void;
 };
 
 const linkClass =
   "border-0 bg-transparent p-0 text-left text-xs font-semibold underline-offset-2 hover:underline";
 
-function collapsedTeaser(items: ScenarioWhyNotItem[], actionCount: number): string {
+function collapsedTeaser(items: ScenarioWhyNotItem[]): string {
   const bits: string[] = [];
   if (items.length > 0) {
     const missing = items.find((i) => i.kind === "missing_confirmations");
@@ -31,23 +34,20 @@ function collapsedTeaser(items: ScenarioWhyNotItem[], actionCount: number): stri
       bits.push(`${items.length} blocker${items.length > 1 ? "s" : ""}`);
     }
   }
-  if (actionCount > 0) {
-    bits.push(`${actionCount} link${actionCount > 1 ? "s" : ""} to Signals`);
-  }
+  bits.push("Layer breakdown & session context below");
   return bits.join(" · ");
 }
 
 export function ScenarioPreviewDrillDown({
   drillDown,
-  executionTier,
+  executionTier: _executionTier,
   whyNotItems = [],
+  previewPanels,
   onClose
 }: Props) {
   const { colors } = useTheme();
   const panelId = useId();
   const [open, setOpen] = useState(false);
-  const showSession = executionTier === "session_limited";
-  const onSignals = drillDown.surface === "signals";
   const inEvidence = drillDown.surface === "evidence";
 
   const runThenClose = (fn?: () => void) => {
@@ -55,52 +55,10 @@ export function ScenarioPreviewDrillDown({
     fn?.();
   };
 
-  const actions: { id: string; label: string; onClick?: () => void; href?: string }[] = [];
+  const showEvidenceLink = !inEvidence;
+  const evidenceHref = drillDown.evidenceHref ?? previewPanels.evidenceHref;
 
-  if (onSignals && drillDown.onViewLayerBreakdown) {
-    actions.push({
-      id: "layers",
-      label: "View layer breakdown",
-      onClick: () => runThenClose(drillDown.onViewLayerBreakdown)
-    });
-  } else if (drillDown.signalsHref) {
-    actions.push({ id: "layers", label: "View layer breakdown on Signals", href: drillDown.signalsHref });
-  }
-
-  if (showSession) {
-    if (onSignals && drillDown.onViewSessionContext) {
-      actions.push({
-        id: "session",
-        label: "View session & gap context",
-        onClick: () => runThenClose(drillDown.onViewSessionContext)
-      });
-    } else if (drillDown.signalsHref) {
-      actions.push({ id: "session", label: "View session context on Signals", href: drillDown.signalsHref });
-    }
-  }
-
-  if (!inEvidence) {
-    if (onSignals && drillDown.onOpenEvidence) {
-      actions.push({
-        id: "evidence",
-        label: "Open full evidence",
-        onClick: () => runThenClose(drillDown.onOpenEvidence)
-      });
-    } else if (drillDown.signalsHref) {
-      actions.push({ id: "evidence", label: "Open symbol on Signals", href: drillDown.signalsHref });
-    }
-  } else {
-    actions.push({
-      id: "layers-evidence",
-      label: "Review layers in this evidence view",
-      onClick: () => onClose()
-    });
-  }
-
-  const teaser = collapsedTeaser(whyNotItems, actions.length);
-  const hasBody = whyNotItems.length > 0 || actions.length > 0;
-
-  if (!hasBody && !onSignals) return null;
+  const teaser = collapsedTeaser(whyNotItems);
 
   const accent = colors.accent;
   const shellBg = `color-mix(in srgb, ${accent} 10%, ${colors.surfaceMuted})`;
@@ -165,10 +123,8 @@ export function ScenarioPreviewDrillDown({
             data-testid="scenario-preview-drill-down-hint"
           >
             {open
-              ? "Collapse when you are done reviewing blockers and links."
-              : teaser
-                ? teaser
-                : "Tap to see why the sheet is limited and jump to Signals for layers & evidence."}
+              ? "Collapse when you are done reviewing blockers and context."
+              : teaser}
           </span>
         </span>
         <span
@@ -212,46 +168,42 @@ export function ScenarioPreviewDrillDown({
             </section>
           ) : null}
 
-          {actions.length > 0 ? (
-            <section>
+          <ScenarioPreviewInlinePanels panels={previewPanels} />
+
+          {showEvidenceLink ? (
+            <section className="mt-3">
               <p
                 className="m-0 text-[10px] font-semibold uppercase tracking-wide"
                 style={{ color: colors.textMuted }}
               >
-                Go deeper on Signals
+                Dive deeper (advanced view)
               </p>
               <ul className="m-0 mt-2 list-none space-y-1.5 p-0">
-                {actions.map((a) => (
-                  <li key={a.id}>
-                    {a.href ? (
-                      <Link
-                        href={a.href}
-                        className={`${linkClass} no-underline hover:underline`}
-                        style={{ color: colors.accent }}
-                        data-testid={`scenario-preview-action-${a.id}`}
-                        onClick={() => onClose()}
-                      >
-                        {a.label}
-                      </Link>
-                    ) : (
-                      <button
-                        type="button"
-                        className={linkClass}
-                        style={{ color: colors.accent, cursor: "pointer" }}
-                        data-testid={`scenario-preview-action-${a.id}`}
-                        onClick={a.onClick}
-                      >
-                        {a.label}
-                      </button>
-                    )}
-                  </li>
-                ))}
+                <li>
+                  {drillDown.onOpenEvidence ? (
+                    <button
+                      type="button"
+                      className={linkClass}
+                      style={{ color: colors.accent, cursor: "pointer" }}
+                      data-testid="scenario-preview-action-evidence"
+                      onClick={() => runThenClose(drillDown.onOpenEvidence)}
+                    >
+                      Open full evidence
+                    </button>
+                  ) : (
+                    <Link
+                      href={evidenceHref}
+                      className={`${linkClass} no-underline hover:underline`}
+                      style={{ color: colors.accent }}
+                      data-testid="scenario-preview-action-evidence"
+                      onClick={() => onClose()}
+                    >
+                      Open full evidence
+                    </Link>
+                  )}
+                </li>
               </ul>
             </section>
-          ) : whyNotItems.length === 0 ? (
-            <p className="m-0 text-xs leading-snug" style={{ color: colors.textMuted }}>
-              Use the layer breakdown, setup read, and evidence on this page.
-            </p>
           ) : null}
         </div>
       ) : null}

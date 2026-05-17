@@ -6,7 +6,8 @@ import type { SnapshotPayload } from "@/lib/api/market";
 import { useGapIntel } from "@/lib/hooks/use-gap-intel";
 import { useSignalComposite } from "@/lib/hooks/use-signal-composite";
 import { buildScenarioPlanningBundle } from "@/lib/scenario/scenario-planning-bundle";
-import { watchlistToSignalsHref } from "@/lib/nav/watchlist-signals-deeplink";
+import { resolveScenarioBuilderCapability } from "@/lib/scenario/scenario-readiness";
+import { buildScenarioPreviewPanelData } from "@/lib/scenario/scenario-preview-panels";
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
 
 type Props = {
@@ -38,6 +39,21 @@ export function WatchlistScenarioBuilder({ symbol, mode, snapshot, maturation, t
     [symU, mode, composite, snapshot, maturation, gapIntel]
   );
 
+  const previewPanels = useMemo(() => {
+    if (!bundle) return undefined;
+    const resolved = resolveScenarioBuilderCapability(bundle.readiness, bundle.input);
+    return buildScenarioPreviewPanelData({
+      symbol: symU,
+      mode,
+      setupBias: bundle.readiness.setupBias ?? "Neutral",
+      composite,
+      gapIntel,
+      gapGate: bundle.input.gap_intel_gate,
+      executionTier: resolved.executionTier,
+      surface: "watchlist"
+    });
+  }, [bundle, symU, mode, composite, gapIntel]);
+
   return (
     <span
       className="inline-flex shrink-0 items-center"
@@ -47,10 +63,8 @@ export function WatchlistScenarioBuilder({ symbol, mode, snapshot, maturation, t
       <ScenarioBuilderInline
         input={bundle.input}
         readiness={bundle.readiness}
-        drillDown={{
-          surface: "watchlist",
-          signalsHref: watchlistToSignalsHref(symU, mode)
-        }}
+        drillDown={{ surface: "watchlist", evidenceHref: previewPanels?.evidenceHref }}
+        previewPanels={previewPanels}
         compact
         testId={`${testId ?? `build-scenario-watchlist-${symU}`}-button`}
       />

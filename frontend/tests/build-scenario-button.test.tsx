@@ -132,6 +132,18 @@ describe("BuildScenarioButton — gated output not access", () => {
     expect(body).not.toMatch(/Stop:\s*\$/i);
     expect(body).not.toMatch(/Risk\/Reward:/i);
   });
+
+  test("expanded drill-down shows inline panels and advanced evidence link only", () => {
+    wrap(<BuildScenarioButton input={eligibleInput()} drillDown={{ surface: "scanner" }} />);
+    fireEvent.click(screen.getByTestId("build-scenario-button"));
+    fireEvent.click(screen.getByTestId("scenario-preview-drill-down-toggle"));
+    expect(screen.getByTestId("scenario-preview-inline-panels")).toBeInTheDocument();
+    expect(screen.getByTestId("scenario-preview-panel-layers")).toBeInTheDocument();
+    expect(screen.getByTestId("scenario-preview-panel-session")).toBeInTheDocument();
+    expect(screen.getByText("Dive deeper (advanced view)")).toBeInTheDocument();
+    expect(screen.getByTestId("scenario-preview-action-evidence")).toHaveTextContent("Open full evidence");
+    expect(screen.queryByText(/on Signals/i)).not.toBeInTheDocument();
+  });
 });
 
 describe("BuildScenarioButton — never implies execution", () => {

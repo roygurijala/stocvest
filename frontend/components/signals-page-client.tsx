@@ -37,7 +37,11 @@ import {
   pickPreviewLayers,
   type SignalsLayerRowInput
 } from "@/lib/signals-page-present";
-import type { ScenarioReadinessContext } from "@/lib/scenario/scenario-readiness";
+import {
+  resolveScenarioBuilderCapability,
+  type ScenarioReadinessContext
+} from "@/lib/scenario/scenario-readiness";
+import { buildScenarioPreviewPanelData } from "@/lib/scenario/scenario-preview-panels";
 import { CuteLoader } from "@/components/cute-loader";
 import { SignalLayerDivergenceChart } from "@/components/signal-layer-divergence-chart";
 import { SignalsAfterHoursPanel } from "@/components/signals-after-hours-panel";
@@ -1250,25 +1254,56 @@ export function SignalsPageClient({
     compositeResult
   ]);
 
+  const scenarioPreviewPanels = useMemo(() => {
+    if (!scenarioPlanningInput || !scenarioReadiness) return undefined;
+    const resolved = resolveScenarioBuilderCapability(scenarioReadiness, scenarioPlanningInput);
+    const comp =
+      compositeResult != null && !isInsufficientCompositeResponse(compositeResult)
+        ? (compositeResult as Record<string, unknown>)
+        : null;
+    return buildScenarioPreviewPanelData({
+      symbol,
+      mode: tradingMode,
+      setupBias,
+      composite: comp,
+      layerRows: signalsPresentRows,
+      gapIntel: gapIntelSnapshot,
+      gapGate: scenarioPlanningInput.gap_intel_gate,
+      executionTier: resolved.executionTier,
+      surface: "signals",
+      loadingLayers: compositeInitialLoading
+    });
+  }, [
+    scenarioPlanningInput,
+    scenarioReadiness,
+    compositeResult,
+    symbol,
+    tradingMode,
+    setupBias,
+    signalsPresentRows,
+    gapIntelSnapshot,
+    compositeInitialLoading
+  ]);
+
   const scenarioDrillDown = useMemo(
     (): ScenarioBuilderDrillDown => ({
       surface: "signals",
-      onViewLayerBreakdown: () => {
-        document
-          .querySelector('[data-testid="signals-layer-breakdown"]')
-          ?.scrollIntoView({ behavior: "smooth", block: "start" });
-      },
       onOpenEvidence: () => {
         void openEvidenceModal();
-      },
-      onViewSessionContext: () => {
-        document
-          .querySelector('[data-testid="signals-session-context"]')
-          ?.scrollIntoView({ behavior: "smooth", block: "start" });
       }
     }),
     [openEvidenceModal]
   );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.location.hash !== "#evidence") return;
+    if (!symbolCommitted) return;
+    void openEvidenceModal();
+    const url = new URL(window.location.href);
+    url.hash = "";
+    window.history.replaceState(null, "", `${url.pathname}${url.search}`);
+  }, [symbolCommitted, openEvidenceModal]);
 
   // Layer 4 (second slice): the composite fetch + radar
   // projection used to live in a `[symbol, tab, tradingMode]`
@@ -2144,6 +2179,7 @@ export function SignalsPageClient({
               input={scenarioPlanningInput}
               readiness={scenarioReadiness}
               drillDown={scenarioDrillDown}
+              previewPanels={scenarioPreviewPanels}
               prominent
               testId="signals-scenario-inline"
             />

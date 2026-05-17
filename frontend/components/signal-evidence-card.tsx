@@ -2,7 +2,7 @@
 
 import type { CSSProperties, ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlignJustify, ArrowDown, ArrowUp, Brain, Clock } from "lucide-react";
 import type { CardTone, ThemeColors } from "@/lib/design-system";
 import { borderRadius, cardSurfaceStyle, spacing, typography } from "@/lib/design-system";
@@ -63,7 +63,11 @@ import { UpgradePrompt } from "@/components/upgrade-prompt";
 import { useHasAIExplanations, useUserProfileLoaded } from "@/lib/api/user";
 import type { GapIntelSnapshot } from "@/lib/api/gap-intel";
 import type { ScenarioInput, ScenarioMode } from "@/lib/scenario/types";
-import type { ScenarioReadinessContext } from "@/lib/scenario/scenario-readiness";
+import {
+  resolveScenarioBuilderCapability,
+  type ScenarioReadinessContext
+} from "@/lib/scenario/scenario-readiness";
+import { buildScenarioPreviewPanelData } from "@/lib/scenario/scenario-preview-panels";
 import { synthTradeDecision } from "@/lib/signal-evidence/trade-decision";
 import { countLayerAlignment } from "@/lib/signals-page-present";
 
@@ -854,6 +858,20 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
     hasReferenceLevels: levelsComplete
   };
 
+  const evidencePreviewPanels = useMemo(() => {
+    const resolved = resolveScenarioBuilderCapability(evidenceReadiness, scenarioForBuild);
+    return buildScenarioPreviewPanelData({
+      symbol: evidence.symbol,
+      mode: evidenceMode,
+      setupBias,
+      layerRows,
+      gapIntel: gapIntelSnapshot,
+      gapGate: scenarioForBuild.gap_intel_gate,
+      executionTier: resolved.executionTier,
+      surface: "evidence"
+    });
+  }, [evidenceReadiness, scenarioForBuild, evidence.symbol, evidenceMode, setupBias, layerRows, gapIntelSnapshot]);
+
   return (
     <article style={{ display: "grid", gap: spacing[4], position: "relative", paddingBottom: spacing[4] }}>
       {evidence.earningsRisk ? (
@@ -894,6 +912,7 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
             input={scenarioForBuild}
             readiness={evidenceReadiness}
             drillDown={{ surface: "evidence" }}
+            previewPanels={evidencePreviewPanels}
             prominent
             testId="signal-evidence-scenario-cta"
           />

@@ -18,7 +18,6 @@ import { AddToWatchlistButton } from "@/components/add-to-watchlist-button";
 import { GapCatalystNewsDrawer } from "@/components/gap-catalyst-news-drawer";
 import { NewsPanel } from "@/components/news-panel";
 import { ScenarioBuilderInline } from "@/components/scenario-builder/scenario-builder-inline";
-import { scannerToSignalsHref } from "@/lib/nav/watchlist-signals-deeplink";
 import { ScannerEmptyStateCard } from "@/components/scanner-empty-state-card";
 import { ScannerNearQualificationSection } from "@/components/scanner/scanner-near-qualification-section";
 import { ScannerEvaluationTraceSection } from "@/components/scanner/scanner-evaluation-trace-section";
@@ -895,10 +894,7 @@ export function ScannerPageClient({
                     gapDirection === "bullish" ? "Bullish" : gapDirection === "bearish" ? "Bearish" : "Neutral",
                   hasReferenceLevels: item.current_price != null
                 }}
-                drillDown={{
-                  surface: "scanner",
-                  signalsHref: scannerToSignalsHref(sym, "day")
-                }}
+                drillDown={{ surface: "scanner" }}
                 testId={`build-scenario-gap-${sym}`}
               />
             );
@@ -2001,10 +1997,7 @@ export function ScannerPageClient({
                                     : "Neutral",
                               hasReferenceLevels: setup.last_price != null
                             }}
-                            drillDown={{
-                              surface: "scanner",
-                              signalsHref: scannerToSignalsHref(sym, setupMode)
-                            }}
+                            drillDown={{ surface: "scanner" }}
                             testId={`build-scenario-setup-${sym}`}
                           />
                         );
