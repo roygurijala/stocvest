@@ -26,9 +26,10 @@
  *      grep that asserts:
  *        - `<Suspense fallback={<SignalsPageShell />}>` appears in
  *          the page source, AND
- *        - the four heavy fetcher imports (`fetchMarketOverview`,
- *          `fetchScannerOverview`, `fetchEarningsCalendar`,
- *          `fetchPdtStatus`) are imported, AND
+ *        - SSR fetchers (`fetchMarketOverview`, `fetchScannerOverview`,
+ *          `fetchPdtStatus`, `fetchDefaultWatchlistSnapshot`) run inside
+ *          `SignalsPageData`, AND `fetchEarningsCalendar` is NOT on the
+ *          SSR path (per-symbol client fetch — see Tier 1.8), AND
  *        - the outer default-exported async page function does
  *          NOT contain any of those fetcher calls directly — the
  *          calls must live in `SignalsPageData` so they run
@@ -183,27 +184,11 @@ describe("/dashboard/signals page.tsx structural invariants", () => {
   });
 
   test("heavy_fetches_run_inside_the_Suspense_boundary_not_the_outer_page", () => {
-    // The structural invariant — the four heavy data calls MUST
-    // live inside the inner async server child (`SignalsPageData`)
-    // so they happen INSIDE the Suspense boundary. If a future
-    // refactor moves any of them back to the outer
-    // `DashboardSignalsPage` function, the shell-paint window
-    // collapses back to "wait for the slowest fetch" and the
-    // Tier 1.B win is silently lost.
-    //
-    // Strategy:
-    //   1. Strip block + line comments from the source so a
-    //      docstring mention of a fetcher name (e.g. "calls
-    //      `fetchEarningsCalendar` for symbols…") doesn't count as
-    //      a real invocation.
-    //   2. Split the cleaned source at the `SignalsPageData`
-    //      boundary.
-    //   3. Each fetcher invocation (`fetchXxx(`) MUST appear in
-    //      the inner half and MUST NOT appear in the outer half.
+    // SSR data calls MUST live inside `SignalsPageData` (Suspense island).
+    // Earnings calendar was removed from SSR (c3850ca): per-symbol client
+    // fetch after commit — do not re-add bulk `fetchEarningsCalendar` here.
     const cleaned = pageSource
-      // Strip block comments `/* ... */` (multi-line aware).
       .replace(/\/\*[\s\S]*?\*\//g, "")
-      // Strip line comments `// ...` to end of line.
       .replace(/\/\/[^\n]*/g, "");
     const innerAnchor = cleaned.indexOf("async function SignalsPageData");
     expect(innerAnchor, "page.tsx must declare a SignalsPageData inner async function").toBeGreaterThan(0);
@@ -212,8 +197,8 @@ describe("/dashboard/signals page.tsx structural invariants", () => {
     for (const fetcher of [
       "fetchMarketOverview",
       "fetchScannerOverview",
-      "fetchEarningsCalendar",
-      "fetchPdtStatus"
+      "fetchPdtStatus",
+      "fetchDefaultWatchlistSnapshot"
     ]) {
       expect(
         innerSource.includes(`${fetcher}(`),
@@ -224,5 +209,10 @@ describe("/dashboard/signals page.tsx structural invariants", () => {
         `${fetcher}() must NOT be called in the outer DashboardSignalsPage — that re-introduces the blank-screen window. See docs/PERFORMANCE.md §4.`
       ).toBe(false);
     }
+    expect(
+      cleaned.includes("fetchEarningsCalendar("),
+      "fetchEarningsCalendar() must not run on the signals SSR path — use client fetchEarningsCalendarClient per symbol"
+    ).toBe(false);
+    expect(innerSource).toMatch(/signalsPageMinimal:\s*true/);
   });
 });
