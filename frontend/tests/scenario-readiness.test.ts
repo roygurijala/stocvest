@@ -5,7 +5,11 @@ import {
   scenarioWhyNotItems,
   type ScenarioReadinessContext
 } from "@/lib/scenario/scenario-readiness";
-import { nextUnlockBullets, setupTierLabel } from "@/lib/scenario/scenario-readiness-present";
+import {
+  nextUnlockBullets,
+  scenarioPreviewTakeaway,
+  setupTierLabel
+} from "@/lib/scenario/scenario-readiness-present";
 import type { ScenarioInput } from "@/lib/scenario/types";
 
 function baseInput(overrides: Partial<ScenarioInput> = {}): ScenarioInput {
@@ -125,14 +129,34 @@ describe("scenarioWhyNotItems", () => {
 });
 
 describe("nextUnlockBullets", () => {
-  test("mentions alignment band and missing layer names", () => {
+  test("at 4/6 lists remaining confirmations by name, not a fixed threshold", () => {
     const r = resolveScenarioBuilderCapability(
-      ctx({ layersAligned: 2, layersTotal: 6 }),
+      ctx({ layersAligned: 4, layersTotal: 6, setupBias: "Bullish" }),
       baseInput()
     );
-    const withMissing = { ...r, missingLayers: ["News", "Macro"] };
+    const withMissing = { ...r, aligned: 4, missingLayers: ["News", "Macro", "Geopolitical"] };
     const bullets = nextUnlockBullets(withMissing);
-    expect(bullets.some((b) => b.includes("4–5 layers"))).toBe(true);
-    expect(bullets.some((b) => b.includes("News, Macro"))).toBe(true);
+    expect(bullets.some((b) => b.includes("Remaining confirmations align"))).toBe(true);
+    expect(bullets.some((b) => b.includes("News, Macro, Geopolitical"))).toBe(true);
+    expect(bullets.some((b) => b.includes("4–5"))).toBe(false);
+  });
+
+  test("mentions execution window when session limited", () => {
+    const r = resolveScenarioBuilderCapability(ctx({ layersAligned: 4, layersTotal: 6 }), baseInput());
+    const limited = { ...r, executionTier: "session_limited" as const, gapIntelBlocked: true };
+    const bullets = nextUnlockBullets(limited);
+    expect(bullets.some((b) => b.toLowerCase().includes("execution window"))).toBe(true);
+  });
+});
+
+describe("scenarioPreviewTakeaway", () => {
+  test("progressing setup with blocked execution", () => {
+    const r = resolveScenarioBuilderCapability(ctx({ layersAligned: 4, layersTotal: 6 }), {
+      ...baseInput(),
+      gap_intel_gate: { scenario_builder_state: "DISABLED", reasons: ["market_closed"] }
+    });
+    const line = scenarioPreviewTakeaway(r);
+    expect(line.toLowerCase()).toContain("execution");
+    expect(line.toLowerCase()).toMatch(/not possible|not available/);
   });
 });

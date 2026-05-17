@@ -123,6 +123,7 @@ describe("BuildScenarioButton — gated output not access", () => {
     expect(screen.getByTestId("scenario-preview-dual-status")).toBeInTheDocument();
     expect(screen.getByTestId("scenario-preview-setup-status")).toBeInTheDocument();
     expect(screen.getByTestId("scenario-preview-execution-status")).toBeInTheDocument();
+    expect(screen.getByTestId("scenario-preview-takeaway")).toBeInTheDocument();
     expect(screen.getByTestId("scenario-preview-drill-down")).toBeInTheDocument();
     expect(screen.getByTestId("scenario-preview-drill-down-toggle")).toBeInTheDocument();
     expect(screen.getByTestId("scenario-preview-drill-down-badge")).toHaveTextContent("Expand");

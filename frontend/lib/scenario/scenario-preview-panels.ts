@@ -7,6 +7,7 @@ import { compositeToSignalsLayerRows } from "@/lib/signals/composite-layer-rows"
 import {
   countLayerAlignment,
   layerPolarity,
+  type SignalsLayerPolarity,
   type SignalsLayerRowInput,
   type SignalsSetupBias
 } from "@/lib/signals-page-present";
@@ -14,6 +15,34 @@ import type { ScenarioBuilderSurface } from "@/lib/scenario/scenario-builder-dri
 import { contextualSignalsHref } from "@/lib/nav/watchlist-signals-deeplink";
 import type { ScenarioInput } from "@/lib/scenario/types";
 import type { ScenarioExecutionTier } from "@/lib/scenario/scenario-readiness";
+
+/** Short direction tag for layer breakdown (ties to setup bias). */
+export function layerDirectionContextLabel(polarity: SignalsLayerPolarity): string {
+  switch (polarity) {
+    case "supportive":
+      return "supportive";
+    case "blocking":
+      return "weak";
+    case "mixed":
+      return "mixed";
+    default:
+      return "neutral";
+  }
+}
+
+export function humanizeScenarioGateReason(reason: string): string {
+  const key = reason.trim().toLowerCase();
+  if (key === "market_closed") {
+    return "Market is closed — execution planning unavailable";
+  }
+  if (key === "outside_rth") {
+    return "Outside regular session — execution planning limited";
+  }
+  if (key === "stale_gap") {
+    return "Gap data is stale — execution planning paused";
+  }
+  return reason.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
+}
 
 export type ScenarioPreviewPanelData = {
   symbol: string;
@@ -72,12 +101,12 @@ export function buildSessionContextLines(args: {
     }
     const sb = gi.scenario_builder;
     if (sb.state === "DISABLED" && sb.reasons.length > 0) {
-      lines.push(`Scenario gate: ${sb.reasons[0]}`);
+      lines.push(humanizeScenarioGateReason(sb.reasons[0]));
     } else if (sb.state === "LIMITED" && sb.reasons.length > 0) {
-      lines.push(`Limited: ${sb.reasons[0]}`);
+      lines.push(`Limited: ${humanizeScenarioGateReason(sb.reasons[0])}`);
     }
   } else if (args.gapGate?.reasons?.length) {
-    lines.push(args.gapGate.reasons[0]);
+    lines.push(humanizeScenarioGateReason(args.gapGate.reasons[0]));
   } else {
     lines.push("Gap intelligence not loaded for this symbol yet.");
   }

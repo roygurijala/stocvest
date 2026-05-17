@@ -3,6 +3,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
 import { ScenarioPreviewDrillDown } from "@/components/scenario-builder/scenario-preview-drill-down";
+import { ScenarioPreviewWhyNot } from "@/components/scenario-builder/scenario-preview-why-not";
 import { scenarioWhyNotItems, type ScenarioReadinessResolved } from "@/lib/scenario/scenario-readiness";
 import type { ScenarioBuilderDrillDown } from "@/lib/scenario/scenario-builder-drill-down";
 import type { ScenarioPreviewPanelData } from "@/lib/scenario/scenario-preview-panels";
@@ -11,6 +12,7 @@ import {
   biasPreviewLabel,
   executionTierLabel,
   nextUnlockBullets,
+  scenarioPreviewTakeaway,
   setupTierLabel
 } from "@/lib/scenario/scenario-readiness-present";
 import type { ScenarioInput } from "@/lib/scenario/types";
@@ -39,6 +41,7 @@ export function ScenarioBuilderPreviewModal({
   const modeLabel = input.mode === "swing" ? "Swing" : "Day";
   const developing = resolved.setupTier === "developing" || resolved.capability === "building_soon";
   const whyNotItems = scenarioWhyNotItems(resolved);
+  const takeaway = scenarioPreviewTakeaway(resolved);
   const next = nextUnlockBullets(resolved);
   const setupLabel = setupTierLabel(resolved.setupTier, resolved.aligned, resolved.total);
   const executionLabel = executionTierLabel(resolved.executionTier);
@@ -147,17 +150,23 @@ export function ScenarioBuilderPreviewModal({
                   Watchlist maturation: <span style={statusStrong}>{resolved.maturationLabel}</span>
                 </p>
               ) : null}
+              <p
+                className="m-0 mt-3 text-sm font-medium leading-snug"
+                style={{ color: colors.text }}
+                data-testid="scenario-preview-takeaway"
+              >
+                {takeaway}
+              </p>
             </section>
 
-            <div className="mb-3">
-              <ScenarioPreviewDrillDown
-                drillDown={drillDown}
-                executionTier={resolved.executionTier}
-                whyNotItems={whyNotItems}
-                previewPanels={previewPanels}
-                onClose={onClose}
-              />
-            </div>
+            {whyNotItems.length > 0 ? (
+              <section style={sectionStyle} data-testid="scenario-preview-why-not">
+                <p style={{ margin: 0, fontWeight: 600, color: colors.text }}>Why not?</p>
+                <div className="mt-2">
+                  <ScenarioPreviewWhyNot items={whyNotItems} />
+                </div>
+              </section>
+            ) : null}
 
             <section style={sectionStyle} data-testid="scenario-preview-next">
               <p style={{ margin: 0, fontWeight: 600, color: colors.text }}>Next unlock</p>
@@ -174,6 +183,15 @@ export function ScenarioBuilderPreviewModal({
                 ))}
               </ul>
             </section>
+
+            <div className="mb-3">
+              <ScenarioPreviewDrillDown
+                drillDown={drillDown}
+                executionTier={resolved.executionTier}
+                previewPanels={previewPanels}
+                onClose={onClose}
+              />
+            </div>
 
             <section
               style={{

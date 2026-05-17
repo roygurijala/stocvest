@@ -49,28 +49,59 @@ export function biasPreviewLabel(directionalLabel: string | null): string {
   return `Bias: ${directionalLabel}`;
 }
 
+/** One-line anchor under Setup / Execution — reflects live dual-axis state. */
+export function scenarioPreviewTakeaway(resolved: ScenarioReadinessResolved): string {
+  const { setupTier, executionTier } = resolved;
+  const setupReady = setupTier === "actionable";
+  const executionReady = executionTier === "available";
+
+  if (setupTier === "invalidated") {
+    return "This setup read has been invalidated — review layers before planning.";
+  }
+  if (setupReady && executionReady) {
+    return "Setup and execution are both available — open the full planning sheet when ready.";
+  }
+  if (setupReady && !executionReady) {
+    if (executionTier === "session_limited") {
+      return "Setup qualifies, but execution planning is not available in the current session.";
+    }
+    return "Setup qualifies, but execution planning is still limited until reference levels clear.";
+  }
+  if (!setupReady && executionReady) {
+    return "Execution window is open, but the setup is still building — confirmations may still be missing.";
+  }
+  if (!executionReady) {
+    return "Setup is progressing, but execution is currently not possible.";
+  }
+  return "Setup is still developing — layer alignment or confirmations need to catch up.";
+}
+
 export function nextUnlockBullets(resolved: ScenarioReadinessResolved): string[] {
   const { setupTier, executionTier, aligned, total, missingLayers } = resolved;
   const out: string[] = [];
 
   if (setupTier !== "actionable") {
-    if (aligned < 4) {
-      out.push("Alignment improves to 4–5 layers");
-    } else if (aligned < total) {
-      out.push(`Alignment improves toward ${total} layers`);
-    }
     if (missingLayers.length > 0) {
       const names = missingLayers.map(formatMissingLayerDisplayName).join(", ");
-      out.push(`Missing confirmations (${names}) align`);
+      out.push(`Remaining confirmations align (${names})`);
     } else if (aligned < total) {
-      out.push("Confirmation layers align with bias");
+      const gap = total - aligned;
+      out.push(
+        gap === 1
+          ? `One more layer aligns with bias (${aligned} / ${total} now)`
+          : `${gap} more layers align with bias (${aligned} / ${total} now)`
+      );
     }
   }
 
   if (executionTier === "session_limited") {
-    out.push("Market session enables execution planning");
+    out.push(
+      resolved.gapIntelBlocked
+        ? "Execution window becomes available when the market is open"
+        : "Execution window becomes available when session conditions clear"
+    );
   } else if (executionTier === "structural_incomplete") {
-    out.push("Reference levels populate for planning math");
+    out.push("Reference levels populate for execution planning");
   }
 
   if (out.length === 0) {

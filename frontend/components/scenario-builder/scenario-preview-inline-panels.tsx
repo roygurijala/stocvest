@@ -5,9 +5,11 @@ import { ChevronDown } from "lucide-react";
 import { CuteLoader } from "@/components/cute-loader";
 import {
   layerAlignedWithBias,
+  layerDirectionContextLabel,
   layerPreviewSummary,
   type ScenarioPreviewPanelData
 } from "@/lib/scenario/scenario-preview-panels";
+import { layerPolarity } from "@/lib/signals-page-present";
 import { borderRadius } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -104,6 +106,9 @@ export function ScenarioPreviewInlinePanels({ panels }: { panels: ScenarioPrevie
               const aligned = layerAlignedWithBias(row, setupBias);
               const unavailable = row.status === "Unavailable" || row.statusLabel?.includes("Unavailable");
               const mark = unavailable ? "—" : aligned ? "✅" : "❌";
+              const direction = unavailable
+                ? null
+                : layerDirectionContextLabel(layerPolarity(row, setupBias));
               return (
                 <li
                   key={row.key}
@@ -112,6 +117,9 @@ export function ScenarioPreviewInlinePanels({ panels }: { panels: ScenarioPrevie
                 >
                   <span aria-hidden>{mark}</span>
                   <span style={{ color: colors.text, fontWeight: 600 }}>{row.name}</span>
+                  {direction ? (
+                    <span style={{ color: colors.textMuted, fontWeight: 500 }}>({direction})</span>
+                  ) : null}
                 </li>
               );
             })}

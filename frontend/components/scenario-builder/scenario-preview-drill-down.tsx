@@ -4,8 +4,7 @@ import { useId, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, Layers } from "lucide-react";
 import { ScenarioPreviewInlinePanels } from "@/components/scenario-builder/scenario-preview-inline-panels";
-import { ScenarioPreviewWhyNot } from "@/components/scenario-builder/scenario-preview-why-not";
-import type { ScenarioExecutionTier, ScenarioWhyNotItem } from "@/lib/scenario/scenario-readiness";
+import type { ScenarioExecutionTier } from "@/lib/scenario/scenario-readiness";
 import type { ScenarioBuilderDrillDown } from "@/lib/scenario/scenario-builder-drill-down";
 import type { ScenarioPreviewPanelData } from "@/lib/scenario/scenario-preview-panels";
 import { borderRadius } from "@/lib/design-system";
@@ -14,7 +13,6 @@ import { useTheme } from "@/lib/theme-provider";
 type Props = {
   drillDown: ScenarioBuilderDrillDown;
   executionTier: ScenarioExecutionTier;
-  whyNotItems?: ScenarioWhyNotItem[];
   previewPanels: ScenarioPreviewPanelData;
   onClose: () => void;
 };
@@ -22,26 +20,13 @@ type Props = {
 const linkClass =
   "border-0 bg-transparent p-0 text-left text-xs font-semibold underline-offset-2 hover:underline";
 
-function collapsedTeaser(items: ScenarioWhyNotItem[]): string {
-  const bits: string[] = [];
-  if (items.length > 0) {
-    const missing = items.find((i) => i.kind === "missing_confirmations");
-    if (missing && missing.kind === "missing_confirmations") {
-      const names = missing.layers.slice(0, 3).join(", ");
-      const extra = missing.layers.length > 3 ? ` +${missing.layers.length - 3}` : "";
-      bits.push(`Missing: ${names}${extra}`);
-    } else {
-      bits.push(`${items.length} blocker${items.length > 1 ? "s" : ""}`);
-    }
-  }
-  bits.push("Layer breakdown & session context below");
-  return bits.join(" · ");
+function collapsedTeaser(): string {
+  return "Layer breakdown and session context — expand for detail";
 }
 
 export function ScenarioPreviewDrillDown({
   drillDown,
   executionTier: _executionTier,
-  whyNotItems = [],
   previewPanels,
   onClose
 }: Props) {
@@ -58,7 +43,7 @@ export function ScenarioPreviewDrillDown({
   const showEvidenceLink = !inEvidence;
   const evidenceHref = drillDown.evidenceHref ?? previewPanels.evidenceHref;
 
-  const teaser = collapsedTeaser(whyNotItems);
+  const teaser = collapsedTeaser();
 
   const accent = colors.accent;
   const shellBg = `color-mix(in srgb, ${accent} 10%, ${colors.surfaceMuted})`;
@@ -157,17 +142,6 @@ export function ScenarioPreviewDrillDown({
           }}
           data-testid="scenario-preview-drill-down-panel"
         >
-          {whyNotItems.length > 0 ? (
-            <section data-testid="scenario-preview-why-not" className="mb-3">
-              <p className="m-0 text-sm font-semibold" style={{ color: colors.text }}>
-                Why not?
-              </p>
-              <div className="mt-2">
-                <ScenarioPreviewWhyNot items={whyNotItems} />
-              </div>
-            </section>
-          ) : null}
-
           <ScenarioPreviewInlinePanels panels={previewPanels} />
 
           {showEvidenceLink ? (
