@@ -7,9 +7,9 @@
  */
 
 import { isEligibleForScenario } from "@/lib/scenario/eligibility";
+import { pickMissingConfirmationLayers } from "@/lib/signal-evidence/evidence-card-present";
 import {
   countLayerAlignment,
-  pickMissingConfirmationLayers,
   type SignalsLayerRowInput,
   type SignalsSetupBias
 } from "@/lib/signals-page-present";
