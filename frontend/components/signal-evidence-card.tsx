@@ -71,6 +71,7 @@ import {
 import { buildScenarioPreviewPanelData } from "@/lib/scenario/scenario-preview-panels";
 import { synthTradeDecision } from "@/lib/signal-evidence/trade-decision";
 import { countLayerAlignment } from "@/lib/signals-page-present";
+import { buildEvidenceRiskHorizonFactors } from "@/lib/signal-evidence/fundamental-present";
 
 interface SignalEvidenceCardProps {
   evidence: SignalEvidenceData;
@@ -893,47 +894,88 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
     });
   }, [evidenceReadiness, scenarioForBuild, evidence.symbol, evidenceMode, setupBias, layerRows, gapIntelSnapshot]);
 
+  const evidenceRiskFactorBullets = useMemo(() => {
+    if (evidenceMode !== "swing") return [];
+    const macroLayer = evidence.layers.find((l) => l.key === "macro");
+    const macroWarnings = (macroLayer?.macro_warnings ?? []).slice(0, 2);
+    return buildEvidenceRiskHorizonFactors({
+      context: evidence.fundamentalContext,
+      earningsDaysAway: evidence.earningsRisk?.daysUntil ?? null,
+      earningsRisk: evidence.earningsRisk?.risk ?? null,
+      omitEarnings: evidence.earningsRisk != null,
+      macroWarnings
+    });
+  }, [evidenceMode, evidence.fundamentalContext, evidence.earningsRisk, evidence.layers]);
+
+  const showRiskHorizon =
+    evidenceMode === "swing" && (evidence.earningsRisk != null || evidenceRiskFactorBullets.length > 0);
+
   return (
     <article style={{ display: "grid", gap: spacing[4], position: "relative", paddingBottom: spacing[4] }}>
-      {evidence.earningsRisk ? (
+      {showRiskHorizon ? (
         <section
+          data-testid="evidence-risk-horizon"
           style={{
             border:
-              evidence.earningsRisk.risk === "imminent"
+              evidence.earningsRisk?.risk === "imminent"
                 ? "1px solid rgba(239,68,68,0.55)"
-                : "1px solid rgba(245,158,11,0.5)",
+                : `1px solid ${colors.border}`,
             background:
-              evidence.earningsRisk.risk === "imminent"
+              evidence.earningsRisk?.risk === "imminent"
                 ? "rgba(239,68,68,0.12)"
-                : "rgba(245,158,11,0.14)",
+                : colors.surface,
             borderRadius: borderRadius.lg,
-            padding: spacing[3]
+            padding: spacing[3],
+            display: "grid",
+            gap: spacing[2]
           }}
         >
-          <p
-            style={{
-              margin: 0,
-              fontWeight: 700,
-              color: evidence.earningsRisk.risk === "imminent" ? colors.bearish : colors.caution
-            }}
-          >
-            {evidence.earningsRisk.chip ??
-              `⚠️ Earnings: ${evidence.symbol} reports in ${evidence.earningsRisk.daysUntil} day${
-                evidence.earningsRisk.daysUntil === 1 ? "" : "s"
-              }`}
-            {evidence.earningsRisk.reportDate ? ` · ${evidence.earningsRisk.reportDate}` : ""}
-            {evidence.earningsRisk.reportTime === "before_market"
-              ? " · before market"
-              : evidence.earningsRisk.reportTime === "after_market"
-                ? " · after market close"
-                : evidence.earningsRisk.reportTime === "during_market"
-                  ? " · during market"
-                  : ""}
+          <p className="m-0 text-[10px] font-semibold uppercase tracking-[0.14em]" style={{ color: colors.textMuted }}>
+            Risk horizon
           </p>
-          <p style={{ margin: `${spacing[1]} 0 0 0`, color: colors.textMuted }}>
-            Calendar context only — not a composite layer. Signals carry extra event uncertainty until after the report; sizing
-            and timing are solely your decision.
-          </p>
+          {evidence.earningsRisk ? (
+            <>
+              <p
+                style={{
+                  margin: 0,
+                  fontWeight: 700,
+                  color: evidence.earningsRisk.risk === "imminent" ? colors.bearish : colors.caution
+                }}
+              >
+                {evidence.earningsRisk.chip ??
+                  `⚠️ Earnings: ${evidence.symbol} reports in ${evidence.earningsRisk.daysUntil} day${
+                    evidence.earningsRisk.daysUntil === 1 ? "" : "s"
+                  }`}
+                {evidence.earningsRisk.reportDate ? ` · ${evidence.earningsRisk.reportDate}` : ""}
+                {evidence.earningsRisk.reportTime === "before_market"
+                  ? " · before market"
+                  : evidence.earningsRisk.reportTime === "after_market"
+                    ? " · after market close"
+                    : evidence.earningsRisk.reportTime === "during_market"
+                      ? " · during market"
+                      : ""}
+              </p>
+              <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.sm }}>
+                Calendar context only — not a composite layer. Event uncertainty is separate from the six-layer alignment.
+              </p>
+            </>
+          ) : null}
+          {evidenceRiskFactorBullets.length > 0 ? (
+            <div>
+              <p className="m-0 text-xs font-semibold" style={{ color: colors.textMuted }}>
+                Risk factors
+              </p>
+              <ul
+                className="m-0 mt-1 list-disc space-y-1 pl-5 text-sm leading-snug"
+                style={{ color: colors.text }}
+                data-testid="evidence-risk-factors"
+              >
+                {evidenceRiskFactorBullets.map((line) => (
+                  <li key={line.slice(0, 72)}>{line}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </section>
       ) : null}
 

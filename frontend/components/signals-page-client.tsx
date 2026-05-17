@@ -24,6 +24,9 @@ import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
 import { normalizeWatchlistMaturationBySymbol } from "@/lib/watchlist-page-utils";
 import { SignalsReferenceLevels } from "@/components/signals/signals-reference-levels";
 import { SignalsSetupRead } from "@/components/signals/signals-setup-read";
+import { buildFundamentalBackdropSummary } from "@/lib/signal-evidence/fundamental-present";
+import { parseFundamentalContext } from "@/lib/signal-evidence";
+import { useHasAIExplanations, useUserProfileLoaded } from "@/lib/api/user";
 import { SetupEvolutionPanel } from "@/components/signals/setup-evolution-panel";
 import { ScenarioBuilderInline } from "@/components/scenario-builder/scenario-builder-inline";
 import { buildScenarioPlanningBundle } from "@/lib/scenario/scenario-planning-bundle";
@@ -1186,6 +1189,31 @@ export function SignalsPageClient({
     [signalsPresentRows, setupBias]
   );
 
+  const profileLoaded = useUserProfileLoaded();
+  const hasFundamentalAccess = useHasAIExplanations();
+
+  const fundamentalSummary = useMemo(() => {
+    if (tradingMode !== "swing") return null;
+    if (!compositeResult || isInsufficientCompositeResponse(compositeResult)) return null;
+    const body = compositeResult as Record<string, unknown>;
+    const ctx = parseFundamentalContext(body.fundamental_context);
+    const daysRaw = body.earnings_days_away;
+    const earningsDays =
+      typeof daysRaw === "number" && Number.isFinite(daysRaw) ? Math.round(daysRaw) : null;
+    const earningsRisk = typeof body.earnings_risk === "string" ? body.earnings_risk : null;
+    const newsRow = signalsPresentRows.find((r) => r.key === "news");
+    return buildFundamentalBackdropSummary({
+      context: ctx,
+      earningsDaysAway: earningsDays,
+      earningsRisk,
+      newsStatus: newsRow?.status,
+      setupActionable: pageDecision?.state === "actionable"
+    });
+  }, [tradingMode, compositeResult, signalsPresentRows, pageDecision?.state]);
+
+  const showFundamentalUpgrade =
+    tradingMode === "swing" && profileLoaded && !hasFundamentalAccess && fundamentalSummary == null;
+
   const scenarioReadiness = useMemo((): ScenarioReadinessContext | null => {
     if (!symbolCommitted || !scenarioPlanningBundle) return null;
     return {
@@ -2209,6 +2237,8 @@ export function SignalsPageClient({
           previewLayers={previewBlockingLayers}
           onOpenEvidence={() => void openEvidenceModal()}
           onSwitchToHistory={() => setTab("history")}
+          fundamentalSummary={fundamentalSummary}
+          showFundamentalUpgrade={showFundamentalUpgrade}
         />
       ) : null}
 

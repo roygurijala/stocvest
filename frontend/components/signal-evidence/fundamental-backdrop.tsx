@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import type { SignalEvidenceFundamentalContext } from "@/lib/signal-evidence";
+import { revenueTrendInterpretation } from "@/lib/signal-evidence/fundamental-present";
 import { UpgradePrompt } from "@/components/upgrade-prompt";
 
 type FundamentalBackdropProps = {
@@ -157,7 +158,7 @@ export function FundamentalBackdropPanel({ context, isPaid, mode }: FundamentalB
           }
         />
         {context.revenue_trend !== "unknown" ? (
-          <MetricTile label="Revenue" value={tagLabel(context.revenue_trend)} />
+          <MetricTile label="Revenue" value={revenueTrendInterpretation(context.revenue_trend)} />
         ) : null}
       </div>
 

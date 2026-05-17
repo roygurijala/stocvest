@@ -445,7 +445,7 @@ function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
 }
 
-function parseFundamentalContext(raw: unknown): SignalEvidenceFundamentalContext | null {
+export function parseFundamentalContext(raw: unknown): SignalEvidenceFundamentalContext | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
   const backdrop = o.backdrop;

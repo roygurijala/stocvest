@@ -11,6 +11,9 @@ import {
   type SignalsSetupBias
 } from "@/lib/signals-page-present";
 import type { TradeDecision } from "@/lib/signal-evidence/trade-decision";
+import type { FundamentalBackdropSummary } from "@/lib/signal-evidence/fundamental-present";
+import { SignalsFundamentalBackdrop } from "@/components/signals/signals-fundamental-backdrop";
+import { SignalsFundamentalBackdropUpgrade } from "@/components/signals/signals-fundamental-upgrade";
 import { watchlistToSignalsHref } from "@/lib/nav/watchlist-signals-deeplink";
 import { borderRadius, spacing, surfaceGlowClassName } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
@@ -24,6 +27,8 @@ type Props = {
   previewLayers: SignalsLayerRowInput[];
   onOpenEvidence?: () => void;
   onSwitchToHistory?: () => void;
+  fundamentalSummary?: FundamentalBackdropSummary | null;
+  showFundamentalUpgrade?: boolean;
 };
 
 export function SignalsSetupRead({
@@ -34,7 +39,9 @@ export function SignalsSetupRead({
   decision,
   previewLayers,
   onOpenEvidence,
-  onSwitchToHistory
+  onSwitchToHistory,
+  fundamentalSummary,
+  showFundamentalUpgrade = false
 }: Props) {
   const { colors } = useTheme();
   const symU = symbol.trim().toUpperCase();
@@ -97,6 +104,9 @@ export function SignalsSetupRead({
       <p className="m-0 mt-1 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
         {decision.line}
       </p>
+
+      {fundamentalSummary ? <SignalsFundamentalBackdrop summary={fundamentalSummary} /> : null}
+      {showFundamentalUpgrade ? <SignalsFundamentalBackdropUpgrade /> : null}
 
       {whyNot.length > 0 ? (
         <div className="mt-4" data-testid="signals-why-not">

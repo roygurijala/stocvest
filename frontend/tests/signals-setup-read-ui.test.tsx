@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import { SignalsSetupRead } from "@/components/signals/signals-setup-read";
 import type { SignalsLayerRowInput } from "@/lib/signals-page-present";
+import type { FundamentalBackdropSummary } from "@/lib/signal-evidence/fundamental-present";
 
 vi.mock("@/components/info-tip", () => ({
   InfoTip: () => null
@@ -9,6 +10,10 @@ vi.mock("@/components/info-tip", () => ({
 
 vi.mock("@/components/signal-disclaimer-chip", () => ({
   SignalDisclaimerChip: () => <span data-testid="signal-disclaimer-chip" />
+}));
+
+vi.mock("@/components/upgrade-prompt", () => ({
+  UpgradePrompt: () => <span data-testid="upgrade-prompt">Upgrade</span>
 }));
 
 vi.mock("@/lib/theme-provider", () => ({
@@ -66,5 +71,54 @@ describe("SignalsSetupRead", () => {
     expect(screen.getByTestId("signals-next")).toBeInTheDocument();
     const html = document.body.innerHTML;
     expect(html).not.toMatch(/consider|watch closely|near miss|buy|sell/i);
+  });
+
+  test("renders fundamental backdrop when summary provided", () => {
+    const summary: FundamentalBackdropSummary = {
+      headline: "Fundamental backdrop: Weak",
+      backdrop: "weak",
+      bullets: ["Revenue trend declining", "No positive catalyst"],
+      convictionNote: "Setup may still meet layer rules, but fundamental backdrop is weak — conviction is lower, not blocked."
+    };
+    render(
+      <SignalsSetupRead
+        symbol="TSLA"
+        tradingMode="swing"
+        bias="Bullish"
+        rows={rows}
+        previewLayers={rows.slice(0, 2)}
+        decision={{
+          state: "actionable",
+          line: "Layers aligned for a bullish swing read",
+          reinforcements: [],
+          rationale: null
+        }}
+        fundamentalSummary={summary}
+      />
+    );
+    expect(screen.getByTestId("signals-fundamental-backdrop")).toBeInTheDocument();
+    expect(screen.getByText(/Fundamental backdrop: Weak/i)).toBeInTheDocument();
+    expect(screen.getByText(/conviction is lower/i)).toBeInTheDocument();
+  });
+
+  test("renders fundamental upgrade slot when requested", () => {
+    render(
+      <SignalsSetupRead
+        symbol="TSLA"
+        tradingMode="swing"
+        bias="Bullish"
+        rows={rows}
+        previewLayers={rows.slice(0, 2)}
+        decision={{
+          state: "monitor",
+          line: "No actionable setup",
+          reinforcements: [],
+          rationale: null
+        }}
+        showFundamentalUpgrade
+      />
+    );
+    expect(screen.getByTestId("signals-fundamental-backdrop-upgrade")).toBeInTheDocument();
+    expect(screen.getByTestId("upgrade-prompt")).toBeInTheDocument();
   });
 });
