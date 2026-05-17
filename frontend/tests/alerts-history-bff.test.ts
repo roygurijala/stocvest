@@ -59,6 +59,18 @@ describe("BFF: GET /api/stocvest/alerts/history", () => {
     expect(u.searchParams.get("symbols")).toBe("AAPL,MSFT");
   });
 
+  test("upstream 503 degrades to empty alerts with 200", async () => {
+    mocks.stocvestAuthedFetch.mockResolvedValueOnce(
+      new Response("{}", { status: 503, headers: { "content-type": "application/json" } })
+    );
+    const { GET } = await import("@/app/api/stocvest/alerts/history/route");
+    const res = await GET(new Request("http://test.local/api/stocvest/alerts/history?limit=5"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.alerts).toEqual([]);
+    expect(body.degraded).toBe(true);
+  });
+
   test("upstream 400 passes through", async () => {
     mocks.stocvestAuthedFetch.mockResolvedValueOnce(
       new Response(JSON.stringify({ message: "Invalid alert_type: 'nope'" }), {

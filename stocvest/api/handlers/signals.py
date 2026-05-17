@@ -106,7 +106,8 @@ _COMPOSITE_INSUFFICIENT_MESSAGE = (
     "Real-time data is required for at least 3 of 6 layers."
 )
 
-_COMPOSITE_TIMEOUT_SEC = 8.0
+_COMPOSITE_TIMEOUT_SEC = 14.0
+_GAP_INTEL_TIMEOUT_SEC = 12.0
 
 
 def _compute_with_thread_timeout(
@@ -151,6 +152,12 @@ def composite_response_with_evidence_cache(
             lambda: _compute_with_thread_timeout(sync_compute, timeout_sec=_COMPOSITE_TIMEOUT_SEC)
         )
     except CircuitOpenError:
+        stale = read_dashboard_cache(cache_key)
+        if stale and isinstance(stale.get("data"), dict):
+            data = dict(stale["data"])
+            data["source"] = "cache_stale"
+            data["cache_state_version"] = stale.get("state_version")
+            return data
         return {
             "error": "upstream_unavailable",
             "message": "Market data is briefly unavailable. Try again in a moment.",
@@ -158,6 +165,12 @@ def composite_response_with_evidence_cache(
         }
 
     if body is None:
+        stale = read_dashboard_cache(cache_key)
+        if stale and isinstance(stale.get("data"), dict):
+            data = dict(stale["data"])
+            data["source"] = "cache_stale"
+            data["cache_state_version"] = stale.get("state_version")
+            return data
         return {
             "error": "timeout",
             "message": "Signal analysis timed out. Try again in a moment.",
@@ -181,11 +194,13 @@ def composite_response_with_evidence_cache(
                 sync_watchlist_maturation_from_composite,
             )
 
+            # Request path: persist maturation only — no SES on the hot path (avoids 503s).
             sync_watchlist_maturation_from_composite(
                 user_id=user_id,
                 symbol=symbol,
                 mode="day" if mode == "day" else "swing",
                 composite_body=out,
+                email_on_state_change=False,
             )
         except Exception as exc:  # noqa: BLE001 — maturation must not break composite
             _LOG.warning("watchlist maturation sync skipped: %s", exc)
@@ -1523,13 +1538,43 @@ def gap_intel_snapshot_handler(event: LambdaEvent, context: LambdaContext) -> di
 
     old_sb = cached.last_sb_state if cached else None
     prior_dm = cached.last_disable_metric_at if cached else None
+
+    def _compute_gap() -> dict[str, Any]:
+        return asyncio.run(compute_gap_intel_body(symbol_raw, mode, now_utc=now_utc))
+
     try:
-        body = asyncio.run(compute_gap_intel_body(symbol_raw, mode, now_utc=now_utc))
+        body = polygon_circuit.call(
+            lambda: _compute_with_thread_timeout(_compute_gap, timeout_sec=_GAP_INTEL_TIMEOUT_SEC)
+        )
+    except CircuitOpenError:
+        if cached is not None:
+            stale = dict(cached.payload)
+            stale["source"] = "cache_stale"
+            return ok(stale)
+        return ok(
+            {
+                "error": "upstream_unavailable",
+                "symbol": symbol_raw,
+                "message": "Market data is briefly unavailable. Try again in a moment.",
+                "disclaimer": API_SIGNAL_DISCLAIMER,
+            }
+        )
     except PolygonError as exc:
         return bad_request(str(exc))
-    except Exception as exc:  # noqa: BLE001 — defensive
-        _LOG.exception("gap_intel_snapshot transport failed: %s", exc)
-        return internal_error("Gap intelligence failed.")
+
+    if body is None:
+        if cached is not None:
+            stale = dict(cached.payload)
+            stale["source"] = "cache_stale"
+            return ok(stale)
+        return ok(
+            {
+                "error": "timeout",
+                "symbol": symbol_raw,
+                "message": "Gap intelligence timed out. Try again in a moment.",
+                "disclaimer": API_SIGNAL_DISCLAIMER,
+            }
+        )
 
     merged_dm = next_last_disable_metric_timestamp(
         old_sb_state=old_sb,

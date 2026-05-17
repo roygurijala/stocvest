@@ -95,6 +95,12 @@ a {
   background: var(--color-bg);
 }
 
+[data-app-scroll-root] {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
 .app-shell-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

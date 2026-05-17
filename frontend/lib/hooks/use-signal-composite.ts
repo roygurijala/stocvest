@@ -55,10 +55,17 @@
  *   * The "insufficient" envelope (`market_status` only) is returned
  *     verbatim — callers use `isInsufficientCompositeResponse` to
  *     branch the UI.
+ *   * Transport envelopes (`error: timeout|upstream_unavailable|…`)
+ *     surface via `transportError` while `composite` stays null.
  */
 
 import useSWR from "swr";
 
+import {
+  compositeFetchErrorMessage,
+  getCompositeTransportError,
+  type CompositeTransportError
+} from "@/lib/api/composite-transport";
 import { STOCVEST_SWR_CACHE_NS } from "@/lib/swr/config";
 
 /** Trading-mode discriminator for the composite endpoint. */
@@ -82,6 +89,8 @@ export interface UseSignalCompositeResult {
   isInitialLoading: boolean;
   isRevalidating: boolean;
   error: unknown;
+  transportError: CompositeTransportError | null;
+  fetchErrorMessage: string | null;
 }
 
 interface FetchCompositeOptions {
@@ -143,11 +152,17 @@ export function useSignalComposite(
     }
   );
 
+  const transportError = getCompositeTransportError(data);
+  const hasLayerPayload =
+    data != null && !transportError && !error && !String(data.error ?? "").trim();
+
   return {
-    composite: error || !data ? null : data,
+    composite: hasLayerPayload ? data : null,
     isInitialLoading: isLoading,
     isRevalidating: isValidating && !isLoading,
-    error
+    error,
+    transportError,
+    fetchErrorMessage: error ? compositeFetchErrorMessage(error) : null
   };
 }
 

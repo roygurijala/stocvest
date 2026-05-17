@@ -344,7 +344,9 @@ export function SignalsPageClient({
   const {
     composite: compositeResult,
     isInitialLoading: compositeInitialLoading,
-    isRevalidating: compositeRevalidating
+    isRevalidating: compositeRevalidating,
+    transportError: compositeTransportError,
+    fetchErrorMessage: compositeFetchErrorMessage
   } = useSignalComposite(symbol, tradingMode, {
     enabled: tab === "layers"
   });
@@ -1328,6 +1330,26 @@ export function SignalsPageClient({
     : null;
   const hasValidSignal = compositeResult !== null && !isInsufficientCompositeResponse(compositeResult);
 
+  const compositeServiceMessage: ReactNode =
+    compositeFetchErrorMessage || compositeTransportError?.message ? (
+      <div
+        data-testid="signals-composite-service-error"
+        style={{
+          background: "rgba(239,68,68,0.06)",
+          border: "1px solid rgba(239,68,68,0.22)",
+          borderRadius: 12,
+          padding: 24
+        }}
+      >
+        <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "#ef4444" }}>
+          Signal service unavailable
+        </p>
+        <p style={{ margin: `${spacing[2]} 0 0 0`, fontSize: 13, lineHeight: 1.55, color: colors.textMuted }}>
+          {compositeFetchErrorMessage ?? compositeTransportError?.message}
+        </p>
+      </div>
+    ) : null;
+
   const insufficientLayerMessage: ReactNode = insufficientComposite ? (
     <div
       style={{
@@ -2167,8 +2189,8 @@ export function SignalsPageClient({
             bias={setupBias}
             rows={signalsPresentRows}
             loading={compositeResult === null}
-            insufficient={Boolean(insufficientComposite)}
-            insufficientMessage={insufficientLayerMessage}
+            insufficient={Boolean(insufficientComposite) || Boolean(compositeServiceMessage)}
+            insufficientMessage={compositeServiceMessage ?? insufficientLayerMessage}
           />
         </div>
 

@@ -76,10 +76,14 @@ export const STOCVEST_SWR_DEFAULTS: SWRConfiguration = {
     if (
       err &&
       typeof err === "object" &&
-      "status" in err &&
-      (err as { status?: unknown }).status === 401
+      "status" in err
     ) {
-      return false;
+      const status = (err as { status?: unknown }).status;
+      if (status === 401) return false;
+      if (status === 502 || status === 503 || status === 504) return false;
+    }
+    if (err instanceof Error) {
+      if (/\bfailed:\s*50[234]\b/i.test(err.message)) return false;
     }
     return true;
   }

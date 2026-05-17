@@ -61,10 +61,14 @@ describe("STOCVEST_SWR_DEFAULTS.shouldRetryOnError", () => {
     expect((predicate as (e: unknown) => boolean)({ status: 401 })).toBe(false);
   });
 
-  test("retries on 5xx (genuinely transient)", () => {
+  test("retries on 500 only among 5xx (502/503/504 are gateway/Lambda unavailable)", () => {
     expect((predicate as (e: unknown) => boolean)({ status: 500 })).toBe(true);
-    expect((predicate as (e: unknown) => boolean)({ status: 502 })).toBe(true);
-    expect((predicate as (e: unknown) => boolean)({ status: 503 })).toBe(true);
+    expect((predicate as (e: unknown) => boolean)({ status: 502 })).toBe(false);
+    expect((predicate as (e: unknown) => boolean)({ status: 503 })).toBe(false);
+    expect((predicate as (e: unknown) => boolean)({ status: 504 })).toBe(false);
+    expect((predicate as (e: unknown) => boolean)(new Error("failed: 503 Service Unavailable"))).toBe(
+      false
+    );
   });
 
   test("retries on 4xx other than 401 (e.g. throttling)", () => {

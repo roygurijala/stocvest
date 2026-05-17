@@ -15,10 +15,6 @@ import type { GapIntelMode } from "@/lib/hooks/use-gap-intel";
 import type { SignalCompositeMode } from "@/lib/hooks/use-signal-composite";
 import { STOCVEST_SWR_CACHE_NS } from "@/lib/swr/config";
 
-function compositeKey(symbol: string, mode: SignalCompositeMode) {
-  return [`${STOCVEST_SWR_CACHE_NS}signal-composite`, symbol, mode] as const;
-}
-
 function snapshotKey(symbol: string) {
   return [`${STOCVEST_SWR_CACHE_NS}symbol-snapshot`, symbol] as const;
 }
@@ -44,7 +40,8 @@ export function useSignalsMountRevalidate(
     let cancelled = false;
     setIsMountRevalidating(true);
 
-    const keys = [compositeKey(sym, mode), snapshotKey(sym), gapIntelKey(sym, mode)] as const;
+    // Snapshot + gap-intel only — composite already fetches on mount via useSignalComposite.
+    const keys = [snapshotKey(sym), gapIntelKey(sym, mode)] as const;
 
     // Defer so the SWR hooks' initial subscribe fetch runs first — avoids
     // aborting an in-flight composite request on mode-toggle tests and first paint.

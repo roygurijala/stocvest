@@ -67,6 +67,42 @@ def test_evidence_cached_on_second_call(monkeypatch: pytest.MonkeyPatch) -> None
     assert calls == [1]
 
 
+def test_evidence_timeout_returns_stale_cache_when_present(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.evidence_rate_limit_exceeded",
+        lambda _uid: False,
+    )
+
+    stale_envelope = {
+        "state_version": "swing_stale",
+        "data": {"symbol": "AAPL", "score": 42, "layers": []},
+    }
+    reads = [None, stale_envelope]
+
+    def read_cache(_k: str) -> dict[str, Any] | None:
+        return reads.pop(0) if reads else stale_envelope
+
+    monkeypatch.setattr("stocvest.api.handlers.signals.read_dashboard_cache", read_cache)
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals._compute_with_thread_timeout",
+        lambda _fn, timeout_sec: None,
+    )
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.polygon_circuit",
+        MagicMock(call=lambda fn: fn()),
+    )
+
+    out = composite_response_with_evidence_cache(
+        symbol="AAPL",
+        user_id="u1",
+        user_email=None,
+        mode="swing",
+        sync_compute=lambda: {"symbol": "AAPL"},
+    )
+    assert out.get("source") == "cache_stale"
+    assert out.get("score") == 42
+
+
 def test_evidence_timeout_returns_error_dict(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "stocvest.api.handlers.signals.evidence_rate_limit_exceeded",
