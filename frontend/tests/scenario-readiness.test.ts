@@ -1,10 +1,11 @@
 import { describe, expect, test } from "vitest";
 
 import {
-  defaultMissingBullets,
   resolveScenarioBuilderCapability,
+  scenarioWhyNotItems,
   type ScenarioReadinessContext
 } from "@/lib/scenario/scenario-readiness";
+import { nextUnlockBullets, setupTierLabel } from "@/lib/scenario/scenario-readiness-present";
 import type { ScenarioInput } from "@/lib/scenario/types";
 
 function baseInput(overrides: Partial<ScenarioInput> = {}): ScenarioInput {
@@ -29,21 +30,23 @@ function ctx(overrides: Partial<ScenarioReadinessContext> = {}): ScenarioReadine
 }
 
 describe("resolveScenarioBuilderCapability", () => {
-  test("preview when not actionable and low alignment", () => {
+  test("2/6 is developing not not aligned", () => {
     const r = resolveScenarioBuilderCapability(ctx({ layersAligned: 2, layersTotal: 6 }), baseInput());
+    expect(r.setupTier).toBe("developing");
+    expect(setupTierLabel(r.setupTier, r.aligned, r.total)).toBe("Developing (2 / 6)");
+    expect(r.capability).toBe("building_soon");
+  });
+
+  test("1/6 is not aligned", () => {
+    const r = resolveScenarioBuilderCapability(ctx({ layersAligned: 1, layersTotal: 6 }), baseInput());
+    expect(r.setupTier).toBe("not_aligned");
     expect(r.capability).toBe("preview");
-    expect(r.aligned).toBe(2);
-    expect(r.total).toBe(6);
   });
 
   test("building_soon at 3/6 alignment without actionable state", () => {
     const r = resolveScenarioBuilderCapability(ctx({ layersAligned: 3, layersTotal: 6 }), baseInput());
     expect(r.capability).toBe("building_soon");
-  });
-
-  test("preview below 3/6 when not developing", () => {
-    const r = resolveScenarioBuilderCapability(ctx({ layersAligned: 2, layersTotal: 6 }), baseInput());
-    expect(r.capability).toBe("preview");
+    expect(r.setupTier).toBe("developing");
   });
 
   test("building_soon when maturation is developing", () => {
@@ -52,6 +55,7 @@ describe("resolveScenarioBuilderCapability", () => {
       baseInput()
     );
     expect(r.capability).toBe("building_soon");
+    expect(r.setupTier).toBe("developing");
   });
 
   test("full only when actionable and structurally eligible", () => {
@@ -102,13 +106,33 @@ describe("resolveScenarioBuilderCapability", () => {
   });
 });
 
-describe("defaultMissingBullets", () => {
-  test("maps Internals to participation copy", () => {
-    const resolved = resolveScenarioBuilderCapability(ctx(), baseInput());
-    const bullets = defaultMissingBullets({
+describe("scenarioWhyNotItems", () => {
+  test("groups missing confirmation layer names", () => {
+    const resolved = resolveScenarioBuilderCapability(
+      ctx({ layersAligned: 2, layersTotal: 6, layerRows: undefined }),
+      baseInput()
+    );
+    const withMissing = {
       ...resolved,
-      missingLayers: ["Internals"]
+      missingLayers: ["News", "Macro", "Geopolitical"]
+    };
+    const items = scenarioWhyNotItems(withMissing);
+    expect(items[0]).toEqual({
+      kind: "missing_confirmations",
+      layers: ["News", "Macro", "Geopolitical"]
     });
-    expect(bullets[0]).toContain("Participation");
+  });
+});
+
+describe("nextUnlockBullets", () => {
+  test("mentions alignment band and missing layer names", () => {
+    const r = resolveScenarioBuilderCapability(
+      ctx({ layersAligned: 2, layersTotal: 6 }),
+      baseInput()
+    );
+    const withMissing = { ...r, missingLayers: ["News", "Macro"] };
+    const bullets = nextUnlockBullets(withMissing);
+    expect(bullets.some((b) => b.includes("4–5 layers"))).toBe(true);
+    expect(bullets.some((b) => b.includes("News, Macro"))).toBe(true);
   });
 });

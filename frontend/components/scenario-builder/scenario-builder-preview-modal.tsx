@@ -3,13 +3,11 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
 import { ScenarioPreviewDrillDown } from "@/components/scenario-builder/scenario-preview-drill-down";
-import {
-  scenarioWhyNotBullets,
-  type ScenarioReadinessResolved
-} from "@/lib/scenario/scenario-readiness";
+import { ScenarioPreviewWhyNot } from "@/components/scenario-builder/scenario-preview-why-not";
+import { scenarioWhyNotItems, type ScenarioReadinessResolved } from "@/lib/scenario/scenario-readiness";
 import type { ScenarioBuilderDrillDown } from "@/lib/scenario/scenario-builder-drill-down";
 import {
-  SCENARIO_DUAL_UNLOCK_FOOTER,
+  SCENARIO_EXECUTION_UNLOCK_FOOTER,
   biasPreviewLabel,
   executionTierLabel,
   nextUnlockBullets,
@@ -32,8 +30,8 @@ export function ScenarioBuilderPreviewModal({ open, input, resolved, drillDown, 
   const sym = input.symbol.trim().toUpperCase();
   const modeLabel = input.mode === "swing" ? "Swing" : "Day";
   const developing = resolved.setupTier === "developing" || resolved.capability === "building_soon";
-  const whyNot = scenarioWhyNotBullets(resolved, input);
-  const next = nextUnlockBullets(resolved.setupTier, resolved.executionTier, resolved.aligned, resolved.total);
+  const whyNotItems = scenarioWhyNotItems(resolved);
+  const next = nextUnlockBullets(resolved);
   const setupLabel = setupTierLabel(resolved.setupTier, resolved.aligned, resolved.total);
   const executionLabel = executionTierLabel(resolved.executionTier);
   const biasLabel = biasPreviewLabel(resolved.directionalLabel);
@@ -143,30 +141,20 @@ export function ScenarioBuilderPreviewModal({ open, input, resolved, drillDown, 
               ) : null}
             </section>
 
-            <section style={sectionStyle} data-testid="scenario-preview-drill-down-wrap">
+            <div className="mb-3">
               <ScenarioPreviewDrillDown
                 drillDown={drillDown}
                 executionTier={resolved.executionTier}
                 onClose={onClose}
               />
-            </section>
+            </div>
 
-            {whyNot.length > 0 ? (
+            {whyNotItems.length > 0 ? (
               <section style={sectionStyle} data-testid="scenario-preview-why-not">
                 <p style={{ margin: 0, fontWeight: 600, color: colors.text }}>Why not?</p>
-                <ul
-                  style={{
-                    margin: `${spacing[2]} 0 0`,
-                    paddingLeft: spacing[4],
-                    color: colors.textMuted,
-                    fontSize: typography.scale.sm,
-                    lineHeight: 1.5
-                  }}
-                >
-                  {whyNot.map((bullet) => (
-                    <li key={bullet}>{bullet}</li>
-                  ))}
-                </ul>
+                <div className="mt-2">
+                  <ScenarioPreviewWhyNot items={whyNotItems} />
+                </div>
               </section>
             ) : null}
 
@@ -221,19 +209,7 @@ export function ScenarioBuilderPreviewModal({ open, input, resolved, drillDown, 
               style={{ color: colors.textMuted }}
               data-testid="scenario-preview-dual-footer"
             >
-              {SCENARIO_DUAL_UNLOCK_FOOTER}
-            </p>
-
-            <p
-              style={{
-                margin: `${spacing[3]} 0 0`,
-                fontSize: typography.scale.xs,
-                color: colors.textMuted,
-                lineHeight: 1.5
-              }}
-            >
-              STOCVEST does not show entry, stop, target, or risk/reward until the setup qualifies. This is
-              educational readiness only — not trading advice.
+              ⓘ {SCENARIO_EXECUTION_UNLOCK_FOOTER}
             </p>
 
             <div style={{ marginTop: spacing[4], display: "flex", justifyContent: "flex-end" }}>

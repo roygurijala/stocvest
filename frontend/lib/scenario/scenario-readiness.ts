@@ -57,7 +57,10 @@ export type ScenarioReadinessResolved = {
 };
 
 const LAYER_TOTAL_DEFAULT = 6;
-const NEAR_ACTIONABLE_ALIGNED = 3;
+/** 2–5 layers aligned (below actionable) → Developing — matches watchlist maturation bands. */
+const DEVELOPING_MIN_ALIGNED = 2;
+/** UI tier `building_soon` (amber) from 2+ aligned or watchlist developing. */
+const NEAR_ACTIONABLE_ALIGNED = DEVELOPING_MIN_ALIGNED;
 
 function normalizeMaturation(state: string | null | undefined): string {
   return (state ?? "").trim().toLowerCase().replace(/\s+/g, "_");
@@ -100,15 +103,23 @@ function hasReferenceLevels(input: ScenarioInput): boolean {
   );
 }
 
+function isDevelopingAlignment(aligned: number, maturation: string, decision: TradeDecisionState | null): boolean {
+  return (
+    aligned >= DEVELOPING_MIN_ALIGNED ||
+    maturation === "developing" ||
+    maturation === "re_evaluating" ||
+    (decision === "monitor" && aligned >= DEVELOPING_MIN_ALIGNED)
+  );
+}
+
 function resolveSetupTier(
   aligned: number,
   maturation: string,
-  decision: TradeDecisionState | null,
-  nearActionable: boolean
+  decision: TradeDecisionState | null
 ): ScenarioSetupTier {
   if (maturation === "invalidated") return "invalidated";
   if (decision === "actionable" || maturation === "actionable") return "actionable";
-  if (nearActionable) return "developing";
+  if (isDevelopingAlignment(aligned, maturation, decision)) return "developing";
   return "not_aligned";
 }
 
@@ -135,13 +146,9 @@ export function resolveScenarioBuilderCapability(
   const structurallyComplete = ctx.hasReferenceLevels ?? hasReferenceLevels(input);
   const structurallyEligible = structural.eligible;
 
-  const nearActionable =
-    aligned >= NEAR_ACTIONABLE_ALIGNED ||
-    maturation === "developing" ||
-    maturation === "re_evaluating" ||
-    (decision === "monitor" && aligned >= NEAR_ACTIONABLE_ALIGNED);
+  const nearActionable = isDevelopingAlignment(aligned, maturation, decision);
 
-  const setupTier = resolveSetupTier(aligned, maturation, decision, nearActionable);
+  const setupTier = resolveSetupTier(aligned, maturation, decision);
   const executionTier = resolveExecutionTier(gapIntelBlocked, structurallyEligible);
 
   const shared = {
@@ -178,32 +185,34 @@ export function resolveScenarioBuilderCapability(
   };
 }
 
-/** User-facing missing layer bullets; falls back when watchlist has no row detail. */
-export function defaultMissingBullets(resolved: ScenarioReadinessResolved): string[] {
-  if (resolved.missingLayers.length > 0) {
-    return resolved.missingLayers.map((name) => {
-      if (name === "Internals") return "Missing final confirmation: Participation / breadth";
-      if (name === "Technical") return "Missing final confirmation: Trend structure";
-      return `Missing final confirmation: ${name}`;
-    });
-  }
-  if (resolved.aligned < resolved.total) {
-    return ["Layer alignment across the six-layer stack", "Risk and confirmation gates"];
-  }
-  return ["Setup qualification on this symbol"];
+export function formatMissingLayerDisplayName(name: string): string {
+  if (name === "Internals") return "Participation / breadth";
+  if (name === "Technical") return "Trend structure";
+  return name;
 }
 
-/** Why-not bullets including execution when session-limited. */
-export function scenarioWhyNotBullets(
-  resolved: ScenarioReadinessResolved,
-  _input: ScenarioInput
-): string[] {
-  const setup = defaultMissingBullets(resolved);
-  const out = [...setup];
+export type ScenarioWhyNotItem =
+  | { kind: "missing_confirmations"; layers: string[] }
+  | { kind: "text"; text: string };
+
+/** Grouped why-not lines for the preview modal. */
+export function scenarioWhyNotItems(resolved: ScenarioReadinessResolved): ScenarioWhyNotItem[] {
+  const out: ScenarioWhyNotItem[] = [];
+  if (resolved.missingLayers.length > 0) {
+    out.push({
+      kind: "missing_confirmations",
+      layers: resolved.missingLayers.map(formatMissingLayerDisplayName)
+    });
+  } else if (resolved.aligned < resolved.total) {
+    out.push({ kind: "text", text: "Layer alignment across the six-layer stack" });
+    out.push({ kind: "text", text: "Risk and confirmation gates" });
+  } else if (resolved.setupTier !== "actionable") {
+    out.push({ kind: "text", text: "Setup qualification on this symbol" });
+  }
   if (resolved.executionTier === "session_limited") {
-    out.push("Execution window not open (session / gap conditions)");
+    out.push({ kind: "text", text: "Execution window not open (session / gap conditions)" });
   } else if (resolved.executionTier === "structural_incomplete") {
-    out.push("Reference levels still forming for planning math");
+    out.push({ kind: "text", text: "Reference levels still forming for planning math" });
   }
   return out;
 }
