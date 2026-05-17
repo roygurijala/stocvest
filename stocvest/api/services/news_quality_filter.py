@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from stocvest.api.services.news_relevance import _article_tickers_upper
+
 BLOCKED_PUBLISHERS = [
     "globenewswire",
     "prnewswire",
@@ -69,9 +71,10 @@ def passes_market_intelligence_gate(article: dict[str, Any]) -> bool:
         return False
 
     tickers = article.get("tickers")
-    if not isinstance(tickers, list) or not any(str(t).strip() for t in tickers):
-        return False
-    return True
+    if isinstance(tickers, list) and any(str(t).strip() for t in tickers):
+        return True
+    # Polygon often tags via insights[] only; composite news layer already counts those.
+    return bool(_article_tickers_upper(article))
 
 
 def is_quality_article(article: dict[str, Any]) -> bool:

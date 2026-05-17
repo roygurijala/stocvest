@@ -1041,9 +1041,11 @@ export function SignalsPageClient({
       const nums = (compositeResult.layers as Array<{ score?: unknown }>)
         .map((x) => (typeof x.score === "number" && Number.isFinite(x.score) ? x.score : null))
         .filter((x): x is number => x != null);
-      if (nums.length) return nums.reduce((a, b) => a + b, 0) / nums.length;
+      if (nums.length)       return nums.reduce((a, b) => a + b, 0) / nums.length;
     }
-    return rows.reduce((sum, row) => sum + row.score, 0) / Math.max(1, rows.length);
+    const scored = rows.map((r) => r.score).filter((s): s is number => s != null);
+    if (!scored.length) return 50;
+    return scored.reduce((sum, s) => sum + s, 0) / scored.length;
   }, [compositeResult, rows]);
 
   const layerSignalSummary = useMemo(() => {
@@ -1320,25 +1322,31 @@ export function SignalsPageClient({
   // `keepPreviousData: true` global default — so the cache key
   // change on mode toggle yields `composite: null` synchronously
   // until the new fetch resolves.
-  const radarData = useMemo<Array<{ layer: string; score: number; hist: number }> | null>(() => {
-    if (!compositeResult || isInsufficientCompositeResponse(compositeResult)) return null;
-    const raw = compositeResult.layers;
-    if (!Array.isArray(raw)) return null;
-    const baseline = 50;
-    return (raw as Array<Record<string, unknown>>).map((layer) => {
-      const k = String(layer.layer ?? "").toLowerCase();
-      const sectorPending =
-        k === "sector" && String(layer.sector_resolution_state ?? "") === "pending_cache_refresh";
-      const n = typeof layer.score === "number" && Number.isFinite(layer.score) ? Math.round(layer.score) : null;
-      // Pending sector is excluded from composite — plot at baseline so radar/divergence shows no false skew.
-      const score = sectorPending ? baseline : n ?? 0;
-      return {
-        layer: RADAR_LAYER_LABEL[k] ?? k,
-        score,
-        hist: baseline
-      };
-    });
-  }, [compositeResult]);
+  const radarData = useMemo<Array<{ layer: string; score: number; hist: number; scoreMissing?: boolean }> | null>(
+    () => {
+      if (!compositeResult || isInsufficientCompositeResponse(compositeResult)) return null;
+      const raw = compositeResult.layers;
+      if (!Array.isArray(raw)) return null;
+      const baseline = 50;
+      return (raw as Array<Record<string, unknown>>).map((layer) => {
+        const k = String(layer.layer ?? "").toLowerCase();
+        const layerStatus = String(layer.status ?? "").toLowerCase();
+        const sectorPending =
+          k === "sector" && String(layer.sector_resolution_state ?? "") === "pending_cache_refresh";
+        const n = typeof layer.score === "number" && Number.isFinite(layer.score) ? Math.round(layer.score) : null;
+        const scoreMissing = layerStatus === "unavailable" && n === null;
+        // Unavailable / pending sector: plot at neutral baseline — not 0 (zero reads as "no technicals").
+        const score = sectorPending || scoreMissing ? baseline : n ?? baseline;
+        return {
+          layer: RADAR_LAYER_LABEL[k] ?? k,
+          score,
+          hist: baseline,
+          scoreMissing: sectorPending || scoreMissing
+        };
+      });
+    },
+    [compositeResult]
+  );
 
   // Reset `signalEvidence` whenever the composite cache key
   // changes (symbol switch, mode flip, or a fresh insufficient

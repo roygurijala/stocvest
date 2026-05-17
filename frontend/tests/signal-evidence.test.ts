@@ -495,7 +495,7 @@ describe("applySwingCompositeEnrichment", () => {
     expect(news?.keyPoints[0]).toContain("No qualifying news");
   });
 
-  test("keeps unavailable layer at zero when API does not provide a score", () => {
+  test("keeps unavailable layer score null when API does not provide a score", () => {
     const base = buildEvidenceFromSetup(baseSetup, undefined, { symbolNewsArticles: [] });
     const enriched = applySwingCompositeEnrichment(base, {
       signal_score: 50,
@@ -511,7 +511,7 @@ describe("applySwingCompositeEnrichment", () => {
     });
     const news = enriched.layers.find((l) => l.key === "news");
     expect(news?.status).toBe("Unavailable");
-    expect(news?.contributionScore).toBe(0);
+    expect(news?.contributionScore).toBeNull();
   });
 
   test("fills reference levels from client snapshot when composite omits them but signal_score present", () => {

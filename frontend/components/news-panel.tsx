@@ -334,8 +334,9 @@ export function NewsPanel({
               📰
             </span>
             <p className="max-w-sm text-sm leading-relaxed" style={{ color: colors.textMuted }}>
-              No qualifying news for {sym} in the last 20 calendar days (after quality filters). Less-covered tickers may
-              have sparse headlines.
+              No {sym}-tagged headlines passed quality filters in the last 20 calendar days. Stories that only mention the
+              company name without a ticker tag, or syndicated research spam, are excluded. Less-covered tickers may have
+              sparse headlines.
             </p>
           </div>
         ) : null}

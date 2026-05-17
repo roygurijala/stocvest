@@ -112,7 +112,7 @@ export interface EvidenceLayer {
   weightPercent: number;
   explanation: string;
   keyPoints: string[];
-  contributionScore: number;
+  contributionScore: number | null;
   freshnessLabel: string;
   macro_warnings?: string[];
   macro_risk_level?: "low" | "moderate" | "elevated" | "critical";
@@ -138,6 +138,9 @@ export interface EvidenceLayer {
   sector_interpretation?: string | null;
   sector_data_available?: boolean | null;
   sector_daily_sessions?: SectorDailySessionWire[];
+  sector_etf?: string | null;
+  sector_display_name?: string | null;
+  sector_bucket?: string | null;
 }
 
 export interface SignalEvidenceConfluence {
@@ -640,6 +643,30 @@ function evidencePatchFromApiLayer(match: Record<string, unknown>, layerKey?: st
   const patch: Partial<EvidenceLayer> = {};
   const raw = match.score;
   const layerStatus = String(match.status ?? "").trim().toLowerCase();
+  const lk = (layerKey ?? "").trim().toLowerCase();
+  if (layerStatus === "as_of_close") {
+    if (typeof raw === "number" && Number.isFinite(raw)) {
+      patch.contributionScore = clamp(Math.round(raw), 0, 100);
+    }
+    const verdict = String(match.verdict ?? "").trim().toLowerCase();
+    if (verdict === "bullish") {
+      patch.status = "Bullish";
+    } else if (verdict === "bearish") {
+      patch.status = "Bearish";
+    } else if (verdict === "neutral") {
+      patch.status = "Neutral";
+    } else if (patch.contributionScore !== undefined) {
+      patch.status = statusFromScore(patch.contributionScore);
+    }
+    patch.freshnessLabel = "As of close · daily structure";
+    if (lk === "technical") {
+      patch.explanation =
+        typeof match.reasoning === "string" && match.reasoning.trim()
+          ? match.reasoning.trim()
+          : "Daily structure as of last close; intraday VWAP/ORB apply when the regular session opens.";
+    }
+    return patch;
+  }
   if (layerStatus === "unavailable") {
     // Closed-session convention: keep last computed layer score, but mark it explicitly as stale close data.
     if (typeof raw === "number" && Number.isFinite(raw)) {
@@ -647,7 +674,7 @@ function evidencePatchFromApiLayer(match: Record<string, unknown>, layerKey?: st
       patch.status = "As of close";
       return patch;
     }
-    patch.contributionScore = 0;
+    patch.contributionScore = null;
     patch.status = "Unavailable";
     return patch;
   }
@@ -665,7 +692,6 @@ function evidencePatchFromApiLayer(match: Record<string, unknown>, layerKey?: st
     patch.status = statusFromScore(patch.contributionScore);
   }
 
-  const lk = (layerKey ?? "").trim().toLowerCase();
   if (lk === "news") {
     const wim = typeof match.wim_summary === "string" && match.wim_summary.trim() ? match.wim_summary.trim() : undefined;
     if (wim) patch.wim_summary = wim;
@@ -769,6 +795,12 @@ function evidencePatchFromApiLayer(match: Record<string, unknown>, layerKey?: st
     if (srs === "resolved" || srs === "pending_cache_refresh" || srs === "unmapped") {
       patch.sector_resolution_state = srs as SectorResolutionStateWire;
     }
+    const etf = String(match.sector_etf ?? "").trim().toUpperCase();
+    if (etf) patch.sector_etf = etf;
+    const display = String(match.sector_display_name ?? "").trim();
+    if (display) patch.sector_display_name = display;
+    const bucket = String(match.sector_bucket ?? "").trim();
+    if (bucket) patch.sector_bucket = bucket;
     const sp = numOrNull(match.sector_persistence);
     if (sp != null) patch.sector_persistence = sp;
     const ssl = numOrNull(match.sector_sessions_leading);

@@ -32,6 +32,9 @@ type LayerStatus =
 
 function verdictToLayerStatus(verdict: string, status: string): LayerStatus {
   const s = status.toLowerCase();
+  if (s === "as_of_close") {
+    return "As of close";
+  }
   if (s === "unavailable") {
     const v = verdict.toLowerCase();
     if (v === "bullish" || v === "bearish" || v === "neutral") {
@@ -55,15 +58,22 @@ export function compositeToSignalsLayerRows(
     const entry = (rawLayers as Array<Record<string, unknown>>).find(
       (x) => String(x.layer ?? "").toLowerCase() === key
     );
-    const score =
-      typeof entry?.score === "number" && Number.isFinite(entry.score)
-        ? Math.max(0, Math.min(100, Math.round(entry.score)))
-        : 0;
-    const verdict = typeof entry?.verdict === "string" ? entry.verdict : "neutral";
     const st = typeof entry?.status === "string" ? entry.status : "unavailable";
+    const rawScore = typeof entry?.score === "number" && Number.isFinite(entry.score) ? entry.score : null;
+    const score = rawScore != null ? Math.max(0, Math.min(100, Math.round(rawScore))) : null;
+    const verdict = typeof entry?.verdict === "string" ? entry.verdict : "neutral";
+    const apiStatus = st.toLowerCase();
+    const asOfClose = apiStatus === "as_of_close";
     const sectorCachePending =
       key === "sector" && String(entry?.sector_resolution_state ?? "") === "pending_cache_refresh";
-    const status = sectorCachePending ? "Unavailable" : verdictToLayerStatus(verdict, st);
+    const sectorEtf = typeof entry?.sector_etf === "string" ? entry.sector_etf.trim().toUpperCase() : "";
+    const sectorDisplay =
+      typeof entry?.sector_display_name === "string" ? entry.sector_display_name.trim() : "";
+    const status = sectorCachePending
+      ? "Unavailable"
+      : asOfClose
+        ? verdictToLayerStatus(verdict, "available")
+        : verdictToLayerStatus(verdict, st);
     const reasoning =
       typeof entry?.reasoning === "string" && entry.reasoning.trim()
         ? entry.reasoning.trim()
@@ -74,7 +84,15 @@ export function compositeToSignalsLayerRows(
       key,
       name: LAYER_DISPLAY[key] ?? key,
       status,
-      statusLabel: sectorCachePending ? "Unavailable (not factored)" : undefined,
+      statusLabel: sectorCachePending
+        ? "Unavailable (not factored)"
+        : key === "sector" && (sectorEtf || sectorDisplay)
+          ? sectorDisplay && sectorEtf
+            ? `${sectorDisplay} (${sectorEtf})`
+            : sectorEtf || sectorDisplay
+          : asOfClose
+            ? "As of close · daily structure"
+            : undefined,
       explanation: reasoning,
       score,
       sectorCachePending
@@ -93,7 +111,9 @@ export function deriveSetupBiasFromComposite(
     }
   }
   if (layerRows.length === 0) return "Neutral";
-  const avg = layerRows.reduce((sum, r) => sum + r.score, 0) / layerRows.length;
+  const scored = layerRows.map((r) => r.score).filter((s): s is number => s != null);
+  if (scored.length === 0) return "Neutral";
+  const avg = scored.reduce((sum, s) => sum + s, 0) / scored.length;
   return avg >= 58 ? "Bullish" : avg <= 42 ? "Bearish" : "Neutral";
 }
 

@@ -21,12 +21,16 @@ from stocvest.api.services.news_panel_format import (
 )
 from stocvest.api.services.news_quality_filter import get_publisher_tier, passes_market_intelligence_gate
 from stocvest.api.services.news_relevance import (
-    _article_tickers_upper,
     calculate_article_relevance,
     catalyst_category_for_text,
     categorize_article,
     deduplicate_articles,
     source_credibility_meta,
+)
+from stocvest.api.services.symbol_news_fetch import (
+    article_matches_symbol_panel,
+    enrich_article_ticker_metadata,
+    fetch_symbol_panel_raw_articles,
 )
 from stocvest.api.shared import build_request_context, parse_json_body
 from stocvest.api.types import LambdaContext, LambdaEvent
@@ -384,23 +388,25 @@ def news_handler(
             recent_cutoff = now - timedelta(hours=recent_hours)
             fetch_limit = min(1000, max(80, panel_limit * 5))
             settings = get_settings()
-            async with client_factory(api_key=settings.polygon_api_key) as client:
-                raw_articles = await client.get_market_news(
-                    tickers=[symbol],
-                    limit=fetch_limit,
-                    order="desc",
-                    published_utc_gte=since,
-                )
+            raw_articles = await fetch_symbol_panel_raw_articles(
+                symbol=symbol,
+                since=since,
+                fetch_limit=fetch_limit,
+                client_factory=client_factory,
+                polygon_api_key=settings.polygon_api_key,
+            )
 
             def collect_panel(min_relevance: int) -> list[dict[str, Any]]:
                 rows: list[dict[str, Any]] = []
                 for article in raw_articles:
+                    article = enrich_article_ticker_metadata(article, symbol)
+                    if not article_matches_symbol_panel(article, symbol):
+                        continue
                     if not passes_market_intelligence_gate(article):
                         continue
-                    if symbol not in _article_tickers_upper(article):
-                        continue
                     pub = parse_published_utc(str(article.get("published_utc") or ""))
-                    if pub is None or pub < since:
+                    # Align with NewsAnalyzer: unparseable timestamps still count in composite scoring.
+                    if pub is not None and pub < since:
                         continue
                     rel = calculate_article_relevance(article, watchlist_symbols)
                     if rel < min_relevance:

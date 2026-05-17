@@ -4,7 +4,7 @@ import type { ThemeColors } from "@/lib/design-system";
 import { useIsMobileLayout } from "@/lib/hooks/use-is-mobile-layout";
 import { Bar, BarChart, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
-export type LayerRadarDatum = { layer: string; score: number; hist: number };
+export type LayerRadarDatum = { layer: string; score: number; hist: number; scoreMissing?: boolean };
 
 /** Match bar fill to legend: hotter (green), cooler (red), ~in line with typical (grey). */
 export function divergenceDeltaFill(delta: number): string {
@@ -110,7 +110,7 @@ export function SignalLayerDivergenceChart({
                     >
                       <div style={{ fontWeight: 600 }}>{p.layer}</div>
                       <div style={{ color: colors.textMuted, marginTop: 4 }}>
-                        Today: {p.score} · Typical: ~{p.hist}
+                        Today: {p.scoreMissing ? "N/A (no live data)" : p.score} · Typical: ~{p.hist}
                       </div>
                       <div
                         style={{

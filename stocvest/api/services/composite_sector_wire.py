@@ -15,6 +15,9 @@ def sector_layer_api_extras(
     resolution_state: SectorResolutionState | None,
     daily_sessions: list[dict[str, Any]] | None = None,
     sic_mapping_tier: SicMappingTier | None = None,
+    sector_etf: str | None = None,
+    sector_display_name: str | None = None,
+    sector_bucket: str | None = None,
 ) -> dict[str, Any]:
     """Additive fields for ``layers[]`` sector row (spec Part 6)."""
     out: dict[str, Any] = {}
@@ -22,6 +25,15 @@ def sector_layer_api_extras(
         out["sector_resolution_state"] = resolution_state.value
     if sic_mapping_tier is not None:
         out["sic_mapping_tier"] = sic_mapping_tier.value
+    etf_u = (sector_etf or "").strip().upper()
+    if etf_u:
+        out["sector_etf"] = etf_u
+    display = (sector_display_name or "").strip()
+    if display:
+        out["sector_display_name"] = display
+    bucket = (sector_bucket or "").strip()
+    if bucket:
+        out["sector_bucket"] = bucket
     if momentum is None:
         out["sector_data_available"] = False
         return out

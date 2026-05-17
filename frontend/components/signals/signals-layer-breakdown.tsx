@@ -8,6 +8,7 @@ import { LAYER_NAME_HINTS } from "@/lib/ui-tooltips";
 import {
   buildLayerInsightLine,
   countLayerAlignment,
+  formatLayerScoreLabel,
   layerPolarity,
   layerPolarityDotColor,
   layerPolarityLabel,
@@ -142,6 +143,15 @@ function LayerRow({
           </span>
           <span className="text-[10px] font-medium uppercase tracking-wide" style={{ color: colors.textMuted }}>
             {layerPolarityLabel(polarity)}
+            {row.status === "As of close"
+              ? row.score != null
+                ? ` · ${formatLayerScoreLabel(row.score, row.status)}/100 · last close`
+                : " · last close"
+              : row.status === "Unavailable" && row.score === null
+                ? " · no live score"
+                : row.score != null
+                  ? ` · ${formatLayerScoreLabel(row.score, row.status)}/100`
+                  : ""}
           </span>
           {hint ? <InfoTip text={hint} label={row.name} /> : null}
         </div>

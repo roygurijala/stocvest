@@ -464,17 +464,6 @@ class SectorMapper:
             except Exception as exc:
                 log.warning("Sector cache read failed symbol=%s err=%s", sym, exc)
 
-            if isinstance(sector_cache, DynamoSectorCache) and sector_cache.enabled:
-                await cls._schedule_background_resolve(sym, sector_cache, sector_params)
-                cls._log_sector_resolution(
-                    symbol=sym,
-                    etf="",
-                    display_name="Sector resolving…",
-                    source="pending_cache_refresh",
-                    resolution_state=SectorResolutionState.PENDING_REFRESH.value,
-                )
-                return "", "Sector resolving…", "default", SectorResolutionState.PENDING_REFRESH, None
-
         mapping = cls._mapping(sector_params)
         try:
             details = await polygon_client.get_ticker_details(sym)
@@ -523,4 +512,14 @@ class SectorMapper:
                 sym,
                 exc,
             )
+            if isinstance(sector_cache, DynamoSectorCache) and sector_cache.enabled:
+                await cls._schedule_background_resolve(sym, sector_cache, sector_params)
+                cls._log_sector_resolution(
+                    symbol=sym,
+                    etf="",
+                    display_name="Sector resolving…",
+                    source="pending_cache_refresh",
+                    resolution_state=SectorResolutionState.PENDING_REFRESH.value,
+                )
+                return "", "Sector resolving…", "default", SectorResolutionState.PENDING_REFRESH, None
             return "SPY", ETF_DISPLAY_NAMES["SPY"], "default", SectorResolutionState.UNMAPPED, SicMappingTier.FALLBACK_SPY

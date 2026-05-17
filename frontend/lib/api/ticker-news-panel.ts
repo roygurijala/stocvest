@@ -47,7 +47,7 @@ export function tickerNewsCacheGet(symbol: string, recentHours: number = 8): Tic
   const row = cache.get(panelCacheKey(sym, recentHours));
   if (!row) return null;
   if (Date.now() - row.t > CACHE_TTL_MS) {
-    cache.delete(sym);
+    cache.delete(panelCacheKey(sym, recentHours));
     return null;
   }
   return row.data;

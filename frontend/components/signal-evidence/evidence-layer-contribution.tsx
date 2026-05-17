@@ -67,8 +67,12 @@ export function EvidenceLayerContribution({ layers, bias }: Props) {
           <BarChart
             data={layers.map((l) => ({
               layer: l.name,
-              score: Math.round(l.contributionScore),
-              status: l.status
+              score:
+                l.contributionScore != null && Number.isFinite(l.contributionScore)
+                  ? Math.round(l.contributionScore)
+                  : 0,
+              status: l.status,
+              scoreMissing: l.contributionScore == null
             }))}
             layout="vertical"
             margin={{ top: 4, right: 12, left: 2, bottom: 6 }}
@@ -94,7 +98,13 @@ export function EvidenceLayerContribution({ layers, bias }: Props) {
               cursor={{ fill: "rgba(148,163,184,0.07)" }}
               content={({ active, payload }) => {
                 if (!active || !payload?.[0]) return null;
-                const row = payload[0].payload as { layer: string; score: number; status: EvidenceStatus };
+                const row = payload[0].payload as {
+                  layer: string;
+                  score: number;
+                  status: EvidenceStatus;
+                  scoreMissing?: boolean;
+                };
+                const weightLabel = row.scoreMissing ? "N/A" : String(row.score);
                 return (
                   <div
                     style={{
@@ -109,10 +119,10 @@ export function EvidenceLayerContribution({ layers, bias }: Props) {
                     <div style={{ fontWeight: 600 }}>{row.layer}</div>
                     <div style={{ color: colors.textMuted, marginTop: 4 }}>
                       {row.status === "Unavailable"
-                        ? "Unavailable"
+                        ? `Unavailable · weight ${weightLabel}`
                         : row.status === "As of close"
-                          ? `As of close · weight ${row.score}`
-                          : `${row.status} · weight ${row.score}`}
+                          ? `As of close · weight ${weightLabel}`
+                          : `${row.status} · weight ${weightLabel}`}
                     </div>
                   </div>
                 );

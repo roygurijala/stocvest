@@ -348,6 +348,9 @@ async def build_swing_composite_response(
                     resolution_state=sector_resolution_state,
                     daily_sessions=ds,
                     sic_mapping_tier=sic_mapping_tier,
+                    sector_etf=sector_etf_sym or None,
+                    sector_display_name=sector_display,
+                    sector_bucket=sic_bucket_for_geo,
                 )
             )
         layers_out.append(row)

@@ -61,7 +61,9 @@ export function buildEvidenceAnchorLine(
 }
 
 export function pickPrimaryLayerDrivers(layers: EvidenceLayer[], bias: SignalsSetupBias): string[] {
-  const sorted = [...layers].sort((a, b) => b.contributionScore - a.contributionScore);
+  const sorted = [...layers].sort(
+    (a, b) => (b.contributionScore ?? -1) - (a.contributionScore ?? -1)
+  );
   const target: EvidenceStatus | null =
     bias === "Bullish" ? "Bullish" : bias === "Bearish" ? "Bearish" : null;
   if (target) {

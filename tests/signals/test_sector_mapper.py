@@ -122,6 +122,26 @@ async def test_empty_sic_spy_skips_dynamo_persist(mock_parameter_store) -> None:
 
 
 @pytest.mark.asyncio
+async def test_dynamo_cache_miss_resolves_from_polygon_sync(mock_parameter_store) -> None:
+    from stocvest.signals.sector_mapper import SectorMapper, SectorResolutionState
+
+    SectorMapper.clear_memory_cache()
+    mock_client = AsyncMock()
+    mock_client.get_ticker_details.return_value = {"sic_code": "5961"}
+    mock_dynamo = AsyncMock()
+    mock_dynamo.get_sector_cache.return_value = None
+    mock_dynamo.enabled = True
+    etf, name, bucket, st, tier = await SectorMapper.get_sector_etf(
+        "AMZN", mock_client, mock_dynamo, mock_parameter_store.sector
+    )
+    assert etf == "XRT"
+    assert bucket == "retail"
+    assert st == SectorResolutionState.RESOLVED
+    assert name
+    mock_dynamo.save_sector_cache.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_unmapped_sic_spy_persists_dynamo(mock_parameter_store) -> None:
     mock_client = AsyncMock()
     mock_client.get_ticker_details.return_value = {"sic_code": "9999"}

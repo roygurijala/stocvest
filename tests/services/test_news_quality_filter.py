@@ -40,6 +40,13 @@ def test_requires_tickers() -> None:
     assert is_quality_article(_article(publisher="Reuters", tickers=[])) is False
 
 
+def test_intel_gate_allows_insights_only_ticker_tags() -> None:
+    art = _article(publisher="Reuters", tickers=[])
+    art["insights"] = [{"ticker": "AMZN", "sentiment": "positive"}]
+    assert passes_market_intelligence_gate(art) is True
+    assert is_quality_article(art) is True
+
+
 def test_blocks_historical_returns_content() -> None:
     assert is_quality_article(_article(publisher="Reuters", title="Best performing stock in 10 years of returns")) is False
 

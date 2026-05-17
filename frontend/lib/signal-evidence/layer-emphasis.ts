@@ -187,6 +187,10 @@ export function layerHasActiveContent(layer: EvidenceLayer): boolean {
       return false;
     }
     case "sector": {
+      if (layer.sector_resolution_state === "pending_cache_refresh") return false;
+      const hasBenchmark =
+        Boolean(layer.sector_etf?.trim()) || Boolean(layer.sector_display_name?.trim());
+      if (hasBenchmark) return true;
       if (layer.sector_resolution_state !== "resolved") return false;
       if (layer.sector_data_available !== true) return false;
       const lead = layer.sector_sessions_leading ?? 0;

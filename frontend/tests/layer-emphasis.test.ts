@@ -492,6 +492,21 @@ describe("layerHasActiveContent — sector thresholds", () => {
     ).toBe(false);
   });
 
+  test("test_sector_resolved_with_benchmark_shows_while_momentum_loading", () => {
+    expect(
+      layerHasActiveContent(
+        makeLayer({
+          key: "sector",
+          status: "Neutral",
+          sector_resolution_state: "resolved",
+          sector_data_available: false,
+          sector_etf: "XRT",
+          sector_display_name: "Retail"
+        })
+      )
+    ).toBe(true);
+  });
+
   test("test_sector_resolved_with_leading_sessions_is_active", () => {
     expect(
       layerHasActiveContent(

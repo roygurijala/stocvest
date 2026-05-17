@@ -168,6 +168,67 @@ class BenzingaClient:
         out.sort(key=lambda a: a.published_at, reverse=True)
         return out[: max(1, min(50, int(limit)))]
 
+    async def get_news_for_symbol_panel(
+        self,
+        symbol: str,
+        *,
+        days: int = 20,
+        limit: int = 50,
+    ) -> list[BenzingaArticle]:
+        """Benzinga REST news for the ticker panel (matches composite engine, not WS replay)."""
+        token = (self._settings.benzinga_news_api_key or self._settings.benzinga_api_key).strip()
+        if not token:
+            return []
+        sym = symbol.strip().upper()
+        window_days = max(1, min(20, int(days)))
+        today = datetime.now(timezone.utc).date()
+        since_date = today - timedelta(days=window_days)
+        since_dt = datetime.combine(since_date, datetime.min.time(), tzinfo=timezone.utc)
+        data = await self._get_json(
+            path="/v2/news",
+            params={
+                "token": token,
+                "tickers": sym,
+                "pageSize": max(1, min(50, int(limit))),
+                "displayOutput": "full",
+                "dateFrom": str(since_date),
+                "dateTo": str(today),
+            },
+        )
+        rows = data if isinstance(data, list) else (data.get("news") if isinstance(data, dict) else [])
+        if not isinstance(rows, list):
+            return []
+        out: list[BenzingaArticle] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            title = str(row.get("title") or "").strip()
+            tickers = [str(t).strip().upper() for t in (row.get("tickers") or []) if str(t).strip()]
+            if not title:
+                continue
+            if not article_matches_ticker(title, tickers, sym):
+                continue
+            pub = _parse_dt(row.get("published_utc") or row.get("created") or row.get("updated"))
+            if pub < since_dt:
+                continue
+            channels = [str(c).strip().upper() for c in (row.get("channels") or []) if str(c).strip()]
+            if sym not in tickers:
+                tickers = list(dict.fromkeys([*tickers, sym]))
+            out.append(
+                BenzingaArticle(
+                    article_id=str(row.get("id") or row.get("article_id") or ""),
+                    title=title,
+                    body=str(row.get("body") or "").strip() or None,
+                    published_at=pub,
+                    tickers=tickers,
+                    channels=channels,
+                    source="benzinga",
+                    url=str(row.get("url") or row.get("article_url") or "").strip() or None,
+                )
+            )
+        out.sort(key=lambda a: a.published_at, reverse=True)
+        return out[: max(1, min(50, int(limit)))]
+
     async def get_news_with_fallback(self, symbol: str, mode: str = "day") -> list[BenzingaArticle]:
         sym = symbol.strip().upper()
         mode_n = (mode or "day").strip().lower()

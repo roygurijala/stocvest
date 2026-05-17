@@ -47,6 +47,35 @@ async def test_get_news_returns_articles(fake_settings: MagicMock, monkeypatch: 
 
 
 @pytest.mark.asyncio
+async def test_get_news_for_symbol_panel_uses_date_window(fake_settings: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+    fresh = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat().replace("+00:00", "Z")
+
+    async def fake_get_json(self: BenzingaClient, *, path: str, params: dict) -> object:
+        captured["path"] = path
+        captured["params"] = dict(params)
+        return [
+            {
+                "id": "99",
+                "title": "Amazon expands same-day delivery",
+                "body": "AMZN logistics",
+                "published_utc": fresh,
+                "tickers": ["AMZN"],
+                "channels": [],
+            }
+        ]
+
+    monkeypatch.setattr(BenzingaClient, "_get_json", fake_get_json)
+    rows = await BenzingaClient().get_news_for_symbol_panel("AMZN", days=20, limit=25)
+    assert captured["path"] == "/v2/news"
+    assert captured["params"]["tickers"] == "AMZN"
+    assert captured["params"]["dateFrom"]
+    assert captured["params"]["dateTo"]
+    assert len(rows) == 1
+    assert rows[0].tickers == ["AMZN"]
+
+
+@pytest.mark.asyncio
 async def test_get_news_fallback_polygon_when_benzinga_empty(fake_settings: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(bzc, "article_matches_ticker", lambda *a: True)
 

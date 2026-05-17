@@ -26,9 +26,16 @@ export type SignalsLayerRowInput = {
   status: SignalsLayerStatus;
   statusLabel?: string;
   explanation: string;
-  score: number;
+  /** Null when the API has no live layer score (do not treat as 0). */
+  score: number | null;
   sectorCachePending?: boolean;
 };
+
+export function formatLayerScoreLabel(score: number | null, status: SignalsLayerStatus): string {
+  if (status === "Unavailable" && score === null) return "N/A";
+  if (score === null) return "—";
+  return String(Math.round(score));
+}
 
 const GENERIC_EXPLANATION_RE =
   /shows the most recent close-state reading|signals align with upside|signals show downside pressure|is mixed without strong direction|data is unavailable right now/i;
@@ -75,6 +82,16 @@ export function countLayerAlignment(
 
 export function layerPolarity(row: SignalsLayerRowInput, bias: SignalsSetupBias): SignalsLayerPolarity {
   if (row.sectorCachePending || row.status === "Unavailable") return "blocking";
+  if (row.statusLabel?.toLowerCase().includes("as of close")) {
+    if (bias === "Neutral") return "neutral";
+    const supportive =
+      (bias === "Bullish" && row.status === "Bullish") || (bias === "Bearish" && row.status === "Bearish");
+    if (supportive) return "supportive";
+    const blocking =
+      (bias === "Bullish" && row.status === "Bearish") || (bias === "Bearish" && row.status === "Bullish");
+    if (blocking) return "blocking";
+    return "mixed";
+  }
   if (bias === "Neutral") {
     if (row.status === "Bullish" || row.status === "Bearish") return "mixed";
     return "neutral";
@@ -86,8 +103,10 @@ export function layerPolarity(row: SignalsLayerRowInput, bias: SignalsSetupBias)
   if (supportive) return "supportive";
   if (blocking) return "blocking";
   if (row.status === "Neutral" || row.status === "As of close") {
-    if (row.name === "Sector" && row.score > 0 && row.score < 55) return "mixed";
-    if (row.name === "Internals" && row.score >= 48 && row.score <= 62) return "mixed";
+    const s = row.score;
+    if (s == null) return "neutral";
+    if (row.name === "Sector" && s > 0 && s < 55) return "mixed";
+    if (row.name === "Internals" && s >= 48 && s <= 62) return "mixed";
     return "neutral";
   }
   return "neutral";
@@ -143,7 +162,7 @@ export function pickCollapsedLayerPreview(
 ): SignalsLayerRowInput[] {
   const driving = rows
     .filter((r) => layerPolarity(r, bias) === "supportive")
-    .sort((a, b) => b.score - a.score)
+    .sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
     .slice(0, maxDriving);
   const blocking = [...rows]
     .filter((r) => {
@@ -173,6 +192,12 @@ export function buildLayerInsightLine(row: SignalsLayerRowInput, bias: SignalsSe
   const name = row.name;
   if (row.sectorCachePending || row.status === "Unavailable") {
     return "Coverage unavailable — not factored into this read";
+  }
+  if (row.status === "As of close" && row.key === "technical") {
+    return "Daily structure as of last close — live VWAP/ORB resume at the open";
+  }
+  if (row.status === "As of close") {
+    return "As of last close — not a live session read";
   }
   if (p === "supportive") {
     if (name === "Technical") return "Structure supports the setup bias";

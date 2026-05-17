@@ -169,7 +169,7 @@ describe("NewsPanel", () => {
 
     wrap(<NewsPanel symbol="ZZZ" isOpen onClose={vi.fn()} />);
     await waitFor(() =>
-      expect(screen.getByText(/No qualifying news for ZZZ in the last 20 calendar days/i)).toBeInTheDocument()
+      expect(screen.getByText(/No ZZZ-tagged headlines passed quality filters/i)).toBeInTheDocument()
     );
   });
 

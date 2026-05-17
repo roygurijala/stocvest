@@ -28,6 +28,10 @@ from stocvest.api.services.validation_timing import (
     is_day_ledger_entry_session_et,
 )
 from stocvest.api.services.swing_composite_evidence import build_swing_composite_evidence_fields
+from stocvest.api.services.symbol_news_fetch import (
+    enrich_article_ticker_metadata,
+    fetch_symbol_panel_raw_articles,
+)
 from stocvest.config.parameter_store import ParameterStore
 from stocvest.config.signal_parameters import SignalParameters
 from stocvest.data.benzinga_client import BenzingaClient, BenzingaMultiResult
@@ -57,7 +61,10 @@ from stocvest.signals.sector_momentum import (
     session_details_from_returns,
 )
 from stocvest.workers.sector_daily_cache import get_all_cached_sector_data, get_cached_sector_returns
-from stocvest.signals.technical_analyzer import TechnicalAnalyzer
+from stocvest.signals.day_technical_close_fallback import (
+    composite_confidence_for_technical_status,
+    resolve_day_technical_layer,
+)
 from stocvest.signals.vwap_state import vwap_session_flags_et
 from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
@@ -134,12 +141,21 @@ def _benzinga_articles_to_rows(items: list[Any]) -> list[dict[str, Any]]:
     return out
 
 
+def _layer_available_for_composite(status: str) -> bool:
+    return str(status or "").strip().lower() in ("available", "as_of_close")
+
+
 def _score_to_layer_signal(layer: str, score: int | None, status: str) -> LayerSignal | None:
-    if status != "available" or score is None:
+    if score is None:
+        return None
+    confidence = composite_confidence_for_technical_status(status) if layer == "technical" else (
+        1.0 if str(status or "").strip().lower() == "available" else 0.0
+    )
+    if confidence <= 0:
         return None
     raw = (float(score) - 50.0) / 50.0
     raw = max(-1.0, min(1.0, raw))
-    return LayerSignal(layer=layer, score=raw, confidence=1.0)
+    return LayerSignal(layer=layer, score=raw, confidence=confidence)
 
 
 def _regime_for_engine(market_regime: str) -> str:
@@ -212,6 +228,9 @@ class RealCompositeEnginePhase:
     sector_momentum: SectorMomentumScore | None = None
     sector_resolution_state: SectorResolutionState | None = None
     sic_mapping_tier: SicMappingTier | None = None
+    sector_etf_sym: str = ""
+    sector_display: str | None = None
+    sic_bucket_for_geo: str | None = None
 
 
 async def run_real_composite_engine_phase(
@@ -232,24 +251,38 @@ async def run_real_composite_engine_phase(
 
     news_since = datetime.now(timezone.utc) - timedelta(hours=float(params.news.lookback_hours))
     benzinga = BenzingaClient()
+
+    async def _fetch_composite_news_rows() -> list[dict[str, Any]]:
+        return await fetch_symbol_panel_raw_articles(
+            symbol=sym,
+            since=news_since,
+            fetch_limit=80,
+            client_factory=PolygonClient,
+            polygon_api_key=settings.polygon_api_key,
+        )
+
     async with PolygonClient(api_key=settings.polygon_api_key) as client:
-        bars_r, sym_r, news_r, spy_r, qqq_r, vix_r, econ_r, bz_r = await asyncio.gather(
+        bars_r, daily_r, sym_r, spy_r, qqq_r, vix_r, econ_r, bz_r, news_raw_r = await asyncio.gather(
             client.get_bars(sym, Timeframe.MIN_1, limit=60),
+            client.get_bars(sym, Timeframe.DAY_1, limit=params.swing_technical.daily_bars_lookback),
             client.get_snapshot(sym),
-            client.get_market_news(tickers=[sym], limit=20, published_utc_gte=news_since),
             client.get_snapshot("SPY"),
             client.get_snapshot("QQQ"),
             get_vix_snapshot_with_fallback(client),
             client.get_economic_calendar_for_day(date.today()),
             benzinga.get_multi(sym, mode="day"),
+            _fetch_composite_news_rows(),
             return_exceptions=True,
         )
 
         bars: list[Bar] = _safe_result(bars_r, [])
+        daily_bars: list[Bar] = _safe_result(daily_r, [])
         sym_snap: Snapshot | None = _safe_result(sym_r, None)
-        news_polygon: list[dict[str, Any]] = _safe_result(news_r, [])
         bz_data: BenzingaMultiResult = _safe_result(bz_r, BenzingaMultiResult())
-        news_rows = _merge_benzinga_first_news_rows(news_polygon, _benzinga_articles_to_rows(bz_data.news))
+        news_raw: list[dict[str, Any]] = _safe_result(news_raw_r, [])
+        news_rows = [
+            enrich_article_ticker_metadata(a, sym) for a in news_raw if isinstance(a, dict)
+        ]
         spy_snap: Snapshot | None = _safe_result(spy_r, None)
         qqq_snap: Snapshot | None = _safe_result(qqq_r, None)
         vix_snap: Snapshot | None = _safe_result(vix_r, None)
@@ -292,7 +325,23 @@ async def run_real_composite_engine_phase(
     snap_for_tech = sym_snap if sym_snap is not None else Snapshot(symbol=sym)
     adv = float(sym_snap.prev_day_volume) if sym_snap and sym_snap.prev_day_volume else None
 
-    tech = TechnicalAnalyzer().analyze(sym, bars, snap_for_tech, params.technical, adv=adv)
+    tech = resolve_day_technical_layer(
+        symbol=sym,
+        intraday_bars=bars,
+        snapshot=snap_for_tech,
+        technical_params=params.technical,
+        swing_params=params.swing_technical,
+        daily_bars=daily_bars,
+        adv=adv,
+    )
+    if tech.status == "as_of_close":
+        _LOG.info(
+            "day_technical_as_of_close symbol=%s score=%s verdict=%s bars_daily=%s",
+            sym,
+            tech.score,
+            tech.verdict,
+            tech.bars_analyzed,
+        )
     news = NewsAnalyzer().analyze(
         sym,
         news_rows,
@@ -333,7 +382,7 @@ async def run_real_composite_engine_phase(
 
     layer_results = [tech, news, macro, sector, geo, internals]
     layer_ids = ["technical", "news", "macro", "sector", "geopolitical", "internals"]
-    available = [r for r in layer_results if getattr(r, "status", "") == "available"]
+    available = [r for r in layer_results if _layer_available_for_composite(getattr(r, "status", ""))]
     day_composite = resolve_composite_block(params, mode="day")
     min_layers = int(day_composite.min_available_layers)
     if len(available) < min_layers:
@@ -395,6 +444,9 @@ async def run_real_composite_engine_phase(
         sector_momentum=sector_momentum,
         sector_resolution_state=sector_resolution_state,
         sic_mapping_tier=sic_mapping_tier,
+        sector_etf_sym=sector_etf_sym,
+        sector_display=sector_display,
+        sic_bucket_for_geo=sic_bucket_for_geo,
     )
 
 
@@ -426,6 +478,9 @@ async def build_real_composite_response(
     sector_momentum = getattr(phase, "sector_momentum", None)
     sector_resolution_state = getattr(phase, "sector_resolution_state", None)
     sic_mapping_tier = getattr(phase, "sic_mapping_tier", None)
+    sector_etf_sym = getattr(phase, "sector_etf_sym", "") or ""
+    sector_display = getattr(phase, "sector_display", None)
+    sic_bucket_for_geo = getattr(phase, "sic_bucket_for_geo", None)
     tech, news, macro, sector, geo, internals = layer_results
 
     contributions: list[dict[str, Any]] = []
@@ -497,6 +552,9 @@ async def build_real_composite_response(
                     resolution_state=sector_resolution_state,
                     daily_sessions=ds,
                     sic_mapping_tier=sic_mapping_tier,
+                    sector_etf=sector_etf_sym or None,
+                    sector_display_name=sector_display,
+                    sector_bucket=sic_bucket_for_geo,
                 )
             )
         layers_out.append(row)

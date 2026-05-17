@@ -206,9 +206,19 @@ function sectorResolutionLabel(state: SectorResolutionStateWire | null | undefin
   return "Unmapped";
 }
 
+function sectorBenchmarkLabel(layer: EvidenceLayer): string | null {
+  const etf = layer.sector_etf?.trim();
+  const name = layer.sector_display_name?.trim();
+  if (name && etf) return `${name} (${etf})`;
+  if (etf) return etf;
+  if (name) return name;
+  return null;
+}
+
 function sectorLayerHasMomentumDetails(layer: EvidenceLayer): boolean {
   if (layer.key !== "sector") return false;
   return (
+    sectorBenchmarkLabel(layer) != null ||
     layer.sector_resolution_state != null ||
     layer.sector_interpretation != null ||
     layer.sector_data_available != null ||
@@ -220,6 +230,7 @@ function sectorLayerHasMomentumDetails(layer: EvidenceLayer): boolean {
 
 function SectorMomentumPanel({ layer, colors }: { layer: EvidenceLayer; colors: ThemeColors }) {
   const st = layer.sector_resolution_state;
+  const benchmark = sectorBenchmarkLabel(layer);
   const interp = layer.sector_interpretation?.trim();
   const lead =
     typeof layer.sector_sessions_leading === "number" && typeof layer.sector_total_sessions === "number"
@@ -245,6 +256,11 @@ function SectorMomentumPanel({ layer, colors }: { layer: EvidenceLayer; colors: 
       style={{ border: `1px solid ${colors.border}`, background: "rgba(148,163,184,0.06)" }}
     >
       <div className="flex flex-wrap items-center gap-2">
+        {benchmark ? (
+          <span className="text-xs font-semibold" style={{ color: colors.text }}>
+            Benchmark: {benchmark}
+          </span>
+        ) : null}
         {st ? (
           <span
             className="rounded-full px-2 py-0.5 text-xs font-semibold"
@@ -260,6 +276,10 @@ function SectorMomentumPanel({ layer, colors }: { layer: EvidenceLayer; colors: 
         {layer.sector_data_available === false && st === "pending_cache_refresh" ? (
           <span className="text-xs text-muted-foreground">
             Excluded from composite score and alignment until cache is ready — not a system error.
+          </span>
+        ) : layer.sector_data_available === false && benchmark ? (
+          <span className="text-xs text-muted-foreground">
+            Sector mapped; session momentum cache is still loading (relative strength vs SPY may update on refresh).
           </span>
         ) : layer.sector_data_available === false ? (
           <span className="text-xs text-muted-foreground">Sector momentum data not available for this read.</span>
