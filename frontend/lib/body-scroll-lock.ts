@@ -4,15 +4,18 @@
  */
 
 let lockCount = 0;
-let savedOverflow = "";
+let savedBodyOverflow = "";
+let savedHtmlOverflow = "";
 
 export function lockBodyScroll(): () => void {
   if (typeof document === "undefined") {
     return () => undefined;
   }
   if (lockCount === 0) {
-    savedOverflow = document.body.style.overflow;
+    savedBodyOverflow = document.body.style.overflow;
+    savedHtmlOverflow = document.documentElement.style.overflow;
     document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
   }
   lockCount += 1;
   let released = false;
@@ -21,15 +24,18 @@ export function lockBodyScroll(): () => void {
     released = true;
     lockCount = Math.max(0, lockCount - 1);
     if (lockCount === 0) {
-      document.body.style.overflow = savedOverflow;
+      document.body.style.overflow = savedBodyOverflow;
+      document.documentElement.style.overflow = savedHtmlOverflow;
     }
   };
 }
 
-/** Clears any stuck body lock (e.g. after client navigation). */
+/** Clears any stuck body/html lock (e.g. after client navigation or bfcache restore). */
 export function resetBodyScrollLock(): void {
   if (typeof document === "undefined") return;
   lockCount = 0;
   document.body.style.overflow = "";
-  savedOverflow = "";
+  document.documentElement.style.overflow = "";
+  savedBodyOverflow = "";
+  savedHtmlOverflow = "";
 }

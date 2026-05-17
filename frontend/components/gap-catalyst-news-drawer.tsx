@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useBodyScrollLock } from "@/lib/hooks/use-body-scroll-lock";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
@@ -38,14 +38,7 @@ function formatPublished(iso: string | undefined): string {
 export function GapCatalystNewsDrawer({ open, payload, onClose, onViewSignal }: GapCatalystNewsDrawerProps) {
   const { colors } = useTheme();
 
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [open]);
+  useBodyScrollLock(open);
 
   if (!open || !payload || typeof document === "undefined") {
     return null;

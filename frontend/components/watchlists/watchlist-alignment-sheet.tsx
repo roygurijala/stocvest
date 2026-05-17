@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
-import { useEffect } from "react";
+import { useBodyScrollLock } from "@/lib/hooks/use-body-scroll-lock";
 import { createPortal } from "react-dom";
 import {
   alignedLayerNames,
@@ -32,14 +32,7 @@ export function WatchlistAlignmentSheet({ open, symbol, deskMode, row, onClose }
   const biasLabel = formatMaturationBiasLabel(row?.bias ?? null);
   const stateLabel = formatWatchlistMaturationLabel(row);
 
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [open]);
+  useBodyScrollLock(open);
 
   if (typeof document === "undefined") return null;
 

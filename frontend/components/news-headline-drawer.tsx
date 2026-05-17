@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
+import { useBodyScrollLock } from "@/lib/hooks/use-body-scroll-lock";
 import { ExternalLink, X } from "lucide-react";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
@@ -61,14 +62,7 @@ function sentimentBadge(article: NewsPayload): { label: string; tone: "bullish" 
 export function NewsHeadlineDrawer({ open, article, onClose }: NewsHeadlineDrawerProps) {
   const { colors } = useTheme();
 
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [open]);
+  useBodyScrollLock(open);
 
   useEffect(() => {
     if (!open) return;

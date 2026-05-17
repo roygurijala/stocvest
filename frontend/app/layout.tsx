@@ -43,11 +43,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
    * support path; the two chat surfaces are intentionally separate (CrispChat = humans,
    * STOCVEST Assistant = product behavior explanations).
    */
-  const appBody = (
-    <div className="app-shell flex min-h-screen flex-col">
-      <div className="flex-1">{children}</div>
-    </div>
-  );
+  const appBody = <div className="app-shell min-h-screen">{children}</div>;
 
   return (
     <html lang="en" className="theme-dark" data-theme="dark" suppressHydrationWarning>

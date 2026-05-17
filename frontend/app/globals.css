@@ -61,12 +61,7 @@ html {
 }
 
 html {
-  /*
-   * Clip horizontal bleed on the viewport only. Applying the same rule to
-   * ``body`` promotes two nested scroll containers and can trap wheel input
-   * when dashboard grid items stretch to ``100vh``. The TopBar is
-   * ``position: fixed`` (see ``top-bar.tsx``).
-   */
+  /* Horizontal bleed only — vertical scroll lives on ``body`` (see below). */
   overflow-x: clip;
 }
 
@@ -77,6 +72,10 @@ body {
   background: var(--color-bg);
   color: var(--color-text);
   transition: background-color 240ms ease, color 240ms ease;
+  min-height: 100vh;
+  overflow-x: clip;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 @media (max-width: 1023px) {

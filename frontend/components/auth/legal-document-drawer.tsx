@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useBodyScrollLock } from "@/lib/hooks/use-body-scroll-lock";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { withSignupLegalEmbed } from "@/lib/legal-agreements";
@@ -95,15 +96,14 @@ export function LegalDocumentDrawer({
     requestAnimationFrame(check);
   }, [detachIframeListeners]);
 
+  useBodyScrollLock(open);
+
   useEffect(() => {
     if (!open) {
-      document.body.style.overflow = "";
       detachIframeListeners();
       return;
     }
-    document.body.style.overflow = "hidden";
     return () => {
-      document.body.style.overflow = "";
       detachIframeListeners();
     };
   }, [open, detachIframeListeners]);

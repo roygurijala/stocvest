@@ -13,6 +13,7 @@ import { DASHBOARD_NAV_ITEMS, DASHBOARD_ADMIN_NAV_ITEMS } from "@/components/sid
 import { isDashboardNavItemActive } from "@/lib/dashboard-nav-active";
 import { isDashboardNavItemEnabled } from "@/lib/nav-features";
 import { usePathname } from "next/navigation";
+import { useBodyScrollLock } from "@/lib/hooks/use-body-scroll-lock";
 
 interface MobileNavDrawerProps {
   open: boolean;
@@ -38,6 +39,8 @@ export function MobileNavDrawer({
   useEffect(() => {
     if (pathInAdmin) setAdminExpanded(true);
   }, [pathInAdmin]);
+
+  useBodyScrollLock(open);
 
   return (
     <AnimatePresence>
