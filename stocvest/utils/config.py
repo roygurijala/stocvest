@@ -132,6 +132,9 @@ class Settings(BaseSettings):
     # ── FRED (macro calendar + Treasury series) ──────────────────
     fred_api_key: str = Field("", alias="FRED_API_KEY")
 
+    # ── FMP (optional fundamentals context — revenue / earnings calendar) ──
+    fmp_api_key: str = Field("", alias="FMP_API_KEY")
+
     # ── App ──────────────────────────────────────────────────────
     env: str = Field("development", alias="STOCVEST_ENV")
     redis_url: str = Field("redis://localhost:6379", alias="REDIS_URL")
@@ -297,6 +300,8 @@ def get_settings() -> Settings:
                 "UPSTASH_REDIS_REST_TOKEN",
                 "upstash_redis_rest_token",
             )
+        if not settings.fmp_api_key:
+            settings.fmp_api_key = _load_secret_key("FMP_API_KEY", "fmp_api_key")
     except Exception:
         # Best-effort fallback for local dev / non-AWS contexts.
         pass

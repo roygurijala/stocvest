@@ -1,6 +1,6 @@
 # Fundamentals as context — NOT a signal layer
 
-**Status:** Phases A, B, and D shipped. Phase C (optional FMP) remains in [`BACKLOG.md`](./BACKLOG.md) as `FUND-C`.
+**Status:** Phases A–D shipped (FMP optional when `FMP_API_KEY` or `fmp_api_key` in `stocvest/external-api-keys` is set).
 
 **Last updated:** 2026-05-16
 
@@ -92,7 +92,7 @@ Module: `stocvest/data/earnings_calendar.py`
 | `earnings_trend` | `beating` \| `missing` \| `inline` \| `unknown` |
 | `guidance_direction` | `raised` \| `lowered` \| `maintained` \| `unknown` |
 | `analyst_direction` | `upgrading` \| `downgrading` \| `stable` \| `unknown` |
-| `revenue_trend` | `growing` \| `flat` \| `declining` \| `unknown` (FMP later) |
+| `revenue_trend` | `growing` \| `flat` \| `declining` \| `unknown` (FMP when configured) |
 | `summary_line` | One-sentence card copy ending with “Signal data only.” |
 | `data_quality` | `high` \| `medium` \| `low` |
 | `quarters_beating` / `quarters_missing` | ints |
@@ -105,9 +105,14 @@ UI: `frontend/components/signal-evidence/fundamental-backdrop.tsx` — gated wit
 
 ---
 
-## Phase C — Optional FMP (planned)
+## Phase C — Optional FMP (shipped)
 
-- Third provider behind the same resolver interface when Benzinga/Polygon miss
+Module: `stocvest/data/fmp_client.py`
+
+- **`get_revenue_trend(symbol)`** — quarterly income statement YoY; feeds `fundamental_context.revenue_trend`
+- **`get_upcoming_earnings_date(symbol)`** — third fallback in `earnings_calendar.resolve_upcoming_earnings_horizon` after Benzinga + Polygon
+- Config: `FMP_API_KEY` env or `fmp_api_key` in Secrets Manager `stocvest/external-api-keys`
+- Redis cache 24h per symbol; never raises; without a key all FMP paths return `unknown` / `None`
 
 ---
 

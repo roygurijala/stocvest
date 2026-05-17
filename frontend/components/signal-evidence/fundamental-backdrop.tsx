@@ -156,6 +156,9 @@ export function FundamentalBackdropPanel({ context, isPaid, mode }: FundamentalB
               : tagLabel(context.analyst_direction)
           }
         />
+        {context.revenue_trend !== "unknown" ? (
+          <MetricTile label="Revenue" value={tagLabel(context.revenue_trend)} />
+        ) : null}
       </div>
 
       <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, fontStyle: "italic" }}>

@@ -143,6 +143,24 @@ async def resolve_upcoming_earnings_horizon(
         except Exception as exc:
             _LOG.warning("earnings_calendar_polygon_failed symbol=%s err=%s", sym, type(exc).__name__)
 
+    if horizon is None:
+        try:
+            from stocvest.data.fmp_client import get_upcoming_earnings_date
+
+            fmp_date = await get_upcoming_earnings_date(sym, window_days=window_days)
+            if fmp_date is not None:
+                days = (fmp_date - today).days
+                risk, chip = classify_earnings_risk(days)
+                horizon = EarningsHorizon(
+                    report_date=fmp_date,
+                    days_away=days,
+                    risk=risk,
+                    report_time="unknown",
+                    chip=chip,
+                )
+        except Exception as exc:
+            _LOG.warning("earnings_calendar_fmp_failed symbol=%s err=%s", sym, type(exc).__name__)
+
     _horizon_cache[sym] = (now, horizon)
     return horizon
 

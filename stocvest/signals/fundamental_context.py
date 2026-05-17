@@ -12,6 +12,7 @@ from stocvest.data.benzinga_client import (
     BenzingaMultiResult,
     BenzingaRating,
 )
+from stocvest.data.fmp_client import get_revenue_trend
 from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
@@ -211,6 +212,10 @@ async def build_fundamental_context(
     guidance_dir = _compute_guidance_direction(guidance_items)
     analyst_dir, upgrades, downgrades = _compute_analyst_direction(ratings)
     revenue_trend: TrendDirection = "unknown"
+    try:
+        revenue_trend = await get_revenue_trend(sym)
+    except Exception as exc:
+        _LOG.warning("fundamental_fmp_revenue_failed symbol=%s err=%s", sym, type(exc).__name__)
 
     backdrop = _compute_backdrop(
         earnings_trend=earnings_trend,
@@ -224,6 +229,7 @@ async def build_fundamental_context(
             bool(earnings_results),
             bool(ratings),
             bool(guidance_items),
+            revenue_trend != "unknown",
         ]
     )
     quality: DataQuality = "high" if sources_hit >= 3 else ("medium" if sources_hit >= 1 else "low")

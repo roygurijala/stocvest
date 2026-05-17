@@ -110,6 +110,31 @@ async def test_resolve_polygon_fallback_when_benzinga_empty() -> None:
 
 
 @pytest.mark.asyncio
+async def test_resolve_fmp_fallback_when_benzinga_and_polygon_empty() -> None:
+    clear_earnings_horizon_cache("MSFT")
+    today = date(2026, 5, 16)
+    fmp_date = today + timedelta(days=5)
+
+    class FakePoly:
+        get_earnings_calendar = AsyncMock(return_value=[])
+
+    with (
+        patch("stocvest.data.earnings_calendar.datetime") as dt_mock,
+        patch("stocvest.data.earnings_calendar._from_benzinga", new=AsyncMock(return_value=None)),
+        patch(
+            "stocvest.data.fmp_client.get_upcoming_earnings_date",
+            new=AsyncMock(return_value=fmp_date),
+        ),
+    ):
+        dt_mock.now.return_value.date.return_value = today
+        h = await resolve_upcoming_earnings_horizon("MSFT", polygon_client=FakePoly())  # type: ignore[arg-type]
+
+    assert h is not None
+    assert h.report_date == fmp_date
+    assert h.days_away == 5
+
+
+@pytest.mark.asyncio
 async def test_resolve_never_raises_on_provider_errors() -> None:
     clear_earnings_horizon_cache("ZZZ")
 
