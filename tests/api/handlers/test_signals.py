@@ -668,8 +668,11 @@ def test_user_signal_history_returns_rows(monkeypatch: pytest.MonkeyPatch) -> No
     }
     resp = user_signal_history_handler(event, {})
     assert resp["statusCode"] == 200
+    assert resp["headers"].get("Deprecation") == "true"
+    assert "setup-outcomes" in resp["headers"].get("Link", "")
     body = json.loads(resp["body"])
     rows = body["items"]
+    assert "deprecation_notice" in body
     assert body["page_size"] == 25
     assert body.get("next_cursor") is None
     assert len(rows) == 1

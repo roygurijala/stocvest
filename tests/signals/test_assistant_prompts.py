@@ -698,6 +698,13 @@ def test_prompt_bans_predicting_future_track_record() -> None:
     assert "descriptive, not predictive" in ASSISTANT_SYSTEM_PROMPT
 
 
+def test_prompt_carries_setup_outcomes_screen_rule() -> None:
+    """B46: user-facing observational outcomes replaced Signal Validation marketing."""
+    assert "SETUP OUTCOMES" in ASSISTANT_SYSTEM_PROMPT
+    assert "/dashboard/setup-outcomes" in ASSISTANT_SYSTEM_PROMPT
+    assert "/dashboard/admin/historical-validation" in ASSISTANT_SYSTEM_PROMPT
+
+
 def test_prompt_bans_per_symbol_pattern_regime_decision_readiness_direction_detail() -> None:
     """The assistant only sees `overall` + `by_mode` — every other stratification is
     deliberately withheld. The prompt must make it clear the LLM should redirect users

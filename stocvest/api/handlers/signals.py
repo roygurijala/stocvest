@@ -16,7 +16,7 @@ from stocvest.api.legal_copy import (
     SCANNER_EVALUATION_TRACE_DISCLAIMER,
 )
 from stocvest.api.http_route import http_route_descriptor
-from stocvest.api.response import bad_request, internal_error, not_found, ok, unauthorized
+from stocvest.api.response import bad_request, internal_error, json_response, not_found, ok, unauthorized
 from stocvest.api.services.historical_validation_service import HistoricalValidationService
 from stocvest.api.services.signal_analysis import analysis_authorized, build_signal_analysis_payload
 from stocvest.api.services.real_composite_engine import real_composite_body_sync
@@ -1175,7 +1175,11 @@ def _parse_me_history_page_size(qs: dict[str, Any]) -> int:
 
 
 def user_signal_history_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
-    """GET /v1/signals/me/history — historical signal data for the signed-in user."""
+    """GET /v1/signals/me/history — legacy SignalHistory ledger (deprecated; B46).
+
+    User-facing setup behavior is ``GET /v1/analytics/setup-outcomes``. This endpoint
+    remains for admin/tooling and D1 resolution until Phase 6 retires the table.
+    """
     _ = context
     rc = build_request_context(event)
     if not rc.user_id:
@@ -1201,12 +1205,21 @@ def user_signal_history_handler(event: LambdaEvent, context: LambdaContext) -> d
         ledger_qualified_only=ledger_qualified_only,
         cursor=cursor_raw,
     )
-    return ok(
+    return json_response(
+        200,
         {
             "items": [public_signal_detail_dict(r) for r in rows],
             "next_cursor": next_cursor,
             "page_size": page_size,
-        }
+            "deprecation_notice": (
+                "Prefer GET /v1/analytics/setup-outcomes for user setup behavior. "
+                "This SignalHistory ledger API will be removed in a future release."
+            ),
+        },
+        headers={
+            "Deprecation": "true",
+            'Link': '</v1/analytics/setup-outcomes>; rel="successor-version"',
+        },
     )
 
 

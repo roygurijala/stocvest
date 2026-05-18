@@ -34,7 +34,9 @@ New transitions persist **`price_at_event`** from composite **`last_trade_price`
 
 `SignalHistory` storage and `record_signal()` remain for D2, weight proposer, and resolution jobs until Phase 6.
 
-## Phase 6 — SignalHistory retirement (not started)
+## Phase 6 — SignalHistory retirement (prep done; table retained)
+
+Full migration checklist: [`SIGNAL_HISTORY_RETIREMENT.md`](./SIGNAL_HISTORY_RETIREMENT.md).
 
 Do **not** drop the table or stop `record_signal()` until every dependent below has a migration path.
 

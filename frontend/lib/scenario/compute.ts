@@ -22,7 +22,7 @@
  *     suggestion, no "we recommend X shares." The user is responsible
  *     for sizing; we only show the consequences of their choice.
  *   - Probability of success — we have historical accuracy on
- *     `/dashboard/signal-validation`, but using it to qualify a
+ *     `/dashboard/setup-outcomes`, but using it to qualify a
  *     scenario's R-expectancy crosses into implicit prediction.
  */
 

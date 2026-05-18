@@ -90,7 +90,7 @@ export type VolatilityRegime = "low" | "normal" | "elevated" | "extreme" | "unkn
  * Whole-payload input to the eligibility check + scenario builder.
  *
  * The shape is intentionally generous so every call site (gap card,
- * setup row, evidence modal, signal-validation row, dashboard signal)
+ * setup row, evidence modal, setup-outcomes link, dashboard signal)
  * can build one without round-tripping through the backend.
  */
 export interface ScenarioInput {
