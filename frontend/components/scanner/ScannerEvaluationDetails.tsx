@@ -8,6 +8,8 @@ import type { ScannerSynthesis } from "@/lib/scanner-synthesis";
 import type { ScannerEvaluationTraceRow } from "@/lib/scanner-setups-response";
 import { useTheme } from "@/lib/theme-provider";
 
+const CHIP_PREVIEW_LIMIT = 5;
+
 type Props = {
   synthesis?: ScannerSynthesis | null;
   traceRows?: ScannerEvaluationTraceRow[];
@@ -43,8 +45,10 @@ export function ScannerEvaluationDetails({ synthesis, traceRows = [], deskFilter
 
   if (!hasSynthesis && !hasTrace) return null;
 
-  const evaluatedCount =
-    sessionVol.length + liquidity.length + structure.length || filteredTrace.length;
+  const broadMarketInsight =
+    sessionVol.length >= 3
+      ? "This is a broad market condition — not symbol-specific."
+      : null;
 
   return (
     <section
@@ -95,7 +99,7 @@ export function ScannerEvaluationDetails({ synthesis, traceRows = [], deskFilter
               color: colors.textMuted
             }}
           >
-            {evaluatedCount} symbol{evaluatedCount === 1 ? "" : "s"} · grouped gate results
+            Grouped gate results
           </span>
         </span>
         <ChevronDown
@@ -113,56 +117,63 @@ export function ScannerEvaluationDetails({ synthesis, traceRows = [], deskFilter
             <>
               {sessionVol.length > 0 ? (
                 <GroupBlock
-                  title={`Session volume · ${sessionVol.length}`}
-                  hint="Same market-wide condition"
+                  title="Low participation (market-wide)"
+                  hint={`${sessionVol.length} symbol${sessionVol.length === 1 ? "" : "s"} affected`}
                   colors={colors}
                 >
-                  <ChipRow>
-                    {sessionVol.map((r) => (
-                      <Chip key={r.symbol} colors={colors}>
-                        {r.symbol}
-                        <span style={{ color: "#d97706", fontWeight: 600 }}> −{Math.round(r.pct_below)}%</span>
-                      </Chip>
-                    ))}
-                  </ChipRow>
+                  <LimitedChipRow rows={sessionVol} colors={colors} renderChip={(r) => (
+                    <>
+                      {r.symbol}
+                      <span style={{ color: "#d97706", fontWeight: 600 }}> −{Math.round(r.pct_below)}%</span>
+                    </>
+                  )} />
                 </GroupBlock>
               ) : null}
               {liquidity.length > 0 ? (
-                <GroupBlock title={`Permanent liquidity filter · ${liquidity.length}`} colors={colors}>
-                  <ChipRow>
-                    {liquidity.map((r) => (
-                      <Chip key={r.symbol} colors={colors}>
-                        {r.symbol}
-                      </Chip>
-                    ))}
-                  </ChipRow>
-                  <p style={{ margin: `${spacing[2]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted }}>
-                    Not related to today&apos;s session — structural universe minimum.
-                  </p>
+                <GroupBlock
+                  title={`Permanent liquidity filter · ${liquidity.length} symbol${liquidity.length === 1 ? "" : "s"}`}
+                  colors={colors}
+                >
+                  <LimitedChipRow rows={liquidity} colors={colors} renderChip={(r) => r.symbol} />
                 </GroupBlock>
               ) : null}
               {structure.length > 0 ? (
-                <GroupBlock title={`Structure gates · ${structure.length}`} colors={colors}>
-                  <ChipRow>
-                    {structure.map((r) => (
-                      <Chip key={`${r.symbol}-${r.reason}`} colors={colors}>
+                <GroupBlock
+                  title={`Structure gates · ${structure.length} symbol${structure.length === 1 ? "" : "s"}`}
+                  colors={colors}
+                >
+                  <LimitedChipRow
+                    rows={structure}
+                    colors={colors}
+                    renderChip={(r) => (
+                      <>
                         {r.symbol}
                         <span style={{ color: colors.accent }}> · {r.reason}</span>
-                      </Chip>
-                    ))}
-                  </ChipRow>
+                      </>
+                    )}
+                  />
                 </GroupBlock>
+              ) : null}
+              {broadMarketInsight ? (
+                <p
+                  data-testid="scanner-evaluation-broad-market-insight"
+                  style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.5 }}
+                >
+                  {broadMarketInsight}
+                </p>
               ) : null}
             </>
           ) : (
-            <ChipRow>
-              {filteredTrace.map((row) => (
-                <Chip key={`${row.symbol}-${row.gate}`} colors={colors}>
+            <LimitedChipRow
+              rows={filteredTrace}
+              colors={colors}
+              renderChip={(row) => (
+                <>
                   {row.symbol}
                   <span style={{ color: colors.textMuted }}> · {gateLabel(row.gate)}</span>
-                </Chip>
-              ))}
-            </ChipRow>
+                </>
+              )}
+            />
           )}
         </div>
       ) : null}
@@ -194,8 +205,37 @@ function GroupBlock({
   );
 }
 
-function ChipRow({ children }: { children: ReactNode }) {
-  return <div style={{ display: "flex", flexWrap: "wrap", gap: spacing[2] }}>{children}</div>;
+function LimitedChipRow<T extends { symbol: string }>({
+  rows,
+  colors,
+  renderChip
+}: {
+  rows: T[];
+  colors: ReturnType<typeof useTheme>["colors"];
+  renderChip: (row: T) => ReactNode;
+}) {
+  const preview = rows.slice(0, CHIP_PREVIEW_LIMIT);
+  const overflow = rows.length - preview.length;
+
+  return (
+    <div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: spacing[2] }}>
+        {preview.map((row, i) => (
+          <Chip key={`${row.symbol}-${i}`} colors={colors}>
+            {renderChip(row)}
+          </Chip>
+        ))}
+        {overflow > 0 ? (
+          <span
+            data-testid="scanner-evaluation-chip-overflow"
+            style={{ alignSelf: "center", fontSize: typography.scale.xs, color: colors.textMuted }}
+          >
+            + {overflow} more
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
 function Chip({ children, colors }: { children: ReactNode; colors: ReturnType<typeof useTheme>["colors"] }) {
@@ -216,3 +256,4 @@ function Chip({ children, colors }: { children: ReactNode; colors: ReturnType<ty
     </span>
   );
 }
+

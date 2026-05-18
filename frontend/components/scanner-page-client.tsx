@@ -25,13 +25,14 @@ import { ScannerClosestToQualifying } from "@/components/scanner/ScannerClosestT
 import { ScannerEvaluationDetails } from "@/components/scanner/ScannerEvaluationDetails";
 import { ScannerOutcomeCards } from "@/components/scanner/ScannerOutcomeCards";
 import { ScannerScanResultHero } from "@/components/scanner/scanner-scan-result-hero";
+import { ScannerWatchlistInsightCard } from "@/components/scanner/ScannerWatchlistInsightCard";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { loadScannerDataWithoutBrief } from "@/lib/api/scanner-client-load";
 import { fetchScannerTraceBundleClient } from "@/lib/api/scanner-trace-client";
 import type { ScannerSynthesis } from "@/lib/scanner-synthesis";
 import {
-  buildClosestToQualifyingLines,
+  buildClosestToQualifyingGroups,
   buildScannerCauseBullets
 } from "@/lib/scanner-quiet-copy";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
@@ -1071,12 +1072,13 @@ export function ScannerPageClient({
       qqqPct: overview.qqqPct,
       swingUniverseSymbolCount: overview.swingUniverseSymbolCount,
       gapIntelligenceSnapshotSymbolCount: overview.gapIntelligenceSnapshotSymbolCount,
+      marketStatus: { market: marketOpen ? "open" : "closed" },
       progressHints: buildScannerProgressHints({
         nearCount: scanSummary.near_qualification.length,
         watchlist: overview.watchlistStatus ?? scanSummary.watchlist
       })
     }),
-    [overview, scanSummary]
+    [overview, scanSummary, marketOpen]
   );
 
   const useCompactColumnEmpty = scanSummary.qualifying.total === 0;
@@ -1099,8 +1101,8 @@ export function ScannerPageClient({
     () => buildScannerCauseBullets(scanSummary, scannerSynthesis),
     [scanSummary, scannerSynthesis]
   );
-  const closestLines = useMemo(
-    () => buildClosestToQualifyingLines(scannerSynthesis, scanSummary),
+  const closestGroups = useMemo(
+    () => buildClosestToQualifyingGroups(scannerSynthesis, scanSummary),
     [scannerSynthesis, scanSummary]
   );
 
@@ -1322,11 +1324,18 @@ export function ScannerPageClient({
         synthesis={scannerSynthesis}
         isRefreshing={isPending}
         onRefresh={onManualRefresh}
+        hideWatchlistStrip={showQuietInterpretation}
       />
       <ScannerOutcomeCards summary={scanSummary} />
       {showQuietInterpretation ? (
         <div data-testid="scanner-quiet-interpretation" style={{ display: "grid", gap: spacing[3] }}>
-          <ScannerClosestToQualifying lines={closestLines} />
+          {scanSummary.watchlist ? (
+            <ScannerWatchlistInsightCard
+              watchlist={scanSummary.watchlist}
+              qualifyingTotal={scanSummary.qualifying.total}
+            />
+          ) : null}
+          <ScannerClosestToQualifying groups={closestGroups} />
           <ScannerCauseSection bullets={causeBullets} />
           <ScannerEvaluationDetails
             synthesis={
@@ -1574,6 +1583,8 @@ export function ScannerPageClient({
                   scannerSetupMode === "day" ? "day" : "swing"
                 )}
                 compact={useCompactColumnEmpty}
+                interpretive={showQuietInterpretation}
+                interpretiveOverview={emptyOverviewInput}
                 testId="scanner-gap-empty-state"
               />
             ) : gapIntelForDisplay.length === 0 ? (
@@ -1693,6 +1704,8 @@ export function ScannerPageClient({
                       <ScannerEmptyStateCard
                         context={context}
                         compact={useCompactColumnEmpty}
+                        interpretive={showQuietInterpretation}
+                        interpretiveOverview={emptyOverviewInput}
                         testId={`scanner-setups-empty-state-${group.key}`}
                       />
                     );

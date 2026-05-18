@@ -7,9 +7,11 @@ import {
   formatTapeReadout,
   type DayEmptyStateContext,
   type GapIntelEmptyStateContext,
+  type EmptyStateOverviewInput,
   type ScannerEmptyStateContext,
   type SwingEmptyStateContext
 } from "@/lib/scanner-empty-state";
+import { buildScannerDeskInterpretiveLine } from "@/lib/scanner-quiet-copy";
 import { SECTION_LABEL_DAY_DESK, SECTION_LABEL_SWING_DESK } from "@/lib/mode-terminology";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -26,6 +28,13 @@ interface ScannerEmptyStateCardProps {
   compact?: boolean;
   /** Optional override for the `data-testid` so tests can target each instance. */
   testId?: string;
+  /**
+   * Quiet-scan mode: one decisive sentence only — no chips, boilerplate,
+   * or re-enable accordions (interpretation lives above the grid).
+   */
+  interpretive?: boolean;
+  /** Used with `interpretive` to build the single desk sentence. */
+  interpretiveOverview?: Pick<EmptyStateOverviewInput, "regimeLabel" | "marketStatus">;
 }
 
 /**
@@ -60,7 +69,9 @@ interface ScannerEmptyStateCardProps {
 export function ScannerEmptyStateCard({
   context,
   compact = false,
-  testId
+  testId,
+  interpretive = false,
+  interpretiveOverview
 }: ScannerEmptyStateCardProps) {
   const { colors, theme } = useTheme();
   const role = context.mode === "swing" ? "swing" : "day";
@@ -69,6 +80,19 @@ export function ScannerEmptyStateCard({
   const deskLabel = context.mode === "swing" ? SECTION_LABEL_SWING_DESK : SECTION_LABEL_DAY_DESK;
   const gap = isGapContext(context);
   const surfaceSlug = gap ? `gap-${context.mode}` : context.mode;
+  const deskKind: "gap" | "swing" | "day" = gap ? "gap" : context.mode;
+  const displayHeadline = interpretive
+    ? buildScannerDeskInterpretiveLine(
+        deskKind,
+        interpretiveOverview ?? {
+          regimeLabel: context.regimeLabel,
+          marketStatus:
+            "sessionOpen" in context && context.sessionOpen != null
+              ? { market: context.sessionOpen ? "open" : "closed" }
+              : undefined
+        }
+      )
+    : context.headline;
   const reenableSummary = gap
     ? "What would surface a gap candidate"
     : `What would re-enable ${context.mode === "swing" ? "swing" : "day"} rows`;
@@ -77,11 +101,13 @@ export function ScannerEmptyStateCard({
     : `These are the gates the ${context.mode === "swing" ? "swing" : "day"} engine evaluates — not a prediction of outcomes. Satisfying a single gate does not produce a setup.`;
   const tape = formatTapeReadout(context.spyPct, context.qqqPct);
   const universeChip =
-    typeof context.universeSize === "number" && context.universeSize > 0
+    !interpretive &&
+    typeof context.universeSize === "number" &&
+    context.universeSize > 0
       ? `${context.universeSize} symbols scanned`
       : null;
-  const regimeChip = context.regimeLabel ? `Regime: ${context.regimeLabel}` : null;
-  const tapeChip = tape || null;
+  const regimeChip = !interpretive && context.regimeLabel ? `Regime: ${context.regimeLabel}` : null;
+  const tapeChip = !interpretive && tape ? tape : null;
   const chips: Array<{ icon: typeof Activity; label: string }> = [];
   if (universeChip) chips.push({ icon: Layers, label: universeChip });
   if (regimeChip) chips.push({ icon: Compass, label: regimeChip });
@@ -145,19 +171,21 @@ export function ScannerEmptyStateCard({
           lineHeight: 1.35
         }}
       >
-        {context.headline}
+        {displayHeadline}
       </h4>
 
-      <p
-        style={{
-          margin: 0,
-          color: colors.textMuted,
-          fontSize: typography.scale.sm,
-          lineHeight: 1.55
-        }}
-      >
-        {context.oneLiner}
-      </p>
+      {interpretive ? null : (
+        <p
+          style={{
+            margin: 0,
+            color: colors.textMuted,
+            fontSize: typography.scale.sm,
+            lineHeight: 1.55
+          }}
+        >
+          {context.oneLiner}
+        </p>
+      )}
 
       {chips.length > 0 ? (
         <div
@@ -195,6 +223,7 @@ export function ScannerEmptyStateCard({
         </div>
       ) : null}
 
+      {interpretive ? null : (
       <details
         data-testid={`scanner-empty-state-${surfaceSlug}-reenable`}
         style={{
@@ -248,8 +277,9 @@ export function ScannerEmptyStateCard({
           {disclaimer}
         </p>
       </details>
+      )}
 
-      {compact ? null : (
+      {interpretive || compact ? null : (
         <nav
           data-testid={`scanner-empty-state-${surfaceSlug}-crosslinks`}
           aria-label={`What to do while ${deskLabel} is quiet`}

@@ -15,9 +15,17 @@ type Props = {
   synthesis?: ScannerSynthesis | null;
   isRefreshing?: boolean;
   onRefresh: () => void;
+  /** When true, watchlist insight renders in the quiet interpretation block instead. */
+  hideWatchlistStrip?: boolean;
 };
 
-export function ScannerScanResultHero({ summary, synthesis, isRefreshing, onRefresh }: Props) {
+export function ScannerScanResultHero({
+  summary,
+  synthesis,
+  isRefreshing,
+  onRefresh,
+  hideWatchlistStrip = false
+}: Props) {
   const { colors } = useTheme();
   const wl = summary.watchlist;
   const quietSubline = buildScannerQuietSubline(summary, synthesis);
@@ -121,7 +129,7 @@ export function ScannerScanResultHero({ summary, synthesis, isRefreshing, onRefr
         ) : null}
       </div>
 
-      {wl ? (
+      {wl && !hideWatchlistStrip ? (
         <WatchlistInsightRow colors={colors} wl={wl} qualifyingTotal={summary.qualifying.total} />
       ) : null}
     </section>

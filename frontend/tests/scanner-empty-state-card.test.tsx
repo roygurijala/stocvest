@@ -90,6 +90,23 @@ describe("<ScannerEmptyStateCard /> — swing variant", () => {
     expect(screen.queryByTestId("scanner-empty-state-swing-crosslinks")).toBeNull();
   });
 
+  test("interpretive mode shows one sentence and hides chips and reenable", () => {
+    const ctx = buildSwingEmptyStateContext(baseInput);
+    wrap(
+      <ScannerEmptyStateCard
+        context={ctx}
+        interpretive
+        interpretiveOverview={baseInput}
+        testId="scanner-empty-interpretive"
+      />
+    );
+    const card = screen.getByTestId("scanner-empty-interpretive");
+    expect(card.textContent).toContain("Bearish regime is preventing");
+    expect(card.textContent).not.toContain("240 symbols scanned");
+    expect(screen.queryByTestId("scanner-empty-state-swing-reenable")).toBeNull();
+    expect(screen.queryByTestId("scanner-empty-state-swing-context-strip")).toBeNull();
+  });
+
   test("test_swing_card_carries_data_mode_swing_for_role_styling", () => {
     const ctx = buildSwingEmptyStateContext(baseInput);
     wrap(<ScannerEmptyStateCard context={ctx} />);
