@@ -11,9 +11,13 @@ import {
   WATCHLIST_ALIGNMENT_CHIP_CLASS,
   WATCHLIST_EVALUATE_LINK_CLASS
 } from "@/lib/watchlist-interactive-styles";
+import { MaturationFrequencyCallout } from "@/components/maturation-frequency-callout";
 import { WATCHLIST_EVALUATION_HEADER } from "@/lib/product-empty-states";
 import { maturationAlignmentCounts } from "@/lib/watchlist-alignment-present";
-import { formatMaturationStateLine } from "@/lib/setup-evolution-present";
+import {
+  formatWatchlistMaturationDisplayLine,
+  formatWatchlistProgressionChip
+} from "@/lib/alignment-display-tier";
 import { setupEvolutionHubHref } from "@/lib/nav/setup-analytics-deeplink";
 import { APP_TOP_BAR_LAYOUT_HEIGHT } from "@/components/top-bar";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
@@ -476,9 +480,15 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
       let matSnippet = "";
       if (!(viewMode === "both" && dualDeskMaturation)) {
         if (viewMode === "swing" || !dualDeskMaturation) {
-          matSnippet = [formatStateLabel(ms), ms?.readiness_label].filter(Boolean).join(" ").trim();
+          matSnippet = [formatWatchlistMaturationDisplayLine(ms) ?? formatStateLabel(ms), ms?.readiness_label]
+            .filter(Boolean)
+            .join(" ")
+            .trim();
         } else if (viewMode === "day") {
-          matSnippet = [formatStateLabel(md), md?.readiness_label].filter(Boolean).join(" ").trim();
+          matSnippet = [formatWatchlistMaturationDisplayLine(md) ?? formatStateLabel(md), md?.readiness_label]
+            .filter(Boolean)
+            .join(" ")
+            .trim();
         }
       }
       const base = name ? `${sym} — ${name}` : sym;
@@ -808,9 +818,18 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                         Watchlist
                       </h1>
                       {active.is_default ? (
-                        <p className="m-0 mt-1 max-w-2xl text-xs leading-relaxed" style={{ color: colors.textMuted }}>
-                          {WATCHLIST_EVALUATION_HEADER}
-                        </p>
+                        <div className="mt-1 max-w-2xl">
+                          <p className="m-0 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
+                            {WATCHLIST_EVALUATION_HEADER}
+                          </p>
+                          <div className="mt-3">
+                            <MaturationFrequencyCallout
+                              desk={viewMode === "day" ? "day" : "swing"}
+                              showDisplayBands
+                              testId="watchlists-maturation-frequency"
+                            />
+                          </div>
+                        </div>
                       ) : null}
                     </div>
                     <button
@@ -1219,11 +1238,8 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                       const rowLine = (mode: "swing" | "day", m: MaturationRow | undefined) => {
                         const hasMat = Boolean(m?.state || m?.label);
                         const { aligned, total } = maturationAlignmentCounts(m);
-                        const stateKey = (m?.state ?? m?.label ?? "").trim().toLowerCase().replace(/\s+/g, "_");
                         const detail = hasMat
-                          ? stateKey
-                            ? formatMaturationStateLine(stateKey, aligned, total)
-                            : formatStateLabel(m)
+                          ? formatWatchlistMaturationDisplayLine(m) ?? formatStateLabel(m)
                           : maturationFetchStatus === "ready" && active.is_default
                             ? null
                             : maturationFetchStatus === "error" && active.is_default
@@ -1245,6 +1261,24 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                                 <span className="text-[11px] font-medium sm:text-sm" style={{ color: colors.text }}>
                                   ● {detail}
                                 </span>
+                                {(() => {
+                                  const progression = formatWatchlistProgressionChip(m);
+                                  if (!progression) return null;
+                                  const improved = m?.last_transition_type === "improved";
+                                  return (
+                                    <span
+                                      className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums"
+                                      style={{
+                                        background: improved ? "rgba(34,197,94,0.12)" : "rgba(248,113,113,0.12)",
+                                        color: improved ? "#86efac" : "#fca5a5"
+                                      }}
+                                      data-testid={`watchlist-progression-${symU}-${mode}`}
+                                      title="Layer alignment vs prior evaluation"
+                                    >
+                                      {progression}
+                                    </span>
+                                  );
+                                })()}
                                 <button
                                   type="button"
                                   className={WATCHLIST_ALIGNMENT_CHIP_CLASS}

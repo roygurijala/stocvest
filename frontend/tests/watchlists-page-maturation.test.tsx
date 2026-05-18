@@ -1,9 +1,20 @@
 import type { ReactElement } from "react";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { WatchlistsPageClient } from "@/components/watchlists-page-client";
 import { ThemeProvider } from "@/lib/theme-provider";
+
+beforeAll(() => {
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    value: () => ({
+      matches: false,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined
+    })
+  });
+});
 
 vi.mock("@/lib/assistant/context", () => ({
   usePublishAssistantContext: () => undefined
@@ -37,9 +48,13 @@ describe("WatchlistsPageClient maturation", () => {
           json: async () => ({
             by_symbol: {
               AAPL: {
-                state: "actionable",
-                label: "Actionable",
-                readiness_label: "Ready for next session"
+                state: "developing",
+                label: "Developing",
+                layers_aligned: 4,
+                layers_total: 6,
+                readiness_label: "Ready for next session",
+                previous_layers_aligned: 3,
+                last_transition_type: "improved"
               }
             }
           })
@@ -67,6 +82,8 @@ describe("WatchlistsPageClient maturation", () => {
 
     await waitFor(() => expect(screen.getByText("AAPL")).toBeInTheDocument());
     await waitFor(() => expect(screen.getByTitle("Ready for next session")).toBeInTheDocument());
+    expect(screen.getByTestId("watchlists-maturation-frequency")).toHaveTextContent(/4:30 PM ET/i);
+    expect(screen.getByTestId("watchlist-progression-AAPL-swing")).toHaveTextContent(/↑ from 3\/6/i);
     expect(global.fetch).toHaveBeenCalled();
     const urls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.map((c) =>
       typeof c[0] === "string" ? c[0] : String(c[0])

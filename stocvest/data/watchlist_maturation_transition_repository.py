@@ -133,6 +133,16 @@ class WatchlistMaturationTransitionRepository:
                 break
         return [_item_to_transition(i) for i in items[:cap]]
 
+    def latest_for_symbol(
+        self,
+        user_id: str,
+        symbol: str,
+        mode: WatchlistMode,
+    ) -> WatchlistMaturationTransition | None:
+        """Most recent transition for this user/symbol/mode, or ``None``."""
+        rows = self.list_for_symbol(user_id, symbol, mode, limit=1, scan_forward=False)
+        return rows[0] if rows else None
+
     def list_for_mode(
         self,
         mode: WatchlistMode,

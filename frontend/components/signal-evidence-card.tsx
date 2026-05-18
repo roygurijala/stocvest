@@ -982,6 +982,7 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
 
       <EvidenceCardHeader
         symbol={evidence.symbol}
+        tradingMode={evidenceMode}
         bias={setupBias}
         rows={layerRows}
         updatedLabel={displayUpdatedLabel(evidence)}

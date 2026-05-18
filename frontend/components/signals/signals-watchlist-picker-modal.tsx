@@ -2,6 +2,11 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import {
+  alignmentDisplayMeta,
+  formatAlignmentStatusLine,
+  type AlignmentDisplayTone
+} from "@/lib/alignment-display-tier";
 import { formatWatchlistMaturationLabel, type WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
 import {
   EVALUATION_MODE_LINES,
@@ -16,25 +21,46 @@ import { useTheme } from "@/lib/theme-provider";
 export type WatchlistPickerMaturationBadge = {
   label: string;
   tone: "bullish" | "bearish" | "caution" | "muted";
+  emoji?: string;
 };
+
+function displayToneToPicker(tone: AlignmentDisplayTone): WatchlistPickerMaturationBadge["tone"] {
+  if (tone === "bullish") return "bullish";
+  if (tone === "bearish") return "bearish";
+  if (tone === "muted") return "muted";
+  return "caution";
+}
 
 export function formatPickerMaturationLabel(row: WatchlistMaturationRow | undefined): string {
   const st = (row?.state || "").trim().toLowerCase();
   if (!st) return "Not evaluated yet";
-  const base = formatWatchlistMaturationLabel(row);
-  const name = base === "—" ? st.replace(/_/g, " ") : base;
   const aligned = row?.layers_aligned;
   const total = row?.layers_total ?? 6;
   if (typeof aligned === "number" && Number.isFinite(aligned)) {
-    return `${name} (${aligned}/${total})`;
+    return formatAlignmentStatusLine({
+      layersAligned: aligned,
+      layersTotal: total,
+      maturationState: st
+    });
   }
-  return name;
+  const base = formatWatchlistMaturationLabel(row);
+  return base === "—" ? st.replace(/_/g, " ") : base;
 }
 
 export function maturationPickerBadge(row: WatchlistMaturationRow | undefined): WatchlistPickerMaturationBadge {
   const st = (row?.state || "").trim().toLowerCase();
   const label = formatPickerMaturationLabel(row);
   if (!st) return { label, tone: "muted" };
+  const aligned = row?.layers_aligned;
+  const total = row?.layers_total ?? 6;
+  if (typeof aligned === "number" && Number.isFinite(aligned)) {
+    const meta = alignmentDisplayMeta({
+      layersAligned: aligned,
+      layersTotal: total,
+      maturationState: st
+    });
+    return { label, tone: displayToneToPicker(meta.tone), emoji: meta.emoji };
+  }
   if (st === "actionable") return { label, tone: "bullish" };
   if (st === "developing") return { label, tone: "caution" };
   if (st === "not_aligned") return { label, tone: "bearish" };
@@ -43,8 +69,10 @@ export function maturationPickerBadge(row: WatchlistMaturationRow | undefined): 
   return { label, tone: "muted" };
 }
 
-function badgeEmoji(tone: WatchlistPickerMaturationBadge["tone"], evaluated: boolean): string {
+function badgeEmoji(badge: WatchlistPickerMaturationBadge, evaluated: boolean): string {
   if (!evaluated) return "○";
+  if (badge.emoji) return badge.emoji;
+  const tone = badge.tone;
   if (tone === "bullish") return "🟢";
   if (tone === "caution") return "🟠";
   if (tone === "bearish") return "🔴";
@@ -198,7 +226,7 @@ export function SignalsWatchlistPickerModal({
                           style={{ color: badgeColor(badge.tone) }}
                           data-testid={`signals-watchlist-picker-badge-${s}`}
                         >
-                          {badgeEmoji(badge.tone, evaluated)} {badge.label}
+                          {badgeEmoji(badge, evaluated)} {badge.label}
                         </span>
                         {!evaluated ? (
                           <span

@@ -1,7 +1,9 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { AlignmentDrilldownLinks } from "@/components/signals/alignment-drilldown-links";
 import { InfoTip } from "@/components/info-tip";
+import { signalsAlignmentDisplayLine } from "@/lib/nav/alignment-display-line";
 import { borderRadius, spacing, surfaceGlowClassName } from "@/lib/design-system";
 import {
   buildEvidenceAnchorLine,
@@ -15,15 +17,26 @@ import { useTheme } from "@/lib/theme-provider";
 
 type Props = {
   symbol: string;
+  tradingMode: "swing" | "day";
   bias: SignalsSetupBias;
   rows: SignalsLayerRowInput[];
+  maturationState?: string | null;
   updatedLabel?: string | null;
   /** Renders under the symbol (e.g. Scenario Builder beside watchlist-style actions). */
   symbolRowExtras?: ReactNode;
   children?: ReactNode;
 };
 
-export function EvidenceCardHeader({ symbol, bias, rows, updatedLabel, symbolRowExtras, children }: Props) {
+export function EvidenceCardHeader({
+  symbol,
+  tradingMode,
+  bias,
+  rows,
+  maturationState,
+  updatedLabel,
+  symbolRowExtras,
+  children
+}: Props) {
   const { colors } = useTheme();
   const alignment = countLayerAlignment(rows, bias);
   const biasColor =
@@ -87,9 +100,20 @@ export function EvidenceCardHeader({ symbol, bias, rows, updatedLabel, symbolRow
           style={{ color: colors.textMuted }}
           data-testid="evidence-card-alignment-context"
         >
-          Alignment {alignment.aligned}/{alignment.total} ({alignment.label}) — context only; setup validity is on
-          Signals
+          {signalsAlignmentDisplayLine({
+            layersAligned: alignment.aligned,
+            layersTotal: alignment.total,
+            maturationState
+          })}{" "}
+          — context only; setup validity is on Signals
         </p>
+        <div className="mt-1.5">
+          <AlignmentDrilldownLinks
+            symbol={symbol}
+            mode={tradingMode}
+            testId="evidence-card-alignment-links"
+          />
+        </div>
       </div>
 
       <p

@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { Zap } from "lucide-react";
 import type { ReactNode } from "react";
+import { setupEvolutionHubHref } from "@/lib/nav/setup-analytics-deeplink";
 import { SUBHEADING_DAY_CADENCE, SUBHEADING_SWING_CADENCE, TAB_LABEL_DAY, TAB_LABEL_SWING } from "@/lib/mode-terminology";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
@@ -92,7 +94,14 @@ export function SignalsCommandBar({
             {scenarioControl}
             {maturationLine ? (
               <span className="text-xs" style={{ color: colors.textMuted }} data-testid="signals-maturation-line">
-                <span style={{ color: colors.text, fontWeight: 600 }}>{maturationLine.label}</span>
+                <Link
+                  href={setupEvolutionHubHref(symU, tradingMode)}
+                  className="font-semibold no-underline hover:underline"
+                  style={{ color: colors.text }}
+                  data-testid="signals-maturation-line-link"
+                >
+                  {maturationLine.label}
+                </Link>
                 {maturationEvaluatedAt ? <> · last evaluated {maturationEvaluatedAt}</> : null}
               </span>
             ) : null}

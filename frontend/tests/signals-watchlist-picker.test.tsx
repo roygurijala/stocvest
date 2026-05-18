@@ -63,7 +63,7 @@ describe("SignalsWatchlistPickerModal", () => {
     expect(screen.getByTestId("signals-watchlist-picker-evaluation-mode")).toBeInTheDocument();
     expect(screen.getByTestId("signals-watchlist-picker-search")).toBeInTheDocument();
     expect(screen.getByTestId("signals-watchlist-picker-badge-TSLA")).toHaveTextContent(/Not aligned/i);
-    expect(screen.getByTestId("signals-watchlist-picker-badge-AAPL")).toHaveTextContent(/Developing \(4\/6\)/);
+    expect(screen.getByTestId("signals-watchlist-picker-badge-AAPL")).toHaveTextContent(/Near ready \(4\/6\)/);
     expect(screen.getByTestId("signals-watchlist-picker-hint-NVDA")).toHaveTextContent(/Tap to evaluate/i);
     fireEvent.change(screen.getByTestId("signals-watchlist-picker-search"), { target: { value: "TS" } });
     expect(screen.queryByTestId("signals-watchlist-picker-row-AAPL")).not.toBeInTheDocument();

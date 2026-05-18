@@ -92,16 +92,34 @@ describe("resolveScenarioBuilderCapability", () => {
     expect(r.executionTier).toBe("session_limited");
   });
 
-  test("4/6 with gap blocked shows developing + session_limited", () => {
+  test("4/6 with gap blocked shows near_ready + session_limited", () => {
     const r = resolveScenarioBuilderCapability(
       ctx({ layersAligned: 4, layersTotal: 6, maturationState: "developing" }),
       baseInput({
         gap_intel_gate: { scenario_builder_state: "DISABLED", reasons: ["market_closed"] }
       })
     );
-    expect(r.setupTier).toBe("developing");
+    expect(r.setupTier).toBe("near_ready");
+    expect(setupTierLabel(r.setupTier, r.aligned, r.total)).toBe("Near ready (4/6)");
     expect(r.executionTier).toBe("session_limited");
     expect(r.capability).toBe("building_soon");
+  });
+
+  test("near_ready takeaway mentions actionable threshold", () => {
+    const r = resolveScenarioBuilderCapability(ctx({ layersAligned: 4, layersTotal: 6 }), baseInput());
+    expect(r.setupTier).toBe("near_ready");
+    expect(scenarioPreviewTakeaway(r).toLowerCase()).toContain("actionable");
+  });
+
+  test("near_ready unlock bullets use threshold language", () => {
+    const r = resolveScenarioBuilderCapability(
+      ctx({ layersAligned: 4, layersTotal: 6, setupBias: "Bullish" }),
+      baseInput()
+    );
+    const withMissing = { ...r, missingLayers: ["News", "Macro"] };
+    const bullets = nextUnlockBullets(withMissing);
+    expect(bullets.some((b) => b.includes("actionable threshold"))).toBe(true);
+    expect(bullets.some((b) => b.includes("confirmations away"))).toBe(false);
   });
 
   test("directional label from bias without prices in resolved", () => {
@@ -129,14 +147,14 @@ describe("scenarioWhyNotItems", () => {
 });
 
 describe("nextUnlockBullets", () => {
-  test("at 4/6 lists remaining confirmations by name, not a fixed threshold", () => {
+  test("at 4/6 near_ready lists missing layers with threshold language", () => {
     const r = resolveScenarioBuilderCapability(
       ctx({ layersAligned: 4, layersTotal: 6, setupBias: "Bullish" }),
       baseInput()
     );
-    const withMissing = { ...r, aligned: 4, missingLayers: ["News", "Macro", "Geopolitical"] };
+    const withMissing = { ...r, setupTier: "near_ready" as const, aligned: 4, missingLayers: ["News", "Macro", "Geopolitical"] };
     const bullets = nextUnlockBullets(withMissing);
-    expect(bullets.some((b) => b.includes("Remaining confirmations align"))).toBe(true);
+    expect(bullets.some((b) => b.includes("actionable threshold"))).toBe(true);
     expect(bullets.some((b) => b.includes("News, Macro, Geopolitical"))).toBe(true);
     expect(bullets.some((b) => b.includes("4–5"))).toBe(false);
   });
@@ -157,6 +175,6 @@ describe("scenarioPreviewTakeaway", () => {
     });
     const line = scenarioPreviewTakeaway(r);
     expect(line.toLowerCase()).toContain("execution");
-    expect(line.toLowerCase()).toMatch(/not possible|not available/);
+    expect(line.toLowerCase()).toMatch(/waits on session|not possible|not available/);
   });
 });

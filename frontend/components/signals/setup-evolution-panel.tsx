@@ -7,6 +7,7 @@ import {
   formatStartedTracking,
   formatTransitionTimelineRow
 } from "@/lib/setup-evolution-present";
+import { MATURATION_PROGRESSION_EXPECTATION_LINE } from "@/lib/maturation-expected-frequency";
 import { EMPTY_SETUP_EVOLUTION } from "@/lib/product-empty-states";
 import { borderRadius, spacing, surfaceGlowClassName } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
@@ -76,6 +77,13 @@ export function SetupEvolutionPanel({ symbol, tradingMode, showSummary = false }
           ) : null}
           <p className="m-0 mt-1 text-sm" style={{ color: colors.textMuted }}>
             {data.evaluation_cadence}
+          </p>
+          <p
+            className="m-0 mt-2 text-xs leading-relaxed"
+            style={{ color: colors.textMuted }}
+            data-testid="setup-evolution-progression-expectation"
+          >
+            {MATURATION_PROGRESSION_EXPECTATION_LINE}
           </p>
 
           {showSummary && summary ? (

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
 import { useBodyScrollLock } from "@/lib/hooks/use-body-scroll-lock";
@@ -10,7 +11,12 @@ import {
   maturationAlignmentCounts,
   missingLayerNames
 } from "@/lib/watchlist-alignment-present";
-import { formatWatchlistMaturationLabel } from "@/lib/watchlist-page-utils";
+import { AlignmentDrilldownLinks } from "@/components/signals/alignment-drilldown-links";
+import {
+  formatLayersFromActionableHint,
+  formatWatchlistMaturationDisplayLine
+} from "@/lib/alignment-display-tier";
+import { signalsWithSymbolHref } from "@/lib/nav/setup-analytics-deeplink";
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
@@ -30,7 +36,8 @@ export function WatchlistAlignmentSheet({ open, symbol, deskMode, row, onClose }
   const alignedNames = alignedLayerNames(row);
   const missing = missingLayerNames(row);
   const biasLabel = formatMaturationBiasLabel(row?.bias ?? null);
-  const stateLabel = formatWatchlistMaturationLabel(row);
+  const stateLabel = formatWatchlistMaturationDisplayLine(row) ?? "—";
+  const thresholdHint = formatLayersFromActionableHint(aligned, total);
 
   useBodyScrollLock(open);
 
@@ -96,7 +103,7 @@ export function WatchlistAlignmentSheet({ open, symbol, deskMode, row, onClose }
             {biasLabel ? (
               <p className="m-0 mt-3 text-sm" style={{ color: colors.textMuted }}>
                 Directional bias: <span style={{ color: colors.text, fontWeight: 600 }}>{biasLabel}</span>
-                {aligned < 4 ? " — not yet an actionable setup" : null}
+                {thresholdHint ? ` — ${thresholdHint}` : null}
               </p>
             ) : null}
 
@@ -129,9 +136,19 @@ export function WatchlistAlignmentSheet({ open, symbol, deskMode, row, onClose }
               </motion.div>
             </section>
 
-            <p className="m-0 mt-4 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
-              Scenario Builder on this row uses the same composite evidence as Signals when available. Open{" "}
-              <strong style={{ color: colors.text }}>Signals</strong> for the full layer read and evidence modal.
+            <div className="mt-4" data-testid="watchlist-alignment-drilldown">
+              <AlignmentDrilldownLinks symbol={symU} mode={deskMode} testId="watchlist-alignment-links" />
+            </div>
+            <p className="m-0 mt-3 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
+              Scenario Builder on this row uses the same composite evidence as Signals when available.{" "}
+              <Link
+                href={signalsWithSymbolHref(symU, deskMode)}
+                className="font-semibold no-underline hover:underline"
+                style={{ color: colors.accent }}
+              >
+                Open Signals
+              </Link>{" "}
+              for the full layer read.
             </p>
           </motion.div>
         </motion.div>

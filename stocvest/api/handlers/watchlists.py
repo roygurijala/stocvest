@@ -264,7 +264,8 @@ def watchlists_maturation_summary_handler(event: LambdaEvent, context: LambdaCon
     entries = repo.list_for_user(rc.user_id, mode=mode, exclude_archived=True)
     profile = get_user_profile_store().get_profile(rc.user_id)
     include_readiness = maturation_summary_include_readiness_label(profile)
-    by_symbol: dict[str, dict[str, str]] = {}
+    trans_repo = get_watchlist_maturation_transition_repository()
+    by_symbol: dict[str, dict[str, str | int | float | list[str]]] = {}
     for e in entries:
         su = e.symbol.strip().upper()
         if su not in allowed:
@@ -280,6 +281,16 @@ def watchlists_maturation_summary_handler(event: LambdaEvent, context: LambdaCon
         }
         if include_readiness:
             row["readiness_label"] = e.readiness_label
+        if trans_repo is not None:
+            latest = trans_repo.latest_for_symbol(rc.user_id, su, mode)
+            if (
+                latest is not None
+                and latest.layers_aligned == e.layers_aligned
+                and latest.transition_type in ("improved", "worsened")
+                and latest.previous_layers_aligned is not None
+            ):
+                row["previous_layers_aligned"] = latest.previous_layers_aligned
+                row["last_transition_type"] = latest.transition_type
         by_symbol[su] = row
     return ok({"mode": mode, "by_symbol": by_symbol})
 

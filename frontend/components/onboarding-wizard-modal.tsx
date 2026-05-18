@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { onboardingMaturationExpectationBullets } from "@/lib/maturation-expected-frequency";
 
 interface OnboardingWizardModalProps {
   onCompleted: () => void;
@@ -58,6 +59,23 @@ export function OnboardingWizardModal({ onCompleted, onRemindLater }: Onboarding
         <p style={{ margin: "12px 0 0", fontSize: 14, lineHeight: 1.5, color: "rgba(226,232,240,0.88)" }}>
           Explore the scanner for intraday setups, build watchlists to track names you care about, and review the Performance page for historical signal outcomes. You can complete this walkthrough any time from Settings.
         </p>
+        <p style={{ margin: "14px 0 0", fontSize: 13, fontWeight: 600, color: "#e2e8f0" }}>What to expect</p>
+        <ul
+          data-testid="onboarding-maturation-expectations"
+          style={{
+            margin: "8px 0 0",
+            paddingLeft: 20,
+            fontSize: 13,
+            lineHeight: 1.55,
+            color: "rgba(226,232,240,0.82)"
+          }}
+        >
+          {onboardingMaturationExpectationBullets().map((line) => (
+            <li key={line.slice(0, 40)} style={{ marginBottom: 6 }}>
+              {line}
+            </li>
+          ))}
+        </ul>
         {err ? <p style={{ color: "#f87171", marginTop: 12, fontSize: 13 }}>{err}</p> : null}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 22, justifyContent: "flex-end" }}>
           <button

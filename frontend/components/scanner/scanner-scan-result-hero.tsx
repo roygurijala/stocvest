@@ -6,6 +6,7 @@ import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/d
 import type { ThemeColors } from "@/lib/design-system";
 import type { ScannerScanSummary } from "@/lib/scanner-scan-summary";
 import { buildScannerNextActions } from "@/lib/scanner-scan-summary";
+import { buildWatchlistInsightSupplement } from "@/lib/scanner-progress-messaging";
 import { useTheme } from "@/lib/theme-provider";
 
 type Props = {
@@ -120,7 +121,9 @@ export function ScannerScanResultHero({ summary, isRefreshing, onRefresh }: Prop
         </p>
       </div>
 
-      {wl ? <WatchlistInsightRow colors={colors} wl={wl} /> : null}
+      {wl ? (
+        <WatchlistInsightRow colors={colors} wl={wl} qualifyingTotal={summary.qualifying.total} />
+      ) : null}
 
       {actions.length > 0 ? (
         <div data-testid="scanner-next-actions">
@@ -178,11 +181,14 @@ export function ScannerScanResultHero({ summary, isRefreshing, onRefresh }: Prop
 
 function WatchlistInsightRow({
   colors,
-  wl
+  wl,
+  qualifyingTotal
 }: {
   colors: ThemeColors;
   wl: NonNullable<ScannerScanSummary["watchlist"]>;
+  qualifyingTotal: number;
 }) {
+  const supplement = buildWatchlistInsightSupplement(wl, qualifyingTotal);
   return (
     <div
       data-testid="scanner-watchlist-insight"
@@ -198,11 +204,21 @@ function WatchlistInsightRow({
         background: `color-mix(in srgb, ${colors.accent} 8%, ${colors.surface})`
       }}
     >
-      <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.text }}>
-        <span style={{ fontWeight: 600 }}>Watchlist</span>
-        {" · "}
-        {wl.monitored} monitored · {wl.actionable} actionable · {wl.developing} developing
-      </p>
+      <div>
+        <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.text }}>
+          <span style={{ fontWeight: 600 }}>Watchlist</span>
+          {" · "}
+          {wl.monitored} monitored · {wl.actionable} actionable · {wl.developing} developing
+        </p>
+        {supplement ? (
+          <p
+            data-testid="scanner-watchlist-progress-note"
+            style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted }}
+          >
+            {supplement}
+          </p>
+        ) : null}
+      </div>
       <Link
         href="/dashboard/watchlists"
         style={{

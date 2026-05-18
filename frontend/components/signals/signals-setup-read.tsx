@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { InfoTip } from "@/components/info-tip";
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
+import { AlignmentDrilldownLinks } from "@/components/signals/alignment-drilldown-links";
+import { signalsAlignmentDisplayLine } from "@/lib/nav/alignment-display-line";
 import {
   actionableHeadline,
   buildWhyNotBullets,
@@ -27,6 +29,7 @@ type Props = {
   previewLayers: SignalsLayerRowInput[];
   onOpenEvidence?: () => void;
   onSwitchToHistory?: () => void;
+  maturationState?: string | null;
   fundamentalSummary?: FundamentalBackdropSummary | null;
   showFundamentalUpgrade?: boolean;
 };
@@ -40,12 +43,18 @@ export function SignalsSetupRead({
   previewLayers,
   onOpenEvidence,
   onSwitchToHistory,
+  maturationState,
   fundamentalSummary,
   showFundamentalUpgrade = false
 }: Props) {
   const { colors } = useTheme();
   const symU = symbol.trim().toUpperCase();
   const alignment = countLayerAlignment(rows, bias);
+  const alignmentLine = signalsAlignmentDisplayLine({
+    layersAligned: alignment.aligned,
+    layersTotal: alignment.total,
+    maturationState
+  });
   const biasColor =
     bias === "Bullish" ? colors.bullish : bias === "Bearish" ? colors.bearish : colors.caution;
   const whyNot =
@@ -81,16 +90,36 @@ export function SignalsSetupRead({
           <p className="m-0 text-sm" style={{ color: colors.textMuted }}>
             Alignment
           </p>
-          <p
-            className="m-0 mt-0.5 text-xl font-semibold"
-            style={{ color: colors.text }}
-            data-testid="signals-setup-alignment"
-          >
-            {alignment.aligned} / {alignment.total}{" "}
-            <span className="text-sm font-medium" style={{ color: colors.textMuted }}>
-              ({alignment.label})
-            </span>
-          </p>
+          {onOpenEvidence ? (
+            <button
+              type="button"
+              className="m-0 mt-0.5 border-0 bg-transparent p-0 text-left text-xl font-semibold underline-offset-2 hover:underline"
+              style={{ color: colors.text, cursor: "pointer" }}
+              data-testid="signals-setup-alignment"
+              onClick={onOpenEvidence}
+              title="Open layer evidence"
+            >
+              {alignmentLine}
+            </button>
+          ) : (
+            <p
+              className="m-0 mt-0.5 text-xl font-semibold"
+              style={{ color: colors.text }}
+              data-testid="signals-setup-alignment"
+            >
+              {alignmentLine}
+            </p>
+          )}
+          <div className="mt-1.5">
+            <AlignmentDrilldownLinks
+              symbol={symU}
+              mode={tradingMode}
+              onOpenEvidence={onOpenEvidence}
+              onScrollToEvolution={onSwitchToHistory}
+              samePageLayers
+              testId="signals-setup-alignment-links"
+            />
+          </div>
         </div>
       </div>
 

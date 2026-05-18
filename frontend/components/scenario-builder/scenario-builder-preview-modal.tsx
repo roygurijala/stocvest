@@ -39,7 +39,10 @@ export function ScenarioBuilderPreviewModal({
   const { colors } = useTheme();
   const sym = input.symbol.trim().toUpperCase();
   const modeLabel = input.mode === "swing" ? "Swing" : "Day";
-  const developing = resolved.setupTier === "developing" || resolved.capability === "building_soon";
+  const progressing =
+    resolved.setupTier === "near_ready" ||
+    resolved.setupTier === "developing" ||
+    resolved.capability === "building_soon";
   const whyNotItems = scenarioWhyNotItems(resolved);
   const takeaway = scenarioPreviewTakeaway(resolved);
   const next = nextUnlockBullets(resolved);
@@ -81,7 +84,7 @@ export function ScenarioBuilderPreviewModal({
             onClick={(e) => e.stopPropagation()}
             style={{
               background: colors.surface,
-              border: `1px solid ${developing ? "rgba(245,158,11,0.45)" : colors.border}`,
+              border: `1px solid ${progressing ? "rgba(245,158,11,0.45)" : colors.border}`,
               padding: spacing[5]
             }}
             data-testid="scenario-builder-preview-modal"

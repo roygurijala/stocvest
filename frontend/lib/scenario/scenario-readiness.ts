@@ -9,6 +9,11 @@
  * both axes are always shown in the preview modal.
  */
 
+import {
+  ACTIONABLE_ALIGNED_MIN,
+  DEVELOPING_ALIGNED_MIN,
+  resolveAlignmentDisplayTier
+} from "@/lib/alignment-display-tier";
 import { isEligibleForScenario } from "@/lib/scenario/eligibility";
 import { pickMissingConfirmationLayers } from "@/lib/signal-evidence/evidence-card-present";
 import {
@@ -21,7 +26,12 @@ import type { TradeDecisionState } from "@/lib/signal-evidence/trade-decision";
 
 export type ScenarioBuilderCapability = "preview" | "building_soon" | "full";
 
-export type ScenarioSetupTier = "not_aligned" | "developing" | "actionable" | "invalidated";
+export type ScenarioSetupTier =
+  | "not_aligned"
+  | "developing"
+  | "near_ready"
+  | "actionable"
+  | "invalidated";
 
 export type ScenarioExecutionTier = "available" | "session_limited" | "structural_incomplete";
 
@@ -57,10 +67,8 @@ export type ScenarioReadinessResolved = {
 };
 
 const LAYER_TOTAL_DEFAULT = 6;
-/** 2–5 layers aligned (below actionable) → Developing — matches watchlist maturation bands. */
-const DEVELOPING_MIN_ALIGNED = 2;
-/** UI tier `building_soon` (amber) from 2+ aligned or watchlist developing. */
-const NEAR_ACTIONABLE_ALIGNED = DEVELOPING_MIN_ALIGNED;
+/** Matches watchlist maturation developing band (display-only near_ready at 4/6). */
+const DEVELOPING_MIN_ALIGNED = DEVELOPING_ALIGNED_MIN;
 
 function normalizeMaturation(state: string | null | undefined): string {
   return (state ?? "").trim().toLowerCase().replace(/\s+/g, "_");
@@ -114,13 +122,32 @@ function isDevelopingAlignment(aligned: number, maturation: string, decision: Tr
 
 function resolveSetupTier(
   aligned: number,
+  total: number,
   maturation: string,
   decision: TradeDecisionState | null
 ): ScenarioSetupTier {
   if (maturation === "invalidated") return "invalidated";
-  if (decision === "actionable" || maturation === "actionable") return "actionable";
+  if (decision === "actionable" || maturation === "actionable" || aligned >= ACTIONABLE_ALIGNED_MIN) {
+    return "actionable";
+  }
+  const displayTier = resolveAlignmentDisplayTier({
+    layersAligned: aligned,
+    layersTotal: total,
+    maturationState: maturation
+  });
+  if (displayTier === "near_ready") return "near_ready";
+  if (displayTier === "developing" || displayTier === "re_evaluating") return "developing";
   if (isDevelopingAlignment(aligned, maturation, decision)) return "developing";
   return "not_aligned";
+}
+
+function shouldUseBuildingSoonCapability(
+  setupTier: ScenarioSetupTier,
+  executionTier: ScenarioExecutionTier
+): boolean {
+  if (setupTier === "near_ready" || setupTier === "developing") return true;
+  if (setupTier === "actionable" && executionTier !== "available") return true;
+  return false;
 }
 
 function resolveExecutionTier(gapIntelBlocked: boolean, structurallyEligible: boolean): ScenarioExecutionTier {
@@ -146,10 +173,9 @@ export function resolveScenarioBuilderCapability(
   const structurallyComplete = ctx.hasReferenceLevels ?? hasReferenceLevels(input);
   const structurallyEligible = structural.eligible;
 
-  const nearActionable = isDevelopingAlignment(aligned, maturation, decision);
-
-  const setupTier = resolveSetupTier(aligned, maturation, decision);
+  const setupTier = resolveSetupTier(aligned, total, maturation, decision);
   const executionTier = resolveExecutionTier(gapIntelBlocked, structurallyEligible);
+  const buildingSoon = shouldUseBuildingSoonCapability(setupTier, executionTier);
 
   const shared = {
     aligned,
@@ -172,7 +198,7 @@ export function resolveScenarioBuilderCapability(
     };
   }
 
-  if (nearActionable) {
+  if (buildingSoon) {
     return {
       ...shared,
       capability: "building_soon"

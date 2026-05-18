@@ -4,9 +4,9 @@
 
 **Cursor AI rules** for agents live in **`.cursorrules`** at the repo root (see **`docs/CURSOR_RULES.md`** for a short pointer—do not duplicate the full rules there).
 
-**Last updated:** 2026-05-17 (latest — **B46 Phase 6 prep** — deprecate SignalHistory user API, retirement doc, dead validation UI removed; prior **B46 core** 3eab90f).
+**Last updated:** 2026-05-16 (latest — **B47** progress presentation layer; prior **B46 Phase 6 prep**).
 **Repo:** https://github.com/roygurijala/stocvest  
-**Test baseline (regression gate — must match §13):** Backend `pytest tests/ -q` → **1613 passed**, **3 skipped**; Frontend `cd frontend && npm run test` → **1229 passed**, **145** test files (verified **2026-05-17** after B46 Phase 6 prep). Prior **1612** / **1228** (B46 core).
+**Test baseline (regression gate — must match §13):** Backend `pytest tests/ -q` → **1615 passed**, **3 skipped**; Frontend `cd frontend && npm run test` → **1271 passed**, **155** test files (verified **2026-05-16** after **B47**). Prior **1613** / **1229** (B46 Phase 6 prep).
 
 ---
 
@@ -30,6 +30,7 @@
 | Terraform / AWS apply | 🚧 | **Development** now includes the news SQS/Lambda pipeline in `infra/` plus **`AuditEvents`** DynamoDB, **`DYNAMODB_AUDIT_EVENTS_TABLE`** on API Lambdas, and API Gateway routes for **`GET /v1/signals/founding-members`**, admin **beta** / **audit** paths, and **`POST /v1/signals/assistant/chat`** (apply to create/update — no new secrets needed: Anthropic key reused from `stocvest/lambda-runtime`). **Still pending for always-on ECS runtime:** publish a worker image and set `news_worker_container_image` / `news_worker_desired_count` so the Fargate service is actually created; also keep production/stage promotion, secret rotation, S3 artifact bucket policy review, and Cognito/Vercel env alignment in sync per environment. |
 | Phase 7 (E2E, audits, paper validation) | 🚧 | **HTTP/API audit trail to DynamoDB** (`AuditEvents`, redacted summaries) + admin query routes shipped; E2E suite, security review, load tests, extended paper validation still open (**BACKLOG P1**) |
 | **B46 Setup analytics** | ✅ | **2026-05-17** — setup evolution + outcomes replace user-facing validation/performance marketing; admin D2 at `/dashboard/admin/historical-validation`; APIs + GSI in `IMPLEMENTED.md` B46. **Pending:** Phase 6 `SignalHistory` retirement (`BACKLOG` B46-Phase6). |
+| **B47 Progress presentation** | ✅ | **2026-05-16** — display-only tiers (**Near ready** @ 4/6); maturation/scanner/dashboard/scenario/onboarding copy; daily pulse; drilldown links; watchlist **↑/↓** progression chips via maturation-summary + transition log. Backend gates unchanged. See `IMPLEMENTED.md` B47. **Not shipped:** push/badge/week-in-review (**B41**). |
 
 ---
 

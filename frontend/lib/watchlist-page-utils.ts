@@ -9,6 +9,9 @@ export type WatchlistMaturationRow = {
   last_evaluated_at?: string;
   missing_layers?: string[];
   bias?: string;
+  /** From latest transition when alignment changed on last evaluation (B47). */
+  previous_layers_aligned?: number;
+  last_transition_type?: "improved" | "worsened" | "unchanged" | "initial";
 };
 
 export type WatchlistViewMode = "swing" | "day" | "both";
@@ -89,6 +92,14 @@ export function normalizeWatchlistMaturationBySymbol(payload: unknown): Record<s
     }
     const biasRaw = o.bias;
     if (typeof biasRaw === "string" && biasRaw.trim()) row.bias = biasRaw.trim().toLowerCase();
+    const prevAlignedRaw = o.previous_layers_aligned ?? o.previousLayersAligned;
+    if (typeof prevAlignedRaw === "number" && Number.isFinite(prevAlignedRaw)) {
+      row.previous_layers_aligned = prevAlignedRaw;
+    }
+    const transRaw = o.last_transition_type ?? o.lastTransitionType;
+    if (transRaw === "improved" || transRaw === "worsened" || transRaw === "unchanged" || transRaw === "initial") {
+      row.last_transition_type = transRaw;
+    }
     if (!row.state && !row.label) continue;
     out[sym] = row;
   }

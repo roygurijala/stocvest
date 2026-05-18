@@ -24,6 +24,7 @@ describe("EvidenceCardHeader", () => {
       <ThemeProvider>
         <EvidenceCardHeader
           symbol="TSLA"
+          tradingMode="swing"
           bias="Bearish"
           rows={[
             { key: "technical", name: "Technical", status: "Bearish", explanation: "", score: 80 },
@@ -37,7 +38,8 @@ describe("EvidenceCardHeader", () => {
       </ThemeProvider>
     );
     expect(screen.getByTestId("evidence-card-bias")).toHaveTextContent("Bearish");
-    expect(screen.getByTestId("evidence-card-alignment-context")).toHaveTextContent(/1\/6/);
+    expect(screen.getByTestId("evidence-card-alignment-context")).toHaveTextContent(/Not aligned/i);
+    expect(screen.getByTestId("evidence-card-alignment-links-evolution")).toBeInTheDocument();
     expect(screen.queryByText(/^short$/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/NOT INVESTMENT ADVICE/i)).not.toBeInTheDocument();
   });

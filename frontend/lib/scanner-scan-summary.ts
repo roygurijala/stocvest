@@ -14,7 +14,15 @@ import type {
 } from "@/lib/api/scanner";
 import { isUsRegularSessionOpenEt, nextRegularSessionOpenLabel } from "@/lib/market-hours-et";
 import { isSwingSetupRow } from "@/lib/scanner-setups-response";
+import {
+  formatWatchlistMaturationDisplayLine,
+  layersAwayFromActionable
+} from "@/lib/alignment-display-tier";
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
+import {
+  buildScannerUnifiedHeadline,
+  formatScannerNearAlignmentLine
+} from "@/lib/scanner-progress-messaging";
 import type { SymbolTrackingMap } from "@/lib/watchlist-tracking-presentation";
 
 export type ScannerAlignmentWire = {
@@ -29,6 +37,7 @@ export type ScannerNearQualificationRow = {
   score: number;
   direction: string;
   alignment: ScannerAlignmentWire | null;
+  layers_away?: number;
   company_name?: string;
 };
 
@@ -37,6 +46,9 @@ export type ScannerWatchlistProgressionRow = {
   desk: "swing" | "day";
   state: string;
   label: string;
+  layers_aligned?: number;
+  layers_total?: number;
+  layers_away?: number;
 };
 
 export type ScannerScanSummary = {
@@ -72,18 +84,31 @@ export type ScannerScanSummary = {
 
 const PROGRESSION_STATES = new Set(["developing", "re_evaluating"]);
 
-function alignmentFromSetup(row: IntradaySetupPayload): ScannerAlignmentWire | null {
+function alignmentFromSetup(row: IntradaySetupPayload): {
+  wire: ScannerAlignmentWire;
+  layersAway: number;
+} | null {
   const wire = (row as { alignment?: ScannerAlignmentWire }).alignment;
+  let aligned: number;
+  let total: number;
   if (wire && typeof wire.aligned === "number" && typeof wire.total === "number") {
-    return {
-      aligned: wire.aligned,
-      total: wire.total,
-      label: wire.label || `${wire.aligned}/${wire.total} aligned`
-    };
+    aligned = wire.aligned;
+    total = wire.total;
+  } else {
+    const triggers = row.triggers?.length ?? 0;
+    if (triggers <= 0) return null;
+    aligned = triggers;
+    total = 6;
   }
-  const triggers = row.triggers?.length ?? 0;
-  if (triggers <= 0) return null;
-  return { aligned: triggers, total: 6, label: `${triggers}/6 aligned` };
+  const formatted = formatScannerNearAlignmentLine(aligned, total);
+  return {
+    wire: {
+      aligned,
+      total,
+      label: formatted.chip
+    },
+    layersAway: formatted.layersAway
+  };
 }
 
 export function nearRowsFromSetups(rows: IntradaySetupPayload[]): ScannerNearQualificationRow[] {
@@ -91,12 +116,14 @@ export function nearRowsFromSetups(rows: IntradaySetupPayload[]): ScannerNearQua
   for (const row of rows) {
     const sym = row.symbol.trim().toUpperCase();
     if (!sym) continue;
+    const alignment = alignmentFromSetup(row);
     out.push({
       symbol: sym,
       desk: isSwingSetupRow(row) ? "swing" : "day",
       score: row.score,
       direction: row.direction,
-      alignment: alignmentFromSetup(row),
+      alignment: alignment?.wire ?? null,
+      layers_away: alignment?.layersAway,
       company_name: row.company_name
     });
   }
@@ -121,11 +148,23 @@ export function buildWatchlistProgressionRows(
     for (const [desk, row] of desks) {
       const st = (row?.state || "").toLowerCase();
       if (!PROGRESSION_STATES.has(st)) continue;
+      const total = row?.layers_total ?? 6;
+      const aligned =
+        typeof row?.layers_aligned === "number" && Number.isFinite(row.layers_aligned)
+          ? row.layers_aligned
+          : undefined;
+      const display =
+        formatWatchlistMaturationDisplayLine(row) ??
+        (row?.readiness_label || row?.label || st.replace(/_/g, " "));
       out.push({
         symbol: sym,
         desk,
         state: st,
-        label: row?.readiness_label || row?.label || st.replace(/_/g, " ")
+        label: display,
+        layers_aligned: aligned,
+        layers_total: typeof aligned === "number" ? total : undefined,
+        layers_away:
+          typeof aligned === "number" ? layersAwayFromActionable(aligned, total) : undefined
       });
     }
   }
@@ -168,21 +207,13 @@ export function buildScannerScanSummary(input: {
     dateStyle: "medium",
     timeStyle: "short"
   });
-  const anyQualifying = counts.total > 0;
-  const anyNear = nearQualificationSetups.length > 0;
-  const anyProgression = watchlistProgression.length > 0;
-
-  let unified_headline = "No setups passed filters this scan";
-  if (anyQualifying) {
-    unified_headline =
-      counts.total === 1
-        ? "1 qualifying setup"
-        : `${counts.total} qualifying setups`;
-  } else if (anyNear) {
-    unified_headline = "Nothing qualified — symbols are close";
-  } else if (anyProgression) {
-    unified_headline = "No qualifying setups — watchlist is progressing";
-  }
+  const nearRows = nearRowsFromSetups(nearQualificationSetups);
+  const unified_headline = buildScannerUnifiedHeadline({
+    qualifyingTotal: counts.total,
+    nearCount: nearRows.length,
+    progressionCount: watchlistProgression.length,
+    watchlist: overview.watchlistStatus
+  });
 
   const detail_line = `Gaps ${gapFlags} · Swing ${counts.swing} · Day ${counts.day}`;
 
@@ -209,7 +240,7 @@ export function buildScannerScanSummary(input: {
       gap_flags: gapFlags
     },
     watchlist: overview.watchlistStatus ?? null,
-    near_qualification: nearRowsFromSetups(nearQualificationSetups),
+    near_qualification: nearRows,
     watchlist_progression: watchlistProgression,
     quiet: { unified_headline, detail_line }
   };
@@ -233,7 +264,7 @@ export function buildScannerNextActions(summary: ScannerScanSummary): ScannerNex
     },
     {
       id: "near",
-      label: "Review near qualification",
+      label: "Review setups approaching threshold",
       href: "#scanner-near-qualification",
       show: summary.near_qualification.length > 0
     },

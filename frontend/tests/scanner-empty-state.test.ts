@@ -137,6 +137,19 @@ describe("empty-state mode separation — vocabulary anti-leak (load-bearing)", 
     }
   });
 
+  test("appends progress suffix when near-qual hints present", () => {
+    const ctx = buildSwingEmptyStateContext({
+      ...baseInput,
+      progressHints: {
+        nearQualificationCount: 2,
+        watchlistDeveloping: 1,
+        watchlistActionable: 0,
+        watchlistMonitored: 5
+      }
+    });
+    expect(ctx.oneLiner).toContain("approaching the setup threshold");
+  });
+
   test("test_no_context_uses_recommendation_words", () => {
     const swing = buildSwingEmptyStateContext(baseInput);
     const day = buildDayEmptyStateContext(baseInput);

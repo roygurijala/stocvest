@@ -20,8 +20,8 @@ import {
   saveSymbolDeskTracking,
   type WatchlistDeskTracking
 } from "@/lib/watchlist-symbol-tracking";
+import { formatWatchlistMaturationDisplayLine } from "@/lib/alignment-display-tier";
 import {
-  formatWatchlistMaturationLabel,
   normalizeWatchlistMaturationBySymbol,
   type WatchlistMaturationRow
 } from "@/lib/watchlist-page-utils";
@@ -385,9 +385,8 @@ function MaturationDeskLine({
   row: WatchlistMaturationRow | undefined;
   colors: ThemeColors;
 }) {
-  const label = formatWatchlistMaturationLabel(row);
   const state = row?.state;
-  const display = label === "—" ? "Not evaluated yet" : label;
+  const display = formatWatchlistMaturationDisplayLine(row) ?? "Not evaluated yet";
   return (
     <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45 }}>
       <span style={{ fontWeight: 600, color: colors.text }}>{desk}:</span>{" "}

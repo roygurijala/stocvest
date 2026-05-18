@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { formatWatchlistMaturationDisplayLine } from "@/lib/alignment-display-tier";
 import {
-  formatWatchlistMaturationLabel,
   normalizeWatchlistMaturationBySymbol,
   type WatchlistMaturationRow
 } from "@/lib/watchlist-page-utils";
@@ -52,8 +52,16 @@ export function useWatchlistMaturationLine(
     };
   }, [symU, isOnList, tradingMode]);
 
-  if (!isOnList || !symU) return null;
-  const label = formatWatchlistMaturationLabel(row);
+  return buildWatchlistMaturationLine(row, isOnList && Boolean(symU));
+}
+
+/** Pure builder for tests and the hook. */
+export function buildWatchlistMaturationLine(
+  row: WatchlistMaturationRow | undefined,
+  onList: boolean
+): WatchlistMaturationLine | null {
+  if (!onList) return null;
+  const display = formatWatchlistMaturationDisplayLine(row);
   const evaluatedAt =
     typeof row?.last_evaluated_at === "string" && row.last_evaluated_at.trim()
       ? row.last_evaluated_at.trim()
@@ -64,6 +72,6 @@ export function useWatchlistMaturationLine(
     layersTotal: row?.layers_total,
     readinessLabel: row?.readiness_label
   };
-  if (label === "—") return { label: "On watchlist", evaluatedAt, ...base };
-  return { label, evaluatedAt, ...base };
+  if (!display) return { label: "On watchlist", evaluatedAt, ...base };
+  return { label: display, evaluatedAt, ...base };
 }

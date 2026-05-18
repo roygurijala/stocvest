@@ -41,6 +41,7 @@ import type {
 } from "@/lib/api/scanner";
 import { mergeScannerCoreIntoOverview } from "@/lib/scanner-overview-merge";
 import { buildScannerScanSummary } from "@/lib/scanner-scan-summary";
+import { buildScannerProgressHints } from "@/lib/scanner-progress-messaging";
 import type { ScannerEvaluationTraceRow } from "@/lib/scanner-setups-response";
 import { fetchEarningsCalendarClient } from "@/lib/api/earnings-client";
 import type { EarningsEvent } from "@/lib/api/earnings";
@@ -56,6 +57,7 @@ import {
   buildDayEmptyStateContext,
   buildGapIntelEmptyStateContext,
   buildSwingEmptyStateContext,
+  type EmptyStateOverviewInput,
   type ScannerEmptyStateContext
 } from "@/lib/scanner-empty-state";
 import type { ScenarioInput } from "@/lib/scenario/types";
@@ -1045,17 +1047,6 @@ export function ScannerPageClient({
   const secondsToScan = Math.max(0, Math.ceil((nextScanRef.current - Date.now()) / 1000));
   const scanCountdownLabel = `${Math.floor(secondsToScan / 60)}:${String(secondsToScan % 60).padStart(2, "0")}`;
 
-  const emptyOverviewInput = useMemo(
-    () => ({
-      regimeLabel: overview.regimeLabel,
-      spyPct: overview.spyPct,
-      qqqPct: overview.qqqPct,
-      swingUniverseSymbolCount: overview.swingUniverseSymbolCount,
-      gapIntelligenceSnapshotSymbolCount: overview.gapIntelligenceSnapshotSymbolCount
-    }),
-    [overview]
-  );
-
   const scanSummary = useMemo(() => {
     if (overview.scanSummary) return overview.scanSummary;
     return buildScannerScanSummary({
@@ -1065,6 +1056,21 @@ export function ScannerPageClient({
       watchlistProgression: []
     });
   }, [overview, initialTimestampIso]);
+
+  const emptyOverviewInput = useMemo(
+    (): EmptyStateOverviewInput => ({
+      regimeLabel: overview.regimeLabel,
+      spyPct: overview.spyPct,
+      qqqPct: overview.qqqPct,
+      swingUniverseSymbolCount: overview.swingUniverseSymbolCount,
+      gapIntelligenceSnapshotSymbolCount: overview.gapIntelligenceSnapshotSymbolCount,
+      progressHints: buildScannerProgressHints({
+        nearCount: scanSummary.near_qualification.length,
+        watchlist: overview.watchlistStatus ?? scanSummary.watchlist
+      })
+    }),
+    [overview, scanSummary]
+  );
 
   const scanEducationPanels = useMemo(() => {
     if (scanSummary.qualifying.total > 0) return [];
@@ -1661,20 +1667,8 @@ export function ScannerPageClient({
                   (() => {
                     const isDayGroup = group.key === "day" || group.key === "day-only";
                     const context = isDayGroup
-                      ? buildDayEmptyStateContext({
-                          regimeLabel: overview.regimeLabel,
-                          spyPct: overview.spyPct,
-                          qqqPct: overview.qqqPct,
-                          swingUniverseSymbolCount: overview.swingUniverseSymbolCount,
-                          gapIntelligenceSnapshotSymbolCount: overview.gapIntelligenceSnapshotSymbolCount
-                        })
-                      : buildSwingEmptyStateContext({
-                          regimeLabel: overview.regimeLabel,
-                          spyPct: overview.spyPct,
-                          qqqPct: overview.qqqPct,
-                          swingUniverseSymbolCount: overview.swingUniverseSymbolCount,
-                          gapIntelligenceSnapshotSymbolCount: overview.gapIntelligenceSnapshotSymbolCount
-                        });
+                      ? buildDayEmptyStateContext(emptyOverviewInput)
+                      : buildSwingEmptyStateContext(emptyOverviewInput);
                     return (
                       <ScannerEmptyStateCard
                         context={context}

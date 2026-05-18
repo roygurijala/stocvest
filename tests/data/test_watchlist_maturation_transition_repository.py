@@ -78,6 +78,37 @@ def test_put_and_list_chronological() -> None:
     assert "u1" in (stored.get("gsi1sk") or "")
 
 
+def test_latest_for_symbol_returns_newest() -> None:
+    table = _FakeDynamoTable()
+    repo = WatchlistMaturationTransitionRepository(table)
+    for recorded_at, aligned, prev, ttype in [
+        ("2026-05-10T12:00:00+00:00", 3, None, "initial"),
+        ("2026-05-11T12:00:00+00:00", 4, 3, "improved"),
+    ]:
+        repo.put_transition(
+            WatchlistMaturationTransition(
+                user_id="u1",
+                symbol="TSLA",
+                mode="swing",
+                recorded_at=recorded_at,
+                session_date=recorded_at[:10],
+                from_state="developing",
+                to_state="developing",
+                layers_aligned=aligned,
+                previous_layers_aligned=prev,
+                layers_total=6,
+                alignment_pct=aligned / 6 * 100,
+                bias="long",
+                transition_type=ttype,
+            )
+        )
+    latest = repo.latest_for_symbol("u1", "TSLA", "swing")
+    assert latest is not None
+    assert latest.layers_aligned == 4
+    assert latest.previous_layers_aligned == 3
+    assert latest.transition_type == "improved"
+
+
 def test_list_for_mode_gsi() -> None:
     table = _FakeDynamoTable()
     repo = WatchlistMaturationTransitionRepository(table)

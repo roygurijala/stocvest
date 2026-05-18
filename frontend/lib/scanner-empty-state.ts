@@ -43,6 +43,10 @@ import {
   type SectorTapeKind
 } from "@/lib/dashboard-posture";
 import { isUsRegularSessionOpenEt } from "@/lib/market-hours-et";
+import {
+  scannerProgressOneLinerSuffix,
+  type ScannerProgressHints
+} from "@/lib/scanner-progress-messaging";
 
 /**
  * Narrow input shape — we only read `.market` from the payload (to
@@ -155,6 +159,8 @@ export interface EmptyStateOverviewInput {
   sectorPct5d?: Array<number | null | undefined>;
   /** Optional explicit market status; defaults to `isUsRegularSessionOpenEt()`. */
   marketStatus?: MarketStatusLite | null;
+  /** B47 — near-qual / watchlist developing counts from the latest scan summary. */
+  progressHints?: ScannerProgressHints | null;
 }
 
 /** Prefer gap-intel eligible-universe count when the API reports it; else bars/swing universe size. */
@@ -248,7 +254,7 @@ export function buildSwingEmptyStateContext(
     spyPct,
     qqqPct,
     headline: swingHeadlineFor(regimeLabel),
-    oneLiner: swingOneLinerFor(regimeLabel, universeSize),
+    oneLiner: swingOneLinerFor(regimeLabel, universeSize) + scannerProgressOneLinerSuffix(overview.progressHints ?? undefined),
     reenableBullets,
     sectorTape
   };
@@ -289,7 +295,7 @@ export function buildDayEmptyStateContext(
     spyPct,
     qqqPct,
     headline: dayHeadlineFor(sessionOpen),
-    oneLiner: dayOneLinerFor(sessionOpen, universeSize),
+    oneLiner: dayOneLinerFor(sessionOpen, universeSize) + scannerProgressOneLinerSuffix(overview.progressHints ?? undefined),
     reenableBullets,
     sessionOpen
   };
@@ -427,9 +433,10 @@ export function buildGapIntelEmptyStateContext(
         : isUsRegularSessionOpenEt()
       : null;
   const oneLiner =
-    mode === "swing"
+    (mode === "swing"
       ? gapOneLinerSwing(universeSize)
-      : gapOneLinerDay(universeSize, sessionOpen === true);
+      : gapOneLinerDay(universeSize, sessionOpen === true)) +
+    scannerProgressOneLinerSuffix(overview.progressHints ?? undefined);
   const reenableBullets =
     mode === "swing"
       ? gapReenableBulletsSwing()

@@ -52,7 +52,8 @@ describe("scanner-scan-summary", () => {
     });
     expect(summary.qualifying.total).toBe(0);
     expect(summary.near_qualification).toHaveLength(1);
-    expect(summary.quiet.unified_headline).toContain("close");
+    expect(summary.quiet.unified_headline).toBe("Nothing ready — 1 setup approaching threshold");
+    expect(summary.near_qualification[0]?.alignment?.label).toContain("layer");
     const actions = buildScannerNextActions(summary);
     expect(actions.some((a) => a.id === "near")).toBe(true);
   });
@@ -67,7 +68,8 @@ describe("scanner-scan-summary", () => {
         timestamp_iso: "2026-05-16T14:00:00Z"
       }
     ]);
-    expect(rows[0]?.alignment?.label).toBe("2/6 aligned");
+    expect(rows[0]?.alignment?.label).toContain("2/6");
+    expect(rows[0]?.alignment?.label).toContain("layer");
   });
 
   it("merges swing and day near-qualification bundles by score", () => {

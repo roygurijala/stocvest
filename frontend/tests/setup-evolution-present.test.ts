@@ -29,7 +29,7 @@ describe("setup-evolution-present", () => {
       missing_layers: ["internals"],
       evaluation_source: "evidence"
     });
-    expect(row.line).toBe("Developing (4/6)");
+    expect(row.line).toBe("Near ready (4/6)");
     expect(row.dateLabel).toBe("May 16");
   });
 });

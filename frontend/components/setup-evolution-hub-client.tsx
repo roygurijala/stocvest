@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { SetupEvolutionPanel } from "@/components/signals/setup-evolution-panel";
+import { MaturationFrequencyCallout } from "@/components/maturation-frequency-callout";
+import { setupEvolutionHubIntro } from "@/lib/maturation-expected-frequency";
 import { setupOutcomesHref } from "@/lib/nav/setup-analytics-deeplink";
 import { borderRadius, roleAccents, spacing } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
@@ -64,7 +66,16 @@ export function SetupEvolutionHubClient() {
           </Link>
           .
         </p>
+        <p
+          className="m-0 mt-2 max-w-3xl text-xs leading-relaxed"
+          style={{ color: colors.textMuted }}
+          data-testid="setup-evolution-hub-frequency-intro"
+        >
+          {setupEvolutionHubIntro(mode)}
+        </p>
       </header>
+
+      <MaturationFrequencyCallout desk={mode} showDisplayBands testId="setup-evolution-hub-frequency" />
 
       <div className="flex flex-wrap gap-2">
         {(["swing", "day"] as const).map((m) => (

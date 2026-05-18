@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { AlignmentDrilldownLinks } from "@/components/signals/alignment-drilldown-links";
+import { signalsAlignmentDisplayLine } from "@/lib/nav/alignment-display-line";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { CuteLoader } from "@/components/cute-loader";
 import { InfoTip } from "@/components/info-tip";
@@ -27,6 +29,9 @@ type Props = {
   loading: boolean;
   insufficient: boolean;
   insufficientMessage?: ReactNode;
+  maturationState?: string | null;
+  onOpenEvidence?: () => void;
+  onScrollToEvolution?: () => void;
 };
 
 export function SignalsLayerBreakdown({
@@ -36,7 +41,10 @@ export function SignalsLayerBreakdown({
   rows,
   loading,
   insufficient,
-  insufficientMessage
+  insufficientMessage,
+  maturationState,
+  onOpenEvidence,
+  onScrollToEvolution
 }: Props) {
   const { colors } = useTheme();
   const [expanded, setExpanded] = useState(false);
@@ -46,6 +54,7 @@ export function SignalsLayerBreakdown({
 
   return (
     <section
+      id="signals-layers"
       className={surfaceGlowClassName}
       data-testid="signals-layer-breakdown"
       style={{
@@ -60,9 +69,24 @@ export function SignalsLayerBreakdown({
           6-Layer Breakdown
         </h3>
         <span className="text-xs" style={{ color: colors.textMuted }}>
-          as of latest close · Alignment {alignment.aligned}/{alignment.total}
+          as of latest close ·{" "}
+          {signalsAlignmentDisplayLine({
+            layersAligned: alignment.aligned,
+            layersTotal: alignment.total,
+            maturationState
+          })}
         </span>
       </div>
+      {!insufficient && !loading ? (
+        <AlignmentDrilldownLinks
+          symbol={symbol}
+          mode={tradingMode}
+          onOpenEvidence={onOpenEvidence}
+          onScrollToEvolution={onScrollToEvolution}
+          samePageLayers
+          testId="signals-layers-alignment-links"
+        />
+      ) : null}
 
       {loading ? (
         <div style={{ padding: `${spacing[6]} ${spacing[2]}` }} data-testid="signals-layers-loader">

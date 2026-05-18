@@ -2,6 +2,7 @@
 
 import { useMemo, type ReactNode } from "react";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
+import { DashboardDailyPulse } from "@/components/dashboard/dashboard-daily-pulse";
 import { DashboardEdgeSync } from "@/components/dashboard-edge-sync";
 import { ScannerOverviewProvider, useScannerOverview } from "@/components/dashboard/scanner-overview-context";
 import { DashboardEarningsProvider, useDashboardEarnings } from "@/components/dashboard/dashboard-earnings-context";
@@ -529,6 +530,8 @@ function DashboardRedesignBody({
           </Link>
         </div>
       ) : null}
+
+      <DashboardDailyPulse dayTradingSurfaces={dayTradingSurfaces} />
 
       <nav
         data-testid="dashboard-desk-status"

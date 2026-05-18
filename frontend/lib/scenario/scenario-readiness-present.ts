@@ -2,6 +2,10 @@
  * User-facing copy for Scenario Builder dual-axis status.
  */
 
+import {
+  formatAlignmentStatusLine,
+  layersAwayFromActionable
+} from "@/lib/alignment-display-tier";
 import type { ScenarioExecutionTier, ScenarioReadinessResolved, ScenarioSetupTier } from "@/lib/scenario/scenario-readiness";
 import { formatMissingLayerDisplayName } from "@/lib/scenario/scenario-readiness";
 
@@ -9,6 +13,13 @@ export const SCENARIO_EXECUTION_UNLOCK_FOOTER =
   "Execution planning unlocks when both setup alignment and execution conditions are met.";
 
 export function setupTierLabel(tier: ScenarioSetupTier, aligned: number, total: number): string {
+  if (tier === "near_ready") {
+    return formatAlignmentStatusLine({
+      layersAligned: aligned,
+      layersTotal: total,
+      maturationState: "developing"
+    });
+  }
   const ratio = `${aligned} / ${total}`;
   switch (tier) {
     case "actionable":
@@ -58,6 +69,15 @@ export function scenarioPreviewTakeaway(resolved: ScenarioReadinessResolved): st
   if (setupTier === "invalidated") {
     return "This setup read has been invalidated — review layers before planning.";
   }
+  if (setupTier === "near_ready") {
+    if (executionTier === "session_limited") {
+      return "Setup is approaching the actionable threshold — execution planning waits on session conditions.";
+    }
+    if (!executionReady) {
+      return "Setup is one layer from the actionable band — execution planning is still limited.";
+    }
+    return "Setup is approaching the actionable threshold — review missing layers before opening the full sheet.";
+  }
   if (setupReady && executionReady) {
     return "Setup and execution are both available — open the full planning sheet when ready.";
   }
@@ -68,7 +88,10 @@ export function scenarioPreviewTakeaway(resolved: ScenarioReadinessResolved): st
     return "Setup qualifies, but execution planning is still limited until reference levels clear.";
   }
   if (!setupReady && executionReady) {
-    return "Execution window is open, but the setup is still building — confirmations may still be missing.";
+    if (setupTier === "developing") {
+      return "Execution window is open, but the setup is still developing — missing layers may still need to align.";
+    }
+    return "Execution window is open, but setup alignment is still below the actionable band.";
   }
   if (!executionReady) {
     return "Setup is progressing, but execution is currently not possible.";
@@ -81,9 +104,25 @@ export function nextUnlockBullets(resolved: ScenarioReadinessResolved): string[]
   const out: string[] = [];
 
   if (setupTier !== "actionable") {
-    if (missingLayers.length > 0) {
+    const layersAway = layersAwayFromActionable(aligned, total);
+    if (setupTier === "near_ready" && layersAway > 0) {
+      if (missingLayers.length > 0) {
+        const names = missingLayers.map(formatMissingLayerDisplayName).join(", ");
+        out.push(
+          layersAway === 1
+            ? `Missing: ${names} — 1 layer from actionable threshold (${aligned} / ${total})`
+            : `Missing: ${names} — ${layersAway} layers from actionable threshold (${aligned} / ${total})`
+        );
+      } else {
+        out.push(
+          layersAway === 1
+            ? `One layer aligns with bias to reach actionable threshold (${aligned} / ${total} now)`
+            : `${layersAway} layers align with bias to reach actionable threshold (${aligned} / ${total} now)`
+        );
+      }
+    } else if (missingLayers.length > 0) {
       const names = missingLayers.map(formatMissingLayerDisplayName).join(", ");
-      out.push(`Remaining confirmations align (${names})`);
+      out.push(`Remaining layers to align: ${names}`);
     } else if (aligned < total) {
       const gap = total - aligned;
       out.push(

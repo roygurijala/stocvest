@@ -1,9 +1,15 @@
 /** Shared empty / warming copy — observational, never “broken”. */
 
+import {
+  setupEvolutionEmptyWarmingBody,
+  setupEvolutionEmptyWarmingCadence,
+  watchlistEvaluationHeader
+} from "@/lib/maturation-expected-frequency";
+
 export const EMPTY_SETUP_EVOLUTION = {
   title: "Tracking started",
-  body: "Evaluated daily after market close (~4:30 PM ET). First data point appears after the next evaluation when alignment or state changes.",
-  cadence: "Opening a symbol on Signals evaluates it immediately."
+  body: setupEvolutionEmptyWarmingBody(),
+  cadence: setupEvolutionEmptyWarmingCadence("swing")
 } as const;
 
 export const EMPTY_VALIDATION = {
@@ -18,5 +24,4 @@ export const EMPTY_PERFORMANCE = {
   hint: "Historical signal accuracy does not guarantee future results."
 } as const;
 
-export const WATCHLIST_EVALUATION_HEADER =
-  "Evaluated daily after market close (~4:30 PM ET). Opening a symbol on Signals evaluates it immediately.";
+export const WATCHLIST_EVALUATION_HEADER = watchlistEvaluationHeader();

@@ -1,33 +1,18 @@
 /** Copy + formatting for setup evolution (Past States) UI. */
 
 import type { SetupEvolutionTransition } from "@/lib/api/setup-evolution";
-
-const STATE_LABEL: Record<string, string> = {
-  not_aligned: "Not aligned",
-  developing: "Developing",
-  actionable: "Actionable",
-  invalidated: "Invalidated",
-  re_evaluating: "Re-evaluating"
-};
-
-const STATE_DOT: Record<string, string> = {
-  not_aligned: "🔴",
-  developing: "🟠",
-  actionable: "🟢",
-  invalidated: "⚫",
-  re_evaluating: "🔵"
-};
+import { alignmentDisplayMeta, formatAlignmentStatusLine } from "@/lib/alignment-display-tier";
 
 export function formatMaturationStateLine(
   state: string,
   layersAligned: number,
   layersTotal: number
 ): string {
-  const label = STATE_LABEL[state] ?? state;
-  if (state === "developing" || state === "re_evaluating" || state === "actionable") {
-    return `${label} (${layersAligned}/${layersTotal})`;
-  }
-  return label;
+  return formatAlignmentStatusLine({
+    layersAligned,
+    layersTotal,
+    maturationState: state
+  });
 }
 
 export function formatTransitionTimelineRow(t: SetupEvolutionTransition): {
@@ -38,7 +23,12 @@ export function formatTransitionTimelineRow(t: SetupEvolutionTransition): {
   const d = t.session_date || t.recorded_at.slice(0, 10);
   const dateLabel = formatShortDate(d);
   const line = formatMaturationStateLine(t.to_state, t.layers_aligned, t.layers_total);
-  const dot = STATE_DOT[t.to_state] ?? "•";
+  const dot =
+    alignmentDisplayMeta({
+      layersAligned: t.layers_aligned,
+      layersTotal: t.layers_total,
+      maturationState: t.to_state
+    }).emoji || "•";
   return { dateLabel, line, dot };
 }
 

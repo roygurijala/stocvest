@@ -1097,12 +1097,15 @@ export function SignalsPageClient({
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (window.location.hash !== "#evidence") return;
     if (!symbolCommitted) return;
-    void openEvidenceModal();
     const url = new URL(window.location.href);
-    url.hash = "";
-    window.history.replaceState(null, "", `${url.pathname}${url.search}`);
+    const openFromQuery = url.searchParams.get("open_evidence") === "1";
+    const openFromHash = url.hash === "#evidence";
+    if (!openFromQuery && !openFromHash) return;
+    void openEvidenceModal();
+    if (openFromHash) url.hash = "";
+    if (openFromQuery) url.searchParams.delete("open_evidence");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
   }, [symbolCommitted, openEvidenceModal]);
 
   // Layer 4 (second slice): the composite fetch + radar
@@ -1617,6 +1620,7 @@ export function SignalsPageClient({
           previewLayers={previewBlockingLayers}
           onOpenEvidence={() => void openEvidenceModal()}
           onSwitchToHistory={scrollToSetupEvolution}
+          maturationState={maturationLine?.state}
           fundamentalSummary={fundamentalSummary}
           showFundamentalUpgrade={showFundamentalUpgrade}
         />
@@ -1643,6 +1647,9 @@ export function SignalsPageClient({
             loading={compositeResult === null}
             insufficient={Boolean(insufficientComposite) || Boolean(compositeServiceMessage)}
             insufficientMessage={compositeServiceMessage ?? insufficientLayerMessage}
+            maturationState={maturationLine?.state}
+            onOpenEvidence={() => void openEvidenceModal()}
+            onScrollToEvolution={scrollToSetupEvolution}
           />
         </div>
 

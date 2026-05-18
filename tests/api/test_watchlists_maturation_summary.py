@@ -13,9 +13,14 @@ from stocvest.api.services.user_profile_store import InMemoryUserProfileStore
 from stocvest.api.types import LambdaEvent
 from stocvest.data.models import UserProfile
 from stocvest.data.watchlist_maturation_repository import WatchlistMaturationRepository
+from stocvest.data.watchlist_maturation_transition_repository import (
+    WatchlistMaturationTransitionRepository,
+)
 from stocvest.data.watchlist_store import InMemoryWatchlistStore
 from stocvest.models.watchlist import WatchlistEntry, WatchlistState
+from stocvest.models.watchlist_transition import WatchlistMaturationTransition
 from tests.data.test_watchlist_maturation_repository import _FakeDynamoTable
+from tests.data.test_watchlist_maturation_transition_repository import _FakeDynamoTable as _FakeTransTable
 
 
 def _ctx() -> MagicMock:
@@ -131,6 +136,61 @@ def test_maturation_summary_free_plan_omits_readiness_label(monkeypatch: pytest.
     assert aapl["state"] == "actionable"
     assert aapl.get("label") == "Actionable"
     assert "readiness_label" not in aapl
+
+
+def test_maturation_summary_includes_progression_from_latest_transition(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = InMemoryWatchlistStore()
+    store.create_watchlist("u1", "M", ["AAPL"], is_default=True)
+    mat_table = _FakeDynamoTable()
+    mat_repo = WatchlistMaturationRepository(mat_table)
+    mat_repo.put_entry(
+        WatchlistEntry(
+            user_id="u1",
+            symbol="AAPL",
+            mode="swing",
+            state=WatchlistState.DEVELOPING,
+            previous_state=WatchlistState.DEVELOPING,
+            state_changed_at="2026-05-11T12:00:00+00:00",
+            state_change_reason="x",
+            layers_aligned=4,
+        )
+    )
+    trans_table = _FakeTransTable()
+    trans_repo = WatchlistMaturationTransitionRepository(trans_table)
+    trans_repo.put_transition(
+        WatchlistMaturationTransition(
+            user_id="u1",
+            symbol="AAPL",
+            mode="swing",
+            recorded_at="2026-05-11T12:00:00+00:00",
+            session_date="2026-05-11",
+            from_state="developing",
+            to_state="developing",
+            layers_aligned=4,
+            previous_layers_aligned=3,
+            layers_total=6,
+            alignment_pct=66.7,
+            bias="long",
+            transition_type="improved",
+        )
+    )
+    monkeypatch.setattr("stocvest.api.handlers.watchlists.get_watchlist_store", lambda: store)
+    monkeypatch.setattr("stocvest.api.handlers.watchlists.get_watchlist_maturation_repository", lambda: mat_repo)
+    monkeypatch.setattr(
+        "stocvest.api.handlers.watchlists.get_watchlist_maturation_transition_repository",
+        lambda: trans_repo,
+    )
+    profiles = InMemoryUserProfileStore()
+    profiles.put_profile(UserProfile(user_id="u1", subscription_plan="free"))
+    monkeypatch.setattr("stocvest.api.handlers.watchlists.get_user_profile_store", lambda: profiles)
+    resp = watchlists_maturation_summary_handler(_event(sub="u1", mode="swing"), _ctx())
+    data = json.loads(str(resp["body"]))
+    aapl = data["by_symbol"]["AAPL"]
+    assert aapl["layers_aligned"] == 4
+    assert aapl["previous_layers_aligned"] == 3
+    assert aapl["last_transition_type"] == "improved"
 
 
 def test_lambda_dispatch_maturation_summary(monkeypatch: pytest.MonkeyPatch) -> None:

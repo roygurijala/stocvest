@@ -829,7 +829,8 @@ describe("SignalEvidenceCard sector + cross-layer alignment", () => {
     );
     expect(html).toContain("evidence-card-header");
     expect(html).toContain("Bias");
-    expect(html).toContain("Alignment");
+    expect(html).toContain("evidence-card-alignment-context");
+    expect(html).toContain("context only; setup validity is on Signals");
     expect(html).toContain("Layer contribution (directional pressure)");
     expect(html).toContain("Tech bid");
     expect(html).toContain("Resolved");

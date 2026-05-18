@@ -116,7 +116,7 @@ describe("<ScannerScanResultHero />", () => {
     wrap(<ScannerScanResultHero summary={summary} onRefresh={vi.fn()} />);
     const link = screen.getByTestId("scanner-next-action-near");
     expect(link.getAttribute("href")).toBe("#scanner-near-qualification");
-    expect(link.textContent).toContain("Review near qualification");
+    expect(link.textContent).toContain("approaching threshold");
   });
 
   test("shows why-nothing-passed action when qualifying is zero", () => {
@@ -134,6 +134,16 @@ describe("<ScannerScanResultHero />", () => {
     const row = screen.getByTestId("scanner-watchlist-insight");
     expect(row.textContent).toContain("8 monitored");
     expect(row.textContent).toContain("1 actionable");
+  });
+
+  test("watchlist progress note when nothing qualifies and developing", () => {
+    const summary = buildSummary({
+      watchlistStatus: { monitored: 6, actionable: 0, developing: 2, inactive: 4 }
+    });
+    wrap(<ScannerScanResultHero summary={summary} onRefresh={vi.fn()} />);
+    expect(screen.getByTestId("scanner-watchlist-progress-note")).toHaveTextContent(
+      /Nothing actionable yet/i
+    );
   });
 
   test("refresh button calls onRefresh", () => {
@@ -161,10 +171,11 @@ describe("<ScannerNearQualificationSection />", () => {
       />
     );
     const section = screen.getByTestId("scanner-near-qualification");
-    expect(section.textContent).toContain("Near qualification");
+    expect(section.textContent).toContain("Approaching threshold");
     expect(section.textContent).toContain("not actionable entries");
     expect(section.textContent).toContain("AMD");
-    expect(section.textContent).toContain("2/6 aligned");
+    expect(section.textContent).toContain("2/6");
+    expect(section.textContent).toContain("layer");
     const signalsLink = within(section).getByText("Open Signals →");
     expect(signalsLink.getAttribute("href")).toContain("symbol=AMD");
     expect(signalsLink.getAttribute("href")).toContain("trading_mode=day");
@@ -179,7 +190,7 @@ describe("<ScannerNearQualificationSection />", () => {
         ]}
       />
     );
-    expect(screen.queryByText("Near qualification")).toBeNull();
+    expect(screen.queryByText("Approaching threshold")).toBeNull();
     const lane = screen.getByTestId("scanner-watchlist-progression");
     expect(lane.textContent).toContain("Watchlist progression");
     expect(lane.textContent).toContain("MSFT");

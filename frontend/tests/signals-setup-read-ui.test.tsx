@@ -1,5 +1,21 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
+
+vi.mock("next/link", () => ({
+  default: ({
+    href,
+    children,
+    ...rest
+  }: {
+    href: string;
+    children: React.ReactNode;
+    [key: string]: unknown;
+  }) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  )
+}));
 import { SignalsSetupRead } from "@/components/signals/signals-setup-read";
 import type { SignalsLayerRowInput } from "@/lib/signals-page-present";
 import type { FundamentalBackdropSummary } from "@/lib/signal-evidence/fundamental-present";
@@ -64,7 +80,8 @@ describe("SignalsSetupRead", () => {
     );
     expect(screen.getByTestId("signals-setup-read")).toBeInTheDocument();
     expect(screen.getByTestId("signals-setup-bias")).toHaveTextContent("Bearish");
-    expect(screen.getByTestId("signals-setup-alignment")).toHaveTextContent("2 / 6");
+    expect(screen.getByTestId("signals-setup-alignment")).toHaveTextContent("Developing (2/6)");
+    expect(screen.getByTestId("signals-setup-alignment-links-evidence")).toBeInTheDocument();
     expect(screen.queryByText(/AI Signal Analysis/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Setup read/i)).toBeInTheDocument();
     expect(screen.getByTestId("signals-why-not")).toBeInTheDocument();
@@ -99,6 +116,28 @@ describe("SignalsSetupRead", () => {
     expect(screen.getByTestId("signals-fundamental-backdrop")).toBeInTheDocument();
     expect(screen.getByText(/Fundamental backdrop: Weak/i)).toBeInTheDocument();
     expect(screen.getByText(/conviction is lower/i)).toBeInTheDocument();
+  });
+
+  test("alignment button opens evidence when handler provided", () => {
+    const onOpenEvidence = vi.fn();
+    render(
+      <SignalsSetupRead
+        symbol="TSLA"
+        tradingMode="swing"
+        bias="Bearish"
+        rows={rows}
+        previewLayers={rows.slice(0, 2)}
+        decision={{
+          state: "monitor",
+          line: "No actionable setup",
+          reinforcements: [],
+          rationale: null
+        }}
+        onOpenEvidence={onOpenEvidence}
+      />
+    );
+    fireEvent.click(screen.getByTestId("signals-setup-alignment"));
+    expect(onOpenEvidence).toHaveBeenCalledTimes(1);
   });
 
   test("renders fundamental upgrade slot when requested", () => {
