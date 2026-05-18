@@ -35,6 +35,7 @@ from stocvest.data.scanner_evaluation_trace_store import (
     get_scanner_evaluation_traces_merged,
     session_date_et,
 )
+from stocvest.api.services.scanner_synthesis import build_scanner_synthesis, synthesis_to_api_dict
 from stocvest.signals.scanner_evaluation_trace import (
     build_intraday_evaluation_traces,
     build_swing_evaluation_traces,
@@ -637,6 +638,23 @@ def swing_synthesis_parse_handler(event: LambdaEvent, context: LambdaContext) ->
         return internal_error(str(exc))
 
 
+def _session_time_et_label() -> str:
+    return datetime.now(ZoneInfo("America/New_York")).strftime("%I:%M %p").lstrip("0")
+
+
+def _attach_day_scanner_synthesis(bundle: dict[str, Any]) -> None:
+    trace = bundle.get("evaluation_trace") or []
+    qual = bundle.get("qualifying") or []
+    qualified_count = len(qual) if isinstance(qual, list) else 0
+    synthesis = build_scanner_synthesis(
+        trace,
+        qualified_count=qualified_count,
+        session_time_et=_session_time_et_label(),
+        desk_filter="day",
+    )
+    bundle["synthesis"] = synthesis_to_api_dict(synthesis)
+
+
 def day_setups_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
     _ = context
     try:
@@ -708,6 +726,7 @@ def day_setups_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, 
                 limit=max(1, min(trace_limit, 50)),
             )
             persist_evaluation_trace_rows(rc.user_id, "day", bundle["evaluation_trace"])
+            _attach_day_scanner_synthesis(bundle)
             rows = bundle
         return ok(rows)
     except (KeyError, TypeError, ValueError) as exc:
@@ -737,14 +756,23 @@ def scanner_trace_handler(event: LambdaEvent, context: LambdaContext) -> dict[st
         session_date=session_date,
         limit=limit,
     )
-    return ok(
-        {
-            "session_date_et": session_date,
-            "mode": mode_raw,
-            "evaluation_trace": rows,
-            "disclaimer": SCANNER_EVALUATION_TRACE_DISCLAIMER,
-        }
-    )
+    payload: dict[str, Any] = {
+        "session_date_et": session_date,
+        "mode": mode_raw,
+        "evaluation_trace": rows,
+        "disclaimer": SCANNER_EVALUATION_TRACE_DISCLAIMER,
+    }
+    if mode_raw in ("day", "both"):
+        day_rows = [r for r in rows if isinstance(r, dict) and r.get("desk") == "day"]
+        if day_rows:
+            synthesis = build_scanner_synthesis(
+                day_rows,
+                qualified_count=0,
+                session_time_et=_session_time_et_label(),
+                desk_filter="day",
+            )
+            payload["synthesis"] = synthesis_to_api_dict(synthesis)
+    return ok(payload)
 
 
 def swing_setups_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:

@@ -111,21 +111,12 @@ describe("<ScannerScanResultHero />", () => {
     expect(within(hero).getByTestId("scanner-scan-desk-breakdown").textContent).toContain("Day 1");
   });
 
-  test("shows near-qualification next action when near rows exist", () => {
-    const summary = buildSummary({ near: [NEAR_AMD] });
-    wrap(<ScannerScanResultHero summary={summary} onRefresh={vi.fn()} />);
-    const link = screen.getByTestId("scanner-next-action-near");
-    expect(link.getAttribute("href")).toBe("#scanner-near-qualification");
-    expect(link.textContent).toContain("approaching threshold");
-  });
-
-  test("shows why-nothing-passed action when qualifying is zero", () => {
+  test("quiet subline when nothing qualifies", () => {
     const summary = buildSummary();
     wrap(<ScannerScanResultHero summary={summary} onRefresh={vi.fn()} />);
-    expect(screen.getByTestId("scanner-next-action-why").getAttribute("href")).toBe(
-      "#scanner-scan-education"
-    );
-    expect(screen.queryByTestId("scanner-next-action-qualifying")).toBeNull();
+    expect(screen.getByTestId("scanner-scan-quiet-subline")).toHaveTextContent(/Market quiet/i);
+    expect(screen.queryByTestId("scanner-scan-desk-breakdown")).toBeNull();
+    expect(screen.queryByTestId("scanner-next-actions")).toBeNull();
   });
 
   test("watchlist insight row when status present", () => {

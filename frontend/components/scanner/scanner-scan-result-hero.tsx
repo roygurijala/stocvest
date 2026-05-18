@@ -5,24 +5,23 @@ import { RefreshCw } from "lucide-react";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import type { ThemeColors } from "@/lib/design-system";
 import type { ScannerScanSummary } from "@/lib/scanner-scan-summary";
-import { buildScannerNextActions } from "@/lib/scanner-scan-summary";
 import { buildWatchlistInsightSupplement } from "@/lib/scanner-progress-messaging";
+import { buildScannerQuietSubline } from "@/lib/scanner-quiet-copy";
+import type { ScannerSynthesis } from "@/lib/scanner-synthesis";
 import { useTheme } from "@/lib/theme-provider";
 
 type Props = {
   summary: ScannerScanSummary;
+  synthesis?: ScannerSynthesis | null;
   isRefreshing?: boolean;
   onRefresh: () => void;
 };
 
-export function ScannerScanResultHero({ summary, isRefreshing, onRefresh }: Props) {
+export function ScannerScanResultHero({ summary, synthesis, isRefreshing, onRefresh }: Props) {
   const { colors } = useTheme();
-  const actions = buildScannerNextActions(summary);
   const wl = summary.watchlist;
-  const tape =
-    summary.regime.spy_pct != null && summary.regime.qqq_pct != null
-      ? `SPY ${summary.regime.spy_pct >= 0 ? "+" : ""}${summary.regime.spy_pct.toFixed(2)}% · QQQ ${summary.regime.qqq_pct >= 0 ? "+" : ""}${summary.regime.qqq_pct.toFixed(2)}%`
-      : null;
+  const quietSubline = buildScannerQuietSubline(summary, synthesis);
+  const showDeskBreakdown = summary.qualifying.total > 0;
 
   const sessionLine = summary.session.regular_open
     ? "Regular session open"
@@ -106,74 +105,24 @@ export function ScannerScanResultHero({ summary, isRefreshing, onRefresh }: Prop
         >
           {summary.qualifying.total} qualifying setup{summary.qualifying.total === 1 ? "" : "s"}
         </p>
-        <p style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.sm, color: colors.textMuted }}>
-          {summary.quiet.unified_headline}
-        </p>
         <p
-          data-testid="scanner-scan-desk-breakdown"
-          style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted }}
+          data-testid="scanner-scan-quiet-subline"
+          style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.sm, color: colors.textMuted }}
         >
-          {summary.quiet.detail_line}
-          {summary.universe.symbols_evaluated != null
-            ? ` · Universe ${summary.universe.symbols_evaluated}`
-            : ""}
-          {tape ? ` · ${tape}` : ""}
+          {quietSubline}
         </p>
+        {showDeskBreakdown ? (
+          <p
+            data-testid="scanner-scan-desk-breakdown"
+            style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted }}
+          >
+            {summary.quiet.detail_line}
+          </p>
+        ) : null}
       </div>
 
       {wl ? (
         <WatchlistInsightRow colors={colors} wl={wl} qualifyingTotal={summary.qualifying.total} />
-      ) : null}
-
-      {actions.length > 0 ? (
-        <div data-testid="scanner-next-actions">
-          <p
-            style={{
-              margin: `0 0 ${spacing[2]}`,
-              fontSize: 10,
-              fontWeight: 700,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              color: colors.textMuted
-            }}
-          >
-            Next actions
-          </p>
-          <ul
-            style={{
-              margin: 0,
-              padding: 0,
-              listStyle: "none",
-              display: "flex",
-              flexWrap: "wrap",
-              gap: spacing[2]
-            }}
-          >
-            {actions.map((a) => (
-              <li key={a.id}>
-                <Link
-                  href={a.href}
-                  data-testid={`scanner-next-action-${a.id}`}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    minHeight: 36,
-                    padding: `${spacing[1]} ${spacing[3]}`,
-                    borderRadius: borderRadius.md,
-                    border: `1px solid ${colors.border}`,
-                    background: colors.surfaceMuted,
-                    color: colors.accent,
-                    fontSize: typography.scale.sm,
-                    fontWeight: 600,
-                    textDecoration: "none"
-                  }}
-                >
-                  → {a.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
       ) : null}
     </section>
   );

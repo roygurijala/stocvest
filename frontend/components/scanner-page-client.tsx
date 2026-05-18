@@ -20,13 +20,20 @@ import { NewsPanel } from "@/components/news-panel";
 import { ScenarioBuilderInline } from "@/components/scenario-builder/scenario-builder-inline";
 import { ScannerEmptyStateCard } from "@/components/scanner-empty-state-card";
 import { ScannerNearQualificationSection } from "@/components/scanner/scanner-near-qualification-section";
-import { ScannerEvaluationTraceSection } from "@/components/scanner/scanner-evaluation-trace-section";
-import { ScannerScanEducation } from "@/components/scanner/scanner-scan-education";
+import { ScannerCauseSection } from "@/components/scanner/ScannerCauseSection";
+import { ScannerClosestToQualifying } from "@/components/scanner/ScannerClosestToQualifying";
+import { ScannerEvaluationDetails } from "@/components/scanner/ScannerEvaluationDetails";
+import { ScannerOutcomeCards } from "@/components/scanner/ScannerOutcomeCards";
 import { ScannerScanResultHero } from "@/components/scanner/scanner-scan-result-hero";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { loadScannerDataWithoutBrief } from "@/lib/api/scanner-client-load";
-import { fetchScannerEvaluationTraceClient } from "@/lib/api/scanner-trace-client";
+import { fetchScannerTraceBundleClient } from "@/lib/api/scanner-trace-client";
+import type { ScannerSynthesis } from "@/lib/scanner-synthesis";
+import {
+  buildClosestToQualifyingLines,
+  buildScannerCauseBullets
+} from "@/lib/scanner-quiet-copy";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import type {
   AssistantPageContext,
@@ -1072,53 +1079,41 @@ export function ScannerPageClient({
     [overview, scanSummary]
   );
 
-  const scanEducationPanels = useMemo(() => {
-    if (scanSummary.qualifying.total > 0) return [];
-    const gapMode: "swing" | "day" =
-      scannerSetupMode === "day" ? "day" : "swing";
-    const panels: Array<{ id: string; title: string; context: ScannerEmptyStateContext }> = [
-      {
-        id: "gap",
-        title: "How gap intelligence works",
-        context: buildGapIntelEmptyStateContext(emptyOverviewInput, gapMode)
-      }
-    ];
-    if (scannerSetupMode === "swing" || scannerSetupMode === "both") {
-      panels.push({
-        id: "swing",
-        title: "Why swing setups may be quiet",
-        context: buildSwingEmptyStateContext(emptyOverviewInput)
-      });
-    }
-    if (dayTradingSurfaces && (scannerSetupMode === "day" || scannerSetupMode === "both")) {
-      panels.push({
-        id: "day",
-        title: "Why day setups may be quiet",
-        context: buildDayEmptyStateContext(emptyOverviewInput)
-      });
-    }
-    return panels;
-  }, [scanSummary.qualifying.total, scannerSetupMode, dayTradingSurfaces, emptyOverviewInput]);
-
   const useCompactColumnEmpty = scanSummary.qualifying.total === 0;
+  const showQuietInterpretation = scanSummary.qualifying.total === 0;
   const evaluationTraceDeskFilter: "swing" | "day" | "all" =
     scannerSetupMode === "swing" ? "swing" : scannerSetupMode === "day" ? "day" : "all";
   const [evaluationTrace, setEvaluationTrace] = useState<ScannerEvaluationTraceRow[]>(
     () => overview.evaluationTrace ?? []
   );
+  const [scannerSynthesis, setScannerSynthesis] = useState<ScannerSynthesis | null>(
+    () => overview.scannerSynthesis ?? null
+  );
 
   useEffect(() => {
     setEvaluationTrace(overview.evaluationTrace ?? []);
-  }, [overview.evaluationTrace]);
+    setScannerSynthesis(overview.scannerSynthesis ?? null);
+  }, [overview.evaluationTrace, overview.scannerSynthesis]);
+
+  const causeBullets = useMemo(
+    () => buildScannerCauseBullets(scanSummary, scannerSynthesis),
+    [scanSummary, scannerSynthesis]
+  );
+  const closestLines = useMemo(
+    () => buildClosestToQualifyingLines(scannerSynthesis, scanSummary),
+    [scannerSynthesis, scanSummary]
+  );
 
   useEffect(() => {
     if (scanSummary.qualifying.total > 0) return;
-    if ((overview.evaluationTrace ?? []).length > 0) return;
+    if ((overview.evaluationTrace ?? []).length > 0 && overview.scannerSynthesis) return;
     let cancelled = false;
     const mode = evaluationTraceDeskFilter === "all" ? "both" : evaluationTraceDeskFilter;
-    void fetchScannerEvaluationTraceClient(mode, 20)
-      .then((rows) => {
-        if (!cancelled && rows.length > 0) setEvaluationTrace(rows);
+    void fetchScannerTraceBundleClient(mode, 20)
+      .then((bundle) => {
+        if (cancelled) return;
+        if (bundle.rows.length > 0) setEvaluationTrace(bundle.rows);
+        if (bundle.synthesis) setScannerSynthesis(bundle.synthesis);
       })
       .catch(() => {
         /* persisted trace is optional hydration */
@@ -1126,7 +1121,12 @@ export function ScannerPageClient({
     return () => {
       cancelled = true;
     };
-  }, [scanSummary.qualifying.total, overview.evaluationTrace, evaluationTraceDeskFilter]);
+  }, [
+    scanSummary.qualifying.total,
+    overview.evaluationTrace,
+    overview.scannerSynthesis,
+    evaluationTraceDeskFilter
+  ]);
 
   const setupsPanelTitle =
     scannerSetupMode === "swing"
@@ -1317,20 +1317,40 @@ export function ScannerPageClient({
         </div>
       ) : null}
 
-      <ScannerScanResultHero summary={scanSummary} isRefreshing={isPending} onRefresh={onManualRefresh} />
+      <ScannerScanResultHero
+        summary={scanSummary}
+        synthesis={scannerSynthesis}
+        isRefreshing={isPending}
+        onRefresh={onManualRefresh}
+      />
+      <ScannerOutcomeCards summary={scanSummary} />
+      {showQuietInterpretation ? (
+        <div data-testid="scanner-quiet-interpretation" style={{ display: "grid", gap: spacing[3] }}>
+          <ScannerClosestToQualifying lines={closestLines} />
+          <ScannerCauseSection bullets={causeBullets} />
+          <ScannerEvaluationDetails
+            synthesis={
+              dayTradingSurfaces &&
+              (scannerSetupMode === "day" || scannerSetupMode === "both")
+                ? scannerSynthesis
+                : null
+            }
+            traceRows={evaluationTrace}
+            deskFilter={evaluationTraceDeskFilter}
+          />
+        </div>
+      ) : null}
       {marketOpen ? (
         <p className="m-0 text-xs" style={{ color: colors.textMuted }}>
           Auto-refresh in <strong style={{ color: colors.text }}>{scanCountdownLabel}</strong>
         </p>
       ) : null}
-      <ScannerNearQualificationSection
-        nearQualification={scanSummary.near_qualification}
-        watchlistProgression={scanSummary.watchlist_progression}
-      />
-      {scanSummary.qualifying.total === 0 && evaluationTrace.length > 0 ? (
-        <ScannerEvaluationTraceSection rows={evaluationTrace} deskFilter={evaluationTraceDeskFilter} />
+      {!showQuietInterpretation ? (
+        <ScannerNearQualificationSection
+          nearQualification={scanSummary.near_qualification}
+          watchlistProgression={scanSummary.watchlist_progression}
+        />
       ) : null}
-      {scanEducationPanels.length > 0 ? <ScannerScanEducation panels={scanEducationPanels} /> : null}
 
       {dayTradingSurfaces ? (
       <div

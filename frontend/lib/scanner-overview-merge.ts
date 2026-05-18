@@ -14,6 +14,7 @@ export function mergeScannerCoreIntoOverview(prev: ScannerOverview, core: Scanne
     gapIntelligenceSnapshotSymbolCount: core.gapIntelligenceSnapshotSymbolCount ?? null,
     watchlistStatus: core.watchlistStatus ?? null,
     scanSummary: core.scanSummary ?? null,
-    evaluationTrace: core.evaluationTrace ?? []
+    evaluationTrace: core.evaluationTrace ?? [],
+    scannerSynthesis: core.scannerSynthesis ?? null
   };
 }

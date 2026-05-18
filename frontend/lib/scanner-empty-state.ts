@@ -197,19 +197,15 @@ function swingHeadlineFor(regimeLabel: string): string {
   return "Swing Desk is quiet — no candidate cleared the swing scanner this load.";
 }
 
-function swingOneLinerFor(regimeLabel: string, universeSize: number | null): string {
-  const ctx =
-    typeof universeSize === "number" && universeSize > 0
-      ? `Scanned ${universeSize} symbols this load. `
-      : "";
+function swingOneLinerFor(regimeLabel: string, _universeSize: number | null): string {
   const r = regimeLabel.trim().toLowerCase();
   if (r.includes("bear")) {
-    return `${ctx}Multi-day setups need the headline tape to clear bearish thresholds and a passing daily-bar score (≥ 0.48). The scanner is honest when neither side of those gates is close.`;
+    return "Multi-day setups need the headline tape to clear bearish thresholds and a passing daily-bar score (≥ 0.48). The scanner is honest when neither side of those gates is close.";
   }
   if (r.includes("bull")) {
-    return `${ctx}Multi-day setups need each candidate to clear per-symbol gates on DailyBarScanner — EMA crosses / weekly RSI recovery / volume expansion / pattern stack. Regime cooperation alone is not enough.`;
+    return "Multi-day setups need each candidate to clear per-symbol gates on DailyBarScanner — EMA crosses / weekly RSI recovery / volume expansion / pattern stack. Regime cooperation alone is not enough.";
   }
-  return `${ctx}Multi-day setups need a clearer headline tape AND a passing per-symbol score. Neither side is producing a candidate this load.`;
+  return "Multi-day setups need a clearer headline tape AND a passing per-symbol score. Neither side is producing a candidate this load.";
 }
 
 function dayHeadlineFor(sessionOpen: boolean): string {
@@ -218,14 +214,10 @@ function dayHeadlineFor(sessionOpen: boolean): string {
     : "Day Desk is suppressed — regular session is closed.";
 }
 
-function dayOneLinerFor(sessionOpen: boolean, universeSize: number | null): string {
-  const ctx =
-    typeof universeSize === "number" && universeSize > 0
-      ? `Scanned ${universeSize} symbols this load. `
-      : "";
+function dayOneLinerFor(sessionOpen: boolean, _universeSize: number | null): string {
   return sessionOpen
-    ? `${ctx}Intraday setups need volume / momentum / session-structure gates to clear together — VWAP-aligned momentum, ORB qualification, and RVOL above the ADV-relative threshold. None of those came together this load.`
-    : `${ctx}Intraday setups are session-bound — gates resume at the next regular open. Extended-hours and overnight prints do not qualify.`;
+    ? "Intraday setups need volume / momentum / session-structure gates to clear together — VWAP-aligned momentum, ORB qualification, and RVOL above the ADV-relative threshold. None of those came together this load."
+    : "Intraday setups are session-bound — gates resume at the next regular open. Extended-hours and overnight prints do not qualify.";
 }
 
 /**
@@ -354,12 +346,8 @@ function gapHeadline(): string {
  * window depends on structure holding past the open, not intraday
  * micro-structure — keep day vocabulary out.
  */
-function gapOneLinerSwing(universeSize: number | null): string {
-  const ctx =
-    typeof universeSize === "number" && universeSize > 0
-      ? `Scanned ${universeSize} symbols this load. `
-      : "";
-  return `${ctx}Gap Intelligence flags overnight close→open dislocations large enough to be worth a second look — names need both a meaningful gap size AND volume confirmation. None of the universe met both gates together.`;
+function gapOneLinerSwing(_universeSize: number | null): string {
+  return "Gap Intelligence flags overnight close→open dislocations large enough to be worth a second look — names need both a meaningful gap size AND volume confirmation. None of the universe met both gates together.";
 }
 
 /**
@@ -367,14 +355,10 @@ function gapOneLinerSwing(universeSize: number | null): string {
  * intraday-survival: does the gap survive the opening session and
  * confirm with same-direction tape, not whether it holds for days.
  */
-function gapOneLinerDay(universeSize: number | null, sessionOpen: boolean): string {
-  const ctx =
-    typeof universeSize === "number" && universeSize > 0
-      ? `Scanned ${universeSize} symbols this load. `
-      : "";
+function gapOneLinerDay(_universeSize: number | null, sessionOpen: boolean): string {
   return sessionOpen
-    ? `${ctx}Gap Intelligence flags overnight close→open dislocations large enough to consider for intraday play — names need both a meaningful gap size AND opening-session volume confirmation. None of the universe met both gates together.`
-    : `${ctx}Gap Intelligence flags overnight close→open dislocations that the next session would have to defend or fade — magnitude + opening volume are the two gates. Outside regular session these are tape observations only; intraday qualification resumes at the next open.`;
+    ? "Gap Intelligence flags overnight close→open dislocations large enough to consider for intraday play — names need both a meaningful gap size AND opening-session volume confirmation. None of the universe met both gates together."
+    : "Gap Intelligence flags overnight close→open dislocations that the next session would have to defend or fade — magnitude + opening volume are the two gates. Outside regular session these are tape observations only; intraday qualification resumes at the next open.";
 }
 
 /**

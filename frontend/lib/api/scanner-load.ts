@@ -25,6 +25,7 @@ import {
   type ScannerEvaluationTraceRow,
   type ScannerSetupsDeskBundle
 } from "@/lib/scanner-setups-response";
+import type { ScannerSynthesis } from "@/lib/scanner-synthesis";
 
 export type DefaultWatchlistFetch = () => Promise<DefaultWatchlistSnapshot>;
 
@@ -533,9 +534,11 @@ export async function runScannerLoadWithoutBrief(
     const emptySwingBundle: ScannerSetupsDeskBundle = {
       qualifying: [],
       nearQualification: [],
-      evaluationTrace: []
+      evaluationTrace: [],
+      synthesis: null
     };
     let evaluationTrace: ScannerEvaluationTraceRow[] = [];
+    let scannerSynthesis: ScannerSynthesis | null = null;
 
     if (loadDaySetups && swingReady) {
       const [dayRaw, swingRaw] = await Promise.all([
@@ -567,6 +570,7 @@ export async function runScannerLoadWithoutBrief(
       setups = mergeSwingAndDaySetups(swingBundle.qualifying, dayBundle.qualifying);
       nearQualificationSetups = mergedBundles.nearQualification;
       evaluationTrace = mergedBundles.evaluationTrace;
+      scannerSynthesis = mergedBundles.synthesis;
     } else if (loadDaySetups) {
       const dayRaw = await jsonFetch<unknown>("/v1/signals/day/setups", {
         method: "POST",
@@ -589,6 +593,7 @@ export async function runScannerLoadWithoutBrief(
       setups = dayBundle.qualifying;
       nearQualificationSetups = dayBundle.nearQualification;
       evaluationTrace = dayBundle.evaluationTrace;
+      scannerSynthesis = dayBundle.synthesis;
     } else if (swingReady) {
       try {
         const swingRaw = await jsonFetch<unknown>("/v1/signals/swing/setups", {
@@ -648,7 +653,8 @@ export async function runScannerLoadWithoutBrief(
       gapIntelligenceSnapshotSymbolCount: gapIntelSnapshotCount,
       watchlistStatus,
       scanSummary,
-      evaluationTrace
+      evaluationTrace,
+      scannerSynthesis
     };
   } catch (error: unknown) {
     if (isNextRedirect(error)) throw error;

@@ -189,6 +189,8 @@ export interface ScannerOverview {
   scanSummary?: ScannerScanSummary | null;
   /** Per-symbol gate failures from setups v2 (`include_evaluation_trace`). */
   evaluationTrace?: ScannerEvaluationTraceRow[];
+  /** Day-desk market synthesis (grouped rejections, near misses). */
+  scannerSynthesis?: import("@/lib/scanner-synthesis").ScannerSynthesis | null;
 }
 
 /** Placeholder before deferred scanner RSC hydrates (Tier 1.C — `/dashboard`). */
@@ -202,7 +204,8 @@ export const EMPTY_SCANNER_OVERVIEW: ScannerOverview = {
   gapIntelligenceSnapshotSymbolCount: null,
   watchlistStatus: null,
   scanSummary: null,
-  evaluationTrace: []
+  evaluationTrace: [],
+  scannerSynthesis: null
 };
 
 /** Snapshot + gap pipeline through intraday setups (no morning briefing). */
@@ -218,6 +221,7 @@ export type ScannerCoreData = {
   watchlistStatus?: WatchlistDashboardStatus | null;
   scanSummary?: ScannerScanSummary | null;
   evaluationTrace?: ScannerEvaluationTraceRow[];
+  scannerSynthesis?: import("@/lib/scanner-synthesis").ScannerSynthesis | null;
 };
 
 /** Which setup endpoints power the scanner core (dashboard defaults to both via `includeSwingDailySetups`). */
@@ -327,7 +331,8 @@ export async function fetchScannerOverview(
       gapIntelligenceSnapshotSymbolCount: null,
       watchlistStatus: core.watchlistStatus ?? null,
       scanSummary: core.scanSummary ?? null,
-      evaluationTrace: core.evaluationTrace ?? []
+      evaluationTrace: core.evaluationTrace ?? [],
+      scannerSynthesis: core.scannerSynthesis ?? null
     };
   }
   let morningBrief: MorningBriefPayload | undefined;
@@ -345,6 +350,8 @@ export async function fetchScannerOverview(
     swingUniverseSymbolCount: core.swingUniverseSymbolCount ?? null,
     gapIntelligenceSnapshotSymbolCount: core.gapIntelligenceSnapshotSymbolCount ?? null,
     watchlistStatus: core.watchlistStatus ?? null,
-    scanSummary: core.scanSummary ?? null
+    scanSummary: core.scanSummary ?? null,
+    evaluationTrace: core.evaluationTrace ?? [],
+    scannerSynthesis: core.scannerSynthesis ?? null
   };
 }

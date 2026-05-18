@@ -1,6 +1,7 @@
 /** Parse day/swing setups API responses (legacy array or v2 bundle). */
 
 import type { IntradaySetupPayload } from "@/lib/api/scanner";
+import { parseScannerSynthesis, type ScannerSynthesis } from "@/lib/scanner-synthesis";
 
 export type ScannerEvaluationTraceRow = {
   symbol: string;
@@ -17,6 +18,7 @@ export type ScannerSetupsDeskBundle = {
   qualifying: IntradaySetupPayload[];
   nearQualification: IntradaySetupPayload[];
   evaluationTrace: ScannerEvaluationTraceRow[];
+  synthesis: ScannerSynthesis | null;
 };
 
 export function isSwingSetupRow(row: IntradaySetupPayload): boolean {
@@ -54,22 +56,29 @@ function parseEvaluationTrace(data: unknown): ScannerEvaluationTraceRow[] {
 
 export function parseScannerSetupsDeskResponse(data: unknown): ScannerSetupsDeskBundle {
   if (Array.isArray(data)) {
-    return { qualifying: data as IntradaySetupPayload[], nearQualification: [], evaluationTrace: [] };
+    return {
+      qualifying: data as IntradaySetupPayload[],
+      nearQualification: [],
+      evaluationTrace: [],
+      synthesis: null
+    };
   }
   if (!data || typeof data !== "object") {
-    return { qualifying: [], nearQualification: [], evaluationTrace: [] };
+    return { qualifying: [], nearQualification: [], evaluationTrace: [], synthesis: null };
   }
   const o = data as {
     qualifying?: unknown;
     near_qualification?: unknown;
     evaluation_trace?: unknown;
+    synthesis?: unknown;
   };
   const qualifying = Array.isArray(o.qualifying) ? (o.qualifying as IntradaySetupPayload[]) : [];
   const nearQualification = Array.isArray(o.near_qualification)
     ? (o.near_qualification as IntradaySetupPayload[])
     : [];
   const evaluationTrace = parseEvaluationTrace(o.evaluation_trace);
-  return { qualifying, nearQualification, evaluationTrace };
+  const synthesis = parseScannerSynthesis(o.synthesis);
+  return { qualifying, nearQualification, evaluationTrace, synthesis };
 }
 
 export function mergeDeskSetupBundles(
@@ -79,10 +88,16 @@ export function mergeDeskSetupBundles(
   qualifying: IntradaySetupPayload[];
   nearQualification: IntradaySetupPayload[];
   evaluationTrace: ScannerEvaluationTraceRow[];
+  synthesis: ScannerSynthesis | null;
 } {
   const qualifying = [...swing.qualifying, ...day.qualifying];
   const nearQualification = [...swing.nearQualification, ...day.nearQualification];
   nearQualification.sort((a, b) => b.score - a.score);
   const evaluationTrace = [...swing.evaluationTrace, ...day.evaluationTrace].slice(0, 20);
-  return { qualifying, nearQualification: nearQualification.slice(0, 10), evaluationTrace };
+  return {
+    qualifying,
+    nearQualification: nearQualification.slice(0, 10),
+    evaluationTrace,
+    synthesis: day.synthesis
+  };
 }
