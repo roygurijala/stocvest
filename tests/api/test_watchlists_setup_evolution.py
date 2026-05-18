@@ -99,3 +99,5 @@ def test_setup_evolution_returns_transitions(monkeypatch) -> None:
     assert body["started_tracking_at"] == "2026-05-16T10:00:00+00:00"
     assert len(body["transitions"]) == 1
     assert body["transitions"][0]["to_state"] == "developing"
+    assert body["summary"]["latest_state"] == "developing"
+    assert body["summary"]["days_tracked"] >= 1

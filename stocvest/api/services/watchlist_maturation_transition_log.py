@@ -33,6 +33,13 @@ def _fundamental_fields_from_composite(body: dict[str, Any]) -> tuple[str | None
     return backdrop, days
 
 
+def _price_at_event(body: dict[str, Any]) -> float | None:
+    raw = body.get("last_trade_price")
+    if isinstance(raw, (int, float)) and raw > 0:
+        return float(raw)
+    return None
+
+
 def _parameter_version(body: dict[str, Any]) -> str | None:
     raw = body.get("parameter_version")
     if raw is None:
@@ -79,6 +86,7 @@ def try_log_maturation_transition(
         parameter_version=_parameter_version(composite_body),
         fundamental_backdrop=fundamental_backdrop if next_entry.mode == "swing" else None,
         earnings_days_away=earnings_days_away if next_entry.mode == "swing" else None,
+        price_at_event=_price_at_event(composite_body),
     )
     try:
         repo.put_transition(transition)

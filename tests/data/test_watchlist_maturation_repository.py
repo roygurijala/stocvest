@@ -52,6 +52,18 @@ class _FakeDynamoTable:
                 if row.get("gsi1pk") == gpk and str(row.get("gsi1sk") or "").startswith(pre)
             ]
             return {"Items": items, "LastEvaluatedKey": None}
+        if kwargs.get("IndexName") == "ModeTimelineIndex":
+            pk = eav[":pk"]
+            from_sk = eav.get(":from")
+            items = [
+                dict(row)
+                for row in self._by_pk_sk.values()
+                if row.get("gsi1pk") == pk and (from_sk is None or (row.get("gsi1sk") or "") >= from_sk)
+            ]
+            items.sort(key=lambda r: r.get("gsi1sk") or "")
+            if kwargs.get("ScanIndexForward") is False:
+                items.reverse()
+            return {"Items": items, "LastEvaluatedKey": None}
         pk = eav[":pk"]
         pref = eav[":pref"]
         items = [

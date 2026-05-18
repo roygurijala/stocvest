@@ -37,7 +37,6 @@ describe("buildSignalEvaluationFreshness", () => {
     expect(
       buildSignalEvaluationFreshness({
         symbolCommitted: true,
-        tab: "layers",
         isInitialLoading: true,
         isRevalidating: false,
         isMountRevalidating: false,
@@ -55,7 +54,6 @@ describe("buildSignalEvaluationFreshness", () => {
     vi.setSystemTime(now);
     const freshness = buildSignalEvaluationFreshness({
       symbolCommitted: true,
-      tab: "layers",
       isInitialLoading: false,
       isRevalidating: false,
       isMountRevalidating: false,

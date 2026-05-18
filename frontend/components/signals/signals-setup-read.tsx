@@ -159,9 +159,9 @@ export function SignalsSetupRead({
               style={{ color: colors.accent, cursor: "pointer" }}
               onClick={onSwitchToHistory}
             >
-              Review past signal states
+              View setup evolution
             </button>
-            <span style={{ color: colors.textMuted }}> — descriptive history only</span>
+            <span style={{ color: colors.textMuted }}> — past maturation states for this symbol</span>
           </li>
           {onOpenEvidence ? (
             <li>

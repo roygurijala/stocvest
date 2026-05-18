@@ -20,7 +20,7 @@
 
 7. **TTL:** Attribute `ttl` (Unix epoch) enabled on the table for physical cleanup of invalidated / archived rows. `archive_after` remains ISO string for UX “hide from active list” before TTL deletes.
 
-8. **Setup evolution log (2026-05-16):** Table **`WatchlistMaturationTransition`** stores append-only rows when maturation **state** changes or **alignment** meaningfully changes (layer count, missing set, or bias). Keys: `pk` = `USER#{user_id}#SYM#{SYMBOL}#MODE#{mode}`, `sk` = `TS#{recorded_at_iso}`. TTL **90 days**. Written from `sync_watchlist_maturation_from_composite` (evidence + scheduler refresh). API: **`GET /v1/watchlists/symbols/{symbol}/setup-evolution?mode=swing|day`**.
+8. **Setup evolution log (2026-05-16, analytics B46 2026-05-17):** Table **`WatchlistMaturationTransition`** stores append-only rows when maturation **state** changes or **alignment** meaningfully changes (layer count, missing set, or bias). Keys: `pk` = `USER#{user_id}#SYM#{SYMBOL}#MODE#{mode}`, `sk` = `TS#{recorded_at_iso}`; GSI **`ModeTimelineIndex`** (`gsi1pk` = `MODE#swing|day`, `gsi1sk` = `{recorded_at}#{user_id}#{symbol}`) for platform aggregates. Optional **`price_at_event`** on new rows. TTL **90 days**. APIs: per-symbol **`GET /v1/watchlists/symbols/{symbol}/setup-evolution`**, user outcomes **`GET /v1/analytics/setup-outcomes`**, admin **`GET /v1/admin/system-behavior`**. UI: `/dashboard/setup-evolution`, `/dashboard/setup-outcomes` — see **`SETUP_ANALYTICS_SPEC.md`**.
 
 ## Related code
 

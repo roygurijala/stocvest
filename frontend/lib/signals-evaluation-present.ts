@@ -44,14 +44,13 @@ export function formatSignalEvaluationFreshness(
 
 export function buildSignalEvaluationFreshness(args: {
   symbolCommitted: boolean;
-  tab: "layers" | "history";
   isInitialLoading: boolean;
   isRevalidating: boolean;
   isMountRevalidating: boolean;
   composite: Record<string, unknown> | null;
   isInsufficient: boolean;
 }): SignalEvaluationFreshness | null {
-  if (!args.symbolCommitted || args.tab !== "layers") return null;
+  if (!args.symbolCommitted) return null;
 
   const loading =
     args.isInitialLoading ||

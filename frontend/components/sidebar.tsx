@@ -27,7 +27,6 @@ import {
   TrendingUp,
   Users,
   Zap,
-  Percent,
   BadgeCheck
 } from "lucide-react";
 import { logoutAction } from "@/app/login/actions";
@@ -58,14 +57,14 @@ export const DASHBOARD_NAV_ITEMS: ReadonlyArray<{
   { href: "/dashboard/scanner", label: "Scanner", icon: Radio },
   { href: "/dashboard/watchlists", label: "Watchlists", icon: Bookmark },
   { href: "/dashboard/signals", label: "Signals", icon: Zap },
-  { href: "/dashboard/signal-validation", label: "Signal validation", icon: ClipboardList },
+  { href: "/dashboard/setup-evolution", label: "Setup evolution", icon: History },
+  { href: "/dashboard/setup-outcomes", label: "Setup outcomes", icon: ClipboardList },
   { href: "/dashboard/earnings", label: "Earnings", icon: CalendarDays },
   { href: "/dashboard/portfolio", label: "Portfolio", icon: Briefcase, feature: "brokersEnabled" },
   { href: "/dashboard/options", label: "Options", icon: Layers, feature: "options" },
   { href: "/dashboard/crypto", label: "Crypto", icon: TrendingUp, feature: "crypto" },
   { href: "/dashboard/futures", label: "Futures", icon: BarChart2, feature: "futures" },
   { href: "/dashboard/journal", label: "Journal", icon: BookOpen, feature: "brokersEnabled" },
-  { href: "/dashboard/performance", label: "Performance", icon: Percent },
   { href: "/dashboard/legal", label: "Legal & agreements", icon: BadgeCheck },
   { href: "/dashboard/settings", label: "Settings", icon: Settings }
 ];
@@ -86,6 +85,7 @@ export const DASHBOARD_ADMIN_NAV_ITEMS: ReadonlyArray<{
   { href: "/dashboard/admin", label: "Overview", icon: Activity },
   { href: "/dashboard/admin/proposals", label: "Weight proposals", icon: ShieldCheck },
   { href: "/dashboard/admin/parameters", label: "Parameters", icon: History },
+  { href: "/dashboard/admin/historical-validation", label: "Historical validation", icon: ClipboardList },
   { href: "/dashboard/admin/users", label: "Users", icon: Users },
   { href: "/dashboard/admin/audit", label: "Audit log", icon: ScrollText },
   { href: "/dashboard/admin/error-logs", label: "Error logs", icon: AlertTriangle },

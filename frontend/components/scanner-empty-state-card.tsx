@@ -262,7 +262,7 @@ export function ScannerEmptyStateCard({
           }}
         >
           <EmptyStateLink
-            href="/dashboard/signal-validation"
+            href="/dashboard/setup-outcomes"
             railHue={railHue}
             borderColor={colors.border}
             textColor={colors.text}

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { fetchSetupEvolution, type SetupEvolutionResponse } from "@/lib/api/setup-evolution";
 import {
+  formatMaturationStateLine,
   formatStartedTracking,
   formatTransitionTimelineRow
 } from "@/lib/setup-evolution-present";
@@ -13,9 +14,11 @@ import { useTheme } from "@/lib/theme-provider";
 type Props = {
   symbol: string;
   tradingMode: "swing" | "day";
+  /** Show summary stat cards (hub page). */
+  showSummary?: boolean;
 };
 
-export function SetupEvolutionPanel({ symbol, tradingMode }: Props) {
+export function SetupEvolutionPanel({ symbol, tradingMode, showSummary = false }: Props) {
   const { colors } = useTheme();
   const [data, setData] = useState<SetupEvolutionResponse | null | undefined>(undefined);
 
@@ -33,6 +36,7 @@ export function SetupEvolutionPanel({ symbol, tradingMode }: Props) {
   const symU = symbol.trim().toUpperCase();
   const started = formatStartedTracking(data?.started_tracking_at ?? null);
   const hasTransitions = (data?.transitions?.length ?? 0) > 0;
+  const summary = data?.summary;
 
   return (
     <section
@@ -74,6 +78,38 @@ export function SetupEvolutionPanel({ symbol, tradingMode }: Props) {
             {data.evaluation_cadence}
           </p>
 
+          {showSummary && summary ? (
+            <div
+              className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+              data-testid="setup-evolution-summary"
+            >
+              <SummaryTile label="Days tracked" value={String(summary.days_tracked)} colors={colors} />
+              <SummaryTile
+                label="Latest state"
+                value={
+                  summary.latest_state
+                    ? formatMaturationStateLine(
+                        summary.latest_state,
+                        summary.latest_layers_aligned ?? 0,
+                        6
+                      )
+                    : "—"
+                }
+                colors={colors}
+              />
+              <SummaryTile
+                label="Improved"
+                value={String(summary.transition_counts.improved)}
+                colors={colors}
+              />
+              <SummaryTile
+                label="Weakened"
+                value={String(summary.transition_counts.worsened)}
+                colors={colors}
+              />
+            </div>
+          ) : null}
+
           {!hasTransitions ? (
             <div className="mt-4" data-testid="setup-evolution-warming">
               <p className="m-0 text-sm font-semibold" style={{ color: colors.text }}>
@@ -101,6 +137,11 @@ export function SetupEvolutionPanel({ symbol, tradingMode }: Props) {
                     </span>
                     <span aria-hidden>{row.dot}</span>
                     <span>{row.line}</span>
+                    {t.transition_type !== "unchanged" ? (
+                      <span className="text-xs capitalize" style={{ color: colors.textMuted }}>
+                        ({t.transition_type})
+                      </span>
+                    ) : null}
                   </li>
                 );
               })}
@@ -109,5 +150,32 @@ export function SetupEvolutionPanel({ symbol, tradingMode }: Props) {
         </>
       )}
     </section>
+  );
+}
+
+function SummaryTile({
+  label,
+  value,
+  colors
+}: {
+  label: string;
+  value: string;
+  colors: { surfaceMuted: string; text: string; textMuted: string };
+}) {
+  return (
+    <div
+      style={{
+        background: colors.surfaceMuted,
+        borderRadius: borderRadius.md,
+        padding: spacing[2]
+      }}
+    >
+      <p className="m-0 text-[10px] font-semibold uppercase tracking-wide" style={{ color: colors.textMuted }}>
+        {label}
+      </p>
+      <p className="m-0 mt-1 text-sm font-semibold" style={{ color: colors.text }}>
+        {value}
+      </p>
+    </div>
   );
 }

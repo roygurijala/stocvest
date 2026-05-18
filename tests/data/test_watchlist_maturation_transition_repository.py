@@ -19,6 +19,20 @@ class _FakeDynamoTable:
 
     def query(self, **kwargs: Any) -> dict[str, Any]:
         eav = kwargs.get("ExpressionAttributeValues") or {}
+        index = kwargs.get("IndexName")
+        if index == "ModeTimelineIndex":
+            pk = eav[":pk"]
+            from_sk = eav.get(":from")
+            items = [
+                dict(row)
+                for row in self._by_pk_sk.values()
+                if row.get("gsi1pk") == pk and (from_sk is None or (row.get("gsi1sk") or "") >= from_sk)
+            ]
+            items.sort(key=lambda r: r.get("gsi1sk") or "")
+            if kwargs.get("ScanIndexForward") is False:
+                items.reverse()
+            return {"Items": items, "LastEvaluatedKey": None}
+
         pk = eav[":pk"]
         pref = eav[":pref"]
         items = [
@@ -60,3 +74,50 @@ def test_put_and_list_chronological() -> None:
     assert rows[-1].layers_aligned == 4
     stored = next(iter(table._by_pk_sk.values()))
     assert stored.get("ttl") is not None
+    assert stored.get("gsi1pk") == "MODE#swing"
+    assert "u1" in (stored.get("gsi1sk") or "")
+
+
+def test_list_for_mode_gsi() -> None:
+    table = _FakeDynamoTable()
+    repo = WatchlistMaturationTransitionRepository(table)
+    repo.put_transition(
+        WatchlistMaturationTransition(
+            user_id="u1",
+            symbol="AAPL",
+            mode="swing",
+            recorded_at="2026-05-10T12:00:00+00:00",
+            session_date="2026-05-10",
+            from_state=None,
+            to_state="developing",
+            layers_aligned=3,
+            previous_layers_aligned=None,
+            layers_total=6,
+            alignment_pct=50.0,
+            bias="long",
+            transition_type="initial",
+        )
+    )
+    repo.put_transition(
+        WatchlistMaturationTransition(
+            user_id="u2",
+            symbol="MSFT",
+            mode="day",
+            recorded_at="2026-05-11T12:00:00+00:00",
+            session_date="2026-05-11",
+            from_state=None,
+            to_state="developing",
+            layers_aligned=2,
+            previous_layers_aligned=None,
+            layers_total=6,
+            alignment_pct=33.0,
+            bias="neutral",
+            transition_type="initial",
+        )
+    )
+    swing_rows = repo.list_for_mode("swing", limit=10)
+    assert len(swing_rows) == 1
+    assert swing_rows[0].symbol == "AAPL"
+    day_rows = repo.list_for_mode("day", limit=10)
+    assert len(day_rows) == 1
+    assert day_rows[0].user_id == "u2"

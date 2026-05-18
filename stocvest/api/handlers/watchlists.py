@@ -11,6 +11,7 @@ from stocvest.api.text_sanitize import WATCHLIST_NAME_MAX, sanitize_free_text
 from stocvest.api.types import LambdaContext, LambdaEvent
 from stocvest.data.scan_symbols import SYSTEM_DEFAULTS
 from stocvest.api.services.user_profile_store import get_user_profile_store
+from stocvest.analytics.evolution_stats import compute_evolution_summary, filter_transitions_by_plan
 from stocvest.api.services.watchlist_maturation_gates import maturation_summary_include_readiness_label
 from stocvest.data.watchlist_maturation_repository import get_watchlist_maturation_repository
 from stocvest.data.watchlist_maturation_transition_repository import (
@@ -317,19 +318,27 @@ def watchlists_setup_evolution_handler(event: LambdaEvent, context: LambdaContex
             started_tracking_at = entry.added_at
 
     trans_repo = get_watchlist_maturation_transition_repository()
-    transitions: list[dict[str, Any]] = []
+    raw_rows = []
     if trans_repo is not None:
-        rows = trans_repo.list_for_symbol(rc.user_id, sym, mode, limit=limit, scan_forward=True)
-        transitions = [r.to_api_dict() for r in rows]
+        raw_rows = trans_repo.list_for_symbol(rc.user_id, sym, mode, limit=limit, scan_forward=True)
+
+    profile_store = get_user_profile_store()
+    profile = profile_store.get_profile(rc.user_id) if profile_store else None
+    has_full = bool(profile and (profile.beta_access_active or (profile.subscription_plan or "").lower() in ("swing_pro", "swing_day_pro")))
+    gated = filter_transitions_by_plan(raw_rows, has_full_access=has_full)
+    transitions = [r.to_api_dict() for r in gated]
+    summary = compute_evolution_summary(gated)
 
     return ok(
         {
             "symbol": sym,
             "mode": mode,
             "started_tracking_at": started_tracking_at,
+            "has_full_access": has_full,
             "evaluation_cadence": (
                 "Recorded when you view Evidence and on weekday maturation refresh (~4:30 PM ET after cash close)."
             ),
+            "summary": summary,
             "transitions": transitions,
         }
     )

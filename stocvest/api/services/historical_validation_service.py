@@ -33,7 +33,7 @@ Out of scope (deferred to Phase 3+)
 -----------------------------------
 - HTTP route (`GET /v1/signals/historical-validation/summary`).
 - BFF route and authentication / paid-tier gating.
-- UI surface on `/dashboard/signal-validation` and `/performance`.
+- Admin UI at `/dashboard/admin/historical-validation`; public mirror on `/performance`.
 - Cursor-based pagination for admin cross-user analytics (the current cap is enough for
   per-user and public-scope views).
 - DynamoDB schema changes — no new tables, no new GSIs. The existing
@@ -130,7 +130,7 @@ class HistoricalValidationService:
 
         ``user_id=None`` queries the public scope (the rows that back the public
         ``/performance`` page). ``user_id="abc"`` queries that user's tracked outcomes
-        (the rows that back ``/dashboard/signal-validation``). ``mode`` and ``symbol``
+        (the rows that back admin D2 historical validation). ``mode`` and ``symbol``
         are optional filters that pass through to the underlying store.
         """
         rows = self._fetch(

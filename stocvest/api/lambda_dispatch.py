@@ -126,6 +126,18 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
 
     if module == "brokers":
         route = http_route_descriptor(event)
+        if route.startswith("GET /v1/analytics/"):
+            from stocvest.api.handlers.analytics import analytics_dispatch_handler
+
+            return _with_cors_and_audit(
+                event=event, response=analytics_dispatch_handler(event, context), module=module
+            )
+        if route.startswith("GET /v1/admin/system-behavior"):
+            from stocvest.api.handlers.analytics import admin_system_behavior_handler
+
+            return _with_cors_and_audit(
+                event=event, response=admin_system_behavior_handler(event, context), module=module
+            )
         if route.startswith(
             (
                 "GET /v1/watchlists",

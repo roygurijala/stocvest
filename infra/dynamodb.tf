@@ -115,6 +115,21 @@ resource "aws_dynamodb_table" "watchlist_maturation_transition" {
     name = "sk"
     type = "S"
   }
+  attribute {
+    name = "gsi1pk"
+    type = "S"
+  }
+  attribute {
+    name = "gsi1sk"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name            = "ModeTimelineIndex"
+    hash_key        = "gsi1pk"
+    range_key       = "gsi1sk"
+    projection_type = "ALL"
+  }
 
   ttl {
     attribute_name = "ttl"

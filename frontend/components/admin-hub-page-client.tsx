@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   Activity,
   AlertCircle,
+  ClipboardList,
   History,
   RefreshCw,
   ScrollText,
@@ -15,6 +16,7 @@ import {
   Users
 } from "lucide-react";
 
+import { AdminSetupBehaviorSnapshot } from "@/components/admin/admin-setup-behavior-snapshot";
 import {
   fetchSystemStatus,
   type SystemStatusResponse
@@ -58,6 +60,12 @@ const NAV_TILES: {
     label: "Parameters",
     description: "Inspect the live signal weights; roll back to a prior version.",
     Icon: History
+  },
+  {
+    href: "/dashboard/admin/historical-validation",
+    label: "Historical validation",
+    description: "D2 stratified accuracy from SignalHistory — tuning and ops only.",
+    Icon: ClipboardList
   },
   {
     href: "/dashboard/admin/users",
@@ -200,6 +208,7 @@ export function AdminHubPageClient() {
         ) : state.data ? (
           <StatusGrid data={state.data} />
         ) : null}
+        <AdminSetupBehaviorSnapshot mode="swing" />
       </section>
 
       <section data-testid="admin-hub-nav-tiles">

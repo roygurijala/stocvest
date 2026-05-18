@@ -41,6 +41,7 @@ class WatchlistMaturationTransition:
     parameter_version: str | None = None
     fundamental_backdrop: str | None = None
     earnings_days_away: int | None = None
+    price_at_event: float | None = None
 
     def to_api_dict(self) -> dict:
         out: dict = {

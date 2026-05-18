@@ -515,10 +515,11 @@ def test_prompt_anchors_suppression_phrasing_to_real_product_copy() -> None:
 
 
 def test_prompt_routes_validation_questions_to_real_pages_with_disclaimer() -> None:
-    """Accuracy questions must point at /performance and /dashboard/signal-validation,
+    """Accuracy questions must point at /performance, setup-outcomes, and admin D2,
     not at numbers the assistant invented, and must carry the standing disclaimer."""
     assert "/performance" in ASSISTANT_SYSTEM_PROMPT
-    assert "/dashboard/signal-validation" in ASSISTANT_SYSTEM_PROMPT
+    assert "/dashboard/setup-outcomes" in ASSISTANT_SYSTEM_PROMPT
+    assert "/dashboard/admin/historical-validation" in ASSISTANT_SYSTEM_PROMPT
     assert "Historical signal accuracy does not guarantee future results." in ASSISTANT_SYSTEM_PROMPT
 
 
@@ -706,7 +707,8 @@ def test_prompt_bans_per_symbol_pattern_regime_decision_readiness_direction_deta
     # when the user asks for them.
     assert "per-symbol, per-pattern, per-regime, per-decision-state, per-readiness-bucket, or per-direction" in text
     assert "deliberately withheld from your context" in text
-    assert "/dashboard/signal-validation" in text
+    assert "/dashboard/admin/historical-validation" in text
+    assert "/dashboard/setup-outcomes" in text
 
 
 def test_prompt_bans_using_validation_to_promote_the_system() -> None:

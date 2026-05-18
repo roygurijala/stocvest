@@ -482,7 +482,7 @@ describe("Shared Context master card structure (Mode Separation B28 Phase 2b)", 
     const dashboard = document.querySelector(".stocvest-dashboard-v2");
     expect(dashboard).not.toBeNull();
     const anchors = dashboard
-      ? Array.from(dashboard.querySelectorAll('a[href="/dashboard/signal-validation"]'))
+      ? Array.from(dashboard.querySelectorAll('a[href="/dashboard/setup-outcomes"]'))
       : [];
     expect(anchors).toHaveLength(0);
   });

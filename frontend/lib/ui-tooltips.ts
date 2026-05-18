@@ -148,7 +148,7 @@ export const UPCOMING_CATALYSTS_CARD_TIP =
   "Earnings dates only — same feed as the calendar below, limited to your dashboard symbol list. Fed, CPI, and other macro calendars are not wired into this panel yet; an empty list does not mean there is nothing on the macro calendar.";
 
 export const SIGNAL_VALIDATION_LEDGER_CARD_TIP =
-  "Shortcut to **Signal validation ledger** — logged outcomes of your STOCVEST decisions (swing vs day) under fixed rules. This is not a brokerage account, managed capital, or performance marketing.";
+  "Shortcut to **Setup outcomes** — how watchlist setups behaved across sessions (swing vs day). Observational only; not a brokerage account, managed capital, or performance marketing.";
 
 export const MORNING_BRIEF_CARD_TIP =
   "Structured pre-market brief: futures tone, VIX direction, economic prints, and a highlighted watch. It is a narrative digest of conditions, separate from the ranked scanner list below.";

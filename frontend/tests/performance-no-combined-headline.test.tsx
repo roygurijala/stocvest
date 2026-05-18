@@ -91,8 +91,8 @@ describe("PerformanceTrackingContent — Validation ledger link (Phase 2c)", () 
       )
     );
     expect(html).toContain("performance-validation-ledger-link");
-    expect(html).toContain("Open full ledger (Swing / Day)");
-    expect(html).toContain("/dashboard/signal-validation");
+    expect(html).toContain("Open setup outcomes (Swing / Day)");
+    expect(html).toContain("/dashboard/setup-outcomes");
     // Mode Separation reminder must surface so a user opening the ledger
     // for the first time understands Swing ≠ Day before they read numbers.
     expect(html).toMatch(/Mode Separation/);

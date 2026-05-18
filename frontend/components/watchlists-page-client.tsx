@@ -14,6 +14,7 @@ import {
 import { WATCHLIST_EVALUATION_HEADER } from "@/lib/product-empty-states";
 import { maturationAlignmentCounts } from "@/lib/watchlist-alignment-present";
 import { formatMaturationStateLine } from "@/lib/setup-evolution-present";
+import { setupEvolutionHubHref } from "@/lib/nav/setup-analytics-deeplink";
 import { APP_TOP_BAR_LAYOUT_HEIGHT } from "@/components/top-bar";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, colorTokens, spacing, surfaceGlowClassName } from "@/lib/design-system";
@@ -1258,6 +1259,15 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                                 >
                                   {aligned}/{total}
                                 </button>
+                                <Link
+                                  href={setupEvolutionHubHref(symU, mode)}
+                                  className="relative z-10 text-[10px] font-medium no-underline hover:underline sm:text-xs"
+                                  style={{ color: colors.accent }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  data-testid={`watchlist-past-states-${symU}-${mode}`}
+                                >
+                                  Past states →
+                                </Link>
                               </>
                             ) : maturationFetchStatus === "ready" && active.is_default ? (
                               <Link

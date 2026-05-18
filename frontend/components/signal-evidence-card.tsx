@@ -72,6 +72,7 @@ import { buildScenarioPreviewPanelData } from "@/lib/scenario/scenario-preview-p
 import { synthTradeDecision } from "@/lib/signal-evidence/trade-decision";
 import { countLayerAlignment } from "@/lib/signals-page-present";
 import { buildEvidenceRiskHorizonFactors } from "@/lib/signal-evidence/fundamental-present";
+import { EvidenceSetupEvolutionLink } from "@/components/signal-evidence/evidence-setup-evolution-link";
 
 interface SignalEvidenceCardProps {
   evidence: SignalEvidenceData;
@@ -1965,6 +1966,8 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
           {insight.signal_parameters}
         </p>
       </details>
+
+      <EvidenceSetupEvolutionLink symbol={evidence.symbol} mode={evidenceMode} />
 
       <footer style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: spacing[2] }}>
         <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>{displayUpdatedLabel(evidence)}</span>

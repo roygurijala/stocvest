@@ -14,11 +14,34 @@ export type SetupEvolutionTransition = {
   parameter_version?: string;
 };
 
+export type SetupEvolutionSummary = {
+  days_tracked: number;
+  first_session: string | null;
+  last_session: string | null;
+  state_distribution: Record<string, number>;
+  alignment_trend: Array<{
+    session_date: string;
+    layers_aligned: number;
+    layers_total: number;
+    to_state: string;
+  }>;
+  transition_counts: {
+    initial: number;
+    improved: number;
+    worsened: number;
+    unchanged: number;
+  };
+  latest_state: string | null;
+  latest_layers_aligned: number | null;
+};
+
 export type SetupEvolutionResponse = {
   symbol: string;
   mode: "swing" | "day";
   started_tracking_at: string | null;
+  has_full_access?: boolean;
   evaluation_cadence: string;
+  summary?: SetupEvolutionSummary;
   transitions: SetupEvolutionTransition[];
 };
 

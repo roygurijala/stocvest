@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Literal, Protocol, cast, runtime_checkable
 
@@ -16,6 +17,22 @@ from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
 _SK_PREFIX = "TS#"
+_MODE_TIMELINE_INDEX = "ModeTimelineIndex"
+
+
+def _mode_gsi_pk(mode: WatchlistMode) -> str:
+    return f"MODE#{mode}"
+
+
+def _mode_gsi_sk(recorded_at: str, user_id: str, symbol: str) -> str:
+    return f"{recorded_at}#{user_id}#{symbol.upper()}"
+
+
+def recorded_at_cutoff_iso(days: int) -> str:
+    """ISO timestamp at UTC midnight boundary ``days`` ago (for GSI range queries)."""
+    d = max(1, int(days))
+    dt = datetime.now(timezone.utc) - timedelta(days=d)
+    return dt.replace(microsecond=0).isoformat()
 
 
 @runtime_checkable
@@ -82,6 +99,10 @@ class WatchlistMaturationTransitionRepository:
             item["fundamental_backdrop"] = transition.fundamental_backdrop
         if transition.earnings_days_away is not None:
             item["earnings_days_away"] = transition.earnings_days_away
+        if transition.price_at_event is not None:
+            item["price_at_event"] = transition.price_at_event
+        item["gsi1pk"] = _mode_gsi_pk(transition.mode)
+        item["gsi1sk"] = _mode_gsi_sk(transition.recorded_at, transition.user_id, transition.symbol)
         self._table.put_item(Item=item)
 
     def list_for_symbol(
@@ -100,6 +121,40 @@ class WatchlistMaturationTransitionRepository:
             q: dict[str, Any] = {
                 "KeyConditionExpression": "pk = :pk AND begins_with(sk, :pref)",
                 "ExpressionAttributeValues": {":pk": _pk(user_id, symbol, mode), ":pref": _SK_PREFIX},
+                "ScanIndexForward": scan_forward,
+                "Limit": cap - len(items),
+            }
+            if eks:
+                q["ExclusiveStartKey"] = eks
+            resp = self._table.query(**q)
+            items.extend(resp.get("Items") or [])
+            eks = resp.get("LastEvaluatedKey")
+            if not eks:
+                break
+        return [_item_to_transition(i) for i in items[:cap]]
+
+    def list_for_mode(
+        self,
+        mode: WatchlistMode,
+        *,
+        limit: int = 1000,
+        recorded_after: str | None = None,
+        scan_forward: bool = True,
+    ) -> list[WatchlistMaturationTransition]:
+        """Platform-wide timeline for a desk mode (ModeTimelineIndex GSI)."""
+        cap = max(1, min(int(limit), 5000))
+        items: list[dict[str, Any]] = []
+        eks: dict[str, Any] | None = None
+        expr = "gsi1pk = :pk"
+        eav: dict[str, Any] = {":pk": _mode_gsi_pk(mode)}
+        if recorded_after:
+            expr += " AND gsi1sk >= :from"
+            eav[":from"] = recorded_after
+        while len(items) < cap:
+            q: dict[str, Any] = {
+                "IndexName": _MODE_TIMELINE_INDEX,
+                "KeyConditionExpression": expr,
+                "ExpressionAttributeValues": eav,
                 "ScanIndexForward": scan_forward,
                 "Limit": cap - len(items),
             }
@@ -145,6 +200,9 @@ def _item_to_transition(item: dict[str, Any]) -> WatchlistMaturationTransition:
         fundamental_backdrop=str(item["fundamental_backdrop"]) if item.get("fundamental_backdrop") else None,
         earnings_days_away=_num(item["earnings_days_away"])
         if item.get("earnings_days_away") is not None
+        else None,
+        price_at_event=_float(item["price_at_event"])
+        if item.get("price_at_event") is not None
         else None,
     )
 

@@ -235,7 +235,7 @@ export function LandingPerformanceSection({ summary }: { summary: PerformanceSum
            * averaged across both engines — a direct violation, especially on
            * the LOGGED-OUT homepage where any combined number reads as a
            * promotional claim. Per-engine track records live behind a sign-in
-           * on /performance and /dashboard/signal-validation; the homepage
+           * on /performance (public mirror) and /dashboard/setup-outcomes when logged in; the homepage
            * stays at the FRAMEWORK level only.
            */}
           {evaluated > 0 && !hasPatternData ? (

@@ -37,8 +37,8 @@ reads, no API surface, no UI. The next phases plug this into the existing live p
 
 - Phase 2: a small service layer that pulls a date-range slice from ``SignalHistory`` and
   builds a ``HistoricalValidationSummary`` per ``parameter_version``.
-- Phase 3: ``GET /v1/signals/historical-validation/...`` endpoints + a new tab on
-  ``/dashboard/signal-validation`` and a refreshed ``/performance`` page.
+- Phase 3: ``GET /v1/signals/historical-validation/...`` endpoints; user UI moved to
+  setup analytics (B46); D2 stratified view at ``/dashboard/admin/historical-validation``.
 - Phase 4: cross-version diffs (parameter A vs. B) so the validation page can show the
   effect of a rules change without ever simulating new signals.
 

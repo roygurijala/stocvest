@@ -250,25 +250,24 @@ export function PerformanceTrackingContent({ showHomeLink = false }: Performance
                 color: colors.textMuted
               }}
             >
-              Validation ledger · stratified outcomes
+              Setup behavior · watchlist outcomes
             </p>
             <Link
-              href="/dashboard/signal-validation"
+              href="/dashboard/setup-outcomes"
               className="hover:underline"
               style={{ fontSize: typography.scale.sm, color: colors.accent, fontWeight: 600 }}
               data-testid="performance-validation-ledger-link-anchor"
             >
-              Open full ledger (Swing / Day) →
+              Open setup outcomes (Swing / Day) →
             </Link>
           </div>
           <p className="mt-2 text-sm" style={{ color: colors.textMuted, lineHeight: 1.5 }}>
-            Detailed historical signal validation — broken out by decision state, regime, setup pattern, readiness band,
-            and direction. Swing and Day tracks are kept structurally separate so accuracy in one engine never
-            implies permission to act in the other (Mode Separation).
+            How setups on your watchlist evolved across sessions — observational session-to-session behavior, not trade
+            performance or win rate. Swing and Day are reported separately (Mode Separation).
           </p>
           <p className="mt-1 text-xs" style={{ color: colors.textMuted, fontStyle: "italic" }}>
-            Tracked outcomes only — not a brokerage account, not a recommendation. Past directional accuracy does not
-            guarantee future results.
+            Observational only — not a brokerage account, not a recommendation. Past behavior does not guarantee future
+            results.
           </p>
         </section>
       ) : null}
@@ -302,7 +301,7 @@ export interface PublicValidationSectionProps {
  * Renders ONLY the `overall` + `by_mode` projection that the backend ships at
  * `GET /v1/signals/historical-validation/public-summary`. The full stratification grid
  * (decision state, regime, pattern, readiness, direction) lives behind the login on
- * `/dashboard/signal-validation` — the LOGGED-OUT golden rule from the assistant prompt
+ * `/dashboard/setup-outcomes` (logged-in) and `/dashboard/admin/historical-validation` (admin D2)
  * is "Explain the FRAMEWORK, not the DECISION", and that boundary is enforced both at
  * the API layer (Phase 3c-1 backend) and here at the rendering layer.
  */

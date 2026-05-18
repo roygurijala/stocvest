@@ -153,7 +153,7 @@ The order is chosen to **compound** — each layer makes the next one cheaper or
 
 These are non-negotiable. Any PR that violates one of these must be rejected even if it improves a metric.
 
-1. **No `<Link prefetch={true}>` to a heavy SSR page from a high-card-count container** (ribbon, table, scanner setup rows linking to `/dashboard/signals`, validation-ledger symbol links, journal rows linking to `/dashboard/signals`, or similar N-of-N lists). Heavy SSR pages are: `/dashboard/signals`, `/dashboard/scanner`, `/dashboard/performance`, `/dashboard/signal-validation`, `/dashboard/journal`, `/dashboard/portfolio`. Top-bar nav and other 1-of-N targets may use the Next default — they're fine.
+1. **No `<Link prefetch={true}>` to a heavy SSR page from a high-card-count container** (ribbon, table, scanner setup rows linking to `/dashboard/signals`, validation-ledger symbol links, journal rows linking to `/dashboard/signals`, or similar N-of-N lists). Heavy SSR pages are: `/dashboard/signals`, `/dashboard/scanner`, `/dashboard/setup-outcomes`, `/dashboard/setup-evolution`, `/dashboard/journal`, `/dashboard/portfolio`. (`/dashboard/performance` and `/dashboard/signal-validation` redirect to setup-outcomes.) Top-bar nav and other 1-of-N targets may use the Next default — they're fine.
 
 2. **No mixing user-identified data into a cache key that is also used for unauthenticated paths.** Edge-cached endpoints (Layer 1) are user-agnostic or they don't get cached.
 

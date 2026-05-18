@@ -20,13 +20,16 @@ const TITLE_BY_PATH: Record<string, string> = {
   "/dashboard/scanner": "Scanner",
   "/dashboard/earnings": "Earnings",
   "/dashboard/signals": "Signals",
-  "/dashboard/signal-validation": "Signal validation",
+  "/dashboard/setup-evolution": "Setup evolution",
+  "/dashboard/setup-outcomes": "Setup outcomes",
   "/dashboard/portfolio": "Portfolio",
   "/dashboard/options": "Options",
   "/dashboard/crypto": "Crypto",
   "/dashboard/futures": "Futures",
   "/dashboard/journal": "Journal",
-  "/dashboard/settings": "Settings"
+  "/dashboard/settings": "Settings",
+  "/dashboard/admin": "Admin",
+  "/dashboard/admin/historical-validation": "Historical validation (admin)"
 };
 
 interface TopBarProps {
