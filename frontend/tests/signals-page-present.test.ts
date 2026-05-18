@@ -5,10 +5,13 @@ import {
   buildSignalsPageDecision,
   buildWhyNotBullets,
   countLayerAlignment,
+  formatDeltaVsBaselineShort,
+  layerDeltaVsBaseline,
   layerPolarity,
   normalizeSetupBias,
   pickCollapsedLayerPreview,
   pickPreviewLayers,
+  SIGNAL_LAYER_LEVEL_BASELINE,
   type SignalsLayerRowInput
 } from "@/lib/signals-page-present";
 
@@ -90,5 +93,19 @@ describe("signals-page-present", () => {
 
   test("layerPolarity blocking when internals oppose bearish", () => {
     expect(layerPolarity(bearishRows[5]!, "Bearish")).toBe("blocking");
+  });
+
+  test("layerDeltaVsBaseline uses neutral baseline", () => {
+    expect(SIGNAL_LAYER_LEVEL_BASELINE).toBe(50);
+    expect(layerDeltaVsBaseline(60)).toBe(10);
+    expect(layerDeltaVsBaseline(40)).toBe(-10);
+    expect(layerDeltaVsBaseline(null)).toBeNull();
+  });
+
+  test("formatDeltaVsBaselineShort", () => {
+    expect(formatDeltaVsBaselineShort(10)).toBe("+10 Δ today");
+    expect(formatDeltaVsBaselineShort(-3.2)).toBe("-3.2 Δ today");
+    expect(formatDeltaVsBaselineShort(0)).toBe("~0 Δ today");
+    expect(formatDeltaVsBaselineShort(0.02)).toBe("~0 Δ today");
   });
 });

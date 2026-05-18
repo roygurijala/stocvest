@@ -2,6 +2,7 @@
 
 import type { ThemeColors } from "@/lib/design-system";
 import { useIsMobileLayout } from "@/lib/hooks/use-is-mobile-layout";
+import { SIGNAL_LAYER_LEVEL_BASELINE } from "@/lib/signals-page-present";
 import { Bar, BarChart, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 export type LayerRadarDatum = { layer: string; score: number; hist: number; scoreMissing?: boolean };
@@ -46,15 +47,15 @@ export function SignalLayerDivergenceChart({
     <div
       className="flex flex-wrap items-center gap-x-3 gap-y-2 sm:gap-x-4"
       style={{ fontSize: isMobileLayout ? 12 : 11, color: colors.textMuted, marginBottom: 10 }}
-      aria-label="Today vs typical: bar colors"
+      aria-label="Δ vs baseline: bar colors"
     >
       <span className="inline-flex items-center gap-2">
         <span className="inline-block h-2.5 w-5 shrink-0 rounded-sm" style={{ background: "#22c55e" }} aria-hidden />
-        Hotter vs typical <span style={{ color: colors.textMuted, opacity: 0.85 }}>(+Δ)</span>
+        Hotter vs baseline <span style={{ color: colors.textMuted, opacity: 0.85 }}>(+Δ)</span>
       </span>
       <span className="inline-flex items-center gap-2">
         <span className="inline-block h-2.5 w-5 shrink-0 rounded-sm" style={{ background: "#f43f5e" }} aria-hidden />
-        Cooler vs typical <span style={{ color: colors.textMuted, opacity: 0.85 }}>(−Δ)</span>
+        Cooler vs baseline <span style={{ color: colors.textMuted, opacity: 0.85 }}>(−Δ)</span>
       </span>
       <span className="inline-flex items-center gap-2">
         <span className="inline-block h-2.5 w-5 shrink-0 rounded-sm" style={{ background: "#64748b" }} aria-hidden />
@@ -81,6 +82,13 @@ export function SignalLayerDivergenceChart({
                 tick={{ fontSize: tickSize, fill: colors.textMuted }}
                 axisLine={{ stroke: colors.border }}
                 tickLine={{ stroke: colors.border }}
+                label={{
+                  value: `Δ vs baseline (${SIGNAL_LAYER_LEVEL_BASELINE})`,
+                  position: "insideBottom",
+                  offset: isMobileLayout ? -4 : -2,
+                  fontSize: tickSize,
+                  fill: colors.textMuted
+                }}
               />
               <YAxis
                 type="category"
@@ -110,7 +118,7 @@ export function SignalLayerDivergenceChart({
                     >
                       <div style={{ fontWeight: 600 }}>{p.layer}</div>
                       <div style={{ color: colors.textMuted, marginTop: 4 }}>
-                        Today: {p.scoreMissing ? "N/A (no live data)" : p.score} · Typical: ~{p.hist}
+                        Level today: {p.scoreMissing ? "N/A" : `${p.score}/100`} · Baseline: {p.hist}/100
                       </div>
                       <div
                         style={{
@@ -121,7 +129,7 @@ export function SignalLayerDivergenceChart({
                       >
                         Δ {p.delta > 0 ? "+" : ""}
                         {p.delta}
-                        {Math.abs(p.delta) <= 0.5 ? " · in line with typical" : ""}
+                        {Math.abs(p.delta) <= 0.5 ? " · in line with baseline" : ""}
                       </div>
                     </div>
                   );

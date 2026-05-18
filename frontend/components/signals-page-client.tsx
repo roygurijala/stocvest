@@ -36,8 +36,10 @@ import { buildSignalEvaluationFreshness } from "@/lib/signals-evaluation-present
 import {
   buildSignalsPageDecision,
   countLayerAlignment,
+  layerDeltaVsBaseline,
   normalizeSetupBias,
   pickPreviewLayers,
+  SIGNAL_LAYER_LEVEL_BASELINE,
   type SignalsLayerRowInput
 } from "@/lib/signals-page-present";
 import {
@@ -863,15 +865,25 @@ export function SignalsPageClient({
   const setupBias = useMemo(() => normalizeSetupBias(layerSignalSummary), [layerSignalSummary]);
   const signalsPresentRows: SignalsLayerRowInput[] = useMemo(
     () =>
-      rows.map((row, idx) => ({
-        key: SIGNAL_LAYER_KEYS[idx] ?? row.name.toLowerCase(),
-        name: row.name,
-        status: row.status,
-        statusLabel: row.statusLabel,
-        explanation: row.explanation,
-        score: row.score,
-        sectorCachePending: row.sectorCachePending
-      })),
+      rows.map((row, idx) => {
+        const unavailable = row.status === "Unavailable" || row.sectorCachePending;
+        const score =
+          unavailable || row.score == null
+            ? null
+            : typeof row.score === "number" && Number.isFinite(row.score)
+              ? row.score
+              : null;
+        return {
+          key: SIGNAL_LAYER_KEYS[idx] ?? row.name.toLowerCase(),
+          name: row.name,
+          status: row.status,
+          statusLabel: row.statusLabel,
+          explanation: row.explanation,
+          score,
+          deltaVsBaseline: layerDeltaVsBaseline(score),
+          sectorCachePending: row.sectorCachePending
+        };
+      }),
     [rows]
   );
 
@@ -1128,7 +1140,7 @@ export function SignalsPageClient({
       if (!compositeResult || isInsufficientCompositeResponse(compositeResult)) return null;
       const raw = compositeResult.layers;
       if (!Array.isArray(raw)) return null;
-      const baseline = 50;
+      const baseline = SIGNAL_LAYER_LEVEL_BASELINE;
       return (raw as Array<Record<string, unknown>>).map((layer) => {
         const k = String(layer.layer ?? "").toLowerCase();
         const layerStatus = String(layer.status ?? "").toLowerCase();
@@ -1701,14 +1713,14 @@ export function SignalsPageClient({
             </div>
             {!signalRadarExpanded ? (
               <p className="m-0 text-sm leading-relaxed" style={{ color: colors.textMuted }}>
-                Shows how current conditions differ from a typical baseline — expand for the chart and per-layer gap
-                bars; the written breakdown stays the main read.
+                Radar shows level (0–100) and Δ vs the {SIGNAL_LAYER_LEVEL_BASELINE} baseline. Expand for charts; layer
+                rows on the left pair level with today&apos;s Δ.
               </p>
             ) : (
               <>
                 <p className="text-sm" style={{ margin: `0 0 ${spacing[2]} 0`, color: colors.textMuted }}>
-                  Shows how current conditions differ from a typical baseline — dashed ring is typical, solid fill is
-                  today.
+                  Dashed ring = neutral baseline ({SIGNAL_LAYER_LEVEL_BASELINE}/100). Solid fill = today&apos;s level.
+                  Bars below = Δ vs that baseline (not the same scale as level).
                 </p>
                 <div
                   className="flex flex-wrap items-center gap-x-4 gap-y-2"
@@ -1789,11 +1801,12 @@ export function SignalsPageClient({
                 </div>
 
                 <h4 style={{ margin: `${spacing[4]} 0 ${spacing[1]} 0`, fontSize: 13, fontWeight: 600, color: colors.text }}>
-                  Today vs typical (per layer)
+                  Today vs baseline (Δ per layer)
                 </h4>
                 <p className="text-xs leading-snug" style={{ margin: `0 0 ${spacing[2]} 0`, color: colors.textMuted }}>
-                  Shows how each layer today differs from its typical baseline (today − typical on the radar). Color key
-                  is directly above the bars.
+                  Δ score vs neutral baseline ({SIGNAL_LAYER_LEVEL_BASELINE}). Positive = hotter than baseline today; compare
+                  to <strong style={{ fontWeight: 600, color: colors.text }}>Level</strong> in the breakdown, not to the
+                  bar length as a 0–100 score.
                 </p>
                 <SignalLayerDivergenceChart data={radarData} colors={colors} height={isMobileLayout ? 348 : 312} />
               </>

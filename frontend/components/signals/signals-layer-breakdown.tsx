@@ -6,15 +6,17 @@ import { signalsAlignmentDisplayLine } from "@/lib/nav/alignment-display-line";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { CuteLoader } from "@/components/cute-loader";
 import { InfoTip } from "@/components/info-tip";
-import { LAYER_NAME_HINTS } from "@/lib/ui-tooltips";
+import { LAYER_NAME_HINTS, SIGNAL_LAYER_LEVEL_VS_DELTA_TIP } from "@/lib/ui-tooltips";
 import {
   buildLayerInsightLine,
   countLayerAlignment,
+  formatDeltaVsBaselineShort,
   formatLayerScoreLabel,
   layerPolarity,
   layerPolarityDotColor,
   layerPolarityLabel,
   pickCollapsedLayerPreview,
+  SIGNAL_LAYER_LEVEL_BASELINE,
   type SignalsLayerRowInput,
   type SignalsSetupBias
 } from "@/lib/signals-page-present";
@@ -64,11 +66,17 @@ export function SignalsLayerBreakdown({
         padding: spacing[4]
       }}
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="m-0" style={{ fontSize: typography.scale.lg }}>
-          6-Layer Breakdown
-        </h3>
-        <span className="text-xs" style={{ color: colors.textMuted }}>
+      <div>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h3 className="m-0" style={{ fontSize: typography.scale.lg }}>
+            6-Layer Breakdown
+          </h3>
+          <span className="inline-flex items-center gap-1 text-xs" style={{ color: colors.textMuted }}>
+            Level 0–100 per layer
+            <InfoTip text={SIGNAL_LAYER_LEVEL_VS_DELTA_TIP} label="Level vs Δ" maxWidth={320} />
+          </span>
+        </div>
+        <span className="mt-1 block text-xs" style={{ color: colors.textMuted }}>
           as of latest close ·{" "}
           {signalsAlignmentDisplayLine({
             layersAligned: alignment.aligned,
@@ -146,6 +154,13 @@ function LayerRow({
   const dot = layerPolarityDotColor(polarity);
   const insight = buildLayerInsightLine(row, bias);
   const hint = LAYER_NAME_HINTS[row.key as keyof typeof LAYER_NAME_HINTS];
+  const levelLabel = formatLayerScoreLabel(row.score, row.status);
+  const showLevel = row.score != null && levelLabel !== "N/A" && levelLabel !== "—";
+  const levelPct = showLevel ? Math.max(0, Math.min(100, Number(levelLabel))) : 0;
+  const delta =
+    typeof row.deltaVsBaseline === "number" && Number.isFinite(row.deltaVsBaseline)
+      ? row.deltaVsBaseline
+      : null;
 
   return (
     <li
@@ -167,19 +182,52 @@ function LayerRow({
           </span>
           <span className="text-[10px] font-medium uppercase tracking-wide" style={{ color: colors.textMuted }}>
             {layerPolarityLabel(polarity)}
-            {row.status === "As of close"
-              ? row.score != null
-                ? ` · ${formatLayerScoreLabel(row.score, row.status)}/100 · last close`
-                : " · last close"
-              : row.status === "Unavailable" && row.score === null
-                ? " · no live score"
-                : row.score != null
-                  ? ` · ${formatLayerScoreLabel(row.score, row.status)}/100`
-                  : ""}
+            {row.status === "As of close" ? " · last close" : null}
           </span>
           {hint ? <InfoTip text={hint} label={row.name} /> : null}
         </div>
-        <p className="m-0 mt-0.5 text-sm leading-snug" style={{ color: colors.textMuted }}>
+        {showLevel ? (
+          <div className="mt-1.5" data-testid={`signals-layer-level-${row.key}`}>
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <span className="text-xs font-medium" style={{ color: colors.text }}>
+                Level {levelLabel}/100
+              </span>
+              {delta != null ? (
+                <span
+                  className="text-xs tabular-nums"
+                  style={{ color: colors.textMuted }}
+                  data-testid={`signals-layer-delta-${row.key}`}
+                >
+                  {formatDeltaVsBaselineShort(delta)} vs {SIGNAL_LAYER_LEVEL_BASELINE}
+                </span>
+              ) : null}
+            </div>
+            <div
+              className="mt-1 h-1.5 overflow-hidden rounded-full"
+              style={{ background: colors.border }}
+              role="progressbar"
+              aria-valuenow={levelPct}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label={`${row.name} level ${levelPct} out of 100`}
+            >
+              <div
+                data-testid={`signals-layer-level-bar-${row.key}`}
+                style={{
+                  width: `${levelPct}%`,
+                  height: "100%",
+                  background: colors.accent,
+                  opacity: 0.85
+                }}
+              />
+            </div>
+          </div>
+        ) : (
+          <p className="m-0 mt-1 text-xs" style={{ color: colors.textMuted }}>
+            {row.status === "Unavailable" ? "No live level score" : "Level unavailable"}
+          </p>
+        )}
+        <p className="m-0 mt-1.5 text-sm leading-snug" style={{ color: colors.textMuted }}>
           {insight}
         </p>
       </div>

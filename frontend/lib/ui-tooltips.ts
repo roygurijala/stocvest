@@ -72,6 +72,9 @@ export const LAYER_NAME_HINTS: Record<string, string> = {
     "Market-wide health indicators including how many stocks are rising versus falling, the VIX volatility index, and advance-decline line breadth."
 };
 
+export const SIGNAL_LAYER_LEVEL_VS_DELTA_TIP =
+  "Level (0–100) is absolute strength for this layer today. Δ (delta) in the radar chart is how far today sits above or below the neutral baseline (50)—a relative move, not the same number as level.";
+
 /** ─── Dashboard cards (umbrella copy for circled i on each panel) ─── */
 
 export const DASHBOARD_MARKET_SENTIMENT_CARD_TIP =

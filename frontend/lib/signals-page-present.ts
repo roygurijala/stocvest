@@ -20,6 +20,9 @@ export type SignalsLayerStatus =
 
 export type SignalsLayerPolarity = "blocking" | "mixed" | "neutral" | "supportive";
 
+/** Neutral baseline for Signal Radar Δ bars and “vs baseline” copy (matches `radarData.hist`). */
+export const SIGNAL_LAYER_LEVEL_BASELINE = 50;
+
 export type SignalsLayerRowInput = {
   key: string;
   name: string;
@@ -28,8 +31,24 @@ export type SignalsLayerRowInput = {
   explanation: string;
   /** Null when the API has no live layer score (do not treat as 0). */
   score: number | null;
+  /** Today − baseline, when score is known (same scale as divergence chart). */
+  deltaVsBaseline?: number | null;
   sectorCachePending?: boolean;
 };
+
+export function layerDeltaVsBaseline(
+  score: number | null,
+  baseline: number = SIGNAL_LAYER_LEVEL_BASELINE
+): number | null {
+  if (score === null || !Number.isFinite(score)) return null;
+  return Math.round((score - baseline) * 10) / 10;
+}
+
+export function formatDeltaVsBaselineShort(delta: number): string {
+  if (delta > 0.05) return `+${delta} Δ today`;
+  if (delta < -0.05) return `${delta} Δ today`;
+  return "~0 Δ today";
+}
 
 export function formatLayerScoreLabel(score: number | null, status: SignalsLayerStatus): string {
   if (status === "Unavailable" && score === null) return "N/A";
