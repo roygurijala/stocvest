@@ -134,7 +134,7 @@ def _try_sync_watchlist_maturation_from_evidence(
     """Persist maturation from any successful evidence payload (computed or cache)."""
     if not user_id:
         return
-    if str(body.get("status") or "") == "insufficient_data" or body.get("error"):
+    if body.get("error"):
         return
     try:
         from stocvest.api.services.watchlist_maturation_sync import (
@@ -215,8 +215,14 @@ def composite_response_with_evidence_cache(
             "disclaimer": API_SIGNAL_DISCLAIMER,
         }
 
-    if str(body.get("status") or "") == "insufficient_data" or body.get("error"):
+    if body.get("error"):
         return dict(body)
+    if str(body.get("status") or "") == "insufficient_data":
+        out_ins = dict(body)
+        _try_sync_watchlist_maturation_from_evidence(
+            user_id=user_id, symbol=symbol, mode=mode, body=out_ins
+        )
+        return out_ins
 
     write_dashboard_cache(
         cache_key,

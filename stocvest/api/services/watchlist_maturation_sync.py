@@ -40,9 +40,20 @@ def _skip_body(body: dict[str, Any]) -> bool:
     if body.get("error"):
         return True
     st = str(body.get("status") or "").strip().lower()
-    if st in ("insufficient_data", "incomplete"):
+    if st == "incomplete":
         return True
     return False
+
+
+def _insufficient_alignment_fields(body: dict[str, Any]) -> tuple[int, list[str], float, str, Literal["long", "short", "neutral"]]:
+    """Map insufficient-data composite to a conservative maturation row (still records last_evaluated_at)."""
+    available = int(body.get("available_layers") or 0)
+    layers_aligned = max(0, min(available, len(MATURATION_LAYER_KEYS)))
+    missing_layers = list(MATURATION_LAYER_KEYS[layers_aligned:])
+    total = len(MATURATION_LAYER_KEYS)
+    pct = (100.0 * float(layers_aligned)) / float(total) if total else 0.0
+    reason = str(body.get("message") or "Insufficient layer data for full maturation")[:240]
+    return layers_aligned, missing_layers, pct, reason, "neutral"
 
 
 def _layer_row_available(row: dict[str, Any]) -> bool:
@@ -159,7 +170,12 @@ def sync_watchlist_maturation_from_composite(
         return
 
     wl_mode: WatchlistMode = mode if mode in ("swing", "day") else "swing"
-    layers_aligned, missing_layers, alignment_pct, top_missing_reason, bias = _alignment_fields(composite_body)
+    if str(composite_body.get("status") or "").strip().lower() == "insufficient_data":
+        layers_aligned, missing_layers, alignment_pct, top_missing_reason, bias = _insufficient_alignment_fields(
+            composite_body
+        )
+    else:
+        layers_aligned, missing_layers, alignment_pct, top_missing_reason, bias = _alignment_fields(composite_body)
 
     prev = repo.get_entry(user_id, sym_u, wl_mode)
     prev_state = prev.state if prev else None
@@ -211,6 +227,15 @@ def sync_watchlist_maturation_from_composite(
     )
     try:
         repo.put_entry(entry)
+        _LOG.info(
+            "watchlist maturation upserted user=%s sym=%s mode=%s state=%s aligned=%s/%s",
+            user_id,
+            sym_u,
+            wl_mode,
+            new_state.value,
+            layers_aligned,
+            len(MATURATION_LAYER_KEYS),
+        )
     except Exception as exc:  # noqa: BLE001 — never break composite response
         _LOG.warning("watchlist maturation put_entry failed user=%s sym=%s: %s", user_id, sym_u, exc)
         return

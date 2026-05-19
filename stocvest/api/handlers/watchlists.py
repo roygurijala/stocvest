@@ -255,11 +255,25 @@ def watchlists_maturation_summary_handler(event: LambdaEvent, context: LambdaCon
     try:
         repo = get_watchlist_maturation_repository()
         if repo is None:
-            return ok({"mode": mode, "by_symbol": {}})
+            return ok(
+                {
+                    "mode": mode,
+                    "by_symbol": {},
+                    "storage_ready": False,
+                    "watchlist_symbol_count": 0,
+                }
+            )
 
         wl = get_watchlist_store().get_default_watchlist(rc.user_id)
         if not wl or not wl.symbols:
-            return ok({"mode": mode, "by_symbol": {}})
+            return ok(
+                {
+                    "mode": mode,
+                    "by_symbol": {},
+                    "storage_ready": True,
+                    "watchlist_symbol_count": 0,
+                }
+            )
 
         allowed = [s.strip().upper() for s in wl.symbols if str(s).strip()]
         allowed_set = set(allowed)
@@ -321,10 +335,25 @@ def watchlists_maturation_summary_handler(event: LambdaEvent, context: LambdaCon
                     getattr(e, "symbol", "?"),
                     exc,
                 )
-        return ok({"mode": mode, "by_symbol": by_symbol})
+        return ok(
+            {
+                "mode": mode,
+                "by_symbol": by_symbol,
+                "storage_ready": True,
+                "watchlist_symbol_count": len(allowed),
+            }
+        )
     except Exception as exc:
         _LOG.exception("maturation_summary_failed user=%s mode=%s", rc.user_id, mode)
-        return ok({"mode": mode, "by_symbol": {}, "degraded": True})
+        return ok(
+            {
+                "mode": mode,
+                "by_symbol": {},
+                "degraded": True,
+                "storage_ready": False,
+                "watchlist_symbol_count": 0,
+            }
+        )
 
 
 def watchlists_setup_evolution_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:

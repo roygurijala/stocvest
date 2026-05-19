@@ -62,6 +62,7 @@ def test_maturation_summary_empty_when_repo_unconfigured(monkeypatch: pytest.Mon
 
     data = json.loads(str(resp["body"]))
     assert data.get("by_symbol") == {}
+    assert data.get("storage_ready") is False
 
 
 def test_maturation_summary_default_list_filter(monkeypatch: pytest.MonkeyPatch) -> None:

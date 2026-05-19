@@ -80,7 +80,7 @@ def test_sync_writes_when_symbol_on_default_watchlist() -> None:
     assert got.missing_layers == []
 
 
-def test_sync_skips_insufficient_data() -> None:
+def test_sync_records_insufficient_data_touch() -> None:
     table = _FakeDynamoTable()
     repo = WatchlistMaturationRepository(table)
     store = InMemoryWatchlistStore()
@@ -89,11 +89,19 @@ def test_sync_skips_insufficient_data() -> None:
         user_id="u1",
         symbol="AAPL",
         mode="day",
-        composite_body={"symbol": "AAPL", "status": "insufficient_data"},
+        composite_body={
+            "symbol": "AAPL",
+            "status": "insufficient_data",
+            "available_layers": 2,
+            "required_layers": 4,
+        },
         maturation_repo=repo,
         watchlist_store=store,
     )
-    assert table._by_pk_sk == {}
+    got = repo.get_entry("u1", "AAPL", "day")
+    assert got is not None
+    assert got.layers_aligned == 2
+    assert got.last_evaluated_at
 
 
 def test_neutral_composite_counts_available_layers() -> None:

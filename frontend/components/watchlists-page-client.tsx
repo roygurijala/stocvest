@@ -134,6 +134,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   const [maturationSwing, setMaturationSwing] = useState<Record<string, MaturationRow>>({});
   const [maturationDay, setMaturationDay] = useState<Record<string, MaturationRow>>({});
   const [maturationFetchStatus, setMaturationFetchStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [maturationStorageReady, setMaturationStorageReady] = useState<boolean | null>(null);
   const [viewMode, setViewMode] = useState<WatchlistViewMode>("swing");
   const [maturationAlerts, setMaturationAlerts] = useState<MaturationAlertFeedItem[]>([]);
   const [maturationAlertsStatus, setMaturationAlertsStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
@@ -217,6 +218,12 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   /** Maturation API is keyed to the default list; with a single list we always surface it. */
   const maturationEligible = Boolean(active && (active.is_default || rows.length <= 1));
 
+  function readMaturationStorageReady(payload: unknown): boolean | null {
+    if (!payload || typeof payload !== "object") return null;
+    const ready = (payload as { storage_ready?: boolean }).storage_ready;
+    return typeof ready === "boolean" ? ready : null;
+  }
+
   const activeSymbolsDeduped = useMemo(() => dedupeSymbolsUpper(active?.symbols ?? []), [active?.symbols]);
 
   const symbolTrackingMap = useMemo((): SymbolTrackingMap => {
@@ -238,9 +245,11 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
       setMaturationDay({});
       setMaturationFetchStatus("idle");
       setMaturationSummaryFetchedAt(null);
+      setMaturationStorageReady(null);
       return;
     }
     setMaturationFetchStatus("loading");
+    setMaturationStorageReady(null);
     let cancelled = false;
     void (async () => {
       try {
@@ -283,6 +292,9 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
           }
           setMaturationSwing(swDegraded ? {} : normalizeMaturationBySymbol(swJson));
           setMaturationDay(dyDegraded ? {} : normalizeMaturationBySymbol(dyJson));
+          setMaturationStorageReady(
+            readMaturationStorageReady(swJson) ?? readMaturationStorageReady(dyJson)
+          );
         } else {
           const res = await fetch(`/api/stocvest/watchlists/maturation-summary?${new URLSearchParams({ mode: "swing" })}`, {
             cache: "no-store",
@@ -311,6 +323,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
           }
           setMaturationSwing(normalizeMaturationBySymbol(json));
           setMaturationDay({});
+          setMaturationStorageReady(readMaturationStorageReady(json));
         }
         setMaturationFetchStatus("ready");
         setMaturationSummaryFetchedAt(new Date());
@@ -781,6 +794,9 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   const maturationDeskSummary = useMemo(() => {
     if (!maturationEligible || activeSymbolsDeduped.length === 0) return null;
     if (maturationFetchStatus === "loading") return "Loading maturation…";
+    if (maturationStorageReady === false) {
+      return "Maturation storage is not configured on the API — rows cannot persist until ops enables DynamoDB";
+    }
     if (maturationFetchStatus === "error") return "Maturation unavailable";
     if (maturationFetchStatus !== "ready") return null;
     return watchlistMaturationDeskSummary(
@@ -795,6 +811,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     maturationEligible,
     activeSymbolsDeduped,
     maturationFetchStatus,
+    maturationStorageReady,
     maturationSwing,
     maturationDay,
     viewMode,
@@ -1285,7 +1302,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                           planMode={planMode}
                           maturationForPlan={maturationForPlan}
                           deskEvaluating={evaluatingSymbols[symU]}
-                          sessionClosed={sessionClosed}
+                          sessionClosed={maturationStorageReady !== false && sessionClosed}
                           onRemove={() => void removeSymbol(s)}
                           onOpenLayers={(desk, row) =>
                             setAlignmentSheet({ symbol: symU, deskMode: desk, row })
