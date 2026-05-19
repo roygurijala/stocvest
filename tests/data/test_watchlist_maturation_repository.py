@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Any
 
-from stocvest.data.watchlist_maturation_repository import WatchlistMaturationRepository
+from stocvest.data.watchlist_maturation_repository import (
+    WatchlistMaturationRepository,
+    _entry_to_item,
+)
 from stocvest.models.watchlist import WatchlistEntry, WatchlistState, user_state_gsi_keys
 
 
@@ -72,6 +76,32 @@ class _FakeDynamoTable:
             if row.get("pk") == pk and str(row.get("sk") or "").startswith(pref)
         ]
         return {"Items": items, "LastEvaluatedKey": None}
+
+
+def test_entry_to_item_serializes_alignment_pct_as_decimal() -> None:
+    """boto3 put_item rejects Python float (production failed_put on evidence sync)."""
+    entry = _entry(layers_aligned=2)
+    entry.alignment_pct = 33.333333333333336
+    item = _entry_to_item(entry)
+    assert isinstance(item["alignment_pct"], Decimal)
+    assert item["alignment_pct"] == Decimal("33.333333333333336")
+
+
+class _FloatRejectingTable(_FakeDynamoTable):
+    def put_item(self, *, Item: dict[str, Any]) -> None:
+        for v in Item.values():
+            if isinstance(v, float):
+                raise TypeError("Float types are not supported. Use Decimal types instead.")
+        super().put_item(Item=Item)
+
+
+def test_put_entry_succeeds_when_alignment_pct_is_float() -> None:
+    table = _FloatRejectingTable()
+    repo = WatchlistMaturationRepository(table)
+    entry = _entry(symbol="AMZN", layers_aligned=2)
+    entry.alignment_pct = 40.0
+    repo.put_entry(entry)
+    assert repo.get_entry("sub-1", "AMZN", "swing") is not None
 
 
 def test_put_entry_sets_user_state_gsi_keys() -> None:

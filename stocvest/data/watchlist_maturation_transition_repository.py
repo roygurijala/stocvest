@@ -65,6 +65,11 @@ def _float(v: Any) -> float:
     return float(v or 0.0)
 
 
+def _to_decimal(v: float | int) -> Decimal:
+    """DynamoDB/boto3 rejects Python ``float`` on ``put_item`` — use ``Decimal``."""
+    return Decimal(str(v))
+
+
 class WatchlistMaturationTransitionRepository:
     def __init__(self, table: _DynamoTable) -> None:
         self._table = table
@@ -84,7 +89,7 @@ class WatchlistMaturationTransitionRepository:
             "to_state": transition.to_state,
             "layers_aligned": transition.layers_aligned,
             "layers_total": transition.layers_total,
-            "alignment_pct": transition.alignment_pct,
+            "alignment_pct": _to_decimal(transition.alignment_pct),
             "bias": transition.bias,
             "transition_type": transition.transition_type,
             "missing_layers": list(transition.missing_layers),
@@ -100,7 +105,7 @@ class WatchlistMaturationTransitionRepository:
         if transition.earnings_days_away is not None:
             item["earnings_days_away"] = transition.earnings_days_away
         if transition.price_at_event is not None:
-            item["price_at_event"] = transition.price_at_event
+            item["price_at_event"] = _to_decimal(transition.price_at_event)
         item["gsi1pk"] = _mode_gsi_pk(transition.mode)
         item["gsi1sk"] = _mode_gsi_sk(transition.recorded_at, transition.user_id, transition.symbol)
         self._table.put_item(Item=item)

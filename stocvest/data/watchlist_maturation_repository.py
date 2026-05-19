@@ -53,6 +53,11 @@ def _float(v: Any) -> float:
     return float(v or 0.0)
 
 
+def _to_decimal(v: float | int) -> Decimal:
+    """DynamoDB/boto3 rejects Python ``float`` on ``put_item`` — use ``Decimal``."""
+    return Decimal(str(v))
+
+
 class WatchlistMaturationRepository:
     """Pure Dynamo I/O for maturation items (no composite / business rules)."""
 
@@ -215,7 +220,7 @@ def _entry_to_item(entry: WatchlistEntry) -> dict[str, Any]:
         "state_change_reason": entry.state_change_reason,
         "layers_aligned": entry.layers_aligned,
         "layers_total": entry.layers_total,
-        "alignment_pct": entry.alignment_pct,
+        "alignment_pct": _to_decimal(entry.alignment_pct),
         "bias": entry.bias,
         "missing_layers": list(entry.missing_layers),
         "top_missing_reason": entry.top_missing_reason,
