@@ -5,6 +5,7 @@ import { isUsRegularSessionOpenEt } from "@/lib/market-hours-et";
 import type { EmptyStateOverviewInput } from "@/lib/scanner-empty-state";
 import type { ScannerScanSummary } from "@/lib/scanner-scan-summary";
 import type { ScannerSynthesis } from "@/lib/scanner-synthesis";
+import { volumeFillFromPctBelow } from "@/lib/scanner-volume-gap";
 
 const MEGA_CAP_LEADERS = ["NVDA", "AAPL", "MSFT", "AMZN", "META", "GOOGL", "GOOG", "TSLA"];
 
@@ -143,9 +144,17 @@ export type ClosestToQualifyingLine = {
   note: string;
 };
 
+export type ClosestQualifyingItem = {
+  symbol: string;
+  /** Shown for structure/score rows; volume rows use {@link volumeFillPct} + bar instead of % text. */
+  detail: string;
+  /** 0–100 session volume met — renders a gap bar when set. */
+  volumeFillPct?: number;
+};
+
 export type ClosestQualifyingGroup = {
   label: string;
-  items: Array<{ symbol: string; detail: string }>;
+  items: ClosestQualifyingItem[];
 };
 
 export function buildClosestToQualifyingGroups(
@@ -162,7 +171,8 @@ export function buildClosestToQualifyingGroups(
       if (volRow) {
         volume.push({
           symbol: nm.symbol,
-          detail: `−${Math.round(volRow.pct_below)}% vs expected`
+          detail: "",
+          volumeFillPct: volumeFillFromPctBelow(volRow.pct_below)
         });
         continue;
       }
@@ -175,10 +185,13 @@ export function buildClosestToQualifyingGroups(
         continue;
       }
       if (/volume|pace|session/i.test(nm.structure_note)) {
-        const pct = nm.pct_of_needed > 0 ? Math.max(1, Math.round(100 - nm.pct_of_needed)) : null;
         volume.push({
           symbol: nm.symbol,
-          detail: pct != null ? `−${pct}% vs expected` : "volume below pace"
+          detail: nm.pct_of_needed > 0 ? "" : "volume below pace",
+          volumeFillPct:
+            nm.pct_of_needed > 0
+              ? Math.max(0, Math.min(100, Math.round(nm.pct_of_needed)))
+              : undefined
         });
       } else {
         structure.push({

@@ -2,6 +2,7 @@
 
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import type { ScannerSynthesisNearMiss } from "@/lib/scanner-synthesis";
+import { volumeGapAriaLabel } from "@/lib/scanner-volume-gap";
 import { useTheme } from "@/lib/theme-provider";
 
 type Props = {
@@ -82,7 +83,9 @@ function NearMissRow({
           aria-valuenow={pct}
           aria-valuemin={0}
           aria-valuemax={100}
+          aria-label={volumeGapAriaLabel(row.symbol, pct)}
           data-testid={`scanner-near-miss-bar-${row.symbol}`}
+          className="scanner-volume-gap__track"
           style={{
             height: 6,
             borderRadius: borderRadius.sm,
@@ -95,13 +98,11 @@ function NearMissRow({
             style={{
               width: `${pct}%`,
               height: "100%",
-              background: "#d97706"
+              background: "#d97706",
+              minWidth: pct > 0 ? 2 : 0
             }}
           />
         </div>
-        <p style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted }}>
-          {pct}% of needed volume
-        </p>
         {row.is_market_proxy ? (
           <p
             data-testid="scanner-near-miss-proxy-note"

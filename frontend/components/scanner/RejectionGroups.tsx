@@ -6,6 +6,7 @@ import { ChevronDown } from "lucide-react";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import type { ScannerSynthesisRejectionGroups } from "@/lib/scanner-synthesis";
 import { useTheme } from "@/lib/theme-provider";
+import { VolumeGapBarList } from "@/components/scanner/VolumeGapBar";
 
 type Props = {
   groups: ScannerSynthesisRejectionGroups;
@@ -137,29 +138,9 @@ export function RejectionGroups({ groups, qualifiedCount = 0, evaluatedCount }: 
           contextLine="All affected by the same market-wide condition"
           defaultOpen
         >
-          <ChipGrid>
-            {session.map((row) => (
-              <span
-                key={row.symbol}
-                data-testid={`scanner-rejection-chip-${row.symbol}`}
-                className="font-mono"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: spacing[1],
-                  padding: `${spacing[1]} ${spacing[2]}`,
-                  borderRadius: borderRadius.md,
-                  border: `1px solid ${colors.border}`,
-                  background: colors.surface,
-                  fontSize: typography.scale.xs,
-                  color: colors.text
-                }}
-              >
-                {row.symbol}
-                <span style={{ color: "#d97706", fontWeight: 600 }}>−{Math.round(row.pct_below)}%</span>
-              </span>
-            ))}
-          </ChipGrid>
+          <div data-testid="scanner-rejection-chip-grid">
+            <VolumeGapBarList rows={session} limit={8} testIdPrefix="scanner-rejection-volume-gap" />
+          </div>
         </CollapsibleGroup>
       ) : null}
 

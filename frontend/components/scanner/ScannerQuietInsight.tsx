@@ -8,6 +8,7 @@ import type { ScannerEvaluationTraceRow } from "@/lib/scanner-setups-response";
 import { useTheme } from "@/lib/theme-provider";
 import { ScannerCollapsible } from "@/components/scanner/ScannerCollapsible";
 import { ScannerEvaluationDetails } from "@/components/scanner/ScannerEvaluationDetails";
+import { VolumeGapBar } from "@/components/scanner/VolumeGapBar";
 
 type Props = {
   bullets: string[];
@@ -99,13 +100,24 @@ export function ScannerQuietInsight({
                 }}
               >
                 {group.items.map((row) => (
-                  <li
-                    key={`${group.label}-${row.symbol}`}
-                    data-testid={`scanner-closest-${row.symbol}`}
-                    style={{ fontSize: typography.scale.sm, color: colors.text }}
-                  >
-                    <span className="font-mono font-semibold">{row.symbol}</span>
-                    <span style={{ color: colors.textMuted }}> · {row.detail}</span>
+                  <li key={`${group.label}-${row.symbol}`}>
+                    {row.volumeFillPct != null ? (
+                      <VolumeGapBar
+                        symbol={row.symbol}
+                        fillPct={row.volumeFillPct}
+                        testId={`scanner-closest-${row.symbol}`}
+                      />
+                    ) : (
+                      <div
+                        data-testid={`scanner-closest-${row.symbol}`}
+                        style={{ fontSize: typography.scale.sm, color: colors.text }}
+                      >
+                        <span className="font-mono font-semibold">{row.symbol}</span>
+                        {row.detail ? (
+                          <span style={{ color: colors.textMuted }}> · {row.detail}</span>
+                        ) : null}
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>

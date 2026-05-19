@@ -131,7 +131,7 @@ describe("ScannerQuietInsight", () => {
       <ScannerQuietInsight
         bullets={["Broad participation below intraday pace"]}
         closestGroups={[
-          { label: "Volume constrained", items: [{ symbol: "AMZN", detail: "−8% vs expected" }] }
+          { label: "Volume constrained", items: [{ symbol: "AMZN", detail: "", volumeFillPct: 92 }] }
         ]}
         synthesis={
           {
@@ -159,9 +159,11 @@ describe("ScannerQuietInsight", () => {
 
     fireEvent.click(screen.getByText("Scan insight"));
     expect(screen.getByTestId("scanner-insight-market-context")).toBeInTheDocument();
-    expect(screen.getByTestId("scanner-closest-AMZN")).toBeInTheDocument();
+    expect(screen.getByTestId("scanner-closest-AMZN-fill")).toHaveStyle({ width: "92%" });
     expect(screen.getByText("Details")).toBeInTheDocument();
     expect(screen.getByTestId("scanner-evaluation-details-body")).toBeInTheDocument();
+    expect(screen.getByTestId("scanner-eval-volume-gap-SOFI-fill")).toHaveStyle({ width: "88%" });
+    expect(screen.queryByText(/−12%/)).toBeNull();
     expect(el.querySelector("details")).toBeNull();
   });
 });

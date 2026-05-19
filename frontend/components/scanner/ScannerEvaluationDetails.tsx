@@ -7,6 +7,7 @@ import type { ScannerSynthesis } from "@/lib/scanner-synthesis";
 import type { ScannerEvaluationTraceRow } from "@/lib/scanner-setups-response";
 import { useTheme } from "@/lib/theme-provider";
 import { ScannerCollapsible } from "@/components/scanner/ScannerCollapsible";
+import { VolumeGapBarList } from "@/components/scanner/VolumeGapBar";
 
 const CHIP_PREVIEW_LIMIT = 5;
 
@@ -71,16 +72,20 @@ export function ScannerEvaluationDetails({
               hint={`${sessionVol.length} symbol${sessionVol.length === 1 ? "" : "s"} affected`}
               colors={colors}
             >
-              <LimitedChipRow
-                rows={sessionVol}
-                colors={colors}
-                renderChip={(r) => (
-                  <>
-                    {r.symbol}
-                    <span style={{ color: "#d97706", fontWeight: 600 }}> −{Math.round(r.pct_below)}%</span>
-                  </>
-                )}
-              />
+              {flat ? (
+                <VolumeGapBarList rows={sessionVol} testIdPrefix="scanner-eval-volume-gap" />
+              ) : (
+                <LimitedChipRow
+                  rows={sessionVol}
+                  colors={colors}
+                  renderChip={(r) => (
+                    <>
+                      {r.symbol}
+                      <span style={{ color: "#d97706", fontWeight: 600 }}> −{Math.round(r.pct_below)}%</span>
+                    </>
+                  )}
+                />
+              )}
             </GroupBlock>
           ) : null}
           {liquidity.length > 0 ? (

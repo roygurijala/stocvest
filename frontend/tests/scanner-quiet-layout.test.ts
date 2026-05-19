@@ -90,11 +90,13 @@ describe("scanner quiet copy", () => {
     expect(wide).toMatch(/Market-wide condition/i);
   });
 
-  test("closest groups use volume percentages", () => {
+  test("closest groups attach volume fill for gap bars", () => {
     const groups = buildClosestToQualifyingGroups(synthesis, emptySummary());
     expect(groups.some((g) => g.label === "Volume constrained")).toBe(true);
     const vol = groups.find((g) => g.label === "Volume constrained");
-    expect(vol?.items.some((i) => i.symbol === "AMZN" && i.detail.includes("92"))).toBe(true);
+    const amzn = vol?.items.find((i) => i.symbol === "AMZN");
+    expect(amzn?.volumeFillPct).toBe(8);
+    expect(amzn?.detail).toBe("");
   });
 
   test("desk interpretive lines are mechanism labels, not macro why copy", () => {

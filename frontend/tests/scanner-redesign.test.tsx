@@ -106,8 +106,9 @@ describe("scanner redesign components", () => {
       />
     );
     const grid = screen.getByTestId("scanner-rejection-chip-grid");
-    expect(within(grid).getAllByTestId(/scanner-rejection-chip-/)).toHaveLength(5);
-    expect(screen.getByText(/−68%/)).toBeTruthy();
+    expect(within(grid).getAllByTestId(/scanner-rejection-volume-gap-.*-fill/)).toHaveLength(5);
+    expect(screen.getByTestId("scanner-rejection-volume-gap-SPY-fill")).toHaveStyle({ width: "32%" });
+    expect(screen.queryByText(/−68%/)).toBeNull();
   });
 
   test("test_liquidity_group_closed_by_default", () => {

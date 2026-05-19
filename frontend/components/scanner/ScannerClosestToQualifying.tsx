@@ -3,6 +3,7 @@
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import type { ClosestQualifyingGroup } from "@/lib/scanner-quiet-copy";
 import { useTheme } from "@/lib/theme-provider";
+import { VolumeGapBar } from "@/components/scanner/VolumeGapBar";
 
 type Props = {
   groups: ClosestQualifyingGroup[];
@@ -49,13 +50,24 @@ export function ScannerClosestToQualifying({ groups }: Props) {
             </p>
             <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: spacing[1] }}>
               {group.items.map((row) => (
-                <li
-                  key={`${group.label}-${row.symbol}`}
-                  data-testid={`scanner-closest-${row.symbol}`}
-                  style={{ fontSize: typography.scale.sm, color: colors.text, lineHeight: 1.5 }}
-                >
-                  <span className="font-mono font-semibold">{row.symbol}</span>
-                  <span style={{ color: colors.textMuted }}> — {row.detail}</span>
+                <li key={`${group.label}-${row.symbol}`}>
+                  {row.volumeFillPct != null ? (
+                    <VolumeGapBar
+                      symbol={row.symbol}
+                      fillPct={row.volumeFillPct}
+                      testId={`scanner-closest-${row.symbol}`}
+                    />
+                  ) : (
+                    <div
+                      data-testid={`scanner-closest-${row.symbol}`}
+                      style={{ fontSize: typography.scale.sm, color: colors.text, lineHeight: 1.5 }}
+                    >
+                      <span className="font-mono font-semibold">{row.symbol}</span>
+                      {row.detail ? (
+                        <span style={{ color: colors.textMuted }}> — {row.detail}</span>
+                      ) : null}
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>

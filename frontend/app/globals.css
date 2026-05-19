@@ -566,3 +566,8 @@ a {
 .scanner-insight-details [data-testid="scanner-evaluation-details-body"] p {
   font-size: 0.75rem;
 }
+
+/* Volume gap bars — symbol + horizontal fill (session pace vs requirement) */
+.scanner-volume-gap__track {
+  width: 100%;
+}
