@@ -66,6 +66,8 @@ import {
   getCompositeTransportError,
   type CompositeTransportError
 } from "@/lib/api/composite-transport";
+import { isInsufficientCompositeResponse } from "@/lib/api/swing-composite";
+import { notifyWatchlistMaturationUpdated } from "@/lib/watchlist-maturation-bump";
 import { STOCVEST_SWR_CACHE_NS } from "@/lib/swr/config";
 
 /** Trading-mode discriminator for the composite endpoint. */
@@ -126,7 +128,16 @@ async function fetchSignalComposite(
       `Composite request to ${path} failed: ${response.status} ${response.statusText}`
     );
   }
-  return (await response.json()) as SignalCompositeResult;
+  const body = (await response.json()) as SignalCompositeResult;
+  if (
+    !getCompositeTransportError(body) &&
+    !isInsufficientCompositeResponse(body) &&
+    !String(body.error ?? "").trim() &&
+    Array.isArray(body.layers)
+  ) {
+    notifyWatchlistMaturationUpdated(symbol.trim().toUpperCase(), mode);
+  }
+  return body;
 }
 
 export function useSignalComposite(

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Columns2, TrendingUp, Zap } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CuteLoader } from "@/components/cute-loader";
@@ -21,6 +21,10 @@ import { borderRadius, colorTokens, spacing, surfaceGlowClassName } from "@/lib/
 import { watchlistSignalsOpenAriaLabel, watchlistToSignalsHref } from "@/lib/nav/watchlist-signals-deeplink";
 import type { MarketStatusPayload, SnapshotPayload } from "@/lib/api/market";
 import { isRegularSessionOpen } from "@/lib/market/regular-session";
+import {
+  consumeWatchlistMaturationBump,
+  WATCHLIST_MATURATION_UPDATED_EVENT
+} from "@/lib/watchlist-maturation-bump";
 import { rankSymbolCandidates } from "@/lib/symbol-suggestion-rank";
 import {
   dedupeWatchlistSymbolsUpper as dedupeSymbolsUpper,
@@ -115,6 +119,7 @@ type WatchlistsPageClientProps = {
 export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   const { dualDeskMaturation = false, planBadgeLabel = "Free" } = props;
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const { colors, theme } = useTheme();
   const [rows, setRows] = useState<WatchlistRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -329,15 +334,42 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     maturationReloadNonce
   ]);
 
+  const requestMaturationReload = useCallback(() => {
+    if (maturationEligible && activeSymbolsDeduped.length > 0) {
+      setMaturationReloadNonce((n) => n + 1);
+    }
+  }, [maturationEligible, activeSymbolsDeduped.length]);
+
   useEffect(() => {
     const onVisible = () => {
-      if (document.visibilityState === "visible" && maturationEligible && activeSymbolsDeduped.length > 0) {
-        setMaturationReloadNonce((n) => n + 1);
-      }
+      if (document.visibilityState !== "visible") return;
+      consumeWatchlistMaturationBump();
+      requestMaturationReload();
+    };
+    const onMaturationUpdated = () => requestMaturationReload();
+    const onFocus = () => {
+      if (consumeWatchlistMaturationBump()) requestMaturationReload();
+    };
+    const onPageShow = () => {
+      if (consumeWatchlistMaturationBump()) requestMaturationReload();
     };
     document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [maturationEligible, activeSymbolsDeduped.length]);
+    window.addEventListener(WATCHLIST_MATURATION_UPDATED_EVENT, onMaturationUpdated);
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("pageshow", onPageShow);
+    if (consumeWatchlistMaturationBump()) requestMaturationReload();
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener(WATCHLIST_MATURATION_UPDATED_EVENT, onMaturationUpdated);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("pageshow", onPageShow);
+    };
+  }, [requestMaturationReload]);
+
+  useEffect(() => {
+    if (!pathname?.includes("/dashboard/watchlists")) return;
+    if (consumeWatchlistMaturationBump()) requestMaturationReload();
+  }, [pathname, requestMaturationReload]);
 
   useEffect(() => {
     let cancelled = false;
