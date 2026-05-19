@@ -486,17 +486,56 @@ a {
   }
 }
 
-.scanner-quiet-insight__summary::-webkit-details-marker,
-.scanner-cause-details__summary::-webkit-details-marker {
+/* Scanner collapsible sections — clearly tappable disclosure rows */
+.scanner-collapsible {
+  border-left: 3px solid color-mix(in srgb, var(--color-accent) 55%, transparent);
+}
+.scanner-collapsible[open] {
+  border-left-color: var(--color-accent);
+}
+.scanner-collapsible__summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  transition: background 0.15s ease;
+}
+.scanner-collapsible__summary::-webkit-details-marker {
   display: none;
 }
-.scanner-quiet-insight__summary::before,
-.scanner-cause-details__summary::before {
-  content: "▸ ";
-  display: inline-block;
-  transition: transform 0.15s ease;
+.scanner-collapsible__summary:hover {
+  background: color-mix(in srgb, var(--color-accent) 6%, var(--color-surface-muted));
 }
-.scanner-quiet-insight[open] .scanner-quiet-insight__summary::before,
-.scanner-cause-details[open] .scanner-cause-details__summary::before {
+.scanner-collapsible[open] > .scanner-collapsible__summary {
+  border-bottom: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-accent) 4%, var(--color-surface-muted));
+}
+.scanner-collapsible__chevron {
+  display: flex;
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+  color: var(--color-text-muted);
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+.scanner-collapsible[open] > .scanner-collapsible__summary .scanner-collapsible__chevron {
   transform: rotate(90deg);
+  color: var(--color-accent);
+}
+.scanner-collapsible--embedded {
+  border: 1px solid color-mix(in srgb, var(--color-border) 90%, transparent);
+  border-left: 2px solid color-mix(in srgb, var(--color-accent) 45%, transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--color-surface) 60%, transparent);
+}
+.scanner-collapsible--embedded[open] {
+  border-left-color: var(--color-accent);
+}
+.scanner-collapsible--embedded > .scanner-collapsible__summary {
+  padding: 0.5rem 0.75rem;
+}
+.scanner-collapsible--embedded[open] > .scanner-collapsible__summary {
+  border-bottom-color: color-mix(in srgb, var(--color-border) 70%, transparent);
 }

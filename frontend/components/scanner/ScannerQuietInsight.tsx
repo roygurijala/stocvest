@@ -1,10 +1,12 @@
 "use client";
 
-import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { spacing, typography } from "@/lib/design-system";
 import type { ClosestQualifyingGroup } from "@/lib/scanner-quiet-copy";
+import { SCANNER_INSIGHT_SESSION_KEY } from "@/lib/scanner/scanner-disclosure-prefs";
 import type { ScannerSynthesis } from "@/lib/scanner-synthesis";
 import type { ScannerEvaluationTraceRow } from "@/lib/scanner-setups-response";
 import { useTheme } from "@/lib/theme-provider";
+import { ScannerCollapsible } from "@/components/scanner/ScannerCollapsible";
 import { ScannerEvaluationDetails } from "@/components/scanner/ScannerEvaluationDetails";
 
 type Props = {
@@ -15,9 +17,16 @@ type Props = {
   deskFilter?: "swing" | "day" | "all";
 };
 
+function insightHint(closest: number, hasWhy: boolean, hasEval: boolean): string {
+  const parts: string[] = [];
+  if (closest > 0) parts.push(`${closest} near threshold`);
+  if (hasWhy) parts.push("market context");
+  if (hasEval) parts.push("gate breakdown");
+  return parts.join(" · ");
+}
+
 /**
  * Single optional drill-down on quiet scans — keeps the default view minimal.
- * Market scope stays in the header; this block is for symbols + gates + trace.
  */
 export function ScannerQuietInsight({
   bullets,
@@ -27,7 +36,8 @@ export function ScannerQuietInsight({
   deskFilter = "all"
 }: Props) {
   const { colors } = useTheme();
-  const hasClosest = closestGroups.length > 0;
+  const closestCount = closestGroups.reduce((n, g) => n + g.items.length, 0);
+  const hasClosest = closestCount > 0;
   const hasWhy = bullets.length > 0;
   const hasEval =
     (synthesis?.rejection_groups.session_volume.length ?? 0) +
@@ -38,29 +48,13 @@ export function ScannerQuietInsight({
   if (!hasClosest && !hasWhy && !hasEval) return null;
 
   return (
-    <details
-      data-testid="scanner-quiet-insight"
-      className="scanner-quiet-insight"
-      style={{
-        borderRadius: borderRadius.lg,
-        border: `1px solid color-mix(in srgb, ${colors.border} 80%, transparent)`,
-        background: colors.surfaceMuted,
-        padding: spacing[3]
-      }}
+    <ScannerCollapsible
+      testId="scanner-quiet-insight"
+      title="Scan insight"
+      hint={insightHint(closestCount, hasWhy, hasEval)}
+      persistSessionKey={SCANNER_INSIGHT_SESSION_KEY}
     >
-      <summary
-        className="scanner-quiet-insight__summary"
-        style={{
-          fontSize: typography.scale.sm,
-          fontWeight: 600,
-          color: colors.textMuted,
-          cursor: "pointer",
-          listStyle: "none"
-        }}
-      >
-        Scan insight
-      </summary>
-      <div style={{ marginTop: spacing[3], display: "grid", gap: spacing[3] }}>
+      <div style={{ display: "grid", gap: spacing[3] }}>
         {hasClosest ? (
           <div data-testid="scanner-closest-to-qualifying">
             <p
@@ -118,9 +112,14 @@ export function ScannerQuietInsight({
         ) : null}
 
         {hasEval ? (
-          <ScannerEvaluationDetails synthesis={synthesis} traceRows={traceRows} deskFilter={deskFilter} />
+          <ScannerEvaluationDetails
+            synthesis={synthesis}
+            traceRows={traceRows}
+            deskFilter={deskFilter}
+            embedded
+          />
         ) : null}
       </div>
-    </details>
+    </ScannerCollapsible>
   );
 }

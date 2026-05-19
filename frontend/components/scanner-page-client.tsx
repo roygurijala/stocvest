@@ -1328,9 +1328,8 @@ export function ScannerPageClient({
         isRefreshing={isPending}
         onRefresh={onManualRefresh}
         hideWatchlistStrip={showQuietInterpretation}
-        quietCompact={showQuietInterpretation}
         marketScopeLine={showQuietInterpretation ? marketScopeLine : null}
-        nextScanLabel={showQuietInterpretation && marketOpen ? scanCountdownLabel : null}
+        nextScanLabel={marketOpen ? scanCountdownLabel : null}
       />
       {!showQuietInterpretation ? <ScannerOutcomeCards summary={scanSummary} /> : null}
       {!showQuietInterpretation ? (

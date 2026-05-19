@@ -18,34 +18,39 @@ type Props = {
   isRefreshing?: boolean;
   onRefresh: () => void;
   hideWatchlistStrip?: boolean;
-  /** Quiet scan: one minimal header — status, desk rails, scope, watchlist line. */
-  quietCompact?: boolean;
   marketScopeLine?: string | null;
   nextScanLabel?: string | null;
 };
 
+/** Unified Scanner header — same chrome for quiet and active scans. */
 export function ScannerScanResultHero({
   summary,
   synthesis,
   isRefreshing,
   onRefresh,
   hideWatchlistStrip = false,
-  quietCompact = false,
   marketScopeLine = null,
   nextScanLabel = null
 }: Props) {
   const { colors } = useTheme();
   const wl = summary.watchlist;
   const quietSubline = buildScannerQuietSubline(summary, synthesis);
+  const isQuiet = summary.qualifying.total === 0;
   const showDeskBreakdown = summary.qualifying.total > 0;
-  const quietScan = summary.qualifying.total === 0 && !quietCompact;
 
   const sessionLine = summary.session.regular_open
     ? "Session open"
     : `Closed · next ${summary.session.next_evaluation_label}`;
 
-  const watchlistQuiet =
-    quietCompact && wl ? buildWatchlistQuietInsight(wl, summary.qualifying.total) : null;
+  const watchlistQuiet = isQuiet && wl ? buildWatchlistQuietInsight(wl, summary.qualifying.total) : null;
+
+  const headline = isQuiet ? (
+    quietSubline
+  ) : (
+    <>
+      {summary.qualifying.total} qualifying setup{summary.qualifying.total === 1 ? "" : "s"}
+    </>
+  );
 
   return (
     <section
@@ -53,8 +58,8 @@ export function ScannerScanResultHero({
       className={surfaceGlowClassName}
       style={{
         display: "grid",
-        gap: quietCompact ? spacing[2] : spacing[3],
-        padding: quietCompact ? spacing[3] : spacing[4],
+        gap: spacing[2],
+        padding: spacing[3],
         borderRadius: borderRadius.xl,
         border: `1px solid ${colors.border}`,
         background: colors.surface
@@ -86,7 +91,7 @@ export function ScannerScanResultHero({
             {sessionLine}
             <span aria-hidden> · </span>
             {summary.session.last_scan_label}
-            {quietCompact && nextScanLabel ? (
+            {nextScanLabel ? (
               <>
                 <span aria-hidden> · </span>
                 <span data-testid="scanner-next-scan">Next scan {nextScanLabel}</span>
@@ -117,113 +122,75 @@ export function ScannerScanResultHero({
         </button>
       </div>
 
-      {quietCompact ? (
-        <>
-          <div
-            data-testid="scanner-quiet-ribbon"
-            className="scanner-quiet-ribbon"
+      <div
+        data-testid={isQuiet ? "scanner-quiet-ribbon" : "scanner-active-ribbon"}
+        className="scanner-quiet-ribbon"
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "flex-end",
+          justifyContent: "space-between",
+          gap: spacing[3]
+        }}
+      >
+        <div style={{ flex: "1 1 10rem", minWidth: 0 }}>
+          <p
+            data-testid={isQuiet ? "scanner-scan-quiet-subline" : "scanner-scan-qualifying-total"}
             style={{
-              display: "flex",
-              flexWrap: "wrap",
-              alignItems: "flex-end",
-              justifyContent: "space-between",
-              gap: spacing[3]
+              margin: 0,
+              fontSize: typography.scale.lg,
+              fontWeight: 600,
+              color: colors.text,
+              lineHeight: 1.25
             }}
           >
+            {headline}
+          </p>
+          {!isQuiet ? (
             <p
               data-testid="scanner-scan-quiet-subline"
-              className="scanner-quiet-ribbon__status"
-              style={{
-                margin: 0,
-                flex: "1 1 10rem",
-                minWidth: 0,
-                fontSize: typography.scale.lg,
-                fontWeight: 600,
-                color: colors.text,
-                lineHeight: 1.25
-              }}
+              style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.sm, color: colors.textMuted }}
             >
               {quietSubline}
             </p>
-            <ScannerDeskRails summary={summary} />
-          </div>
-          {marketScopeLine ? (
-            <p
-              data-testid="scanner-market-scope-inline"
-              style={{
-                margin: 0,
-                fontSize: typography.scale.sm,
-                color: colors.textMuted,
-                lineHeight: 1.45
-              }}
-            >
-              {marketScopeLine}
-            </p>
           ) : null}
-          {watchlistQuiet ? (
-            <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted, lineHeight: 1.45 }}>
-              <span style={{ color: colors.text }}>{watchlistQuiet.headline}</span>
-              {" — "}
-              {watchlistQuiet.subline}
-              {" · "}
-              <Link href="/dashboard/watchlists" style={{ color: colors.accent, fontWeight: 600, textDecoration: "none" }}>
-                Watchlist
-              </Link>
-            </p>
-          ) : null}
-        </>
-      ) : (
-        <>
-          <div>
-            {quietScan ? (
-              <p
-                data-testid="scanner-scan-quiet-subline"
-                style={{
-                  margin: 0,
-                  fontSize: typography.scale.xl,
-                  fontWeight: 600,
-                  color: colors.text,
-                  lineHeight: 1.25
-                }}
-              >
-                {quietSubline}
-              </p>
-            ) : (
-              <>
-                <p
-                  data-testid="scanner-scan-qualifying-total"
-                  style={{
-                    margin: 0,
-                    fontSize: typography.scale["2xl"],
-                    fontWeight: 700,
-                    color: colors.text,
-                    lineHeight: 1.15
-                  }}
-                >
-                  {summary.qualifying.total} qualifying setup{summary.qualifying.total === 1 ? "" : "s"}
-                </p>
-                <p
-                  data-testid="scanner-scan-quiet-subline"
-                  style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.sm, color: colors.textMuted }}
-                >
-                  {quietSubline}
-                </p>
-              </>
-            )}
-            {showDeskBreakdown ? (
-              <p
-                data-testid="scanner-scan-desk-breakdown"
-                style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted }}
-              >
-                {summary.quiet.detail_line}
-              </p>
-            ) : null}
-          </div>
-          {wl && !hideWatchlistStrip ? (
-            <WatchlistInsightRow colors={colors} wl={wl} qualifyingTotal={summary.qualifying.total} />
-          ) : null}
-        </>
-      )}
+        </div>
+        <ScannerDeskRails summary={summary} />
+      </div>
+
+      {showDeskBreakdown ? (
+        <p
+          data-testid="scanner-scan-desk-breakdown"
+          style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted }}
+        >
+          {summary.quiet.detail_line}
+        </p>
+      ) : null}
+
+      {isQuiet && marketScopeLine ? (
+        <p
+          data-testid="scanner-market-scope-inline"
+          style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted, lineHeight: 1.45 }}
+        >
+          {marketScopeLine}
+        </p>
+      ) : null}
+
+      {watchlistQuiet ? (
+        <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted, lineHeight: 1.45 }}>
+          <span style={{ color: colors.text }}>{watchlistQuiet.headline}</span>
+          {" — "}
+          {watchlistQuiet.subline}
+          {" · "}
+          <Link href="/dashboard/watchlists" style={{ color: colors.accent, fontWeight: 600, textDecoration: "none" }}>
+            Watchlist
+          </Link>
+        </p>
+      ) : null}
+
+      {!isQuiet && wl && !hideWatchlistStrip ? (
+        <WatchlistInsightRow colors={colors} wl={wl} qualifyingTotal={summary.qualifying.total} />
+      ) : null}
     </section>
   );
 }

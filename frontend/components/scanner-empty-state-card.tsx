@@ -148,24 +148,26 @@ export function ScannerEmptyStateCard({
         />
       ) : null}
 
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing[3] }}>
-        <span
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: spacing[2],
-            color: railHue,
-            fontWeight: 700,
-            fontSize: typography.scale.xs,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase"
-          }}
-        >
-          <Activity size={14} aria-hidden />
-          {accent.pillLabel}
-        </span>
-        <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>{deskLabel}</span>
-      </div>
+      {!interpretive ? (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing[3] }}>
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: spacing[2],
+              color: railHue,
+              fontWeight: 700,
+              fontSize: typography.scale.xs,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase"
+            }}
+          >
+            <Activity size={14} aria-hidden />
+            {accent.pillLabel}
+          </span>
+          <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>{deskLabel}</span>
+        </div>
+      ) : null}
 
       <p
         data-testid={`scanner-empty-state-${surfaceSlug}-headline`}

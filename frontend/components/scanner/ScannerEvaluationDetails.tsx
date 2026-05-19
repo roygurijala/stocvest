@@ -1,12 +1,12 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useState } from "react";
-import { ChevronDown } from "lucide-react";
-import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { spacing, typography } from "@/lib/design-system";
+import { borderRadius } from "@/lib/design-system";
 import type { ScannerSynthesis } from "@/lib/scanner-synthesis";
 import type { ScannerEvaluationTraceRow } from "@/lib/scanner-setups-response";
 import { useTheme } from "@/lib/theme-provider";
+import { ScannerCollapsible } from "@/components/scanner/ScannerCollapsible";
 
 const CHIP_PREVIEW_LIMIT = 5;
 
@@ -14,6 +14,8 @@ type Props = {
   synthesis?: ScannerSynthesis | null;
   traceRows?: ScannerEvaluationTraceRow[];
   deskFilter?: "swing" | "day" | "all";
+  /** Nested under Scan insight — shared collapsible styling, lighter chrome. */
+  embedded?: boolean;
 };
 
 function gateLabel(gate: string): string {
@@ -30,9 +32,13 @@ function gateLabel(gate: string): string {
   }
 }
 
-export function ScannerEvaluationDetails({ synthesis, traceRows = [], deskFilter = "day" }: Props) {
+export function ScannerEvaluationDetails({
+  synthesis,
+  traceRows = [],
+  deskFilter = "day",
+  embedded = false
+}: Props) {
   const { colors } = useTheme();
-  const [open, setOpen] = useState(false);
 
   const filteredTrace =
     deskFilter === "all" ? traceRows : traceRows.filter((r) => r.desk === deskFilter);
@@ -46,138 +52,102 @@ export function ScannerEvaluationDetails({ synthesis, traceRows = [], deskFilter
   if (!hasSynthesis && !hasTrace) return null;
 
   const broadMarketInsight =
-    sessionVol.length >= 3
-      ? "This is a broad market condition — not symbol-specific."
-      : null;
+    sessionVol.length >= 3 ? "This is a broad market condition — not symbol-specific." : null;
+
+  const gateCount = sessionVol.length + liquidity.length + structure.length;
+  const hint = hasSynthesis
+    ? `${gateCount} gate group${gateCount === 1 ? "" : "s"}`
+    : `${filteredTrace.length} trace row${filteredTrace.length === 1 ? "" : "s"}`;
+
+  const body = (
+    <div data-testid="scanner-evaluation-details-body" style={{ display: "grid", gap: spacing[3] }}>
+      {hasSynthesis ? (
+        <>
+          {sessionVol.length > 0 ? (
+            <GroupBlock
+              title="Low participation (market-wide)"
+              hint={`${sessionVol.length} symbol${sessionVol.length === 1 ? "" : "s"} affected`}
+              colors={colors}
+            >
+              <LimitedChipRow
+                rows={sessionVol}
+                colors={colors}
+                renderChip={(r) => (
+                  <>
+                    {r.symbol}
+                    <span style={{ color: "#d97706", fontWeight: 600 }}> −{Math.round(r.pct_below)}%</span>
+                  </>
+                )}
+              />
+            </GroupBlock>
+          ) : null}
+          {liquidity.length > 0 ? (
+            <GroupBlock
+              title={`Permanent liquidity filter · ${liquidity.length} symbol${liquidity.length === 1 ? "" : "s"}`}
+              colors={colors}
+            >
+              <LimitedChipRow rows={liquidity} colors={colors} renderChip={(r) => r.symbol} />
+            </GroupBlock>
+          ) : null}
+          {structure.length > 0 ? (
+            <GroupBlock
+              title={`Structure gates · ${structure.length} symbol${structure.length === 1 ? "" : "s"}`}
+              colors={colors}
+            >
+              <LimitedChipRow
+                rows={structure}
+                colors={colors}
+                renderChip={(r) => (
+                  <>
+                    {r.symbol}
+                    <span style={{ color: colors.accent }}> · {r.reason}</span>
+                  </>
+                )}
+              />
+            </GroupBlock>
+          ) : null}
+          {broadMarketInsight ? (
+            <p
+              data-testid="scanner-evaluation-broad-market-insight"
+              style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.5 }}
+            >
+              {broadMarketInsight}
+            </p>
+          ) : null}
+        </>
+      ) : (
+        <LimitedChipRow
+          rows={filteredTrace}
+          colors={colors}
+          renderChip={(row) => (
+            <>
+              {row.symbol}
+              <span style={{ color: colors.textMuted }}> · {gateLabel(row.gate)}</span>
+            </>
+          )}
+        />
+      )}
+    </div>
+  );
+
+  if (embedded) {
+    return (
+      <ScannerCollapsible
+        testId="scanner-evaluation-details"
+        title="Evaluation details"
+        hint={hint}
+        embedded
+        defaultOpen={false}
+      >
+        {body}
+      </ScannerCollapsible>
+    );
+  }
 
   return (
-    <section
-      data-testid="scanner-evaluation-details"
-      style={{
-        borderRadius: borderRadius.lg,
-        border: `1px solid ${colors.border}`,
-        background: colors.surfaceMuted
-      }}
-    >
-      <button
-        type="button"
-        data-testid="scanner-evaluation-details-toggle"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        style={{
-          width: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: spacing[2],
-          padding: spacing[3],
-          border: "none",
-          background: "transparent",
-          color: colors.text,
-          cursor: "pointer",
-          textAlign: "left"
-        }}
-      >
-        <span>
-          <span
-            style={{
-              display: "block",
-              fontSize: 10,
-              fontWeight: 700,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              color: colors.textMuted
-            }}
-          >
-            Evaluation details
-          </span>
-          <span
-            style={{
-              display: "block",
-              marginTop: spacing[1],
-              fontSize: typography.scale.xs,
-              color: colors.textMuted
-            }}
-          >
-            Grouped gate results
-          </span>
-        </span>
-        <ChevronDown
-          size={16}
-          style={{ flexShrink: 0, transform: open ? "rotate(180deg)" : undefined, transition: "transform 0.15s ease" }}
-        />
-      </button>
-
-      {open ? (
-        <div
-          data-testid="scanner-evaluation-details-body"
-          style={{ padding: `0 ${spacing[3]} ${spacing[3]}`, display: "grid", gap: spacing[3] }}
-        >
-          {hasSynthesis ? (
-            <>
-              {sessionVol.length > 0 ? (
-                <GroupBlock
-                  title="Low participation (market-wide)"
-                  hint={`${sessionVol.length} symbol${sessionVol.length === 1 ? "" : "s"} affected`}
-                  colors={colors}
-                >
-                  <LimitedChipRow rows={sessionVol} colors={colors} renderChip={(r) => (
-                    <>
-                      {r.symbol}
-                      <span style={{ color: "#d97706", fontWeight: 600 }}> −{Math.round(r.pct_below)}%</span>
-                    </>
-                  )} />
-                </GroupBlock>
-              ) : null}
-              {liquidity.length > 0 ? (
-                <GroupBlock
-                  title={`Permanent liquidity filter · ${liquidity.length} symbol${liquidity.length === 1 ? "" : "s"}`}
-                  colors={colors}
-                >
-                  <LimitedChipRow rows={liquidity} colors={colors} renderChip={(r) => r.symbol} />
-                </GroupBlock>
-              ) : null}
-              {structure.length > 0 ? (
-                <GroupBlock
-                  title={`Structure gates · ${structure.length} symbol${structure.length === 1 ? "" : "s"}`}
-                  colors={colors}
-                >
-                  <LimitedChipRow
-                    rows={structure}
-                    colors={colors}
-                    renderChip={(r) => (
-                      <>
-                        {r.symbol}
-                        <span style={{ color: colors.accent }}> · {r.reason}</span>
-                      </>
-                    )}
-                  />
-                </GroupBlock>
-              ) : null}
-              {broadMarketInsight ? (
-                <p
-                  data-testid="scanner-evaluation-broad-market-insight"
-                  style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.5 }}
-                >
-                  {broadMarketInsight}
-                </p>
-              ) : null}
-            </>
-          ) : (
-            <LimitedChipRow
-              rows={filteredTrace}
-              colors={colors}
-              renderChip={(row) => (
-                <>
-                  {row.symbol}
-                  <span style={{ color: colors.textMuted }}> · {gateLabel(row.gate)}</span>
-                </>
-              )}
-            />
-          )}
-        </div>
-      ) : null}
-    </section>
+    <ScannerCollapsible testId="scanner-evaluation-details" title="Evaluation details" hint={hint} defaultOpen={false}>
+      {body}
+    </ScannerCollapsible>
   );
 }
 
@@ -256,4 +226,3 @@ function Chip({ children, colors }: { children: ReactNode; colors: ReturnType<ty
     </span>
   );
 }
-

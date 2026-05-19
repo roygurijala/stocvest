@@ -115,25 +115,35 @@ describe("<ScannerScanResultHero />", () => {
     const summary = buildSummary();
     wrap(<ScannerScanResultHero summary={summary} onRefresh={vi.fn()} />);
     expect(screen.getByTestId("scanner-scan-quiet-subline")).toHaveTextContent(/Market quiet/i);
-    expect(screen.queryByTestId("scanner-scan-qualifying-total")).toBeNull();
+    expect(screen.getByTestId("scanner-quiet-ribbon")).toBeInTheDocument();
     expect(screen.queryByTestId("scanner-scan-desk-breakdown")).toBeNull();
-    expect(screen.queryByTestId("scanner-next-actions")).toBeNull();
   });
 
-  test("watchlist insight row when status present", () => {
-    const summary = buildSummary();
+  test("watchlist insight row when setups qualify", () => {
+    const summary = buildSummary({
+      setups: [
+        {
+          symbol: "AAPL",
+          direction: "long",
+          score: 0.7,
+          triggers: ["x"],
+          timestamp_iso: "x"
+        }
+      ]
+    });
     wrap(<ScannerScanResultHero summary={summary} onRefresh={vi.fn()} />);
     const row = screen.getByTestId("scanner-watchlist-insight");
     expect(row.textContent).toContain("8 monitored");
     expect(row.textContent).toContain("1 actionable");
   });
 
-  test("watchlist progress note when nothing qualifies and developing", () => {
+  test("watchlist quiet line when nothing qualifies and developing", () => {
     const summary = buildSummary({
       watchlistStatus: { monitored: 6, actionable: 0, developing: 2, inactive: 4 }
     });
     wrap(<ScannerScanResultHero summary={summary} onRefresh={vi.fn()} />);
-    expect(screen.getByTestId("scanner-watchlist-insight")).toHaveTextContent(/Nothing actionable yet/i);
+    expect(screen.getByText(/Your watchlist is active but not ready/i)).toBeInTheDocument();
+    expect(screen.getByText(/none confirmed yet/i)).toBeInTheDocument();
   });
 
   test("refresh button calls onRefresh", () => {
