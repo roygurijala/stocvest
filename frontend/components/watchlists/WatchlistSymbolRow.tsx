@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { SignalsDeeplinkLink } from "@/components/nav/signals-deeplink-link";
 import { buildWatchlistDeskStatusPresent, watchlistStatusRailColor } from "@/lib/watchlist-row-present";
 import { WATCHLIST_EVALUATE_LINK_CLASS } from "@/lib/watchlist-interactive-styles";
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
 import { formatWatchlistMaturationLabel } from "@/lib/watchlist-page-utils";
 import { shouldShowDeskRow, type SymbolTrackingMap, trackingForSymbol } from "@/lib/watchlist-tracking-presentation";
 import type { WatchlistViewMode } from "@/lib/watchlist-page-utils";
-import { watchlistSignalsOpenAriaLabel, watchlistToSignalsHref } from "@/lib/nav/watchlist-signals-deeplink";
+import { watchlistSignalsOpenAriaLabel } from "@/lib/nav/watchlist-signals-deeplink";
 import {
   formatLastEvaluatedLine,
   formatUnevaluatedDeskStatusLine,
@@ -22,7 +23,6 @@ type Desk = "swing" | "day";
 
 type Props = {
   symbol: string;
-  href: string;
   swingRow?: WatchlistMaturationRow;
   dayRow?: WatchlistMaturationRow;
   displayState?: string;
@@ -68,7 +68,6 @@ function DeskStatusBlock({
     }
     const fallback = maturationFetchStatus === "ready" && isDefaultList ? null : "…";
     if (fallback === null) {
-      const signalsHref = watchlistToSignalsHref(symU, desk);
       return (
         <div
           data-testid={`watchlist-desk-${symU}-${desk}`}
@@ -85,15 +84,16 @@ function DeskStatusBlock({
             {formatLastEvaluatedLine(undefined, evalOpts)}
           </p>
           {!deskEvaluating ? (
-            <Link
-              href={signalsHref}
-              prefetch={false}
+            <SignalsDeeplinkLink
+              symbol={symU}
+              contextRef="watchlist"
+              tradingMode={desk}
               className={`${WATCHLIST_EVALUATE_LINK_CLASS} watchlist-desk-lines__action`}
               data-testid={`watchlist-evaluate-${symU}-${desk}`}
               onClick={(e) => e.stopPropagation()}
             >
               Open Signals
-            </Link>
+            </SignalsDeeplinkLink>
           ) : null}
         </div>
       );
@@ -157,7 +157,6 @@ function DeskStatusBlock({
 
 export function WatchlistSymbolRow({
   symbol,
-  href,
   swingRow,
   dayRow,
   displayState,
@@ -200,14 +199,15 @@ export function WatchlistSymbolRow({
 
         <div className="watchlist-symbol-row__body">
           <div className="watchlist-symbol-row__head">
-            <Link
-              href={href}
-              prefetch={false}
+            <SignalsDeeplinkLink
+              symbol={symU}
+              contextRef="watchlist"
+              tradingMode={planMode}
               className="watchlist-symbol-row__symbol font-mono pointer-events-auto"
               aria-label={watchlistSignalsOpenAriaLabel(symbol)}
             >
               {symU}
-            </Link>
+            </SignalsDeeplinkLink>
             <span className="watchlist-symbol-row__scenario pointer-events-auto">
               <WatchlistScenarioBuilder
                 symbol={symU}

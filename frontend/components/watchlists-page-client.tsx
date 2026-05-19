@@ -356,7 +356,6 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     window.addEventListener(WATCHLIST_MATURATION_UPDATED_EVENT, onMaturationUpdated);
     window.addEventListener("focus", onFocus);
     window.addEventListener("pageshow", onPageShow);
-    if (consumeWatchlistMaturationBump()) requestMaturationReload();
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener(WATCHLIST_MATURATION_UPDATED_EVENT, onMaturationUpdated);
@@ -1267,7 +1266,6 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                             dualDeskMaturation
                           )
                         : undefined;
-                      const href = watchlistToSignalsHref(s, tradingModeForSignalsNav(viewMode, dualDeskMaturation));
                       const planMode = tradingModeForSignalsNav(viewMode, dualDeskMaturation) ?? "swing";
                       const maturationForPlan =
                         viewMode === "day" ? md : viewMode === "swing" ? ms : ms ?? md;
@@ -1275,7 +1273,6 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                         <WatchlistSymbolRow
                           key={symU}
                           symbol={symU}
-                          href={href}
                           swingRow={ms}
                           dayRow={md}
                           displayState={displaySt}
@@ -1304,7 +1301,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
 
             <p className="m-0 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
               Your watchlist feeds the scanner. Maturation reflects your last evidence run or the scheduled refresh.
-              <Link href="/dashboard/signals" className="ml-1 font-semibold" style={{ color: colors.accent }}>
+              <Link href="/dashboard/signals" prefetch={false} className="ml-1 font-semibold" style={{ color: colors.accent }}>
                 Open Signals
               </Link>
             </p>
