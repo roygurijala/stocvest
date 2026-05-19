@@ -13,12 +13,18 @@ export async function GET(req: Request) {
     const res = await stocvestAuthedFetch(`/v1/market/snapshots?symbols=${encodeURIComponent(symbols)}`, {
       method: "GET"
     });
+    if (res.status >= 500) {
+      return NextResponse.json(
+        { snapshots: [], degraded: true, upstream_status: res.status },
+        { status: 200 }
+      );
+    }
     const text = await res.text();
     return new Response(text, {
       status: res.status,
       headers: { "content-type": res.headers.get("content-type") || "application/json" }
     });
   } catch {
-    return NextResponse.json({ snapshots: [] }, { status: 502 });
+    return NextResponse.json({ snapshots: [], degraded: true }, { status: 200 });
   }
 }

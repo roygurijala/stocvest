@@ -19,7 +19,8 @@ import { APP_TOP_BAR_LAYOUT_HEIGHT } from "@/components/top-bar";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, colorTokens, spacing, surfaceGlowClassName } from "@/lib/design-system";
 import { watchlistSignalsOpenAriaLabel, watchlistToSignalsHref } from "@/lib/nav/watchlist-signals-deeplink";
-import type { SnapshotPayload } from "@/lib/api/market";
+import type { MarketStatusPayload, SnapshotPayload } from "@/lib/api/market";
+import { isRegularSessionOpen } from "@/lib/market/regular-session";
 import { rankSymbolCandidates } from "@/lib/symbol-suggestion-rank";
 import {
   dedupeWatchlistSymbolsUpper as dedupeSymbolsUpper,
@@ -139,6 +140,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   const addComboRef = useRef<HTMLDivElement | null>(null);
   const [snapshotsBySymbol, setSnapshotsBySymbol] = useState<Record<string, SnapshotPayload>>({});
   const [snapshotFetchStatus, setSnapshotFetchStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [marketStatus, setMarketStatus] = useState<MarketStatusPayload | null>(null);
   const [alignmentSheet, setAlignmentSheet] = useState<{
     symbol: string;
     deskMode: "swing" | "day";
@@ -338,6 +340,31 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   }, [maturationEligible, activeSymbolsDeduped.length]);
 
   useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/stocvest/market/status", {
+          cache: "no-store",
+          credentials: "same-origin"
+        });
+        if (!res.ok || cancelled) return;
+        const data = (await res.json().catch(() => null)) as MarketStatusPayload | null;
+        if (!cancelled && data && typeof data === "object") setMarketStatus(data);
+      } catch {
+        /* quotes/maturation still work without session badge */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const sessionClosed = useMemo(
+    () => Boolean(marketStatus?.market?.trim()) && !isRegularSessionOpen(marketStatus),
+    [marketStatus]
+  );
+
+  useEffect(() => {
     const syms = activeSymbolsDeduped.slice(0, WATCHLIST_MAX_SYMBOLS);
     if (syms.length === 0) {
       setSnapshotsBySymbol({});
@@ -349,8 +376,8 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     void (async () => {
       const merged: Record<string, SnapshotPayload> = {};
       try {
-        for (let i = 0; i < syms.length; i += 40) {
-          const chunk = syms.slice(i, i + 40);
+        for (let i = 0; i < syms.length; i += 20) {
+          const chunk = syms.slice(i, i + 20);
           if (chunk.length === 0) break;
           const res = await fetch(`/api/stocvest/market/snapshots?symbols=${encodeURIComponent(chunk.join(","))}`, {
             cache: "no-store",
@@ -731,7 +758,8 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
       maturationSwing,
       maturationDay,
       viewMode,
-      dualDeskMaturation
+      dualDeskMaturation,
+      { sessionClosed }
     );
   }, [
     maturationEligible,
@@ -740,7 +768,8 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     maturationSwing,
     maturationDay,
     viewMode,
-    dualDeskMaturation
+    dualDeskMaturation,
+    sessionClosed
   ]);
 
   const sortedSymbols = useMemo(() => {
@@ -1228,6 +1257,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                           planMode={planMode}
                           maturationForPlan={maturationForPlan}
                           deskEvaluating={evaluatingSymbols[symU]}
+                          sessionClosed={sessionClosed}
                           onRemove={() => void removeSymbol(s)}
                           onOpenLayers={(desk, row) =>
                             setAlignmentSheet({ symbol: symU, deskMode: desk, row })

@@ -5,6 +5,7 @@ import {
   formatLastEvaluatedLine,
   formatLastEvaluatedShort,
   formatSummaryFetchedAt,
+  formatUnevaluatedDeskStatusLine,
   newestLastEvaluatedAt,
   watchlistMaturationDeskSummary
 } from "@/lib/watchlist-evaluation-present";
@@ -39,6 +40,11 @@ describe("watchlist-evaluation-present", () => {
     expect(formatLastEvaluatedLine("2026-05-16T16:30:00+00:00")).toMatch(/Last evaluated/);
     expect(formatLastEvaluatedLine(undefined)).toBe("Not evaluated yet");
     expect(formatLastEvaluatedLine(undefined, { evaluating: true })).toBe("Evaluating now…");
+    expect(formatLastEvaluatedLine(undefined, { sessionClosed: true })).toMatch(/market is closed/i);
+  });
+
+  test("formatUnevaluatedDeskStatusLine when session closed", () => {
+    expect(formatUnevaluatedDeskStatusLine("swing", { sessionClosed: true })).toMatch(/market closed/i);
   });
 
   test("formatSummaryFetchedAt", () => {
@@ -49,5 +55,10 @@ describe("watchlist-evaluation-present", () => {
     const line = watchlistMaturationDeskSummary(["AAPL"], {}, {}, "swing", false);
     expect(line).toMatch(/No maturation runs/);
     expect(line).toMatch(/Signals/);
+  });
+
+  test("watchlistMaturationDeskSummary when session closed", () => {
+    const line = watchlistMaturationDeskSummary(["AAPL"], {}, {}, "swing", false, { sessionClosed: true });
+    expect(line).toMatch(/Market is closed/);
   });
 });

@@ -8,7 +8,11 @@ import { formatWatchlistMaturationLabel } from "@/lib/watchlist-page-utils";
 import { shouldShowDeskRow, type SymbolTrackingMap, trackingForSymbol } from "@/lib/watchlist-tracking-presentation";
 import type { WatchlistViewMode } from "@/lib/watchlist-page-utils";
 import { watchlistSignalsOpenAriaLabel, watchlistToSignalsHref } from "@/lib/nav/watchlist-signals-deeplink";
-import { formatLastEvaluatedLine } from "@/lib/watchlist-evaluation-present";
+import {
+  formatLastEvaluatedLine,
+  formatUnevaluatedDeskStatusLine,
+  type WatchlistEvaluationLineOpts
+} from "@/lib/watchlist-evaluation-present";
 import type { SnapshotPayload } from "@/lib/api/market";
 import { watchlistQuoteFromSnapshot } from "@/lib/watchlist-page-utils";
 import { useTheme } from "@/lib/theme-provider";
@@ -31,6 +35,7 @@ type Props = {
   planMode: "swing" | "day";
   maturationForPlan?: WatchlistMaturationRow;
   deskEvaluating?: { swing?: boolean; day?: boolean };
+  sessionClosed?: boolean;
   onRemove: () => void;
   onOpenLayers: (desk: Desk, row: WatchlistMaturationRow | undefined) => void;
 };
@@ -42,6 +47,7 @@ function DeskStatusBlock({
   maturationFetchStatus,
   isDefaultList,
   deskEvaluating,
+  sessionClosed,
   onOpenLayers
 }: {
   symU: string;
@@ -50,8 +56,10 @@ function DeskStatusBlock({
   maturationFetchStatus: Props["maturationFetchStatus"];
   isDefaultList: boolean;
   deskEvaluating?: boolean;
+  sessionClosed?: boolean;
   onOpenLayers: Props["onOpenLayers"];
 }) {
+  const evalOpts: WatchlistEvaluationLineOpts = { evaluating: deskEvaluating, sessionClosed };
   const { colors } = useTheme();
   const present = buildWatchlistDeskStatusPresent(row, desk);
   if (!present) {
@@ -67,14 +75,14 @@ function DeskStatusBlock({
           className="watchlist-desk-lines watchlist-desk-lines--pending"
         >
           <p className="watchlist-desk-lines__status m-0" style={{ color: colors.textMuted }}>
-            {desk === "swing" ? "SWING" : "DAY"} · {deskEvaluating ? "Evaluating…" : "Not evaluated yet"}
+            {formatUnevaluatedDeskStatusLine(desk, evalOpts)}
           </p>
           <p
             className="watchlist-desk-lines__fetched m-0"
             style={{ color: colors.textMuted }}
             data-testid={`watchlist-last-evaluated-${symU}-${desk}`}
           >
-            {formatLastEvaluatedLine(undefined, { evaluating: deskEvaluating })}
+            {formatLastEvaluatedLine(undefined, evalOpts)}
           </p>
           {!deskEvaluating ? (
             <Link
@@ -161,6 +169,7 @@ export function WatchlistSymbolRow({
   planMode,
   maturationForPlan,
   deskEvaluating,
+  sessionClosed,
   onRemove,
   onOpenLayers
 }: Props) {
@@ -244,6 +253,7 @@ export function WatchlistSymbolRow({
               maturationFetchStatus={maturationFetchStatus}
               isDefaultList={isDefaultList}
               deskEvaluating={deskEvaluating?.swing}
+              sessionClosed={sessionClosed}
               onOpenLayers={onOpenLayers}
             />
           ) : null}
@@ -255,6 +265,7 @@ export function WatchlistSymbolRow({
               maturationFetchStatus={maturationFetchStatus}
               isDefaultList={isDefaultList}
               deskEvaluating={deskEvaluating?.day}
+              sessionClosed={sessionClosed}
               onOpenLayers={onOpenLayers}
             />
           ) : null}

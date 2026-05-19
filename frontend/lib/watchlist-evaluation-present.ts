@@ -11,12 +11,30 @@ export function evaluationStatusTitle(mode: "swing" | "day"): string {
   return mode === "swing" ? "Swing evaluation status" : "Day evaluation status";
 }
 
+export type WatchlistEvaluationLineOpts = {
+  evaluating?: boolean;
+  /** Regular session not open (Polygon `market` ≠ `open`). */
+  sessionClosed?: boolean;
+};
+
 /** Row footer — always non-empty when shown. */
-export function formatLastEvaluatedLine(iso: string | undefined, opts?: { evaluating?: boolean }): string {
+export function formatLastEvaluatedLine(iso: string | undefined, opts?: WatchlistEvaluationLineOpts): string {
   if (opts?.evaluating) return "Evaluating now…";
   const short = formatLastEvaluatedShort(iso);
   if (short) return `Last evaluated ${short}`;
+  if (opts?.sessionClosed) return "No live run while market is closed";
   return "Not evaluated yet";
+}
+
+/** Pending desk status line (no maturation row yet). */
+export function formatUnevaluatedDeskStatusLine(
+  desk: "swing" | "day",
+  opts?: WatchlistEvaluationLineOpts
+): string {
+  const tag = desk === "swing" ? "SWING" : "DAY";
+  if (opts?.evaluating) return `${tag} · Evaluating…`;
+  if (opts?.sessionClosed) return `${tag} · No run yet (market closed)`;
+  return `${tag} · Not evaluated yet`;
 }
 
 /** Page-level maturation-summary fetch time (local clock). */
@@ -109,7 +127,8 @@ export function watchlistMaturationDeskSummary(
   swingBySymbol: Record<string, WatchlistMaturationRow>,
   dayBySymbol: Record<string, WatchlistMaturationRow>,
   viewMode: "swing" | "day" | "both",
-  dualDesk: boolean
+  dualDesk: boolean,
+  opts?: { sessionClosed?: boolean }
 ): string | null {
   const { evaluated, total } = countEvaluatedSymbols(symbols, swingBySymbol, dayBySymbol, viewMode, dualDesk);
   if (total === 0) return null;
@@ -125,6 +144,9 @@ export function watchlistMaturationDeskSummary(
   }
   const lastRun = newestLastEvaluatedAt(merged);
   if (evaluated === 0) {
+    if (opts?.sessionClosed) {
+      return "Market is closed — maturation updates on weekdays after ~4:30 PM ET or when you open Evidence on Signals";
+    }
     return "No maturation runs on this desk yet — open a symbol on Signals (Evidence) or wait for weekday ~4:30 PM ET refresh";
   }
   if (lastRun) {
