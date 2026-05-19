@@ -285,8 +285,8 @@ describe("ScannerPageClient setup mode toggle", () => {
     // mode renders its own card with mode-discriminated copy. We assert:
     //   1. Both cards exist (one per mode) in the both-view.
     //   2. Each card carries a `data-mode` matching its render group.
-    //   3. The swing card visibly identifies as "Swing Desk".
-    //   4. The day card visibly identifies as "Day Desk".
+    //   3–4. Each card uses mode-specific interpretive mechanism copy
+    //      (quiet days hide desk pill rows; discrimination is copy + data-mode).
     //   5. Neither card leaks the other mode's vocabulary (this is the
     //      hard rule — a copy edit that swaps them would silently break
     //      Mode Separation, so we pin it here).
@@ -309,8 +309,10 @@ describe("ScannerPageClient setup mode toggle", () => {
     const dayCard = await screen.findByTestId("scanner-setups-empty-state-day");
     expect(swingCard.getAttribute("data-mode")).toBe("swing");
     expect(dayCard.getAttribute("data-mode")).toBe("day");
-    expect(swingCard.textContent).toContain("Swing Desk");
-    expect(dayCard.textContent).toContain("Day Desk");
+    expect(swingCard.textContent).toMatch(
+      /Setup conditions not fully aligned|Structure \+ regime|Per-symbol confirmation/i
+    );
+    expect(dayCard.textContent).toMatch(/Intraday gates not cleared|Session closed/i);
     expect(swingCard.textContent?.toLowerCase()).not.toContain("intraday confirmation");
     expect(dayCard.textContent?.toLowerCase()).not.toContain("regime alignment");
   });
