@@ -48,7 +48,7 @@ def test_sync_skips_when_symbol_not_on_default_watchlist() -> None:
     repo = WatchlistMaturationRepository(table)
     store = InMemoryWatchlistStore()
     store.create_watchlist("u1", "Main", ["MSFT"], is_default=True)
-    sync_watchlist_maturation_from_composite(
+    status = sync_watchlist_maturation_from_composite(
         user_id="u1",
         symbol="AAPL",
         mode="swing",
@@ -56,6 +56,7 @@ def test_sync_skips_when_symbol_not_on_default_watchlist() -> None:
         maturation_repo=repo,
         watchlist_store=store,
     )
+    assert status == "skipped_symbol_not_on_watchlist"
     assert table._by_pk_sk == {}
 
 
@@ -64,7 +65,7 @@ def test_sync_writes_when_symbol_on_default_watchlist() -> None:
     repo = WatchlistMaturationRepository(table)
     store = InMemoryWatchlistStore()
     store.create_watchlist("u1", "Main", ["AAPL", "NVDA"], is_default=True)
-    sync_watchlist_maturation_from_composite(
+    status = sync_watchlist_maturation_from_composite(
         user_id="u1",
         symbol="AAPL",
         mode="swing",
@@ -72,6 +73,7 @@ def test_sync_writes_when_symbol_on_default_watchlist() -> None:
         maturation_repo=repo,
         watchlist_store=store,
     )
+    assert status == "written"
     got = repo.get_entry("u1", "AAPL", "swing")
     assert got is not None
     assert got.state == WatchlistState.ACTIONABLE
@@ -339,6 +341,45 @@ def test_sync_skips_notify_when_email_on_state_change_false(monkeypatch: pytest.
         email_on_state_change=False,
     )
     assert calls == []
+
+
+def test_composite_evidence_cache_reports_written_sync(monkeypatch: pytest.MonkeyPatch) -> None:
+    table = _FakeDynamoTable()
+    repo = WatchlistMaturationRepository(table)
+    store = InMemoryWatchlistStore()
+    store.create_watchlist("u1", "Main", ["NVDA"], is_default=True)
+    monkeypatch.setattr(
+        "stocvest.api.services.watchlist_maturation_sync.get_watchlist_maturation_repository",
+        lambda: repo,
+    )
+    monkeypatch.setattr(
+        "stocvest.api.services.watchlist_maturation_sync.get_watchlist_store",
+        lambda: store,
+    )
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.evidence_rate_limit_exceeded",
+        lambda _uid: False,
+    )
+    monkeypatch.setattr("stocvest.api.handlers.signals.read_dashboard_cache", lambda _k: None)
+    monkeypatch.setattr("stocvest.api.handlers.signals.write_dashboard_cache", lambda *a, **k: True)
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals._compute_with_thread_timeout",
+        lambda fn, timeout_sec: fn(),
+    )
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.polygon_circuit",
+        MagicMock(call=lambda fn: fn()),
+    )
+
+    out = composite_response_with_evidence_cache(
+        symbol="NVDA",
+        user_id="u1",
+        user_email=None,
+        mode="swing",
+        sync_compute=lambda: _bullish_body() | {"symbol": "NVDA", "layers": _six_layers()},
+    )
+    assert out.get("watchlist_maturation_sync") == "written"
+    assert repo.get_entry("u1", "NVDA", "swing") is not None
 
 
 def test_composite_evidence_cache_skips_sync_without_user(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -66,7 +66,6 @@ import {
   getCompositeTransportError,
   type CompositeTransportError
 } from "@/lib/api/composite-transport";
-import { isInsufficientCompositeResponse } from "@/lib/api/swing-composite";
 import { notifyWatchlistMaturationUpdated } from "@/lib/watchlist-maturation-bump";
 import { STOCVEST_SWR_CACHE_NS } from "@/lib/swr/config";
 
@@ -129,12 +128,7 @@ async function fetchSignalComposite(
     );
   }
   const body = (await response.json()) as SignalCompositeResult;
-  if (
-    !getCompositeTransportError(body) &&
-    !isInsufficientCompositeResponse(body) &&
-    !String(body.error ?? "").trim() &&
-    Array.isArray(body.layers)
-  ) {
+  if (!getCompositeTransportError(body) && !String(body.error ?? "").trim()) {
     notifyWatchlistMaturationUpdated(symbol.trim().toUpperCase(), mode);
   }
   return body;

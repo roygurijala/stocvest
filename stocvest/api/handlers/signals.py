@@ -130,18 +130,18 @@ def _try_sync_watchlist_maturation_from_evidence(
     symbol: str,
     mode: str,
     body: dict[str, Any],
-) -> None:
+) -> str | None:
     """Persist maturation from any successful evidence payload (computed or cache)."""
     if not user_id:
-        return
+        return None
     if body.get("error"):
-        return
+        return None
     try:
         from stocvest.api.services.watchlist_maturation_sync import (
             sync_watchlist_maturation_from_composite,
         )
 
-        sync_watchlist_maturation_from_composite(
+        return sync_watchlist_maturation_from_composite(
             user_id=user_id,
             symbol=symbol,
             mode="day" if mode == "day" else "swing",
@@ -150,6 +150,15 @@ def _try_sync_watchlist_maturation_from_evidence(
         )
     except Exception as exc:  # noqa: BLE001 — maturation must not break composite
         _LOG.warning("watchlist maturation sync skipped: %s", exc)
+        return None
+
+
+def _with_maturation_sync(body: dict[str, Any], sync_status: str | None) -> dict[str, Any]:
+    if not sync_status:
+        return body
+    out = dict(body)
+    out["watchlist_maturation_sync"] = sync_status
+    return out
 
 
 def composite_response_with_evidence_cache(
@@ -174,10 +183,10 @@ def composite_response_with_evidence_cache(
         data = dict(envelope["data"])
         data["source"] = "cache"
         data["cache_state_version"] = envelope.get("state_version")
-        _try_sync_watchlist_maturation_from_evidence(
+        sync_status = _try_sync_watchlist_maturation_from_evidence(
             user_id=user_id, symbol=symbol, mode=mode, body=data
         )
-        return data
+        return _with_maturation_sync(data, sync_status)
 
     try:
         body = polygon_circuit.call(
@@ -189,10 +198,10 @@ def composite_response_with_evidence_cache(
             data = dict(stale["data"])
             data["source"] = "cache_stale"
             data["cache_state_version"] = stale.get("state_version")
-            _try_sync_watchlist_maturation_from_evidence(
+            sync_status = _try_sync_watchlist_maturation_from_evidence(
                 user_id=user_id, symbol=symbol, mode=mode, body=data
             )
-            return data
+            return _with_maturation_sync(data, sync_status)
         return {
             "error": "upstream_unavailable",
             "message": "Market data is briefly unavailable. Try again in a moment.",
@@ -205,10 +214,10 @@ def composite_response_with_evidence_cache(
             data = dict(stale["data"])
             data["source"] = "cache_stale"
             data["cache_state_version"] = stale.get("state_version")
-            _try_sync_watchlist_maturation_from_evidence(
+            sync_status = _try_sync_watchlist_maturation_from_evidence(
                 user_id=user_id, symbol=symbol, mode=mode, body=data
             )
-            return data
+            return _with_maturation_sync(data, sync_status)
         return {
             "error": "timeout",
             "message": "Signal analysis timed out. Try again in a moment.",
@@ -217,12 +226,12 @@ def composite_response_with_evidence_cache(
 
     if body.get("error"):
         return dict(body)
-    if str(body.get("status") or "") == "insufficient_data":
+    if str(body.get("status") or "").strip().lower() == "insufficient_data":
         out_ins = dict(body)
-        _try_sync_watchlist_maturation_from_evidence(
+        sync_status = _try_sync_watchlist_maturation_from_evidence(
             user_id=user_id, symbol=symbol, mode=mode, body=out_ins
         )
-        return out_ins
+        return _with_maturation_sync(out_ins, sync_status)
 
     write_dashboard_cache(
         cache_key,
@@ -232,8 +241,10 @@ def composite_response_with_evidence_cache(
     )
     out = dict(body)
     out["source"] = "computed"
-    _try_sync_watchlist_maturation_from_evidence(user_id=user_id, symbol=symbol, mode=mode, body=out)
-    return out
+    sync_status = _try_sync_watchlist_maturation_from_evidence(
+        user_id=user_id, symbol=symbol, mode=mode, body=out
+    )
+    return _with_maturation_sync(out, sync_status)
 
 
 def _parse_composite_signal_item(item: object) -> dict[str, Any] | None:

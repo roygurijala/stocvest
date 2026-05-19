@@ -31,6 +31,16 @@ _LOG = get_logger(__name__)
 
 _REASON = "evidence_composite"
 
+MaturationSyncResult = Literal[
+    "written",
+    "skipped_no_user",
+    "skipped_bad_body",
+    "skipped_no_repo",
+    "skipped_no_watchlist",
+    "skipped_symbol_not_on_watchlist",
+    "failed_put",
+]
+
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
@@ -148,26 +158,32 @@ def sync_watchlist_maturation_from_composite(
     watchlist_store: WatchlistStore | None = None,
     email_on_state_change: bool = True,
     evaluation_source: EvaluationSource = "evidence",
-) -> None:
-    """Best-effort maturation upsert; logs and returns on any failure."""
+) -> MaturationSyncResult | None:
+    """Best-effort maturation upsert; logs and returns a status (or ``None`` when symbol empty)."""
     if not (user_id or "").strip():
-        return
+        return "skipped_no_user"
     sym_u = (symbol or "").strip().upper()
     if not sym_u:
-        return
+        return None
     if _skip_body(composite_body):
-        return
+        return "skipped_bad_body"
 
     repo = maturation_repo if maturation_repo is not None else get_watchlist_maturation_repository()
     if repo is None:
-        return
+        _LOG.warning("watchlist maturation sync skipped: DYNAMODB_WATCHLIST_MATURATION_TABLE not configured")
+        return "skipped_no_repo"
 
     store = watchlist_store if watchlist_store is not None else get_watchlist_store()
     wl = store.get_default_watchlist(user_id)
     if not wl:
-        return
+        return "skipped_no_watchlist"
     if sym_u not in {s.strip().upper() for s in wl.symbols}:
-        return
+        _LOG.info(
+            "watchlist maturation sync skipped: %s not on default watchlist user=%s",
+            sym_u,
+            user_id,
+        )
+        return "skipped_symbol_not_on_watchlist"
 
     wl_mode: WatchlistMode = mode if mode in ("swing", "day") else "swing"
     if str(composite_body.get("status") or "").strip().lower() == "insufficient_data":
@@ -238,7 +254,7 @@ def sync_watchlist_maturation_from_composite(
         )
     except Exception as exc:  # noqa: BLE001 — never break composite response
         _LOG.warning("watchlist maturation put_entry failed user=%s sym=%s: %s", user_id, sym_u, exc)
-        return
+        return "failed_put"
 
     try:
         from stocvest.api.services.watchlist_maturation_transition_log import (
@@ -276,3 +292,4 @@ def sync_watchlist_maturation_from_composite(
             )
         except Exception as exc:  # noqa: BLE001
             _LOG.warning("watchlist maturation notify failed user=%s sym=%s: %s", user_id, sym_u, exc)
+    return "written"
