@@ -14,8 +14,10 @@ type Props = {
   synthesis?: ScannerSynthesis | null;
   traceRows?: ScannerEvaluationTraceRow[];
   deskFilter?: "swing" | "day" | "all";
-  /** Nested under Scan insight — shared collapsible styling, lighter chrome. */
-  embedded?: boolean;
+  /**
+   * Render inline under Scan insight — no second toggle; typography + divider only.
+   */
+  flat?: boolean;
 };
 
 function gateLabel(gate: string): string {
@@ -36,7 +38,7 @@ export function ScannerEvaluationDetails({
   synthesis,
   traceRows = [],
   deskFilter = "day",
-  embedded = false
+  flat = false
 }: Props) {
   const { colors } = useTheme();
 
@@ -55,7 +57,7 @@ export function ScannerEvaluationDetails({
     sessionVol.length >= 3 ? "This is a broad market condition — not symbol-specific." : null;
 
   const gateCount = sessionVol.length + liquidity.length + structure.length;
-  const hint = hasSynthesis
+  const summaryHint = hasSynthesis
     ? `${gateCount} gate group${gateCount === 1 ? "" : "s"}`
     : `${filteredTrace.length} trace row${filteredTrace.length === 1 ? "" : "s"}`;
 
@@ -130,22 +132,23 @@ export function ScannerEvaluationDetails({
     </div>
   );
 
-  if (embedded) {
+  if (flat) {
     return (
-      <ScannerCollapsible
-        testId="scanner-evaluation-details"
-        title="Evaluation details"
-        hint={hint}
-        embedded
-        defaultOpen={false}
-      >
+      <section data-testid="scanner-evaluation-details" className="scanner-insight-details">
+        <p className="scanner-insight-details__label">Details</p>
+        {summaryHint ? <p className="scanner-insight-details__summary">{summaryHint}</p> : null}
         {body}
-      </ScannerCollapsible>
+      </section>
     );
   }
 
   return (
-    <ScannerCollapsible testId="scanner-evaluation-details" title="Evaluation details" hint={hint} defaultOpen={false}>
+    <ScannerCollapsible
+      testId="scanner-evaluation-details"
+      title="Evaluation details"
+      hint={summaryHint}
+      defaultOpen={false}
+    >
       {body}
     </ScannerCollapsible>
   );

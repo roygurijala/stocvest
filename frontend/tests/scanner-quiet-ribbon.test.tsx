@@ -126,17 +126,42 @@ describe("ScannerCollapsible", () => {
 });
 
 describe("ScannerQuietInsight", () => {
-  test("uses ScannerCollapsible with session persistence", () => {
+  test("uses single collapsible; gate breakdown is flat when expanded", () => {
     wrap(
       <ScannerQuietInsight
         bullets={["Broad participation below intraday pace"]}
         closestGroups={[
           { label: "Volume constrained", items: [{ symbol: "AMZN", detail: "−8% vs expected" }] }
         ]}
+        synthesis={
+          {
+            qualified_count: 0,
+            market_summary: "",
+            what_would_change: "",
+            session_time_et: "10:00",
+            volume_context: null,
+            near_misses: [],
+            rejection_groups: {
+              session_volume: [{ symbol: "SOFI", pct_below: 12 }],
+              liquidity: [],
+              structure: []
+            }
+          } as import("@/lib/scanner-synthesis").ScannerSynthesis
+        }
       />
     );
     const el = screen.getByTestId("scanner-quiet-insight");
+    expect(el.tagName).toBe("DETAILS");
     expect(el.classList.contains("scanner-collapsible")).toBe(true);
     expect(screen.getByText(/near threshold/i)).toBeInTheDocument();
+    expect(el.querySelector("details")).toBeNull();
+    expect(screen.queryByText("Evaluation details")).toBeNull();
+
+    fireEvent.click(screen.getByText("Scan insight"));
+    expect(screen.getByTestId("scanner-insight-market-context")).toBeInTheDocument();
+    expect(screen.getByTestId("scanner-closest-AMZN")).toBeInTheDocument();
+    expect(screen.getByText("Details")).toBeInTheDocument();
+    expect(screen.getByTestId("scanner-evaluation-details-body")).toBeInTheDocument();
+    expect(el.querySelector("details")).toBeNull();
   });
 });

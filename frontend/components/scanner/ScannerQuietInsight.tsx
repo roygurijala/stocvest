@@ -54,7 +54,27 @@ export function ScannerQuietInsight({
       hint={insightHint(closestCount, hasWhy, hasEval)}
       persistSessionKey={SCANNER_INSIGHT_SESSION_KEY}
     >
-      <div style={{ display: "grid", gap: spacing[3] }}>
+      <div className="scanner-quiet-insight__body" style={{ display: "grid", gap: spacing[3] }}>
+        {hasWhy ? (
+          <ul
+            data-testid="scanner-insight-market-context"
+            style={{
+              margin: 0,
+              padding: 0,
+              listStyle: "none",
+              display: "grid",
+              gap: 4,
+              fontSize: typography.scale.sm,
+              color: colors.textMuted,
+              lineHeight: 1.45
+            }}
+          >
+            {bullets.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        ) : null}
+
         {hasClosest ? (
           <div data-testid="scanner-closest-to-qualifying">
             <p
@@ -93,30 +113,12 @@ export function ScannerQuietInsight({
           </div>
         ) : null}
 
-        {hasWhy ? (
-          <ul
-            style={{
-              margin: 0,
-              padding: `0 0 0 ${spacing[3]}`,
-              display: "grid",
-              gap: 4,
-              fontSize: typography.scale.sm,
-              color: colors.textMuted,
-              lineHeight: 1.45
-            }}
-          >
-            {bullets.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
-        ) : null}
-
         {hasEval ? (
           <ScannerEvaluationDetails
             synthesis={synthesis}
             traceRows={traceRows}
             deskFilter={deskFilter}
-            embedded
+            flat
           />
         ) : null}
       </div>

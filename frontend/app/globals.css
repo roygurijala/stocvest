@@ -539,3 +539,30 @@ a {
 .scanner-collapsible--embedded[open] > .scanner-collapsible__summary {
   border-bottom-color: color-mix(in srgb, var(--color-border) 70%, transparent);
 }
+
+/* Flat gate breakdown inside Scan insight — one expand only */
+.scanner-insight-details {
+  margin-top: 0.25rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid color-mix(in srgb, var(--color-border) 85%, transparent);
+}
+.scanner-insight-details__label {
+  margin: 0 0 0.25rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.scanner-insight-details__summary {
+  margin: 0 0 0.75rem;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+.scanner-insight-details [data-testid="scanner-evaluation-details-body"] {
+  gap: 0.625rem;
+}
+.scanner-insight-details [data-testid="scanner-evaluation-details-body"] p {
+  font-size: 0.75rem;
+}
