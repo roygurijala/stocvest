@@ -2,7 +2,8 @@
  * B47 — Progress presentation: display-only alignment tiers.
  *
  * Backend maturation (`derive_state`) stays unchanged (Actionable ≥5/6, Developing ≥3/6).
- * UI adds "Near ready" at 4/6 so users see progression without relaxing gates.
+ * UI adds "Near ready" at 4/6 and labels the 5–6 band "Strong" (setup quality),
+ * distinct from execution readiness ("Actionable" on the trade-decision axis).
  */
 
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
@@ -71,7 +72,7 @@ const TIER_LABEL: Record<AlignmentDisplayTier, string> = {
   not_aligned: "Not aligned",
   developing: "Developing",
   near_ready: "Near ready",
-  actionable: "Actionable",
+  actionable: "Strong",
   invalidated: "Invalidated",
   re_evaluating: "Re-evaluating"
 };

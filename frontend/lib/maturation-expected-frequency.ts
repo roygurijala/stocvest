@@ -20,10 +20,10 @@ export const MATURATION_ON_DEMAND_DAY_LINE =
 
 /** B47 display-band expectation — quiet days are normal. */
 export const MATURATION_PROGRESSION_EXPECTATION_LINE =
-  "Most symbols spend time in Developing or Near ready before Actionable (5+ of 6 layers). Quiet scans are normal — progression is observational, not a trade signal.";
+  "Most symbols spend time in Developing or Near ready before Strong alignment (5+ of 6 layers). Quiet scans are normal — progression is observational, not a trade signal.";
 
 export const MATURATION_DISPLAY_BANDS_LINE =
-  "Display bands: Not aligned (0–1) · Developing (2–3) · Near ready (4/6) · Actionable (5–6). Gates are unchanged.";
+  "Display bands: Not aligned (0–1) · Developing (2–3) · Near ready (4/6) · Strong (5–6). Execution readiness is separate.";
 
 export type MaturationFrequencyCopy = {
   desk: MaturationFrequencyDesk;
@@ -57,7 +57,7 @@ export function setupEvolutionHubIntro(desk: MaturationFrequencyDesk): string {
 export function setupEvolutionEmptyWarmingBody(): string {
   return (
     "First transition appears after the next evaluation when alignment or maturation state changes. " +
-    "Symbols can stay in Developing for multiple sessions before reaching Near ready or Actionable."
+    "Symbols can stay in Developing for multiple sessions before reaching Near ready or Strong alignment."
   );
 }
 

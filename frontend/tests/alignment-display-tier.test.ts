@@ -43,6 +43,11 @@ describe("formatAlignmentStatusLine", () => {
   test("not aligned omits ratio at 0-1", () => {
     expect(formatAlignmentStatusLine({ layersAligned: 1 })).toBe("Not aligned");
   });
+
+  test("5-6 aligned shows Strong (setup quality, not execution)", () => {
+    expect(formatAlignmentStatusLine({ layersAligned: 5 })).toBe("Strong (5/6)");
+    expect(formatAlignmentStatusLine({ layersAligned: 6 })).toBe("Strong (6/6)");
+  });
 });
 
 describe("layersAwayFromActionable", () => {

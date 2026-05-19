@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
-  actionableHeadline,
+  executionHeadline,
+  executionProgressHint,
   buildLayerInsightLine,
   buildSignalsPageDecision,
   buildWhyNotBullets,
@@ -73,7 +74,22 @@ describe("signals-page-present", () => {
       isComplete: true
     });
     expect(d.state).toBe("monitor");
-    expect(actionableHeadline(d.state)).toMatch(/No actionable setup/);
+    expect(executionHeadline(d.state)).toMatch(/Setup is forming/);
+    expect(d.line).toMatch(/Final confirmation/);
+  });
+
+  test("executionProgressHint when strong alignment but monitor gates", () => {
+    const bullishAligned: SignalsLayerRowInput[] = [
+      { key: "technical", name: "Technical", status: "Bullish", explanation: "", score: 72 },
+      { key: "news", name: "News", status: "Bullish", explanation: "", score: 68 },
+      { key: "macro", name: "Macro", status: "Bullish", explanation: "", score: 65 },
+      { key: "sector", name: "Sector", status: "Bullish", explanation: "", score: 70 },
+      { key: "geopolitical", name: "Geopolitical", status: "Neutral", explanation: "", score: 52 },
+      { key: "internals", name: "Internals", status: "Bullish", explanation: "", score: 66 }
+    ];
+    const a = countLayerAlignment(bullishAligned, "Bullish");
+    expect(a.aligned).toBeGreaterThanOrEqual(5);
+    expect(executionProgressHint("monitor", a.aligned, a.total)).toMatch(/One condition remains/);
   });
 
   test("why-not bullets avoid recommendation words", () => {

@@ -3,6 +3,7 @@
  * Keeps copy discipline aligned with `trade-decision.ts` (validates, does not instruct).
  */
 
+import { resolveAlignmentDisplayTier } from "@/lib/alignment-display-tier";
 import {
   deriveDecisionRationale,
   type TradeDecision,
@@ -304,15 +305,40 @@ export function buildSignalsPageDecision(input: {
   }
   return {
     state: "monitor",
-    line: "No actionable setup — confirmation and/or risk gates not fully cleared",
+    line: "Final confirmation and/or risk conditions not yet satisfied",
     reinforcements,
     rationale: deriveDecisionRationale("monitor", rationaleCtx)
   };
 }
 
-export function actionableHeadline(state: TradeDecisionState): string {
+/** Execution readiness — separate from layer alignment strength. */
+export function executionReadinessLabel(state: TradeDecisionState): string {
+  if (state === "actionable") return "Actionable";
+  if (state === "monitor") return "Not actionable yet";
+  return "Not actionable";
+}
+
+export function executionHeadline(state: TradeDecisionState): string {
   if (state === "actionable") return "→ Actionable setup — gates cleared";
-  return "→ No actionable setup";
+  if (state === "monitor") return "→ Setup is forming — waiting on final confirmation";
+  return "→ Setup not ready — minimum gates not met";
+}
+
+/** @deprecated Use {@link executionHeadline} */
+export const actionableHeadline = executionHeadline;
+
+/** When alignment is strong but execution gates are not cleared yet. */
+export function executionProgressHint(
+  state: TradeDecisionState,
+  layersAligned: number,
+  layersTotal: number
+): string | null {
+  if (state === "actionable") return null;
+  const tier = resolveAlignmentDisplayTier({ layersAligned, layersTotal });
+  if (tier === "actionable" && state === "monitor") {
+    return "One condition remains before this becomes actionable";
+  }
+  return null;
 }
 
 export function buildWhyNotBullets(

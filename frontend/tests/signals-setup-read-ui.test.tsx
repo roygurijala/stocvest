@@ -68,7 +68,7 @@ describe("SignalsSetupRead", () => {
         previewLayers={rows.slice(0, 2)}
         decision={{
           state: "monitor",
-          line: "No actionable setup — confirmation and/or risk gates not fully cleared",
+          line: "Final confirmation and/or risk conditions not yet satisfied",
           reinforcements: [],
           rationale: {
             category: "confirmation",
@@ -84,6 +84,7 @@ describe("SignalsSetupRead", () => {
     expect(screen.getByTestId("signals-setup-alignment-links-evidence")).toBeInTheDocument();
     expect(screen.queryByText(/AI Signal Analysis/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Setup read/i)).toBeInTheDocument();
+    expect(screen.getByTestId("signals-setup-execution")).toHaveTextContent("Not actionable yet");
     expect(screen.getByTestId("signals-why-not")).toBeInTheDocument();
     expect(screen.getByTestId("signals-next")).toBeInTheDocument();
     const html = document.body.innerHTML;

@@ -23,7 +23,7 @@ export function setupTierLabel(tier: ScenarioSetupTier, aligned: number, total: 
   const ratio = `${aligned} / ${total}`;
   switch (tier) {
     case "actionable":
-      return `Actionable (${ratio})`;
+      return `Strong (${ratio})`;
     case "developing":
       return `Developing (${ratio})`;
     case "invalidated":

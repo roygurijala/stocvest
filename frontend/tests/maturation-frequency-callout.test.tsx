@@ -23,6 +23,6 @@ describe("MaturationFrequencyCallout", () => {
     );
     expect(screen.getByTestId("maturation-frequency-callout")).toHaveTextContent(/4:30 PM ET/i);
     expect(screen.getByTestId("maturation-frequency-callout")).toHaveTextContent(/Near ready/i);
-    expect(screen.getByTestId("maturation-frequency-callout")).toHaveTextContent(/Actionable \(5–6\)/i);
+    expect(screen.getByTestId("maturation-frequency-callout")).toHaveTextContent(/Strong \(5–6\)/i);
   });
 });

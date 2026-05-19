@@ -6,9 +6,11 @@ import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import { AlignmentDrilldownLinks } from "@/components/signals/alignment-drilldown-links";
 import { signalsAlignmentDisplayLine } from "@/lib/nav/alignment-display-line";
 import {
-  actionableHeadline,
   buildWhyNotBullets,
   countLayerAlignment,
+  executionHeadline,
+  executionProgressHint,
+  executionReadinessLabel,
   type SignalsLayerRowInput,
   type SignalsSetupBias
 } from "@/lib/signals-page-present";
@@ -59,6 +61,7 @@ export function SignalsSetupRead({
     bias === "Bullish" ? colors.bullish : bias === "Bearish" ? colors.bearish : colors.caution;
   const whyNot =
     decision.state === "actionable" ? [] : buildWhyNotBullets(decision, previewLayers, bias, 3);
+  const executionHint = executionProgressHint(decision.state, alignment.aligned, alignment.total);
 
   return (
     <article
@@ -77,7 +80,7 @@ export function SignalsSetupRead({
       >
         Setup read
       </p>
-      <div className="mt-3 grid gap-4 sm:grid-cols-2">
+      <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <div>
           <p className="m-0 text-sm" style={{ color: colors.textMuted }}>
             Bias
@@ -121,6 +124,23 @@ export function SignalsSetupRead({
             />
           </div>
         </div>
+        <div>
+          <p className="m-0 text-sm" style={{ color: colors.textMuted }}>
+            Execution
+          </p>
+          <p
+            className="m-0 mt-0.5 text-xl font-semibold"
+            style={{ color: decision.state === "actionable" ? colors.bullish : colors.textMuted }}
+            data-testid="signals-setup-execution"
+          >
+            {executionReadinessLabel(decision.state)}
+          </p>
+          {executionHint ? (
+            <p className="m-0 mt-1 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
+              {executionHint}
+            </p>
+          ) : null}
+        </div>
       </div>
 
       <p
@@ -128,7 +148,7 @@ export function SignalsSetupRead({
         style={{ color: decision.state === "actionable" ? colors.bullish : colors.textMuted }}
         data-testid="signals-setup-actionable"
       >
-        {actionableHeadline(decision.state)}
+        {executionHeadline(decision.state)}
       </p>
       <p className="m-0 mt-1 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
         {decision.line}
