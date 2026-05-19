@@ -4,6 +4,7 @@ import {
   buildClosestToQualifyingGroups,
   buildScannerCauseBullets,
   buildScannerDeskInterpretiveLine,
+  buildScannerMarketScopeLine,
   buildScannerQuietSubline,
   buildWatchlistQuietInsight
 } from "@/lib/scanner-quiet-copy";
@@ -78,9 +79,15 @@ describe("scanner quiet copy", () => {
   test("cause bullets include concrete participation and leaders", () => {
     const bullets = buildScannerCauseBullets(emptySummary(), synthesis);
     expect(bullets).toHaveLength(3);
-    expect(bullets[0]).toMatch(/intraday norms/i);
+    expect(bullets[0]).toMatch(/participation|intraday pace/i);
     expect(bullets[1]).toMatch(/NVDA|AMZN|Mega-cap/i);
-    expect(bullets[2]).toMatch(/Bearish regime/i);
+    expect(bullets[2]).toMatch(/Risk-off|regime/i);
+    expect(bullets.join(" ")).not.toMatch(/magnitude \+ volume/i);
+  });
+
+  test("market scope line distinguishes market-wide vs selective", () => {
+    const wide = buildScannerMarketScopeLine(emptySummary(), synthesis);
+    expect(wide).toMatch(/Market-wide condition/i);
   });
 
   test("closest groups use volume percentages", () => {
@@ -90,12 +97,12 @@ describe("scanner quiet copy", () => {
     expect(vol?.items.some((i) => i.symbol === "AMZN" && i.detail.includes("92"))).toBe(true);
   });
 
-  test("desk interpretive lines are single decisive sentences", () => {
+  test("desk interpretive lines are mechanism labels, not macro why copy", () => {
     expect(buildScannerDeskInterpretiveLine("gap", { regimeLabel: "Bearish" })).toMatch(
-      /overnight gaps met magnitude/i
+      /magnitude \+ volume criteria/i
     );
     expect(buildScannerDeskInterpretiveLine("swing", { regimeLabel: "Bearish" })).toMatch(
-      /Bearish regime is preventing/i
+      /Structure \+ regime/i
     );
     expect(
       buildScannerDeskInterpretiveLine("day", { regimeLabel: "Bearish", marketStatus: { market: "closed" } })

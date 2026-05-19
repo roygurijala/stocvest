@@ -115,6 +115,7 @@ describe("<ScannerScanResultHero />", () => {
     const summary = buildSummary();
     wrap(<ScannerScanResultHero summary={summary} onRefresh={vi.fn()} />);
     expect(screen.getByTestId("scanner-scan-quiet-subline")).toHaveTextContent(/Market quiet/i);
+    expect(screen.queryByTestId("scanner-scan-qualifying-total")).toBeNull();
     expect(screen.queryByTestId("scanner-scan-desk-breakdown")).toBeNull();
     expect(screen.queryByTestId("scanner-next-actions")).toBeNull();
   });

@@ -84,6 +84,9 @@ export function LaggardScanner({ visible = true }: LaggardScannerProps) {
 
   if (!visible) return null;
 
+  const showEmptyPaid = !loading && !error && rows.length === 0 && isPaid;
+  if (showEmptyPaid) return null;
+
   const shell = {
     background: colors.surface,
     border: `1px solid ${colors.border}`,
@@ -122,11 +125,6 @@ export function LaggardScanner({ visible = true }: LaggardScannerProps) {
       ) : error ? (
         <p className="m-0 text-sm" style={{ color: colors.textMuted }}>
           Laggard scan unavailable right now.
-        </p>
-      ) : rows.length === 0 ? (
-        <p data-testid="laggard-scanner-empty" className="m-0 text-sm" style={{ color: colors.textMuted }}>
-          No peer divergence signals in the warmed universe right now.
-          {typeof data?.scanned === "number" ? ` (${data.scanned} symbols checked.)` : ""}
         </p>
       ) : (
         <ul className="m-0 list-none p-0" style={{ display: "grid", gap: spacing[2] }}>

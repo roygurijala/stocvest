@@ -139,7 +139,7 @@ describe("UnlockForecast", () => {
 });
 
 describe("LaggardScanner", () => {
-  test("empty state renders gracefully", async () => {
+  test("empty paid scan hides section entirely", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -147,8 +147,11 @@ describe("LaggardScanner", () => {
         json: async () => ({ scanned: 12, laggards_found: 0, laggards: [] })
       })
     );
-    wrap(<LaggardScanner visible />);
-    expect(await screen.findByTestId("laggard-scanner-empty")).toBeTruthy();
+    const { container } = wrap(<LaggardScanner visible />);
+    await vi.waitFor(() => {
+      expect(container.querySelector("[data-testid='laggard-scanner']")).toBeNull();
+    });
+    expect(screen.queryByTestId("laggard-scanner-empty")).toBeNull();
     vi.unstubAllGlobals();
   });
 });

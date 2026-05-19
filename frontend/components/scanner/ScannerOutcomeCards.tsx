@@ -7,9 +7,11 @@ import { useTheme } from "@/lib/theme-provider";
 
 type Props = {
   summary: ScannerScanSummary;
+  /** Quiet scan — emphasize desk counts (hero omits duplicate total). */
+  emphasized?: boolean;
 };
 
-export function ScannerOutcomeCards({ summary }: Props) {
+export function ScannerOutcomeCards({ summary, emphasized = false }: Props) {
   const { colors, theme } = useTheme();
   const cards = [
     {
@@ -48,38 +50,26 @@ export function ScannerOutcomeCards({ summary }: Props) {
             key={card.key}
             data-testid={`scanner-outcome-card-${card.key}`}
             style={{
-              padding: spacing[3],
+              padding: emphasized ? spacing[4] : spacing[3],
               borderRadius: borderRadius.lg,
               border: `1px solid ${colors.border}`,
-              background: colors.surfaceMuted,
-              borderTop: `3px solid ${accent.borderAccent}`
+              background: emphasized ? colors.surface : colors.surfaceMuted,
+              borderTop: `3px solid ${accent.borderAccent}`,
+              boxShadow: emphasized
+                ? `0 1px 0 color-mix(in srgb, ${accent.borderAccent} 25%, transparent)`
+                : undefined
             }}
           >
             <p
               style={{
                 margin: 0,
-                fontSize: 10,
-                fontWeight: 700,
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                color: colors.textMuted
-              }}
-            >
-              {card.label}
-            </p>
-            <p
-              style={{
-                margin: `${spacing[1]} 0 0`,
-                fontSize: typography.scale.xl,
+                fontSize: emphasized ? typography.scale.lg : typography.scale.base,
                 fontWeight: 700,
                 color: colors.text,
-                lineHeight: 1.1
+                lineHeight: 1.2
               }}
             >
-              {card.count}
-            </p>
-            <p style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted }}>
-              qualifying
+              {card.label}: {card.count}
             </p>
           </div>
         );

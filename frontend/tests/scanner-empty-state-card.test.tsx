@@ -101,7 +101,7 @@ describe("<ScannerEmptyStateCard /> — swing variant", () => {
       />
     );
     const card = screen.getByTestId("scanner-empty-interpretive");
-    expect(card.textContent).toContain("Bearish regime is preventing");
+    expect(card.textContent).toMatch(/Structure \+ regime|Setup conditions not fully aligned/i);
     expect(card.textContent).not.toContain("240 symbols scanned");
     expect(screen.queryByTestId("scanner-empty-state-swing-reenable")).toBeNull();
     expect(screen.queryByTestId("scanner-empty-state-swing-context-strip")).toBeNull();

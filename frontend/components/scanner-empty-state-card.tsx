@@ -161,18 +161,18 @@ export function ScannerEmptyStateCard({
         <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>{deskLabel}</span>
       </div>
 
-      <h4
+      <p
         data-testid={`scanner-empty-state-${surfaceSlug}-headline`}
         style={{
           margin: 0,
           color: colors.text,
           fontSize: typography.scale.base,
-          fontWeight: 700,
+          fontWeight: interpretive ? 600 : 700,
           lineHeight: 1.35
         }}
       >
         {displayHeadline}
-      </h4>
+      </p>
 
       {interpretive ? null : (
         <p

@@ -24,6 +24,7 @@ import { ScannerCauseSection } from "@/components/scanner/ScannerCauseSection";
 import { ScannerClosestToQualifying } from "@/components/scanner/ScannerClosestToQualifying";
 import { ScannerEvaluationDetails } from "@/components/scanner/ScannerEvaluationDetails";
 import { ScannerOutcomeCards } from "@/components/scanner/ScannerOutcomeCards";
+import { ScannerQuietRibbon } from "@/components/scanner/ScannerQuietRibbon";
 import { ScannerScanResultHero } from "@/components/scanner/scanner-scan-result-hero";
 import { ScannerWatchlistInsightCard } from "@/components/scanner/ScannerWatchlistInsightCard";
 import { LaggardScanner } from "@/components/scanner/LaggardScanner";
@@ -34,7 +35,8 @@ import { fetchScannerTraceBundleClient } from "@/lib/api/scanner-trace-client";
 import type { ScannerSynthesis } from "@/lib/scanner-synthesis";
 import {
   buildClosestToQualifyingGroups,
-  buildScannerCauseBullets
+  buildScannerCauseBullets,
+  buildScannerMarketScopeLine
 } from "@/lib/scanner-quiet-copy";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import type {
@@ -1102,6 +1104,10 @@ export function ScannerPageClient({
     () => buildScannerCauseBullets(scanSummary, scannerSynthesis),
     [scanSummary, scannerSynthesis]
   );
+  const marketScopeLine = useMemo(
+    () => buildScannerMarketScopeLine(scanSummary, scannerSynthesis),
+    [scanSummary, scannerSynthesis]
+  );
   const closestGroups = useMemo(
     () => buildClosestToQualifyingGroups(scannerSynthesis, scanSummary),
     [scannerSynthesis, scanSummary]
@@ -1326,8 +1332,13 @@ export function ScannerPageClient({
         isRefreshing={isPending}
         onRefresh={onManualRefresh}
         hideWatchlistStrip={showQuietInterpretation}
+        quietCompact={showQuietInterpretation}
       />
-      <ScannerOutcomeCards summary={scanSummary} />
+      {showQuietInterpretation ? (
+        <ScannerQuietRibbon summary={scanSummary} synthesis={scannerSynthesis} />
+      ) : (
+        <ScannerOutcomeCards summary={scanSummary} />
+      )}
       {showQuietInterpretation ? (
         <div data-testid="scanner-quiet-interpretation" style={{ display: "grid", gap: spacing[3] }}>
           {scanSummary.watchlist ? (
@@ -1337,7 +1348,11 @@ export function ScannerPageClient({
             />
           ) : null}
           <ScannerClosestToQualifying groups={closestGroups} />
-          <ScannerCauseSection bullets={causeBullets} />
+          <ScannerCauseSection
+            bullets={causeBullets}
+            marketScopeLine={marketScopeLine}
+            collapsible
+          />
           <ScannerEvaluationDetails
             synthesis={
               dayTradingSurfaces &&
@@ -1352,7 +1367,7 @@ export function ScannerPageClient({
       ) : null}
       {marketOpen ? (
         <p className="m-0 text-xs" style={{ color: colors.textMuted }}>
-          Auto-refresh in <strong style={{ color: colors.text }}>{scanCountdownLabel}</strong>
+          Next scan in <strong style={{ color: colors.text }}>{scanCountdownLabel}</strong>
         </p>
       ) : null}
       {!showQuietInterpretation ? (

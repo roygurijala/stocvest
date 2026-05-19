@@ -467,3 +467,33 @@ a {
     transform: none !important;
   }
 }
+
+/* Scanner quiet ribbon — status + desk rails on one row (wraps on narrow viewports). */
+.scanner-quiet-ribbon__status {
+  flex: 1 1 10rem;
+  min-width: 0;
+}
+.scanner-quiet-ribbon__counts {
+  flex: 0 0 auto;
+}
+@media (max-width: 480px) {
+  .scanner-quiet-ribbon {
+    flex-direction: row;
+    align-items: flex-end;
+  }
+  .scanner-quiet-ribbon__counts {
+    margin-left: auto;
+  }
+}
+
+.scanner-cause-details__summary::-webkit-details-marker {
+  display: none;
+}
+.scanner-cause-details__summary::before {
+  content: "▸ ";
+  display: inline-block;
+  transition: transform 0.15s ease;
+}
+.scanner-cause-details[open] .scanner-cause-details__summary::before {
+  transform: rotate(90deg);
+}

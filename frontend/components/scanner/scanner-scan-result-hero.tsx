@@ -17,6 +17,8 @@ type Props = {
   onRefresh: () => void;
   /** When true, watchlist insight renders in the quiet interpretation block instead. */
   hideWatchlistStrip?: boolean;
+  /** Quiet scan: metadata + refresh only; status/counts live in {@link ScannerQuietRibbon}. */
+  quietCompact?: boolean;
 };
 
 export function ScannerScanResultHero({
@@ -24,12 +26,14 @@ export function ScannerScanResultHero({
   synthesis,
   isRefreshing,
   onRefresh,
-  hideWatchlistStrip = false
+  hideWatchlistStrip = false,
+  quietCompact = false
 }: Props) {
   const { colors } = useTheme();
   const wl = summary.watchlist;
   const quietSubline = buildScannerQuietSubline(summary, synthesis);
   const showDeskBreakdown = summary.qualifying.total > 0;
+  const quietScan = summary.qualifying.total === 0 && !quietCompact;
 
   const sessionLine = summary.session.regular_open
     ? "Regular session open"
@@ -41,8 +45,8 @@ export function ScannerScanResultHero({
       className={surfaceGlowClassName}
       style={{
         display: "grid",
-        gap: spacing[3],
-        padding: spacing[4],
+        gap: quietCompact ? spacing[2] : spacing[3],
+        padding: quietCompact ? spacing[3] : spacing[4],
         borderRadius: borderRadius.xl,
         border: `1px solid ${colors.border}`,
         background: colors.surface
@@ -100,25 +104,43 @@ export function ScannerScanResultHero({
         </button>
       </div>
 
+      {quietCompact ? null : (
       <div>
-        <p
-          data-testid="scanner-scan-qualifying-total"
-          style={{
-            margin: 0,
-            fontSize: typography.scale["2xl"],
-            fontWeight: 700,
-            color: colors.text,
-            lineHeight: 1.15
-          }}
-        >
-          {summary.qualifying.total} qualifying setup{summary.qualifying.total === 1 ? "" : "s"}
-        </p>
-        <p
-          data-testid="scanner-scan-quiet-subline"
-          style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.sm, color: colors.textMuted }}
-        >
-          {quietSubline}
-        </p>
+        {quietScan ? (
+          <p
+            data-testid="scanner-scan-quiet-subline"
+            style={{
+              margin: 0,
+              fontSize: typography.scale.xl,
+              fontWeight: 600,
+              color: colors.text,
+              lineHeight: 1.25
+            }}
+          >
+            {quietSubline}
+          </p>
+        ) : (
+          <>
+            <p
+              data-testid="scanner-scan-qualifying-total"
+              style={{
+                margin: 0,
+                fontSize: typography.scale["2xl"],
+                fontWeight: 700,
+                color: colors.text,
+                lineHeight: 1.15
+              }}
+            >
+              {summary.qualifying.total} qualifying setup{summary.qualifying.total === 1 ? "" : "s"}
+            </p>
+            <p
+              data-testid="scanner-scan-quiet-subline"
+              style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.sm, color: colors.textMuted }}
+            >
+              {quietSubline}
+            </p>
+          </>
+        )}
         {showDeskBreakdown ? (
           <p
             data-testid="scanner-scan-desk-breakdown"
@@ -128,6 +150,7 @@ export function ScannerScanResultHero({
           </p>
         ) : null}
       </div>
+      )}
 
       {wl && !hideWatchlistStrip ? (
         <WatchlistInsightRow colors={colors} wl={wl} qualifyingTotal={summary.qualifying.total} />

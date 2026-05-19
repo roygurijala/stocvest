@@ -26,27 +26,28 @@ export function buildScannerQuietSubline(
   return "Market quiet — low participation";
 }
 
-/** One decisive sentence per desk empty card on quiet scan days. */
+/**
+ * Mechanism-specific desk label on quiet days (column cards).
+ * Intentionally distinct from {@link buildScannerCauseBullets} macro copy.
+ */
 export function buildScannerDeskInterpretiveLine(
   desk: "gap" | "swing" | "day",
   overview: Pick<EmptyStateOverviewInput, "regimeLabel" | "marketStatus">
 ): string {
   if (desk === "gap") {
-    return "No overnight gaps met magnitude and volume thresholds.";
+    return "No gaps met magnitude + volume criteria";
   }
   if (desk === "day") {
     const sessionOpen =
       overview.marketStatus != null
         ? (overview.marketStatus.market || "").trim().toLowerCase() === "open"
         : isUsRegularSessionOpenEt();
-    return sessionOpen
-      ? "Intraday setups inactive — session gates not cleared."
-      : "Intraday setups inactive — session closed.";
+    return sessionOpen ? "Intraday gates not cleared" : "Session closed";
   }
   const r = (overview.regimeLabel ?? "").trim().toLowerCase();
-  if (r.includes("bear")) return "Bearish regime is preventing multi-day setups.";
-  if (r.includes("bull")) return "Multi-day setups inactive — per-symbol gates not cleared.";
-  return "Multi-day setups inactive — regime and structure not aligned.";
+  if (r.includes("bear")) return "Structure + regime not aligned together";
+  if (r.includes("bull")) return "Per-symbol confirmation gates not cleared";
+  return "Setup conditions not fully aligned";
 }
 
 export function buildScannerCauseBullets(
@@ -62,9 +63,9 @@ export function buildScannerCauseBullets(
   const participation =
     volQuiet || sessionVolCount >= 2
       ? avgBelow != null && Number.isFinite(avgBelow)
-        ? `Market volume far below intraday norms (≈${Math.round(avgBelow)}% under pace)`
-        : "Market volume far below intraday norms"
-      : "Volume and participation have not reached scanner thresholds";
+        ? `Broad participation ≈${Math.round(avgBelow)}% below intraday pace`
+        : "Broad participation below intraday pace"
+      : "Tape participation has not reached desk thresholds";
 
   const leaders = pickLeaderSymbolsForCause(synthesis, summary);
   const leadersQuiet =
@@ -75,16 +76,44 @@ export function buildScannerCauseBullets(
           summary.regime.spy_pct <= 0.15 &&
           summary.regime.qqq_pct <= 0.15
         ? "Index leaders (SPY, QQQ) not confirming moves"
-        : "Broad index leadership is not confirming follow-through";
+        : "Index leadership not confirming follow-through";
 
   const regime = summary.regime.label.toLowerCase();
   const regimeLine = regime.includes("bear")
-    ? "Bearish regime blocking follow-through"
+    ? "Risk-off regime limiting broad follow-through"
     : regime.includes("bull")
-      ? "Constructive regime — per-symbol gates still blocking entries"
-      : "Current regime blocking follow-through";
+      ? "Constructive regime — breadth still selective"
+      : "Mixed regime — follow-through limited";
 
   return [participation, leadersQuiet, regimeLine];
+}
+
+/** One line under “Why” — market-wide vs selective (reduces “is the scanner broken?” doubt). */
+export function buildScannerMarketScopeLine(
+  summary: ScannerScanSummary,
+  synthesis?: ScannerSynthesis | null
+): string {
+  const sessionVol = synthesis?.rejection_groups.session_volume.length ?? 0;
+  const structure = synthesis?.rejection_groups.structure.length ?? 0;
+  const volQuiet =
+    synthesis?.volume_context?.market_condition?.toLowerCase().includes("low") ||
+    synthesis?.volume_context?.market_condition?.toLowerCase().includes("below");
+  const universe = summary.universe.symbols_evaluated ?? 0;
+
+  if (volQuiet && sessionVol >= 2) {
+    return "Market-wide condition — low participation is affecting most symbols in today’s scan.";
+  }
+  if (sessionVol >= 3 && universe >= 8) {
+    return "Market-wide condition — session pace is failing across most of the evaluated universe.";
+  }
+  const regime = summary.regime.label.toLowerCase();
+  if (regime.includes("bear") && sessionVol >= 1) {
+    return "Market-wide condition — risk-off tape is limiting follow-through across large-cap names.";
+  }
+  if (sessionVol <= 1 && structure >= 2) {
+    return "Selective condition — a few names are close; most misses are symbol-specific structure, not a broken scan.";
+  }
+  return "Market-wide condition — today’s quiet read applies to most of the evaluated universe.";
 }
 
 function pickLeaderSymbolsForCause(
