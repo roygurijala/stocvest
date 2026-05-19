@@ -20,13 +20,9 @@ import { NewsPanel } from "@/components/news-panel";
 import { ScenarioBuilderInline } from "@/components/scenario-builder/scenario-builder-inline";
 import { ScannerEmptyStateCard } from "@/components/scanner-empty-state-card";
 import { ScannerNearQualificationSection } from "@/components/scanner/scanner-near-qualification-section";
-import { ScannerCauseSection } from "@/components/scanner/ScannerCauseSection";
-import { ScannerClosestToQualifying } from "@/components/scanner/ScannerClosestToQualifying";
-import { ScannerEvaluationDetails } from "@/components/scanner/ScannerEvaluationDetails";
 import { ScannerOutcomeCards } from "@/components/scanner/ScannerOutcomeCards";
-import { ScannerQuietRibbon } from "@/components/scanner/ScannerQuietRibbon";
+import { ScannerQuietInsight } from "@/components/scanner/ScannerQuietInsight";
 import { ScannerScanResultHero } from "@/components/scanner/scanner-scan-result-hero";
-import { ScannerWatchlistInsightCard } from "@/components/scanner/ScannerWatchlistInsightCard";
 import { LaggardScanner } from "@/components/scanner/LaggardScanner";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
@@ -1333,43 +1329,10 @@ export function ScannerPageClient({
         onRefresh={onManualRefresh}
         hideWatchlistStrip={showQuietInterpretation}
         quietCompact={showQuietInterpretation}
+        marketScopeLine={showQuietInterpretation ? marketScopeLine : null}
+        nextScanLabel={showQuietInterpretation && marketOpen ? scanCountdownLabel : null}
       />
-      {showQuietInterpretation ? (
-        <ScannerQuietRibbon summary={scanSummary} synthesis={scannerSynthesis} />
-      ) : (
-        <ScannerOutcomeCards summary={scanSummary} />
-      )}
-      {showQuietInterpretation ? (
-        <div data-testid="scanner-quiet-interpretation" style={{ display: "grid", gap: spacing[3] }}>
-          {scanSummary.watchlist ? (
-            <ScannerWatchlistInsightCard
-              watchlist={scanSummary.watchlist}
-              qualifyingTotal={scanSummary.qualifying.total}
-            />
-          ) : null}
-          <ScannerClosestToQualifying groups={closestGroups} />
-          <ScannerCauseSection
-            bullets={causeBullets}
-            marketScopeLine={marketScopeLine}
-            collapsible
-          />
-          <ScannerEvaluationDetails
-            synthesis={
-              dayTradingSurfaces &&
-              (scannerSetupMode === "day" || scannerSetupMode === "both")
-                ? scannerSynthesis
-                : null
-            }
-            traceRows={evaluationTrace}
-            deskFilter={evaluationTraceDeskFilter}
-          />
-        </div>
-      ) : null}
-      {marketOpen ? (
-        <p className="m-0 text-xs" style={{ color: colors.textMuted }}>
-          Next scan in <strong style={{ color: colors.text }}>{scanCountdownLabel}</strong>
-        </p>
-      ) : null}
+      {!showQuietInterpretation ? <ScannerOutcomeCards summary={scanSummary} /> : null}
       {!showQuietInterpretation ? (
         <ScannerNearQualificationSection
           nearQualification={scanSummary.near_qualification}
@@ -2157,6 +2120,20 @@ export function ScannerPageClient({
           </div>
         </section>
       </div>
+
+      {showQuietInterpretation ? (
+        <ScannerQuietInsight
+          bullets={causeBullets}
+          closestGroups={closestGroups}
+          synthesis={
+            dayTradingSurfaces && (scannerSetupMode === "day" || scannerSetupMode === "both")
+              ? scannerSynthesis
+              : null
+          }
+          traceRows={evaluationTrace}
+          deskFilter={evaluationTraceDeskFilter}
+        />
+      ) : null}
 
       <LaggardScanner visible={scannerSetupMode === "swing" || scannerSetupMode === "both"} />
 

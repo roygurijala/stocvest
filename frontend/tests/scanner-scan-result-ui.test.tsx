@@ -133,9 +133,7 @@ describe("<ScannerScanResultHero />", () => {
       watchlistStatus: { monitored: 6, actionable: 0, developing: 2, inactive: 4 }
     });
     wrap(<ScannerScanResultHero summary={summary} onRefresh={vi.fn()} />);
-    expect(screen.getByTestId("scanner-watchlist-progress-note")).toHaveTextContent(
-      /Nothing actionable yet/i
-    );
+    expect(screen.getByTestId("scanner-watchlist-insight")).toHaveTextContent(/Nothing actionable yet/i);
   });
 
   test("refresh button calls onRefresh", () => {

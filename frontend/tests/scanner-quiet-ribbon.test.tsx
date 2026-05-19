@@ -2,8 +2,8 @@ import type { ReactElement } from "react";
 import { render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
 
-import { ScannerQuietRibbon } from "@/components/scanner/ScannerQuietRibbon";
-import { ScannerCauseSection } from "@/components/scanner/ScannerCauseSection";
+import { ScannerScanResultHero } from "@/components/scanner/scanner-scan-result-hero";
+import { ScannerQuietInsight } from "@/components/scanner/ScannerQuietInsight";
 import { buildScannerScanSummary } from "@/lib/scanner-scan-summary";
 import { ThemeProvider } from "@/lib/theme-provider";
 
@@ -24,43 +24,55 @@ function wrap(ui: ReactElement) {
   return render(<ThemeProvider>{ui}</ThemeProvider>);
 }
 
-describe("ScannerQuietRibbon", () => {
-  test("renders status and color-rail desk counts", () => {
-    const summary = buildScannerScanSummary({
-      scannedAtIso: "2026-05-16T14:30:00.000Z",
-      overview: {
-        setups: [],
-        gapIntelligence: [],
-        regimeLabel: "Bearish",
-        spyPct: -0.1,
-        qqqPct: -0.08,
-        swingUniverseSymbolCount: 20,
-        gapIntelligenceSnapshotSymbolCount: 20
-      },
-      nearQualificationSetups: [],
-      watchlistProgression: []
-    });
-    wrap(<ScannerQuietRibbon summary={summary} />);
+function emptySummary() {
+  return buildScannerScanSummary({
+    scannedAtIso: "2026-05-16T14:30:00.000Z",
+    overview: {
+      setups: [],
+      gapIntelligence: [],
+      regimeLabel: "Bearish",
+      spyPct: -0.1,
+      qqqPct: -0.08,
+      swingUniverseSymbolCount: 20,
+      gapIntelligenceSnapshotSymbolCount: 20
+    },
+    nearQualificationSetups: [],
+    watchlistProgression: []
+  });
+}
+
+describe("Scanner quiet header", () => {
+  test("quiet compact merges status and desk rails in one hero", () => {
+    const summary = emptySummary();
+    wrap(
+      <ScannerScanResultHero
+        summary={summary}
+        onRefresh={() => undefined}
+        quietCompact
+        marketScopeLine="Market-wide condition — low participation."
+        nextScanLabel="4:36"
+      />
+    );
     expect(screen.getByTestId("scanner-quiet-ribbon")).toBeInTheDocument();
     expect(screen.getByTestId("scanner-scan-quiet-subline")).toHaveTextContent(/Market quiet/i);
     expect(screen.getByTestId("scanner-quiet-rail-gap")).toHaveTextContent("0");
-    expect(screen.getByTestId("scanner-quiet-rail-swing")).toHaveTextContent("0");
-    expect(screen.getByTestId("scanner-quiet-rail-day")).toHaveTextContent("0");
+    expect(screen.getByTestId("scanner-market-scope-inline")).toHaveTextContent(/Market-wide/i);
+    expect(screen.getByTestId("scanner-next-scan")).toHaveTextContent(/4:36/);
+    expect(screen.queryByTestId("scanner-scan-qualifying-total")).toBeNull();
   });
 });
 
-describe("ScannerCauseSection collapsible", () => {
-  test("wraps bullets in details when collapsible", () => {
+describe("ScannerQuietInsight", () => {
+  test("wraps drill-down in a single details block", () => {
     wrap(
-      <ScannerCauseSection
-        collapsible
-        bullets={["Broad participation below intraday pace", "Index leaders not confirming"]}
-        marketScopeLine="Market-wide condition — low participation."
+      <ScannerQuietInsight
+        bullets={["Broad participation below intraday pace"]}
+        closestGroups={[
+          { label: "Volume constrained", items: [{ symbol: "AMZN", detail: "−8% vs expected" }] }
+        ]}
       />
     );
-    const details = screen.getByTestId("scanner-cause-section");
-    expect(details.tagName).toBe("DETAILS");
-    expect(screen.getByText("Why nothing passed")).toBeInTheDocument();
-    expect(screen.queryByText(/Broad participation/)).not.toBeVisible();
+    expect(screen.getByTestId("scanner-quiet-insight").tagName).toBe("DETAILS");
+    expect(screen.getByText("Scan insight")).toBeInTheDocument();
   });
 });

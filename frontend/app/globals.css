@@ -486,14 +486,17 @@ a {
   }
 }
 
+.scanner-quiet-insight__summary::-webkit-details-marker,
 .scanner-cause-details__summary::-webkit-details-marker {
   display: none;
 }
+.scanner-quiet-insight__summary::before,
 .scanner-cause-details__summary::before {
   content: "▸ ";
   display: inline-block;
   transition: transform 0.15s ease;
 }
+.scanner-quiet-insight[open] .scanner-quiet-insight__summary::before,
 .scanner-cause-details[open] .scanner-cause-details__summary::before {
   transform: rotate(90deg);
 }

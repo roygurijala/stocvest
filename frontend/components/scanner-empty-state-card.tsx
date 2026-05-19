@@ -120,27 +120,33 @@ export function ScannerEmptyStateCard({
       data-surface={gap ? "gap" : "setups"}
       style={{
         display: "grid",
-        gap: spacing[3],
-        padding: spacing[4],
-        background: `color-mix(in srgb, ${railHue} 6%, ${colors.surface})`,
-        border: `1.5px solid ${railHue}`,
+        gap: interpretive ? spacing[2] : spacing[3],
+        padding: interpretive ? spacing[3] : spacing[4],
+        background: interpretive
+          ? colors.surfaceMuted
+          : `color-mix(in srgb, ${railHue} 6%, ${colors.surface})`,
+        border: interpretive
+          ? `1px solid ${colors.border}`
+          : `1.5px solid ${railHue}`,
+        borderTop: interpretive ? `3px solid ${railHue}` : undefined,
         borderRadius: borderRadius.lg,
         position: "relative",
         overflow: "hidden"
       }}
     >
-      {/* Role rail — bright top stripe so the desk identity reads at a glance, matches dashboard cards. */}
-      <span
-        aria-hidden
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 2,
-          background: railHue
-        }}
-      />
+      {!interpretive ? (
+        <span
+          aria-hidden
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 2,
+            background: railHue
+          }}
+        />
+      ) : null}
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing[3] }}>
         <span
