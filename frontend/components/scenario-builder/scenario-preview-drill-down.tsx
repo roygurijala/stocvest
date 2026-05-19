@@ -167,6 +167,7 @@ export function ScenarioPreviewDrillDown({
                   ) : (
                     <Link
                       href={evidenceHref}
+                      prefetch={false}
                       className={`${linkClass} no-underline hover:underline`}
                       style={{ color: colors.accent }}
                       data-testid="scenario-preview-action-evidence"

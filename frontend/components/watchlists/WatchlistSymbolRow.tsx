@@ -87,6 +87,7 @@ function DeskStatusBlock({
           {!deskEvaluating ? (
             <Link
               href={signalsHref}
+              prefetch={false}
               className={`${WATCHLIST_EVALUATE_LINK_CLASS} watchlist-desk-lines__action`}
               data-testid={`watchlist-evaluate-${symU}-${desk}`}
               onClick={(e) => e.stopPropagation()}

@@ -111,7 +111,8 @@ export function BuildScenarioButton({
     surface: "signals"
   };
 
-  const autoFetchPanels = drillDownResolved.surface === "scanner";
+  const autoFetchPanels =
+    drillDownResolved.surface === "scanner" || drillDownResolved.surface === "watchlist";
   const autoPanels = useScenarioPreviewPanels({
     symbol: input.symbol,
     mode: input.mode,

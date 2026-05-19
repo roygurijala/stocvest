@@ -343,8 +343,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
-      consumeWatchlistMaturationBump();
-      requestMaturationReload();
+      if (consumeWatchlistMaturationBump()) requestMaturationReload();
     };
     const onMaturationUpdated = () => requestMaturationReload();
     const onFocus = () => {
