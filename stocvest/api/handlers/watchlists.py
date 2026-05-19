@@ -18,7 +18,7 @@ from stocvest.data.watchlist_maturation_transition_repository import (
     get_watchlist_maturation_transition_repository,
 )
 from stocvest.data.watchlist_store import WatchlistItem, get_watchlist_store
-from stocvest.models.watchlist import WatchlistMode
+from stocvest.models.watchlist import WatchlistEntry, WatchlistMode
 from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
@@ -261,8 +261,18 @@ def watchlists_maturation_summary_handler(event: LambdaEvent, context: LambdaCon
         if not wl or not wl.symbols:
             return ok({"mode": mode, "by_symbol": {}})
 
-        allowed = {s.strip().upper() for s in wl.symbols if str(s).strip()}
-        entries = repo.list_for_user(rc.user_id, mode=mode, exclude_archived=True)
+        allowed = [s.strip().upper() for s in wl.symbols if str(s).strip()]
+        allowed_set = set(allowed)
+        # Point reads per watchlist symbol (avoids scanning the full user partition).
+        entries: list[WatchlistEntry] = []
+        for sym in allowed:
+            try:
+                hit = repo.get_entry(rc.user_id, sym, mode)
+            except Exception as exc:
+                _LOG.warning("maturation_summary get_entry failed user=%s symbol=%s: %s", rc.user_id, sym, exc)
+                continue
+            if hit is not None and not hit.should_exclude_from_active_queries():
+                entries.append(hit)
         profile = get_user_profile_store().get_profile(rc.user_id)
         include_readiness = maturation_summary_include_readiness_label(profile)
         trans_repo = get_watchlist_maturation_transition_repository()
@@ -270,7 +280,7 @@ def watchlists_maturation_summary_handler(event: LambdaEvent, context: LambdaCon
         for e in entries:
             try:
                 su = e.symbol.strip().upper()
-                if su not in allowed:
+                if su not in allowed_set:
                     continue
                 row: dict[str, str | int | float | list[str]] = {
                     "state": e.state.value,

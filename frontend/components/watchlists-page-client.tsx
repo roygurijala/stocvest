@@ -251,27 +251,31 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
           const swJson = (await swRes.json().catch(() => ({}))) as unknown;
           const dyJson = (await dyRes.json().catch(() => ({}))) as unknown;
           if (cancelled) return;
-          if (!swRes.ok) {
-            const degraded =
-              swRes.status >= 500 ||
-              (typeof swJson === "object" &&
-                swJson !== null &&
-                "degraded" in swJson &&
-                Boolean((swJson as { degraded?: boolean }).degraded));
-            if (degraded) {
-              setMaturationSwing({});
-              setMaturationDay({});
+          const swDegraded =
+            !swRes.ok ||
+            (typeof swJson === "object" &&
+              swJson !== null &&
+              "degraded" in swJson &&
+              Boolean((swJson as { degraded?: boolean }).degraded));
+          const dyDegraded =
+            !dyRes.ok ||
+            (typeof dyJson === "object" &&
+              dyJson !== null &&
+              "degraded" in dyJson &&
+              Boolean((dyJson as { degraded?: boolean }).degraded));
+          if (swDegraded && dyDegraded) {
+            setMaturationSwing({});
+            setMaturationDay({});
+            if (swRes.status >= 500 || dyRes.status >= 500) {
               setMaturationFetchStatus("ready");
               setMaturationSummaryFetchedAt(new Date());
               return;
             }
-            setMaturationSwing({});
-            setMaturationDay({});
             setMaturationFetchStatus("error");
             return;
           }
-          setMaturationSwing(normalizeMaturationBySymbol(swJson));
-          setMaturationDay(dyRes.ok ? normalizeMaturationBySymbol(dyJson) : {});
+          setMaturationSwing(swDegraded ? {} : normalizeMaturationBySymbol(swJson));
+          setMaturationDay(dyDegraded ? {} : normalizeMaturationBySymbol(dyJson));
         } else {
           const res = await fetch(`/api/stocvest/watchlists/maturation-summary?${new URLSearchParams({ mode: "swing" })}`, {
             cache: "no-store",
