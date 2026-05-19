@@ -81,9 +81,10 @@ describe("WatchlistsPageClient maturation", () => {
     wrap(<WatchlistsPageClient />);
 
     await waitFor(() => expect(screen.getByText("AAPL")).toBeInTheDocument());
-    await waitFor(() => expect(screen.getByTitle("Ready for next session")).toBeInTheDocument());
-    expect(screen.getByTestId("watchlists-maturation-frequency")).toHaveTextContent(/4:30 PM ET/i);
-    expect(screen.getByTestId("watchlist-progression-AAPL-swing")).toHaveTextContent(/↑ from 3\/6/i);
+    await waitFor(() => expect(screen.getByText("Ready for next session")).toBeInTheDocument());
+    expect(screen.getByTestId("watchlist-evaluation-info")).toBeInTheDocument();
+    expect(screen.getByTestId("watchlist-status-line-AAPL-swing")).toHaveTextContent(/SWING · Near ready \(4\/6\)/i);
+    expect(screen.getByTestId("watchlist-detail-line-AAPL-swing")).toHaveTextContent(/Ready for next session/i);
     expect(global.fetch).toHaveBeenCalled();
     const urls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.map((c) =>
       typeof c[0] === "string" ? c[0] : String(c[0])

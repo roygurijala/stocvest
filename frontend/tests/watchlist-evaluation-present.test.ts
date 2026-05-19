@@ -1,8 +1,10 @@
 import { describe, expect, test } from "vitest";
 import {
+  countEvaluatedSymbols,
   evaluationStatusTitle,
   formatLastEvaluatedShort,
-  newestLastEvaluatedAt
+  newestLastEvaluatedAt,
+  watchlistMaturationDeskSummary
 } from "@/lib/watchlist-evaluation-present";
 
 describe("watchlist-evaluation-present", () => {
@@ -21,5 +23,19 @@ describe("watchlist-evaluation-present", () => {
 
   test("formatLastEvaluatedShort", () => {
     expect(formatLastEvaluatedShort("2026-05-16T16:30:00+00:00")).toMatch(/May/);
+  });
+
+  test("countEvaluatedSymbols respects view mode", () => {
+    const swing = { AAPL: { state: "developing" }, MSFT: {} };
+    expect(countEvaluatedSymbols(["AAPL", "MSFT"], swing, {}, "swing", false)).toEqual({
+      evaluated: 1,
+      total: 2
+    });
+  });
+
+  test("watchlistMaturationDeskSummary when none evaluated", () => {
+    const line = watchlistMaturationDeskSummary(["AAPL"], {}, {}, "swing", false);
+    expect(line).toMatch(/No maturation runs/);
+    expect(line).toMatch(/Signals/);
   });
 });

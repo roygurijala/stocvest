@@ -10,10 +10,10 @@ import { WatchlistActivityCollapsible } from "@/components/watchlists/WatchlistA
 import { WatchlistSymbolRow } from "@/components/watchlists/WatchlistSymbolRow";
 import { WatchlistStatusRails } from "@/components/watchlists/WatchlistStatusRails";
 import { ScannerCollapsible } from "@/components/scanner/ScannerCollapsible";
-import { MaturationFrequencyCallout } from "@/components/maturation-frequency-callout";
-import { WATCHLIST_EVALUATION_HEADER } from "@/lib/product-empty-states";
+import { WatchlistEvaluationInfoTip } from "@/components/watchlists/WatchlistEvaluationInfoTip";
 import { formatWatchlistMaturationDisplayLine } from "@/lib/alignment-display-tier";
 import { buildWatchlistPortfolioHeadline } from "@/lib/watchlist-row-present";
+import { watchlistMaturationDeskSummary } from "@/lib/watchlist-evaluation-present";
 import { APP_TOP_BAR_LAYOUT_HEIGHT } from "@/components/top-bar";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, colorTokens, spacing, surfaceGlowClassName } from "@/lib/design-system";
@@ -123,7 +123,6 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   const [maturationSwing, setMaturationSwing] = useState<Record<string, MaturationRow>>({});
   const [maturationDay, setMaturationDay] = useState<Record<string, MaturationRow>>({});
   const [maturationFetchStatus, setMaturationFetchStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
-  const [lastEvaluatedAt, setLastEvaluatedAt] = useState<Date | null>(null);
   const [viewMode, setViewMode] = useState<WatchlistViewMode>("swing");
   const [maturationAlerts, setMaturationAlerts] = useState<MaturationAlertFeedItem[]>([]);
   const [maturationAlertsStatus, setMaturationAlertsStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
@@ -141,7 +140,11 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     row: MaturationRow | undefined;
   } | null>(null);
 
-  usePublishAssistantContext({ page: "dashboard/watchlists" });
+  usePublishAssistantContext({
+    page: "dashboard/watchlists",
+    decision_line:
+      "Watchlist maturation runs on weekdays after ~4:30 PM ET or when you open Evidence on Signals. Ask how evaluation cadence and layer bands work."
+  });
 
   useEffect(() => {
     if (loading) return;
@@ -222,7 +225,6 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
       setMaturationSwing({});
       setMaturationDay({});
       setMaturationFetchStatus("idle");
-      setLastEvaluatedAt(null);
       return;
     }
     setMaturationFetchStatus("loading");
@@ -268,7 +270,6 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
           setMaturationDay({});
         }
         setMaturationFetchStatus("ready");
-        setLastEvaluatedAt(new Date());
       } catch {
         if (!cancelled) {
           setMaturationSwing({});
@@ -653,13 +654,27 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     }
   }
 
-  const evaluatedLabel = useMemo(() => {
+  const maturationDeskSummary = useMemo(() => {
     if (!maturationEligible || activeSymbolsDeduped.length === 0) return null;
-    if (maturationFetchStatus === "loading") return "Loading…";
-    if (maturationFetchStatus === "error") return "Unavailable";
-    if (!lastEvaluatedAt) return null;
-    return lastEvaluatedAt.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-  }, [maturationEligible, activeSymbolsDeduped.length, maturationFetchStatus, lastEvaluatedAt]);
+    if (maturationFetchStatus === "loading") return "Loading maturation…";
+    if (maturationFetchStatus === "error") return "Maturation unavailable";
+    if (maturationFetchStatus !== "ready") return null;
+    return watchlistMaturationDeskSummary(
+      activeSymbolsDeduped,
+      maturationSwing,
+      maturationDay,
+      viewMode,
+      dualDeskMaturation
+    );
+  }, [
+    maturationEligible,
+    activeSymbolsDeduped,
+    maturationFetchStatus,
+    maturationSwing,
+    maturationDay,
+    viewMode,
+    dualDeskMaturation
+  ]);
 
   const sortedSymbols = useMemo(() => {
     if (!active) return [];
@@ -793,34 +808,29 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
           >
             <div className="flex flex-wrap items-start justify-between gap-2 pb-2">
               <div className="min-w-0 flex-1">
-                      <h1 className="m-0 truncate text-xl font-bold tracking-tight sm:text-2xl" style={{ color: colors.text }}>
-                        Watchlist
-                      </h1>
-                      {maturationEligible ? (
-                        <div className="mt-1 max-w-2xl">
-                          <p
-                            className="m-0 text-sm font-medium"
-                            style={{ color: colors.text }}
-                            data-testid="watchlist-portfolio-headline"
-                          >
-                            {maturationFetchStatus === "ready" ? portfolioHeadline : WATCHLIST_EVALUATION_HEADER}
-                          </p>
-                          <div className="mt-2">
-                            <ScannerCollapsible
-                              testId="watchlist-evaluation-how"
-                              title="How evaluation works"
-                              hint="Cadence and layer bands"
-                              embedded
-                            >
-                              <MaturationFrequencyCallout
-                                desk={viewMode === "day" ? "day" : "swing"}
-                                showDisplayBands
-                                testId="watchlists-maturation-frequency"
-                              />
-                            </ScannerCollapsible>
-                          </div>
-                        </div>
-                      ) : null}
+                <div className="flex items-center gap-2">
+                  <h1 className="m-0 truncate text-xl font-bold tracking-tight sm:text-2xl" style={{ color: colors.text }}>
+                    Watchlist
+                  </h1>
+                  {maturationEligible ? (
+                    <WatchlistEvaluationInfoTip desk={viewMode === "day" ? "day" : "swing"} />
+                  ) : null}
+                </div>
+                {maturationEligible ? (
+                  <p
+                    className="m-0 mt-1 max-w-2xl text-sm font-medium"
+                    style={{ color: colors.text }}
+                    data-testid="watchlist-portfolio-headline"
+                  >
+                    {maturationFetchStatus === "ready"
+                      ? portfolioHeadline
+                      : maturationFetchStatus === "loading"
+                        ? "Loading maturation…"
+                        : maturationFetchStatus === "error"
+                          ? "Maturation unavailable"
+                          : "Track symbols for maturation status"}
+                  </p>
+                ) : null}
               </div>
               <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                 <span
@@ -1023,9 +1033,13 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                   </>
                 ) : null}
               </div>
-              {evaluatedLabel ? (
-                <span className="shrink-0 text-xs tabular-nums sm:text-sm" style={{ color: colors.textMuted }}>
-                  Evaluated {evaluatedLabel}
+              {maturationDeskSummary ? (
+                <span
+                  className="max-w-md shrink-0 text-right text-xs leading-snug sm:text-sm"
+                  style={{ color: colors.textMuted }}
+                  data-testid="watchlist-maturation-desk-summary"
+                >
+                  {maturationDeskSummary}
                 </span>
               ) : null}
             </div>

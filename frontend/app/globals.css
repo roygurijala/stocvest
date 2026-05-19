@@ -621,6 +621,11 @@ a {
   font-size: 1.125rem;
   font-weight: 700;
   letter-spacing: 0.04em;
+  color: inherit;
+  text-decoration: none;
+}
+.watchlist-symbol-row__symbol:hover {
+  text-decoration: underline;
 }
 .watchlist-symbol-row__quote {
   margin-left: auto;
@@ -642,17 +647,42 @@ a {
 .watchlist-symbol-row__remove:hover {
   background: color-mix(in srgb, var(--color-text) 6%, transparent);
 }
-.watchlist-desk-status {
+.watchlist-desk-lines {
   display: grid;
-  gap: 0.35rem;
-  padding-top: 0.25rem;
-  border-top: 1px solid color-mix(in srgb, var(--color-border) 80%, transparent);
+  gap: 0.2rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
 }
-.watchlist-desk-status__head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.35rem 0.5rem;
+.watchlist-desk-lines--pending {
+  gap: 0.35rem;
+}
+.watchlist-desk-lines__block {
+  display: grid;
+  gap: 0.15rem;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 0.25rem;
+}
+.watchlist-desk-lines__block:hover .watchlist-desk-lines__status {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.watchlist-desk-lines__status {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.35;
+}
+.watchlist-desk-lines__detail {
+  font-size: 0.8125rem;
+  line-height: 1.35;
+}
+.watchlist-desk-lines__action {
+  justify-self: start;
 }
 .watchlist-desk-status__pill {
   flex-shrink: 0;

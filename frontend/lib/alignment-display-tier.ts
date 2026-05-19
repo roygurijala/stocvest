@@ -181,3 +181,23 @@ export function formatWatchlistProgressionChip(row: WatchlistMaturationRow | und
   if (type === "worsened") return `↓ from ${prev}/${total}`;
   return null;
 }
+
+/** Watchlist row detail line, e.g. "2 layers improved today". */
+export function formatWatchlistProgressionDetail(row: WatchlistMaturationRow | undefined): string | null {
+  if (!row) return null;
+  const prev = row.previous_layers_aligned;
+  const type = row.last_transition_type;
+  const aligned = row.layers_aligned;
+  if (typeof prev !== "number" || !Number.isFinite(prev) || typeof aligned !== "number" || !Number.isFinite(aligned)) {
+    return null;
+  }
+  const delta = aligned - prev;
+  if (type === "improved" && delta > 0) {
+    return delta === 1 ? "1 layer improved today" : `${delta} layers improved today`;
+  }
+  if (type === "worsened" && delta < 0) {
+    const n = Math.abs(delta);
+    return n === 1 ? "1 layer slipped today" : `${n} layers slipped today`;
+  }
+  return null;
+}

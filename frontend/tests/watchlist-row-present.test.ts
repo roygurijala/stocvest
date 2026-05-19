@@ -11,16 +11,45 @@ describe("watchlist-row-present", () => {
     expect(watchlistLayerFillPct({ layers_aligned: 4, layers_total: 6, state: "developing" })).toBe(67);
   });
 
-  test("desk status uses readiness as secondary", () => {
-    const present = buildWatchlistDeskStatusPresent({
-      state: "developing",
-      layers_aligned: 4,
-      layers_total: 6,
-      readiness_label: "Ready for next session"
-    });
-    expect(present?.primary).toMatch(/Near ready/i);
-    expect(present?.secondary).toBe("Ready for next session");
-    expect(present?.progression).toBeNull();
+  test("ideal desk line uses SWING prefix and tier counts", () => {
+    const present = buildWatchlistDeskStatusPresent(
+      {
+        state: "developing",
+        layers_aligned: 3,
+        layers_total: 6
+      },
+      "swing"
+    );
+    expect(present?.statusLine).toBe("SWING · Developing (3/6)");
+  });
+
+  test("detail line prefers readiness over progression", () => {
+    const present = buildWatchlistDeskStatusPresent(
+      {
+        state: "developing",
+        layers_aligned: 4,
+        layers_total: 6,
+        readiness_label: "Waiting on volume confirmation",
+        previous_layers_aligned: 3,
+        last_transition_type: "improved"
+      },
+      "swing"
+    );
+    expect(present?.detailLine).toBe("Waiting on volume confirmation");
+  });
+
+  test("detail line uses layers improved when no readiness", () => {
+    const present = buildWatchlistDeskStatusPresent(
+      {
+        state: "developing",
+        layers_aligned: 5,
+        layers_total: 6,
+        previous_layers_aligned: 3,
+        last_transition_type: "improved"
+      },
+      "swing"
+    );
+    expect(present?.detailLine).toBe("2 layers improved today");
   });
 
   test("portfolio headline summarizes actionable and developing", () => {

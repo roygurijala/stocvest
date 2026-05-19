@@ -1,22 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import {
-  buildWatchlistDeskStatusPresent,
-  watchlistLayerBarColor,
-  watchlistStatusRailColor
-} from "@/lib/watchlist-row-present";
-import { WATCHLIST_ALIGNMENT_CHIP_CLASS, WATCHLIST_EVALUATE_LINK_CLASS } from "@/lib/watchlist-interactive-styles";
+import { buildWatchlistDeskStatusPresent, watchlistStatusRailColor } from "@/lib/watchlist-row-present";
+import { WATCHLIST_EVALUATE_LINK_CLASS } from "@/lib/watchlist-interactive-styles";
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
 import { formatWatchlistMaturationLabel } from "@/lib/watchlist-page-utils";
 import { shouldShowDeskRow, type SymbolTrackingMap, trackingForSymbol } from "@/lib/watchlist-tracking-presentation";
 import type { WatchlistViewMode } from "@/lib/watchlist-page-utils";
-import { watchlistSignalsOpenAriaLabel } from "@/lib/nav/watchlist-signals-deeplink";
+import { watchlistSignalsOpenAriaLabel, watchlistToSignalsHref } from "@/lib/nav/watchlist-signals-deeplink";
 import type { SnapshotPayload } from "@/lib/api/market";
 import { watchlistQuoteFromSnapshot } from "@/lib/watchlist-page-utils";
 import { useTheme } from "@/lib/theme-provider";
 import { WatchlistScenarioBuilder } from "@/components/watchlists/watchlist-scenario-builder";
-import { LayerAlignmentBar } from "@/components/watchlists/LayerAlignmentBar";
 
 type Desk = "swing" | "day";
 
@@ -54,105 +49,79 @@ function DeskStatusBlock({
   onOpenLayers: Props["onOpenLayers"];
 }) {
   const { colors } = useTheme();
-  const present = buildWatchlistDeskStatusPresent(row);
-  const deskLabel = desk === "swing" ? "Swing" : "Day";
-  const deskHue = desk === "swing" ? "#c4b5fd" : "#5eead4";
-  const barTestId = `watchlist-layer-bar-${symU}-${desk}`;
-
+  const present = buildWatchlistDeskStatusPresent(row, desk);
   if (!present) {
     if (maturationFetchStatus === "error" && isDefaultList) {
       return null;
     }
     const fallback = maturationFetchStatus === "ready" && isDefaultList ? null : "…";
     if (fallback === null) {
+      const signalsHref = watchlistToSignalsHref(symU, desk);
       return (
-        <div data-testid={`watchlist-desk-${symU}-${desk}`} className="watchlist-desk-status">
-          <span
-            className="watchlist-desk-status__pill"
-            style={{
-              background: desk === "swing" ? "rgba(167,139,250,0.2)" : "rgba(45,212,191,0.15)",
-              color: deskHue
-            }}
+        <div
+          data-testid={`watchlist-desk-${symU}-${desk}`}
+          className="watchlist-desk-lines watchlist-desk-lines--pending"
+        >
+          <p className="watchlist-desk-lines__status m-0" style={{ color: colors.textMuted }}>
+            {desk === "swing" ? "SWING" : "DAY"} · Not evaluated yet
+          </p>
+          <Link
+            href={signalsHref}
+            className={`${WATCHLIST_EVALUATE_LINK_CLASS} watchlist-desk-lines__action`}
+            data-testid={`watchlist-evaluate-${symU}-${desk}`}
+            onClick={(e) => e.stopPropagation()}
           >
-            {deskLabel}
-          </span>
-          <Link href={`/dashboard/signals?symbol=${symU}&mode=${desk}`} className={WATCHLIST_EVALUATE_LINK_CLASS}>
-            Not evaluated yet · Evaluate →
+            Open Signals
           </Link>
         </div>
       );
     }
     return (
-      <div data-testid={`watchlist-desk-${symU}-${desk}`} className="watchlist-desk-status">
-        <span className="watchlist-desk-status__pill" style={{ background: "rgba(148,163,184,0.12)", color: colors.textMuted }}>
-          {deskLabel}
-        </span>
-        <span style={{ fontSize: 12, color: colors.textMuted }}>{fallback}</span>
+      <div data-testid={`watchlist-desk-${symU}-${desk}`} className="watchlist-desk-lines">
+        <p className="m-0 text-sm" style={{ color: colors.textMuted }}>
+          {fallback}
+        </p>
       </div>
     );
   }
 
-  const improved = row?.last_transition_type === "improved";
-
   return (
-    <div data-testid={`watchlist-desk-${symU}-${desk}`} className="watchlist-desk-status">
-      <div className="watchlist-desk-status__head">
-        <span
-          className="watchlist-desk-status__pill"
-          style={{
-            background: desk === "swing" ? "rgba(167,139,250,0.2)" : "rgba(45,212,191,0.15)",
-            color: deskHue
-          }}
+    <div data-testid={`watchlist-desk-${symU}-${desk}`} className="watchlist-desk-lines">
+      <button
+        type="button"
+        className="watchlist-desk-lines__block pointer-events-auto"
+        style={{ color: colors.text }}
+        data-testid={`watchlist-alignment-${symU}-${desk}`}
+        aria-label={`${symU} ${present.statusLine}. ${present.detailLine ?? "Open layer breakdown"}`}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onOpenLayers(desk, row);
+        }}
+      >
+        <p
+          className="watchlist-desk-lines__status m-0"
+          style={{ color: colors.text }}
+          data-testid={`watchlist-status-line-${symU}-${desk}`}
         >
-          {deskLabel}
-        </span>
-        <span className="watchlist-desk-status__primary" style={{ color: colors.text }}>
-          {present.primary}
-        </span>
-        {present.progression ? (
-          <span
-            className="watchlist-desk-status__progression"
-            data-testid={`watchlist-progression-${symU}-${desk}`}
-            title="Layer alignment vs prior evaluation"
-            style={{
-              background: improved ? "rgba(34,197,94,0.12)" : "rgba(248,113,113,0.12)",
-              color: improved ? "#86efac" : "#fca5a5"
-            }}
+          {present.statusLine}
+        </p>
+        {present.detailLine ? (
+          <p
+            className="watchlist-desk-lines__detail m-0"
+            style={{ color: colors.textMuted }}
+            data-testid={`watchlist-detail-line-${symU}-${desk}`}
+            title={row?.readiness_label ?? undefined}
           >
-            {present.progression}
+            {present.detailLine}
+          </p>
+        ) : null}
+        {present.progressionChip ? (
+          <span className="sr-only" data-testid={`watchlist-progression-${symU}-${desk}`}>
+            {present.progressionChip}
           </span>
         ) : null}
-        <button
-          type="button"
-          className={WATCHLIST_ALIGNMENT_CHIP_CLASS}
-          data-testid={`watchlist-alignment-${symU}-${desk}`}
-          title="Layer breakdown"
-          aria-label={`${symU} ${deskLabel} ${present.aligned} of ${present.total} layers aligned. Open breakdown`}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onOpenLayers(desk, row);
-          }}
-        >
-          Layers {present.aligned}/{present.total}
-        </button>
-      </div>
-      <LayerAlignmentBar
-        fillPct={present.layerFillPct}
-        aligned={present.aligned}
-        total={present.total}
-        fillColor={watchlistLayerBarColor(row, colors)}
-        testId={barTestId}
-      />
-      {present.secondary ? (
-        <p
-          className="watchlist-desk-status__secondary"
-          style={{ color: colors.textMuted }}
-          title={row?.readiness_label ?? undefined}
-        >
-          {present.secondary}
-        </p>
-      ) : null}
+      </button>
     </div>
   );
 }
@@ -191,15 +160,6 @@ export function WatchlistSymbolRow({
           background: colors.background
         }}
       >
-        <Link
-          href={href}
-          prefetch={false}
-          className="watchlist-symbol-row__overlay"
-          aria-label={watchlistSignalsOpenAriaLabel(symbol)}
-        >
-          <span className="sr-only">Open {symU} on Signals</span>
-        </Link>
-
         <span
           className="watchlist-symbol-row__dot"
           style={{ background: accent }}
@@ -209,7 +169,14 @@ export function WatchlistSymbolRow({
 
         <div className="watchlist-symbol-row__body">
           <div className="watchlist-symbol-row__head">
-            <span className="watchlist-symbol-row__symbol font-mono">{symU}</span>
+            <Link
+              href={href}
+              prefetch={false}
+              className="watchlist-symbol-row__symbol font-mono pointer-events-auto"
+              aria-label={watchlistSignalsOpenAriaLabel(symbol)}
+            >
+              {symU}
+            </Link>
             <span className="watchlist-symbol-row__scenario pointer-events-auto">
               <WatchlistScenarioBuilder
                 symbol={symU}
@@ -225,7 +192,7 @@ export function WatchlistSymbolRow({
               </span>
             ) : null}
             {quote ? (
-              <span className="watchlist-symbol-row__quote tabular-nums">
+              <span className="watchlist-symbol-row__quote tabular-nums pointer-events-none">
                 <span style={{ color: colors.text, fontWeight: 600 }}>{quote.price}</span>
                 {quote.pct ? (
                   <span

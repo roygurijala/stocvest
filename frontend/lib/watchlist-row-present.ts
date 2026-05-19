@@ -1,21 +1,30 @@
 import {
   alignmentDisplayMeta,
+  formatAlignmentStatusLine,
   formatLayersFromActionableHint,
   formatWatchlistMaturationDisplayLine,
-  formatWatchlistProgressionChip
+  formatWatchlistProgressionChip,
+  formatWatchlistProgressionDetail
 } from "@/lib/alignment-display-tier";
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
 import { formatWatchlistMaturationLabel } from "@/lib/watchlist-page-utils";
 import { maturationAlignmentCounts } from "@/lib/watchlist-alignment-present";
 
 export type WatchlistDeskStatusPresent = {
-  primary: string;
-  secondary: string | null;
+  /** e.g. "SWING · Developing (3/6)" */
+  statusLine: string;
+  /** e.g. "Waiting on volume confirmation" or "2 layers improved today" */
+  detailLine: string | null;
   layerFillPct: number;
-  progression: string | null;
+  /** Legacy chip text for tests that still assert ↑/↓ */
+  progressionChip: string | null;
   aligned: number;
   total: number;
 };
+
+export function watchlistDeskLabel(desk: "swing" | "day"): string {
+  return desk === "swing" ? "SWING" : "DAY";
+}
 
 export function watchlistLayerFillPct(row: WatchlistMaturationRow | undefined): number {
   const { aligned, total } = maturationAlignmentCounts(row);
@@ -24,19 +33,22 @@ export function watchlistLayerFillPct(row: WatchlistMaturationRow | undefined): 
 }
 
 export function buildWatchlistDeskStatusPresent(
-  row: WatchlistMaturationRow | undefined
+  row: WatchlistMaturationRow | undefined,
+  desk: "swing" | "day"
 ): WatchlistDeskStatusPresent | null {
   if (!row?.state && !row?.label) return null;
   const { aligned, total } = maturationAlignmentCounts(row);
-  const primary =
+  const tierLine =
     formatWatchlistMaturationDisplayLine(row) ?? formatWatchlistMaturationLabel(row);
+  const statusLine = `${watchlistDeskLabel(desk)} · ${tierLine}`;
   const readiness = row.readiness_label?.trim();
-  const secondary = readiness || formatLayersFromActionableHint(aligned, total);
+  const detailLine =
+    readiness || formatWatchlistProgressionDetail(row) || formatLayersFromActionableHint(aligned, total);
   return {
-    primary,
-    secondary,
+    statusLine,
+    detailLine,
     layerFillPct: watchlistLayerFillPct(row),
-    progression: formatWatchlistProgressionChip(row),
+    progressionChip: formatWatchlistProgressionChip(row),
     aligned,
     total
   };
