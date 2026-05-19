@@ -39,7 +39,8 @@ describe("EvidenceCardHeader", () => {
     );
     expect(screen.getByTestId("evidence-card-bias")).toHaveTextContent("Bearish");
     expect(screen.getByTestId("evidence-card-alignment-context")).toHaveTextContent(/Not aligned/i);
-    expect(screen.getByTestId("evidence-card-alignment-links-evolution")).toBeInTheDocument();
+    expect(screen.queryByTestId("evidence-card-alignment-links-evidence")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("evidence-card-alignment-links-evolution")).not.toBeInTheDocument();
     expect(screen.queryByText(/^short$/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/NOT INVESTMENT ADVICE/i)).not.toBeInTheDocument();
   });

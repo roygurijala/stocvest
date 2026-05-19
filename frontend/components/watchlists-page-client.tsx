@@ -252,6 +252,19 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
           const dyJson = (await dyRes.json().catch(() => ({}))) as unknown;
           if (cancelled) return;
           if (!swRes.ok) {
+            const degraded =
+              swRes.status >= 500 ||
+              (typeof swJson === "object" &&
+                swJson !== null &&
+                "degraded" in swJson &&
+                Boolean((swJson as { degraded?: boolean }).degraded));
+            if (degraded) {
+              setMaturationSwing({});
+              setMaturationDay({});
+              setMaturationFetchStatus("ready");
+              setMaturationSummaryFetchedAt(new Date());
+              return;
+            }
             setMaturationSwing({});
             setMaturationDay({});
             setMaturationFetchStatus("error");
@@ -267,6 +280,19 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
           const json = (await res.json().catch(() => ({}))) as unknown;
           if (cancelled) return;
           if (!res.ok) {
+            const degraded =
+              res.status >= 500 ||
+              (typeof json === "object" &&
+                json !== null &&
+                "degraded" in json &&
+                Boolean((json as { degraded?: boolean }).degraded));
+            if (degraded) {
+              setMaturationSwing({});
+              setMaturationDay({});
+              setMaturationFetchStatus("ready");
+              setMaturationSummaryFetchedAt(new Date());
+              return;
+            }
             setMaturationSwing({});
             setMaturationDay({});
             setMaturationFetchStatus("error");

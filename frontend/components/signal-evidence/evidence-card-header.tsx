@@ -1,7 +1,6 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { AlignmentDrilldownLinks } from "@/components/signals/alignment-drilldown-links";
 import { InfoTip } from "@/components/info-tip";
 import { signalsAlignmentDisplayLine } from "@/lib/nav/alignment-display-line";
 import { borderRadius, spacing, surfaceGlowClassName } from "@/lib/design-system";
@@ -29,7 +28,7 @@ type Props = {
 
 export function EvidenceCardHeader({
   symbol,
-  tradingMode,
+  tradingMode: _tradingMode,
   bias,
   rows,
   maturationState,
@@ -107,13 +106,6 @@ export function EvidenceCardHeader({
           })}{" "}
           — context only; setup validity is on Signals
         </p>
-        <div className="mt-1.5">
-          <AlignmentDrilldownLinks
-            symbol={symbol}
-            mode={tradingMode}
-            testId="evidence-card-alignment-links"
-          />
-        </div>
       </div>
 
       <p

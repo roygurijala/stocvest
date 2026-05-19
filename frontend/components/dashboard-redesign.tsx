@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { DashboardDailyPulse } from "@/components/dashboard/dashboard-daily-pulse";
 import { DashboardEdgeSync } from "@/components/dashboard-edge-sync";
@@ -294,12 +294,42 @@ function DashboardRedesignBody({
     return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null;
   }, [edgeDashboard?.market_pulse]);
 
+  const [indicesVixSnap, setIndicesVixSnap] = useState<SnapshotPayload | null>(null);
+  const tapeVixOk = useMemo(() => {
+    const pct = vixSnapshotSessionChangePct(vixFromTape);
+    return Boolean(vixFromTape && vixPulseDataAvailable(vixFromTape, pct));
+  }, [vixFromTape]);
+
+  useEffect(() => {
+    if (tapeVixOk || pulseVixLevel != null) {
+      setIndicesVixSnap(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/market/vix-snapshot", { cache: "no-store" });
+        const json = (await res.json().catch(() => ({}))) as { snapshot?: SnapshotPayload | null };
+        if (!cancelled && json.snapshot) setIndicesVixSnap(json.snapshot);
+      } catch {
+        if (!cancelled) setIndicesVixSnap(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tapeVixOk, pulseVixLevel]);
+
   const vixSnapshot = useMemo(() => {
     const pct = vixSnapshotSessionChangePct(vixFromTape);
     if (vixFromTape && vixPulseDataAvailable(vixFromTape, pct)) return vixFromTape;
     if (pulseVixLevel != null) return vixSnapshotFromPulseLevel(pulseVixLevel);
+    if (indicesVixSnap) {
+      const ip = vixSnapshotSessionChangePct(indicesVixSnap);
+      if (vixPulseDataAvailable(indicesVixSnap, ip)) return indicesVixSnap;
+    }
     return vixFromTape;
-  }, [vixFromTape, pulseVixLevel]);
+  }, [vixFromTape, pulseVixLevel, indicesVixSnap]);
 
   const spyFromScanner =
     typeof scannerOverview.spyPct === "number" &&
