@@ -120,6 +120,39 @@ def test_neutral_composite_counts_available_layers() -> None:
     assert got.state == WatchlistState.ACTIONABLE
 
 
+def test_composite_evidence_cache_hit_also_syncs_maturation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Cached Evidence must still upsert maturation (watchlist reads Dynamo, not Upstash)."""
+    calls: list[tuple[str, str, str]] = []
+    cached = _bullish_body() | {"symbol": "NVDA"}
+
+    def capture(**kw: Any) -> None:
+        calls.append((kw["user_id"], kw["symbol"], kw["mode"]))
+
+    monkeypatch.setattr(
+        "stocvest.api.services.watchlist_maturation_sync.sync_watchlist_maturation_from_composite",
+        capture,
+    )
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.evidence_rate_limit_exceeded",
+        lambda _uid: False,
+    )
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.read_dashboard_cache",
+        lambda _k: {"state_version": "swing_v1", "data": dict(cached)},
+    )
+    monkeypatch.setattr("stocvest.api.handlers.signals.write_dashboard_cache", lambda *a, **k: True)
+
+    out = composite_response_with_evidence_cache(
+        symbol="NVDA",
+        user_id="sub-x",
+        user_email=None,
+        mode="swing",
+        sync_compute=lambda: (_ for _ in ()).throw(AssertionError("compute must not run")),
+    )
+    assert out.get("source") == "cache"
+    assert calls == [("sub-x", "NVDA", "swing")]
+
+
 def test_composite_evidence_cache_invokes_maturation_sync(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, str, str]] = []
 

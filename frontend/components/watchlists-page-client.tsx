@@ -290,6 +290,16 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   ]);
 
   useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && maturationEligible && activeSymbolsDeduped.length > 0) {
+        setMaturationReloadNonce((n) => n + 1);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [maturationEligible, activeSymbolsDeduped.length]);
+
+  useEffect(() => {
     const syms = activeSymbolsDeduped.slice(0, WATCHLIST_MAX_SYMBOLS);
     if (syms.length === 0) {
       setSnapshotsBySymbol({});

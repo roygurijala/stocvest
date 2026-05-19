@@ -124,6 +124,34 @@ def _compute_with_thread_timeout(
             return None
 
 
+def _try_sync_watchlist_maturation_from_evidence(
+    *,
+    user_id: str | None,
+    symbol: str,
+    mode: str,
+    body: dict[str, Any],
+) -> None:
+    """Persist maturation from any successful evidence payload (computed or cache)."""
+    if not user_id:
+        return
+    if str(body.get("status") or "") == "insufficient_data" or body.get("error"):
+        return
+    try:
+        from stocvest.api.services.watchlist_maturation_sync import (
+            sync_watchlist_maturation_from_composite,
+        )
+
+        sync_watchlist_maturation_from_composite(
+            user_id=user_id,
+            symbol=symbol,
+            mode="day" if mode == "day" else "swing",
+            composite_body=body,
+            email_on_state_change=False,
+        )
+    except Exception as exc:  # noqa: BLE001 — maturation must not break composite
+        _LOG.warning("watchlist maturation sync skipped: %s", exc)
+
+
 def composite_response_with_evidence_cache(
     *,
     symbol: str,
@@ -146,6 +174,9 @@ def composite_response_with_evidence_cache(
         data = dict(envelope["data"])
         data["source"] = "cache"
         data["cache_state_version"] = envelope.get("state_version")
+        _try_sync_watchlist_maturation_from_evidence(
+            user_id=user_id, symbol=symbol, mode=mode, body=data
+        )
         return data
 
     try:
@@ -158,6 +189,9 @@ def composite_response_with_evidence_cache(
             data = dict(stale["data"])
             data["source"] = "cache_stale"
             data["cache_state_version"] = stale.get("state_version")
+            _try_sync_watchlist_maturation_from_evidence(
+                user_id=user_id, symbol=symbol, mode=mode, body=data
+            )
             return data
         return {
             "error": "upstream_unavailable",
@@ -171,6 +205,9 @@ def composite_response_with_evidence_cache(
             data = dict(stale["data"])
             data["source"] = "cache_stale"
             data["cache_state_version"] = stale.get("state_version")
+            _try_sync_watchlist_maturation_from_evidence(
+                user_id=user_id, symbol=symbol, mode=mode, body=data
+            )
             return data
         return {
             "error": "timeout",
@@ -189,22 +226,7 @@ def composite_response_with_evidence_cache(
     )
     out = dict(body)
     out["source"] = "computed"
-    if user_id:
-        try:
-            from stocvest.api.services.watchlist_maturation_sync import (
-                sync_watchlist_maturation_from_composite,
-            )
-
-            # Request path: persist maturation only — no SES on the hot path (avoids 503s).
-            sync_watchlist_maturation_from_composite(
-                user_id=user_id,
-                symbol=symbol,
-                mode="day" if mode == "day" else "swing",
-                composite_body=out,
-                email_on_state_change=False,
-            )
-        except Exception as exc:  # noqa: BLE001 — maturation must not break composite
-            _LOG.warning("watchlist maturation sync skipped: %s", exc)
+    _try_sync_watchlist_maturation_from_evidence(user_id=user_id, symbol=symbol, mode=mode, body=out)
     return out
 
 
