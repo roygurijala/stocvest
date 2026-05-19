@@ -84,6 +84,15 @@ describe("VIX snapshot helpers", () => {
     expect(pct!).toBeGreaterThan(0);
   });
 
+  test("pickUsableVixSnapshot prefers first usable ticker", async () => {
+    const { pickUsableVixSnapshot } = await import("@/lib/api/market-snapshot-helpers");
+    const picked = pickUsableVixSnapshot([
+      { symbol: "I:VIX", last_trade_price: null, day_close: null },
+      { symbol: "^VIX", last_trade_price: 19.1, prev_close: 18.5 }
+    ]);
+    expect(picked?.symbol).toBe("^VIX");
+  });
+
   test("vixSnapshotDisplayLevel accepts string numbers from JSON", async () => {
     const { vixSnapshotDisplayLevel, vixPulseDataAvailable, vixSnapshotSessionChangePct } = await import(
       "@/lib/api/market-snapshot-helpers"

@@ -40,6 +40,7 @@ from stocvest.data.polygon_client import LIQUID_NEWS_TICKERS
 from stocvest.data.watchlist_store import get_watchlist_store
 from stocvest.utils.config import get_settings
 from stocvest.api.services.dashboard_summary import build_dashboard_summary
+from stocvest.api.services.morning_brief_fetch import get_vix_snapshot_with_fallback
 from stocvest.signals.macro_context import get_macro_context
 
 
@@ -195,6 +196,28 @@ def tickers_search_handler(
             rows = await client.search_reference_tickers(raw, limit=25)
         items = [{"symbol": r["ticker"], "name": r.get("name", "")} for r in rows if r.get("ticker")]
         return ok({"items": items})
+
+    try:
+        return asyncio.run(_run())
+    except PolygonError as exc:
+        return internal_error(str(exc))
+
+
+def vix_snapshot_handler(
+    event: LambdaEvent,
+    context: LambdaContext,
+    client_factory: Callable[..., PolygonClient] = PolygonClient,
+) -> dict[str, Any]:
+    """GET ``/v1/market/vix-snapshot`` — VIX via indices + stocks fallback (Polygon key from Lambda secret)."""
+    _ = (event, context)
+
+    async def _run() -> dict[str, Any]:
+        settings = get_settings()
+        async with client_factory(api_key=settings.polygon_api_key) as client:
+            snap = await get_vix_snapshot_with_fallback(client)
+        if snap is None:
+            return ok({"snapshot": None})
+        return ok({"snapshot": snap.model_dump(mode="json")})
 
     try:
         return asyncio.run(_run())

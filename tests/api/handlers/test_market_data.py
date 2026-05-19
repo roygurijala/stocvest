@@ -16,6 +16,7 @@ from stocvest.api.handlers.market_data import (
     snapshot_handler,
     snapshots_batch_handler,
     tickers_search_handler,
+    vix_snapshot_handler,
 )
 from stocvest.data.models import Bar, EarningsEvent, MarketStatus, NewsArticle, OptionContract, Snapshot, Timeframe
 from stocvest.data.polygon_client import PolygonError
@@ -221,6 +222,26 @@ def test_snapshot_handler_returns_symbol_snapshot() -> None:
     body = json.loads(response["body"])
     assert body["symbol"] == "AAPL"
     assert body["last_trade_price"] == 101.5
+
+
+def test_vix_snapshot_handler_returns_usable_snapshot() -> None:
+    class _VixClient(_FakePolygonClient):
+        async def get_indices_snapshots(self, tickers: list[str]) -> dict[str, Snapshot]:
+            _ = tickers
+            return {
+                "I:VIX": Snapshot(
+                    symbol="I:VIX",
+                    last_trade_price=18.5,
+                    change_percent=0.4,
+                    prev_close=18.0,
+                )
+            }
+
+    response = vix_snapshot_handler({}, {}, client_factory=_VixClient)
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["snapshot"]["symbol"] == "I:VIX"
+    assert body["snapshot"]["last_trade_price"] == 18.5
 
 
 def test_tickers_search_handler_requires_two_chars() -> None:

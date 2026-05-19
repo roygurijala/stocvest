@@ -91,6 +91,7 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
             snapshot_handler,
             snapshots_batch_handler,
             tickers_search_handler,
+            vix_snapshot_handler,
         )
 
         return _with_cors_and_audit(
@@ -103,6 +104,7 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
                     "GET /v1/market/status": market_status_handler,
                     "GET /v1/market/macro-context": macro_context_handler,
                     "GET /v1/market/snapshot": snapshot_handler,
+                    "GET /v1/market/vix-snapshot": vix_snapshot_handler,
                     "GET /v1/market/snapshots": snapshots_batch_handler,
                     "GET /v1/market/tickers-search": tickers_search_handler,
                     "GET /v1/market/bars": bars_handler,

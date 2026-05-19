@@ -7,6 +7,7 @@ locals {
     "GET /v1/market/status"         = { module_key = "market_data", authorizer = true }
     "GET /v1/market/macro-context"  = { module_key = "market_data", authorizer = true }
     "GET /v1/market/snapshot"       = { module_key = "market_data", authorizer = true }
+    "GET /v1/market/vix-snapshot"   = { module_key = "market_data", authorizer = true }
     "GET /v1/market/snapshots"      = { module_key = "market_data", authorizer = true }
     "GET /v1/market/tickers-search" = { module_key = "market_data", authorizer = true }
     "GET /v1/market/bars"           = { module_key = "market_data", authorizer = true }

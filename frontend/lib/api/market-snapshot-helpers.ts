@@ -78,6 +78,38 @@ export function vixPulseDataAvailable(
   return vixSnapshotDisplayLevel(snapshot) != null;
 }
 
+/** Pick the first VIX row the dashboard can render from a snapshot list. */
+export function pickUsableVixSnapshot(
+  snapshots: readonly MarketSnapshotVixFields[]
+): MarketSnapshotVixFields | null {
+  const preferred = new Set(["I:VIX", "^VIX", "VIX"]);
+  const bySym = new Map<string, MarketSnapshotVixFields>();
+  const fringe: MarketSnapshotVixFields[] = [];
+  for (const x of snapshots) {
+    const row = x as MarketSnapshotVixFields & { symbol?: string };
+    const u = String(row.symbol || "")
+      .trim()
+      .toUpperCase();
+    if (!u) continue;
+    bySym.set(u, row);
+    if (!preferred.has(u) && isVixTickerSymbol(u)) fringe.push(row);
+  }
+  const pickUsable = (hit: MarketSnapshotVixFields | undefined): MarketSnapshotVixFields | null => {
+    if (!hit) return null;
+    const pct = vixSnapshotSessionChangePct(hit);
+    return vixPulseDataAvailable(hit, pct) ? hit : null;
+  };
+  for (const k of ["I:VIX", "^VIX", "VIX"]) {
+    const ok = pickUsable(bySym.get(k));
+    if (ok) return ok;
+  }
+  for (const x of fringe) {
+    const ok = pickUsable(x);
+    if (ok) return ok;
+  }
+  return null;
+}
+
 /** Polygon / vendors may label VIX under alternate tickers — use for discovery, not display. */
 export function isVixTickerSymbol(raw: string | undefined | null): boolean {
   const u = String(raw || "")

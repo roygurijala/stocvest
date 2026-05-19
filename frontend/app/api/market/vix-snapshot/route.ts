@@ -1,11 +1,8 @@
 import { NextResponse } from "next/server";
-import { fetchVixIndicesSnapshot } from "@/lib/market/fetch-vix-indices";
+import { fetchVixSnapshotForDashboard } from "@/lib/market/fetch-vix-indices";
 
-/** Public read of VIX level for dashboard fallback (Polygon key on this host). */
+/** VIX level for dashboard — uses API Gateway Polygon key, then optional Vercel POLYGON_API_KEY. */
 export async function GET() {
-  const snap = await fetchVixIndicesSnapshot();
-  if (!snap) {
-    return NextResponse.json({ snapshot: null }, { status: 200 });
-  }
+  const snap = await fetchVixSnapshotForDashboard();
   return NextResponse.json({ snapshot: snap }, { status: 200 });
 }
