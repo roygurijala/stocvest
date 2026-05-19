@@ -12,6 +12,7 @@ import {
   WATCHLIST_EVALUATE_LINK_CLASS
 } from "@/lib/watchlist-interactive-styles";
 import { MaturationFrequencyCallout } from "@/components/maturation-frequency-callout";
+import { UnlockForecast } from "@/components/analytics/UnlockForecast";
 import { WATCHLIST_EVALUATION_HEADER } from "@/lib/product-empty-states";
 import { maturationAlignmentCounts } from "@/lib/watchlist-alignment-present";
 import {
@@ -1413,6 +1414,11 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                               ×
                             </button>
                           </div>
+                          {active.is_default &&
+                          (viewMode === "swing" || viewMode === "both") &&
+                          shouldShowDeskRow(rowTracking, "swing", viewMode, dualDeskMaturation) ? (
+                            <UnlockForecast fetchOnExpand symbol={symU} />
+                          ) : null}
                         </li>
                       );
                     })}

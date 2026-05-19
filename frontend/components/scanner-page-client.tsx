@@ -26,6 +26,7 @@ import { ScannerEvaluationDetails } from "@/components/scanner/ScannerEvaluation
 import { ScannerOutcomeCards } from "@/components/scanner/ScannerOutcomeCards";
 import { ScannerScanResultHero } from "@/components/scanner/scanner-scan-result-hero";
 import { ScannerWatchlistInsightCard } from "@/components/scanner/ScannerWatchlistInsightCard";
+import { LaggardScanner } from "@/components/scanner/LaggardScanner";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { loadScannerDataWithoutBrief } from "@/lib/api/scanner-client-load";
@@ -2141,6 +2142,8 @@ export function ScannerPageClient({
           </div>
         </section>
       </div>
+
+      <LaggardScanner visible={scannerSetupMode === "swing" || scannerSetupMode === "both"} />
 
       <GapCatalystNewsDrawer
         open={gapNewsDrawerItem != null && !!gapNewsDrawerItem.catalyst}

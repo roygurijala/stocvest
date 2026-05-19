@@ -219,6 +219,7 @@ export function SignalsPageClient({
     evolutionPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
   const signalIdUrlStrippedRef = useRef(false);
+  const pendingAutoEvidenceOpenRef = useRef(false);
   const [tradingMode, setTradingMode] = useState<TradingMode>(() => {
     const raw = signalsPrefill.initialTradingMode;
     const base: TradingMode = raw === "day" || raw === "swing" ? raw : "swing";
@@ -1114,11 +1115,12 @@ export function SignalsPageClient({
     const openFromQuery = url.searchParams.get("open_evidence") === "1";
     const openFromHash = url.hash === "#evidence";
     if (!openFromQuery && !openFromHash) return;
-    void openEvidenceModal();
+    pendingAutoEvidenceOpenRef.current = true;
+    setEvidenceOpen(true);
     if (openFromHash) url.hash = "";
     if (openFromQuery) url.searchParams.delete("open_evidence");
     window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
-  }, [symbolCommitted, openEvidenceModal]);
+  }, [symbolCommitted]);
 
   // Layer 4 (second slice): the composite fetch + radar
   // projection used to live in a `[symbol, tab, tradingMode]`
@@ -1161,30 +1163,30 @@ export function SignalsPageClient({
     [compositeResult]
   );
 
-  // Reset `signalEvidence` whenever the composite cache key
-  // changes (symbol switch, mode flip, or a fresh insufficient
-  // envelope). The evidence card is built from a *different*
-  // source (the user-initiated "Show evidence" click in the
-  // download handler), so we keep it as local state but tie its
-  // lifecycle to the same key the composite hook uses.
+  // Drop cached evidence whenever composite input changes so reopening
+  // (or the rebuild effect below) never shows a prior symbol/mode/payload.
   useEffect(() => {
-    if (!symbol.trim()) {
-      setSignalEvidence(null);
-      return;
-    }
-    if (compositeResult === null) {
-      setSignalEvidence(null);
-      return;
-    }
-    if (isInsufficientCompositeResponse(compositeResult)) {
-      setSignalEvidence(null);
-    }
+    setSignalEvidence(null);
   }, [symbol, tradingMode, compositeResult]);
 
   const insufficientComposite: SwingCompositeMarketStatus | null = isInsufficientCompositeResponse(compositeResult)
     ? compositeResult.market_status
     : null;
   const hasValidSignal = compositeResult !== null && !isInsufficientCompositeResponse(compositeResult);
+
+  useEffect(() => {
+    if (!evidenceOpen || !symbolCommitted || !hasValidSignal) return;
+    if (pendingAutoEvidenceOpenRef.current) {
+      pendingAutoEvidenceOpenRef.current = false;
+      void openEvidenceModal();
+      return;
+    }
+    if (!signalEvidence) {
+      void openEvidenceModal();
+    }
+  }, [evidenceOpen, symbolCommitted, hasValidSignal, compositeResult, signalEvidence, openEvidenceModal]);
+
+  const evidenceModalLoading = evidenceOpen && !signalEvidence;
 
   const compositeServiceMessage: ReactNode =
     compositeFetchErrorMessage || compositeTransportError?.message ? (
@@ -1833,7 +1835,12 @@ export function SignalsPageClient({
       <SignalEvidenceModal
         open={evidenceOpen}
         evidence={signalEvidence}
-        onClose={() => setEvidenceOpen(false)}
+        loading={evidenceModalLoading}
+        loadingSymbol={symbol.trim() ? symbol : null}
+        onClose={() => {
+          pendingAutoEvidenceOpenRef.current = false;
+          setEvidenceOpen(false);
+        }}
         gapIntelSnapshot={gapIntelSnapshot}
         onOpenNewsPanel={(sym) => {
           setNewsPanelSymbol(sym.trim().toUpperCase());

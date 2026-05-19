@@ -1,5 +1,6 @@
 import type { NewsPayload, SnapshotPayload } from "@/lib/api/market";
 import type { IntradaySetupPayload } from "@/lib/api/scanner";
+import { parseLaggardSignal, parseUnlockForecast, type LaggardSignal, type UnlockHint } from "@/lib/laggard";
 import { coerceSnapshotForReferenceLevels } from "@/lib/snapshot-reference-levels";
 
 export type EvidenceDirection = "bullish" | "bearish" | "neutral";
@@ -430,6 +431,10 @@ export interface SignalEvidenceData {
   } | null;
   /** Swing-only fundamental backdrop from composite (paid users; null when gated or unavailable). */
   fundamentalContext?: SignalEvidenceFundamentalContext | null;
+  /** Swing-only peer divergence context from composite (`laggard_signal`). */
+  laggardSignal?: LaggardSignal | null;
+  /** Swing-only layer unlock hints from composite (`unlock_forecast`). */
+  unlockForecast?: UnlockHint[];
   confluence?: SignalEvidenceConfluence | null;
   /** Populated from swing composite JSON or derived locally for consistent evidence UI. */
   insight?: SignalEvidenceInsight | null;
@@ -1995,6 +2000,11 @@ export function applySwingCompositeEnrichment(
   const fundamentalContext =
     cm === "swing" ? parseFundamentalContext(body.fundamental_context) ?? evidence.fundamentalContext ?? null : null;
 
+  const laggardSignal =
+    cm === "swing" ? parseLaggardSignal(body.laggard_signal) ?? evidence.laggardSignal ?? null : null;
+  const unlockForecast =
+    cm === "swing" ? parseUnlockForecast(body.unlock_forecast) : evidence.unlockForecast ?? [];
+
   return {
     ...evidence,
     compositeMode: cm ?? evidence.compositeMode,
@@ -2006,7 +2016,9 @@ export function applySwingCompositeEnrichment(
     confluence,
     alignment: alignmentMerged,
     earningsRisk,
-    fundamentalContext
+    fundamentalContext,
+    laggardSignal,
+    unlockForecast: unlockForecast.length ? unlockForecast : undefined
   };
 }
 

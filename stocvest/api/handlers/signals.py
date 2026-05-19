@@ -1757,6 +1757,10 @@ def signals_http_dispatch(event: LambdaEvent, context: LambdaContext) -> dict[st
         )
 
         return admin_system_status_handler(event, context)
+    if route.endswith("/laggard") and route.startswith("GET /v1/signals/"):
+        from stocvest.api.handlers.laggard import signal_laggard_handler
+
+        return signal_laggard_handler(event, context)
     if route.startswith("GET /v1/signals/records/"):
         return public_platform_signal_record_handler(event, context)
     if route.startswith("GET /v1/signals/me/records/"):

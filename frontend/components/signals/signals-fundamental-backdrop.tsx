@@ -35,7 +35,7 @@ export function SignalsFundamentalBackdrop({ summary }: Props) {
           maxWidth={300}
         />
         <span className="text-[10px] uppercase tracking-wide" style={{ color: colors.textMuted }}>
-          (not scored)
+          (optional · not scored)
         </span>
       </div>
       {summary.bullets.length > 0 ? (

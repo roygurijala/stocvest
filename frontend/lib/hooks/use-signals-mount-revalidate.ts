@@ -23,6 +23,10 @@ function gapIntelKey(symbol: string, mode: GapIntelMode) {
   return [`${STOCVEST_SWR_CACHE_NS}gap-intel`, symbol, mode] as const;
 }
 
+function compositeKey(symbol: string, mode: SignalCompositeMode) {
+  return [`${STOCVEST_SWR_CACHE_NS}signal-composite`, symbol, mode] as const;
+}
+
 export function useSignalsMountRevalidate(
   symbol: string,
   mode: SignalCompositeMode,
@@ -40,8 +44,10 @@ export function useSignalsMountRevalidate(
     let cancelled = false;
     setIsMountRevalidating(true);
 
-    // Snapshot + gap-intel only — composite already fetches on mount via useSignalComposite.
-    const keys = [snapshotKey(sym), gapIntelKey(sym, mode)] as const;
+    // Revalidate composite too — session-restored symbols can otherwise show a
+    // stale-while-revalidate SWR payload on the main page while evidence was
+    // built from the synthetic fallback before the first fetch completed.
+    const keys = [compositeKey(sym, mode), snapshotKey(sym), gapIntelKey(sym, mode)] as const;
 
     // Defer so the SWR hooks' initial subscribe fetch runs first — avoids
     // aborting an in-flight composite request on mode-toggle tests and first paint.

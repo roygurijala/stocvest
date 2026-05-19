@@ -34,6 +34,7 @@ locals {
     "GET /v1/signals/me/history"             = { module_key = "signals", authorizer = true }
     "GET /v1/signals/gap-intel"              = { module_key = "signals", authorizer = true }
     "POST /v1/signals/gap-intel/batch"       = { module_key = "signals", authorizer = true }
+    "GET /v1/signals/{symbol}/laggard"       = { module_key = "signals", authorizer = true }
     "GET /v1/signals/me/records/{signal_id}" = { module_key = "signals", authorizer = true }
     "GET /v1/signals/analysis"               = { module_key = "signals", authorizer = true }
     # D2 Historical Signal Validation — Phase 3a backend surface. Auth-required; every
@@ -138,6 +139,7 @@ locals {
     "POST /v1/scanner/intraday"         = { module_key = "scanner", authorizer = true }
     "POST /v1/scanner/briefing"         = { module_key = "scanner", authorizer = true }
     "POST /v1/scanner/gap-intelligence" = { module_key = "scanner", authorizer = true }
+    "GET /v1/scanner/laggards"          = { module_key = "scanner", authorizer = true }
   }
 
   http_lambda_integration_keys = distinct([for _, v in local.http_api_route_definitions : v.module_key])

@@ -31,6 +31,7 @@ locals {
     "macro_warmer",
     "sector_daily_cache",
     "market_pulse_refresher",
+    "laggard_jobs",
   ])
 
   lambda_common_env = {
@@ -291,8 +292,8 @@ resource "aws_lambda_function" "api" {
   role          = aws_iam_role.lambda_api_execution.arn
   handler       = "handler.lambda_handler"
   runtime       = "python3.11"
-  timeout       = each.key == "scanner" ? 120 : each.key == "signal_resolution" ? 120 : each.key == "news_consumer" ? 120 : each.key == "geo_themes" ? 30 : each.key == "macro_warmer" ? 60 : each.key == "sector_daily_cache" ? 120 : each.key == "market_pulse_refresher" ? 15 : 60
-  memory_size   = each.key == "geo_themes" ? 256 : each.key == "orb_compute" ? 256 : each.key == "macro_warmer" ? 256 : each.key == "sector_daily_cache" ? 512 : each.key == "market_pulse_refresher" ? 256 : 512
+  timeout       = each.key == "scanner" ? 120 : each.key == "signal_resolution" ? 120 : each.key == "news_consumer" ? 120 : each.key == "geo_themes" ? 30 : each.key == "macro_warmer" ? 60 : each.key == "sector_daily_cache" ? 120 : each.key == "market_pulse_refresher" ? 15 : each.key == "laggard_jobs" ? 120 : 60
+  memory_size   = each.key == "geo_themes" ? 256 : each.key == "orb_compute" ? 256 : each.key == "macro_warmer" ? 256 : each.key == "sector_daily_cache" ? 512 : each.key == "market_pulse_refresher" ? 256 : each.key == "laggard_jobs" ? 256 : 512
 
   filename         = data.archive_file.api_lambda_placeholder.output_path
   source_code_hash = data.archive_file.api_lambda_placeholder.output_base64sha256
@@ -324,6 +325,9 @@ resource "aws_lambda_function" "api" {
         STOCVEST_DISABLE_REDIS = "0"
       } : {},
       each.key == "market_pulse_refresher" ? {
+        STOCVEST_DISABLE_REDIS = "0"
+      } : {},
+      each.key == "laggard_jobs" ? {
         STOCVEST_DISABLE_REDIS = "0"
       } : {},
       each.key == "signals" ? {

@@ -10,6 +10,7 @@ import { useTheme } from "@/lib/theme-provider";
 import { EvidenceCardHeader } from "@/components/signal-evidence/evidence-card-header";
 import { EvidenceLayerContribution } from "@/components/signal-evidence/evidence-layer-contribution";
 import { FundamentalBackdropPanel } from "@/components/signal-evidence/fundamental-backdrop";
+import { LaggardInsight } from "@/components/signal/LaggardInsight";
 import { InfoTip } from "@/components/info-tip";
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import {
@@ -1131,6 +1132,8 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
         isPaid={hasAIExplanations}
         mode={evidence.compositeMode}
       />
+
+      <LaggardInsight signal={evidence.laggardSignal} isPaid={hasAIExplanations} mode={evidence.compositeMode} />
 
       <section>
         <h3 style={{ marginTop: 0 }}>Layer breakdown</h3>

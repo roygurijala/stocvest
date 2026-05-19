@@ -41,7 +41,28 @@ describe("FundamentalBackdropPanel", () => {
   test("shows backdrop for paid swing users", () => {
     wrap(<FundamentalBackdropPanel context={sample} isPaid mode="swing" />);
     expect(screen.getByTestId("fundamental-backdrop-panel")).toBeTruthy();
+    expect(screen.getByText(/FUNDAMENTAL CONTEXT \(optional\)/i)).toBeTruthy();
     expect(screen.getByText(/not scored/i)).toBeTruthy();
     expect(screen.getByText(/XRT/)).toBeTruthy();
+    expect(screen.getByText(/Positive fundamental backdrop/i)).toBeTruthy();
+  });
+
+  test("quiet pillars show reframed narrative and pillar lines", () => {
+    const quiet: SignalEvidenceFundamentalContext = {
+      ...sample,
+      backdrop: "neutral",
+      earnings_trend: "unknown",
+      guidance_direction: "unknown",
+      analyst_direction: "unknown",
+      summary_line: "Fundamental context limited for AMZN. Signal data only."
+    };
+    wrap(<FundamentalBackdropPanel context={quiet} isPaid mode="swing" />);
+    expect(screen.getByText(/No fundamental catalyst influencing this setup/i)).toBeTruthy();
+    expect(screen.getByText(/broader market conditions/i)).toBeTruthy();
+    expect(screen.getByText(/no recent signal/i)).toBeTruthy();
+    expect(screen.getByText(/no material change/i)).toBeTruthy();
+    expect(screen.getByText(/no notable activity/i)).toBeTruthy();
+    expect(screen.queryByText(/Neutral fundamental backdrop/i)).toBeNull();
+    expect(screen.queryByText(/unknown/i)).toBeNull();
   });
 });

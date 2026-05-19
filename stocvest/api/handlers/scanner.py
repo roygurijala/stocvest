@@ -10,6 +10,7 @@ from stocvest.api.http_route import http_route_descriptor
 from stocvest.api.legal_copy import API_SIGNAL_DISCLAIMER
 from stocvest.api.response import bad_request, internal_error, not_found, ok
 from stocvest.api.services.gap_intelligence_news import collect_news_for_gap_intelligence
+from stocvest.api.handlers.laggard import scanner_laggards_handler
 from stocvest.api.services.scanner_response_cache import build_cache_key, cache_get, cache_set
 from stocvest.api.services.scanner_scheduled_pipeline import run_scheduled_scan_sync
 from stocvest.api.services.morning_brief_fetch import (
@@ -194,6 +195,7 @@ def handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
         "POST /v1/scanner/intraday": scanner_intraday_handler,
         "POST /v1/scanner/briefing": scanner_briefing_handler,
         "POST /v1/scanner/gap-intelligence": scanner_gap_intelligence_handler,
+        "GET /v1/scanner/laggards": scanner_laggards_handler,
     }
     target = routes.get(route)
     if target is None:

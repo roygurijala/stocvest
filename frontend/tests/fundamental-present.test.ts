@@ -3,6 +3,7 @@ import {
   buildEvidenceRiskHorizonFactors,
   buildFundamentalBackdropBullets,
   buildFundamentalBackdropSummary,
+  buildFundamentalContextPresentation,
   buildFundamentalConvictionNote,
   revenueTrendInterpretation
 } from "@/lib/signal-evidence/fundamental-present";
@@ -71,6 +72,28 @@ describe("fundamental-present", () => {
     });
     expect(factors).not.toContain("Earnings in 3 days");
     expect(factors).toContain("Weak revenue trend increases downside sensitivity");
+  });
+
+  test("buildFundamentalContextPresentation quiet pillars use reframed copy", () => {
+    const pres = buildFundamentalContextPresentation(
+      ctx({
+        backdrop: "neutral",
+        earnings_trend: "unknown",
+        guidance_direction: "unknown",
+        analyst_direction: "unknown",
+        revenue_trend: "unknown"
+      })
+    );
+    expect(pres.narrative).toEqual([
+      "No fundamental catalyst influencing this setup.",
+      "Price behavior is currently driven by broader market conditions."
+    ]);
+    expect(pres.backdropChip).toBeNull();
+    expect(pres.pillars.map((p) => `${p.label}: ${p.text}`)).toEqual([
+      "Earnings: no recent signal",
+      "Guidance: no material change",
+      "Analysts: no notable activity"
+    ]);
   });
 
   test("buildEvidenceRiskHorizonFactors includes macro warnings", () => {

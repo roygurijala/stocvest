@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from typing import Any
@@ -38,6 +39,18 @@ from stocvest.data.benzinga_client import BenzingaClient, BenzingaMultiResult
 from stocvest.api.services.user_profile_store import get_user_profile_store
 from stocvest.data.earnings_calendar import merge_earnings_horizon_into_response, resolve_upcoming_earnings_horizon
 from stocvest.signals.fundamental_context import build_fundamental_context
+from stocvest.analytics.unlock_forecast import (
+    composite_bias_from_summary,
+    compute_unlock_forecast,
+    derive_missing_layers,
+    unlock_hints_to_api,
+)
+from stocvest.signals.laggard_assembler import compute_laggard_signal
+from stocvest.signals.multi_timeframe import (
+    apply_timeframe_score_modifier,
+    compute_weekly_bias,
+    get_timeframe_alignment,
+)
 from stocvest.data.models import Bar, SignalRecord, Snapshot, Timeframe
 from stocvest.data.polygon_client import PolygonClient, PolygonError
 from stocvest.data.symbol_normalize import to_polygon_symbol
@@ -285,6 +298,25 @@ async def build_swing_composite_response(
         alignment.technical_direction,
     )
 
+    weekly_timeframe: dict[str, Any] | None = None
+    timeframe_alignment: dict[str, Any] | None = None
+    if len(daily_bars) >= 5:
+        weekly_timeframe = compute_weekly_bias(daily_bars)
+        timeframe_alignment = get_timeframe_alignment(
+            str(tech.verdict or "neutral"),
+            str(weekly_timeframe.get("weekly_bias") or "neutral"),
+        )
+        tf_mod = int(timeframe_alignment.get("composite_score_modifier") or 0)
+        if tf_mod:
+            adj_score = apply_timeframe_score_modifier(float(composite.score), tf_mod)
+            if adj_score >= float(swing_composite.bullish_threshold):
+                nv = CompositeVerdict.BULLISH
+            elif adj_score <= float(swing_composite.bearish_threshold):
+                nv = CompositeVerdict.BEARISH
+            else:
+                nv = CompositeVerdict.NEUTRAL
+            composite = replace(composite, score=adj_score, verdict=nv)
+
     contributions: list[dict[str, Any]] = []
     for c in composite.contributions:
         reasoning = ""
@@ -342,6 +374,9 @@ async def build_swing_composite_response(
             row["macro_risk_level"] = getattr(res, "macro_risk_level", None)
             row["upcoming_events"] = list(getattr(res, "upcoming_events", None) or [])
             row["yield_curve"] = getattr(res, "yield_curve", None)
+        if lid == "internals":
+            row["breadth_signal"] = getattr(res, "breadth_signal", None)
+            row["participation"] = getattr(res, "participation", None)
         if lid == "sector":
             ds = None
             if sector_momentum:
@@ -389,7 +424,23 @@ async def build_swing_composite_response(
         "conflicted_layers": list(composite.conflicted_layers or []),
     }
     response_body["alignment"] = alignment_to_response_dict(alignment)
+    response_body["weekly_timeframe"] = weekly_timeframe
+    response_body["timeframe_alignment"] = timeframe_alignment
     merge_earnings_horizon_into_response(response_body, earnings_horizon)
+
+    try:
+        cb = composite_bias_from_summary(str(composite.verdict.value))
+        layer_raw = {str(row.get("layer") or ""): row for row in layers_out}
+        missing_layers = derive_missing_layers(layers_out, composite_bias=cb)
+        unlock_hints = compute_unlock_forecast(
+            missing_layers=missing_layers,
+            layer_raw_data=layer_raw,
+            composite_bias=cb,
+        )
+        response_body["unlock_forecast"] = unlock_hints_to_api(unlock_hints)
+    except Exception as exc:
+        _LOG.warning("unlock_forecast_failed symbol=%s err=%s", sym, type(exc).__name__)
+        response_body["unlock_forecast"] = []
 
     response_body["fundamental_context"] = None
     if user_id:
@@ -405,6 +456,31 @@ async def build_swing_composite_response(
                 response_body["fundamental_context"] = fctx.to_api_dict()
         except Exception as exc:
             _LOG.warning("fundamental_context_failed symbol=%s err=%s", sym, type(exc).__name__)
+
+    response_body["laggard_signal"] = None
+    try:
+        snap_move_1d = (
+            float(sym_snap.change_percent)
+            if sym_snap is not None and sym_snap.change_percent is not None
+            else None
+        )
+        snap_vol = (
+            float(sym_snap.day_volume)
+            if sym_snap is not None and sym_snap.day_volume is not None
+            else None
+        )
+        earnings_risk = str(response_body.get("earnings_risk") or "").strip().lower()
+        response_body["laggard_signal"] = await compute_laggard_signal(
+            symbol=sym,
+            news_verdict=news.verdict,
+            has_earnings_risk=earnings_risk in ("imminent", "elevated"),
+            tech_score=float(tech.score) if tech.score is not None else 0.0,
+            symbol_move_1d=snap_move_1d,
+            symbol_vol_today=snap_vol,
+            mode="swing",
+        )
+    except Exception as exc:
+        _LOG.warning("laggard_signal_failed symbol=%s err=%s", sym, type(exc).__name__)
 
     nc: dict[str, Any] | None = None
     if news.catalyst_headline:

@@ -14,6 +14,144 @@ export type FundamentalBackdropSummary = {
   convictionNote: string | null;
 };
 
+export type FundamentalContextPillarLine = {
+  label: string;
+  text: string;
+};
+
+export type FundamentalContextPresentation = {
+  narrative: string[];
+  pillars: FundamentalContextPillarLine[];
+  sectorLine: string | null;
+  /** Colored backdrop chip when company-specific fundamentals carry a signal. */
+  backdropChip: { icon: string; label: string; tone: FundamentalBackdropLevel } | null;
+};
+
+export const FUNDAMENTAL_CONTEXT_FOOTER =
+  "Signal data only — not investment advice. Does not affect layer scores or alignment.";
+
+const QUIET_EARNINGS = "no recent signal";
+const QUIET_GUIDANCE = "no material change";
+const QUIET_ANALYSTS = "no notable activity";
+
+export function fundamentalPillarsAreQuiet(ctx: SignalEvidenceFundamentalContext): boolean {
+  return (
+    ctx.earnings_trend === "unknown" &&
+    ctx.guidance_direction === "unknown" &&
+    ctx.analyst_direction === "unknown"
+  );
+}
+
+export function formatFundamentalEarningsLine(ctx: SignalEvidenceFundamentalContext): string {
+  if (ctx.earnings_trend === "unknown") return QUIET_EARNINGS;
+  const totalQ = Math.max(1, ctx.quarters_beating + ctx.quarters_missing);
+  if (ctx.earnings_trend === "beating") return `beating ${ctx.quarters_beating}/${totalQ} recent quarters`;
+  if (ctx.earnings_trend === "missing") return `missing ${ctx.quarters_missing}/${totalQ} recent quarters`;
+  return "inline vs estimates";
+}
+
+export function formatFundamentalGuidanceLine(ctx: SignalEvidenceFundamentalContext): string {
+  switch (ctx.guidance_direction) {
+    case "raised":
+      return "raised";
+    case "lowered":
+      return "cut / lowered";
+    case "maintained":
+      return "maintained";
+    default:
+      return QUIET_GUIDANCE;
+  }
+}
+
+export function formatFundamentalAnalystsLine(ctx: SignalEvidenceFundamentalContext): string {
+  if (ctx.analyst_direction === "upgrading") {
+    return `${ctx.recent_upgrades} upgrade${ctx.recent_upgrades === 1 ? "" : "s"} recent`;
+  }
+  if (ctx.analyst_direction === "downgrading") {
+    return `${ctx.recent_downgrades} downgrade${ctx.recent_downgrades === 1 ? "" : "s"} recent`;
+  }
+  if (ctx.analyst_direction === "stable") return "stable consensus";
+  return QUIET_ANALYSTS;
+}
+
+export function formatFundamentalRevenueLine(
+  trend: SignalEvidenceFundamentalContext["revenue_trend"]
+): string | null {
+  switch (trend) {
+    case "growing":
+      return "revenue growing YoY";
+    case "declining":
+      return "revenue declining YoY";
+    case "flat":
+      return "revenue flat YoY";
+    default:
+      return null;
+  }
+}
+
+function sectorLineFromContext(ctx: SignalEvidenceFundamentalContext): string | null {
+  if (!ctx.sector_display_name) return null;
+  return ctx.sector_etf
+    ? `Sector: ${ctx.sector_display_name} (${ctx.sector_etf})`
+    : `Sector: ${ctx.sector_display_name}`;
+}
+
+const BACKDROP_CHIP: Record<FundamentalBackdropLevel, { icon: string; label: string }> = {
+  positive: { icon: "↑", label: "Positive fundamental backdrop" },
+  neutral: { icon: "→", label: "Neutral fundamental backdrop" },
+  mixed: { icon: "~", label: "Mixed fundamental backdrop" },
+  weak: { icon: "↓", label: "Weak fundamental backdrop" }
+};
+
+export function buildFundamentalContextPresentation(
+  context: SignalEvidenceFundamentalContext | null | undefined
+): FundamentalContextPresentation {
+  if (!context) {
+    return {
+      narrative: ["Fundamental context is not available for this symbol right now."],
+      pillars: [],
+      sectorLine: null,
+      backdropChip: null
+    };
+  }
+
+  const sectorLine = sectorLineFromContext(context);
+  const pillars: FundamentalContextPillarLine[] = [
+    { label: "Earnings", text: formatFundamentalEarningsLine(context) },
+    { label: "Guidance", text: formatFundamentalGuidanceLine(context) },
+    { label: "Analysts", text: formatFundamentalAnalystsLine(context) }
+  ];
+  const revenue = formatFundamentalRevenueLine(context.revenue_trend);
+  if (revenue) {
+    pillars.push({ label: "Revenue", text: revenue });
+  }
+
+  if (fundamentalPillarsAreQuiet(context)) {
+    return {
+      narrative: [
+        "No fundamental catalyst influencing this setup.",
+        "Price behavior is currently driven by broader market conditions."
+      ],
+      pillars,
+      sectorLine,
+      backdropChip: null
+    };
+  }
+
+  const chip = BACKDROP_CHIP[context.backdrop];
+  const summary = context.summary_line
+    .replace(/\.\s*Signal data only\.?$/i, "")
+    .trim();
+  const narrative = summary ? [summary] : [];
+
+  return {
+    narrative,
+    pillars,
+    sectorLine,
+    backdropChip: { icon: chip.icon, label: chip.label, tone: context.backdrop }
+  };
+}
+
 export function capitalizeBackdrop(level: FundamentalBackdropLevel): string {
   return level.charAt(0).toUpperCase() + level.slice(1);
 }
@@ -180,7 +318,13 @@ export function buildFundamentalBackdropSummary(input: {
 
   const backdrop = ctx.backdrop;
   const bullets = buildFundamentalBackdropBullets(input);
-  if (bullets.length === 0 && ctx.summary_line) {
+  if (fundamentalPillarsAreQuiet(ctx)) {
+    const pres = buildFundamentalContextPresentation(ctx);
+    bullets.push(...pres.narrative);
+    for (const row of pres.pillars) {
+      bullets.push(`${row.label}: ${row.text}`);
+    }
+  } else if (bullets.length === 0 && ctx.summary_line) {
     bullets.push(ctx.summary_line.replace(/\.\s*Signal data only\.?$/i, "").trim() || ctx.summary_line);
   }
 

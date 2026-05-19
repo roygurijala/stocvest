@@ -4,7 +4,10 @@ import type { CSSProperties } from "react";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import type { SignalEvidenceFundamentalContext } from "@/lib/signal-evidence";
-import { revenueTrendInterpretation } from "@/lib/signal-evidence/fundamental-present";
+import {
+  buildFundamentalContextPresentation,
+  FUNDAMENTAL_CONTEXT_FOOTER
+} from "@/lib/signal-evidence/fundamental-present";
 import { UpgradePrompt } from "@/components/upgrade-prompt";
 
 type FundamentalBackdropProps = {
@@ -13,56 +16,67 @@ type FundamentalBackdropProps = {
   mode: "day" | "swing" | undefined;
 };
 
-const BACKDROP_STYLES: Record<
-  SignalEvidenceFundamentalContext["backdrop"],
-  { border: string; background: string; color: string; icon: string }
+const BACKDROP_CHIP_STYLES: Record<
+  "positive" | "neutral" | "mixed" | "weak",
+  { border: string; background: string; color: string }
 > = {
   positive: {
     border: "1px solid rgba(34,197,94,0.45)",
     background: "rgba(34,197,94,0.1)",
-    color: "#16a34a",
-    icon: "↑"
+    color: "#16a34a"
   },
   neutral: {
     border: "1px solid rgba(148,163,184,0.35)",
     background: "rgba(148,163,184,0.08)",
-    color: "inherit",
-    icon: "→"
+    color: "inherit"
   },
   mixed: {
     border: "1px solid rgba(245,158,11,0.45)",
     background: "rgba(245,158,11,0.1)",
-    color: "#d97706",
-    icon: "~"
+    color: "#d97706"
   },
   weak: {
     border: "1px solid rgba(239,68,68,0.45)",
     background: "rgba(239,68,68,0.1)",
-    color: "#dc2626",
-    icon: "↓"
+    color: "#dc2626"
   }
 };
 
-function tagLabel(value: string): string {
-  return value.replace(/_/g, " ");
+function SectionHeader({ optionalOnly = false }: { optionalOnly?: boolean }) {
+  const { colors } = useTheme();
+  return (
+    <div
+      style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: spacing[2] }}
+    >
+      <h3 style={{ margin: 0, fontSize: typography.scale.sm, letterSpacing: "0.06em" }}>FUNDAMENTAL CONTEXT (optional)</h3>
+      {!optionalOnly ? (
+        <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>(not scored)</span>
+      ) : null}
+    </div>
+  );
 }
 
-function MetricTile({ label, value }: { label: string; value: string }) {
+function PillarList({ pillars }: { pillars: Array<{ label: string; text: string }> }) {
   const { colors } = useTheme();
-  const box: CSSProperties = {
-    border: `1px solid ${colors.border}`,
-    borderRadius: borderRadius.md,
-    padding: spacing[2],
-    minWidth: 0,
-    flex: "1 1 120px"
-  };
+  if (pillars.length === 0) return null;
   return (
-    <div style={box}>
-      <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, textTransform: "uppercase" }}>
-        {label}
-      </p>
-      <p style={{ margin: `${spacing[1]} 0 0 0`, fontWeight: 600, fontSize: typography.scale.sm }}>{value}</p>
-    </div>
+    <ul
+      style={{
+        margin: 0,
+        padding: 0,
+        listStyle: "none",
+        display: "grid",
+        gap: spacing[1],
+        fontSize: typography.scale.sm,
+        color: colors.text
+      }}
+    >
+      {pillars.map((row) => (
+        <li key={row.label}>
+          <span style={{ fontWeight: 600 }}>{row.label}:</span> {row.text}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -84,86 +98,63 @@ export function FundamentalBackdropPanel({ context, isPaid, mode }: FundamentalB
   if (!isPaid) {
     return (
       <section data-testid="fundamental-backdrop-upgrade" style={shell}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: spacing[2] }}>
-          <h3 style={{ margin: 0, fontSize: typography.scale.sm, letterSpacing: "0.06em" }}>FUNDAMENTAL CONTEXT</h3>
-          <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>(not scored)</span>
-        </div>
+        <SectionHeader optionalOnly />
         <UpgradePrompt
           feature="Fundamental backdrop"
           plan="Swing Pro"
-          description="Upgrade to see earnings trend, guidance direction, and analyst consensus as context alongside your swing read."
+          description="Upgrade to see earnings, guidance, and analyst activity as context alongside your swing read."
         />
       </section>
     );
   }
 
-  if (!context) {
-    return (
-      <section data-testid="fundamental-backdrop-unavailable" style={shell}>
-        <h3 style={{ margin: 0, fontSize: typography.scale.sm }}>Fundamental context (not scored)</h3>
-        <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.sm }}>
-          Fundamental data not available for this symbol right now.
-        </p>
-      </section>
-    );
-  }
-
-  const tone = BACKDROP_STYLES[context.backdrop];
-  const totalQ = Math.max(1, context.quarters_beating + context.quarters_missing);
-  const earningsDetail =
-    context.earnings_trend === "beating"
-      ? `Beating ${context.quarters_beating}/${totalQ}`
-      : context.earnings_trend === "missing"
-        ? `Missing ${context.quarters_missing}/${totalQ}`
-        : tagLabel(context.earnings_trend);
+  const presentation = buildFundamentalContextPresentation(context);
+  const chipStyle = presentation.backdropChip
+    ? BACKDROP_CHIP_STYLES[presentation.backdropChip.tone]
+    : null;
 
   return (
-    <section data-testid="fundamental-backdrop-panel" style={shell}>
-      <div
-        style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: spacing[2] }}
-      >
-        <h3 style={{ margin: 0, fontSize: typography.scale.sm, letterSpacing: "0.06em" }}>FUNDAMENTAL CONTEXT</h3>
-        <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>(not scored)</span>
-      </div>
+    <section data-testid={context ? "fundamental-backdrop-panel" : "fundamental-backdrop-unavailable"} style={shell}>
+      <SectionHeader />
 
-      <div
-        style={{
-          borderRadius: borderRadius.md,
-          padding: spacing[2],
-          border: tone.border,
-          background: tone.background
-        }}
-      >
-        <p style={{ margin: 0, fontWeight: 700, color: tone.color }}>
-          {tone.icon} {tagLabel(context.backdrop)} backdrop
+      {presentation.narrative.map((line) => (
+        <p
+          key={line}
+          style={{
+            margin: 0,
+            fontSize: typography.scale.sm,
+            color: colors.text,
+            lineHeight: 1.55,
+            fontWeight: line.startsWith("No fundamental") ? 600 : 400
+          }}
+        >
+          {line}
         </p>
-        <p style={{ margin: `${spacing[1]} 0 0 0`, fontSize: typography.scale.sm }}>{context.summary_line}</p>
-        {context.sector_display_name ? (
-          <p style={{ margin: `${spacing[1]} 0 0 0`, fontSize: typography.scale.xs, color: colors.textMuted }}>
-            Sector: {context.sector_display_name}
-            {context.sector_etf ? ` (${context.sector_etf})` : ""}
-          </p>
-        ) : null}
-      </div>
+      ))}
 
-      <div style={{ display: "flex", flexWrap: "wrap", gap: spacing[2] }}>
-        <MetricTile label="Earnings" value={earningsDetail} />
-        <MetricTile label="Guidance" value={tagLabel(context.guidance_direction)} />
-        <MetricTile
-          label="Analysts"
-          value={
-            context.analyst_direction === "upgrading" || context.analyst_direction === "downgrading"
-              ? `${context.recent_upgrades}↑ / ${context.recent_downgrades}↓`
-              : tagLabel(context.analyst_direction)
-          }
-        />
-        {context.revenue_trend !== "unknown" ? (
-          <MetricTile label="Revenue" value={revenueTrendInterpretation(context.revenue_trend)} />
-        ) : null}
-      </div>
+      {presentation.backdropChip && chipStyle ? (
+        <div
+          style={{
+            borderRadius: borderRadius.md,
+            padding: spacing[2],
+            border: chipStyle.border,
+            background: chipStyle.background
+          }}
+        >
+          <p style={{ margin: 0, fontWeight: 700, fontSize: typography.scale.sm, color: chipStyle.color }}>
+            {presentation.backdropChip.icon} {presentation.backdropChip.label}
+          </p>
+        </div>
+      ) : null}
+
+      <PillarList pillars={presentation.pillars} />
+
+      {presentation.sectorLine ? (
+        <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted }}>{presentation.sectorLine}</p>
+      ) : null}
 
       <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, fontStyle: "italic" }}>
-        Signal data only — not investment advice. Does not affect layer scores or alignment.
+        {FUNDAMENTAL_CONTEXT_FOOTER}
       </p>
     </section>
   );
