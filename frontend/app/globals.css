@@ -681,6 +681,11 @@ a {
   font-size: 0.8125rem;
   line-height: 1.35;
 }
+.watchlist-desk-lines__fetched {
+  font-size: 0.75rem;
+  line-height: 1.35;
+  opacity: 0.9;
+}
 .watchlist-desk-lines__action {
   justify-self: start;
 }

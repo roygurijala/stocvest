@@ -9,6 +9,7 @@ from typing import Any, Protocol
 from stocvest.api.services.gap_intelligence_news import collect_news_for_gap_intelligence
 from stocvest.data import PolygonClient, PolygonError
 from stocvest.data.models import EarningsEvent, Snapshot
+from stocvest.data.vix_snapshot import snapshot_has_usable_vix_pulse, vix_level_from_snapshot
 from stocvest.data.scan_symbols import get_scan_symbols
 from stocvest.data.scanner_universe import LIQUID_SYMBOLS_FALLBACK
 from stocvest.data.watchlist_store import get_watchlist_store
@@ -39,24 +40,27 @@ class SupportsPolygonSnapshotFetch(Protocol):
 
 
 async def get_vix_snapshot_with_fallback(client: SupportsPolygonSnapshotFetch) -> Snapshot | None:
-    """Return the first VIX snapshot that has a usable last trade price.
+    """Return the first VIX snapshot that has a usable level or session %.
 
-    Tries ``VIX_SNAPSHOT_FALLBACK_SYMBOLS`` in order. Callers needing VIX for regime
-    or macro context should import this instead of duplicating symbol lists or
-    ad-hoc ``get_snapshot`` loops.
+    Tries Polygon **indices** snapshot first (``GET /v3/snapshot/indices``), then the legacy
+  stocks snapshot per symbol. Order within each path: ``VIX_SNAPSHOT_FALLBACK_SYMBOLS``.
     """
+    get_indices = getattr(client, "get_indices_snapshots", None)
+    if callable(get_indices):
+        try:
+            by_sym = await get_indices(list(VIX_SNAPSHOT_FALLBACK_SYMBOLS))
+            for vix_sym in VIX_SNAPSHOT_FALLBACK_SYMBOLS:
+                hit = by_sym.get(vix_sym)
+                if snapshot_has_usable_vix_pulse(hit):
+                    return hit
+        except PolygonError:
+            pass
+
     for vix_sym in VIX_SNAPSHOT_FALLBACK_SYMBOLS:
         try:
             vix_snap = await client.get_snapshot(vix_sym)
-            if vix_snap is None:
-                continue
-            lp = vix_snap.last_trade_price
-            if isinstance(lp, (int, float)) and lp == lp and lp > 0:
+            if snapshot_has_usable_vix_pulse(vix_snap):
                 return vix_snap
-            for attr in ("change_percent", "pre_market_change_percent", "after_hours_change_percent"):
-                v = getattr(vix_snap, attr, None)
-                if isinstance(v, (int, float)) and v == v and v > -99.5:
-                    return vix_snap
         except PolygonError:
             continue
     return None
@@ -147,7 +151,7 @@ async def fetch_morning_brief_context_live(
 
     spy_pct = _pct_from_snapshot(spy)
     qqq_pct = _pct_from_snapshot(qqq)
-    vix_level = float(vix_snap.last_trade_price) if vix_snap and vix_snap.last_trade_price else None
+    vix_level = vix_level_from_snapshot(vix_snap)
     vix_chg = float(vix_snap.change_percent) if vix_snap and vix_snap.change_percent is not None else None
     regime = infer_regime(spy_pct, qqq_pct, vix_level)
 

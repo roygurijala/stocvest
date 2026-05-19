@@ -445,6 +445,73 @@ class PolygonClient:
             out.extend(batch.values())
         return out
 
+    async def get_indices_snapshots(self, tickers: list[str]) -> dict[str, Snapshot]:
+        """Fetch index snapshots (VIX, DJI, …) via ``GET /v3/snapshot/indices``."""
+        if not tickers:
+            return {}
+        unique = list(dict.fromkeys(str(t).strip().upper() for t in tickers if str(t).strip()))
+        params = {"ticker.any_of": ",".join(unique)}
+        data = await self._get("/v3/snapshot/indices", params)
+        out: dict[str, Snapshot] = {}
+        for row in data.get("results", []) or []:
+            if not isinstance(row, dict):
+                continue
+            sym = str(row.get("ticker", "") or "").strip().upper()
+            if not sym:
+                continue
+            snap = self._parse_index_snapshot_row(sym, row)
+            if snap is not None:
+                out[sym] = snap
+        return out
+
+    @staticmethod
+    def _index_session_float(session: dict, key: str) -> float | None:
+        raw = session.get(key)
+        if raw is None or raw == "":
+            return None
+        try:
+            n = float(raw)
+            return n if n == n else None
+        except (TypeError, ValueError):
+            return None
+
+    @classmethod
+    def _parse_index_snapshot_row(cls, symbol: str, row: dict) -> Snapshot | None:
+        """Map Polygon indices snapshot JSON → :class:`Snapshot` (stocks-shaped for callers)."""
+        from stocvest.data.vix_snapshot import snapshot_has_usable_vix_pulse
+
+        if row.get("error"):
+            return None
+        session = row.get("session") if isinstance(row.get("session"), dict) else {}
+        value_raw = row.get("value")
+        value: float | None = None
+        if value_raw is not None and value_raw != "":
+            try:
+                v = float(value_raw)
+                value = v if v == v and v > 0 else None
+            except (TypeError, ValueError):
+                value = None
+        close = cls._index_session_float(session, "close")
+        prev = cls._index_session_float(session, "previous_close")
+        last_price = value if value is not None else (close if close is not None and close > 0 else None)
+        change = cls._index_session_float(session, "change")
+        change_pct = cls._index_session_float(session, "change_percent")
+        if change_pct is None and last_price is not None and prev is not None and prev != 0:
+            change_pct = ((last_price - prev) / prev) * 100.0
+        snap = Snapshot(
+            symbol=symbol,
+            last_trade_price=last_price,
+            day_open=cls._index_session_float(session, "open"),
+            day_high=cls._index_session_float(session, "high"),
+            day_low=cls._index_session_float(session, "low"),
+            day_close=close if close is not None and close > 0 else last_price,
+            prev_close=prev,
+            change=change,
+            change_percent=change_pct,
+            market_status=str(row.get("market_status") or "") or None,
+        )
+        return snap if snapshot_has_usable_vix_pulse(snap) else None
+
     async def get_us_stocks_market_snapshots(self, *, include_otc: bool = False) -> list[Snapshot]:
         """
         All US stock tickers in one snapshot feed (paginated via ``next_url``).

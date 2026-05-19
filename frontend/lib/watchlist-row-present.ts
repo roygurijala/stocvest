@@ -9,12 +9,15 @@ import {
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
 import { formatWatchlistMaturationLabel } from "@/lib/watchlist-page-utils";
 import { maturationAlignmentCounts } from "@/lib/watchlist-alignment-present";
+import { formatLastEvaluatedLine } from "@/lib/watchlist-evaluation-present";
 
 export type WatchlistDeskStatusPresent = {
   /** e.g. "SWING · Developing (3/6)" */
   statusLine: string;
   /** e.g. "Waiting on volume confirmation" or "2 layers improved today" */
   detailLine: string | null;
+  /** Always set — "Last evaluated …" or "Not evaluated yet" */
+  lastEvaluatedLine: string;
   layerFillPct: number;
   /** Legacy chip text for tests that still assert ↑/↓ */
   progressionChip: string | null;
@@ -47,6 +50,7 @@ export function buildWatchlistDeskStatusPresent(
   return {
     statusLine,
     detailLine,
+    lastEvaluatedLine: formatLastEvaluatedLine(row.last_evaluated_at),
     layerFillPct: watchlistLayerFillPct(row),
     progressionChip: formatWatchlistProgressionChip(row),
     aligned,

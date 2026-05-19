@@ -36,6 +36,7 @@ describe("watchlist-row-present", () => {
       "swing"
     );
     expect(present?.detailLine).toBe("Waiting on volume confirmation");
+    expect(present?.lastEvaluatedLine).toMatch(/Last evaluated|Not evaluated/);
   });
 
   test("detail line uses layers improved when no readiness", () => {

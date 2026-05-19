@@ -26,6 +26,7 @@ import {
   type WatchlistMaturationRow
 } from "@/lib/watchlist-page-utils";
 import { tracksDesk } from "@/lib/watchlist-tracking-presentation";
+import { primeWatchlistSymbolMaturation } from "@/lib/watchlist-maturation-prime";
 import { useTheme } from "@/lib/theme-provider";
 
 type Props = {
@@ -190,6 +191,7 @@ export function AddToWatchlistButton({ symbol, dualDeskTracking = true, classNam
       }
       invalidateWatchlistMembershipCache();
       await refresh();
+      void primeWatchlistSymbolMaturation(symU, dualDeskTracking);
       setAddPhase("idle");
       setToast(`${symU} added to your watchlist`);
     } catch {

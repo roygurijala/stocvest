@@ -8,6 +8,7 @@ import { formatWatchlistMaturationLabel } from "@/lib/watchlist-page-utils";
 import { shouldShowDeskRow, type SymbolTrackingMap, trackingForSymbol } from "@/lib/watchlist-tracking-presentation";
 import type { WatchlistViewMode } from "@/lib/watchlist-page-utils";
 import { watchlistSignalsOpenAriaLabel, watchlistToSignalsHref } from "@/lib/nav/watchlist-signals-deeplink";
+import { formatLastEvaluatedLine } from "@/lib/watchlist-evaluation-present";
 import type { SnapshotPayload } from "@/lib/api/market";
 import { watchlistQuoteFromSnapshot } from "@/lib/watchlist-page-utils";
 import { useTheme } from "@/lib/theme-provider";
@@ -29,6 +30,7 @@ type Props = {
   isDefaultList: boolean;
   planMode: "swing" | "day";
   maturationForPlan?: WatchlistMaturationRow;
+  deskEvaluating?: { swing?: boolean; day?: boolean };
   onRemove: () => void;
   onOpenLayers: (desk: Desk, row: WatchlistMaturationRow | undefined) => void;
 };
@@ -39,6 +41,7 @@ function DeskStatusBlock({
   row,
   maturationFetchStatus,
   isDefaultList,
+  deskEvaluating,
   onOpenLayers
 }: {
   symU: string;
@@ -46,6 +49,7 @@ function DeskStatusBlock({
   row: WatchlistMaturationRow | undefined;
   maturationFetchStatus: Props["maturationFetchStatus"];
   isDefaultList: boolean;
+  deskEvaluating?: boolean;
   onOpenLayers: Props["onOpenLayers"];
 }) {
   const { colors } = useTheme();
@@ -63,16 +67,25 @@ function DeskStatusBlock({
           className="watchlist-desk-lines watchlist-desk-lines--pending"
         >
           <p className="watchlist-desk-lines__status m-0" style={{ color: colors.textMuted }}>
-            {desk === "swing" ? "SWING" : "DAY"} · Not evaluated yet
+            {desk === "swing" ? "SWING" : "DAY"} · {deskEvaluating ? "Evaluating…" : "Not evaluated yet"}
           </p>
-          <Link
-            href={signalsHref}
-            className={`${WATCHLIST_EVALUATE_LINK_CLASS} watchlist-desk-lines__action`}
-            data-testid={`watchlist-evaluate-${symU}-${desk}`}
-            onClick={(e) => e.stopPropagation()}
+          <p
+            className="watchlist-desk-lines__fetched m-0"
+            style={{ color: colors.textMuted }}
+            data-testid={`watchlist-last-evaluated-${symU}-${desk}`}
           >
-            Open Signals
-          </Link>
+            {formatLastEvaluatedLine(undefined, { evaluating: deskEvaluating })}
+          </p>
+          {!deskEvaluating ? (
+            <Link
+              href={signalsHref}
+              className={`${WATCHLIST_EVALUATE_LINK_CLASS} watchlist-desk-lines__action`}
+              data-testid={`watchlist-evaluate-${symU}-${desk}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              Open Signals
+            </Link>
+          ) : null}
         </div>
       );
     }
@@ -116,6 +129,13 @@ function DeskStatusBlock({
             {present.detailLine}
           </p>
         ) : null}
+        <p
+          className="watchlist-desk-lines__fetched m-0"
+          style={{ color: colors.textMuted }}
+          data-testid={`watchlist-last-evaluated-${symU}-${desk}`}
+        >
+          {present.lastEvaluatedLine}
+        </p>
         {present.progressionChip ? (
           <span className="sr-only" data-testid={`watchlist-progression-${symU}-${desk}`}>
             {present.progressionChip}
@@ -140,6 +160,7 @@ export function WatchlistSymbolRow({
   isDefaultList,
   planMode,
   maturationForPlan,
+  deskEvaluating,
   onRemove,
   onOpenLayers
 }: Props) {
@@ -222,6 +243,7 @@ export function WatchlistSymbolRow({
               row={swingRow}
               maturationFetchStatus={maturationFetchStatus}
               isDefaultList={isDefaultList}
+              deskEvaluating={deskEvaluating?.swing}
               onOpenLayers={onOpenLayers}
             />
           ) : null}
@@ -232,6 +254,7 @@ export function WatchlistSymbolRow({
               row={dayRow}
               maturationFetchStatus={maturationFetchStatus}
               isDefaultList={isDefaultList}
+              deskEvaluating={deskEvaluating?.day}
               onOpenLayers={onOpenLayers}
             />
           ) : null}

@@ -13,6 +13,8 @@ import { InfoTip } from "@/components/info-tip";
 import { type WeeklyIndexRow } from "@/components/weekly-market-context-widget";
 import { SharedContextMasterCard } from "@/components/shared-context-master-card";
 import { useMacroContext } from "@/lib/hooks/use-macro-context";
+import { useDashboardPayload } from "@/lib/hooks/use-dashboard-payload";
+import { isStale } from "@/lib/api/dashboard";
 import type { MarketOverview, SnapshotPayload } from "@/lib/api/market";
 import {
   isVixTickerSymbol,
@@ -124,6 +126,14 @@ function findVixSnapshot(snapshots: SnapshotPayload[]): SnapshotPayload | undefi
     if (hit) return hit;
   }
   return fringe[0];
+}
+
+type MarketPulseCacheData = {
+  vix_level?: number | null;
+};
+
+function vixSnapshotFromPulseLevel(level: number): SnapshotPayload {
+  return { symbol: "I:VIX", last_trade_price: level };
 }
 
 function regimeLabelIsDirectional(regimeLabel: string): boolean {
@@ -238,6 +248,7 @@ function DashboardRedesignBody({
   const dayScannerHoverPrefetch = useHoverPrefetch("/dashboard/scanner?mode=day");
   const watchlistHoverPrefetch = useHoverPrefetch("/dashboard/watchlists");
   const signalsHubHoverPrefetch = useHoverPrefetch("/dashboard/signals");
+  const { data: edgeDashboard } = useDashboardPayload("swing");
 
   const snapshotsBySymbol = useMemo(
     () => new Map(marketOverview.snapshots.map((s) => [(s.symbol || "").toUpperCase(), s])),
@@ -269,11 +280,26 @@ function DashboardRedesignBody({
     return best;
   }, [daySignalsForRibbon]);
 
-  const vixSnapshot =
+  const vixFromTape =
     findVixSnapshot(marketOverview.snapshots) ||
     snapshotsBySymbol.get("I:VIX") ||
     snapshotsBySymbol.get("VIX") ||
     snapshotsBySymbol.get("^VIX");
+
+  const pulseVixLevel = useMemo(() => {
+    const env = edgeDashboard?.market_pulse;
+    if (!env || isStale(env)) return null;
+    const raw = (env.data ?? {}) as MarketPulseCacheData;
+    const v = raw.vix_level;
+    return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null;
+  }, [edgeDashboard?.market_pulse]);
+
+  const vixSnapshot = useMemo(() => {
+    const pct = vixSnapshotSessionChangePct(vixFromTape);
+    if (vixFromTape && vixPulseDataAvailable(vixFromTape, pct)) return vixFromTape;
+    if (pulseVixLevel != null) return vixSnapshotFromPulseLevel(pulseVixLevel);
+    return vixFromTape;
+  }, [vixFromTape, pulseVixLevel]);
 
   const spyFromScanner =
     typeof scannerOverview.spyPct === "number" &&

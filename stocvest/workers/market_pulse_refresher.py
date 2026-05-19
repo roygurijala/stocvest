@@ -14,6 +14,7 @@ from stocvest.api.services.morning_brief_fetch import get_vix_snapshot_with_fall
 from stocvest.data import PolygonClient
 from stocvest.data.dashboard_cache import DashboardKeys, write_dashboard_cache
 from stocvest.data.models import Snapshot
+from stocvest.data.vix_snapshot import vix_level_from_snapshot
 from stocvest.signals.morning_brief import infer_regime
 from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
@@ -30,19 +31,6 @@ def _within_equity_rth_et(now: datetime | None = None) -> bool:
         return False
     minutes = n.hour * 60 + n.minute
     return 9 * 60 + 30 <= minutes < 16 * 60
-
-
-def _vix_level(s: Snapshot | None) -> float | None:
-    """Level for regime + cache: prefer last print; then Polygon session close on index snapshots."""
-    if s is None:
-        return None
-    lp = s.last_trade_price
-    if isinstance(lp, (int, float)) and lp == lp and lp > 0:
-        return float(lp)
-    dc = s.day_close
-    if isinstance(dc, (int, float)) and dc == dc and dc > 0:
-        return float(dc)
-    return None
 
 
 def _session_pct(s: Snapshot | None) -> float | None:
@@ -67,7 +55,7 @@ async def refresh_market_pulse() -> dict[str, Any]:
         vix_snap = await get_vix_snapshot_with_fallback(client)
         spy_pct = _session_pct(spy)
         qqq_pct = _session_pct(qqq)
-        vix_level = _vix_level(vix_snap)
+        vix_level = vix_level_from_snapshot(vix_snap)
         regime = infer_regime(spy_pct, qqq_pct, vix_level)
         payload = {
             "spy_pct": spy_pct,

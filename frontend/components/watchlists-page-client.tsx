@@ -13,7 +13,8 @@ import { ScannerCollapsible } from "@/components/scanner/ScannerCollapsible";
 import { WatchlistEvaluationInfoTip } from "@/components/watchlists/WatchlistEvaluationInfoTip";
 import { formatWatchlistMaturationDisplayLine } from "@/lib/alignment-display-tier";
 import { buildWatchlistPortfolioHeadline } from "@/lib/watchlist-row-present";
-import { watchlistMaturationDeskSummary } from "@/lib/watchlist-evaluation-present";
+import { formatSummaryFetchedAt, watchlistMaturationDeskSummary } from "@/lib/watchlist-evaluation-present";
+import { primeWatchlistSymbolMaturation } from "@/lib/watchlist-maturation-prime";
 import { APP_TOP_BAR_LAYOUT_HEIGHT } from "@/components/top-bar";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, colorTokens, spacing, surfaceGlowClassName } from "@/lib/design-system";
@@ -120,6 +121,10 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   const [addDraft, setAddDraft] = useState("");
   const [symErr, setSymErr] = useState<string | null>(null);
   const [maturationReloadNonce, setMaturationReloadNonce] = useState(0);
+  const [maturationSummaryFetchedAt, setMaturationSummaryFetchedAt] = useState<Date | null>(null);
+  const [evaluatingSymbols, setEvaluatingSymbols] = useState<Record<string, { swing?: boolean; day?: boolean }>>(
+    {}
+  );
   const [maturationSwing, setMaturationSwing] = useState<Record<string, MaturationRow>>({});
   const [maturationDay, setMaturationDay] = useState<Record<string, MaturationRow>>({});
   const [maturationFetchStatus, setMaturationFetchStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
@@ -225,6 +230,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
       setMaturationSwing({});
       setMaturationDay({});
       setMaturationFetchStatus("idle");
+      setMaturationSummaryFetchedAt(null);
       return;
     }
     setMaturationFetchStatus("loading");
@@ -270,11 +276,13 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
           setMaturationDay({});
         }
         setMaturationFetchStatus("ready");
+        setMaturationSummaryFetchedAt(new Date());
       } catch {
         if (!cancelled) {
           setMaturationSwing({});
           setMaturationDay({});
           setMaturationFetchStatus("error");
+          setMaturationSummaryFetchedAt(null);
         }
       }
     })();
@@ -628,6 +636,25 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
       });
       setAddDraft("");
       setAddSuggestOpen(false);
+      if (maturationEligible) {
+        const symU = sym.trim().toUpperCase();
+        setEvaluatingSymbols((prev) => ({
+          ...prev,
+          [symU]: { swing: true, day: dualDeskMaturation ? true : undefined }
+        }));
+        void (async () => {
+          try {
+            await primeWatchlistSymbolMaturation(sym, dualDeskMaturation);
+          } finally {
+            setEvaluatingSymbols((prev) => {
+              const next = { ...prev };
+              delete next[symU];
+              return next;
+            });
+            setMaturationReloadNonce((n) => n + 1);
+          }
+        })();
+      }
     } catch {
       setRows(prev);
       setSymErr("Network error");
@@ -1043,13 +1070,21 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                   </>
                 ) : null}
               </div>
-              {maturationDeskSummary ? (
+              {maturationDeskSummary || maturationSummaryFetchedAt ? (
                 <span
                   className="max-w-md shrink-0 text-right text-xs leading-snug sm:text-sm"
                   style={{ color: colors.textMuted }}
                   data-testid="watchlist-maturation-desk-summary"
                 >
                   {maturationDeskSummary}
+                  {maturationSummaryFetchedAt && maturationFetchStatus === "ready" ? (
+                    <>
+                      {maturationDeskSummary ? " · " : null}
+                      <span data-testid="watchlist-summary-fetched-at">
+                        Fetched {formatSummaryFetchedAt(maturationSummaryFetchedAt)}
+                      </span>
+                    </>
+                  ) : null}
                 </span>
               ) : null}
             </div>
@@ -1162,6 +1197,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                           isDefaultList={maturationEligible}
                           planMode={planMode}
                           maturationForPlan={maturationForPlan}
+                          deskEvaluating={evaluatingSymbols[symU]}
                           onRemove={() => void removeSymbol(s)}
                           onOpenLayers={(desk, row) =>
                             setAlignmentSheet({ symbol: symU, deskMode: desk, row })

@@ -11,6 +11,26 @@ export function evaluationStatusTitle(mode: "swing" | "day"): string {
   return mode === "swing" ? "Swing evaluation status" : "Day evaluation status";
 }
 
+/** Row footer — always non-empty when shown. */
+export function formatLastEvaluatedLine(iso: string | undefined, opts?: { evaluating?: boolean }): string {
+  if (opts?.evaluating) return "Evaluating now…";
+  const short = formatLastEvaluatedShort(iso);
+  if (short) return `Last evaluated ${short}`;
+  return "Not evaluated yet";
+}
+
+/** Page-level maturation-summary fetch time (local clock). */
+export function formatSummaryFetchedAt(when: Date): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "shortGeneric"
+  }).format(when);
+}
+
 export function formatLastEvaluatedShort(iso: string | undefined): string | null {
   if (!iso?.trim()) return null;
   try {

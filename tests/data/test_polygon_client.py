@@ -858,6 +858,32 @@ class TestRetries:
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+class TestParseIndexSnapshotRow:
+    def test_indices_vix_row_maps_to_snapshot(self):
+        row = {
+            "ticker": "I:VIX",
+            "value": 18.42,
+            "market_status": "open",
+            "session": {
+                "change": 0.22,
+                "change_percent": 1.2,
+                "close": 18.42,
+                "high": 19.0,
+                "low": 17.8,
+                "open": 18.0,
+                "previous_close": 18.2,
+            },
+        }
+        snap = PolygonClient._parse_index_snapshot_row("I:VIX", row)
+        assert snap is not None
+        assert snap.last_trade_price == pytest.approx(18.42)
+        assert snap.change_percent == pytest.approx(1.2)
+
+    def test_indices_error_row_returns_none(self):
+        row = {"ticker": "I:VIX", "error": "NOT_ENTITLED", "message": "nope"}
+        assert PolygonClient._parse_index_snapshot_row("I:VIX", row) is None
+
+
 class TestParseSnapshotIndexFallback:
     def test_vix_like_payload_without_last_trade_uses_day_close(self):
         ticker = {

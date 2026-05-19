@@ -2,7 +2,9 @@ import { describe, expect, test } from "vitest";
 import {
   countEvaluatedSymbols,
   evaluationStatusTitle,
+  formatLastEvaluatedLine,
   formatLastEvaluatedShort,
+  formatSummaryFetchedAt,
   newestLastEvaluatedAt,
   watchlistMaturationDeskSummary
 } from "@/lib/watchlist-evaluation-present";
@@ -31,6 +33,16 @@ describe("watchlist-evaluation-present", () => {
       evaluated: 1,
       total: 2
     });
+  });
+
+  test("formatLastEvaluatedLine", () => {
+    expect(formatLastEvaluatedLine("2026-05-16T16:30:00+00:00")).toMatch(/Last evaluated/);
+    expect(formatLastEvaluatedLine(undefined)).toBe("Not evaluated yet");
+    expect(formatLastEvaluatedLine(undefined, { evaluating: true })).toBe("Evaluating now…");
+  });
+
+  test("formatSummaryFetchedAt", () => {
+    expect(formatSummaryFetchedAt(new Date("2026-05-16T16:30:00+00:00"))).toMatch(/May/);
   });
 
   test("watchlistMaturationDeskSummary when none evaluated", () => {

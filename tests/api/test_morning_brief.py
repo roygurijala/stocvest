@@ -143,6 +143,31 @@ def test_morning_brief_context_from_payload_dict_roundtrip() -> None:
 
 
 @pytest.mark.asyncio
+async def test_vix_fallback_prefers_indices_snapshot() -> None:
+    class _FakeClient:
+        def __init__(self) -> None:
+            self.stock_calls: list[str] = []
+
+        async def get_indices_snapshots(self, tickers: list[str]) -> dict[str, Snapshot]:
+            assert tickers == list(VIX_SNAPSHOT_FALLBACK_SYMBOLS)
+            return {
+                "I:VIX": Snapshot(
+                    symbol="I:VIX",
+                    last_trade_price=18.42,
+                    change_percent=0.5,
+                    prev_close=18.0,
+                )
+            }
+
+        async def get_snapshot(self, sym: str) -> Snapshot:
+            self.stock_calls.append(sym)
+            raise PolygonError("should not reach stocks when indices succeeds")
+
+    out = await get_vix_snapshot_with_fallback(_FakeClient())
+    assert out is not None and out.symbol == "I:VIX" and out.last_trade_price == 18.42
+
+
+@pytest.mark.asyncio
 async def test_vix_fallback_order_skips_unusable_then_errors() -> None:
     """Design: try I:VIX then ^VIX then VIX; empty last price and PolygonError do not stop the chain."""
 
@@ -162,3 +187,15 @@ async def test_vix_fallback_order_skips_unusable_then_errors() -> None:
     out = await get_vix_snapshot_with_fallback(c)
     assert out is not None and out.symbol == "VIX" and out.last_trade_price == 19.5
     assert c.calls == list(VIX_SNAPSHOT_FALLBACK_SYMBOLS)
+
+
+@pytest.mark.asyncio
+async def test_vix_fallback_accepts_day_close_without_last() -> None:
+    class _FakeClient:
+        async def get_snapshot(self, sym: str) -> Snapshot:
+            if sym == "I:VIX":
+                return Snapshot(symbol="I:VIX", last_trade_price=None, day_close=19.1, prev_close=18.8)
+            raise PolygonError("skip")
+
+    out = await get_vix_snapshot_with_fallback(_FakeClient())
+    assert out is not None and out.day_close == 19.1
