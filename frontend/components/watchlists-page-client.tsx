@@ -6,20 +6,14 @@ import { Columns2, TrendingUp, Zap } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CuteLoader } from "@/components/cute-loader";
 import { WatchlistAlignmentSheet } from "@/components/watchlists/watchlist-alignment-sheet";
-import { WatchlistScenarioBuilder } from "@/components/watchlists/watchlist-scenario-builder";
-import {
-  WATCHLIST_ALIGNMENT_CHIP_CLASS,
-  WATCHLIST_EVALUATE_LINK_CLASS
-} from "@/lib/watchlist-interactive-styles";
+import { WatchlistActivityCollapsible } from "@/components/watchlists/WatchlistActivityCollapsible";
+import { WatchlistSymbolRow } from "@/components/watchlists/WatchlistSymbolRow";
+import { WatchlistStatusRails } from "@/components/watchlists/WatchlistStatusRails";
+import { ScannerCollapsible } from "@/components/scanner/ScannerCollapsible";
 import { MaturationFrequencyCallout } from "@/components/maturation-frequency-callout";
-import { UnlockForecast } from "@/components/analytics/UnlockForecast";
 import { WATCHLIST_EVALUATION_HEADER } from "@/lib/product-empty-states";
-import { maturationAlignmentCounts } from "@/lib/watchlist-alignment-present";
-import {
-  formatWatchlistMaturationDisplayLine,
-  formatWatchlistProgressionChip
-} from "@/lib/alignment-display-tier";
-import { setupEvolutionHubHref } from "@/lib/nav/setup-analytics-deeplink";
+import { formatWatchlistMaturationDisplayLine } from "@/lib/alignment-display-tier";
+import { buildWatchlistPortfolioHeadline } from "@/lib/watchlist-row-present";
 import { APP_TOP_BAR_LAYOUT_HEIGHT } from "@/components/top-bar";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, colorTokens, spacing, surfaceGlowClassName } from "@/lib/design-system";
@@ -125,7 +119,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   const [error, setError] = useState<string | null>(null);
   const [addDraft, setAddDraft] = useState("");
   const [symErr, setSymErr] = useState<string | null>(null);
-  const [rename, setRename] = useState<string | null>(null);
+  const [maturationReloadNonce, setMaturationReloadNonce] = useState(0);
   const [maturationSwing, setMaturationSwing] = useState<Record<string, MaturationRow>>({});
   const [maturationDay, setMaturationDay] = useState<Record<string, MaturationRow>>({});
   const [maturationFetchStatus, setMaturationFetchStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
@@ -205,6 +199,9 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
 
   const active = useMemo(() => rows[0] ?? null, [rows]);
 
+  /** Maturation API is keyed to the default list; with a single list we always surface it. */
+  const maturationEligible = Boolean(active && (active.is_default || rows.length <= 1));
+
   const activeSymbolsDeduped = useMemo(() => dedupeSymbolsUpper(active?.symbols ?? []), [active?.symbols]);
 
   const symbolTrackingMap = useMemo((): SymbolTrackingMap => {
@@ -221,7 +218,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   }, [active?.symbol_tracking, activeSymbolsDeduped]);
 
   useEffect(() => {
-    if (!active?.is_default || activeSymbolsDeduped.length === 0) {
+    if (!maturationEligible || activeSymbolsDeduped.length === 0) {
       setMaturationSwing({});
       setMaturationDay({});
       setMaturationFetchStatus("idle");
@@ -235,26 +232,29 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
         if (dualDeskMaturation) {
           const [swRes, dyRes] = await Promise.all([
             fetch(`/api/stocvest/watchlists/maturation-summary?${new URLSearchParams({ mode: "swing" })}`, {
-              cache: "no-store"
+              cache: "no-store",
+              credentials: "same-origin"
             }),
             fetch(`/api/stocvest/watchlists/maturation-summary?${new URLSearchParams({ mode: "day" })}`, {
-              cache: "no-store"
+              cache: "no-store",
+              credentials: "same-origin"
             })
           ]);
           const swJson = (await swRes.json().catch(() => ({}))) as unknown;
           const dyJson = (await dyRes.json().catch(() => ({}))) as unknown;
           if (cancelled) return;
-          if (!swRes.ok || !dyRes.ok) {
+          if (!swRes.ok) {
             setMaturationSwing({});
             setMaturationDay({});
             setMaturationFetchStatus("error");
             return;
           }
           setMaturationSwing(normalizeMaturationBySymbol(swJson));
-          setMaturationDay(normalizeMaturationBySymbol(dyJson));
+          setMaturationDay(dyRes.ok ? normalizeMaturationBySymbol(dyJson) : {});
         } else {
           const res = await fetch(`/api/stocvest/watchlists/maturation-summary?${new URLSearchParams({ mode: "swing" })}`, {
-            cache: "no-store"
+            cache: "no-store",
+            credentials: "same-origin"
           });
           const json = (await res.json().catch(() => ({}))) as unknown;
           if (cancelled) return;
@@ -280,7 +280,13 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     return () => {
       cancelled = true;
     };
-  }, [active?.watchlist_id, active?.is_default, activeSymbolsDeduped.join(","), dualDeskMaturation]);
+  }, [
+    active?.watchlist_id,
+    maturationEligible,
+    activeSymbolsDeduped.join(","),
+    dualDeskMaturation,
+    maturationReloadNonce
+  ]);
 
   useEffect(() => {
     const syms = activeSymbolsDeduped.slice(0, WATCHLIST_MAX_SYMBOLS);
@@ -329,7 +335,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   }, [active?.watchlist_id, activeSymbolsDeduped.join(",")]);
 
   useEffect(() => {
-    if (!active?.is_default || activeSymbolsDeduped.length === 0) {
+    if (!maturationEligible || activeSymbolsDeduped.length === 0) {
       setMaturationAlerts([]);
       setMaturationAlertsStatus("idle");
       return;
@@ -384,7 +390,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     };
   }, [
     active?.watchlist_id,
-    active?.is_default,
+    maturationEligible,
     activeSymbolsDeduped.join(","),
     symbolTrackingMap,
     dualDeskMaturation
@@ -561,17 +567,6 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     );
   }, [addSuggestionRows]);
 
-  async function patchWatchlist(id: string, body: Record<string, unknown>) {
-    const res = await fetch(`/api/stocvest/watchlists/${encodeURIComponent(id)}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body)
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error((data as { message?: string }).message || "Update failed");
-    return data as WatchlistRow;
-  }
-
   async function addSymbol(symOrRaw: string, options?: { skipCorroboration?: boolean }) {
     if (!active) return;
     const raw = symOrRaw.trim();
@@ -658,25 +653,18 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     }
   }
 
-  async function saveRename(name: string) {
-    if (!active) return;
-    await patchWatchlist(active.watchlist_id, { name });
-    setRename(null);
-    await load();
-  }
-
   const evaluatedLabel = useMemo(() => {
-    if (!active?.is_default || activeSymbolsDeduped.length === 0) return null;
+    if (!maturationEligible || activeSymbolsDeduped.length === 0) return null;
     if (maturationFetchStatus === "loading") return "Loading…";
     if (maturationFetchStatus === "error") return "Unavailable";
     if (!lastEvaluatedAt) return null;
     return lastEvaluatedAt.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-  }, [active?.is_default, activeSymbolsDeduped.length, maturationFetchStatus, lastEvaluatedAt]);
+  }, [maturationEligible, activeSymbolsDeduped.length, maturationFetchStatus, lastEvaluatedAt]);
 
   const sortedSymbols = useMemo(() => {
     if (!active) return [];
     const syms = activeSymbolsDeduped;
-    if (!active.is_default || maturationFetchStatus !== "ready") {
+    if (!maturationEligible || maturationFetchStatus !== "ready") {
       return [...syms].sort();
     }
     return [...syms].sort((a, b) =>
@@ -727,21 +715,21 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   ]);
 
   const statusCounts = useMemo(() => {
-    const keys = ["actionable", "developing", "not_aligned", "invalidated"] as const;
-    const out: Record<(typeof keys)[number], number> = {
+    const out = {
       actionable: 0,
       developing: 0,
-      not_aligned: 0,
-      invalidated: 0
+      notAligned: 0,
+      invalidated: 0,
+      monitored: activeSymbolsDeduped.length
     };
-    if (!active?.is_default || maturationFetchStatus !== "ready") return out;
+    if (!maturationEligible || maturationFetchStatus !== "ready") return out;
     for (const sym of activeSymbolsDeduped) {
       const disp = (
         displayStateForSymbol(sym, symbolTrackingMap, maturationSwing, maturationDay, dualDeskMaturation) || ""
       ).toLowerCase();
       if (disp === "actionable") out.actionable += 1;
       else if (disp === "developing" || disp === "re_evaluating") out.developing += 1;
-      else if (disp === "not_aligned") out.not_aligned += 1;
+      else if (disp === "not_aligned") out.notAligned += 1;
       else if (disp === "invalidated") out.invalidated += 1;
     }
     return out;
@@ -754,6 +742,11 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     symbolTrackingMap,
     dualDeskMaturation
   ]);
+
+  const portfolioHeadline = useMemo(
+    () => buildWatchlistPortfolioHeadline(statusCounts),
+    [statusCounts]
+  );
 
   const tabBtn = (mode: WatchlistViewMode, label: string, icon: ReactNode) => {
     const on = viewMode === mode;
@@ -799,50 +792,35 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
             style={headerStickyStyle}
           >
             <div className="flex flex-wrap items-start justify-between gap-2 pb-2">
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                {rename === active.watchlist_id ? (
-                  <input
-                    autoFocus
-                    defaultValue={active.name}
-                    onBlur={(e) => void saveRename(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                    }}
-                    className="min-h-10 w-full max-w-xs rounded-md border px-2 text-base font-semibold"
-                    style={{ borderColor: colors.border, color: colors.text, background: colors.surface }}
-                    aria-label="Watchlist name"
-                  />
-                ) : (
-                  <>
-                    <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                       <h1 className="m-0 truncate text-xl font-bold tracking-tight sm:text-2xl" style={{ color: colors.text }}>
                         Watchlist
                       </h1>
-                      {active.is_default ? (
+                      {maturationEligible ? (
                         <div className="mt-1 max-w-2xl">
-                          <p className="m-0 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
-                            {WATCHLIST_EVALUATION_HEADER}
+                          <p
+                            className="m-0 text-sm font-medium"
+                            style={{ color: colors.text }}
+                            data-testid="watchlist-portfolio-headline"
+                          >
+                            {maturationFetchStatus === "ready" ? portfolioHeadline : WATCHLIST_EVALUATION_HEADER}
                           </p>
-                          <div className="mt-3">
-                            <MaturationFrequencyCallout
-                              desk={viewMode === "day" ? "day" : "swing"}
-                              showDisplayBands
-                              testId="watchlists-maturation-frequency"
-                            />
+                          <div className="mt-2">
+                            <ScannerCollapsible
+                              testId="watchlist-evaluation-how"
+                              title="How evaluation works"
+                              hint="Cadence and layer bands"
+                              embedded
+                            >
+                              <MaturationFrequencyCallout
+                                desk={viewMode === "day" ? "day" : "swing"}
+                                showDisplayBands
+                                testId="watchlists-maturation-frequency"
+                              />
+                            </ScannerCollapsible>
                           </div>
                         </div>
                       ) : null}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setRename(active.watchlist_id)}
-                      className="shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold hover:underline"
-                      style={{ color: colors.textMuted }}
-                    >
-                      Rename list
-                    </button>
-                  </>
-                )}
               </div>
               <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                 <span
@@ -1054,135 +1032,46 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
           </header>
 
           <div style={{ display: "grid", gap: spacing[3] }}>
-            {active.is_default && activeSymbolsDeduped.length > 0 ? (
+            {maturationEligible && activeSymbolsDeduped.length > 0 && maturationFetchStatus === "error" ? (
               <div
-                className="grid gap-3 rounded-xl border px-3 py-3 sm:grid-cols-2 sm:px-4"
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm"
                 style={{ borderColor: colors.border, background: colors.surface }}
+                data-testid="watchlist-maturation-error"
+                role="alert"
               >
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  <div>
-                    <p className="m-0 text-2xl font-bold tabular-nums" style={{ color: colors.bullish }}>
-                      {statusCounts.actionable}
-                    </p>
-                    <p className="m-0 text-[10px] font-bold uppercase tracking-wider sm:text-xs" style={{ color: colors.textMuted }}>
-                      Actionable
-                    </p>
-                  </div>
-                  <div>
-                    <p className="m-0 text-2xl font-bold tabular-nums" style={{ color: "#f59e0b" }}>
-                      {statusCounts.developing}
-                    </p>
-                    <p className="m-0 text-[10px] font-bold uppercase tracking-wider sm:text-xs" style={{ color: colors.textMuted }}>
-                      Developing
-                    </p>
-                  </div>
-                  <div>
-                    <p className="m-0 text-2xl font-bold tabular-nums" style={{ color: colors.textMuted }}>
-                      {statusCounts.not_aligned}
-                    </p>
-                    <p className="m-0 text-[10px] font-bold uppercase tracking-wider sm:text-xs" style={{ color: colors.textMuted }}>
-                      Not aligned
-                    </p>
-                  </div>
-                  <div>
-                    <p className="m-0 text-2xl font-bold tabular-nums" style={{ color: colors.textMuted }}>
-                      {statusCounts.invalidated}
-                    </p>
-                    <p className="m-0 text-[10px] font-bold uppercase tracking-wider sm:text-xs" style={{ color: colors.textMuted }}>
-                      Invalidated
-                    </p>
-                  </div>
-                </div>
-                <div className="flex flex-col justify-center gap-1 sm:border-l sm:pl-4" style={{ borderColor: colors.border }}>
-                  <div className="h-2 w-full overflow-hidden rounded-full" style={{ background: colors.surfaceMuted }}>
-                    <div
-                      className="h-full rounded-full transition-[width]"
-                      style={{
-                        width: `${Math.min(100, (slotUsed / WATCHLIST_MAX_SYMBOLS) * 100)}%`,
-                        background: colors.accent
-                      }}
-                    />
-                  </div>
-                  <div className="flex justify-between text-xs" style={{ color: colors.textMuted }}>
-                    <span>
-                      {slotUsed} of {WATCHLIST_MAX_SYMBOLS} symbol slots used
-                    </span>
-                    <span className="tabular-nums">{slotsLeft} left</span>
-                  </div>
-                </div>
+                <p className="m-0" style={{ color: colors.text }}>
+                  Maturation status couldn&apos;t load. Symbols and quotes are still shown.
+                </p>
+                <button
+                  type="button"
+                  className="shrink-0 rounded-md border px-2.5 py-1 text-xs font-semibold"
+                  style={{ borderColor: colors.border, color: colors.text }}
+                  onClick={() => setMaturationReloadNonce((n) => n + 1)}
+                >
+                  Retry
+                </button>
               </div>
             ) : null}
-
-            {active.is_default && activeSymbolsDeduped.length > 0 ? (
-              <p className="m-0 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
-                <span className="font-semibold" style={{ color: "#a78bfa" }}>
-                  ■
-                </span>{" "}
-                Swing{" "}
-                {dualDeskMaturation ? (
-                  <>
-                    <span className="font-semibold" style={{ color: "#2dd4bf" }}>
-                      ■
-                    </span>{" "}
-                    Day ·{" "}
-                  </>
-                ) : null}
-                Sorted by best maturation among desks you track
-                {viewMode === "both" || viewMode === "day" ? " (rows respect tab + tracking)" : ""}.
-              </p>
+            {maturationEligible && activeSymbolsDeduped.length > 0 && maturationFetchStatus === "ready" ? (
+              <div className="watchlist-hero">
+                <WatchlistStatusRails counts={statusCounts} />
+                <p className="m-0 text-xs" style={{ color: colors.textMuted }}>
+                  {slotUsed} of {WATCHLIST_MAX_SYMBOLS} slots · {slotsLeft} left · sorted by best maturation
+                </p>
+              </div>
             ) : null}
-
+            
             <article
               className={surfaceGlowClassName}
               style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl }}
             >
-              {active.is_default && activeSymbolsDeduped.length > 0 ? (
-                <div
-                  data-testid="watchlist-maturation-alerts-feed"
-                  className="mx-4 mt-3 rounded-lg border px-3 py-2"
-                  style={{ borderColor: "rgba(0, 180, 255, 0.22)", background: "rgba(0, 180, 255, 0.06)" }}
-                >
-                  <p className="m-0 text-[10px] font-bold uppercase tracking-wider" style={{ color: colors.textMuted }}>
-                    Recent maturation alerts
-                  </p>
-                  {maturationAlertsStatus === "loading" ? (
-                    <p className="m-0 mt-1 text-xs" style={{ color: colors.textMuted }}>
-                      Loading…
-                    </p>
-                  ) : null}
-                  {maturationAlertsStatus === "error" ? (
-                    <p className="m-0 mt-1 text-xs" style={{ color: colors.bearish }}>
-                      Could not load alert history.
-                    </p>
-                  ) : null}
-                  {maturationAlertsStatus === "ready" && maturationAlerts.length === 0 ? (
-                    <p className="m-0 mt-1 text-xs leading-snug" style={{ color: colors.textMuted }}>
-                      No maturation emails yet. They appear when readiness changes after you run evidence from Signals.
-                    </p>
-                  ) : null}
-                  {maturationAlertsStatus === "ready" && maturationAlerts.length > 0 ? (
-                    <ul className="m-0 mt-1 list-disc space-y-1 pl-4 text-xs" style={{ color: colors.text }}>
-                      {maturationAlerts.map((row, i) => (
-                        <li key={`${row.created_at}-${i}`}>
-                          <Link
-                            href={watchlistToSignalsHref(row.symbol ?? "", tradingModeForSignalsNav(viewMode, dualDeskMaturation))}
-                            prefetch={false}
-                            aria-label={watchlistSignalsOpenAriaLabel(row.symbol ?? "")}
-                            style={{ color: colors.text, fontWeight: 700, textDecoration: "none" }}
-                            className="hover:underline"
-                          >
-                            {row.symbol}
-                          </Link>
-                          <span style={{ color: colors.textMuted }}> — {row.title}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                  <p className="m-0 mt-2 text-[10px]">
-                    <Link href="/dashboard/settings#alerts" style={{ color: colors.accent, fontWeight: 600 }}>
-                      Alert preferences
-                    </Link>
-                  </p>
+                            {maturationEligible && activeSymbolsDeduped.length > 0 ? (
+                <div className="mx-4 mt-3">
+                  <WatchlistActivityCollapsible
+                    alerts={maturationAlerts}
+                    status={maturationAlertsStatus}
+                    signalsMode={tradingModeForSignalsNav(viewMode, dualDeskMaturation)}
+                  />
                 </div>
               ) : null}
 
@@ -1218,10 +1107,9 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                     <ul className="m-0 flex list-none flex-col gap-2 p-0">
                     {filteredSymbolsForList.map((s) => {
                       const symU = s.trim().toUpperCase();
-                      const ms = active.is_default ? maturationSwing[symU] : undefined;
-                      const md = active.is_default && dualDeskMaturation ? maturationDay[symU] : undefined;
-                      const rowTracking = trackingForSymbol(symbolTrackingMap, symU, dualDeskMaturation);
-                      const displaySt = active.is_default
+                      const ms = maturationEligible ? maturationSwing[symU] : undefined;
+                      const md = maturationEligible && dualDeskMaturation ? maturationDay[symU] : undefined;
+                      const displaySt = maturationEligible
                         ? displayStateForSymbol(
                             symU,
                             symbolTrackingMap,
@@ -1230,196 +1118,31 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                             dualDeskMaturation
                           )
                         : undefined;
-                      const accent = maturationAccent(displaySt, colors as ThemeColors);
                       const href = watchlistToSignalsHref(s, tradingModeForSignalsNav(viewMode, dualDeskMaturation));
-                      const quote = watchlistQuoteFromSnapshot(snapshotsBySymbol[symU]);
                       const planMode = tradingModeForSignalsNav(viewMode, dualDeskMaturation) ?? "swing";
                       const maturationForPlan =
                         viewMode === "day" ? md : viewMode === "swing" ? ms : ms ?? md;
-                      const rowLine = (mode: "swing" | "day", m: MaturationRow | undefined) => {
-                        const hasMat = Boolean(m?.state || m?.label);
-                        const { aligned, total } = maturationAlignmentCounts(m);
-                        const detail = hasMat
-                          ? formatWatchlistMaturationDisplayLine(m) ?? formatStateLabel(m)
-                          : maturationFetchStatus === "ready" && active.is_default
-                            ? null
-                            : maturationFetchStatus === "error" && active.is_default
-                              ? "Could not load maturation"
-                              : "…";
-                        return (
-                          <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs sm:text-sm">
-                            <span
-                              className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide"
-                              style={{
-                                background: mode === "swing" ? "rgba(167,139,250,0.2)" : "rgba(45,212,191,0.15)",
-                                color: mode === "swing" ? "#c4b5fd" : "#5eead4"
-                              }}
-                            >
-                              {mode === "swing" ? "Swing" : "Day"}
-                            </span>
-                            {hasMat ? (
-                              <>
-                                <span className="text-[11px] font-medium sm:text-sm" style={{ color: colors.text }}>
-                                  ● {detail}
-                                </span>
-                                {(() => {
-                                  const progression = formatWatchlistProgressionChip(m);
-                                  if (!progression) return null;
-                                  const improved = m?.last_transition_type === "improved";
-                                  return (
-                                    <span
-                                      className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums"
-                                      style={{
-                                        background: improved ? "rgba(34,197,94,0.12)" : "rgba(248,113,113,0.12)",
-                                        color: improved ? "#86efac" : "#fca5a5"
-                                      }}
-                                      data-testid={`watchlist-progression-${symU}-${mode}`}
-                                      title="Layer alignment vs prior evaluation"
-                                    >
-                                      {progression}
-                                    </span>
-                                  );
-                                })()}
-                                <button
-                                  type="button"
-                                  className={WATCHLIST_ALIGNMENT_CHIP_CLASS}
-                                  data-testid={`watchlist-alignment-${symU}-${mode}`}
-                                  title="View aligned and missing layers — click for layer breakdown"
-                                  aria-label={`${symU} ${mode} alignment ${aligned} of ${total}. Open layer breakdown`}
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    setAlignmentSheet({ symbol: symU, deskMode: mode, row: m });
-                                  }}
-                                >
-                                  {aligned}/{total}
-                                </button>
-                                <Link
-                                  href={setupEvolutionHubHref(symU, mode)}
-                                  className="relative z-10 text-[10px] font-medium no-underline hover:underline sm:text-xs"
-                                  style={{ color: colors.accent }}
-                                  onClick={(e) => e.stopPropagation()}
-                                  data-testid={`watchlist-past-states-${symU}-${mode}`}
-                                >
-                                  Past states →
-                                </Link>
-                              </>
-                            ) : maturationFetchStatus === "ready" && active.is_default ? (
-                              <Link
-                                href={href}
-                                className={WATCHLIST_EVALUATE_LINK_CLASS}
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                Not evaluated yet · Tap to evaluate →
-                              </Link>
-                            ) : (
-                              <span className="text-[11px] font-medium sm:text-sm" style={{ color: colors.textMuted }}>
-                                {detail}
-                              </span>
-                            )}
-                            {m?.readiness_label ? (
-                              <span
-                                className="text-[10px] font-normal sm:text-xs"
-                                style={{ color: colors.textMuted }}
-                                title={m.readiness_label}
-                              >
-                                · {m.readiness_label.length > 48 ? `${m.readiness_label.slice(0, 48)}…` : m.readiness_label}
-                              </span>
-                            ) : null}
-                          </div>
-                        );
-                      };
                       return (
-                        <li key={symU} id={`watchlist-row-${symU}`}>
-                          <div className="relative flex items-stretch gap-3 rounded-xl border px-3 py-3 transition hover:brightness-[1.03] sm:px-4" style={{ borderColor: colors.border, background: colors.background }}>
-                            <Link
-                              href={href}
-                              prefetch={false}
-                              className="absolute inset-0 z-0 rounded-xl"
-                              aria-label={watchlistSignalsOpenAriaLabel(s)}
-                            >
-                              <span className="sr-only">Open {symU} on Signals</span>
-                            </Link>
-                            <span className="relative z-[1] mt-1 h-2.5 w-2.5 shrink-0 rounded-full pointer-events-none" style={{ background: accent }} aria-hidden />
-                            <div className="relative z-[1] flex min-h-0 min-w-0 flex-1 items-start gap-3 pointer-events-none sm:gap-4">
-                              <div className="min-w-0 flex-1">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <span className="font-mono text-lg font-bold tracking-wide">{symU}</span>
-                                  <span className="relative z-10 shrink-0 pointer-events-auto">
-                                    <WatchlistScenarioBuilder
-                                      symbol={symU}
-                                      mode={planMode}
-                                      snapshot={snapshotsBySymbol[symU]}
-                                      maturation={maturationForPlan}
-                                      testId={`build-scenario-watchlist-${symU}`}
-                                    />
-                                  </span>
-                                  {maturationFetchStatus === "loading" && active.is_default ? (
-                                    <span className="text-[10px] uppercase" style={{ color: colors.textMuted }}>
-                                      …
-                                    </span>
-                                  ) : null}
-                                </div>
-                                {active.is_default &&
-                                shouldShowDeskRow(rowTracking, "swing", viewMode, dualDeskMaturation) ? (
-                                  <div className="mt-2 space-y-1.5">{rowLine("swing", ms)}</div>
-                                ) : null}
-                                {active.is_default &&
-                                shouldShowDeskRow(rowTracking, "day", viewMode, dualDeskMaturation) ? (
-                                  <div className="mt-2 space-y-1.5">{rowLine("day", md)}</div>
-                                ) : null}
-                              </div>
-                              {quote ? (
-                                <div className="flex shrink-0 flex-col items-end gap-0.5 text-right tabular-nums">
-                                  <span className="font-mono text-sm font-semibold" style={{ color: colors.text }}>
-                                    {quote.price}
-                                  </span>
-                                  {quote.pct ? (
-                                    <span
-                                      className="text-xs font-semibold"
-                                      style={{
-                                        color:
-                                          quote.bullish === true
-                                            ? colors.bullish
-                                            : quote.bullish === false
-                                              ? colors.bearish
-                                              : colors.textMuted
-                                      }}
-                                    >
-                                      {quote.pct}
-                                    </span>
-                                  ) : null}
-                                </div>
-                              ) : snapshotFetchStatus === "loading" ? (
-                                <span className="shrink-0 pt-0.5 text-xs" style={{ color: colors.textMuted }}>
-                                  …
-                                </span>
-                              ) : null}
-                            </div>
-                            {evaluatedLabel && active.is_default ? (
-                              <span className="relative z-[1] hidden shrink-0 self-start pt-1 text-xs tabular-nums pointer-events-none sm:inline" style={{ color: colors.textMuted }}>
-                                {evaluatedLabel}
-                              </span>
-                            ) : null}
-                            <button
-                              type="button"
-                              className="relative z-10 shrink-0 self-start rounded p-1.5 text-lg leading-none hover:bg-white/5"
-                              style={{ color: colors.textMuted }}
-                              aria-label={`Remove ${s}`}
-                              onClick={(ev) => {
-                                ev.stopPropagation();
-                                void removeSymbol(s);
-                              }}
-                            >
-                              ×
-                            </button>
-                          </div>
-                          {active.is_default &&
-                          (viewMode === "swing" || viewMode === "both") &&
-                          shouldShowDeskRow(rowTracking, "swing", viewMode, dualDeskMaturation) ? (
-                            <UnlockForecast fetchOnExpand symbol={symU} />
-                          ) : null}
-                        </li>
+                        <WatchlistSymbolRow
+                          key={symU}
+                          symbol={symU}
+                          href={href}
+                          swingRow={ms}
+                          dayRow={md}
+                          displayState={displaySt}
+                          viewMode={viewMode}
+                          dualDesk={dualDeskMaturation}
+                          symbolTracking={symbolTrackingMap}
+                          snapshot={snapshotsBySymbol[symU]}
+                          maturationFetchStatus={maturationFetchStatus}
+                          isDefaultList={maturationEligible}
+                          planMode={planMode}
+                          maturationForPlan={maturationForPlan}
+                          onRemove={() => void removeSymbol(s)}
+                          onOpenLayers={(desk, row) =>
+                            setAlignmentSheet({ symbol: symU, deskMode: desk, row })
+                          }
+                        />
                       );
                     })}
                   </ul>

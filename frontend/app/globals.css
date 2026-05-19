@@ -571,3 +571,120 @@ a {
 .scanner-volume-gap__track {
   width: 100%;
 }
+
+/* Watchlist — minimalist symbol rows */
+.watchlist-symbol-row {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--color-border);
+  transition: filter 0.15s ease;
+}
+.watchlist-symbol-row:hover {
+  filter: brightness(1.03);
+}
+.watchlist-symbol-row__overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: 0.75rem;
+}
+.watchlist-symbol-row__dot {
+  position: relative;
+  z-index: 1;
+  margin-top: 0.35rem;
+  width: 0.5rem;
+  height: 0.5rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  pointer-events: none;
+}
+.watchlist-symbol-row__body {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+.watchlist-symbol-row__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.watchlist-symbol-row__symbol {
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.watchlist-symbol-row__quote {
+  margin-left: auto;
+  font-size: 0.875rem;
+  text-align: right;
+}
+.watchlist-symbol-row__remove {
+  position: relative;
+  z-index: 2;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  padding: 0.25rem 0.375rem;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 0.25rem;
+}
+.watchlist-symbol-row__remove:hover {
+  background: color-mix(in srgb, var(--color-text) 6%, transparent);
+}
+.watchlist-desk-status {
+  display: grid;
+  gap: 0.35rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid color-mix(in srgb, var(--color-border) 80%, transparent);
+}
+.watchlist-desk-status__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+}
+.watchlist-desk-status__pill {
+  flex-shrink: 0;
+  border-radius: 0.25rem;
+  padding: 0.125rem 0.375rem;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.watchlist-desk-status__primary {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+.watchlist-desk-status__progression {
+  flex-shrink: 0;
+  border-radius: 0.25rem;
+  padding: 0.125rem 0.375rem;
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.watchlist-desk-status__secondary {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+.watchlist-hero {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+}

@@ -138,6 +138,89 @@ describe("WatchlistsPageClient maturation", () => {
     });
   });
 
+  it("shows maturation on rows when day summary fails but swing succeeds (dual desk)", async () => {
+    global.fetch = vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/alerts/history")) {
+        return emptyAlertsHistory();
+      }
+      if (url.includes("/maturation-summary") && url.includes("mode=day")) {
+        return Promise.resolve({ ok: false, json: async () => ({}) });
+      }
+      if (url.includes("/maturation-summary") && url.includes("mode=swing")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            by_symbol: {
+              AAPL: {
+                state: "developing",
+                label: "Developing",
+                layers_aligned: 4,
+                layers_total: 6
+              }
+            }
+          })
+        });
+      }
+      if (url.includes("/api/stocvest/watchlists") && !url.includes("/watchlists/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            watchlists: [
+              {
+                watchlist_id: "wl-default",
+                name: "Main",
+                symbols: ["AAPL"],
+                is_default: true
+              }
+            ]
+          })
+        });
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    }) as unknown as typeof fetch;
+
+    wrap(<WatchlistsPageClient dualDeskMaturation={true} />);
+
+    await waitFor(() => expect(screen.getByText("Developing")).toBeInTheDocument());
+    expect(screen.queryByText("Could not load maturation")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("watchlist-maturation-error")).not.toBeInTheDocument();
+  });
+
+  it("shows a single maturation error banner when swing summary fails", async () => {
+    global.fetch = vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/alerts/history")) {
+        return emptyAlertsHistory();
+      }
+      if (url.includes("/maturation-summary")) {
+        return Promise.resolve({ ok: false, json: async () => ({}) });
+      }
+      if (url.includes("/api/stocvest/watchlists") && !url.includes("/watchlists/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            watchlists: [
+              {
+                watchlist_id: "wl-default",
+                name: "Main",
+                symbols: ["AAPL"],
+                is_default: true
+              }
+            ]
+          })
+        });
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    }) as unknown as typeof fetch;
+
+    wrap(<WatchlistsPageClient />);
+
+    await waitFor(() => expect(screen.getByTestId("watchlist-maturation-error")).toBeInTheDocument());
+    expect(screen.queryByText("Could not load maturation")).not.toBeInTheDocument();
+    expect(screen.getByText("AAPL")).toBeInTheDocument();
+  });
+
   it("fetches swing and day maturation when dualDeskMaturation is true", async () => {
     global.fetch = vi.fn((input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input.toString();
@@ -280,9 +363,10 @@ describe("WatchlistsPageClient maturation", () => {
 
     wrap(<WatchlistsPageClient dualDeskMaturation={false} />);
 
-    await waitFor(() => expect(screen.getByTestId("watchlist-maturation-alerts-feed")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId("watchlist-activity")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Recent activity"));
     await waitFor(() => expect(screen.getByText(/STOCVEST · AAPL \(swing\) maturation: Actionable → Developing/)).toBeInTheDocument());
-    const feed = screen.getByTestId("watchlist-maturation-alerts-feed");
+    const feed = screen.getByTestId("watchlist-activity");
     const symLink = within(feed).getByRole("link", { name: /Open AAPL on Signals/i });
     expect(symLink.getAttribute("href")).toContain("/dashboard/signals");
     expect(symLink.getAttribute("href")).toContain("ref=watchlist");
