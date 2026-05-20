@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, test, vi } from "vitest";
 
 import { DashboardRedesign } from "@/components/dashboard-redesign";
@@ -77,8 +77,8 @@ describe("Dashboard scanner partition (focus layout)", () => {
       />
     );
     const banner = screen.getByTestId("dashboard-system-state-banner");
-    expect(banner.textContent || "").toMatch(/Day Desk:.*Active/i);
-    expect(banner.textContent || "").toMatch(/Swing Desk:.*Suppressed/i);
+    expect(banner.textContent || "").toMatch(/Status:\s*ACTIONABLE/i);
+    expect(screen.getByTestId("dashboard-live-status").textContent || "").toMatch(/day/i);
     expect(screen.queryByTestId("swing-desk-panel")).toBeNull();
     expect(screen.queryByTestId("day-desk-panel")).toBeNull();
   });
@@ -111,7 +111,11 @@ describe("Dashboard scanner partition (focus layout)", () => {
         sectorRotation={[]}
       />
     );
-    expect(screen.getByTestId("dashboard-system-state-banner").textContent || "").toMatch(/Swing Desk:.*Active/i);
+    fireEvent.click(screen.getByTestId("dashboard-desk-mode-swing"));
+    expect(screen.getByTestId("dashboard-system-state-banner").textContent || "").toMatch(
+      /Status:\s*ACTIONABLE/i
+    );
+    expect(screen.getByTestId("dashboard-live-status").textContent || "").toMatch(/swing/i);
     expect(screen.queryByTestId("swing-desk-panel")).toBeNull();
     const dash = document.querySelector(".stocvest-dashboard-v2");
     expect((dash?.textContent || "").toLowerCase()).not.toContain("pattern maturity");

@@ -4,6 +4,10 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
+import {
+  regimeGateRejectionContext,
+  regimeGateRejectionTitle
+} from "@/lib/scanner/scanner-quiet-desk";
 import type { ScannerSynthesisRejectionGroups } from "@/lib/scanner-synthesis";
 import { useTheme } from "@/lib/theme-provider";
 import { VolumeGapBarList } from "@/components/scanner/VolumeGapBar";
@@ -12,6 +16,9 @@ type Props = {
   groups: ScannerSynthesisRejectionGroups;
   qualifiedCount?: number;
   evaluatedCount?: number;
+  regimeLabel?: string;
+  spyPct?: number | null;
+  qqqPct?: number | null;
 };
 
 function CollapsibleGroup({
@@ -93,7 +100,14 @@ function CollapsibleGroup({
   );
 }
 
-export function RejectionGroups({ groups, qualifiedCount = 0, evaluatedCount }: Props) {
+export function RejectionGroups({
+  groups,
+  qualifiedCount = 0,
+  evaluatedCount,
+  regimeLabel,
+  spyPct = null,
+  qqqPct = null
+}: Props) {
   const { colors } = useTheme();
   const session = groups.session_volume;
   const liquidity = groups.liquidity;
@@ -132,10 +146,18 @@ export function RejectionGroups({ groups, qualifiedCount = 0, evaluatedCount }: 
       {session.length > 0 ? (
         <CollapsibleGroup
           testId="scanner-rejection-session-volume"
-          title={`Volume below threshold · ${session.length} symbol${session.length === 1 ? "" : "s"}`}
-          tag="Session volume"
+          title={
+            regimeLabel && regimeLabel.toLowerCase().includes("bear") && qualifiedCount === 0
+              ? regimeGateRejectionTitle(session.length, regimeLabel)
+              : `Volume below threshold · ${session.length} symbol${session.length === 1 ? "" : "s"}`
+          }
+          tag={regimeLabel && qualifiedCount === 0 ? "Regime" : "Session volume"}
           tagColor="#d97706"
-          contextLine="All affected by the same market-wide condition"
+          contextLine={
+            regimeLabel && qualifiedCount === 0
+              ? regimeGateRejectionContext(regimeLabel, spyPct, qqqPct)
+              : "All affected by the same market-wide condition"
+          }
           defaultOpen
         >
           <div data-testid="scanner-rejection-chip-grid">

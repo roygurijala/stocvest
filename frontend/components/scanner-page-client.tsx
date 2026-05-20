@@ -21,7 +21,7 @@ import { ScenarioBuilderInline } from "@/components/scenario-builder/scenario-bu
 import { ScannerEmptyStateCard } from "@/components/scanner-empty-state-card";
 import { ScannerNearQualificationSection } from "@/components/scanner/scanner-near-qualification-section";
 import { ScannerOutcomeCards } from "@/components/scanner/ScannerOutcomeCards";
-import { ScannerQuietInsight } from "@/components/scanner/ScannerQuietInsight";
+import { ScannerQuietDesk } from "@/components/scanner/scanner-quiet-desk";
 import { ScannerScanResultHero } from "@/components/scanner/scanner-scan-result-hero";
 import { LaggardScanner } from "@/components/scanner/LaggardScanner";
 import { SignalEvidenceModal } from "@/components/signal-evidence-modal";
@@ -30,7 +30,6 @@ import { loadScannerDataWithoutBrief } from "@/lib/api/scanner-client-load";
 import { fetchScannerTraceBundleClient } from "@/lib/api/scanner-trace-client";
 import type { ScannerSynthesis } from "@/lib/scanner-synthesis";
 import {
-  buildClosestToQualifyingGroups,
   buildScannerCauseBullets,
   buildScannerMarketScopeLine
 } from "@/lib/scanner-quiet-copy";
@@ -1104,11 +1103,6 @@ export function ScannerPageClient({
     () => buildScannerMarketScopeLine(scanSummary, scannerSynthesis),
     [scanSummary, scannerSynthesis]
   );
-  const closestGroups = useMemo(
-    () => buildClosestToQualifyingGroups(scannerSynthesis, scanSummary),
-    [scannerSynthesis, scanSummary]
-  );
-
   useEffect(() => {
     if (scanSummary.qualifying.total > 0) return;
     if ((overview.evaluationTrace ?? []).length > 0 && overview.scannerSynthesis) return;
@@ -1337,7 +1331,15 @@ export function ScannerPageClient({
           nearQualification={scanSummary.near_qualification}
           watchlistProgression={scanSummary.watchlist_progression}
         />
-      ) : null}
+      ) : (
+        <ScannerQuietDesk
+          summary={scanSummary}
+          synthesis={scannerSynthesis}
+          causeBullets={causeBullets}
+          marketScopeLine={marketScopeLine}
+          deskFilter={evaluationTraceDeskFilter}
+        />
+      )}
 
       {dayTradingSurfaces ? (
       <div
@@ -2119,20 +2121,6 @@ export function ScannerPageClient({
           </div>
         </section>
       </div>
-
-      {showQuietInterpretation ? (
-        <ScannerQuietInsight
-          bullets={causeBullets}
-          closestGroups={closestGroups}
-          synthesis={
-            dayTradingSurfaces && (scannerSetupMode === "day" || scannerSetupMode === "both")
-              ? scannerSynthesis
-              : null
-          }
-          traceRows={evaluationTrace}
-          deskFilter={evaluationTraceDeskFilter}
-        />
-      ) : null}
 
       <LaggardScanner visible={scannerSetupMode === "swing" || scannerSetupMode === "both"} />
 

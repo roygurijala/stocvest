@@ -1,10 +1,10 @@
 /**
- * Dashboard → Scanner URLs after the focus-layout redesign.
+ * Dashboard → Scanner URLs after the command-center redesign.
  */
 
 import type { ReactElement } from "react";
 import { beforeAll, describe, expect, test, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach } from "vitest";
 
 import { DashboardRedesign } from "@/components/dashboard-redesign";
@@ -65,8 +65,8 @@ afterEach(() => {
   cleanup();
 });
 
-describe("Desk status scanner links", () => {
-  test("desk_status_includes_swing_and_day_scanner_hrefs", () => {
+describe("Opportunities scanner links", () => {
+  test("opportunities_scanner_href_follows_active_desk_mode", () => {
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
@@ -77,18 +77,15 @@ describe("Desk status scanner links", () => {
         sectorRotation={[]}
       />
     );
-    const desk = screen.getByTestId("dashboard-desk-status");
-    const swing = Array.from(desk.querySelectorAll("a")).find(
-      (a) => a.getAttribute("href") === "/dashboard/scanner?mode=swing"
-    );
-    const day = Array.from(desk.querySelectorAll("a")).find(
-      (a) => a.getAttribute("href") === "/dashboard/scanner?mode=day"
-    );
-    expect(swing).toBeDefined();
-    expect(day).toBeDefined();
+    const opportunities = screen.getByTestId("dashboard-opportunities");
+    expect(opportunities.querySelector('a[href="/dashboard/scanner?mode=day"]')).not.toBeNull();
+    fireEvent.click(screen.getByTestId("dashboard-desk-mode-swing"));
+    expect(opportunities.querySelector('a[href="/dashboard/scanner?mode=swing"]')).not.toBeNull();
+    fireEvent.click(screen.getByTestId("dashboard-desk-mode-day"));
+    expect(opportunities.querySelector('a[href="/dashboard/scanner?mode=day"]')).not.toBeNull();
   });
 
-  test("next_actions_open_scanner_uses_swing_mode_query", () => {
+  test("live_status_cta_points_at_scanner_for_active_desk", () => {
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
@@ -99,8 +96,9 @@ describe("Desk status scanner links", () => {
         sectorRotation={[]}
       />
     );
-    const na = screen.getByTestId("dashboard-next-actions");
-    const open = na.querySelector('a[href="/dashboard/scanner?mode=swing"]');
-    expect(open).not.toBeNull();
+    const live = screen.getByTestId("dashboard-live-status");
+    expect(live.querySelector('a[href="/dashboard/scanner?mode=day"]')).not.toBeNull();
+    fireEvent.click(screen.getByTestId("dashboard-desk-mode-swing"));
+    expect(live.querySelector('a[href="/dashboard/scanner?mode=swing"]')).not.toBeNull();
   });
 });

@@ -45,6 +45,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { DashboardRedesign } from "@/components/dashboard-redesign";
+import { SharedContextMasterCard } from "@/components/shared-context-master-card";
 import { ThemeProvider } from "@/lib/theme-provider";
 import type { MarketOverview, MarketStatusPayload, SnapshotPayload } from "@/lib/api/market";
 import type { ScannerOverview } from "@/lib/api/scanner";
@@ -242,18 +243,21 @@ describe("Dashboard chatbot contract (Phase A invariance)", () => {
 // (4) Shared Context collapse contract (Phase A2)
 // ─────────────────────────────────────────────────────────────────────────────
 
+function wrapSharedContextForCollapse() {
+  wrap(
+    <SharedContextMasterCard
+      weeklyIndexRows={baseWeekly}
+      sectorRotation={baseSectors}
+      upcomingEarnings={[]}
+      vixSessionPct={null}
+      layout="master"
+    />
+  );
+}
+
 describe("SharedContextMasterCard — collapse / expand (Phase A2)", () => {
   test("default_state_is_collapsed_AND_collapsed_summary_visible", () => {
-    wrap(
-      <DashboardRedesign
-        marketOverview={baseMarket}
-        scannerOverview={baseScanner}
-        earningsEvents={[]}
-        earningsRecent={[]}
-        weeklyIndexRows={baseWeekly}
-        sectorRotation={baseSectors}
-      />
-    );
+    wrapSharedContextForCollapse();
     const collapsedSummary = screen.queryByTestId("shared-context-collapsed-summary");
     expect(collapsedSummary).not.toBeNull();
     const toggle = screen.getByTestId("shared-context-toggle");
@@ -269,16 +273,7 @@ describe("SharedContextMasterCard — collapse / expand (Phase A2)", () => {
     // because that test was written before the collapse feature
     // existed — locking the collapsed-default path closes a future
     // regression where someone conditionally unmounts B–E.
-    wrap(
-      <DashboardRedesign
-        marketOverview={baseMarket}
-        scannerOverview={baseScanner}
-        earningsEvents={[]}
-        earningsRecent={[]}
-        weeklyIndexRows={baseWeekly}
-        sectorRotation={baseSectors}
-      />
-    );
+    wrapSharedContextForCollapse();
     for (const section of ["A", "B", "C", "D", "E"]) {
       const el = screen.getByTestId(`shared-context-section-${section}`);
       expect(el).toBeInTheDocument();
@@ -286,16 +281,7 @@ describe("SharedContextMasterCard — collapse / expand (Phase A2)", () => {
   });
 
   test("expanded_body_wrapper_has_aria_hidden_true_when_collapsed", () => {
-    wrap(
-      <DashboardRedesign
-        marketOverview={baseMarket}
-        scannerOverview={baseScanner}
-        earningsEvents={[]}
-        earningsRecent={[]}
-        weeklyIndexRows={baseWeekly}
-        sectorRotation={baseSectors}
-      />
-    );
+    wrapSharedContextForCollapse();
     const body = screen.getByTestId("shared-context-expanded-body");
     // The wrapper hides its content from assistive tech AND visually
     // when collapsed. We assert aria-hidden + display:none.
@@ -305,16 +291,7 @@ describe("SharedContextMasterCard — collapse / expand (Phase A2)", () => {
   });
 
   test("clicking_toggle_expands_AND_persists_to_localStorage", () => {
-    wrap(
-      <DashboardRedesign
-        marketOverview={baseMarket}
-        scannerOverview={baseScanner}
-        earningsEvents={[]}
-        earningsRecent={[]}
-        weeklyIndexRows={baseWeekly}
-        sectorRotation={baseSectors}
-      />
-    );
+    wrapSharedContextForCollapse();
     fireEvent.click(screen.getByTestId("shared-context-toggle"));
     // After click: collapsed-summary is gone, expanded body is shown.
     expect(screen.queryByTestId("shared-context-collapsed-summary")).toBeNull();
@@ -329,16 +306,7 @@ describe("SharedContextMasterCard — collapse / expand (Phase A2)", () => {
   test("expanded_state_persisted_across_remount_via_localStorage", () => {
     // User expanded previously → next visit comes up expanded.
     localStorage.setItem("stocvest_shared_context_collapsed", "0");
-    wrap(
-      <DashboardRedesign
-        marketOverview={baseMarket}
-        scannerOverview={baseScanner}
-        earningsEvents={[]}
-        earningsRecent={[]}
-        weeklyIndexRows={baseWeekly}
-        sectorRotation={baseSectors}
-      />
-    );
+    wrapSharedContextForCollapse();
     // The post-mount effect reads localStorage and flips to expanded.
     const body = screen.getByTestId("shared-context-expanded-body");
     expect(body.getAttribute("aria-hidden")).toBe("false");

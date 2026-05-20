@@ -5,7 +5,7 @@
  */
 
 import type { ReactElement } from "react";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 
 import { DashboardRedesign } from "@/components/dashboard-redesign";
@@ -105,11 +105,12 @@ describe("Tier 1.C — deferred scanner hydrate → dashboard surfaces", () => {
 
     const banner = screen.getByTestId("dashboard-system-state-banner");
     expect(banner.textContent).toMatch(/ACTIONABLE/i);
-    expect(banner.textContent).toMatch(/Day Desk:\s*Active/i);
+    expect(banner.textContent).toMatch(/Status:\s*ACTIONABLE/i);
 
-    const deskShortcuts = screen.getByTestId("dashboard-desk-status");
-    expect(deskShortcuts.querySelector('a[href="/dashboard/scanner?mode=swing"]')).not.toBeNull();
-    expect(deskShortcuts.querySelector('a[href="/dashboard/scanner?mode=day"]')).not.toBeNull();
+    const opportunities = screen.getByTestId("dashboard-opportunities");
+    expect(opportunities.querySelector('a[href="/dashboard/scanner?mode=day"]')).not.toBeNull();
+    fireEvent.click(screen.getByTestId("dashboard-desk-mode-swing"));
+    expect(opportunities.querySelector('a[href="/dashboard/scanner?mode=swing"]')).not.toBeNull();
   });
 
   test("hydrate_carries_scanSummary_into_scanner_overview_context", () => {

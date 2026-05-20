@@ -168,7 +168,7 @@ describe("DashboardRedesign Phase 3 integration", () => {
     expect(screen.getByTestId("dashboard-desk-status")).toBeInTheDocument();
   });
 
-  test("desk_scanner_links_carry_deep_interaction_level", () => {
+  test("opportunity_scanner_links_carry_deep_interaction_level", () => {
     const daySetup: IntradaySetupPayload = {
       symbol: "DAYLVL",
       direction: "bullish",
@@ -194,9 +194,9 @@ describe("DashboardRedesign Phase 3 integration", () => {
       />
     );
 
-    const swingScanner = screen.getByRole("link", { name: /swing scanner/i });
-    expect(swingScanner.getAttribute("data-interaction-level")).toBe("deep");
-    const dayScanner = screen.getByRole("link", { name: /day scanner/i });
-    expect(dayScanner.getAttribute("data-interaction-level")).toBe("deep");
+    const scannerCta = screen.getByRole("link", { name: /view scanner/i });
+    expect(scannerCta.getAttribute("data-interaction-level")).toBe("deep");
+    const liveCta = screen.getByTestId("dashboard-live-status").querySelector("a");
+    expect(liveCta?.getAttribute("data-interaction-level")).toBe("deep");
   });
 });
