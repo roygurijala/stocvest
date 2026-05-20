@@ -3,8 +3,9 @@
  */
 
 import type { GapIntelSnapshot } from "@/lib/api/gap-intel";
-import { compositeToSignalsLayerRows } from "@/lib/signals/composite-layer-rows";
+import { COMPOSITE_LAYER_KEYS, compositeToSignalsLayerRows } from "@/lib/signals/composite-layer-rows";
 import {
+  alignedLayersFromAlignmentRatio,
   layerPolarity,
   resolveCompositeLayerAlignment,
   type SignalsLayerPolarity,
@@ -44,12 +45,25 @@ export function humanizeScenarioGateReason(reason: string): string {
   return reason.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 }
 
+/** Matches ``DEFAULT_BASE_WEIGHTS`` in composite scorer (for weighted X/6 row marks). */
+export const LAYER_ALIGNMENT_WEIGHT: Record<string, number> = {
+  technical: 0.3,
+  news: 0.18,
+  sector: 0.12,
+  macro: 0.16,
+  geopolitical: 0.12,
+  internals: 0.12
+};
+
+export type LayerPreviewMark = "aligned" | "partial" | "conflicted" | "unavailable";
+
 export type ScenarioPreviewPanelData = {
   symbol: string;
   mode: "day" | "swing";
   setupBias: SignalsSetupBias;
   layerRows: SignalsLayerRowInput[];
   alignmentRatio?: number | null;
+  conflictedLayerKeys?: string[];
   sessionLines: string[];
   loadingLayers: boolean;
   evidenceHref: string;
@@ -142,12 +156,15 @@ export function buildScenarioPreviewPanelData(args: {
       ? args.layerRows
       : compositeToSignalsLayerRows(args.composite);
 
+  const conflictedLayerKeys = conflictedLayersFromComposite(args.composite);
+
   return {
     symbol: sym,
     mode: args.mode,
     setupBias: args.setupBias,
     layerRows: rows,
     alignmentRatio: args.alignmentRatio,
+    conflictedLayerKeys,
     sessionLines: buildSessionContextLines({
       gapIntel: args.gapIntel,
       gapGate: args.gapGate,
@@ -164,6 +181,85 @@ export function layerAlignedWithBias(row: SignalsLayerRowInput, bias: SignalsSet
     return row.status === "Neutral" || row.status === "As of close";
   }
   return layerPolarity(row, bias) === "supportive";
+}
+
+function conflictedLayersFromComposite(composite?: Record<string, unknown> | null): string[] {
+  const raw = composite?.conflicted_layers;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((x) => (typeof x === "string" ? x.trim().toLowerCase() : ""))
+    .filter(Boolean);
+}
+
+/**
+ * Per-layer marks for Scenario Builder preview — when ``alignmentRatio`` is set, the
+ * headline X/6 is weighted; cap ✅ marks at that count (highest-weight non-conflicted layers).
+ */
+export function resolveLayerPreviewMarks(
+  rows: SignalsLayerRowInput[],
+  bias: SignalsSetupBias,
+  opts?: { alignmentRatio?: number | null; conflictedLayerKeys?: readonly string[] | null }
+): Record<string, LayerPreviewMark> {
+  const out: Record<string, LayerPreviewMark> = {};
+  for (const row of rows) {
+    if (row.sectorCachePending || row.status === "Unavailable") {
+      out[row.key] = "unavailable";
+    }
+  }
+
+  const ar = opts?.alignmentRatio;
+  if (ar == null || !Number.isFinite(ar)) {
+    for (const row of rows) {
+      if (out[row.key]) continue;
+      out[row.key] = layerAlignedWithBias(row, bias) ? "aligned" : "conflicted";
+    }
+    return out;
+  }
+
+  const target = alignedLayersFromAlignmentRatio(ar) ?? 0;
+  const conflicted = new Set((opts?.conflictedLayerKeys ?? []).map((k) => k.toLowerCase()));
+
+  for (const row of rows) {
+    if (out[row.key]) continue;
+    if (conflicted.has(row.key.toLowerCase())) {
+      out[row.key] = "conflicted";
+    }
+  }
+
+  type Candidate = { key: string; weight: number; order: number };
+  const candidates: Candidate[] = [];
+  for (const row of rows) {
+    if (out[row.key]) continue;
+    const layerKey = row.key.toLowerCase();
+    const order = COMPOSITE_LAYER_KEYS.indexOf(layerKey as (typeof COMPOSITE_LAYER_KEYS)[number]);
+    candidates.push({
+      key: row.key,
+      weight: LAYER_ALIGNMENT_WEIGHT[layerKey] ?? 0.1,
+      order: order >= 0 ? order : 99
+    });
+  }
+
+  candidates.sort((a, b) => b.weight - a.weight || a.order - b.order);
+  const alignedKeys = new Set(candidates.slice(0, target).map((c) => c.key));
+
+  for (const row of rows) {
+    if (out[row.key]) continue;
+    out[row.key] = alignedKeys.has(row.key) ? "aligned" : "partial";
+  }
+  return out;
+}
+
+export function layerPreviewMarkGlyph(mark: LayerPreviewMark): string {
+  switch (mark) {
+    case "aligned":
+      return "✅";
+    case "partial":
+      return "○";
+    case "conflicted":
+      return "❌";
+    default:
+      return "—";
+  }
 }
 
 export function layerPreviewSummary(

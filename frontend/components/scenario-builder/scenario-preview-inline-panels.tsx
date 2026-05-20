@@ -4,9 +4,10 @@ import { useId, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { CuteLoader } from "@/components/cute-loader";
 import {
-  layerAlignedWithBias,
   layerDirectionContextLabel,
+  layerPreviewMarkGlyph,
   layerPreviewSummary,
+  resolveLayerPreviewMarks,
   type ScenarioPreviewPanelData
 } from "@/lib/scenario/scenario-preview-panels";
 import { layerPolarity } from "@/lib/signals-page-present";
@@ -82,7 +83,11 @@ function InlineAccordion({
 
 export function ScenarioPreviewInlinePanels({ panels }: { panels: ScenarioPreviewPanelData }) {
   const { colors } = useTheme();
-  const { layerRows, setupBias, sessionLines, loadingLayers, alignmentRatio } = panels;
+  const { layerRows, setupBias, sessionLines, loadingLayers, alignmentRatio, conflictedLayerKeys } = panels;
+  const layerMarks = resolveLayerPreviewMarks(layerRows, setupBias, {
+    alignmentRatio,
+    conflictedLayerKeys
+  });
   const layerSummary =
     layerRows.length > 0
       ? layerPreviewSummary(layerRows, setupBias, alignmentRatio)
@@ -103,9 +108,8 @@ export function ScenarioPreviewInlinePanels({ panels }: { panels: ScenarioPrevie
         ) : (
           <ul className="m-0 list-none space-y-1.5 p-0">
             {layerRows.map((row) => {
-              const aligned = layerAlignedWithBias(row, setupBias);
-              const unavailable = row.status === "Unavailable" || row.statusLabel?.includes("Unavailable");
-              const mark = unavailable ? "—" : aligned ? "✅" : "❌";
+              const mark = layerPreviewMarkGlyph(layerMarks[row.key] ?? "conflicted");
+              const unavailable = layerMarks[row.key] === "unavailable";
               const direction = unavailable
                 ? null
                 : layerDirectionContextLabel(layerPolarity(row, setupBias));
