@@ -78,13 +78,27 @@ export function normalizeSetupBias(summary: string): SignalsSetupBias {
   return "Neutral";
 }
 
+/**
+ * Whether a layer row counts toward X/6 alignment on Signals and in watchlist maturation
+ * (see ``watchlist_maturation_sync._layer_row_available``).
+ */
+export function layerRowEligibleForAlignmentCount(row: SignalsLayerRowInput): boolean {
+  if (row.sectorCachePending || row.status === "Unavailable") return false;
+  if (row.score === null) return false;
+  return true;
+}
+
 export function countLayerAlignment(
   rows: SignalsLayerRowInput[],
   bias: SignalsSetupBias
 ): { aligned: number; total: number; label: string } {
   const total = 6;
   if (bias === "Neutral") {
-    const neutralish = rows.filter((r) => r.status === "Neutral" || r.status === "As of close").length;
+    const neutralish = rows.filter(
+      (r) =>
+        layerRowEligibleForAlignmentCount(r) &&
+        (r.status === "Neutral" || r.status === "As of close")
+    ).length;
     return {
       aligned: neutralish,
       total,
@@ -92,7 +106,9 @@ export function countLayerAlignment(
     };
   }
   const target = bias === "Bullish" ? "Bullish" : "Bearish";
-  const aligned = rows.filter((r) => r.status === target).length;
+  const aligned = rows.filter(
+    (r) => layerRowEligibleForAlignmentCount(r) && r.status === target
+  ).length;
   return {
     aligned,
     total,

@@ -36,6 +36,18 @@ describe("signals-page-present", () => {
     expect(a.total).toBe(6);
   });
 
+  test("countLayerAlignment ignores bullish label without a live layer score", () => {
+    const rows: SignalsLayerRowInput[] = [
+      { key: "technical", name: "Technical", status: "Bullish", explanation: "", score: 72 },
+      { key: "news", name: "News", status: "Bullish", explanation: "", score: null },
+      { key: "macro", name: "Macro", status: "Neutral", explanation: "", score: 50 },
+      { key: "sector", name: "Sector", status: "Neutral", explanation: "", score: 50 },
+      { key: "geopolitical", name: "Geopolitical", status: "Neutral", explanation: "", score: 50 },
+      { key: "internals", name: "Internals", status: "Neutral", explanation: "", score: 50 }
+    ];
+    expect(countLayerAlignment(rows, "Bullish").aligned).toBe(1);
+  });
+
   test("pickPreviewLayers prefers blocking layers", () => {
     const preview = pickPreviewLayers(bearishRows, "Bearish", 3);
     expect(preview.some((r) => r.key === "internals")).toBe(true);
