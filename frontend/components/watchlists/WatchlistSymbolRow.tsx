@@ -21,51 +21,48 @@ import { WatchlistScenarioBuilder } from "@/components/watchlists/watchlist-scen
 
 type Desk = "swing" | "day";
 
-function DeskEvalMeta({
+function DeskRefreshButton({
   symU,
   desk,
-  lastEvaluatedLine,
   deskEvaluating,
   onRefreshDesk
 }: {
   symU: string;
   desk: Desk;
-  lastEvaluatedLine: string;
   deskEvaluating?: boolean;
-  onRefreshDesk?: (desk: Desk) => void;
+  onRefreshDesk: (desk: Desk) => void;
 }) {
   const { colors } = useTheme();
   return (
-    <span
-      className="watchlist-desk-lines__meta inline-flex shrink-0 flex-wrap items-center justify-end gap-x-2 gap-y-0.5 text-right"
-      onClick={(e) => e.stopPropagation()}
+    <button
+      type="button"
+      className={`${WATCHLIST_EVALUATE_LINK_CLASS} watchlist-desk-lines__refresh inline-flex shrink-0 items-center gap-1`}
+      style={{ color: colors.textMuted }}
+      data-testid={`watchlist-refresh-${symU}-${desk}`}
+      aria-label={`Refresh ${desk} evaluation for ${symU}`}
+      title="Re-run composite and update maturation"
+      disabled={deskEvaluating}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onRefreshDesk(desk);
+      }}
     >
-      <span
-        className="watchlist-desk-lines__fetched text-xs leading-snug"
-        style={{ color: colors.textMuted }}
-        data-testid={`watchlist-last-evaluated-${symU}-${desk}`}
-      >
-        {lastEvaluatedLine}
-      </span>
-      {onRefreshDesk ? (
-        <button
-          type="button"
-          className={`${WATCHLIST_EVALUATE_LINK_CLASS} watchlist-desk-lines__refresh inline-flex items-center gap-1`}
-          style={{ color: colors.textMuted }}
-          data-testid={`watchlist-refresh-${symU}-${desk}`}
-          aria-label={`Refresh ${desk} evaluation for ${symU}`}
-          title="Re-run composite and update maturation"
-          disabled={deskEvaluating}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onRefreshDesk(desk);
-          }}
-        >
-          <RefreshCw size={12} className={deskEvaluating ? "animate-spin" : undefined} aria-hidden />
-          {deskEvaluating ? "Refreshing…" : "Refresh"}
-        </button>
-      ) : null}
+      <RefreshCw size={12} className={deskEvaluating ? "animate-spin" : undefined} aria-hidden />
+      {deskEvaluating ? "Refreshing…" : "Refresh"}
+    </button>
+  );
+}
+
+function DeskLastEvaluated({ symU, desk, line }: { symU: string; desk: Desk; line: string }) {
+  const { colors } = useTheme();
+  return (
+    <span
+      className="watchlist-desk-lines__fetched shrink-0 text-right text-xs leading-snug"
+      style={{ color: colors.textMuted }}
+      data-testid={`watchlist-last-evaluated-${symU}-${desk}`}
+    >
+      {line}
     </span>
   );
 }
@@ -126,15 +123,23 @@ function DeskStatusBlock({
           className="watchlist-desk-lines watchlist-desk-lines--pending"
         >
           <div className="watchlist-desk-lines__header flex items-start justify-between gap-3">
-            <p className="watchlist-desk-lines__status m-0 min-w-0 flex-1" style={{ color: colors.textMuted }}>
-              {formatUnevaluatedDeskStatusLine(desk, evalOpts)}
-            </p>
-            <DeskEvalMeta
+            <div className="watchlist-desk-lines__primary flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+              <p className="watchlist-desk-lines__status m-0" style={{ color: colors.textMuted }}>
+                {formatUnevaluatedDeskStatusLine(desk, evalOpts)}
+              </p>
+              {onRefreshDesk ? (
+                <DeskRefreshButton
+                  symU={symU}
+                  desk={desk}
+                  deskEvaluating={deskEvaluating}
+                  onRefreshDesk={onRefreshDesk}
+                />
+              ) : null}
+            </div>
+            <DeskLastEvaluated
               symU={symU}
               desk={desk}
-              lastEvaluatedLine={formatLastEvaluatedLine(undefined, evalOpts)}
-              deskEvaluating={deskEvaluating}
-              onRefreshDesk={onRefreshDesk}
+              line={formatLastEvaluatedLine(undefined, evalOpts)}
             />
           </div>
           {!deskEvaluating ? (
@@ -164,49 +169,49 @@ function DeskStatusBlock({
   return (
     <div data-testid={`watchlist-desk-${symU}-${desk}`} className="watchlist-desk-lines">
       <div className="watchlist-desk-lines__header flex items-start justify-between gap-3">
-        <button
-          type="button"
-          className="watchlist-desk-lines__status-btn pointer-events-auto m-0 min-w-0 flex-1 border-0 bg-transparent p-0 text-left"
-          style={{ color: colors.text, cursor: "pointer" }}
-          data-testid={`watchlist-alignment-${symU}-${desk}`}
-          aria-label={`${symU} ${present.statusLine}. ${present.detailLine ?? "Open layer breakdown"}`}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onOpenLayers(desk, row);
-          }}
-        >
-          <span
-            className="watchlist-desk-lines__status block"
-            data-testid={`watchlist-status-line-${symU}-${desk}`}
+        <div className="watchlist-desk-lines__primary flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+          <button
+            type="button"
+            className="watchlist-desk-lines__status-btn pointer-events-auto m-0 min-w-0 border-0 bg-transparent p-0 text-left"
+            style={{ color: colors.text, cursor: "pointer" }}
+            data-testid={`watchlist-alignment-${symU}-${desk}`}
+            aria-label={`${symU} ${present.statusLine}${present.statusNote ? `. ${present.statusNote}` : ""}. Open layer breakdown`}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onOpenLayers(desk, row);
+            }}
           >
-            {present.statusLine}
-          </span>
-        </button>
-        <DeskEvalMeta
-          symU={symU}
-          desk={desk}
-          lastEvaluatedLine={present.lastEvaluatedLine}
-          deskEvaluating={deskEvaluating}
-          onRefreshDesk={onRefreshDesk}
-        />
+            <span
+              className="watchlist-desk-lines__status inline"
+              data-testid={`watchlist-status-line-${symU}-${desk}`}
+            >
+              {present.statusLine}
+              {present.coreCheckmark ? (
+                <span className="watchlist-desk-lines__core-check" aria-label="Core layers aligned">
+                  {" "}
+                  ✓
+                </span>
+              ) : null}
+              {present.statusNote ? (
+                <span className="watchlist-desk-lines__status-note" style={{ color: colors.textMuted }}>
+                  {" "}
+                  · {present.statusNote}
+                </span>
+              ) : null}
+            </span>
+          </button>
+          {onRefreshDesk ? (
+            <DeskRefreshButton
+              symU={symU}
+              desk={desk}
+              deskEvaluating={deskEvaluating}
+              onRefreshDesk={onRefreshDesk}
+            />
+          ) : null}
+        </div>
+        <DeskLastEvaluated symU={symU} desk={desk} line={present.lastEvaluatedLine} />
       </div>
-      {present.detailLine ? (
-        <button
-          type="button"
-          className="watchlist-desk-lines__detail-btn pointer-events-auto m-0 w-full border-0 bg-transparent p-0 text-left"
-          style={{ color: colors.textMuted, cursor: "pointer" }}
-          data-testid={`watchlist-detail-line-${symU}-${desk}`}
-          title={row?.readiness_label ?? undefined}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onOpenLayers(desk, row);
-          }}
-        >
-          <span className="watchlist-desk-lines__detail block">{present.detailLine}</span>
-        </button>
-      ) : null}
       {present.progressionChip ? (
         <span className="sr-only" data-testid={`watchlist-progression-${symU}-${desk}`}>
           {present.progressionChip}

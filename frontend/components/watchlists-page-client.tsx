@@ -1090,9 +1090,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                     }
                   }}
                   placeholder="Search watchlist or add ticker (symbol first, then name)"
-                  className={`watchlist-search-input min-h-11 w-full flex-1 rounded-lg border px-3 font-mono font-semibold tracking-wide placeholder:font-normal ${
-                    theme === "light" ? "placeholder:text-slate-400" : "placeholder:text-slate-200/90"
-                  }`}
+                  className="watchlist-search-input min-h-11 w-full flex-1 rounded-lg border px-3 font-mono font-semibold tracking-wide placeholder:font-normal placeholder:font-sans"
                   style={{
                     borderColor:
                       theme === "light" ? "#94a3b8" : "rgba(56, 189, 248, 0.45)",

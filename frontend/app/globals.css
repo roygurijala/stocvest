@@ -659,13 +659,12 @@ a {
 .watchlist-desk-lines__header {
   gap: 0.5rem;
 }
-.watchlist-desk-lines__status-btn:hover .watchlist-desk-lines__status,
-.watchlist-desk-lines__detail-btn:hover .watchlist-desk-lines__detail {
+.watchlist-desk-lines__primary {
+  gap: 0.35rem 0.5rem;
+}
+.watchlist-desk-lines__status-btn:hover .watchlist-desk-lines__status {
   text-decoration: underline;
   text-underline-offset: 2px;
-}
-.watchlist-desk-lines__meta {
-  max-width: 58%;
 }
 .watchlist-desk-lines__status {
   font-size: 0.8125rem;
@@ -673,17 +672,25 @@ a {
   letter-spacing: 0.02em;
   line-height: 1.35;
 }
-.watchlist-desk-lines__detail {
-  font-size: 0.8125rem;
-  line-height: 1.35;
-}
 .watchlist-desk-lines__fetched {
+  max-width: 52%;
   font-size: 0.75rem;
   line-height: 1.35;
   opacity: 0.9;
 }
 .watchlist-desk-lines__action {
   justify-self: start;
+}
+
+/* Watchlist search — placeholder barely visible; typed text uses inline color from theme. */
+.watchlist-search-input::placeholder {
+  opacity: 1;
+}
+.theme-dark .watchlist-search-input::placeholder {
+  color: rgba(71, 85, 105, 0.38);
+}
+.theme-light .watchlist-search-input::placeholder {
+  color: rgba(100, 116, 139, 0.38);
 }
 .watchlist-desk-status__pill {
   flex-shrink: 0;

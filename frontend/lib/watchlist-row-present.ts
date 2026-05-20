@@ -15,8 +15,10 @@ import { formatSignalsAlignmentDisplayLine } from "@/lib/signals-page-present";
 export type WatchlistDeskStatusPresent = {
   /** e.g. "SWING · Developing (3/6)" */
   statusLine: string;
-  /** e.g. "Waiting on volume confirmation" or "2 layers improved today" */
-  detailLine: string | null;
+  /** Unique note on the status row (readiness / progression) — not duplicate X/6 copy. */
+  statusNote: string | null;
+  /** True when technical + news layers are aligned (backend "core ✓"). */
+  coreCheckmark: boolean;
   /** Always set — "Last evaluated …" or "Not evaluated yet" */
   lastEvaluatedLine: string;
   layerFillPct: number;
@@ -25,6 +27,22 @@ export type WatchlistDeskStatusPresent = {
   aligned: number;
   total: number;
 };
+
+function watchlistCoreLayersAligned(row: WatchlistMaturationRow): boolean {
+  const missing = new Set((row.missing_layers ?? []).map((k) => k.trim().toLowerCase()));
+  return !missing.has("technical") && !missing.has("news");
+}
+
+/** Backend readiness often repeats the X/6 count already shown on the status line. */
+export function readinessDuplicatesAlignmentCount(
+  readiness: string,
+  aligned: number,
+  total: number
+): boolean {
+  const r = readiness.trim().toLowerCase();
+  if (/^\d+\/\d+\s+aligned\b/.test(r)) return true;
+  return r.startsWith(`${aligned}/${total} aligned`);
+}
 
 export function watchlistDeskLabel(desk: "swing" | "day"): string {
   return desk === "swing" ? "SWING" : "DAY";
@@ -56,12 +74,21 @@ export function buildWatchlistDeskStatusPresent(
         )
       : formatWatchlistMaturationDisplayLine(row) ?? formatWatchlistMaturationLabel(row);
   const statusLine = `${watchlistDeskLabel(desk)} · ${tierLine}`;
-  const readiness = row.readiness_label?.trim();
-  const detailLine =
-    readiness || formatWatchlistProgressionDetail(row) || formatLayersFromActionableHint(aligned, total);
+  const readiness = row.readiness_label?.trim() ?? "";
+  const progression = formatWatchlistProgressionDetail(row);
+  const actionableHint = formatLayersFromActionableHint(aligned, total);
+  let statusNote: string | null = null;
+  if (readiness && !readinessDuplicatesAlignmentCount(readiness, aligned, total)) {
+    statusNote = readiness;
+  } else if (progression) {
+    statusNote = progression;
+  } else if (actionableHint) {
+    statusNote = actionableHint;
+  }
   return {
     statusLine,
-    detailLine,
+    statusNote,
+    coreCheckmark: watchlistCoreLayersAligned(row),
     lastEvaluatedLine: formatLastEvaluatedLine(row.last_evaluated_at),
     layerFillPct: watchlistLayerFillPct(row),
     progressionChip: formatWatchlistProgressionChip(row),
