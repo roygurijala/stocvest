@@ -46,7 +46,12 @@ export function ScenarioBuilderPreviewModal({
   const whyNotItems = scenarioWhyNotItems(resolved);
   const takeaway = scenarioPreviewTakeaway(resolved);
   const next = nextUnlockBullets(resolved);
-  const setupLabel = setupTierLabel(resolved.setupTier, resolved.aligned, resolved.total);
+  const setupLabel = setupTierLabel(
+    resolved.setupTier,
+    resolved.aligned,
+    resolved.total,
+    previewPanels.setupBias
+  );
   const executionLabel = executionTierLabel(resolved.executionTier);
   const biasLabel = biasPreviewLabel(resolved.directionalLabel);
   const levelsLine = resolved.structurallyComplete

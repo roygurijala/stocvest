@@ -106,6 +106,23 @@ export function normalizeWatchlistMaturationBySymbol(payload: unknown): Record<s
   return out;
 }
 
+/** Scenario Builder on a row — in “both” view, prefer the desk evaluated most recently. */
+export function pickWatchlistMaturationForPlan(
+  viewMode: WatchlistViewMode,
+  swing: WatchlistMaturationRow | undefined,
+  day: WatchlistMaturationRow | undefined
+): WatchlistMaturationRow | undefined {
+  if (viewMode === "day") return day;
+  if (viewMode === "swing") return swing;
+  const swingAt = swing?.last_evaluated_at ? Date.parse(swing.last_evaluated_at) : NaN;
+  const dayAt = day?.last_evaluated_at ? Date.parse(day.last_evaluated_at) : NaN;
+  const swingOk = Number.isFinite(swingAt);
+  const dayOk = Number.isFinite(dayAt);
+  if (swingOk && dayOk) return dayAt >= swingAt ? day ?? swing : swing ?? day;
+  if (dayOk) return day ?? swing;
+  return swing ?? day;
+}
+
 /**
  * Watchlist filter / on-list typeahead: ticker + company name always; maturation text only for the active desk
  * (swing OR day). In “Both” maturation view, do not search swing+day text together — symbol + company only.

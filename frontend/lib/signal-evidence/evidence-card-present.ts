@@ -23,12 +23,17 @@ export function evidenceDirectionToBias(direction: string): SignalsSetupBias {
 }
 
 export function evidenceLayerToRow(layer: EvidenceLayer): SignalsLayerRowInput {
+  const sectorPending =
+    layer.key === "sector" && layer.sector_resolution_state === "pending_cache_refresh";
+  const unavailable = layer.status === "Unavailable" || sectorPending;
   return {
     key: layer.key,
     name: layer.name,
-    status: layer.status,
+    status: sectorPending ? "Unavailable" : layer.status,
+    statusLabel: sectorPending ? "Unavailable (not factored)" : undefined,
     explanation: layer.explanation,
-    score: layer.contributionScore
+    score: unavailable ? null : layer.contributionScore,
+    sectorCachePending: sectorPending || undefined
   };
 }
 

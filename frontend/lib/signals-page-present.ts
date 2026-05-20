@@ -159,6 +159,24 @@ export function resolveSignalsLayerAlignment(input: {
   return countLayerAlignment(input.rows, input.bias);
 }
 
+/** Canonical X/6 + display line for composite-backed surfaces (Signals, Evidence, Scenario). */
+export function resolveCompositeLayerAlignment(input: {
+  rows: SignalsLayerRowInput[];
+  bias: SignalsSetupBias;
+  alignmentRatio?: number | null;
+  maturationState?: string | null;
+}): { aligned: number; total: number; label: string; displayLine: string } {
+  const alignment = resolveSignalsLayerAlignment({
+    rows: input.rows,
+    bias: input.bias,
+    alignmentRatio: input.alignmentRatio
+  });
+  return {
+    ...alignment,
+    displayLine: formatSignalsAlignmentDisplayLine(alignment, input.bias, input.maturationState)
+  };
+}
+
 /** Bias-aware alignment line for Signals surfaces (no "Strong" on neutral bias). */
 export function formatSignalsAlignmentDisplayLine(
   alignment: { aligned: number; total: number; label: string },

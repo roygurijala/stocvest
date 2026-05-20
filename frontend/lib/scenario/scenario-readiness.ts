@@ -17,7 +17,7 @@ import {
 import { isEligibleForScenario } from "@/lib/scenario/eligibility";
 import { pickMissingConfirmationLayers } from "@/lib/signal-evidence/evidence-card-present";
 import {
-  countLayerAlignment,
+  resolveSignalsLayerAlignment,
   type SignalsLayerRowInput,
   type SignalsSetupBias
 } from "@/lib/signals-page-present";
@@ -41,6 +41,8 @@ export type ScenarioReadinessContext = {
   /** Setup bias for directional preview copy only (no prices). */
   setupBias?: SignalsSetupBias | null;
   layerRows?: SignalsLayerRowInput[];
+  /** Composite engine agreement (0–1); preferred for X/6 when set. */
+  alignmentRatio?: number | null;
   layersAligned?: number | null;
   layersTotal?: number | null;
   /** Watchlist maturation or similar lifecycle label. */
@@ -89,7 +91,11 @@ function countAlignment(
   const bias = ctx.setupBias ?? "Neutral";
   const rows = ctx.layerRows ?? [];
   if (rows.length > 0) {
-    const { aligned } = countLayerAlignment(rows, bias);
+    const { aligned } = resolveSignalsLayerAlignment({
+      rows,
+      bias,
+      alignmentRatio: ctx.alignmentRatio
+    });
     const missing = pickMissingConfirmationLayers(rows, bias, 4);
     return { aligned, total, missing };
   }

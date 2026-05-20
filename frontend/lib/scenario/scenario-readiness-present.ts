@@ -8,11 +8,27 @@ import {
 } from "@/lib/alignment-display-tier";
 import type { ScenarioExecutionTier, ScenarioReadinessResolved, ScenarioSetupTier } from "@/lib/scenario/scenario-readiness";
 import { formatMissingLayerDisplayName } from "@/lib/scenario/scenario-readiness";
+import { formatSignalsAlignmentDisplayLine, type SignalsSetupBias } from "@/lib/signals-page-present";
 
 export const SCENARIO_EXECUTION_UNLOCK_FOOTER =
   "Execution planning unlocks when both setup alignment and execution conditions are met.";
 
-export function setupTierLabel(tier: ScenarioSetupTier, aligned: number, total: number): string {
+export function setupTierLabel(
+  tier: ScenarioSetupTier,
+  aligned: number,
+  total: number,
+  setupBias?: SignalsSetupBias
+): string {
+  if (setupBias === "Neutral") {
+    return formatSignalsAlignmentDisplayLine(
+      {
+        aligned,
+        total,
+        label: aligned >= 4 ? "Mostly neutral" : "Mixed direction"
+      },
+      "Neutral"
+    );
+  }
   if (tier === "near_ready") {
     return formatAlignmentStatusLine({
       layersAligned: aligned,

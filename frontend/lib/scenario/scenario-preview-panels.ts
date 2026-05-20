@@ -5,8 +5,8 @@
 import type { GapIntelSnapshot } from "@/lib/api/gap-intel";
 import { compositeToSignalsLayerRows } from "@/lib/signals/composite-layer-rows";
 import {
-  countLayerAlignment,
   layerPolarity,
+  resolveCompositeLayerAlignment,
   type SignalsLayerPolarity,
   type SignalsLayerRowInput,
   type SignalsSetupBias
@@ -49,6 +49,7 @@ export type ScenarioPreviewPanelData = {
   mode: "day" | "swing";
   setupBias: SignalsSetupBias;
   layerRows: SignalsLayerRowInput[];
+  alignmentRatio?: number | null;
   sessionLines: string[];
   loadingLayers: boolean;
   evidenceHref: string;
@@ -133,6 +134,7 @@ export function buildScenarioPreviewPanelData(args: {
   executionTier: ScenarioExecutionTier;
   surface: ScenarioBuilderSurface;
   loadingLayers?: boolean;
+  alignmentRatio?: number | null;
 }): ScenarioPreviewPanelData {
   const sym = args.symbol.trim().toUpperCase();
   const rows =
@@ -145,6 +147,7 @@ export function buildScenarioPreviewPanelData(args: {
     mode: args.mode,
     setupBias: args.setupBias,
     layerRows: rows,
+    alignmentRatio: args.alignmentRatio,
     sessionLines: buildSessionContextLines({
       gapIntel: args.gapIntel,
       gapGate: args.gapGate,
@@ -163,7 +166,14 @@ export function layerAlignedWithBias(row: SignalsLayerRowInput, bias: SignalsSet
   return layerPolarity(row, bias) === "supportive";
 }
 
-export function layerPreviewSummary(rows: SignalsLayerRowInput[], bias: SignalsSetupBias): string {
-  const { aligned, total } = countLayerAlignment(rows, bias);
-  return `${aligned}/${total} layers aligned with ${bias.toLowerCase()} bias`;
+export function layerPreviewSummary(
+  rows: SignalsLayerRowInput[],
+  bias: SignalsSetupBias,
+  alignmentRatio?: number | null
+): string {
+  const { displayLine } = resolveCompositeLayerAlignment({ rows, bias, alignmentRatio });
+  if (bias === "Neutral") {
+    return `${displayLine} — no directional pressure dominates`;
+  }
+  return `${displayLine} — layers aligned with ${bias.toLowerCase()} bias`;
 }

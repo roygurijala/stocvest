@@ -5,6 +5,7 @@ import {
   dedupeWatchlistSymbolsUpper,
   formatWatchlistMaturationLabel,
   normalizeWatchlistMaturationBySymbol,
+  pickWatchlistMaturationForPlan,
   parseCompanyNameFromTickerCandidateLabel,
   watchlistQuoteFromSnapshot,
   watchlistSymbolMatchesSearch
@@ -166,5 +167,21 @@ describe("watchlistQuoteFromSnapshot", () => {
 
   test("no numeric price", () => {
     expect(watchlistQuoteFromSnapshot(snap({ last_trade_price: NaN, day_close: null }))).toBeNull();
+  });
+});
+
+describe("pickWatchlistMaturationForPlan", () => {
+  test("both view prefers desk with newer last_evaluated_at", () => {
+    const swing = { state: "developing", last_evaluated_at: "2026-05-18T10:00:00Z", layers_aligned: 2 };
+    const day = { state: "near_ready", last_evaluated_at: "2026-05-19T12:00:00Z", layers_aligned: 4 };
+    expect(pickWatchlistMaturationForPlan("both", swing, day)).toBe(day);
+    expect(pickWatchlistMaturationForPlan("both", day, swing)).toBe(day);
+  });
+
+  test("single-desk view uses that desk row", () => {
+    const swing = { state: "developing", layers_aligned: 2 };
+    const day = { state: "near_ready", layers_aligned: 4 };
+    expect(pickWatchlistMaturationForPlan("swing", swing, day)).toBe(swing);
+    expect(pickWatchlistMaturationForPlan("day", swing, day)).toBe(day);
   });
 });

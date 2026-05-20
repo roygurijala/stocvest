@@ -32,14 +32,19 @@ export function useScenarioPreviewPanels(args: {
 
   return useMemo(() => {
     const bias =
-      args.setupBias ??
       deriveSetupBiasFromComposite(composite, []) ??
+      args.setupBias ??
       ("Neutral" as const);
+    const ar =
+      composite && typeof composite.alignment_ratio === "number" && Number.isFinite(composite.alignment_ratio)
+        ? composite.alignment_ratio
+        : null;
     return buildScenarioPreviewPanelData({
       symbol: sym,
       mode: args.mode,
       setupBias: bias,
       composite,
+      alignmentRatio: ar,
       gapIntel,
       gapGate: args.gapGate,
       executionTier: args.executionTier,

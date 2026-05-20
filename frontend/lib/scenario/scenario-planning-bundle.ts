@@ -14,7 +14,7 @@ import {
 } from "@/lib/signals/composite-layer-rows";
 import {
   buildSignalsPageDecision,
-  countLayerAlignment,
+  resolveSignalsLayerAlignment,
   type SignalsLayerRowInput,
   type SignalsSetupBias
 } from "@/lib/signals-page-present";
@@ -114,9 +114,13 @@ export function buildScenarioPlanningBundle(args: BuildScenarioPlanningBundleArg
 
   input = augmentScenarioInputWithGapIntel(input, args.gapIntel);
 
+  const alignmentRatio =
+    comp && typeof comp.alignment_ratio === "number" && Number.isFinite(comp.alignment_ratio)
+      ? comp.alignment_ratio
+      : null;
   const { aligned, total } =
     layerRows.length > 0
-      ? countLayerAlignment(layerRows, setupBias)
+      ? resolveSignalsLayerAlignment({ rows: layerRows, bias: setupBias, alignmentRatio })
       : {
           aligned: args.maturation?.layers_aligned ?? 0,
           total: args.maturation?.layers_total ?? 6
@@ -131,7 +135,7 @@ export function buildScenarioPlanningBundle(args: BuildScenarioPlanningBundleArg
         : typeof insight?.risk_reward === "number"
           ? insight.risk_reward
           : 1.5;
-    const ar = typeof comp.alignment_ratio === "number" ? comp.alignment_ratio : null;
+    const ar = alignmentRatio;
     const score =
       typeof insight?.signal_score === "number" && Number.isFinite(insight.signal_score)
         ? insight.signal_score
@@ -152,6 +156,7 @@ export function buildScenarioPlanningBundle(args: BuildScenarioPlanningBundleArg
     mode: args.tradingMode,
     setupBias,
     layerRows: layerRows.length > 0 ? layerRows : undefined,
+    alignmentRatio,
     layersAligned: aligned,
     layersTotal: total,
     decisionState,

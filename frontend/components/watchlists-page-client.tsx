@@ -34,6 +34,7 @@ import {
   dedupeWatchlistSymbolsUpper as dedupeSymbolsUpper,
   formatWatchlistMaturationLabel as formatStateLabel,
   normalizeWatchlistMaturationBySymbol as normalizeMaturationBySymbol,
+  pickWatchlistMaturationForPlan,
   parseCompanyNameFromTickerCandidateLabel,
   watchlistQuoteFromSnapshot,
   watchlistSymbolMatchesSearch,
@@ -154,8 +155,13 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   const [alignmentSheet, setAlignmentSheet] = useState<{
     symbol: string;
     deskMode: "swing" | "day";
-    row: MaturationRow | undefined;
   } | null>(null);
+
+  const alignmentSheetRow: MaturationRow | undefined = alignmentSheet
+    ? alignmentSheet.deskMode === "day"
+      ? maturationDay[alignmentSheet.symbol]
+      : maturationSwing[alignmentSheet.symbol]
+    : undefined;
 
   usePublishAssistantContext({
     page: "dashboard/watchlists",
@@ -1084,17 +1090,19 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                     }
                   }}
                   placeholder="Search watchlist or add ticker (symbol first, then name)"
-                  className={`min-h-11 w-full flex-1 rounded-lg border px-3 font-mono font-semibold tracking-wide placeholder:font-normal ${
-                    theme === "light" ? "placeholder:text-slate-500" : "placeholder:text-slate-300"
+                  className={`watchlist-search-input min-h-11 w-full flex-1 rounded-lg border px-3 font-mono font-semibold tracking-wide placeholder:font-normal ${
+                    theme === "light" ? "placeholder:text-slate-400" : "placeholder:text-slate-200/90"
                   }`}
                   style={{
-                    borderColor: theme === "light" ? colors.border : "rgba(148, 163, 184, 0.45)",
-                    background: colors.surfaceMuted,
+                    borderColor:
+                      theme === "light" ? "#94a3b8" : "rgba(56, 189, 248, 0.45)",
+                    background:
+                      theme === "light" ? "#e8eef4" : "rgba(8, 18, 32, 0.92)",
                     color: colors.text,
                     boxShadow:
                       theme === "light"
-                        ? "inset 0 1px 2px rgba(15, 23, 42, 0.06)"
-                        : "inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 1px 2px rgba(0, 0, 0, 0.35)"
+                        ? "inset 0 1px 2px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.04)"
+                        : "inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 0 0 1px rgba(56, 189, 248, 0.12)"
                   }}
                 />
                 <button
@@ -1323,8 +1331,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                           )
                         : undefined;
                       const planMode = tradingModeForSignalsNav(viewMode, dualDeskMaturation) ?? "swing";
-                      const maturationForPlan =
-                        viewMode === "day" ? md : viewMode === "swing" ? ms : ms ?? md;
+                      const maturationForPlan = pickWatchlistMaturationForPlan(viewMode, ms, md);
                       return (
                         <WatchlistSymbolRow
                           key={symU}
@@ -1343,9 +1350,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                           deskEvaluating={evaluatingSymbols[symU]}
                           sessionClosed={maturationStorageReady !== false && sessionClosed}
                           onRemove={() => void removeSymbol(s)}
-                          onOpenLayers={(desk, row) =>
-                            setAlignmentSheet({ symbol: symU, deskMode: desk, row })
-                          }
+                          onOpenLayers={(desk) => setAlignmentSheet({ symbol: symU, deskMode: desk })}
                           onRefreshDesk={
                             maturationEligible
                               ? (desk) => refreshSymbolMaturationDesk(symU, desk)
@@ -1376,7 +1381,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
         open={alignmentSheet != null}
         symbol={alignmentSheet?.symbol ?? ""}
         deskMode={alignmentSheet?.deskMode ?? "swing"}
-        row={alignmentSheet?.row}
+        row={alignmentSheetRow}
         onClose={() => setAlignmentSheet(null)}
       />
     </div>

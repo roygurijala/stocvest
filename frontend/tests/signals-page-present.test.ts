@@ -14,6 +14,7 @@ import {
   normalizeSetupBias,
   pickCollapsedLayerPreview,
   pickPreviewLayers,
+  resolveCompositeLayerAlignment,
   resolveSignalsLayerAlignment,
   SIGNAL_LAYER_LEVEL_BASELINE,
   type SignalsLayerRowInput
@@ -37,6 +38,20 @@ describe("signals-page-present", () => {
     const a = countLayerAlignment(bearishRows, "Bearish");
     expect(a.aligned).toBe(2);
     expect(a.total).toBe(6);
+  });
+
+  test("resolveCompositeLayerAlignment matches Signals display line", () => {
+    const neutralRows: SignalsLayerRowInput[] = bearishRows.map((r) => ({
+      ...r,
+      status: "Neutral" as const
+    }));
+    const resolved = resolveCompositeLayerAlignment({
+      rows: neutralRows,
+      bias: "Neutral",
+      alignmentRatio: 0.5
+    });
+    expect(resolved.aligned).toBe(3);
+    expect(resolved.displayLine).toBe("Mixed direction (3/6)");
   });
 
   test("resolveSignalsLayerAlignment prefers alignment_ratio over chip count", () => {

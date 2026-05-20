@@ -2,15 +2,14 @@
 
 import type { ReactNode } from "react";
 import { InfoTip } from "@/components/info-tip";
-import { signalsAlignmentDisplayLine } from "@/lib/nav/alignment-display-line";
 import { borderRadius, spacing, surfaceGlowClassName } from "@/lib/design-system";
 import {
   buildEvidenceAnchorLine,
-  countLayerAlignment,
   formatDriversStrip,
   pickLeadingLayers,
   pickMissingConfirmationLayers
 } from "@/lib/signal-evidence/evidence-card-present";
+import { resolveCompositeLayerAlignment } from "@/lib/signals-page-present";
 import type { SignalsLayerRowInput, SignalsSetupBias } from "@/lib/signals-page-present";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -19,6 +18,7 @@ type Props = {
   tradingMode: "swing" | "day";
   bias: SignalsSetupBias;
   rows: SignalsLayerRowInput[];
+  alignmentRatio?: number | null;
   maturationState?: string | null;
   updatedLabel?: string | null;
   /** Renders under the symbol (e.g. Scenario Builder beside watchlist-style actions). */
@@ -31,13 +31,19 @@ export function EvidenceCardHeader({
   tradingMode: _tradingMode,
   bias,
   rows,
+  alignmentRatio,
   maturationState,
   updatedLabel,
   symbolRowExtras,
   children
 }: Props) {
   const { colors } = useTheme();
-  const alignment = countLayerAlignment(rows, bias);
+  const alignment = resolveCompositeLayerAlignment({
+    rows,
+    bias,
+    alignmentRatio,
+    maturationState
+  });
   const biasColor =
     bias === "Bullish" ? colors.bullish : bias === "Bearish" ? colors.bearish : colors.caution;
   const anchor = buildEvidenceAnchorLine(bias, alignment);
@@ -99,12 +105,7 @@ export function EvidenceCardHeader({
           style={{ color: colors.textMuted }}
           data-testid="evidence-card-alignment-context"
         >
-          {signalsAlignmentDisplayLine({
-            layersAligned: alignment.aligned,
-            layersTotal: alignment.total,
-            maturationState
-          })}{" "}
-          — context only; setup validity is on Signals
+          {alignment.displayLine} — context only; setup validity is on Signals
         </p>
       </div>
 

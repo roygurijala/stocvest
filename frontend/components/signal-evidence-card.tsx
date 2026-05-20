@@ -71,7 +71,7 @@ import {
 } from "@/lib/scenario/scenario-readiness";
 import { buildScenarioPreviewPanelData } from "@/lib/scenario/scenario-preview-panels";
 import { synthTradeDecision } from "@/lib/signal-evidence/trade-decision";
-import { countLayerAlignment } from "@/lib/signals-page-present";
+import { resolveCompositeLayerAlignment } from "@/lib/signals-page-present";
 import { buildEvidenceRiskHorizonFactors } from "@/lib/signal-evidence/fundamental-present";
 import { EvidenceSetupEvolutionLink } from "@/components/signal-evidence/evidence-setup-evolution-link";
 
@@ -824,6 +824,11 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
   );
   const setupBias = evidenceDirectionToBias(evidence.direction);
   const layerRows = evidenceLayersToRows(evidence.layers);
+  const compositeAlignment = resolveCompositeLayerAlignment({
+    rows: layerRows,
+    bias: setupBias,
+    alignmentRatio: insight.alignment_ratio ?? null
+  });
   const entryZone =
     insight.historical_entry_zone ??
     (typeof evidence.keyLevels.support === "number" && typeof evidence.keyLevels.resistance === "number"
@@ -870,14 +875,14 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
     gapIntelSnapshot
   );
   const evidenceDecision = synthTradeDecision(evidence, insight);
-  const evidenceAlignment = countLayerAlignment(layerRows, setupBias);
   const evidenceReadiness: ScenarioReadinessContext = {
     symbol: evidence.symbol,
     mode: evidenceMode,
     setupBias,
     layerRows,
-    layersAligned: evidenceAlignment.aligned,
-    layersTotal: evidenceAlignment.total,
+    alignmentRatio: insight.alignment_ratio ?? null,
+    layersAligned: compositeAlignment.aligned,
+    layersTotal: compositeAlignment.total,
     decisionState: evidenceDecision.state,
     hasReferenceLevels: levelsComplete
   };
@@ -889,12 +894,22 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
       mode: evidenceMode,
       setupBias,
       layerRows,
+      alignmentRatio: insight.alignment_ratio ?? null,
       gapIntel: gapIntelSnapshot,
       gapGate: scenarioForBuild.gap_intel_gate,
       executionTier: resolved.executionTier,
       surface: "evidence"
     });
-  }, [evidenceReadiness, scenarioForBuild, evidence.symbol, evidenceMode, setupBias, layerRows, gapIntelSnapshot]);
+  }, [
+    evidenceReadiness,
+    scenarioForBuild,
+    evidence.symbol,
+    evidenceMode,
+    setupBias,
+    layerRows,
+    gapIntelSnapshot,
+    insight.alignment_ratio
+  ]);
 
   const evidenceRiskFactorBullets = useMemo(() => {
     if (evidenceMode !== "swing") return [];
@@ -986,6 +1001,7 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
         tradingMode={evidenceMode}
         bias={setupBias}
         rows={layerRows}
+        alignmentRatio={insight.alignment_ratio ?? null}
         updatedLabel={displayUpdatedLabel(evidence)}
         symbolRowExtras={
           <ScenarioBuilderInline

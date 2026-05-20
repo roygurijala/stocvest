@@ -67,7 +67,7 @@ import {
   type CompositeTransportError
 } from "@/lib/api/composite-transport";
 import { notifyWatchlistMaturationUpdated } from "@/lib/watchlist-maturation-bump";
-import { STOCVEST_SWR_CACHE_NS } from "@/lib/swr/config";
+import { signalCompositeCacheKey } from "@/lib/signal-composite-cache";
 
 /** Trading-mode discriminator for the composite endpoint. */
 export type SignalCompositeMode = "swing" | "day";
@@ -142,10 +142,7 @@ export function useSignalComposite(
   const { enabled = true } = options;
   const normalized = symbol.trim().toUpperCase();
 
-  const key: readonly [string, string, SignalCompositeMode] | null =
-    enabled && normalized
-      ? ([`${STOCVEST_SWR_CACHE_NS}signal-composite`, normalized, mode] as const)
-      : null;
+  const key = enabled && normalized ? signalCompositeCacheKey(normalized, mode) : null;
 
   const { data, isLoading, isValidating, error } = useSWR(
     key,

@@ -3,6 +3,8 @@
  * (persists WatchlistMaturation via backend sync on compute/cache hit).
  */
 
+import type { SignalCompositeResult } from "@/lib/hooks/use-signal-composite";
+import { primeSignalCompositeCache } from "@/lib/signal-composite-cache";
 import { notifyWatchlistMaturationUpdated } from "@/lib/watchlist-maturation-bump";
 
 export type WatchlistMaturationDesk = "swing" | "day";
@@ -20,8 +22,10 @@ async function postCompositeForDesk(symbol: string, desk: WatchlistMaturationDes
     credentials: "same-origin",
     body: JSON.stringify({ symbol: sym })
   });
+  const body = (await res.json().catch(() => ({}))) as SignalCompositeResult;
   if (res.ok) {
     notifyWatchlistMaturationUpdated(sym, desk);
+    await primeSignalCompositeCache(sym, desk, body);
     return true;
   }
   return false;

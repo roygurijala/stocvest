@@ -1098,6 +1098,7 @@ export function SignalsPageClient({
       setupBias,
       composite: comp,
       layerRows: signalsPresentRows,
+      alignmentRatio: compositeAlignmentRatio,
       gapIntel: gapIntelSnapshot,
       gapGate: scenarioPlanningInput.gap_intel_gate,
       executionTier: resolved.executionTier,

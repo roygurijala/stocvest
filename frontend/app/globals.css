@@ -656,20 +656,16 @@ a {
 .watchlist-desk-lines--pending {
   gap: 0.35rem;
 }
-.watchlist-desk-lines__block {
-  display: grid;
-  gap: 0.15rem;
-  width: 100%;
-  border: none;
-  background: transparent;
-  padding: 0;
-  text-align: left;
-  cursor: pointer;
-  border-radius: 0.25rem;
+.watchlist-desk-lines__header {
+  gap: 0.5rem;
 }
-.watchlist-desk-lines__block:hover .watchlist-desk-lines__status {
+.watchlist-desk-lines__status-btn:hover .watchlist-desk-lines__status,
+.watchlist-desk-lines__detail-btn:hover .watchlist-desk-lines__detail {
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+.watchlist-desk-lines__meta {
+  max-width: 58%;
 }
 .watchlist-desk-lines__status {
   font-size: 0.8125rem;

@@ -4,10 +4,12 @@ import {
   buildEvidenceAnchorLine,
   countLayerAlignment,
   evidenceDirectionToBias,
+  evidenceLayerToRow,
   evidenceLayersToRows,
   formatDriversStrip,
   pickPrimaryLayerDrivers
 } from "@/lib/signal-evidence/evidence-card-present";
+import { resolveCompositeLayerAlignment } from "@/lib/signals-page-present";
 
 function layer(
   key: string,
@@ -31,6 +33,35 @@ describe("evidenceDirectionToBias", () => {
   test("maps short and bearish to Bearish", () => {
     expect(evidenceDirectionToBias("short")).toBe("Bearish");
     expect(evidenceDirectionToBias("bearish")).toBe("Bearish");
+  });
+});
+
+describe("evidenceLayerToRow", () => {
+  test("pending sector cache marks row unavailable and excluded from alignment", () => {
+    const row = evidenceLayerToRow(
+      Object.assign(layer("sector", "Sector", "Neutral", 45), {
+        sector_resolution_state: "pending_cache_refresh" as const,
+        sector_data_available: false
+      })
+    );
+    expect(row.status).toBe("Unavailable");
+    expect(row.sectorCachePending).toBe(true);
+    expect(row.score).toBeNull();
+    const alignment = resolveCompositeLayerAlignment({
+      rows: [
+        ...evidenceLayersToRows([
+          layer("technical", "Technical", "Neutral", 50),
+          layer("news", "News", "Neutral", 43),
+          layer("macro", "Macro", "Neutral", 46),
+          row,
+          layer("geopolitical", "Geopolitical", "Neutral", 58),
+          layer("internals", "Internals", "Neutral", 37)
+        ])
+      ],
+      bias: "Neutral",
+      alignmentRatio: 0.5
+    });
+    expect(alignment.displayLine).toBe("Mixed direction (3/6)");
   });
 });
 

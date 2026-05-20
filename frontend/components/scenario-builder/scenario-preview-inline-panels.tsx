@@ -82,10 +82,10 @@ function InlineAccordion({
 
 export function ScenarioPreviewInlinePanels({ panels }: { panels: ScenarioPreviewPanelData }) {
   const { colors } = useTheme();
-  const { layerRows, setupBias, sessionLines, loadingLayers } = panels;
+  const { layerRows, setupBias, sessionLines, loadingLayers, alignmentRatio } = panels;
   const layerSummary =
     layerRows.length > 0
-      ? layerPreviewSummary(layerRows, setupBias)
+      ? layerPreviewSummary(layerRows, setupBias, alignmentRatio)
       : loadingLayers
         ? "Loading layers…"
         : "Layer data not available yet";
