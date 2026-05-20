@@ -97,9 +97,61 @@ export function DashboardMarketContextPanel({ snapshot }: Props) {
           );
         })}
       </div>
-      <p style={{ margin: `${spacing[2]} 0 ${spacing[3]}`, fontSize: typography.scale.xs, color: colors.textMuted }}>
+      <p style={{ margin: `${spacing[2]} 0 ${spacing[2]}`, fontSize: typography.scale.xs, color: colors.textMuted }}>
         {MARKET_CONTEXT_INDEX_FOOTNOTE}
       </p>
+
+      {snapshot.sessionToday.items.length > 0 ? (
+        <div
+          data-testid="dashboard-market-context-today"
+          style={{
+            marginBottom: spacing[3],
+            padding: spacing[3],
+            borderRadius: borderRadius.md,
+            border: `1px solid color-mix(in srgb, ${colors.accent} 25%, ${colors.border})`,
+            background: `color-mix(in srgb, ${colors.surface} 94%, ${colors.accent} 6%)`
+          }}
+        >
+          <p
+            style={{
+              margin: `0 0 ${spacing[2]}`,
+              fontSize: typography.scale.xs,
+              fontWeight: 700,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              color: colors.textMuted
+            }}
+          >
+            {snapshot.sessionToday.label}
+          </p>
+          <p
+            style={{
+              margin: 0,
+              fontSize: typography.scale.sm,
+              fontWeight: 600,
+              fontVariantNumeric: "tabular-nums",
+              color: colors.text,
+              lineHeight: 1.5
+            }}
+          >
+            {snapshot.sessionToday.items.map((item, i) => {
+              const toneColor =
+                item.tone === "bullish"
+                  ? colors.bullish
+                  : item.tone === "bearish"
+                    ? colors.bearish
+                    : colors.textMuted;
+              return (
+                <span key={item.symbol}>
+                  {i > 0 ? "   " : null}
+                  <span style={{ color: colors.textMuted, fontWeight: 500 }}>{item.symbol}</span>{" "}
+                  <span style={{ color: toneColor }}>{item.formattedPct}</span>
+                </span>
+              );
+            })}
+          </p>
+        </div>
+      ) : null}
 
       <div className="flex flex-wrap gap-2" data-testid="dashboard-market-context-pills">
         {snapshot.pills.map((pill) => (
@@ -174,6 +226,7 @@ function MarketContextPillButton({
 
 function MarketContextExplainPanel({ pill, onClose }: { pill: MarketContextPill; onClose: () => void }) {
   const { colors } = useTheme();
+  const structured = pill.structured;
 
   return (
     <div
@@ -204,21 +257,110 @@ function MarketContextExplainPanel({ pill, onClose }: { pill: MarketContextPill;
           Close
         </button>
       </div>
-      <p style={{ margin: `${spacing[2]} 0`, fontSize: typography.scale.sm, color: colors.text, lineHeight: 1.5 }}>
-        {pill.summaryLine}
-      </p>
-      <dl style={{ margin: `${spacing[2]} 0`, display: "grid", gap: spacing[1] }}>
-        {pill.inputs.map((row) => (
-          <div key={row.label} className="flex flex-wrap gap-x-2 text-sm">
-            <dt style={{ color: colors.textMuted, fontWeight: 600 }}>{row.label}</dt>
-            <dd style={{ margin: 0, color: colors.text }}>{row.value}</dd>
+
+      {structured ? (
+        <div style={{ marginTop: spacing[2], display: "grid", gap: spacing[3] }}>
+          <div>
+            <p
+              style={{
+                margin: `0 0 ${spacing[1]}`,
+                fontSize: typography.scale.xs,
+                fontWeight: 700,
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+                color: colors.textMuted
+              }}
+            >
+              Why
+            </p>
+            <ul
+              style={{
+                margin: 0,
+                paddingLeft: spacing[4],
+                fontSize: typography.scale.sm,
+                color: colors.text,
+                lineHeight: 1.55
+              }}
+            >
+              {structured.why.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
           </div>
-        ))}
-      </dl>
-      <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45 }}>
-        <strong style={{ color: colors.text }}>Rule: </strong>
-        {pill.rule}
-      </p>
+          <div>
+            <p
+              style={{
+                margin: `0 0 ${spacing[1]}`,
+                fontSize: typography.scale.xs,
+                fontWeight: 700,
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+                color: colors.textMuted
+              }}
+            >
+              Result
+            </p>
+            <p style={{ margin: 0, fontSize: typography.scale.sm, fontWeight: 600, color: colors.text }}>
+              {structured.result}
+            </p>
+          </div>
+          <div>
+            <p
+              style={{
+                margin: `0 0 ${spacing[1]}`,
+                fontSize: typography.scale.xs,
+                fontWeight: 700,
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+                color: colors.textMuted
+              }}
+            >
+              Impact
+            </p>
+            <ul
+              style={{
+                margin: 0,
+                paddingLeft: spacing[4],
+                fontSize: typography.scale.sm,
+                color: colors.textMuted,
+                lineHeight: 1.55
+              }}
+            >
+              {structured.impact.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          </div>
+          {structured.advanced ? (
+            <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45 }}>
+              <strong style={{ color: colors.text }}>Advanced: </strong>
+              {structured.advanced}
+            </p>
+          ) : null}
+        </div>
+      ) : (
+        <>
+          <p style={{ margin: `${spacing[2]} 0`, fontSize: typography.scale.sm, color: colors.text, lineHeight: 1.5 }}>
+            {pill.summaryLine}
+          </p>
+          {pill.inputs.length > 0 ? (
+            <dl style={{ margin: `${spacing[2]} 0`, display: "grid", gap: spacing[1] }}>
+              {pill.inputs.map((row) => (
+                <div key={row.label} className="flex flex-wrap gap-x-2 text-sm">
+                  <dt style={{ color: colors.textMuted, fontWeight: 600 }}>{row.label}</dt>
+                  <dd style={{ margin: 0, color: colors.text }}>{row.value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
+          {pill.rule ? (
+            <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45 }}>
+              <strong style={{ color: colors.text }}>Rule: </strong>
+              {pill.rule}
+            </p>
+          ) : null}
+        </>
+      )}
     </div>
   );
 }

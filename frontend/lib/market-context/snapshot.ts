@@ -23,7 +23,14 @@ import {
   type RotationProfileCategory,
   type VolatilityCategory
 } from "@/lib/market-context/derivations";
-import { regimeBadgeExplanation, regimeOneLiner } from "@/lib/market-context/regime";
+import {
+  buildRegimeStructuredExplain,
+  buildSessionTodayLine,
+  buildVolatilityStructuredExplain,
+  type MarketContextSessionToday,
+  type MarketContextStructuredExplain
+} from "@/lib/market-context/pill-explain";
+import { regimeOneLiner } from "@/lib/market-context/regime";
 import type { SectorRotationChip } from "@/lib/market-context/types";
 
 export type MarketContextPillId = "regime" | "volatility" | "breadth" | "sectors" | "macro";
@@ -42,6 +49,8 @@ export type MarketContextPill = {
   summaryLine: string;
   inputs: MarketContextExplainLine[];
   rule: string;
+  /** Human-first explain (Why / Result / Impact); thresholds live in `advanced`. */
+  structured?: MarketContextStructuredExplain;
 };
 
 export type MarketContextIndexStat = {
@@ -54,6 +63,7 @@ export type MarketContextIndexStat = {
 
 export type MarketContextSnapshot = {
   indexStats: MarketContextIndexStat[];
+  sessionToday: MarketContextSessionToday;
   pills: MarketContextPill[];
   environmentSummary: string;
   derived: {
@@ -150,7 +160,7 @@ export function buildMarketContextSnapshot(input: {
     return { symbol: row.symbol, label: row.label, pct5d: row.pct5d, formattedPct: formatted, tone };
   });
 
-  const regimeExplain = regimeBadgeExplanation(input.vixPulseOk);
+  const sessionToday = buildSessionTodayLine(input.spyPct, input.qqqPct);
   const pills: MarketContextPill[] = [
     {
       id: "regime",
@@ -158,36 +168,29 @@ export function buildMarketContextSnapshot(input: {
       value: input.regimeLabel,
       tone: pillToneForRegime(input.regimeLabel),
       summaryLine: regimeOneLiner(input.regimeLabel, input.regimePriceBreadthOnly),
-      inputs: [
-        { label: "SPY session %", value: input.spyPct != null ? `${input.spyPct >= 0 ? "+" : ""}${input.spyPct.toFixed(2)}%` : "—" },
-        { label: "QQQ session %", value: input.qqqPct != null ? `${input.qqqPct >= 0 ? "+" : ""}${input.qqqPct.toFixed(2)}%` : "—" },
-        {
-          label: "VIX pulse",
-          value: input.vixPulseOk
-            ? input.vixLevel != null
-              ? `Level ${input.vixLevel.toFixed(1)}`
-              : "Available"
-            : "Unavailable (breadth-only regime)"
-        }
-      ],
-      rule:
-        "Bullish when SPY > +0.2% and QQQ > +0.15% on the session tape; Bearish when SPY < −0.2% or QQQ < −0.25%; otherwise Neutral. Scanner tape wins when both index %s are present."
+      inputs: [],
+      rule: "",
+      structured: buildRegimeStructuredExplain({
+        regimeLabel: input.regimeLabel,
+        spyPct: input.spyPct,
+        qqqPct: input.qqqPct,
+        regimePriceBreadthOnly: input.regimePriceBreadthOnly,
+        vixPulseOk: input.vixPulseOk
+      })
     },
     {
       id: "volatility",
       category: "Volatility",
-      value: volatilityPillLabel(volatility),
+      value: volatilityPillLabel(volatility, { vixPulseOk: input.vixPulseOk }),
       tone: pillToneForVolatility(volatility),
       summaryLine: volatilityPlainLine(volatility),
-      inputs: [
-        { label: "VIX level", value: input.vixLevel != null ? input.vixLevel.toFixed(1) : "—" },
-        {
-          label: "VIX session %",
-          value: input.vixSessionPct != null ? `${input.vixSessionPct >= 0 ? "+" : ""}${input.vixSessionPct.toFixed(2)}%` : "—"
-        },
-        { label: "Internal band", value: volatility }
-      ],
-      rule: "High when VIX ≥ 22 or session change ≥ +5%; Low when VIX ≤ 13 or session change ≤ −5%; otherwise Low (contained). Dashboard shows the band only, not raw VIX."
+      inputs: [],
+      rule: "",
+      structured: buildVolatilityStructuredExplain({
+        category: volatility,
+        vixPulseOk: input.vixPulseOk,
+        regimePriceBreadthOnly: input.regimePriceBreadthOnly
+      })
     },
     {
       id: "breadth",
@@ -235,6 +238,7 @@ export function buildMarketContextSnapshot(input: {
 
   return {
     indexStats,
+    sessionToday,
     pills,
     environmentSummary: buildEnvironmentSummary(weeklyAvg, volatility, participation, riskHorizon),
     derived: {
@@ -248,5 +252,5 @@ export function buildMarketContextSnapshot(input: {
   };
 }
 
-/** Footnote under index stats — shared copy. */
-export const MARKET_CONTEXT_INDEX_FOOTNOTE = "5-day change on each index.";
+/** Footnote under 5d index stats — shared copy. */
+export const MARKET_CONTEXT_INDEX_FOOTNOTE = "5-Day Trend (Context)";

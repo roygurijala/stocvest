@@ -31,12 +31,18 @@ export function volatilityPlainLine(cat: VolatilityCategory): string {
     case "Contained":
       return "Daily ranges stable vs prior sessions";
     default:
-      return "Volatility input pending";
+      return "VIX unavailable — infer range from price and breadth";
   }
 }
 
 /** User-facing volatility band on dashboard pills (not raw VIX). */
-export function volatilityPillLabel(cat: VolatilityCategory): string {
+export function volatilityPillLabel(
+  cat: VolatilityCategory,
+  opts?: { vixPulseOk?: boolean }
+): string {
+  if (cat === "Unknown" || opts?.vixPulseOk === false) {
+    return "Unknown (breadth + price only)";
+  }
   switch (cat) {
     case "Expanding":
       return "High";
@@ -44,7 +50,7 @@ export function volatilityPillLabel(cat: VolatilityCategory): string {
     case "Contained":
       return "Low";
     default:
-      return "Pending";
+      return "Unknown (breadth + price only)";
   }
 }
 
