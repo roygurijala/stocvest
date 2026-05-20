@@ -35,6 +35,7 @@ import { render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, test, vi } from "vitest";
 
 import { DashboardRedesign } from "@/components/dashboard-redesign";
+import { SharedContextMasterCard } from "@/components/shared-context-master-card";
 import { ThemeProvider } from "@/lib/theme-provider";
 import {
   SHORT_HORIZON_TIMEFRAME_LINE,
@@ -100,7 +101,7 @@ function wrap(ui: ReactElement) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("dashboard focus layout", () => {
-  test("renders_system_state_scanner_shortcuts_next_actions_and_strip_shared_context", () => {
+  test("renders_command_center_sections_with_market_context_pills", () => {
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
@@ -112,11 +113,14 @@ describe("dashboard focus layout", () => {
       />
     );
     expect(screen.getByTestId("dashboard-system-state-banner")).toBeInTheDocument();
-    expect(screen.getByTestId("dashboard-desk-status")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-desk-mode")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-live-status")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-opportunities")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-next-actions")).toBeInTheDocument();
-    const sc = screen.getByTestId("shared-context-master-card");
-    expect(sc.getAttribute("data-shared-layout")).toBe("strip");
-    expect(sc.hasAttribute("data-card-role")).toBe(false);
+    expect(screen.getByTestId("dashboard-market-context")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-market-pill-regime")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-market-pill-volatility")).toBeInTheDocument();
+    expect(screen.queryByTestId("shared-context-master-card")).toBeNull();
   });
 
   test("dashboard_does_not_render_legacy_swing_or_day_master_desk_panels", () => {
@@ -149,22 +153,30 @@ describe("dashboard focus layout", () => {
 // (B) SHARED CONTEXT MASTER CARD — sub-sections A through E
 // ─────────────────────────────────────────────────────────────────────────────
 
+function wrapSharedContext(
+  weekly = baseWeekly,
+  sectorRotation: { symbol: string; label: string; pct5d: number | null }[] = [],
+  earningsEvents: { symbol: string; company_name: string; report_date: string; report_time: string }[] = [],
+  layout: "strip" | "embedded" | "master" = "strip"
+) {
+  wrap(
+    <SharedContextMasterCard
+      weeklyIndexRows={weekly}
+      sectorRotation={sectorRotation}
+      upcomingEarnings={earningsEvents}
+      vixSessionPct={null}
+      layout={layout}
+    />
+  );
+}
+
 describe("Shared Context master card structure (Mode Separation B28 Phase 2b)", () => {
   test("master_card_renders_all_five_subsections_A_through_E_in_order", () => {
     // The five sub-sections are NON-NEGOTIABLE per the user directive. Order
     // matters: A (price state) → B (volatility) → C (participation) → D (risk)
     // → E (summary). DOM order is checked because the summary in E reads as
     // the synthesis of everything above; flipping ordering breaks reading flow.
-    wrap(
-      <DashboardRedesign
-        marketOverview={baseMarket}
-        scannerOverview={baseScanner}
-        earningsEvents={[]}
-        earningsRecent={[]}
-        weeklyIndexRows={baseWeekly}
-        sectorRotation={[]}
-      />
-    );
+    wrapSharedContext();
     const a = screen.getByTestId("shared-context-section-A");
     const b = screen.getByTestId("shared-context-section-B");
     const c = screen.getByTestId("shared-context-section-C");
@@ -185,16 +197,7 @@ describe("Shared Context master card structure (Mode Separation B28 Phase 2b)", 
     // live in frontend/tests/index-returns-histogram.test.tsx; this test
     // pins the *integration* — each tile in Section A must mount the
     // histogram and the % label, with no axes/labels inside the SVG.
-    wrap(
-      <DashboardRedesign
-        marketOverview={baseMarket}
-        scannerOverview={baseScanner}
-        earningsEvents={[]}
-        earningsRecent={[]}
-        weeklyIndexRows={baseWeekly}
-        sectorRotation={[]}
-      />
-    );
+    wrapSharedContext();
     for (const sym of ["SPY", "QQQ", "IWM"]) {
       const tile = screen.getByTestId(`shared-context-index-tile-${sym}`);
       expect(tile).toBeInTheDocument();
@@ -218,16 +221,7 @@ describe("Shared Context master card structure (Mode Separation B28 Phase 2b)", 
   test("section_B_renders_a_volatility_CATEGORY_only_NOT_an_ATR_number", () => {
     // Per the user directive: "Volatility: Contained · Daily ranges stable
     // vs prior week (Category only — no ATR numbers)".
-    wrap(
-      <DashboardRedesign
-        marketOverview={baseMarket}
-        scannerOverview={baseScanner}
-        earningsEvents={[]}
-        earningsRecent={[]}
-        weeklyIndexRows={baseWeekly}
-        sectorRotation={[]}
-      />
-    );
+    wrapSharedContext();
     const b = screen.getByTestId("shared-context-section-B");
     const cat = b.querySelector('[data-testid="shared-context-volatility-category"]');
     expect(cat).not.toBeNull();
@@ -243,22 +237,13 @@ describe("Shared Context master card structure (Mode Separation B28 Phase 2b)", 
     // indices participating". The sector chip row stays as supporting detail
     // (it was a top-level card; now it lives inside Section C as evidence
     // for the category label).
-    wrap(
-      <DashboardRedesign
-        marketOverview={baseMarket}
-        scannerOverview={baseScanner}
-        earningsEvents={[]}
-        earningsRecent={[]}
-        weeklyIndexRows={baseWeekly}
-        sectorRotation={[
-          { symbol: "XLK", label: "Tech", pct5d: 1.5 },
-          { symbol: "XLC", label: "Comm", pct5d: 0.8 },
-          { symbol: "XLE", label: "Energy", pct5d: -0.6 },
-          { symbol: "XLF", label: "Financials", pct5d: 0.4 },
-          { symbol: "XLY", label: "Cons. disc.", pct5d: 1.1 }
-        ]}
-      />
-    );
+    wrapSharedContext(baseWeekly, [
+      { symbol: "XLK", label: "Tech", pct5d: 1.5 },
+      { symbol: "XLC", label: "Comm", pct5d: 0.8 },
+      { symbol: "XLE", label: "Energy", pct5d: -0.6 },
+      { symbol: "XLF", label: "Financials", pct5d: 0.4 },
+      { symbol: "XLY", label: "Cons. disc.", pct5d: 1.1 }
+    ]);
     // Phase 2c: Section C now reports BEHAVIOR only.
     // Two categorical readouts — Rotation profile + Participation — and NO
     // ranked sector chip row. The chip row was a relative-strength ranking
@@ -287,16 +272,7 @@ describe("Shared Context master card structure (Mode Separation B28 Phase 2b)", 
     // Phase 2c: per user directive, Section C is renamed from "Participation /
     // Breadth Tone" to "Sector Participation (Last ~5 Sessions)". The new
     // label anchors the time-horizon and reads as descriptive, not evaluative.
-    wrap(
-      <DashboardRedesign
-        marketOverview={baseMarket}
-        scannerOverview={baseScanner}
-        earningsEvents={[]}
-        earningsRecent={[]}
-        weeklyIndexRows={baseWeekly}
-        sectorRotation={[]}
-      />
-    );
+    wrapSharedContext();
     const c = screen.getByTestId("shared-context-section-C");
     const text = c.textContent || "";
     expect(text).toContain("Sector Participation (Last ~5 Sessions)");
@@ -306,22 +282,13 @@ describe("Shared Context master card structure (Mode Separation B28 Phase 2b)", 
     // Lock-in: only Concentrated / Rotational / Mixed / Unknown — never
     // "Trending", "Leading", "Bullish", "Bearish", etc. Those would imply
     // direction or actionability, which the directive bans.
-    wrap(
-      <DashboardRedesign
-        marketOverview={baseMarket}
-        scannerOverview={baseScanner}
-        earningsEvents={[]}
-        earningsRecent={[]}
-        weeklyIndexRows={baseWeekly}
-        sectorRotation={[
-          { symbol: "XLK", label: "Tech", pct5d: 1.2 },
-          { symbol: "XLC", label: "Comm", pct5d: -0.5 },
-          { symbol: "XLE", label: "Energy", pct5d: 1.8 },
-          { symbol: "XLF", label: "Financials", pct5d: 0.4 },
-          { symbol: "XLY", label: "Cons. disc.", pct5d: -1.0 }
-        ]}
-      />
-    );
+    wrapSharedContext(baseWeekly, [
+      { symbol: "XLK", label: "Tech", pct5d: 1.2 },
+      { symbol: "XLC", label: "Comm", pct5d: -0.5 },
+      { symbol: "XLE", label: "Energy", pct5d: 1.8 },
+      { symbol: "XLF", label: "Financials", pct5d: 0.4 },
+      { symbol: "XLY", label: "Cons. disc.", pct5d: -1.0 }
+    ]);
     const rotation = screen.getByTestId("shared-context-rotation-profile-category");
     const text = (rotation.textContent || "").toLowerCase();
     expect(text).toMatch(/concentrated|rotational|mixed|unknown/);
@@ -341,19 +308,10 @@ describe("Shared Context master card structure (Mode Separation B28 Phase 2b)", 
   });
 
   test("section_D_renders_a_risk_horizon_category_plus_earnings_list", () => {
-    wrap(
-      <DashboardRedesign
-        marketOverview={baseMarket}
-        scannerOverview={baseScanner}
-        earningsEvents={[
-          { symbol: "AAPL", company_name: "Apple", report_date: "2026-05-15", report_time: "after_market" },
-          { symbol: "MSFT", company_name: "Microsoft", report_date: "2026-05-16", report_time: "before_market" }
-        ]}
-        earningsRecent={[]}
-        weeklyIndexRows={baseWeekly}
-        sectorRotation={[]}
-      />
-    );
+    wrapSharedContext(baseWeekly, [], [
+      { symbol: "AAPL", company_name: "Apple", report_date: "2026-05-15", report_time: "after_market" },
+      { symbol: "MSFT", company_name: "Microsoft", report_date: "2026-05-16", report_time: "before_market" }
+    ]);
     const d = screen.getByTestId("shared-context-section-D");
     const cat = d.querySelector('[data-testid="shared-context-risk-category"]');
     expect(cat).not.toBeNull();
@@ -375,16 +333,7 @@ describe("Shared Context master card structure (Mode Separation B28 Phase 2b)", 
     // joins A + B + C + D. Plus the timeframe-binding clause + why-this-matters
     // hint that prevent day traders from misreading shared context as swing
     // intent.
-    wrap(
-      <DashboardRedesign
-        marketOverview={baseMarket}
-        scannerOverview={baseScanner}
-        earningsEvents={[]}
-        earningsRecent={[]}
-        weeklyIndexRows={baseWeekly}
-        sectorRotation={[]}
-      />
-    );
+    wrapSharedContext();
     const e = screen.getByTestId("shared-context-section-E");
     const summary = e.querySelector('[data-testid="shared-context-environment-summary"]');
     expect(summary).not.toBeNull();
@@ -410,22 +359,13 @@ describe("Shared Context master card structure (Mode Separation B28 Phase 2b)", 
     // The MASTER CARD as a whole must NOT carry strategy-coded language on
     // any sub-section. Words below are the canonical "leak terms" that flag
     // a regression toward swing doctrine in shared infrastructure.
-    wrap(
-      <DashboardRedesign
-        marketOverview={baseMarket}
-        scannerOverview={baseScanner}
-        earningsEvents={[]}
-        earningsRecent={[]}
-        weeklyIndexRows={baseWeekly}
-        sectorRotation={[
-          { symbol: "XLK", label: "Tech", pct5d: 1.5 },
-          { symbol: "XLC", label: "Comm", pct5d: 0.8 },
-          { symbol: "XLE", label: "Energy", pct5d: -0.6 },
-          { symbol: "XLF", label: "Financials", pct5d: 0.4 },
-          { symbol: "XLY", label: "Cons. disc.", pct5d: 1.1 }
-        ]}
-      />
-    );
+    wrapSharedContext(baseWeekly, [
+      { symbol: "XLK", label: "Tech", pct5d: 1.5 },
+      { symbol: "XLC", label: "Comm", pct5d: 0.8 },
+      { symbol: "XLE", label: "Energy", pct5d: -0.6 },
+      { symbol: "XLF", label: "Financials", pct5d: 0.4 },
+      { symbol: "XLY", label: "Cons. disc.", pct5d: 1.1 }
+    ]);
     const card = screen.getByTestId("shared-context-master-card");
     const text = (card.textContent || "").toLowerCase();
     for (const banned of [
@@ -445,19 +385,36 @@ describe("Shared Context master card structure (Mode Separation B28 Phase 2b)", 
     expect(tipLc).toContain("not a trade signal");
     expect(tipLc).toContain("market backdrop and constraints");
 
-    wrap(
-      <DashboardRedesign
-        marketOverview={baseMarket}
-        scannerOverview={baseScanner}
-        earningsEvents={[]}
-        earningsRecent={[]}
-        weeklyIndexRows={baseWeekly}
-        sectorRotation={[]}
-      />
-    );
+    wrapSharedContext();
     expect(screen.getByTestId("shared-context-master-card").getAttribute("data-shared-layout")).toBe("strip");
   });
 
+  test("section_A_index_tiles_have_direction_aware_borders_green_red_neutral", () => {
+    wrapSharedContext([
+      { symbol: "SPY", label: "S&P 500", pct5d: 1.19, lastPrice: 500, closes5d: [495, 496, 498, 499, 500] },
+      { symbol: "QQQ", label: "Nasdaq 100", pct5d: -2.0, lastPrice: 400, closes5d: [410, 408, 405, 402, 400] },
+      { symbol: "IWM", label: "Russell 2000", pct5d: 0.05, lastPrice: 200, closes5d: [200, 200.1, 200, 199.9, 200] }
+    ]);
+    const spy = screen.getByTestId("shared-context-index-tile-SPY");
+    expect(spy.getAttribute("data-tile-direction")).toBe("up");
+    const qqq = screen.getByTestId("shared-context-index-tile-QQQ");
+    expect(qqq.getAttribute("data-tile-direction")).toBe("down");
+    const iwm = screen.getByTestId("shared-context-index-tile-IWM");
+    expect(iwm.getAttribute("data-tile-direction")).toBe("flat");
+  });
+
+  test("subsections_B_C_D_E_each_render_as_their_own_bordered_subcard", () => {
+    wrapSharedContext();
+    for (const letter of ["B", "C", "D", "E"] as const) {
+      const section = screen.getByTestId(`shared-context-section-${letter}`);
+      expect(section.getAttribute("data-subsection-card")).toBe(letter);
+    }
+    const a = screen.getByTestId("shared-context-section-A");
+    expect(a.getAttribute("data-subsection-card")).toBeNull();
+  });
+});
+
+describe("dashboard command center regressions", () => {
   test("dashboard_does_NOT_render_signal_validation_ledger_anymore", () => {
     // Phase 2c: per the user's directive — "a data element belongs in Shared
     // Context if and only if it answers what kind of market environment are
@@ -487,38 +444,7 @@ describe("Shared Context master card structure (Mode Separation B28 Phase 2b)", 
     expect(anchors).toHaveLength(0);
   });
 
-  test("section_A_index_tiles_have_direction_aware_borders_green_red_neutral", () => {
-    // Phase 2c: SPY/QQQ/IWM tiles in Section A must have green/red highlighted
-    // borders — green when 5-day net % is up, red when down, neutral when
-    // flat or unknown. Each tile carries a `data-tile-direction` attribute
-    // we lock against.
-    wrap(
-      <DashboardRedesign
-        marketOverview={baseMarket}
-        scannerOverview={baseScanner}
-        earningsEvents={[]}
-        earningsRecent={[]}
-        weeklyIndexRows={[
-          { symbol: "SPY", label: "S&P 500", pct5d: 1.19, lastPrice: 500, closes5d: [495, 496, 498, 499, 500] },
-          { symbol: "QQQ", label: "Nasdaq 100", pct5d: -2.0, lastPrice: 400, closes5d: [410, 408, 405, 402, 400] },
-          { symbol: "IWM", label: "Russell 2000", pct5d: 0.05, lastPrice: 200, closes5d: [200, 200.1, 200, 199.9, 200] }
-        ]}
-        sectorRotation={[]}
-      />
-    );
-    const spy = screen.getByTestId("shared-context-index-tile-SPY");
-    expect(spy.getAttribute("data-tile-direction")).toBe("up");
-    const qqq = screen.getByTestId("shared-context-index-tile-QQQ");
-    expect(qqq.getAttribute("data-tile-direction")).toBe("down");
-    const iwm = screen.getByTestId("shared-context-index-tile-IWM");
-    expect(iwm.getAttribute("data-tile-direction")).toBe("flat");
-  });
-
-  test("subsections_B_C_D_E_each_render_as_their_own_bordered_subcard", () => {
-    // Phase 2c: per user directive, sections B/C/D/E should each be CARDS
-    // with highlighted borders, not paragraphs sharing one wall of text. We
-    // lock against the `data-subsection-card` attribute the SubsectionCard
-    // wrapper stamps on the DOM.
+  test("legacy_swing_desk_primary_read_card_not_on_command_center_dashboard", () => {
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
@@ -529,39 +455,6 @@ describe("Shared Context master card structure (Mode Separation B28 Phase 2b)", 
         sectorRotation={[]}
       />
     );
-    for (const letter of ["B", "C", "D", "E"] as const) {
-      const section = screen.getByTestId(`shared-context-section-${letter}`);
-      expect(section.getAttribute("data-subsection-card")).toBe(letter);
-    }
-    // Section A is intentionally NOT a sub-card — it already IS a row of
-    // three direction-bordered tiles. Wrapping it would create card-in-card
-    // nesting that defeats the at-a-glance scan.
-    const a = screen.getByTestId("shared-context-section-A");
-    expect(a.getAttribute("data-subsection-card")).toBeNull();
-  });
-
-  test("swing_desk_primary_read_card_renders_on_the_canonical_card_shell", () => {
-    // The Swing Desk "Primary read" card is the swing desk's dominant
-    // decision surface when no setups are firing. Its visual contract must
-    // match the canonical {@link cardSurfaceStyle} shell (same surface as
-    // every other card in the app); role identity is anchored by the parent
-    // Swing Desk panel's borderLeft + pill, so the child card itself does
-    // not repeat the role hue. Phase 2c's 1.5px violet border + 6% gradient
-    // was retired when the user asked for uniform look-and-feel across the
-    // application; a regression that reintroduces a >1px coloured border
-    // here makes the dashboard visually inconsistent with the rest of the
-    // app and is caught by this lock-in.
-    wrap(
-      <DashboardRedesign
-        marketOverview={baseMarket}
-        scannerOverview={baseScanner}
-        earningsEvents={[]}
-        earningsRecent={[]}
-        weeklyIndexRows={baseWeekly}
-        sectorRotation={[]}
-      />
-    );
-    const card = screen.queryByTestId("swing-desk-primary-read-card");
-    expect(card).toBeNull();
+    expect(screen.queryByTestId("swing-desk-primary-read-card")).toBeNull();
   });
 });

@@ -32,7 +32,7 @@ import {
   riskHorizonPlainLine,
   rotationProfilePlainLine,
   buildEnvironmentSummary
-} from "@/components/shared-context-master-card";
+} from "@/lib/market-context/derivations";
 import type { EarningsEvent } from "@/lib/api/earnings";
 
 const NO_EARNINGS: EarningsEvent[] = [];

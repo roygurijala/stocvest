@@ -4,7 +4,7 @@
  */
 
 import type { ReactElement } from "react";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, test, vi } from "vitest";
 
 import { DashboardRedesign } from "@/components/dashboard-redesign";
@@ -62,7 +62,7 @@ function wrap(ui: ReactElement) {
 }
 
 describe("Dashboard — Swing Pro surfaces (dayTradingSurfaces=false)", () => {
-  test("embeds market backdrop inside swing desk; no standalone shared card or day desk", () => {
+  test("swing_only_shows_command_center_without_day_mode_or_legacy_desk_panels", () => {
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
@@ -74,12 +74,11 @@ describe("Dashboard — Swing Pro surfaces (dayTradingSurfaces=false)", () => {
         dayTradingSurfaces={false}
       />
     );
-    const swing = screen.getByTestId("swing-desk-panel");
-    expect(swing).toBeInTheDocument();
+    expect(screen.queryByTestId("swing-desk-panel")).toBeNull();
     expect(screen.queryByTestId("shared-context-master-card")).toBeNull();
     expect(screen.queryByTestId("day-desk-panel")).toBeNull();
-    expect(within(swing).getByTestId("swing-desk-market-backdrop")).toBeInTheDocument();
-    expect(within(swing).getByTestId("shared-context-section-A")).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /view day scanner/i })).toBeNull();
+    expect(screen.getByTestId("dashboard-market-context")).toBeInTheDocument();
+    expect(screen.queryByTestId("dashboard-desk-mode-day")).toBeNull();
+    expect(screen.queryByRole("link", { name: /day scanner/i })).toBeNull();
   });
 });

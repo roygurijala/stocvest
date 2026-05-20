@@ -57,7 +57,8 @@ import {
   type ParticipationCategory,
   type RiskHorizonCategory,
   type VolatilityCategory
-} from "@/components/shared-context-master-card";
+} from "@/lib/market-context/derivations";
+import { regimeOneLiner, regimeTone } from "@/lib/market-context/regime";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import type { ThemeColors } from "@/lib/design-system";
@@ -72,7 +73,7 @@ import {
   UPCOMING_CATALYSTS_CARD_TIP,
   VIX_PULSE_NUMBER_TIP
 } from "@/lib/ui-tooltips";
-import type { SectorRotationChip } from "@/components/dashboard-redesign";
+import type { SectorRotationChip } from "@/lib/market-context/types";
 import type { WeeklyIndexRow } from "@/components/weekly-market-context-widget";
 
 export interface DashboardHeroStripProps {
@@ -105,58 +106,10 @@ export interface DashboardHeroStripProps {
  * Neutral / Mixed = caution amber rail. Unknown falls back to muted
  * slate so the strip never goes silent.
  */
-function regimeTone(regimeLabel: string, colors: ThemeColors) {
-  const r = regimeLabel.trim().toLowerCase();
-  if (r.includes("bull")) {
-    return {
-      kind: "risk-on" as const,
-      fg: colors.bullish,
-      bg: "rgba(34,197,94,0.10)",
-      border: "rgba(34,197,94,0.36)",
-      rail: colors.bullish
-    };
-  }
-  if (r.includes("bear")) {
-    return {
-      kind: "risk-off" as const,
-      fg: colors.bearish,
-      bg: "rgba(239,68,68,0.10)",
-      border: "rgba(239,68,68,0.36)",
-      rail: colors.bearish
-    };
-  }
-  if (r.includes("neutral") || r.includes("mixed") || r.includes("range")) {
-    return {
-      kind: "mixed" as const,
-      fg: colors.caution,
-      bg: "rgba(245,158,11,0.10)",
-      border: "rgba(245,158,11,0.36)",
-      rail: colors.caution
-    };
-  }
-  return {
-    kind: "unknown" as const,
-    fg: colors.textMuted,
-    bg: "rgba(148,163,184,0.10)",
-    border: "rgba(148,163,184,0.36)",
-    rail: colors.textMuted
-  };
-}
-
-/**
- * Short one-line context that follows the regime label inside the pill.
- * Strategy-agnostic — describes the read, does NOT prescribe action.
- */
-function regimeOneLiner(regimeLabel: string, priceBreadthOnly: boolean): string {
-  const r = regimeLabel.trim().toLowerCase();
-  const base = r.includes("bull")
-    ? "Index price + breadth lean upside"
-    : r.includes("bear")
-      ? "Index price + breadth lean downside"
-      : r.includes("neutral") || r.includes("mixed") || r.includes("range")
-        ? "Index price + breadth mixed"
-        : "Regime input pending";
-  return priceBreadthOnly ? `${base} (VIX unavailable)` : base;
+/** Hero strip regime tone adds a `rail` color for the glance band layout. */
+function heroRegimeTone(regimeLabel: string, colors: ThemeColors) {
+  const base = regimeTone(regimeLabel, colors);
+  return { ...base, rail: base.fg };
 }
 
 /**
@@ -301,7 +254,7 @@ export function DashboardHeroStrip({
 }: DashboardHeroStripProps) {
   const { colors } = useTheme();
 
-  const tone = useMemo(() => regimeTone(regimeLabel, colors), [regimeLabel, colors]);
+  const tone = useMemo(() => heroRegimeTone(regimeLabel, colors), [regimeLabel, colors]);
   const regimeContext = useMemo(
     () => regimeOneLiner(regimeLabel, regimeBadgePriceBreadthOnly),
     [regimeLabel, regimeBadgePriceBreadthOnly]

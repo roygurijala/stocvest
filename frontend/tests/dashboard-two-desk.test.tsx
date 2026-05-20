@@ -61,7 +61,7 @@ function wrap(ui: ReactElement) {
 }
 
 describe("dashboard two-desk status (focus layout)", () => {
-  test("system_banner_lists_swing_and_day_desk_lines", () => {
+  test("system_banner_includes_swing_and_day_posture_in_detail", () => {
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
@@ -73,11 +73,11 @@ describe("dashboard two-desk status (focus layout)", () => {
       />
     );
     const banner = screen.getByTestId("dashboard-system-state-banner");
-    expect(banner.textContent || "").toMatch(/Swing Desk/i);
-    expect(banner.textContent || "").toMatch(/Day Desk/i);
+    expect(banner.textContent || "").toMatch(/Swing:/i);
+    expect(banner.textContent || "").toMatch(/Day:/i);
   });
 
-  test("scanner_shortcut_row_lists_swing_link_before_day_link_in_dom_order", () => {
+  test("opportunities_cards_link_to_day_scanner_and_watchlist", () => {
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
@@ -88,16 +88,12 @@ describe("dashboard two-desk status (focus layout)", () => {
         sectorRotation={[]}
       />
     );
-    const desk = screen.getByTestId("dashboard-desk-status");
-    const anchors = Array.from(desk.querySelectorAll("a")) as HTMLAnchorElement[];
-    const swingIdx = anchors.findIndex((a) => a.getAttribute("href") === "/dashboard/scanner?mode=swing");
-    const dayIdx = anchors.findIndex((a) => a.getAttribute("href") === "/dashboard/scanner?mode=day");
-    expect(swingIdx).toBeGreaterThan(-1);
-    expect(dayIdx).toBeGreaterThan(-1);
-    expect(swingIdx).toBeLessThan(dayIdx);
+    const opp = screen.getByTestId("dashboard-next-actions");
+    expect(opp.querySelector('a[href="/dashboard/scanner?mode=day"]')).not.toBeNull();
+    expect(opp.querySelector('a[href="/dashboard/watchlists"]')).not.toBeNull();
   });
 
-  test("shared_market_context_is_compact_strip_without_role_master_card", () => {
+  test("market_context_panel_replaces_legacy_shared_context_strip", () => {
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
@@ -108,12 +104,11 @@ describe("dashboard two-desk status (focus layout)", () => {
         sectorRotation={[]}
       />
     );
-    const sc = screen.getByTestId("shared-context-master-card");
-    expect(sc.getAttribute("data-shared-layout")).toBe("strip");
-    expect(sc.hasAttribute("data-card-role")).toBe(false);
+    expect(screen.getByTestId("dashboard-market-context")).toBeInTheDocument();
+    expect(screen.queryByTestId("shared-context-master-card")).toBeNull();
   });
 
-  test("view_day_scanner_link_is_present", () => {
+  test("view_day_scanner_link_in_opportunities_when_day_mode", () => {
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
@@ -124,7 +119,7 @@ describe("dashboard two-desk status (focus layout)", () => {
         sectorRotation={[]}
       />
     );
-    const link = screen.getByRole("link", { name: /day scanner/i });
-    expect(link).toHaveAttribute("href", "/dashboard/scanner?mode=day");
+    const link = screen.getByTestId("dashboard-opportunity-scanner").querySelector('a[href="/dashboard/scanner?mode=day"]');
+    expect(link).not.toBeNull();
   });
 });

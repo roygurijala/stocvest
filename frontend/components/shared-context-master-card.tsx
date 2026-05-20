@@ -19,7 +19,7 @@ import type { MarketStatusPayload, SnapshotPayload } from "@/lib/api/market";
 import { vixSnapshotDisplayLevel } from "@/lib/api/market-snapshot-helpers";
 import type { EarningsEvent } from "@/lib/api/earnings";
 import { earningsTimingLabel } from "@/lib/earnings-timing";
-import type { SectorRotationChip } from "@/components/dashboard-redesign";
+import type { SectorRotationChip } from "@/lib/market-context/types";
 import {
   WEEKLY_MARKET_CONTEXT_CARD_TIP,
   SHARED_CONTEXT_INDEX_TILE_TIP,
@@ -87,224 +87,38 @@ type Props = {
   layout?: "master" | "embedded" | "strip";
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Derivations (pure helpers — exported for direct test coverage)
-// ─────────────────────────────────────────────────────────────────────────────
+import {
+  buildEnvironmentSummary,
+  classifyParticipation,
+  classifyRiskHorizon,
+  classifyRotationProfile,
+  classifyVolatility,
+  participationPlainLine,
+  riskHorizonPlainLine,
+  rotationProfilePlainLine,
+  volatilityPlainLine,
+  type ParticipationCategory,
+  type RiskHorizonCategory,
+  type RotationProfileCategory,
+  type VolatilityCategory
+} from "@/lib/market-context/derivations";
 
-/**
- * Volatility category from VIX session change % + last-trade level.
- *
- *   - VIX level ≥ 22 OR VIX % >= +5 → "Expanding"
- *   - VIX level <= 13 OR VIX % <= -5 → "Compressed"
- *   - otherwise                      → "Contained"
- *   - missing data                   → "Unknown"
- *
- * Thresholds are intentionally conservative — VIX swings ±5% intraday on
- * any non-quiet day, and we don't want to flap the category. The numbers
- * are not surfaced; only the CATEGORY is shown per the user's directive.
- */
-export type VolatilityCategory = "Contained" | "Expanding" | "Compressed" | "Unknown";
-
-export function classifyVolatility(
-  vixLevel: number | null | undefined,
-  vixPct: number | null | undefined
-): VolatilityCategory {
-  const level = typeof vixLevel === "number" && Number.isFinite(vixLevel) ? vixLevel : null;
-  const pct = typeof vixPct === "number" && Number.isFinite(vixPct) ? vixPct : null;
-  if (level == null && pct == null) return "Unknown";
-  if ((level != null && level >= 22) || (pct != null && pct >= 5)) return "Expanding";
-  if ((level != null && level <= 13) || (pct != null && pct <= -5)) return "Compressed";
-  return "Contained";
-}
-
-export function volatilityPlainLine(cat: VolatilityCategory): string {
-  switch (cat) {
-    case "Expanding":
-      return "Daily ranges widening vs prior sessions";
-    case "Compressed":
-      return "Daily ranges compressing vs prior sessions";
-    case "Contained":
-      return "Daily ranges stable vs prior sessions";
-    default:
-      return "Volatility input pending";
-  }
-}
-
-/**
- * Participation / breadth category from sector rotation chips + index breadth.
- *
- *   - ≥ 4 of 5 ETFs positive AND ≥ 2 of 3 indices positive on 5d → "Broad"
- *   - ≤ 1 of 5 ETFs positive AND ≤ 1 of 3 indices positive on 5d → "Narrow"
- *   - otherwise                                                  → "Mixed"
- *   - missing input                                              → "Unknown"
- *
- * "Broad" requires confirmation across BOTH the sector layer and the index
- * layer — a single benchmark surge with thin sector follow-through is the
- * canonical "narrow leadership" trap and must not classify as Broad.
- */
-export type ParticipationCategory = "Broad" | "Mixed" | "Narrow" | "Unknown";
-
-export function classifyParticipation(
-  sectorPct5d: Array<number | null>,
-  indexPct5d: Array<number | null>
-): ParticipationCategory {
-  const sectorClean = sectorPct5d.filter((v): v is number => typeof v === "number" && Number.isFinite(v));
-  const indexClean = indexPct5d.filter((v): v is number => typeof v === "number" && Number.isFinite(v));
-  if (sectorClean.length === 0 && indexClean.length === 0) return "Unknown";
-  const sectorUp = sectorClean.filter((v) => v > 0).length;
-  const indexUp = indexClean.filter((v) => v > 0).length;
-  if (sectorClean.length >= 4 && sectorUp >= 4 && indexClean.length >= 2 && indexUp >= 2) return "Broad";
-  if (sectorClean.length >= 4 && sectorUp <= 1 && indexClean.length >= 2 && indexUp <= 1) return "Narrow";
-  return "Mixed";
-}
-
-export function participationPlainLine(cat: ParticipationCategory): string {
-  switch (cat) {
-    case "Broad":
-      return "Large- and small-cap indices and most sectors participating";
-    case "Narrow":
-      return "Few sectors or indices participating — leadership thin";
-    case "Mixed":
-      return "Mixed participation across sectors and indices";
-    default:
-      return "Participation input pending";
-  }
-}
-
-/**
- * Rotation profile — behavioral classification of how capital is moving across
- * sectors. STRICTLY DESCRIPTIVE of "how the market feels", never ranked.
- *
- * Per the user directive: shared context for sector activity must answer the
- * question "what kind of market environment are all traders operating in?" —
- * NOT "which sector leads next?" or "where to allocate?". Names, rankings,
- * and "leadership emerging" language are banned (they belong inside the Swing
- * Desk downstream). This helper returns only the BEHAVIORAL pattern:
- *
- *   - "Concentrated" — high dispersion + narrow positives (1-2 sectors
- *     dragging the index while the rest are quiet/negative). Day traders
- *     should expect chop, swing traders should expect fragile follow-through.
- *   - "Rotational"   — mixed direction across sectors + moderate dispersion.
- *     Capital is cycling, no single sector controls the move. Both groups
- *     should expect inconsistent follow-through and faster fades.
- *   - "Mixed"        — partial leadership pattern that doesn't cleanly fit
- *     either concentrated or rotational.
- *   - "Unknown"      — insufficient sector data.
- *
- * Notice the absence of "Trending", "Leading", or any allocation-flavored
- * label. That's intentional.
- */
-export type RotationProfileCategory = "Concentrated" | "Rotational" | "Mixed" | "Unknown";
-
-export function classifyRotationProfile(sectorPct5d: Array<number | null>): RotationProfileCategory {
-  const clean = sectorPct5d.filter((v): v is number => typeof v === "number" && Number.isFinite(v));
-  if (clean.length < 3) return "Unknown";
-  const sorted = [...clean].sort((a, b) => b - a);
-  const max = sorted[0]!;
-  const min = sorted[sorted.length - 1]!;
-  const spread = max - min;
-  const positives = clean.filter((v) => v > 0.2).length;
-  const negatives = clean.filter((v) => v < -0.2).length;
-  // Concentrated: a few outliers pull the average — high spread but only 1-2
-  // sectors are meaningfully positive. The "narrow leadership" pattern.
-  if (spread >= 3 && positives >= 1 && positives <= 2) return "Concentrated";
-  // Rotational: capital splits across sectors in BOTH directions with
-  // meaningful spread — no single sector controls the move.
-  if (positives >= 2 && negatives >= 1 && spread >= 1.5) return "Rotational";
-  return "Mixed";
-}
-
-/**
- * Plain-language line for rotation profile — strictly DESCRIPTIVE of capital
- * flow, never directional or actionable. No sector NAMES, no "leadership
- * emerging", no allocation language.
- */
-export function rotationProfilePlainLine(cat: RotationProfileCategory): string {
-  switch (cat) {
-    case "Concentrated":
-      return "Narrow leadership — a few sectors carrying the move; broad follow-through unlikely";
-    case "Rotational":
-      return "Capital rotating across sectors — no single sector controlling the move; expect inconsistent follow-through";
-    case "Mixed":
-      return "Mixed sector behavior — partial leadership, no dominant pattern";
-    default:
-      return "Sector activity pending";
-  }
-}
-
-/**
- * Risk-horizon category from upcoming earnings + macro warnings.
- *
- *   - macroWarning present                            → "Elevated"
- *   - ≥ 4 tracked earnings in the next 7 days         → "Active"
- *   - 1-3 tracked earnings                            → "Quiet"
- *   - 0 tracked earnings AND no macro warning         → "Quiet"
- *
- * Time-based, NOT directional. The user's directive: "Risk Horizon: Elevated.
- * High-impact Fed event in 7 days." — the line tells you WHEN the next
- * potential disruption is, not whether to trade through it.
- */
-export type RiskHorizonCategory = "Elevated" | "Active" | "Quiet" | "Unknown";
-
-export function classifyRiskHorizon(
-  upcomingEarnings: EarningsEvent[],
-  macroWarning: string | null | undefined
-): RiskHorizonCategory {
-  if (typeof macroWarning === "string" && macroWarning.trim().length > 0) return "Elevated";
-  const count = upcomingEarnings.length;
-  if (count >= 4) return "Active";
-  if (count > 0) return "Quiet";
-  return "Quiet";
-}
-
-export function riskHorizonPlainLine(
-  cat: RiskHorizonCategory,
-  upcomingCount: number,
-  macroWarning: string | null | undefined,
-  soonestSymbol?: string,
-  soonestDateLabel?: string
-): string {
-  if (cat === "Elevated" && macroWarning) return macroWarning;
-  if (cat === "Active") {
-    return soonestSymbol && soonestDateLabel
-      ? `${upcomingCount} tracked earnings this week · next: ${soonestSymbol} on ${soonestDateLabel}`
-      : `${upcomingCount} tracked earnings this week`;
-  }
-  if (cat === "Quiet" && upcomingCount > 0) {
-    return soonestSymbol && soonestDateLabel
-      ? `${upcomingCount} tracked earnings · next: ${soonestSymbol} on ${soonestDateLabel}`
-      : `${upcomingCount} tracked earnings this week`;
-  }
-  return "No tracked earnings or high-impact macro prints in the next 7 sessions";
-}
-
-/**
- * Environment summary — single descriptive sentence combining A + B + C + D.
- *
- * Per the user's directive: "Short-horizon price drift up, volatility contained,
- * participation broad, macro risk approaching." Strategy-agnostic — describes
- * what the environment IS, not what to do about it.
- */
-export function buildEnvironmentSummary(
-  weeklyAvgPct5d: number | null,
-  volatility: VolatilityCategory,
-  participation: ParticipationCategory,
-  risk: RiskHorizonCategory
-): string {
-  let drift: string;
-  if (weeklyAvgPct5d == null) drift = "Short-horizon price drift unknown";
-  else if (weeklyAvgPct5d >= 0.6) drift = "Short-horizon price drift up";
-  else if (weeklyAvgPct5d <= -0.6) drift = "Short-horizon price drift down";
-  else drift = "Short-horizon price drift mixed";
-
-  const volPhrase = volatility === "Unknown" ? "volatility pending" : `volatility ${volatility.toLowerCase()}`;
-  const partPhrase =
-    participation === "Unknown" ? "participation pending" : `participation ${participation.toLowerCase()}`;
-  const riskPhrase =
-    risk === "Elevated" ? "macro risk approaching" : risk === "Active" ? "earnings risk approaching" : "macro risk quiet";
-
-  return `${drift}, ${volPhrase}, ${partPhrase}, ${riskPhrase}.`;
-}
+/** Re-export market-context derivations — single source of truth lives in `@/lib/market-context`. */
+export {
+  buildEnvironmentSummary,
+  classifyParticipation,
+  classifyRiskHorizon,
+  classifyRotationProfile,
+  classifyVolatility,
+  participationPlainLine,
+  riskHorizonPlainLine,
+  rotationProfilePlainLine,
+  volatilityPlainLine,
+  type ParticipationCategory,
+  type RiskHorizonCategory,
+  type RotationProfileCategory,
+  type VolatilityCategory
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Visual primitives

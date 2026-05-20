@@ -94,11 +94,11 @@ describe("Dashboard focus shell", () => {
       />
     );
     const na = screen.getByTestId("dashboard-next-actions");
-    expect(na.querySelector('a[href="/dashboard/scanner?mode=swing"]')).not.toBeNull();
+    expect(na.querySelector('a[href="/dashboard/scanner?mode=day"]')).not.toBeNull();
     expect(na.querySelector('a[href="/dashboard/watchlists"]')).not.toBeNull();
   });
 
-  test("watchlist_status_omitted_when_default_watchlist_empty", () => {
+  test("watchlist_opportunity_shows_empty_state_when_no_default_watchlist", () => {
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
@@ -109,10 +109,11 @@ describe("Dashboard focus shell", () => {
         sectorRotation={[]}
       />
     );
-    expect(screen.queryByTestId("dashboard-watchlist-status")).toBeNull();
+    const card = screen.getByTestId("dashboard-opportunity-watchlist");
+    expect(card.textContent || "").toMatch(/no default watchlist/i);
   });
 
-  test("watchlist_status_renders_when_monitored_positive", () => {
+  test("watchlist_opportunity_lists_tracked_symbols_when_monitored_positive", () => {
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
@@ -126,10 +127,8 @@ describe("Dashboard focus shell", () => {
         sectorRotation={[]}
       />
     );
-    expect(screen.getByTestId("dashboard-watchlist-status")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /what the watchlist status dots mean/i })
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/Actionable — returned a setup row this scan/i)).toBeNull();
+    const card = screen.getByTestId("dashboard-opportunity-watchlist");
+    expect(card.textContent || "").toMatch(/4 symbols tracked/i);
+    expect(card.textContent || "").toMatch(/developing/i);
   });
 });
