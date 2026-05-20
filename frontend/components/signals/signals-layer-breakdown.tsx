@@ -2,16 +2,16 @@
 
 import { useState, type ReactNode } from "react";
 import { AlignmentDrilldownLinks } from "@/components/signals/alignment-drilldown-links";
-import { signalsAlignmentDisplayLine } from "@/lib/nav/alignment-display-line";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { CuteLoader } from "@/components/cute-loader";
 import { InfoTip } from "@/components/info-tip";
 import { LAYER_NAME_HINTS, SIGNAL_LAYER_LEVEL_VS_DELTA_TIP } from "@/lib/ui-tooltips";
 import {
   buildLayerInsightLine,
-  countLayerAlignment,
   formatDeltaVsBaselineShort,
   formatLayerScoreLabel,
+  formatSignalsAlignmentDisplayLine,
+  resolveSignalsLayerAlignment,
   layerPolarity,
   layerPolarityDotColor,
   layerPolarityLabel,
@@ -32,6 +32,7 @@ type Props = {
   insufficient: boolean;
   insufficientMessage?: ReactNode;
   maturationState?: string | null;
+  alignmentRatio?: number | null;
   onOpenEvidence?: () => void;
   onScrollToEvolution?: () => void;
 };
@@ -45,12 +46,13 @@ export function SignalsLayerBreakdown({
   insufficient,
   insufficientMessage,
   maturationState,
+  alignmentRatio,
   onOpenEvidence,
   onScrollToEvolution
 }: Props) {
   const { colors } = useTheme();
   const [expanded, setExpanded] = useState(false);
-  const alignment = countLayerAlignment(rows, bias);
+  const alignment = resolveSignalsLayerAlignment({ rows, bias, alignmentRatio });
   const preview = pickCollapsedLayerPreview(rows, bias, 2, 2);
   const visible = expanded ? rows : preview.length > 0 ? preview : rows.slice(0, 3);
 
@@ -78,11 +80,7 @@ export function SignalsLayerBreakdown({
         </div>
         <span className="mt-1 block text-xs" style={{ color: colors.textMuted }}>
           as of latest close ·{" "}
-          {signalsAlignmentDisplayLine({
-            layersAligned: alignment.aligned,
-            layersTotal: alignment.total,
-            maturationState
-          })}
+          {formatSignalsAlignmentDisplayLine(alignment, bias, maturationState)}
         </span>
       </div>
       {!insufficient && !loading ? (

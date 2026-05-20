@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { RefreshCw } from "lucide-react";
 import { SignalsDeeplinkLink } from "@/components/nav/signals-deeplink-link";
 import { buildWatchlistDeskStatusPresent, watchlistStatusRailColor } from "@/lib/watchlist-row-present";
 import { WATCHLIST_EVALUATE_LINK_CLASS } from "@/lib/watchlist-interactive-styles";
@@ -38,6 +39,7 @@ type Props = {
   sessionClosed?: boolean;
   onRemove: () => void;
   onOpenLayers: (desk: Desk, row: WatchlistMaturationRow | undefined) => void;
+  onRefreshDesk?: (desk: Desk) => void;
 };
 
 function DeskStatusBlock({
@@ -48,7 +50,8 @@ function DeskStatusBlock({
   isDefaultList,
   deskEvaluating,
   sessionClosed,
-  onOpenLayers
+  onOpenLayers,
+  onRefreshDesk
 }: {
   symU: string;
   desk: Desk;
@@ -58,6 +61,7 @@ function DeskStatusBlock({
   deskEvaluating?: boolean;
   sessionClosed?: boolean;
   onOpenLayers: Props["onOpenLayers"];
+  onRefreshDesk?: Props["onRefreshDesk"];
 }) {
   const evalOpts: WatchlistEvaluationLineOpts = { evaluating: deskEvaluating, sessionClosed };
   const { colors } = useTheme();
@@ -83,18 +87,42 @@ function DeskStatusBlock({
           >
             {formatLastEvaluatedLine(undefined, evalOpts)}
           </p>
-          {!deskEvaluating ? (
-            <SignalsDeeplinkLink
-              symbol={symU}
-              contextRef="watchlist"
-              tradingMode={desk}
-              className={`${WATCHLIST_EVALUATE_LINK_CLASS} watchlist-desk-lines__action`}
-              data-testid={`watchlist-evaluate-${symU}-${desk}`}
-              onClick={(e) => e.stopPropagation()}
-            >
-              Open Signals
-            </SignalsDeeplinkLink>
-          ) : null}
+          <span className="watchlist-desk-lines__actions inline-flex flex-wrap items-center gap-2">
+            {onRefreshDesk ? (
+              <button
+                type="button"
+                className={`${WATCHLIST_EVALUATE_LINK_CLASS} watchlist-desk-lines__refresh inline-flex items-center gap-1`}
+                data-testid={`watchlist-refresh-${symU}-${desk}`}
+                aria-label={`Refresh ${desk} evaluation for ${symU}`}
+                title="Re-run composite and update maturation"
+                disabled={deskEvaluating}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onRefreshDesk(desk);
+                }}
+              >
+                <RefreshCw
+                  size={12}
+                  className={deskEvaluating ? "animate-spin" : undefined}
+                  aria-hidden
+                />
+                {deskEvaluating ? "Refreshing…" : "Refresh"}
+              </button>
+            ) : null}
+            {!deskEvaluating ? (
+              <SignalsDeeplinkLink
+                symbol={symU}
+                contextRef="watchlist"
+                tradingMode={desk}
+                className={`${WATCHLIST_EVALUATE_LINK_CLASS} watchlist-desk-lines__action`}
+                data-testid={`watchlist-evaluate-${symU}-${desk}`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                Open Signals
+              </SignalsDeeplinkLink>
+            ) : null}
+          </span>
         </div>
       );
     }
@@ -138,13 +166,38 @@ function DeskStatusBlock({
             {present.detailLine}
           </p>
         ) : null}
-        <p
-          className="watchlist-desk-lines__fetched m-0"
-          style={{ color: colors.textMuted }}
-          data-testid={`watchlist-last-evaluated-${symU}-${desk}`}
-        >
-          {present.lastEvaluatedLine}
-        </p>
+        <div className="watchlist-desk-lines__footer m-0 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <p
+            className="watchlist-desk-lines__fetched m-0"
+            style={{ color: colors.textMuted }}
+            data-testid={`watchlist-last-evaluated-${symU}-${desk}`}
+          >
+            {present.lastEvaluatedLine}
+          </p>
+          {onRefreshDesk ? (
+            <button
+              type="button"
+              className={`${WATCHLIST_EVALUATE_LINK_CLASS} watchlist-desk-lines__refresh inline-flex items-center gap-1`}
+              style={{ color: colors.textMuted }}
+              data-testid={`watchlist-refresh-${symU}-${desk}`}
+              aria-label={`Refresh ${desk} evaluation for ${symU}`}
+              title="Re-run composite and update maturation"
+              disabled={deskEvaluating}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onRefreshDesk(desk);
+              }}
+            >
+              <RefreshCw
+                size={12}
+                className={deskEvaluating ? "animate-spin" : undefined}
+                aria-hidden
+              />
+              {deskEvaluating ? "Refreshing…" : "Refresh"}
+            </button>
+          ) : null}
+        </div>
         {present.progressionChip ? (
           <span className="sr-only" data-testid={`watchlist-progression-${symU}-${desk}`}>
             {present.progressionChip}
@@ -171,7 +224,8 @@ export function WatchlistSymbolRow({
   deskEvaluating,
   sessionClosed,
   onRemove,
-  onOpenLayers
+  onOpenLayers,
+  onRefreshDesk
 }: Props) {
   const { colors } = useTheme();
   const symU = symbol.trim().toUpperCase();
@@ -256,6 +310,7 @@ export function WatchlistSymbolRow({
               deskEvaluating={deskEvaluating?.swing}
               sessionClosed={sessionClosed}
               onOpenLayers={onOpenLayers}
+              onRefreshDesk={onRefreshDesk}
             />
           ) : null}
           {showDay ? (
@@ -268,6 +323,7 @@ export function WatchlistSymbolRow({
               deskEvaluating={deskEvaluating?.day}
               sessionClosed={sessionClosed}
               onOpenLayers={onOpenLayers}
+              onRefreshDesk={onRefreshDesk}
             />
           ) : null}
         </div>

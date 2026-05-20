@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { primeWatchlistSymbolMaturation } from "@/lib/watchlist-maturation-prime";
+import {
+  primeWatchlistSymbolMaturation,
+  refreshWatchlistSymbolMaturationDesk
+} from "@/lib/watchlist-maturation-prime";
+import { consumeWatchlistMaturationBump } from "@/lib/watchlist-maturation-bump";
 
 describe("primeWatchlistSymbolMaturation", () => {
   const originalFetch = global.fetch;
@@ -34,5 +38,15 @@ describe("primeWatchlistSymbolMaturation", () => {
 
     expect(urls.some((u) => u.includes("/composite/swing"))).toBe(true);
     expect(urls.some((u) => u.includes("/composite/real"))).toBe(true);
+  });
+
+  it("refreshWatchlistSymbolMaturationDesk bumps maturation on success", async () => {
+    global.fetch = vi.fn(() =>
+      Promise.resolve({ ok: true, json: async () => ({}) })
+    ) as unknown as typeof fetch;
+
+    const ok = await refreshWatchlistSymbolMaturationDesk("AMZN", "swing");
+    expect(ok).toBe(true);
+    expect(consumeWatchlistMaturationBump()).toBe(true);
   });
 });

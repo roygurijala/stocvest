@@ -4,13 +4,13 @@ import Link from "next/link";
 import { InfoTip } from "@/components/info-tip";
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import { AlignmentDrilldownLinks } from "@/components/signals/alignment-drilldown-links";
-import { signalsAlignmentDisplayLine } from "@/lib/nav/alignment-display-line";
 import {
   buildWhyNotBullets,
-  countLayerAlignment,
   executionHeadline,
   executionProgressHint,
   executionReadinessLabel,
+  formatSignalsAlignmentDisplayLine,
+  resolveSignalsLayerAlignment,
   type SignalsLayerRowInput,
   type SignalsSetupBias
 } from "@/lib/signals-page-present";
@@ -32,6 +32,7 @@ type Props = {
   onOpenEvidence?: () => void;
   onSwitchToHistory?: () => void;
   maturationState?: string | null;
+  alignmentRatio?: number | null;
   fundamentalSummary?: FundamentalBackdropSummary | null;
   showFundamentalUpgrade?: boolean;
 };
@@ -46,22 +47,19 @@ export function SignalsSetupRead({
   onOpenEvidence,
   onSwitchToHistory,
   maturationState,
+  alignmentRatio,
   fundamentalSummary,
   showFundamentalUpgrade = false
 }: Props) {
   const { colors } = useTheme();
   const symU = symbol.trim().toUpperCase();
-  const alignment = countLayerAlignment(rows, bias);
-  const alignmentLine = signalsAlignmentDisplayLine({
-    layersAligned: alignment.aligned,
-    layersTotal: alignment.total,
-    maturationState
-  });
+  const alignment = resolveSignalsLayerAlignment({ rows, bias, alignmentRatio });
+  const alignmentLine = formatSignalsAlignmentDisplayLine(alignment, bias, maturationState);
   const biasColor =
     bias === "Bullish" ? colors.bullish : bias === "Bearish" ? colors.bearish : colors.caution;
   const whyNot =
     decision.state === "actionable" ? [] : buildWhyNotBullets(decision, previewLayers, bias, 3);
-  const executionHint = executionProgressHint(decision.state, alignment.aligned, alignment.total);
+  const executionHint = executionProgressHint(decision.state, alignment.aligned, alignment.total, bias);
 
   return (
     <article

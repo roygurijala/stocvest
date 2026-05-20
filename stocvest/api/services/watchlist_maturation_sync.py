@@ -104,6 +104,66 @@ def _layer_aligned_with_composite(
     return False
 
 
+def _aligned_layers_from_ratio(body: dict[str, Any]) -> int | None:
+    """Match Signals UI: whole-layer count from composite ``alignment_ratio`` (0–1)."""
+    raw = body.get("alignment_ratio")
+    if raw is None:
+        return None
+    try:
+        ratio = float(raw)
+    except (TypeError, ValueError):
+        return None
+    if ratio != ratio:  # NaN
+        return None
+    ratio = max(0.0, min(1.0, ratio))
+    total = len(MATURATION_LAYER_KEYS)
+    return max(0, min(total, round(ratio * total)))
+
+
+def _missing_layers_for_alignment(
+    body: dict[str, Any],
+    *,
+    composite_bias: Literal["long", "short", "neutral"],
+    aligned: int,
+) -> tuple[list[str], str]:
+    total = len(MATURATION_LAYER_KEYS)
+    need = max(0, total - aligned)
+    if need <= 0:
+        return [], ""
+    missing: list[str] = []
+    top_reason = ""
+    conflicted_raw = body.get("conflicted_layers")
+    if isinstance(conflicted_raw, list):
+        for item in conflicted_raw:
+            lid = str(item).strip().lower()
+            if lid in MATURATION_LAYER_KEYS and lid not in missing:
+                missing.append(lid)
+    by_layer = _layers_index(body)
+    for lid in MATURATION_LAYER_KEYS:
+        if len(missing) >= need:
+            break
+        if lid in missing:
+            continue
+        row = by_layer.get(lid)
+        if row is None:
+            missing.append(lid)
+            if not top_reason:
+                top_reason = f"{lid}: no layer row"
+            continue
+        if not _layer_aligned_with_composite(row, composite_bias=composite_bias):
+            missing.append(lid)
+            if not top_reason:
+                reason = str(row.get("reasoning") or row.get("status") or "").strip()
+                top_reason = (f"{lid}: {reason}" if reason else f"{lid}: not aligned")[:240]
+    missing = missing[:need]
+    for lid in MATURATION_LAYER_KEYS:
+        if len(missing) >= need:
+            break
+        if lid not in missing:
+            missing.append(lid)
+    return missing, top_reason
+
+
 def _layers_index(body: dict[str, Any]) -> dict[str, dict[str, Any]]:
     raw = body.get("layers")
     if not isinstance(raw, list):
@@ -121,27 +181,32 @@ def _layers_index(body: dict[str, Any]) -> dict[str, dict[str, Any]]:
 def _alignment_fields(
     body: dict[str, Any],
 ) -> tuple[int, list[str], float, str, Literal["long", "short", "neutral"]]:
-    by_layer = _layers_index(body)
     summary = str(body.get("signal_summary") or "")
     cb = _composite_bias(summary)
     bias = cast(Literal["long", "short", "neutral"], cb)
-    missing: list[str] = []
-    aligned = 0
-    top_reason = ""
-    for lid in MATURATION_LAYER_KEYS:
-        row = by_layer.get(lid)
-        if row is None:
-            missing.append(lid)
-            if not top_reason:
-                top_reason = f"{lid}: no layer row"
-            continue
-        if _layer_aligned_with_composite(row, composite_bias=cb):
-            aligned += 1
-        else:
-            missing.append(lid)
-            if not top_reason:
-                reason = str(row.get("reasoning") or row.get("status") or "").strip()
-                top_reason = (f"{lid}: {reason}" if reason else f"{lid}: not aligned")[:240]
+    from_ratio = _aligned_layers_from_ratio(body)
+    if from_ratio is not None:
+        aligned = from_ratio
+        missing, top_reason = _missing_layers_for_alignment(body, composite_bias=cb, aligned=aligned)
+    else:
+        by_layer = _layers_index(body)
+        missing = []
+        aligned = 0
+        top_reason = ""
+        for lid in MATURATION_LAYER_KEYS:
+            row = by_layer.get(lid)
+            if row is None:
+                missing.append(lid)
+                if not top_reason:
+                    top_reason = f"{lid}: no layer row"
+                continue
+            if _layer_aligned_with_composite(row, composite_bias=cb):
+                aligned += 1
+            else:
+                missing.append(lid)
+                if not top_reason:
+                    reason = str(row.get("reasoning") or row.get("status") or "").strip()
+                    top_reason = (f"{lid}: {reason}" if reason else f"{lid}: not aligned")[:240]
     total = len(MATURATION_LAYER_KEYS)
     pct = (100.0 * float(aligned)) / float(total) if total else 0.0
     return aligned, missing, pct, top_reason, bias

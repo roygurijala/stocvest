@@ -14,7 +14,11 @@ import { WatchlistEvaluationInfoTip } from "@/components/watchlists/WatchlistEva
 import { formatWatchlistMaturationDisplayLine } from "@/lib/alignment-display-tier";
 import { buildWatchlistPortfolioHeadline } from "@/lib/watchlist-row-present";
 import { formatSummaryFetchedAt, watchlistMaturationDeskSummary } from "@/lib/watchlist-evaluation-present";
-import { primeWatchlistSymbolMaturation } from "@/lib/watchlist-maturation-prime";
+import {
+  primeWatchlistSymbolMaturation,
+  refreshWatchlistSymbolMaturationDesk,
+  type WatchlistMaturationDesk
+} from "@/lib/watchlist-maturation-prime";
 import { APP_TOP_BAR_LAYOUT_HEIGHT } from "@/components/top-bar";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, colorTokens, spacing, surfaceGlowClassName } from "@/lib/design-system";
@@ -761,6 +765,38 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     }
   }
 
+  const refreshSymbolMaturationDesk = useCallback(
+    (sym: string, desk: WatchlistMaturationDesk) => {
+      if (!maturationEligible) return;
+      const symU = sym.trim().toUpperCase();
+      if (!symU) return;
+      setEvaluatingSymbols((prev) => ({
+        ...prev,
+        [symU]: { ...prev[symU], [desk]: true }
+      }));
+      void (async () => {
+        try {
+          await refreshWatchlistSymbolMaturationDesk(symU, desk);
+        } finally {
+          setEvaluatingSymbols((prev) => {
+            const next = { ...prev };
+            const row = next[symU];
+            if (!row) return next;
+            const deskRow = { ...row, [desk]: false };
+            if (!deskRow.swing && !deskRow.day) {
+              delete next[symU];
+            } else {
+              next[symU] = deskRow;
+            }
+            return next;
+          });
+          setMaturationReloadNonce((n) => n + 1);
+        }
+      })();
+    },
+    [maturationEligible]
+  );
+
   async function removeSymbol(sym: string) {
     if (!active) return;
     const prev = rows;
@@ -1048,14 +1084,17 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                     }
                   }}
                   placeholder="Search watchlist or add ticker (symbol first, then name)"
-                  className="min-h-11 w-full flex-1 rounded-lg border px-3"
+                  className={`min-h-11 w-full flex-1 rounded-lg border px-3 font-mono font-semibold tracking-wide placeholder:font-normal ${
+                    theme === "light" ? "placeholder:text-slate-500" : "placeholder:text-slate-300"
+                  }`}
                   style={{
-                    borderColor: colors.border,
-                    background: colors.surface,
+                    borderColor: theme === "light" ? colors.border : "rgba(148, 163, 184, 0.45)",
+                    background: colors.surfaceMuted,
                     color: colors.text,
-                    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-                    letterSpacing: "0.04em",
-                    fontWeight: 600
+                    boxShadow:
+                      theme === "light"
+                        ? "inset 0 1px 2px rgba(15, 23, 42, 0.06)"
+                        : "inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 1px 2px rgba(0, 0, 0, 0.35)"
                   }}
                 />
                 <button
@@ -1307,6 +1346,11 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                           onOpenLayers={(desk, row) =>
                             setAlignmentSheet({ symbol: symU, deskMode: desk, row })
                           }
+                          onRefreshDesk={
+                            maturationEligible
+                              ? (desk) => refreshSymbolMaturationDesk(symU, desk)
+                              : undefined
+                          }
                         />
                       );
                     })}
@@ -1317,7 +1361,8 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
             </article>
 
             <p className="m-0 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
-              Your watchlist feeds the scanner. Maturation reflects your last evidence run or the scheduled refresh.
+              Your watchlist feeds the scanner. Maturation is stored per symbol and desk — use Refresh on a row to
+              re-run composite and update alignment, or open Signals / Evidence.
               <Link href="/dashboard/signals" prefetch={false} className="ml-1 font-semibold" style={{ color: colors.accent }}>
                 Open Signals
               </Link>

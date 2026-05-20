@@ -11,6 +11,19 @@ describe("watchlist-row-present", () => {
     expect(watchlistLayerFillPct({ layers_aligned: 4, layers_total: 6, state: "developing" })).toBe(67);
   });
 
+  test("neutral bias uses Mostly neutral label (matches Signals)", () => {
+    const present = buildWatchlistDeskStatusPresent(
+      {
+        state: "developing",
+        bias: "neutral",
+        layers_aligned: 4,
+        layers_total: 6
+      },
+      "swing"
+    );
+    expect(present?.statusLine).toBe("SWING · Mostly neutral (4/6)");
+  });
+
   test("ideal desk line uses SWING prefix and tier counts", () => {
     const present = buildWatchlistDeskStatusPresent(
       {

@@ -106,7 +106,7 @@ def test_sync_records_insufficient_data_touch() -> None:
     assert got.last_evaluated_at
 
 
-def test_neutral_composite_counts_available_layers() -> None:
+def test_neutral_composite_counts_available_layers_without_ratio() -> None:
     table = _FakeDynamoTable()
     repo = WatchlistMaturationRepository(table)
     store = InMemoryWatchlistStore()
@@ -128,6 +128,33 @@ def test_neutral_composite_counts_available_layers() -> None:
     assert got is not None
     assert got.layers_aligned == 6
     assert got.state == WatchlistState.ACTIONABLE
+
+
+def test_neutral_composite_uses_alignment_ratio_when_present() -> None:
+    table = _FakeDynamoTable()
+    repo = WatchlistMaturationRepository(table)
+    store = InMemoryWatchlistStore()
+    store.create_watchlist("u1", "Main", ["AMZN"], is_default=True)
+    body = {
+        "symbol": "AMZN",
+        "signal_summary": "neutral",
+        "alignment_ratio": 0.67,
+        "conflicted_layers": ["news", "internals"],
+        "layers": _six_layers(verdict="neutral"),
+    }
+    sync_watchlist_maturation_from_composite(
+        user_id="u1",
+        symbol="AMZN",
+        mode="swing",
+        composite_body=body,
+        maturation_repo=repo,
+        watchlist_store=store,
+    )
+    got = repo.get_entry("u1", "AMZN", "swing")
+    assert got is not None
+    assert got.layers_aligned == 4
+    assert got.state == WatchlistState.DEVELOPING
+    assert got.missing_layers == ["news", "internals"]
 
 
 def test_composite_evidence_cache_hit_also_syncs_maturation(monkeypatch: pytest.MonkeyPatch) -> None:

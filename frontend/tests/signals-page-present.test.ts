@@ -5,13 +5,16 @@ import {
   buildLayerInsightLine,
   buildSignalsPageDecision,
   buildWhyNotBullets,
+  alignedLayersFromAlignmentRatio,
   countLayerAlignment,
   formatDeltaVsBaselineShort,
+  formatSignalsAlignmentDisplayLine,
   layerDeltaVsBaseline,
   layerPolarity,
   normalizeSetupBias,
   pickCollapsedLayerPreview,
   pickPreviewLayers,
+  resolveSignalsLayerAlignment,
   SIGNAL_LAYER_LEVEL_BASELINE,
   type SignalsLayerRowInput
 } from "@/lib/signals-page-present";
@@ -34,6 +37,30 @@ describe("signals-page-present", () => {
     const a = countLayerAlignment(bearishRows, "Bearish");
     expect(a.aligned).toBe(2);
     expect(a.total).toBe(6);
+  });
+
+  test("resolveSignalsLayerAlignment prefers alignment_ratio over chip count", () => {
+    const neutralRows: SignalsLayerRowInput[] = bearishRows.map((r) => ({
+      ...r,
+      status: "Neutral" as const
+    }));
+    expect(countLayerAlignment(neutralRows, "Neutral").aligned).toBe(6);
+    const resolved = resolveSignalsLayerAlignment({
+      rows: neutralRows,
+      bias: "Neutral",
+      alignmentRatio: 0.67
+    });
+    expect(resolved.aligned).toBe(4);
+    expect(formatSignalsAlignmentDisplayLine(resolved, "Neutral")).toBe("Mostly neutral (4/6)");
+  });
+
+  test("alignedLayersFromAlignmentRatio rounds to nearest layer", () => {
+    expect(alignedLayersFromAlignmentRatio(0.62)).toBe(4);
+    expect(alignedLayersFromAlignmentRatio(0.85)).toBe(5);
+  });
+
+  test("executionProgressHint skips misleading copy on neutral bias", () => {
+    expect(executionProgressHint("monitor", 6, 6, "Neutral")).toBeNull();
   });
 
   test("countLayerAlignment ignores bullish label without a live layer score", () => {

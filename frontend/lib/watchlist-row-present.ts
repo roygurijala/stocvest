@@ -10,6 +10,7 @@ import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
 import { formatWatchlistMaturationLabel } from "@/lib/watchlist-page-utils";
 import { maturationAlignmentCounts } from "@/lib/watchlist-alignment-present";
 import { formatLastEvaluatedLine } from "@/lib/watchlist-evaluation-present";
+import { formatSignalsAlignmentDisplayLine } from "@/lib/signals-page-present";
 
 export type WatchlistDeskStatusPresent = {
   /** e.g. "SWING · Developing (3/6)" */
@@ -41,8 +42,19 @@ export function buildWatchlistDeskStatusPresent(
 ): WatchlistDeskStatusPresent | null {
   if (!row?.state && !row?.label) return null;
   const { aligned, total } = maturationAlignmentCounts(row);
+  const biasKey = (row.bias ?? "").trim().toLowerCase();
   const tierLine =
-    formatWatchlistMaturationDisplayLine(row) ?? formatWatchlistMaturationLabel(row);
+    biasKey === "neutral"
+      ? formatSignalsAlignmentDisplayLine(
+          {
+            aligned,
+            total,
+            label: aligned >= 4 ? "Mostly neutral" : "Mixed direction"
+          },
+          "Neutral",
+          row.state
+        )
+      : formatWatchlistMaturationDisplayLine(row) ?? formatWatchlistMaturationLabel(row);
   const statusLine = `${watchlistDeskLabel(desk)} · ${tierLine}`;
   const readiness = row.readiness_label?.trim();
   const detailLine =

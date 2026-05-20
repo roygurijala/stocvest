@@ -35,10 +35,11 @@ import { useWatchlistMaturationLine } from "@/lib/hooks/use-watchlist-maturation
 import { buildSignalEvaluationFreshness } from "@/lib/signals-evaluation-present";
 import {
   buildSignalsPageDecision,
-  countLayerAlignment,
+  formatSignalsAlignmentDisplayLine,
   layerDeltaVsBaseline,
   normalizeSetupBias,
   pickPreviewLayers,
+  resolveSignalsLayerAlignment,
   SIGNAL_LAYER_LEVEL_BASELINE,
   type SignalsLayerRowInput
 } from "@/lib/signals-page-present";
@@ -967,6 +968,23 @@ export function SignalsPageClient({
     });
   }, [compositeResult, setupBias, signalsPresentRows, aiStripSignalScore]);
 
+  const compositeAlignmentRatio = useMemo(() => {
+    if (!compositeResult || isInsufficientCompositeResponse(compositeResult)) return null;
+    const ar = (compositeResult as Record<string, unknown>).alignment_ratio;
+    return typeof ar === "number" && Number.isFinite(ar) ? ar : null;
+  }, [compositeResult]);
+
+  const commandBarMaturationLine = useMemo(() => {
+    if (!maturationLine || compositeAlignmentRatio == null) return maturationLine;
+    const alignment = resolveSignalsLayerAlignment({
+      rows: signalsPresentRows,
+      bias: setupBias,
+      alignmentRatio: compositeAlignmentRatio
+    });
+    const label = formatSignalsAlignmentDisplayLine(alignment, setupBias, maturationLine.state);
+    return { ...maturationLine, label };
+  }, [maturationLine, compositeAlignmentRatio, signalsPresentRows, setupBias]);
+
   const previewBlockingLayers = useMemo(
     () => pickPreviewLayers(signalsPresentRows, setupBias, 3),
     [signalsPresentRows, setupBias]
@@ -1618,7 +1636,7 @@ export function SignalsPageClient({
             />
           ) : null
         }
-        maturationLine={maturationLine}
+        maturationLine={commandBarMaturationLine}
         evaluationFreshness={evaluationFreshness}
         resumedFromSession={resumedFromSession}
         onTradingModeChange={updateTradingMode}
@@ -1635,6 +1653,7 @@ export function SignalsPageClient({
           onOpenEvidence={() => void openEvidenceModal()}
           onSwitchToHistory={scrollToSetupEvolution}
           maturationState={maturationLine?.state}
+          alignmentRatio={compositeAlignmentRatio}
           fundamentalSummary={fundamentalSummary}
           showFundamentalUpgrade={showFundamentalUpgrade}
         />
@@ -1662,6 +1681,7 @@ export function SignalsPageClient({
             insufficient={Boolean(insufficientComposite) || Boolean(compositeServiceMessage)}
             insufficientMessage={compositeServiceMessage ?? insufficientLayerMessage}
             maturationState={maturationLine?.state}
+            alignmentRatio={compositeAlignmentRatio}
             onOpenEvidence={() => void openEvidenceModal()}
             onScrollToEvolution={scrollToSetupEvolution}
           />

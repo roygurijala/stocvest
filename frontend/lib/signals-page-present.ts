@@ -3,7 +3,10 @@
  * Keeps copy discipline aligned with `trade-decision.ts` (validates, does not instruct).
  */
 
-import { resolveAlignmentDisplayTier } from "@/lib/alignment-display-tier";
+import {
+  formatAlignmentStatusLine,
+  resolveAlignmentDisplayTier
+} from "@/lib/alignment-display-tier";
 import {
   deriveDecisionRationale,
   type TradeDecision,
@@ -88,11 +91,22 @@ export function layerRowEligibleForAlignmentCount(row: SignalsLayerRowInput): bo
   return true;
 }
 
+export const SIGNAL_LAYER_ALIGN_TOTAL = 6;
+
+/** Map composite `alignment_ratio` (0–1) to a whole-layer X/6 count. */
+export function alignedLayersFromAlignmentRatio(
+  alignmentRatio: number | null | undefined,
+  total = SIGNAL_LAYER_ALIGN_TOTAL
+): number | null {
+  if (alignmentRatio == null || !Number.isFinite(alignmentRatio)) return null;
+  return Math.round(Math.max(0, Math.min(1, alignmentRatio)) * total);
+}
+
 export function countLayerAlignment(
   rows: SignalsLayerRowInput[],
   bias: SignalsSetupBias
 ): { aligned: number; total: number; label: string } {
-  const total = 6;
+  const total = SIGNAL_LAYER_ALIGN_TOTAL;
   if (bias === "Neutral") {
     const neutralish = rows.filter(
       (r) =>
@@ -114,6 +128,55 @@ export function countLayerAlignment(
     total,
     label: aligned >= 4 ? "Aligned" : aligned >= 2 ? "Partially aligned" : "Not aligned"
   };
+}
+
+/**
+ * Signals X/6 — prefers composite `alignment_ratio` (weighted layer agreement) so the
+ * headline matches trade-decision gates and the radar Δ chart is not mistaken for alignment.
+ */
+export function resolveSignalsLayerAlignment(input: {
+  rows: SignalsLayerRowInput[];
+  bias: SignalsSetupBias;
+  alignmentRatio?: number | null;
+}): { aligned: number; total: number; label: string } {
+  const fromRatio = alignedLayersFromAlignmentRatio(input.alignmentRatio);
+  if (fromRatio != null) {
+    const total = SIGNAL_LAYER_ALIGN_TOTAL;
+    if (input.bias === "Neutral") {
+      return {
+        aligned: fromRatio,
+        total,
+        label: fromRatio >= 4 ? "Mostly neutral" : "Mixed direction"
+      };
+    }
+    return {
+      aligned: fromRatio,
+      total,
+      label:
+        fromRatio >= 4 ? "Aligned" : fromRatio >= 2 ? "Partially aligned" : "Not aligned"
+    };
+  }
+  return countLayerAlignment(input.rows, input.bias);
+}
+
+/** Bias-aware alignment line for Signals surfaces (no "Strong" on neutral bias). */
+export function formatSignalsAlignmentDisplayLine(
+  alignment: { aligned: number; total: number; label: string },
+  bias: SignalsSetupBias,
+  maturationState?: string | null
+): string {
+  if (bias === "Neutral") {
+    const { aligned, total, label } = alignment;
+    if (aligned <= 1 && label === "Mixed direction") {
+      return aligned === 0 ? "Not aligned" : `${label} (${aligned}/${total})`;
+    }
+    return `${label} (${aligned}/${total})`;
+  }
+  return formatAlignmentStatusLine({
+    layersAligned: alignment.aligned,
+    layersTotal: alignment.total,
+    maturationState
+  });
 }
 
 export function layerPolarity(row: SignalsLayerRowInput, bias: SignalsSetupBias): SignalsLayerPolarity {
@@ -347,9 +410,11 @@ export const actionableHeadline = executionHeadline;
 export function executionProgressHint(
   state: TradeDecisionState,
   layersAligned: number,
-  layersTotal: number
+  layersTotal: number,
+  setupBias?: SignalsSetupBias
 ): string | null {
   if (state === "actionable") return null;
+  if (setupBias === "Neutral") return null;
   const tier = resolveAlignmentDisplayTier({ layersAligned, layersTotal });
   if (tier === "actionable" && state === "monitor") {
     return "One condition remains before this becomes actionable";
