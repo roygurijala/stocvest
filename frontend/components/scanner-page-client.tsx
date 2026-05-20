@@ -29,10 +29,7 @@ import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { loadScannerDataWithoutBrief } from "@/lib/api/scanner-client-load";
 import { fetchScannerTraceBundleClient } from "@/lib/api/scanner-trace-client";
 import type { ScannerSynthesis } from "@/lib/scanner-synthesis";
-import {
-  buildScannerCauseBullets,
-  buildScannerMarketScopeLine
-} from "@/lib/scanner-quiet-copy";
+import { buildScannerMarketScopeLine } from "@/lib/scanner-quiet-copy";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import type {
   AssistantPageContext,
@@ -1095,10 +1092,6 @@ export function ScannerPageClient({
     setScannerSynthesis(overview.scannerSynthesis ?? null);
   }, [overview.evaluationTrace, overview.scannerSynthesis]);
 
-  const causeBullets = useMemo(
-    () => buildScannerCauseBullets(scanSummary, scannerSynthesis),
-    [scanSummary, scannerSynthesis]
-  );
   const marketScopeLine = useMemo(
     () => buildScannerMarketScopeLine(scanSummary, scannerSynthesis),
     [scanSummary, scannerSynthesis]
@@ -1335,7 +1328,6 @@ export function ScannerPageClient({
         <ScannerQuietDesk
           summary={scanSummary}
           synthesis={scannerSynthesis}
-          causeBullets={causeBullets}
           marketScopeLine={marketScopeLine}
           deskFilter={evaluationTraceDeskFilter}
         />
@@ -1364,7 +1356,7 @@ export function ScannerPageClient({
           const accent = roleAccents[theme][role];
           const railHue = accent.borderAccent;
           const label = m === "swing" ? TAB_LABEL_SWING : m === "day" ? TAB_LABEL_DAY : TAB_LABEL_BOTH;
-          const cadence = m === "swing" ? "Multi-day" : m === "day" ? "Intraday" : "Two desks";
+          const cadence = m === "swing" ? "Multi-day" : m === "day" ? "Intraday" : "Swing + Day";
           return (
             <button
               key={m}
@@ -1459,6 +1451,22 @@ export function ScannerPageClient({
         </div>
       ) : null}
 
+      {showQuietInterpretation ? (
+        <p
+          data-testid="scanner-why-nothing-qualified"
+          style={{
+            margin: 0,
+            fontSize: typography.scale.xs,
+            fontWeight: 700,
+            letterSpacing: "0.1em",
+            textTransform: "uppercase",
+            color: colors.textMuted
+          }}
+        >
+          Why nothing qualified
+        </p>
+      ) : null}
+
       <div className="scanner-grid grid grid-cols-1 gap-3 lg:grid-cols-2">
         <section
           className={`min-w-0 ${surfaceGlowClassName}`}
@@ -1474,7 +1482,21 @@ export function ScannerPageClient({
             }}
           >
             <div style={{ minWidth: 0 }}>
-              <h3 style={{ margin: 0 }}>Gap Intelligence</h3>
+              <h3 style={{ margin: 0 }}>
+                Gap Intelligence
+                {overview.gapIntelligence.length === 0 ? (
+                  <span
+                    style={{
+                      marginLeft: spacing[2],
+                      fontSize: typography.scale.xs,
+                      fontWeight: 600,
+                      color: colors.textMuted
+                    }}
+                  >
+                    (0 today)
+                  </span>
+                ) : null}
+              </h3>
               <p
                 style={{
                   margin: `${spacing[1]} 0 0`,

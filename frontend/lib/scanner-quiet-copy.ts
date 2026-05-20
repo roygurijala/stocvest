@@ -43,12 +43,26 @@ export function buildScannerDeskInterpretiveLine(
       overview.marketStatus != null
         ? (overview.marketStatus.market || "").trim().toLowerCase() === "open"
         : isUsRegularSessionOpenEt();
-    return sessionOpen ? "Intraday gates not cleared" : "Session closed";
+    return sessionOpen
+      ? "Intraday gates not cleared — waiting for confirmation"
+      : "Session closed — check back at next open (9:30 AM ET)";
   }
   const r = (overview.regimeLabel ?? "").trim().toLowerCase();
   if (r.includes("bear")) return "Structure + regime not aligned together";
-  if (r.includes("bull")) return "Per-symbol confirmation gates not cleared";
-  return "Setup conditions not fully aligned";
+  if (r.includes("bull")) return "Waiting for confirmation across all required conditions";
+  return "Some conditions missing — no setups fully confirmed";
+}
+
+/** Detail bullets for “Why quiet” — omits participation when hero already states market-wide pace. */
+export function buildScannerCauseDetailBullets(
+  summary: ScannerScanSummary,
+  synthesis: ScannerSynthesis | null | undefined,
+  opts?: { marketScopeLine?: string | null }
+): string[] {
+  const bullets = buildScannerCauseBullets(summary, synthesis);
+  const scope = (opts?.marketScopeLine ?? "").toLowerCase();
+  if (!scope.includes("participation") && !scope.includes("pace")) return bullets;
+  return bullets.filter((line) => !/participation|intraday pace|below.*pace/i.test(line));
 }
 
 export function buildScannerCauseBullets(

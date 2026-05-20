@@ -9,13 +9,18 @@ import type { ScannerSynthesis } from "@/lib/scanner-synthesis";
 
 export type NearReadyMomentum = "improving" | "stable" | "re_eval" | "weakening";
 
+/** Minimum aligned layers to show in market-wide activity (filters 0/6 noise). */
+export const MIN_DEVELOPING_ALIGNED = 3;
+
 export type NearReadyCardModel = {
   symbol: string;
   desk: "swing" | "day";
+  deskLabel: string;
   alignmentHeadline: string;
   readinessHint: string;
   confirmedLines: string[];
   blockedLine: string;
+  urgencyLine: string;
   momentum: NearReadyMomentum;
   momentumLabel: string;
   evidenceHref: string;
@@ -24,12 +29,17 @@ export type NearReadyCardModel = {
 export type DevelopingRowModel = {
   symbol: string;
   desk: "swing" | "day";
+  displaySymbol: string;
   directionLabel: string;
   alignmentLabel: string;
   missingHint: string;
   movement: "improving" | "stable" | "weakening";
-  movementSuffix: string;
   watchlistHref: string;
+};
+
+export type WhatWouldChangeContent = {
+  watchItems: string[];
+  outcome: string;
 };
 
 export type DevelopingMovementGroups = {
@@ -56,14 +66,43 @@ export function nearReadySectionCopy(regimeLabel: string): { title: string; subt
   };
 }
 
+export function movementLabelFromBucket(
+  bucket: "improving" | "stable" | "weakening" | "re_eval"
+): string {
+  switch (bucket) {
+    case "improving":
+      return "↑ improving";
+    case "weakening":
+      return "↓ weakening";
+    case "re_eval":
+      return "↻ re-eval";
+    default:
+      return "→ stable";
+  }
+}
+
 function momentumFromRow(
   tier: ReturnType<typeof resolveAlignmentDisplayTier>,
   layersAway: number
 ): { kind: NearReadyMomentum; label: string } {
-  if (tier === "re_evaluating") return { kind: "re_eval", label: "↻ re-eval" };
-  if (tier === "near_ready" && layersAway <= 1) return { kind: "improving", label: "↑ improving" };
-  if (tier === "developing" && layersAway >= 3) return { kind: "weakening", label: "↓ weakening" };
-  return { kind: "stable", label: "→ stable" };
+  if (tier === "re_evaluating") return { kind: "re_eval", label: movementLabelFromBucket("re_eval") };
+  if (tier === "near_ready" && layersAway <= 1)
+    return { kind: "improving", label: movementLabelFromBucket("improving") };
+  if (tier === "developing" && layersAway >= 3)
+    return { kind: "weakening", label: movementLabelFromBucket("weakening") };
+  return { kind: "stable", label: movementLabelFromBucket("stable") };
+}
+
+export function alignmentLabelWithMovement(aligned: number, total: number, movementLabel: string): string {
+  return `${aligned}/${total} aligned ${movementLabel}`;
+}
+
+function deskBadge(desk: "swing" | "day"): string {
+  return desk === "swing" ? "swing" : "day";
+}
+
+function displaySymbolForRow(symbol: string, desk: "swing" | "day", showDesk: boolean): string {
+  return showDesk ? `${symbol} (${deskBadge(desk)})` : symbol;
 }
 
 function confirmedLinesForRow(
@@ -107,9 +146,9 @@ export function buildNearReadyCards(
       const away = row.layers_away ?? layersAwayFromActionable(aligned, total);
       const tier = resolveAlignmentDisplayTier({ layersAligned: aligned, layersTotal: total });
       const momentum = momentumFromRow(tier, away);
-      const alignmentHeadline = `${aligned}/${total} aligned`;
+      const alignmentHeadline = alignmentLabelWithMovement(aligned, total, momentum.label);
       const readinessHint =
-        away <= 1 ? `${alignmentHeadline} — Close to ready` : `${alignmentHeadline} — ${away} conditions away`;
+        away <= 1 ? "Close to ready" : `${away} condition${away === 1 ? "" : "s"} from actionable`;
 
       const blockedLine = blocked
         ? "Blocked by regime"
@@ -117,14 +156,22 @@ export function buildNearReadyCards(
           ? `${away} layer${away === 1 ? "" : "s"} from actionable`
           : "Awaiting final confirmation";
 
+      const urgencyLine = blocked
+        ? "→ Will trigger if regime clears"
+        : away <= 1
+          ? "→ May qualify on the next scan if gates clear"
+          : "";
+
       const mode = row.desk === "swing" ? "swing" : "day";
       return {
         symbol: row.symbol,
         desk: row.desk,
+        deskLabel: deskBadge(row.desk),
         alignmentHeadline,
         readinessHint,
         confirmedLines: confirmedLinesForRow(aligned, total, away),
         blockedLine,
+        urgencyLine,
         momentum: momentum.kind,
         momentumLabel: momentum.label,
         evidenceHref: `/dashboard/signals?symbol=${encodeURIComponent(row.symbol)}&ref=scanner&trading_mode=${mode}`
@@ -146,27 +193,19 @@ function movementBucket(
   return "stable";
 }
 
-function movementSuffix(bucket: "improving" | "stable" | "weakening"): string {
-  switch (bucket) {
-    case "improving":
-      return "(+1)";
-    case "weakening":
-      return "(-1)";
-    default:
-      return "";
-  }
-}
-
 export function buildDevelopingMovementGroups(
   rows: ScannerWatchlistProgressionRow[],
   deskFilter: "swing" | "day" | "all",
   excludeSymbols: Set<string>
 ): DevelopingMovementGroups {
+  const showDesk = deskFilter === "all";
   const filtered = rows.filter((r) => {
     if (excludeSymbols.has(r.symbol)) return false;
     if (deskFilter !== "all" && r.desk !== deskFilter) return false;
     const st = (r.state || "").toLowerCase();
-    return !st.includes("actionable");
+    if (st.includes("actionable")) return false;
+    const aligned = r.layers_aligned ?? 0;
+    return aligned >= MIN_DEVELOPING_ALIGNED;
   });
 
   const out: DevelopingMovementGroups = { improving: [], stable: [], weakening: [] };
@@ -176,20 +215,21 @@ export function buildDevelopingMovementGroups(
     const total = row.layers_total ?? 6;
     const away = row.layers_away ?? layersAwayFromActionable(aligned, total);
     const bucket = movementBucket(row);
+    const movementLabel = movementLabelFromBucket(bucket);
     const dir = (row.label || row.state || "Developing").toLowerCase().includes("short") ? "Short" : "Long";
     const missing =
       away > 0
-        ? `Missing: ${away} layer${away === 1 ? "" : "s"} from actionable`
+        ? `${away} layer${away === 1 ? "" : "s"} from actionable`
         : "Alignment building";
 
     const model: DevelopingRowModel = {
       symbol: row.symbol,
       desk: row.desk,
+      displaySymbol: displaySymbolForRow(row.symbol, row.desk, showDesk),
       directionLabel: dir,
-      alignmentLabel: `${aligned}/${total} aligned`,
+      alignmentLabel: alignmentLabelWithMovement(aligned, total, movementLabel),
       missingHint: missing,
       movement: bucket,
-      movementSuffix: movementSuffix(bucket),
       watchlistHref: `/dashboard/watchlists?focus=${encodeURIComponent(row.symbol)}`
     };
     out[bucket].push(model);
@@ -218,6 +258,50 @@ export function regimeGateRejectionContext(
   return `Regime reads ${resolved} on the session tape — desk gates follow index confirmation.`;
 }
 
+export function buildQuietBridgeLine(
+  qualifyingTotal: number,
+  nearReadyCount: number,
+  regimeLabel: string
+): string | null {
+  if (qualifyingTotal > 0 || nearReadyCount === 0) return null;
+  if (regimeBlocksDesk(regimeLabel)) {
+    return `No setups qualified yet → ${nearReadyCount} near-ready blocked by regime / volume`;
+  }
+  return `No setups qualified yet → ${nearReadyCount} near-ready approaching threshold`;
+}
+
+export function buildWhatWouldChangeContent(
+  synthesis: ScannerSynthesis | null | undefined,
+  regimeLabel: string,
+  nearSymbols: string[]
+): WhatWouldChangeContent {
+  const watchItems: string[] = [];
+  const volQuiet =
+    synthesis?.volume_context?.market_condition?.toLowerCase().includes("low") ||
+    synthesis?.volume_context?.market_condition?.toLowerCase().includes("below");
+  if (volQuiet || (synthesis?.rejection_groups.session_volume.length ?? 0) >= 2) {
+    watchItems.push("Participation must improve vs intraday pace");
+  }
+  watchItems.push("SPY / QQQ need stronger follow-through");
+  if (regimeBlocksDesk(regimeLabel)) {
+    watchItems.push("Regime must clear before swing gates unlock");
+  } else {
+    watchItems.push("Per-symbol structure must finish confirming");
+  }
+
+  const names = nearSymbols.slice(0, 2).join(" and ");
+  const outcome = regimeBlocksDesk(regimeLabel)
+    ? names
+      ? `If conditions improve → ${names} may qualify first after the next scan.`
+      : "If conditions improve → near-ready setups may trigger on the next scan."
+    : names
+      ? `If conditions improve → ${names} are next in line to qualify.`
+      : "If conditions improve → near-ready setups may qualify on the next scan.";
+
+  return { watchItems, outcome };
+}
+
+/** @deprecated Prefer {@link buildWhatWouldChangeContent} for structured UI. */
 export function synthesizeWhatWouldChange(
   synthesis: ScannerSynthesis | null | undefined,
   regimeLabel: string,
@@ -225,13 +309,8 @@ export function synthesizeWhatWouldChange(
 ): string {
   const base = synthesis?.what_would_change?.trim();
   if (base) return base;
-  const names = nearSymbols.slice(0, 2).join(" and ");
-  if (regimeBlocksDesk(regimeLabel)) {
-    return names
-      ? `If the regime clears, ${names} would be first in line to qualify. Check back after the next regular-session scan.`
-      : "If SPY and QQQ reclaim session thresholds, swing rows can clear the regime gate on the next scan.";
-  }
-  return "Session pace or structure needs to firm before setups can qualify.";
+  const { watchItems, outcome } = buildWhatWouldChangeContent(synthesis, regimeLabel, nearSymbols);
+  return [...watchItems.map((w) => `• ${w}`), outcome].join(" ");
 }
 
 export function marketConditionsRegimeBadge(regimeLabel: string): string {

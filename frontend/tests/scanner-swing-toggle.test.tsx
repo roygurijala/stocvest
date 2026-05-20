@@ -310,9 +310,9 @@ describe("ScannerPageClient setup mode toggle", () => {
     expect(swingCard.getAttribute("data-mode")).toBe("swing");
     expect(dayCard.getAttribute("data-mode")).toBe("day");
     expect(swingCard.textContent).toMatch(
-      /Setup conditions not fully aligned|Structure \+ regime|Per-symbol confirmation/i
+      /Setup conditions not fully aligned|Structure \+ regime|Per-symbol confirmation|conditions missing|fully confirmed/i
     );
-    expect(dayCard.textContent).toMatch(/Intraday gates not cleared|Session closed/i);
+    expect(dayCard.textContent).toMatch(/Intraday gates not cleared|Session closed|next open/i);
     expect(swingCard.textContent?.toLowerCase()).not.toContain("intraday confirmation");
     expect(dayCard.textContent?.toLowerCase()).not.toContain("regime alignment");
   });

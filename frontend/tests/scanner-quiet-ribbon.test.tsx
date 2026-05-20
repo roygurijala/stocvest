@@ -59,6 +59,7 @@ describe("Scanner header", () => {
     );
     expect(screen.getByTestId("scanner-quiet-ribbon")).toBeInTheDocument();
     expect(screen.getByTestId("scanner-scan-quiet-subline")).toHaveTextContent(/Market quiet/i);
+    expect(screen.getByTestId("scanner-quiet-ribbon-summary")).toHaveTextContent(/no setups ready/i);
     expect(screen.getByTestId("scanner-market-scope-inline")).toHaveTextContent(/Market-wide/i);
     expect(screen.getByTestId("scanner-next-scan")).toHaveTextContent(/4:36/);
   });

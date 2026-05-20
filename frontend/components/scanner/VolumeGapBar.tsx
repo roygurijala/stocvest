@@ -72,18 +72,35 @@ type VolumeGapRow = { symbol: string; pct_below: number };
 export function VolumeGapBarList({
   rows,
   limit = 5,
-  testIdPrefix = "scanner-volume-gap"
+  testIdPrefix = "scanner-volume-gap",
+  showCaption = true
 }: {
   rows: VolumeGapRow[];
   limit?: number;
   testIdPrefix?: string;
+  showCaption?: boolean;
 }) {
+  const { colors } = useTheme();
   if (rows.length === 0) return null;
   const sorted = [...rows].sort((a, b) => a.pct_below - b.pct_below);
   const preview = sorted.slice(0, limit);
   const overflow = sorted.length - preview.length;
 
   return (
+    <div style={{ display: "grid", gap: spacing[2] }}>
+      {showCaption ? (
+        <p
+          data-testid={`${testIdPrefix}-caption`}
+          style={{
+            margin: 0,
+            fontSize: typography.scale.xs,
+            color: colors.textMuted,
+            lineHeight: 1.45
+          }}
+        >
+          Volume vs required threshold (% of session pace met — higher bar = closer to qualifying)
+        </p>
+      ) : null}
     <ul
       className="scanner-volume-gap-list"
       style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: spacing[2] }}
@@ -107,5 +124,6 @@ export function VolumeGapBarList({
         </li>
       ) : null}
     </ul>
+    </div>
   );
 }

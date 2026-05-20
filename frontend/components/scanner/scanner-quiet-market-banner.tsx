@@ -7,11 +7,13 @@ import { useTheme } from "@/lib/theme-provider";
 
 type Props = {
   regimeLabel: string;
+  /** One-line market-wide summary (hero already states “quiet”; this is the mechanism headline). */
+  summaryLine?: string | null;
   bullets: string[];
   footnote?: string;
 };
 
-export function ScannerQuietMarketBanner({ regimeLabel, bullets, footnote }: Props) {
+export function ScannerQuietMarketBanner({ regimeLabel, summaryLine, bullets, footnote }: Props) {
   const { colors } = useTheme();
   const badge = marketConditionsRegimeBadge(regimeLabel);
   const bearish = regimeLabel.toLowerCase().includes("bear");
@@ -38,6 +40,20 @@ export function ScannerQuietMarketBanner({ regimeLabel, bullets, footnote }: Pro
       >
         Why the scanner is quiet
       </p>
+      {summaryLine ? (
+        <p
+          data-testid="scanner-quiet-summary-line"
+          style={{
+            margin: `0 0 ${spacing[3]}`,
+            fontSize: typography.scale.sm,
+            fontWeight: 600,
+            color: colors.text,
+            lineHeight: 1.5
+          }}
+        >
+          {summaryLine}
+        </p>
+      ) : null}
       <div className="flex flex-wrap items-center gap-2" style={{ marginBottom: spacing[2] }}>
         <span
           style={{
@@ -48,7 +64,7 @@ export function ScannerQuietMarketBanner({ regimeLabel, bullets, footnote }: Pro
             color: colors.textMuted
           }}
         >
-          Market conditions
+          Details
         </span>
         <span
           data-testid="scanner-quiet-regime-badge"
@@ -67,22 +83,24 @@ export function ScannerQuietMarketBanner({ regimeLabel, bullets, footnote }: Pro
           {badge}
         </span>
       </div>
-      <ul
-        style={{
-          margin: 0,
-          padding: 0,
-          listStyle: "none",
-          display: "grid",
-          gap: spacing[2],
-          fontSize: typography.scale.sm,
-          color: colors.text,
-          lineHeight: 1.55
-        }}
-      >
-        {bullets.map((line) => (
-          <li key={line}>{line}</li>
-        ))}
-      </ul>
+      {bullets.length > 0 ? (
+        <ul
+          style={{
+            margin: 0,
+            padding: 0,
+            listStyle: "none",
+            display: "grid",
+            gap: spacing[2],
+            fontSize: typography.scale.sm,
+            color: colors.textMuted,
+            lineHeight: 1.55
+          }}
+        >
+          {bullets.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+      ) : null}
       {footnote ? (
         <p
           style={{

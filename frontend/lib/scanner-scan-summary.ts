@@ -215,7 +215,10 @@ export function buildScannerScanSummary(input: {
     watchlist: overview.watchlistStatus
   });
 
-  const detail_line = `Gaps ${gapFlags} · Swing ${counts.swing} · Day ${counts.day}`;
+  const detail_line =
+    counts.total === 0
+      ? "Across all strategies: no setups ready"
+      : `Gaps ${gapFlags} · Swing ${counts.swing} · Day ${counts.day}`;
 
   return {
     scanned_at_iso: scannedAtIso,

@@ -11,9 +11,32 @@ const DESKS = [
   { key: "day", label: "Day", role: "day" as const, count: (s: ScannerScanSummary) => s.qualifying.day }
 ];
 
-/** Minimal desk counts — color rail + label + number only. */
+/** Desk counts in hero — narrative when quiet instead of three zeroes. */
 export function ScannerDeskRails({ summary }: { summary: ScannerScanSummary }) {
   const { colors, theme } = useTheme();
+  const isQuiet = summary.qualifying.total === 0;
+
+  if (isQuiet) {
+    return (
+      <div
+        className="scanner-quiet-ribbon__counts"
+        data-testid="scanner-quiet-ribbon-summary"
+        style={{ flex: "0 0 auto", maxWidth: "14rem", textAlign: "right" }}
+      >
+        <span
+          style={{
+            display: "block",
+            fontSize: typography.scale.sm,
+            fontWeight: 600,
+            color: colors.textMuted,
+            lineHeight: 1.4
+          }}
+        >
+          {summary.quiet.detail_line}
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div

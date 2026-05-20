@@ -7,11 +7,13 @@ import { ScannerQuietMarketBanner } from "@/components/scanner/scanner-quiet-mar
 import { RejectionGroups } from "@/components/scanner/RejectionGroups";
 import { WhatWouldChangeFooter } from "@/components/scanner/WhatWouldChangeFooter";
 import { buildSwingReenableBulletsShort } from "@/lib/dashboard-posture";
+import { buildScannerCauseDetailBullets } from "@/lib/scanner-quiet-copy";
 import {
   buildDevelopingMovementGroups,
   buildNearReadyCards,
-  regimeBlocksDesk,
-  synthesizeWhatWouldChange
+  buildQuietBridgeLine,
+  buildWhatWouldChangeContent,
+  regimeBlocksDesk
 } from "@/lib/scanner/scanner-quiet-desk";
 import type { ScannerScanSummary } from "@/lib/scanner-scan-summary";
 import type { ScannerSynthesis } from "@/lib/scanner-synthesis";
@@ -21,7 +23,6 @@ import { useTheme } from "@/lib/theme-provider";
 type Props = {
   summary: ScannerScanSummary;
   synthesis?: ScannerSynthesis | null;
-  causeBullets: string[];
   marketScopeLine?: string | null;
   deskFilter: "swing" | "day" | "all";
   weeklyAvgPct5d?: number | null;
@@ -30,13 +31,17 @@ type Props = {
 export function ScannerQuietDesk({
   summary,
   synthesis,
-  causeBullets,
   marketScopeLine,
   deskFilter,
   weeklyAvgPct5d = null
 }: Props) {
   const { colors } = useTheme();
   const regimeLabel = summary.regime.label;
+
+  const detailBullets = useMemo(
+    () => buildScannerCauseDetailBullets(summary, synthesis, { marketScopeLine }),
+    [summary, synthesis, marketScopeLine]
+  );
 
   const nearCards = useMemo(
     () => buildNearReadyCards(summary.near_qualification, regimeLabel, deskFilter),
@@ -60,13 +65,18 @@ export function ScannerQuietDesk({
     ? "Bearish regime prevents trading against the tape — individual alignment alone does not clear swing gates."
     : undefined;
 
-  const whatWouldChange = synthesizeWhatWouldChange(
-    synthesis,
-    regimeLabel,
-    nearCards.map((c) => c.symbol)
+  const whatWouldChangeContent = useMemo(
+    () => buildWhatWouldChangeContent(synthesis, regimeLabel, nearCards.map((c) => c.symbol)),
+    [synthesis, regimeLabel, nearCards]
   );
 
-  const reenable = buildSwingReenableBulletsShort({
+  const bridgeLine = buildQuietBridgeLine(
+    summary.qualifying.total,
+    nearCards.length,
+    regimeLabel
+  );
+
+  const reenableFallback = buildSwingReenableBulletsShort({
     regimeLabel,
     sectorTape: "mixed",
     weeklyAvgPct5d
@@ -74,26 +84,31 @@ export function ScannerQuietDesk({
 
   return (
     <div data-testid="scanner-quiet-desk" style={{ display: "grid", gap: spacing[4] }}>
-      <ScannerQuietMarketBanner regimeLabel={regimeLabel} bullets={causeBullets} footnote={footnote} />
-
-      {marketScopeLine ? (
-        <p
-          data-testid="scanner-market-scope-line"
-          style={{
-            margin: 0,
-            fontSize: typography.scale.sm,
-            fontWeight: 500,
-            color: colors.textMuted,
-            lineHeight: 1.45
-          }}
-        >
-          {marketScopeLine}
-        </p>
-      ) : null}
+      <ScannerQuietMarketBanner
+        regimeLabel={regimeLabel}
+        summaryLine={marketScopeLine}
+        bullets={detailBullets}
+        footnote={footnote}
+      />
 
       <ScannerNearReadyZone cards={nearCards} regimeLabel={regimeLabel} />
 
       <ScannerDevelopingUniverse groups={developingGroups} totalCount={developingCount} />
+
+      {bridgeLine ? (
+        <p
+          data-testid="scanner-quiet-bridge"
+          style={{
+            margin: 0,
+            fontSize: typography.scale.sm,
+            fontWeight: 600,
+            color: colors.text,
+            lineHeight: 1.5
+          }}
+        >
+          {bridgeLine}
+        </p>
+      ) : null}
 
       {synthesis ? (
         <RejectionGroups
@@ -106,7 +121,10 @@ export function ScannerQuietDesk({
         />
       ) : null}
 
-      <WhatWouldChangeFooter text={whatWouldChange || reenable.join(" ")} />
+      <WhatWouldChangeFooter
+        content={whatWouldChangeContent}
+        text={reenableFallback.length > 0 ? reenableFallback.join(" · ") : undefined}
+      />
     </div>
   );
 }

@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  MIN_DEVELOPING_ALIGNED,
   buildDevelopingMovementGroups,
   buildNearReadyCards,
+  buildQuietBridgeLine,
+  buildWhatWouldChangeContent,
   nearReadySectionCopy,
   regimeBlocksDesk,
   regimeGateRejectionContext,
@@ -25,10 +28,11 @@ const nearRow = (symbol: string, aligned: number): ScannerNearQualificationRow =
 const progressionRow = (
   symbol: string,
   aligned: number,
+  desk: "swing" | "day" = "swing",
   state = "developing"
 ): ScannerWatchlistProgressionRow => ({
   symbol,
-  desk: "swing",
+  desk,
   state,
   label: "Developing",
   layers_aligned: aligned,
@@ -37,11 +41,12 @@ const progressionRow = (
 });
 
 describe("scanner-quiet-desk", () => {
-  it("builds near-ready cards when alignment is high", () => {
+  it("builds near-ready cards with urgency when regime blocks", () => {
     const cards = buildNearReadyCards([nearRow("AAPL", 5)], "Bearish", "all");
     expect(cards).toHaveLength(1);
-    expect(cards[0].symbol).toBe("AAPL");
+    expect(cards[0].alignmentHeadline).toMatch(/5\/6 aligned/);
     expect(cards[0].blockedLine).toBe("Blocked by regime");
+    expect(cards[0].urgencyLine).toMatch(/regime clears/i);
   });
 
   it("near ready section copy reflects regime gate", () => {
@@ -49,12 +54,13 @@ describe("scanner-quiet-desk", () => {
     expect(nearReadySectionCopy("Bullish").title).toBe("Near Ready");
   });
 
-  it("groups developing rows by movement bucket", () => {
+  it("groups developing rows by movement and filters below MIN aligned", () => {
     const groups = buildDevelopingMovementGroups(
       [
         progressionRow("MSFT", 5),
         progressionRow("GOOG", 3),
-        progressionRow("NVDA", 2, "invalidated")
+        progressionRow("NVDA", 2),
+        progressionRow("NVDA", 3, "swing", "invalidated")
       ],
       "all",
       new Set()
@@ -62,6 +68,20 @@ describe("scanner-quiet-desk", () => {
     expect(groups.improving.map((r) => r.symbol)).toEqual(["MSFT"]);
     expect(groups.stable.map((r) => r.symbol)).toEqual(["GOOG"]);
     expect(groups.weakening.map((r) => r.symbol)).toEqual(["NVDA"]);
+    expect(MIN_DEVELOPING_ALIGNED).toBe(3);
+  });
+
+  it("shows desk on symbol when filter is all", () => {
+    const groups = buildDevelopingMovementGroups(
+      [progressionRow("AAPL", 4, "swing"), progressionRow("AAPL", 4, "day")],
+      "all",
+      new Set()
+    );
+    const labels = [...groups.stable, ...groups.improving, ...groups.weakening].map(
+      (r) => r.displaySymbol
+    );
+    expect(labels).toContain("AAPL (swing)");
+    expect(labels).toContain("AAPL (day)");
   });
 
   it("excludes near-ready symbols from developing groups", () => {
@@ -73,15 +93,24 @@ describe("scanner-quiet-desk", () => {
     expect(groups.improving.map((r) => r.symbol)).toEqual(["MSFT"]);
   });
 
-  it("synthesizes what would change with regime and symbols", () => {
-    const text = synthesizeWhatWouldChange(null, "Bearish", ["AAPL", "MSFT"]);
-    expect(text).toContain("AAPL");
-    expect(text).toMatch(/regime clears/i);
+  it("builds quiet bridge line when near-ready exist", () => {
+    expect(buildQuietBridgeLine(0, 2, "Bearish")).toMatch(/near-ready blocked/i);
+  });
+
+  it("builds structured what-would-change content", () => {
+    const content = buildWhatWouldChangeContent(null, "Bearish", ["AAPL"]);
+    expect(content.watchItems.length).toBeGreaterThan(0);
+    expect(content.outcome).toContain("AAPL");
   });
 
   it("regime gate helpers and blocks desk", () => {
     expect(regimeBlocksDesk("Bearish")).toBe(true);
     expect(regimeGateRejectionTitle(2, "Bearish")).toMatch(/Blocked by Regime \(2/);
     expect(regimeGateRejectionContext("Bearish", -0.5, -0.7)).toMatch(/SPY\/QQQ/i);
+  });
+
+  it("synthesizeWhatWouldChange legacy string includes bullets", () => {
+    const text = synthesizeWhatWouldChange(null, "Bearish", ["AAPL"]);
+    expect(text).toContain("•");
   });
 });
