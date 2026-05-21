@@ -47,50 +47,65 @@ export function SignalEvidenceModal({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.98 }}
             transition={{ duration: 0.2 }}
-            className={`flex max-h-none min-h-screen w-full max-w-none flex-col overflow-y-auto rounded-none lg:max-h-[95vh] lg:min-h-0 lg:w-[min(1000px,100vw-1.5rem)] lg:rounded-xl ${surfaceGlowClassName}`}
+            className={`flex max-h-none min-h-screen w-full max-w-none flex-col overflow-hidden rounded-none lg:max-h-[95vh] lg:min-h-0 lg:w-[min(1000px,100vw-1.5rem)] lg:rounded-xl ${surfaceGlowClassName}`}
             onClick={(e) => e.stopPropagation()}
             style={{
               background: colors.surface,
               border: `1px solid ${colors.border}`,
               padding: spacing[4]
             }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Signal evidence"
+            data-testid="signal-evidence-modal"
           >
-            <div className="mb-2 flex justify-end">
-              <button
-                type="button"
-                onClick={onClose}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-md border"
-                style={{
-                  borderColor: colors.border,
-                  background: "transparent",
-                  color: colors.text,
-                  cursor: "pointer"
-                }}
-                aria-label="Close evidence"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            {loading || !evidence ? (
-              <div
-                className="grid place-items-center"
-                style={{ minHeight: "42vh", color: colors.text, padding: spacing[4] }}
-                aria-live="polite"
-                aria-busy="true"
-              >
-                <CuteLoader
-                  compact
-                  label={`Preparing signal${loadingSymbol ? ` for ${loadingSymbol}` : ""}...`}
-                  sublabel="Fetching snapshot, news, and six-layer synthesis."
-                />
+            <header
+              className="z-10 shrink-0 pb-2"
+              style={{
+                background: colors.surface,
+                borderBottom: `1px solid color-mix(in srgb, ${colors.border} 55%, transparent)`
+              }}
+            >
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-md border"
+                  style={{
+                    borderColor: colors.border,
+                    background: colors.surface,
+                    color: colors.text,
+                    cursor: "pointer"
+                  }}
+                  aria-label="Close evidence"
+                  data-testid="signal-evidence-modal-close"
+                >
+                  <X size={18} />
+                </button>
               </div>
-            ) : (
-              <SignalEvidenceCard
-                evidence={evidence}
-                onOpenNewsPanel={onOpenNewsPanel}
-                gapIntelSnapshot={gapIntelSnapshot}
-              />
-            )}
+            </header>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+              {loading || !evidence ? (
+                <div
+                  className="grid place-items-center"
+                  style={{ minHeight: "42vh", color: colors.text, padding: spacing[4] }}
+                  aria-live="polite"
+                  aria-busy="true"
+                >
+                  <CuteLoader
+                    compact
+                    label={`Preparing signal${loadingSymbol ? ` for ${loadingSymbol}` : ""}...`}
+                    sublabel="Fetching snapshot, news, and six-layer synthesis."
+                  />
+                </div>
+              ) : (
+                <SignalEvidenceCard
+                  evidence={evidence}
+                  onOpenNewsPanel={onOpenNewsPanel}
+                  gapIntelSnapshot={gapIntelSnapshot}
+                />
+              )}
+            </div>
           </motion.div>
         </motion.div>
       ) : null}

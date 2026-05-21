@@ -440,6 +440,23 @@ export function executionProgressHint(
   return null;
 }
 
+/** Primary gate sentence when execution is withheld (from trade-decision rationale). */
+export function primaryExecutionBlockerLine(decision: TradeDecision): string | null {
+  const text = decision.rationale?.text?.trim();
+  return text || null;
+}
+
+/** Label for the execution disclosure control under “Not actionable yet”. */
+export function executionDetailToggleLabel(
+  state: TradeDecisionState,
+  executionHint: string | null
+): string | null {
+  if (state === "actionable") return null;
+  if (executionHint) return executionHint;
+  if (state === "monitor" || state === "blocked") return "See what is blocking execution";
+  return null;
+}
+
 export function buildWhyNotBullets(
   decision: TradeDecision,
   previewLayers: SignalsLayerRowInput[],

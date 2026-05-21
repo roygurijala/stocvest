@@ -1,15 +1,18 @@
 "use client";
 
-import Link from "next/link";
+import { useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { InfoTip } from "@/components/info-tip";
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import { AlignmentDrilldownLinks } from "@/components/signals/alignment-drilldown-links";
 import {
   buildWhyNotBullets,
+  executionDetailToggleLabel,
   executionHeadline,
   executionProgressHint,
   executionReadinessLabel,
   formatSignalsAlignmentDisplayLine,
+  primaryExecutionBlockerLine,
   resolveSignalsLayerAlignment,
   type SignalsLayerRowInput,
   type SignalsSetupBias
@@ -18,8 +21,7 @@ import type { TradeDecision } from "@/lib/signal-evidence/trade-decision";
 import type { FundamentalBackdropSummary } from "@/lib/signal-evidence/fundamental-present";
 import { SignalsFundamentalBackdrop } from "@/components/signals/signals-fundamental-backdrop";
 import { SignalsFundamentalBackdropUpgrade } from "@/components/signals/signals-fundamental-upgrade";
-import { watchlistToSignalsHref } from "@/lib/nav/watchlist-signals-deeplink";
-import { borderRadius, spacing, surfaceGlowClassName } from "@/lib/design-system";
+import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
 type Props = {
@@ -53,6 +55,7 @@ export function SignalsSetupRead({
 }: Props) {
   const { colors } = useTheme();
   const symU = symbol.trim().toUpperCase();
+  const [executionDetailOpen, setExecutionDetailOpen] = useState(false);
   const alignment = resolveSignalsLayerAlignment({ rows, bias, alignmentRatio });
   const alignmentLine = formatSignalsAlignmentDisplayLine(alignment, bias, maturationState);
   const biasColor =
@@ -60,6 +63,10 @@ export function SignalsSetupRead({
   const whyNot =
     decision.state === "actionable" ? [] : buildWhyNotBullets(decision, previewLayers, bias, 3);
   const executionHint = executionProgressHint(decision.state, alignment.aligned, alignment.total, bias);
+  const executionToggleLabel = executionDetailToggleLabel(decision.state, executionHint);
+  const primaryBlocker = primaryExecutionBlockerLine(decision);
+  const showExecutionDisclosure =
+    decision.state !== "actionable" && Boolean(executionToggleLabel && (primaryBlocker || whyNot.length > 0));
 
   return (
     <article
@@ -133,7 +140,48 @@ export function SignalsSetupRead({
           >
             {executionReadinessLabel(decision.state)}
           </p>
-          {executionHint ? (
+          {showExecutionDisclosure && executionToggleLabel ? (
+            <div className="mt-1">
+              <button
+                type="button"
+                className="inline-flex w-full items-start gap-1 border-0 bg-transparent p-0 text-left text-xs leading-relaxed underline-offset-2 hover:underline"
+                style={{ color: colors.accent, cursor: "pointer" }}
+                data-testid="signals-setup-execution-detail-toggle"
+                aria-expanded={executionDetailOpen}
+                onClick={() => setExecutionDetailOpen((open) => !open)}
+              >
+                <ChevronDown
+                  size={14}
+                  className="mt-0.5 shrink-0 transition-transform"
+                  style={{
+                    transform: executionDetailOpen ? "rotate(180deg)" : "rotate(0deg)"
+                  }}
+                  aria-hidden
+                />
+                <span>{executionToggleLabel}</span>
+              </button>
+              {executionDetailOpen ? (
+                <div
+                  className="mt-2 text-xs leading-relaxed"
+                  style={{
+                    color: colors.text,
+                    paddingLeft: spacing[2],
+                    borderLeft: `2px solid ${colors.accent}`
+                  }}
+                  data-testid="signals-setup-execution-detail"
+                >
+                  {primaryBlocker ? <p className="m-0">{primaryBlocker}</p> : null}
+                  {whyNot.length > 0 && primaryBlocker !== whyNot[0] ? (
+                    <ul className={`m-0 list-none space-y-1 p-0 ${primaryBlocker ? "mt-2" : ""}`}>
+                      {whyNot.map((bullet) => (
+                        <li key={bullet.slice(0, 48)}>{bullet}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : executionHint ? (
             <p className="m-0 mt-1 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
               {executionHint}
             </p>
@@ -174,57 +222,29 @@ export function SignalsSetupRead({
         </div>
       ) : null}
 
-      <div className="mt-4" data-testid="signals-next">
-        <p className="m-0 text-xs font-semibold uppercase tracking-wide" style={{ color: colors.textMuted }}>
-          Next
-        </p>
-        <ul className="m-0 mt-2 list-none space-y-1 p-0 text-sm">
-          <li>
-            <Link
-              href="/dashboard/watchlists"
-              className="font-medium no-underline hover:underline"
-              style={{ color: colors.accent }}
-            >
-              Review on Watchlist
-            </Link>
-            <span style={{ color: colors.textMuted }}> — track {symU} across desks</span>
-          </li>
-          <li>
-            <Link
-              href={watchlistToSignalsHref(symU, tradingMode)}
-              className="font-medium no-underline hover:underline"
-              style={{ color: colors.accent }}
-            >
-              Monitor progression
-            </Link>
-            <span style={{ color: colors.textMuted }}> — maturation for this mode</span>
-          </li>
-          <li>
-            <button
-              type="button"
-              className="border-0 bg-transparent p-0 text-left font-medium underline-offset-2 hover:underline"
-              style={{ color: colors.accent, cursor: "pointer" }}
-              onClick={onSwitchToHistory}
-            >
-              View setup evolution
-            </button>
-            <span style={{ color: colors.textMuted }}> — past maturation states for this symbol</span>
-          </li>
-          {onOpenEvidence ? (
-            <li>
-              <button
-                type="button"
-                className="border-0 bg-transparent p-0 text-left font-medium underline-offset-2 hover:underline"
-                style={{ color: colors.accent, cursor: "pointer" }}
-                onClick={onOpenEvidence}
-              >
-                Open full evidence
-              </button>
-              <span style={{ color: colors.textMuted }}> — layer detail + reference context</span>
-            </li>
-          ) : null}
-        </ul>
-      </div>
+      {onOpenEvidence ? (
+        <div className="mt-4" data-testid="signals-setup-actions">
+          <button
+            type="button"
+            onClick={onOpenEvidence}
+            data-testid="signals-open-evidence-button"
+            className="inline-flex w-full items-center justify-center rounded-lg border font-semibold sm:w-auto"
+            style={{
+              padding: `${spacing[3]} ${spacing[5]}`,
+              borderColor: colors.accent,
+              background: `color-mix(in srgb, ${colors.accent} 18%, ${colors.surfaceMuted})`,
+              color: colors.text,
+              fontSize: typography.scale.base,
+              cursor: "pointer"
+            }}
+          >
+            Open full evidence
+          </button>
+          <p className="m-0 mt-1.5 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
+            Layer detail, reference context, and gap intelligence for {symU}
+          </p>
+        </div>
+      ) : null}
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
         <span className="inline-flex items-center gap-1 text-xs" style={{ color: colors.textMuted }}>

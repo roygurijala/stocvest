@@ -86,7 +86,9 @@ describe("SignalsSetupRead", () => {
     expect(screen.getByText(/Setup read/i)).toBeInTheDocument();
     expect(screen.getByTestId("signals-setup-execution")).toHaveTextContent("Not actionable yet");
     expect(screen.getByTestId("signals-why-not")).toBeInTheDocument();
-    expect(screen.getByTestId("signals-next")).toBeInTheDocument();
+    expect(screen.queryByText(/Review on Watchlist/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Monitor progression/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/View setup evolution/i)).not.toBeInTheDocument();
     const html = document.body.innerHTML;
     expect(html).not.toMatch(/consider|watch closely|near miss|buy|sell/i);
   });
@@ -117,6 +119,65 @@ describe("SignalsSetupRead", () => {
     expect(screen.getByTestId("signals-fundamental-backdrop")).toBeInTheDocument();
     expect(screen.getByText(/Fundamental backdrop: Weak/i)).toBeInTheDocument();
     expect(screen.getByText(/conviction is lower/i)).toBeInTheDocument();
+  });
+
+  test("open full evidence is a prominent button", () => {
+    const onOpenEvidence = vi.fn();
+    render(
+      <SignalsSetupRead
+        symbol="AAPL"
+        tradingMode="swing"
+        bias="Bullish"
+        rows={rows}
+        previewLayers={rows.slice(0, 2)}
+        decision={{
+          state: "monitor",
+          line: "Final confirmation and/or risk conditions not yet satisfied",
+          reinforcements: [],
+          rationale: {
+            category: "risk_reward",
+            label: "Why hold:",
+            text: "Risk/reward too low (0.5:1) — below threshold."
+          }
+        }}
+        alignmentRatio={1}
+        onOpenEvidence={onOpenEvidence}
+      />
+    );
+    const btn = screen.getByTestId("signals-open-evidence-button");
+    expect(btn).toHaveTextContent("Open full evidence");
+    fireEvent.click(btn);
+    expect(onOpenEvidence).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("signals-next")).not.toBeInTheDocument();
+  });
+
+  test("execution detail toggle reveals primary blocker", () => {
+    render(
+      <SignalsSetupRead
+        symbol="AAPL"
+        tradingMode="swing"
+        bias="Bullish"
+        rows={rows}
+        previewLayers={rows.slice(0, 2)}
+        decision={{
+          state: "monitor",
+          line: "Final confirmation and/or risk conditions not yet satisfied",
+          reinforcements: [],
+          rationale: {
+            category: "risk_reward",
+            label: "Why hold:",
+            text: "Risk/reward too low (0.5:1) — below threshold."
+          }
+        }}
+        alignmentRatio={1}
+      />
+    );
+    expect(screen.getByTestId("signals-setup-execution-detail-toggle")).toHaveTextContent(
+      /One condition remains/
+    );
+    expect(screen.queryByTestId("signals-setup-execution-detail")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("signals-setup-execution-detail-toggle"));
+    expect(screen.getByTestId("signals-setup-execution-detail")).toHaveTextContent(/Risk\/reward too low/);
   });
 
   test("alignment button opens evidence when handler provided", () => {
