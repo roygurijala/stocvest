@@ -12,7 +12,7 @@
  *   4. `dashboardPayloadKey` is stable and unique per mode (so a
  *      caller can `mutate(dashboardPayloadKey("day"))` without
  *      duplicating the namespace string).
- *   5. Network error → `data: null` and `error` populated.
+ *   5. Network error → safe `edge_cache_error` envelope (no client throw).
  */
 
 import type { ReactNode } from "react";
@@ -148,13 +148,14 @@ describe("useDashboardPayload", () => {
     expect(String(swing[0])).toMatch(/^stocvest:/);
   });
 
-  test("fetcher rejects → data: null and error populated", async () => {
+  test("fetcher rejects → edge_cache_error envelope without surfacing error", async () => {
     fetcherMock.mockRejectedValue(new Error("dashboard down"));
     const { result } = renderHook(
       () => useDashboardPayload("swing", { refreshIntervalMs: 0 }),
       { wrapper: Provider }
     );
-    await waitFor(() => expect(result.current.error).toBeTruthy());
-    expect(result.current.data).toBeNull();
+    await waitFor(() => expect(result.current.data).not.toBeNull());
+    expect(result.current.data?.source).toBe("edge_cache_error");
+    expect(result.current.error).toBeFalsy();
   });
 });
