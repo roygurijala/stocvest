@@ -1,8 +1,22 @@
 "use client";
 
 import { useLayoutEffect } from "react";
-import { EMPTY_SCANNER_OVERVIEW, type ScannerOverview } from "@/lib/api/scanner";
+import type { ScannerOverview } from "@/lib/api/scanner";
 import { useReplaceScannerOverview } from "@/components/dashboard/scanner-overview-context";
+
+const EMPTY_SCANNER_OVERVIEW: ScannerOverview = {
+  gapIntelligence: [],
+  setups: [],
+  spyPct: null,
+  qqqPct: null,
+  regimeLabel: "Neutral",
+  swingUniverseSymbolCount: null,
+  gapIntelligenceSnapshotSymbolCount: null,
+  watchlistStatus: null,
+  scanSummary: null,
+  evaluationTrace: [],
+  scannerSynthesis: null
+};
 
 function normalizeScannerOverview(raw: ScannerOverview): ScannerOverview {
   return {
