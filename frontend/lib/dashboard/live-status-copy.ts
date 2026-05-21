@@ -12,13 +12,16 @@ export type LiveStatusCopy = {
 };
 
 function nearReadyCountForDesk(summary: ScannerScanSummary | null | undefined, mode: DashboardDeskMode): number {
-  if (!summary) return 0;
+  if (!summary?.near_qualification || !Array.isArray(summary.near_qualification)) return 0;
   return summary.near_qualification.filter((r) => r.desk === mode).length;
 }
 
 function readyCountForDesk(summary: ScannerScanSummary | null | undefined, mode: DashboardDeskMode): number {
-  if (!summary) return 0;
-  return mode === "swing" ? summary.qualifying.swing : summary.qualifying.day;
+  const q = summary?.qualifying;
+  if (!q || typeof q !== "object") return 0;
+  const swing = typeof q.swing === "number" && Number.isFinite(q.swing) ? q.swing : 0;
+  const day = typeof q.day === "number" && Number.isFinite(q.day) ? q.day : 0;
+  return mode === "swing" ? swing : day;
 }
 
 export function buildLiveStatusCopy(opts: {

@@ -2,6 +2,18 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import { StocvestLogo } from "@/components/brand/stocvest-logo";
 
+vi.mock("next/image", () => ({
+  default: ({
+    alt,
+    priority: _priority,
+    ...rest
+  }: {
+    alt: string;
+    priority?: boolean;
+    [key: string]: unknown;
+  }) => <img alt={alt} data-testid="stocvest-logo-img" {...rest} />
+}));
+
 vi.mock("next/link", () => ({
   default: ({
     href,
@@ -30,15 +42,15 @@ vi.mock("@/lib/theme-provider", () => ({
 }));
 
 describe("StocvestLogo", () => {
-  test("renders compact wordmark", () => {
+  test("renders compact brand image", () => {
     render(<StocvestLogo variant="compact" />);
     expect(screen.getByTestId("stocvest-logo")).toBeInTheDocument();
-    expect(screen.getByText("STOCVEST")).toBeInTheDocument();
+    expect(screen.getByAltText("STOCVEST")).toBeInTheDocument();
   });
 
-  test("renders tagline on full variant when enabled", () => {
+  test("renders full brand asset", () => {
     render(<StocvestLogo variant="full" showTagline />);
-    expect(screen.getByText(/Judgment/i)).toBeInTheDocument();
+    expect(screen.getByAltText("STOCVEST")).toBeInTheDocument();
   });
 
   test("links home when href provided", () => {

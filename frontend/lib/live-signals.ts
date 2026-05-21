@@ -1,7 +1,5 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
-
 /** US equity regular session (ET), best-effort — matches Edge /api/signals/live gate. */
 export function isMarketHours(now: Date = new Date()): boolean {
   const fmt = new Intl.DateTimeFormat("en-US", {
@@ -21,48 +19,15 @@ export function isMarketHours(now: Date = new Date()): boolean {
 }
 
 /**
- * SSE-style hint stream — payload is version-only; always re-fetch /api/dashboard.
- * 60s polling in dashboard-edge-sync covers missed hints.
+ * Live hint hook — intentionally does NOT open `EventSource` to `/api/signals/live`.
+ *
+ * Long-lived SSE on Edge was closing after ~30–60s (`Connection closed` in the
+ * Next.js client bundle). Dashboard freshness is covered by `useDashboardPayload`
+ * (`refreshInterval: 60_000`) in `DashboardEdgeSync`; that path is sufficient.
  */
 export function useLiveSignals(
-  mode: "swing" | "day",
-  onRefreshNeeded: (expectedVersion: string) => void
+  _mode: "swing" | "day",
+  _onRefreshNeeded: (expectedVersion: string) => void
 ) {
-  const onRefresh = useRef(onRefreshNeeded);
-  onRefresh.current = onRefreshNeeded;
-
-  useEffect(() => {
-    if (mode !== "day") return;
-    if (!isMarketHours()) return;
-
-    let source: EventSource | null = null;
-    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
-
-    function connect() {
-      source = new EventSource(`/api/signals/live?mode=${encodeURIComponent(mode)}`);
-
-      source.onmessage = (event: MessageEvent<string>) => {
-        try {
-          const hint = JSON.parse(event.data) as { type?: string; state_version?: string };
-          if (hint.type === "signal_update" && hint.state_version) {
-            onRefresh.current(hint.state_version);
-          }
-        } catch {
-          /* ignore */
-        }
-      };
-
-      source.onerror = () => {
-        source?.close();
-        reconnectTimer = setTimeout(connect, 5000);
-      };
-    }
-
-    connect();
-
-    return () => {
-      source?.close();
-      if (reconnectTimer) clearTimeout(reconnectTimer);
-    };
-  }, [mode]);
+  /* no-op — polling-only */
 }

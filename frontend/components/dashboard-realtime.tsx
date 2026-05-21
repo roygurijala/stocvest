@@ -102,6 +102,11 @@ export function DashboardRealtime() {
       wsRef.current = null;
     };
 
+    // Prevent stray close events from surfacing as unhandled runtime errors in production.
+    ws.addEventListener("error", (ev) => {
+      ev.stopPropagation();
+    });
+
     return () => {
       ws.close();
       wsRef.current = null;

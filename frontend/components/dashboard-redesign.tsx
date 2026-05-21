@@ -373,7 +373,11 @@ function DashboardRedesignBody({
   );
 
   const upcomingCatalystWeek = useMemo(
-    () => [...earningsEvents].sort((a, b) => a.report_date.localeCompare(b.report_date)).slice(0, 10),
+    () =>
+      [...earningsEvents]
+        .filter((e) => typeof e.report_date === "string" && e.report_date.length > 0)
+        .sort((a, b) => a.report_date.localeCompare(b.report_date))
+        .slice(0, 10),
     [earningsEvents]
   );
 
