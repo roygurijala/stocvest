@@ -19,6 +19,8 @@ import { fetchEarningsCalendarClient } from "@/lib/api/earnings-client";
 import { AddToWatchlistButton } from "@/components/add-to-watchlist-button";
 import { APP_TOP_BAR_LAYOUT_HEIGHT } from "@/components/top-bar";
 import { SignalsCommandBar } from "@/components/signals/signals-command-bar";
+import { SignalsSectionNav } from "@/components/signals/signals-section-nav";
+import { buildSignalsSectionLinks, SIGNALS_SECTION_TARGET } from "@/lib/signals-page-sections";
 import { SignalsLayerBreakdown } from "@/components/signals/signals-layer-breakdown";
 import { SignalsWatchlistPickerModal } from "@/components/signals/signals-watchlist-picker-modal";
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
@@ -220,7 +222,8 @@ export function SignalsPageClient({
   const symbolComboRef = useRef<HTMLDivElement | null>(null);
   const evolutionPanelRef = useRef<HTMLDivElement | null>(null);
   const scrollToSetupEvolution = useCallback(() => {
-    evolutionPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const el = document.getElementById(SIGNALS_SECTION_TARGET.evolution);
+    el?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
   const signalIdUrlStrippedRef = useRef(false);
   const pendingAutoEvidenceOpenRef = useRef(false);
@@ -1365,6 +1368,16 @@ export function SignalsPageClient({
     };
   }, [showAfterHoursPanel, symbol]);
 
+  const signalsSectionLinks = useMemo(
+    () =>
+      buildSignalsSectionLinks({
+        hasValidSignal,
+        hasRadar: hasValidSignal && radarData != null,
+        hasAfterHours: showAfterHoursPanel
+      }),
+    [hasValidSignal, radarData, showAfterHoursPanel]
+  );
+
   /**
    * Build the page-context payload published to the STOCVEST Assistant chatbot.
    *
@@ -1451,7 +1464,7 @@ export function SignalsPageClient({
 
 
   return (
-    <section style={{ display: "grid", gap: spacing[4] }}>
+    <section className="signals-page-root min-w-0" style={{ display: "grid", gap: spacing[4] }}>
       <div
         ref={symbolComboRef}
         className={`relative w-full min-w-0 sm:max-w-xl${suggestOpen ? " z-50" : ""}`}
@@ -1667,7 +1680,7 @@ export function SignalsPageClient({
       {symbolCommitted ? (
         <>
       <header
-        className="relative z-10 -mx-4 mb-1 w-full max-w-none self-start px-4 pb-1 pt-0 lg:sticky lg:z-20 lg:-mx-6 lg:px-6"
+        className="signals-sticky-command sticky z-20 -mx-4 mb-1 w-full max-w-none self-start px-4 pb-2 pt-0 lg:-mx-6 lg:px-6"
         style={{
           top: APP_TOP_BAR_LAYOUT_HEIGHT,
           background: colors.background,
@@ -1698,8 +1711,10 @@ export function SignalsPageClient({
           onTradingModeChange={updateTradingMode}
           onOpenEvidence={hasValidSignal ? () => void openEvidenceModal() : undefined}
         />
+        {signalsSectionLinks.length > 1 ? <SignalsSectionNav sections={signalsSectionLinks} /> : null}
       </header>
 
+      <div className="signals-page-flow min-w-0">
       {hasValidSignal && pageDecision ? (
         <SignalsSetupRead
           symbol={symbol}
@@ -1716,7 +1731,11 @@ export function SignalsPageClient({
         />
       ) : null}
 
-      <div className="mt-4" ref={evolutionPanelRef}>
+      <div
+        id={SIGNALS_SECTION_TARGET.evolution}
+        className="signals-snap-section mt-4 scroll-mt-4"
+        ref={evolutionPanelRef}
+      >
         <SetupEvolutionPanel symbol={symbol} tradingMode={tradingMode} />
       </div>
 
@@ -1728,7 +1747,7 @@ export function SignalsPageClient({
       ) : null}
 
       <div className="signals-grid grid grid-cols-1 items-start gap-4 lg:grid-cols-[1.35fr_1fr] [&>*]:min-w-0">
-        <div className="order-2 min-w-0 lg:order-1">
+        <div className="order-1 min-w-0 lg:order-1">
           <SignalsLayerBreakdown
             symbol={symbol}
             tradingMode={tradingMode}
@@ -1744,7 +1763,8 @@ export function SignalsPageClient({
 
         {hasValidSignal && radarData ? (
           <section
-            className={`order-1 min-w-0 lg:order-2 ${surfaceGlowClassName}`}
+            id={SIGNALS_SECTION_TARGET.radar}
+            className={`signals-snap-section order-2 min-w-0 scroll-mt-4 lg:order-2 ${surfaceGlowClassName}`}
             style={{
               background: colors.surface,
               border: `1px solid ${
@@ -1790,8 +1810,8 @@ export function SignalsPageClient({
             </div>
             {!signalRadarExpanded ? (
               <p className="m-0 text-sm leading-relaxed" style={{ color: colors.textMuted }}>
-                Radar shows level (0–100) and Δ vs the {SIGNAL_LAYER_LEVEL_BASELINE} baseline. Expand for charts; layer
-                rows on the left pair level with today&apos;s Δ.
+                Radar shows level (0–100) and Δ vs the {SIGNAL_LAYER_LEVEL_BASELINE} baseline. Expand for charts; pair
+                with <strong style={{ fontWeight: 600, color: colors.text }}>Layers</strong> above for today&apos;s Δ.
               </p>
             ) : (
               <>
@@ -1894,6 +1914,7 @@ export function SignalsPageClient({
       </div>
 
       {showAfterHoursPanel ? (
+        <div id={SIGNALS_SECTION_TARGET.context} className="signals-snap-section scroll-mt-4">
         <SignalsAfterHoursPanel
           symbol={symbol}
           snapshot={snapshot}
@@ -1904,7 +1925,9 @@ export function SignalsPageClient({
           watchlistCheckComplete={afterHoursWatchlistKnown}
           dualDeskTracking={dayTradingSurfaces}
         />
+        </div>
       ) : null}
+      </div>
         </>
       ) : null}
       <SignalEvidenceModal

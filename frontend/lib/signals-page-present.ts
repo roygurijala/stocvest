@@ -247,6 +247,7 @@ export function layerPolarityDotColor(p: SignalsLayerPolarity): string {
   }
 }
 
+/** @deprecated Prefer {@link layerRoleLabel} for user-facing copy. */
 export function layerPolarityLabel(p: SignalsLayerPolarity): string {
   switch (p) {
     case "blocking":
@@ -258,6 +259,118 @@ export function layerPolarityLabel(p: SignalsLayerPolarity): string {
     default:
       return "Neutral";
   }
+}
+
+function biasThesisPhrase(bias: SignalsSetupBias): string {
+  if (bias === "Bullish") return "bullish thesis";
+  if (bias === "Bearish") return "bearish thesis";
+  return "setup";
+}
+
+/** Bias-anchored role vs setup (Signals layer breakdown). */
+export function layerRoleLabel(p: SignalsLayerPolarity, bias: SignalsSetupBias): string {
+  const thesis = biasThesisPhrase(bias);
+  if (bias === "Neutral") {
+    switch (p) {
+      case "supportive":
+        return "Aligns with directional lean";
+      case "blocking":
+        return "Opposes directional lean";
+      case "mixed":
+        return "Mixed — no clear edge";
+      default:
+        return "Neutral / no edge";
+    }
+  }
+  switch (p) {
+    case "supportive":
+      return `Supports ${thesis}`;
+    case "blocking":
+      return `Conflicts with ${thesis}`;
+    case "mixed":
+      return "Mixed — not confirming";
+    default:
+      return "Neutral / no edge";
+  }
+}
+
+/** Short verdict strength from layer status + level (not composite weight). */
+export function layerStatusQualifier(
+  row: SignalsLayerRowInput,
+  polarity: SignalsLayerPolarity
+): string {
+  if (row.sectorCachePending || row.status === "Unavailable") return "Unavailable";
+  if (row.status === "As of close") return "As of last close";
+  const score = row.score;
+  const extreme = score != null && Number.isFinite(score) && (score >= 65 || score <= 35);
+  if (row.status === "Bullish") return extreme ? "Strong bullish read" : "Bullish read";
+  if (row.status === "Bearish") return extreme ? "Strong bearish read" : "Bearish read";
+  if (polarity === "mixed") return "Mixed read";
+  return "Neutral read";
+}
+
+/** One-line layer interpretation: status + role vs bias. */
+export function buildLayerRoleHeadline(row: SignalsLayerRowInput, bias: SignalsSetupBias): string {
+  const p = layerPolarity(row, bias);
+  return `${layerStatusQualifier(row, p)} (${layerRoleLabel(p, bias)})`;
+}
+
+export type LayerForceGroups = {
+  withBias: SignalsLayerRowInput[];
+  againstOrMixed: SignalsLayerRowInput[];
+  noEdge: SignalsLayerRowInput[];
+  titles: {
+    withBias: string;
+    againstOrMixed: string;
+    noEdge: string;
+  };
+};
+
+/** Group all six layers for the force-summary strip (Signals only). */
+export function groupLayersByForce(
+  rows: SignalsLayerRowInput[],
+  bias: SignalsSetupBias
+): LayerForceGroups {
+  const withBias: SignalsLayerRowInput[] = [];
+  const againstOrMixed: SignalsLayerRowInput[] = [];
+  const noEdge: SignalsLayerRowInput[] = [];
+
+  for (const row of rows) {
+    if (bias === "Neutral") {
+      if (row.status === "Bullish") withBias.push(row);
+      else if (row.status === "Bearish") againstOrMixed.push(row);
+      else noEdge.push(row);
+      continue;
+    }
+    const p = layerPolarity(row, bias);
+    if (p === "supportive") withBias.push(row);
+    else if (p === "blocking" || p === "mixed") againstOrMixed.push(row);
+    else noEdge.push(row);
+  }
+
+  withBias.sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
+  againstOrMixed.sort((a, b) => layerBlockingScore(a, bias) - layerBlockingScore(b, bias));
+  noEdge.sort((a, b) => a.name.localeCompare(b.name));
+
+  const titles =
+    bias === "Neutral"
+      ? {
+          withBias: "Bullish-leaning layers",
+          againstOrMixed: "Bearish-leaning layers",
+          noEdge: "Neutral / no edge"
+        }
+      : {
+          withBias: `Layers supporting ${bias.toLowerCase()} bias`,
+          againstOrMixed: "Layers opposing or mixed",
+          noEdge: "Neutral / no edge"
+        };
+
+  return { withBias, againstOrMixed, noEdge, titles };
+}
+
+export function formatLayerForceNames(rows: SignalsLayerRowInput[]): string {
+  if (rows.length === 0) return "—";
+  return rows.map((r) => r.name).join(", ");
 }
 
 function layerBlockingScore(row: SignalsLayerRowInput, bias: SignalsSetupBias): number {
@@ -302,6 +415,11 @@ export function pickCollapsedLayerPreview(
   }
   if (out.length > 0) return out;
   return rows.slice(0, Math.min(3, rows.length));
+}
+
+export function layerHasCustomInsight(row: SignalsLayerRowInput): boolean {
+  const custom = row.explanation?.trim();
+  return Boolean(custom && !GENERIC_EXPLANATION_RE.test(custom));
 }
 
 export function buildLayerInsightLine(row: SignalsLayerRowInput, bias: SignalsSetupBias): string {

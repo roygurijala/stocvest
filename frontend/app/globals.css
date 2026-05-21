@@ -713,6 +713,33 @@ a {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
+/* Signals page — section jump nav + gentle scroll snap on phone/tablet */
+.signals-page-flow {
+  scroll-behavior: smooth;
+}
+@media (max-width: 1023px) {
+  .signals-page-flow {
+    scroll-snap-type: y proximity;
+  }
+  .signals-snap-section {
+    scroll-snap-align: start;
+    scroll-margin-top: 0.5rem;
+  }
+  .signals-sticky-command {
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .signals-page-flow {
+    scroll-behavior: auto;
+  }
+  @media (max-width: 1023px) {
+    .signals-page-flow {
+      scroll-snap-type: none;
+    }
+  }
+}
+
 .watchlist-desk-status__secondary {
   margin: 0;
   font-size: 0.75rem;

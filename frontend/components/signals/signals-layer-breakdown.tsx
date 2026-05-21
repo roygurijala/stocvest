@@ -5,15 +5,18 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import { CuteLoader } from "@/components/cute-loader";
 import { InfoTip } from "@/components/info-tip";
 import { LAYER_NAME_HINTS, SIGNAL_LAYER_LEVEL_VS_DELTA_TIP } from "@/lib/ui-tooltips";
+import { SignalsLayerForceSummary } from "@/components/signals/signals-layer-force-summary";
 import {
   buildLayerInsightLine,
+  buildLayerRoleHeadline,
+  layerHasCustomInsight,
   formatDeltaVsBaselineShort,
   formatLayerScoreLabel,
   formatSignalsAlignmentDisplayLine,
   resolveSignalsLayerAlignment,
   layerPolarity,
   layerPolarityDotColor,
-  layerPolarityLabel,
+  layerRoleLabel,
   pickCollapsedLayerPreview,
   SIGNAL_LAYER_LEVEL_BASELINE,
   type SignalsLayerRowInput,
@@ -54,7 +57,7 @@ export function SignalsLayerBreakdown({
   return (
     <section
       id="signals-layers"
-      className={surfaceGlowClassName}
+      className={`signals-snap-section scroll-mt-4 ${surfaceGlowClassName}`}
       data-testid="signals-layer-breakdown"
       style={{
         background: colors.surface,
@@ -91,6 +94,7 @@ export function SignalsLayerBreakdown({
         insufficientMessage
       ) : (
         <>
+          <SignalsLayerForceSummary rows={rows} bias={bias} />
           <ul className="m-0 mt-3 list-none space-y-2 p-0">
             {visible.map((row) => (
               <LayerRow key={row.key} row={row} bias={bias} colors={colors} />
@@ -135,7 +139,9 @@ function LayerRow({
 }) {
   const polarity = layerPolarity(row, bias);
   const dot = layerPolarityDotColor(polarity);
+  const roleHeadline = buildLayerRoleHeadline(row, bias);
   const insight = buildLayerInsightLine(row, bias);
+  const showInsight = layerHasCustomInsight(row);
   const hint = LAYER_NAME_HINTS[row.key as keyof typeof LAYER_NAME_HINTS];
   const levelLabel = formatLayerScoreLabel(row.score, row.status);
   const showLevel = row.score != null && levelLabel !== "N/A" && levelLabel !== "—";
@@ -156,19 +162,18 @@ function LayerRow({
         className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
         style={{ background: dot }}
         aria-hidden
-        title={layerPolarityLabel(polarity)}
+        title={layerRoleLabel(polarity, bias)}
       />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-semibold" style={{ color: colors.text }}>
             {row.name}
           </span>
-          <span className="text-[10px] font-medium uppercase tracking-wide" style={{ color: colors.textMuted }}>
-            {layerPolarityLabel(polarity)}
-            {row.status === "As of close" ? " · last close" : null}
-          </span>
           {hint ? <InfoTip text={hint} label={row.name} /> : null}
         </div>
+        <p className="m-0 mt-0.5 text-xs font-medium leading-snug" style={{ color: colors.text }}>
+          {roleHeadline}
+        </p>
         {showLevel ? (
           <div className="mt-1.5" data-testid={`signals-layer-level-${row.key}`}>
             <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -210,9 +215,11 @@ function LayerRow({
             {row.status === "Unavailable" ? "No live level score" : "Level unavailable"}
           </p>
         )}
-        <p className="m-0 mt-1.5 text-sm leading-snug" style={{ color: colors.textMuted }}>
-          {insight}
-        </p>
+        {showInsight ? (
+          <p className="m-0 mt-1.5 text-sm leading-snug" style={{ color: colors.textMuted }}>
+            {insight}
+          </p>
+        ) : null}
       </div>
     </li>
   );

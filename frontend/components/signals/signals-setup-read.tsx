@@ -70,7 +70,8 @@ export function SignalsSetupRead({
     decision.state !== "actionable" && Boolean(executionToggleLabel && (primaryBlocker || whyNot.length > 0));
   return (
     <article
-      className={surfaceGlowClassName}
+      id="signals-section-setup"
+      className={`signals-snap-section ${surfaceGlowClassName}`}
       data-testid="signals-setup-read"
       style={{
         background: colors.surface,

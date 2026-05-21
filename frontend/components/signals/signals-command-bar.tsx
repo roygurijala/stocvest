@@ -101,17 +101,6 @@ export function SignalsCommandBar({
               Viewing {symU} (previous selection)
             </p>
           ) : null}
-          {onOpenEvidence ? (
-            <button
-              type="button"
-              data-testid="signals-open-evidence-button-mobile"
-              className={`${evidenceButtonClass} mt-3 sm:hidden`}
-              style={evidenceButtonStyle}
-              onClick={onOpenEvidence}
-            >
-              Open full evidence
-            </button>
-          ) : null}
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
             {watchlistControl}
             {scenarioControl}
@@ -134,12 +123,12 @@ export function SignalsCommandBar({
             ) : null}
           </div>
         </div>
-        <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:shrink-0 sm:flex-row sm:items-center sm:justify-end">
+        <div className="flex w-full min-w-0 flex-col gap-2 lg:w-auto lg:shrink-0 lg:flex-row lg:items-center lg:justify-end">
           {onOpenEvidence ? (
             <button
               type="button"
               data-testid="signals-open-evidence-button"
-              className={`${evidenceButtonClass} hidden sm:inline-flex`}
+              className={evidenceButtonClass}
               style={evidenceButtonStyle}
               onClick={onOpenEvidence}
             >
@@ -199,8 +188,17 @@ export function SignalsCommandBar({
           )}
         </div>
       </div>
+      <p className="m-0 mt-3 text-xs leading-relaxed lg:hidden" style={{ color: colors.textMuted }}>
+        <strong style={{ color: colors.text, fontWeight: 600 }}>
+          {tradingMode === "day" ? TAB_LABEL_DAY : TAB_LABEL_SWING}
+        </strong>
+        {" · "}
+        {tradingMode === "day"
+          ? "Live session structure · valid through close."
+          : "Daily close · ~5-day horizon."}
+      </p>
       <p
-        className="m-0 mt-3 hidden text-xs leading-relaxed md:block"
+        className="m-0 mt-3 hidden text-xs leading-relaxed lg:block"
         style={{ color: colors.textMuted }}
       >
         <strong style={{ color: colors.text, fontWeight: 600 }}>

@@ -11,6 +11,10 @@ import {
   formatSignalsAlignmentDisplayLine,
   layerDeltaVsBaseline,
   layerPolarity,
+  layerRoleLabel,
+  groupLayersByForce,
+  buildLayerRoleHeadline,
+  formatLayerForceNames,
   normalizeSetupBias,
   pickCollapsedLayerPreview,
   pickPreviewLayers,
@@ -100,6 +104,29 @@ describe("signals-page-present", () => {
     const preview = pickCollapsedLayerPreview(bearishRows, "Bearish", 2, 2);
     expect(preview.some((r) => r.key === "technical")).toBe(true);
     expect(preview.some((r) => r.key === "internals" || r.key === "sector")).toBe(true);
+  });
+
+  test("groupLayersByForce splits bearish setup into supporting and opposing lists", () => {
+    const g = groupLayersByForce(bearishRows, "Bearish");
+    expect(g.withBias.map((r) => r.name)).toEqual(expect.arrayContaining(["Technical", "Sector"]));
+    expect(g.againstOrMixed.map((r) => r.name)).toContain("Internals");
+    expect(formatLayerForceNames(g.withBias)).toMatch(/Technical/);
+    expect(g.titles.withBias).toMatch(/supporting bearish bias/i);
+  });
+
+  test("layerRoleLabel is bias-anchored", () => {
+    expect(layerRoleLabel("supportive", "Bullish")).toMatch(/supports bullish thesis/i);
+    expect(layerRoleLabel("blocking", "Bullish")).toMatch(/conflicts with bullish thesis/i);
+    expect(layerRoleLabel("neutral", "Bearish")).toMatch(/no edge/i);
+  });
+
+  test("buildLayerRoleHeadline combines status and role", () => {
+    const line = buildLayerRoleHeadline(
+      { key: "news", name: "News", status: "Bullish", explanation: "", score: 72 },
+      "Bullish"
+    );
+    expect(line).toMatch(/Strong bullish read/i);
+    expect(line).toMatch(/supports bullish thesis/i);
   });
 
   test("buildLayerInsightLine avoids generic close-state copy", () => {

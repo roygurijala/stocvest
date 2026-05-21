@@ -30,9 +30,9 @@ describe("SignalsCommandBar", () => {
       </ThemeProvider>
     );
     const btn = screen.getByTestId("signals-open-evidence-button");
-    const btnMobile = screen.getByTestId("signals-open-evidence-button-mobile");
     expect(btn).toHaveTextContent("Open full evidence");
-    fireEvent.click(btnMobile);
+    expect(screen.queryByTestId("signals-open-evidence-button-mobile")).toBeNull();
+    fireEvent.click(btn);
     expect(onOpenEvidence).toHaveBeenCalledTimes(1);
   });
 });

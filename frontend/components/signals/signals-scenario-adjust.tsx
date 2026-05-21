@@ -252,7 +252,7 @@ export function SignalsScenarioAdjust({ systemDecision, geometryBundle }: Props)
       ? buildScenarioRrFixGuidance(system, geometrySource.direction, geometrySource)
       : null;
   const scenarioRrFix =
-    !clearsRr
+    !clearsRr && resolved
       ? buildScenarioRrFixGuidance(resolved, geometrySource.direction, geometrySource)
       : null;
   const showScenarioFixPanel =
