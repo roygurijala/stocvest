@@ -76,7 +76,7 @@ export function MobileNavDrawer({
               className="flex shrink-0 items-center justify-between"
               style={{ padding: spacing[4], borderBottom: `1px solid ${colors.border}` }}
             >
-              <StocvestLogo variant="compact" href="/dashboard" />
+              <StocvestLogo variant="nav" href="/dashboard" className="max-w-[140px]" />
               <button
                 type="button"
                 onClick={onClose}

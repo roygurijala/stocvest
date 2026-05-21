@@ -57,4 +57,9 @@ describe("StocvestLogo", () => {
     render(<StocvestLogo variant="compact" href="/dashboard" />);
     expect(screen.getByRole("link", { name: /STOCVEST home/i })).toHaveAttribute("href", "/dashboard");
   });
+
+  test("renders nav crop for sidebar", () => {
+    render(<StocvestLogo variant="nav" href="/dashboard" />);
+    expect(screen.getByTestId("stocvest-logo")).toHaveAttribute("data-variant", "nav");
+  });
 });

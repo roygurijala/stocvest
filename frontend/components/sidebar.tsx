@@ -154,8 +154,15 @@ export function Sidebar({ userLabel, isAdmin = false }: SidebarProps) {
         borderRight: `1px solid ${colors.border}`
       }}
     >
-      <div style={{ padding: spacing[6], borderBottom: `1px solid ${colors.border}` }}>
-        <StocvestLogo variant="compact" href="/dashboard" />
+      <div
+        className="flex min-h-14 shrink-0 items-center justify-center border-b px-5"
+        style={{
+          paddingTop: spacing[3],
+          paddingBottom: spacing[3],
+          borderBottomColor: colors.border
+        }}
+      >
+        <StocvestLogo variant="nav" href="/dashboard" className="w-full" />
       </div>
 
       <nav

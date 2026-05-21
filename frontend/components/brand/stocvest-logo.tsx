@@ -5,7 +5,7 @@ import Link from "next/link";
 import type { CSSProperties } from "react";
 import { useTheme } from "@/lib/theme-provider";
 
-export type StocvestLogoVariant = "full" | "compact" | "mark";
+export type StocvestLogoVariant = "full" | "compact" | "nav" | "mark";
 
 const BRAND_ASSET = "/brand/stocvest-logo-full.png";
 
@@ -32,6 +32,39 @@ export function StocvestLogo({
   const { theme } = useTheme();
   const isDark = theme === "dark";
   const toneFilter = isDark ? undefined : "brightness(0.88) contrast(1.08)";
+
+  if (variant === "nav") {
+    const inner = (
+      <span
+        className={`relative mx-auto block h-9 w-full max-w-[168px] overflow-hidden ${className}`}
+        style={style}
+        data-testid="stocvest-logo"
+        data-variant={variant}
+      >
+        <Image
+          src={BRAND_ASSET}
+          alt="STOCVEST"
+          width={200}
+          height={88}
+          className="pointer-events-none absolute left-1/2 top-0 max-w-none -translate-x-1/2 object-contain object-top"
+          style={{
+            width: 200,
+            height: 88,
+            filter: toneFilter
+          }}
+          priority
+        />
+      </span>
+    );
+    if (href) {
+      return (
+        <Link href={href} className="block no-underline hover:opacity-90" aria-label="STOCVEST home">
+          {inner}
+        </Link>
+      );
+    }
+    return inner;
+  }
 
   const height =
     variant === "full" ? (showTagline ? 148 : 120) : variant === "compact" ? 40 : 36;

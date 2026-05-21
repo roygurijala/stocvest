@@ -8,6 +8,7 @@ import { DashboardInsightCallout } from "@/components/dashboard/dashboard-insigh
 import { DashboardLiveStatus } from "@/components/dashboard/dashboard-live-status";
 import { DashboardMarketContextPanel } from "@/components/dashboard/dashboard-market-context-panel";
 import { DashboardOpportunitiesOverview } from "@/components/dashboard/dashboard-opportunities-overview";
+import { DashboardScannerLoadingStrip } from "@/components/dashboard/dashboard-scanner-suspense-fallback";
 import { ScannerOverviewProvider, useScannerOverview } from "@/components/dashboard/scanner-overview-context";
 import { DashboardEarningsProvider, useDashboardEarnings } from "@/components/dashboard/dashboard-earnings-context";
 import { buildDashboardAssistantPageContext } from "@/lib/dashboard/dashboard-assistant-context";
@@ -479,6 +480,9 @@ function DashboardRedesignBody({
         showDay={dayTradingSurfaces}
       />
 
+      {!scannerDataSettled ? <DashboardScannerLoadingStrip /> : null}
+      {deferredScannerSlot}
+
       <div
         role="region"
         aria-label="System state"
@@ -517,17 +521,31 @@ function DashboardRedesignBody({
           </span>
           <InfoTip text={regimeTip} label="How regime is read" maxWidth={300} />
         </div>
-        {systemSuppressed ? (
+        {!scannerDataSettled ? (
+          <p
+            data-testid="dashboard-system-state-pending"
+            style={{
+              margin: `${spacing[2]} 0 0`,
+              fontSize: typography.scale.sm,
+              color: colors.textMuted,
+              lineHeight: 1.5
+            }}
+          >
+            Scanner still loading — desk status may update when the universe finishes.
+          </p>
+        ) : systemSuppressed ? (
           <p
             data-testid="dashboard-system-suppressed-callout"
             style={{
               margin: `${spacing[2]} 0 0`,
               fontSize: typography.scale.sm,
-              color: colors.caution,
+              color: colors.textMuted,
               lineHeight: 1.5
             }}
           >
-            Signals are currently suppressed. Wait for structure to improve.
+            <strong style={{ color: colors.text, fontWeight: 600 }}>Desk gated.</strong> No actionable
+            setups on the {activeDeskMode} desk right now — normal when session or structure gates are
+            closed, not a system error.
           </p>
         ) : null}
         <details style={{ marginTop: spacing[2] }}>
@@ -593,7 +611,6 @@ function DashboardRedesignBody({
       <EarningsCalendar events={earningsEvents} title="Upcoming Earnings (Next 7 Days)" maxDays={7} />
 
       {deferredEarningsSlot}
-      {deferredScannerSlot}
       <DashboardEdgeSync />
     </section>
   );

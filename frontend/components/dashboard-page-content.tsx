@@ -1,7 +1,6 @@
 import { Suspense } from "react";
 import { DashboardRedesign } from "@/components/dashboard-redesign";
 import { DashboardScannerDeferredFetch } from "@/components/dashboard/dashboard-scanner-deferred-fetch";
-import { DashboardScannerSuspenseFallback } from "@/components/dashboard/dashboard-scanner-suspense-fallback";
 import { DEFAULT_EARNINGS_SYMBOLS, fetchDashboardFirstSegment } from "@/lib/dashboard/dashboard-page-data";
 import { timeDashboardPhase } from "@/lib/dashboard/load-timing";
 import { fetchDashboardUserMe, subscriptionPlanFromMe } from "@/lib/dashboard-user-subscription";
@@ -50,7 +49,7 @@ export async function DashboardPageContent() {
       sectorRotation={sectorRotation}
       dayTradingSurfaces={dayTradingSurfaces}
       deferredScannerSlot={
-        <Suspense fallback={<DashboardScannerSuspenseFallback />}>
+        <Suspense fallback={null}>
           <DashboardScannerDeferredFetch tuning={dashboardScannerTuning} />
         </Suspense>
       }
