@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchSetupEvolution, type SetupEvolutionResponse } from "@/lib/api/setup-evolution";
 import {
   formatMaturationStateLine,
@@ -11,6 +11,8 @@ import { MATURATION_PROGRESSION_EXPECTATION_LINE } from "@/lib/maturation-expect
 import { EMPTY_SETUP_EVOLUTION } from "@/lib/product-empty-states";
 import { borderRadius, spacing, surfaceGlowClassName } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
+import { WATCHLIST_SYMBOLS_CHANGED_EVENT } from "@/lib/watchlist-membership-client";
+import { WATCHLIST_MATURATION_UPDATED_EVENT } from "@/lib/watchlist-maturation-bump";
 
 type Props = {
   symbol: string;
@@ -22,17 +24,45 @@ type Props = {
 export function SetupEvolutionPanel({ symbol, tradingMode, showSummary = false }: Props) {
   const { colors } = useTheme();
   const [data, setData] = useState<SetupEvolutionResponse | null | undefined>(undefined);
+  const requestIdRef = useRef(0);
+
+  const reload = useCallback(() => {
+    const symU = symbol.trim().toUpperCase();
+    if (!symU) {
+      setData(null);
+      return;
+    }
+    const id = ++requestIdRef.current;
+    setData(undefined);
+    void fetchSetupEvolution(symU, tradingMode).then((res) => {
+      if (requestIdRef.current === id) setData(res);
+    });
+  }, [symbol, tradingMode]);
 
   useEffect(() => {
-    let active = true;
-    setData(undefined);
-    void fetchSetupEvolution(symbol, tradingMode).then((res) => {
-      if (active) setData(res);
-    });
-    return () => {
-      active = false;
+    reload();
+  }, [reload]);
+
+  useEffect(() => {
+    const symU = symbol.trim().toUpperCase();
+    if (!symU) return;
+
+    const onSymbolsChanged = () => reload();
+
+    const onMaturationUpdated = (e: Event) => {
+      const detail = (e as CustomEvent<{ symbol?: string; mode?: string }>).detail;
+      if (detail?.symbol?.trim().toUpperCase() === symU && detail?.mode === tradingMode) {
+        reload();
+      }
     };
-  }, [symbol, tradingMode]);
+
+    window.addEventListener(WATCHLIST_SYMBOLS_CHANGED_EVENT, onSymbolsChanged);
+    window.addEventListener(WATCHLIST_MATURATION_UPDATED_EVENT, onMaturationUpdated);
+    return () => {
+      window.removeEventListener(WATCHLIST_SYMBOLS_CHANGED_EVENT, onSymbolsChanged);
+      window.removeEventListener(WATCHLIST_MATURATION_UPDATED_EVENT, onMaturationUpdated);
+    };
+  }, [symbol, tradingMode, reload]);
 
   const symU = symbol.trim().toUpperCase();
   const started = formatStartedTracking(data?.started_tracking_at ?? null);

@@ -4,6 +4,8 @@ import {
   buildScenarioGeometryBundle,
   buildScenarioGeometrySource,
   buildScenarioVariantCatalog,
+  buildScenarioRrImprovementGuidance,
+  formatScenarioRrQuickCalc,
   isExecutionStageEligibleForScenarioAdjust,
   remainingBlockersAfterScenarioRr,
   resolveScenarioLevels,
@@ -33,12 +35,48 @@ describe("scenario-variants", () => {
     expect(aggressive.riskReward).toBeGreaterThan(conservative.riskReward);
   });
 
+  test("conservative entry above T1 still resolves (target fallback + entry cap)", () => {
+    const src = buildScenarioGeometrySource({
+      bias: "Bullish",
+      entryZoneLow: 440,
+      entryZoneHigh: 447,
+      last: 442,
+      structuralStop: 430.74,
+      target1: 445,
+      target2: 465,
+      vwap: 441,
+      systemRiskReward: 0.5
+    })!;
+    const conservative = resolveScenarioLevels(src, {
+      preset: "conservative",
+      entry: "conservative",
+      stop: "structural",
+      target: "t1"
+    });
+    expect(conservative).not.toBeNull();
+    expect(conservative!.entry).toBeLessThan(conservative!.target);
+    expect(conservative!.riskReward).toBeGreaterThan(0);
+  });
+
   test("aggressive + tight + t2 can clear R/R gate when system cannot", () => {
     const catalog = buildScenarioVariantCatalog(bullishSource)!;
     const tuned = resolveScenarioLevels(bullishSource, catalog.presets.aggressive)!;
     expect(tuned.riskReward).toBeGreaterThanOrEqual(SCENARIO_RR_MIN);
     expect(scenarioClearsRrGate(tuned.riskReward)).toBe(true);
     expect(scenarioClearsRrGate(bullishSource.systemRiskReward!)).toBe(false);
+  });
+
+  test("buildScenarioRrImprovementGuidance — bearish minimum target", () => {
+    const g = buildScenarioRrImprovementGuidance(440.88, 448.9, "bearish")!;
+    expect(g.requiredTarget).toBeCloseTo(424.84, 2);
+    expect(g.riskPerShare).toBeCloseTo(8.02, 2);
+    expect(formatScenarioRrQuickCalc(g)).toBe("440.88 − 2.0 × 8.02");
+  });
+
+  test("buildScenarioRrImprovementGuidance — bullish minimum target", () => {
+    const g = buildScenarioRrImprovementGuidance(301.2, 297.48, "bullish")!;
+    expect(g.requiredTarget).toBeGreaterThan(301.2);
+    expect(formatScenarioRrQuickCalc(g)).toMatch(/301\.20 \+ 2\.0 ×/);
   });
 
   test("remainingBlockersAfterScenarioRr drops R/R-only lines when scenario clears", () => {

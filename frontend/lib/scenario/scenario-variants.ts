@@ -152,18 +152,45 @@ function resolveTarget(
 ): number | null {
   const primary = t1;
   const extended = t2 ?? (primary != null ? round4(direction === "bullish" ? primary * 1.004 : primary * 0.996) : null);
-  const pick = choice === "t2" ? extended : primary;
-  if (pick == null || !Number.isFinite(pick)) return null;
-  if (direction === "bullish" && pick <= entry) return null;
-  if (direction === "bearish" && pick >= entry) return null;
-  return round4(pick);
+  const order: (number | null)[] = choice === "t2" ? [extended, primary] : [primary, extended];
+  for (const pick of order) {
+    if (pick == null || !Number.isFinite(pick)) continue;
+    if (direction === "bullish" && pick <= entry) continue;
+    if (direction === "bearish" && pick >= entry) continue;
+    return round4(pick);
+  }
+  const bump = entry * 0.003;
+  const synthetic = direction === "bullish" ? round4(entry + bump) : round4(entry - bump);
+  if (direction === "bullish" && synthetic > entry) return synthetic;
+  if (direction === "bearish" && synthetic < entry) return synthetic;
+  return null;
 }
 
-export function resolveScenarioLevels(
+function capConservativeEntry(
+  entry: number,
+  source: ScenarioGeometrySource
+): number {
+  const t1 = source.target1;
+  const t2 = source.target2;
+  if (source.direction === "bullish") {
+    const refs = [t1, t2].filter((v): v is number => v != null && Number.isFinite(v) && v > 0);
+    if (refs.length === 0) return entry;
+    const ceiling = Math.min(...refs);
+    if (entry >= ceiling) return round4(ceiling * 0.998);
+    return entry;
+  }
+  const refs = [t1, t2].filter((v): v is number => v != null && Number.isFinite(v) && v > 0);
+  if (refs.length === 0) return entry;
+  const floor = Math.max(...refs);
+  if (entry <= floor) return round4(floor * 1.002);
+  return entry;
+}
+
+function resolveScenarioLevelsOnce(
   source: ScenarioGeometrySource,
   selection: ScenarioSelection
 ): ResolvedScenarioLevels | null {
-  const entry = resolveEntry(
+  let entry = resolveEntry(
     selection.entry,
     source.direction,
     source.last,
@@ -171,6 +198,9 @@ export function resolveScenarioLevels(
     source.entryZoneHigh
   );
   if (entry == null) return null;
+  if (selection.entry === "conservative") {
+    entry = capConservativeEntry(entry, source);
+  }
   const stop = resolveStop(
     selection.stop,
     source.direction,
@@ -193,6 +223,63 @@ export function resolveScenarioLevels(
       : rrShort(entry, target, stop);
   if (rr == null || !Number.isFinite(rr)) return null;
   return { entry, stop, target, riskReward: rr };
+}
+
+/** Human-readable reason when a preset/entry/stop/target combo cannot form valid R/R geometry. */
+export function describeInvalidScenarioSelection(
+  source: ScenarioGeometrySource,
+  selection: ScenarioSelection
+): string | null {
+  if (resolveScenarioLevelsOnce(source, selection) != null) return null;
+
+  const entry = resolveEntry(
+    selection.entry,
+    source.direction,
+    source.last,
+    source.entryZoneLow,
+    source.entryZoneHigh
+  );
+  if (entry == null) {
+    return "No usable entry level for this symbol — check that price and entry zone are loaded.";
+  }
+
+  const stop = resolveStop(
+    selection.stop,
+    source.direction,
+    entry,
+    source.structuralStop,
+    source.vwap
+  );
+  if (stop == null) {
+    return "Stop does not fit this entry — try Structural stop or a different entry style.";
+  }
+
+  if (source.direction === "bullish" && stop >= entry) {
+    return "Stop must sit below entry on a long — try Structural stop or Mid-zone entry.";
+  }
+  if (source.direction === "bearish" && stop <= entry) {
+    return "Stop must sit above entry on a short — try Structural stop or Mid-zone entry.";
+  }
+
+  const t1 = source.target1;
+  const t2 = source.target2;
+  if (selection.entry === "conservative") {
+    if (source.direction === "bullish" && t1 != null && entry >= t1) {
+      return "Conservative entry (top of zone) is at or above the target — try Mid-zone or Aggressive entry, or switch to T2.";
+    }
+    if (source.direction === "bearish" && t1 != null && entry <= t1) {
+      return "Conservative entry (bottom of zone) is at or below the target — try Mid-zone or Aggressive entry, or switch to T2.";
+    }
+  }
+
+  return "This entry / stop / target combination leaves no room for reward — try Mid-zone entry, T2 target, or Structural stop.";
+}
+
+export function resolveScenarioLevels(
+  source: ScenarioGeometrySource,
+  selection: ScenarioSelection
+): ResolvedScenarioLevels | null {
+  return resolveScenarioLevelsOnce(source, selection);
 }
 
 export function setupBiasToScenarioDirection(
@@ -439,6 +526,58 @@ export function formatScenarioRatio(riskReward: number): string {
   return `${riskReward.toFixed(1)} : 1`;
 }
 
+/** Minimum target at `minRr` : 1 for fixed entry + stop (reference geometry only). */
+export type ScenarioRrImprovementGuidance = {
+  direction: "bullish" | "bearish";
+  entry: number;
+  stop: number;
+  riskPerShare: number;
+  requiredTarget: number;
+  minRr: number;
+};
+
+export function buildScenarioRrImprovementGuidance(
+  entry: number,
+  stop: number,
+  direction: "bullish" | "bearish",
+  minRr: number = SCENARIO_RR_MIN
+): ScenarioRrImprovementGuidance | null {
+  if (!Number.isFinite(entry) || !Number.isFinite(stop) || !Number.isFinite(minRr) || minRr <= 0) {
+    return null;
+  }
+  if (direction === "bullish") {
+    const risk = entry - stop;
+    if (risk <= 1e-6 || stop >= entry) return null;
+    return {
+      direction,
+      entry: round4(entry),
+      stop: round4(stop),
+      riskPerShare: round4(risk),
+      requiredTarget: round4(entry + minRr * risk),
+      minRr
+    };
+  }
+  const risk = stop - entry;
+  if (risk <= 1e-6 || stop <= entry) return null;
+  return {
+    direction,
+    entry: round4(entry),
+    stop: round4(stop),
+    riskPerShare: round4(risk),
+    requiredTarget: round4(entry - minRr * risk),
+    minRr
+  };
+}
+
+/** Compact formula line for UI, e.g. `440.88 − 2.0 × 8.02`. */
+export function formatScenarioRrQuickCalc(g: ScenarioRrImprovementGuidance): string {
+  const entry = g.entry.toFixed(2);
+  const risk = g.riskPerShare.toFixed(2);
+  const rr = g.minRr.toFixed(1);
+  const op = g.direction === "bullish" ? "+" : "−";
+  return `${entry} ${op} ${rr} × ${risk}`;
+}
+
 export type ScenarioImpactLine = { label: string; detail: string };
 
 export function explainScenarioImpact(
@@ -531,7 +670,7 @@ export function scenarioExecutionSummary(args: {
   }
   return {
     headline: "Scenario still below risk/reward minimum",
-    subline: `Needs at least ${SCENARIO_RR_MIN.toFixed(1)} : 1 for that gate alone`
+    subline: `Needs at least ${SCENARIO_RR_MIN.toFixed(1)} : 1 for that gate alone (see target guidance below)`
   };
 }
 

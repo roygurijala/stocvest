@@ -4,7 +4,13 @@ import { useMemo, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { formatScenarioDollars } from "@/lib/scenario/compute";
 import {
+  buildScenarioRrFixGuidance,
+  type ScenarioRrFixGuidance,
+  type ScenarioRrLeverQuality
+} from "@/lib/scenario/scenario-rr-fix-guidance";
+import {
   buildScenarioVariantCatalog,
+  describeInvalidScenarioSelection,
   explainScenarioImpact,
   formatScenarioRatio,
   remainingBlockersAfterScenarioRr,
@@ -76,6 +82,74 @@ function Segmented<T extends string>({
   );
 }
 
+function qualityLabel(q: ScenarioRrLeverQuality): string {
+  if (q === "best") return "Best";
+  if (q === "medium") return "Medium";
+  return "Risky";
+}
+
+function qualityColor(q: ScenarioRrLeverQuality, colors: ReturnType<typeof useTheme>["colors"]): string {
+  if (q === "best") return colors.bullish;
+  if (q === "medium") return colors.caution;
+  return colors.bearish;
+}
+
+function RrFixGuidancePanel({ guidance, testId }: { guidance: ScenarioRrFixGuidance; testId: string }) {
+  const { colors } = useTheme();
+  return (
+    <div
+      className="mt-2 rounded-md p-2.5"
+      data-testid={testId}
+      style={{
+        background: `color-mix(in srgb, ${colors.caution} 8%, transparent)`,
+        border: `1px solid color-mix(in srgb, ${colors.caution} 30%, ${colors.border})`,
+        borderRadius: borderRadius.md
+      }}
+    >
+      <p className="m-0 text-xs font-bold uppercase tracking-wide" style={{ color: colors.textMuted }}>
+        R/R fix guidance
+      </p>
+      <p className="m-0 mt-2 text-xs leading-relaxed" style={{ color: colors.text }} data-testid={`${testId}-diagnosis`}>
+        {guidance.diagnosis}
+      </p>
+      <p className="m-0 mt-2 text-xs tabular-nums" style={{ color: colors.textMuted }}>
+        Risk {formatScenarioDollars(guidance.riskPerShare)} · Reward {formatScenarioDollars(guidance.rewardPerShare)} ·
+        need {formatScenarioDollars(guidance.requiredReward)} reward for {guidance.minRr.toFixed(1)} : 1
+      </p>
+      <p className="m-0 mt-2 text-xs font-semibold" style={{ color: colors.text }}>
+        To reach {guidance.minRr.toFixed(1)} : 1 (change one lever):
+      </p>
+      <ul className="m-0 mt-2 list-none space-y-2.5 p-0" data-testid={`${testId}-levers`}>
+        {guidance.levers.map((lever) => (
+          <li key={lever.id} data-testid={`${testId}-lever-${lever.id}`}>
+            <p className="m-0 text-xs font-semibold" style={{ color: qualityColor(lever.quality, colors) }}>
+              {qualityLabel(lever.quality)} — {lever.label}
+            </p>
+            <p className="m-0 mt-0.5 text-sm font-semibold tabular-nums" style={{ color: colors.text }}>
+              {lever.thresholdText}
+            </p>
+            <p className="m-0 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
+              {lever.detail}
+            </p>
+            <p className="m-0 text-[10px] tabular-nums" style={{ color: colors.textMuted }}>
+              (calc: {lever.calcLine})
+            </p>
+          </li>
+        ))}
+      </ul>
+      {guidance.warnings.length > 0 ? (
+        <ul className="m-0 mt-2 list-none space-y-1 p-0" data-testid={`${testId}-warnings`}>
+          {guidance.warnings.map((w) => (
+            <li key={w} className="text-xs leading-relaxed" style={{ color: colors.caution }}>
+              {w}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 function RrBar({ riskReward }: { riskReward: number }) {
   const { colors } = useTheme();
   const { risk, reward } = scenarioRrBarFills(riskReward);
@@ -136,6 +210,10 @@ export function SignalsScenarioAdjust({ systemDecision, geometryBundle }: Props)
   }, [catalog, activeSelection]);
 
   const system = catalog?.system ?? null;
+  const selectionInvalid =
+    catalog && activeSelection && !resolved
+      ? describeInvalidScenarioSelection(catalog.source, activeSelection)
+      : null;
   const clearsRr = resolved ? scenarioClearsRrGate(resolved.riskReward) : false;
   const stillBlocked = remainingBlockersAfterScenarioRr(systemDecision, clearsRr);
   const impact =
@@ -149,7 +227,7 @@ export function SignalsScenarioAdjust({ systemDecision, geometryBundle }: Props)
         })
       : null;
 
-  if (!catalog || !system || !resolved || !activeSelection) return null;
+  if (!catalog || !system || !activeSelection) return null;
 
   const systemRr =
     geometrySource.systemRiskReward != null && Number.isFinite(geometrySource.systemRiskReward)
@@ -163,10 +241,26 @@ export function SignalsScenarioAdjust({ systemDecision, geometryBundle }: Props)
     setOpen(true);
   };
 
-  const rrColor =
-    scenarioRrTone(resolved.riskReward) === "low"
+  const rrColor = resolved
+    ? scenarioRrTone(resolved.riskReward) === "low"
       ? colors.caution
-      : colors.bullish;
+      : colors.bullish
+    : colors.caution;
+
+  const systemRrFix =
+    systemRr < SCENARIO_RR_MIN
+      ? buildScenarioRrFixGuidance(system, geometrySource.direction, geometrySource)
+      : null;
+  const scenarioRrFix =
+    !clearsRr
+      ? buildScenarioRrFixGuidance(resolved, geometrySource.direction, geometrySource)
+      : null;
+  const showScenarioFixPanel =
+    scenarioRrFix != null &&
+    (scenarioRrFix.entry !== systemRrFix?.entry ||
+      scenarioRrFix.stop !== systemRrFix?.stop ||
+      scenarioRrFix.target !== systemRrFix?.target ||
+      Math.abs(scenarioRrFix.riskReward - (systemRrFix?.riskReward ?? 0)) > 0.05);
 
   return (
     <div
@@ -198,6 +292,9 @@ export function SignalsScenarioAdjust({ systemDecision, geometryBundle }: Props)
         </div>
       ) : null}
       <RrBar riskReward={system.riskReward} />
+      {systemRrFix ? (
+        <RrFixGuidancePanel guidance={systemRrFix} testId="signals-scenario-system-rr-guidance" />
+      ) : null}
 
       {showPanel ? (
         <>
@@ -297,42 +394,73 @@ export function SignalsScenarioAdjust({ systemDecision, geometryBundle }: Props)
                 <p className="m-0 text-xs font-semibold uppercase tracking-wide" style={{ color: colors.textMuted }}>
                   Result
                 </p>
-                <p className="m-0 mt-1 text-sm font-semibold tabular-nums" style={{ color: rrColor }} data-testid="signals-scenario-result-rr">
-                  Risk/Reward {formatScenarioRatio(resolved.riskReward)}
-                  {!clearsRr ? " ⚠" : " ✓"}
-                </p>
-                <p className="m-0 mt-1 text-xs tabular-nums" style={{ color: colors.text }}>
-                  Entry {formatScenarioDollars(resolved.entry)} · Stop {formatScenarioDollars(resolved.stop)} · Target{" "}
-                  {formatScenarioDollars(resolved.target)}
-                </p>
-                <RrBar riskReward={resolved.riskReward} />
-                {execSummary ? (
-                  <p className="m-0 mt-2 text-xs leading-relaxed" style={{ color: colors.text }} data-testid="signals-scenario-exec-summary">
-                    {execSummary.headline}
-                    {execSummary.subline ? (
-                      <span style={{ color: colors.textMuted }}> — {execSummary.subline}</span>
-                    ) : null}
-                  </p>
-                ) : null}
-                {impact.length > 0 ? (
-                  <div className="mt-2" data-testid="signals-scenario-impact">
-                    <p className="m-0 text-[10px] font-semibold uppercase tracking-wide" style={{ color: colors.textMuted }}>
-                      Why it changed
+                {resolved ? (
+                  <>
+                    <p
+                      className="m-0 mt-1 text-sm font-semibold tabular-nums"
+                      style={{ color: rrColor }}
+                      data-testid="signals-scenario-result-rr"
+                    >
+                      Risk/Reward {formatScenarioRatio(resolved.riskReward)}
+                      {!clearsRr ? " ⚠" : " ✓"}
                     </p>
-                    <ul className="m-0 mt-1 list-none space-y-1 p-0 text-xs" style={{ color: colors.text }}>
-                      {impact.map((line) => (
-                        <li key={line.label}>
-                          <span className="font-semibold">{line.label}:</span> {line.detail}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-                {stillBlocked.length > 0 && clearsRr ? (
-                  <p className="m-0 mt-2 text-xs leading-relaxed" style={{ color: colors.caution }} data-testid="signals-scenario-still-blocked">
-                    Still held by: {stillBlocked.join(" · ")}
+                    <p className="m-0 mt-1 text-xs tabular-nums" style={{ color: colors.text }}>
+                      Entry {formatScenarioDollars(resolved.entry)} · Stop {formatScenarioDollars(resolved.stop)} ·
+                      Target {formatScenarioDollars(resolved.target)}
+                    </p>
+                    <RrBar riskReward={resolved.riskReward} />
+                    {execSummary ? (
+                      <p
+                        className="m-0 mt-2 text-xs leading-relaxed"
+                        style={{ color: colors.text }}
+                        data-testid="signals-scenario-exec-summary"
+                      >
+                        {execSummary.headline}
+                        {execSummary.subline ? (
+                          <span style={{ color: colors.textMuted }}> — {execSummary.subline}</span>
+                        ) : null}
+                      </p>
+                    ) : null}
+                    {showScenarioFixPanel && scenarioRrFix ? (
+                      <RrFixGuidancePanel guidance={scenarioRrFix} testId="signals-scenario-result-rr-guidance" />
+                    ) : null}
+                    {impact.length > 0 ? (
+                      <div className="mt-2" data-testid="signals-scenario-impact">
+                        <p
+                          className="m-0 text-[10px] font-semibold uppercase tracking-wide"
+                          style={{ color: colors.textMuted }}
+                        >
+                          Why it changed
+                        </p>
+                        <ul className="m-0 mt-1 list-none space-y-1 p-0 text-xs" style={{ color: colors.text }}>
+                          {impact.map((line) => (
+                            <li key={line.label}>
+                              <span className="font-semibold">{line.label}:</span> {line.detail}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                    {stillBlocked.length > 0 && clearsRr ? (
+                      <p
+                        className="m-0 mt-2 text-xs leading-relaxed"
+                        style={{ color: colors.caution }}
+                        data-testid="signals-scenario-still-blocked"
+                      >
+                        Still held by: {stillBlocked.join(" · ")}
+                      </p>
+                    ) : null}
+                  </>
+                ) : (
+                  <p
+                    className="m-0 mt-2 text-sm leading-relaxed"
+                    style={{ color: colors.caution }}
+                    data-testid="signals-scenario-result-invalid"
+                  >
+                    {selectionInvalid ??
+                      "This combination does not form valid reference geometry — try another entry style, target, or stop."}
                   </p>
-                ) : null}
+                )}
               </div>
 
               <button

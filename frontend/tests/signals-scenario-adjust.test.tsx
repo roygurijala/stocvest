@@ -55,6 +55,24 @@ describe("SignalsScenarioAdjust", () => {
     expect(screen.getByTestId("signals-scenario-adjust")).toBeInTheDocument();
     expect(screen.getByTestId("signals-scenario-system-rr")).toHaveTextContent(/0\.5/);
     expect(screen.getByTestId("signals-scenario-adjust-panel")).toBeInTheDocument();
+    const guidance = screen.getByTestId("signals-scenario-system-rr-guidance");
+    expect(guidance).toHaveTextContent(/R\/R fix guidance/i);
+    expect(guidance).toHaveTextContent(/To reach 2\.0 : 1/i);
+    expect(guidance).toHaveTextContent(/Best — Improve entry timing/i);
+    expect(guidance).toHaveTextContent(/Risky — Extend target/i);
+    expect(screen.getByTestId("signals-scenario-system-rr-guidance-lever-target")).toHaveTextContent(
+      /301\.20 \+ 2\.0 ×/
+    );
+  });
+
+  test("conservative preset keeps panel visible with result or invalid message", () => {
+    render(<SignalsScenarioAdjust systemDecision={monitorRrDecision} geometryBundle={geometryBundle} />);
+    fireEvent.click(screen.getByTestId("signals-scenario-preset-conservative"));
+    expect(screen.getByTestId("signals-scenario-adjust")).toBeInTheDocument();
+    expect(screen.getByTestId("signals-scenario-adjust-panel")).toBeInTheDocument();
+    const hasResult =
+      screen.queryByTestId("signals-scenario-result-rr") ?? screen.queryByTestId("signals-scenario-result-invalid");
+    expect(hasResult).toBeTruthy();
   });
 
   test("aggressive preset updates result R/R without mutating system line", () => {
