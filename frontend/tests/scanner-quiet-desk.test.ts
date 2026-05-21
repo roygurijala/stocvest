@@ -5,13 +5,16 @@ import {
   buildNearReadyCards,
   buildQuietBridgeLine,
   buildScanOutcomePrimaryBlocker,
+  buildVolumeProximityLeads,
   buildWhatWouldChangeContent,
   nearReadySectionCopy,
   regimeBlocksDesk,
   regimeGateRejectionContext,
   regimeGateRejectionTitle,
-  synthesizeWhatWouldChange
+  synthesizeWhatWouldChange,
+  volumeLeadToNearReadyCard
 } from "@/lib/scanner/scanner-quiet-desk";
+import type { ScannerSynthesis } from "@/lib/scanner-synthesis";
 import type {
   ScannerNearQualificationRow,
   ScannerWatchlistProgressionRow
@@ -107,6 +110,32 @@ describe("scanner-quiet-desk", () => {
     const content = buildWhatWouldChangeContent(null, "Bearish", ["AAPL"]);
     expect(content.watchItems.length).toBeGreaterThan(0);
     expect(content.outcome).toContain("AAPL");
+  });
+
+  it("volume proximity leads sort by lowest pct_below and map to near-ready cards", () => {
+    const synthesis = {
+      qualified_count: 0,
+      market_summary: "",
+      what_would_change: "",
+      session_time_et: "10:00",
+      volume_context: { market_condition: "low" },
+      near_misses: [],
+      rejection_groups: {
+        session_volume: [
+          { symbol: "TSLA", pct_below: 85 },
+          { symbol: "NVDA", pct_below: 12 }
+        ],
+        liquidity: [],
+        structure: []
+      }
+    } as ScannerSynthesis;
+    const leads = buildVolumeProximityLeads(synthesis, new Set(), 2);
+    expect(leads.map((l) => l.symbol)).toEqual(["NVDA", "TSLA"]);
+    const card = volumeLeadToNearReadyCard(leads[0], "Bullish", 0);
+    expect(card.readinessHint).toMatch(/Nearest to qualifying on volume/i);
+    expect(card.blockedLine).toMatch(/session volume — not regime/i);
+    const change = buildWhatWouldChangeContent(synthesis, "Bullish", [], ["NVDA", "SPY"]);
+    expect(change.outcome).toMatch(/Volume pickup in NVDA and SPY/i);
   });
 
   it("regime gate helpers and blocks desk", () => {

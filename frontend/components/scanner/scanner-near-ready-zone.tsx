@@ -66,8 +66,8 @@ export function ScannerNearReadyZone({ cards, regimeLabel }: Props) {
           {hasCards
             ? subtitle
             : regimeBlocksDesk(regimeLabel)
-              ? "None on this scan — structure may be building but regime or volume still blocks qualification."
-              : "None on this scan — all evaluated setups still need multiple conditions before they can qualify."}
+              ? "None on this scan — structure may be building but regime still blocks qualification."
+              : "No structural near-ready rows — see volume leaders below for who is closest on pace."}
         </p>
       </header>
 

@@ -4,11 +4,7 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
-import {
-  buildScanOutcomePrimaryBlocker,
-  regimeGateRejectionContext,
-  regimeGateRejectionTitle
-} from "@/lib/scanner/scanner-quiet-desk";
+import { buildScanOutcomePrimaryBlocker } from "@/lib/scanner/scanner-quiet-desk";
 import type { ScannerSynthesisRejectionGroups } from "@/lib/scanner-synthesis";
 import { useTheme } from "@/lib/theme-provider";
 import { VolumeGapBarList } from "@/components/scanner/VolumeGapBar";
@@ -17,9 +13,6 @@ type Props = {
   groups: ScannerSynthesisRejectionGroups;
   qualifiedCount?: number;
   evaluatedCount?: number;
-  regimeLabel?: string;
-  spyPct?: number | null;
-  qqqPct?: number | null;
 };
 
 function CollapsibleGroup({
@@ -119,10 +112,7 @@ function CollapsibleGroup({
 export function RejectionGroups({
   groups,
   qualifiedCount = 0,
-  evaluatedCount,
-  regimeLabel,
-  spyPct = null,
-  qqqPct = null
+  evaluatedCount
 }: Props) {
   const { colors } = useTheme();
   const session = groups.session_volume;
@@ -196,18 +186,10 @@ export function RejectionGroups({
       {session.length > 0 ? (
         <CollapsibleGroup
           testId="scanner-rejection-session-volume"
-          title={
-            regimeLabel && regimeLabel.toLowerCase().includes("bear") && qualifiedCount === 0
-              ? regimeGateRejectionTitle(session.length, regimeLabel)
-              : `Volume below threshold (${session.length} symbol${session.length === 1 ? "" : "s"})`
-          }
-          tag={regimeLabel && qualifiedCount === 0 ? "Regime" : "Session volume"}
+          title={`Session volume (${session.length} symbol${session.length === 1 ? "" : "s"})`}
+          tag="Session volume"
           tagColor="#d97706"
-          contextLine={
-            regimeLabel && qualifiedCount === 0
-              ? regimeGateRejectionContext(regimeLabel, spyPct, qqqPct)
-              : "Relative bar height = share of required pace met — not near-ready."
-          }
+          contextLine="Bar height = share of required intraday pace met — not structural near-ready."
           defaultOpen={false}
         >
           <VolumeGapBarList rows={session} limit={8} testIdPrefix="scanner-rejection-volume-gap" />

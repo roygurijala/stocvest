@@ -8,7 +8,9 @@ import { WhatWouldChangeFooter } from "@/components/scanner/WhatWouldChangeFoote
 import { buildMarketConditionsQuietCard } from "@/lib/scanner-quiet-copy";
 import {
   buildNearReadyCards,
-  buildWhatWouldChangeContent
+  buildVolumeProximityLeads,
+  buildWhatWouldChangeContent,
+  volumeLeadToNearReadyCard
 } from "@/lib/scanner/scanner-quiet-desk";
 import type { ScannerScanSummary } from "@/lib/scanner-scan-summary";
 import type { ScannerSynthesis } from "@/lib/scanner-synthesis";
@@ -32,14 +34,29 @@ export function ScannerQuietDesk({ summary, synthesis, deskFilter }: Props) {
     [summary, synthesis]
   );
 
-  const nearCards = useMemo(
-    () => buildNearReadyCards(summary.near_qualification, regimeLabel, deskFilter),
-    [summary.near_qualification, regimeLabel, deskFilter]
-  );
+  const nearCards = useMemo(() => {
+    const structural = buildNearReadyCards(summary.near_qualification, regimeLabel, deskFilter);
+    const seen = new Set(structural.map((c) => c.symbol));
+    const volLeads = buildVolumeProximityLeads(synthesis, seen, structural.length === 0 ? 2 : 1);
+    const volCards = volLeads.map((lead, i) => volumeLeadToNearReadyCard(lead, regimeLabel, i));
+    return [...structural, ...volCards];
+  }, [summary.near_qualification, regimeLabel, deskFilter, synthesis]);
+
+  const volumeLeaderSymbols = useMemo(() => {
+    const fromCards = nearCards.filter((c) => c.source === "volume").map((c) => c.symbol);
+    if (fromCards.length > 0) return fromCards;
+    return buildVolumeProximityLeads(synthesis, new Set(), 2).map((l) => l.symbol);
+  }, [nearCards, synthesis]);
 
   const whatWouldChangeContent = useMemo(
-    () => buildWhatWouldChangeContent(synthesis, regimeLabel, nearCards.map((c) => c.symbol)),
-    [synthesis, regimeLabel, nearCards]
+    () =>
+      buildWhatWouldChangeContent(
+        synthesis,
+        regimeLabel,
+        nearCards.filter((c) => c.source === "alignment").map((c) => c.symbol),
+        volumeLeaderSymbols
+      ),
+    [synthesis, regimeLabel, nearCards, volumeLeaderSymbols]
   );
 
   return (
@@ -53,9 +70,6 @@ export function ScannerQuietDesk({ summary, synthesis, deskFilter }: Props) {
           groups={synthesis.rejection_groups}
           qualifiedCount={summary.qualifying.total}
           evaluatedCount={summary.universe.symbols_evaluated ?? undefined}
-          regimeLabel={regimeLabel}
-          spyPct={summary.regime.spy_pct}
-          qqqPct={summary.regime.qqq_pct}
         />
       ) : null}
 

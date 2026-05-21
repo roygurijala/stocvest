@@ -16,6 +16,7 @@ export type NearReadyCardModel = {
   symbol: string;
   desk: "swing" | "day";
   deskLabel: string;
+  source: "alignment" | "volume";
   alignmentHeadline: string;
   readinessHint: string;
   confirmedLines: string[];
@@ -25,6 +26,58 @@ export type NearReadyCardModel = {
   momentumLabel: string;
   evidenceHref: string;
 };
+
+export type VolumeProximityLead = {
+  symbol: string;
+  fillPct: number;
+  pctBelow: number;
+};
+
+/** Top session-volume rows (closest on pace) — not the same as structural near-ready. */
+export function buildVolumeProximityLeads(
+  synthesis: ScannerSynthesis | null | undefined,
+  excludeSymbols: Set<string>,
+  limit = 2
+): VolumeProximityLead[] {
+  const rows = synthesis?.rejection_groups.session_volume ?? [];
+  return [...rows]
+    .filter((r) => !excludeSymbols.has(r.symbol))
+    .sort((a, b) => a.pct_below - b.pct_below)
+    .slice(0, limit)
+    .map((r) => ({
+      symbol: r.symbol,
+      fillPct: Math.max(0, Math.min(100, Math.round(100 - r.pct_below))),
+      pctBelow: r.pct_below
+    }));
+}
+
+export function volumeLeadToNearReadyCard(
+  lead: VolumeProximityLead,
+  regimeLabel: string,
+  rank = 0
+): NearReadyCardModel {
+  const blocked = regimeBlocksDesk(regimeLabel);
+  return {
+    symbol: lead.symbol,
+    desk: "swing",
+    deskLabel: "volume",
+    source: "volume",
+    alignmentHeadline: `${lead.fillPct}% of session pace met`,
+    readinessHint:
+      rank === 0
+        ? "Nearest to qualifying on volume today — still below threshold"
+        : "Also relatively close on session pace",
+    confirmedLines: [
+      "Structure may be intact — participation has not confirmed",
+      "Watch this symbol if session pace recovers"
+    ],
+    blockedLine: blocked ? "Blocked by regime (volume also weak)" : "Blocked by session volume — not regime",
+    urgencyLine: "→ First signal if participation recovers",
+    momentum: lead.fillPct >= 25 ? "improving" : "stable",
+    momentumLabel: lead.fillPct >= 25 ? "↑ closest on volume" : "→ closest on volume",
+    evidenceHref: `/dashboard/signals?symbol=${encodeURIComponent(lead.symbol)}&ref=scanner&trading_mode=swing`
+  };
+}
 
 export type DevelopingRowModel = {
   symbol: string;
@@ -159,7 +212,7 @@ export function buildNearReadyCards(
       const urgencyLine = blocked
         ? "→ Will trigger if regime clears"
         : away <= 1
-          ? "→ May qualify on the next scan if gates clear"
+          ? "→ May qualify on the next scan if volume and gates align"
           : "";
 
       const mode = row.desk === "swing" ? "swing" : "day";
@@ -167,6 +220,7 @@ export function buildNearReadyCards(
         symbol: row.symbol,
         desk: row.desk,
         deskLabel: deskBadge(row.desk),
+        source: "alignment",
         alignmentHeadline,
         readinessHint,
         confirmedLines: confirmedLinesForRow(aligned, total, away),
@@ -281,23 +335,44 @@ export function buildQuietBridgeLine(
 export function buildWhatWouldChangeContent(
   synthesis: ScannerSynthesis | null | undefined,
   regimeLabel: string,
-  nearSymbols: string[]
+  nearSymbols: string[],
+  volumeLeaderSymbols: string[] = []
 ): WhatWouldChangeContent {
   const watchItems: string[] = [];
-  const volQuiet =
-    synthesis?.volume_context?.market_condition?.toLowerCase().includes("low") ||
-    synthesis?.volume_context?.market_condition?.toLowerCase().includes("below");
-  watchItems.push("Participation must improve");
-  watchItems.push("Volume needs to expand across large caps");
-  watchItems.push("SPY / QQQ should lead higher");
+  const volLeaders = volumeLeaderSymbols.length
+    ? volumeLeaderSymbols
+    : (synthesis?.rejection_groups.session_volume ?? [])
+        .slice()
+        .sort((a, b) => a.pct_below - b.pct_below)
+        .slice(0, 2)
+        .map((r) => r.symbol);
+
+  const indexProxies = ["SPY", "QQQ"].filter((s) =>
+    (synthesis?.rejection_groups.session_volume ?? []).some((r) => r.symbol === s)
+  );
+
+  watchItems.push("Participation must improve vs intraday pace");
+  if (volLeaders.length > 0) {
+    watchItems.push(`Volume expansion in ${volLeaders.join(", ")} first`);
+  } else {
+    watchItems.push("Volume needs to expand across large caps");
+  }
+  if (indexProxies.length > 0) {
+    watchItems.push(`${indexProxies.join(" / ")} reclaiming pace would confirm a broader turn`);
+  } else {
+    watchItems.push("SPY / QQQ should lead higher on volume");
+  }
   if (regimeBlocksDesk(regimeLabel)) {
     watchItems.push("Regime must clear before swing gates unlock");
   }
 
-  const names = nearSymbols.slice(0, 2).join(" and ");
-  const outcome = names
-    ? `If these improve → ${names} may qualify first.`
-    : "If these improve → setups may qualify on the next scan.";
+  const leadNames = [...new Set([...nearSymbols, ...volLeaders])].slice(0, 2);
+  const outcome =
+    leadNames.length >= 2
+      ? `Volume pickup in ${leadNames[0]} and ${leadNames[1]} would be the first signal that session pace is recovering.`
+      : leadNames.length === 1
+        ? `Volume pickup in ${leadNames[0]} would be the first signal that session pace is recovering.`
+        : "If participation improves → setups may qualify on the next scan.";
 
   return { watchItems, outcome };
 }

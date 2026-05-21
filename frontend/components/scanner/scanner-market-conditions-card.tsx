@@ -11,22 +11,19 @@ type Props = {
 export function ScannerMarketConditionsCard({ model }: Props) {
   const { colors } = useTheme();
 
-  const pillColor = (tone: "ok" | "caution" | "bearish" | "muted") => {
+  const lineTone = (tone: "ok" | "caution" | "bearish") => {
     switch (tone) {
       case "ok":
-        return { border: colors.bullish, color: colors.bullish, bg: "rgba(34,197,94,0.08)" };
+        return colors.bullish;
       case "bearish":
-        return { border: colors.bearish, color: colors.bearish, bg: "rgba(239,68,68,0.08)" };
-      case "caution":
-        return { border: colors.caution, color: colors.caution, bg: "rgba(245,158,11,0.08)" };
+        return colors.bearish;
       default:
-        return { border: colors.border, color: colors.textMuted, bg: colors.surfaceMuted };
+        return colors.caution;
     }
   };
 
-  const regimeStyle = pillColor(model.regimePill.tone);
-  const breadthStyle = pillColor(model.breadthPill.tone);
   const envWeak = model.environmentQuality.tone === "weak";
+  const regimeColor = lineTone(model.regimeContextTone);
 
   return (
     <section
@@ -87,25 +84,31 @@ export function ScannerMarketConditionsCard({ model }: Props) {
         {model.focusHint}
       </p>
 
-      <div className="flex flex-wrap gap-2" style={{ marginBottom: spacing[3] }}>
-        <StatusPill label={model.regimePill.label} style={regimeStyle} testId="scanner-market-regime-pill" />
-        <StatusPill label={model.breadthPill.label} style={breadthStyle} testId="scanner-market-breadth-pill" />
-      </div>
-
       <div style={{ display: "grid", gap: spacing[2] }}>
-        {model.bodyParagraphs.map((para) => (
-          <p
-            key={para}
-            style={{
-              margin: 0,
-              fontSize: typography.scale.sm,
-              color: colors.textMuted,
-              lineHeight: 1.55
-            }}
-          >
-            {para}
-          </p>
-        ))}
+        <p
+          data-testid="scanner-market-regime-context"
+          style={{
+            margin: 0,
+            fontSize: typography.scale.sm,
+            fontWeight: 600,
+            color: regimeColor,
+            lineHeight: 1.55
+          }}
+        >
+          {model.regimeContextLine}
+        </p>
+        <p
+          data-testid="scanner-market-volume-blocker"
+          style={{
+            margin: 0,
+            fontSize: typography.scale.sm,
+            fontWeight: 600,
+            color: colors.caution,
+            lineHeight: 1.55
+          }}
+        >
+          {model.volumeBlockerLine}
+        </p>
       </div>
 
       {model.footnote ? (
@@ -121,33 +124,5 @@ export function ScannerMarketConditionsCard({ model }: Props) {
         </p>
       ) : null}
     </section>
-  );
-}
-
-function StatusPill({
-  label,
-  style,
-  testId
-}: {
-  label: string;
-  style: { border: string; color: string; bg: string };
-  testId: string;
-}) {
-  return (
-    <span
-      data-testid={testId}
-      style={{
-        fontSize: 10,
-        fontWeight: 700,
-        letterSpacing: "0.04em",
-        padding: `${spacing[1]} ${spacing[2]}`,
-        borderRadius: borderRadius.md,
-        border: `1px solid ${style.border}`,
-        color: style.color,
-        background: style.bg
-      }}
-    >
-      {label}
-    </span>
   );
 }

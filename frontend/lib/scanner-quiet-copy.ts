@@ -9,6 +9,18 @@ import { volumeFillFromPctBelow } from "@/lib/scanner-volume-gap";
 
 const MEGA_CAP_LEADERS = ["NVDA", "AAPL", "MSFT", "AMZN", "META", "GOOGL", "GOOG", "TSLA"];
 
+function sessionVolumeIsPrimaryBlocker(
+  summary: ScannerScanSummary,
+  synthesis?: ScannerSynthesis | null
+): boolean {
+  const sessionVol = synthesis?.rejection_groups.session_volume.length ?? 0;
+  const volQuiet =
+    synthesis?.volume_context?.market_condition?.toLowerCase().includes("low") ||
+    synthesis?.volume_context?.market_condition?.toLowerCase().includes("below");
+  const regime = summary.regime.label.toLowerCase();
+  return (volQuiet || sessionVol >= 2) && !regime.includes("bear");
+}
+
 export function buildScannerQuietSubline(
   summary: ScannerScanSummary,
   synthesis?: ScannerSynthesis | null
@@ -16,15 +28,15 @@ export function buildScannerQuietSubline(
   if (summary.qualifying.total > 0) {
     return summary.quiet.unified_headline;
   }
-  const condition = synthesis?.volume_context?.market_condition?.toLowerCase() ?? "";
-  if (condition.includes("low")) return "Market quiet — low participation";
-  if (condition.includes("below")) return "Market quiet — below-average participation";
-  if (summary.near_qualification.length > 0) {
-    return summary.quiet.unified_headline;
+  if (sessionVolumeIsPrimaryBlocker(summary, synthesis)) {
+    return "Quiet today — session volume below pace";
   }
   const regime = summary.regime.label.toLowerCase();
   if (regime.includes("bear")) return "Market quiet — risk-off regime";
-  return "Market quiet — low participation";
+  if (summary.near_qualification.length > 0) {
+    return summary.quiet.unified_headline;
+  }
+  return "Market quiet — conditions not aligned";
 }
 
 /**
@@ -57,13 +69,26 @@ export type MarketConditionsQuietCard = {
   headline: string;
   environmentQuality: { label: string; tone: "weak" | "mixed" | "ok" };
   focusHint: string;
-  regimePill: { label: string; tone: "ok" | "caution" | "bearish" };
-  breadthPill: { label: string; tone: "caution" | "muted" | "bearish" };
-  bodyParagraphs: string[];
+  /** Regime as context — not the rejection reason when volume-led. */
+  regimeContextLine: string;
+  regimeContextTone: "ok" | "caution" | "bearish";
+  /** Why nothing qualified today (volume-led on most quiet bullish days). */
+  volumeBlockerLine: string;
   footnote?: string;
 };
 
-/** Single market-conditions card — replaces standalone “Why the scanner is quiet”. */
+function volumeBelowPctRange(
+  rows: { pct_below: number }[]
+): string | null {
+  if (rows.length === 0) return null;
+  const pcts = rows.map((r) => Math.round(r.pct_below)).filter((n) => Number.isFinite(n));
+  if (pcts.length === 0) return null;
+  const min = Math.min(...pcts);
+  const max = Math.max(...pcts);
+  return min === max ? `${min}%` : `${min}–${max}%`;
+}
+
+/** Single market-conditions card — one story: regime context + volume blocker (not competing bullets). */
 export function buildMarketConditionsQuietCard(
   summary: ScannerScanSummary,
   synthesis?: ScannerSynthesis | null
@@ -73,73 +98,61 @@ export function buildMarketConditionsQuietCard(
   const r = regimeLabel.toLowerCase();
   const bearish = r.includes("bear");
   const bullish = r.includes("bull");
+  const volumePrimary = sessionVolumeIsPrimaryBlocker(summary, synthesis);
 
-  const regimePill = bearish
-    ? { label: `Regime: ${regimeLabel}`, tone: "bearish" as const }
-    : bullish
-      ? { label: `Regime: ${regimeLabel} ✓`, tone: "ok" as const }
-      : { label: `Regime: ${regimeLabel}`, tone: "caution" as const };
+  const sessionRows = synthesis?.rejection_groups.session_volume ?? [];
+  const pctRange = volumeBelowPctRange(sessionRows);
 
-  const breadthPill = bearish
-    ? { label: "Breadth: risk-off", tone: "bearish" as const }
-    : bullish
-      ? { label: "Breadth: selective", tone: "caution" as const }
-      : { label: "Breadth: mixed", tone: "muted" as const };
-
-  const sessionVolCount = synthesis?.rejection_groups.session_volume.length ?? 0;
-  const volQuiet =
-    synthesis?.volume_context?.market_condition?.toLowerCase().includes("low") ||
-    synthesis?.volume_context?.market_condition?.toLowerCase().includes("below");
-  const avgBelow = synthesis?.volume_context?.avg_pct_below;
-  const leaders = pickLeaderSymbolsForCause(synthesis, summary);
-
-  const bodyParagraphs: string[] = [];
-
+  let regimeContextLine: string;
+  let regimeContextTone: "ok" | "caution" | "bearish";
   if (bearish) {
-    bodyParagraphs.push("Risk-off regime is limiting broad follow-through — structure alone is not enough today.");
+    regimeContextLine = `Regime: ${regimeLabel} — limiting follow-through today`;
+    regimeContextTone = "bearish";
   } else if (bullish) {
-    bodyParagraphs.push(`Regime is ${regimeLabel} — not the primary blocker on this scan.`);
+    regimeContextLine = `Regime: ${regimeLabel} ✓ — not the blocker today`;
+    regimeContextTone = "ok";
   } else {
-    bodyParagraphs.push(`Regime reads ${regimeLabel} — follow-through remains selective.`);
+    regimeContextLine = `Regime: ${regimeLabel} — tape is mixed, not the main story`;
+    regimeContextTone = "caution";
   }
 
-  if (volQuiet || sessionVolCount >= 2) {
-    const pace =
-      avgBelow != null && Number.isFinite(avgBelow)
-        ? `Volume is the primary blocker — broad participation ≈${Math.round(avgBelow)}% below intraday pace.`
-        : "Volume is the primary blocker — session pace has not reached desk thresholds.";
-    bodyParagraphs.push(pace);
+  let volumeBlockerLine: string;
+  if (bearish && !volumePrimary) {
+    volumeBlockerLine =
+      "Regime and participation together — why no setups have qualified on this scan.";
+  } else if (pctRange) {
+    volumeBlockerLine = `Volume: ${pctRange} below session pace — this is why no setups have qualified.`;
+  } else if (volumePrimary) {
+    volumeBlockerLine = "Volume: below session pace — this is why no setups have qualified.";
   } else {
-    bodyParagraphs.push("Participation has not reached desk thresholds yet.");
-  }
-
-  if (leaders.length >= 2) {
-    bodyParagraphs.push(
-      `${leaders.slice(0, 3).join(", ")} not confirming session pace — keeps the tape selective.`
-    );
-  } else if (leaders.length === 1) {
-    bodyParagraphs.push(`${leaders[0]} not confirming session pace.`);
+    volumeBlockerLine = "Session volume has not reached desk thresholds — why nothing qualified today.";
   }
 
   const footnote = bearish
     ? "Bearish regime prevents trading against the tape — individual alignment alone does not clear swing gates."
     : undefined;
 
-  const environmentQuality =
-    volQuiet || sessionVolCount >= 3
+  const environmentQuality = volumePrimary
+    ? { label: "Environment quality: Weak (volume-led)", tone: "weak" as const }
+    : bearish
       ? { label: "Environment quality: Weak", tone: "weak" as const }
-      : bearish
-        ? { label: "Environment quality: Weak", tone: "weak" as const }
-        : { label: "Environment quality: Mixed", tone: "mixed" as const };
+      : { label: "Environment quality: Mixed", tone: "mixed" as const };
 
-  const focusHint =
-    volQuiet || sessionVolCount >= 2
-      ? "Focus: Wait for volume expansion before scanning for setups."
-      : bearish
-        ? "Focus: Regime must improve before swing setups can qualify."
-        : "Focus: Watch for participation and structure to align.";
+  const focusHint = volumePrimary
+    ? "Focus: Watch session volume — especially leaders with the longest bars below."
+    : bearish
+      ? "Focus: Regime must improve before swing setups can qualify."
+      : "Focus: Watch for participation and structure to align.";
 
-  return { headline, environmentQuality, focusHint, regimePill, breadthPill, bodyParagraphs, footnote };
+  return {
+    headline,
+    environmentQuality,
+    focusHint,
+    regimeContextLine,
+    regimeContextTone,
+    volumeBlockerLine,
+    footnote
+  };
 }
 
 /** @deprecated Use {@link buildMarketConditionsQuietCard} — kept for tests/callers migrating off bullet lists. */

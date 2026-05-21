@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildMarketConditionsQuietCard } from "@/lib/scanner-quiet-copy";
+import { buildMarketConditionsQuietCard, buildScannerQuietSubline } from "@/lib/scanner-quiet-copy";
 import { buildScannerScanSummary } from "@/lib/scanner-scan-summary";
 
 describe("buildMarketConditionsQuietCard", () => {
-  it("returns headline and pills for bullish quiet day", () => {
+  it("separates bullish regime context from volume blocker", () => {
     const summary = buildScannerScanSummary({
       scannedAtIso: "2026-05-16T14:30:00.000Z",
       overview: {
@@ -16,7 +16,7 @@ describe("buildMarketConditionsQuietCard", () => {
       nearQualificationSetups: [],
       watchlistProgression: []
     });
-    const model = buildMarketConditionsQuietCard(summary, {
+    const synthesis = {
       qualified_count: 0,
       market_summary: "",
       what_would_change: "",
@@ -31,13 +31,13 @@ describe("buildMarketConditionsQuietCard", () => {
         liquidity: [],
         structure: []
       }
-    });
-    expect(model.headline).toMatch(/Market quiet/i);
-    expect(model.environmentQuality.label).toMatch(/Weak|Mixed/i);
-    expect(model.focusHint).toMatch(/Focus:/i);
-    expect(model.regimePill.label).toMatch(/Bullish/);
-    expect(model.breadthPill.label).toMatch(/selective/i);
-    expect(model.bodyParagraphs.some((p) => /Volume is the primary blocker/i.test(p))).toBe(true);
-    expect(model.bodyParagraphs.some((p) => /NVDA/i.test(p))).toBe(true);
+    };
+    const model = buildMarketConditionsQuietCard(summary, synthesis);
+    expect(buildScannerQuietSubline(summary, synthesis)).toMatch(/session volume below pace/i);
+    expect(model.headline).toMatch(/session volume below pace/i);
+    expect(model.regimeContextLine).toMatch(/Bullish.*not the blocker/i);
+    expect(model.volumeBlockerLine).toMatch(/85–90% below session pace/i);
+    expect(model.volumeBlockerLine).toMatch(/why no setups have qualified/i);
+    expect(model.regimeContextTone).toBe("ok");
   });
 });

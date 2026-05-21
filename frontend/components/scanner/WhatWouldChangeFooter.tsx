@@ -36,7 +36,7 @@ export function WhatWouldChangeFooter({ text, content }: Props) {
           color: colors.textMuted
         }}
       >
-        What to watch
+        What would change this
       </p>
       {structured ? (
         <>
