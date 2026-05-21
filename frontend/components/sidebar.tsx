@@ -38,7 +38,7 @@ import { isDashboardNavItemEnabled, type NavFeatureKey } from "@/lib/nav-feature
 
 export { NAV_FEATURES } from "@/lib/nav-features";
 import { useTheme } from "@/lib/theme-provider";
-import { StocvestLogo } from "@/components/brand/stocvest-logo";
+import { StocvestTitle } from "@/components/brand/stocvest-title";
 import type { LucideIcon } from "lucide-react";
 
 interface SidebarProps {
@@ -162,7 +162,7 @@ export function Sidebar({ userLabel, isAdmin = false }: SidebarProps) {
           borderBottomColor: colors.border
         }}
       >
-        <StocvestLogo variant="nav" href="/dashboard" className="w-full" />
+        <StocvestTitle href="/dashboard" />
       </div>
 
       <nav
