@@ -117,8 +117,32 @@ describe("signals-page-present", () => {
     expect(line).toMatch(/structure/i);
   });
 
+  test("buildSignalsPageDecision assigns B+ conviction for 1.6 R/R and 5/6 swing", () => {
+    const rows: SignalsLayerRowInput[] = [
+      { key: "technical", name: "Technical", status: "Bullish", explanation: "", score: 72 },
+      { key: "news", name: "News", status: "Bullish", explanation: "", score: 68 },
+      { key: "macro", name: "Macro", status: "Bullish", explanation: "", score: 65 },
+      { key: "sector", name: "Sector", status: "Bullish", explanation: "", score: 70 },
+      { key: "geopolitical", name: "Geopolitical", status: "Neutral", explanation: "", score: 52 },
+      { key: "internals", name: "Internals", status: "Bullish", explanation: "", score: 66 }
+    ];
+    const d = buildSignalsPageDecision({
+      mode: "swing",
+      bias: "Bullish",
+      rows,
+      signalScore: 65,
+      alignmentRatio: 0.85,
+      riskReward: 1.6,
+      rrWarning: false,
+      isComplete: true
+    });
+    expect(d.state).toBe("monitor");
+    expect(d.conviction?.tier).toBe("b_plus");
+  });
+
   test("buildSignalsPageDecision monitor state", () => {
     const d = buildSignalsPageDecision({
+      mode: "swing",
       bias: "Bearish",
       rows: bearishRows,
       signalScore: 62,
@@ -148,6 +172,7 @@ describe("signals-page-present", () => {
 
   test("why-not bullets avoid recommendation words", () => {
     const d = buildSignalsPageDecision({
+      mode: "swing",
       bias: "Bearish",
       rows: bearishRows,
       signalScore: 45,

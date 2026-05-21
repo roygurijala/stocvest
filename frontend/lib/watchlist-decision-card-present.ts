@@ -13,6 +13,11 @@ import { maturationAlignmentCounts, missingLayerNames } from "@/lib/watchlist-al
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
 import type { SnapshotPayload } from "@/lib/api/market";
 import { watchlistQuoteFromSnapshot } from "@/lib/watchlist-page-utils";
+import {
+  parseRiskRewardFromReadiness,
+  resolveTradeConvictionTier,
+  type TradeConvictionTierResult
+} from "@/lib/trade-conviction-tier";
 
 export type WatchlistAttentionTier = "check_now" | "getting_close" | "tracking";
 
@@ -36,6 +41,7 @@ export type WatchlistCardModel = {
   layerDots: boolean[];
   borderLeft: string;
   borderBottom: string;
+  conviction: TradeConvictionTierResult | null;
 };
 
 const TIER_SECTION: Record<
@@ -181,11 +187,36 @@ export function watchlistCardBorderAccent(
   }
 }
 
+function resolveWatchlistConviction(
+  row: WatchlistMaturationRow | undefined,
+  aligned: number,
+  total: number,
+  mode: "swing" | "day"
+): TradeConvictionTierResult | null {
+  const rr = parseRiskRewardFromReadiness(row?.readiness_label);
+  if (rr == null) return null;
+  const tier = resolveAlignmentDisplayTier({
+    layersAligned: aligned,
+    layersTotal: total,
+    maturationState: row?.state
+  });
+  const decisionState =
+    tier === "actionable" ? "actionable" : tier === "not_aligned" || tier === "invalidated" ? "blocked" : "monitor";
+  return resolveTradeConvictionTier({
+    mode,
+    riskReward: rr,
+    layersAligned: aligned,
+    layersTotal: total,
+    decisionState
+  });
+}
+
 export function buildWatchlistCardModel(
   symbol: string,
   row: WatchlistMaturationRow | undefined,
   snapshot: SnapshotPayload | undefined,
-  colors: { accent: string; bullish: string; bearish: string; caution: string; textMuted: string }
+  colors: { accent: string; bullish: string; bearish: string; caution: string; textMuted: string },
+  planMode: "swing" | "day" = "swing"
 ): WatchlistCardModel {
   const symU = symbol.trim().toUpperCase();
   const { aligned, total } = maturationAlignmentCounts(row);
@@ -222,7 +253,8 @@ export function buildWatchlistCardModel(
     quote: watchlistQuoteFromSnapshot(snapshot),
     layerDots,
     borderLeft: borders.left,
-    borderBottom: borders.bottom
+    borderBottom: borders.bottom,
+    conviction: resolveWatchlistConviction(row, aligned, total, planMode)
   };
 }
 

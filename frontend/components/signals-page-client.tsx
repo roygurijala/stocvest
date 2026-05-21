@@ -45,6 +45,7 @@ import {
   SIGNAL_LAYER_LEVEL_BASELINE,
   type SignalsLayerRowInput
 } from "@/lib/signals-page-present";
+import { isRrBelowVerdictThreshold } from "@/lib/trade-conviction-tier";
 import {
   resolveScenarioBuilderCapability,
   type ScenarioReadinessContext
@@ -993,9 +994,10 @@ export function SignalsPageClient({
     if (!compositeResult || isInsufficientCompositeResponse(compositeResult)) return null;
     const c = compositeResult as Record<string, unknown>;
     const rr = typeof c.risk_reward === "number" && Number.isFinite(c.risk_reward) ? c.risk_reward : 1.5;
-    const rrWarning = Boolean(c.rr_warning) || rr < 2.0;
+    const rrWarning = Boolean(c.rr_warning) || isRrBelowVerdictThreshold(rr, tradingMode);
     const ar = typeof c.alignment_ratio === "number" ? c.alignment_ratio : null;
     return buildSignalsPageDecision({
+      mode: tradingMode,
       bias: setupBias,
       rows: signalsPresentRows,
       signalScore: aiStripSignalScore,
@@ -1004,7 +1006,7 @@ export function SignalsPageClient({
       rrWarning,
       isComplete: c.is_complete !== false
     });
-  }, [compositeResult, setupBias, signalsPresentRows, aiStripSignalScore]);
+  }, [compositeResult, setupBias, signalsPresentRows, aiStripSignalScore, tradingMode]);
 
   const compositeAlignmentRatio = useMemo(() => {
     if (!compositeResult || isInsufficientCompositeResponse(compositeResult)) return null;
@@ -1413,7 +1415,7 @@ export function SignalsPageClient({
       };
     }
     const insight = signalEvidence.insight;
-    const decision = synthTradeDecision(signalEvidence, insight);
+    const decision = synthTradeDecision(signalEvidence, insight, tradingMode);
     return {
       page: pageId,
       trading_mode: tradingMode,
@@ -1422,6 +1424,9 @@ export function SignalsPageClient({
       decision_state: decision.state,
       decision_line: decision.line,
       decision_rationale: decision.rationale ?? undefined,
+      conviction_tier: decision.conviction?.tier,
+      conviction_label: decision.conviction?.label,
+      conviction_summary: decision.conviction?.summaryLine,
       trade_readiness:
         typeof insight.signal_score === "number" && Number.isFinite(insight.signal_score)
           ? insight.signal_score

@@ -153,6 +153,19 @@ export function WatchlistDecisionCard({
           </p>
         ) : null}
 
+        {model.conviction && model.conviction.tier !== "developing" ? (
+          <p
+            className="m-0 mt-2 text-xs leading-snug"
+            style={{
+              color: model.conviction.tone === "bullish" ? colors.bullish : colors.caution
+            }}
+            data-testid={`watchlist-conviction-${model.symbol}`}
+          >
+            {model.conviction.shortLabel} · {model.conviction.label}
+            {model.conviction.tier === "b_plus" ? " (discretionary)" : ""}
+          </p>
+        ) : null}
+
         <p className="m-0 mt-2 text-sm" style={{ color: colors.textMuted }}>
           → Worth checking?{" "}
           <span style={{ color: model.worthChecking ? colors.bullish : colors.textMuted, fontWeight: 600 }}>
@@ -221,13 +234,19 @@ export function WatchlistDecisionCardFromRow({
   onRefresh?: () => void;
 }) {
   const { colors } = useTheme();
-  const model = buildWatchlistCardModel(symbol, row, snapshot, {
-    accent: colors.accent,
-    bullish: colors.bullish,
-    bearish: colors.bearish,
-    caution: colors.caution,
-    textMuted: colors.textMuted
-  });
+  const model = buildWatchlistCardModel(
+    symbol,
+    row,
+    snapshot,
+    {
+      accent: colors.accent,
+      bullish: colors.bullish,
+      bearish: colors.bearish,
+      caution: colors.caution,
+      textMuted: colors.textMuted
+    },
+    planMode
+  );
   return (
     <WatchlistDecisionCard
       model={model}

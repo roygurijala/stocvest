@@ -118,10 +118,10 @@ export interface ScenarioInput {
    * levels are mechanically degenerate for structured planning (a 0.5:1
    * sheet plans to lose more than it stands to gain, which is not a
    * coherent structure regardless of whether the signal is otherwise
-   * "good"). The threshold is `2.0` and matches the same threshold
-   * `trade-decision.ts::synthTradeDecision` uses for its `rrFail` gate,
-   * so the Build Scenario button stays in lock-step with the Decision
-   * line on the same card.
+   * "good"). The threshold is mode-aware via
+   * `minRiskRewardForVerdict(mode)` (swing 2.0, day 1.3), aligned with
+   * Signals verdict gates. A-tier conviction display still requires
+   * 2.0 : 1 separately (`MIN_RR_A_TIER`).
    *
    * Optional / nullable so legacy call sites that haven't been wired
    * yet keep working — when the field is missing or non-finite, the

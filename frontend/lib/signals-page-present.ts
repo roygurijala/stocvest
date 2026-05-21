@@ -12,6 +12,11 @@ import {
   type TradeDecision,
   type TradeDecisionState
 } from "@/lib/signal-evidence/trade-decision";
+import {
+  isRrBelowVerdictThreshold,
+  minRiskRewardForVerdict,
+  resolveTradeConvictionTier
+} from "@/lib/trade-conviction-tier";
 
 export type SignalsSetupBias = "Bullish" | "Bearish" | "Neutral";
 
@@ -342,6 +347,7 @@ export function buildLayerInsightLine(row: SignalsLayerRowInput, bias: SignalsSe
 }
 
 export function buildSignalsPageDecision(input: {
+  mode: "swing" | "day";
   bias: SignalsSetupBias;
   rows: SignalsLayerRowInput[];
   signalScore: number | null;
@@ -352,10 +358,11 @@ export function buildSignalsPageDecision(input: {
   counterTrend?: boolean;
   regimeConflict?: boolean;
 }): TradeDecision {
-  const { rows, bias, signalScore, alignmentRatio, riskReward, rrWarning, isComplete } = input;
+  const { rows, bias, signalScore, alignmentRatio, riskReward, rrWarning, isComplete, mode } = input;
   const score = signalScore ?? 50;
   const availableLayers = rows.filter((r) => r.status !== "Unavailable").length;
   const directionalLayers = rows.filter((r) => r.status === "Bullish" || r.status === "Bearish").length;
+  const alignment = resolveSignalsLayerAlignment({ rows, bias, alignmentRatio });
   const agreementPct =
     alignmentRatio != null && Number.isFinite(alignmentRatio)
       ? Math.round(Math.max(0, Math.min(1, alignmentRatio)) * 100)
@@ -366,7 +373,7 @@ export function buildSignalsPageDecision(input: {
   const strongAgreement = agreementPct != null ? agreementPct >= 60 : directionalLayers >= 4;
   const goodCoverage = availableLayers >= 5;
   const hasInsufficient = !isComplete;
-  const rrFail = rrWarning || riskReward < 2;
+  const rrFail = rrWarning || isRrBelowVerdictThreshold(riskReward, mode);
   const counterTrend = input.counterTrend === true;
   const regimeConflict = input.regimeConflict === true;
 
@@ -380,8 +387,23 @@ export function buildSignalsPageDecision(input: {
     regimeConflict
   };
 
+  const convictionBase = {
+    mode,
+    riskReward,
+    layersAligned: alignment.aligned,
+    layersTotal: alignment.total,
+    counterTrend,
+    regimeConflict,
+    hasInsufficient
+  };
+
   const reinforcements: string[] = [];
-  if (rrFail) reinforcements.push(`Risk/reward too low (${riskReward.toFixed(1)}:1) — below threshold.`);
+  if (rrFail) {
+    const minRr = minRiskRewardForVerdict(mode);
+    reinforcements.push(
+      `Risk/reward too low (${riskReward.toFixed(1)}:1) — below ${mode} desk threshold (${minRr.toFixed(1)}:1).`
+    );
+  }
   if (weakAgreement) reinforcements.push("Layer agreement is mixed across desks.");
 
   if (hasInsufficient || (rrFail && weakAgreement && lowReadiness) || availableLayers < 4) {
@@ -389,7 +411,8 @@ export function buildSignalsPageDecision(input: {
       state: "blocked",
       line: "Not actionable — minimum synthesis and risk gates not met",
       reinforcements,
-      rationale: deriveDecisionRationale("blocked", rationaleCtx)
+      rationale: deriveDecisionRationale("blocked", rationaleCtx),
+      conviction: resolveTradeConvictionTier({ ...convictionBase, decisionState: "blocked" })
     };
   }
   if (strongReadiness && !rrFail && strongAgreement && goodCoverage && !counterTrend) {
@@ -397,14 +420,16 @@ export function buildSignalsPageDecision(input: {
       state: "actionable",
       line: "Actionable — internal gates cleared for this setup",
       reinforcements: [],
-      rationale: null
+      rationale: null,
+      conviction: resolveTradeConvictionTier({ ...convictionBase, decisionState: "actionable" })
     };
   }
   return {
     state: "monitor",
     line: "Final confirmation and/or risk conditions not yet satisfied",
     reinforcements,
-    rationale: deriveDecisionRationale("monitor", rationaleCtx)
+    rationale: deriveDecisionRationale("monitor", rationaleCtx),
+    conviction: resolveTradeConvictionTier({ ...convictionBase, decisionState: "monitor" })
   };
 }
 

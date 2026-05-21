@@ -77,6 +77,18 @@ For **contributors and product copy** (the UI may use terms like “trade readin
 - Treat the headline **0–100-style** read as **alignment and cleanliness after rules and gates**, **not** win probability, expected return, or a trade instruction.
 - **Internal mental model** (not necessarily a single literal formula in code): readiness is driven by **weighted directional alignment**, **data quality** (available layers, confidence), and **gate clearance** (e.g. insufficient-data envelope, evidence-side R/R warnings). Features should **not** quietly inflate scores without revisiting this framing.
 
+### Trade conviction tiers (frontend display, B50)
+
+Signals and watchlist cards may show **A+** / **B+** / **Developing** bands from `frontend/lib/trade-conviction-tier.ts`. These are **explanatory only** — they do **not** change composite verdicts, actionable counts, maturation `derive_state`, or the validation ledger.
+
+| Band | Rough rule |
+|------|------------|
+| **A+** | Actionable verdict + R/R ≥ **2.0** + ≥ **5/6** alignment + no counter-trend / regime-conflict blocks |
+| **B+** | ≥ **5/6** alignment + R/R in **[1.3, 2.0)** — discretionary context; not STOCVEST’s default recommendation |
+| **Developing** | Below B+ floor or major blocks |
+
+Desk **verdict** R/R gates remain mode-specific: swing **≥ 2.0**, day **≥ 1.3** (`minRiskRewardForVerdict`). **Scenario Builder** structural `low_risk_reward` uses the same desk minimum; the **2.0** bar is the separate **A-tier** label, not the day desk gate.
+
 ### Gate taxonomy: eligibility vs degradation
 
 Keep these **conceptually separate** when adding features:

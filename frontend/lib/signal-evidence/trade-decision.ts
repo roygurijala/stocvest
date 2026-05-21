@@ -10,6 +10,11 @@
  */
 
 import type { SignalEvidenceData, SignalEvidenceInsight } from "@/lib/signal-evidence";
+import {
+  isRrBelowVerdictThreshold,
+  resolveTradeConvictionTier,
+  type TradeConvictionTierResult
+} from "@/lib/trade-conviction-tier";
 
 export type TradeDecisionState = "actionable" | "monitor" | "blocked";
 
@@ -43,7 +48,11 @@ export interface TradeDecision {
   line: string;
   reinforcements: string[];
   rationale: DecisionRationale | null;
+  /** Display-only quality band — does not override `state`. */
+  conviction?: TradeConvictionTierResult;
 }
+
+export type { TradeConvictionTierResult };
 
 /**
  * Build the single rationale line shown under the Decision when permission is withheld.
@@ -126,7 +135,8 @@ export function deriveDecisionRationale(
 
 export function synthTradeDecision(
   evidence: SignalEvidenceData,
-  insight: SignalEvidenceInsight
+  insight: SignalEvidenceInsight,
+  mode: "swing" | "day" = "swing"
 ): TradeDecision {
   const layers = evidence.layers ?? [];
   const totalLayers = Math.max(1, layers.length);
@@ -134,7 +144,7 @@ export function synthTradeDecision(
   const directionalLayers = layers.filter((l) => l.status === "Bullish" || l.status === "Bearish").length;
   const hasInsufficient = insight.is_complete === false;
   const rr = Number.isFinite(insight.risk_reward) ? insight.risk_reward : 0;
-  const rrFail = rr < 2.0;
+  const rrFail = insight.rr_warning === true || isRrBelowVerdictThreshold(rr, mode);
   const agreementPct =
     insight.alignment_ratio != null && Number.isFinite(insight.alignment_ratio)
       ? Math.round(Math.max(0, Math.min(1, insight.alignment_ratio)) * 100)
@@ -164,12 +174,29 @@ export function synthTradeDecision(
     regimeConflict
   };
 
+  const alignedForConviction =
+    agreementPct != null
+      ? Math.round(Math.max(0, Math.min(1, insight.alignment_ratio ?? 0)) * totalLayers)
+      : directionalLayers;
+
+  const convictionInput = {
+    mode,
+    riskReward: rr,
+    layersAligned: alignedForConviction,
+    layersTotal: totalLayers,
+    decisionState: "monitor" as TradeDecisionState,
+    counterTrend,
+    regimeConflict,
+    hasInsufficient
+  };
+
   if (hasInsufficient || (rrFail && weakAgreement && lowReadiness) || availableLayers < 4) {
     return {
       state: "blocked",
       line: "Decision: 🚫 Blocked — fails minimum synthesis and risk gates",
       reinforcements,
-      rationale: deriveDecisionRationale("blocked", rationaleCtx)
+      rationale: deriveDecisionRationale("blocked", rationaleCtx),
+      conviction: resolveTradeConvictionTier({ ...convictionInput, decisionState: "blocked" })
     };
   }
   if (strongReadiness && !rrFail && strongAgreement && goodCoverage && !counterTrend) {
@@ -177,13 +204,15 @@ export function synthTradeDecision(
       state: "actionable",
       line: "Decision: ✅ Actionable — passes risk/reward and confirmation thresholds",
       reinforcements: [],
-      rationale: null
+      rationale: null,
+      conviction: resolveTradeConvictionTier({ ...convictionInput, decisionState: "actionable" })
     };
   }
   return {
     state: "monitor",
     line: "Decision: ⚠️ Monitor only — confirmation and/or risk gates are not fully cleared",
     reinforcements,
-    rationale: deriveDecisionRationale("monitor", rationaleCtx)
+    rationale: deriveDecisionRationale("monitor", rationaleCtx),
+    conviction: resolveTradeConvictionTier({ ...convictionInput, decisionState: "monitor" })
   };
 }

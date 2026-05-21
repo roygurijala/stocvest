@@ -254,9 +254,31 @@ describe("isEligibleForScenario — low risk/reward gate (BRK.B feedback, 2026-0
     expect(r.eligible).toBe(true);
   });
 
-  test("test_rr_below_threshold_1p8_just_under_2_fails", () => {
-    const r = isEligibleForScenario(happyInput({ risk_reward: 1.8 }), NOW);
+  test("test_swing_rr_below_threshold_1p8_just_under_2_fails", () => {
+    const r = isEligibleForScenario(happyInput({ mode: "swing", risk_reward: 1.8 }), NOW);
     expect(r.reasons).toContain("low_risk_reward");
+  });
+
+  test("test_day_rr_1p8_passes_above_desk_minimum", () => {
+    const r = isEligibleForScenario(happyInput({ mode: "day", risk_reward: 1.8 }), NOW);
+    expect(r.reasons).not.toContain("low_risk_reward");
+    expect(r.eligible).toBe(true);
+  });
+
+  test("test_day_mode_rr_1p4_passes_swing_same_rr_fails", () => {
+    const day = isEligibleForScenario(happyInput({ mode: "day", risk_reward: 1.4 }), NOW);
+    expect(day.reasons).not.toContain("low_risk_reward");
+    expect(day.eligible).toBe(true);
+
+    const swing = isEligibleForScenario(happyInput({ mode: "swing", risk_reward: 1.4 }), NOW);
+    expect(swing.reasons).toContain("low_risk_reward");
+    expect(swing.eligible).toBe(false);
+  });
+
+  test("test_day_mode_rr_1p2_fails_below_desk_minimum", () => {
+    const r = isEligibleForScenario(happyInput({ mode: "day", risk_reward: 1.2 }), NOW);
+    expect(r.reasons).toContain("low_risk_reward");
+    expect(r.eligible).toBe(false);
   });
 
   test("test_rr_missing_field_does_not_gate", () => {

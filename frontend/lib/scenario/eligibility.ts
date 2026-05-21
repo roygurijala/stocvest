@@ -30,9 +30,9 @@
  *   more than they stand to gain), so we treat it as a structural
  *   completeness failure with the user-facing copy framed in
  *   internal-thresholds terms — never as "we do not recommend this
- *   trade." The threshold matches `trade-decision.ts::synthTradeDecision`
- *   (R/R < 2.0) so the Build Scenario button stays in lock-step with
- *   the Decision line on the same card.
+ *   trade." The threshold matches `minRiskRewardForVerdict(mode)` on the
+ *   same payload so the Build Scenario button stays in lock-step with
+ *   the Signals desk verdict (swing 2.0, day 1.3).
  *
  * Freshness windows by mode (these match the freshness windows the
  * signal engines themselves use to mark `signal_valid_until` /
@@ -47,6 +47,10 @@
  * declaration of "after this, do not trade this."
  */
 
+import {
+  minRiskRewardForVerdict,
+  MIN_RR_A_TIER
+} from "@/lib/trade-conviction-tier";
 import {
   SCENARIO_INELIGIBILITY_REASONS,
   type EligibilityReport,
@@ -161,15 +165,13 @@ export function isEligibleForScenario(
     reasons.push("signal_stale");
   }
 
-  // Risk/reward gate (BRK.B feedback, 2026-05-13). Treats R/R below 2.0
-  // as a structural failure on the reference levels themselves — a
-  // 0.5:1 sheet would plan to lose more than it stands to gain, which
-  // is not a coherent planning structure. The check is intentionally
-  // permissive when the field is missing or non-finite: we never gate
-  // on a property we cannot read (legacy call sites and partial-data
-  // payloads still pass through).
+  // Risk/reward gate (BRK.B feedback, 2026-05-13). Mode-aware minimum
+  // matches desk verdict (`swing` 2.0, `day` 1.3). A-tier conviction
+  // (2.0) is a separate display band — day can open the full sheet at
+  // 1.3 while still showing B+ when below 2.0.
   const rr = input.risk_reward;
-  if (typeof rr === "number" && Number.isFinite(rr) && rr > 0 && rr < 2.0) {
+  const minRr = minRiskRewardForVerdict(input.mode);
+  if (typeof rr === "number" && Number.isFinite(rr) && rr > 0 && rr < minRr) {
     reasons.push("low_risk_reward");
   }
 
@@ -208,7 +210,7 @@ export function scenarioIneligibilityLabel(reason: ScenarioIneligibilityReason):
     case "signal_expired":
       return "Signal carries an explicit expiry that has already passed.";
     case "low_risk_reward":
-      return "Risk/reward does not meet internal thresholds for structured scenario building.";
+      return `Risk/reward does not meet internal thresholds for structured scenario building (desk minimum applies; A-tier is ${MIN_RR_A_TIER.toFixed(1)} : 1).`;
     case "gap_intel_blocked":
       return "Scenario drafting is not structurally available for this market phase or data state (Gap Intelligence).";
     default: {

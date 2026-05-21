@@ -20,6 +20,7 @@ import type { TradeDecision } from "@/lib/signal-evidence/trade-decision";
 import type { FundamentalBackdropSummary } from "@/lib/signal-evidence/fundamental-present";
 import { SignalsFundamentalBackdrop } from "@/components/signals/signals-fundamental-backdrop";
 import { SignalsFundamentalBackdropUpgrade } from "@/components/signals/signals-fundamental-upgrade";
+import { ConvictionTierBadge } from "@/components/signals/conviction-tier-badge";
 import { SignalsScenarioAdjust } from "@/components/signals/signals-scenario-adjust";
 import type { ScenarioGeometryBundle } from "@/lib/scenario/scenario-variants";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
@@ -67,7 +68,6 @@ export function SignalsSetupRead({
   const primaryBlocker = primaryExecutionBlockerLine(decision);
   const showExecutionDisclosure =
     decision.state !== "actionable" && Boolean(executionToggleLabel && (primaryBlocker || whyNot.length > 0));
-
   return (
     <article
       className={surfaceGlowClassName}
@@ -184,6 +184,8 @@ export function SignalsSetupRead({
       <p className="m-0 mt-1 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
         {decision.line}
       </p>
+
+      {decision.conviction ? <ConvictionTierBadge conviction={decision.conviction} /> : null}
 
       {fundamentalSummary ? <SignalsFundamentalBackdrop summary={fundamentalSummary} /> : null}
       {showFundamentalUpgrade ? <SignalsFundamentalBackdropUpgrade /> : null}

@@ -18,6 +18,7 @@ import {
   type SignalsLayerRowInput,
   type SignalsSetupBias
 } from "@/lib/signals-page-present";
+import { minRiskRewardForVerdict } from "@/lib/trade-conviction-tier";
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
 import {
   augmentScenarioInputWithGapIntel,
@@ -141,12 +142,13 @@ export function buildScenarioPlanningBundle(args: BuildScenarioPlanningBundleArg
         ? insight.signal_score
         : 50;
     decisionState = buildSignalsPageDecision({
+      mode: args.tradingMode,
       bias: setupBias,
       rows: layerRows,
       signalScore: score,
       alignmentRatio: ar,
       riskReward: rr,
-      rrWarning: Boolean(comp.rr_warning) || rr < 2,
+      rrWarning: Boolean(comp.rr_warning) || rr < minRiskRewardForVerdict(args.tradingMode),
       isComplete: comp.is_complete !== false
     }).state;
   }
