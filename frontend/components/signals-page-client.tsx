@@ -1689,7 +1689,6 @@ export function SignalsPageClient({
           decision={pageDecision}
           previewLayers={previewBlockingLayers}
           onOpenEvidence={() => void openEvidenceModal()}
-          onSwitchToHistory={scrollToSetupEvolution}
           maturationState={maturationLine?.state}
           alignmentRatio={compositeAlignmentRatio}
           fundamentalSummary={fundamentalSummary}

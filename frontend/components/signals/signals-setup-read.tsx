@@ -4,7 +4,6 @@ import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { InfoTip } from "@/components/info-tip";
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
-import { AlignmentDrilldownLinks } from "@/components/signals/alignment-drilldown-links";
 import {
   buildWhyNotBullets,
   executionDetailToggleLabel,
@@ -34,7 +33,6 @@ type Props = {
   decision: TradeDecision;
   previewLayers: SignalsLayerRowInput[];
   onOpenEvidence?: () => void;
-  onSwitchToHistory?: () => void;
   maturationState?: string | null;
   alignmentRatio?: number | null;
   fundamentalSummary?: FundamentalBackdropSummary | null;
@@ -51,7 +49,6 @@ export function SignalsSetupRead({
   decision,
   previewLayers,
   onOpenEvidence,
-  onSwitchToHistory,
   maturationState,
   alignmentRatio,
   fundamentalSummary,
@@ -103,36 +100,13 @@ export function SignalsSetupRead({
           <p className="m-0 text-sm" style={{ color: colors.textMuted }}>
             Alignment
           </p>
-          {onOpenEvidence ? (
-            <button
-              type="button"
-              className="m-0 mt-0.5 border-0 bg-transparent p-0 text-left text-xl font-semibold underline-offset-2 hover:underline"
-              style={{ color: colors.text, cursor: "pointer" }}
-              data-testid="signals-setup-alignment"
-              onClick={onOpenEvidence}
-              title="Open layer evidence"
-            >
-              {alignmentLine}
-            </button>
-          ) : (
-            <p
-              className="m-0 mt-0.5 text-xl font-semibold"
-              style={{ color: colors.text }}
-              data-testid="signals-setup-alignment"
-            >
-              {alignmentLine}
-            </p>
-          )}
-          <div className="mt-1.5">
-            <AlignmentDrilldownLinks
-              symbol={symU}
-              mode={tradingMode}
-              onOpenEvidence={onOpenEvidence}
-              onScrollToEvolution={onSwitchToHistory}
-              samePageLayers
-              testId="signals-setup-alignment-links"
-            />
-          </div>
+          <p
+            className="m-0 mt-0.5 text-xl font-semibold"
+            style={{ color: colors.text }}
+            data-testid="signals-setup-alignment"
+          >
+            {alignmentLine}
+          </p>
         </div>
         <div>
           <p className="m-0 text-sm" style={{ color: colors.textMuted }}>

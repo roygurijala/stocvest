@@ -82,7 +82,8 @@ describe("SignalsSetupRead", () => {
     expect(screen.getByTestId("signals-setup-read")).toBeInTheDocument();
     expect(screen.getByTestId("signals-setup-bias")).toHaveTextContent("Bearish");
     expect(screen.getByTestId("signals-setup-alignment")).toHaveTextContent("Developing (2/6)");
-    expect(screen.getByTestId("signals-setup-alignment-links-evidence")).toBeInTheDocument();
+    expect(screen.queryByText("Layer evidence")).not.toBeInTheDocument();
+    expect(screen.queryByText("Past states")).not.toBeInTheDocument();
     expect(screen.queryByText(/AI Signal Analysis/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Setup read/i)).toBeInTheDocument();
     expect(screen.getByTestId("signals-setup-execution")).toHaveTextContent("Not actionable yet");
@@ -219,28 +220,6 @@ describe("SignalsSetupRead", () => {
     expect(screen.queryByTestId("signals-setup-execution-detail")).not.toBeInTheDocument();
     fireEvent.click(screen.getByTestId("signals-setup-execution-detail-toggle"));
     expect(screen.getByTestId("signals-setup-execution-detail")).toHaveTextContent(/Risk\/reward too low/);
-  });
-
-  test("alignment button opens evidence when handler provided", () => {
-    const onOpenEvidence = vi.fn();
-    render(
-      <SignalsSetupRead
-        symbol="TSLA"
-        tradingMode="swing"
-        bias="Bearish"
-        rows={rows}
-        previewLayers={rows.slice(0, 2)}
-        decision={{
-          state: "monitor",
-          line: "No actionable setup",
-          reinforcements: [],
-          rationale: null
-        }}
-        onOpenEvidence={onOpenEvidence}
-      />
-    );
-    fireEvent.click(screen.getByTestId("signals-setup-alignment"));
-    expect(onOpenEvidence).toHaveBeenCalledTimes(1);
   });
 
   test("renders fundamental upgrade slot when requested", () => {
