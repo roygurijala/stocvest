@@ -9,6 +9,7 @@ import {
 } from "@/lib/watchlist-decision-card-present";
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
 import type { SnapshotPayload } from "@/lib/api/market";
+import { spacing } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { useMemo } from "react";
 
@@ -33,7 +34,7 @@ export function WatchlistDecisionQueue({
   onRemove,
   onRefresh
 }: Props) {
-  const { colors, spacing } = useTheme();
+  const { colors } = useTheme();
   const grouped = useMemo(
     () => groupSymbolsIntoAttentionTiers(symbols, rowForSymbol),
     [symbols, rowForSymbol]

@@ -9,6 +9,7 @@ import {
 import { watchlistSignalsOpenAriaLabel } from "@/lib/nav/watchlist-signals-deeplink";
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
 import type { SnapshotPayload } from "@/lib/api/market";
+import { borderRadius, spacing } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
 type Props = {
@@ -45,7 +46,7 @@ export function WatchlistDecisionCard({
   onRemove,
   onRefresh
 }: Props) {
-  const { colors, spacing, borderRadius } = useTheme();
+  const { colors } = useTheme();
   const peek =
     model.blockers.length > 0
       ? `Blocked: ${model.blockers.join(" · ")}`
@@ -58,7 +59,7 @@ export function WatchlistDecisionCard({
       tradingMode={planMode}
       className="group block no-underline"
       data-testid={`watchlist-decision-card-${model.symbol}`}
-      aria-label={watchlistSignalsOpenAriaLabel(model.symbol, "watchlist")}
+      aria-label={watchlistSignalsOpenAriaLabel(model.symbol)}
       title={peek ? `Quick peek: ${peek}` : undefined}
     >
       <article
