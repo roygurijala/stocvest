@@ -59,7 +59,7 @@ export function WatchlistDecisionQueue({
             </header>
             <ul className="m-0 flex list-none flex-col gap-2 p-0">
               {list.map((symU) => (
-                <li key={symU}>
+                <li key={symU} id={`watchlist-row-${symU}`}>
                   <WatchlistDecisionCardFromRow
                     symbol={symU}
                     row={rowForSymbol(symU)}

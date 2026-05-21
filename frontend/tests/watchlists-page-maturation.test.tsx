@@ -80,14 +80,17 @@ describe("WatchlistsPageClient maturation", () => {
 
     wrap(<WatchlistsPageClient />);
 
-    await waitFor(() => expect(screen.getByTestId("watchlist-row-AAPL")).toBeInTheDocument());
-    expect(screen.getByTestId("watchlist-evaluation-info")).toBeInTheDocument();
     await waitFor(() => {
-      const status = screen.getByTestId("watchlist-status-line-AAPL-swing");
-      expect(status).toHaveTextContent(/SWING · Near ready \(4\/6\)/i);
-      expect(status).toHaveTextContent(/Ready for next session/i);
+      expect(screen.getByTestId("watchlist-evaluation-info")).toBeInTheDocument();
+      expect(screen.getByTestId("watchlist-decision-card-AAPL")).toBeInTheDocument();
+      expect(screen.getByTestId("watchlist-tier-check_now")).toBeInTheDocument();
     });
-    expect(screen.queryByTestId("watchlist-detail-line-AAPL-swing")).not.toBeInTheDocument();
+    const card = screen.getByTestId("watchlist-decision-card-AAPL");
+    expect(within(card).getByText("(4/6)")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByTestId("watchlist-badge-improved-AAPL")).toBeInTheDocument();
+      expect(screen.getByTestId("watchlist-decision-hint-AAPL")).toHaveTextContent(/Check Signals/i);
+    });
     expect(global.fetch).toHaveBeenCalled();
     const urls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.map((c) =>
       typeof c[0] === "string" ? c[0] : String(c[0])
@@ -186,7 +189,10 @@ describe("WatchlistsPageClient maturation", () => {
 
     wrap(<WatchlistsPageClient dualDeskMaturation={true} />);
 
-    await waitFor(() => expect(screen.getByText("Developing")).toBeInTheDocument());
+    await waitFor(() => {
+      expect(screen.getByTestId("watchlist-decision-card-AAPL")).toBeInTheDocument();
+      expect(screen.getByTestId("watchlist-tier-check_now")).toBeInTheDocument();
+    });
     expect(screen.queryByText("Could not load maturation")).not.toBeInTheDocument();
     expect(screen.queryByTestId("watchlist-maturation-error")).not.toBeInTheDocument();
   });
