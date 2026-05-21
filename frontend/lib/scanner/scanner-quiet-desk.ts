@@ -61,7 +61,7 @@ export function volumeLeadToNearReadyCard(
     symbol: lead.symbol,
     desk: "swing",
     deskLabel: "volume",
-    source: "volume",
+    source: "volume" as const,
     alignmentHeadline: `${lead.fillPct}% of session pace met`,
     readinessHint:
       rank === 0
@@ -220,7 +220,7 @@ export function buildNearReadyCards(
         symbol: row.symbol,
         desk: row.desk,
         deskLabel: deskBadge(row.desk),
-        source: "alignment",
+        source: "alignment" as const,
         alignmentHeadline,
         readinessHint,
         confirmedLines: confirmedLinesForRow(aligned, total, away),
