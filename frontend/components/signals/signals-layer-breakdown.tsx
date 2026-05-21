@@ -35,6 +35,8 @@ type Props = {
   insufficientMessage?: ReactNode;
   maturationState?: string | null;
   alignmentRatio?: number | null;
+  /** Layers tab: show all rows without collapse affordance. */
+  defaultExpanded?: boolean;
 };
 
 export function SignalsLayerBreakdown({
@@ -46,10 +48,11 @@ export function SignalsLayerBreakdown({
   insufficient,
   insufficientMessage,
   maturationState,
-  alignmentRatio
+  alignmentRatio,
+  defaultExpanded = false
 }: Props) {
   const { colors } = useTheme();
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const alignment = resolveSignalsLayerAlignment({ rows, bias, alignmentRatio });
   const preview = pickCollapsedLayerPreview(rows, bias, 2, 2);
   const visible = expanded ? rows : preview.length > 0 ? preview : rows.slice(0, 3);
@@ -100,7 +103,7 @@ export function SignalsLayerBreakdown({
               <LayerRow key={row.key} row={row} bias={bias} colors={colors} />
             ))}
           </ul>
-          {rows.length > preview.length ? (
+          {!defaultExpanded && rows.length > preview.length ? (
             <button
               type="button"
               className="mt-3 inline-flex min-h-9 items-center gap-1 rounded-md px-2 text-xs font-medium"

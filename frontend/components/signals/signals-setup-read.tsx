@@ -39,6 +39,8 @@ type Props = {
   showFundamentalUpgrade?: boolean;
   /** Reference geometry for controlled what-if (Signals only; does not change system decision). */
   scenarioGeometryBundle?: ScenarioGeometryBundle | null;
+  /** Desk tabs: KPIs live in sticky strip; omit grid + why-not panel here. */
+  layout?: "full" | "desk";
 };
 
 export function SignalsSetupRead({
@@ -52,7 +54,8 @@ export function SignalsSetupRead({
   alignmentRatio,
   fundamentalSummary,
   showFundamentalUpgrade = false,
-  scenarioGeometryBundle = null
+  scenarioGeometryBundle = null,
+  layout = "full"
 }: Props) {
   const { colors } = useTheme();
   const symU = symbol.trim().toUpperCase();
@@ -80,92 +83,107 @@ export function SignalsSetupRead({
         padding: spacing[4]
       }}
     >
-      <p
-        className="m-0 text-[10px] font-semibold uppercase tracking-[0.14em]"
-        style={{ color: colors.textMuted }}
-      >
-        Setup read
-      </p>
-      <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <div>
-          <p className="m-0 text-sm" style={{ color: colors.textMuted }}>
-            Bias
-          </p>
-          <p className="m-0 mt-0.5 text-xl font-semibold" style={{ color: biasColor }} data-testid="signals-setup-bias">
-            {bias}
-          </p>
-        </div>
-        <div>
-          <p className="m-0 text-sm" style={{ color: colors.textMuted }}>
-            Alignment
-          </p>
+      {layout === "full" ? (
+        <>
           <p
-            className="m-0 mt-0.5 text-xl font-semibold"
-            style={{ color: colors.text }}
-            data-testid="signals-setup-alignment"
+            className="m-0 text-[10px] font-semibold uppercase tracking-[0.14em]"
+            style={{ color: colors.textMuted }}
           >
-            {alignmentLine}
+            Setup read
           </p>
-        </div>
-        <div>
-          <p className="m-0 text-sm" style={{ color: colors.textMuted }}>
-            Execution
-          </p>
-          <p
-            className="m-0 mt-0.5 text-xl font-semibold"
-            style={{ color: decision.state === "actionable" ? colors.bullish : colors.textMuted }}
-            data-testid="signals-setup-execution"
-          >
-            {executionReadinessLabel(decision.state)}
-          </p>
-          {showExecutionDisclosure && executionToggleLabel ? (
-            <div className="mt-1">
-              <button
-                type="button"
-                className="inline-flex w-full items-start gap-1 border-0 bg-transparent p-0 text-left text-xs leading-relaxed underline-offset-2 hover:underline"
-                style={{ color: colors.accent, cursor: "pointer" }}
-                data-testid="signals-setup-execution-detail-toggle"
-                aria-expanded={executionDetailOpen}
-                onClick={() => setExecutionDetailOpen((open) => !open)}
+          <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div>
+              <p className="m-0 text-sm" style={{ color: colors.textMuted }}>
+                Bias
+              </p>
+              <p
+                className="m-0 mt-0.5 text-xl font-semibold"
+                style={{ color: biasColor }}
+                data-testid="signals-setup-bias"
               >
-                <ChevronDown
-                  size={14}
-                  className="mt-0.5 shrink-0 transition-transform"
-                  style={{
-                    transform: executionDetailOpen ? "rotate(180deg)" : "rotate(0deg)"
-                  }}
-                  aria-hidden
-                />
-                <span>{executionToggleLabel}</span>
-              </button>
-              {executionDetailOpen ? (
-                <div
-                  className="mt-2 text-xs leading-relaxed"
-                  style={{
-                    color: colors.text,
-                    paddingLeft: spacing[2],
-                    borderLeft: `2px solid ${colors.accent}`
-                  }}
-                  data-testid="signals-setup-execution-detail"
-                >
-                  {primaryBlocker ? <p className="m-0">{primaryBlocker}</p> : null}
-                  {whyNot.length > 0 && primaryBlocker !== whyNot[0] ? (
-                    <ul className={`m-0 list-none space-y-1 p-0 ${primaryBlocker ? "mt-2" : ""}`}>
-                      {whyNot.map((bullet) => (
-                        <li key={bullet.slice(0, 48)}>{bullet}</li>
-                      ))}
-                    </ul>
+                {bias}
+              </p>
+            </div>
+            <div>
+              <p className="m-0 text-sm" style={{ color: colors.textMuted }}>
+                Alignment
+              </p>
+              <p
+                className="m-0 mt-0.5 text-xl font-semibold"
+                style={{ color: colors.text }}
+                data-testid="signals-setup-alignment"
+              >
+                {alignmentLine}
+              </p>
+            </div>
+            <div>
+              <p className="m-0 text-sm" style={{ color: colors.textMuted }}>
+                Execution
+              </p>
+              <p
+                className="m-0 mt-0.5 text-xl font-semibold"
+                style={{ color: decision.state === "actionable" ? colors.bullish : colors.textMuted }}
+                data-testid="signals-setup-execution"
+              >
+                {executionReadinessLabel(decision.state)}
+              </p>
+              {showExecutionDisclosure && executionToggleLabel ? (
+                <div className="mt-1">
+                  <button
+                    type="button"
+                    className="inline-flex w-full items-start gap-1 border-0 bg-transparent p-0 text-left text-xs leading-relaxed underline-offset-2 hover:underline"
+                    style={{ color: colors.accent, cursor: "pointer" }}
+                    data-testid="signals-setup-execution-detail-toggle"
+                    aria-expanded={executionDetailOpen}
+                    onClick={() => setExecutionDetailOpen((open) => !open)}
+                  >
+                    <ChevronDown
+                      size={14}
+                      className="mt-0.5 shrink-0 transition-transform"
+                      style={{
+                        transform: executionDetailOpen ? "rotate(180deg)" : "rotate(0deg)"
+                      }}
+                      aria-hidden
+                    />
+                    <span>{executionToggleLabel}</span>
+                  </button>
+                  {executionDetailOpen ? (
+                    <div
+                      className="mt-2 text-xs leading-relaxed"
+                      style={{
+                        color: colors.text,
+                        paddingLeft: spacing[2],
+                        borderLeft: `2px solid ${colors.accent}`
+                      }}
+                      data-testid="signals-setup-execution-detail"
+                    >
+                      {primaryBlocker ? <p className="m-0">{primaryBlocker}</p> : null}
+                      {whyNot.length > 0 && primaryBlocker !== whyNot[0] ? (
+                        <ul className={`m-0 list-none space-y-1 p-0 ${primaryBlocker ? "mt-2" : ""}`}>
+                          {whyNot.map((bullet) => (
+                            <li key={bullet.slice(0, 48)}>{bullet}</li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
+              ) : executionHint ? (
+                <p className="m-0 mt-1 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
+                  {executionHint}
+                </p>
               ) : null}
             </div>
-          ) : executionHint ? (
-            <p className="m-0 mt-1 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
-              {executionHint}
-            </p>
-          ) : null}
-        </div>
-      </div>
+          </div>
+        </>
+      ) : (
+        <p
+          className="m-0 text-[10px] font-semibold uppercase tracking-[0.14em]"
+          style={{ color: colors.textMuted }}
+        >
+          Setup & scenario
+        </p>
+      )}
 
       {scenarioGeometryBundle ? (
         <SignalsScenarioAdjust
@@ -191,7 +209,7 @@ export function SignalsSetupRead({
       {fundamentalSummary ? <SignalsFundamentalBackdrop summary={fundamentalSummary} /> : null}
       {showFundamentalUpgrade ? <SignalsFundamentalBackdropUpgrade /> : null}
 
-      {whyNot.length > 0 ? (
+      {layout === "full" && whyNot.length > 0 ? (
         <div className="mt-4" data-testid="signals-why-not">
           <p className="m-0 text-xs font-semibold uppercase tracking-wide" style={{ color: colors.textMuted }}>
             Why not?

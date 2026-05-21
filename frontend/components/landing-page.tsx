@@ -7,6 +7,7 @@ import type { LandingSignal } from "@/lib/api/landing-signals";
 import type { PerformanceSummary } from "@/lib/api/public-signals";
 import { useScrollPosition } from "@/lib/hooks/use-scroll-position";
 import { isPaidCheckoutEnabled } from "@/lib/feature-flags";
+import { StocvestLogo } from "@/components/brand/stocvest-logo";
 
 const MONO =
   '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
@@ -149,7 +150,7 @@ export function LandingPage({
     <main className="bg-[#070d18] text-slate-100">
       <header className={`fixed inset-x-0 top-0 z-50 transition-colors duration-300 ${isScrolled ? "border-b border-white/10 bg-[#070d18]/95 backdrop-blur" : "bg-transparent"}`}>
         <nav className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-4 md:px-8">
-          <p className="text-lg font-extrabold tracking-tight text-[#3b82f6] sm:text-xl">STOCVEST</p>
+          <StocvestLogo variant="compact" href="/" />
           <div className="flex items-center gap-2 md:gap-3">
             <Link href="/login" className="rounded-md border border-white/20 px-4 py-2 text-sm hover:border-white/40">Login</Link>
             <Link href="/signup/agreements" className="rounded-md bg-[#3b82f6] px-4 py-2 text-sm font-semibold text-white">

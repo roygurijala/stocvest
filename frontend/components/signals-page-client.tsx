@@ -3,8 +3,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronUp, Clock } from "lucide-react";
-import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer } from "recharts";
+import { Clock } from "lucide-react";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
 import { useSignalComposite } from "@/lib/hooks/use-signal-composite";
@@ -19,8 +18,21 @@ import { fetchEarningsCalendarClient } from "@/lib/api/earnings-client";
 import { AddToWatchlistButton } from "@/components/add-to-watchlist-button";
 import { APP_TOP_BAR_LAYOUT_HEIGHT } from "@/components/top-bar";
 import { SignalsCommandBar } from "@/components/signals/signals-command-bar";
-import { SignalsSectionNav } from "@/components/signals/signals-section-nav";
-import { buildSignalsSectionLinks, SIGNALS_SECTION_TARGET } from "@/lib/signals-page-sections";
+import { SignalsDeskKpiStrip } from "@/components/signals/signals-desk-kpi-strip";
+import { SignalsDeskTabNav } from "@/components/signals/signals-desk-tab-nav";
+import { SignalsExecutionContextStrip } from "@/components/signals/signals-execution-context-strip";
+import { SignalsFormingBanner } from "@/components/signals/signals-forming-banner";
+import { SignalsRadarPanel } from "@/components/signals/signals-radar-panel";
+import { SignalsWhyNotPanel } from "@/components/signals/signals-why-not-panel";
+import { SIGNALS_SECTION_TARGET } from "@/lib/signals-page-sections";
+import { buildSignalsDeskKpiItems } from "@/lib/signals-desk-kpi-present";
+import {
+  kpiTargetToDeskTab,
+  parseSignalsDeskTab,
+  SIGNALS_TAB_QUERY_KEY,
+  type SignalsDeskTab,
+  type SignalsKpiTarget
+} from "@/lib/signals-page-tabs";
 import { SignalsLayerBreakdown } from "@/components/signals/signals-layer-breakdown";
 import { SignalsWatchlistPickerModal } from "@/components/signals/signals-watchlist-picker-modal";
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
@@ -54,7 +66,6 @@ import {
 } from "@/lib/scenario/scenario-readiness";
 import { buildScenarioPreviewPanelData } from "@/lib/scenario/scenario-preview-panels";
 import { CuteLoader } from "@/components/cute-loader";
-import { SignalLayerDivergenceChart } from "@/components/signal-layer-divergence-chart";
 import { SignalsAfterHoursPanel } from "@/components/signals-after-hours-panel";
 import { InfoTip } from "@/components/info-tip";
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
@@ -148,16 +159,14 @@ const SIGNAL_LAYER_KEYS = ["technical", "news", "macro", "sector", "geopolitical
 const TRADING_MODE_STORAGE_KEY = "stocvest_trading_mode";
 type TradingMode = "day" | "swing";
 
-/** Persist the experienced-user choice to keep the radar open across visits; default stays collapsed. */
-const SIGNAL_RADAR_EXPANDED_STORAGE_KEY = "stocvest_signal_radar_expanded";
-
-const RADAR_LAYER_LABEL: Record<string, string> = {
-  technical: "Technical",
+/** Short axis labels so radar ticks do not truncate in the Layers tab. */
+const RADAR_LAYER_SHORT: Record<string, string> = {
+  technical: "Tech",
   news: "News",
   macro: "Macro",
   sector: "Sector",
-  geopolitical: "Geopolitical",
-  internals: "Internals"
+  geopolitical: "Geo",
+  internals: "Intl"
 };
 
 /** Marginal bullish internals vs clearly bearish technical — reconciliation copy only in this band (fixed, no UI tuning). */
@@ -260,8 +269,7 @@ export function SignalsPageClient({
   const [newsPanelSymbol, setNewsPanelSymbol] = useState("");
   const [newsPanelOpen, setNewsPanelOpen] = useState(false);
   const [newsUiTick, setNewsUiTick] = useState(0);
-  /** Radar is detail-dense; collapsed by default so narrative layers stay primary. */
-  const [signalRadarExpanded, setSignalRadarExpanded] = useState(false);
+  const [deskTab, setDeskTab] = useState<SignalsDeskTab>("setup");
   // Tier 1 → Layer 4: per-symbol snapshot is now backed by SWR.
   // The cache lives under `stocvest:symbol-snapshot:<TICKER>` and
   // returns stale data instantly on repeat visits while silently
@@ -436,6 +444,7 @@ export function SignalsPageClient({
       // via its `useMemo` derivation — no imperative setters needed.
       setSignalEvidence(null);
       setResumedFromSession(false);
+      setDeskTab("setup");
       try {
         sessionStorage.removeItem(SIGNALS_SESSION_SYMBOL_KEY);
       } catch {
@@ -448,6 +457,7 @@ export function SignalsPageClient({
     setSuggestOpen(false);
     setUnverifiedSymbolNote(null);
     setResumedFromSession(false);
+    setDeskTab("setup");
   }, []);
 
   /**
@@ -610,12 +620,30 @@ export function SignalsPageClient({
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(SIGNAL_RADAR_EXPANDED_STORAGE_KEY);
-      if (raw === "1") setSignalRadarExpanded(true);
+      const tab = parseSignalsDeskTab(new URL(window.location.href).searchParams.get(SIGNALS_TAB_QUERY_KEY));
+      setDeskTab(tab);
     } catch {
       /* ignore */
     }
   }, []);
+
+  const applyDeskTab = useCallback((tab: SignalsDeskTab) => {
+    setDeskTab(tab);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set(SIGNALS_TAB_QUERY_KEY, tab);
+      window.history.replaceState(null, "", url.pathname + (url.search || ""));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const applyDeskKpiTarget = useCallback(
+    (target: SignalsKpiTarget) => {
+      applyDeskTab(kpiTargetToDeskTab(target));
+    },
+    [applyDeskTab]
+  );
 
   useEffect(() => {
     if (signalsPrefill.urlSymbol || signalsPrefill.signalIdForResolve) return;
@@ -743,18 +771,6 @@ export function SignalsPageClient({
     } catch {
       /* ignore */
     }
-  };
-
-  const toggleSignalRadarExpanded = () => {
-    setSignalRadarExpanded((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem(SIGNAL_RADAR_EXPANDED_STORAGE_KEY, next ? "1" : "0");
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
   };
 
   // Per-symbol snapshot is now handled by `useSymbolSnapshot` above
@@ -1215,7 +1231,7 @@ export function SignalsPageClient({
         // Unavailable / pending sector: plot at neutral baseline — not 0 (zero reads as "no technicals").
         const score = sectorPending || scoreMissing ? baseline : n ?? baseline;
         return {
-          layer: RADAR_LAYER_LABEL[k] ?? k,
+          layer: RADAR_LAYER_SHORT[k] ?? k,
           score,
           hist: baseline,
           scoreMissing: sectorPending || scoreMissing
@@ -1368,15 +1384,24 @@ export function SignalsPageClient({
     };
   }, [showAfterHoursPanel, symbol]);
 
-  const signalsSectionLinks = useMemo(
-    () =>
-      buildSignalsSectionLinks({
-        hasValidSignal,
-        hasRadar: hasValidSignal && radarData != null,
-        hasAfterHours: showAfterHoursPanel
-      }),
-    [hasValidSignal, radarData, showAfterHoursPanel]
-  );
+  const deskKpiItems = useMemo(() => {
+    if (!pageDecision) return [];
+    return buildSignalsDeskKpiItems({
+      bias: setupBias,
+      rows: signalsPresentRows,
+      decision: pageDecision,
+      tradingMode,
+      alignmentRatio: compositeAlignmentRatio,
+      maturationState: maturationLine?.state
+    });
+  }, [
+    pageDecision,
+    setupBias,
+    signalsPresentRows,
+    tradingMode,
+    compositeAlignmentRatio,
+    maturationLine?.state
+  ]);
 
   /**
    * Build the page-context payload published to the STOCVEST Assistant chatbot.
@@ -1711,222 +1736,130 @@ export function SignalsPageClient({
           onTradingModeChange={updateTradingMode}
           onOpenEvidence={hasValidSignal ? () => void openEvidenceModal() : undefined}
         />
-        {signalsSectionLinks.length > 1 ? <SignalsSectionNav sections={signalsSectionLinks} /> : null}
+        {hasValidSignal && pageDecision && deskKpiItems.length > 0 ? (
+          <SignalsDeskKpiStrip
+            items={deskKpiItems}
+            activeTab={deskTab}
+            onSelectTarget={applyDeskKpiTarget}
+          />
+        ) : null}
+        {hasValidSignal && pageDecision ? (
+          <SignalsExecutionContextStrip decision={pageDecision} tradingMode={tradingMode} />
+        ) : null}
+        {symbolCommitted ? (
+          <SignalsDeskTabNav activeTab={deskTab} onTabChange={applyDeskTab} />
+        ) : null}
       </header>
 
       <div className="signals-page-flow min-w-0">
-      {hasValidSignal && pageDecision ? (
-        <SignalsSetupRead
-          symbol={symbol}
-          tradingMode={tradingMode}
-          bias={setupBias}
-          rows={signalsPresentRows}
-          decision={pageDecision}
-          previewLayers={previewBlockingLayers}
-          maturationState={maturationLine?.state}
-          alignmentRatio={compositeAlignmentRatio}
-          fundamentalSummary={fundamentalSummary}
-          showFundamentalUpgrade={showFundamentalUpgrade}
-          scenarioGeometryBundle={scenarioGeometryBundle}
-        />
-      ) : null}
-
-      <div
-        id={SIGNALS_SECTION_TARGET.evolution}
-        className="signals-snap-section mt-4 scroll-mt-4"
-        ref={evolutionPanelRef}
-      >
-        <SetupEvolutionPanel symbol={symbol} tradingMode={tradingMode} />
-      </div>
-
-      {hasValidSignal ? (
-        <SignalsReferenceLevels
-          levels={referenceLevels}
-          setupPattern={setup?.triggers[0] ?? null}
-        />
-      ) : null}
-
-      <div className="signals-grid grid grid-cols-1 items-start gap-4 lg:grid-cols-[1.35fr_1fr] [&>*]:min-w-0">
-        <div className="order-1 min-w-0 lg:order-1">
-          <SignalsLayerBreakdown
-            symbol={symbol}
-            tradingMode={tradingMode}
-            bias={setupBias}
-            rows={signalsPresentRows}
-            loading={compositeResult === null}
-            insufficient={Boolean(insufficientComposite) || Boolean(compositeServiceMessage)}
-            insufficientMessage={compositeServiceMessage ?? insufficientLayerMessage}
-            maturationState={maturationLine?.state}
-            alignmentRatio={compositeAlignmentRatio}
-          />
-        </div>
-
-        {hasValidSignal && radarData ? (
-          <section
-            id={SIGNALS_SECTION_TARGET.radar}
-            className={`signals-snap-section order-2 min-w-0 scroll-mt-4 lg:order-2 ${surfaceGlowClassName}`}
-            style={{
-              background: colors.surface,
-              border: `1px solid ${
-                signalRadarExpanded
-                  ? colors.border
-                  : `color-mix(in srgb, ${colors.border} 55%, transparent)`
-              }`,
-              borderRadius: borderRadius.xl,
-              padding: spacing[4],
-              opacity: signalRadarExpanded ? 1 : 0.92
-            }}
+        {symbolCommitted && deskTab === "setup" ? (
+          <div
+            id={SIGNALS_SECTION_TARGET.setup}
+            className="flex min-w-0 flex-col gap-4"
+            data-testid="signals-tab-panel-setup"
+            role="tabpanel"
           >
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <h3
-                style={{
-                  marginTop: 0,
-                  ...(signalRadarExpanded
-                    ? null
-                    : { fontSize: typography.scale.base, fontWeight: 600 })
-                }}
-              >
-                Signal Radar
-              </h3>
-              <button
-                type="button"
-                className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-md px-2.5 text-xs font-medium"
-                style={{ border: `1px solid ${colors.border}`, color: colors.textMuted, background: colors.surfaceMuted }}
-                aria-expanded={signalRadarExpanded}
-                onClick={toggleSignalRadarExpanded}
-              >
-                {signalRadarExpanded ? (
-                  <>
-                    <ChevronUp size={14} aria-hidden />
-                    Collapse
-                  </>
-                ) : (
-                  <>
-                    <ChevronDown size={14} aria-hidden />
-                    Expand radar
-                  </>
-                )}
-              </button>
-            </div>
-            {!signalRadarExpanded ? (
-              <p className="m-0 text-sm leading-relaxed" style={{ color: colors.textMuted }}>
-                Radar shows level (0–100) and Δ vs the {SIGNAL_LAYER_LEVEL_BASELINE} baseline. Expand for charts; pair
-                with <strong style={{ fontWeight: 600, color: colors.text }}>Layers</strong> above for today&apos;s Δ.
-              </p>
-            ) : (
-              <>
-                <p className="text-sm" style={{ margin: `0 0 ${spacing[2]} 0`, color: colors.textMuted }}>
-                  Dashed ring = neutral baseline ({SIGNAL_LAYER_LEVEL_BASELINE}/100). Solid fill = today&apos;s level.
-                  Bars below = Δ vs that baseline (not the same scale as level).
-                </p>
-                <div
-                  className="flex flex-wrap items-center gap-x-4 gap-y-2"
-                  style={{ margin: `0 0 ${spacing[3]} 0`, fontSize: 12, color: colors.textMuted }}
-                  aria-label="Radar chart legend"
-                >
-                  <span className="inline-flex items-center gap-2">
-                    <span
-                      className="inline-block shrink-0 rounded-sm"
-                      style={{ width: 12, height: 12, background: "#0ea5e9", opacity: 0.85, border: "1px solid #38bdf8" }}
-                      aria-hidden
-                    />
-                    Current
-                  </span>
-                  <span className="inline-flex items-center gap-2">
-                    <span
-                      className="inline-block shrink-0 rounded-sm"
-                      style={{
-                        width: 12,
-                        height: 12,
-                        border: `2px dashed ${colors.text}`,
-                        background: "transparent",
-                        opacity: 0.85
-                      }}
-                      aria-hidden
-                    />
-                    Typical baseline
-                  </span>
-                </div>
-                <div className="mx-auto w-full min-w-0 max-w-full">
-                  {/* One chart only: a display:none sibling gives ResponsiveContainer 0×0 and Recharts warns. */}
-                  <div
-                    className="mx-auto w-full max-w-full min-w-0 overflow-hidden"
-                    style={{ height: isMobileLayout ? 256 : 288 }}
-                  >
-                    <ResponsiveContainer width="100%" height="100%">
-                      <RadarChart
-                        data={radarData}
-                        margin={
-                          isMobileLayout
-                            ? { top: 16, right: 18, bottom: 22, left: 18 }
-                            : { top: 18, right: 20, bottom: 26, left: 20 }
-                        }
-                      >
-                        <PolarGrid stroke={colors.border} />
-                        <PolarAngleAxis
-                          dataKey="layer"
-                          tick={{ fill: colors.textMuted, fontSize: isMobileLayout ? 10 : 11 }}
-                          tickLine={false}
-                        />
-                        <PolarRadiusAxis
-                          angle={30}
-                          domain={[0, 100]}
-                          tick={{ fill: colors.textMuted, fontSize: isMobileLayout ? 9 : 10 }}
-                        />
-                        <Radar
-                          name="Typical baseline"
-                          dataKey="hist"
-                          stroke={colors.text}
-                          strokeWidth={2}
-                          strokeDasharray="5 4"
-                          fill="none"
-                          dot={false}
-                          isAnimationActive={false}
-                        />
-                        <Radar
-                          name="Current"
-                          dataKey="score"
-                          stroke="#38bdf8"
-                          strokeWidth={2}
-                          fill="#0ea5e9"
-                          fillOpacity={0.38}
-                          dot={false}
-                        />
-                      </RadarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                <h4 style={{ margin: `${spacing[4]} 0 ${spacing[1]} 0`, fontSize: 13, fontWeight: 600, color: colors.text }}>
-                  Today vs baseline (Δ per layer)
-                </h4>
-                <p className="text-xs leading-snug" style={{ margin: `0 0 ${spacing[2]} 0`, color: colors.textMuted }}>
-                  Δ score vs neutral baseline ({SIGNAL_LAYER_LEVEL_BASELINE}). Positive = hotter than baseline today; compare
-                  to <strong style={{ fontWeight: 600, color: colors.text }}>Level</strong> in the breakdown, not to the
-                  bar length as a 0–100 score.
-                </p>
-                <SignalLayerDivergenceChart data={radarData} colors={colors} height={isMobileLayout ? 348 : 312} />
-              </>
-            )}
-          </section>
+            {compositeResult === null ? (
+              <div style={{ padding: `${spacing[6]} ${spacing[2]}` }} data-testid="signals-setup-loading">
+                <CuteLoader
+                  label={`Loading ${tradingMode === "swing" ? "swing" : "day"} signal`}
+                  sublabel={`Refreshing setup for ${symbol.trim().toUpperCase()}.`}
+                  compact
+                />
+              </div>
+            ) : null}
+            {hasValidSignal && pageDecision ? (
+              <SignalsFormingBanner
+                decisionState={pageDecision.state}
+                maturationLabel={commandBarMaturationLine?.label ?? null}
+              />
+            ) : null}
+            {hasValidSignal ? (
+              <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2 [&>*]:min-w-0">
+                {pageDecision ? (
+                  <SignalsWhyNotPanel
+                    decision={pageDecision}
+                    previewLayers={previewBlockingLayers}
+                    bias={setupBias}
+                  />
+                ) : null}
+                <SignalsReferenceLevels
+                  levels={referenceLevels}
+                  setupPattern={setup?.triggers[0] ?? null}
+                />
+              </div>
+            ) : insufficientLayerMessage ? (
+              <div data-testid="signals-setup-insufficient">{insufficientLayerMessage}</div>
+            ) : compositeServiceMessage ? (
+              <div data-testid="signals-setup-service-error">{compositeServiceMessage}</div>
+            ) : null}
+            {hasValidSignal && pageDecision ? (
+              <SignalsSetupRead
+                symbol={symbol}
+                tradingMode={tradingMode}
+                bias={setupBias}
+                rows={signalsPresentRows}
+                decision={pageDecision}
+                previewLayers={previewBlockingLayers}
+                maturationState={maturationLine?.state}
+                alignmentRatio={compositeAlignmentRatio}
+                fundamentalSummary={fundamentalSummary}
+                showFundamentalUpgrade={showFundamentalUpgrade}
+                scenarioGeometryBundle={scenarioGeometryBundle}
+                layout="desk"
+              />
+            ) : null}
+            {showAfterHoursPanel ? (
+              <div id={SIGNALS_SECTION_TARGET.context}>
+                <SignalsAfterHoursPanel
+                  symbol={symbol}
+                  snapshot={snapshot}
+                  marketStatus={insufficientComposite}
+                  earningsEvent={earningsBySymbol[symbol.toUpperCase()] ?? null}
+                  newsArticles={afterHoursNews}
+                  isInDefaultWatchlist={afterHoursInWatchlist}
+                  watchlistCheckComplete={afterHoursWatchlistKnown}
+                  dualDeskTracking={dayTradingSurfaces}
+                />
+              </div>
+            ) : null}
+          </div>
         ) : null}
 
-      </div>
+        {symbolCommitted && deskTab === "layers" ? (
+          <div
+            id={SIGNALS_SECTION_TARGET.layers}
+            className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[1.35fr_1fr] [&>*]:min-w-0"
+            data-testid="signals-tab-panel-layers"
+            role="tabpanel"
+          >
+            <SignalsLayerBreakdown
+              symbol={symbol}
+              tradingMode={tradingMode}
+              bias={setupBias}
+              rows={signalsPresentRows}
+              loading={compositeResult === null}
+              insufficient={Boolean(insufficientComposite) || Boolean(compositeServiceMessage)}
+              insufficientMessage={compositeServiceMessage ?? insufficientLayerMessage}
+              maturationState={maturationLine?.state}
+              alignmentRatio={compositeAlignmentRatio}
+              defaultExpanded
+            />
+            {radarData ? <SignalsRadarPanel data={radarData} isMobileLayout={isMobileLayout} /> : null}
+          </div>
+        ) : null}
 
-      {showAfterHoursPanel ? (
-        <div id={SIGNALS_SECTION_TARGET.context} className="signals-snap-section scroll-mt-4">
-        <SignalsAfterHoursPanel
-          symbol={symbol}
-          snapshot={snapshot}
-          marketStatus={insufficientComposite}
-          earningsEvent={earningsBySymbol[symbol.toUpperCase()] ?? null}
-          newsArticles={afterHoursNews}
-          isInDefaultWatchlist={afterHoursInWatchlist}
-          watchlistCheckComplete={afterHoursWatchlistKnown}
-          dualDeskTracking={dayTradingSurfaces}
-        />
-        </div>
-      ) : null}
+        {symbolCommitted && deskTab === "evolution" ? (
+          <div
+            id={SIGNALS_SECTION_TARGET.evolution}
+            className="scroll-mt-4"
+            data-testid="signals-tab-panel-evolution"
+            role="tabpanel"
+            ref={evolutionPanelRef}
+          >
+            <SetupEvolutionPanel symbol={symbol} tradingMode={tradingMode} />
+          </div>
+        ) : null}
       </div>
         </>
       ) : null}

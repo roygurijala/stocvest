@@ -277,7 +277,7 @@ describe("SignalsPageClient — mode toggle clears the screen (load-bearing UX g
     // waitFor) because the contract is: state is cleared on the
     // *click handler*, not after some downstream effect.
     expect(screen.queryByTestId("signals-setup-bias")).toBeNull();
-    expect(screen.getByTestId("signals-layers-loader")).toBeTruthy();
+    expect(screen.getByTestId("signals-setup-loading")).toBeTruthy();
 
     // The day-mode fetch is still in flight — setup read not shown yet.
     expect(screen.queryByTestId("signals-setup-bias")).toBeNull();
@@ -288,7 +288,7 @@ describe("SignalsPageClient — mode toggle clears the screen (load-bearing UX g
       expect(screen.getByTestId("signals-setup-bias")).toHaveTextContent("Bearish")
     );
     // And the loader is gone now that the data is in.
-    expect(screen.queryByTestId("signals-layers-loader")).toBeNull();
+    expect(screen.queryByTestId("signals-setup-loading")).toBeNull();
   });
 
   test("toggling day → swing also clears immediately (symmetric)", async () => {
@@ -325,13 +325,13 @@ describe("SignalsPageClient — mode toggle clears the screen (load-bearing UX g
     fireEvent.click(screen.getByRole("tab", { name: /^Swing$/i }));
 
     expect(screen.queryByTestId("signals-setup-bias")).toBeNull();
-    expect(screen.getByTestId("signals-layers-loader")).toBeTruthy();
+    expect(screen.getByTestId("signals-setup-loading")).toBeTruthy();
 
     releaseSwingFetch(mockCompositeOk(swingPayload));
     await waitFor(() =>
       expect(screen.getByTestId("signals-setup-bias")).toHaveTextContent("Bullish")
     );
-    expect(screen.queryByTestId("signals-layers-loader")).toBeNull();
+    expect(screen.queryByTestId("signals-setup-loading")).toBeNull();
   });
 
   test("clicking the currently-selected mode is a no-op (does not flash the loader)", async () => {
@@ -363,7 +363,7 @@ describe("SignalsPageClient — mode toggle clears the screen (load-bearing UX g
     // loader flash) and MUST NOT re-fire the fetch.
     fireEvent.click(screen.getByRole("tab", { name: /^Swing$/i }));
 
-    expect(screen.queryByTestId("signals-layers-loader")).toBeNull();
+    expect(screen.queryByTestId("signals-setup-loading")).toBeNull();
     expect(screen.getByTestId("signals-setup-bias")).toHaveTextContent("Bullish");
 
     // Allow any micro-tasks to flush, then re-check fetch count is

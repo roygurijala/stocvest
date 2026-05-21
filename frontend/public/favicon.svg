@@ -1,5 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="STOCVEST">
-  <rect width="32" height="32" rx="8" fill="#070d18"/>
-  <path fill="#22d3ee" d="M7 11h18v2.2H7zm0 6h14v2.2H7zm0 6h10v2.2H7z"/>
-  <rect x="22" y="7" width="4" height="9" rx="1" fill="#3b82f6"/>
+  <rect width="32" height="32" rx="7" fill="#0a0e1a"/>
+  <defs>
+    <linearGradient id="sv" x1="6" y1="8" x2="26" y2="24" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#e2e8f0"/>
+      <stop offset="100%" stop-color="#60a5fa"/>
+    </linearGradient>
+  </defs>
+  <path d="M6 10h9M6 15h7M6 20h5" stroke="url(#sv)" stroke-width="2.2" stroke-linecap="square"/>
+  <path d="M15 10v10" stroke="url(#sv)" stroke-width="2.2" stroke-linecap="square"/>
+  <path d="M18 10l5 10 5-10" stroke="url(#sv)" stroke-width="2.2" stroke-linecap="square" stroke-linejoin="miter" fill="none"/>
 </svg>
