@@ -7,7 +7,7 @@ import type { LandingSignal } from "@/lib/api/landing-signals";
 import type { PerformanceSummary } from "@/lib/api/public-signals";
 import { useScrollPosition } from "@/lib/hooks/use-scroll-position";
 import { isPaidCheckoutEnabled } from "@/lib/feature-flags";
-import { StocvestTitle } from "@/components/brand/stocvest-title";
+import { StocvestLogo } from "@/components/brand/stocvest-logo";
 
 const MONO =
   '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
@@ -150,7 +150,7 @@ export function LandingPage({
     <main className="bg-[#070d18] text-slate-100">
       <header className={`fixed inset-x-0 top-0 z-50 transition-colors duration-300 ${isScrolled ? "border-b border-white/10 bg-[#070d18]/95 backdrop-blur" : "bg-transparent"}`}>
         <nav className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-4 md:px-8">
-          <StocvestTitle href="/" className="!text-slate-100" />
+          <StocvestLogo variant="header" href="/" priority />
           <div className="flex items-center gap-2 md:gap-3">
             <Link href="/login" className="rounded-md border border-white/20 px-4 py-2 text-sm hover:border-white/40">Login</Link>
             <Link href="/signup/agreements" className="rounded-md bg-[#3b82f6] px-4 py-2 text-sm font-semibold text-white">
@@ -477,16 +477,21 @@ export function LandingPage({
         <p className="mt-3 text-slate-300">Explore the platform free. No credit card required.</p>
       </section>
 
-      <footer className="flex flex-col items-center gap-3 px-4 py-8 text-sm text-slate-400 md:flex-row md:justify-between md:px-8">
-        <span>Copyright 2026 STOCVEST LLC</span>
-        <div className="flex max-w-full flex-wrap justify-center gap-x-4 gap-y-2">
-          <Link href="/about">About</Link>
-          <Link href="/how-it-works">How It Works</Link>
-          <Link href="/performance">Performance</Link>
-          <Link href="/security">Security</Link>
-          <Link href="/terms">Terms</Link>
-          <Link href="/privacy">Privacy</Link>
-          <span>Not investment advice</span>
+      <footer className="border-t border-white/10 px-4 py-10 md:px-8">
+        <div className="mx-auto flex max-w-7xl flex-col items-center gap-6">
+          <StocvestLogo variant="footer" href="/" />
+          <div className="flex w-full flex-col items-center gap-3 text-sm text-slate-400 md:flex-row md:justify-between">
+            <span>Copyright 2026 STOCVEST LLC</span>
+            <div className="flex max-w-full flex-wrap justify-center gap-x-4 gap-y-2">
+              <Link href="/about">About</Link>
+              <Link href="/how-it-works">How It Works</Link>
+              <Link href="/performance">Performance</Link>
+              <Link href="/security">Security</Link>
+              <Link href="/terms">Terms</Link>
+              <Link href="/privacy">Privacy</Link>
+              <span>Not investment advice</span>
+            </div>
+          </div>
         </div>
       </footer>
     </main>

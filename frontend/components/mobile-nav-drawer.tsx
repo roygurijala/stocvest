@@ -14,7 +14,7 @@ import { isDashboardNavItemActive } from "@/lib/dashboard-nav-active";
 import { isDashboardNavItemEnabled } from "@/lib/nav-features";
 import { usePathname } from "next/navigation";
 import { useBodyScrollLock } from "@/lib/hooks/use-body-scroll-lock";
-import { StocvestTitle } from "@/components/brand/stocvest-title";
+import { StocvestLogo } from "@/components/brand/stocvest-logo";
 
 interface MobileNavDrawerProps {
   open: boolean;
@@ -76,7 +76,7 @@ export function MobileNavDrawer({
               className="flex shrink-0 items-center justify-between"
               style={{ padding: spacing[4], borderBottom: `1px solid ${colors.border}` }}
             >
-              <StocvestTitle href="/dashboard" />
+              <StocvestLogo variant="nav" href="/dashboard" />
               <button
                 type="button"
                 onClick={onClose}

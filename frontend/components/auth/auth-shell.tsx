@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { ChevronLeft } from "lucide-react";
-import { StocvestTitle } from "@/components/brand/stocvest-title";
+import { StocvestLogo } from "@/components/brand/stocvest-logo";
 
 export type AuthSignupStep = "agreements" | "account";
 
@@ -57,7 +57,7 @@ export function AuthShell({
 
         <section className="stocvest-edge-line-card border border-white/[0.08] bg-[#0c1222]/95 p-5 shadow-[0_24px_80px_-20px_rgba(0,0,0,0.75)] backdrop-blur-sm sm:p-7">
           <div className="mb-5 flex justify-center">
-            <StocvestTitle href="/" size="display" />
+            <StocvestLogo variant="stacked" href="/" priority />
           </div>
           <h1 className="m-0 text-2xl font-bold tracking-tight text-slate-50 sm:text-3xl">{title}</h1>
           {subtitle ? <p className="mb-6 mt-2 text-sm leading-relaxed text-slate-400 sm:text-base">{subtitle}</p> : <div className="mb-6" />}

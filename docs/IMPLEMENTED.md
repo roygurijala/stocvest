@@ -10,6 +10,7 @@ This file archives **completed** backlog rows so `BACKLOG.md` stays focused on p
 
 | ID | Theme | Shipped | Summary |
 |----|-------|---------|---------|
+| B56 | Brand asset pack + landing footer logo | 2026-05-19 | Wire **`public/brand/`** pack: `header_logo_400w/600w`, `full_logo_with_tagline_600w`, `wordmark_only_300w` (footer), `favicon.ico` + `icon_dark_square_*`. Landing footer **`StocvestLogo` `footer`**. Tests: `stocvest-logo.test.tsx`. Frontend-only. |
 | B55 | Text wordmark replaces image logo | 2026-05-19 | **`StocvestTitle`** (`stocvest-title.tsx`) in sidebar, mobile drawer, landing, auth — removes **`StocvestLogo`** PNG component. Tests: `stocvest-title.test.tsx`. Frontend-only. |
 | B54 | Dashboard loading UX + sidebar nav logo | 2026-05-19 | Compact **`DashboardScannerLoadingStrip`** under desk pills (no large bottom fallback). **Desk gated** callout only after scanner settles; muted copy (not error-orange). **`StocvestLogo` `nav`** crop — sidebar/mobile header aligned with top bar (`min-h-14`). Tests: `stocvest-logo.test.tsx` (+nav). Frontend-only. |
 | B53 | Brand logo asset + dashboard Connection closed fix | 2026-05-19 | **`StocvestLogo`** renders **`/brand/stocvest-logo-full.png`** (sidebar, landing, auth). **`useLiveSignals`** no-op — removed Edge **SSE** `EventSource` that closed ~60s and crashed the dashboard client; freshness via **`useDashboardPayload`** poll. Defensive **`scanSummary`** / earnings date guards. Tests: `stocvest-logo.test.tsx`. Frontend-only. |
