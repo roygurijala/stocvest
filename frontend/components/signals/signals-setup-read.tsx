@@ -21,6 +21,8 @@ import type { TradeDecision } from "@/lib/signal-evidence/trade-decision";
 import type { FundamentalBackdropSummary } from "@/lib/signal-evidence/fundamental-present";
 import { SignalsFundamentalBackdrop } from "@/components/signals/signals-fundamental-backdrop";
 import { SignalsFundamentalBackdropUpgrade } from "@/components/signals/signals-fundamental-upgrade";
+import { SignalsScenarioAdjust } from "@/components/signals/signals-scenario-adjust";
+import type { ScenarioGeometrySource } from "@/lib/scenario/scenario-variants";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -37,6 +39,8 @@ type Props = {
   alignmentRatio?: number | null;
   fundamentalSummary?: FundamentalBackdropSummary | null;
   showFundamentalUpgrade?: boolean;
+  /** Reference geometry for controlled what-if (Signals only; does not change system decision). */
+  scenarioGeometry?: ScenarioGeometrySource | null;
 };
 
 export function SignalsSetupRead({
@@ -51,7 +55,8 @@ export function SignalsSetupRead({
   maturationState,
   alignmentRatio,
   fundamentalSummary,
-  showFundamentalUpgrade = false
+  showFundamentalUpgrade = false,
+  scenarioGeometry = null
 }: Props) {
   const { colors } = useTheme();
   const symU = symbol.trim().toUpperCase();
@@ -188,6 +193,14 @@ export function SignalsSetupRead({
           ) : null}
         </div>
       </div>
+
+      {scenarioGeometry ? (
+        <SignalsScenarioAdjust
+          key={`${symU}-${tradingMode}`}
+          systemDecision={decision}
+          geometrySource={scenarioGeometry}
+        />
+      ) : null}
 
       <p
         className="m-0 mt-3 text-sm font-medium leading-snug"

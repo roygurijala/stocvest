@@ -33,6 +33,7 @@ import { buildScenarioPlanningBundle } from "@/lib/scenario/scenario-planning-bu
 import type { ScenarioBuilderDrillDown } from "@/lib/scenario/scenario-builder-drill-down";
 import { useWatchlistMaturationLine } from "@/lib/hooks/use-watchlist-maturation-line";
 import { buildSignalEvaluationFreshness } from "@/lib/signals-evaluation-present";
+import { buildScenarioGeometrySource } from "@/lib/scenario/scenario-variants";
 import {
   buildSignalsPageDecision,
   formatSignalsAlignmentDisplayLine,
@@ -951,6 +952,30 @@ export function SignalsPageClient({
 
   const scenarioPlanningInput = scenarioPlanningBundle?.input ?? null;
 
+  const scenarioGeometry = useMemo(() => {
+    if (!compositeResult || isInsufficientCompositeResponse(compositeResult)) return null;
+    const insight = parseSwingCompositeInsight(compositeResult as Record<string, unknown>);
+    if (!insight?.reference_stop_level || insight.reference_target_1 == null) return null;
+    const zone = insight.historical_entry_zone;
+    const last =
+      typeof snapshot?.last_trade_price === "number" && Number.isFinite(snapshot.last_trade_price)
+        ? snapshot.last_trade_price
+        : null;
+    const c = compositeResult as Record<string, unknown>;
+    const rr = typeof c.risk_reward === "number" && Number.isFinite(c.risk_reward) ? c.risk_reward : null;
+    return buildScenarioGeometrySource({
+      bias: setupBias,
+      entryZoneLow: zone?.low ?? null,
+      entryZoneHigh: zone?.high ?? null,
+      last,
+      structuralStop: insight.reference_stop_level,
+      target1: insight.reference_target_1,
+      target2: insight.reference_target_2,
+      vwap: insight.vwap,
+      systemRiskReward: rr
+    });
+  }, [compositeResult, setupBias, snapshot]);
+
   const pageDecision = useMemo(() => {
     if (!compositeResult || isInsufficientCompositeResponse(compositeResult)) return null;
     const c = compositeResult as Record<string, unknown>;
@@ -1657,6 +1682,7 @@ export function SignalsPageClient({
           alignmentRatio={compositeAlignmentRatio}
           fundamentalSummary={fundamentalSummary}
           showFundamentalUpgrade={showFundamentalUpgrade}
+          scenarioGeometry={scenarioGeometry}
         />
       ) : null}
 

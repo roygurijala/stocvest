@@ -19,6 +19,7 @@ vi.mock("next/link", () => ({
 import { SignalsSetupRead } from "@/components/signals/signals-setup-read";
 import type { SignalsLayerRowInput } from "@/lib/signals-page-present";
 import type { FundamentalBackdropSummary } from "@/lib/signal-evidence/fundamental-present";
+import { buildScenarioGeometrySource } from "@/lib/scenario/scenario-variants";
 
 vi.mock("@/components/info-tip", () => ({
   InfoTip: () => null
@@ -149,6 +150,41 @@ describe("SignalsSetupRead", () => {
     fireEvent.click(btn);
     expect(onOpenEvidence).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId("signals-next")).not.toBeInTheDocument();
+  });
+
+  test("renders scenario adjust when geometry provided", () => {
+    const geometry = buildScenarioGeometrySource({
+      bias: "Bullish",
+      entryZoneLow: 299,
+      entryZoneHigh: 302,
+      last: 301.2,
+      structuralStop: 297.48,
+      target1: 302.8,
+      target2: 306.5,
+      systemRiskReward: 0.5
+    });
+    render(
+      <SignalsSetupRead
+        symbol="AAPL"
+        tradingMode="swing"
+        bias="Bullish"
+        rows={rows}
+        previewLayers={rows.slice(0, 2)}
+        decision={{
+          state: "monitor",
+          line: "Held",
+          reinforcements: [],
+          rationale: {
+            category: "risk_reward",
+            label: "Why hold:",
+            text: "Risk/reward too low (0.5:1) — below threshold."
+          }
+        }}
+        scenarioGeometry={geometry}
+      />
+    );
+    expect(screen.getByTestId("signals-scenario-adjust")).toBeInTheDocument();
+    expect(screen.getByTestId("signals-setup-execution")).toHaveTextContent("Not actionable yet");
   });
 
   test("execution detail toggle reveals primary blocker", () => {
