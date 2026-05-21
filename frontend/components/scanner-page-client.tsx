@@ -29,7 +29,6 @@ import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { loadScannerDataWithoutBrief } from "@/lib/api/scanner-client-load";
 import { fetchScannerTraceBundleClient } from "@/lib/api/scanner-trace-client";
 import type { ScannerSynthesis } from "@/lib/scanner-synthesis";
-import { buildScannerMarketScopeLine } from "@/lib/scanner-quiet-copy";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import type {
   AssistantPageContext,
@@ -1092,10 +1091,6 @@ export function ScannerPageClient({
     setScannerSynthesis(overview.scannerSynthesis ?? null);
   }, [overview.evaluationTrace, overview.scannerSynthesis]);
 
-  const marketScopeLine = useMemo(
-    () => buildScannerMarketScopeLine(scanSummary, scannerSynthesis),
-    [scanSummary, scannerSynthesis]
-  );
   useEffect(() => {
     if (scanSummary.qualifying.total > 0) return;
     if ((overview.evaluationTrace ?? []).length > 0 && overview.scannerSynthesis) return;
@@ -1315,7 +1310,6 @@ export function ScannerPageClient({
         isRefreshing={isPending}
         onRefresh={onManualRefresh}
         hideWatchlistStrip={showQuietInterpretation}
-        marketScopeLine={showQuietInterpretation ? marketScopeLine : null}
         nextScanLabel={marketOpen ? scanCountdownLabel : null}
       />
       {!showQuietInterpretation ? <ScannerOutcomeCards summary={scanSummary} /> : null}
@@ -1328,7 +1322,6 @@ export function ScannerPageClient({
         <ScannerQuietDesk
           summary={scanSummary}
           synthesis={scannerSynthesis}
-          marketScopeLine={marketScopeLine}
           deskFilter={evaluationTraceDeskFilter}
         />
       )}

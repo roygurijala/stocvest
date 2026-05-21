@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import type { NearReadyCardModel } from "@/lib/scanner/scanner-quiet-desk";
-import { nearReadySectionCopy } from "@/lib/scanner/scanner-quiet-desk";
+import { nearReadySectionCopy, regimeBlocksDesk } from "@/lib/scanner/scanner-quiet-desk";
 import { useTheme } from "@/lib/theme-provider";
 
 type Props = {
@@ -15,8 +15,7 @@ type Props = {
 export function ScannerNearReadyZone({ cards, regimeLabel }: Props) {
   const { colors } = useTheme();
   const { title, subtitle } = nearReadySectionCopy(regimeLabel);
-
-  if (cards.length === 0) return null;
+  const hasCards = cards.length > 0;
 
   return (
     <section
@@ -40,7 +39,7 @@ export function ScannerNearReadyZone({ cards, regimeLabel }: Props) {
             color: colors.caution
           }}
         >
-          Primary focus
+          Closest to qualifying
         </p>
         <h3
           data-testid="scanner-near-ready-title"
@@ -52,7 +51,7 @@ export function ScannerNearReadyZone({ cards, regimeLabel }: Props) {
             lineHeight: 1.2
           }}
         >
-          {title}
+          {hasCards ? title : "No setups near ready"}
         </h3>
         <p
           data-testid="scanner-near-ready-subtitle"
@@ -64,15 +63,33 @@ export function ScannerNearReadyZone({ cards, regimeLabel }: Props) {
             lineHeight: 1.45
           }}
         >
-          {subtitle}
+          {hasCards
+            ? subtitle
+            : regimeBlocksDesk(regimeLabel)
+              ? "None on this scan — structure may be building but regime or volume still blocks qualification."
+              : "None on this scan — all evaluated setups still need multiple conditions before they can qualify."}
         </p>
       </header>
 
-      <div style={{ display: "grid", gap: spacing[3] }}>
-        {cards.map((card) => (
-          <NearReadyCard key={`${card.symbol}-${card.desk}`} card={card} />
-        ))}
-      </div>
+      {hasCards ? (
+        <div style={{ display: "grid", gap: spacing[3] }}>
+          {cards.map((card) => (
+            <NearReadyCard key={`${card.symbol}-${card.desk}`} card={card} />
+          ))}
+        </div>
+      ) : (
+        <p
+          data-testid="scanner-near-ready-empty"
+          style={{
+            margin: 0,
+            fontSize: typography.scale.sm,
+            color: colors.textMuted,
+            lineHeight: 1.55
+          }}
+        >
+          Volume leaders below are relatively closer on pace but still below threshold — not actionable yet.
+        </p>
+      )}
     </section>
   );
 }

@@ -40,7 +40,7 @@ export function ScannerScanResultHero({
 
   const sessionLine = summary.session.regular_open
     ? "Session open"
-    : `Closed · next ${summary.session.next_evaluation_label}`;
+    : `Closed · Next update: ${summary.session.next_evaluation_label}`;
 
   const watchlistQuiet = isQuiet && wl ? buildWatchlistQuietInsight(wl, summary.qualifying.total) : null;
 

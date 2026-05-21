@@ -53,14 +53,13 @@ describe("Scanner header", () => {
       <ScannerScanResultHero
         summary={emptySummary()}
         onRefresh={() => undefined}
-        marketScopeLine="Market-wide condition — low participation."
         nextScanLabel="4:36"
       />
     );
     expect(screen.getByTestId("scanner-quiet-ribbon")).toBeInTheDocument();
     expect(screen.getByTestId("scanner-scan-quiet-subline")).toHaveTextContent(/Market quiet/i);
     expect(screen.getByTestId("scanner-quiet-ribbon-summary")).toHaveTextContent(/no setups ready/i);
-    expect(screen.getByTestId("scanner-market-scope-inline")).toHaveTextContent(/Market-wide/i);
+    expect(screen.queryByTestId("scanner-market-scope-inline")).toBeNull();
     expect(screen.getByTestId("scanner-next-scan")).toHaveTextContent(/4:36/);
   });
 

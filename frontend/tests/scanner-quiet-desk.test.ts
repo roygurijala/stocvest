@@ -4,6 +4,7 @@ import {
   buildDevelopingMovementGroups,
   buildNearReadyCards,
   buildQuietBridgeLine,
+  buildScanOutcomePrimaryBlocker,
   buildWhatWouldChangeContent,
   nearReadySectionCopy,
   regimeBlocksDesk,
@@ -95,6 +96,11 @@ describe("scanner-quiet-desk", () => {
 
   it("builds quiet bridge line when near-ready exist", () => {
     expect(buildQuietBridgeLine(0, 2, "Bearish")).toMatch(/near-ready blocked/i);
+  });
+
+  it("builds scan outcome primary blocker for volume", () => {
+    expect(buildScanOutcomePrimaryBlocker(0, 10)).toMatch(/low volume across 10 symbols/i);
+    expect(buildScanOutcomePrimaryBlocker(1, 10)).toBeNull();
   });
 
   it("builds structured what-would-change content", () => {

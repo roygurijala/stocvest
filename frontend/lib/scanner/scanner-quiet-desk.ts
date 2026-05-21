@@ -258,6 +258,14 @@ export function regimeGateRejectionContext(
   return `Regime reads ${resolved} on the session tape — desk gates follow index confirmation.`;
 }
 
+export function buildScanOutcomePrimaryBlocker(
+  qualifiedCount: number,
+  sessionVolumeCount: number
+): string | null {
+  if (qualifiedCount > 0 || sessionVolumeCount === 0) return null;
+  return `→ Primary blocker: low volume across ${sessionVolumeCount} symbol${sessionVolumeCount === 1 ? "" : "s"}`;
+}
+
 export function buildQuietBridgeLine(
   qualifyingTotal: number,
   nearReadyCount: number,
@@ -279,24 +287,17 @@ export function buildWhatWouldChangeContent(
   const volQuiet =
     synthesis?.volume_context?.market_condition?.toLowerCase().includes("low") ||
     synthesis?.volume_context?.market_condition?.toLowerCase().includes("below");
-  if (volQuiet || (synthesis?.rejection_groups.session_volume.length ?? 0) >= 2) {
-    watchItems.push("Participation must improve vs intraday pace");
-  }
-  watchItems.push("SPY / QQQ need stronger follow-through");
+  watchItems.push("Participation must improve");
+  watchItems.push("Volume needs to expand across large caps");
+  watchItems.push("SPY / QQQ should lead higher");
   if (regimeBlocksDesk(regimeLabel)) {
     watchItems.push("Regime must clear before swing gates unlock");
-  } else {
-    watchItems.push("Per-symbol structure must finish confirming");
   }
 
   const names = nearSymbols.slice(0, 2).join(" and ");
-  const outcome = regimeBlocksDesk(regimeLabel)
-    ? names
-      ? `If conditions improve → ${names} may qualify first after the next scan.`
-      : "If conditions improve → near-ready setups may trigger on the next scan."
-    : names
-      ? `If conditions improve → ${names} are next in line to qualify.`
-      : "If conditions improve → near-ready setups may qualify on the next scan.";
+  const outcome = names
+    ? `If these improve → ${names} may qualify first.`
+    : "If these improve → setups may qualify on the next scan.";
 
   return { watchItems, outcome };
 }

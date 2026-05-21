@@ -13,9 +13,11 @@ type VolumeGapBarProps = {
   /** When provided, used for an accessible label alongside fill %. */
   pctBelow?: number;
   testId?: string;
+  /** e.g. "Best on volume (still below threshold)" — only on the top relative row. */
+  rankNote?: string;
 };
 
-export function VolumeGapBar({ symbol, fillPct, pctBelow, testId }: VolumeGapBarProps) {
+export function VolumeGapBar({ symbol, fillPct, pctBelow, testId, rankNote }: VolumeGapBarProps) {
   const { colors } = useTheme();
   const fill = Math.max(0, Math.min(100, Math.round(fillPct)));
   const barTestId = testId ?? `scanner-volume-gap-${symbol}`;
@@ -24,45 +26,64 @@ export function VolumeGapBar({ symbol, fillPct, pctBelow, testId }: VolumeGapBar
     <div
       className="scanner-volume-gap"
       data-testid={barTestId}
-      style={{
-        display: "grid",
-        gridTemplateColumns: "3.25rem minmax(0, 1fr)",
-        alignItems: "center",
-        gap: spacing[2]
-      }}
+      style={{ display: "grid", gap: spacing[1] }}
     >
-      <span
-        className="font-mono font-semibold"
-        style={{ fontSize: typography.scale.sm, color: colors.text }}
-      >
-        {symbol}
-      </span>
       <div
-        role="progressbar"
-        aria-valuenow={fill}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-label={volumeGapAriaLabel(symbol, fill, pctBelow)}
-        data-testid={`${barTestId}-track`}
         style={{
-          height: 6,
-          borderRadius: borderRadius.sm,
-          background: colors.border,
-          overflow: "hidden"
+          display: "grid",
+          gridTemplateColumns: "3.25rem minmax(0, 1fr)",
+          alignItems: "center",
+          gap: spacing[2]
         }}
       >
+        <span
+          className="font-mono font-semibold"
+          style={{ fontSize: typography.scale.sm, color: colors.text }}
+        >
+          {symbol}
+        </span>
         <div
-          data-testid={`${barTestId}-fill`}
+          role="progressbar"
+          aria-valuenow={fill}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={volumeGapAriaLabel(symbol, fill, pctBelow)}
+          data-testid={`${barTestId}-track`}
           style={{
-            width: `${fill}%`,
-            height: "100%",
+            height: 6,
             borderRadius: borderRadius.sm,
-            background: VOLUME_GAP_FILL,
-            minWidth: fill > 0 ? 2 : 0,
-            transition: "width 0.2s ease"
+            background: colors.border,
+            overflow: "hidden"
           }}
-        />
+        >
+          <div
+            data-testid={`${barTestId}-fill`}
+            style={{
+              width: `${fill}%`,
+              height: "100%",
+              borderRadius: borderRadius.sm,
+              background: VOLUME_GAP_FILL,
+              minWidth: fill > 0 ? 2 : 0,
+              transition: "width 0.2s ease"
+            }}
+          />
+        </div>
       </div>
+      {rankNote ? (
+        <p
+          data-testid={`${barTestId}-rank-note`}
+          style={{
+            margin: 0,
+            paddingLeft: "3.25rem",
+            fontSize: 10,
+            fontWeight: 600,
+            color: colors.textMuted,
+            lineHeight: 1.4
+          }}
+        >
+          {rankNote}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -98,32 +119,42 @@ export function VolumeGapBarList({
             lineHeight: 1.45
           }}
         >
-          Volume vs required threshold (% of session pace met — higher bar = closer to qualifying)
+          Bars show % of required session pace met. Tallest bar = best among weak participation — not
+          near-ready.
         </p>
       ) : null}
-    <ul
-      className="scanner-volume-gap-list"
-      style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: spacing[2] }}
-    >
-      {preview.map((row) => (
-        <li key={row.symbol}>
-          <VolumeGapBar
-            symbol={row.symbol}
-            fillPct={100 - row.pct_below}
-            pctBelow={row.pct_below}
-            testId={`${testIdPrefix}-${row.symbol}`}
-          />
-        </li>
-      ))}
-      {overflow > 0 ? (
-        <li
-          data-testid={`${testIdPrefix}-overflow`}
-          style={{ fontSize: typography.scale.xs, color: "var(--color-text-muted)", paddingLeft: "3.25rem" }}
-        >
-          + {overflow} more
-        </li>
-      ) : null}
-    </ul>
+      <ul
+        className="scanner-volume-gap-list"
+        style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: spacing[2] }}
+      >
+        {preview.map((row, index) => (
+          <li key={row.symbol}>
+            <VolumeGapBar
+              symbol={row.symbol}
+              fillPct={100 - row.pct_below}
+              pctBelow={row.pct_below}
+              testId={`${testIdPrefix}-${row.symbol}`}
+              rankNote={
+                index === 0
+                  ? "Best on volume (still below threshold — not near-ready)"
+                  : undefined
+              }
+            />
+          </li>
+        ))}
+        {overflow > 0 ? (
+          <li
+            data-testid={`${testIdPrefix}-overflow`}
+            style={{
+              fontSize: typography.scale.xs,
+              color: colors.textMuted,
+              paddingLeft: "3.25rem"
+            }}
+          >
+            + {overflow} more
+          </li>
+        ) : null}
+      </ul>
     </div>
   );
 }

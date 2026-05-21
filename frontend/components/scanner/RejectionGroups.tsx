@@ -5,6 +5,7 @@ import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import {
+  buildScanOutcomePrimaryBlocker,
   regimeGateRejectionContext,
   regimeGateRejectionTitle
 } from "@/lib/scanner/scanner-quiet-desk";
@@ -69,25 +70,40 @@ function CollapsibleGroup({
           textAlign: "left"
         }}
       >
-        <span>
+        <span style={{ minWidth: 0 }}>
           <span style={{ display: "block", fontSize: typography.scale.sm, fontWeight: 600, color: colors.text }}>
             {title}
-          </span>
-          <span style={{ display: "inline-block", marginTop: spacing[1], fontSize: 10, fontWeight: 700, color: tagColor }}>
-            {tag}
-          </span>
-          {contextLine ? (
-            <span
-              style={{
-                display: "block",
-                marginTop: spacing[1],
-                fontSize: typography.scale.xs,
-                color: colors.textMuted,
-                lineHeight: 1.5
-              }}
-            >
-              {contextLine}
+            <span style={{ marginLeft: spacing[1], color: colors.textMuted, fontWeight: 500 }}>
+              {open ? "" : " ▼"}
             </span>
+          </span>
+          {open ? (
+            <>
+              <span
+                style={{
+                  display: "inline-block",
+                  marginTop: spacing[1],
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: tagColor
+                }}
+              >
+                {tag}
+              </span>
+              {contextLine ? (
+                <span
+                  style={{
+                    display: "block",
+                    marginTop: spacing[1],
+                    fontSize: typography.scale.xs,
+                    color: colors.textMuted,
+                    lineHeight: 1.5
+                  }}
+                >
+                  {contextLine}
+                </span>
+              ) : null}
+            </>
           ) : null}
         </span>
         <ChevronDown
@@ -118,10 +134,7 @@ export function RejectionGroups({
 
   if (totalEvaluated === 0 && qualifiedCount === 0) return null;
 
-  const subtitle =
-    qualifiedCount > 0
-      ? `${qualifiedCount} setup${qualifiedCount === 1 ? "" : "s"} qualified · ${totalEvaluated} evaluated`
-      : "No setups met all required gates this scan";
+  const primaryBlocker = buildScanOutcomePrimaryBlocker(qualifiedCount, session.length);
 
   return (
     <section data-testid="scanner-rejection-groups" style={{ display: "grid", gap: spacing[3] }}>
@@ -138,9 +151,46 @@ export function RejectionGroups({
         >
           Scan outcome
         </p>
-        <p style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.5 }}>
-          {subtitle}
+        <p
+          data-testid="scanner-scan-outcome-headline"
+          style={{
+            margin: `${spacing[1]} 0 0`,
+            fontSize: typography.scale.sm,
+            fontWeight: 600,
+            color: colors.text,
+            lineHeight: 1.5
+          }}
+        >
+          {qualifiedCount > 0
+            ? `${qualifiedCount} setup${qualifiedCount === 1 ? "" : "s"} qualified · ${totalEvaluated} evaluated`
+            : "No setups qualified"}
         </p>
+        {primaryBlocker ? (
+          <p
+            data-testid="scanner-scan-outcome-blocker"
+            style={{
+              margin: `${spacing[1]} 0 0`,
+              fontSize: typography.scale.sm,
+              fontWeight: 600,
+              color: colors.caution,
+              lineHeight: 1.5
+            }}
+          >
+            {primaryBlocker}
+          </p>
+        ) : null}
+        {qualifiedCount === 0 ? (
+          <p
+            style={{
+              margin: `${spacing[1]} 0 0`,
+              fontSize: typography.scale.xs,
+              color: colors.textMuted,
+              lineHeight: 1.5
+            }}
+          >
+            No setups met all required gates this scan.
+          </p>
+        ) : null}
       </div>
 
       {session.length > 0 ? (
@@ -149,27 +199,25 @@ export function RejectionGroups({
           title={
             regimeLabel && regimeLabel.toLowerCase().includes("bear") && qualifiedCount === 0
               ? regimeGateRejectionTitle(session.length, regimeLabel)
-              : `Volume below threshold · ${session.length} symbol${session.length === 1 ? "" : "s"}`
+              : `Volume below threshold (${session.length} symbol${session.length === 1 ? "" : "s"})`
           }
           tag={regimeLabel && qualifiedCount === 0 ? "Regime" : "Session volume"}
           tagColor="#d97706"
           contextLine={
             regimeLabel && qualifiedCount === 0
               ? regimeGateRejectionContext(regimeLabel, spyPct, qqqPct)
-              : "All affected by the same market-wide condition"
+              : "Relative bar height = share of required pace met — not near-ready."
           }
-          defaultOpen
+          defaultOpen={false}
         >
-          <div data-testid="scanner-rejection-chip-grid">
-            <VolumeGapBarList rows={session} limit={8} testIdPrefix="scanner-rejection-volume-gap" />
-          </div>
+          <VolumeGapBarList rows={session} limit={8} testIdPrefix="scanner-rejection-volume-gap" />
         </CollapsibleGroup>
       ) : null}
 
       {liquidity.length > 0 ? (
         <CollapsibleGroup
           testId="scanner-rejection-liquidity"
-          title={`Universe filter · permanent · ${liquidity.length} symbol${liquidity.length === 1 ? "" : "s"}`}
+          title={`Universe filter · permanent (${liquidity.length})`}
           tag="Liquidity"
           tagColor={colors.textMuted}
           defaultOpen={false}
@@ -212,7 +260,7 @@ export function RejectionGroups({
       {structure.length > 0 ? (
         <CollapsibleGroup
           testId="scanner-rejection-structure"
-          title={`Structure gates · ${structure.length} symbol${structure.length === 1 ? "" : "s"}`}
+          title={`Structure gates (${structure.length} symbol${structure.length === 1 ? "" : "s"})`}
           tag="Technical"
           tagColor={colors.accent}
           defaultOpen={false}

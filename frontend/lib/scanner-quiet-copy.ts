@@ -53,7 +53,96 @@ export function buildScannerDeskInterpretiveLine(
   return "Some conditions missing — no setups fully confirmed";
 }
 
-/** Detail bullets for “Why quiet” — omits participation when hero already states market-wide pace. */
+export type MarketConditionsQuietCard = {
+  headline: string;
+  environmentQuality: { label: string; tone: "weak" | "mixed" | "ok" };
+  focusHint: string;
+  regimePill: { label: string; tone: "ok" | "caution" | "bearish" };
+  breadthPill: { label: string; tone: "caution" | "muted" | "bearish" };
+  bodyParagraphs: string[];
+  footnote?: string;
+};
+
+/** Single market-conditions card — replaces standalone “Why the scanner is quiet”. */
+export function buildMarketConditionsQuietCard(
+  summary: ScannerScanSummary,
+  synthesis?: ScannerSynthesis | null
+): MarketConditionsQuietCard {
+  const headline = buildScannerQuietSubline(summary, synthesis);
+  const regimeLabel = summary.regime.label;
+  const r = regimeLabel.toLowerCase();
+  const bearish = r.includes("bear");
+  const bullish = r.includes("bull");
+
+  const regimePill = bearish
+    ? { label: `Regime: ${regimeLabel}`, tone: "bearish" as const }
+    : bullish
+      ? { label: `Regime: ${regimeLabel} ✓`, tone: "ok" as const }
+      : { label: `Regime: ${regimeLabel}`, tone: "caution" as const };
+
+  const breadthPill = bearish
+    ? { label: "Breadth: risk-off", tone: "bearish" as const }
+    : bullish
+      ? { label: "Breadth: selective", tone: "caution" as const }
+      : { label: "Breadth: mixed", tone: "muted" as const };
+
+  const sessionVolCount = synthesis?.rejection_groups.session_volume.length ?? 0;
+  const volQuiet =
+    synthesis?.volume_context?.market_condition?.toLowerCase().includes("low") ||
+    synthesis?.volume_context?.market_condition?.toLowerCase().includes("below");
+  const avgBelow = synthesis?.volume_context?.avg_pct_below;
+  const leaders = pickLeaderSymbolsForCause(synthesis, summary);
+
+  const bodyParagraphs: string[] = [];
+
+  if (bearish) {
+    bodyParagraphs.push("Risk-off regime is limiting broad follow-through — structure alone is not enough today.");
+  } else if (bullish) {
+    bodyParagraphs.push(`Regime is ${regimeLabel} — not the primary blocker on this scan.`);
+  } else {
+    bodyParagraphs.push(`Regime reads ${regimeLabel} — follow-through remains selective.`);
+  }
+
+  if (volQuiet || sessionVolCount >= 2) {
+    const pace =
+      avgBelow != null && Number.isFinite(avgBelow)
+        ? `Volume is the primary blocker — broad participation ≈${Math.round(avgBelow)}% below intraday pace.`
+        : "Volume is the primary blocker — session pace has not reached desk thresholds.";
+    bodyParagraphs.push(pace);
+  } else {
+    bodyParagraphs.push("Participation has not reached desk thresholds yet.");
+  }
+
+  if (leaders.length >= 2) {
+    bodyParagraphs.push(
+      `${leaders.slice(0, 3).join(", ")} not confirming session pace — keeps the tape selective.`
+    );
+  } else if (leaders.length === 1) {
+    bodyParagraphs.push(`${leaders[0]} not confirming session pace.`);
+  }
+
+  const footnote = bearish
+    ? "Bearish regime prevents trading against the tape — individual alignment alone does not clear swing gates."
+    : undefined;
+
+  const environmentQuality =
+    volQuiet || sessionVolCount >= 3
+      ? { label: "Environment quality: Weak", tone: "weak" as const }
+      : bearish
+        ? { label: "Environment quality: Weak", tone: "weak" as const }
+        : { label: "Environment quality: Mixed", tone: "mixed" as const };
+
+  const focusHint =
+    volQuiet || sessionVolCount >= 2
+      ? "Focus: Wait for volume expansion before scanning for setups."
+      : bearish
+        ? "Focus: Regime must improve before swing setups can qualify."
+        : "Focus: Watch for participation and structure to align.";
+
+  return { headline, environmentQuality, focusHint, regimePill, breadthPill, bodyParagraphs, footnote };
+}
+
+/** @deprecated Use {@link buildMarketConditionsQuietCard} — kept for tests/callers migrating off bullet lists. */
 export function buildScannerCauseDetailBullets(
   summary: ScannerScanSummary,
   synthesis: ScannerSynthesis | null | undefined,
