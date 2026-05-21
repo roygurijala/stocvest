@@ -5,7 +5,9 @@
  * trade decision — only local presentation on the Signals page.
  */
 
+import { resolveAlignmentDisplayTier } from "@/lib/alignment-display-tier";
 import type { SignalsSetupBias } from "@/lib/signals-page-present";
+import { referenceLevelsFromSessionStructure } from "@/lib/signal-evidence";
 import type { TradeDecision } from "@/lib/signal-evidence/trade-decision";
 
 /** Matches `buildSignalsPageDecision` R/R gate — keep in sync. */
@@ -26,6 +28,21 @@ export type ScenarioGeometrySource = {
   target2: number | null;
   vwap: number | null;
   systemRiskReward: number | null;
+};
+
+export type ScenarioGeometryPrecision = "validated" | "estimated";
+
+export type ScenarioLevelProvenance = {
+  entry: "zone" | "last" | "synthetic_zone" | "estimated";
+  stop: "composite" | "structure" | "vwap" | "percent_rule" | "estimated";
+  target: "composite" | "structure" | "percent_rule" | "estimated";
+};
+
+export type ScenarioGeometryBundle = {
+  source: ScenarioGeometrySource;
+  precision: ScenarioGeometryPrecision;
+  provenance: ScenarioLevelProvenance;
+  estimationLines: string[];
 };
 
 export type ScenarioSelection = {
@@ -210,6 +227,191 @@ export function buildScenarioGeometrySource(args: {
     vwap: args.vwap ?? null,
     systemRiskReward: args.systemRiskReward ?? null
   };
+}
+
+function positivePrice(v: number | null | undefined): number | null {
+  return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null;
+}
+
+function pctFallbackStop(direction: "bullish" | "bearish", entry: number): number {
+  return direction === "bullish" ? round4(entry * 0.985) : round4(entry * 1.015);
+}
+
+function pctFallbackTarget(direction: "bullish" | "bearish", entry: number): number {
+  return direction === "bullish" ? round4(entry * 1.012) : round4(entry * 0.988);
+}
+
+/** Developing+ only — hide Neutral bias and not_aligned / invalidated. */
+export function isExecutionStageEligibleForScenarioAdjust(args: {
+  maturationState?: string | null;
+  layersAligned?: number;
+  layersTotal?: number;
+}): boolean {
+  const tier = resolveAlignmentDisplayTier({
+    layersAligned: args.layersAligned ?? 0,
+    layersTotal: args.layersTotal ?? 6,
+    maturationState: args.maturationState
+  });
+  return tier !== "not_aligned" && tier !== "invalidated";
+}
+
+export function formatScenarioEstimationLines(provenance: ScenarioLevelProvenance): string[] {
+  const lines: string[] = [];
+  if (provenance.entry === "last") lines.push("Entry: current price");
+  else if (provenance.entry === "zone") lines.push("Entry: reference zone");
+  else if (provenance.entry === "synthetic_zone") lines.push("Entry: estimated band around last price");
+  if (provenance.stop === "composite") lines.push("Stop: system reference stop");
+  else if (provenance.stop === "structure") lines.push("Stop: recent session structure");
+  else if (provenance.stop === "vwap") lines.push("Stop: VWAP-based");
+  else if (provenance.stop === "percent_rule") lines.push("Stop: percent rule from entry");
+  if (provenance.target === "composite") lines.push("Target: system reference target");
+  else if (provenance.target === "structure") {
+    lines.push("Target: nearest resistance/support from session");
+  } else if (provenance.target === "percent_rule") {
+    lines.push("Target: percent extension from entry");
+  }
+  return lines;
+}
+
+export type BuildScenarioGeometryBundleArgs = {
+  bias: SignalsSetupBias;
+  maturationState?: string | null;
+  layersAligned?: number;
+  layersTotal?: number;
+  entryZoneLow?: number | null;
+  entryZoneHigh?: number | null;
+  last?: number | null;
+  structuralStop?: number | null;
+  target1?: number | null;
+  target2?: number | null;
+  vwap?: number | null;
+  support?: number | null;
+  resistance?: number | null;
+  prevClose?: number | null;
+  systemRiskReward?: number | null;
+  /** True when stop/target came from composite insight fields. */
+  compositeStopProvided?: boolean;
+  compositeTargetProvided?: boolean;
+  compositeZoneProvided?: boolean;
+};
+
+/**
+ * Build geometry with fallbacks — returns null only for Neutral bias, early/invalidated
+ * stage, or when no price structure exists at all.
+ */
+export function buildScenarioGeometryBundle(
+  args: BuildScenarioGeometryBundleArgs
+): ScenarioGeometryBundle | null {
+  const direction = setupBiasToScenarioDirection(args.bias);
+  if (!direction) return null;
+  if (
+    !isExecutionStageEligibleForScenarioAdjust({
+      maturationState: args.maturationState,
+      layersAligned: args.layersAligned,
+      layersTotal: args.layersTotal
+    })
+  ) {
+    return null;
+  }
+
+  const provenance: ScenarioLevelProvenance = {
+    entry: "estimated",
+    stop: "estimated",
+    target: "estimated"
+  };
+
+  let last = positivePrice(args.last);
+  let zoneLo = positivePrice(args.entryZoneLow);
+  let zoneHi = positivePrice(args.entryZoneHigh);
+  let vwap = positivePrice(args.vwap);
+  let stop = positivePrice(args.structuralStop);
+  let t1 = positivePrice(args.target1);
+  let t2 = positivePrice(args.target2);
+
+  if (args.compositeZoneProvided && zoneLo != null && zoneHi != null) {
+    provenance.entry = "zone";
+  } else if (last != null) {
+    provenance.entry = "last";
+  }
+
+  if (args.compositeStopProvided && stop != null) provenance.stop = "composite";
+  if (args.compositeTargetProvided && t1 != null) provenance.target = "composite";
+
+  if (last == null && zoneLo != null && zoneHi != null && zoneHi > zoneLo) {
+    last = round4((zoneLo + zoneHi) / 2);
+    provenance.entry = "zone";
+  }
+  if (last == null) return null;
+
+  if (zoneLo == null || zoneHi == null || zoneHi <= zoneLo) {
+    zoneLo = round4(last * 0.998);
+    zoneHi = round4(last * 1.002);
+    if (provenance.entry === "last") provenance.entry = "synthetic_zone";
+  }
+
+  const support = positivePrice(args.support);
+  const resistance = positivePrice(args.resistance);
+  const session = referenceLevelsFromSessionStructure({
+    direction,
+    support,
+    resistance,
+    vwap,
+    lastTradePrice: last,
+    prevClose: positivePrice(args.prevClose)
+  });
+
+  if (stop == null && session.reference_stop_level != null) {
+    stop = session.reference_stop_level;
+    provenance.stop = "structure";
+  }
+  if (t1 == null && session.reference_target_1 != null) {
+    t1 = session.reference_target_1;
+    if (provenance.target !== "composite") provenance.target = "structure";
+  }
+  if (t2 == null && session.reference_target_2 != null) {
+    t2 = session.reference_target_2;
+  }
+
+  if (stop == null) {
+    stop = pctFallbackStop(direction, last);
+    provenance.stop = "percent_rule";
+  }
+  if (t1 == null) {
+    t1 = pctFallbackTarget(direction, last);
+    provenance.target = "percent_rule";
+  }
+
+  const source: ScenarioGeometrySource = {
+    direction,
+    entryZoneLow: zoneLo,
+    entryZoneHigh: zoneHi,
+    last,
+    structuralStop: stop,
+    target1: t1,
+    target2: t2,
+    vwap,
+    systemRiskReward: args.systemRiskReward ?? null
+  };
+
+  const catalog = buildScenarioVariantCatalog(source);
+  if (!catalog) return null;
+
+  const precision: ScenarioGeometryPrecision =
+    provenance.entry === "zone" &&
+    provenance.stop === "composite" &&
+    provenance.target === "composite"
+      ? "validated"
+      : "estimated";
+
+  const estimationLines =
+    precision === "estimated"
+      ? [
+          ...formatScenarioEstimationLines(provenance),
+          "Refine when full scenario levels are available from composite"
+        ]
+      : [];
+
+  return { source, precision, provenance, estimationLines };
 }
 
 const PRESET_SELECTIONS: Record<ScenarioPresetId, ScenarioSelection> = {

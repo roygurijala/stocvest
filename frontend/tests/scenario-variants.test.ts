@@ -1,8 +1,10 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  buildScenarioGeometryBundle,
   buildScenarioGeometrySource,
   buildScenarioVariantCatalog,
+  isExecutionStageEligibleForScenarioAdjust,
   remainingBlockersAfterScenarioRr,
   resolveScenarioLevels,
   scenarioClearsRrGate,
@@ -57,14 +59,62 @@ describe("scenario-variants", () => {
     expect(after.some((l) => /Layer agreement/i.test(l))).toBe(true);
   });
 
-  test("neutral bias yields no geometry source", () => {
+  test("neutral bias yields no geometry bundle", () => {
     expect(
-      buildScenarioGeometrySource({
+      buildScenarioGeometryBundle({
         bias: "Neutral",
-        structuralStop: 1,
-        target1: 2,
-        last: 1.5
+        last: 301,
+        maturationState: "developing",
+        layersAligned: 3
       })
     ).toBeNull();
+  });
+
+  test("not_aligned stage hides panel", () => {
+    expect(isExecutionStageEligibleForScenarioAdjust({ maturationState: "not_aligned", layersAligned: 0 })).toBe(
+      false
+    );
+    expect(
+      buildScenarioGeometryBundle({
+        bias: "Bullish",
+        last: 100,
+        maturationState: "not_aligned",
+        layersAligned: 0
+      })
+    ).toBeNull();
+  });
+
+  test("developing with last only yields estimated bundle", () => {
+    const bundle = buildScenarioGeometryBundle({
+      bias: "Bearish",
+      last: 266.5,
+      maturationState: "developing",
+      layersAligned: 2,
+      layersTotal: 6,
+      support: 264,
+      resistance: 268,
+      systemRiskReward: 1.0
+    });
+    expect(bundle).not.toBeNull();
+    expect(bundle!.precision).toBe("estimated");
+    expect(bundle!.estimationLines.length).toBeGreaterThan(0);
+    expect(buildScenarioVariantCatalog(bundle!.source)).not.toBeNull();
+  });
+
+  test("validated when composite levels and zone provided", () => {
+    const bundle = buildScenarioGeometryBundle({
+      bias: "Bullish",
+      last: 301.2,
+      entryZoneLow: 299,
+      entryZoneHigh: 302,
+      structuralStop: 297.48,
+      target1: 302.8,
+      maturationState: "developing",
+      layersAligned: 3,
+      compositeStopProvided: true,
+      compositeTargetProvided: true,
+      compositeZoneProvided: true
+    });
+    expect(bundle?.precision).toBe("validated");
   });
 });

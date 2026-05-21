@@ -22,7 +22,7 @@ import type { FundamentalBackdropSummary } from "@/lib/signal-evidence/fundament
 import { SignalsFundamentalBackdrop } from "@/components/signals/signals-fundamental-backdrop";
 import { SignalsFundamentalBackdropUpgrade } from "@/components/signals/signals-fundamental-upgrade";
 import { SignalsScenarioAdjust } from "@/components/signals/signals-scenario-adjust";
-import type { ScenarioGeometrySource } from "@/lib/scenario/scenario-variants";
+import type { ScenarioGeometryBundle } from "@/lib/scenario/scenario-variants";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -40,7 +40,7 @@ type Props = {
   fundamentalSummary?: FundamentalBackdropSummary | null;
   showFundamentalUpgrade?: boolean;
   /** Reference geometry for controlled what-if (Signals only; does not change system decision). */
-  scenarioGeometry?: ScenarioGeometrySource | null;
+  scenarioGeometryBundle?: ScenarioGeometryBundle | null;
 };
 
 export function SignalsSetupRead({
@@ -56,7 +56,7 @@ export function SignalsSetupRead({
   alignmentRatio,
   fundamentalSummary,
   showFundamentalUpgrade = false,
-  scenarioGeometry = null
+  scenarioGeometryBundle = null
 }: Props) {
   const { colors } = useTheme();
   const symU = symbol.trim().toUpperCase();
@@ -194,11 +194,11 @@ export function SignalsSetupRead({
         </div>
       </div>
 
-      {scenarioGeometry ? (
+      {scenarioGeometryBundle ? (
         <SignalsScenarioAdjust
           key={`${symU}-${tradingMode}`}
           systemDecision={decision}
-          geometrySource={scenarioGeometry}
+          geometryBundle={scenarioGeometryBundle}
         />
       ) : null}
 

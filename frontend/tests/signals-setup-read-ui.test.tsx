@@ -19,7 +19,7 @@ vi.mock("next/link", () => ({
 import { SignalsSetupRead } from "@/components/signals/signals-setup-read";
 import type { SignalsLayerRowInput } from "@/lib/signals-page-present";
 import type { FundamentalBackdropSummary } from "@/lib/signal-evidence/fundamental-present";
-import { buildScenarioGeometrySource } from "@/lib/scenario/scenario-variants";
+import { buildScenarioGeometryBundle } from "@/lib/scenario/scenario-variants";
 
 vi.mock("@/components/info-tip", () => ({
   InfoTip: () => null
@@ -153,7 +153,7 @@ describe("SignalsSetupRead", () => {
   });
 
   test("renders scenario adjust when geometry provided", () => {
-    const geometry = buildScenarioGeometrySource({
+    const geometryBundle = buildScenarioGeometryBundle({
       bias: "Bullish",
       entryZoneLow: 299,
       entryZoneHigh: 302,
@@ -161,7 +161,12 @@ describe("SignalsSetupRead", () => {
       structuralStop: 297.48,
       target1: 302.8,
       target2: 306.5,
-      systemRiskReward: 0.5
+      systemRiskReward: 0.5,
+      maturationState: "developing",
+      layersAligned: 3,
+      compositeStopProvided: true,
+      compositeTargetProvided: true,
+      compositeZoneProvided: true
     });
     render(
       <SignalsSetupRead
@@ -180,7 +185,7 @@ describe("SignalsSetupRead", () => {
             text: "Risk/reward too low (0.5:1) — below threshold."
           }
         }}
-        scenarioGeometry={geometry}
+        scenarioGeometryBundle={geometryBundle}
       />
     );
     expect(screen.getByTestId("signals-scenario-adjust")).toBeInTheDocument();

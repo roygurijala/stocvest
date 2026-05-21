@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 
 import { SignalsScenarioAdjust } from "@/components/signals/signals-scenario-adjust";
-import { buildScenarioGeometrySource } from "@/lib/scenario/scenario-variants";
+import { buildScenarioGeometryBundle } from "@/lib/scenario/scenario-variants";
 import type { TradeDecision } from "@/lib/signal-evidence/trade-decision";
 
 vi.mock("@/lib/theme-provider", () => ({
@@ -21,7 +21,7 @@ vi.mock("@/lib/theme-provider", () => ({
   })
 }));
 
-const geometry = buildScenarioGeometrySource({
+const geometryBundle = buildScenarioGeometryBundle({
   bias: "Bullish",
   entryZoneLow: 299,
   entryZoneHigh: 302,
@@ -30,7 +30,12 @@ const geometry = buildScenarioGeometrySource({
   target1: 302.8,
   target2: 306.5,
   vwap: 300.5,
-  systemRiskReward: 0.5
+  systemRiskReward: 0.5,
+  maturationState: "developing",
+  layersAligned: 3,
+  compositeStopProvided: true,
+  compositeTargetProvided: true,
+  compositeZoneProvided: true
 })!;
 
 const monitorRrDecision: TradeDecision = {
@@ -46,14 +51,14 @@ const monitorRrDecision: TradeDecision = {
 
 describe("SignalsScenarioAdjust", () => {
   test("renders system R/R and opens adjust panel", () => {
-    render(<SignalsScenarioAdjust systemDecision={monitorRrDecision} geometrySource={geometry} />);
+    render(<SignalsScenarioAdjust systemDecision={monitorRrDecision} geometryBundle={geometryBundle} />);
     expect(screen.getByTestId("signals-scenario-adjust")).toBeInTheDocument();
     expect(screen.getByTestId("signals-scenario-system-rr")).toHaveTextContent(/0\.5/);
     expect(screen.getByTestId("signals-scenario-adjust-panel")).toBeInTheDocument();
   });
 
   test("aggressive preset updates result R/R without mutating system line", () => {
-    render(<SignalsScenarioAdjust systemDecision={monitorRrDecision} geometrySource={geometry} />);
+    render(<SignalsScenarioAdjust systemDecision={monitorRrDecision} geometryBundle={geometryBundle} />);
     fireEvent.click(screen.getByTestId("signals-scenario-preset-aggressive"));
     const result = screen.getByTestId("signals-scenario-result-rr");
     expect(result.textContent).toMatch(/✓|2\./);

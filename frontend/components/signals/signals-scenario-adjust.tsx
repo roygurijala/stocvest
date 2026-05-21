@@ -15,7 +15,7 @@ import {
   SCENARIO_RR_MIN,
   scenarioRrTone,
   type ScenarioEntryStyle,
-  type ScenarioGeometrySource,
+  type ScenarioGeometryBundle,
   type ScenarioPresetId,
   type ScenarioSelection,
   type ScenarioStopStrategy,
@@ -28,7 +28,7 @@ import { useTheme } from "@/lib/theme-provider";
 
 type Props = {
   systemDecision: TradeDecision;
-  geometrySource: ScenarioGeometrySource;
+  geometryBundle: ScenarioGeometryBundle;
 };
 
 function Segmented<T extends string>({
@@ -110,8 +110,9 @@ function RrBar({ riskReward }: { riskReward: number }) {
   );
 }
 
-export function SignalsScenarioAdjust({ systemDecision, geometrySource }: Props) {
+export function SignalsScenarioAdjust({ systemDecision, geometryBundle }: Props) {
   const { colors } = useTheme();
+  const { source: geometrySource, precision, estimationLines } = geometryBundle;
   const catalog = useMemo(
     () => buildScenarioVariantCatalog(geometrySource),
     [geometrySource]
@@ -121,7 +122,8 @@ export function SignalsScenarioAdjust({ systemDecision, geometrySource }: Props)
       systemDecision.rationale?.category === "risk_reward" ||
       (geometrySource.systemRiskReward != null &&
         Number.isFinite(geometrySource.systemRiskReward) &&
-        geometrySource.systemRiskReward < SCENARIO_RR_MIN)
+        geometrySource.systemRiskReward < SCENARIO_RR_MIN) ||
+      precision === "estimated"
   );
   const [selection, setSelection] = useState<ScenarioSelection | null>(
     () => catalog?.defaultSelection ?? null
@@ -173,16 +175,28 @@ export function SignalsScenarioAdjust({ systemDecision, geometrySource }: Props)
       data-testid="signals-scenario-adjust"
     >
       <p className="m-0 text-xs font-semibold" style={{ color: colors.textMuted }}>
-        Reference scenario (system default)
+        {precision === "validated" ? "Reference scenario (validated)" : "Reference scenario (estimated)"}
       </p>
       <p className="m-0 mt-1 text-sm tabular-nums" style={{ color: colors.text }} data-testid="signals-scenario-system-rr">
-        <span aria-hidden>{systemRr < 2 ? "⚠ " : ""}</span>
+        <span aria-hidden>{systemRr < SCENARIO_RR_MIN ? "⚠ " : precision === "validated" ? "✓ " : "≈ "}</span>
         Risk/Reward {formatScenarioRatio(systemRr)}
       </p>
       <p className="m-0 mt-1 text-xs tabular-nums leading-relaxed" style={{ color: colors.textMuted }}>
         Entry {formatScenarioDollars(system.entry)} · Stop {formatScenarioDollars(system.stop)} · Target{" "}
         {formatScenarioDollars(system.target)}
       </p>
+      {precision === "estimated" && estimationLines.length > 0 ? (
+        <div className="mt-2" data-testid="signals-scenario-estimated">
+          <p className="m-0 text-[10px] font-semibold uppercase tracking-wide" style={{ color: colors.caution }}>
+            Estimated using
+          </p>
+          <ul className="m-0 mt-1 list-none space-y-0.5 p-0 text-xs" style={{ color: colors.textMuted }}>
+            {estimationLines.map((line) => (
+              <li key={line}>· {line}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <RrBar riskReward={system.riskReward} />
 
       {showPanel ? (
