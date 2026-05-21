@@ -93,7 +93,25 @@ export function useDashboardPayload(
 
   const { data, isLoading, isValidating, error } = useSWR(
     key,
-    async ([, m]: readonly [string, DashboardPayloadMode]) => fetchDashboardData(m),
+    async ([, m]: readonly [string, DashboardPayloadMode]) => {
+      try {
+        return await fetchDashboardData(m);
+      } catch {
+        // Avoid surfacing fetch failures as client runtime errors on long-lived dashboard views.
+        return {
+          mode: m,
+          served_at: new Date().toISOString(),
+          source: "edge_cache_error",
+          swing_signals: null,
+          day_signals: null,
+          market_pulse: null,
+          sector_rotation: null,
+          upcoming_events: null,
+          active_positions: null,
+          geo_themes: null
+        };
+      }
+    },
     {
       refreshInterval: refreshIntervalMs
     }

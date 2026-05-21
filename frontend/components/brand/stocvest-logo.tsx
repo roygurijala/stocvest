@@ -11,23 +11,39 @@ const BRAND_BASE = "/brand";
  * Assets include a dark plate — no theme invert; they are meant for dark UI surfaces.
  */
 export const STOCVEST_LOGO_VARIANTS = {
-  /** Sidebar + mobile drawer — `header_logo_400w` */
+  /** Sidebar + mobile drawer */
   nav: {
+    src: `${BRAND_BASE}/header_logo_600w.webp`,
+    width: 600,
+    height: 153,
+    displayHeight: 44,
+    maxWidth: 220
+  },
+  /** App top bar on dashboard routes */
+  dashboard: {
+    src: `${BRAND_BASE}/header_logo_900w.webp`,
+    width: 900,
+    height: 230,
+    displayHeight: 52,
+    maxWidth: 320
+  },
+  /** Landing fixed nav (compact; hero carries the large lockup) */
+  header: {
     src: `${BRAND_BASE}/header_logo_400w.webp`,
     width: 400,
     height: 102,
     displayHeight: 36,
     maxWidth: 200
   },
-  /** Landing / marketing top bar — `header_logo_600w` */
-  header: {
-    src: `${BRAND_BASE}/header_logo_600w.webp`,
-    width: 600,
-    height: 153,
-    displayHeight: 44,
-    maxWidth: 260
+  /** Landing hero — full wordmark + tagline */
+  hero: {
+    src: `${BRAND_BASE}/full_logo_with_tagline_1200w.webp`,
+    width: 1200,
+    height: 580,
+    displayHeight: 240,
+    maxWidth: 720
   },
-  /** Login / signup card — `full_logo_with_tagline_600w` */
+  /** Login / signup card */
   stacked: {
     src: `${BRAND_BASE}/full_logo_with_tagline_600w.webp`,
     width: 600,
@@ -35,7 +51,7 @@ export const STOCVEST_LOGO_VARIANTS = {
     displayHeight: 112,
     maxWidth: 220
   },
-  /** Landing / site footer — `wordmark_only_300w` */
+  /** Landing / site footer */
   footer: {
     src: `${BRAND_BASE}/wordmark_only_300w.webp`,
     width: 300,
@@ -85,9 +101,9 @@ export function StocvestLogo({
         alt="STOCVEST"
         width={asset.width}
         height={asset.height}
-        className="h-auto max-w-full"
+        className="h-auto w-auto max-w-full"
         style={imageStyle}
-        priority={priority || variant === "nav"}
+        priority={priority || variant === "nav" || variant === "hero"}
       />
     </span>
   );

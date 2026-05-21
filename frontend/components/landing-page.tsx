@@ -160,9 +160,12 @@ export function LandingPage({
         </nav>
       </header>
 
-      {/* 1 · Hero — decision-first */}
+      {/* 1 · Hero — brand lockup + decision-first copy */}
       <section className="mx-auto flex min-h-screen max-w-7xl flex-col justify-center px-4 pt-24 md:px-8">
-        <h1 className="max-w-4xl text-4xl font-black leading-tight md:text-6xl">We tell you when to trade — and when not to.</h1>
+        <StocvestLogo variant="hero" href="/" priority className="mb-8 md:mb-10" />
+        <h1 className="max-w-4xl text-3xl font-black leading-tight md:text-5xl">
+          We tell you when to trade — and when not to.
+        </h1>
         <p className="mt-5 max-w-3xl text-lg text-slate-300">
           STOCVEST evaluates every setup across six independent layers — and only surfaces trades when they agree. Built for traders who want
           alignment, not noise.

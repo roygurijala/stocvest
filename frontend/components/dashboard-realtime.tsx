@@ -94,21 +94,26 @@ export function DashboardRealtime() {
     };
 
     ws.onerror = () => {
-      setConnection("error");
+      setConnection("silent");
     };
 
     ws.onclose = () => {
-      setConnection((prev) => (prev === "live" ? "off" : prev));
+      setConnection("silent");
       wsRef.current = null;
     };
 
-    // Prevent stray close events from surfacing as unhandled runtime errors in production.
     ws.addEventListener("error", (ev) => {
       ev.stopPropagation();
     });
 
     return () => {
-      ws.close();
+      try {
+        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+          ws.close();
+        }
+      } catch {
+        /* ignore teardown races */
+      }
       wsRef.current = null;
     };
   }, []);

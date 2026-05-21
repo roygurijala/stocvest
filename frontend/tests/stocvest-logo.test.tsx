@@ -33,21 +33,31 @@ vi.mock("next/link", () => ({
 }));
 
 describe("StocvestLogo", () => {
-  test("nav variant uses header_logo_400w", () => {
+  test("nav variant uses header_logo_600w", () => {
     render(<StocvestLogo variant="nav" />);
     expect(screen.getByTestId("stocvest-logo")).toHaveAttribute("data-variant", "nav");
+    expect(screen.getByAltText("STOCVEST")).toHaveAttribute("src", STOCVEST_LOGO_VARIANTS.nav.src);
+  });
+
+  test("dashboard variant uses header_logo_900w", () => {
+    render(<StocvestLogo variant="dashboard" />);
     expect(screen.getByAltText("STOCVEST")).toHaveAttribute(
       "src",
-      STOCVEST_LOGO_VARIANTS.nav.src
+      STOCVEST_LOGO_VARIANTS.dashboard.src
     );
   });
 
-  test("header variant uses header_logo_600w", () => {
+  test("header variant uses compact header_logo_400w", () => {
     render(<StocvestLogo variant="header" />);
     expect(screen.getByAltText("STOCVEST")).toHaveAttribute(
       "src",
       STOCVEST_LOGO_VARIANTS.header.src
     );
+  });
+
+  test("hero variant uses full_logo_with_tagline_1200w", () => {
+    render(<StocvestLogo variant="hero" />);
+    expect(screen.getByAltText("STOCVEST")).toHaveAttribute("src", STOCVEST_LOGO_VARIANTS.hero.src);
   });
 
   test("stacked variant uses full_logo_with_tagline_600w", () => {
