@@ -41,7 +41,11 @@ def test_handler_routes_eventbridge_schedule_payload(monkeypatch: pytest.MonkeyP
 
 
 def test_handler_routes_maturation_refresh_schedule(monkeypatch: pytest.MonkeyPatch) -> None:
-    def _fake_refresh() -> dict:
+    seen: list[str | None] = []
+
+    def _fake_refresh(*, scan_type: str | None = None, slot: str | None = None) -> dict:
+        _ = slot
+        seen.append(scan_type)
         return {"job": "watchlist_maturation_refresh", "composite_calls": 0}
 
     monkeypatch.setattr(
@@ -52,6 +56,25 @@ def test_handler_routes_maturation_refresh_schedule(monkeypatch: pytest.MonkeyPa
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
     assert body.get("job") == "watchlist_maturation_refresh"
+    assert seen == ["maturation_refresh"]
+
+
+def test_handler_routes_maturation_refresh_swing_and_day(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[str | None] = []
+
+    def _fake_refresh(*, scan_type: str | None = None, slot: str | None = None) -> dict:
+        _ = slot
+        seen.append(scan_type)
+        return {"job": "watchlist_maturation_refresh", "slot": scan_type}
+
+    monkeypatch.setattr(
+        "stocvest.workers.watchlist_maturation_refresh.run_watchlist_maturation_refresh_sync",
+        _fake_refresh,
+    )
+    for scan_type in ("maturation_refresh_swing", "maturation_refresh_day"):
+        response = handler({"source": "eventbridge", "scan_type": scan_type}, {})
+        assert response["statusCode"] == 200
+    assert seen == ["maturation_refresh_swing", "maturation_refresh_day"]
 
 
 def test_handler_rejects_unknown_eventbridge_scan_type() -> None:

@@ -21,6 +21,7 @@ describe("MaturationFrequencyCallout", () => {
         <MaturationFrequencyCallout desk="swing" showDisplayBands />
       </ThemeProvider>
     );
+    expect(screen.getByTestId("maturation-frequency-callout")).toHaveTextContent(/8:15 AM ET/i);
     expect(screen.getByTestId("maturation-frequency-callout")).toHaveTextContent(/4:30 PM ET/i);
     expect(screen.getByTestId("maturation-frequency-callout")).toHaveTextContent(/Near ready/i);
     expect(screen.getByTestId("maturation-frequency-callout")).toHaveTextContent(/Strong \(5–6\)/i);

@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { CuteLoader } from "@/components/cute-loader";
 import { WatchlistAlignmentSheet } from "@/components/watchlists/watchlist-alignment-sheet";
 import { WatchlistActivityCollapsible } from "@/components/watchlists/WatchlistActivityCollapsible";
-import { WatchlistSymbolRow } from "@/components/watchlists/WatchlistSymbolRow";
+import { WatchlistDecisionQueue } from "@/components/watchlists/watchlist-decision-queue";
 import { WatchlistStatusRails } from "@/components/watchlists/WatchlistStatusRails";
 import { ScannerCollapsible } from "@/components/scanner/ScannerCollapsible";
 import { WatchlistEvaluationInfoTip } from "@/components/watchlists/WatchlistEvaluationInfoTip";
@@ -52,8 +52,6 @@ import {
   trackingForSymbol,
   type SymbolTrackingMap
 } from "@/lib/watchlist-tracking-presentation";
-
-const WATCHLIST_MAX_SYMBOLS = 50;
 
 type WatchlistRow = {
   watchlist_id: string;
@@ -119,10 +117,12 @@ type WatchlistsPageClientProps = {
   dualDeskMaturation?: boolean;
   /** Short plan label for the header chip, e.g. ``Swing + Day Pro``. */
   planBadgeLabel?: string;
+  /** Plan-based default-watchlist symbol cap (5 / 50 / 100). */
+  maxSymbols?: number;
 };
 
 export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
-  const { dualDeskMaturation = false, planBadgeLabel = "Free" } = props;
+  const { dualDeskMaturation = false, planBadgeLabel = "Free", maxSymbols = 5 } = props;
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const { colors, theme } = useTheme();
@@ -418,7 +418,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   );
 
   useEffect(() => {
-    const syms = activeSymbolsDeduped.slice(0, WATCHLIST_MAX_SYMBOLS);
+    const syms = activeSymbolsDeduped.slice(0, maxSymbols);
     if (syms.length === 0) {
       setSnapshotsBySymbol({});
       setSnapshotFetchStatus("idle");
@@ -976,7 +976,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   }
 
   const slotUsed = activeSymbolsDeduped.length;
-  const slotsLeft = Math.max(0, WATCHLIST_MAX_SYMBOLS - slotUsed);
+  const slotsLeft = Math.max(0, maxSymbols - slotUsed);
   const headerStickyStyle = {
     top: APP_TOP_BAR_LAYOUT_HEIGHT,
     background: colors.background,
@@ -1026,7 +1026,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                     color: colors.text
                   }}
                 >
-                  {planBadgeLabel} · {slotUsed}/{WATCHLIST_MAX_SYMBOLS}
+                  {planBadgeLabel} · {slotUsed}/{maxSymbols}
                 </span>
               </div>
             </div>
@@ -1266,7 +1266,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
               <div className="watchlist-hero">
                 <WatchlistStatusRails counts={statusCounts} />
                 <p className="m-0 text-xs" style={{ color: colors.textMuted }}>
-                  {slotUsed} of {WATCHLIST_MAX_SYMBOLS} slots · {slotsLeft} left · sorted by best maturation
+                  {slotUsed} of {maxSymbols} slots · {slotsLeft} left · grouped by attention — click a card for Signals
                 </p>
               </div>
             ) : null}
@@ -1314,58 +1314,38 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                         the bar to see all rows, or pick &quot;Add&quot; below to add a new ticker.
                       </p>
                     ) : null}
-                    <ul className="m-0 flex list-none flex-col gap-2 p-0">
-                    {filteredSymbolsForList.map((s) => {
-                      const symU = s.trim().toUpperCase();
-                      const ms = maturationEligible ? maturationSwing[symU] : undefined;
-                      const md = maturationEligible && dualDeskMaturation ? maturationDay[symU] : undefined;
-                      const displaySt = maturationEligible
-                        ? displayStateForSymbol(
-                            symU,
-                            symbolTrackingMap,
-                            maturationSwing,
-                            maturationDay,
-                            dualDeskMaturation
-                          )
-                        : undefined;
+                    {(() => {
                       const planMode = tradingModeForSignalsNav(viewMode, dualDeskMaturation) ?? "swing";
-                      const maturationForPlan = pickWatchlistMaturationForPlan(viewMode, ms, md);
+                      const symbols = filteredSymbolsForList.map((s) => s.trim().toUpperCase());
                       return (
-                        <WatchlistSymbolRow
-                          key={symU}
-                          symbol={symU}
-                          swingRow={ms}
-                          dayRow={md}
-                          displayState={displaySt}
-                          viewMode={viewMode}
-                          dualDesk={dualDeskMaturation}
-                          symbolTracking={symbolTrackingMap}
-                          snapshot={snapshotsBySymbol[symU]}
-                          maturationFetchStatus={maturationFetchStatus}
-                          isDefaultList={maturationEligible}
+                        <WatchlistDecisionQueue
+                          symbols={symbols}
                           planMode={planMode}
-                          maturationForPlan={maturationForPlan}
-                          deskEvaluating={evaluatingSymbols[symU]}
-                          sessionClosed={maturationStorageReady !== false && sessionClosed}
-                          onRemove={() => void removeSymbol(s)}
-                          onOpenLayers={(desk) => setAlignmentSheet({ symbol: symU, deskMode: desk })}
-                          onRefreshDesk={
+                          rowForSymbol={(symU) => {
+                            const ms = maturationEligible ? maturationSwing[symU] : undefined;
+                            const md =
+                              maturationEligible && dualDeskMaturation ? maturationDay[symU] : undefined;
+                            return pickWatchlistMaturationForPlan(viewMode, ms, md);
+                          }}
+                          snapshotForSymbol={(symU) => snapshotsBySymbol[symU]}
+                          deskEvaluatingForSymbol={(symU) => evaluatingSymbols[symU]?.[planMode]}
+                          onRemove={(symU) => void removeSymbol(symU)}
+                          onRefresh={
                             maturationEligible
-                              ? (desk) => refreshSymbolMaturationDesk(symU, desk)
+                              ? (symU) => refreshSymbolMaturationDesk(symU, planMode)
                               : undefined
                           }
                         />
                       );
-                    })}
-                  </ul>
+                    })()}
                   </>
                 )}
               </div>
             </article>
 
             <p className="m-0 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
-              Your watchlist feeds the scanner. Maturation is stored per symbol and desk — use Refresh on a row to
-              re-run composite and update alignment, or open Signals / Evidence.
+              Your watchlist is a prioritized queue — click a card for Signals. Use ↻ on a card to re-run composite
+              for that desk.
               <Link href="/dashboard/signals" prefetch={false} className="ml-1 font-semibold" style={{ color: colors.accent }}>
                 Open Signals
               </Link>

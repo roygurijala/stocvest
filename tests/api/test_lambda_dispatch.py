@@ -49,7 +49,8 @@ def test_scanner_schedule_through_dispatch(monkeypatch: pytest.MonkeyPatch) -> N
 def test_scanner_maturation_refresh_through_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("STOCVEST_LAMBDA_MODULE", "scanner")
 
-    def _fake_refresh() -> dict:
+    def _fake_refresh(*, scan_type: str | None = None, slot: str | None = None) -> dict:
+        _ = (scan_type, slot)
         return {"job": "watchlist_maturation_refresh", "composite_calls": 0}
 
     monkeypatch.setattr(

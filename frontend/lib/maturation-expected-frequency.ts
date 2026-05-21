@@ -7,16 +7,27 @@
 
 export type MaturationFrequencyDesk = "swing" | "day";
 
-/** Weekday batch refresh after cash close (maturation_refresh job). */
-export const MATURATION_SCHEDULED_REFRESH_LINE =
-  "Default watchlist symbols are re-evaluated on weekdays after the cash close (~4:30 PM ET).";
+/** Weekday swing batch after price warm (~8:15 AM ET). */
+export const MATURATION_SCHEDULED_SWING_OPEN_LINE =
+  "Swing desk: default-watchlist symbols refresh on weekdays around 8:15 AM ET (after the price warm).";
+
+/** Weekday day batch after the open (~9:35 AM ET, regular session only). */
+export const MATURATION_SCHEDULED_DAY_OPEN_LINE =
+  "Day desk: default-watchlist symbols refresh on weekdays around 9:35 AM ET when the regular session is open.";
+
+/** Weekday batch reconciliation after cash close. */
+export const MATURATION_SCHEDULED_EOD_LINE =
+  "Both desks also reconcile on weekdays after the cash close (~4:30 PM ET).";
+
+/** @deprecated Use desk-specific lines; kept for tests that import the old name. */
+export const MATURATION_SCHEDULED_REFRESH_LINE = MATURATION_SCHEDULED_EOD_LINE;
 
 /** Immediate evaluation when the user opens Evidence / composite on Signals. */
 export const MATURATION_ON_DEMAND_SWING_LINE =
-  "Opening Evidence or refreshing the swing composite on Signals evaluates that symbol immediately.";
+  "Opening Evidence, row Refresh, or adding a symbol evaluates swing immediately.";
 
 export const MATURATION_ON_DEMAND_DAY_LINE =
-  "Opening Evidence or refreshing the day composite on Signals evaluates that symbol when the regular session is active.";
+  "Opening Evidence or row Refresh evaluates the day desk when the regular session is active.";
 
 /** B47 display-band expectation — quiet days are normal. */
 export const MATURATION_PROGRESSION_EXPECTATION_LINE =
@@ -34,9 +45,13 @@ export type MaturationFrequencyCopy = {
 };
 
 export function expectedFrequencyForDesk(desk: MaturationFrequencyDesk): MaturationFrequencyCopy {
+  const scheduled =
+    desk === "swing"
+      ? `${MATURATION_SCHEDULED_SWING_OPEN_LINE} ${MATURATION_SCHEDULED_EOD_LINE}`
+      : `${MATURATION_SCHEDULED_DAY_OPEN_LINE} ${MATURATION_SCHEDULED_EOD_LINE}`;
   return {
     desk,
-    scheduled: MATURATION_SCHEDULED_REFRESH_LINE,
+    scheduled,
     onDemand: desk === "swing" ? MATURATION_ON_DEMAND_SWING_LINE : MATURATION_ON_DEMAND_DAY_LINE,
     progression: MATURATION_PROGRESSION_EXPECTATION_LINE,
     displayBands: MATURATION_DISPLAY_BANDS_LINE
@@ -45,7 +60,7 @@ export function expectedFrequencyForDesk(desk: MaturationFrequencyDesk): Maturat
 
 /** Signals command bar + watchlist maturation header. */
 export function watchlistEvaluationHeader(): string {
-  return `${MATURATION_SCHEDULED_REFRESH_LINE} ${MATURATION_ON_DEMAND_SWING_LINE}`;
+  return `${MATURATION_SCHEDULED_SWING_OPEN_LINE} ${MATURATION_SCHEDULED_DAY_OPEN_LINE} ${MATURATION_ON_DEMAND_SWING_LINE}`;
 }
 
 /** Setup evolution hub intro + empty warming body. */
@@ -74,7 +89,8 @@ export function dailyPulseFrequencyFootnote(desk: MaturationFrequencyDesk): stri
 /** Onboarding wizard bullets (progress + cadence). */
 export function onboardingMaturationExpectationBullets(): string[] {
   return [
-    MATURATION_SCHEDULED_REFRESH_LINE,
+    MATURATION_SCHEDULED_SWING_OPEN_LINE,
+    MATURATION_SCHEDULED_DAY_OPEN_LINE,
     MATURATION_ON_DEMAND_SWING_LINE,
     MATURATION_PROGRESSION_EXPECTATION_LINE
   ];

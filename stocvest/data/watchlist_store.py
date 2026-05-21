@@ -14,7 +14,14 @@ from stocvest.utils.logging import get_logger
 _LOG = get_logger(__name__)
 
 _MAX_WATCHLISTS = 1
-_MAX_SYMBOLS = 50
+# Legacy default when callers omit ``max_symbols`` (tests); production handlers pass plan caps.
+_DEFAULT_MAX_SYMBOLS = 50
+
+
+def _resolve_max_symbols(max_symbols: int | None) -> int:
+    if max_symbols is None:
+        return _DEFAULT_MAX_SYMBOLS
+    return max(1, min(int(max_symbols), 500))
 
 
 def _utc_now() -> str:
@@ -73,6 +80,8 @@ def _validate_tracking_modes(track_swing: bool, track_day: bool) -> dict[str, bo
 
 def _pick_keeper_merge_plan(
     rows: list[WatchlistItem],
+    *,
+    max_symbols: int,
 ) -> tuple[WatchlistItem, list[str], SymbolTrackingMap, list[WatchlistItem]]:
     """Return keeper row, merged symbols (deduped, capped), merged tracking, and other rows to drop."""
     if not rows:
@@ -89,7 +98,7 @@ def _pick_keeper_merge_plan(
     for w in (keeper, *others_sorted):
         for sym in w.symbols:
             su = str(sym).strip().upper()
-            if su and su not in seen and len(merged) < _MAX_SYMBOLS:
+            if su and su not in seen and len(merged) < max_symbols:
                 seen.add(su)
                 merged.append(su)
                 if su in w.symbol_tracking:
@@ -176,7 +185,13 @@ class WatchlistStore(Protocol):
         ...
 
     def create_watchlist(
-        self, user_id: str, name: str, symbols: list[str], *, is_default: bool = False
+        self,
+        user_id: str,
+        name: str,
+        symbols: list[str],
+        *,
+        is_default: bool = False,
+        max_symbols: int | None = None,
     ) -> WatchlistItem: ...
     def update_watchlist(
         self,
@@ -186,6 +201,7 @@ class WatchlistStore(Protocol):
         name: str | None = None,
         symbols: list[str] | None = None,
         is_default: bool | None = None,
+        max_symbols: int | None = None,
     ) -> WatchlistItem | None: ...
     def delete_watchlist(self, user_id: str, watchlist_id: str) -> bool: ...
     def add_symbol(
@@ -196,6 +212,7 @@ class WatchlistStore(Protocol):
         *,
         track_swing: bool = True,
         track_day: bool = True,
+        max_symbols: int | None = None,
     ) -> WatchlistItem | None: ...
     def remove_symbol(self, user_id: str, watchlist_id: str, symbol: str) -> WatchlistItem | None: ...
     def set_symbol_tracking(
@@ -223,7 +240,11 @@ class InMemoryWatchlistStore:
                     only.updated_at = _utc_now()
             return
         rows = list(u.values())
-        keeper, merged, merged_tracking, to_delete = _pick_keeper_merge_plan(rows)
+        from stocvest.api.services.watchlist_plan_limits import watchlist_symbol_cap_for_profile
+        from stocvest.api.services.user_profile_store import get_user_profile_store
+
+        cap = watchlist_symbol_cap_for_profile(get_user_profile_store().get_profile(user_id))
+        keeper, merged, merged_tracking, to_delete = _pick_keeper_merge_plan(rows, max_symbols=cap)
         keeper.symbols = merged
         keeper.symbol_tracking = merged_tracking
         keeper.is_default = True
@@ -252,14 +273,21 @@ class InMemoryWatchlistStore:
         return rows[0]
 
     def create_watchlist(
-        self, user_id: str, name: str, symbols: list[str], *, is_default: bool = False
+        self,
+        user_id: str,
+        name: str,
+        symbols: list[str],
+        *,
+        is_default: bool = False,
+        max_symbols: int | None = None,
     ) -> WatchlistItem:
         uid = user_id
+        cap = _resolve_max_symbols(max_symbols)
         self._ensure_single_watchlist(uid)
         existing = self.get_watchlists(uid)
         if len(existing) >= _MAX_WATCHLISTS:
             raise ValueError("You already have a watchlist. Additional lists are not supported.")
-        norm = [_normalize_symbol(s) for s in symbols][: _MAX_SYMBOLS]
+        norm = [_normalize_symbol(s) for s in symbols][:cap]
         norm = list(dict.fromkeys(norm))
         wid = str(uuid.uuid4())
         now = _utc_now()
@@ -289,14 +317,16 @@ class InMemoryWatchlistStore:
         name: str | None = None,
         symbols: list[str] | None = None,
         is_default: bool | None = None,
+        max_symbols: int | None = None,
     ) -> WatchlistItem | None:
         w = self._by_user.get(user_id, {}).get(watchlist_id)
         if not w:
             return None
+        cap = _resolve_max_symbols(max_symbols)
         if name is not None:
             w.name = name.strip() or w.name
         if symbols is not None:
-            norm = [_normalize_symbol(s) for s in symbols][: _MAX_SYMBOLS]
+            norm = [_normalize_symbol(s) for s in symbols][:cap]
             w.symbols = list(dict.fromkeys(norm))
         if is_default is True:
             for o in self._by_user[user_id].values():
@@ -333,18 +363,22 @@ class InMemoryWatchlistStore:
         *,
         track_swing: bool = True,
         track_day: bool = True,
+        max_symbols: int | None = None,
     ) -> WatchlistItem | None:
         w = self._by_user.get(user_id, {}).get(watchlist_id)
         if not w:
             return None
+        cap = _resolve_max_symbols(max_symbols)
         sym = _normalize_symbol(symbol)
         modes = _validate_tracking_modes(track_swing, track_day)
         if sym in w.symbols:
             w.symbol_tracking[sym] = modes
             w.updated_at = _utc_now()
             return w
-        if len(w.symbols) >= _MAX_SYMBOLS:
-            raise ValueError("Watchlist may contain at most 50 symbols.")
+        if len(w.symbols) >= cap:
+            from stocvest.api.services.watchlist_plan_limits import watchlist_symbol_limit_message
+
+            raise ValueError(watchlist_symbol_limit_message(cap))
         w.symbols = [*w.symbols, sym]
         w.symbol_tracking[sym] = modes
         w.updated_at = _utc_now()
@@ -444,7 +478,11 @@ class DynamoDBWatchlistStore:
                     ExpressionAttributeValues={":t": True, ":u": now},
                 )
             return
-        keeper, merged, merged_tracking, to_delete = _pick_keeper_merge_plan(rows)
+        from stocvest.api.services.watchlist_plan_limits import watchlist_symbol_cap_for_profile
+        from stocvest.api.services.user_profile_store import get_user_profile_store
+
+        cap = watchlist_symbol_cap_for_profile(get_user_profile_store().get_profile(user_id))
+        keeper, merged, merged_tracking, to_delete = _pick_keeper_merge_plan(rows, max_symbols=cap)
         now = _utc_now()
         item = {
             "userId": user_id,
@@ -481,13 +519,20 @@ class DynamoDBWatchlistStore:
         return rows[0]
 
     def create_watchlist(
-        self, user_id: str, name: str, symbols: list[str], *, is_default: bool = False
+        self,
+        user_id: str,
+        name: str,
+        symbols: list[str],
+        *,
+        is_default: bool = False,
+        max_symbols: int | None = None,
     ) -> WatchlistItem:
+        cap = _resolve_max_symbols(max_symbols)
         self._ensure_single_watchlist(user_id)
         existing = self.get_watchlists(user_id)
         if len(existing) >= _MAX_WATCHLISTS:
             raise ValueError("You already have a watchlist. Additional lists are not supported.")
-        norm = [_normalize_symbol(s) for s in symbols][: _MAX_SYMBOLS]
+        norm = [_normalize_symbol(s) for s in symbols][:cap]
         norm = list(dict.fromkeys(norm))
         wid = str(uuid.uuid4())
         now = _utc_now()
@@ -521,10 +566,12 @@ class DynamoDBWatchlistStore:
         name: str | None = None,
         symbols: list[str] | None = None,
         is_default: bool | None = None,
+        max_symbols: int | None = None,
     ) -> WatchlistItem | None:
         cur = self._get_one(user_id, watchlist_id)
         if not cur:
             return None
+        cap = _resolve_max_symbols(max_symbols)
         now = _utc_now()
         if is_default is True:
             for w in self.get_watchlists(user_id):
@@ -538,7 +585,7 @@ class DynamoDBWatchlistStore:
         if not name_f:
             name_f = cur.name
         if symbols is not None:
-            sym_f = [_normalize_symbol(s) for s in symbols][: _MAX_SYMBOLS]
+            sym_f = [_normalize_symbol(s) for s in symbols][:cap]
             sym_f = list(dict.fromkeys(sym_f))
         else:
             sym_f = list(cur.symbols)
@@ -593,10 +640,12 @@ class DynamoDBWatchlistStore:
         *,
         track_swing: bool = True,
         track_day: bool = True,
+        max_symbols: int | None = None,
     ) -> WatchlistItem | None:
         w = self._get_one(user_id, watchlist_id)
         if not w:
             return None
+        cap = _resolve_max_symbols(max_symbols)
         sym = _normalize_symbol(symbol)
         modes = _validate_tracking_modes(track_swing, track_day)
         tracking = dict(w.symbol_tracking)
@@ -610,8 +659,10 @@ class DynamoDBWatchlistStore:
             )
             out = self.table.get_item(Key={"userId": user_id, "watchlistId": watchlist_id})
             return WatchlistItem.from_item(user_id, out["Item"])
-        if len(w.symbols) >= _MAX_SYMBOLS:
-            raise ValueError("Watchlist may contain at most 50 symbols.")
+        if len(w.symbols) >= cap:
+            from stocvest.api.services.watchlist_plan_limits import watchlist_symbol_limit_message
+
+            raise ValueError(watchlist_symbol_limit_message(cap))
         now = _utc_now()
         new_syms = [*w.symbols, sym]
         self.table.update_item(

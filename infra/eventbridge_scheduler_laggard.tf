@@ -41,7 +41,7 @@ resource "aws_iam_role_policy" "eventbridge_laggard_invoke_lambda" {
   })
 }
 
-# 8:00 AM ET — warm registry + watchlist prices before maturation refresh.
+# 8:00 AM ET — warm registry + watchlist prices before swing maturation at 8:15.
 resource "aws_scheduler_schedule" "laggard_price_cache_warmer" {
   name       = "stocvest-price-cache-warmer"
   group_name = aws_scheduler_schedule_group.laggard.name

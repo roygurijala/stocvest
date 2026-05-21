@@ -3,8 +3,8 @@
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
 
 export const EVALUATION_MODE_LINES = [
-  "Auto (daily refresh ~4:30 PM ET after cash close)",
-  "Manual (when you open a symbol on Signals)"
+  "Scheduled: swing ~8:15 AM ET · day ~9:35 AM ET (RTH) · reconcile ~4:30 PM ET",
+  "On demand: row Refresh or Evidence on Signals"
 ] as const;
 
 export function evaluationStatusTitle(mode: "swing" | "day"): string {
@@ -145,9 +145,9 @@ export function watchlistMaturationDeskSummary(
   const lastRun = newestLastEvaluatedAt(merged);
   if (evaluated === 0) {
     if (opts?.sessionClosed) {
-      return "Market is closed — maturation updates on weekdays after ~4:30 PM ET or when you open Evidence on Signals";
+      return "Market is closed — day desk updates at the next 9:35 AM ET session or via Refresh / Evidence; swing at ~8:15 AM ET";
     }
-    return "No maturation runs on this desk yet — open a symbol on Signals (Evidence) or wait for weekday ~4:30 PM ET refresh";
+    return "No maturation runs on this desk yet — use row Refresh, open Evidence on Signals, or wait for the weekday schedule";
   }
   if (lastRun) {
     return `${evaluated} of ${total} evaluated on this desk · last engine run ${lastRun}`;
@@ -157,6 +157,6 @@ export function watchlistMaturationDeskSummary(
 
 export function watchlistUnevaluatedDeskHint(desk: "swing" | "day"): string {
   return desk === "swing"
-    ? "Run swing Evidence on Signals to evaluate now, or wait for the weekday ~4:30 PM ET batch."
-    : "Run day Evidence on Signals during the regular session, or wait for the weekday ~4:30 PM ET batch.";
+    ? "Use row Refresh or swing Evidence now, or wait for weekday ~8:15 AM ET (and ~4:30 PM ET reconcile)."
+    : "Use row Refresh or day Evidence during the session, or wait for weekday ~9:35 AM ET (and ~4:30 PM ET reconcile).";
 }

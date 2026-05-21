@@ -86,13 +86,51 @@ def test_remove_symbol_from_watchlist(brokers: None) -> None:
     assert "AAPL" not in _body(r)["symbols"]
 
 
-def test_max_50_symbols_enforced(brokers: None) -> None:
-    syms = [f"S{i:02d}" for i in range(50)]
-    wid = _body(lambda_handler(_ev("POST", "/v1/watchlists", body={"name": "Full", "symbols": syms}), {}))[
-        "watchlist_id"
-    ]
+def test_free_plan_caps_at_five_symbols(brokers: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    from stocvest.api.services.user_profile_store import get_user_profile_store
+    from stocvest.data.models import UserProfile
+
+    store = get_user_profile_store()
+    store.put_profile(UserProfile(user_id="wl-user-1", subscription_plan="free"))
+    syms = [f"S{i}" for i in range(5)]
+    wid = _body(
+        lambda_handler(_ev("POST", "/v1/watchlists", body={"name": "Free", "symbols": syms}, sub="wl-user-1"), {})
+    )["watchlist_id"]
     r = lambda_handler(
-        _ev("POST", f"/v1/watchlists/{wid}/symbols", body={"symbol": "ZZ"}, path_parameters={"watchlist_id": wid}),
+        _ev(
+            "POST",
+            f"/v1/watchlists/{wid}/symbols",
+            body={"symbol": "ZZ"},
+            path_parameters={"watchlist_id": wid},
+            sub="wl-user-1",
+        ),
+        {},
+    )
+    assert r["statusCode"] == 400
+    assert _body(r).get("error") == "symbol_limit"
+
+
+def test_swing_pro_allows_fifty_symbols(brokers: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    from stocvest.api.services.user_profile_store import get_user_profile_store
+    from stocvest.data.models import UserProfile
+
+    store = get_user_profile_store()
+    store.put_profile(UserProfile(user_id="wl-pro", subscription_plan="swing_pro"))
+    syms = [f"S{i:02d}" for i in range(50)]
+    wid = _body(
+        lambda_handler(
+            _ev("POST", "/v1/watchlists", body={"name": "Pro", "symbols": syms}, sub="wl-pro"),
+            {},
+        )
+    )["watchlist_id"]
+    r = lambda_handler(
+        _ev(
+            "POST",
+            f"/v1/watchlists/{wid}/symbols",
+            body={"symbol": "ZZ"},
+            path_parameters={"watchlist_id": wid},
+            sub="wl-pro",
+        ),
         {},
     )
     assert r["statusCode"] == 400

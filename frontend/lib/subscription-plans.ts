@@ -21,7 +21,7 @@ export const PLAN_TIERS: PlanTier[] = [
     swing: "limited",
     dayTrading: "preview",
     highlights: [
-      "Six-layer swing composite on a capped universe / cadence (limits apply).",
+      "Default watchlist: up to 5 symbols with scheduled + on-demand maturation.",
       "Peek at day-trading panels: read-only or throttled so you can see how intraday mode looks.",
       "Watchlists and alerts within free-tier caps."
     ]
@@ -33,7 +33,7 @@ export const PLAN_TIERS: PlanTier[] = [
     swing: "full",
     dayTrading: "none",
     highlights: [
-      "Unlimited swing scans, composites, journal, and portfolio tracking where enabled.",
+      "Default watchlist: up to 50 symbols; full swing scans, composites, and journal where enabled.",
       "Same six-layer engine; tuned for multi-day holds and daily context.",
       "Optional: hide day-trading chrome entirely if you only swing."
     ]
@@ -45,7 +45,7 @@ export const PLAN_TIERS: PlanTier[] = [
     swing: "full",
     dayTrading: "full",
     highlights: [
-      "Adds intraday composite, scanner, ORB/VWAP context, and PDT-aware execution paths.",
+      "Default watchlist: up to 100 symbols; adds intraday composite, scanner, ORB/VWAP context, and PDT-aware execution paths.",
       "One subscription for traders who run both horizons with consistent scoring.",
       "Same six-layer architecture end-to-end — no separate “lite” math for day mode."
     ]

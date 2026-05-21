@@ -13,6 +13,7 @@ from stocvest.data.scan_symbols import SYSTEM_DEFAULTS
 from stocvest.api.services.user_profile_store import get_user_profile_store
 from stocvest.analytics.evolution_stats import compute_evolution_summary, filter_transitions_by_plan
 from stocvest.api.services.watchlist_maturation_gates import maturation_summary_include_readiness_label
+from stocvest.api.services.watchlist_plan_limits import watchlist_symbol_cap_for_profile
 from stocvest.data.watchlist_maturation_repository import get_watchlist_maturation_repository
 from stocvest.data.watchlist_maturation_transition_repository import (
     get_watchlist_maturation_transition_repository,
@@ -33,6 +34,11 @@ def _path_params(event: LambdaEvent) -> dict[str, str]:
 
 def _serialize(w: WatchlistItem) -> dict[str, Any]:
     return w.to_api_dict()
+
+
+def _max_symbols_for_user(user_id: str) -> int:
+    prof = get_user_profile_store().get_profile(user_id)
+    return watchlist_symbol_cap_for_profile(prof)
 
 
 def watchlists_dispatch_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
@@ -95,7 +101,13 @@ def watchlists_create_handler(event: LambdaEvent, context: LambdaContext) -> dic
     is_default = bool(body.get("is_default"))
     store = get_watchlist_store()
     try:
-        w = store.create_watchlist(rc.user_id, name, symbols, is_default=is_default)
+        w = store.create_watchlist(
+            rc.user_id,
+            name,
+            symbols,
+            is_default=is_default,
+            max_symbols=_max_symbols_for_user(rc.user_id),
+        )
     except ValueError as exc:
         return json_response(400, {"error": "watchlist_limit", "message": str(exc)})
     return ok(_serialize(w))
@@ -137,6 +149,7 @@ def watchlists_patch_handler(event: LambdaEvent, context: LambdaContext) -> dict
         name=name_clean if name_clean else None,
         symbols=[str(s) for s in symbols] if isinstance(symbols, list) else None,
         is_default=bool(is_default) if is_default is not None else None,
+        max_symbols=_max_symbols_for_user(rc.user_id),
     )
     if out is None:
         return not_found("Watchlist not found.")
@@ -180,7 +193,14 @@ def watchlists_add_symbol_handler(event: LambdaEvent, context: LambdaContext) ->
     swing = True if track_swing is None else bool(track_swing)
     day = True if track_day is None else bool(track_day)
     try:
-        out = get_watchlist_store().add_symbol(rc.user_id, wid, sym, track_swing=swing, track_day=day)
+        out = get_watchlist_store().add_symbol(
+            rc.user_id,
+            wid,
+            sym,
+            track_swing=swing,
+            track_day=day,
+            max_symbols=_max_symbols_for_user(rc.user_id),
+        )
     except ValueError as exc:
         msg = str(exc)
         if "desk" in msg.lower():
@@ -408,7 +428,8 @@ def watchlists_setup_evolution_handler(event: LambdaEvent, context: LambdaContex
             "started_tracking_at": started_tracking_at,
             "has_full_access": has_full,
             "evaluation_cadence": (
-                "Recorded when you view Evidence and on weekday maturation refresh (~4:30 PM ET after cash close)."
+                "Recorded on Evidence or row Refresh, weekday swing refresh (~8:15 AM ET), "
+                "day refresh (~9:35 AM ET when market is open), and EOD reconcile (~4:30 PM ET)."
             ),
             "summary": summary,
             "transitions": transitions,
@@ -443,13 +464,26 @@ def watchlists_default_symbols_post_handler(event: LambdaEvent, context: LambdaC
     store = get_watchlist_store()
     wl = store.get_default_watchlist(rc.user_id)
     if wl is None:
-        wl = store.create_watchlist(rc.user_id, "My Watchlist", [], is_default=True)
+        wl = store.create_watchlist(
+            rc.user_id,
+            "My Watchlist",
+            [],
+            is_default=True,
+            max_symbols=_max_symbols_for_user(rc.user_id),
+        )
     track_swing = body.get("track_swing")
     track_day = body.get("track_day")
     swing = True if track_swing is None else bool(track_swing)
     day = True if track_day is None else bool(track_day)
     try:
-        out = store.add_symbol(rc.user_id, wl.watchlist_id, sym, track_swing=swing, track_day=day)
+        out = store.add_symbol(
+            rc.user_id,
+            wl.watchlist_id,
+            sym,
+            track_swing=swing,
+            track_day=day,
+            max_symbols=_max_symbols_for_user(rc.user_id),
+        )
     except ValueError as exc:
         msg = str(exc)
         if "desk" in msg.lower():

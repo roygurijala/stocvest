@@ -9,8 +9,9 @@ import {
 describe("maturation-expected-frequency", () => {
   test("watchlist header mentions scheduled and on-demand evaluation", () => {
     const h = watchlistEvaluationHeader();
-    expect(h).toContain("4:30 PM ET");
-    expect(h).toContain("Signals");
+    expect(h).toContain("8:15 AM ET");
+    expect(h).toContain("9:35 AM ET");
+    expect(h).toContain("Refresh");
   });
 
   test("swing and day on-demand lines differ", () => {

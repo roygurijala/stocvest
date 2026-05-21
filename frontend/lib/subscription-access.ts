@@ -34,3 +34,14 @@ export function watchlistAllowsDualDeskModes(
   if (hasFullAccess === true) return true;
   return plan === "swing_day_pro";
 }
+
+/** Default-watchlist symbol slots by plan (must match backend ``watchlist_plan_limits``). */
+export function watchlistMaxSymbolsForPlan(
+  plan: SubscriptionPlan | undefined,
+  hasFullAccess: boolean | undefined
+): number {
+  if (hasFullAccess === true) return 100;
+  if (plan === "swing_day_pro") return 100;
+  if (plan === "swing_pro") return 50;
+  return 5;
+}
