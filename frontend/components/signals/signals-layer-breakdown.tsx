@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { AlignmentDrilldownLinks } from "@/components/signals/alignment-drilldown-links";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { CuteLoader } from "@/components/cute-loader";
 import { InfoTip } from "@/components/info-tip";
@@ -33,8 +32,6 @@ type Props = {
   insufficientMessage?: ReactNode;
   maturationState?: string | null;
   alignmentRatio?: number | null;
-  onOpenEvidence?: () => void;
-  onScrollToEvolution?: () => void;
 };
 
 export function SignalsLayerBreakdown({
@@ -46,9 +43,7 @@ export function SignalsLayerBreakdown({
   insufficient,
   insufficientMessage,
   maturationState,
-  alignmentRatio,
-  onOpenEvidence,
-  onScrollToEvolution
+  alignmentRatio
 }: Props) {
   const { colors } = useTheme();
   const [expanded, setExpanded] = useState(false);
@@ -83,16 +78,6 @@ export function SignalsLayerBreakdown({
           {formatSignalsAlignmentDisplayLine(alignment, bias, maturationState)}
         </span>
       </div>
-      {!insufficient && !loading ? (
-        <AlignmentDrilldownLinks
-          symbol={symbol}
-          mode={tradingMode}
-          onOpenEvidence={onOpenEvidence}
-          onScrollToEvolution={onScrollToEvolution}
-          samePageLayers
-          testId="signals-layers-alignment-links"
-        />
-      ) : null}
 
       {loading ? (
         <div style={{ padding: `${spacing[6]} ${spacing[2]}` }} data-testid="signals-layers-loader">

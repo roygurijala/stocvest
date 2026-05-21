@@ -17,6 +17,7 @@ import type { ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
 import { fetchEarningsCalendarClient } from "@/lib/api/earnings-client";
 import { AddToWatchlistButton } from "@/components/add-to-watchlist-button";
+import { APP_TOP_BAR_LAYOUT_HEIGHT } from "@/components/top-bar";
 import { SignalsCommandBar } from "@/components/signals/signals-command-bar";
 import { SignalsLayerBreakdown } from "@/components/signals/signals-layer-breakdown";
 import { SignalsWatchlistPickerModal } from "@/components/signals/signals-watchlist-picker-modal";
@@ -1657,28 +1658,39 @@ export function SignalsPageClient({
 
       {symbolCommitted ? (
         <>
-      <SignalsCommandBar
-        symbol={symbol}
-        tradingMode={tradingMode}
-        dayTradingSurfaces={dayTradingSurfaces}
-        watchlistControl={<AddToWatchlistButton symbol={symbol} dualDeskTracking={dayTradingSurfaces} />}
-        scenarioControl={
-          scenarioPlanningInput ? (
-            <ScenarioBuilderInline
-              input={scenarioPlanningInput}
-              readiness={scenarioReadiness}
-              drillDown={scenarioDrillDown}
-              previewPanels={scenarioPreviewPanels}
-              prominent
-              testId="signals-scenario-inline"
-            />
-          ) : null
-        }
-        maturationLine={commandBarMaturationLine}
-        evaluationFreshness={evaluationFreshness}
-        resumedFromSession={resumedFromSession}
-        onTradingModeChange={updateTradingMode}
-      />
+      <header
+        className="sticky z-30 -mx-4 mb-1 w-full max-w-none self-start px-4 pb-1 pt-0 lg:-mx-6 lg:px-6"
+        style={{
+          top: APP_TOP_BAR_LAYOUT_HEIGHT,
+          background: colors.background,
+          borderBottom: `1px solid ${colors.border}`
+        }}
+        data-testid="signals-sticky-command"
+      >
+        <SignalsCommandBar
+          symbol={symbol}
+          tradingMode={tradingMode}
+          dayTradingSurfaces={dayTradingSurfaces}
+          watchlistControl={<AddToWatchlistButton symbol={symbol} dualDeskTracking={dayTradingSurfaces} />}
+          scenarioControl={
+            scenarioPlanningInput ? (
+              <ScenarioBuilderInline
+                input={scenarioPlanningInput}
+                readiness={scenarioReadiness}
+                drillDown={scenarioDrillDown}
+                previewPanels={scenarioPreviewPanels}
+                prominent
+                testId="signals-scenario-inline"
+              />
+            ) : null
+          }
+          maturationLine={commandBarMaturationLine}
+          evaluationFreshness={evaluationFreshness}
+          resumedFromSession={resumedFromSession}
+          onTradingModeChange={updateTradingMode}
+          onOpenEvidence={hasValidSignal ? () => void openEvidenceModal() : undefined}
+        />
+      </header>
 
       {hasValidSignal && pageDecision ? (
         <SignalsSetupRead
@@ -1688,7 +1700,6 @@ export function SignalsPageClient({
           rows={signalsPresentRows}
           decision={pageDecision}
           previewLayers={previewBlockingLayers}
-          onOpenEvidence={() => void openEvidenceModal()}
           maturationState={maturationLine?.state}
           alignmentRatio={compositeAlignmentRatio}
           fundamentalSummary={fundamentalSummary}
@@ -1720,8 +1731,6 @@ export function SignalsPageClient({
             insufficientMessage={compositeServiceMessage ?? insufficientLayerMessage}
             maturationState={maturationLine?.state}
             alignmentRatio={compositeAlignmentRatio}
-            onOpenEvidence={() => void openEvidenceModal()}
-            onScrollToEvolution={scrollToSetupEvolution}
           />
         </div>
 

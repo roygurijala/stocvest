@@ -123,35 +123,6 @@ describe("SignalsSetupRead", () => {
     expect(screen.getByText(/conviction is lower/i)).toBeInTheDocument();
   });
 
-  test("open full evidence is a prominent button", () => {
-    const onOpenEvidence = vi.fn();
-    render(
-      <SignalsSetupRead
-        symbol="AAPL"
-        tradingMode="swing"
-        bias="Bullish"
-        rows={rows}
-        previewLayers={rows.slice(0, 2)}
-        decision={{
-          state: "monitor",
-          line: "Final confirmation and/or risk conditions not yet satisfied",
-          reinforcements: [],
-          rationale: {
-            category: "risk_reward",
-            label: "Why hold:",
-            text: "Risk/reward too low (0.5:1) — below threshold."
-          }
-        }}
-        alignmentRatio={1}
-        onOpenEvidence={onOpenEvidence}
-      />
-    );
-    const btn = screen.getByTestId("signals-open-evidence-button");
-    expect(btn).toHaveTextContent("Open full evidence");
-    fireEvent.click(btn);
-    expect(onOpenEvidence).toHaveBeenCalledTimes(1);
-    expect(screen.queryByTestId("signals-next")).not.toBeInTheDocument();
-  });
 
   test("renders scenario adjust when geometry provided", () => {
     const geometryBundle = buildScenarioGeometryBundle({

@@ -29,6 +29,8 @@ type Props = {
   /** True when symbol was restored from sessionStorage (no URL prefill). */
   resumedFromSession?: boolean;
   onTradingModeChange: (mode: TradingMode) => void;
+  /** Primary evidence entry — pinned in the command bar while scrolling. */
+  onOpenEvidence?: () => void;
 };
 
 export function SignalsCommandBar({
@@ -40,7 +42,8 @@ export function SignalsCommandBar({
   maturationLine,
   evaluationFreshness,
   resumedFromSession = false,
-  onTradingModeChange
+  onTradingModeChange,
+  onOpenEvidence
 }: Props) {
   const { colors } = useTheme();
   const symU = symbol.trim().toUpperCase();
@@ -107,7 +110,24 @@ export function SignalsCommandBar({
             ) : null}
           </div>
         </div>
-        {dayTradingSurfaces ? (
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          {onOpenEvidence ? (
+            <button
+              type="button"
+              data-testid="signals-open-evidence-button"
+              className="inline-flex min-h-9 items-center justify-center rounded-lg border px-3 text-xs font-semibold sm:text-sm"
+              style={{
+                borderColor: colors.accent,
+                background: `color-mix(in srgb, ${colors.accent} 16%, ${colors.surfaceMuted})`,
+                color: colors.text,
+                cursor: "pointer"
+              }}
+              onClick={onOpenEvidence}
+            >
+              Open full evidence
+            </button>
+          ) : null}
+          {dayTradingSurfaces ? (
           <div
             className="grid shrink-0 grid-cols-2 gap-1 rounded-lg p-1"
             style={{ border: `1px solid ${colors.border}`, background: colors.background, minWidth: 200 }}
@@ -158,6 +178,7 @@ export function SignalsCommandBar({
             {TAB_LABEL_SWING} (your plan)
           </span>
         )}
+        </div>
       </div>
       <p className="m-0 mt-3 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
         <strong style={{ color: colors.text, fontWeight: 600 }}>

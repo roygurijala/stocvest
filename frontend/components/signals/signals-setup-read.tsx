@@ -32,7 +32,6 @@ type Props = {
   rows: SignalsLayerRowInput[];
   decision: TradeDecision;
   previewLayers: SignalsLayerRowInput[];
-  onOpenEvidence?: () => void;
   maturationState?: string | null;
   alignmentRatio?: number | null;
   fundamentalSummary?: FundamentalBackdropSummary | null;
@@ -48,7 +47,6 @@ export function SignalsSetupRead({
   rows,
   decision,
   previewLayers,
-  onOpenEvidence,
   maturationState,
   alignmentRatio,
   fundamentalSummary,
@@ -206,30 +204,6 @@ export function SignalsSetupRead({
               </li>
             ))}
           </ul>
-        </div>
-      ) : null}
-
-      {onOpenEvidence ? (
-        <div className="mt-4" data-testid="signals-setup-actions">
-          <button
-            type="button"
-            onClick={onOpenEvidence}
-            data-testid="signals-open-evidence-button"
-            className="inline-flex w-full items-center justify-center rounded-lg border font-semibold sm:w-auto"
-            style={{
-              padding: `${spacing[3]} ${spacing[5]}`,
-              borderColor: colors.accent,
-              background: `color-mix(in srgb, ${colors.accent} 18%, ${colors.surfaceMuted})`,
-              color: colors.text,
-              fontSize: typography.scale.base,
-              cursor: "pointer"
-            }}
-          >
-            Open full evidence
-          </button>
-          <p className="m-0 mt-1.5 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
-            Layer detail, reference context, and gap intelligence for {symU}
-          </p>
         </div>
       ) : null}
 
