@@ -320,6 +320,14 @@ export function buildScanOutcomePrimaryBlocker(
   return `→ Primary blocker: low volume across ${sessionVolumeCount} symbol${sessionVolumeCount === 1 ? "" : "s"}`;
 }
 
+/** One-line forward hint when the full “what would change” block would repeat market context. */
+export function buildScanOutcomeWatchHint(symbols: string[]): string | null {
+  const names = symbols.filter(Boolean).slice(0, 2);
+  if (names.length === 0) return null;
+  if (names.length === 1) return `→ Watch for volume pickup (first in ${names[0]})`;
+  return `→ Watch for volume pickup (first in ${names[0]} / ${names[1]})`;
+}
+
 export function buildQuietBridgeLine(
   qualifyingTotal: number,
   nearReadyCount: number,

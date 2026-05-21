@@ -13,6 +13,8 @@ type Props = {
   groups: ScannerSynthesisRejectionGroups;
   qualifiedCount?: number;
   evaluatedCount?: number;
+  /** One-line forward hint when cause is obvious (avoids a separate guidance block). */
+  watchHint?: string | null;
 };
 
 function CollapsibleGroup({
@@ -112,7 +114,8 @@ function CollapsibleGroup({
 export function RejectionGroups({
   groups,
   qualifiedCount = 0,
-  evaluatedCount
+  evaluatedCount,
+  watchHint = null
 }: Props) {
   const { colors } = useTheme();
   const session = groups.session_volume;
@@ -167,6 +170,20 @@ export function RejectionGroups({
             }}
           >
             {primaryBlocker}
+          </p>
+        ) : null}
+        {watchHint ? (
+          <p
+            data-testid="scanner-scan-outcome-watch"
+            style={{
+              margin: `${spacing[1]} 0 0`,
+              fontSize: typography.scale.xs,
+              fontWeight: 600,
+              color: colors.textMuted,
+              lineHeight: 1.5
+            }}
+          >
+            {watchHint}
           </p>
         ) : null}
         {qualifiedCount === 0 ? (

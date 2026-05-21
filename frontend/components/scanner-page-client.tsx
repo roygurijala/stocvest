@@ -49,6 +49,7 @@ import { fetchEarningsCalendarClient } from "@/lib/api/earnings-client";
 import type { EarningsEvent } from "@/lib/api/earnings";
 import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
+import { GAP_INTEL_ACTIVE_GUIDANCE, GAP_INTEL_EMPTY_CONTEXT } from "@/lib/scanner-quiet-copy";
 import { brokersEnabled } from "@/lib/nav-features";
 import {
   TAB_LABEL_BOTH,
@@ -1077,6 +1078,8 @@ export function ScannerPageClient({
 
   const useCompactColumnEmpty = scanSummary.qualifying.total === 0;
   const showQuietInterpretation = scanSummary.qualifying.total === 0;
+  const gapIntelEmpty = overview.gapIntelligence.length === 0;
+  const nearReadyCount = scanSummary.near_qualification.length;
   const evaluationTraceDeskFilter: "swing" | "day" | "all" =
     scannerSetupMode === "swing" ? "swing" : scannerSetupMode === "day" ? "day" : "all";
   const [evaluationTrace, setEvaluationTrace] = useState<ScannerEvaluationTraceRow[]>(
@@ -1462,8 +1465,20 @@ export function ScannerPageClient({
 
       <div className="scanner-grid grid grid-cols-1 gap-3 lg:grid-cols-2">
         <section
-          className={`min-w-0 ${surfaceGlowClassName}`}
-          style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
+          data-testid="scanner-gap-intelligence-section"
+          data-empty={gapIntelEmpty ? "true" : "false"}
+          className={gapIntelEmpty ? "min-w-0" : `min-w-0 ${surfaceGlowClassName}`}
+          style={{
+            background: gapIntelEmpty
+              ? `color-mix(in srgb, ${colors.textMuted} 5%, ${colors.surface})`
+              : colors.surface,
+            border: gapIntelEmpty
+              ? `1px dashed color-mix(in srgb, ${colors.border} 65%, transparent)`
+              : `1px solid ${colors.border}`,
+            borderRadius: borderRadius.xl,
+            padding: gapIntelEmpty ? spacing[3] : spacing[4],
+            opacity: gapIntelEmpty ? 0.94 : 1
+          }}
         >
           <div
             style={{
@@ -1475,9 +1490,16 @@ export function ScannerPageClient({
             }}
           >
             <div style={{ minWidth: 0 }}>
-              <h3 style={{ margin: 0 }}>
+              <h3
+                style={{
+                  margin: 0,
+                  fontSize: gapIntelEmpty ? typography.scale.base : undefined,
+                  fontWeight: gapIntelEmpty ? 600 : undefined,
+                  color: gapIntelEmpty ? colors.textMuted : colors.text
+                }}
+              >
                 Gap Intelligence
-                {overview.gapIntelligence.length === 0 ? (
+                {gapIntelEmpty ? (
                   <span
                     style={{
                       marginLeft: spacing[2],
@@ -1499,8 +1521,25 @@ export function ScannerPageClient({
                   maxWidth: "42rem"
                 }}
               >
-                Extreme moves to monitor — not swing entries on the gap.
+                {gapIntelEmpty
+                  ? GAP_INTEL_EMPTY_CONTEXT
+                  : "Extreme moves to monitor — not swing entries on the gap."}
               </p>
+              {!gapIntelEmpty ? (
+                <p
+                  data-testid="scanner-gap-active-guidance"
+                  style={{
+                    margin: `${spacing[1]} 0 0`,
+                    fontSize: typography.scale.xs,
+                    fontWeight: 600,
+                    color: colors.caution,
+                    lineHeight: 1.45,
+                    maxWidth: "42rem"
+                  }}
+                >
+                  {GAP_INTEL_ACTIVE_GUIDANCE}
+                </p>
+              ) : null}
             </div>
             <InfoTip text={GAP_INTELLIGENCE_TIP} label="About gap intelligence" />
           </div>
@@ -1580,6 +1619,7 @@ export function ScannerPageClient({
                 compact={useCompactColumnEmpty}
                 interpretive={showQuietInterpretation}
                 interpretiveOverview={emptyOverviewInput}
+                deemphasized={showQuietInterpretation}
                 testId="scanner-gap-empty-state"
               />
             ) : gapIntelForDisplay.length === 0 ? (
@@ -1649,8 +1689,18 @@ export function ScannerPageClient({
         <section
           id="scanner-setups-section"
           data-testid="scanner-setups-section"
-          className={`min-w-0 ${surfaceGlowClassName}`}
-          style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: borderRadius.xl, padding: spacing[4] }}
+          data-quiet-secondary={showQuietInterpretation ? "true" : "false"}
+          className={showQuietInterpretation ? "min-w-0" : `min-w-0 ${surfaceGlowClassName}`}
+          style={{
+            background: showQuietInterpretation
+              ? `color-mix(in srgb, ${colors.textMuted} 4%, ${colors.surface})`
+              : colors.surface,
+            border: showQuietInterpretation
+              ? `1px solid color-mix(in srgb, ${colors.border} 75%, transparent)`
+              : `1px solid ${colors.border}`,
+            borderRadius: borderRadius.xl,
+            padding: spacing[4]
+          }}
         >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing[2], marginBottom: spacing[2] }}>
             <h3 style={{ margin: 0 }}>{setupsPanelTitle}</h3>
@@ -1701,6 +1751,8 @@ export function ScannerPageClient({
                         compact={useCompactColumnEmpty}
                         interpretive={showQuietInterpretation}
                         interpretiveOverview={emptyOverviewInput}
+                        nearReadyCount={nearReadyCount}
+                        secondaryPanel={showQuietInterpretation}
                         testId={`scanner-setups-empty-state-${group.key}`}
                       />
                     );

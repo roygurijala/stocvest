@@ -5,9 +5,14 @@ import { ScannerMarketConditionsCard } from "@/components/scanner/scanner-market
 import { ScannerNearReadyZone } from "@/components/scanner/scanner-near-ready-zone";
 import { RejectionGroups } from "@/components/scanner/RejectionGroups";
 import { WhatWouldChangeFooter } from "@/components/scanner/WhatWouldChangeFooter";
-import { buildMarketConditionsQuietCard } from "@/lib/scanner-quiet-copy";
+import {
+  buildMarketConditionsQuietCard,
+  sessionVolumeIsPrimaryBlocker,
+  shouldShowQuietWhatWouldChangeSection
+} from "@/lib/scanner-quiet-copy";
 import {
   buildNearReadyCards,
+  buildScanOutcomeWatchHint,
   buildVolumeProximityLeads,
   buildWhatWouldChangeContent,
   volumeLeadToNearReadyCard
@@ -23,8 +28,8 @@ type Props = {
 };
 
 /**
- * Quiet-scan body: closest to qualifying → market conditions → scan outcome → what to watch.
- * (Hero strip above carries session chrome + headline only.)
+ * Quiet-scan body: closest to qualifying → market conditions → scan outcome.
+ * Full “what would change” only when the cause is not already obvious (mixed / complex).
  */
 export function ScannerQuietDesk({ summary, synthesis, deskFilter }: Props) {
   const regimeLabel = summary.regime.label;
@@ -48,16 +53,25 @@ export function ScannerQuietDesk({ summary, synthesis, deskFilter }: Props) {
     return buildVolumeProximityLeads(synthesis, new Set(), 2).map((l) => l.symbol);
   }, [nearCards, synthesis]);
 
-  const whatWouldChangeContent = useMemo(
-    () =>
-      buildWhatWouldChangeContent(
-        synthesis,
-        regimeLabel,
-        nearCards.filter((c) => c.source === "alignment").map((c) => c.symbol),
-        volumeLeaderSymbols
-      ),
-    [synthesis, regimeLabel, nearCards, volumeLeaderSymbols]
+  const showFullGuidance = useMemo(
+    () => shouldShowQuietWhatWouldChangeSection(summary, synthesis),
+    [summary, synthesis]
   );
+
+  const scanWatchHint = useMemo(() => {
+    if (showFullGuidance || !sessionVolumeIsPrimaryBlocker(summary, synthesis)) return null;
+    return buildScanOutcomeWatchHint(volumeLeaderSymbols);
+  }, [showFullGuidance, summary, synthesis, volumeLeaderSymbols]);
+
+  const whatWouldChangeContent = useMemo(() => {
+    if (!showFullGuidance) return null;
+    return buildWhatWouldChangeContent(
+      synthesis,
+      regimeLabel,
+      nearCards.filter((c) => c.source === "alignment").map((c) => c.symbol),
+      volumeLeaderSymbols
+    );
+  }, [showFullGuidance, synthesis, regimeLabel, nearCards, volumeLeaderSymbols]);
 
   return (
     <div data-testid="scanner-quiet-desk" style={{ display: "grid", gap: spacing[4] }}>
@@ -70,10 +84,11 @@ export function ScannerQuietDesk({ summary, synthesis, deskFilter }: Props) {
           groups={synthesis.rejection_groups}
           qualifiedCount={summary.qualifying.total}
           evaluatedCount={summary.universe.symbols_evaluated ?? undefined}
+          watchHint={scanWatchHint}
         />
       ) : null}
 
-      <WhatWouldChangeFooter content={whatWouldChangeContent} />
+      {whatWouldChangeContent ? <WhatWouldChangeFooter content={whatWouldChangeContent} /> : null}
     </div>
   );
 }

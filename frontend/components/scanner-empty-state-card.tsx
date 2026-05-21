@@ -11,7 +11,7 @@ import {
   type ScannerEmptyStateContext,
   type SwingEmptyStateContext
 } from "@/lib/scanner-empty-state";
-import { buildScannerDeskInterpretiveLine } from "@/lib/scanner-quiet-copy";
+import { buildScannerDeskInterpretiveCopy } from "@/lib/scanner-quiet-copy";
 import { SECTION_LABEL_DAY_DESK, SECTION_LABEL_SWING_DESK } from "@/lib/mode-terminology";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -35,6 +35,12 @@ interface ScannerEmptyStateCardProps {
   interpretive?: boolean;
   /** Used with `interpretive` to build the single desk sentence. */
   interpretiveOverview?: Pick<EmptyStateOverviewInput, "regimeLabel" | "marketStatus">;
+  /** Tie setup columns to Near Ready when names are building above. */
+  nearReadyCount?: number;
+  /** Lighter chrome for edge-case columns (e.g. empty Gap Intelligence). */
+  deemphasized?: boolean;
+  /** Secondary panel under hero — slightly lower contrast than near-ready / market blocks. */
+  secondaryPanel?: boolean;
 }
 
 /**
@@ -71,7 +77,10 @@ export function ScannerEmptyStateCard({
   compact = false,
   testId,
   interpretive = false,
-  interpretiveOverview
+  interpretiveOverview,
+  nearReadyCount = 0,
+  deemphasized = false,
+  secondaryPanel = false
 }: ScannerEmptyStateCardProps) {
   const { colors, theme } = useTheme();
   const role = context.mode === "swing" ? "swing" : "day";
@@ -81,8 +90,8 @@ export function ScannerEmptyStateCard({
   const gap = isGapContext(context);
   const surfaceSlug = gap ? `gap-${context.mode}` : context.mode;
   const deskKind: "gap" | "swing" | "day" = gap ? "gap" : context.mode;
-  const displayHeadline = interpretive
-    ? buildScannerDeskInterpretiveLine(
+  const interpretiveCopy = interpretive
+    ? buildScannerDeskInterpretiveCopy(
         deskKind,
         interpretiveOverview ?? {
           regimeLabel: context.regimeLabel,
@@ -90,9 +99,12 @@ export function ScannerEmptyStateCard({
             "sessionOpen" in context && context.sessionOpen != null
               ? { market: context.sessionOpen ? "open" : "closed" }
               : undefined
-        }
+        },
+        { nearReadyCount }
       )
-    : context.headline;
+    : null;
+  const displayHeadline = interpretiveCopy?.headline ?? context.headline;
+  const nearReadyConnector = interpretiveCopy?.nearReadyConnector;
   const reenableSummary = gap
     ? "What would surface a gap candidate"
     : `What would re-enable ${context.mode === "swing" ? "swing" : "day"} rows`;
@@ -121,17 +133,32 @@ export function ScannerEmptyStateCard({
       style={{
         display: "grid",
         gap: interpretive ? spacing[2] : spacing[3],
-        padding: interpretive ? spacing[3] : spacing[4],
-        background: interpretive
-          ? colors.surfaceMuted
-          : `color-mix(in srgb, ${railHue} 6%, ${colors.surface})`,
-        border: interpretive
-          ? `1px solid ${colors.border}`
-          : `1.5px solid ${railHue}`,
-        borderTop: interpretive ? `3px solid ${railHue}` : undefined,
+        padding: deemphasized ? spacing[2] : interpretive ? spacing[3] : spacing[4],
+        background: deemphasized
+          ? "transparent"
+          : interpretive
+            ? secondaryPanel
+              ? `color-mix(in srgb, ${colors.textMuted} 4%, ${colors.surface})`
+              : colors.surfaceMuted
+            : `color-mix(in srgb, ${railHue} 6%, ${colors.surface})`,
+        ...(interpretive && !deemphasized
+          ? {
+              borderWidth: 1,
+              borderStyle: "solid",
+              borderColor: `color-mix(in srgb, ${colors.border} ${secondaryPanel ? 80 : 100}%, transparent)`,
+              borderTopWidth: 3,
+              borderTopStyle: "solid",
+              borderTopColor: railHue
+            }
+          : {
+              border: deemphasized
+                ? `1px dashed color-mix(in srgb, ${colors.border} 70%, transparent)`
+                : `1.5px solid ${railHue}`
+            }),
         borderRadius: borderRadius.lg,
         position: "relative",
-        overflow: "hidden"
+        overflow: "hidden",
+        opacity: deemphasized ? 0.92 : 1
       }}
     >
       {!interpretive ? (
@@ -173,14 +200,29 @@ export function ScannerEmptyStateCard({
         data-testid={`scanner-empty-state-${surfaceSlug}-headline`}
         style={{
           margin: 0,
-          color: colors.text,
-          fontSize: typography.scale.base,
-          fontWeight: interpretive ? 600 : 700,
+          color: deemphasized ? colors.textMuted : colors.text,
+          fontSize: deemphasized ? typography.scale.sm : typography.scale.base,
+          fontWeight: deemphasized ? 500 : interpretive ? 600 : 700,
           lineHeight: 1.35
         }}
       >
         {displayHeadline}
       </p>
+
+      {nearReadyConnector ? (
+        <p
+          data-testid={`scanner-empty-state-${surfaceSlug}-near-ready-connector`}
+          style={{
+            margin: 0,
+            fontSize: typography.scale.xs,
+            fontWeight: 600,
+            color: colors.accent,
+            lineHeight: 1.45
+          }}
+        >
+          {nearReadyConnector}
+        </p>
+      ) : null}
 
       {interpretive ? null : (
         <p

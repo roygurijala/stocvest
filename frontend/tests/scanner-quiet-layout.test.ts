@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import {
   buildClosestToQualifyingGroups,
   buildScannerCauseBullets,
+  buildScannerDeskInterpretiveCopy,
   buildScannerDeskInterpretiveLine,
   buildScannerMarketScopeLine,
   buildScannerQuietSubline,
@@ -109,6 +110,13 @@ describe("scanner quiet copy", () => {
     expect(
       buildScannerDeskInterpretiveLine("day", { regimeLabel: "Bearish", marketStatus: { market: "closed" } })
     ).toMatch(/session closed/i);
+    expect(buildScannerDeskInterpretiveLine("swing", { regimeLabel: "Bullish" })).toMatch(
+      /key conditions still missing/i
+    );
+    expect(
+      buildScannerDeskInterpretiveCopy("swing", { regimeLabel: "Bullish" }, { nearReadyCount: 2 })
+        .nearReadyConnector
+    ).toMatch(/Near Ready above/i);
   });
 
   test("watchlist quiet insight is forward-looking", () => {

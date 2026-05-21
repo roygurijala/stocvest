@@ -9,7 +9,7 @@ import { volumeFillFromPctBelow } from "@/lib/scanner-volume-gap";
 
 const MEGA_CAP_LEADERS = ["NVDA", "AAPL", "MSFT", "AMZN", "META", "GOOGL", "GOOG", "TSLA"];
 
-function sessionVolumeIsPrimaryBlocker(
+export function sessionVolumeIsPrimaryBlocker(
   summary: ScannerScanSummary,
   synthesis?: ScannerSynthesis | null
 ): boolean {
@@ -19,6 +19,38 @@ function sessionVolumeIsPrimaryBlocker(
     synthesis?.volume_context?.market_condition?.toLowerCase().includes("below");
   const regime = summary.regime.label.toLowerCase();
   return (volQuiet || sessionVol >= 2) && !regime.includes("bear");
+}
+
+/** Dominant, single-story quiet day — use a one-line Focus hint, not a full guidance block. */
+export function quietScanCauseIsObvious(
+  summary: ScannerScanSummary,
+  synthesis?: ScannerSynthesis | null
+): boolean {
+  if (sessionVolumeIsPrimaryBlocker(summary, synthesis)) return true;
+  const regime = summary.regime.label.toLowerCase();
+  if (regime.includes("bear") && !regime.includes("bull")) return true;
+  return false;
+}
+
+export function shouldShowQuietWhatWouldChangeSection(
+  summary: ScannerScanSummary,
+  synthesis?: ScannerSynthesis | null
+): boolean {
+  return !quietScanCauseIsObvious(summary, synthesis);
+}
+
+function topVolumeWatchSymbols(synthesis?: ScannerSynthesis | null, limit = 2): string[] {
+  return [...(synthesis?.rejection_groups.session_volume ?? [])]
+    .sort((a, b) => a.pct_below - b.pct_below)
+    .slice(0, limit)
+    .map((r) => r.symbol);
+}
+
+function formatSymbolList(symbols: string[]): string {
+  if (symbols.length === 0) return "";
+  if (symbols.length === 1) return symbols[0]!;
+  if (symbols.length === 2) return `${symbols[0]} and ${symbols[1]}`;
+  return `${symbols.slice(0, -1).join(", ")}, and ${symbols[symbols.length - 1]}`;
 }
 
 export function buildScannerQuietSubline(
@@ -39,30 +71,67 @@ export function buildScannerQuietSubline(
   return "Market quiet — conditions not aligned";
 }
 
+/** Gap Intelligence section hints (edge-case column — not primary on quiet days). */
+export const GAP_INTEL_EMPTY_CONTEXT =
+  "Most sessions have none — overnight dislocations only when magnitude and volume align.";
+export const GAP_INTEL_ACTIVE_GUIDANCE =
+  "If gaps appear: monitor for continuation, not immediate entry.";
+
+export type DeskInterpretiveCopy = {
+  headline: string;
+  nearReadyConnector?: string;
+};
+
+export type DeskInterpretiveOptions = {
+  nearReadyCount?: number;
+};
+
 /**
  * Mechanism-specific desk label on quiet days (column cards).
  * Intentionally distinct from {@link buildScannerCauseBullets} macro copy.
  */
-export function buildScannerDeskInterpretiveLine(
+export function buildScannerDeskInterpretiveCopy(
   desk: "gap" | "swing" | "day",
-  overview: Pick<EmptyStateOverviewInput, "regimeLabel" | "marketStatus">
-): string {
+  overview: Pick<EmptyStateOverviewInput, "regimeLabel" | "marketStatus">,
+  options?: DeskInterpretiveOptions
+): DeskInterpretiveCopy {
+  const nearReadyCount = options?.nearReadyCount ?? 0;
+  const nearReadyConnector =
+    nearReadyCount > 0 && desk !== "gap" ? "→ See Near Ready above" : undefined;
+
   if (desk === "gap") {
-    return "No gaps met magnitude + volume criteria";
+    return { headline: "No gaps met magnitude + volume criteria" };
   }
   if (desk === "day") {
     const sessionOpen =
       overview.marketStatus != null
         ? (overview.marketStatus.market || "").trim().toLowerCase() === "open"
         : isUsRegularSessionOpenEt();
-    return sessionOpen
-      ? "Intraday gates not cleared — waiting for confirmation"
-      : "Session closed — check back at next open (9:30 AM ET)";
+    return {
+      headline: sessionOpen
+        ? "Intraday gates not cleared — waiting for confirmation"
+        : "Session closed — check back at next open (9:30 AM ET)",
+      nearReadyConnector
+    };
   }
   const r = (overview.regimeLabel ?? "").trim().toLowerCase();
-  if (r.includes("bear")) return "Structure + regime not aligned together";
-  if (r.includes("bull")) return "Waiting for confirmation across all required conditions";
-  return "Some conditions missing — no setups fully confirmed";
+  let headline: string;
+  if (r.includes("bear")) {
+    headline = "Structure + regime not aligned together";
+  } else if (r.includes("bull")) {
+    headline = "Waiting for confirmation — key conditions still missing";
+  } else {
+    headline = "Some conditions missing — no swing setups fully confirmed";
+  }
+  return { headline, nearReadyConnector };
+}
+
+export function buildScannerDeskInterpretiveLine(
+  desk: "gap" | "swing" | "day",
+  overview: Pick<EmptyStateOverviewInput, "regimeLabel" | "marketStatus">,
+  options?: DeskInterpretiveOptions
+): string {
+  return buildScannerDeskInterpretiveCopy(desk, overview, options).headline;
 }
 
 export type MarketConditionsQuietCard = {
@@ -138,8 +207,11 @@ export function buildMarketConditionsQuietCard(
       ? { label: "Environment quality: Weak", tone: "weak" as const }
       : { label: "Environment quality: Mixed", tone: "mixed" as const };
 
+  const watchNames = topVolumeWatchSymbols(synthesis);
   const focusHint = volumePrimary
-    ? "Focus: Watch session volume — especially leaders with the longest bars below."
+    ? watchNames.length > 0
+      ? `Focus: Watch session volume — especially ${formatSymbolList(watchNames)}`
+      : "Focus: Watch session volume — especially leaders with the longest bars below."
     : bearish
       ? "Focus: Regime must improve before swing setups can qualify."
       : "Focus: Watch for participation and structure to align.";

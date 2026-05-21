@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildMarketConditionsQuietCard, buildScannerQuietSubline } from "@/lib/scanner-quiet-copy";
+import {
+  buildMarketConditionsQuietCard,
+  buildScannerQuietSubline,
+  quietScanCauseIsObvious,
+  shouldShowQuietWhatWouldChangeSection
+} from "@/lib/scanner-quiet-copy";
 import { buildScannerScanSummary } from "@/lib/scanner-scan-summary";
 
 describe("buildMarketConditionsQuietCard", () => {
@@ -39,5 +44,8 @@ describe("buildMarketConditionsQuietCard", () => {
     expect(model.volumeBlockerLine).toMatch(/85–90% below session pace/i);
     expect(model.volumeBlockerLine).toMatch(/why no setups have qualified/i);
     expect(model.regimeContextTone).toBe("ok");
+    expect(model.focusHint).toMatch(/especially TSLA and NVDA/i);
+    expect(quietScanCauseIsObvious(summary, synthesis)).toBe(true);
+    expect(shouldShowQuietWhatWouldChangeSection(summary, synthesis)).toBe(false);
   });
 });

@@ -5,6 +5,7 @@ import {
   buildNearReadyCards,
   buildQuietBridgeLine,
   buildScanOutcomePrimaryBlocker,
+  buildScanOutcomeWatchHint,
   buildVolumeProximityLeads,
   buildWhatWouldChangeContent,
   nearReadySectionCopy,
@@ -104,6 +105,11 @@ describe("scanner-quiet-desk", () => {
   it("builds scan outcome primary blocker for volume", () => {
     expect(buildScanOutcomePrimaryBlocker(0, 10)).toMatch(/low volume across 10 symbols/i);
     expect(buildScanOutcomePrimaryBlocker(1, 10)).toBeNull();
+  });
+
+  it("builds one-line scan outcome watch hint", () => {
+    expect(buildScanOutcomeWatchHint(["NVDA", "QQQ"])).toMatch(/first in NVDA \/ QQQ/i);
+    expect(buildScanOutcomeWatchHint([])).toBeNull();
   });
 
   it("builds structured what-would-change content", () => {
