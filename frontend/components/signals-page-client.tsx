@@ -1447,7 +1447,10 @@ export function SignalsPageClient({
 
   return (
     <section style={{ display: "grid", gap: spacing[4] }}>
-      <div ref={symbolComboRef} className="relative w-full min-w-0 sm:max-w-xl">
+      <div
+        ref={symbolComboRef}
+        className={`relative w-full min-w-0 sm:max-w-xl${suggestOpen ? " z-50" : ""}`}
+      >
         <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
           <label htmlFor="signal-symbol" className="text-sm sm:shrink-0" style={{ color: colors.textMuted }}>
             Symbol
@@ -1538,7 +1541,7 @@ export function SignalsPageClient({
           <ul
             id="signal-symbol-suggestions"
             role="listbox"
-            className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-md border py-1 shadow-lg sm:left-auto sm:right-auto sm:min-w-full"
+            className="absolute left-0 right-0 top-full z-[1] mt-1 max-h-60 overflow-y-auto rounded-md border py-1 shadow-lg sm:left-auto sm:right-auto sm:min-w-full"
             style={{
               borderColor: colors.border,
               background: colors.surface,
@@ -1659,7 +1662,7 @@ export function SignalsPageClient({
       {symbolCommitted ? (
         <>
       <header
-        className="sticky z-30 -mx-4 mb-1 w-full max-w-none self-start px-4 pb-1 pt-0 lg:-mx-6 lg:px-6"
+        className="relative z-10 -mx-4 mb-1 w-full max-w-none self-start px-4 pb-1 pt-0 lg:sticky lg:z-20 lg:-mx-6 lg:px-6"
         style={{
           top: APP_TOP_BAR_LAYOUT_HEIGHT,
           background: colors.background,
