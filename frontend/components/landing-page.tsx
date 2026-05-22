@@ -149,28 +149,25 @@ export function LandingPage({
   return (
     <main className="bg-[#070d18] text-slate-100">
       <header className={`fixed inset-x-0 top-0 z-50 transition-colors duration-300 ${isScrolled ? "border-b border-white/10 bg-[#070d18]/95 backdrop-blur" : "bg-transparent"}`}>
-        <nav className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-4 md:px-8">
-          <StocvestLogo variant="header" href="/" priority />
-          <div className="flex items-center gap-2 md:gap-3">
-            <Link href="/login" className="rounded-md border border-white/20 px-4 py-2 text-sm hover:border-white/40">Login</Link>
-            <Link href="/signup/agreements" className="rounded-md bg-[#3b82f6] px-4 py-2 text-sm font-semibold text-white">
-              Get Started
-            </Link>
-          </div>
+        <nav className="mx-auto flex max-w-7xl items-center justify-end gap-2 px-4 py-4 md:px-8">
+          <Link href="/login" className="rounded-md border border-white/20 px-4 py-2 text-sm hover:border-white/40">Login</Link>
+          <Link href="/signup/agreements" className="rounded-md bg-[#3b82f6] px-4 py-2 text-sm font-semibold text-white">
+            Get Started
+          </Link>
         </nav>
       </header>
 
-      {/* 1 · Hero — brand lockup + decision-first copy */}
-      <section className="mx-auto flex min-h-screen max-w-7xl flex-col justify-center px-4 pt-24 md:px-8">
-        <StocvestLogo variant="hero" href="/" priority className="mb-8 md:mb-10" />
+      {/* 1 · Hero — centered logo at top + decision-first copy */}
+      <section className="mx-auto flex min-h-screen max-w-7xl flex-col items-center px-4 pb-16 pt-24 text-center md:px-8 md:pt-28">
+        <StocvestLogo variant="hero" href="/" priority className="mb-10 md:mb-12" />
         <h1 className="max-w-4xl text-3xl font-black leading-tight md:text-5xl">
           We tell you when to trade — and when not to.
         </h1>
-        <p className="mt-5 max-w-3xl text-lg text-slate-300">
+        <p className="mx-auto mt-5 max-w-3xl text-lg text-slate-300">
           STOCVEST evaluates every setup across six independent layers — and only surfaces trades when they agree. Built for traders who want
           alignment, not noise.
         </p>
-        <div className="mt-8 flex flex-wrap gap-3">
+        <div className="mt-8 flex flex-wrap justify-center gap-3">
           <Link href="/signup/agreements" className="rounded-md bg-[#3b82f6] px-6 py-3 font-semibold">
             Start Free — No Card Required
           </Link>
@@ -178,7 +175,7 @@ export function LandingPage({
             See How It Works
           </a>
         </div>
-        <div className="mt-6 flex flex-wrap gap-2 text-xs text-slate-300">
+        <div className="mt-6 flex flex-wrap justify-center gap-2 text-xs text-slate-300">
           {trustBadges.map((b) => (
             <span key={b} className="rounded-full border border-white/15 bg-white/5 px-2 py-1">
               {b}

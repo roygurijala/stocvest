@@ -8,6 +8,7 @@ import { DashboardInsightCallout } from "@/components/dashboard/dashboard-insigh
 import { DashboardLiveStatus } from "@/components/dashboard/dashboard-live-status";
 import { DashboardMarketContextPanel } from "@/components/dashboard/dashboard-market-context-panel";
 import { DashboardOpportunitiesOverview } from "@/components/dashboard/dashboard-opportunities-overview";
+import { StocvestTitle } from "@/components/brand/stocvest-title";
 import { DashboardScannerLoadingStrip } from "@/components/dashboard/dashboard-scanner-suspense-fallback";
 import { ScannerOverviewProvider, useScannerOverview } from "@/components/dashboard/scanner-overview-context";
 import { DashboardEarningsProvider, useDashboardEarnings } from "@/components/dashboard/dashboard-earnings-context";
@@ -474,6 +475,10 @@ function DashboardRedesignBody({
 
   return (
     <section className="stocvest-dashboard-v2" style={{ display: "grid", gap: spacing[4] }}>
+      <div className="flex justify-center py-2" data-testid="dashboard-brand-title">
+        <StocvestTitle size="display" />
+      </div>
+
       <DashboardDeskModePills
         mode={activeDeskMode}
         onModeChange={setDeskMode}

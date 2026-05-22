@@ -19,14 +19,6 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/dashboard"
 }));
 
-vi.mock("@/components/brand/stocvest-logo", () => ({
-  StocvestLogo: ({ href }: { href?: string }) => (
-    <a href={href ?? "/dashboard"} data-testid="app-top-bar-brand" aria-label="STOCVEST home">
-      STOCVEST
-    </a>
-  )
-}));
-
 vi.mock("@/lib/nav-features", async () => {
   const actual = await vi.importActual<typeof import("@/lib/nav-features")>(
     "@/lib/nav-features"
@@ -51,8 +43,8 @@ describe("TopBar (brokers disabled)", () => {
     expect(screen.queryByText(/Live/i)).not.toBeInTheDocument();
   });
 
-  test("dashboard brand and theme toggle still render", () => {
+  test("title and theme toggle still render", () => {
     wrap(<TopBar />);
-    expect(screen.getByTestId("app-top-bar-brand")).toBeInTheDocument();
+    expect(screen.getByText("Dashboard")).toBeInTheDocument();
   });
 });

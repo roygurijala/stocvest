@@ -3,7 +3,6 @@
 import { useMemo } from "react";
 import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
-import { StocvestLogo } from "@/components/brand/stocvest-logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { TradingModeBadge } from "@/components/trading-mode-badge";
 import { spacing } from "@/lib/design-system";
@@ -41,7 +40,6 @@ export function TopBar({ onMenuClick }: TopBarProps) {
   const pathname = usePathname();
   const { colors } = useTheme();
   const title = useMemo(() => TITLE_BY_PATH[pathname] || "STOCVEST", [pathname]);
-  const showDashboardBrand = pathname === "/dashboard";
 
   return (
     <header
@@ -74,15 +72,9 @@ export function TopBar({ onMenuClick }: TopBarProps) {
       >
         <Menu size={22} />
       </button>
-      {showDashboardBrand ? (
-        <div className="min-w-0 flex-1 lg:flex-none">
-          <StocvestLogo variant="dashboard" href="/dashboard" priority />
-        </div>
-      ) : (
-        <h1 className="m-0 min-w-0 flex-1 truncate text-center text-lg font-bold lg:flex-none lg:text-left lg:text-xl">
-          {title}
-        </h1>
-      )}
+      <h1 className="m-0 min-w-0 flex-1 truncate text-center text-lg font-bold lg:flex-none lg:text-left lg:text-xl">
+        {title}
+      </h1>
       <div className="flex shrink-0 items-center justify-end gap-2">
         {brokersEnabled() ? <TradingModeBadge /> : null}
         <ThemeToggle />
