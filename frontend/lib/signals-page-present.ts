@@ -475,6 +475,7 @@ export function buildSignalsPageDecision(input: {
   isComplete: boolean;
   counterTrend?: boolean;
   regimeConflict?: boolean;
+  timeframeCounterTrend?: boolean;
 }): TradeDecision {
   const { rows, bias, signalScore, alignmentRatio, riskReward, rrWarning, isComplete, mode } = input;
   const score = signalScore ?? 50;
@@ -493,6 +494,7 @@ export function buildSignalsPageDecision(input: {
   const hasInsufficient = !isComplete;
   const rrFail = rrWarning || isRrBelowVerdictThreshold(riskReward, mode);
   const counterTrend = input.counterTrend === true;
+  const timeframeCounterTrend = input.timeframeCounterTrend === true;
   const regimeConflict = input.regimeConflict === true;
 
   const rationaleCtx = {
@@ -523,6 +525,13 @@ export function buildSignalsPageDecision(input: {
     );
   }
   if (weakAgreement) reinforcements.push("Layer agreement is mixed across desks.");
+  if (timeframeCounterTrend) {
+    reinforcements.push(
+      mode === "day"
+        ? "Intraday and weekly timeframes diverge."
+        : "Daily and weekly timeframes diverge."
+    );
+  }
 
   if (hasInsufficient || (rrFail && weakAgreement && lowReadiness) || availableLayers < 4) {
     return {
@@ -533,7 +542,7 @@ export function buildSignalsPageDecision(input: {
       conviction: resolveTradeConvictionTier({ ...convictionBase, decisionState: "blocked" })
     };
   }
-  if (strongReadiness && !rrFail && strongAgreement && goodCoverage && !counterTrend) {
+  if (strongReadiness && !rrFail && strongAgreement && goodCoverage && !counterTrend && !timeframeCounterTrend) {
     return {
       state: "actionable",
       line: "Actionable — internal gates cleared for this setup",
@@ -604,8 +613,12 @@ export function buildWhyNotBullets(
   decision: TradeDecision,
   previewLayers: SignalsLayerRowInput[],
   bias: SignalsSetupBias,
-  max = 3
+  max = 3,
+  causalBullets?: string[] | null
 ): string[] {
+  if (causalBullets && causalBullets.length > 0) {
+    return causalBullets.slice(0, max);
+  }
   const out: string[] = [];
   if (decision.rationale?.text) {
     out.push(decision.rationale.text);

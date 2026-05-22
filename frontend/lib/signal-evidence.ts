@@ -1,6 +1,7 @@
 import type { NewsPayload, SnapshotPayload } from "@/lib/api/market";
 import type { IntradaySetupPayload } from "@/lib/api/scanner";
 import { parseLaggardSignal, parseUnlockForecast, type LaggardSignal, type UnlockHint } from "@/lib/laggard";
+import { parseCausalNarrativeFromApi } from "@/lib/signal-evidence/causal-narrative";
 import { coerceSnapshotForReferenceLevels } from "@/lib/snapshot-reference-levels";
 
 export type EvidenceDirection = "bullish" | "bearish" | "neutral";
@@ -444,6 +445,10 @@ export interface SignalEvidenceData {
   signal_basis_label?: string;
   /** Present after composite enrichment when backend sends `alignment`. */
   alignment?: CompositeAlignmentWire | null;
+  /** Informational causal narrative from composite (`causal_narrative`). */
+  causalNarrative?: import("@/lib/signal-evidence/causal-narrative").CausalNarrative | null;
+  /** Raw composite JSON used for enrichment (weekly / timeframe fields). */
+  compositePayload?: Record<string, unknown> | null;
 }
 
 function clamp(v: number, min: number, max: number): number {
@@ -2005,6 +2010,8 @@ export function applySwingCompositeEnrichment(
   const unlockForecast =
     cm === "swing" ? parseUnlockForecast(body.unlock_forecast) : evidence.unlockForecast ?? [];
 
+  const causalFromApi = parseCausalNarrativeFromApi(body.causal_narrative);
+
   return {
     ...evidence,
     compositeMode: cm ?? evidence.compositeMode,
@@ -2018,7 +2025,9 @@ export function applySwingCompositeEnrichment(
     earningsRisk,
     fundamentalContext,
     laggardSignal,
-    unlockForecast: unlockForecast.length ? unlockForecast : undefined
+    unlockForecast: unlockForecast.length ? unlockForecast : undefined,
+    causalNarrative: causalFromApi ?? evidence.causalNarrative ?? null,
+    compositePayload: body
   };
 }
 

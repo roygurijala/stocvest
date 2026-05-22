@@ -3,7 +3,9 @@ import { describe, expect, test, vi } from "vitest";
 import {
   buildSignalEvaluationFreshness,
   extractCompositeGeneratedAt,
-  formatSignalEvaluationFreshness
+  formatSignalEvaluationFreshness,
+  formatSignalsModeEvaluatedSegment,
+  signalsDeskModeTooltip
 } from "@/lib/signals-evaluation-present";
 
 describe("extractCompositeGeneratedAt", () => {
@@ -63,5 +65,59 @@ describe("buildSignalEvaluationFreshness", () => {
     expect(freshness?.phase).toBe("ready");
     expect(freshness?.label).toBe("Evaluated just now");
     vi.useRealTimers();
+  });
+});
+
+describe("formatSignalsModeEvaluatedSegment", () => {
+  test("strips colon from Last evaluated label", () => {
+    expect(
+      formatSignalsModeEvaluatedSegment({
+        phase: "ready",
+        label: "Last evaluated: May 21, 4:11 PM ET"
+      })
+    ).toBe("Last evaluated May 21, 4:11 PM ET");
+  });
+
+  test("maps just now to Last evaluated just now", () => {
+    expect(
+      formatSignalsModeEvaluatedSegment({ phase: "ready", label: "Evaluated just now" })
+    ).toBe("Last evaluated just now");
+  });
+});
+
+describe("signalsDeskModeTooltip", () => {
+  test("day tooltip includes structure and refresh lines", () => {
+    const tip = signalsDeskModeTooltip("day");
+    expect(tip).toContain("live session structure");
+    expect(tip).toContain("8:15 AM ET");
+    expect(tip).toContain("9:35 AM ET");
+    expect(tip).toContain("Signals update when you open");
+  });
+});
+
+describe("formatSignalsModeEvaluatedSegment", () => {
+  test("strips colon from Last evaluated label", () => {
+    expect(
+      formatSignalsModeEvaluatedSegment({
+        phase: "ready",
+        label: "Last evaluated: May 21, 4:11 PM ET"
+      })
+    ).toBe("Last evaluated May 21, 4:11 PM ET");
+  });
+
+  test("maps just now to Last evaluated just now", () => {
+    expect(
+      formatSignalsModeEvaluatedSegment({ phase: "ready", label: "Evaluated just now" })
+    ).toBe("Last evaluated just now");
+  });
+});
+
+describe("signalsDeskModeTooltip", () => {
+  test("day tooltip includes structure and refresh lines", () => {
+    const tip = signalsDeskModeTooltip("day");
+    expect(tip).toContain("live session structure");
+    expect(tip).toContain("8:15 AM ET");
+    expect(tip).toContain("9:35 AM ET");
+    expect(tip).toContain("Signals update when you open");
   });
 });

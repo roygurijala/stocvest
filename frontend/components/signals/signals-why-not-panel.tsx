@@ -2,6 +2,11 @@
 
 import { Check, Circle } from "lucide-react";
 import type { TradeDecision } from "@/lib/signal-evidence/trade-decision";
+import {
+  causalBulletsForWhyNot,
+  resolveCausalNarrative,
+  type CausalNarrative
+} from "@/lib/signal-evidence/causal-narrative";
 import { buildWhyNotBullets, type SignalsLayerRowInput, type SignalsSetupBias } from "@/lib/signals-page-present";
 import { borderRadius, spacing, surfaceGlowClassName } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
@@ -11,17 +16,41 @@ type Props = {
   previewLayers: SignalsLayerRowInput[];
   bias: SignalsSetupBias;
   maxBullets?: number;
+  /** All layer rows for causal narrative (defaults to previewLayers). */
+  allLayers?: SignalsLayerRowInput[];
+  signalSummary?: string;
+  causalNarrativeApi?: unknown;
 };
 
 export function SignalsWhyNotPanel({
   decision,
   previewLayers,
   bias,
-  maxBullets = 5
+  maxBullets = 5,
+  allLayers,
+  signalSummary = "",
+  causalNarrativeApi
 }: Props) {
   const { colors } = useTheme();
+  const narrative: CausalNarrative | null =
+    decision.state === "actionable"
+      ? null
+      : resolveCausalNarrative({
+          apiPayload: causalNarrativeApi,
+          signalSummary: signalSummary || bias.toLowerCase(),
+          rows: allLayers ?? previewLayers,
+          executionNote: decision.rationale?.text ?? null
+        });
   const bullets =
-    decision.state === "actionable" ? [] : buildWhyNotBullets(decision, previewLayers, bias, maxBullets);
+    decision.state === "actionable"
+      ? []
+      : buildWhyNotBullets(
+          decision,
+          previewLayers,
+          bias,
+          maxBullets,
+          narrative ? causalBulletsForWhyNot(narrative, maxBullets) : null
+        );
 
   if (bullets.length === 0) return null;
 

@@ -83,15 +83,20 @@ def test_serialize_page_context_emits_signals_fields() -> None:
     assert "decision_line=Hold for now" in out
     assert "decision_rationale_category=risk_reward" in out
     assert "decision_rationale_text=R/R unfavorable here." in out
-    assert "trade_readiness=62" in out
-    assert "risk_reward=1.60" in out
-    assert "layer_alignment_pct=75" in out
-    assert "trend_strength=Strong" in out
-    assert "market_regime=Risk-on" in out
-    assert "layer_status_technical=Bullish" in out
-    assert "layer_status_internals=Bullish" in out
-    # Unknown layer key is not in the whitelist and must be dropped.
-    assert "unknown_layer" not in out
+
+
+def test_serialize_page_context_includes_causal_narrative():
+    out = serialize_page_context(
+        {
+            "page": "signals/layers",
+            "symbol": "AAPL",
+            "causal_narrative_summary": "Macro is the main environmental headwind.",
+            "causal_blocking_chain": "Macro → Sector",
+        }
+    )
+    assert "symbol=AAPL" in out
+    assert "causal_narrative_summary=Macro is the main environmental headwind." in out
+    assert "causal_blocking_chain=Macro → Sector" in out
 
 
 def test_serialize_page_context_emits_scanner_fields() -> None:

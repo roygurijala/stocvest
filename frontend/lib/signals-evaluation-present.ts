@@ -2,10 +2,41 @@
  * Signals page — evaluation freshness copy and composite timestamp helpers.
  */
 
+import {
+  MATURATION_SCHEDULED_DAY_OPEN_LINE,
+  MATURATION_SCHEDULED_SWING_OPEN_LINE
+} from "@/lib/maturation-expected-frequency";
 import { formatLastEvaluatedShort } from "@/lib/watchlist-evaluation-present";
 
 export const SIGNALS_UPDATE_MICROCOPY =
   "Signals update when you open a symbol, refresh this page, or after the scheduled desk evaluation.";
+
+/** Full cadence + evaluation copy for the Signals command-bar ⓘ tooltip. */
+export function signalsDeskModeTooltip(mode: "day" | "swing"): string {
+  const structure =
+    mode === "day"
+      ? "Evaluated on live session structure · valid through regular session close."
+      : "Evaluated on daily close · horizon ~5 calendar days.";
+  return [
+    structure,
+    MATURATION_SCHEDULED_SWING_OPEN_LINE,
+    MATURATION_SCHEDULED_DAY_OPEN_LINE,
+    SIGNALS_UPDATE_MICROCOPY
+  ].join("\n\n");
+}
+
+/** Inline segment after "Mode: Day ·" (no leading "Mode"). */
+export function formatSignalsModeEvaluatedSegment(
+  freshness: SignalEvaluationFreshness | null
+): string {
+  if (!freshness) return "";
+  const raw = freshness.label.trim();
+  if (/^refreshing/i.test(raw) || /^evaluating/i.test(raw)) return raw;
+  if (/^evaluated just now$/i.test(raw)) return "Last evaluated just now";
+  if (/^last evaluated:/i.test(raw)) return raw.replace(/^last evaluated:\s*/i, "Last evaluated ");
+  if (/^evaluation pending$/i.test(raw)) return "Evaluation pending";
+  return raw;
+}
 
 const DEFAULT_JUST_NOW_MS = 90_000;
 

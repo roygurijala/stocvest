@@ -9,9 +9,11 @@ from decimal import Decimal
 from typing import Any, Literal, Protocol, cast, runtime_checkable
 
 from stocvest.models.watchlist import (
+    ProgressBand,
     WatchlistEntry,
     WatchlistMode,
     WatchlistState,
+    derive_progress_band,
     user_state_gsi_keys,
     user_state_gsi_partition_key,
 )
@@ -205,7 +207,17 @@ def _item_to_entry(item: dict[str, Any]) -> WatchlistEntry:
         invalidated_at=item.get("invalidated_at"),
         invalidation_reason=item.get("invalidation_reason"),
         archive_after=item.get("archive_after"),
+        progress_band=_progress_band_from_item(item),
     )
+
+
+def _progress_band_from_item(item: dict[str, Any]) -> ProgressBand:
+    layers = _num(item.get("layers_aligned"))
+    try:
+        state = WatchlistState(str(item.get("state") or WatchlistState.NOT_ALIGNED.value))
+    except ValueError:
+        state = WatchlistState.NOT_ALIGNED
+    return derive_progress_band(layers, state=state)
 
 
 def _entry_to_item(entry: WatchlistEntry) -> dict[str, Any]:
@@ -228,6 +240,7 @@ def _entry_to_item(entry: WatchlistEntry) -> dict[str, Any]:
         "added_from": entry.added_from,
         "last_evaluated_at": entry.last_evaluated_at,
         "last_evaluated_session": entry.last_evaluated_session,
+        "progress_band": derive_progress_band(entry.layers_aligned, state=entry.state),
     }
     if entry.previous_state is not None:
         item["previous_state"] = entry.previous_state.value

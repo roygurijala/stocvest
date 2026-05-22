@@ -112,21 +112,32 @@ def _fmt_pct(value: float) -> str:
     return f"{sign}{value:.1f}%"
 
 
-def get_timeframe_alignment(daily_bias: str, weekly_bias: str) -> dict[str, Any]:
+def get_timeframe_alignment(
+    daily_bias: str,
+    weekly_bias: str,
+    *,
+    mode: str = "swing",
+) -> dict[str, Any]:
     """
-    Compare daily (technical) bias vs weekly bias.
+    Compare short-horizon technical bias vs weekly bias.
+
+    Swing: daily structure vs weekly (5-session) window.
+    Day: intraday technical vs weekly window on daily bars.
 
     ``composite_score_modifier``: +10 aligned strong, -10 counter-trend, else 0.
     """
     daily = _verdict_to_bias(daily_bias)
     weekly = _verdict_to_bias(weekly_bias)
+    desk = (mode or "swing").strip().lower()
+    short_label = "Intraday" if desk == "day" else "Daily"
 
     if daily == weekly and daily in ("bullish", "bearish"):
         return {
             "aligned": True,
             "strength": "strong",
             "composite_score_modifier": 10,
-            "label": f"Daily and weekly both {daily}",
+            "label": f"{short_label} and weekly both {daily}",
+            "mode": desk,
         }
 
     if (daily == "bullish" and weekly == "bearish") or (daily == "bearish" and weekly == "bullish"):
@@ -134,7 +145,8 @@ def get_timeframe_alignment(daily_bias: str, weekly_bias: str) -> dict[str, Any]
             "aligned": False,
             "strength": "counter-trend",
             "composite_score_modifier": -10,
-            "label": f"Counter-trend: daily {daily}, weekly {weekly}",
+            "label": f"Counter-trend: {short_label.lower()} {daily}, weekly {weekly}",
+            "mode": desk,
         }
 
     if daily == weekly:
@@ -142,15 +154,61 @@ def get_timeframe_alignment(daily_bias: str, weekly_bias: str) -> dict[str, Any]
             "aligned": True,
             "strength": "moderate",
             "composite_score_modifier": 0,
-            "label": "Daily and weekly both neutral",
+            "label": f"{short_label} and weekly both neutral",
+            "mode": desk,
         }
 
     return {
         "aligned": False,
         "strength": "moderate",
         "composite_score_modifier": 0,
-        "label": f"Mixed timeframe: daily {daily}, weekly {weekly}",
+        "label": f"Mixed timeframe: {short_label.lower()} {daily}, weekly {weekly}",
+        "mode": desk,
     }
+
+
+def apply_multi_timeframe_to_composite(
+    composite: Any,
+    *,
+    technical_verdict: str,
+    daily_bars: list[Any],
+    bullish_threshold: float,
+    bearish_threshold: float,
+    mode: str = "swing",
+) -> tuple[Any, dict[str, Any] | None, dict[str, Any] | None]:
+    """
+    Compute weekly context and optionally nudge composite score / verdict.
+
+    Returns ``(composite, weekly_timeframe, timeframe_alignment)``.
+    """
+    from dataclasses import replace
+
+    from stocvest.signals.composite_score import CompositeVerdict
+
+    weekly_timeframe: dict[str, Any] | None = None
+    timeframe_alignment: dict[str, Any] | None = None
+    if len(daily_bars) < _WEEKLY_BARS_MIN:
+        return composite, weekly_timeframe, timeframe_alignment
+
+    weekly_timeframe = compute_weekly_bias(daily_bars)
+    timeframe_alignment = get_timeframe_alignment(
+        str(technical_verdict or "neutral"),
+        str(weekly_timeframe.get("weekly_bias") or "neutral"),
+        mode=mode,
+    )
+    tf_mod = int(timeframe_alignment.get("composite_score_modifier") or 0)
+    if not tf_mod:
+        return composite, weekly_timeframe, timeframe_alignment
+
+    adj_score = apply_timeframe_score_modifier(float(composite.score), tf_mod)
+    if adj_score >= float(bullish_threshold):
+        nv = CompositeVerdict.BULLISH
+    elif adj_score <= float(bearish_threshold):
+        nv = CompositeVerdict.BEARISH
+    else:
+        nv = CompositeVerdict.NEUTRAL
+    composite = replace(composite, score=adj_score, verdict=nv)
+    return composite, weekly_timeframe, timeframe_alignment
 
 
 def apply_timeframe_score_modifier(composite_score: float, modifier: int) -> float:

@@ -52,6 +52,8 @@ from stocvest.signals.macro_analyzer import MacroAnalyzer
 from stocvest.signals.macro_context import get_macro_context
 from stocvest.signals.news_analyzer import NewsAnalyzer
 from stocvest.signals.alignment_score import AlignmentResult, adjust_composite_with_alignment, alignment_to_response_dict
+from stocvest.signals.causal_narrative import build_causal_narrative
+from stocvest.signals.multi_timeframe import apply_multi_timeframe_to_composite
 from stocvest.signals.sector_analyzer import SectorAnalyzer
 from stocvest.signals.sector_mapper import SectorMapper, SectorResolutionState
 from stocvest.signals.sector_sic_fallback import SicMappingTier
@@ -218,6 +220,7 @@ class RealCompositeEnginePhase:
     sym: str
     sym_snap: Snapshot | None
     bars: list[Bar]
+    daily_bars: list[Bar]
     news_rows: list[dict[str, Any]]
     layer_results: list[Any]
     layer_ids: list[str]
@@ -434,6 +437,7 @@ async def run_real_composite_engine_phase(
         sym=sym,
         sym_snap=sym_snap,
         bars=bars,
+        daily_bars=daily_bars,
         news_rows=news_rows,
         layer_results=layer_results,
         layer_ids=layer_ids,
@@ -468,6 +472,7 @@ async def build_real_composite_response(
     sym = phase.sym
     sym_snap = phase.sym_snap
     bars = phase.bars
+    daily_bars = phase.daily_bars
     news_rows = phase.news_rows
     layer_results = phase.layer_results
     layer_ids = phase.layer_ids
@@ -482,6 +487,16 @@ async def build_real_composite_response(
     sector_display = getattr(phase, "sector_display", None)
     sic_bucket_for_geo = getattr(phase, "sic_bucket_for_geo", None)
     tech, news, macro, sector, geo, internals = layer_results
+
+    day_composite = resolve_composite_block(params, mode="day")
+    composite, weekly_timeframe, timeframe_alignment = apply_multi_timeframe_to_composite(
+        composite,
+        technical_verdict=str(tech.verdict or "neutral"),
+        daily_bars=daily_bars,
+        bullish_threshold=float(day_composite.bullish_threshold),
+        bearish_threshold=float(day_composite.bearish_threshold),
+        mode="day",
+    )
 
     contributions: list[dict[str, Any]] = []
     for c in composite.contributions:
@@ -583,6 +598,14 @@ async def build_real_composite_response(
     }
     if alignment is not None:
         response_body["alignment"] = alignment_to_response_dict(alignment)
+
+    response_body["weekly_timeframe"] = weekly_timeframe
+    response_body["timeframe_alignment"] = timeframe_alignment
+
+    response_body["causal_narrative"] = build_causal_narrative(
+        signal_summary=str(composite.verdict.value),
+        layers=layers_out,
+    )
 
     nc: dict[str, Any] | None = None
     if news.catalyst_headline:

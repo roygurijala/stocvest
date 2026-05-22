@@ -22,6 +22,7 @@ from stocvest.models.watchlist import (
     WatchlistEntry,
     WatchlistMode,
     WatchlistState,
+    derive_progress_band,
     derive_state,
 )
 from stocvest.models.watchlist_transition import EvaluationSource
@@ -284,6 +285,8 @@ def sync_watchlist_maturation_from_composite(
     added_at = prev.added_at if prev and prev.added_at else now
     added_from = prev.added_from if prev and prev.added_from else "evidence"
 
+    progress_band = derive_progress_band(layers_aligned, state=new_state)
+
     entry = WatchlistEntry(
         user_id=user_id,
         symbol=sym_u,
@@ -305,6 +308,7 @@ def sync_watchlist_maturation_from_composite(
         invalidated_at=invalidated_at,
         invalidation_reason=invalidation_reason,
         archive_after=prev.archive_after if prev else None,
+        progress_band=progress_band,
     )
     try:
         repo.put_entry(entry)

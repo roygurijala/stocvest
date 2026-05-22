@@ -6,6 +6,7 @@ import { CuteLoader } from "@/components/cute-loader";
 import { InfoTip } from "@/components/info-tip";
 import { LAYER_NAME_HINTS, SIGNAL_LAYER_LEVEL_VS_DELTA_TIP } from "@/lib/ui-tooltips";
 import { SignalsLayerForceSummary } from "@/components/signals/signals-layer-force-summary";
+import { causalLineForLayerRow, type CausalNarrative } from "@/lib/signal-evidence/causal-narrative";
 import {
   buildLayerInsightLine,
   buildLayerRoleHeadline,
@@ -37,6 +38,7 @@ type Props = {
   alignmentRatio?: number | null;
   /** Layers tab: show all rows without collapse affordance. */
   defaultExpanded?: boolean;
+  causalNarrative?: CausalNarrative | null;
 };
 
 export function SignalsLayerBreakdown({
@@ -49,7 +51,8 @@ export function SignalsLayerBreakdown({
   insufficientMessage,
   maturationState,
   alignmentRatio,
-  defaultExpanded = false
+  defaultExpanded = false,
+  causalNarrative = null
 }: Props) {
   const { colors } = useTheme();
   const [expanded, setExpanded] = useState(defaultExpanded);
@@ -100,7 +103,13 @@ export function SignalsLayerBreakdown({
           <SignalsLayerForceSummary rows={rows} bias={bias} />
           <ul className="m-0 mt-3 list-none space-y-2 p-0">
             {visible.map((row) => (
-              <LayerRow key={row.key} row={row} bias={bias} colors={colors} />
+              <LayerRow
+                key={row.key}
+                row={row}
+                bias={bias}
+                colors={colors}
+                causalNarrative={causalNarrative}
+              />
             ))}
           </ul>
           {!defaultExpanded && rows.length > preview.length ? (
@@ -134,17 +143,20 @@ export function SignalsLayerBreakdown({
 function LayerRow({
   row,
   bias,
-  colors
+  colors,
+  causalNarrative
 }: {
   row: SignalsLayerRowInput;
   bias: SignalsSetupBias;
   colors: ReturnType<typeof useTheme>["colors"];
+  causalNarrative: CausalNarrative | null;
 }) {
   const polarity = layerPolarity(row, bias);
   const dot = layerPolarityDotColor(polarity);
   const roleHeadline = buildLayerRoleHeadline(row, bias);
-  const insight = buildLayerInsightLine(row, bias);
-  const showInsight = layerHasCustomInsight(row);
+  const causalLine = causalLineForLayerRow(row, causalNarrative, bias);
+  const insight = causalLine ?? buildLayerInsightLine(row, bias);
+  const showInsight = Boolean(causalLine) || layerHasCustomInsight(row);
   const hint = LAYER_NAME_HINTS[row.key as keyof typeof LAYER_NAME_HINTS];
   const levelLabel = formatLayerScoreLabel(row.score, row.status);
   const showLevel = row.score != null && levelLabel !== "N/A" && levelLabel !== "—";

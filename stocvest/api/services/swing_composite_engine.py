@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from typing import Any
@@ -46,11 +45,8 @@ from stocvest.analytics.unlock_forecast import (
     unlock_hints_to_api,
 )
 from stocvest.signals.laggard_assembler import compute_laggard_signal
-from stocvest.signals.multi_timeframe import (
-    apply_timeframe_score_modifier,
-    compute_weekly_bias,
-    get_timeframe_alignment,
-)
+from stocvest.signals.causal_narrative import build_causal_narrative
+from stocvest.signals.multi_timeframe import apply_multi_timeframe_to_composite
 from stocvest.data.models import Bar, SignalRecord, Snapshot, Timeframe
 from stocvest.data.polygon_client import PolygonClient, PolygonError
 from stocvest.data.symbol_normalize import to_polygon_symbol
@@ -298,24 +294,14 @@ async def build_swing_composite_response(
         alignment.technical_direction,
     )
 
-    weekly_timeframe: dict[str, Any] | None = None
-    timeframe_alignment: dict[str, Any] | None = None
-    if len(daily_bars) >= 5:
-        weekly_timeframe = compute_weekly_bias(daily_bars)
-        timeframe_alignment = get_timeframe_alignment(
-            str(tech.verdict or "neutral"),
-            str(weekly_timeframe.get("weekly_bias") or "neutral"),
-        )
-        tf_mod = int(timeframe_alignment.get("composite_score_modifier") or 0)
-        if tf_mod:
-            adj_score = apply_timeframe_score_modifier(float(composite.score), tf_mod)
-            if adj_score >= float(swing_composite.bullish_threshold):
-                nv = CompositeVerdict.BULLISH
-            elif adj_score <= float(swing_composite.bearish_threshold):
-                nv = CompositeVerdict.BEARISH
-            else:
-                nv = CompositeVerdict.NEUTRAL
-            composite = replace(composite, score=adj_score, verdict=nv)
+    composite, weekly_timeframe, timeframe_alignment = apply_multi_timeframe_to_composite(
+        composite,
+        technical_verdict=str(tech.verdict or "neutral"),
+        daily_bars=daily_bars,
+        bullish_threshold=float(swing_composite.bullish_threshold),
+        bearish_threshold=float(swing_composite.bearish_threshold),
+        mode="swing",
+    )
 
     contributions: list[dict[str, Any]] = []
     for c in composite.contributions:
@@ -426,6 +412,10 @@ async def build_swing_composite_response(
     response_body["alignment"] = alignment_to_response_dict(alignment)
     response_body["weekly_timeframe"] = weekly_timeframe
     response_body["timeframe_alignment"] = timeframe_alignment
+    response_body["causal_narrative"] = build_causal_narrative(
+        signal_summary=str(composite.verdict.value),
+        layers=layers_out,
+    )
     merge_earnings_horizon_into_response(response_body, earnings_horizon)
 
     try:

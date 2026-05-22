@@ -12,6 +12,14 @@ vi.mock("next/link", () => ({
   )
 }));
 
+vi.mock("@/components/info-tip", () => ({
+  InfoTip: ({ label }: { label?: string }) => (
+    <button type="button" aria-label={label ?? "More info"}>
+      ⓘ
+    </button>
+  )
+}));
+
 describe("SignalsCommandBar", () => {
   test("renders open full evidence in command bar when handler provided", () => {
     const onOpenEvidence = vi.fn();
@@ -34,5 +42,27 @@ describe("SignalsCommandBar", () => {
     expect(screen.queryByTestId("signals-open-evidence-button-mobile")).toBeNull();
     fireEvent.click(btn);
     expect(onOpenEvidence).toHaveBeenCalledTimes(1);
+  });
+
+  test("shows compact mode line and hides cadence paragraphs", () => {
+    render(
+      <ThemeProvider>
+        <SignalsCommandBar
+          symbol="AAPL"
+          tradingMode="day"
+          dayTradingSurfaces
+          watchlistControl={<span>Watchlist</span>}
+          maturationLine={null}
+          evaluationFreshness={{ phase: "ready", label: "Last evaluated: May 21, 4:11 PM ET" }}
+          onTradingModeChange={vi.fn()}
+        />
+      </ThemeProvider>
+    );
+    const line = screen.getByTestId("signals-mode-eval-line");
+    expect(line).toHaveTextContent("Mode: Day");
+    expect(line).toHaveTextContent("Last evaluated May 21, 4:11 PM ET");
+    expect(screen.getByLabelText("About Day desk evaluation")).toBeInTheDocument();
+    expect(screen.queryByText(/Swing desk:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Evaluated on live session structure/)).not.toBeInTheDocument();
   });
 });

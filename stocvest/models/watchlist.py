@@ -41,7 +41,10 @@ STATE_LABELS: dict[WatchlistState, str] = {
 
 # Layer alignment thresholds (count of layers aligned with composite direction).
 DEVELOPING_THRESHOLD = 3  # >= this → Developing or Re-evaluating
+NEAR_READY_LAYER_COUNT = 4  # display-only engagement band (B47); does not change derive_state
 ACTIONABLE_THRESHOLD = 5  # >= this → Actionable
+
+ProgressBand = Literal["not_aligned", "developing", "near_ready", "actionable"]
 
 # Canonical layer keys (composite / evidence card contract).
 _ALL_LAYERS: tuple[str, ...] = (
@@ -110,6 +113,7 @@ class WatchlistEntry:
     invalidated_at: str | None = None
     invalidation_reason: str | None = None
     archive_after: str | None = None
+    progress_band: ProgressBand = "not_aligned"
 
     @property
     def readiness_label(self) -> str:
@@ -178,3 +182,24 @@ def derive_state(
         return WatchlistState.INVALIDATED
 
     return WatchlistState.NOT_ALIGNED
+
+
+def derive_progress_band(
+    layers_aligned: int,
+    *,
+    state: WatchlistState | None = None,
+) -> ProgressBand:
+    """
+    Display-only progress band for engagement surfaces (B47 near-ready @ 4/6).
+
+    Does not affect ``derive_state`` or actionable gates.
+    """
+    if state == WatchlistState.INVALIDATED:
+        return "not_aligned"
+    if layers_aligned >= ACTIONABLE_THRESHOLD:
+        return "actionable"
+    if layers_aligned == NEAR_READY_LAYER_COUNT:
+        return "near_ready"
+    if layers_aligned >= DEVELOPING_THRESHOLD:
+        return "developing"
+    return "not_aligned"

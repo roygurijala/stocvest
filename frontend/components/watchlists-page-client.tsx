@@ -11,7 +11,10 @@ import { WatchlistDecisionQueue } from "@/components/watchlists/watchlist-decisi
 import { WatchlistStatusRails } from "@/components/watchlists/WatchlistStatusRails";
 import { ScannerCollapsible } from "@/components/scanner/ScannerCollapsible";
 import { WatchlistEvaluationInfoTip } from "@/components/watchlists/WatchlistEvaluationInfoTip";
-import { formatWatchlistMaturationDisplayLine } from "@/lib/alignment-display-tier";
+import {
+  formatWatchlistMaturationDisplayLine,
+  resolveAlignmentDisplayTier
+} from "@/lib/alignment-display-tier";
 import { buildWatchlistPortfolioHeadline } from "@/lib/watchlist-row-present";
 import { formatSummaryFetchedAt, watchlistMaturationDeskSummary } from "@/lib/watchlist-evaluation-present";
 import {
@@ -187,6 +190,14 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   useEffect(() => {
     if (!dualDeskMaturation && viewMode !== "swing") setViewMode("swing");
   }, [dualDeskMaturation, viewMode]);
+
+  const nearReadyFilterActive = searchParams.get("near_ready") === "1";
+
+  useEffect(() => {
+    const desk = (searchParams.get("desk") ?? "").trim().toLowerCase();
+    if (desk === "day" && dualDeskMaturation) setViewMode("day");
+    else if (desk === "swing") setViewMode("swing");
+  }, [searchParams, dualDeskMaturation]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -887,10 +898,36 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     dualDeskMaturation
   ]);
 
+  const displaySymbols = useMemo(() => {
+    if (!nearReadyFilterActive || maturationFetchStatus !== "ready") return sortedSymbols;
+    return sortedSymbols.filter((sym) => {
+      const symU = sym.trim().toUpperCase();
+      const ms = maturationSwing[symU];
+      const md = maturationDay[symU];
+      const row = pickWatchlistMaturationForPlan(viewMode, ms, md);
+      if (row?.progress_band === "near_ready") return true;
+      const aligned = typeof row?.layers_aligned === "number" ? row.layers_aligned : 0;
+      return (
+        resolveAlignmentDisplayTier({
+          layersAligned: aligned,
+          layersTotal: row?.layers_total,
+          maturationState: row?.state
+        }) === "near_ready"
+      );
+    });
+  }, [
+    sortedSymbols,
+    nearReadyFilterActive,
+    maturationFetchStatus,
+    maturationSwing,
+    maturationDay,
+    viewMode
+  ]);
+
   const filteredSymbolsForList = useMemo(() => {
     const q = addDraft.trim();
-    if (!q) return sortedSymbols;
-    return sortedSymbols.filter((s) => {
+    if (!q) return displaySymbols;
+    return displaySymbols.filter((s) => {
       const symU = s.trim().toUpperCase();
       return watchlistSymbolMatchesSearch(
         symU,
@@ -904,7 +941,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
       );
     });
   }, [
-    sortedSymbols,
+    displaySymbols,
     addDraft,
     viewMode,
     dualDeskMaturation,
@@ -1260,6 +1297,20 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                 >
                   Retry
                 </button>
+              </div>
+            ) : null}
+            {nearReadyFilterActive ? (
+              <div
+                data-testid="watchlist-near-ready-filter-banner"
+                className="rounded-lg border px-3 py-2 text-sm"
+                style={{ borderColor: colors.border, background: colors.surface }}
+              >
+                <p className="m-0" style={{ color: colors.text }}>
+                  Showing symbols at <strong>near ready</strong> (4/6 layers) for this desk.{" "}
+                  <Link href={pathname} prefetch={false} className="font-semibold" style={{ color: colors.accent }}>
+                    Show all
+                  </Link>
+                </p>
               </div>
             ) : null}
             {maturationEligible && activeSymbolsDeduped.length > 0 && maturationFetchStatus === "ready" ? (

@@ -19,7 +19,7 @@ from stocvest.data.watchlist_maturation_transition_repository import (
     get_watchlist_maturation_transition_repository,
 )
 from stocvest.data.watchlist_store import WatchlistItem, get_watchlist_store
-from stocvest.models.watchlist import WatchlistEntry, WatchlistMode
+from stocvest.models.watchlist import WatchlistEntry, WatchlistMode, derive_progress_band
 from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
@@ -279,6 +279,8 @@ def watchlists_maturation_summary_handler(event: LambdaEvent, context: LambdaCon
                 {
                     "mode": mode,
                     "by_symbol": {},
+                    "near_ready_count": 0,
+                    "near_ready_symbols": [],
                     "storage_ready": False,
                     "watchlist_symbol_count": 0,
                 }
@@ -290,6 +292,8 @@ def watchlists_maturation_summary_handler(event: LambdaEvent, context: LambdaCon
                 {
                     "mode": mode,
                     "by_symbol": {},
+                    "near_ready_count": 0,
+                    "near_ready_symbols": [],
                     "storage_ready": True,
                     "watchlist_symbol_count": 0,
                 }
@@ -311,11 +315,13 @@ def watchlists_maturation_summary_handler(event: LambdaEvent, context: LambdaCon
         include_readiness = maturation_summary_include_readiness_label(profile)
         trans_repo = get_watchlist_maturation_transition_repository()
         by_symbol: dict[str, dict[str, str | int | float | list[str]]] = {}
+        near_ready_symbols: list[str] = []
         for e in entries:
             try:
                 su = e.symbol.strip().upper()
                 if su not in allowed_set:
                     continue
+                band = derive_progress_band(e.layers_aligned, state=e.state)
                 row: dict[str, str | int | float | list[str]] = {
                     "state": e.state.value,
                     "label": e.label,
@@ -324,7 +330,10 @@ def watchlists_maturation_summary_handler(event: LambdaEvent, context: LambdaCon
                     "last_evaluated_at": e.last_evaluated_at,
                     "missing_layers": list(e.missing_layers),
                     "bias": e.bias,
+                    "progress_band": band,
                 }
+                if band == "near_ready":
+                    near_ready_symbols.append(su)
                 if include_readiness:
                     row["readiness_label"] = e.readiness_label
                 if trans_repo is not None:
@@ -355,10 +364,13 @@ def watchlists_maturation_summary_handler(event: LambdaEvent, context: LambdaCon
                     getattr(e, "symbol", "?"),
                     exc,
                 )
+        near_ready_symbols.sort()
         return ok(
             {
                 "mode": mode,
                 "by_symbol": by_symbol,
+                "near_ready_count": len(near_ready_symbols),
+                "near_ready_symbols": near_ready_symbols,
                 "storage_ready": True,
                 "watchlist_symbol_count": len(allowed),
             }
@@ -369,6 +381,8 @@ def watchlists_maturation_summary_handler(event: LambdaEvent, context: LambdaCon
             {
                 "mode": mode,
                 "by_symbol": {},
+                "near_ready_count": 0,
+                "near_ready_symbols": [],
                 "degraded": True,
                 "storage_ready": False,
                 "watchlist_symbol_count": 0,

@@ -12,6 +12,8 @@ export type WatchlistMaturationRow = {
   /** From latest transition when alignment changed on last evaluation (B47). */
   previous_layers_aligned?: number;
   last_transition_type?: "improved" | "worsened" | "unchanged" | "initial";
+  /** Display-only band from API / Dynamo (near_ready @ 4/6). */
+  progress_band?: "not_aligned" | "developing" | "near_ready" | "actionable";
 };
 
 export type WatchlistViewMode = "swing" | "day" | "both";
@@ -99,6 +101,15 @@ export function normalizeWatchlistMaturationBySymbol(payload: unknown): Record<s
     const transRaw = o.last_transition_type ?? o.lastTransitionType;
     if (transRaw === "improved" || transRaw === "worsened" || transRaw === "unchanged" || transRaw === "initial") {
       row.last_transition_type = transRaw;
+    }
+    const bandRaw = o.progress_band ?? o.progressBand;
+    if (
+      bandRaw === "not_aligned" ||
+      bandRaw === "developing" ||
+      bandRaw === "near_ready" ||
+      bandRaw === "actionable"
+    ) {
+      row.progress_band = bandRaw;
     }
     if (!row.state && !row.label) continue;
     out[sym] = row;

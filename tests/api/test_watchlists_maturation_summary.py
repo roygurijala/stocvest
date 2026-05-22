@@ -190,8 +190,43 @@ def test_maturation_summary_includes_progression_from_latest_transition(
     data = json.loads(str(resp["body"]))
     aapl = data["by_symbol"]["AAPL"]
     assert aapl["layers_aligned"] == 4
+    assert aapl["progress_band"] == "near_ready"
     assert aapl["previous_layers_aligned"] == 3
     assert aapl["last_transition_type"] == "improved"
+    assert data["near_ready_count"] == 1
+    assert data["near_ready_symbols"] == ["AAPL"]
+
+
+def test_maturation_summary_near_ready_aggregate(monkeypatch: pytest.MonkeyPatch) -> None:
+    store = InMemoryWatchlistStore()
+    store.create_watchlist("u1", "M", ["AAPL", "MSFT", "GOOG"], is_default=True)
+    table = _FakeDynamoTable()
+    repo = WatchlistMaturationRepository(table)
+    for sym, aligned in (("AAPL", 4), ("MSFT", 3), ("GOOG", 5)):
+        repo.put_entry(
+            WatchlistEntry(
+                user_id="u1",
+                symbol=sym,
+                mode="swing",
+                state=WatchlistState.DEVELOPING if aligned < 5 else WatchlistState.ACTIONABLE,
+                previous_state=None,
+                state_changed_at="2026-01-01T00:00:00+00:00",
+                state_change_reason="x",
+                layers_aligned=aligned,
+            )
+        )
+    monkeypatch.setattr("stocvest.api.handlers.watchlists.get_watchlist_store", lambda: store)
+    monkeypatch.setattr("stocvest.api.handlers.watchlists.get_watchlist_maturation_repository", lambda: repo)
+    profiles = InMemoryUserProfileStore()
+    profiles.put_profile(UserProfile(user_id="u1", subscription_plan="free"))
+    monkeypatch.setattr("stocvest.api.handlers.watchlists.get_user_profile_store", lambda: profiles)
+    resp = watchlists_maturation_summary_handler(_event(sub="u1", mode="swing"), _ctx())
+    data = json.loads(str(resp["body"]))
+    assert data["near_ready_count"] == 1
+    assert data["near_ready_symbols"] == ["AAPL"]
+    assert data["by_symbol"]["AAPL"]["progress_band"] == "near_ready"
+    assert data["by_symbol"]["MSFT"]["progress_band"] == "developing"
+    assert data["by_symbol"]["GOOG"]["progress_band"] == "actionable"
 
 
 def test_lambda_dispatch_maturation_summary(monkeypatch: pytest.MonkeyPatch) -> None:

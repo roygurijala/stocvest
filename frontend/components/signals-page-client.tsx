@@ -23,7 +23,14 @@ import { SignalsDeskTabNav } from "@/components/signals/signals-desk-tab-nav";
 import { SignalsExecutionContextStrip } from "@/components/signals/signals-execution-context-strip";
 import { SignalsFormingBanner } from "@/components/signals/signals-forming-banner";
 import { SignalsRadarPanel } from "@/components/signals/signals-radar-panel";
+import { CausalNarrativePanel } from "@/components/signals/causal-narrative-panel";
+import { TimeframeContextPanel } from "@/components/signals/timeframe-context-panel";
 import { SignalsWhyNotPanel } from "@/components/signals/signals-why-not-panel";
+import { resolveCausalNarrative } from "@/lib/signal-evidence/causal-narrative";
+import {
+  isTimeframeCounterTrend,
+  resolveTimeframeContext
+} from "@/lib/signal-evidence/timeframe-context";
 import { SIGNALS_SECTION_TARGET } from "@/lib/signals-page-sections";
 import { buildSignalsDeskKpiItems } from "@/lib/signals-desk-kpi-present";
 import {
@@ -79,6 +86,7 @@ import { coerceSnapshotForReferenceLevels, deriveSessionReferenceLevels } from "
 import {
   applySwingCompositeEnrichment,
   buildEvidenceFromSetup,
+  parseCompositeAlignment,
   parseSwingCompositeInsight,
   type SignalEvidenceData
 } from "@/lib/signal-evidence";
@@ -1015,6 +1023,10 @@ export function SignalsPageClient({
     const rr = typeof c.risk_reward === "number" && Number.isFinite(c.risk_reward) ? c.risk_reward : 1.5;
     const rrWarning = Boolean(c.rr_warning) || isRrBelowVerdictThreshold(rr, tradingMode);
     const ar = typeof c.alignment_ratio === "number" ? c.alignment_ratio : null;
+    const tfCtx =
+      compositeResult && !isInsufficientCompositeResponse(compositeResult)
+        ? resolveTimeframeContext(compositeResult as Record<string, unknown>, tradingMode)
+        : null;
     return buildSignalsPageDecision({
       mode: tradingMode,
       bias: setupBias,
@@ -1023,7 +1035,9 @@ export function SignalsPageClient({
       alignmentRatio: ar,
       riskReward: rr,
       rrWarning,
-      isComplete: c.is_complete !== false
+      isComplete: c.is_complete !== false,
+      counterTrend: parseCompositeAlignment(compositeResult)?.is_counter_trend === true,
+      timeframeCounterTrend: isTimeframeCounterTrend(tfCtx)
     });
   }, [compositeResult, setupBias, signalsPresentRows, aiStripSignalScore, tradingMode]);
 
@@ -1048,6 +1062,22 @@ export function SignalsPageClient({
     () => pickPreviewLayers(signalsPresentRows, setupBias, 3),
     [signalsPresentRows, setupBias]
   );
+
+  const causalNarrative = useMemo(() => {
+    if (!compositeResult || isInsufficientCompositeResponse(compositeResult)) return null;
+    const c = compositeResult as Record<string, unknown>;
+    return resolveCausalNarrative({
+      apiPayload: c.causal_narrative,
+      signalSummary: layerSignalSummary,
+      rows: signalsPresentRows,
+      executionNote: pageDecision?.rationale?.text ?? null
+    });
+  }, [compositeResult, layerSignalSummary, signalsPresentRows, pageDecision?.rationale?.text]);
+
+  const timeframeContext = useMemo(() => {
+    if (!compositeResult || isInsufficientCompositeResponse(compositeResult)) return null;
+    return resolveTimeframeContext(compositeResult as Record<string, unknown>, tradingMode);
+  }, [compositeResult, tradingMode]);
 
   const profileLoaded = useUserProfileLoaded();
   const hasFundamentalAccess = useHasAIExplanations();
@@ -1476,6 +1506,9 @@ export function SignalsPageClient({
       trend_strength: insight.trend_strength || undefined,
       trend_direction: insight.trend_direction || undefined,
       market_regime: insight.market_regime || undefined,
+      causal_narrative_summary: causalNarrative?.summary,
+      causal_blocking_chain: causalNarrative?.chainLabel || undefined,
+      timeframe_alignment_label: timeframeContext?.alignment.label,
       layer_alignment_pct:
         insight.alignment_ratio != null && Number.isFinite(insight.alignment_ratio)
           ? Math.round(Math.max(0, Math.min(1, insight.alignment_ratio)) * 100)
@@ -1483,7 +1516,7 @@ export function SignalsPageClient({
       layer_status: layerStatusForCtx,
       ...(gapIntelForAssistant ? { gap_intel: gapIntelForAssistant } : {})
     };
-  }, [tradingMode, symbol, signalEvidence, gapIntelSnapshot]);
+  }, [tradingMode, symbol, signalEvidence, gapIntelSnapshot, causalNarrative, timeframeContext]);
 
   usePublishAssistantContext(assistantContext);
 
@@ -1746,10 +1779,13 @@ export function SignalsPageClient({
         {hasValidSignal && pageDecision ? (
           <SignalsExecutionContextStrip decision={pageDecision} tradingMode={tradingMode} />
         ) : null}
-        {symbolCommitted ? (
-          <SignalsDeskTabNav activeTab={deskTab} onTabChange={applyDeskTab} />
-        ) : null}
       </header>
+
+      {symbolCommitted ? (
+        <div className="mb-2 min-w-0" data-testid="signals-desk-tab-nav-wrap">
+          <SignalsDeskTabNav activeTab={deskTab} onTabChange={applyDeskTab} />
+        </div>
+      ) : null}
 
       <div className="signals-page-flow min-w-0">
         {symbolCommitted && deskTab === "setup" ? (
@@ -1774,6 +1810,12 @@ export function SignalsPageClient({
                 maturationLabel={commandBarMaturationLine?.label ?? null}
               />
             ) : null}
+            {hasValidSignal && timeframeContext ? (
+              <TimeframeContextPanel context={timeframeContext} tradingMode={tradingMode} compact />
+            ) : null}
+            {hasValidSignal && causalNarrative && pageDecision?.state !== "actionable" ? (
+              <CausalNarrativePanel narrative={causalNarrative} compact />
+            ) : null}
             {hasValidSignal ? (
               <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2 [&>*]:min-w-0">
                 {pageDecision ? (
@@ -1781,6 +1823,13 @@ export function SignalsPageClient({
                     decision={pageDecision}
                     previewLayers={previewBlockingLayers}
                     bias={setupBias}
+                    allLayers={signalsPresentRows}
+                    signalSummary={layerSignalSummary}
+                    causalNarrativeApi={
+                      compositeResult && !isInsufficientCompositeResponse(compositeResult)
+                        ? (compositeResult as Record<string, unknown>).causal_narrative
+                        : undefined
+                    }
                   />
                 ) : null}
                 <SignalsReferenceLevels
@@ -1844,6 +1893,7 @@ export function SignalsPageClient({
               maturationState={maturationLine?.state}
               alignmentRatio={compositeAlignmentRatio}
               defaultExpanded
+              causalNarrative={causalNarrative}
             />
             {radarData ? <SignalsRadarPanel data={radarData} isMobileLayout={isMobileLayout} /> : null}
           </div>

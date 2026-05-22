@@ -19,6 +19,10 @@ import {
   evidenceLayerToRow,
   evidenceLayersToRows
 } from "@/lib/signal-evidence/evidence-card-present";
+import { CausalNarrativePanel } from "@/components/signals/causal-narrative-panel";
+import { TimeframeContextPanel } from "@/components/signals/timeframe-context-panel";
+import { resolveCausalNarrative } from "@/lib/signal-evidence/causal-narrative";
+import { resolveTimeframeContext } from "@/lib/signal-evidence/timeframe-context";
 import {
   buildCompressedContextSummary,
   buildNewsNeutralParenthetical,
@@ -875,6 +879,20 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
     gapIntelSnapshot
   );
   const evidenceDecision = synthTradeDecision(evidence, insight);
+  const evidenceCausalNarrative = useMemo(
+    () =>
+      evidence.causalNarrative ??
+      resolveCausalNarrative({
+        signalSummary: evidence.direction,
+        rows: layerRows,
+        executionNote: evidenceDecision.rationale?.text ?? null
+      }),
+    [evidence.causalNarrative, evidence.direction, layerRows, evidenceDecision.rationale?.text]
+  );
+  const evidenceTimeframeContext = useMemo(
+    () => resolveTimeframeContext(evidence.compositePayload ?? null, evidenceMode),
+    [evidence.compositePayload, evidenceMode]
+  );
   const evidenceReadiness: ScenarioReadinessContext = {
     symbol: evidence.symbol,
     mode: evidenceMode,
@@ -1142,6 +1160,12 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
       ) : null}
 
       <EvidenceLayerContribution layers={evidence.layers} bias={setupBias} />
+      {evidenceTimeframeContext ? (
+        <TimeframeContextPanel context={evidenceTimeframeContext} tradingMode={evidenceMode} compact />
+      ) : null}
+      {evidenceDecision.state !== "actionable" && evidenceCausalNarrative ? (
+        <CausalNarrativePanel narrative={evidenceCausalNarrative} compact />
+      ) : null}
 
       <FundamentalBackdropPanel
         context={evidence.fundamentalContext}
@@ -1560,7 +1584,11 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
                     </span>
                   </div>
                   {(() => {
-                    const layerInsight = buildLayerInsightLine(evidenceLayerToRow(layer), setupBias);
+                    const layerRow = evidenceLayerToRow(layer);
+                    const causalLine = evidenceCausalNarrative
+                      ? evidenceCausalNarrative.layerNotes[layer.key]?.because
+                      : null;
+                    const layerInsight = causalLine ?? buildLayerInsightLine(layerRow, setupBias);
                     return (
                       <p
                         className="m-0 text-xs leading-snug"

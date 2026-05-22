@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 from stocvest.data.models import Bar, Timeframe
 from stocvest.signals.multi_timeframe import (
+    apply_multi_timeframe_to_composite,
     apply_timeframe_score_modifier,
     compute_weekly_bias,
     get_timeframe_alignment,
@@ -101,3 +102,43 @@ def test_oversold_labeled_correctly() -> None:
 def test_apply_timeframe_modifier_clamps() -> None:
     assert apply_timeframe_score_modifier(0.0, 10) > 0.0
     assert apply_timeframe_score_modifier(0.8, -10) < 0.8
+
+
+def test_day_mode_labels_use_intraday() -> None:
+    tf = get_timeframe_alignment("bullish", "bullish", mode="day")
+    assert "Intraday" in tf["label"]
+    assert tf["mode"] == "day"
+    ct = get_timeframe_alignment("bullish", "bearish", mode="day")
+    assert "intraday bullish" in ct["label"]
+    assert ct["strength"] == "counter-trend"
+
+
+def test_apply_multi_timeframe_to_composite_counter_trend() -> None:
+    from dataclasses import dataclass
+
+    from stocvest.signals.composite_score import CompositeVerdict
+
+    @dataclass
+    class _C:
+        score: float
+        verdict: CompositeVerdict
+        confidence: float = 0.5
+        alignment_ratio: float = 0.5
+        conflicted_layers: list[str] | None = None
+        contributions: list = None
+
+    c = _C(score=0.4, verdict=CompositeVerdict.BULLISH)
+    closes = [120.0 - i * 1.2 for i in range(20)]
+    bars = _bars(closes)
+    out, weekly, tf = apply_multi_timeframe_to_composite(
+        c,
+        technical_verdict="bullish",
+        daily_bars=bars,
+        bullish_threshold=0.35,
+        bearish_threshold=-0.35,
+        mode="day",
+    )
+    assert weekly is not None
+    assert tf is not None
+    assert tf["strength"] == "counter-trend"
+    assert out.score < c.score

@@ -3,14 +3,15 @@
 import Link from "next/link";
 import { Zap } from "lucide-react";
 import type { ReactNode } from "react";
+import { InfoTip } from "@/components/info-tip";
 import { setupEvolutionHubHref } from "@/lib/nav/setup-analytics-deeplink";
-import { SUBHEADING_DAY_CADENCE, SUBHEADING_SWING_CADENCE, TAB_LABEL_DAY, TAB_LABEL_SWING } from "@/lib/mode-terminology";
+import { TAB_LABEL_DAY, TAB_LABEL_SWING } from "@/lib/mode-terminology";
 import { borderRadius, surfaceGlowClassName } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import type { WatchlistMaturationLine } from "@/lib/hooks/use-watchlist-maturation-line";
-import { WATCHLIST_EVALUATION_HEADER } from "@/lib/product-empty-states";
 import {
-  SIGNALS_UPDATE_MICROCOPY,
+  formatSignalsModeEvaluatedSegment,
+  signalsDeskModeTooltip,
   type SignalEvaluationFreshness
 } from "@/lib/signals-evaluation-present";
 import { formatLastEvaluatedShort } from "@/lib/watchlist-evaluation-present";
@@ -53,6 +54,8 @@ export function SignalsCommandBar({
   const maturationEvaluatedAt = maturationLine?.evaluatedAt
     ? formatLastEvaluatedShort(maturationLine.evaluatedAt)
     : null;
+  const modeLabel = tradingMode === "day" ? TAB_LABEL_DAY : TAB_LABEL_SWING;
+  const evaluatedSegment = formatSignalsModeEvaluatedSegment(evaluationFreshness);
   const freshnessAccent =
     evaluationFreshness?.phase === "refreshing" || evaluationFreshness?.phase === "loading";
 
@@ -81,17 +84,6 @@ export function SignalsCommandBar({
           >
             {symU}
           </h2>
-          {evaluationFreshness ? (
-            <p
-              className="m-0 mt-1 text-xs font-medium"
-              data-testid="signals-evaluation-freshness"
-              style={{
-                color: freshnessAccent ? "#00C8DC" : colors.textMuted
-              }}
-            >
-              {evaluationFreshness.label}
-            </p>
-          ) : null}
           {resumedFromSession ? (
             <p
               className="m-0 mt-0.5 text-[11px] leading-snug"
@@ -188,32 +180,28 @@ export function SignalsCommandBar({
           )}
         </div>
       </div>
-      <p className="m-0 mt-3 text-xs leading-relaxed lg:hidden" style={{ color: colors.textMuted }}>
-        <strong style={{ color: colors.text, fontWeight: 600 }}>
-          {tradingMode === "day" ? TAB_LABEL_DAY : TAB_LABEL_SWING}
-        </strong>
-        {" · "}
-        {tradingMode === "day"
-          ? "Live session structure · valid through close."
-          : "Daily close · ~5-day horizon."}
-      </p>
       <p
-        className="m-0 mt-3 hidden text-xs leading-relaxed lg:block"
+        className="m-0 mt-2 flex flex-wrap items-center gap-x-1 gap-y-0.5 text-xs leading-snug"
+        data-testid="signals-mode-eval-line"
         style={{ color: colors.textMuted }}
       >
-        <strong style={{ color: colors.text, fontWeight: 600 }}>
-          Mode: {tradingMode === "day" ? TAB_LABEL_DAY : TAB_LABEL_SWING}
-        </strong>
-        {" · "}
-        {tradingMode === "day" ? SUBHEADING_DAY_CADENCE : SUBHEADING_SWING_CADENCE}
-        <br />
-        {tradingMode === "day"
-          ? "Evaluated on live session structure · valid through regular session close."
-          : "Evaluated on daily close · horizon ~5 calendar days."}
-        <br />
-        {WATCHLIST_EVALUATION_HEADER}
-        <br />
-        {SIGNALS_UPDATE_MICROCOPY}
+        <span style={{ color: colors.text, fontWeight: 600 }}>Mode: {modeLabel}</span>
+        {evaluatedSegment ? (
+          <>
+            <span aria-hidden>·</span>
+            <span
+              data-testid="signals-evaluation-freshness"
+              style={{ color: freshnessAccent ? "#00C8DC" : colors.textMuted, fontWeight: 500 }}
+            >
+              {evaluatedSegment}
+            </span>
+          </>
+        ) : null}
+        <InfoTip
+          text={signalsDeskModeTooltip(tradingMode)}
+          label={`About ${modeLabel} desk evaluation`}
+          maxWidth={340}
+        />
       </p>
     </article>
   );

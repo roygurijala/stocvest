@@ -9,8 +9,10 @@ import pytest
 from stocvest.models.watchlist import (
     ACTIONABLE_THRESHOLD,
     DEVELOPING_THRESHOLD,
+    NEAR_READY_LAYER_COUNT,
     WatchlistEntry,
     WatchlistState,
+    derive_progress_band,
     derive_state,
     user_state_gsi_keys,
 )
@@ -26,6 +28,22 @@ def test_derive_state_actionable_at_threshold() -> None:
 
 def test_derive_state_developing_at_three() -> None:
     assert derive_state(DEVELOPING_THRESHOLD, None) == WatchlistState.DEVELOPING
+
+
+def test_derive_progress_band_near_ready_at_four() -> None:
+    assert derive_progress_band(NEAR_READY_LAYER_COUNT) == "near_ready"
+    assert derive_progress_band(NEAR_READY_LAYER_COUNT, state=WatchlistState.DEVELOPING) == "near_ready"
+
+
+def test_derive_progress_band_actionable_at_five() -> None:
+    assert derive_progress_band(ACTIONABLE_THRESHOLD) == "actionable"
+
+
+def test_derive_progress_band_invalidated_not_near_ready() -> None:
+    assert (
+        derive_progress_band(NEAR_READY_LAYER_COUNT, state=WatchlistState.INVALIDATED)
+        == "not_aligned"
+    )
 
 
 def test_derive_state_not_aligned_below_threshold_no_history() -> None:

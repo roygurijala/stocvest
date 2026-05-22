@@ -713,6 +713,17 @@ def serialize_page_context(ctx: dict[str, Any] | None) -> str:
         if rtext:
             lines.append(f"decision_rationale_text={rtext}")
 
+    causal_summary = _coerce_str(ctx.get("causal_narrative_summary"), limit=400)
+    if causal_summary:
+        lines.append(f"causal_narrative_summary={causal_summary}")
+    causal_chain = _coerce_str(ctx.get("causal_blocking_chain"), limit=120)
+    if causal_chain:
+        lines.append(f"causal_blocking_chain={causal_chain}")
+
+    tf_label = _coerce_str(ctx.get("timeframe_alignment_label"), limit=200)
+    if tf_label:
+        lines.append(f"timeframe_alignment_label={tf_label}")
+
     numerics = {
         "trade_readiness": ctx.get("trade_readiness"),
         "risk_reward": ctx.get("risk_reward"),

@@ -5,6 +5,7 @@ import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { DashboardDeskModePills } from "@/components/dashboard/dashboard-desk-mode-pills";
 import { DashboardEdgeSync } from "@/components/dashboard-edge-sync";
 import { DashboardInsightCallout } from "@/components/dashboard/dashboard-insight-callout";
+import { NearReadyEngagementStrip } from "@/components/dashboard/near-ready-engagement-strip";
 import { DashboardLiveStatus } from "@/components/dashboard/dashboard-live-status";
 import { DashboardMarketContextPanel } from "@/components/dashboard/dashboard-market-context-panel";
 import { DashboardOpportunitiesOverview } from "@/components/dashboard/dashboard-opportunities-overview";
@@ -603,6 +604,8 @@ function DashboardRedesignBody({
         scanSummary={scannerOverview.scanSummary}
         watchlistStatus={scannerOverview.watchlistStatus}
       />
+
+      <NearReadyEngagementStrip mode={activeDeskMode} />
 
       <DashboardMarketContextPanel snapshot={marketContextSnapshot} />
 

@@ -78,6 +78,11 @@ export interface AssistantPageContext {
   trend_direction?: string;
   market_regime?: string;
   layer_alignment_pct?: number | null;
+  /** Informational causal narrative summary (same copy as Signals desk). */
+  causal_narrative_summary?: string;
+  /** Ordered headwind chain label, e.g. "Macro → Sector → Technical". */
+  causal_blocking_chain?: string;
+  timeframe_alignment_label?: string;
   layer_status?: Partial<Record<AssistantLayerKey, AssistantLayerStatus>>;
   /**
    * High-level status of the analysis on the current page. Lets the assistant distinguish

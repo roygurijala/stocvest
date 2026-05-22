@@ -18,7 +18,7 @@ export function SignalsDeskTabNav({ activeTab, onTabChange }: Props) {
 
   return (
     <nav
-      className="mt-3 flex flex-wrap gap-1 rounded-lg p-1"
+      className="grid w-full grid-cols-3 gap-0.5 rounded-lg p-0.5 sm:gap-1 sm:p-1"
       style={{ background: colors.surfaceMuted, border: `1px solid ${colors.border}` }}
       data-testid="signals-desk-tab-nav"
       aria-label="Signals desk sections"
@@ -31,7 +31,7 @@ export function SignalsDeskTabNav({ activeTab, onTabChange }: Props) {
             type="button"
             role="tab"
             aria-selected={active}
-            className="min-h-10 flex-1 rounded-md px-3 text-sm font-semibold sm:min-h-9"
+            className="min-h-9 rounded-md px-1.5 text-xs font-semibold sm:min-h-9 sm:px-2 sm:text-sm"
             style={{
               background: active ? colors.surface : "transparent",
               color: active ? colors.text : colors.textMuted,
