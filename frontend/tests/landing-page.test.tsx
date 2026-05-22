@@ -132,3 +132,12 @@ test("test_live_engine_section_copy", () => {
     screen.getByText(/The engine is live — inactivity is intentional when alignment isn'?t present\./i)
   ).toBeInTheDocument();
 });
+
+test("test_conversion_sections_present", () => {
+  view();
+  expect(screen.getByTestId("landing-assistant-section")).toBeInTheDocument();
+  expect(screen.getByTestId("landing-aha-section")).toBeInTheDocument();
+  expect(screen.getByTestId("landing-first-minutes")).toBeInTheDocument();
+  expect(screen.getByText(/Most platforms help you find trades/i)).toBeInTheDocument();
+  expect(screen.getByText(/Traders who value patience over activity/i)).toBeInTheDocument();
+});

@@ -8,6 +8,10 @@ import type { PerformanceSummary } from "@/lib/api/public-signals";
 import { useScrollPosition } from "@/lib/hooks/use-scroll-position";
 import { isPaidCheckoutEnabled } from "@/lib/feature-flags";
 import { StocvestLogo } from "@/components/brand/stocvest-logo";
+import { LandingAhaSection } from "@/components/landing/landing-aha-section";
+import { LandingAssistantSection } from "@/components/landing/landing-assistant-section";
+import { LandingFirstMinutesSection } from "@/components/landing/landing-first-minutes-section";
+import { LandingHeroSearch } from "@/components/landing/landing-hero-search";
 
 const MONO =
   '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
@@ -157,32 +161,19 @@ export function LandingPage({
         </nav>
       </header>
 
-      {/* 1 · Hero — centered logo at top + decision-first copy */}
-      <section className="mx-auto flex min-h-screen max-w-7xl flex-col items-center px-4 pb-16 pt-24 text-center md:px-8 md:pt-28">
-        <StocvestLogo variant="hero" href="/" priority className="mb-10 md:mb-12" />
-        <h1 className="max-w-4xl text-3xl font-black leading-tight md:text-5xl">
-          We tell you when to trade — and when not to.
-        </h1>
-        <p className="mx-auto mt-5 max-w-3xl text-lg text-slate-300">
-          STOCVEST evaluates every setup across six independent layers — and only surfaces trades when they agree. Built for traders who want
-          alignment, not noise.
-        </p>
-        <div className="mt-8 flex flex-wrap justify-center gap-3">
-          <Link href="/signup/agreements" className="rounded-md bg-[#3b82f6] px-6 py-3 font-semibold">
-            Start Free — No Card Required
-          </Link>
-          <a href="#the-engine" className="rounded-md border border-white/30 px-6 py-3 font-semibold">
-            See How It Works
-          </a>
-        </div>
-        <div className="mt-6 flex flex-wrap justify-center gap-2 text-xs text-slate-300">
-          {trustBadges.map((b) => (
-            <span key={b} className="rounded-full border border-white/15 bg-white/5 px-2 py-1">
-              {b}
-            </span>
-          ))}
-        </div>
-      </section>
+      <LandingHeroSearch />
+
+      <div className="mx-auto flex max-w-7xl flex-wrap justify-center gap-2 px-4 pb-8 text-xs text-slate-300 md:px-8">
+        {trustBadges.map((b) => (
+          <span key={b} className="rounded-full border border-white/15 bg-white/5 px-2 py-1">
+            {b}
+          </span>
+        ))}
+      </div>
+
+      <LandingAssistantSection />
+      <LandingAhaSection />
+      <LandingFirstMinutesSection />
 
       {/* 2 · Swing vs Day */}
       <section className="mx-auto max-w-7xl px-4 py-16 md:px-8">
@@ -242,22 +233,22 @@ export function LandingPage({
           <p className="mb-2 text-center text-xs uppercase tracking-[0.25em] text-cyan-300" style={{ fontFamily: MONO }}>
             FIT
           </p>
-          <h2 className="mb-8 text-center text-3xl font-bold md:text-4xl">Who STOCVEST is for — and who it isn&apos;t</h2>
+          <h2 className="mb-8 text-center text-3xl font-bold md:text-4xl">Built for disciplined traders</h2>
           <div className="grid gap-8 md:grid-cols-2 md:gap-12">
             <div>
-              <p className="mb-3 font-semibold text-emerald-300/90">Built for traders who:</p>
+              <p className="mb-3 font-semibold text-emerald-300/90">Built for:</p>
               <ul className="space-y-2 text-sm leading-relaxed text-slate-200">
-                <li>• value restraint over constant action</li>
-                <li>• want to understand why a trade exists</li>
-                <li>• trade defined plans on defined timeframes</li>
+                <li>• Traders who value patience over activity</li>
+                <li>• Traders who want clear decision frameworks</li>
+                <li>• Traders tired of false signals and overtrading</li>
               </ul>
             </div>
             <div>
-              <p className="mb-3 font-semibold text-slate-400">Not built for:</p>
+              <p className="mb-3 font-semibold text-slate-400">Not ideal for:</p>
               <ul className="space-y-2 text-sm leading-relaxed text-slate-300">
-                <li>• gambling</li>
-                <li>• prediction chasing</li>
-                <li>• indicator tinkering</li>
+                <li>• Constant action seekers</li>
+                <li>• Pure indicator-based trading</li>
+                <li>• Prediction-driven trading</li>
               </ul>
             </div>
           </div>
@@ -298,10 +289,11 @@ export function LandingPage({
         <p className="mx-auto mb-4 max-w-3xl text-center text-base leading-relaxed text-slate-300">
           Most traders lose money not because they lack data — but because they rely on only one or two perspectives at a time.
         </p>
-        <h2 className="text-center text-3xl font-bold md:text-5xl">Every other platform gives you data. We give you a verdict.</h2>
+        <h2 className="text-center text-3xl font-bold md:text-5xl">
+          Most platforms help you find trades. We help you avoid bad ones.
+        </h2>
         <p className="mx-auto mt-4 max-w-3xl text-center text-base font-medium leading-relaxed text-slate-200 md:text-lg">
-          Our system evaluates every setup across six independent layers and surfaces trades only when they agree — with full reasoning shown when
-          you need it.
+          Six independent layers. One verdict. Full reasoning when you need it — not another dashboard of disconnected charts.
         </p>
         <p className="mx-auto mt-8 max-w-3xl text-center text-sm leading-relaxed text-slate-400">
           Here&apos;s what alignment looks like when all six layers are considered together.
@@ -470,7 +462,9 @@ export function LandingPage({
 
       {/* 8 · Final CTA */}
       <section className="border-t border-white/10 bg-black/20 px-4 py-20 text-center md:px-8">
-        <h2 className="mb-4 text-3xl font-bold md:text-4xl">Trade when layers align. Wait when they don&apos;t.</h2>
+        <h2 className="mb-4 text-3xl font-bold md:text-4xl">
+          Try our thinking in five seconds — then trade with permission to wait.
+        </h2>
         <Link href="/signup/agreements" className="inline-flex min-h-11 items-center justify-center rounded-md bg-[#3b82f6] px-6 py-3 font-semibold">
           Create Your Free Account
         </Link>
