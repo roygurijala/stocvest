@@ -55,7 +55,7 @@ describe("StocvestLogo", () => {
     );
   });
 
-  test("hero variant uses wordmark_only_1000w", () => {
+  test("hero variant uses header_logo_1200w", () => {
     render(<StocvestLogo variant="hero" />);
     expect(screen.getByAltText("STOCVEST")).toHaveAttribute("src", STOCVEST_LOGO_VARIANTS.hero.src);
   });

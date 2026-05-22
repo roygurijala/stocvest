@@ -35,13 +35,13 @@ export const STOCVEST_LOGO_VARIANTS = {
     displayHeight: 36,
     maxWidth: 200
   },
-  /** Landing hero — wordmark only (tagline rendered once in HTML below the logo) */
+  /** Landing hero — large header lockup; motto once in HTML below (not in the image) */
   hero: {
-    src: `${BRAND_BASE}/wordmark_only_1000w.webp`,
-    width: 1000,
-    height: 143,
-    displayHeight: 72,
-    maxWidth: 640
+    src: `${BRAND_BASE}/header_logo_1200w.webp`,
+    width: 1200,
+    height: 307,
+    displayHeight: 200,
+    maxWidth: 720
   },
   /** Login / signup card */
   stacked: {
