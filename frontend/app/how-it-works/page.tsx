@@ -1,5 +1,13 @@
 import Link from "next/link";
 import { Brain, Database, Eye, Layers3, MousePointerClick, TrendingUp } from "lucide-react";
+import { buildPageMetadata } from "@/lib/seo/metadata";
+
+export const metadata = buildPageMetadata({
+  path: "/how-it-works",
+  title: "How it works",
+  description:
+    "How STOCVEST builds swing and day trading signals: real-time Polygon data, six independent layers, regime-aware gating, and transparent setup maturation."
+});
 
 const steps = [
   {

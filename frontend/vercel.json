@@ -19,7 +19,7 @@
     },
     {
       "source": "/:path*",
-      "has": [{ "type": "host", "value": "stocvest.app" }],
+      "has": [{ "type": "host", "value": "stocvest.ai" }],
       "headers": [
         {
           "key": "Strict-Transport-Security",
@@ -31,8 +31,20 @@
   "redirects": [
     {
       "source": "/:path*",
+      "has": [{ "type": "host", "value": "www.stocvest.ai" }],
+      "destination": "https://stocvest.ai/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "stocvest.app" }],
+      "destination": "https://stocvest.ai/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
       "has": [{ "type": "host", "value": "www.stocvest.app" }],
-      "destination": "https://stocvest.app/:path*",
+      "destination": "https://stocvest.ai/:path*",
       "permanent": true
     }
   ]

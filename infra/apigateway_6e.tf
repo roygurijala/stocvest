@@ -155,6 +155,8 @@ resource "aws_apigatewayv2_api" "http" {
     allow_headers     = ["authorization", "content-type", "x-requested-with", "x-stocvest-internal-analysis", "x-stocvest-session-id"]
     allow_methods     = ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
     allow_origins = [
+      "https://stocvest.ai",
+      "https://www.stocvest.ai",
       "https://stocvest.app",
       "https://www.stocvest.app",
     ]

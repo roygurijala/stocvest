@@ -1,4 +1,13 @@
 import Link from "next/link";
+import { buildPageMetadata } from "@/lib/seo/metadata";
+import { SUPPORT_EMAIL } from "@/lib/seo/site";
+
+export const metadata = buildPageMetadata({
+  path: "/about",
+  title: "About",
+  description:
+    "STOCVEST was built by a trader for traders — one platform for six-layer swing and day signal intelligence with transparent reasoning, not black-box alerts."
+});
 
 export default function AboutPage() {
   return (
@@ -54,7 +63,7 @@ export default function AboutPage() {
           <p>STOCVEST LLC is a Delaware registered company.</p>
           <p className="mt-2">We are a signal intelligence platform, not a registered investment advisor.</p>
           <p className="mt-2">
-            Contact: <a href="mailto:support@stocvest.app">support@stocvest.app</a>
+            Contact: <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>
           </p>
         </section>
       </div>

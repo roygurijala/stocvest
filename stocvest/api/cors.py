@@ -9,6 +9,8 @@ from stocvest.api.types import LambdaEvent
 # Keep in sync with `infra/apigateway_6e.tf` `cors_configuration.allow_origins`.
 ALLOWED_CORS_ORIGINS: frozenset[str] = frozenset(
     {
+        "https://stocvest.ai",
+        "https://www.stocvest.ai",
         "https://stocvest.app",
         "https://www.stocvest.app",
     }

@@ -40,6 +40,14 @@ def test_apply_cors_skips_non_http_event() -> None:
     assert "Access-Control-Allow-Origin" not in out["headers"]
 
 
+def test_apply_cors_primary_ai_origin() -> None:
+    ev = _http_event(origin="https://stocvest.ai")
+    out = apply_cors_to_http_proxy_response(ok({}), ev)
+    assert out["headers"]["Access-Control-Allow-Origin"] == "https://stocvest.ai"
+
+
 def test_allowed_origins_frozenset() -> None:
+    assert "https://stocvest.ai" in ALLOWED_CORS_ORIGINS
+    assert "https://www.stocvest.ai" in ALLOWED_CORS_ORIGINS
     assert "https://stocvest.app" in ALLOWED_CORS_ORIGINS
     assert "https://www.stocvest.app" in ALLOWED_CORS_ORIGINS

@@ -7,13 +7,13 @@ import { CrispChat } from "@/components/crisp-chat";
 import { GlobalDisclaimer } from "@/components/global-disclaimer";
 import { AssistantContextProvider } from "@/lib/assistant/context";
 import { getServerSession } from "@/lib/auth/session";
+import { rootSiteMetadata } from "@/lib/seo/metadata";
 import { StocvestSwrProvider } from "@/lib/swr/provider";
 import { ThemeProvider } from "@/lib/theme-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "STOCVEST",
-  description: "Multi-broker swing and day trading platform",
+  ...rootSiteMetadata(),
   icons: {
     icon: [
       { url: "/brand/favicon.ico", sizes: "any" },

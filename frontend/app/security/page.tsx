@@ -1,4 +1,12 @@
 import Link from "next/link";
+import { buildPageMetadata } from "@/lib/seo/metadata";
+
+export const metadata = buildPageMetadata({
+  path: "/security",
+  title: "Security",
+  description:
+    "STOCVEST security practices — access controls, broker-layer safeguards, and continuous monitoring for your trading workspace."
+});
 
 export default function SecurityPage() {
   return (

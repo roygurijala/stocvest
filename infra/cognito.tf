@@ -98,12 +98,16 @@ resource "aws_cognito_user_pool_client" "frontend" {
   callback_urls = [
     "http://localhost:3000",
     "https://localhost:3000",
+    "https://stocvest.ai",
+    "https://www.stocvest.ai",
     "https://stocvest.app",
     "https://www.stocvest.app",
   ]
   logout_urls = [
     "http://localhost:3000",
     "https://localhost:3000",
+    "https://stocvest.ai",
+    "https://www.stocvest.ai",
     "https://stocvest.app",
     "https://www.stocvest.app",
   ]

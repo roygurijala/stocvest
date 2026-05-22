@@ -73,7 +73,7 @@ class EmailService:
 
     def _build_html_body(self, alert_type: AlertType, context: dict[str, Any]) -> str:
         settings = get_settings()
-        base = (settings.stocvest_public_app_url or "https://stocvest.app").rstrip("/")
+        base = (settings.stocvest_public_app_url or "https://stocvest.ai").rstrip("/")
         prefs_url = f"{base}/dashboard/settings#alerts"
         sym = html.escape(str(context.get("symbol") or "").upper())
         title = html.escape(self._build_subject(alert_type, context))
