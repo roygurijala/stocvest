@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
+import { StocvestTitle } from "@/components/brand/stocvest-title";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { TradingModeBadge } from "@/components/trading-mode-badge";
 import { spacing } from "@/lib/design-system";
@@ -40,6 +41,7 @@ export function TopBar({ onMenuClick }: TopBarProps) {
   const pathname = usePathname();
   const { colors } = useTheme();
   const title = useMemo(() => TITLE_BY_PATH[pathname] || "STOCVEST", [pathname]);
+  const isDashboardHome = pathname === "/dashboard";
 
   return (
     <header
@@ -50,7 +52,7 @@ export function TopBar({ onMenuClick }: TopBarProps) {
       // document scrolls. On
       // ``lg+`` the bar starts after the 248px sidebar. ``z-30`` sits
       // below modals/drawers (40+) but above page content.
-      className="fixed left-0 right-0 top-0 z-30 flex min-h-14 items-center gap-2 px-4 backdrop-blur-sm lg:left-[248px] lg:justify-between lg:px-6"
+      className="fixed left-0 right-0 top-0 z-30 grid min-h-14 grid-cols-[auto_1fr_auto] items-center gap-2 px-4 backdrop-blur-sm lg:left-[248px] lg:px-6"
       style={{
         paddingTop: spacing[3],
         paddingBottom: spacing[3],
@@ -72,9 +74,13 @@ export function TopBar({ onMenuClick }: TopBarProps) {
       >
         <Menu size={22} />
       </button>
-      <h1 className="m-0 min-w-0 flex-1 truncate text-center text-lg font-bold lg:flex-none lg:text-left lg:text-xl">
-        {title}
-      </h1>
+      {isDashboardHome ? (
+        <div className="flex min-w-0 justify-center px-2">
+          <StocvestTitle href="/dashboard" />
+        </div>
+      ) : (
+        <h1 className="m-0 min-w-0 truncate text-center text-lg font-bold lg:text-left lg:text-xl">{title}</h1>
+      )}
       <div className="flex shrink-0 items-center justify-end gap-2">
         {brokersEnabled() ? <TradingModeBadge /> : null}
         <ThemeToggle />

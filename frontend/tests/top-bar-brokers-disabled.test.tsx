@@ -43,8 +43,8 @@ describe("TopBar (brokers disabled)", () => {
     expect(screen.queryByText(/Live/i)).not.toBeInTheDocument();
   });
 
-  test("title and theme toggle still render", () => {
+  test("Stocvest brand and theme toggle still render on dashboard home", () => {
     wrap(<TopBar />);
-    expect(screen.getByText("Dashboard")).toBeInTheDocument();
+    expect(screen.getByTestId("stocvest-title")).toHaveTextContent("Stocvest");
   });
 });
