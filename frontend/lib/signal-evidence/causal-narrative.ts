@@ -163,8 +163,11 @@ function buildLayerNote(
   blockingKeys: string[]
 ): CausalLayerNote | null {
   const key = row.key.trim().toLowerCase();
-  const polarity = layerPolarity(row, bias);
-  if ((polarity === "neutral" || polarity === "unavailable") && !substantiveExplanation(row.explanation)) {
+  if (row.status === "Unavailable" && !substantiveExplanation(row.explanation)) {
+    return null;
+  }
+  const polarity: SignalsLayerPolarity = layerPolarity(row, bias);
+  if (polarity === "neutral" && !substantiveExplanation(row.explanation)) {
     return null;
   }
   const upstream = upstreamForLayer(key, blockingKeys);
@@ -343,7 +346,8 @@ export function causalLineForLayerRow(
   if (!narrative) return null;
   const note = narrative.layerNotes[row.key];
   if (note) return note.because;
-  const pol = layerPolarity(row, bias);
-  if (pol === "neutral" || pol === "unavailable") return null;
+  if (row.status === "Unavailable") return null;
+  const pol: SignalsLayerPolarity = layerPolarity(row, bias);
+  if (pol === "neutral") return null;
   return null;
 }
