@@ -85,7 +85,13 @@ export function LandingHeroSearch() {
 
   return (
     <section className="mx-auto flex min-h-[88vh] max-w-7xl flex-col items-center px-4 pb-12 pt-24 text-center md:px-8 md:pt-28">
-      <StocvestLogo variant="hero" href="/" priority className="mb-6 md:mb-8" />
+      <StocvestLogo variant="hero" href="/" priority className="mb-4 md:mb-5" />
+      <p
+        className="mb-4 text-xs font-semibold uppercase tracking-[0.28em] text-slate-400 md:text-sm"
+        data-testid="landing-hero-motto"
+      >
+        Judgment. Restraint. Gating. Permission.
+      </p>
       <p className="mb-3 max-w-2xl text-base font-medium text-amber-200/95 md:text-lg">
         Stop wasting trades that shouldn&apos;t be taken.
       </p>

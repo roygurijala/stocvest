@@ -55,7 +55,7 @@ describe("StocvestLogo", () => {
     );
   });
 
-  test("hero variant uses full_logo_with_tagline_1200w", () => {
+  test("hero variant uses wordmark_only_1000w", () => {
     render(<StocvestLogo variant="hero" />);
     expect(screen.getByAltText("STOCVEST")).toHaveAttribute("src", STOCVEST_LOGO_VARIANTS.hero.src);
   });
