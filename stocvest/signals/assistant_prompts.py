@@ -492,7 +492,8 @@ You MAY:
 - Position STOCVEST as a market analysis and decision-support system that explains *why* a signal is in Monitor only, Blocked, or Actionable — distinct from services that simply tell users what to trade. Use factual qualitative language and never disparage other products by name.
 - Define and explain general finance and trading terminology when asked (e.g. EMA, RSI, MACD, VWAP, ORB, R/R, expectancy, drawdown, gap, position sizing, stop loss, limit vs market order). Keep explanations textbook-style and free of any claim about typical outcomes.
 - Explain order types and foundational market mechanics at an educational level.
-- If a visitor asks about signing up or pricing, answer briefly and factually ("you can create an account from the STOCVEST homepage"). Never invent specific prices or feature lists.
+- Answer product, pricing, signup, and feature questions using ONLY the facts in the appended ``=== PRODUCT FACTS (PUBLIC) ===`` block. Quote those prices and tiers verbatim; do not invent plans, discounts, or capabilities beyond that block.
+- Explain the homepage stock search as a **sample system read** (curated examples NFLX, AAPL, NVDA show full-style previews; other tickers show a limited preview until signup). Never treat homepage preview cards as live per-symbol decisions.
 
 You MUST NOT (in addition to the global MUST NOT list above):
 - Evaluate or discuss any specific stock by ticker or company name (e.g., AAPL, TSLA, NVDA, MSFT, etc.).
@@ -873,6 +874,45 @@ def serialize_page_context(ctx: dict[str, Any] | None) -> str:
         if isinstance(flg.get("stale"), bool):
             lines.append(f"gap_intel_stale={'true' if flg['stale'] else 'false'}")
 
+    return "\n".join(lines) + "\n"
+
+
+PUBLIC_MARKETING_PAGE_PREFIX = "marketing/"
+
+
+def sanitize_public_page_context(ctx: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Whitelist anonymous marketing context — never honor dashboard/symbol fields.
+
+    Clients may only supply a ``marketing/*`` page id. All trading fields are dropped so a
+    tampered request cannot impersonate an in-app Evidence card on the public route.
+    """
+    if not isinstance(ctx, dict):
+        return None
+    page = _coerce_str(ctx.get("page"), limit=64)
+    if not page.startswith(PUBLIC_MARKETING_PAGE_PREFIX):
+        return None
+    return {"page": page, "session_mode": "public"}
+
+
+def serialize_public_product_facts() -> str:
+    """Authoritative product facts for LOGGED-OUT / marketing assistant turns."""
+    lines = [
+        "=== PRODUCT FACTS (PUBLIC) ===",
+        "product=STOCVEST market analysis and decision-support (not investment advice)",
+        "motto=Judgment. Restraint. Gating. Permission.",
+        "value_prop=Explains when to trade and when to stay out; surfaces Actionable only when six layers align",
+        "six_layers=Technical,News,Macro,Sector,Geopolitical,Market Internals",
+        "decision_states=Actionable,Monitor only,Blocked",
+        "modes=Swing (multi-day desk) and Day (intraday desk) — independent engines, never blended",
+        "signup_url=/signup/agreements",
+        "free_tier=$0/month — preview signals, limited evidence views, basic scanner, public track record",
+        "swing_pro=$49/month — full swing signals, daily bar scanner, AI explanations, swing alerts",
+        "swing_day_pro=$99/month — everything in Swing Pro plus day signals, gap scanner, intraday signals, day alerts, priority support",
+        "homepage_search=Type a ticker for a sample system read; NFLX AAPL NVDA are full examples; other symbols show limited preview until signup",
+        "assistant_public=Available on marketing pages for product education and finance terms (no per-stock verdicts)",
+        "assistant_paid=Page-aware conversational explanations for Swing Pro and Swing+Day Pro subscribers",
+        "first_minutes_after_signup=Add watchlist, see forming setups, open signals when alignment is strong, ask assistant, execute or skip with confidence",
+    ]
     return "\n".join(lines) + "\n"
 
 

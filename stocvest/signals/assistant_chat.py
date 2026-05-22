@@ -32,7 +32,9 @@ from stocvest.data.models import UserProfile
 from stocvest.signals.assistant_prompts import (
     ASSISTANT_SYSTEM_PROMPT,
     sanitize_messages,
+    sanitize_public_page_context,
     serialize_page_context,
+    serialize_public_product_facts,
 )
 from stocvest.signals.geopolitical_scanner import ANTHROPIC_API_URL, ANTHROPIC_VERSION
 from stocvest.signals.historical_validation import HistoricalValidationSummary
@@ -248,41 +250,41 @@ class AssistantChatService:
         self,
         *,
         messages: list[dict[str, str]],
+        page_context: dict[str, Any] | None = None,
     ) -> AssistantChatResult:
         """Anonymous (unauthenticated) chat for the marketing surface.
 
-        No page context is honored — anonymous visitors have no STOCVEST page state. The
-        locked system prompt activates its PUBLIC MODE section via the appended
-        ``session_mode=public`` marker so the LLM is free to explain general finance terms,
-        STOCVEST's positioning, and product mechanics while continuing to refuse all
-        trade recommendations, predictions, and accuracy / profitability claims.
+        Only whitelisted ``marketing/*`` page ids are honored; symbol/decision fields from
+        the client are stripped. Product facts are always appended so pricing and feature
+        questions stay accurate. The locked PUBLIC MODE section still refuses per-stock
+        verdicts, trade calls, and invented accuracy claims.
 
-        Claude is called directly (no paid-feature gate); the same rate limiter that
-        protects authenticated paid calls also protects this path. If Claude is unreachable
-        the visitor still gets a calm deterministic introduction so the surface never
-        appears broken.
+        Claude is called directly (no paid-feature gate). If Claude is unreachable the
+        visitor still gets a calm deterministic introduction.
         """
         clean = sanitize_messages(messages)
         if not clean or clean[-1].get("role") != "user":
             return AssistantChatResult(
                 text=(
-                    "I'm the STOCVEST Assistant. Ask me what STOCVEST is, how it differs "
-                    "from signal-alert services, or for an explanation of a finance term "
-                    "like R/R, EMA, VWAP, or ORB and I'll explain."
+                    "I'm the STOCVEST Assistant. Ask me what STOCVEST is, how pricing works, "
+                    "how it differs from signal-alert services, or for an explanation of a "
+                    "finance term like R/R, EMA, VWAP, or ORB."
                 ),
                 source="deterministic",
                 mode="general",
                 upgrade_available=True,
             )
 
-        system_text = (
-            ASSISTANT_SYSTEM_PROMPT
-            + "\n=== PAGE CONTEXT ===\nmode=general\nsession_mode=public\n"
-        )
+        marketing_ctx = sanitize_public_page_context(page_context)
+        system_text = ASSISTANT_SYSTEM_PROMPT + "\n" + serialize_public_product_facts()
+        if marketing_ctx:
+            system_text += "\n" + serialize_page_context(marketing_ctx)
+        else:
+            system_text += "\n=== PAGE CONTEXT ===\nmode=general\nsession_mode=public\n"
         ai_text = await self._claude_chat_or_none(
             system=system_text,
             messages=clean,
-            max_tokens=320,
+            max_tokens=400,
         )
         if ai_text:
             return AssistantChatResult(

@@ -126,14 +126,6 @@ export function LandingPage({
   const isScrolled = useScrollPosition(24);
   const [engineTab, setEngineTab] = useState<LandingMode>("swing");
   const [pricingTier, setPricingTier] = useState<PricingTier>("swing_pro");
-  const trustBadges = [
-    "Real-time data · Polygon.io",
-    "AI synthesis · Anthropic Claude",
-    "Infrastructure · AWS",
-    "STOCVEST LLC",
-    "Not investment advice"
-  ];
-
   const selectPricingCard = (tier: PricingTier) => setPricingTier(tier);
 
   const onPricingCardClick = (e: MouseEvent<HTMLDivElement>, tier: PricingTier) => {
@@ -162,14 +154,6 @@ export function LandingPage({
       </header>
 
       <LandingHeroSearch />
-
-      <div className="mx-auto flex max-w-7xl flex-wrap justify-center gap-2 px-4 pb-8 text-xs text-slate-300 md:px-8">
-        {trustBadges.map((b) => (
-          <span key={b} className="rounded-full border border-white/15 bg-white/5 px-2 py-1">
-            {b}
-          </span>
-        ))}
-      </div>
 
       <LandingAssistantSection />
       <LandingAhaSection />
@@ -328,7 +312,7 @@ export function LandingPage({
         <h2 className="mb-2 text-center text-3xl font-bold md:text-4xl">Simple pricing. Both modes included.</h2>
         <p className="mx-auto mb-4 max-w-2xl text-center text-sm text-slate-400">
           {paidCheckout
-            ? "Early member pricing for initial members at signup."
+            ? "Choose the plan that matches how you trade. Monthly billing at signup."
             : "Pro prices are preview-only — we are not accepting payment yet. Create a free account to explore the product."}
         </p>
         {!paidCheckout ? (
@@ -378,9 +362,7 @@ export function LandingPage({
             </div>
             <h3 className="text-xl font-bold">Swing Pro</h3>
             <p className="mt-1 text-sm text-slate-400">Commit to disciplined swing trading</p>
-            <p className="mt-2 text-sm text-slate-400 line-through">$49/month</p>
-            <p className="text-3xl font-black text-cyan-300">$29/month</p>
-            <p className="text-xs text-slate-400">Early member rate · reg. $49</p>
+            <p className="mt-2 text-3xl font-black text-cyan-300">$49/month</p>
             <ul className="mt-3 flex flex-1 list-none flex-col gap-1 pl-0 text-sm text-slate-300">
               <li>• Full swing signal access</li>
               <li>• Full daily bar scanner</li>
@@ -414,9 +396,7 @@ export function LandingPage({
             <div className="mb-1 min-h-[2.75rem] shrink-0" aria-hidden="true" />
             <h3 className="text-xl font-bold">Swing + Day Pro</h3>
             <p className="mt-1 text-sm text-slate-400">Full-spectrum market intelligence</p>
-            <p className="mt-2 text-sm text-slate-400 line-through">$99/month</p>
-            <p className="text-3xl font-black text-cyan-300">$59/month</p>
-            <p className="text-xs text-slate-400">Early member rate · reg. $99</p>
+            <p className="mt-2 text-3xl font-black text-cyan-300">$99/month</p>
             <ul className="mt-3 flex flex-1 list-none flex-col gap-1 pl-0 text-sm text-slate-300">
               <li>• Everything in Swing Pro</li>
               <li>• Full day-trading signal access</li>
@@ -445,6 +425,12 @@ export function LandingPage({
             </div>
           </div>
         </div>
+        <p
+          className="mx-auto mt-10 max-w-3xl text-center text-sm text-slate-400"
+          data-testid="landing-platform-trust-line"
+        >
+          Real-time market data · AI-driven reasoning · Institutional-grade infrastructure
+        </p>
       </section>
 
       {/* 7 · Live engine */}

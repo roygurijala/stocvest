@@ -4,14 +4,15 @@ import { LandingHeroSearch } from "@/components/landing/landing-hero-search";
 import { ThemeProvider } from "@/lib/theme-provider";
 
 describe("LandingHeroSearch", () => {
-  test("shows motto and search", () => {
+  test("shows search placeholder and full examples label", () => {
     render(
       <ThemeProvider>
         <LandingHeroSearch />
       </ThemeProvider>
     );
-    expect(screen.getByText(/Judgment\. Restraint\. Gating\. Permission\./i)).toBeInTheDocument();
-    expect(screen.getByTestId("landing-stock-search")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Type any stock to preview the system/i)).toBeInTheDocument();
+    expect(screen.getByText(/Try full examples:/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Judgment\. Restraint\. Gating\. Permission\./i)).toBeNull();
     expect(screen.getByRole("heading", { name: /when to stay out/i })).toBeInTheDocument();
   });
 
@@ -28,5 +29,44 @@ describe("LandingHeroSearch", () => {
     const card = screen.getByTestId("landing-stock-preview");
     expect(card).toHaveTextContent(/Not actionable/i);
     expect(card).toHaveTextContent(/NFLX — current read/i);
+    expect(card).toHaveTextContent(/Sample system read — live data unlocks after signup/i);
+    expect(card).toHaveTextContent(/exactly how the system filters trades/i);
+  });
+
+  test("clearing search closes preview", async () => {
+    render(
+      <ThemeProvider>
+        <LandingHeroSearch />
+      </ThemeProvider>
+    );
+    fireEvent.click(screen.getByRole("button", { name: "NFLX" }));
+    await waitFor(() => expect(screen.getByTestId("landing-stock-preview")).toBeInTheDocument());
+    fireEvent.change(screen.getByTestId("landing-stock-search"), { target: { value: "" } });
+    expect(screen.queryByTestId("landing-stock-preview")).toBeNull();
+  });
+
+  test("close button dismisses preview", async () => {
+    render(
+      <ThemeProvider>
+        <LandingHeroSearch />
+      </ThemeProvider>
+    );
+    fireEvent.click(screen.getByRole("button", { name: "AAPL" }));
+    await waitFor(() => expect(screen.getByTestId("landing-stock-preview")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("landing-stock-preview-close"));
+    expect(screen.queryByTestId("landing-stock-preview")).toBeNull();
+    expect(screen.getByTestId("landing-stock-search")).toHaveValue("");
+  });
+
+  test("AMD shows limited preview", async () => {
+    render(
+      <ThemeProvider>
+        <LandingHeroSearch />
+      </ThemeProvider>
+    );
+    fireEvent.change(screen.getByTestId("landing-stock-search"), { target: { value: "AMD" } });
+    fireEvent.keyDown(screen.getByTestId("landing-stock-search"), { key: "Enter" });
+    await waitFor(() => expect(screen.getByTestId("landing-limited-preview")).toBeInTheDocument());
+    expect(screen.getByText(/This is a limited preview/i)).toBeInTheDocument();
   });
 });

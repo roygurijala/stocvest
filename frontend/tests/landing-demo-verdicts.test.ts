@@ -12,9 +12,10 @@ describe("landing demo verdicts", () => {
     expect(v?.bias).toBe("Bearish");
   });
 
-  test("unknown symbol gets generic preview", () => {
-    const v = genericLandingDemoVerdict("xyz");
-    expect(v.symbol).toBe("XYZ");
+  test("unknown symbol gets generic limited preview", () => {
+    const v = genericLandingDemoVerdict("AMD");
+    expect(v.symbol).toBe("AMD");
+    expect(v.limitedPreview).toBe(true);
     expect(v.execution).toMatch(/sign up for live/i);
   });
 });

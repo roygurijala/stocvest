@@ -64,6 +64,8 @@ export interface AssistantScannerGapSummary {
 export interface AssistantPageContext {
   /** Page identifier, e.g. "signals/layers", "signals/history", or "dashboard/scanner". */
   page: string;
+  /** Public marketing surface vs signed-in app (backend whitelists marketing/* only on public route). */
+  session_mode?: "public" | "authenticated";
   /** Active trading mode if the page exposes one. */
   trading_mode?: "swing" | "day";
   symbol?: string;

@@ -99,6 +99,129 @@ function scannerPrompts(ctx: AssistantPageContext): string[] {
   return prompts.slice(0, MAX_PROMPTS);
 }
 
+function marketingPrompts(ctx: AssistantPageContext): string[] {
+  const base = [
+    "What is STOCVEST?",
+    "What are the pricing plans?",
+    "How is STOCVEST different from alert services?",
+    "What happens in my first 5 minutes after signup?"
+  ];
+  if (ctx.page === "marketing/home") {
+    return [
+      "How does the homepage stock preview work?",
+      ...base
+    ].slice(0, 4);
+  }
+  if (ctx.page === "marketing/performance") {
+    return [
+      "How does STOCVEST measure historical signal accuracy?",
+      "What is the difference between Swing and Day validation?",
+      ...base
+    ].slice(0, 4);
+  }
+  return base;
+}
+
+function dashboardPrompts(ctx: AssistantPageContext): string[] {
+  const swing = ctx.swing_desk_posture;
+  const day = ctx.day_desk_posture;
+  if (swing && day) {
+    return [
+      swing === "suppressed"
+        ? "Why is the Swing desk suppressed right now?"
+        : "What is the Swing desk showing today?",
+      day.startsWith("suppressed")
+        ? "Why is the Day desk quiet right now?"
+        : "What is the Day desk showing today?",
+      "How do Swing and Day desks stay independent?"
+    ];
+  }
+  const top = ctx.top_setups?.[0]?.symbol;
+  if (top) {
+    return [
+      `What stands out about ${top.toUpperCase()} on my dashboard?`,
+      "Why might one desk be active while the other is suppressed?",
+      "How should I read Market Pulse before acting?"
+    ];
+  }
+  return [
+    "What is system posture telling me today?",
+    "When do swing setups re-engage?",
+    "How do I use the dashboard without overtrading?"
+  ];
+}
+
+function pageOnlyPrompts(page: string): string[] | null {
+  const map: Record<string, string[]> = {
+    "dashboard/watchlists": [
+      "How does watchlist maturation work?",
+      "When are symbols evaluated on my watchlist?",
+      "What do alignment bands on the watchlist mean?"
+    ],
+    "dashboard/journal": [
+      "How should I tag journal entries by mode?",
+      "What metrics does the journal surface?",
+      "How is journal data kept separate for Swing vs Day?"
+    ],
+    "dashboard/performance": [
+      "How do I read my performance on this page?",
+      "What is directional accuracy vs P&L?",
+      "How are Swing and Day results kept separate?"
+    ],
+    "dashboard/setup-outcomes": [
+      "What is a setup outcome on my watchlist?",
+      "How are Swing and Day outcomes separated?",
+      "Why might a setup show no edge?"
+    ],
+    "dashboard/setup-evolution": [
+      "What does setup evolution track?",
+      "How is this different from live signals?",
+      "Which mode am I viewing on this page?"
+    ],
+    "dashboard/portfolio": [
+      "How does STOCVEST read my positions?",
+      "Why are positions tagged by trading mode?",
+      "What can I learn without trade advice?"
+    ],
+    "dashboard/settings": [
+      "What settings affect alerts and notifications?",
+      "Where do I manage my account?",
+      "What is included in each subscription tier?"
+    ],
+    "dashboard/earnings": [
+      "How does the earnings calendar affect context?",
+      "What should I watch before a report?",
+      "Does earnings data authorize a trade?"
+    ],
+    "dashboard/futures": [
+      "How does futures context relate to equities?",
+      "What is this panel for?",
+      "Does this change my stock Decision?"
+    ],
+    "dashboard/options": [
+      "How should I read options context here?",
+      "Does this panel give trade signals?",
+      "How does this relate to the six layers?"
+    ],
+    "dashboard/crypto": [
+      "What crypto context does STOCVEST show?",
+      "Is crypto evaluation the same as equities?",
+      "How should I use this panel?"
+    ],
+    "dashboard/legal": [
+      "What legal agreements apply to my account?",
+      "Where is the risk disclosure?",
+      "What does not investment advice mean here?"
+    ],
+    "dashboard/admin/historical-validation": [
+      "How do I read stratified accuracy buckets?",
+      "What horizon is this summary using?",
+      "How is this different from setup outcomes?"
+    ]
+  };
+  return map[page] ?? null;
+}
+
 function historyPrompts(ctx: AssistantPageContext): string[] {
   const ticker = sym(ctx);
   if (ticker) {
@@ -122,18 +245,24 @@ export function buildContextualQuickPrompts(
 ): string[] {
   if (!ctx) {
     if (!isAuthenticated) {
-      return [
-        "What is STOCVEST?",
-        "How is STOCVEST different from alert services?",
-        "How do the six layers work together?",
-        "Explain risk/reward in plain terms"
-      ];
+      return marketingPrompts({ page: "marketing/home", session_mode: "public" });
     }
     return [
       "What is STOCVEST?",
       "How do I read a signal Decision?",
       "What's the difference between Monitor and Blocked?"
     ];
+  }
+
+  if (ctx.session_mode === "public" || ctx.page.startsWith("marketing/")) {
+    return marketingPrompts(ctx);
+  }
+
+  const pageOnly = pageOnlyPrompts(ctx.page);
+  if (pageOnly) return pageOnly;
+
+  if (ctx.page === "dashboard") {
+    return dashboardPrompts(ctx);
   }
 
   if (ctx.page === "signals/history") {
@@ -150,9 +279,10 @@ export function buildContextualQuickPrompts(
   }
 
   if (!ticker) {
+    const modeLabel = ctx.trading_mode === "day" ? "Day" : "Swing";
     return [
-      "What should I look at first on this Signals screen?",
-      "How do Swing and Day evaluation differ?",
+      `What should I look at first on this ${modeLabel} Signals screen?`,
+      "How do Swing and Day evaluation differ on this page?",
       "What does Monitor vs Blocked mean?"
     ];
   }
@@ -183,14 +313,37 @@ export function buildContextualEmptyState(
   if (!ctx) {
     if (!isAuthenticated) {
       return {
-        title: "Ask how STOCVEST thinks — not what to trade.",
+        title: "Ask about STOCVEST — product, pricing, and how we think.",
         subtitle:
-          "I explain the six-layer framework, Decisions, and terms like R/R. I never recommend entries or predict prices."
+          "I explain the framework, plans, and terms like R/R. I never recommend stocks, entries, or predict prices."
       };
     }
     return {
       title: "Ask about STOCVEST's analysis or anything on screen.",
       subtitle: "I explain product behavior and what you see. I do not give trading advice or price targets."
+    };
+  }
+
+  if (ctx.session_mode === "public" || ctx.page.startsWith("marketing/")) {
+    return {
+      title: "Ask about STOCVEST — product, pricing, and how we think.",
+      subtitle:
+        "Pricing, six layers, Swing vs Day, and signup flow are fair game. Per-stock verdicts require a free account inside the app."
+    };
+  }
+
+  const pageOnly = pageOnlyPrompts(ctx.page);
+  if (pageOnly) {
+    return {
+      title: "I can explain what this screen is showing and how to use it.",
+      subtitle: "Ask about the workflow on this page — not whether to enter a trade."
+    };
+  }
+
+  if (ctx.page === "dashboard") {
+    return {
+      title: "I can explain both desks — Swing and Day — as separate postures.",
+      subtitle: "Ask why a desk is suppressed, what leaders mean, or how to read today's tape."
     };
   }
 

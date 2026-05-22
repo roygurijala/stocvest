@@ -331,7 +331,7 @@ def test_assistant_chat_paid_user_calls_service_and_returns_ai_text(monkeypatch:
 def test_public_assistant_chat_does_not_require_auth(monkeypatch: pytest.MonkeyPatch) -> None:
     """The whole point of the public route: no sub claim is fine; the handler returns 200."""
 
-    async def fake_reply_public(self, *, messages):  # type: ignore[no-untyped-def]
+    async def fake_reply_public(self, *, messages, page_context=None):  # type: ignore[no-untyped-def]
         return AssistantChatResult(
             text="STOCVEST is a market analysis and decision-support system.",
             source="ai",
@@ -354,17 +354,13 @@ def test_public_assistant_chat_does_not_require_auth(monkeypatch: pytest.MonkeyP
     assert "STOCVEST" in body["text"]
 
 
-def test_public_assistant_chat_ignores_page_context(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Anonymous callers have no STOCVEST page state; any client-side `page_context` must be
-    dropped before reaching the service. This is the single most important guardrail for
-    the public route: marketing visitors must never be answered as if they were inside a
-    paid-tier dashboard context."""
+def test_public_assistant_chat_strips_dashboard_page_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tampered dashboard context must not reach the service — only marketing/* is honored."""
     captured: dict[str, object] = {}
 
-    async def fake_reply_public(self, *, messages):  # type: ignore[no-untyped-def]
+    async def fake_reply_public(self, *, messages, page_context=None):  # type: ignore[no-untyped-def]
         captured["messages"] = list(messages)
-        # The service signature intentionally has no `page_context` parameter; that this
-        # function takes only `messages` is the contract proof.
+        captured["page_context"] = page_context
         return AssistantChatResult(
             text="Educational answer.",
             source="ai",
@@ -382,8 +378,6 @@ def test_public_assistant_chat_ignores_page_context(monkeypatch: pytest.MonkeyPa
             "body": json.dumps(
                 {
                     "messages": [{"role": "user", "content": "Why is TTD in Monitor?"}],
-                    # Even if a tampered client posts a rich page_context, the public handler
-                    # never forwards it.
                     "page_context": {
                         "page": "dashboard/signals/layers",
                         "symbol": "TTD",
@@ -395,11 +389,43 @@ def test_public_assistant_chat_ignores_page_context(monkeypatch: pytest.MonkeyPa
         {},
     )
     assert response["statusCode"] == 200
-    body = json.loads(response["body"])
-    assert body["mode"] == "general"
-    fwd = captured.get("messages")
-    assert isinstance(fwd, list)
-    assert fwd[-1]["content"] == "Why is TTD in Monitor?"
+    assert captured.get("page_context") is None
+
+
+def test_public_assistant_chat_forwards_marketing_page_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_reply_public(self, *, messages, page_context=None):  # type: ignore[no-untyped-def]
+        captured["page_context"] = page_context
+        return AssistantChatResult(
+            text="Product answer.",
+            source="ai",
+            mode="general",
+            upgrade_available=True,
+        )
+
+    monkeypatch.setattr(
+        "stocvest.signals.assistant_chat.AssistantChatService.reply_public",
+        fake_reply_public,
+    )
+    response = public_assistant_chat_handler(
+        {
+            "requestContext": {},
+            "body": json.dumps(
+                {
+                    "messages": [{"role": "user", "content": "What are the pricing plans?"}],
+                    "page_context": {"page": "marketing/home", "session_mode": "public"},
+                }
+            ),
+        },
+        {},
+    )
+    assert response["statusCode"] == 200
+    ctx = captured.get("page_context")
+    assert isinstance(ctx, dict)
+    assert ctx.get("page") == "marketing/home"
+    assert ctx.get("session_mode") == "public"
+    assert "symbol" not in ctx
 
 
 def test_public_assistant_chat_rejects_invalid_body() -> None:
@@ -410,7 +436,7 @@ def test_public_assistant_chat_rejects_invalid_body() -> None:
 def test_public_assistant_chat_handles_empty_messages(monkeypatch: pytest.MonkeyPatch) -> None:
     """Missing/empty messages array must produce a calm deterministic intro rather than 500ing."""
 
-    async def fake_reply_public(self, *, messages):  # type: ignore[no-untyped-def]
+    async def fake_reply_public(self, *, messages, page_context=None):  # type: ignore[no-untyped-def]
         # The real service handles this path itself; mirror that contract here.
         assert messages == []
         return AssistantChatResult(

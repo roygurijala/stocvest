@@ -8,12 +8,22 @@ import { apiBaseUrl } from "@/lib/api/client";
  * handler simply forwards the visitor's conversation turns. The client never speaks to
  * the API origin directly — keeping the API base URL server-only.
  *
- * `page_context` is intentionally stripped before forwarding: anonymous visitors have no
- * STOCVEST page state, and the backend public handler ignores the field regardless.
+ * Only whitelisted `marketing/*` page_context is forwarded; symbol/decision fields are
+ * stripped on the backend.
  */
 export async function POST(req: Request) {
-  const payload = (await req.json().catch(() => ({}))) as { messages?: unknown };
-  const safeBody = { messages: Array.isArray(payload?.messages) ? payload.messages : [] };
+  const payload = (await req.json().catch(() => ({}))) as {
+    messages?: unknown;
+    page_context?: unknown;
+  };
+  const pageContext =
+    payload?.page_context && typeof payload.page_context === "object" && !Array.isArray(payload.page_context)
+      ? (payload.page_context as Record<string, unknown>)
+      : null;
+  const safeBody = {
+    messages: Array.isArray(payload?.messages) ? payload.messages : [],
+    page_context: pageContext
+  };
   let res: Response;
   try {
     res = await fetch(`${apiBaseUrl()}/v1/public/assistant/chat`, {

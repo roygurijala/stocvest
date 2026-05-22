@@ -19,6 +19,18 @@ describe("buildContextualQuickPrompts", () => {
     expect(prompts.some((p) => /risk\/reward/i.test(p))).toBe(true);
   });
 
+  test("dashboard page suggests desk posture questions", () => {
+    const prompts = buildContextualQuickPrompts(
+      {
+        page: "dashboard",
+        swing_desk_posture: "suppressed",
+        day_desk_posture: "active"
+      },
+      true
+    );
+    expect(prompts.some((p) => /Swing desk/i.test(p))).toBe(true);
+  });
+
   test("scanner page references top setup symbol", () => {
     const ctx: AssistantPageContext = {
       page: "dashboard/scanner",

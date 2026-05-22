@@ -1178,8 +1178,9 @@ def public_assistant_chat_handler(event: LambdaEvent, context: LambdaContext) ->
     finance terms — while the prompt continues to refuse all trade recommendations,
     price predictions, and accuracy claims.
 
-    Any ``page_context`` posted from the client is intentionally ignored on this path —
-    anonymous visitors have no STOCVEST page state to anchor against.
+    Only whitelisted ``marketing/*`` page ids in ``page_context`` are honored; symbol and
+    decision fields are stripped server-side so tampered clients cannot impersonate an
+    in-app Evidence card.
     """
     _ = context
     try:
@@ -1189,12 +1190,17 @@ def public_assistant_chat_handler(event: LambdaEvent, context: LambdaContext) ->
     if not isinstance(body, dict):
         return bad_request("Body must be a JSON object.")
 
+    from stocvest.signals.assistant_prompts import sanitize_public_page_context
+
     raw_messages = body.get("messages")
+    raw_context = body.get("page_context")
+    page_context = sanitize_public_page_context(raw_context if isinstance(raw_context, dict) else None)
     svc = AssistantChatService()
     try:
         result = asyncio.run(
             svc.reply_public(
                 messages=raw_messages if isinstance(raw_messages, list) else [],
+                page_context=page_context,
             )
         )
     except (TypeError, ValueError) as exc:

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { BodyScrollResetOnNavigate } from "@/components/body-scroll-reset";
+import { MarketingAssistantContext } from "@/components/assistant/marketing-assistant-context";
 import { StocvestAssistant } from "@/components/assistant/stocvest-assistant";
 import { CrispChat } from "@/components/crisp-chat";
 import { GlobalDisclaimer } from "@/components/global-disclaimer";
@@ -82,6 +83,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <BodyScrollResetOnNavigate />
             <CrispChat userEmail={crispUserEmail} />
             <AssistantContextProvider>
+              <MarketingAssistantContext isAuthenticated={isAuthenticated} />
               {appBody}
               <StocvestAssistant isAuthenticated={isAuthenticated} />
             </AssistantContextProvider>

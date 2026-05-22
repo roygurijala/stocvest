@@ -11,12 +11,7 @@ import {
   resolveLandingDemoVerdict
 } from "@/lib/landing/demo-verdicts";
 
-const MONO =
-  '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
-
 const QUICK_PICKS = ["NFLX", "AAPL", "NVDA"] as const;
-
-const MOTTO = "Judgment. Restraint. Gating. Permission.";
 
 type TickerHit = { symbol: string; name: string };
 
@@ -32,6 +27,12 @@ export function LandingHeroSearch() {
     return resolveLandingDemoVerdict(activeSymbol) ?? genericLandingDemoVerdict(activeSymbol);
   }, [activeSymbol]);
 
+  const dismissPreview = useCallback(() => {
+    setActiveSymbol(null);
+    setQuery("");
+    setSuggestions([]);
+  }, []);
+
   const applySymbol = useCallback((sym: string) => {
     const t = normalizeLandingTicker(sym);
     if (!t) return;
@@ -40,8 +41,20 @@ export function LandingHeroSearch() {
     setSuggestions([]);
   }, []);
 
+  const onQueryChange = useCallback((value: string) => {
+    setQuery(value);
+    if (!value.trim()) {
+      setActiveSymbol(null);
+      setSuggestions([]);
+    }
+  }, []);
+
   useEffect(() => {
-    if (normalized.length >= 2 && resolveLandingDemoVerdict(normalized)) {
+    if (!normalized) {
+      setActiveSymbol(null);
+      return;
+    }
+    if (resolveLandingDemoVerdict(normalized)) {
       setActiveSymbol(normalized);
     }
   }, [normalized]);
@@ -73,12 +86,6 @@ export function LandingHeroSearch() {
   return (
     <section className="mx-auto flex min-h-[88vh] max-w-7xl flex-col items-center px-4 pb-12 pt-24 text-center md:px-8 md:pt-28">
       <StocvestLogo variant="hero" href="/" priority className="mb-6 md:mb-8" />
-      <p
-        className="mb-4 text-xs font-semibold uppercase tracking-[0.28em] text-cyan-300/90"
-        style={{ fontFamily: MONO }}
-      >
-        {MOTTO}
-      </p>
       <p className="mb-3 max-w-2xl text-base font-medium text-amber-200/95 md:text-lg">
         Stop wasting trades that shouldn&apos;t be taken.
       </p>
@@ -91,7 +98,7 @@ export function LandingHeroSearch() {
 
       <div className="relative mt-8 w-full max-w-xl">
         <label htmlFor="landing-stock-search" className="sr-only">
-          Search any stock
+          Type any stock to preview the system
         </label>
         <div className="flex items-center gap-2 rounded-lg border border-cyan-500/40 bg-black/40 px-3 py-2 shadow-[0_0_32px_rgba(59,130,246,0.15)]">
           <Search className="h-5 w-5 shrink-0 text-cyan-400" aria-hidden />
@@ -100,9 +107,9 @@ export function LandingHeroSearch() {
             data-testid="landing-stock-search"
             type="search"
             autoComplete="off"
-            placeholder="Search any stock… (e.g., NFLX, AAPL, NVDA)"
+            placeholder="Type any stock to preview the system"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => onQueryChange(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && normalized) applySymbol(normalized);
             }}
@@ -131,13 +138,13 @@ export function LandingHeroSearch() {
         ) : null}
       </div>
 
-      <p className="mt-3 text-xs text-slate-500">Try it in 5 seconds — no signup required for preview symbols.</p>
+      <p className="mt-4 text-sm text-slate-400">Try full examples:</p>
       <div className="mt-2 flex flex-wrap justify-center gap-2">
         {QUICK_PICKS.map((sym) => (
           <button
             key={sym}
             type="button"
-            className="rounded-full border border-white/20 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200 hover:border-cyan-400/50"
+            className="rounded-full border border-cyan-500/40 bg-cyan-500/10 px-4 py-1.5 text-sm font-semibold text-cyan-100 hover:border-cyan-400/70"
             onClick={() => applySymbol(sym)}
           >
             {sym}
@@ -147,7 +154,7 @@ export function LandingHeroSearch() {
 
       {verdict ? (
         <div className="mt-8 flex w-full justify-center">
-          <LandingStockPreview verdict={verdict} />
+          <LandingStockPreview verdict={verdict} onClose={dismissPreview} />
         </div>
       ) : null}
 

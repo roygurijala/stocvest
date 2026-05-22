@@ -226,18 +226,12 @@ export function StocvestAssistant({ isAuthenticated }: StocvestAssistantProps) {
       const endpoint = isAuthenticated
         ? "/api/stocvest/signals/assistant/chat"
         : "/api/stocvest/public/assistant/chat";
-      const body = isAuthenticated
-        ? {
-            messages: nextMessages
-              .filter((m) => !m.pending)
-              .map((m) => ({ role: m.role, content: m.content })),
-            page_context: pageContext ?? null
-          }
-        : {
-            messages: nextMessages
-              .filter((m) => !m.pending)
-              .map((m) => ({ role: m.role, content: m.content }))
-          };
+      const body = {
+        messages: nextMessages
+          .filter((m) => !m.pending)
+          .map((m) => ({ role: m.role, content: m.content })),
+        page_context: pageContext ?? null
+      };
 
       try {
         const res = await fetch(endpoint, {

@@ -72,6 +72,8 @@ def test_reply_public_calls_claude_with_public_mode_marker(
     # the whole prompt because the static instruction block now mentions
     # `session_mode=authenticated` as descriptive text inside the CRITICAL CONTEXT AWARENESS
     # RULE — that mention is a guardrail, not a routing signal.
+    assert "=== PRODUCT FACTS (PUBLIC) ===" in system_text
+    assert "swing_pro=$49/month" in system_text
     assert "=== PAGE CONTEXT ===" in system_text
     page_ctx_tail = system_text.split("=== PAGE CONTEXT ===", 1)[1]
     assert "session_mode=public" in page_ctx_tail
@@ -102,17 +104,17 @@ def test_reply_public_falls_back_to_deterministic_on_claude_outage(
     assert "STOCVEST" in result.text
 
 
-def test_reply_public_does_not_accept_page_context_parameter(service: AssistantChatService) -> None:
-    """The contract of the public path is `reply_public(messages=...)` — never with a
-    page_context kwarg. Calling it with one must fail, so a refactor that accidentally
-    threads page state into the anonymous path gets caught."""
-    with pytest.raises(TypeError):
-        asyncio.run(
-            service.reply_public(  # type: ignore[call-arg]
-                messages=[{"role": "user", "content": "hi"}],
-                page_context={"symbol": "TTD"},
-            )
-        )
+def test_reply_public_sanitizes_marketing_page_context_only(service: AssistantChatService) -> None:
+    """Dashboard fields are stripped; marketing page id is preserved for product Q&A."""
+    from stocvest.signals.assistant_prompts import sanitize_public_page_context
+
+    assert sanitize_public_page_context({"page": "marketing/home"}) == {
+        "page": "marketing/home",
+        "session_mode": "public",
+    }
+    assert sanitize_public_page_context(
+        {"page": "signals/layers", "symbol": "TTD", "decision_state": "monitor"}
+    ) is None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
