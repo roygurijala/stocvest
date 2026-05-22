@@ -54,6 +54,9 @@ _SCHEDULED_SCAN_TYPES = frozenset({
     "maturation_refresh",
     "maturation_refresh_swing",
     "maturation_refresh_day",
+    "ledger_capture",
+    "ledger_capture_day",
+    "ledger_capture_swing",
 })
 
 # Gap intelligence: prefer Polygon full-US snapshot, rank top N by |gap| + liquidity gates.
@@ -178,6 +181,16 @@ def _handle_eventbridge_schedule(event: LambdaEvent, context: LambdaContext) -> 
 
             result = run_watchlist_maturation_refresh_sync(scan_type=scan_type)
             return ok(result)
+        if scan_type in ("ledger_capture", "ledger_capture_day", "ledger_capture_swing"):
+            from stocvest.workers.watchlist_ledger_capture import run_watchlist_ledger_capture_sync
+
+            desk = "both"
+            if scan_type == "ledger_capture_day":
+                desk = "day"
+            elif scan_type == "ledger_capture_swing":
+                desk = "swing"
+            result = run_watchlist_ledger_capture_sync(desk=desk)
+            return ok(result)
         result = run_scheduled_scan_sync(scan_type)
         return ok(result)
     except Exception as exc:
@@ -191,7 +204,8 @@ def handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
         if not _is_eventbridge_schedule_event(event):
             return bad_request(
                 "Scheduled scanner event requires scan_type "
-                "premarket|intraday|eod_summary|maturation_refresh|maturation_refresh_swing|maturation_refresh_day."
+                "premarket|intraday|eod_summary|maturation_refresh|maturation_refresh_swing|"
+                "maturation_refresh_day|ledger_capture|ledger_capture_day|ledger_capture_swing."
             )
         return _handle_eventbridge_schedule(event, context)
 

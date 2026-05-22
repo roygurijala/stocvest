@@ -204,8 +204,20 @@ def evaluate_day_ledger_entry(
     return ok, gates
 
 
-def gate_blob_json(gates: dict[str, Any], *, qualified: bool) -> str:
-    return json.dumps({"qualified": qualified, "gates": gates}, separators=(",", ":"))
+def gate_blob_json(
+    gates: dict[str, Any],
+    *,
+    qualified: bool,
+    execution_quality: dict[str, Any] | None = None,
+    evaluation_source: str | None = None,
+) -> str:
+    """Serialize gate outcome; optional study fields for Phase 1/2 audit rows."""
+    blob: dict[str, Any] = {"qualified": qualified, "gates": gates}
+    if execution_quality is not None:
+        blob["execution_quality"] = execution_quality
+    if evaluation_source:
+        blob["evaluation_source"] = evaluation_source
+    return json.dumps(blob, separators=(",", ":"))
 
 
 def entry_rationale_from_gates(qualified: bool, mode: str) -> str:

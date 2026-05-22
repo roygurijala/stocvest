@@ -77,6 +77,29 @@ def test_handler_routes_maturation_refresh_swing_and_day(monkeypatch: pytest.Mon
     assert seen == ["maturation_refresh_swing", "maturation_refresh_day"]
 
 
+def test_handler_routes_ledger_capture_schedule(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[str] = []
+
+    def _fake_capture(*, desk: str = "both") -> dict:
+        seen.append(desk)
+        return {"job": "watchlist_ledger_capture", "composite_calls": 0}
+
+    monkeypatch.setattr(
+        "stocvest.workers.watchlist_ledger_capture.run_watchlist_ledger_capture_sync",
+        _fake_capture,
+    )
+    for scan_type, expected_desk in (
+        ("ledger_capture", "both"),
+        ("ledger_capture_day", "day"),
+        ("ledger_capture_swing", "swing"),
+    ):
+        response = handler({"source": "eventbridge", "scan_type": scan_type}, {})
+        assert response["statusCode"] == 200
+        body = json.loads(response["body"])
+        assert body.get("job") == "watchlist_ledger_capture"
+    assert seen == ["both", "day", "swing"]
+
+
 def test_handler_rejects_unknown_eventbridge_scan_type() -> None:
     response = handler({"source": "eventbridge", "scan_type": "overnight"}, {})
     assert response["statusCode"] == 400

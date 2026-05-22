@@ -23,6 +23,7 @@ import { CausalNarrativePanel } from "@/components/signals/causal-narrative-pane
 import { TimeframeContextPanel } from "@/components/signals/timeframe-context-panel";
 import { resolveCausalNarrative } from "@/lib/signal-evidence/causal-narrative";
 import { resolveTimeframeContext } from "@/lib/signal-evidence/timeframe-context";
+import { executionQualitySummaryLine } from "@/lib/signal-evidence/execution-quality";
 import {
   buildCompressedContextSummary,
   buildNewsNeutralParenthetical,
@@ -1116,6 +1117,16 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
           );
         })()}
       </EvidenceCardHeader>
+
+      {evidence.executionQuality ? (
+        <p
+          data-testid="signal-evidence-execution-quality"
+          className="m-0 text-xs leading-snug"
+          style={{ color: colors.textMuted, marginTop: spacing[2] }}
+        >
+          {executionQualitySummaryLine(evidence.executionQuality)}
+        </p>
+      ) : null}
 
       {gapIntelSnapshot ? (
         <section

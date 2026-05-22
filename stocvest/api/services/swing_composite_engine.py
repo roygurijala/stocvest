@@ -24,6 +24,12 @@ from stocvest.api.services.real_composite_engine import (
 from stocvest.api.services.sector_cache_dynamo import DynamoSectorCache
 from stocvest.api.services.signal_snapshot_builders import build_real_composite_snapshot_payload
 from stocvest.api.services.signal_recorder import get_signal_recorder
+from stocvest.api.services.execution_quality import build_execution_quality_payload
+from stocvest.api.services.ledger_gate_attempt import persist_ledger_gate_attempt
+from stocvest.api.services.ledger_study_capture import (
+    evaluation_source_for_ledger_capture,
+    maybe_persist_ledger_study_row,
+)
 from stocvest.api.services.signal_validation_eligibility import (
     derive_decision_state,
     entry_rationale_from_gates,
@@ -105,6 +111,7 @@ async def build_swing_composite_response(
     user_id: str | None,
     user_email: str | None,
     params: SignalParameters,
+    ledger_capture: bool = False,
 ) -> dict[str, Any]:
     # Polygon's REST endpoints reject the dash form of class-share tickers
     # (BRK-B → 404), so canonicalise once at engine entry. Without this
@@ -557,6 +564,33 @@ async def build_swing_composite_response(
         _is_complete,
     )
 
+    _rr_eq_raw = response_body.get("risk_reward")
+    _rr_eq: float | None = float(_rr_eq_raw) if isinstance(_rr_eq_raw, (int, float)) else None
+    _gen_at_eq = datetime.now(timezone.utc)
+    _execution_quality = build_execution_quality_payload(
+        mode="swing",
+        price_at_signal=float(last_px) if last_px else None,
+        reference_stop_level=(
+            float(response_body["reference_stop_level"])
+            if response_body.get("reference_stop_level") is not None
+            else None
+        ),
+        reference_target_1=(
+            float(response_body["reference_target_1"])
+            if response_body.get("reference_target_1") is not None
+            else None
+        ),
+        risk_reward=_rr_eq,
+        atr=getattr(tech, "atr", None),
+        volume_ratio=getattr(tech, "volume_vs_adv", None),
+        orb_signal=None,
+        vwap_state=str(getattr(tech, "vwap_state", None) or response_body.get("vwap_state") or "").strip()
+        or None,
+        ref_utc=_gen_at_eq,
+    )
+    response_body["execution_quality"] = _execution_quality
+    _eval_src = evaluation_source_for_ledger_capture(ledger_capture)
+
     if direction_out:
         price_at = last_px
         if price_at:
@@ -639,7 +673,12 @@ async def build_swing_composite_response(
                     status=str(response_body.get("status") or "active"),
                     mode="swing",
                     ledger_qualified=eligible,
-                    gate_status_json=gate_blob_json(gates, qualified=eligible),
+                    gate_status_json=gate_blob_json(
+                        gates,
+                        qualified=eligible,
+                        execution_quality=_execution_quality,
+                        evaluation_source=_eval_src,
+                    ),
                     entry_rationale=entry_rationale_from_gates(eligible, "swing"),
                     decision_state_entry="actionable" if eligible else None,
                     ledger_entry_date_et=ny_date if eligible else None,
@@ -653,10 +692,9 @@ async def build_swing_composite_response(
                     regime_window_key=rwk,
                     ledger_position_open=bool(eligible),
                 )
-                if eligible:
-                    get_signal_recorder().record_signal(record)
-                else:
-                    _LOG.info("swing ledger row skipped (gates) symbol=%s", sym)
+                persist_ledger_gate_attempt(record, ledger_capture=ledger_capture, mode="swing")
+                response_body["ledger_qualified"] = eligible
+                response_body["gate_status"] = gates
                 if record.status != "active":
                     return response_body
                 if eligible and user_id and user_email and direction_out:
@@ -680,6 +718,63 @@ async def build_swing_composite_response(
             except Exception as exc:
                 _LOG.warning("swing record_signal skipped: %s", exc)
 
+    if ledger_capture and user_id and "ledger_qualified" not in response_body:
+        try:
+            layer_scores_neutral = {s.layer: float(s.score) for s in signals}
+            blobs_neutral = build_real_composite_snapshot_payload(
+                technical=tech,
+                news=news,
+                macro=macro,
+                sector=sector,
+                internals=internals,
+                layer_scores=layer_scores_neutral,
+                confirming_labels=[],
+                conflicting_labels=[],
+            )
+            rb = response_body
+            stop_lvl = rb.get("reference_stop_level")
+            ref_t1 = rb.get("reference_target_1")
+            try:
+                stop_f_n = float(stop_lvl) if stop_lvl is not None else None
+            except (TypeError, ValueError):
+                stop_f_n = None
+            try:
+                ref_struct_f_n = float(ref_t1) if ref_t1 is not None else None
+            except (TypeError, ValueError):
+                ref_struct_f_n = None
+            eligible_n, gates_n = maybe_persist_ledger_study_row(
+                ledger_capture=True,
+                user_id=user_id,
+                mode="swing",
+                symbol=sym,
+                response_status=str(response_body.get("status") or "active"),
+                verdict=composite.verdict,
+                composite_score=float(composite.score),
+                alignment_ratio=float(composite.alignment_ratio),
+                macro_market_regime=str(macro.market_regime or "neutral"),
+                risk_reward=_rr_eq,
+                price_at_signal=float(last_px) if last_px else None,
+                layer_scores=layer_scores_neutral,
+                signal_strength=int(round(max(0.0, min(1.0, composite.confidence)) * 100)),
+                pattern=pattern,
+                params=params,
+                snapshot_blobs=blobs_neutral,
+                layer_scores_json=blobs_neutral.get("layer_scores_json"),
+                setup_type=None,
+                stop_level=stop_f_n,
+                reference_structure_level=ref_struct_f_n,
+                regime_label=str(macro.market_regime or "neutral"),
+                sector_label=str(getattr(sector, "sector_signal", None) or sector.verdict or ""),
+                vwap_state_at_entry=str(rb.get("vwap_state") or getattr(tech, "vwap_state", None) or "").strip()
+                or None,
+                atr=getattr(tech, "atr", None),
+                volume_ratio=getattr(tech, "volume_vs_adv", None),
+            )
+            response_body["ledger_qualified"] = eligible_n
+            response_body["gate_status"] = gates_n
+        except Exception as exc:
+            _LOG.warning("swing ledger study capture (neutral) skipped: %s", exc)
+
     response_body["decision_state"] = derive_decision_state(
         response_status=str(response_body.get("status") or "active"),
         verdict=composite.verdict,
@@ -693,6 +788,7 @@ def swing_composite_body_sync(
     user_id: str | None,
     user_email: str | None = None,
     params: SignalParameters | None = None,
+    ledger_capture: bool = False,
 ) -> dict[str, Any]:
     p = params or ParameterStore.get_parameters_sync()
     return asyncio.run(
@@ -701,5 +797,6 @@ def swing_composite_body_sync(
             user_id=user_id,
             user_email=user_email,
             params=p,
+            ledger_capture=ledger_capture,
         )
     )

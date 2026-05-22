@@ -210,6 +210,30 @@ resource "aws_scheduler_schedule" "scanner_maturation_refresh_day_open" {
   }
 }
 
+# 3:55 PM ET — validation ledger capture inside day RTH (≤15:59) and swing post-close window (≥15:50).
+resource "aws_scheduler_schedule" "scanner_ledger_capture" {
+  name       = "stocvest-development-scanner-ledger-capture"
+  group_name = aws_scheduler_schedule_group.scanner.name
+
+  state = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  schedule_expression          = "cron(55 15 ? * MON-FRI *)"
+  schedule_expression_timezone = "America/New_York"
+
+  target {
+    arn      = aws_lambda_function.api["scanner"].arn
+    role_arn = aws_iam_role.eventbridge_scanner_invoke.arn
+    input = jsonencode({
+      source    = "eventbridge"
+      scan_type = "ledger_capture"
+    })
+  }
+}
+
 # After US cash equity close — bounded day (+ optional swing) reconciliation for default watchlists
 # (see stocvest.workers.watchlist_maturation_refresh). Caps via env on the scanner Lambda.
 resource "aws_scheduler_schedule" "scanner_maturation_refresh" {
