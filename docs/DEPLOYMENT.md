@@ -1,6 +1,8 @@
 # Deployment notes
 
-**Last updated:** 2026-05-08 · See also [`docs/CONTEXT.md`](./CONTEXT.md) §3 (full deploy checklist).
+**Last updated:** 2026-05-21 · See also [`docs/CONTEXT.md`](./CONTEXT.md) §3 (full deploy checklist).
+
+**Signal intelligence (B58–B61, 2026-05-21):** No Terraform change. Push to **`main`** runs GitHub Actions **`deploy-lambda`**, which updates **`signals`** (composite: `causal_narrative`, day `timeframe_alignment`) and **`brokers`** (watchlist maturation-summary `progress_band` / `near_ready_*`) function code. Frontend ships via **`deploy-vercel`** when the hook is configured.
 
 **Terraform (2026-05):** Apply `infra/` so **`AuditEvents`** exists and Lambdas receive **`DYNAMODB_AUDIT_EVENTS_TABLE`** (otherwise audit falls back to in-memory per cold start). API Gateway needs the **`GET /v1/signals/founding-members`** and admin **beta** / **audit** / **`GET /v1/admin/users/{user_id}/activity-errors`** routes for production parity with repo (`apigateway_6e.tf`).
 
