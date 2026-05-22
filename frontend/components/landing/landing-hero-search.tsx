@@ -92,7 +92,9 @@ export function LandingHeroSearch() {
 
   return (
     <section className="mx-auto flex min-h-[88vh] max-w-7xl flex-col items-center px-4 pb-12 pt-24 text-center md:px-8 md:pt-28">
-      <StocvestLogo variant="hero" href="/" priority className="mb-6 w-full max-w-[720px] md:mb-8" />
+      <div className="mb-6 flex w-full max-w-[720px] justify-center md:mb-8">
+        <StocvestLogo variant="hero" href="/" priority />
+      </div>
       <p
         className="mb-4 text-xs font-semibold uppercase tracking-[0.28em] text-slate-400 md:text-sm"
         data-testid="landing-hero-motto"
