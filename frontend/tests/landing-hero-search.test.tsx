@@ -33,6 +33,19 @@ describe("LandingHeroSearch", () => {
     expect(card).toHaveTextContent(/exactly how the system filters trades/i);
   });
 
+  test("editing search away from symbol closes preview", async () => {
+    render(
+      <ThemeProvider>
+        <LandingHeroSearch />
+      </ThemeProvider>
+    );
+    fireEvent.click(screen.getByRole("button", { name: "NFLX" }));
+    await waitFor(() => expect(screen.getByTestId("landing-stock-preview")).toBeInTheDocument());
+    fireEvent.change(screen.getByTestId("landing-stock-search"), { target: { value: "NFL" } });
+    expect(screen.queryByTestId("landing-stock-preview")).toBeNull();
+    expect(screen.getByTestId("landing-stock-search")).toHaveValue("NFL");
+  });
+
   test("clearing search closes preview", async () => {
     render(
       <ThemeProvider>

@@ -22,10 +22,13 @@ export function LandingHeroSearch() {
 
   const normalized = useMemo(() => normalizeLandingTicker(query), [query]);
 
+  /** Panel only when search text still matches the symbol we applied (chip, Enter, or pick). */
   const verdict = useMemo(() => {
     if (!activeSymbol) return null;
+    const q = normalizeLandingTicker(query);
+    if (!q || q !== activeSymbol) return null;
     return resolveLandingDemoVerdict(activeSymbol) ?? genericLandingDemoVerdict(activeSymbol);
-  }, [activeSymbol]);
+  }, [activeSymbol, query]);
 
   const dismissPreview = useCallback(() => {
     setActiveSymbol(null);
@@ -43,12 +46,16 @@ export function LandingHeroSearch() {
 
   const onQueryChange = useCallback((value: string) => {
     setQuery(value);
+    const t = normalizeLandingTicker(value);
     if (!value.trim()) {
       setActiveSymbol(null);
       setSuggestions([]);
+      return;
     }
+    setActiveSymbol((prev) => (prev && t !== prev ? null : prev));
   }, []);
 
+  /** Full-example tickers preview live as the user completes the symbol in the search bar. */
   useEffect(() => {
     if (!normalized) {
       setActiveSymbol(null);
@@ -118,6 +125,7 @@ export function LandingHeroSearch() {
             onChange={(e) => onQueryChange(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && normalized) applySymbol(normalized);
+              if (e.key === "Escape") dismissPreview();
             }}
             className="min-w-0 flex-1 bg-transparent text-base text-slate-100 outline-none placeholder:text-slate-500"
           />
