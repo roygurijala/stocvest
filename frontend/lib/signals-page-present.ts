@@ -618,6 +618,18 @@ function pushUniqueBullet(out: string[], line: string): void {
   }
 }
 
+function isRiskRewardBullet(line: string): boolean {
+  return /risk\/?reward too low/i.test(line);
+}
+
+/** One R/R bullet: desk threshold + structured-scenario framing (avoid duplicate lines). */
+function mergeRiskRewardWhyNotLine(rationaleText: string, deskThresholdLine: string): string {
+  const deskPart = deskThresholdLine.match(/below .+?\(\d+(?:\.\d+)?:1\)\.?/i);
+  const rrPrefix = rationaleText.match(/^Risk\/reward too low \([^)]+\)/i)?.[0];
+  if (!rrPrefix || !deskPart) return rationaleText;
+  return `${rrPrefix} — ${deskPart[0].replace(/\.$/, "")}; does not meet internal thresholds for structured scenario building.`;
+}
+
 /** Gate-focused bullets for “Why not actionable?” — distinct from causal layer narrative. */
 export function buildWhyNotBullets(
   decision: TradeDecision,
@@ -632,10 +644,16 @@ export function buildWhyNotBullets(
   }
   const out: string[] = [];
   if (decision.rationale?.text) {
-    pushUniqueBullet(out, decision.rationale.text);
+    if (decision.rationale.category === "risk_reward") {
+      const deskRr = (decision.reinforcements ?? []).find(isRiskRewardBullet);
+      pushUniqueBullet(out, deskRr ? mergeRiskRewardWhyNotLine(decision.rationale.text, deskRr) : decision.rationale.text);
+    } else {
+      pushUniqueBullet(out, decision.rationale.text);
+    }
   }
   for (const line of decision.reinforcements ?? []) {
     if (out.length >= max) break;
+    if (decision.rationale?.category === "risk_reward" && isRiskRewardBullet(line)) continue;
     pushUniqueBullet(out, line);
   }
   for (const row of previewLayers) {

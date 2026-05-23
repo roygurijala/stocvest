@@ -65,4 +65,22 @@ describe("Why not vs causal narrative deduplication", () => {
     const merged = buildWhyNotBullets(monitorDecision, [], "Bearish", 3, causalBullets);
     expect(merged[0]).toBe(narrative.summary);
   });
+
+  test("merges duplicate risk/reward rationale and desk reinforcement into one bullet", () => {
+    const rrDecision: TradeDecision = {
+      state: "monitor",
+      line: "Monitor",
+      reinforcements: ["Risk/reward too low (1.3:1) — below swing desk threshold (2.0:1)."],
+      rationale: {
+        category: "risk_reward",
+        label: "Why hold:",
+        text: "Risk/reward too low (1.3:1) — below threshold; does not meet internal thresholds for structured scenario building."
+      }
+    };
+    const bullets = buildWhyNotBullets(rrDecision, [], "Bullish", 5, null);
+    expect(bullets).toHaveLength(1);
+    expect(bullets[0]).toContain("1.3:1");
+    expect(bullets[0]).toContain("swing desk threshold (2.0:1)");
+    expect(bullets[0]).toContain("structured scenario building");
+  });
 });
