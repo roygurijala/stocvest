@@ -1738,11 +1738,9 @@ export function SignalsPageClient({
       {symbolCommitted ? (
         <>
       <header
-        className="signals-sticky-command sticky z-20 -mx-4 mb-1 w-full max-w-none self-start px-4 pb-2 pt-0 lg:-mx-6 lg:px-6"
+        className="app-sticky-page-header signals-sticky-command sticky z-40 -mx-4 mb-1 w-full max-w-none self-start px-4 pb-2 pt-2 lg:-mx-6 lg:px-6"
         style={{
-          top: APP_TOP_BAR_LAYOUT_HEIGHT,
-          background: colors.background,
-          borderBottom: `1px solid ${colors.border}`
+          top: APP_TOP_BAR_LAYOUT_HEIGHT
         }}
         data-testid="signals-sticky-command"
       >

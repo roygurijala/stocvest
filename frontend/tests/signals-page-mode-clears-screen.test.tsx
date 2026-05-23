@@ -415,4 +415,10 @@ describe("SignalsPageClient — Swing Pro (dayTradingSurfaces=false)", () => {
       expect(screen.getByTestId("signals-setup-bias")).toHaveTextContent("Bullish")
     );
   });
+
+  test("sticky command bar uses opaque full-bleed backdrop", async () => {
+    renderSignalsWithSymbol("AAPL", "swing");
+    await waitFor(() => expect(screen.getByTestId("signals-sticky-command")).toBeInTheDocument());
+    expect(screen.getByTestId("signals-sticky-command").className).toContain("app-sticky-page-header");
+  });
 });

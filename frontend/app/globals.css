@@ -725,9 +725,6 @@ a {
     scroll-snap-align: start;
     scroll-margin-top: 0.5rem;
   }
-  .signals-sticky-command {
-    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
-  }
 }
 @media (prefers-reduced-motion: reduce) {
   .signals-page-flow {
@@ -745,35 +742,36 @@ a {
   font-size: 0.75rem;
   line-height: 1.4;
 }
-/* Watchlist — sticky header/search: opaque full-bleed backdrop so scrolled cards do not show through. */
-.watchlist-sticky-header {
+/* Sticky page headers (Signals command bar, Watchlist search) — opaque full-bleed backdrop. */
+.app-sticky-page-header {
   position: relative;
   isolation: isolate;
 }
-.watchlist-sticky-header::before {
+.app-sticky-page-header::before {
   content: "";
   position: absolute;
   z-index: -1;
-  top: 0;
+  top: -4px;
   right: -1rem;
-  bottom: 0;
+  bottom: -1px;
   left: -1rem;
   background: var(--color-bg);
   border-bottom: 1px solid var(--color-border);
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
 }
 @media (min-width: 1024px) {
-  .watchlist-sticky-header::before {
+  .app-sticky-page-header::before {
     right: -1.5rem;
     left: -1.5rem;
   }
 }
-.theme-light .watchlist-sticky-header::before {
+.theme-light .app-sticky-page-header::before {
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.1);
 }
 
-.theme-light .watchlist-sticky-header::before {
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.1);
+.signals-page-root {
+  overflow-x: clip;
+  max-width: 100%;
 }
 
 /* Modal / drawer / assistant overlay scrims — blur with opaque fallback for unsupported browsers. */
