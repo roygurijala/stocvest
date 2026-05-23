@@ -1,6 +1,8 @@
 # Deployment notes
 
-**Last updated:** 2026-05-21 · See also [`docs/CONTEXT.md`](./CONTEXT.md) §3 (full deploy checklist).
+**Last updated:** 2026-05-22 · See also [`docs/CONTEXT.md`](./CONTEXT.md) §3 (full deploy checklist).
+
+**Validation ledger capture (B62, 2026-05-22):** Requires **`terraform apply`** to create EventBridge schedule **`stocvest-development-scanner-ledger-capture`** (`scan_type: ledger_capture`, **3:55 PM ET** Mon–Fri). Push to **`main`** runs CI **`deploy-lambda`**, which must update **`scanner`** (schedule handler) and **`signals`** (composite engines + gate persistence). No new secrets or Dynamo tables.
 
 **Signal intelligence (B58–B61, 2026-05-21):** No Terraform change. Push to **`main`** runs GitHub Actions **`deploy-lambda`**, which updates **`signals`** (composite: `causal_narrative`, day `timeframe_alignment`) and **`brokers`** (watchlist maturation-summary `progress_band` / `near_ready_*`) function code. Frontend ships via **`deploy-vercel`** when the hook is configured.
 
