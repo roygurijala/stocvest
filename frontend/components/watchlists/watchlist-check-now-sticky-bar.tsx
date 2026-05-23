@@ -1,6 +1,6 @@
 "use client";
 
-import { APP_TOP_BAR_LAYOUT_HEIGHT } from "@/components/top-bar";
+import { APP_TOP_BAR_LAYOUT_HEIGHT, measureAppTopBarLayoutHeightPx } from "@/components/top-bar";
 import { spacing } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { useEffect, useRef, useState, type RefObject } from "react";
@@ -27,12 +27,13 @@ export function WatchlistCheckNowStickyBar({ count, sentinelRef }: Props) {
     if (!el || typeof window === "undefined" || !("IntersectionObserver" in window)) return;
 
     observerRef.current?.disconnect();
+    const topInsetPx = measureAppTopBarLayoutHeightPx();
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (!entry) return;
         setVisible(!entry.isIntersecting);
       },
-      { root: null, rootMargin: `-${APP_TOP_BAR_LAYOUT_HEIGHT} 0px 0px 0px`, threshold: 0 }
+      { root: null, rootMargin: `-${topInsetPx}px 0px 0px 0px`, threshold: 0 }
     );
     observer.observe(el);
     observerRef.current = observer;

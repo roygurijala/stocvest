@@ -16,6 +16,20 @@ import { useTheme } from "@/lib/theme-provider";
  */
 export const APP_TOP_BAR_LAYOUT_HEIGHT = `calc(${spacing[3]} + 3.5rem + ${spacing[3]})`;
 
+/** Fallback when the live top bar is not mounted (tests, SSR). Matches layout height at 16px root. */
+export const APP_TOP_BAR_LAYOUT_HEIGHT_PX = 80;
+
+/** IntersectionObserver `rootMargin` must use px or % — not `calc()`. */
+export function measureAppTopBarLayoutHeightPx(): number {
+  if (typeof document === "undefined") return APP_TOP_BAR_LAYOUT_HEIGHT_PX;
+  const bar = document.querySelector('[data-testid="app-top-bar"]');
+  if (bar instanceof HTMLElement) {
+    const h = bar.getBoundingClientRect().height;
+    if (Number.isFinite(h) && h > 0) return Math.ceil(h);
+  }
+  return APP_TOP_BAR_LAYOUT_HEIGHT_PX;
+}
+
 const TITLE_BY_PATH: Record<string, string> = {
   "/dashboard": "Dashboard",
   "/dashboard/scanner": "Scanner",

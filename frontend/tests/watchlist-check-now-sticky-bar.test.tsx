@@ -6,6 +6,7 @@ import { WatchlistCheckNowStickyBar } from "@/components/watchlists/watchlist-ch
 import { ThemeProvider } from "@/lib/theme-provider";
 
 let lastObserverCallback: IntersectionObserverCallback | null = null;
+let lastObserverOptions: IntersectionObserverInit | null = null;
 
 beforeAll(() => {
   Object.defineProperty(window, "matchMedia", {
@@ -20,8 +21,9 @@ beforeAll(() => {
     observe = vi.fn();
     disconnect = vi.fn();
     unobserve = vi.fn();
-    constructor(callback: IntersectionObserverCallback) {
+    constructor(callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
       lastObserverCallback = callback;
+      lastObserverOptions = options ?? null;
     }
   }
   vi.stubGlobal("IntersectionObserver", MockIntersectionObserver);
@@ -57,6 +59,7 @@ describe("WatchlistCheckNowStickyBar", () => {
     });
 
     expect(screen.getByTestId("watchlist-check-now-sticky-bar")).toHaveTextContent("Check now (2)");
+    expect(lastObserverOptions?.rootMargin).toMatch(/^-\d+px 0px 0px 0px$/);
     el.remove();
   });
 });
