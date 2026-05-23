@@ -1527,7 +1527,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
             </article>
 
             <p className="m-0 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
-              Your watchlist is a prioritized queue — click a card for Signals. Use ↻ on a card to re-run composite
+              Your watchlist is a prioritized queue — click a card for Signals. Use Refresh on a card to re-run composite
               for that desk.
               <Link href="/dashboard/signals" prefetch={false} className="ml-1 font-semibold" style={{ color: colors.accent }}>
                 Open Signals

@@ -1,12 +1,13 @@
 "use client";
 
-import { RefreshCw, X } from "lucide-react";
+import { X } from "lucide-react";
 import { SignalsDeeplinkLink } from "@/components/nav/signals-deeplink-link";
 import {
   buildWatchlistCardModel,
   type WatchlistCardModel
 } from "@/lib/watchlist-decision-card-present";
 import { watchlistSignalsOpenAriaLabel } from "@/lib/nav/watchlist-signals-deeplink";
+import { WATCHLIST_EVALUATE_LINK_CLASS } from "@/lib/watchlist-interactive-styles";
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
 import type { SnapshotPayload } from "@/lib/api/market";
 import { borderRadius, spacing } from "@/lib/design-system";
@@ -226,10 +227,10 @@ export function WatchlistDecisionCard({
           {onRefresh ? (
             <button
               type="button"
-              className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium transition hover:opacity-80"
-              style={{ color: colors.textMuted }}
+              className={`${WATCHLIST_EVALUATE_LINK_CLASS} shrink-0`}
               data-testid={`watchlist-refresh-${model.symbol}-${planMode}`}
               aria-label={`Refresh ${planMode} evaluation for ${model.symbol}`}
+              title="Re-run composite and update maturation"
               disabled={deskEvaluating}
               onClick={(e) => {
                 e.preventDefault();
@@ -237,8 +238,7 @@ export function WatchlistDecisionCard({
                 onRefresh();
               }}
             >
-              <RefreshCw size={12} className={deskEvaluating ? "animate-spin" : undefined} aria-hidden />
-              <span aria-hidden>↻</span>
+              {deskEvaluating ? "Refreshing…" : "Refresh"}
             </button>
           ) : null}
         </footer>
