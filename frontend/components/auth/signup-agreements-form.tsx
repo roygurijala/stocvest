@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { acceptSignupAgreementsAction, type SignupAgreementsActionState } from "@/app/signup/agreements/actions";
 import {
@@ -13,6 +13,7 @@ import {
 import { LegalDocumentDrawer } from "@/components/auth/legal-document-drawer";
 
 const INITIAL: SignupAgreementsActionState = {};
+const DOC_COUNT = AGREEMENTS_DOCUMENT_LINKS.length;
 
 function ContinueButton({ disabled }: { disabled: boolean }) {
   const { pending } = useFormStatus();
@@ -29,17 +30,22 @@ function ContinueButton({ disabled }: { disabled: boolean }) {
 
 export function SignupAgreementsForm() {
   const [state, action] = useFormState(acceptSignupAgreementsAction, INITIAL);
-  const [drawer, setDrawer] = useState<{ href: string; label: string } | null>(null);
+  const [wizardStep, setWizardStep] = useState<number | null>(null);
+  const autoOpenedRef = useRef(false);
 
   const [readComplete, setReadComplete] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(AGREEMENTS_DOCUMENT_LINKS.map((d) => [d.href, false]))
   );
   const [agreed, setAgreed] = useState(false);
 
-  const allRead = AGREEMENTS_DOCUMENT_LINKS.every((d) => readComplete[d.href]);
+  const completedCount = AGREEMENTS_DOCUMENT_LINKS.filter((d) => readComplete[d.href]).length;
+  const allRead = completedCount === DOC_COUNT;
+  const firstUnreadIndex = AGREEMENTS_DOCUMENT_LINKS.findIndex((d) => !readComplete[d.href]);
 
   useEffect(() => {
-    if (!allRead) {
+    if (allRead) {
+      setAgreed(true);
+    } else {
       setAgreed(false);
     }
   }, [allRead]);
@@ -48,29 +54,57 @@ export function SignupAgreementsForm() {
     setReadComplete((prev) => (prev[href] ? prev : { ...prev, [href]: true }));
   }, []);
 
+  const openWizardAt = useCallback((index: number) => {
+    const clamped = Math.max(0, Math.min(DOC_COUNT - 1, index));
+    setWizardStep(clamped);
+  }, []);
+
+  const closeWizard = useCallback(() => {
+    setWizardStep(null);
+  }, []);
+
+  useEffect(() => {
+    if (autoOpenedRef.current || allRead) return;
+    autoOpenedRef.current = true;
+    openWizardAt(firstUnreadIndex >= 0 ? firstUnreadIndex : 0);
+  }, [allRead, firstUnreadIndex, openWizardAt]);
+
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;
       if (event.data?.type !== LEGAL_DOCUMENT_READ_MESSAGE) return;
       const href = event.data.href;
-      if (typeof href === "string") {
-        markRead(href);
-        setDrawer((current) => (current?.href === href ? null : current));
+      if (typeof href !== "string") return;
+
+      markRead(href);
+      const agreedIndex = AGREEMENTS_DOCUMENT_LINKS.findIndex((d) => d.href === href);
+      const nextIndex = agreedIndex + 1;
+      if (nextIndex < DOC_COUNT) {
+        openWizardAt(nextIndex);
+      } else {
+        closeWizard();
       }
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [markRead]);
+  }, [markRead, openWizardAt, closeWizard]);
 
-  const openDoc = useCallback((href: string, label: string) => {
-    setDrawer({ href, label });
-  }, []);
+  const drawerOpen = wizardStep !== null;
+  const activeDoc = wizardStep !== null ? AGREEMENTS_DOCUMENT_LINKS[wizardStep] : null;
+  const reviewStep = wizardStep !== null ? wizardStep + 1 : Math.min(completedCount + 1, DOC_COUNT);
+  const reviewLabel = allRead ? "Review agreements again" : `Review agreements (${reviewStep} of ${DOC_COUNT})`;
 
   const continueDisabled = !agreed;
 
   return (
     <>
-      <LegalDocumentDrawer open={!!drawer} href={drawer?.href ?? null} title={drawer?.label ?? ""} onClose={() => setDrawer(null)} />
+      <LegalDocumentDrawer
+        open={drawerOpen}
+        href={activeDoc?.href ?? null}
+        title={activeDoc?.label ?? ""}
+        progressLabel={drawerOpen ? `${reviewStep} of ${DOC_COUNT}` : undefined}
+        onClose={closeWizard}
+      />
 
       <form action={action} className="grid gap-4">
         <p className="m-0 text-sm font-medium text-slate-200">
@@ -78,26 +112,24 @@ export function SignupAgreementsForm() {
           <span className="rounded bg-white/10 px-2 py-0.5 font-mono text-cyan-200">{agreementsBundleLabel()}</span>
         </p>
         <p className="m-0 text-sm text-slate-400">
-          Open each document below, scroll if needed, and click <span className="font-medium text-slate-300">I Agree</span> — the
-          panel closes automatically. You can re-read these documents anytime after sign-in.
+          Walk through each document in order, scroll if needed, and click <span className="font-medium text-slate-300">I Agree</span>{" "}
+          on each page. When all three are done, confirm below to continue.
         </p>
-        <ul className="m-0 grid gap-2 text-sm text-slate-300">
-          {AGREEMENTS_DOCUMENT_LINKS.map((doc) => {
-            const done = readComplete[doc.href];
-            return (
-              <li key={doc.href} className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <button
-                  type="button"
-                  onClick={() => openDoc(doc.href, doc.label)}
-                  className="text-left text-[#38bdf8] underline decoration-[#38bdf8]/50 underline-offset-2 transition hover:text-cyan-200"
-                >
-                  {doc.label}
-                </button>
-                <span className={done ? "text-emerald-400/90" : "text-slate-500"}>{done ? "· Agreed" : "· Not agreed yet"}</span>
-              </li>
-            );
-          })}
-        </ul>
+
+        <button
+          type="button"
+          onClick={() => openWizardAt(firstUnreadIndex >= 0 ? firstUnreadIndex : 0)}
+          className="min-h-11 w-full rounded-md border border-[#3b82f6]/50 bg-[#3b82f6]/15 px-4 py-2.5 text-sm font-semibold text-[#93c5fd] transition hover:border-[#3b82f6] hover:bg-[#3b82f6]/25 hover:text-white"
+        >
+          {reviewLabel}
+        </button>
+
+        <p className="m-0 text-xs text-slate-500" role="status" aria-live="polite">
+          {allRead
+            ? "All three documents agreed — confirm the checkbox below to continue."
+            : `${completedCount} of ${DOC_COUNT} documents agreed`}
+        </p>
+
         {AGREEMENTS_DOCUMENT_LINKS.map((doc) =>
           readComplete[doc.href] ? <input key={doc.key} type="hidden" name={signupLegalReadFieldName(doc.key)} value="1" /> : null
         )}
@@ -120,6 +152,23 @@ export function SignupAgreementsForm() {
             and understand that STOCVEST provides informational analysis only, not investment advice.
           </label>
         </div>
+
+        {allRead ? (
+          <ul className="m-0 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+            {AGREEMENTS_DOCUMENT_LINKS.map((doc, i) => (
+              <li key={doc.href}>
+                <button
+                  type="button"
+                  onClick={() => openWizardAt(i)}
+                  className="text-[#38bdf8] underline decoration-[#38bdf8]/40 underline-offset-2 transition hover:text-cyan-200"
+                >
+                  Re-read {doc.label}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
         <p className="m-0 text-xs leading-relaxed text-slate-500">
           Account creation is blocked until you complete this step. Your agreement is stored on your profile after you sign in.
         </p>

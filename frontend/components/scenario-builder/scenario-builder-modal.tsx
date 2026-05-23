@@ -31,11 +31,21 @@ import type {
   ScenarioUserInputs
 } from "@/lib/scenario/types";
 
+function defaultSystemDecision(): TradeDecision {
+  return {
+    state: "monitor",
+    line: "Setup status unavailable — treat scenario math as exploratory only.",
+    reinforcements: [],
+    rationale: null
+  };
+}
+
 interface ScenarioBuilderModalProps {
   open: boolean;
   input: ScenarioInput;
   onClose: () => void;
-  systemDecision: TradeDecision;
+  /** Desk decision for verdict banner; defaults to monitor when omitted (tests, legacy callers). */
+  systemDecision?: TradeDecision;
 }
 
 /**
@@ -291,7 +301,12 @@ function ComputedRow({ label, value, testId }: { label: string; value: string; t
  *     follow-up later (backlog B32) but the MVP keeps the surface
  *     stateless to stay clearly non-advisory.
  */
-export function ScenarioBuilderModal({ open, input, onClose, systemDecision }: ScenarioBuilderModalProps) {
+export function ScenarioBuilderModal({
+  open,
+  input,
+  onClose,
+  systemDecision = defaultSystemDecision()
+}: ScenarioBuilderModalProps) {
   const { colors } = useTheme();
   useModalOverlay(open, onClose);
   const direction = input.direction === "bullish" || input.direction === "bearish" ? input.direction : "bullish";

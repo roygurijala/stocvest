@@ -39,6 +39,18 @@ function eligibleInput(): ScenarioInput {
   };
 }
 
+/** Missing reference stop/target — opens preview modal, not full sheet. */
+function previewOnlyInput(): ScenarioInput {
+  return {
+    symbol: "AAPL",
+    direction: "bullish",
+    mode: "day",
+    generated_at: new Date().toISOString(),
+    reference: { current_price: 100 },
+    volatility_regime: "normal"
+  };
+}
+
 function actionableReadiness(): ScenarioReadinessContext {
   return {
     symbol: "AAPL",
@@ -60,23 +72,30 @@ describe("BuildScenarioButton — always enabled", () => {
     expect(btn.textContent).toContain("Scenario Builder");
   });
 
-  test("full capability when actionable and structurally eligible", () => {
+  test("full capability when reference stop and target exist", () => {
     wrap(<BuildScenarioButton input={eligibleInput()} readiness={actionableReadiness()} />);
     const btn = screen.getByTestId("build-scenario-button");
     expect(btn.getAttribute("data-capability")).toBe("full");
     expect(btn.getAttribute("data-eligible")).toBe("true");
     const title = btn.getAttribute("title") ?? "";
-    expect(title).toContain("full scenario planning");
+    expect(title).toContain("verdict banner");
   });
 
-  test("preview capability without actionable readiness", () => {
+  test("full capability without actionable readiness when structurally eligible", () => {
     wrap(<BuildScenarioButton input={eligibleInput()} />);
+    const btn = screen.getByTestId("build-scenario-button");
+    expect(btn.getAttribute("data-capability")).toBe("full");
+    expect(btn.getAttribute("data-eligible")).toBe("true");
+  });
+
+  test("preview capability when stop and target are missing", () => {
+    wrap(<BuildScenarioButton input={previewOnlyInput()} />);
     const btn = screen.getByTestId("build-scenario-button");
     expect(btn.getAttribute("data-capability")).toBe("preview");
     expect(btn.getAttribute("data-eligible")).toBe("false");
   });
 
-  test("building_soon capability at 3/6 alignment", () => {
+  test("full capability at 3/6 alignment when structurally eligible", () => {
     wrap(
       <BuildScenarioButton
         input={eligibleInput()}
@@ -89,7 +108,7 @@ describe("BuildScenarioButton — always enabled", () => {
         }}
       />
     );
-    expect(screen.getByTestId("build-scenario-button").getAttribute("data-capability")).toBe("building_soon");
+    expect(screen.getByTestId("build-scenario-button").getAttribute("data-capability")).toBe("full");
   });
 });
 
@@ -101,7 +120,7 @@ describe("BuildScenarioButton — gated output not access", () => {
     expect(btn.textContent).toContain("Scenario Builder");
   });
 
-  test("gap intel disabled stays enabled with building_soon when setup actionable", () => {
+  test("gap intel disabled stays enabled with preview when gap blocks eligibility", () => {
     wrap(
       <BuildScenarioButton
         input={{
@@ -113,11 +132,11 @@ describe("BuildScenarioButton — gated output not access", () => {
     );
     const btn = screen.getByTestId("build-scenario-button");
     expect(btn).not.toHaveAttribute("disabled");
-    expect(btn.getAttribute("data-capability")).toBe("building_soon");
+    expect(btn.getAttribute("data-capability")).toBe("preview");
   });
 
-  test("click opens preview modal without trade prices when not full", () => {
-    wrap(<BuildScenarioButton input={eligibleInput()} />);
+  test("click opens preview modal without trade prices when structurally incomplete", () => {
+    wrap(<BuildScenarioButton input={previewOnlyInput()} />);
     fireEvent.click(screen.getByTestId("build-scenario-button"));
     expect(screen.getByTestId("scenario-builder-preview-modal")).toBeInTheDocument();
     expect(screen.getByTestId("scenario-preview-dual-status")).toBeInTheDocument();
@@ -135,7 +154,7 @@ describe("BuildScenarioButton — gated output not access", () => {
   });
 
   test("expanded drill-down shows inline panels and advanced evidence link only", () => {
-    wrap(<BuildScenarioButton input={eligibleInput()} drillDown={{ surface: "scanner" }} />);
+    wrap(<BuildScenarioButton input={previewOnlyInput()} drillDown={{ surface: "scanner" }} />);
     fireEvent.click(screen.getByTestId("build-scenario-button"));
     fireEvent.click(screen.getByTestId("scenario-preview-drill-down-toggle"));
     expect(screen.getByTestId("scenario-preview-inline-panels")).toBeInTheDocument();
@@ -144,6 +163,13 @@ describe("BuildScenarioButton — gated output not access", () => {
     expect(screen.getByText("Dive deeper (advanced view)")).toBeInTheDocument();
     expect(screen.getByTestId("scenario-preview-action-evidence")).toHaveTextContent("Open full evidence");
     expect(screen.queryByText(/on Signals/i)).not.toBeInTheDocument();
+  });
+
+  test("click opens full modal when structurally eligible", () => {
+    wrap(<BuildScenarioButton input={eligibleInput()} readiness={actionableReadiness()} />);
+    fireEvent.click(screen.getByTestId("build-scenario-button"));
+    expect(screen.getByTestId("scenario-builder-modal")).toBeInTheDocument();
+    expect(screen.queryByTestId("scenario-builder-preview-modal")).not.toBeInTheDocument();
   });
 });
 
@@ -160,7 +186,7 @@ describe("BuildScenarioButton — never implies execution", () => {
   });
 
   test("tooltip never uses endorsement words", () => {
-    wrap(<BuildScenarioButton input={eligibleInput()} />);
+    wrap(<BuildScenarioButton input={previewOnlyInput()} />);
     const title = (screen.getByTestId("build-scenario-button").getAttribute("title") ?? "").toLowerCase();
     for (const banned of ["recommend", "approve", "validated", "qualified", "cleared", "endorsed"]) {
       expect(title).not.toContain(banned);

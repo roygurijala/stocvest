@@ -10,11 +10,14 @@ export function LegalDocumentDrawer({
   open,
   href,
   title,
+  progressLabel,
   onClose,
 }: {
   open: boolean;
   href: string | null;
   title: string;
+  /** e.g. "2 of 3" — shown in the signup agreements wizard header. */
+  progressLabel?: string;
   onClose: () => void;
 }) {
   const titleId = useId();
@@ -67,9 +70,14 @@ export function LegalDocumentDrawer({
         }`}
       >
         <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-5">
-          <h2 id={titleId} className="m-0 min-w-0 truncate text-base font-semibold text-slate-100 sm:text-lg">
-            {title}
-          </h2>
+          <div className="min-w-0 flex-1">
+            {progressLabel ? (
+              <p className="m-0 text-xs font-medium uppercase tracking-wide text-slate-500">{progressLabel}</p>
+            ) : null}
+            <h2 id={titleId} className="m-0 min-w-0 truncate text-base font-semibold text-slate-100 sm:text-lg">
+              {title}
+            </h2>
+          </div>
           <button
             type="button"
             onClick={onClose}

@@ -18,7 +18,7 @@ export default function SignupAgreementsPage() {
     <AuthShell
       signupStep="agreements"
       title="Agreements"
-      subtitle="Open each document, click I Agree (the panel closes automatically), then confirm below. You can re-read agreements anytime after sign-in."
+      subtitle="Review each agreement in order, then confirm below to continue. You can re-read these documents anytime after sign-in."
     >
       {alreadyAccepted ? (
         <div className="mb-6 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-100">

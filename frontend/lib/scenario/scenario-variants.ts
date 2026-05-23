@@ -632,9 +632,10 @@ export function explainScenarioImpact(
 
 /** Non-authoritative blockers still applying after scenario clears R/R only. */
 export function remainingBlockersAfterScenarioRr(
-  systemDecision: TradeDecision,
+  systemDecision: TradeDecision | null | undefined,
   scenarioClearsRr: boolean
 ): string[] {
+  if (!systemDecision) return [];
   const out: string[] = [];
   const isRrText = (t: string) => /risk\s*\/?\s*reward|r\/r/i.test(t);
 
