@@ -116,9 +116,8 @@ export function LandingHeroSearch() {
         className="max-w-3xl text-[1.75rem] font-bold leading-snug tracking-tight text-slate-50 md:text-4xl md:leading-tight lg:text-[2.75rem]"
         data-testid="landing-hero-headline"
       >
-        We tell you when to trade—
-        <br className="hidden sm:inline" />
-        <span className="sm:ml-0"> and when to stay out.</span>
+        <span className="block">We tell you when to trade</span>
+        <span className="block">and when to stay out.</span>
       </h1>
 
       <p
