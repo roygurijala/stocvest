@@ -770,7 +770,6 @@ a {
 }
 
 .signals-page-root {
-  overflow-x: clip;
   max-width: 100%;
 }
 

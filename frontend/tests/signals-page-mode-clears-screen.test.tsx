@@ -429,6 +429,9 @@ describe("SignalsPageClient — Swing Pro (dayTradingSurfaces=false)", () => {
   test("sticky command bar uses opaque full-bleed backdrop", async () => {
     renderSignalsWithSymbol("AAPL", "swing");
     await waitFor(() => expect(screen.getByTestId("signals-sticky-command")).toBeInTheDocument());
-    expect(screen.getByTestId("signals-sticky-command").className).toContain("app-sticky-page-header");
+    const header = screen.getByTestId("signals-sticky-command");
+    expect(header.className).toContain("app-sticky-page-header");
+    expect(header.className).toContain("lg:sticky");
+    expect(header.className.split(/\s+/)).not.toContain("sticky");
   });
 });
