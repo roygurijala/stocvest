@@ -21,8 +21,6 @@ import type { FundamentalBackdropSummary } from "@/lib/signal-evidence/fundament
 import { SignalsFundamentalBackdrop } from "@/components/signals/signals-fundamental-backdrop";
 import { SignalsFundamentalBackdropUpgrade } from "@/components/signals/signals-fundamental-upgrade";
 import { ConvictionTierBadge } from "@/components/signals/conviction-tier-badge";
-import { SignalsScenarioAdjust } from "@/components/signals/signals-scenario-adjust";
-import type { ScenarioGeometryBundle } from "@/lib/scenario/scenario-variants";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -37,8 +35,6 @@ type Props = {
   alignmentRatio?: number | null;
   fundamentalSummary?: FundamentalBackdropSummary | null;
   showFundamentalUpgrade?: boolean;
-  /** Reference geometry for controlled what-if (Signals only; does not change system decision). */
-  scenarioGeometryBundle?: ScenarioGeometryBundle | null;
   /** Desk tabs: KPIs live in sticky strip; omit grid + why-not panel here. */
   layout?: "full" | "desk";
 };
@@ -54,11 +50,9 @@ export function SignalsSetupRead({
   alignmentRatio,
   fundamentalSummary,
   showFundamentalUpgrade = false,
-  scenarioGeometryBundle = null,
   layout = "full"
 }: Props) {
   const { colors } = useTheme();
-  const symU = symbol.trim().toUpperCase();
   const [executionDetailOpen, setExecutionDetailOpen] = useState(false);
   const alignment = resolveSignalsLayerAlignment({ rows, bias, alignmentRatio });
   const alignmentLine = formatSignalsAlignmentDisplayLine(alignment, bias, maturationState);
@@ -184,14 +178,6 @@ export function SignalsSetupRead({
           Setup & scenario
         </p>
       )}
-
-      {scenarioGeometryBundle ? (
-        <SignalsScenarioAdjust
-          key={`${symU}-${tradingMode}`}
-          systemDecision={decision}
-          geometryBundle={scenarioGeometryBundle}
-        />
-      ) : null}
 
       <p
         className="m-0 mt-3 text-sm font-medium leading-snug"

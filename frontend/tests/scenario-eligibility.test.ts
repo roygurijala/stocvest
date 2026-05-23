@@ -85,18 +85,32 @@ describe("isEligibleForScenario — each gate fails specifically", () => {
     expect(r.reasons).toContain("no_reference_price");
   });
 
-  test("test_risk_anchor_via_explicit_stop_only_passes", () => {
-    // Reference price + explicit stop, no ATR, unknown vol → still eligible
-    // because explicit stop satisfies the risk anchor on its own.
+  test("test_no_stop_when_missing", () => {
+    const r = isEligibleForScenario(
+      happyInput({ reference: { current_price: 100, target_1: 110, atr: 2.5 } }),
+      NOW
+    );
+    expect(r.eligible).toBe(false);
+    expect(r.reasons).toContain("no_stop");
+  });
+
+  test("test_no_target_when_missing", () => {
+    const r = isEligibleForScenario(
+      happyInput({ reference: { current_price: 100, stop: 95, atr: 2.5 } }),
+      NOW
+    );
+    expect(r.eligible).toBe(false);
+    expect(r.reasons).toContain("no_target");
+  });
+
+  test("test_risk_anchor_via_explicit_stop_and_target_passes", () => {
     const r = isEligibleForScenario(
       happyInput({
-        reference: { current_price: 100, stop: 95 },
+        reference: { current_price: 100, stop: 95, target_1: 110 },
         volatility_regime: "unknown"
       }),
       NOW
     );
-    // Will still fail on unknown_volatility (separate gate) — but NOT
-    // on no_risk_anchor.
     expect(r.reasons).not.toContain("no_risk_anchor");
     expect(r.reasons).toContain("unknown_volatility");
   });
@@ -109,9 +123,7 @@ describe("isEligibleForScenario — each gate fails specifically", () => {
     expect(r.reasons).not.toContain("no_risk_anchor");
   });
 
-  test("test_risk_anchor_via_price_plus_known_regime", () => {
-    // No explicit stop, no ATR — but reference price + known regime is
-    // accepted (the modal will scaffold a regime-default % stop).
+  test("test_risk_anchor_via_price_plus_known_regime_requires_stop_and_target", () => {
     const r = isEligibleForScenario(
       happyInput({
         reference: { current_price: 100 },
@@ -119,8 +131,9 @@ describe("isEligibleForScenario — each gate fails specifically", () => {
       }),
       NOW
     );
-    expect(r.reasons).not.toContain("no_risk_anchor");
-    expect(r.eligible).toBe(true);
+    expect(r.reasons).toContain("no_stop");
+    expect(r.reasons).toContain("no_target");
+    expect(r.eligible).toBe(false);
   });
 
   test("test_no_risk_anchor_when_truly_empty", () => {
@@ -225,21 +238,19 @@ describe("isEligibleForScenario — low risk/reward gate (BRK.B feedback, 2026-0
   // completeness only" philosophy. The threshold matches
   // synthTradeDecision::rrFail.
 
-  test("test_rr_below_2_fails_eligibility_with_low_risk_reward_reason", () => {
+  test("test_rr_below_2_still_eligible_for_planning_sheet", () => {
     const r = isEligibleForScenario(happyInput({ risk_reward: 0.5 }), NOW);
-    expect(r.eligible).toBe(false);
-    expect(r.reasons).toContain("low_risk_reward");
+    expect(r.eligible).toBe(true);
+    expect(r.reasons).not.toContain("low_risk_reward");
   });
 
-  test("test_rr_below_2_brk_b_regression_0p5_to_1", () => {
-    // Exact BRK.B scenario from the screenshot: long direction, R/R
-    // displayed as 0.5:1 — must disable Build Scenario.
+  test("test_rr_below_2_brk_b_opens_builder_with_verdict_banner", () => {
     const r = isEligibleForScenario(
       happyInput({ symbol: "BRK.B", direction: "bullish", risk_reward: 0.5 }),
       NOW
     );
-    expect(r.eligible).toBe(false);
-    expect(r.reasons).toContain("low_risk_reward");
+    expect(r.eligible).toBe(true);
+    expect(r.reasons).not.toContain("low_risk_reward");
   });
 
   test("test_rr_at_threshold_2p0_is_eligible", () => {
@@ -254,9 +265,10 @@ describe("isEligibleForScenario — low risk/reward gate (BRK.B feedback, 2026-0
     expect(r.eligible).toBe(true);
   });
 
-  test("test_swing_rr_below_threshold_1p8_just_under_2_fails", () => {
+  test("test_swing_rr_below_threshold_1p8_still_eligible", () => {
     const r = isEligibleForScenario(happyInput({ mode: "swing", risk_reward: 1.8 }), NOW);
-    expect(r.reasons).toContain("low_risk_reward");
+    expect(r.eligible).toBe(true);
+    expect(r.reasons).not.toContain("low_risk_reward");
   });
 
   test("test_day_rr_1p8_passes_above_desk_minimum", () => {
@@ -265,20 +277,17 @@ describe("isEligibleForScenario — low risk/reward gate (BRK.B feedback, 2026-0
     expect(r.eligible).toBe(true);
   });
 
-  test("test_day_mode_rr_1p4_passes_swing_same_rr_fails", () => {
+  test("test_day_mode_rr_1p4_passes_swing_same_rr_still_eligible", () => {
     const day = isEligibleForScenario(happyInput({ mode: "day", risk_reward: 1.4 }), NOW);
-    expect(day.reasons).not.toContain("low_risk_reward");
     expect(day.eligible).toBe(true);
 
     const swing = isEligibleForScenario(happyInput({ mode: "swing", risk_reward: 1.4 }), NOW);
-    expect(swing.reasons).toContain("low_risk_reward");
-    expect(swing.eligible).toBe(false);
+    expect(swing.eligible).toBe(true);
   });
 
-  test("test_day_mode_rr_1p2_fails_below_desk_minimum", () => {
+  test("test_day_mode_rr_1p2_still_eligible", () => {
     const r = isEligibleForScenario(happyInput({ mode: "day", risk_reward: 1.2 }), NOW);
-    expect(r.reasons).toContain("low_risk_reward");
-    expect(r.eligible).toBe(false);
+    expect(r.eligible).toBe(true);
   });
 
   test("test_rr_missing_field_does_not_gate", () => {

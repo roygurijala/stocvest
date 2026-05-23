@@ -55,7 +55,6 @@ import { buildScenarioPlanningBundle } from "@/lib/scenario/scenario-planning-bu
 import type { ScenarioBuilderDrillDown } from "@/lib/scenario/scenario-builder-drill-down";
 import { useWatchlistMaturationLine } from "@/lib/hooks/use-watchlist-maturation-line";
 import { buildSignalEvaluationFreshness } from "@/lib/signals-evaluation-present";
-import { buildScenarioGeometryBundle } from "@/lib/scenario/scenario-variants";
 import {
   buildSignalsPageDecision,
   formatSignalsAlignmentDisplayLine,
@@ -981,42 +980,6 @@ export function SignalsPageClient({
 
   const scenarioPlanningInput = scenarioPlanningBundle?.input ?? null;
 
-  const scenarioGeometryBundle = useMemo(() => {
-    if (!compositeResult || isInsufficientCompositeResponse(compositeResult)) return null;
-    const insight = parseSwingCompositeInsight(compositeResult as Record<string, unknown>);
-    const zone = insight?.historical_entry_zone;
-    const last =
-      typeof snapshot?.last_trade_price === "number" && Number.isFinite(snapshot.last_trade_price)
-        ? snapshot.last_trade_price
-        : null;
-    const c = compositeResult as Record<string, unknown>;
-    const rr = typeof c.risk_reward === "number" && Number.isFinite(c.risk_reward) ? c.risk_reward : null;
-    const ref = referenceLevels;
-    return buildScenarioGeometryBundle({
-      bias: setupBias,
-      maturationState: maturationLine?.state,
-      layersAligned: maturationLine?.layersAligned,
-      layersTotal: maturationLine?.layersTotal,
-      entryZoneLow: zone?.low ?? null,
-      entryZoneHigh: zone?.high ?? null,
-      last,
-      structuralStop: insight?.reference_stop_level ?? null,
-      target1: insight?.reference_target_1 ?? null,
-      target2: insight?.reference_target_2 ?? null,
-      vwap: insight?.vwap ?? ref.vwap ?? null,
-      support: ref.support,
-      resistance: ref.resistance,
-      prevClose:
-        typeof snapshot?.prev_close === "number" && Number.isFinite(snapshot.prev_close)
-          ? snapshot.prev_close
-          : null,
-      systemRiskReward: rr,
-      compositeStopProvided: insight?.reference_stop_level != null,
-      compositeTargetProvided: insight?.reference_target_1 != null,
-      compositeZoneProvided: zone != null && zone.low > 0 && zone.high > zone.low
-    });
-  }, [compositeResult, setupBias, snapshot, referenceLevels, maturationLine]);
-
   const pageDecision = useMemo(() => {
     if (!compositeResult || isInsufficientCompositeResponse(compositeResult)) return null;
     const c = compositeResult as Record<string, unknown>;
@@ -1108,9 +1071,10 @@ export function SignalsPageClient({
     if (!symbolCommitted || !scenarioPlanningBundle) return null;
     return {
       ...scenarioPlanningBundle.readiness,
-      decisionState: pageDecision?.state ?? scenarioPlanningBundle.readiness.decisionState ?? null
+      decisionState: pageDecision?.state ?? scenarioPlanningBundle.readiness.decisionState ?? null,
+      systemDecision: pageDecision ?? scenarioPlanningBundle.readiness.systemDecision ?? null
     };
-  }, [symbolCommitted, scenarioPlanningBundle, pageDecision?.state]);
+  }, [symbolCommitted, scenarioPlanningBundle, pageDecision]);
 
   const setupDirectionForEvidence =
     layerSignalSummary === "Bullish" ? "long" : layerSignalSummary === "Bearish" ? "short" : "neutral";
@@ -1855,7 +1819,6 @@ export function SignalsPageClient({
                 alignmentRatio={compositeAlignmentRatio}
                 fundamentalSummary={fundamentalSummary}
                 showFundamentalUpgrade={showFundamentalUpgrade}
-                scenarioGeometryBundle={scenarioGeometryBundle}
                 layout="desk"
               />
             ) : null}

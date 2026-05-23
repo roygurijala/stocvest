@@ -164,6 +164,8 @@ export const SCENARIO_INELIGIBILITY_REASONS = [
   "no_direction",
   "neutral_direction",
   "no_reference_price",
+  "no_stop",
+  "no_target",
   "no_risk_anchor",
   "unknown_volatility",
   "signal_stale",

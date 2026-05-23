@@ -48,7 +48,6 @@
  */
 
 import {
-  minRiskRewardForVerdict,
   MIN_RR_A_TIER
 } from "@/lib/trade-conviction-tier";
 import {
@@ -76,6 +75,15 @@ function hasReferencePrice(reference: ScenarioInput["reference"]): boolean {
     reference.prev_close
   ];
   return candidates.some((v) => typeof v === "number" && Number.isFinite(v) && v > 0);
+}
+
+function hasExplicitStop(reference: ScenarioInput["reference"]): boolean {
+  return typeof reference.stop === "number" && Number.isFinite(reference.stop) && reference.stop > 0;
+}
+
+function hasExplicitTarget(reference: ScenarioInput["reference"]): boolean {
+  const targets = [reference.target_1, reference.target_2, reference.target_3];
+  return targets.some((v) => typeof v === "number" && Number.isFinite(v) && v > 0);
 }
 
 function hasRiskAnchor(input: ScenarioInput): boolean {
@@ -148,6 +156,8 @@ export function isEligibleForScenario(
   }
 
   if (!hasReferencePrice(input.reference)) reasons.push("no_reference_price");
+  if (!hasExplicitStop(input.reference)) reasons.push("no_stop");
+  if (!hasExplicitTarget(input.reference)) reasons.push("no_target");
   if (!hasRiskAnchor(input)) reasons.push("no_risk_anchor");
 
   if (input.volatility_regime === "unknown") {
@@ -165,16 +175,8 @@ export function isEligibleForScenario(
     reasons.push("signal_stale");
   }
 
-  // Risk/reward gate (BRK.B feedback, 2026-05-13). Mode-aware minimum
-  // matches desk verdict (`swing` 2.0, `day` 1.3). A-tier conviction
-  // (2.0) is a separate display band — day can open the full sheet at
-  // 1.3 while still showing B+ when below 2.0.
-  const rr = input.risk_reward;
-  const minRr = minRiskRewardForVerdict(input.mode);
-  if (typeof rr === "number" && Number.isFinite(rr) && rr > 0 && rr < minRr) {
-    reasons.push("low_risk_reward");
-  }
-
+  // low_risk_reward is surfaced in the Scenario Builder verdict banner — users may
+  // adjust entry to explore geometry even when reference R/R is below desk minimum.
   if (input.gap_intel_gate?.scenario_builder_state === "DISABLED") {
     reasons.push("gap_intel_blocked");
   }
@@ -201,6 +203,10 @@ export function scenarioIneligibilityLabel(reason: ScenarioIneligibilityReason):
       return "Signal is neutral — there is no directional scenario to plan.";
     case "no_reference_price":
       return "No reference price exists (entry zone, snapshot, or session anchor).";
+    case "no_stop":
+      return "Reference stop level is missing — scenario planning needs a stop from the signal.";
+    case "no_target":
+      return "Reference target level is missing — scenario planning needs at least one target from the signal.";
     case "no_risk_anchor":
       return "No way to express risk numerically — stop or ATR is required.";
     case "unknown_volatility":

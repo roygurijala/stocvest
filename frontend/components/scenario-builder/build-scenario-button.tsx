@@ -19,12 +19,23 @@ import {
   type ScenarioPreviewPanelData
 } from "@/lib/scenario/scenario-preview-panels";
 import type { ScenarioInput } from "@/lib/scenario/types";
+import type { TradeDecision } from "@/lib/signal-evidence/trade-decision";
 import { useTheme } from "@/lib/theme-provider";
 
 type ModalSession = {
   input: ScenarioInput;
   resolved: ScenarioReadinessResolved;
+  systemDecision: TradeDecision;
 };
+
+function fallbackSystemDecision(): TradeDecision {
+  return {
+    state: "monitor",
+    line: "Setup status unavailable — treat scenario math as exploratory only.",
+    reinforcements: [],
+    rationale: null
+  };
+}
 
 interface BuildScenarioButtonProps {
   input: ScenarioInput;
@@ -75,8 +86,8 @@ export function BuildScenarioButton({
   const label = "Scenario Builder";
   const tooltip =
     resolved.capability === "full"
-      ? "Open full scenario planning — setup and execution window are both available."
-      : "Preview setup and execution status. Full planning unlocks when both alignment and session conditions clear.";
+      ? "Plan entry, stop, and target — verdict banner shows whether desk gates clear for your geometry."
+      : "Reference stop and target are required before the planning sheet can open.";
 
   const prominent = variant === "prominent";
   const pad = compact
@@ -88,19 +99,17 @@ export function BuildScenarioButton({
   const iconSize = compact ? 13 : prominent ? 16 : 14;
 
   const accentBorder =
-    resolved.capability === "full"
-      ? colors.accent
-      : resolved.capability === "building_soon"
-        ? "rgba(245, 158, 11, 0.65)"
-        : colors.border;
+    resolved.capability === "full" ? colors.accent : colors.border;
   const accentBg = prominent
-    ? `color-mix(in srgb, ${resolved.capability === "full" ? colors.accent : "#f59e0b"} 14%, ${colors.surfaceMuted})`
+    ? `color-mix(in srgb, ${resolved.capability === "full" ? colors.accent : colors.caution} 14%, ${colors.surfaceMuted})`
     : colors.surfaceMuted;
 
   const handleOpen = useCallback(() => {
-    setSession({ input, resolved });
+    const systemDecision =
+      readinessCtx.systemDecision ?? fallbackSystemDecision();
+    setSession({ input, resolved, systemDecision });
     setOpen(true);
-  }, [input, resolved]);
+  }, [input, resolved, readinessCtx.systemDecision]);
 
   const handleClose = useCallback(() => {
     setOpen(false);
@@ -146,7 +155,12 @@ export function BuildScenarioButton({
     open && session && typeof document !== "undefined"
       ? createPortal(
           session.resolved.capability === "full" ? (
-            <ScenarioBuilderModal open input={session.input} onClose={handleClose} />
+            <ScenarioBuilderModal
+              open
+              input={session.input}
+              systemDecision={session.systemDecision}
+              onClose={handleClose}
+            />
           ) : (
             <ScenarioBuilderPreviewModal
               open

@@ -22,7 +22,7 @@ import {
   type SignalsSetupBias
 } from "@/lib/signals-page-present";
 import type { ScenarioInput } from "@/lib/scenario/types";
-import type { TradeDecisionState } from "@/lib/signal-evidence/trade-decision";
+import type { TradeDecision, TradeDecisionState } from "@/lib/signal-evidence/trade-decision";
 
 export type ScenarioBuilderCapability = "preview" | "building_soon" | "full";
 
@@ -49,6 +49,8 @@ export type ScenarioReadinessContext = {
   maturationState?: string | null;
   /** Signals page decision when available. */
   decisionState?: TradeDecisionState | null;
+  /** Full desk decision for Scenario Builder verdict banner (strict gates). */
+  systemDecision?: TradeDecision | null;
   /** True when reference levels exist on the payload — qualitative only in UI. */
   hasReferenceLevels?: boolean;
   readinessLabel?: string | null;
@@ -147,15 +149,6 @@ function resolveSetupTier(
   return "not_aligned";
 }
 
-function shouldUseBuildingSoonCapability(
-  setupTier: ScenarioSetupTier,
-  executionTier: ScenarioExecutionTier
-): boolean {
-  if (setupTier === "near_ready" || setupTier === "developing") return true;
-  if (setupTier === "actionable" && executionTier !== "available") return true;
-  return false;
-}
-
 function resolveExecutionTier(gapIntelBlocked: boolean, structurallyEligible: boolean): ScenarioExecutionTier {
   if (gapIntelBlocked) return "session_limited";
   if (!structurallyEligible) return "structural_incomplete";
@@ -163,7 +156,8 @@ function resolveExecutionTier(gapIntelBlocked: boolean, structurallyEligible: bo
 }
 
 /**
- * Resolve which modal experience to show. Does not disable the button.
+ * Resolve which modal experience to show. Full sheet when structurally eligible
+ * (reference stop + target present). Preview when levels are missing.
  */
 export function resolveScenarioBuilderCapability(
   ctx: ScenarioReadinessContext,
@@ -181,7 +175,6 @@ export function resolveScenarioBuilderCapability(
 
   const setupTier = resolveSetupTier(aligned, total, maturation, decision);
   const executionTier = resolveExecutionTier(gapIntelBlocked, structurallyEligible);
-  const buildingSoon = shouldUseBuildingSoonCapability(setupTier, executionTier);
 
   const shared = {
     aligned,
@@ -195,19 +188,11 @@ export function resolveScenarioBuilderCapability(
     executionTier
   };
 
-  if (setupTier === "actionable" && executionTier === "available" && structurallyEligible) {
+  if (structurallyEligible) {
     return {
       ...shared,
       capability: "full",
-      structurallyComplete: true,
-      gapIntelBlocked: false
-    };
-  }
-
-  if (buildingSoon) {
-    return {
-      ...shared,
-      capability: "building_soon"
+      structurallyComplete: true
     };
   }
 

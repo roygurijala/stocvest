@@ -903,6 +903,7 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
     layersAligned: compositeAlignment.aligned,
     layersTotal: compositeAlignment.total,
     decisionState: evidenceDecision.state,
+    systemDecision: evidenceDecision,
     hasReferenceLevels: levelsComplete
   };
 

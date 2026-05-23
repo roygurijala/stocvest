@@ -10,20 +10,32 @@ import {
   formatScenarioForClipboard,
   formatScenarioPercent
 } from "@/lib/scenario/compute";
+import {
+  formatScenarioRatio,
+  resolveScenarioLevels,
+  buildScenarioVariantCatalog,
+  type ScenarioPresetId
+} from "@/lib/scenario/scenario-variants";
+import { scenarioInputToGeometrySource } from "@/lib/scenario/scenario-input-geometry";
+import { resolveScenarioVerdict } from "@/lib/scenario/scenario-verdict";
+import type { TradeDecision } from "@/lib/signal-evidence/trade-decision";
+import { ScenarioBuilderVerdictBanner } from "@/components/scenario-builder/scenario-builder-verdict-banner";
+import { ScenarioBuilderComparisonTable } from "@/components/scenario-builder/scenario-builder-comparison-table";
+import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
+import { useModalOverlay } from "@/lib/hooks/use-modal-overlay";
+import { MODAL_BACKDROP_CLASS, MODAL_DIALOG_SCROLL_CLASS } from "@/lib/overlay-classes";
+import { useTheme } from "@/lib/theme-provider";
 import type {
   ScenarioComputedResult,
   ScenarioInput,
   ScenarioUserInputs
 } from "@/lib/scenario/types";
-import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
-import { useModalOverlay } from "@/lib/hooks/use-modal-overlay";
-import { MODAL_BACKDROP_CLASS, MODAL_DIALOG_SCROLL_CLASS } from "@/lib/overlay-classes";
-import { useTheme } from "@/lib/theme-provider";
 
 interface ScenarioBuilderModalProps {
   open: boolean;
   input: ScenarioInput;
   onClose: () => void;
+  systemDecision: TradeDecision;
 }
 
 /**
@@ -279,10 +291,16 @@ function ComputedRow({ label, value, testId }: { label: string; value: string; t
  *     follow-up later (backlog B32) but the MVP keeps the surface
  *     stateless to stay clearly non-advisory.
  */
-export function ScenarioBuilderModal({ open, input, onClose }: ScenarioBuilderModalProps) {
+export function ScenarioBuilderModal({ open, input, onClose, systemDecision }: ScenarioBuilderModalProps) {
   const { colors } = useTheme();
   useModalOverlay(open, onClose);
   const direction = input.direction === "bullish" || input.direction === "bearish" ? input.direction : "bullish";
+
+  const catalog = useMemo(() => {
+    const source = scenarioInputToGeometrySource(input);
+    if (!source) return null;
+    return buildScenarioVariantCatalog(source);
+  }, [input]);
 
   const entryDefault = useMemo(() => deriveEntryDefault(input.reference), [input.reference]);
   const stopDefault = useMemo(
@@ -319,6 +337,28 @@ export function ScenarioBuilderModal({ open, input, onClose }: ScenarioBuilderMo
     () => computeScenarioResult(userInputs),
     [userInputs]
   );
+
+  const verdict = useMemo(
+    () =>
+      resolveScenarioVerdict({
+        systemDecision,
+        mode: input.mode,
+        direction,
+        entry,
+        stop,
+        target
+      }),
+    [systemDecision, input.mode, direction, entry, stop, target]
+  );
+
+  const applyPreset = (preset: ScenarioPresetId) => {
+    if (!catalog) return;
+    const resolved = resolveScenarioLevels(catalog.source, catalog.presets[preset]);
+    if (!resolved) return;
+    setEntry(resolved.entry);
+    setStop(resolved.stop);
+    setTarget(resolved.target);
+  };
 
   const handleReset = () => {
     setEntry(entryDefault);
@@ -397,7 +437,8 @@ export function ScenarioBuilderModal({ open, input, onClose }: ScenarioBuilderMo
                   Build scenario — {input.symbol.toUpperCase()}
                 </h2>
                 <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>
-                  {directionLabel} · {modeLabel} · Structurally complete
+                  {directionLabel} · {modeLabel}
+                  {verdict.scenarioRr != null ? ` · Your plan ${formatScenarioRatio(verdict.scenarioRr)}` : ""}
                 </p>
               </div>
               <button
@@ -430,6 +471,19 @@ export function ScenarioBuilderModal({ open, input, onClose }: ScenarioBuilderMo
               >
                 {input.structural_planning_banner}
               </p>
+            ) : null}
+
+            <ScenarioBuilderVerdictBanner verdict={verdict} />
+
+            {catalog ? (
+              <ScenarioBuilderComparisonTable
+                catalog={catalog}
+                mode={input.mode}
+                entry={entry}
+                stop={stop}
+                target={target}
+                onApplyPreset={applyPreset}
+              />
             ) : null}
 
             <section

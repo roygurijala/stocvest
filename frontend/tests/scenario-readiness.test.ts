@@ -38,31 +38,31 @@ describe("resolveScenarioBuilderCapability", () => {
     const r = resolveScenarioBuilderCapability(ctx({ layersAligned: 2, layersTotal: 6 }), baseInput());
     expect(r.setupTier).toBe("developing");
     expect(setupTierLabel(r.setupTier, r.aligned, r.total)).toBe("Developing (2 / 6)");
-    expect(r.capability).toBe("building_soon");
+    expect(r.capability).toBe("full");
   });
 
-  test("1/6 is not aligned", () => {
+  test("1/6 is not aligned but still opens full sheet when levels exist", () => {
     const r = resolveScenarioBuilderCapability(ctx({ layersAligned: 1, layersTotal: 6 }), baseInput());
     expect(r.setupTier).toBe("not_aligned");
-    expect(r.capability).toBe("preview");
+    expect(r.capability).toBe("full");
   });
 
-  test("building_soon at 3/6 alignment without actionable state", () => {
+  test("developing alignment opens full sheet when stop and target exist", () => {
     const r = resolveScenarioBuilderCapability(ctx({ layersAligned: 3, layersTotal: 6 }), baseInput());
-    expect(r.capability).toBe("building_soon");
+    expect(r.capability).toBe("full");
     expect(r.setupTier).toBe("developing");
   });
 
-  test("building_soon when maturation is developing", () => {
+  test("developing maturation opens full sheet when structurally eligible", () => {
     const r = resolveScenarioBuilderCapability(
       ctx({ maturationState: "developing", layersAligned: 1 }),
       baseInput()
     );
-    expect(r.capability).toBe("building_soon");
+    expect(r.capability).toBe("full");
     expect(r.setupTier).toBe("developing");
   });
 
-  test("full only when actionable and structurally eligible", () => {
+  test("full when structurally eligible regardless of actionable state", () => {
     const r = resolveScenarioBuilderCapability(
       ctx({ decisionState: "actionable", layersAligned: 6, layersTotal: 6 }),
       baseInput()
@@ -71,28 +71,28 @@ describe("resolveScenarioBuilderCapability", () => {
     expect(r.structurallyComplete).toBe(true);
   });
 
-  test("preview when actionable but structurally incomplete", () => {
+  test("preview when reference stop or target missing", () => {
     const r = resolveScenarioBuilderCapability(
       ctx({ decisionState: "actionable" }),
-      baseInput({ reference: {}, volatility_regime: "unknown" })
+      baseInput({ reference: { current_price: 100 }, volatility_regime: "unknown" })
     );
-    expect(r.capability).not.toBe("full");
+    expect(r.capability).toBe("preview");
   });
 
-  test("gap intel disabled blocks full but keeps developing setup tier", () => {
+  test("gap intel disabled keeps preview when structurally blocked", () => {
     const r = resolveScenarioBuilderCapability(
       ctx({ decisionState: "actionable", layersAligned: 6, layersTotal: 6 }),
       baseInput({
         gap_intel_gate: { scenario_builder_state: "DISABLED", reasons: ["closed"] }
       })
     );
-    expect(r.capability).toBe("building_soon");
+    expect(r.capability).toBe("preview");
     expect(r.gapIntelBlocked).toBe(true);
     expect(r.setupTier).toBe("actionable");
     expect(r.executionTier).toBe("session_limited");
   });
 
-  test("4/6 with gap blocked shows near_ready + session_limited", () => {
+  test("4/6 with gap blocked shows near_ready + session_limited preview", () => {
     const r = resolveScenarioBuilderCapability(
       ctx({ layersAligned: 4, layersTotal: 6, maturationState: "developing" }),
       baseInput({
@@ -102,7 +102,7 @@ describe("resolveScenarioBuilderCapability", () => {
     expect(r.setupTier).toBe("near_ready");
     expect(setupTierLabel(r.setupTier, r.aligned, r.total)).toBe("Near ready (4/6)");
     expect(r.executionTier).toBe("session_limited");
-    expect(r.capability).toBe("building_soon");
+    expect(r.capability).toBe("preview");
   });
 
   test("near_ready takeaway mentions actionable threshold", () => {

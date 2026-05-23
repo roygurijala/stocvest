@@ -28,7 +28,7 @@ import {
 } from "@/lib/scenario/scenario-input-present";
 import type { ScenarioReadinessContext } from "@/lib/scenario/scenario-readiness";
 import type { ScenarioInput } from "@/lib/scenario/types";
-import type { TradeDecisionState } from "@/lib/signal-evidence/trade-decision";
+import type { TradeDecisionState, TradeDecision } from "@/lib/signal-evidence/trade-decision";
 import { parseSwingCompositeInsight } from "@/lib/signal-evidence";
 
 export type ScenarioPlanningBundle = {
@@ -46,8 +46,9 @@ export type BuildScenarioPlanningBundleArgs = {
   snapshot?: SnapshotPayload | null;
   gapIntel?: GapIntelSnapshot | null;
   maturation?: WatchlistMaturationRow | null;
-  /** When Signals page already computed decision, pass through for full-tier gating. */
+  /** When Signals page already computed decision, pass through for verdict banner. */
   decisionState?: TradeDecisionState | null;
+  systemDecision?: TradeDecision | null;
   /** Optional override (Signals page layer summary). */
   setupBias?: SignalsSetupBias | null;
   layerRows?: SignalsLayerRowInput[] | null;
@@ -128,7 +129,8 @@ export function buildScenarioPlanningBundle(args: BuildScenarioPlanningBundleArg
         };
 
   let decisionState = args.decisionState ?? null;
-  if (!decisionState && comp && layerRows.length > 0) {
+  let systemDecision = args.systemDecision ?? null;
+  if (!systemDecision && comp && layerRows.length > 0) {
     const insight = parseSwingCompositeInsight(comp);
     const rr =
       typeof comp.risk_reward === "number" && Number.isFinite(comp.risk_reward)
@@ -141,7 +143,7 @@ export function buildScenarioPlanningBundle(args: BuildScenarioPlanningBundleArg
       typeof insight?.signal_score === "number" && Number.isFinite(insight.signal_score)
         ? insight.signal_score
         : 50;
-    decisionState = buildSignalsPageDecision({
+    systemDecision = buildSignalsPageDecision({
       mode: args.tradingMode,
       bias: setupBias,
       rows: layerRows,
@@ -150,7 +152,8 @@ export function buildScenarioPlanningBundle(args: BuildScenarioPlanningBundleArg
       riskReward: rr,
       rrWarning: Boolean(comp.rr_warning) || rr < minRiskRewardForVerdict(args.tradingMode),
       isComplete: comp.is_complete !== false
-    }).state;
+    });
+    if (!decisionState) decisionState = systemDecision.state;
   }
 
   const readiness: ScenarioReadinessContext = {
@@ -162,6 +165,7 @@ export function buildScenarioPlanningBundle(args: BuildScenarioPlanningBundleArg
     layersAligned: aligned,
     layersTotal: total,
     decisionState,
+    systemDecision,
     maturationState: args.maturation?.state ?? null,
     readinessLabel: args.maturation?.readiness_label ?? null,
     hasReferenceLevels: fromComposite ? hasStructuralReference(input) : Boolean(input.reference.current_price)
