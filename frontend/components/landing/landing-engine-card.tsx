@@ -22,7 +22,7 @@ function layerRow(label: string, pct: number) {
 export function LandingEngineCard({ mode }: { mode: LandingEngineMode }) {
   if (mode === "day") {
     return (
-      <div className="landing-glow-card h-full p-5">
+      <div className="landing-glow-card flex h-full min-h-0 flex-col p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-xl font-bold text-slate-100">AAPL · DAY SIGNAL</p>
@@ -58,7 +58,7 @@ export function LandingEngineCard({ mode }: { mode: LandingEngineMode }) {
   }
 
   return (
-    <div className="landing-glow-card h-full p-5">
+    <div className="landing-glow-card flex h-full min-h-0 flex-col p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xl font-bold text-slate-100">NVDA · SWING SIGNAL</p>

@@ -13,7 +13,8 @@ describe("LandingHeroSearch", () => {
     expect(screen.getByPlaceholderText(/Type any stock to preview the system/i)).toBeInTheDocument();
     expect(screen.getByText(/Try:/i)).toBeInTheDocument();
     expect(screen.queryByText(/Stop wasting trades/i)).toBeNull();
-    expect(screen.queryByText(/Judgment\. Restraint\. Gating\. Permission\./i)).toBeNull();
+    expect(screen.getByTestId("landing-hero-motto")).toHaveTextContent("Judgment");
+    expect(screen.getByTestId("landing-hero-motto")).toHaveTextContent("Permission");
     expect(screen.getByRole("heading", { name: /when to stay out/i })).toBeInTheDocument();
     expect(screen.queryByTestId("stocvest-logo")).toBeNull();
   });

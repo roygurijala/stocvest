@@ -12,6 +12,8 @@ import {
 
 const QUICK_PICKS = ["NFLX", "AAPL", "NVDA"] as const;
 
+const CORE_PHILOSOPHY = ["Judgment", "Restraint", "Gating", "Permission"] as const;
+
 type TickerHit = { symbol: string; name: string };
 
 export function LandingHeroSearch() {
@@ -92,6 +94,24 @@ export function LandingHeroSearch() {
       className="mx-auto flex min-h-[72vh] max-w-7xl flex-col items-center px-4 pb-10 pt-24 text-center md:px-8 md:pt-28"
       data-testid="landing-hero"
     >
+      <p
+        className="mb-5 text-[11px] font-semibold uppercase tracking-[0.28em] md:text-xs"
+        data-testid="landing-hero-motto"
+      >
+        {CORE_PHILOSOPHY.map((word, index) => (
+          <span key={word}>
+            {index > 0 ? (
+              <span className="mx-2 font-normal text-slate-600/90" aria-hidden>
+                ·
+              </span>
+            ) : null}
+            <span className="bg-gradient-to-r from-cyan-200/95 via-cyan-300/90 to-blue-400/85 bg-clip-text text-transparent drop-shadow-[0_0_18px_rgba(34,211,238,0.22)]">
+              {word}
+            </span>
+          </span>
+        ))}
+      </p>
+
       <h1
         className="max-w-3xl text-[1.75rem] font-bold leading-snug tracking-tight text-slate-50 md:text-4xl md:leading-tight lg:text-[2.75rem]"
         data-testid="landing-hero-headline"

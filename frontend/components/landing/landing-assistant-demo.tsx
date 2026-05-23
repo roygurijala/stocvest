@@ -5,7 +5,7 @@ const MONO =
 
 export function LandingAssistantDemo() {
   return (
-    <div className="landing-glow-card flex h-full flex-col p-5 text-left">
+    <div className="landing-glow-card flex h-full min-h-0 flex-col p-5 text-left">
       <p className="text-xs uppercase tracking-widest text-cyan-300/80" style={{ fontFamily: MONO }}>
         Assistant · example
       </p>
@@ -21,7 +21,7 @@ export function LandingAssistantDemo() {
           </p>
         </div>
       </div>
-      <p className="mt-4 text-xs text-slate-500">Restraint in action — not another buy signal.</p>
+      <p className="mt-auto pt-4 text-xs text-slate-500">Restraint in action — not another buy signal.</p>
     </div>
   );
 }
