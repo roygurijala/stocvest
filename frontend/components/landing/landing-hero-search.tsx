@@ -21,7 +21,6 @@ export function LandingHeroSearch() {
 
   const normalized = useMemo(() => normalizeLandingTicker(query), [query]);
 
-  /** Panel only when search text still matches the symbol we applied (chip, Enter, or pick). */
   const verdict = useMemo(() => {
     if (!activeSymbol) return null;
     const q = normalizeLandingTicker(query);
@@ -54,7 +53,6 @@ export function LandingHeroSearch() {
     setActiveSymbol((prev) => (prev && t !== prev ? null : prev));
   }, []);
 
-  /** Full-example tickers preview live as the user completes the symbol in the search bar. */
   useEffect(() => {
     if (!normalized) {
       setActiveSymbol(null);
@@ -91,16 +89,9 @@ export function LandingHeroSearch() {
 
   return (
     <section
-      className="mx-auto flex min-h-[88vh] max-w-7xl flex-col items-center px-4 pb-16 pt-24 text-center md:px-8 md:pt-28"
+      className="mx-auto flex min-h-[72vh] max-w-7xl flex-col items-center px-4 pb-10 pt-24 text-center md:px-8 md:pt-28"
       data-testid="landing-hero"
     >
-      <p
-        className="mb-4 text-[10px] font-medium uppercase tracking-[0.22em] text-slate-500 md:text-xs"
-        data-testid="landing-hero-motto"
-      >
-        Judgment. Restraint. Gating. Permission.
-      </p>
-
       <h1
         className="max-w-3xl text-[1.75rem] font-bold leading-snug tracking-tight text-slate-50 md:text-4xl md:leading-tight lg:text-[2.75rem]"
         data-testid="landing-hero-headline"
@@ -111,17 +102,17 @@ export function LandingHeroSearch() {
       </h1>
 
       <p
-        className="mx-auto mb-8 mt-4 max-w-[600px] text-base leading-relaxed text-slate-400 md:text-lg"
+        className="mx-auto mb-6 mt-3 max-w-[560px] text-sm leading-relaxed text-slate-400 md:text-base"
         data-testid="landing-hero-subtext"
       >
         Most platforms give you signals. STOCVEST tells you if the trade is worth taking at all.
       </p>
 
-      <div className="relative mb-6 mt-2 w-full max-w-xl">
+      <div className="relative mb-4 mt-1 w-full max-w-xl">
         <label htmlFor="landing-stock-search" className="sr-only">
           Type any stock to preview the system
         </label>
-        <div className="flex items-center gap-2 rounded-lg border border-cyan-500/35 bg-black/35 px-3 py-2.5 shadow-[0_0_28px_rgba(59,130,246,0.12)]">
+        <div className="flex items-center gap-2 rounded-lg border border-cyan-500/40 bg-black/40 px-3 py-3 shadow-[0_0_32px_rgba(59,130,246,0.18)]">
           <Search className="h-5 w-5 shrink-0 text-cyan-400/90" aria-hidden />
           <input
             id="landing-stock-search"
@@ -161,10 +152,10 @@ export function LandingHeroSearch() {
       </div>
 
       <div
-        className="mb-8 flex flex-wrap items-center justify-center gap-x-2 gap-y-2 text-sm text-slate-500"
+        className="mb-6 flex flex-wrap items-center justify-center gap-x-2 gap-y-2 text-sm text-slate-500"
         data-testid="landing-hero-examples"
       >
-        <span className="text-xs text-slate-500/80">Try examples:</span>
+        <span className="text-xs text-slate-500/80">Try:</span>
         {QUICK_PICKS.map((sym, index) => (
           <span key={sym} className="inline-flex items-center gap-2">
             {index > 0 ? <span className="text-slate-600" aria-hidden>/</span> : null}
@@ -180,23 +171,20 @@ export function LandingHeroSearch() {
       </div>
 
       {verdict ? (
-        <div className="mb-8 flex w-full justify-center">
+        <div className="mb-6 flex w-full justify-center">
           <LandingStockPreview verdict={verdict} onClose={dismissPreview} />
         </div>
       ) : null}
 
-      <div className="mt-10 flex flex-wrap justify-center gap-3" data-testid="landing-hero-cta">
+      <div className="mt-4 flex flex-col items-center gap-3" data-testid="landing-hero-cta">
         <Link
           href="/signup/agreements"
           className="rounded-md bg-[#3b82f6] px-7 py-3.5 text-base font-semibold text-white shadow-[0_0_24px_rgba(59,130,246,0.35)] transition hover:bg-[#2563eb]"
         >
           Start Free — No Card Required
         </Link>
-        <a
-          href="#how-it-works"
-          className="rounded-md border border-white/20 px-6 py-3 text-sm font-medium text-slate-300 transition hover:border-white/35 hover:text-slate-100"
-        >
-          See your first 5 minutes
+        <a href="#see-it-work" className="text-sm text-slate-500 transition hover:text-slate-300">
+          See the engine live ↓
         </a>
       </div>
     </section>

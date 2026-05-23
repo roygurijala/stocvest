@@ -15,6 +15,8 @@ type Props = {
   persistSessionKey?: string;
   /** Nested inside another collapsible — lighter chrome. */
   embedded?: boolean;
+  /** When true, programmatically opens the section (e.g. search jump). */
+  forceOpen?: boolean;
 };
 
 export function ScannerCollapsible({
@@ -24,7 +26,8 @@ export function ScannerCollapsible({
   children,
   defaultOpen = false,
   persistSessionKey,
-  embedded = false
+  embedded = false,
+  forceOpen = false
 }: Props) {
   const { colors } = useTheme();
   const detailsRef = useRef<HTMLDetailsElement>(null);
@@ -65,6 +68,13 @@ export function ScannerCollapsible({
     el.addEventListener("toggle", onToggle);
     return () => el.removeEventListener("toggle", onToggle);
   }, [persistSessionKey]);
+
+  useEffect(() => {
+    const el = detailsRef.current;
+    if (!el || !forceOpen) return;
+    el.open = true;
+    if (persistSessionKey) persistOpenState(true);
+  }, [forceOpen, persistSessionKey]);
 
   const handleToggle = (e: SyntheticEvent<HTMLDetailsElement>) => {
     persistOpenState(e.currentTarget.open);

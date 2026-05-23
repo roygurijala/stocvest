@@ -18,7 +18,7 @@ export default function SignupAgreementsPage() {
     <AuthShell
       signupStep="agreements"
       title="Agreements"
-      subtitle="Before you create an account, read each legal document, scroll to the bottom, and click I Agree. Account creation is blocked until you complete this step."
+      subtitle="Open each document, click I Agree (the panel closes automatically), then confirm below. You can re-read agreements anytime after sign-in."
     >
       {alreadyAccepted ? (
         <div className="mb-6 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-100">

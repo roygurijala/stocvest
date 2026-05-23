@@ -16,6 +16,7 @@ type Props = {
   model: WatchlistCardModel;
   planMode: "swing" | "day";
   deskEvaluating?: boolean;
+  justAdded?: boolean;
   onRemove: () => void;
   onRefresh?: () => void;
 };
@@ -43,6 +44,7 @@ export function WatchlistDecisionCard({
   model,
   planMode,
   deskEvaluating,
+  justAdded,
   onRemove,
   onRefresh
 }: Props) {
@@ -92,6 +94,18 @@ export function WatchlistDecisionCard({
           <span className="text-base font-bold tracking-wide" style={{ color: colors.text }}>
             {model.symbol}
           </span>
+          {justAdded ? (
+            <span
+              className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+              style={{
+                background: `color-mix(in srgb, ${colors.accent} 22%, transparent)`,
+                color: colors.accent
+              }}
+              data-testid={`watchlist-badge-just-added-${model.symbol}`}
+            >
+              Just added
+            </span>
+          ) : null}
           {model.quote ? (
             <span className="ml-auto flex items-baseline gap-2 text-sm tabular-nums">
               <span style={{ color: colors.text }}>{model.quote.price}</span>
@@ -222,6 +236,7 @@ export function WatchlistDecisionCardFromRow({
   snapshot,
   planMode,
   deskEvaluating,
+  justAdded,
   onRemove,
   onRefresh
 }: {
@@ -230,6 +245,7 @@ export function WatchlistDecisionCardFromRow({
   snapshot?: SnapshotPayload;
   planMode: "swing" | "day";
   deskEvaluating?: boolean;
+  justAdded?: boolean;
   onRemove: () => void;
   onRefresh?: () => void;
 }) {
@@ -252,6 +268,7 @@ export function WatchlistDecisionCardFromRow({
       model={model}
       planMode={planMode}
       deskEvaluating={deskEvaluating}
+      justAdded={justAdded}
       onRemove={onRemove}
       onRefresh={onRefresh}
     />

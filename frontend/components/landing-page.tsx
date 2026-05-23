@@ -1,24 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type MouseEvent } from "react";
-import { MoonStar, Zap } from "lucide-react";
+import { useScrollPosition } from "@/lib/hooks/use-scroll-position";
+import { StocvestLogo } from "@/components/brand/stocvest-logo";
+import { LandingFitSection } from "@/components/landing/landing-fit-section";
+import { LandingHeroSearch } from "@/components/landing/landing-hero-search";
+import { LandingPhilosophySection } from "@/components/landing/landing-philosophy-section";
+import { LandingProductDemoSection } from "@/components/landing/landing-product-demo-section";
+import { LandingSignupSection } from "@/components/landing/landing-signup-section";
 import type { LandingSignal } from "@/lib/api/landing-signals";
 import type { PerformanceSummary } from "@/lib/api/public-signals";
-import { useScrollPosition } from "@/lib/hooks/use-scroll-position";
-import { isPaidCheckoutEnabled } from "@/lib/feature-flags";
-import { StocvestLogo } from "@/components/brand/stocvest-logo";
-import { LandingAhaSection } from "@/components/landing/landing-aha-section";
-import { LandingAssistantSection } from "@/components/landing/landing-assistant-section";
-import { LandingFirstMinutesSection } from "@/components/landing/landing-first-minutes-section";
-import { LandingHeroSearch } from "@/components/landing/landing-hero-search";
-
-const MONO =
-  '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
-
-type LandingMode = "swing" | "day";
-
-type PricingTier = "free" | "swing_pro" | "swing_day_pro";
 
 export type LandingPageProps = {
   explorerSignals: LandingSignal[];
@@ -28,94 +19,6 @@ export type LandingPageProps = {
   foundingMemberCount: number | null;
 };
 
-function layerRow(label: string, pct: number) {
-  return (
-    <div className="grid grid-cols-[120px_1fr_40px] items-center gap-2 text-xs" key={label}>
-      <span style={{ fontFamily: MONO, color: "#8aa0bf" }}>{label}</span>
-      <div className="h-2 rounded-full bg-white/10">
-        <div className="h-2 rounded-full bg-gradient-to-r from-cyan-400 to-blue-500" style={{ width: `${pct}%` }} />
-      </div>
-      <span className="text-right text-slate-200" style={{ fontFamily: MONO }}>
-        {pct}%
-      </span>
-    </div>
-  );
-}
-
-function EngineCard({ mode }: { mode: LandingMode }) {
-  if (mode === "day") {
-    return (
-      <div className="landing-glow-card p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-xl font-bold text-slate-100">AAPL · DAY SIGNAL</p>
-            <p className="text-xs text-slate-400" style={{ fontFamily: MONO }}>
-              9:38 AM · confluence_alert
-            </p>
-          </div>
-          <p className="text-3xl font-black text-cyan-300">79</p>
-        </div>
-        <div className="my-4 space-y-2">
-          {[
-            ["TECHNICAL", 88],
-            ["NEWS", 82],
-            ["MACRO", 71],
-            ["SECTOR", 85],
-            ["GEOPOLITICAL", 54],
-            ["INTERNALS", 76]
-          ].map(([l, p]) => layerRow(String(l), Number(p)))}
-        </div>
-        <p className="mb-3 text-sm italic text-slate-300">
-          "ORB breakout confirmed above VWAP with earnings catalyst still active. Tech sector leading. 4 of 6 layers aligned bullish."
-        </p>
-        <p className="border-t border-white/10 pt-3 text-xs text-slate-300" style={{ fontFamily: MONO }}>
-          Entry $195-$197 · Stop $192 · R/R 2.4:1
-        </p>
-        <div className="mt-3 flex items-center justify-between text-sm">
-          <span className="font-bold text-emerald-400">BULLISH · 79/100</span>
-          <span className="text-cyan-300">[View Evidence]</span>
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="landing-glow-card p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xl font-bold text-slate-100">NVDA · SWING SIGNAL</p>
-          <p className="text-xs text-slate-400" style={{ fontFamily: MONO }}>
-            Forming 6 days · Updated just now
-          </p>
-        </div>
-        <p className="text-3xl font-black text-cyan-300">84</p>
-      </div>
-      <div className="my-4 space-y-2">
-        {[
-          ["TECHNICAL", 91],
-          ["NEWS", 78],
-          ["MACRO", 68],
-          ["SECTOR", 87],
-          ["GEOPOLITICAL", 32],
-          ["INTERNALS", 88]
-        ].map(([l, p]) => layerRow(String(l), Number(p)))}
-      </div>
-      <div className="mb-3 rounded-lg border border-amber-300/30 bg-amber-300/10 p-3 text-xs text-amber-100">
-        ⚠ GEO LAYER: Semiconductors carry 1.8× weight on US-China trade tension. PINS would score 0.4×. Same news. Different stock. Different exposure.
-      </div>
-      <p className="mb-3 text-sm italic text-slate-300">
-        "Strong daily structure and earnings momentum. Geo headwind partially offsets bullish thesis. Watch for trade policy headlines this week."
-      </p>
-      <p className="border-t border-white/10 pt-3 text-xs text-slate-300" style={{ fontFamily: MONO }}>
-        Entry $112-$118 · Stop $108 · R/R 2.8:1
-      </p>
-      <div className="mt-3 flex items-center justify-between text-sm">
-        <span className="font-bold text-emerald-400">BULLISH · 84/100</span>
-        <span className="text-cyan-300">[View Evidence]</span>
-      </div>
-    </div>
-  );
-}
-
 export function LandingPage({
   explorerSignals: _explorerSignals,
   activitySignals: _activitySignals,
@@ -124,23 +27,6 @@ export function LandingPage({
   foundingMemberCount: _foundingMemberCount
 }: LandingPageProps) {
   const isScrolled = useScrollPosition(24);
-  const [engineTab, setEngineTab] = useState<LandingMode>("swing");
-  const [pricingTier, setPricingTier] = useState<PricingTier>("swing_pro");
-  const selectPricingCard = (tier: PricingTier) => setPricingTier(tier);
-
-  const onPricingCardClick = (e: MouseEvent<HTMLDivElement>, tier: PricingTier) => {
-    if ((e.target as HTMLElement).closest("a[href]")) return;
-    selectPricingCard(tier);
-  };
-
-  const pricingCardClass = (tier: PricingTier) =>
-    [
-      "landing-pricing-card flex h-full cursor-pointer flex-col p-6 text-left outline-none transition-[transform,box-shadow] duration-200",
-      "focus-visible:ring-2 focus-visible:ring-cyan-400/90 focus-visible:ring-offset-2 focus-visible:ring-offset-[#070d18]",
-      pricingTier === tier ? "landing-pricing-card--selected" : ""
-    ].join(" ");
-
-  const paidCheckout = isPaidCheckoutEnabled();
 
   return (
     <main className="bg-[#070d18] text-slate-100">
@@ -155,315 +41,17 @@ export function LandingPage({
               Login
             </Link>
             <Link href="/signup/agreements" className="rounded-md bg-[#3b82f6] px-4 py-2 text-sm font-semibold text-white">
-              Get Started
+              Start Free
             </Link>
           </div>
         </nav>
       </header>
 
       <LandingHeroSearch />
-
-      <LandingAssistantSection />
-      <LandingAhaSection />
-      <LandingFirstMinutesSection />
-
-      {/* 2 · Swing vs Day */}
-      <section className="mx-auto max-w-7xl px-4 py-16 md:px-8">
-        <p className="mb-2 text-center text-xs uppercase tracking-[0.25em] text-cyan-300" style={{ fontFamily: MONO }}>
-          TWO TRADING STYLES
-        </p>
-        <h2 className="mb-4 text-center text-3xl font-bold md:text-4xl">Your style. Your timeframe. The same six-layer intelligence.</h2>
-        <p className="mx-auto mb-8 max-w-3xl text-center text-base leading-relaxed text-slate-300">
-          Same intelligence engine. Different time horizons.
-          <br />
-          Discipline stays constant — execution adapts.
-        </p>
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="landing-glow-card p-6">
-            <div className="mb-3 flex items-center gap-2">
-              <MoonStar className="h-5 w-5 text-cyan-300" />
-              <span className="text-xs uppercase tracking-[0.2em] text-cyan-300" style={{ fontFamily: MONO }}>
-                SWING TRADING
-              </span>
-            </div>
-            <p className="mb-4 text-sm text-slate-300">Plan tonight. Trade this week.</p>
-            <ul className="space-y-2 text-sm text-slate-200">
-              <li>• Daily bar scanner — daily structure shifts and momentum recovery</li>
-              <li>• Pattern maturity tracking — &quot;Forming 6 days&quot;</li>
-              <li>• 5-day news context with recency weighting</li>
-              <li>• Weekly sector rotation context</li>
-              <li>• Entry zone + stop + target on every setup</li>
-              <li>• Check once a day — alerts when levels hit</li>
-            </ul>
-          </div>
-          <div
-            className="landing-glow-card p-6"
-            style={{ borderLeftColor: "rgba(245,158,11,0.9)", borderBottomColor: "rgba(245,158,11,0.9)" }}
-          >
-            <div className="mb-3 flex items-center gap-2">
-              <Zap className="h-5 w-5 text-amber-300" />
-              <span className="text-xs uppercase tracking-[0.2em] text-amber-300" style={{ fontFamily: MONO }}>
-                DAY TRADING
-              </span>
-            </div>
-            <p className="mb-4 text-sm text-slate-300">Pre-market ready. Act at open.</p>
-            <ul className="space-y-2 text-sm text-slate-200">
-              <li>• Pre-market gap scanner — ranked by catalyst</li>
-              <li>• ORB breakout + VWAP setup detection</li>
-              <li>• Real-time intraday confluence scoring</li>
-              <li>• 8 AM intelligence brief every trading day</li>
-              <li>• Ranked setups with signal strength at open</li>
-              <li>• Intraday alerts as signals fire</li>
-            </ul>
-          </div>
-        </div>
-      </section>
-
-      {/* Who it is for */}
-      <section className="border-y border-white/10 bg-black/25 px-4 py-16 md:px-8">
-        <div className="mx-auto max-w-5xl">
-          <p className="mb-2 text-center text-xs uppercase tracking-[0.25em] text-cyan-300" style={{ fontFamily: MONO }}>
-            FIT
-          </p>
-          <h2 className="mb-8 text-center text-3xl font-bold md:text-4xl">Built for disciplined traders</h2>
-          <div className="grid gap-8 md:grid-cols-2 md:gap-12">
-            <div>
-              <p className="mb-3 font-semibold text-emerald-300/90">Built for:</p>
-              <ul className="space-y-2 text-sm leading-relaxed text-slate-200">
-                <li>• Traders who value patience over activity</li>
-                <li>• Traders who want clear decision frameworks</li>
-                <li>• Traders tired of false signals and overtrading</li>
-              </ul>
-            </div>
-            <div>
-              <p className="mb-3 font-semibold text-slate-400">Not ideal for:</p>
-              <ul className="space-y-2 text-sm leading-relaxed text-slate-300">
-                <li>• Constant action seekers</li>
-                <li>• Pure indicator-based trading</li>
-                <li>• Prediction-driven trading</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 4 · How traders use STOCVEST */}
-      <section className="mx-auto max-w-7xl px-4 py-16 md:px-8">
-        <p className="mb-2 text-center text-xs uppercase tracking-[0.25em] text-cyan-300" style={{ fontFamily: MONO }}>
-          WORKFLOW
-        </p>
-        <h2 className="mb-8 text-center text-3xl font-bold md:text-4xl">How traders use STOCVEST</h2>
-        <ol className="mx-auto grid max-w-4xl gap-4 text-sm text-slate-200 md:grid-cols-2">
-          <li className="landing-glow-card p-4">
-            <span className="font-mono text-xs text-cyan-300">01</span>
-            <p className="mt-2 leading-relaxed">Start from context — indices, regime, and the morning brief so you know the tape you&apos;re operating in.</p>
-          </li>
-          <li className="landing-glow-card p-4">
-            <span className="font-mono text-xs text-cyan-300">02</span>
-            <p className="mt-2 leading-relaxed">Scan gaps and setups when your plan says to look — not on every tick.</p>
-          </li>
-          <li className="landing-glow-card p-4">
-            <span className="font-mono text-xs text-cyan-300">03</span>
-            <p className="mt-2 leading-relaxed">Open evidence only when layers align; read the composite and the conflicts, not a single headline.</p>
-          </li>
-          <li className="landing-glow-card p-4">
-            <span className="font-mono text-xs text-cyan-300">04</span>
-            <p className="mt-2 leading-relaxed">Execute from your own rules — or step aside when alignment isn&apos;t there.</p>
-          </li>
-        </ol>
-      </section>
-
-      {/* 5 · Six-layer engine + example card */}
-      <section id="the-engine" className="mx-auto max-w-7xl px-4 py-16 md:px-8">
-        <p className="mb-2 text-center text-xs uppercase tracking-[0.25em] text-cyan-300" style={{ fontFamily: MONO }}>
-          THE ENGINE
-        </p>
-        <p className="mx-auto mb-4 max-w-3xl text-center text-base leading-relaxed text-slate-300">
-          Most traders lose money not because they lack data — but because they rely on only one or two perspectives at a time.
-        </p>
-        <h2 className="text-center text-3xl font-bold md:text-5xl">
-          Most platforms help you find trades. We help you avoid bad ones.
-        </h2>
-        <p className="mx-auto mt-4 max-w-3xl text-center text-base font-medium leading-relaxed text-slate-200 md:text-lg">
-          Six independent layers. One verdict. Full reasoning when you need it — not another dashboard of disconnected charts.
-        </p>
-        <p className="mx-auto mt-8 max-w-3xl text-center text-sm leading-relaxed text-slate-400">
-          Here&apos;s what alignment looks like when all six layers are considered together.
-        </p>
-        <div className="mx-auto mt-4 max-w-4xl">
-          <div className="mb-3 flex gap-2">
-            <button
-              type="button"
-              className={`rounded-md px-4 py-2 text-sm font-semibold ${engineTab === "swing" ? "bg-cyan-500/20 text-cyan-200" : "bg-white/5 text-slate-300"}`}
-              onClick={() => setEngineTab("swing")}
-            >
-              SWING
-            </button>
-            <button
-              type="button"
-              className={`rounded-md px-4 py-2 text-sm font-semibold ${engineTab === "day" ? "bg-cyan-500/20 text-cyan-200" : "bg-white/5 text-slate-300"}`}
-              onClick={() => setEngineTab("day")}
-            >
-              DAY
-            </button>
-          </div>
-          <EngineCard mode={engineTab} />
-        </div>
-        <p className="mx-auto mt-4 max-w-3xl text-center text-xs leading-relaxed text-slate-500">
-          Most traders review this card briefly — or not at all — depending on experience level. The platform holds the full depth when you need
-          it.
-        </p>
-      </section>
-
-      {/* 6 · Pricing */}
-      <section className="mx-auto max-w-7xl px-4 py-16 md:px-8">
-        <h2 className="mb-2 text-center text-3xl font-bold md:text-4xl">Simple pricing. Both modes included.</h2>
-        <p className="mx-auto mb-4 max-w-2xl text-center text-sm text-slate-400">
-          {paidCheckout
-            ? "Choose the plan that matches how you trade. Monthly billing at signup."
-            : "Pro prices are preview-only — we are not accepting payment yet. Create a free account to explore the product."}
-        </p>
-        {!paidCheckout ? (
-          <p className="mx-auto mb-6 max-w-2xl rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-center text-xs leading-relaxed text-amber-100/95">
-            Paid checkout is not available yet. Invited beta testers receive full Pro-equivalent access without payment — if you were invited,
-            sign in with the email you used to register.
-          </p>
-        ) : null}
-        <p className="mx-auto mb-4 max-w-2xl text-center text-xs text-slate-500">
-          {paidCheckout
-            ? "Click a card to compare plans; use the button to continue signup."
-            : "Click a card to compare plans. Only the free tier can self-serve signup today."}
-        </p>
-        <div className="grid gap-4 lg:grid-cols-3 lg:items-stretch">
-          <div
-            aria-label="Free — Understand the system plan — click to compare"
-            className={pricingCardClass("free")}
-            onClick={(e) => onPricingCardClick(e, "free")}
-          >
-            <div className="mb-1 min-h-[2.75rem] shrink-0" aria-hidden="true" />
-            <h3 className="text-xl font-bold leading-snug">Free — Understand the system</h3>
-            <p className="mt-2 text-3xl font-black text-cyan-300">$0/month</p>
-            <ul className="mt-3 flex flex-1 list-none flex-col gap-1 pl-0 text-sm text-slate-300">
-              <li>• Preview access to swing and day signals</li>
-              <li>• Limited evidence views per day</li>
-              <li>• Basic scanner results</li>
-              <li>• Signal evidence cards</li>
-              <li>• Public signal track record</li>
-            </ul>
-            <div className="mt-auto shrink-0 pt-4">
-              <p className="mb-3 text-left text-xs leading-relaxed text-slate-500">Built for exploration, not active trading.</p>
-              <Link
-                href="/signup/agreements"
-                className="inline-flex min-h-11 w-full items-center justify-center rounded-md bg-[#3b82f6] px-4 py-2 font-semibold"
-              >
-                Get Started Free
-              </Link>
-            </div>
-          </div>
-          <div
-            aria-label="Swing Pro plan — click to compare"
-            className={pricingCardClass("swing_pro")}
-            onClick={(e) => onPricingCardClick(e, "swing_pro")}
-          >
-            <div className="mb-1 min-h-[2.75rem] shrink-0">
-              <p className="text-xs font-bold uppercase tracking-wide text-cyan-300">Most Popular</p>
-            </div>
-            <h3 className="text-xl font-bold">Swing Pro</h3>
-            <p className="mt-1 text-sm text-slate-400">Commit to disciplined swing trading</p>
-            <p className="mt-2 text-3xl font-black text-cyan-300">$49/month</p>
-            <ul className="mt-3 flex flex-1 list-none flex-col gap-1 pl-0 text-sm text-slate-300">
-              <li>• Full swing signal access</li>
-              <li>• Full daily bar scanner</li>
-              <li>• AI signal explanations (paid feature)</li>
-              <li>• Swing trading alerts</li>
-            </ul>
-            <div className="mt-auto shrink-0 pt-4">
-              {paidCheckout ? (
-                <Link
-                  href="/signup/agreements"
-                  className="inline-flex min-h-11 w-full items-center justify-center rounded-md bg-[#3b82f6] px-4 py-2 font-semibold"
-                >
-                  Choose Swing Pro
-                </Link>
-              ) : (
-                <button
-                  type="button"
-                  disabled
-                  className="inline-flex min-h-11 w-full cursor-not-allowed items-center justify-center rounded-md border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-400"
-                >
-                  Paid checkout coming soon
-                </button>
-              )}
-            </div>
-          </div>
-          <div
-            aria-label="Swing plus Day Pro plan — click to compare"
-            className={pricingCardClass("swing_day_pro")}
-            onClick={(e) => onPricingCardClick(e, "swing_day_pro")}
-          >
-            <div className="mb-1 min-h-[2.75rem] shrink-0" aria-hidden="true" />
-            <h3 className="text-xl font-bold">Swing + Day Pro</h3>
-            <p className="mt-1 text-sm text-slate-400">Full-spectrum market intelligence</p>
-            <p className="mt-2 text-3xl font-black text-cyan-300">$99/month</p>
-            <ul className="mt-3 flex flex-1 list-none flex-col gap-1 pl-0 text-sm text-slate-300">
-              <li>• Everything in Swing Pro</li>
-              <li>• Full day-trading signal access</li>
-              <li>• Pre-market gap scanner</li>
-              <li>• Intraday real-time signals</li>
-              <li>• Day trading alerts</li>
-              <li>• Priority support</li>
-            </ul>
-            <div className="mt-auto shrink-0 pt-4">
-              {paidCheckout ? (
-                <Link
-                  href="/signup/agreements"
-                  className="inline-flex min-h-11 w-full items-center justify-center rounded-md bg-[#3b82f6] px-4 py-2 font-semibold"
-                >
-                  Choose Swing + Day Pro
-                </Link>
-              ) : (
-                <button
-                  type="button"
-                  disabled
-                  className="inline-flex min-h-11 w-full cursor-not-allowed items-center justify-center rounded-md border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-400"
-                >
-                  Paid checkout coming soon
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-        <p
-          className="mx-auto mt-10 max-w-3xl text-center text-sm text-slate-400"
-          data-testid="landing-platform-trust-line"
-        >
-          Real-time market data · AI-driven reasoning · Institutional-grade infrastructure
-        </p>
-      </section>
-
-      {/* 7 · Live engine */}
-      <section className="mx-auto max-w-7xl px-4 py-16 md:px-8">
-        <p className="mb-2 text-center text-xs uppercase tracking-[0.25em] text-cyan-300" style={{ fontFamily: MONO }}>
-          LIVE ENGINE
-        </p>
-        <h2 className="text-center text-3xl font-bold md:text-4xl">Signals generate only when conditions align.</h2>
-        <div className="mx-auto mt-8 max-w-3xl">
-          <div className="landing-glow-card p-6 text-center text-base leading-relaxed text-slate-200 md:text-lg">
-            The engine is live — inactivity is intentional when alignment isn&apos;t present.
-          </div>
-        </div>
-      </section>
-
-      {/* 8 · Final CTA */}
-      <section className="border-t border-white/10 bg-black/20 px-4 py-20 text-center md:px-8">
-        <h2 className="mb-4 text-3xl font-bold md:text-4xl">
-          Try our thinking in five seconds — then trade with permission to wait.
-        </h2>
-        <Link href="/signup/agreements" className="inline-flex min-h-11 items-center justify-center rounded-md bg-[#3b82f6] px-6 py-3 font-semibold">
-          Create Your Free Account
-        </Link>
-        <p className="mt-3 text-slate-300">Explore the platform free. No credit card required.</p>
-      </section>
+      <LandingProductDemoSection />
+      <LandingPhilosophySection />
+      <LandingFitSection />
+      <LandingSignupSection />
 
       <footer className="border-t border-white/10 px-4 py-10 md:px-8">
         <div className="mx-auto flex max-w-7xl flex-col items-center gap-6">

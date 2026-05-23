@@ -80,8 +80,7 @@ export function LegalDocumentDrawer({
           </button>
         </header>
         <p className="shrink-0 border-b border-white/5 bg-[#0f172a] px-4 py-2 text-xs leading-relaxed text-slate-400 sm:px-5">
-          Scroll to the bottom of this document, then click <span className="font-medium text-slate-300">I Agree</span>. If you close this
-          panel before agreeing, this document will not count as read for signup.
+          Scroll if needed, then click <span className="font-medium text-slate-300">I Agree</span>. The panel closes automatically when you agree.
         </p>
         <div className="relative min-h-0 flex-1 bg-[#070d18]">
           <iframe ref={iframeRef} title={title} src={withSignupLegalEmbed(href)} className="h-full w-full border-0" />

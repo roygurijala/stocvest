@@ -55,6 +55,7 @@ export function SignupAgreementsForm() {
       const href = event.data.href;
       if (typeof href === "string") {
         markRead(href);
+        setDrawer((current) => (current?.href === href ? null : current));
       }
     };
     window.addEventListener("message", onMessage);
@@ -77,8 +78,8 @@ export function SignupAgreementsForm() {
           <span className="rounded bg-white/10 px-2 py-0.5 font-mono text-cyan-200">{agreementsBundleLabel()}</span>
         </p>
         <p className="m-0 text-sm text-slate-400">
-          Open each document below, scroll to the bottom, and click <span className="font-medium text-slate-300">I Agree</span> on each
-          page. You cannot create an account until all three documents are agreed to and you confirm below.
+          Open each document below, scroll if needed, and click <span className="font-medium text-slate-300">I Agree</span> — the
+          panel closes automatically. You can re-read these documents anytime after sign-in.
         </p>
         <ul className="m-0 grid gap-2 text-sm text-slate-300">
           {AGREEMENTS_DOCUMENT_LINKS.map((doc) => {

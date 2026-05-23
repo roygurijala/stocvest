@@ -4,12 +4,12 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Columns2, TrendingUp, Zap } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { CuteLoader } from "@/components/cute-loader";
 import { WatchlistAlignmentSheet } from "@/components/watchlists/watchlist-alignment-sheet";
 import { WatchlistActivityCollapsible } from "@/components/watchlists/WatchlistActivityCollapsible";
 import { WatchlistDecisionQueue } from "@/components/watchlists/watchlist-decision-queue";
 import { WatchlistStatusRails } from "@/components/watchlists/WatchlistStatusRails";
-import { ScannerCollapsible } from "@/components/scanner/ScannerCollapsible";
 import { WatchlistEvaluationInfoTip } from "@/components/watchlists/WatchlistEvaluationInfoTip";
 import {
   formatWatchlistMaturationDisplayLine,
@@ -47,6 +47,12 @@ import {
 } from "@/lib/watchlist-page-utils";
 import { canonicalUsTicker, canonicalUsTickerFromSearch, isWellFormedUsTicker } from "@/lib/symbol-ticker";
 import { useTheme } from "@/lib/theme-provider";
+import {
+  resolveWatchlistAttentionTier,
+  watchlistAttentionSectionMeta,
+  type WatchlistAttentionTier
+} from "@/lib/watchlist-decision-card-present";
+import { focusWatchlistRow } from "@/lib/watchlist-row-focus";
 import {
   compareSymbolsByPresentationPriority,
   maturationAlertPassesTracking,
@@ -160,6 +166,9 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     symbol: string;
     deskMode: "swing" | "day";
   } | null>(null);
+  const [forceOpenTiers, setForceOpenTiers] = useState<WatchlistAttentionTier[]>([]);
+  const [justAddedSymbol, setJustAddedSymbol] = useState<string | null>(null);
+  const [watchlistToast, setWatchlistToast] = useState<{ message: string; symbol: string } | null>(null);
 
   const alignmentSheetRow: MaturationRow | undefined = alignmentSheet
     ? alignmentSheet.deskMode === "day"
@@ -177,16 +186,28 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     if (loading) return;
     const focus = (searchParams.get("focus") ?? "").trim().toUpperCase();
     if (!focus) return;
-    const el = document.getElementById(`watchlist-row-${focus}`);
-    if (!el) return;
+    const ms = maturationSwing[focus];
+    const md = maturationDay[focus];
+    const row = pickWatchlistMaturationForPlan(viewMode, ms, md);
+    setForceOpenTiers([resolveWatchlistAttentionTier(row)]);
     window.requestAnimationFrame(() => {
-      el.scrollIntoView({ block: "center", behavior: "smooth" });
-      el.style.outline = `2px solid ${colors.accent}`;
-      window.setTimeout(() => {
-        el.style.outline = "";
-      }, 2400);
+      focusWatchlistRow(focus, colors.accent);
     });
-  }, [loading, searchParams, colors.accent]);
+  }, [loading, searchParams, colors.accent, maturationSwing, maturationDay, viewMode]);
+
+  useEffect(() => {
+    if (!watchlistToast) return;
+    const t = window.setTimeout(() => setWatchlistToast(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [watchlistToast]);
+
+  useEffect(() => {
+    if (!justAddedSymbol) return;
+    const t = window.setTimeout(() => {
+      setJustAddedSymbol((s) => (s === justAddedSymbol ? null : s));
+    }, 30_000);
+    return () => window.clearTimeout(t);
+  }, [justAddedSymbol]);
 
   useEffect(() => {
     if (!dualDeskMaturation && viewMode !== "swing") setViewMode("swing");
@@ -723,6 +744,8 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     const cur = dedupeSymbolsUpper(active.symbols);
     if (cur.includes(sym)) {
       setSymErr("That symbol is already on your watchlist.");
+      setAddDraft(sym);
+      focusSymbolOnWatchlist(sym);
       return;
     }
     const prev = rows;
@@ -757,8 +780,16 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
       });
       setAddDraft("");
       setAddSuggestOpen(false);
+      const symU = sym.trim().toUpperCase();
+      const trackingMeta = watchlistAttentionSectionMeta("tracking");
+      setJustAddedSymbol(symU);
+      setForceOpenTiers(["tracking"]);
+      setWatchlistToast({
+        message: `${symU} added → ${trackingMeta.title} (evaluating…)`,
+        symbol: symU
+      });
+      window.setTimeout(() => focusWatchlistRow(symU, colors.accent), 120);
       if (maturationEligible) {
-        const symU = sym.trim().toUpperCase();
         setEvaluatingSymbols((prev) => ({
           ...prev,
           [symU]: { swing: true, day: dualDeskMaturation ? true : undefined }
@@ -951,6 +982,45 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     remoteCompanyBySymbol
   ]);
 
+  const maturationRowForSymbol = useCallback(
+    (symU: string) => {
+      const ms = maturationEligible ? maturationSwing[symU] : undefined;
+      const md = maturationEligible && dualDeskMaturation ? maturationDay[symU] : undefined;
+      return pickWatchlistMaturationForPlan(viewMode, ms, md);
+    },
+    [maturationEligible, maturationSwing, maturationDay, dualDeskMaturation, viewMode]
+  );
+
+  const focusSymbolOnWatchlist = useCallback(
+    (sym: string) => {
+      const symU = sym.trim().toUpperCase();
+      if (!activeSymbolsDeduped.includes(symU)) return;
+      const tier = resolveWatchlistAttentionTier(maturationRowForSymbol(symU));
+      setForceOpenTiers([tier]);
+      window.requestAnimationFrame(() => {
+        window.setTimeout(() => focusWatchlistRow(symU, colors.accent), 80);
+      });
+    },
+    [activeSymbolsDeduped, maturationRowForSymbol, colors.accent]
+  );
+
+  useEffect(() => {
+    const q = addDraft.trim();
+    if (!q) return;
+    const timer = window.setTimeout(() => {
+      let targetSym: string | null = null;
+      const parsed = parseTickerInput(q) || canonicalUsTicker(q);
+      if (parsed && activeSymbolsDeduped.includes(parsed)) {
+        targetSym = parsed;
+      } else if (filteredSymbolsForList.length === 1) {
+        targetSym = filteredSymbolsForList[0]!.trim().toUpperCase();
+      }
+      if (!targetSym) return;
+      focusSymbolOnWatchlist(targetSym);
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [addDraft, filteredSymbolsForList, activeSymbolsDeduped, focusSymbolOnWatchlist]);
+
   const statusCounts = useMemo(() => {
     const out = {
       actionable: 0,
@@ -1109,12 +1179,10 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                       if (pick) {
                         e.preventDefault();
                         if (pick.kind === "watchlist") {
-                          document.getElementById(`watchlist-row-${pick.symbol}`)?.scrollIntoView({
-                            block: "nearest",
-                            behavior: "smooth"
-                          });
-                          setAddDraft("");
+                          e.preventDefault();
+                          setAddDraft(pick.symbol);
                           setAddSuggestOpen(false);
+                          focusSymbolOnWatchlist(pick.symbol);
                           return;
                         }
                         void addSymbol(pick.symbol);
@@ -1152,12 +1220,9 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                   onClick={() => {
                     const pick = addSuggestionRows[addSuggestHighlight];
                     if (pick?.kind === "watchlist") {
-                      document.getElementById(`watchlist-row-${pick.symbol}`)?.scrollIntoView({
-                        block: "nearest",
-                        behavior: "smooth"
-                      });
-                      setAddDraft("");
+                      setAddDraft(pick.symbol);
                       setAddSuggestOpen(false);
+                      focusSymbolOnWatchlist(pick.symbol);
                       return;
                     }
                     if (pick) void addSymbol(pick.symbol);
@@ -1208,12 +1273,9 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                         onMouseDown={(ev) => ev.preventDefault()}
                         onClick={() => {
                           if (row.kind === "watchlist") {
-                            document.getElementById(`watchlist-row-${row.symbol}`)?.scrollIntoView({
-                              block: "nearest",
-                              behavior: "smooth"
-                            });
-                            setAddDraft("");
+                            setAddDraft(row.symbol);
                             setAddSuggestOpen(false);
+                            focusSymbolOnWatchlist(row.symbol);
                             return;
                           }
                           void addSymbol(row.symbol);
@@ -1245,7 +1307,12 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                 <p className="m-0 pt-1 text-xs" style={{ color: colors.bearish }}>
                   {symErr}
                 </p>
-              ) : null}
+              ) : (
+                <p className="m-0 pt-1 text-xs leading-snug" style={{ color: colors.textMuted }}>
+                  New symbols start in Tracking until evaluated. Search filters the list — pick &quot;On your list&quot;
+                  to jump to a card.
+                </p>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1358,6 +1425,27 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                   </div>
                 ) : (
                   <>
+                    {activeSymbolsDeduped.length > 0 &&
+                    addDraft.trim() &&
+                    filteredSymbolsForList.length > 0 &&
+                    filteredSymbolsForList.length < displaySymbols.length ? (
+                      <p
+                        className="m-0 mb-3 text-sm"
+                        style={{ color: colors.textMuted }}
+                        data-testid="watchlist-filter-banner"
+                      >
+                        Showing {filteredSymbolsForList.length} of {displaySymbols.length} symbols matching &quot;
+                        {addDraft.trim()}&quot;.{" "}
+                        <button
+                          type="button"
+                          className="font-semibold underline-offset-2 hover:underline"
+                          style={{ color: colors.accent, background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                          onClick={() => setAddDraft("")}
+                        >
+                          Clear filter
+                        </button>
+                      </p>
+                    ) : null}
                     {activeSymbolsDeduped.length > 0 && addDraft.trim() && filteredSymbolsForList.length === 0 ? (
                       <p className="m-0 mb-3 text-sm" style={{ color: colors.textMuted }}>
                         No symbols match &quot;{addDraft.trim()}&quot; in this {viewMode} view (symbol and company name
@@ -1386,6 +1474,8 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                               ? (symU) => refreshSymbolMaturationDesk(symU, planMode)
                               : undefined
                           }
+                          forceOpenTiers={forceOpenTiers}
+                          justAddedSymbol={justAddedSymbol}
                         />
                       );
                     })()}
@@ -1413,6 +1503,32 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
         row={alignmentSheetRow}
         onClose={() => setAlignmentSheet(null)}
       />
+      {watchlistToast && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="fixed bottom-6 left-1/2 z-50 flex max-w-md -translate-x-1/2 flex-wrap items-center justify-center gap-3 rounded-xl border px-4 py-3 text-sm shadow-lg"
+              style={{
+                background: colors.surface,
+                borderColor: colors.border,
+                color: colors.text,
+                boxShadow: "0 16px 48px rgba(0,0,0,0.35)"
+              }}
+              role="status"
+              data-testid="watchlist-toast"
+            >
+              <span>{watchlistToast.message}</span>
+              <button
+                type="button"
+                className="shrink-0 rounded-md border px-2.5 py-1 text-xs font-semibold"
+                style={{ borderColor: colors.accent, color: colors.accent, background: "transparent", cursor: "pointer" }}
+                onClick={() => focusSymbolOnWatchlist(watchlistToast.symbol)}
+              >
+                View
+              </button>
+            </div>,
+            document.body
+          )
+        : null}
     </div>
   );
 }

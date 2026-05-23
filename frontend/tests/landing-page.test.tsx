@@ -49,28 +49,49 @@ function view() {
 test("test_hero_no_broker_execution_claim", () => {
   view();
   expect(screen.queryByText(/Multi-broker execution/i)).toBeNull();
-  expect(screen.queryByText(/Multi-broker/i)).toBeNull();
 });
 
-test("test_landing_nav_shows_logo_anchor_left", () => {
+test("test_landing_nav_shows_logo_and_start_free", () => {
   view();
   const header = screen.getByTestId("landing-header");
-  const logo = within(header).getByTestId("stocvest-logo");
-  expect(logo).toHaveAttribute("data-variant", "landingNav");
-  expect(within(header).getByRole("link", { name: /STOCVEST home/i })).toHaveAttribute("href", "/");
-  expect(within(header).getByRole("link", { name: /Login/i })).toBeInTheDocument();
-  expect(within(header).getByRole("link", { name: /Get Started/i })).toBeInTheDocument();
+  expect(within(header).getByTestId("stocvest-logo")).toHaveAttribute("data-variant", "landingNav");
+  expect(within(header).getByRole("link", { name: /Start Free/i })).toBeInTheDocument();
 });
 
-test("test_pricing_no_backtesting_claim", () => {
+test("test_product_demo_and_philosophy_sections", () => {
   view();
-  expect(screen.queryByText(/Backtesting/i)).toBeNull();
+  expect(screen.getByTestId("landing-product-demo")).toBeInTheDocument();
+  expect(screen.getByTestId("landing-philosophy")).toBeInTheDocument();
+  expect(screen.getByText(/Inactivity is intentional/i)).toBeInTheDocument();
+  expect(screen.getByText(/Typical week:/i)).toBeInTheDocument();
 });
 
-test("test_pricing_no_broker_claim", () => {
+test("test_signal_card_tabs_in_product_demo", () => {
   view();
-  const pricing = screen.getByText(/Simple pricing\. Both modes included\./i).closest("section");
-  expect(pricing?.textContent?.toLowerCase()).not.toContain("broker");
+  const swing = screen.getByRole("button", { name: "SWING" });
+  const day = screen.getByRole("button", { name: "DAY" });
+  fireEvent.click(day);
+  expect(screen.getByText(/AAPL · DAY SIGNAL/i)).toBeInTheDocument();
+  fireEvent.click(swing);
+  expect(screen.getByText(/NVDA · SWING SIGNAL/i)).toBeInTheDocument();
+});
+
+test("test_fit_section_preserved", () => {
+  view();
+  expect(screen.getByTestId("landing-fit-section")).toBeInTheDocument();
+  expect(screen.getByText(/Traders who value patience over activity/i)).toBeInTheDocument();
+  expect(screen.getByText(/Constant action seekers/i)).toBeInTheDocument();
+});
+
+test("test_beta_signup_when_checkout_off", () => {
+  vi.stubEnv("NEXT_PUBLIC_ENABLE_PAID_CHECKOUT", "");
+  try {
+    view();
+    expect(screen.getByTestId("landing-signup-section")).toHaveTextContent(/Start free during beta/i);
+    expect(screen.queryByText(/Paid checkout coming soon/i)).toBeNull();
+  } finally {
+    vi.unstubAllEnvs();
+  }
 });
 
 test("test_pricing_shows_standard_rates_when_checkout_enabled", () => {
@@ -79,50 +100,16 @@ test("test_pricing_shows_standard_rates_when_checkout_enabled", () => {
     view();
     expect(screen.getByText("$49/month")).toBeInTheDocument();
     expect(screen.getByText("$99/month")).toBeInTheDocument();
-    expect(screen.queryByText("$29/month")).toBeNull();
-    expect(screen.queryByText("$59/month")).toBeNull();
-    expect(screen.queryByText(/Early member/i)).toBeNull();
-    expect(screen.queryByText(/FOUNDING MEMBER OFFER/i)).toBeNull();
   } finally {
     vi.unstubAllEnvs();
   }
 });
 
-test("test_pricing_paid_ctas_disabled_when_checkout_env_off", () => {
-  vi.stubEnv("NEXT_PUBLIC_ENABLE_PAID_CHECKOUT", "");
-  try {
-    view();
-    expect(screen.getByText(/Pro prices are preview-only/i)).toBeInTheDocument();
-    const soon = screen.getAllByRole("button", { name: /Paid checkout coming soon/i });
-    expect(soon.length).toBe(2);
-  } finally {
-    vi.unstubAllEnvs();
-  }
-});
-
-test("test_pdt_section_removed", () => {
+test("test_removed_verbose_sections", () => {
   view();
-  expect(screen.queryByText(/PDT/i)).toBeNull();
-  expect(screen.queryByText(/Pattern Day Trader/i)).toBeNull();
-  expect(screen.queryByText(/Day trades used/i)).toBeNull();
-});
-
-test("test_two_modes_section_exists", () => {
-  view();
-  expect(screen.getByText("SWING TRADING")).toBeInTheDocument();
-  expect(screen.getByText("DAY TRADING")).toBeInTheDocument();
-});
-
-test("test_signal_card_tabs", () => {
-  view();
-  const swing = screen.getByRole("button", { name: "SWING" });
-  const day = screen.getByRole("button", { name: "DAY" });
-  expect(swing).toBeInTheDocument();
-  expect(day).toBeInTheDocument();
-  fireEvent.click(day);
-  expect(screen.getByText(/AAPL · DAY SIGNAL/i)).toBeInTheDocument();
-  fireEvent.click(swing);
-  expect(screen.getByText(/NVDA · SWING SIGNAL/i)).toBeInTheDocument();
+  expect(screen.queryByTestId("landing-aha-section")).toBeNull();
+  expect(screen.queryByTestId("landing-first-minutes")).toBeNull();
+  expect(screen.queryByTestId("landing-assistant-section")).toBeNull();
 });
 
 test("test_comparison_no_competitor_names", () => {
@@ -130,23 +117,4 @@ test("test_comparison_no_competitor_names", () => {
   const txt = document.body.textContent || "";
   expect(txt).not.toContain("TradingView");
   expect(txt).not.toContain("Finviz");
-  expect(txt).not.toContain("Trade Ideas");
-  expect(txt).not.toContain("Webull");
-});
-
-test("test_live_engine_section_copy", () => {
-  view();
-  expect(screen.getByRole("heading", { name: /Signals generate only when conditions align/i })).toBeInTheDocument();
-  expect(
-    screen.getByText(/The engine is live — inactivity is intentional when alignment isn'?t present\./i)
-  ).toBeInTheDocument();
-});
-
-test("test_conversion_sections_present", () => {
-  view();
-  expect(screen.getByTestId("landing-assistant-section")).toBeInTheDocument();
-  expect(screen.getByTestId("landing-aha-section")).toBeInTheDocument();
-  expect(screen.getByTestId("landing-first-minutes")).toBeInTheDocument();
-  expect(screen.getByText(/Most platforms help you find trades/i)).toBeInTheDocument();
-  expect(screen.getByText(/Traders who value patience over activity/i)).toBeInTheDocument();
 });

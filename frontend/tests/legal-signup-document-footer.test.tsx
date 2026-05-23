@@ -31,6 +31,12 @@ describe("LegalSignupDocumentFooter", () => {
     expect(agree).not.toBeDisabled();
   });
 
+  test("short document enables Agree immediately", () => {
+    mockScrollMetrics({ scrollHeight: 600, clientHeight: 900, scrollTop: 0 });
+    render(<LegalSignupDocumentFooter href="/privacy" label="Privacy Policy" />);
+    expect(screen.getByRole("button", { name: /I Agree to the Privacy Policy/i })).not.toBeDisabled();
+  });
+
   test("clicking Agree posts message to parent", () => {
     const postMessage = vi.fn();
     Object.defineProperty(window, "parent", { configurable: true, value: { postMessage } });
@@ -41,6 +47,6 @@ describe("LegalSignupDocumentFooter", () => {
     fireEvent.click(agree);
 
     expect(postMessage).toHaveBeenCalledWith({ type: LEGAL_DOCUMENT_READ_MESSAGE, href: "/terms" }, window.location.origin);
-    expect(screen.getByText(/You agreed to the Terms of Service/i)).toBeInTheDocument();
+    expect(screen.getByText(/Agreed — returning to registration/i)).toBeInTheDocument();
   });
 });
