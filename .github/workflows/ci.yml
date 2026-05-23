@@ -142,5 +142,7 @@ jobs:
       GITHUB_SHA: ${{ github.sha }}
       GITHUB_REF: ${{ github.ref }}
     steps:
+      - uses: actions/checkout@v5
+
       - name: Trigger Vercel production deploy
         run: bash .github/scripts/trigger-vercel-deploy.sh
