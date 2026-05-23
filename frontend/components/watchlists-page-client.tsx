@@ -9,6 +9,8 @@ import { CuteLoader } from "@/components/cute-loader";
 import { WatchlistAlignmentSheet } from "@/components/watchlists/watchlist-alignment-sheet";
 import { WatchlistActivityCollapsible } from "@/components/watchlists/WatchlistActivityCollapsible";
 import { WatchlistDecisionQueue } from "@/components/watchlists/watchlist-decision-queue";
+import { WatchlistSortControl } from "@/components/watchlists/watchlist-sort-control";
+import { WatchlistTrackingDensityToggle } from "@/components/watchlists/watchlist-tracking-density-toggle";
 import { WatchlistStatusRails } from "@/components/watchlists/WatchlistStatusRails";
 import { WatchlistEvaluationInfoTip } from "@/components/watchlists/WatchlistEvaluationInfoTip";
 import {
@@ -53,6 +55,15 @@ import {
   type WatchlistAttentionTier
 } from "@/lib/watchlist-decision-card-present";
 import { focusWatchlistRow } from "@/lib/watchlist-row-focus";
+import {
+  readWatchlistTrackingCompact,
+  writeWatchlistTrackingCompact
+} from "@/lib/watchlist-display-preference";
+import {
+  readWatchlistSortMode,
+  writeWatchlistSortMode,
+  type WatchlistSortMode
+} from "@/lib/watchlist-sort-preference";
 import {
   compareSymbolsByPresentationPriority,
   maturationAlertPassesTracking,
@@ -169,12 +180,29 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   const [forceOpenTiers, setForceOpenTiers] = useState<WatchlistAttentionTier[]>([]);
   const [justAddedSymbol, setJustAddedSymbol] = useState<string | null>(null);
   const [watchlistToast, setWatchlistToast] = useState<{ message: string; symbol: string } | null>(null);
+  const [sortMode, setSortMode] = useState<WatchlistSortMode>("attention");
+  const [trackingCompact, setTrackingCompact] = useState(false);
 
   const alignmentSheetRow: MaturationRow | undefined = alignmentSheet
     ? alignmentSheet.deskMode === "day"
       ? maturationDay[alignmentSheet.symbol]
       : maturationSwing[alignmentSheet.symbol]
     : undefined;
+
+  useEffect(() => {
+    setSortMode(readWatchlistSortMode());
+    setTrackingCompact(readWatchlistTrackingCompact());
+  }, []);
+
+  const handleSortModeChange = useCallback((mode: WatchlistSortMode) => {
+    setSortMode(mode);
+    writeWatchlistSortMode(mode);
+  }, []);
+
+  const handleTrackingCompactChange = useCallback((compact: boolean) => {
+    setTrackingCompact(compact);
+    writeWatchlistTrackingCompact(compact);
+  }, []);
 
   usePublishAssistantContext({
     page: "dashboard/watchlists",
@@ -1383,6 +1411,18 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
             {maturationEligible && activeSymbolsDeduped.length > 0 && maturationFetchStatus === "ready" ? (
               <div className="watchlist-hero">
                 <WatchlistStatusRails counts={statusCounts} />
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <WatchlistSortControl
+                    value={sortMode}
+                    onChange={handleSortModeChange}
+                    disabled={maturationFetchStatus !== "ready"}
+                  />
+                  <WatchlistTrackingDensityToggle
+                    checked={trackingCompact}
+                    onChange={handleTrackingCompactChange}
+                    disabled={maturationFetchStatus !== "ready"}
+                  />
+                </div>
                 <p className="m-0 text-xs" style={{ color: colors.textMuted }}>
                   {slotUsed} of {maxSymbols} slots · {slotsLeft} left · grouped by attention — click a card for Signals
                 </p>
@@ -1476,6 +1516,8 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                           }
                           forceOpenTiers={forceOpenTiers}
                           justAddedSymbol={justAddedSymbol}
+                          sortMode={sortMode}
+                          trackingCompact={trackingCompact}
                         />
                       );
                     })()}

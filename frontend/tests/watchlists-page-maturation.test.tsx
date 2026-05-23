@@ -14,6 +14,16 @@ beforeAll(() => {
       removeEventListener: () => undefined
     })
   });
+  class MockIntersectionObserver {
+    observe = vi.fn();
+    disconnect = vi.fn();
+    unobserve = vi.fn();
+    constructor(private callback: IntersectionObserverCallback) {}
+    trigger(isIntersecting: boolean, target: Element) {
+      this.callback([{ isIntersecting, target } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+    }
+  }
+  vi.stubGlobal("IntersectionObserver", MockIntersectionObserver);
 });
 
 vi.mock("@/lib/assistant/context", () => ({

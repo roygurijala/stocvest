@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import {
   buildWatchlistCardModel,
   formatEvaluatedAgo,
+  formatWatchlistTierHeaderHint,
   groupSymbolsIntoAttentionTiers,
   resolveWatchlistAttentionTier,
   sortSymbolsInAttentionTier
@@ -118,5 +119,15 @@ describe("groupSymbolsIntoAttentionTiers", () => {
         : row({ layers_aligned: 6, layers_total: 6, state: "actionable" });
     const sorted = sortSymbolsInAttentionTier(["AAPL", "NVDA"], rowFor);
     expect(sorted[0]).toBe("NVDA");
+  });
+
+  test("formatWatchlistTierHeaderHint includes near actionable preview", () => {
+    const rowFor = (sym: string) =>
+      sym === "NVDA"
+        ? row({ layers_aligned: 4, layers_total: 6, state: "developing" })
+        : row({ layers_aligned: 6, layers_total: 6, state: "actionable" });
+    const hint = formatWatchlistTierHeaderHint("check_now", 2, rowFor, ["NVDA", "AAPL"]);
+    expect(hint).toContain("2 symbols");
+    expect(hint).toMatch(/near actionable|actionable/);
   });
 });

@@ -17,6 +17,7 @@ type Props = {
   planMode: "swing" | "day";
   deskEvaluating?: boolean;
   justAdded?: boolean;
+  compact?: boolean;
   onRemove: () => void;
   onRefresh?: () => void;
 };
@@ -45,6 +46,7 @@ export function WatchlistDecisionCard({
   planMode,
   deskEvaluating,
   justAdded,
+  compact = false,
   onRemove,
   onRefresh
 }: Props) {
@@ -61,6 +63,7 @@ export function WatchlistDecisionCard({
       tradingMode={planMode}
       className="group block no-underline"
       data-testid={`watchlist-decision-card-${model.symbol}`}
+      data-watchlist-card-density={compact ? "compact" : "default"}
       aria-label={watchlistSignalsOpenAriaLabel(model.symbol)}
       title={peek ? `Quick peek: ${peek}` : undefined}
     >
@@ -70,9 +73,9 @@ export function WatchlistDecisionCard({
           background: colors.surface,
           border: `1px solid ${colors.border}`,
           borderLeft: `3px solid ${model.borderLeft}`,
-          borderBottom: `3px solid ${model.borderBottom}`,
+          borderBottom: compact ? `1px solid ${colors.border}` : `3px solid ${model.borderBottom}`,
           borderRadius: borderRadius.lg,
-          padding: spacing[3]
+          padding: compact ? spacing[2] : spacing[3]
         }}
       >
         <button
@@ -127,6 +130,15 @@ export function WatchlistDecisionCard({
           ) : null}
         </header>
 
+        {compact ? (
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+            <LayerDots filled={model.layerDots} total={model.total} accent={colors.accent} />
+            <span className="text-xs" style={{ color: colors.textMuted }}>
+              {model.alignmentLine}
+            </span>
+          </div>
+        ) : (
+          <>
         <div
           className="my-2 h-px w-full"
           style={{ background: `color-mix(in srgb, ${colors.border} 80%, transparent)` }}
@@ -196,8 +208,13 @@ export function WatchlistDecisionCard({
           <span aria-hidden>{model.decisionIcon} </span>
           {model.decisionHint}
         </p>
+          </>
+        )}
 
-        <footer className="mt-3 flex items-center justify-between gap-2 border-t pt-2" style={{ borderColor: colors.border }}>
+        <footer
+          className={`flex items-center justify-between gap-2 border-t ${compact ? "mt-2 pt-1.5" : "mt-3 pt-2"}`}
+          style={{ borderColor: colors.border }}
+        >
           <span
             className="text-xs"
             style={{ color: model.evaluatedStale ? colors.caution : colors.textMuted }}
@@ -237,6 +254,7 @@ export function WatchlistDecisionCardFromRow({
   planMode,
   deskEvaluating,
   justAdded,
+  compact,
   onRemove,
   onRefresh
 }: {
@@ -246,6 +264,7 @@ export function WatchlistDecisionCardFromRow({
   planMode: "swing" | "day";
   deskEvaluating?: boolean;
   justAdded?: boolean;
+  compact?: boolean;
   onRemove: () => void;
   onRefresh?: () => void;
 }) {
@@ -269,6 +288,7 @@ export function WatchlistDecisionCardFromRow({
       planMode={planMode}
       deskEvaluating={deskEvaluating}
       justAdded={justAdded}
+      compact={compact}
       onRemove={onRemove}
       onRefresh={onRefresh}
     />

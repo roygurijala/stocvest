@@ -1,18 +1,20 @@
 "use client";
 
+import { WatchlistCheckNowStickyBar } from "@/components/watchlists/watchlist-check-now-sticky-bar";
 import { WatchlistDecisionCardFromRow } from "@/components/watchlists/watchlist-decision-card";
 import { ScannerCollapsible } from "@/components/scanner/ScannerCollapsible";
 import {
+  formatWatchlistTierHeaderHint,
   groupSymbolsIntoAttentionTiers,
-  sortSymbolsInAttentionTier,
   watchlistAttentionSectionMeta,
   type WatchlistAttentionTier
 } from "@/lib/watchlist-decision-card-present";
+import { sortWatchlistSymbolsInTier, type WatchlistSortMode } from "@/lib/watchlist-sort-preference";
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
 import type { SnapshotPayload } from "@/lib/api/market";
 import { spacing } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 
 const TIER_ORDER: WatchlistAttentionTier[] = ["check_now", "getting_close", "tracking"];
 
@@ -27,10 +29,11 @@ type Props = {
   deskEvaluatingForSymbol?: (sym: string) => boolean | undefined;
   onRemove: (sym: string) => void;
   onRefresh?: (sym: string) => void;
-  /** Tiers that must be expanded (e.g. after search jump or add). */
   forceOpenTiers?: WatchlistAttentionTier[];
-  /** Symbol to show a short-lived “Just added” badge on. */
   justAddedSymbol?: string | null;
+  sortMode?: WatchlistSortMode;
+  /** Smaller cards in the Tracking tier only. */
+  trackingCompact?: boolean;
 };
 
 function tierCardListClass(tier: WatchlistAttentionTier, count: number): string {
@@ -38,12 +41,6 @@ function tierCardListClass(tier: WatchlistAttentionTier, count: number): string 
     return "m-0 flex list-none flex-col gap-2 p-0";
   }
   return "m-0 grid list-none grid-cols-1 gap-2 p-0 lg:grid-cols-2";
-}
-
-function tierCountHint(tier: WatchlistAttentionTier, count: number): string {
-  const meta = watchlistAttentionSectionMeta(tier);
-  if (count === 1) return `1 symbol · ${meta.subtitle}`;
-  return `${count} symbols · ${meta.subtitle}`;
 }
 
 function TierCardList({
@@ -55,7 +52,8 @@ function TierCardList({
   deskEvaluatingForSymbol,
   onRemove,
   onRefresh,
-  justAddedSymbol
+  justAddedSymbol,
+  compact
 }: {
   tier: WatchlistAttentionTier;
   list: string[];
@@ -66,6 +64,7 @@ function TierCardList({
   onRemove: (sym: string) => void;
   onRefresh?: (sym: string) => void;
   justAddedSymbol?: string | null;
+  compact?: boolean;
 }) {
   const justAddedU = justAddedSymbol?.trim().toUpperCase() ?? "";
   return (
@@ -79,6 +78,7 @@ function TierCardList({
             planMode={planMode}
             deskEvaluating={deskEvaluatingForSymbol?.(symU)}
             justAdded={justAddedU === symU}
+            compact={compact}
             onRemove={() => onRemove(symU)}
             onRefresh={onRefresh ? () => onRefresh(symU) : undefined}
           />
@@ -97,71 +97,83 @@ export function WatchlistDecisionQueue({
   onRemove,
   onRefresh,
   forceOpenTiers,
-  justAddedSymbol
+  justAddedSymbol,
+  sortMode = "attention",
+  trackingCompact = false
 }: Props) {
   const { colors } = useTheme();
+  const checkNowSentinelRef = useRef<HTMLDivElement | null>(null);
   const grouped = useMemo(
     () => groupSymbolsIntoAttentionTiers(symbols, rowForSymbol),
     [symbols, rowForSymbol]
   );
   const forceOpenSet = useMemo(() => new Set(forceOpenTiers ?? []), [forceOpenTiers]);
+  const checkNowList = useMemo(
+    () => sortWatchlistSymbolsInTier(grouped.check_now, sortMode, rowForSymbol),
+    [grouped.check_now, sortMode, rowForSymbol]
+  );
 
   return (
-    <div className="flex flex-col" style={{ gap: spacing[4] }} data-testid="watchlist-decision-queue">
-      {TIER_ORDER.map((tier) => {
-        const list = sortSymbolsInAttentionTier(grouped[tier], rowForSymbol);
-        if (list.length === 0) return null;
-        const meta = watchlistAttentionSectionMeta(tier);
-        const hint = tierCountHint(tier, list.length);
-        const cards = (
-          <TierCardList
-            tier={tier}
-            list={list}
-            rowForSymbol={rowForSymbol}
-            snapshotForSymbol={snapshotForSymbol}
-            planMode={planMode}
-            deskEvaluatingForSymbol={deskEvaluatingForSymbol}
-            onRemove={onRemove}
-            onRefresh={onRefresh}
-            justAddedSymbol={justAddedSymbol}
-          />
-        );
-
-        if (tier === "check_now") {
-          return (
-            <section key={tier} data-testid={`watchlist-tier-${tier}`}>
-              <header className="mb-2 flex flex-wrap items-baseline gap-2">
-                <h3 className="m-0 text-sm font-bold tracking-wide" style={{ color: colors.text }}>
-                  <span aria-hidden>{meta.icon} </span>
-                  {meta.title}
-                </h3>
-                <span className="text-xs" style={{ color: colors.textMuted }}>
-                  {hint}
-                </span>
-              </header>
-              {cards}
-            </section>
+    <>
+      <WatchlistCheckNowStickyBar count={checkNowList.length} sentinelRef={checkNowSentinelRef} />
+      <div className="flex flex-col" style={{ gap: spacing[4] }} data-testid="watchlist-decision-queue">
+        {TIER_ORDER.map((tier) => {
+          const list = sortWatchlistSymbolsInTier(grouped[tier], sortMode, rowForSymbol);
+          if (list.length === 0) return null;
+          const meta = watchlistAttentionSectionMeta(tier);
+          const hint = formatWatchlistTierHeaderHint(tier, list.length, rowForSymbol, list);
+          const cards = (
+            <TierCardList
+              tier={tier}
+              list={list}
+              rowForSymbol={rowForSymbol}
+              snapshotForSymbol={snapshotForSymbol}
+              planMode={planMode}
+              deskEvaluatingForSymbol={deskEvaluatingForSymbol}
+              onRemove={onRemove}
+              onRefresh={onRefresh}
+              justAddedSymbol={justAddedSymbol}
+              compact={tier === "tracking" && trackingCompact}
+            />
           );
-        }
 
-        const defaultOpen =
-          tier === "getting_close" ? true : list.length < WATCHLIST_TRACKING_COLLAPSE_MIN;
+          if (tier === "check_now") {
+            return (
+              <section key={tier} id="watchlist-tier-check_now" data-testid="watchlist-tier-check_now">
+                <header className="mb-2 flex flex-wrap items-baseline gap-2">
+                  <h3 className="m-0 text-sm font-bold tracking-wide" style={{ color: colors.text }}>
+                    <span aria-hidden>{meta.icon} </span>
+                    {meta.title}
+                  </h3>
+                  <span className="text-xs" style={{ color: colors.textMuted }}>
+                    {hint}
+                  </span>
+                </header>
+                {cards}
+                <div ref={checkNowSentinelRef} className="h-px w-full" aria-hidden data-testid="watchlist-check-now-sentinel" />
+              </section>
+            );
+          }
 
-        return (
-          <ScannerCollapsible
-            key={tier}
-            testId={`watchlist-tier-${tier}`}
-            title={`${meta.icon} ${meta.title}`}
-            hint={hint}
-            defaultOpen={defaultOpen}
-            forceOpen={forceOpenSet.has(tier)}
-            persistSessionKey={`watchlist-tier-${tier}`}
-            embedded
-          >
-            {cards}
-          </ScannerCollapsible>
-        );
-      })}
-    </div>
+          const defaultOpen =
+            tier === "getting_close" ? true : list.length < WATCHLIST_TRACKING_COLLAPSE_MIN;
+
+          return (
+            <ScannerCollapsible
+              key={tier}
+              testId={`watchlist-tier-${tier}`}
+              title={`${meta.icon} ${meta.title}`}
+              hint={hint}
+              defaultOpen={defaultOpen}
+              forceOpen={forceOpenSet.has(tier)}
+              persistSessionKey={`watchlist-tier-${tier}`}
+              embedded
+            >
+              {cards}
+            </ScannerCollapsible>
+          );
+        })}
+      </div>
+    </>
   );
 }

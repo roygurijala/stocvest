@@ -13,6 +13,7 @@ import { maturationAlignmentCounts, missingLayerNames } from "@/lib/watchlist-al
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
 import type { SnapshotPayload } from "@/lib/api/market";
 import { watchlistQuoteFromSnapshot } from "@/lib/watchlist-page-utils";
+import { sortWatchlistSymbolsInTier } from "@/lib/watchlist-sort-preference";
 import {
   parseRiskRewardFromReadiness,
   resolveTradeConvictionTier,
@@ -281,15 +282,65 @@ export function sortSymbolsInAttentionTier(
   symbols: string[],
   rowForSymbol: (sym: string) => WatchlistMaturationRow | undefined
 ): string[] {
-  return [...symbols].sort((a, b) => {
-    const ra = rowForSymbol(a);
-    const rb = rowForSymbol(b);
-    const ca = maturationAlignmentCounts(ra).aligned;
-    const cb = maturationAlignmentCounts(rb).aligned;
-    if (cb !== ca) return cb - ca;
-    const impA = ra?.last_transition_type === "improved" ? 1 : 0;
-    const impB = rb?.last_transition_type === "improved" ? 1 : 0;
-    if (impB !== impA) return impB - impA;
-    return a.localeCompare(b);
-  });
+  return sortWatchlistSymbolsInTier(symbols, "attention", rowForSymbol);
+}
+
+/** Short tier-specific preview appended to section headers, e.g. "2 near actionable". */
+export function buildWatchlistTierPreview(
+  tier: WatchlistAttentionTier,
+  symbols: string[],
+  rowForSymbol: (sym: string) => WatchlistMaturationRow | undefined
+): string | null {
+  if (symbols.length === 0) return null;
+
+  let actionable = 0;
+  let nearReady = 0;
+  let improved = 0;
+  let early = 0;
+
+  for (const sym of symbols) {
+    const row = rowForSymbol(sym);
+    const { aligned, total } = maturationAlignmentCounts(row);
+    const displayTier = resolveAlignmentDisplayTier({
+      layersAligned: aligned,
+      layersTotal: total,
+      maturationState: row?.state ?? row?.label
+    });
+    if (displayTier === "actionable") actionable += 1;
+    else if (displayTier === "near_ready") nearReady += 1;
+    if (row?.last_transition_type === "improved") improved += 1;
+    if (displayTier === "not_aligned" || aligned <= 1) early += 1;
+  }
+
+  if (tier === "check_now") {
+    const parts: string[] = [];
+    if (actionable > 0) parts.push(`${actionable} actionable`);
+    if (nearReady > 0) parts.push(`${nearReady} near actionable`);
+    return parts.length > 0 ? parts.join(", ") : null;
+  }
+
+  if (tier === "getting_close") {
+    if (improved > 0) {
+      return improved === 1 ? "1 improved recently" : `${improved} improved recently`;
+    }
+    return null;
+  }
+
+  if (early >= symbols.length) return "mostly early stage";
+  if (early > 0) return early === 1 ? "1 early stage" : `${early} early stage`;
+  return null;
+}
+
+export function formatWatchlistTierHeaderHint(
+  tier: WatchlistAttentionTier,
+  count: number,
+  rowForSymbol: (sym: string) => WatchlistMaturationRow | undefined,
+  symbolsInTier: string[]
+): string {
+  const meta = watchlistAttentionSectionMeta(tier);
+  const countLabel = count === 1 ? "1 symbol" : `${count} symbols`;
+  const preview = buildWatchlistTierPreview(tier, symbolsInTier, rowForSymbol);
+  const parts = [countLabel, meta.subtitle];
+  if (preview) parts.push(preview);
+  return parts.join(" · ");
 }
