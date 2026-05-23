@@ -27,7 +27,15 @@ export const STOCVEST_LOGO_VARIANTS = {
     displayHeight: 52,
     maxWidth: 320
   },
-  /** Landing fixed nav (compact; hero carries the large lockup) */
+  /** Landing fixed nav anchor — wordmark, slightly above nav link scale */
+  landingNav: {
+    src: `${BRAND_BASE}/wordmark_only_500w.webp`,
+    width: 500,
+    height: 72,
+    displayHeight: 40,
+    maxWidth: 200
+  },
+  /** Legacy compact strip (non-landing surfaces) */
   header: {
     src: `${BRAND_BASE}/header_logo_400w.webp`,
     width: 400,
@@ -103,7 +111,7 @@ export function StocvestLogo({
         height={asset.height}
         className="h-auto w-auto max-w-full"
         style={imageStyle}
-        priority={priority || variant === "nav" || variant === "hero"}
+        priority={priority || variant === "nav" || variant === "hero" || variant === "landingNav"}
       />
     </span>
   );

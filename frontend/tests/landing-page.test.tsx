@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import { LandingPage } from "@/components/landing-page";
 import { ThemeProvider } from "@/lib/theme-provider";
@@ -50,6 +50,16 @@ test("test_hero_no_broker_execution_claim", () => {
   view();
   expect(screen.queryByText(/Multi-broker execution/i)).toBeNull();
   expect(screen.queryByText(/Multi-broker/i)).toBeNull();
+});
+
+test("test_landing_nav_shows_logo_anchor_left", () => {
+  view();
+  const header = screen.getByTestId("landing-header");
+  const logo = within(header).getByTestId("stocvest-logo");
+  expect(logo).toHaveAttribute("data-variant", "landingNav");
+  expect(within(header).getByRole("link", { name: /STOCVEST home/i })).toHaveAttribute("href", "/");
+  expect(within(header).getByRole("link", { name: /Login/i })).toBeInTheDocument();
+  expect(within(header).getByRole("link", { name: /Get Started/i })).toBeInTheDocument();
 });
 
 test("test_pricing_no_backtesting_claim", () => {

@@ -47,6 +47,15 @@ describe("StocvestLogo", () => {
     );
   });
 
+  test("landingNav variant uses wordmark_only_500w", () => {
+    render(<StocvestLogo variant="landingNav" />);
+    expect(screen.getByTestId("stocvest-logo")).toHaveAttribute("data-variant", "landingNav");
+    expect(screen.getByAltText("STOCVEST")).toHaveAttribute(
+      "src",
+      STOCVEST_LOGO_VARIANTS.landingNav.src
+    );
+  });
+
   test("header variant uses compact header_logo_400w", () => {
     render(<StocvestLogo variant="header" />);
     expect(screen.getByAltText("STOCVEST")).toHaveAttribute(

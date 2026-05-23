@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
-import { StocvestLogo } from "@/components/brand/stocvest-logo";
 import { LandingStockPreview } from "@/components/landing/landing-stock-preview";
 import {
   genericLandingDemoVerdict,
@@ -95,9 +94,6 @@ export function LandingHeroSearch() {
       className="mx-auto flex min-h-[88vh] max-w-7xl flex-col items-center px-4 pb-16 pt-24 text-center md:px-8 md:pt-28"
       data-testid="landing-hero"
     >
-      <div className="mb-6 flex w-full justify-center">
-        <StocvestLogo variant="header" href="/" priority />
-      </div>
       <p
         className="mb-4 text-[10px] font-medium uppercase tracking-[0.22em] text-slate-500 md:text-xs"
         data-testid="landing-hero-motto"

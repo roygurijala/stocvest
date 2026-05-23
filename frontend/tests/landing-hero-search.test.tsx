@@ -15,6 +15,7 @@ describe("LandingHeroSearch", () => {
     expect(screen.queryByText(/Stop wasting trades/i)).toBeNull();
     expect(screen.getAllByText(/Judgment\. Restraint\. Gating\. Permission\./i)).toHaveLength(1);
     expect(screen.getByRole("heading", { name: /when to stay out/i })).toBeInTheDocument();
+    expect(screen.queryByTestId("stocvest-logo")).toBeNull();
   });
 
   test("NFLX quick pick shows preview card", async () => {
