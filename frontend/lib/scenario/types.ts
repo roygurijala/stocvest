@@ -130,9 +130,9 @@ export interface ScenarioInput {
    */
   risk_reward?: number | null;
   /**
-   * When Gap Intelligence marks Scenario Builder structurally unavailable
-   * (phase / fill / calendar), the Build Scenario button is disabled with
-   * `gap_intel_blocked` — this is not a conviction gate.
+   * Gap Intelligence session/phase context. Does not block the full planning
+   * sheet when reference stop + target exist — surfaced via planning banner
+   * and verdict blockers instead.
    */
   gap_intel_gate?: {
     scenario_builder_state: "DISABLED";

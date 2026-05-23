@@ -50,7 +50,12 @@ export function augmentScenarioInputWithGapIntel(
   const st = snap.scenario_builder.state;
   const reasons = snap.scenario_builder.reasons ?? [];
   if (st === "DISABLED") {
-    return { ...input, gap_intel_gate: { scenario_builder_state: "DISABLED", reasons } };
+    const b = gapIntelStructuralBanner(reasons);
+    return {
+      ...input,
+      gap_intel_gate: { scenario_builder_state: "DISABLED", reasons },
+      ...(b ? { structural_planning_banner: b } : {})
+    };
   }
   if (st === "LIMITED") {
     const b = gapIntelStructuralBanner(reasons);

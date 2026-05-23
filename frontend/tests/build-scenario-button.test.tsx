@@ -120,7 +120,7 @@ describe("BuildScenarioButton — gated output not access", () => {
     expect(btn.textContent).toContain("Scenario Builder");
   });
 
-  test("gap intel disabled stays enabled with preview when gap blocks eligibility", () => {
+  test("gap intel disabled opens full sheet when stop and target exist", () => {
     wrap(
       <BuildScenarioButton
         input={{
@@ -132,7 +132,7 @@ describe("BuildScenarioButton — gated output not access", () => {
     );
     const btn = screen.getByTestId("build-scenario-button");
     expect(btn).not.toHaveAttribute("disabled");
-    expect(btn.getAttribute("data-capability")).toBe("preview");
+    expect(btn.getAttribute("data-capability")).toBe("full");
   });
 
   test("click opens preview modal without trade prices when structurally incomplete", () => {

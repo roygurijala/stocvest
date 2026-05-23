@@ -177,9 +177,8 @@ export function isEligibleForScenario(
 
   // low_risk_reward is surfaced in the Scenario Builder verdict banner — users may
   // adjust entry to explore geometry even when reference R/R is below desk minimum.
-  if (input.gap_intel_gate?.scenario_builder_state === "DISABLED") {
-    reasons.push("gap_intel_blocked");
-  }
+  // gap_intel session limits are execution context (verdict banner / planning banner),
+  // not structural completeness — stop + target still open the full sheet.
 
   return { eligible: reasons.length === 0, reasons };
 }

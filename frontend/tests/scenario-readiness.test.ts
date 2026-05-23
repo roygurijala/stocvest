@@ -79,20 +79,20 @@ describe("resolveScenarioBuilderCapability", () => {
     expect(r.capability).toBe("preview");
   });
 
-  test("gap intel disabled keeps preview when structurally blocked", () => {
+  test("gap intel disabled opens full sheet with session_limited execution", () => {
     const r = resolveScenarioBuilderCapability(
       ctx({ decisionState: "actionable", layersAligned: 6, layersTotal: 6 }),
       baseInput({
         gap_intel_gate: { scenario_builder_state: "DISABLED", reasons: ["closed"] }
       })
     );
-    expect(r.capability).toBe("preview");
+    expect(r.capability).toBe("full");
     expect(r.gapIntelBlocked).toBe(true);
     expect(r.setupTier).toBe("actionable");
     expect(r.executionTier).toBe("session_limited");
   });
 
-  test("4/6 with gap blocked shows near_ready + session_limited preview", () => {
+  test("4/6 with gap blocked shows near_ready + session_limited full sheet", () => {
     const r = resolveScenarioBuilderCapability(
       ctx({ layersAligned: 4, layersTotal: 6, maturationState: "developing" }),
       baseInput({
@@ -102,7 +102,7 @@ describe("resolveScenarioBuilderCapability", () => {
     expect(r.setupTier).toBe("near_ready");
     expect(setupTierLabel(r.setupTier, r.aligned, r.total)).toBe("Near ready (4/6)");
     expect(r.executionTier).toBe("session_limited");
-    expect(r.capability).toBe("preview");
+    expect(r.capability).toBe("full");
   });
 
   test("near_ready takeaway mentions actionable threshold", () => {
