@@ -113,4 +113,12 @@ describe("browserApiFetch — 401 refresh-and-retry contract", () => {
     expect(refreshSessionMock).not.toHaveBeenCalled();
     expect(markSessionExpiredMock).not.toHaveBeenCalled();
   });
+
+  test("returns null when fetch does not return a promise (e.g. unconfigured test mock)", async () => {
+    global.fetch = vi.fn() as unknown as typeof fetch;
+
+    const result = await browserApiFetch<unknown>("/v1/market/earnings");
+    expect(result).toBeNull();
+    expect(refreshSessionMock).not.toHaveBeenCalled();
+  });
 });

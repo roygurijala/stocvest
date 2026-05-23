@@ -44,6 +44,16 @@ vi.mock("@/lib/hooks/use-signals-mount-revalidate", () => ({
   useSignalsMountRevalidate: () => ({ isMountRevalidating: false })
 }));
 
+vi.mock("@/lib/api/earnings-client", () => ({
+  fetchEarningsCalendarClient: vi.fn(async () => ({
+    symbols: [] as string[],
+    days: 3,
+    upcoming: [],
+    recent: [],
+    notice: null as string | null
+  }))
+}));
+
 // Recharts isn't exercised by these tests (radar starts collapsed and
 // we never expand it) but importing the file still registers the
 // component tree. We don't need to mock recharts.

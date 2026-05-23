@@ -42,13 +42,24 @@ export async function browserApiFetch<T>(path: string, init?: RequestInit): Prom
   const url = `${apiBaseUrl()}${path}`;
 
   const doFetch = async (): Promise<Response | null> => {
-    return fetch(url, {
-      ...init,
-      headers: buildHeaders(init),
-      credentials: "include",
-      cache: "no-store",
-      signal: init?.signal ?? timeoutSignal
-    }).catch((error: unknown) => {
+    let pending: ReturnType<typeof fetch>;
+    try {
+      pending = fetch(url, {
+        ...init,
+        headers: buildHeaders(init),
+        credentials: "include",
+        cache: "no-store",
+        signal: init?.signal ?? timeoutSignal
+      });
+    } catch (error: unknown) {
+      console.error("Unable to connect. Check your connection.", error);
+      return null;
+    }
+    if (!pending || typeof pending.then !== "function") {
+      console.error("Unable to connect. Check your connection.");
+      return null;
+    }
+    return pending.catch((error: unknown) => {
       console.error("Unable to connect. Check your connection.", error);
       return null;
     });
