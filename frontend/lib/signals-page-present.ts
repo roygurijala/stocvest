@@ -609,11 +609,22 @@ export function executionDetailToggleLabel(
   return null;
 }
 
+function pushUniqueBullet(out: string[], line: string): void {
+  const trimmed = line.trim();
+  if (!trimmed) return;
+  const key = trimmed.slice(0, 48);
+  if (!out.some((b) => b.slice(0, 48) === key || b.includes(trimmed) || trimmed.includes(b))) {
+    out.push(trimmed);
+  }
+}
+
+/** Gate-focused bullets for “Why not actionable?” — distinct from causal layer narrative. */
 export function buildWhyNotBullets(
   decision: TradeDecision,
   previewLayers: SignalsLayerRowInput[],
   bias: SignalsSetupBias,
   max = 3,
+  /** @deprecated Prefer `causalNarrativeShown` on the panel — only used when no causal panel is visible. */
   causalBullets?: string[] | null
 ): string[] {
   if (causalBullets && causalBullets.length > 0) {
@@ -621,13 +632,16 @@ export function buildWhyNotBullets(
   }
   const out: string[] = [];
   if (decision.rationale?.text) {
-    out.push(decision.rationale.text);
+    pushUniqueBullet(out, decision.rationale.text);
+  }
+  for (const line of decision.reinforcements ?? []) {
+    if (out.length >= max) break;
+    pushUniqueBullet(out, line);
   }
   for (const row of previewLayers) {
     if (out.length >= max) break;
     const line = buildLayerInsightLine(row, bias);
-    const tagged = `${row.name}: ${line}`;
-    if (!out.some((b) => b.includes(row.name))) out.push(tagged);
+    pushUniqueBullet(out, `${row.name}: ${line}`);
   }
   return out.slice(0, max);
 }

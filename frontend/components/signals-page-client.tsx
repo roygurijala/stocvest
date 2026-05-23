@@ -1825,6 +1825,7 @@ export function SignalsPageClient({
                     bias={setupBias}
                     allLayers={signalsPresentRows}
                     signalSummary={layerSignalSummary}
+                    causalNarrativeShown={Boolean(causalNarrative)}
                     causalNarrativeApi={
                       compositeResult && !isInsufficientCompositeResponse(compositeResult)
                         ? (compositeResult as Record<string, unknown>).causal_narrative

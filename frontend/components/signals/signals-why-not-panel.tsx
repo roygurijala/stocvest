@@ -20,6 +20,8 @@ type Props = {
   allLayers?: SignalsLayerRowInput[];
   signalSummary?: string;
   causalNarrativeApi?: unknown;
+  /** When the causal narrative panel is visible above, show gate bullets only (no duplicate layer story). */
+  causalNarrativeShown?: boolean;
 };
 
 export function SignalsWhyNotPanel({
@@ -29,7 +31,8 @@ export function SignalsWhyNotPanel({
   maxBullets = 5,
   allLayers,
   signalSummary = "",
-  causalNarrativeApi
+  causalNarrativeApi,
+  causalNarrativeShown = false
 }: Props) {
   const { colors } = useTheme();
   const narrative: CausalNarrative | null =
@@ -41,16 +44,12 @@ export function SignalsWhyNotPanel({
           rows: allLayers ?? previewLayers,
           executionNote: decision.rationale?.text ?? null
         });
+  const causalFallback =
+    !causalNarrativeShown && narrative ? causalBulletsForWhyNot(narrative, maxBullets) : null;
   const bullets =
     decision.state === "actionable"
       ? []
-      : buildWhyNotBullets(
-          decision,
-          previewLayers,
-          bias,
-          maxBullets,
-          narrative ? causalBulletsForWhyNot(narrative, maxBullets) : null
-        );
+      : buildWhyNotBullets(decision, previewLayers, bias, maxBullets, causalFallback);
 
   if (bullets.length === 0) return null;
 
@@ -69,7 +68,9 @@ export function SignalsWhyNotPanel({
         Why not actionable?
       </h3>
       <p className="m-0 mt-1 text-xs leading-snug" style={{ color: colors.textMuted }}>
-        Gates still open — informational only
+        {causalNarrativeShown
+          ? "Risk, alignment, and confirmation thresholds — separate from the layer context above"
+          : "Gates still open — informational only"}
       </p>
       <ul className="m-0 mt-3 list-none space-y-2.5 p-0">
         {bullets.map((bullet, index) => (
