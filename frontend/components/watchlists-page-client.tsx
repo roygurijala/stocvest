@@ -56,6 +56,11 @@ import {
 } from "@/lib/watchlist-decision-card-present";
 import { focusWatchlistRow } from "@/lib/watchlist-row-focus";
 import {
+  symbolMatchesMaturationRail,
+  WATCHLIST_MATURATION_RAIL_LABELS,
+  type WatchlistMaturationRailKey
+} from "@/lib/watchlist-maturation-rails";
+import {
   readWatchlistTrackingCompact,
   writeWatchlistTrackingCompact
 } from "@/lib/watchlist-display-preference";
@@ -178,6 +183,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     deskMode: "swing" | "day";
   } | null>(null);
   const [forceOpenTiers, setForceOpenTiers] = useState<WatchlistAttentionTier[]>([]);
+  const [maturationRailFilter, setMaturationRailFilter] = useState<WatchlistMaturationRailKey | null>(null);
   const [justAddedSymbol, setJustAddedSymbol] = useState<string | null>(null);
   const [watchlistToast, setWatchlistToast] = useState<{ message: string; symbol: string } | null>(null);
   const [sortMode, setSortMode] = useState<WatchlistSortMode>("attention");
@@ -958,29 +964,48 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   ]);
 
   const displaySymbols = useMemo(() => {
-    if (!nearReadyFilterActive || maturationFetchStatus !== "ready") return sortedSymbols;
-    return sortedSymbols.filter((sym) => {
-      const symU = sym.trim().toUpperCase();
-      const ms = maturationSwing[symU];
-      const md = maturationDay[symU];
-      const row = pickWatchlistMaturationForPlan(viewMode, ms, md);
-      if (row?.progress_band === "near_ready") return true;
-      const aligned = typeof row?.layers_aligned === "number" ? row.layers_aligned : 0;
-      return (
-        resolveAlignmentDisplayTier({
-          layersAligned: aligned,
-          layersTotal: row?.layers_total,
-          maturationState: row?.state
-        }) === "near_ready"
-      );
-    });
+    let list = sortedSymbols;
+    if (nearReadyFilterActive && maturationFetchStatus === "ready") {
+      list = list.filter((sym) => {
+        const symU = sym.trim().toUpperCase();
+        const ms = maturationSwing[symU];
+        const md = maturationDay[symU];
+        const row = pickWatchlistMaturationForPlan(viewMode, ms, md);
+        if (row?.progress_band === "near_ready") return true;
+        const aligned = typeof row?.layers_aligned === "number" ? row.layers_aligned : 0;
+        return (
+          resolveAlignmentDisplayTier({
+            layersAligned: aligned,
+            layersTotal: row?.layers_total,
+            maturationState: row?.state
+          }) === "near_ready"
+        );
+      });
+    }
+    if (maturationRailFilter && maturationFetchStatus === "ready") {
+      list = list.filter((sym) => {
+        const symU = sym.trim().toUpperCase();
+        const state = displayStateForSymbol(
+          symU,
+          symbolTrackingMap,
+          maturationSwing,
+          maturationDay,
+          dualDeskMaturation
+        );
+        return symbolMatchesMaturationRail(state, maturationRailFilter);
+      });
+    }
+    return list;
   }, [
     sortedSymbols,
     nearReadyFilterActive,
+    maturationRailFilter,
     maturationFetchStatus,
     maturationSwing,
     maturationDay,
-    viewMode
+    viewMode,
+    symbolTrackingMap,
+    dualDeskMaturation
   ]);
 
   const filteredSymbolsForList = useMemo(() => {
@@ -1030,6 +1055,49 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
       });
     },
     [activeSymbolsDeduped, maturationRowForSymbol, colors.accent]
+  );
+
+  const handleMaturationRailClick = useCallback(
+    (rail: WatchlistMaturationRailKey) => {
+      const next = maturationRailFilter === rail ? null : rail;
+      setMaturationRailFilter(next);
+      if (!next) {
+        setForceOpenTiers([]);
+        return;
+      }
+      const matches = sortedSymbols.filter((sym) => {
+        const symU = sym.trim().toUpperCase();
+        const state = displayStateForSymbol(
+          symU,
+          symbolTrackingMap,
+          maturationSwing,
+          maturationDay,
+          dualDeskMaturation
+        );
+        return symbolMatchesMaturationRail(state, next);
+      });
+      if (matches.length === 0) return;
+      const tiers = new Set<WatchlistAttentionTier>();
+      for (const sym of matches) {
+        const symU = sym.trim().toUpperCase();
+        tiers.add(resolveWatchlistAttentionTier(maturationRowForSymbol(symU)));
+      }
+      setForceOpenTiers([...tiers]);
+      const first = matches[0]!.trim().toUpperCase();
+      window.requestAnimationFrame(() => {
+        window.setTimeout(() => focusWatchlistRow(first, colors.accent), 80);
+      });
+    },
+    [
+      maturationRailFilter,
+      sortedSymbols,
+      symbolTrackingMap,
+      maturationSwing,
+      maturationDay,
+      dualDeskMaturation,
+      maturationRowForSymbol,
+      colors.accent
+    ]
   );
 
   useEffect(() => {
@@ -1410,7 +1478,11 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
             ) : null}
             {maturationEligible && activeSymbolsDeduped.length > 0 && maturationFetchStatus === "ready" ? (
               <div className="watchlist-hero">
-                <WatchlistStatusRails counts={statusCounts} />
+                <WatchlistStatusRails
+                  counts={statusCounts}
+                  activeRail={maturationRailFilter}
+                  onRailClick={handleMaturationRailClick}
+                />
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <WatchlistSortControl
                     value={sortMode}
@@ -1465,6 +1537,30 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                   </div>
                 ) : (
                   <>
+                    {maturationRailFilter &&
+                    activeSymbolsDeduped.length > 0 &&
+                    filteredSymbolsForList.length > 0 &&
+                    filteredSymbolsForList.length < sortedSymbols.length ? (
+                      <p
+                        className="m-0 mb-3 text-sm"
+                        style={{ color: colors.textMuted }}
+                        data-testid="watchlist-maturation-rail-filter-banner"
+                      >
+                        Showing {filteredSymbolsForList.length} of {sortedSymbols.length} symbols in{" "}
+                        <strong>{WATCHLIST_MATURATION_RAIL_LABELS[maturationRailFilter]}</strong>.{" "}
+                        <button
+                          type="button"
+                          className="font-semibold underline-offset-2 hover:underline"
+                          style={{ color: colors.accent, background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                          onClick={() => {
+                            setMaturationRailFilter(null);
+                            setForceOpenTiers([]);
+                          }}
+                        >
+                          Clear filter
+                        </button>
+                      </p>
+                    ) : null}
                     {activeSymbolsDeduped.length > 0 &&
                     addDraft.trim() &&
                     filteredSymbolsForList.length > 0 &&

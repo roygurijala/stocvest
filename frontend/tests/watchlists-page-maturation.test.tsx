@@ -392,4 +392,73 @@ describe("WatchlistsPageClient maturation", () => {
     expect(symLink.getAttribute("href")).toContain("ref=watchlist");
     expect(symLink.getAttribute("href")).toContain("trading_mode=swing");
   });
+
+  it("filters cards when a maturation status rail is clicked", async () => {
+    global.fetch = vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/alerts/history")) {
+        return emptyAlertsHistory();
+      }
+      if (url.includes("/maturation-summary")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            by_symbol: {
+              AAPL: {
+                state: "developing",
+                label: "Developing",
+                layers_aligned: 3,
+                layers_total: 6
+              },
+              MSFT: {
+                state: "not_aligned",
+                label: "Not aligned",
+                layers_aligned: 1,
+                layers_total: 6
+              }
+            }
+          })
+        });
+      }
+      if (url.includes("/api/stocvest/watchlists") && !url.includes("/watchlists/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            watchlists: [
+              {
+                watchlist_id: "wl-default",
+                name: "Main",
+                symbols: ["AAPL", "MSFT"],
+                is_default: true
+              }
+            ]
+          })
+        });
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    }) as unknown as typeof fetch;
+
+    wrap(<WatchlistsPageClient />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("watchlist-decision-card-AAPL")).toBeInTheDocument();
+      expect(screen.getByTestId("watchlist-decision-card-MSFT")).toBeInTheDocument();
+      expect(screen.getByTestId("watchlist-status-rails")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId("watchlist-status-rail-developing"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("watchlist-maturation-rail-filter-banner")).toBeInTheDocument();
+      expect(screen.getByTestId("watchlist-decision-card-AAPL")).toBeInTheDocument();
+      expect(screen.queryByTestId("watchlist-decision-card-MSFT")).not.toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId("watchlist-status-rail-developing"));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("watchlist-maturation-rail-filter-banner")).not.toBeInTheDocument();
+      expect(screen.getByTestId("watchlist-decision-card-MSFT")).toBeInTheDocument();
+    });
+  });
 });

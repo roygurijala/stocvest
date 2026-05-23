@@ -1,21 +1,28 @@
 "use client";
 
 import { typography } from "@/lib/design-system";
+import type { WatchlistMaturationRailKey } from "@/lib/watchlist-maturation-rails";
+import { WATCHLIST_MATURATION_RAIL_LABELS } from "@/lib/watchlist-maturation-rails";
 import type { WatchlistPortfolioSummary } from "@/lib/watchlist-row-present";
 import { useTheme } from "@/lib/theme-provider";
 
-const RAILS = [
-  { key: "actionable", label: "Actionable", colorKey: "bullish" as const },
-  { key: "developing", label: "Developing", color: "#f59e0b" },
-  { key: "notAligned", label: "Not aligned", colorKey: "muted" as const },
-  { key: "invalidated", label: "Invalidated", colorKey: "muted" as const }
-] as const;
+const RAILS: Array<
+  | { key: WatchlistMaturationRailKey; colorKey: "bullish" | "muted" }
+  | { key: WatchlistMaturationRailKey; color: string }
+> = [
+  { key: "actionable", colorKey: "bullish" },
+  { key: "developing", color: "#f59e0b" },
+  { key: "notAligned", colorKey: "muted" },
+  { key: "invalidated", colorKey: "muted" }
+];
 
 type Props = {
   counts: WatchlistPortfolioSummary;
+  activeRail?: WatchlistMaturationRailKey | null;
+  onRailClick?: (rail: WatchlistMaturationRailKey) => void;
 };
 
-export function WatchlistStatusRails({ counts }: Props) {
+export function WatchlistStatusRails({ counts, activeRail = null, onRailClick }: Props) {
   const { colors } = useTheme();
 
   return (
@@ -26,21 +33,39 @@ export function WatchlistStatusRails({ counts }: Props) {
     >
       {RAILS.map((rail) => {
         const n = counts[rail.key];
+        const disabled = n === 0 || !onRailClick;
+        const active = activeRail === rail.key;
         const borderColor =
           "color" in rail
             ? rail.color
             : rail.colorKey === "bullish"
               ? colors.bullish
               : colors.textMuted;
+        const label = WATCHLIST_MATURATION_RAIL_LABELS[rail.key];
         return (
-          <div
+          <button
             key={rail.key}
+            type="button"
             data-testid={`watchlist-status-rail-${rail.key}`}
+            aria-pressed={active}
+            aria-label={`${label}: ${n}${disabled ? "" : active ? ", filter active, click to clear" : ", click to filter"}`}
+            disabled={disabled}
+            onClick={() => onRailClick?.(rail.key)}
             style={{
               minWidth: 52,
               paddingTop: 5,
+              paddingBottom: 2,
+              paddingLeft: 4,
+              paddingRight: 4,
               borderTop: `3px solid ${borderColor}`,
-              textAlign: "center"
+              borderRight: "none",
+              borderBottom: "none",
+              borderLeft: "none",
+              background: active ? "rgba(0,180,255,0.1)" : "transparent",
+              borderRadius: 4,
+              textAlign: "center",
+              cursor: disabled ? "default" : "pointer",
+              opacity: disabled ? 0.45 : 1
             }}
           >
             <span
@@ -50,10 +75,10 @@ export function WatchlistStatusRails({ counts }: Props) {
                 fontWeight: 600,
                 letterSpacing: "0.08em",
                 textTransform: "uppercase",
-                color: colors.textMuted
+                color: active ? colors.accent : colors.textMuted
               }}
             >
-              {rail.label}
+              {label}
             </span>
             <span
               style={{
@@ -67,7 +92,7 @@ export function WatchlistStatusRails({ counts }: Props) {
             >
               {n}
             </span>
-          </div>
+          </button>
         );
       })}
     </div>

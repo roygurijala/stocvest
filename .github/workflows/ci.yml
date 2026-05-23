@@ -140,10 +140,7 @@ jobs:
     env:
       VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
     steps:
-      - name: Skip when Vercel hook is not configured
-        if: ${{ env.VERCEL_DEPLOY_HOOK_URL == '' }}
-        run: echo "VERCEL_DEPLOY_HOOK_URL is not set; skipping Vercel deploy."
+      - uses: actions/checkout@v5
 
       - name: Trigger Vercel production deploy
-        if: ${{ env.VERCEL_DEPLOY_HOOK_URL != '' }}
-        run: curl -fsS -X POST "${VERCEL_DEPLOY_HOOK_URL}"
+        run: bash .github/scripts/trigger-vercel-deploy.sh
