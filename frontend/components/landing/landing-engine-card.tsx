@@ -1,97 +1,142 @@
 "use client";
 
-const MONO =
-  '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
+import {
+  landingEngineDemoForMode,
+  type LandingDemoLayer,
+  type LandingEngineDemo
+} from "@/lib/landing/demo-engine-cards";
 
 export type LandingEngineMode = "swing" | "day";
 
-function layerRow(label: string, pct: number) {
+const MONO =
+  '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
+
+function biasClass(bias: LandingEngineDemo["bias"]): string {
+  if (bias === "Bullish") return "text-emerald-400";
+  if (bias === "Bearish") return "text-rose-400";
+  return "text-slate-300";
+}
+
+function executionClass(actionable: boolean): string {
+  return actionable ? "text-emerald-400" : "text-amber-300";
+}
+
+function polarityDot(polarity: LandingDemoLayer["polarity"]): string {
+  if (polarity === "supportive") return "text-emerald-400";
+  if (polarity === "opposing") return "text-rose-400";
+  return "text-slate-500";
+}
+
+function LayerRow({ layer }: { layer: LandingDemoLayer }) {
+  const pct = Math.max(0, Math.min(100, layer.score));
   return (
-    <div className="grid grid-cols-[120px_1fr_40px] items-center gap-2 text-xs" key={label}>
-      <span style={{ fontFamily: MONO, color: "#8aa0bf" }}>{label}</span>
-      <div className="h-2 rounded-full bg-white/10">
-        <div className="h-2 rounded-full bg-gradient-to-r from-cyan-400 to-blue-500" style={{ width: `${pct}%` }} />
-      </div>
-      <span className="text-right text-slate-200" style={{ fontFamily: MONO }}>
-        {pct}%
+    <li className="grid grid-cols-[auto_88px_1fr_36px] items-center gap-2 text-xs">
+      <span className={`text-sm leading-none ${polarityDot(layer.polarity)}`} aria-hidden>
+        {layer.polarity === "neutral" ? "○" : "●"}
       </span>
-    </div>
+      <span className="truncate text-slate-300">{layer.label}</span>
+      <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+          <LayerLevelBar pct={pct} />
+      </div>
+      <span className="text-right tabular-nums text-slate-400" style={{ fontFamily: MONO }}>
+        {layer.score}
+      </span>
+    </li>
+  );
+}
+
+function LayerLevelBar({ pct }: { pct: number }) {
+  return (
+    <div
+      className="h-1.5 rounded-full bg-gradient-to-r from-cyan-400/80 to-blue-500/90"
+      style={{ width: `${pct}%` }}
+    />
+  );
+}
+
+function SetupReadGrid({ demo }: { demo: LandingEngineDemo }) {
+  return (
+    <dl className="mt-3 grid grid-cols-3 gap-2 text-sm">
+      <div>
+        <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Bias</dt>
+        <dd className={`mt-0.5 font-semibold ${biasClass(demo.bias)}`}>{demo.bias}</dd>
+      </div>
+      <div>
+        <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Alignment</dt>
+        <dd className="mt-0.5 font-semibold text-slate-100">
+          {demo.alignmentLabel} ({demo.aligned}/{demo.total})
+        </dd>
+      </div>
+      <div>
+        <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Execution</dt>
+        <dd className={`mt-0.5 font-semibold ${executionClass(demo.actionable)}`}>{demo.execution}</dd>
+      </div>
+    </dl>
   );
 }
 
 export function LandingEngineCard({ mode }: { mode: LandingEngineMode }) {
-  if (mode === "day") {
-    return (
-      <div className="landing-glow-card flex h-full min-h-0 flex-col p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-xl font-bold text-slate-100">AAPL · DAY SIGNAL</p>
-            <p className="text-xs text-slate-400" style={{ fontFamily: MONO }}>
-              9:38 AM · confluence_alert
-            </p>
-          </div>
-          <p className="text-3xl font-black text-cyan-300">79</p>
-        </div>
-        <div className="my-4 space-y-2">
-          {[
-            ["TECHNICAL", 88],
-            ["NEWS", 82],
-            ["MACRO", 71],
-            ["SECTOR", 85],
-            ["GEOPOLITICAL", 54],
-            ["INTERNALS", 76]
-          ].map(([l, p]) => layerRow(String(l), Number(p)))}
-        </div>
-        <p className="mb-3 text-sm italic text-slate-300">
-          &quot;ORB breakout confirmed above VWAP with earnings catalyst still active. Tech sector leading. 4 of 6 layers aligned
-          bullish.&quot;
-        </p>
-        <p className="border-t border-white/10 pt-3 text-xs text-slate-300" style={{ fontFamily: MONO }}>
-          Entry $195-$197 · Stop $192 · R/R 2.4:1
-        </p>
-        <div className="mt-3 flex items-center justify-between text-sm">
-          <span className="font-bold text-emerald-400">BULLISH · 79/100</span>
-          <span className="text-cyan-300">[View Evidence]</span>
-        </div>
-      </div>
-    );
-  }
+  const demo = landingEngineDemoForMode(mode);
+  const testId = mode === "swing" ? "landing-engine-card-swing" : "landing-engine-card-day";
 
   return (
-    <div className="landing-glow-card flex h-full min-h-0 flex-col p-5">
-      <div className="flex items-start justify-between gap-3">
+    <div className="landing-glow-card flex h-full min-h-0 flex-col p-5" data-testid={testId}>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">Setup read</p>
+      <div className="mt-1 flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <p className="text-xl font-bold text-slate-100">NVDA · SWING SIGNAL</p>
+          <p className="text-xl font-bold text-slate-100">{demo.symbol}</p>
           <p className="text-xs text-slate-400" style={{ fontFamily: MONO }}>
-            Forming 6 days · Updated just now
+            {demo.metaLine}
           </p>
         </div>
-        <p className="text-3xl font-black text-cyan-300">84</p>
+        {typeof demo.readinessScore === "number" ? (
+          <div className="text-right">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Readiness</p>
+            <p className="text-2xl font-black tabular-nums text-cyan-300">{demo.readinessScore}</p>
+          </div>
+        ) : null}
       </div>
-      <div className="my-4 space-y-2">
-        {[
-          ["TECHNICAL", 91],
-          ["NEWS", 78],
-          ["MACRO", 68],
-          ["SECTOR", 87],
-          ["GEOPOLITICAL", 32],
-          ["INTERNALS", 88]
-        ].map(([l, p]) => layerRow(String(l), Number(p)))}
+
+      <SetupReadGrid demo={demo} />
+
+      <div className="my-4">
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">6-layer breakdown</p>
+        <ul className="m-0 list-none space-y-1.5 p-0">
+          {demo.layers.map((layer) => (
+            <LayerRow key={layer.label} layer={layer} />
+          ))}
+        </ul>
       </div>
-      <div className="mb-3 rounded-lg border border-amber-300/30 bg-amber-300/10 p-3 text-xs text-amber-100">
-        ⚠ GEO LAYER: Semiconductors carry 1.8× weight on US-China trade tension. PINS would score 0.4×. Same news. Different stock. Different
-        exposure.
-      </div>
-      <p className="mb-3 text-sm italic text-slate-300">
-        &quot;Strong daily structure and earnings momentum. Geo headwind partially offsets bullish thesis. Watch for trade policy headlines this
-        week.&quot;
-      </p>
-      <p className="border-t border-white/10 pt-3 text-xs text-slate-300" style={{ fontFamily: MONO }}>
-        Entry $112-$118 · Stop $108 · R/R 2.8:1
-      </p>
-      <div className="mt-3 flex items-center justify-between text-sm">
-        <span className="font-bold text-emerald-400">BULLISH · 84/100</span>
-        <span className="text-cyan-300">[View Evidence]</span>
+
+      {demo.geoCallout ? (
+        <div className="mb-3 rounded-lg border border-slate-500/35 bg-slate-800/40 p-3 text-xs text-slate-200">
+          <p className="m-0 font-semibold text-slate-400">{demo.geoCallout.title}</p>
+          <p className="m-0 mt-1.5 leading-relaxed">{demo.geoCallout.body}</p>
+        </div>
+      ) : null}
+
+      <p className="mb-2 text-sm leading-snug text-slate-300">{demo.narrative}</p>
+
+      {demo.blockerLine ? (
+        <p className="mb-2 text-sm leading-snug text-amber-200/90">
+          <span aria-hidden>⚠ </span>
+          {demo.blockerLine}
+        </p>
+      ) : null}
+
+      {demo.levelsLine ? (
+        <p className="border-t border-white/10 pt-3 text-xs text-slate-300" style={{ fontFamily: MONO }}>
+          {demo.levelsLine}
+        </p>
+      ) : null}
+
+      {demo.convictionLine ? (
+        <p className="mt-2 text-xs text-slate-400">{demo.convictionLine}</p>
+      ) : null}
+
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-3 text-sm">
+        <span className="text-xs text-slate-500">Illustrative sample — live desk after signup</span>
+        <span className="shrink-0 font-semibold text-cyan-300">Open full evidence</span>
       </div>
     </div>
   );

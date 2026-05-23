@@ -1,5 +1,7 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { ContentLoading } from "@/components/content-loading";
 import { WatchlistsPageClient } from "@/components/watchlists-page-client";
 import { getDashboardAuthContext } from "@/lib/auth/dashboard-session";
 import { fetchDashboardUserMe, subscriptionPlanFromMe } from "@/lib/dashboard-user-subscription";
@@ -22,11 +24,13 @@ export default async function DashboardWatchlistsPage() {
   const dualDeskMaturation = watchlistAllowsDualDeskModes(plan, me?.has_full_access === true);
   return (
     <AppShell session={session} isAdmin={isAdmin}>
-      <WatchlistsPageClient
-        dualDeskMaturation={dualDeskMaturation}
-        planBadgeLabel={watchlistPlanBadgeLabel(plan)}
-        maxSymbols={watchlistMaxSymbolsForPlan(plan, me?.has_full_access === true)}
-      />
+      <Suspense fallback={<ContentLoading compact />}>
+        <WatchlistsPageClient
+          dualDeskMaturation={dualDeskMaturation}
+          planBadgeLabel={watchlistPlanBadgeLabel(plan)}
+          maxSymbols={watchlistMaxSymbolsForPlan(plan, me?.has_full_access === true)}
+        />
+      </Suspense>
     </AppShell>
   );
 }

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useBodyScrollLock } from "@/lib/hooks/use-body-scroll-lock";
 import { createPortal } from "react-dom";
 import {
@@ -31,6 +32,7 @@ type Props = {
 
 export function WatchlistAlignmentSheet({ open, symbol, deskMode, row, onClose }: Props) {
   const { colors } = useTheme();
+  const [mounted, setMounted] = useState(false);
   const symU = symbol.trim().toUpperCase();
   const { aligned, total } = maturationAlignmentCounts(row);
   const alignedNames = alignedLayerNames(row);
@@ -41,12 +43,15 @@ export function WatchlistAlignmentSheet({ open, symbol, deskMode, row, onClose }
 
   useBodyScrollLock(open);
 
-  if (typeof document === "undefined") return null;
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted || !open) return null;
 
   return createPortal(
     <AnimatePresence>
-      {open ? (
-        <motion.div
+      <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -152,7 +157,6 @@ export function WatchlistAlignmentSheet({ open, symbol, deskMode, row, onClose }
             </p>
           </motion.div>
         </motion.div>
-      ) : null}
     </AnimatePresence>,
     document.body
   );

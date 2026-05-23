@@ -71,9 +71,17 @@ test("test_signal_card_tabs_in_product_demo", () => {
   const swing = screen.getByRole("button", { name: "SWING" });
   const day = screen.getByRole("button", { name: "DAY" });
   fireEvent.click(day);
-  expect(screen.getByText(/AAPL · DAY SIGNAL/i)).toBeInTheDocument();
+  const dayCard = screen.getByTestId("landing-engine-card-day");
+  expect(dayCard).toBeInTheDocument();
+  expect(within(dayCard).getByText("MSFT")).toBeInTheDocument();
+  expect(within(dayCard).getByText(/Monitor only/i)).toBeInTheDocument();
+  expect(within(dayCard).getByText(/Confluence alert/i)).toBeInTheDocument();
   fireEvent.click(swing);
-  expect(screen.getByText(/NVDA · SWING SIGNAL/i)).toBeInTheDocument();
+  const swingCard = screen.getByTestId("landing-engine-card-swing");
+  expect(swingCard).toBeInTheDocument();
+  expect(within(swingCard).getByText("NVDA")).toBeInTheDocument();
+  expect(within(swingCard).getByText(/Setup read/i)).toBeInTheDocument();
+  expect(within(swingCard).getByText(/Open full evidence/i)).toBeInTheDocument();
 });
 
 test("test_fit_section_preserved", () => {

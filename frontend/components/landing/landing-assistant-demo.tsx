@@ -3,9 +3,10 @@
 const MONO =
   '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
 
+/** Assistant demo — aligned with NFLX curated verdict (bearish, aligned, R/R gated). */
 export function LandingAssistantDemo() {
   return (
-    <div className="landing-glow-card flex h-full min-h-0 flex-col p-5 text-left">
+    <div className="landing-glow-card flex h-full min-h-0 flex-col p-5 text-left" data-testid="landing-assistant-demo">
       <p className="text-xs uppercase tracking-widest text-cyan-300/80" style={{ fontFamily: MONO }}>
         Assistant · example
       </p>
@@ -16,8 +17,9 @@ export function LandingAssistantDemo() {
         <div className="rounded-lg border border-cyan-500/20 bg-cyan-950/20 px-3 py-3 text-slate-100">
           <span className="font-semibold text-emerald-300">Assistant:</span>
           <p className="mt-2 leading-relaxed">
-            The setup is bearish and aligned, but the reward does not justify the risk. You&apos;d need a target near $424 to meet the system
-            threshold. Best adjustment: wait for a better entry rather than force the trade.
+            The setup is bearish and five of six layers agree, but risk/reward is about 1.4:1 — below the 2.0:1 swing
+            desk threshold. The setup does not meet internal thresholds for structured scenario building yet. Best
+            adjustment: wait for a cleaner entry rather than force the trade.
           </p>
         </div>
       </div>
