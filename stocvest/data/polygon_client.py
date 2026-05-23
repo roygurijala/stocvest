@@ -1201,6 +1201,7 @@ class PolygonClient:
         if len(q) < 2:
             return []
         lim = max(1, min(int(limit), 25))
+        q_upper = q.upper()
         params = {
             "search": q,
             "active": "true",
@@ -1219,7 +1220,19 @@ class PolygonClient:
             rows_out.append({"ticker": t, "name": name})
             if len(rows_out) >= lim:
                 break
-        return rows_out
+
+        # Fuzzy search often omits short liquid tickers (e.g. GS) from the first page.
+        if re.fullmatch(r"[A-Z]{1,6}", q_upper) and not any(r["ticker"] == q_upper for r in rows_out):
+            try:
+                detail = await self.get_ticker_details(q_upper)
+                if isinstance(detail, dict) and (detail.get("ticker") or detail.get("name")):
+                    t = str(detail.get("ticker") or q_upper).strip().upper()
+                    name = str(detail.get("name") or "").strip()
+                    rows_out.insert(0, {"ticker": t, "name": name})
+            except PolygonError:
+                pass
+
+        return rows_out[:lim]
 
     async def get_earnings_calendar(
         self,

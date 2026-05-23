@@ -15,12 +15,20 @@ export function agreementsBundleLabel(): string {
   return `Agreements v${AGREEMENTS_BUNDLE_VERSION}`;
 }
 
+/** postMessage `type` when user clicks I Agree on an embedded signup legal page. */
+export const LEGAL_DOCUMENT_READ_MESSAGE = "stocvest:legal-document-read";
+
 /** Documents included in the signup bundle (same version string applies to all). */
-export const AGREEMENTS_DOCUMENT_LINKS: ReadonlyArray<{ href: string; label: string }> = [
-  { href: "/terms", label: "Terms of Service" },
-  { href: "/privacy", label: "Privacy Policy" },
-  { href: "/legal/risk-disclosure", label: "Risk disclosure" },
+export const AGREEMENTS_DOCUMENT_LINKS: ReadonlyArray<{ href: string; label: string; key: string }> = [
+  { href: "/terms", label: "Terms of Service", key: "terms" },
+  { href: "/privacy", label: "Privacy Policy", key: "privacy" },
+  { href: "/legal/risk-disclosure", label: "Risk disclosure", key: "risk_disclosure" },
 ];
+
+/** Form field name for server validation after user agrees in the signup drawer. */
+export function signupLegalReadFieldName(docKey: string): string {
+  return `read_${docKey}`;
+}
 
 /** Query key: legal pages loaded in the signup drawer iframe append this to hide exit links. */
 export const SIGNUP_LEGAL_EMBED_PARAM = "signupEmbed";

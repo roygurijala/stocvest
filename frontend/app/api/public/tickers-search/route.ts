@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { canonicalUsTickerFromSearch } from "@/lib/symbol-ticker";
+import { finalizeTickerSearchItems } from "@/lib/symbol-typeahead";
 
 function mapPolygonResults(data: unknown): { symbol: string; name: string }[] {
   if (!data || typeof data !== "object") return [];
@@ -41,6 +42,6 @@ export async function GET(req: Request) {
   if (q.length < 1) {
     return NextResponse.json({ items: [] }, { status: 200 });
   }
-  const items = await polygonDirectSearch(q);
+  const items = finalizeTickerSearchItems(q, await polygonDirectSearch(q));
   return NextResponse.json({ items });
 }

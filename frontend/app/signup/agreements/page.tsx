@@ -18,7 +18,7 @@ export default function SignupAgreementsPage() {
     <AuthShell
       signupStep="agreements"
       title="Agreements"
-      subtitle="Before you create an account, confirm you have read and agree to our legal documents. This step is required for every new registration."
+      subtitle="Before you create an account, read each legal document, scroll to the bottom, and click I Agree. Account creation is blocked until you complete this step."
     >
       {alreadyAccepted ? (
         <div className="mb-6 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-100">
@@ -30,7 +30,7 @@ export default function SignupAgreementsPage() {
             href="/signup"
             className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-md bg-[#3b82f6] px-4 py-2.5 text-center font-semibold text-white"
           >
-            Continue to create account
+            I Agree — Continue to create account
           </Link>
         </div>
       ) : null}

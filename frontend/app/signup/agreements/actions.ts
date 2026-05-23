@@ -4,8 +4,10 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import {
   AGREEMENTS_BUNDLE_VERSION,
+  AGREEMENTS_DOCUMENT_LINKS,
   SIGNUP_LEGAL_COOKIE_MAX_AGE_SEC,
   SIGNUP_LEGAL_COOKIE_NAME,
+  signupLegalReadFieldName,
 } from "@/lib/legal-agreements";
 
 export interface SignupAgreementsActionState {
@@ -24,6 +26,14 @@ export async function acceptSignupAgreementsAction(
   _prev: SignupAgreementsActionState,
   formData: FormData
 ): Promise<SignupAgreementsActionState> {
+  for (const doc of AGREEMENTS_DOCUMENT_LINKS) {
+    if (formData.get(signupLegalReadFieldName(doc.key)) !== "1") {
+      return {
+        error: "You must open each document, scroll to the end, click I Agree, and then confirm below before continuing.",
+      };
+    }
+  }
+
   const accept = formData.get("accept_agreements") === "on";
   if (!accept) {
     return { error: "You must check the box to confirm you agree before continuing." };

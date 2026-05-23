@@ -919,6 +919,36 @@ class TestParseSnapshotIndexFallback:
         snap = PolygonClient._parse_snapshot("AAPL", ticker)
         assert snap.last_trade_price is None
 
+
+class TestSearchReferenceTickers:
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_prepends_exact_ticker_when_fuzzy_search_omits_it(self):
+        fuzzy = {
+            "status": "OK",
+            "results": [
+                {"ticker": "GSHD", "name": "Goosehead Insurance Inc"},
+                {"ticker": "GSM", "name": "Ferroglobe PLC"},
+            ],
+        }
+        detail = {
+            "status": "OK",
+            "results": {"ticker": "GS", "name": "The Goldman Sachs Group, Inc."},
+        }
+        respx.get("https://api.polygon.io/v3/reference/tickers").mock(
+            return_value=httpx.Response(200, json=fuzzy)
+        )
+        respx.get("https://api.polygon.io/v3/reference/tickers/GS").mock(
+            return_value=httpx.Response(200, json=detail)
+        )
+
+        async with PolygonClient(FAKE_KEY) as client:
+            rows = await client.search_reference_tickers("GS", limit=5)
+
+        assert rows[0]["ticker"] == "GS"
+        assert "Goldman" in rows[0]["name"]
+
+
 class TestClientInit:
     def test_empty_api_key_raises(self):
         with pytest.raises(ValueError, match="POLYGON_API_KEY"):

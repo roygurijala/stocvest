@@ -90,7 +90,7 @@ import {
   parseSwingCompositeInsight,
   type SignalEvidenceData
 } from "@/lib/signal-evidence";
-import { rankSymbolCandidates } from "@/lib/symbol-suggestion-rank";
+import { buildRankedSymbolSuggestions } from "@/lib/symbol-typeahead";
 import {
   canonicalUsTicker,
   canonicalUsTickerFromSearch,
@@ -436,7 +436,7 @@ export function SignalsPageClient({
       seen.add(sym);
       merged.push(c);
     }
-    return rankSymbolCandidates(merged, q).slice(0, 12);
+    return buildRankedSymbolSuggestions(merged, q, 12);
   }, [symbolCandidates, symbolDraft, remoteCandidates]);
 
   const applyCommittedSymbol = useCallback((sym: string | null | undefined) => {

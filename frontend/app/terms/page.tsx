@@ -1,28 +1,43 @@
 import Link from "next/link";
 
 import { AGREEMENTS_BUNDLE_VERSION, isSignupLegalEmbedSearch, withSignupLegalEmbed } from "@/lib/legal-agreements";
+import { LegalSignupDocumentFooter } from "@/components/auth/legal-signup-document-footer";
+import { LegalSignupEmbedIntro } from "@/components/auth/legal-signup-embed-intro";
 
 export default function TermsPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
   const embed = isSignupLegalEmbedSearch(searchParams);
   const riskHref = embed ? withSignupLegalEmbed("/legal/risk-disclosure") : "/legal/risk-disclosure";
 
   return (
-    <main className="min-h-screen bg-[#0a0e1a] px-4 py-16 text-slate-100 md:px-8">
-      <div className="mx-auto grid max-w-4xl gap-6">
-        {embed ? null : (
+    <main className={`min-h-screen bg-[#0a0e1a] text-slate-100 ${embed ? "" : "px-4 py-16 md:px-8"}`}>
+      <div className={`mx-auto grid max-w-4xl gap-6 ${embed ? "px-4 py-8 md:px-8" : ""}`}>
+        {embed ? (
+          <LegalSignupEmbedIntro documentLabel="Terms of Service" />
+        ) : (
           <Link href="/" className="text-sm text-[#3b82f6] hover:underline">
             ← Back to home
           </Link>
         )}
-        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-100/95">
-          ⚠️ This Terms of Service is a working draft. It is pending review by a licensed securities attorney before this platform accepts
-          paid subscribers.
-        </div>
+        {embed ? null : (
+          <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-100/95">
+            ⚠️ This Terms of Service is a working draft. It is pending review by a licensed securities attorney before this platform accepts
+            paid subscribers.
+          </div>
+        )}
         <div>
           <h1 className="m-0 text-3xl font-bold md:text-4xl">Terms of Service</h1>
           <p className="mt-2 text-sm text-slate-400">
-            Effective / document version: <span className="font-mono text-slate-200">{AGREEMENTS_BUNDLE_VERSION}</span> — must match the
-            version shown at signup and stored on your profile when you acknowledge.
+            {embed ? (
+              <>
+                Document version: <span className="font-mono text-slate-200">{AGREEMENTS_BUNDLE_VERSION}</span> — agreeing creates a binding
+                record tied to your new account.
+              </>
+            ) : (
+              <>
+                Effective / document version: <span className="font-mono text-slate-200">{AGREEMENTS_BUNDLE_VERSION}</span> — must match the
+                version shown at signup and stored on your profile when you acknowledge.
+              </>
+            )}
           </p>
         </div>
         <section className="rounded-xl border border-white/10 bg-white/5 p-6">
@@ -71,10 +86,11 @@ export default function TermsPage({ searchParams }: { searchParams?: Record<stri
             INCIDENTAL, OR CONSEQUENTIAL DAMAGES ARISING FROM USE OF THIS PLATFORM.
           </p>
         </section>
-        <p className="text-sm text-slate-400">
-          This placeholder copy must be reviewed and replaced by a licensed attorney before launch.
-        </p>
+        {embed ? null : (
+          <p className="text-sm text-slate-400">This placeholder copy must be reviewed and replaced by a licensed attorney before launch.</p>
+        )}
       </div>
+      {embed ? <LegalSignupDocumentFooter href="/terms" label="Terms of Service" /> : null}
     </main>
   );
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { stocvestAuthedFetch } from "@/lib/bff/stocvest-authed";
 import { canonicalUsTickerFromSearch } from "@/lib/symbol-ticker";
+import { finalizeTickerSearchItems } from "@/lib/symbol-typeahead";
 
 function mapPolygonResults(data: unknown): { symbol: string; name: string }[] {
   if (!data || typeof data !== "object") return [];
@@ -60,7 +61,7 @@ export async function GET(req: Request) {
 
   const direct = await polygonDirectSearch(q);
   if (direct.length > 0) {
-    return NextResponse.json({ items: direct });
+    return NextResponse.json({ items: finalizeTickerSearchItems(q, direct) });
   }
 
   return NextResponse.json(

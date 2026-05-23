@@ -1,44 +1,26 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useBodyScrollLock } from "@/lib/hooks/use-body-scroll-lock";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { withSignupLegalEmbed } from "@/lib/legal-agreements";
-
-function isDocumentScrolledToBottom(win: Window, doc: Document, tolerancePx: number): boolean {
-  const de = doc.documentElement;
-  const body = doc.body;
-  const scrollHeight = Math.max(de.scrollHeight, body?.scrollHeight ?? 0);
-  const clientHeight = win.innerHeight || de.clientHeight;
-  if (scrollHeight <= clientHeight + tolerancePx) {
-    return true;
-  }
-  const scrollTop = win.scrollY ?? de.scrollTop ?? body?.scrollTop ?? 0;
-  return scrollTop + clientHeight >= scrollHeight - tolerancePx;
-}
 
 export function LegalDocumentDrawer({
   open,
   href,
   title,
   onClose,
-  onReachedBottom,
 }: {
   open: boolean;
   href: string | null;
   title: string;
   onClose: () => void;
-  onReachedBottom: () => void;
 }) {
   const titleId = useId();
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const reachedRef = useRef(false);
-  const onBottomRef = useRef(onReachedBottom);
   const [mounted, setMounted] = useState(false);
   const [slideIn, setSlideIn] = useState(false);
-
-  onBottomRef.current = onReachedBottom;
 
   useEffect(() => {
     setMounted(true);
@@ -46,7 +28,6 @@ export function LegalDocumentDrawer({
 
   useEffect(() => {
     if (open && href) {
-      reachedRef.current = false;
       setSlideIn(false);
       const id = requestAnimationFrame(() => {
         requestAnimationFrame(() => setSlideIn(true));
@@ -56,57 +37,7 @@ export function LegalDocumentDrawer({
     setSlideIn(false);
   }, [open, href]);
 
-  const cleanupRef = useRef<(() => void) | null>(null);
-
-  const detachIframeListeners = useCallback(() => {
-    cleanupRef.current?.();
-    cleanupRef.current = null;
-  }, []);
-
-  const wireIframe = useCallback(() => {
-    const iframe = iframeRef.current;
-    if (!iframe) return;
-    const win = iframe.contentWindow;
-    const doc = iframe.contentDocument;
-    if (!win || !doc) return;
-
-    detachIframeListeners();
-
-    const check = () => {
-      if (reachedRef.current) return;
-      if (isDocumentScrolledToBottom(win, doc, 48)) {
-        reachedRef.current = true;
-        onBottomRef.current();
-      }
-    };
-
-    win.addEventListener("scroll", check, { passive: true });
-    win.addEventListener("resize", check);
-    const mo = new MutationObserver(() => check());
-    mo.observe(doc.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
-    const t = win.setTimeout(() => check(), 500);
-
-    cleanupRef.current = () => {
-      win.removeEventListener("scroll", check);
-      win.removeEventListener("resize", check);
-      mo.disconnect();
-      win.clearTimeout(t);
-    };
-
-    requestAnimationFrame(check);
-  }, [detachIframeListeners]);
-
   useBodyScrollLock(open);
-
-  useEffect(() => {
-    if (!open) {
-      detachIframeListeners();
-      return;
-    }
-    return () => {
-      detachIframeListeners();
-    };
-  }, [open, detachIframeListeners]);
 
   useEffect(() => {
     if (!open) return;
@@ -149,17 +80,11 @@ export function LegalDocumentDrawer({
           </button>
         </header>
         <p className="shrink-0 border-b border-white/5 bg-[#0f172a] px-4 py-2 text-xs leading-relaxed text-slate-400 sm:px-5">
-          Scroll to the bottom of this document. If you close this panel before reaching the end, this document will not count as read for
-          signup.
+          Scroll to the bottom of this document, then click <span className="font-medium text-slate-300">I Agree</span>. If you close this
+          panel before agreeing, this document will not count as read for signup.
         </p>
         <div className="relative min-h-0 flex-1 bg-[#070d18]">
-          <iframe
-            ref={iframeRef}
-            title={title}
-            src={withSignupLegalEmbed(href)}
-            className="h-full w-full border-0"
-            onLoad={wireIframe}
-          />
+          <iframe ref={iframeRef} title={title} src={withSignupLegalEmbed(href)} className="h-full w-full border-0" />
         </div>
       </aside>
     </div>,

@@ -33,6 +33,7 @@ import {
   WATCHLIST_MATURATION_UPDATED_EVENT
 } from "@/lib/watchlist-maturation-bump";
 import { rankSymbolCandidates } from "@/lib/symbol-suggestion-rank";
+import { buildRankedSymbolSuggestions } from "@/lib/symbol-typeahead";
 import {
   dedupeWatchlistSymbolsUpper as dedupeSymbolsUpper,
   formatWatchlistMaturationLabel as formatStateLabel,
@@ -44,7 +45,7 @@ import {
   type WatchlistMaturationRow as MaturationRow,
   type WatchlistViewMode
 } from "@/lib/watchlist-page-utils";
-import { canonicalUsTicker, canonicalUsTickerFromSearch } from "@/lib/symbol-ticker";
+import { canonicalUsTicker, canonicalUsTickerFromSearch, isWellFormedUsTicker } from "@/lib/symbol-ticker";
 import { useTheme } from "@/lib/theme-provider";
 import {
   compareSymbolsByPresentationPriority,
@@ -661,9 +662,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
         seenSym.add(sym);
         merged.push(c);
       }
-      rankedAdd = rankSymbolCandidates(merged, q)
-        .slice(0, 12)
-        .map((c) => ({ ...c, kind: "add" as const }));
+      rankedAdd = buildRankedSymbolSuggestions(merged, q, 12).map((c) => ({ ...c, kind: "add" as const }));
     }
     return [...rankedOnList, ...rankedAdd];
   }, [
@@ -682,7 +681,8 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   const isAddCorroborated = useCallback(
     (sym: string) => {
       const u = sym.trim().toUpperCase();
-      return addSuggestionRows.some((r) => r.symbol === u && r.kind === "add");
+      if (addSuggestionRows.some((r) => r.symbol === u && r.kind === "add")) return true;
+      return isWellFormedUsTicker(sym);
     },
     [addSuggestionRows]
   );
