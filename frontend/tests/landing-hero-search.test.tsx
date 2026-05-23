@@ -11,7 +11,8 @@ describe("LandingHeroSearch", () => {
       </ThemeProvider>
     );
     expect(screen.getByPlaceholderText(/Type any stock to preview the system/i)).toBeInTheDocument();
-    expect(screen.getByText(/Try full examples:/i)).toBeInTheDocument();
+    expect(screen.getByText(/Try examples:/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Stop wasting trades/i)).toBeNull();
     expect(screen.getAllByText(/Judgment\. Restraint\. Gating\. Permission\./i)).toHaveLength(1);
     expect(screen.getByRole("heading", { name: /when to stay out/i })).toBeInTheDocument();
   });

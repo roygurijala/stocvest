@@ -91,32 +91,42 @@ export function LandingHeroSearch() {
   }, [query]);
 
   return (
-    <section className="mx-auto flex min-h-[88vh] max-w-7xl flex-col items-center px-4 pb-12 pt-24 text-center md:px-8 md:pt-28">
-      <div className="mb-6 flex w-full max-w-[720px] justify-center md:mb-8">
-        <StocvestLogo variant="hero" href="/" priority />
+    <section
+      className="mx-auto flex min-h-[88vh] max-w-7xl flex-col items-center px-4 pb-16 pt-24 text-center md:px-8 md:pt-28"
+      data-testid="landing-hero"
+    >
+      <div className="mb-6 flex w-full justify-center">
+        <StocvestLogo variant="header" href="/" priority />
       </div>
       <p
-        className="mb-4 text-xs font-semibold uppercase tracking-[0.28em] text-slate-400 md:text-sm"
+        className="mb-4 text-[10px] font-medium uppercase tracking-[0.22em] text-slate-500 md:text-xs"
         data-testid="landing-hero-motto"
       >
         Judgment. Restraint. Gating. Permission.
       </p>
-      <p className="mb-3 max-w-2xl text-base font-medium text-amber-200/95 md:text-lg">
-        Stop wasting trades that shouldn&apos;t be taken.
-      </p>
-      <h1 className="max-w-4xl text-3xl font-black leading-tight md:text-5xl lg:text-6xl">
-        We tell you when to trade — and when to stay out.
+
+      <h1
+        className="max-w-3xl text-[1.75rem] font-bold leading-snug tracking-tight text-slate-50 md:text-4xl md:leading-tight lg:text-[2.75rem]"
+        data-testid="landing-hero-headline"
+      >
+        We tell you when to trade—
+        <br className="hidden sm:inline" />
+        <span className="sm:ml-0"> and when to stay out.</span>
       </h1>
-      <p className="mx-auto mt-5 max-w-2xl text-lg text-slate-300 md:text-xl">
+
+      <p
+        className="mx-auto mb-8 mt-4 max-w-[600px] text-base leading-relaxed text-slate-400 md:text-lg"
+        data-testid="landing-hero-subtext"
+      >
         Most platforms give you signals. STOCVEST tells you if the trade is worth taking at all.
       </p>
 
-      <div className="relative mt-8 w-full max-w-xl">
+      <div className="relative mb-6 mt-2 w-full max-w-xl">
         <label htmlFor="landing-stock-search" className="sr-only">
           Type any stock to preview the system
         </label>
-        <div className="flex items-center gap-2 rounded-lg border border-cyan-500/40 bg-black/40 px-3 py-2 shadow-[0_0_32px_rgba(59,130,246,0.15)]">
-          <Search className="h-5 w-5 shrink-0 text-cyan-400" aria-hidden />
+        <div className="flex items-center gap-2 rounded-lg border border-cyan-500/35 bg-black/35 px-3 py-2.5 shadow-[0_0_28px_rgba(59,130,246,0.12)]">
+          <Search className="h-5 w-5 shrink-0 text-cyan-400/90" aria-hidden />
           <input
             id="landing-stock-search"
             data-testid="landing-stock-search"
@@ -154,31 +164,42 @@ export function LandingHeroSearch() {
         ) : null}
       </div>
 
-      <p className="mt-4 text-sm text-slate-400">Try full examples:</p>
-      <div className="mt-2 flex flex-wrap justify-center gap-2">
-        {QUICK_PICKS.map((sym) => (
-          <button
-            key={sym}
-            type="button"
-            className="rounded-full border border-cyan-500/40 bg-cyan-500/10 px-4 py-1.5 text-sm font-semibold text-cyan-100 hover:border-cyan-400/70"
-            onClick={() => applySymbol(sym)}
-          >
-            {sym}
-          </button>
+      <div
+        className="mb-8 flex flex-wrap items-center justify-center gap-x-2 gap-y-2 text-sm text-slate-500"
+        data-testid="landing-hero-examples"
+      >
+        <span className="text-xs text-slate-500/80">Try examples:</span>
+        {QUICK_PICKS.map((sym, index) => (
+          <span key={sym} className="inline-flex items-center gap-2">
+            {index > 0 ? <span className="text-slate-600" aria-hidden>/</span> : null}
+            <button
+              type="button"
+              className="rounded-md px-1.5 py-0.5 text-xs font-medium text-slate-400 opacity-70 transition hover:text-slate-200 hover:opacity-100"
+              onClick={() => applySymbol(sym)}
+            >
+              {sym}
+            </button>
+          </span>
         ))}
       </div>
 
       {verdict ? (
-        <div className="mt-8 flex w-full justify-center">
+        <div className="mb-8 flex w-full justify-center">
           <LandingStockPreview verdict={verdict} onClose={dismissPreview} />
         </div>
       ) : null}
 
-      <div className="mt-8 flex flex-wrap justify-center gap-3">
-        <Link href="/signup/agreements" className="rounded-md bg-[#3b82f6] px-6 py-3 font-semibold">
+      <div className="mt-10 flex flex-wrap justify-center gap-3" data-testid="landing-hero-cta">
+        <Link
+          href="/signup/agreements"
+          className="rounded-md bg-[#3b82f6] px-7 py-3.5 text-base font-semibold text-white shadow-[0_0_24px_rgba(59,130,246,0.35)] transition hover:bg-[#2563eb]"
+        >
           Start Free — No Card Required
         </Link>
-        <a href="#how-it-works" className="rounded-md border border-white/30 px-6 py-3 font-semibold">
+        <a
+          href="#how-it-works"
+          className="rounded-md border border-white/20 px-6 py-3 text-sm font-medium text-slate-300 transition hover:border-white/35 hover:text-slate-100"
+        >
           See your first 5 minutes
         </a>
       </div>
