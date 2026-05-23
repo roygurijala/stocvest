@@ -16,6 +16,8 @@ import type {
   ScenarioUserInputs
 } from "@/lib/scenario/types";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
+import { useModalOverlay } from "@/lib/hooks/use-modal-overlay";
+import { MODAL_BACKDROP_CLASS, MODAL_DIALOG_SCROLL_CLASS } from "@/lib/overlay-classes";
 import { useTheme } from "@/lib/theme-provider";
 
 interface ScenarioBuilderModalProps {
@@ -279,6 +281,7 @@ function ComputedRow({ label, value, testId }: { label: string; value: string; t
  */
 export function ScenarioBuilderModal({ open, input, onClose }: ScenarioBuilderModalProps) {
   const { colors } = useTheme();
+  useModalOverlay(open, onClose);
   const direction = input.direction === "bullish" || input.direction === "bearish" ? input.direction : "bullish";
 
   const entryDefault = useMemo(() => deriveEntryDefault(input.reference), [input.reference]);
@@ -352,8 +355,7 @@ export function ScenarioBuilderModal({ open, input, onClose }: ScenarioBuilderMo
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[95] grid place-items-stretch p-0 lg:place-items-center lg:p-3"
-          style={{ background: "rgba(2,6,23,0.75)" }}
+          className={`fixed inset-0 z-[95] grid place-items-stretch p-0 lg:place-items-center lg:p-3 ${MODAL_BACKDROP_CLASS}`}
           onClick={onClose}
           data-testid="scenario-builder-modal-overlay"
         >
@@ -362,7 +364,7 @@ export function ScenarioBuilderModal({ open, input, onClose }: ScenarioBuilderMo
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.98 }}
             transition={{ duration: 0.2 }}
-            className={`flex max-h-none min-h-screen w-full max-w-none flex-col overflow-y-auto rounded-none lg:max-h-[95vh] lg:min-h-0 lg:w-[min(720px,100vw-1.5rem)] lg:rounded-xl ${surfaceGlowClassName}`}
+            className={`flex max-h-none min-h-screen w-full max-w-none flex-col overflow-y-auto rounded-none lg:max-h-[95vh] lg:min-h-0 lg:w-[min(720px,100vw-1.5rem)] lg:rounded-xl ${surfaceGlowClassName} ${MODAL_DIALOG_SCROLL_CLASS}`}
             onClick={(e) => e.stopPropagation()}
             style={{
               background: colors.surface,

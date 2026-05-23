@@ -10,6 +10,8 @@ import {
 } from "@/lib/api/ticker-news-panel";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useIsMobileLayout } from "@/lib/hooks/use-is-mobile-layout";
+import { useModalOverlay } from "@/lib/hooks/use-modal-overlay";
+import { MODAL_BACKDROP_CLASS } from "@/lib/overlay-classes";
 import { useTheme } from "@/lib/theme-provider";
 import { useHasAIExplanations } from "@/lib/api/user";
 
@@ -140,6 +142,7 @@ export function NewsPanel({
 }: NewsPanelProps) {
   const { colors } = useTheme();
   const mobile = useIsMobileLayout();
+  useModalOverlay(isOpen, onClose);
   const hasAIExplanations = useHasAIExplanations();
   const [data, setData] = useState<TickerNewsPanelResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -440,8 +443,8 @@ export function NewsPanel({
     <div
       className={
         mobile
-          ? "fixed inset-0 z-[96] flex flex-col justify-end bg-black/50"
-          : "fixed inset-0 z-[96] flex justify-end bg-black/40"
+          ? `fixed inset-0 z-[96] flex flex-col justify-end ${MODAL_BACKDROP_CLASS}`
+          : `fixed inset-0 z-[96] flex justify-end ${MODAL_BACKDROP_CLASS}`
       }
       role="dialog"
       aria-modal="true"

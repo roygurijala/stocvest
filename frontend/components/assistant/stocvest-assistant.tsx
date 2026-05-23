@@ -13,6 +13,8 @@ import { surfaceAuthErrorIfAny } from "@/lib/auth/surface-auth-error";
 import { subscribeSessionExpired } from "@/lib/auth/session-expired";
 import { AssistantLauncher } from "@/components/assistant/assistant-launcher";
 import { AssistantPanel } from "@/components/assistant/assistant-panel";
+import { AppOverlayScrim } from "@/components/app-overlay-scrim";
+import { useIsMobileLayout } from "@/lib/hooks/use-is-mobile-layout";
 
 /**
  * Top-level mount for the STOCVEST Assistant. Anchored to the bottom-right corner of the
@@ -72,6 +74,7 @@ export function StocvestAssistant({ isAuthenticated }: StocvestAssistantProps) {
   const { colors } = useTheme();
   const pageContext = useAssistantContext();
   const pathname = usePathname();
+  const mobileLayout = useIsMobileLayout();
 
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
@@ -330,19 +333,28 @@ export function StocvestAssistant({ isAuthenticated }: StocvestAssistantProps) {
   }, [pageContext?.decision_state, colors.bullish, colors.bearish, colors.caution]);
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        right: 16,
-        bottom: 16,
-        zIndex: 60,
-        display: "grid",
-        gap: 12,
-        justifyItems: "end",
-        pointerEvents: "none"
-      }}
-      aria-live="polite"
-    >
+    <>
+      <AppOverlayScrim
+        open={open}
+        variant={mobileLayout ? "assistant-mobile" : "assistant-desktop"}
+        onClose={mobileLayout ? close : undefined}
+        lockScroll={mobileLayout}
+        zIndex={59}
+        testId="assistant-overlay-scrim"
+      />
+      <div
+        style={{
+          position: "fixed",
+          right: 16,
+          bottom: 16,
+          zIndex: 60,
+          display: "grid",
+          gap: 12,
+          justifyItems: "end",
+          pointerEvents: "none"
+        }}
+        aria-live="polite"
+      >
       {open ? (
         <div style={{ pointerEvents: "auto" }}>
           <AssistantPanel
@@ -369,5 +381,6 @@ export function StocvestAssistant({ isAuthenticated }: StocvestAssistantProps) {
         />
       </div>
     </div>
+    </>
   );
 }

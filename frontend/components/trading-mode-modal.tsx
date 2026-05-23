@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
+import { useModalOverlay } from "@/lib/hooks/use-modal-overlay";
+import { MODAL_BACKDROP_CLASS, MODAL_DIALOG_SCROLL_CLASS } from "@/lib/overlay-classes";
 import { useTheme } from "@/lib/theme-provider";
 import type { TradingModeUi } from "@/components/trading-mode-badge";
 
@@ -14,6 +16,7 @@ interface TradingModeModalProps {
 
 export function TradingModeModal({ open, initialMode, onClose, onModeChange }: TradingModeModalProps) {
   const { colors } = useTheme();
+  useModalOverlay(open, onClose);
   const [step, setStep] = useState<"pick" | "live_warn" | "live_confirm" | "done">("pick");
   const [target, setTarget] = useState<TradingModeUi>(initialMode);
   const [phrase, setPhrase] = useState("");
@@ -47,14 +50,15 @@ export function TradingModeModal({ open, initialMode, onClose, onModeChange }: T
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(0,0,0,0.55)" }}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${MODAL_BACKDROP_CLASS}`}
       role="dialog"
       aria-modal
+      onClick={onClose}
     >
       <div
-        className={`max-h-[90vh] w-full max-w-md overflow-y-auto p-4 ${surfaceGlowClassName}`}
+        className={`max-h-[90vh] w-full max-w-md overflow-y-auto p-4 ${surfaceGlowClassName} ${MODAL_DIALOG_SCROLL_CLASS}`}
         style={{ background: colors.surface, borderRadius: borderRadius.xl, border: `1px solid ${colors.border}` }}
+        onClick={(e) => e.stopPropagation()}
       >
         {step === "pick" ? (
           <>

@@ -14,6 +14,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { borderRadius, colorTokens, spacing, typography } from "@/lib/design-system";
+import { FLOATING_SURFACE_CLASS } from "@/lib/overlay-classes";
 import { invalidateWatchlistMembershipCache, useDefaultWatchlistMembership } from "@/lib/watchlist-membership-client";
 import {
   defaultDeskTracking,
@@ -438,12 +439,14 @@ function WatchlistInListPopover({
       ref={popoverRef}
       role="dialog"
       aria-label={`${symU} watchlist options`}
+      className={FLOATING_SURFACE_CLASS}
       style={{
         position: "fixed",
         top: popoverPos.top,
         left: popoverPos.left,
         width: popoverPos.width,
-        zIndex: 50,
+        zIndex: 70,
+        maxHeight: "none",
         borderRadius: borderRadius.lg,
         border: `1px solid ${colors.border}`,
         background: colors.surface,

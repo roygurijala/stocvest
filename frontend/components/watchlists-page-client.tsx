@@ -55,6 +55,7 @@ import {
   type WatchlistAttentionTier
 } from "@/lib/watchlist-decision-card-present";
 import { focusWatchlistRow } from "@/lib/watchlist-row-focus";
+import { FLOATING_SURFACE_CLASS } from "@/lib/overlay-classes";
 import {
   symbolMatchesMaturationRail,
   WATCHLIST_MATURATION_RAIL_LABELS,
@@ -1181,9 +1182,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   const slotUsed = activeSymbolsDeduped.length;
   const slotsLeft = Math.max(0, maxSymbols - slotUsed);
   const headerStickyStyle = {
-    top: APP_TOP_BAR_LAYOUT_HEIGHT,
-    background: colors.background,
-    borderBottom: `1px solid ${colors.border}`
+    top: APP_TOP_BAR_LAYOUT_HEIGHT
   } as const;
 
   return (
@@ -1295,8 +1294,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                   style={{
                     borderColor:
                       theme === "light" ? "#94a3b8" : "rgba(56, 189, 248, 0.45)",
-                    background:
-                      theme === "light" ? "#e8eef4" : "rgba(8, 18, 32, 0.92)",
+                    background: theme === "light" ? "#e8eef4" : colors.surface,
                     color: colors.text,
                     boxShadow:
                       theme === "light"
@@ -1335,7 +1333,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                 <ul
                   id="watchlist-add-ticker-suggestions"
                   role="listbox"
-                  className="absolute left-0 right-0 top-full z-30 mt-1 max-h-60 overflow-y-auto rounded-lg border py-1 shadow-lg sm:right-auto sm:min-w-[min(100%,420px)]"
+                  className={`absolute left-0 right-0 top-full z-[70] mt-1 max-h-60 overflow-y-auto rounded-lg border py-1 shadow-lg sm:right-auto sm:min-w-[min(100%,420px)] ${FLOATING_SURFACE_CLASS}`}
                   style={{
                     background: colors.surface,
                     borderColor: colors.border,

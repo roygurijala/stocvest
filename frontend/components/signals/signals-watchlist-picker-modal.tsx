@@ -16,6 +16,8 @@ import {
   pickerRowIsEvaluated
 } from "@/lib/watchlist-evaluation-present";
 import { borderRadius, spacing } from "@/lib/design-system";
+import { useModalOverlay } from "@/lib/hooks/use-modal-overlay";
+import { MODAL_BACKDROP_CLASS, MODAL_DIALOG_SCROLL_CLASS } from "@/lib/overlay-classes";
 import { useTheme } from "@/lib/theme-provider";
 
 export type WatchlistPickerMaturationBadge = {
@@ -99,6 +101,7 @@ export function SignalsWatchlistPickerModal({
   onClose
 }: Props) {
   const { colors } = useTheme();
+  useModalOverlay(open, onClose);
   const [query, setQuery] = useState("");
 
   const filtered = useMemo(() => {
@@ -123,16 +126,17 @@ export function SignalsWatchlistPickerModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(0,0,0,0.55)" }}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${MODAL_BACKDROP_CLASS}`}
       role="dialog"
       aria-modal="true"
       aria-label="Choose symbol from watchlist"
       data-testid="signals-watchlist-picker"
+      onClick={onClose}
     >
       <div
-        className="flex max-h-[min(85vh,560px)] w-full max-w-md flex-col overflow-hidden rounded-xl border p-4"
+        className={`flex max-h-[min(85vh,560px)] w-full max-w-md flex-col overflow-hidden rounded-xl border p-4 ${MODAL_DIALOG_SCROLL_CLASS}`}
         style={{ borderColor: colors.border, background: colors.surface }}
+        onClick={(e) => e.stopPropagation()}
       >
         <p className="m-0 text-[10px] font-semibold uppercase tracking-[0.14em]" style={{ color: colors.textMuted }}>
           Default watchlist

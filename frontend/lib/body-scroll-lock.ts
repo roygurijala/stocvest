@@ -1,9 +1,12 @@
 /**
- * Reference-counted `document.body` scroll lock for modals and drawers.
+ * Reference-counted scroll lock for modals and drawers.
+ * Locks both `html` and `body` and compensates for scrollbar width (Windows / macOS).
  */
 
 let lockCount = 0;
 let savedBodyOverflow = "";
+let savedHtmlOverflow = "";
+let savedBodyPaddingRight = "";
 
 export function lockBodyScroll(): () => void {
   if (typeof document === "undefined") {
@@ -11,7 +14,15 @@ export function lockBodyScroll(): () => void {
   }
   if (lockCount === 0) {
     savedBodyOverflow = document.body.style.overflow;
+    savedHtmlOverflow = document.documentElement.style.overflow;
+    savedBodyPaddingRight = document.body.style.paddingRight;
+
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
     document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingRight = `${scrollbarWidth}px`;
+    }
   }
   lockCount += 1;
   let released = false;
@@ -21,6 +32,8 @@ export function lockBodyScroll(): () => void {
     lockCount = Math.max(0, lockCount - 1);
     if (lockCount === 0) {
       document.body.style.overflow = savedBodyOverflow;
+      document.documentElement.style.overflow = savedHtmlOverflow;
+      document.body.style.paddingRight = savedBodyPaddingRight;
     }
   };
 }
@@ -30,8 +43,11 @@ export function resetBodyScrollLock(): void {
   if (typeof document === "undefined") return;
   lockCount = 0;
   document.body.style.overflow = "";
+  document.body.style.paddingRight = "";
   document.documentElement.style.overflow = "";
   savedBodyOverflow = "";
+  savedHtmlOverflow = "";
+  savedBodyPaddingRight = "";
 }
 
 /** @deprecated Main scroll is on ``body``; kept for tests that query the attribute. */

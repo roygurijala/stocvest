@@ -2,12 +2,16 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { CuteLoader } from "@/components/cute-loader";
 import { SignalEvidenceCard } from "@/components/signal-evidence-card";
 import { spacing, surfaceGlowClassName } from "@/lib/design-system";
-import { useTheme } from "@/lib/theme-provider";
 import type { GapIntelSnapshot } from "@/lib/api/gap-intel";
+import { useModalOverlay } from "@/lib/hooks/use-modal-overlay";
+import { MODAL_BACKDROP_CLASS, MODAL_DIALOG_SCROLL_CLASS } from "@/lib/overlay-classes";
 import type { SignalEvidenceData } from "@/lib/signal-evidence";
+import { useTheme } from "@/lib/theme-provider";
 
 interface SignalEvidenceModalProps {
   evidence: SignalEvidenceData | null;
@@ -29,18 +33,26 @@ export function SignalEvidenceModal({
   gapIntelSnapshot = null
 }: SignalEvidenceModalProps) {
   const { colors } = useTheme();
-  return (
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useModalOverlay(open, onClose);
+
+  if (!mounted) return null;
+
+  return createPortal(
     <AnimatePresence>
       {open ? (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[90] grid place-items-stretch p-0 lg:place-items-center lg:p-3"
-          style={{
-            background: "rgba(2,6,23,0.75)"
-          }}
+          className={`fixed inset-0 z-[90] grid place-items-stretch p-0 lg:place-items-center lg:p-3 ${MODAL_BACKDROP_CLASS}`}
           onClick={onClose}
+          data-testid="signal-evidence-modal-overlay"
         >
           <motion.div
             initial={{ opacity: 0, y: 24, scale: 0.98 }}
@@ -84,9 +96,9 @@ export function SignalEvidenceModal({
                 </button>
               </div>
             </header>
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            <div className={`min-h-0 flex-1 overflow-y-auto overscroll-contain ${MODAL_DIALOG_SCROLL_CLASS}`}>
               {loading || !evidence ? (
-                <div
+                <motion.div
                   className="grid place-items-center"
                   style={{ minHeight: "42vh", color: colors.text, padding: spacing[4] }}
                   aria-live="polite"
@@ -97,7 +109,7 @@ export function SignalEvidenceModal({
                     label={`Preparing signal${loadingSymbol ? ` for ${loadingSymbol}` : ""}...`}
                     sublabel="Fetching snapshot, news, and six-layer synthesis."
                   />
-                </div>
+                </motion.div>
               ) : (
                 <SignalEvidenceCard
                   evidence={evidence}
@@ -109,6 +121,7 @@ export function SignalEvidenceModal({
           </motion.div>
         </motion.div>
       ) : null}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }

@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import type { TradingModeUi } from "@/components/trading-mode-badge";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
+import { useModalOverlay } from "@/lib/hooks/use-modal-overlay";
+import { MODAL_BACKDROP_CLASS, MODAL_DIALOG_SCROLL_CLASS } from "@/lib/overlay-classes";
 import { useTheme } from "@/lib/theme-provider";
 import type { BrokerKind, OrderType, TimeInForce } from "@/lib/api/brokers";
 
@@ -55,6 +57,7 @@ interface OrderConfirmationModalProps {
 
 export function OrderConfirmationModal({ open, draft, tradingMode, onClose, onAccepted }: OrderConfirmationModalProps) {
   const { colors } = useTheme();
+  useModalOverlay(open, onClose);
   const [readyMs, setReadyMs] = useState(0);
   const [inlineError, setInlineError] = useState<string | null>(null);
   const [pdtUsed, setPdtUsed] = useState(0);
@@ -176,10 +179,14 @@ export function OrderConfirmationModal({ open, draft, tradingMode, onClose, onAc
   const est = preview?.estimated_cost ?? preview?.estimated_value;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.55)" }}>
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${MODAL_BACKDROP_CLASS}`}
+      onClick={onClose}
+    >
       <div
-        className={`max-h-[90vh] w-full max-w-lg overflow-y-auto p-4 ${surfaceGlowClassName}`}
+        className={`max-h-[90vh] w-full max-w-lg overflow-y-auto p-4 ${surfaceGlowClassName} ${MODAL_DIALOG_SCROLL_CLASS}`}
         style={{ background: colors.surface, borderRadius: borderRadius.xl, border: `1px solid ${colors.border}` }}
+        onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <span

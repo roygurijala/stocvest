@@ -21,5 +21,13 @@ describe("body-scroll-lock", () => {
     lockBodyScroll();
     resetBodyScrollLock();
     expect(document.body.style.overflow).toBe("");
+    expect(document.documentElement.style.overflow).toBe("");
+  });
+
+  test("locks html overflow alongside body", () => {
+    const unlock = lockBodyScroll();
+    expect(document.documentElement.style.overflow).toBe("hidden");
+    unlock();
+    expect(document.documentElement.style.overflow).toBe("");
   });
 });
