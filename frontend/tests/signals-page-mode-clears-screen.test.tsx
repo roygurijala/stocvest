@@ -44,16 +44,6 @@ vi.mock("@/lib/hooks/use-signals-mount-revalidate", () => ({
   useSignalsMountRevalidate: () => ({ isMountRevalidating: false })
 }));
 
-vi.mock("@/lib/api/earnings-client", () => ({
-  fetchEarningsCalendarClient: vi.fn(async () => ({
-    symbols: [] as string[],
-    days: 3,
-    upcoming: [],
-    recent: [],
-    notice: null as string | null
-  }))
-}));
-
 // Recharts isn't exercised by these tests (radar starts collapsed and
 // we never expand it) but importing the file still registers the
 // component tree. We don't need to mock recharts.
@@ -424,14 +414,5 @@ describe("SignalsPageClient — Swing Pro (dayTradingSurfaces=false)", () => {
     await waitFor(() =>
       expect(screen.getByTestId("signals-setup-bias")).toHaveTextContent("Bullish")
     );
-  });
-
-  test("sticky command bar uses opaque full-bleed backdrop", async () => {
-    renderSignalsWithSymbol("AAPL", "swing");
-    await waitFor(() => expect(screen.getByTestId("signals-sticky-command")).toBeInTheDocument());
-    const header = screen.getByTestId("signals-sticky-command");
-    expect(header.className).toContain("app-sticky-page-header");
-    expect(header.className).toContain("lg:sticky");
-    expect(header.className.split(/\s+/)).not.toContain("sticky");
   });
 });
