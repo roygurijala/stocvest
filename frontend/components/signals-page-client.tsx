@@ -103,6 +103,7 @@ import { isInsufficientCompositeResponse, type SwingCompositeMarketStatus } from
 import { synthTradeDecision } from "@/lib/signal-evidence/trade-decision";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { narrowGapIntelForAssistant } from "@/lib/assistant/gap-intel-context";
+import { enrichSignalsDeskAssistantContext } from "@/lib/assistant/signals-desk-assistant-context";
 import type { AssistantPageContext, AssistantLayerKey, AssistantLayerStatus } from "@/lib/assistant/types";
 
 type LayerStatus = "Bullish" | "Bearish" | "Neutral" | "Unavailable" | "As of close";
@@ -1470,7 +1471,7 @@ export function SignalsPageClient({
     }
     const insight = signalEvidence.insight;
     const decision = synthTradeDecision(signalEvidence, insight, tradingMode);
-    return {
+    const base: AssistantPageContext = {
       page: pageId,
       trading_mode: tradingMode,
       symbol: sym,
@@ -1478,9 +1479,6 @@ export function SignalsPageClient({
       decision_state: decision.state,
       decision_line: decision.line,
       decision_rationale: decision.rationale ?? undefined,
-      conviction_tier: decision.conviction?.tier,
-      conviction_label: decision.conviction?.label,
-      conviction_summary: decision.conviction?.summaryLine,
       trade_readiness:
         typeof insight.signal_score === "number" && Number.isFinite(insight.signal_score)
           ? insight.signal_score
@@ -1502,7 +1500,28 @@ export function SignalsPageClient({
       layer_status: layerStatusForCtx,
       ...(gapIntelForAssistant ? { gap_intel: gapIntelForAssistant } : {})
     };
-  }, [tradingMode, symbol, signalEvidence, gapIntelSnapshot, causalNarrative, timeframeContext]);
+    return enrichSignalsDeskAssistantContext(base, {
+      setupBias,
+      rows: signalsPresentRows,
+      decision,
+      alignmentRatio: compositeAlignmentRatio,
+      maturationState: maturationLine?.state,
+      maturationLabel: commandBarMaturationLine?.label ?? null,
+      tradingMode
+    });
+  }, [
+    tradingMode,
+    symbol,
+    signalEvidence,
+    gapIntelSnapshot,
+    causalNarrative,
+    timeframeContext,
+    setupBias,
+    signalsPresentRows,
+    compositeAlignmentRatio,
+    maturationLine?.state,
+    commandBarMaturationLine?.label
+  ]);
 
   usePublishAssistantContext(assistantContext);
 

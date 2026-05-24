@@ -84,6 +84,22 @@ export interface AssistantPageContext {
   causal_blocking_chain?: string;
   timeframe_alignment_label?: string;
   layer_status?: Partial<Record<AssistantLayerKey, AssistantLayerStatus>>;
+  /** Setup tab / command-bar bias headline (Bullish / Bearish / Neutral). */
+  setup_bias?: "Bullish" | "Bearish" | "Neutral";
+  /** Human alignment line on desk (e.g. Strong (5/6)). */
+  alignment_display?: string;
+  /** Execution headline on desk (e.g. Not actionable yet). */
+  execution_readiness_label?: string;
+  /** Short execution hint under command-bar verdict. */
+  execution_hint?: string;
+  /** Supporting gates — mirrors Setup "Also in play" (max 5). */
+  decision_reinforcements?: string[];
+  /** Watchlist maturation label when shown on command bar. */
+  maturation_label?: string;
+  /** Display-only conviction band (A+ / B+ / Developing). */
+  conviction_tier?: string;
+  conviction_label?: string;
+  conviction_summary?: string;
   /**
    * High-level status of the analysis on the current page. Lets the assistant distinguish
    * "decision visible on screen" from "user has selected a symbol but no analysis loaded yet".

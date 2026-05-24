@@ -85,6 +85,42 @@ def test_serialize_page_context_emits_signals_fields() -> None:
     assert "decision_rationale_text=R/R unfavorable here." in out
 
 
+def test_serialize_page_context_emits_signals_desk_and_conviction_fields() -> None:
+    ctx = {
+        "page": "signals/layers",
+        "symbol": "D",
+        "trading_mode": "swing",
+        "decision_state": "monitor",
+        "setup_bias": "Bullish",
+        "alignment_display": "Strong (5/6)",
+        "execution_readiness_label": "Not actionable yet",
+        "execution_hint": "Daily and weekly timeframes diverge · Signal readiness",
+        "maturation_label": "Strong (5/6)",
+        "conviction_tier": "B+",
+        "conviction_label": "Developing edge",
+        "conviction_summary": "Alignment strong; execution gates still open.",
+        "decision_reinforcements": [
+            "Daily and weekly timeframes diverge.",
+            "Layer agreement is mixed across desks.",
+        ],
+    }
+    out = serialize_page_context(ctx)
+    assert "setup_bias=Bullish" in out
+    assert "alignment_display=Strong (5/6)" in out
+    assert "execution_readiness_label=Not actionable yet" in out
+    assert "execution_hint=Daily and weekly timeframes diverge" in out
+    assert "maturation_label=Strong (5/6)" in out
+    assert "conviction_tier=B+" in out
+    assert "decision_reinforcement_1=Daily and weekly timeframes diverge." in out
+    assert "decision_reinforcement_2=Layer agreement is mixed across desks." in out
+
+
+def test_assistant_prompt_requires_plain_english_explanation_section() -> None:
+    assert "PLAIN ENGLISH EXPLANATION (ALL SCREENS)" in ASSISTANT_SYSTEM_PROMPT
+    assert "decision_reinforcement_N" in ASSISTANT_SYSTEM_PROMPT
+    assert "Never invent metrics" in ASSISTANT_SYSTEM_PROMPT or "Never invent" in ASSISTANT_SYSTEM_PROMPT
+
+
 def test_serialize_page_context_includes_causal_narrative():
     out = serialize_page_context(
         {
