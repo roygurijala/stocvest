@@ -184,6 +184,20 @@ export function isEligibleForScenario(
 }
 
 /**
+ * Full planning sheet (R/R math) when reference stop + target + direction exist.
+ * Does not require freshness, volatility, or desk R/R gates — those surface in the verdict banner.
+ */
+export function canOpenFullScenarioSheet(input: ScenarioInput): boolean {
+  const symbol = typeof input.symbol === "string" ? input.symbol.trim() : "";
+  if (!symbol) return false;
+  if (input.direction !== "bullish" && input.direction !== "bearish") return false;
+  if (!hasReferencePrice(input.reference)) return false;
+  if (!hasExplicitStop(input.reference)) return false;
+  if (!hasExplicitTarget(input.reference)) return false;
+  return true;
+}
+
+/**
  * Stable human-readable label for a failure reason. Used by the
  * tooltip rendered when the button is disabled.
  *

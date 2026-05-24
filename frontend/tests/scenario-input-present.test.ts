@@ -37,6 +37,30 @@ describe("scenario-input-present", () => {
     expect(input.reference.stop).toBe(98);
   });
 
+  test("buildScenarioInputFromCompositeContext derives stop and target from snapshot when composite omits them", () => {
+    const input = buildScenarioInputFromCompositeContext({
+      symbol: "GS",
+      tradingMode: "swing",
+      setupBias: "Bullish",
+      composite: {
+        signal_score: 68,
+        risk_reward: 1.3,
+        market_regime: "neutral",
+        historical_entry_zone: { low: 380, high: 385 }
+      },
+      snapshot: {
+        symbol: "GS",
+        last_trade_price: 382,
+        day_low: 375,
+        day_high: 390,
+        prev_close: 378
+      } as never
+    });
+    expect(input.reference.stop).not.toBeNull();
+    expect(input.reference.target_1).not.toBeNull();
+    expect(input.risk_reward).toBe(1.3);
+  });
+
   test("buildWatchlistScenarioInput uses snapshot last and day_low", () => {
     const input = buildWatchlistScenarioInput({
       symbol: "nvda",

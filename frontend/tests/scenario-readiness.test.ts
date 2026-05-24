@@ -79,6 +79,15 @@ describe("resolveScenarioBuilderCapability", () => {
     expect(r.capability).toBe("preview");
   });
 
+  test("full sheet when stop and target exist even if signal is stale", () => {
+    const stale = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const r = resolveScenarioBuilderCapability(
+      ctx({ decisionState: "monitor", layersAligned: 5, layersTotal: 6 }),
+      baseInput({ mode: "swing", generated_at: stale, risk_reward: 1.3 })
+    );
+    expect(r.capability).toBe("full");
+  });
+
   test("gap intel disabled opens full sheet with session_limited execution", () => {
     const r = resolveScenarioBuilderCapability(
       ctx({ decisionState: "actionable", layersAligned: 6, layersTotal: 6 }),

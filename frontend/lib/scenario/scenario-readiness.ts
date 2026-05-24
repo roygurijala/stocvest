@@ -14,7 +14,7 @@ import {
   DEVELOPING_ALIGNED_MIN,
   resolveAlignmentDisplayTier
 } from "@/lib/alignment-display-tier";
-import { isEligibleForScenario } from "@/lib/scenario/eligibility";
+import { canOpenFullScenarioSheet } from "@/lib/scenario/eligibility";
 import { pickMissingConfirmationLayers } from "@/lib/signal-evidence/evidence-card-present";
 import {
   resolveSignalsLayerAlignment,
@@ -163,18 +163,17 @@ export function resolveScenarioBuilderCapability(
   ctx: ScenarioReadinessContext,
   input: ScenarioInput
 ): ScenarioReadinessResolved {
-  const structural = isEligibleForScenario(input);
   const gapIntelBlocked = Boolean(input.gap_intel_gate?.scenario_builder_state === "DISABLED");
   const { aligned, total, missing } = countAlignment(ctx);
   const maturation = normalizeMaturation(ctx.maturationState);
   const decision = ctx.decisionState ?? null;
   const directionalLabel = biasToDirectionalLabel(ctx.setupBias ?? null);
   const maturationLabel = maturation ? maturation.replace(/_/g, " ") : null;
+  const sheetReady = canOpenFullScenarioSheet(input);
   const structurallyComplete = ctx.hasReferenceLevels ?? hasReferenceLevels(input);
-  const structurallyEligible = structural.eligible;
 
   const setupTier = resolveSetupTier(aligned, total, maturation, decision);
-  const executionTier = resolveExecutionTier(gapIntelBlocked, structurallyEligible);
+  const executionTier = resolveExecutionTier(gapIntelBlocked, sheetReady);
 
   const shared = {
     aligned,
@@ -188,7 +187,7 @@ export function resolveScenarioBuilderCapability(
     executionTier
   };
 
-  if (structurallyEligible) {
+  if (sheetReady) {
     return {
       ...shared,
       capability: "full",

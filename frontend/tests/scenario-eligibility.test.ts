@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import {
   buildIneligibilityTooltip,
+  canOpenFullScenarioSheet,
   isEligibleForScenario,
   scenarioIneligibilityLabel
 } from "@/lib/scenario/eligibility";
@@ -51,6 +52,30 @@ describe("isEligibleForScenario — happy path", () => {
     });
     const r = isEligibleForScenario(input, NOW);
     expect(r.eligible).toBe(true);
+  });
+});
+
+describe("canOpenFullScenarioSheet", () => {
+  test("opens when stop target direction and price exist", () => {
+    expect(canOpenFullScenarioSheet(happyInput())).toBe(true);
+  });
+
+  test("opens when stale or low rr even if isEligibleForScenario fails", () => {
+    const stale = happyInput({
+      mode: "swing",
+      generated_at: new Date(NOW - 30 * 24 * 60 * 60 * 1000).toISOString(),
+      risk_reward: 1.2
+    });
+    expect(isEligibleForScenario(stale, NOW).eligible).toBe(false);
+    expect(canOpenFullScenarioSheet(stale)).toBe(true);
+  });
+
+  test("preview when stop missing", () => {
+    expect(
+      canOpenFullScenarioSheet(
+        happyInput({ reference: { ...happyInput().reference, stop: null } })
+      )
+    ).toBe(false);
   });
 });
 

@@ -1,8 +1,14 @@
 import type { GapIntelSnapshot } from "@/lib/api/gap-intel";
 import type { SnapshotPayload } from "@/lib/api/market";
-import { parseSwingCompositeInsight } from "@/lib/signal-evidence";
+import { deriveSessionReferenceLevels } from "@/lib/snapshot-reference-levels";
+import { parseSwingCompositeInsight, referenceLevelsFromSessionStructure } from "@/lib/signal-evidence";
 import type { SignalsSetupBias } from "@/lib/signals-page-present";
 import type { ScenarioInput, ScenarioMode, VolatilityRegime } from "@/lib/scenario/types";
+
+function positiveNum(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v) && v > 0) return v;
+  return null;
+}
 
 function gapIntelStructuralBanner(reasons: readonly string[]): string | null {
   if (!reasons.length) return null;
@@ -107,6 +113,67 @@ export function buildScenarioInputFromEvidenceParts(parts: {
   };
 }
 
+/** Same fallbacks as Evidence card — composite fields, session structure, snapshot OHLC. */
+function resolveCompositeScenarioReference(args: {
+  composite: Record<string, unknown> | null | undefined;
+  snapshot?: SnapshotPayload | null;
+  setupBias: SignalsSetupBias;
+  insight: ReturnType<typeof parseSwingCompositeInsight>;
+}): ScenarioInput["reference"] {
+  const comp = args.composite;
+  const zone = args.insight?.historical_entry_zone;
+  const session = deriveSessionReferenceLevels(args.snapshot ?? null, comp ?? null);
+
+  let stop =
+    args.insight?.reference_stop_level ?? (comp ? positiveNum(comp["reference_stop_level"]) : null);
+  let target_1 =
+    args.insight?.reference_target_1 ?? (comp ? positiveNum(comp["reference_target_1"]) : null);
+  let target_2 =
+    args.insight?.reference_target_2 ?? (comp ? positiveNum(comp["reference_target_2"]) : null);
+
+  if (target_1 == null && session.resistance != null) target_1 = session.resistance;
+  if (stop == null && session.support != null) stop = session.support;
+
+  const direction = setupBiasToScenarioDirection(args.setupBias);
+  if ((stop == null || target_1 == null) && (direction === "bullish" || direction === "bearish")) {
+    const last =
+      typeof args.snapshot?.last_trade_price === "number" && Number.isFinite(args.snapshot.last_trade_price)
+        ? args.snapshot.last_trade_price
+        : null;
+    const prevClose =
+      typeof args.snapshot?.prev_close === "number" && Number.isFinite(args.snapshot.prev_close)
+        ? args.snapshot.prev_close
+        : null;
+    const derived = referenceLevelsFromSessionStructure({
+      direction,
+      support: session.support ?? zone?.low ?? null,
+      resistance: session.resistance ?? zone?.high ?? null,
+      vwap: session.vwap,
+      lastTradePrice: last,
+      prevClose
+    });
+    if (stop == null) stop = derived.reference_stop_level;
+    if (target_1 == null) target_1 = derived.reference_target_1;
+    if (target_2 == null) target_2 = derived.reference_target_2;
+  }
+
+  return {
+    entry_low: zone?.low ?? session.support ?? null,
+    entry_high: zone?.high ?? session.resistance ?? null,
+    stop,
+    target_1,
+    target_2,
+    current_price:
+      typeof args.snapshot?.last_trade_price === "number" && Number.isFinite(args.snapshot.last_trade_price)
+        ? args.snapshot.last_trade_price
+        : null,
+    prev_close:
+      typeof args.snapshot?.prev_close === "number" && Number.isFinite(args.snapshot.prev_close)
+        ? args.snapshot.prev_close
+        : null
+  };
+}
+
 /** Signals page / composite-backed surfaces. */
 export function buildScenarioInputFromCompositeContext(args: {
   symbol: string;
@@ -116,41 +183,35 @@ export function buildScenarioInputFromCompositeContext(args: {
   snapshot?: SnapshotPayload | null;
 }): ScenarioInput {
   const sym = args.symbol.trim().toUpperCase();
-  const insight = args.composite ? parseSwingCompositeInsight(args.composite) : null;
-  const zone = insight?.historical_entry_zone;
-  const last =
-    typeof args.snapshot?.last_trade_price === "number" && Number.isFinite(args.snapshot.last_trade_price)
-      ? args.snapshot.last_trade_price
-      : null;
-  const prevClose =
-    typeof args.snapshot?.prev_close === "number" && Number.isFinite(args.snapshot.prev_close)
-      ? args.snapshot.prev_close
-      : null;
+  const comp = args.composite;
+  const insight = comp ? parseSwingCompositeInsight(comp) : null;
   const generated =
-    typeof args.composite?.generated_at === "string"
-      ? args.composite.generated_at
-      : typeof args.composite?.timestamp_iso === "string"
-        ? args.composite.timestamp_iso
+    typeof comp?.generated_at === "string"
+      ? comp.generated_at
+      : typeof comp?.timestamp_iso === "string"
+        ? comp.timestamp_iso
         : null;
+  const marketRegime =
+    insight?.market_regime ??
+    (comp && typeof comp["market_regime"] === "string" ? String(comp["market_regime"]) : null);
+  const rrFromComp = comp ? positiveNum(comp["risk_reward"]) : null;
+
   return {
     symbol: sym,
     direction: setupBiasToScenarioDirection(args.setupBias),
     mode: args.tradingMode,
     generated_at: generated,
-    reference: {
-      entry_low: zone?.low ?? null,
-      entry_high: zone?.high ?? null,
-      stop: insight?.reference_stop_level ?? null,
-      target_1: insight?.reference_target_1 ?? null,
-      target_2: insight?.reference_target_2 ?? null,
-      current_price: last,
-      prev_close: prevClose
-    },
-    volatility_regime: marketRegimeToVolatilityRegime(insight?.market_regime ?? null),
+    reference: resolveCompositeScenarioReference({
+      composite: comp,
+      snapshot: args.snapshot,
+      setupBias: args.setupBias,
+      insight
+    }),
+    volatility_regime: marketRegimeToVolatilityRegime(marketRegime),
     risk_reward:
       typeof insight?.risk_reward === "number" && Number.isFinite(insight.risk_reward)
         ? insight.risk_reward
-        : null
+        : rrFromComp
   };
 }
 
