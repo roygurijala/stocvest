@@ -87,8 +87,7 @@ export function SignalsDeskVerdictRow({
 
   const executionHighlighted = deskTabHighlightsKpi(activeTab, "execution");
   const isActionable = decisionState === "actionable";
-  const isBlocked = decisionState === "blocked";
-  const executionAccent = isActionable ? colors.bullish : isBlocked ? colors.caution : colors.text;
+  const executionAccent = isActionable ? colors.bullish : colors.bearish;
 
   return (
     <div
@@ -119,11 +118,11 @@ export function SignalsDeskVerdictRow({
             ? colors.accent
             : isActionable
               ? `color-mix(in srgb, ${colors.bullish} 45%, ${colors.border})`
-              : `color-mix(in srgb, ${colors.caution} 35%, ${colors.border})`,
+              : `color-mix(in srgb, ${colors.bearish} 45%, ${colors.border})`,
           borderLeftWidth: isActionable ? undefined : 4,
           background: isActionable
             ? `color-mix(in srgb, ${colors.bullish} 12%, ${colors.surfaceMuted})`
-            : `color-mix(in srgb, ${colors.caution} 8%, ${colors.surfaceMuted})`,
+            : `color-mix(in srgb, ${colors.bearish} 10%, ${colors.surfaceMuted})`,
           cursor: "pointer"
         }}
         data-testid="signals-desk-verdict-execution"

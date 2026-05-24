@@ -75,7 +75,7 @@ export function SignalsWhyNotPanel({
   }
 
   const readinessLabel = executionReadinessLabel(decision.state);
-  const readinessColor = decision.state === "blocked" ? colors.caution : colors.textMuted;
+  const readinessColor = decision.state === "actionable" ? colors.bullish : colors.bearish;
 
   return (
     <article
