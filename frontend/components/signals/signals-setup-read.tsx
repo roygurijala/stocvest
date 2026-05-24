@@ -18,6 +18,7 @@ import {
 } from "@/lib/signals-page-present";
 import type { TradeDecision } from "@/lib/signal-evidence/trade-decision";
 import type { FundamentalBackdropSummary } from "@/lib/signal-evidence/fundamental-present";
+import { SIGNALS_SECTION_TARGET } from "@/lib/signals-page-sections";
 import { SignalsFundamentalBackdrop } from "@/components/signals/signals-fundamental-backdrop";
 import { SignalsFundamentalBackdropUpgrade } from "@/components/signals/signals-fundamental-upgrade";
 import { ConvictionTierBadge } from "@/components/signals/conviction-tier-badge";
@@ -179,6 +180,11 @@ export function SignalsSetupRead({
         </p>
       )}
 
+      <div
+        id={SIGNALS_SECTION_TARGET.executionDetail}
+        className="scroll-mt-4"
+        data-testid="signals-section-execution-detail"
+      >
       <p
         className="m-0 mt-3 text-sm font-medium leading-snug"
         style={{ color: decision.state === "actionable" ? colors.bullish : colors.textMuted }}
@@ -191,6 +197,7 @@ export function SignalsSetupRead({
       </p>
 
       {decision.conviction ? <ConvictionTierBadge conviction={decision.conviction} /> : null}
+      </div>
 
       {fundamentalSummary ? <SignalsFundamentalBackdrop summary={fundamentalSummary} /> : null}
       {showFundamentalUpgrade ? <SignalsFundamentalBackdropUpgrade /> : null}

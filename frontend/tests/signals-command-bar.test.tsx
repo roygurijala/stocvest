@@ -44,6 +44,34 @@ describe("SignalsCommandBar", () => {
     expect(onOpenEvidence).toHaveBeenCalledTimes(1);
   });
 
+  test("shows last price inline beside symbol when priceContext provided", () => {
+    render(
+      <ThemeProvider>
+        <SignalsCommandBar
+          symbol="AAPL"
+          tradingMode="swing"
+          dayTradingSurfaces={false}
+          watchlistControl={<span>Watchlist</span>}
+          maturationLine={null}
+          evaluationFreshness={null}
+          onTradingModeChange={vi.fn()}
+          priceContext={{
+            priceLabel: "Last",
+            priceFormatted: "$185.20",
+            dayChangePct: 1.2,
+            dayChangeFormatted: "+1.2%",
+            dayChangeTone: "up",
+            accessibleLabel: "Last $185.20, +1.2% today. Context only."
+          }}
+        />
+      </ThemeProvider>
+    );
+    const row = screen.getByTestId("signals-command-bar-price");
+    expect(row).toHaveTextContent("Last");
+    expect(row).toHaveTextContent("$185.20");
+    expect(row).toHaveTextContent("+1.2%");
+  });
+
   test("shows compact mode line and hides cadence paragraphs", () => {
     render(
       <ThemeProvider>

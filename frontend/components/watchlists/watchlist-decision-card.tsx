@@ -192,23 +192,6 @@ export function WatchlistDecisionCard({
             {model.conviction.tier === "b_plus" ? " (discretionary)" : ""}
           </p>
         ) : null}
-
-        <p className="m-0 mt-2 text-sm" style={{ color: colors.textMuted }}>
-          → Worth checking?{" "}
-          <span style={{ color: model.worthChecking ? colors.bullish : colors.textMuted, fontWeight: 600 }}>
-            {model.worthChecking ? "YES" : "Not yet"}
-            {model.worthChecking && model.attentionTier === "check_now" ? " (close to threshold)" : ""}
-          </span>
-        </p>
-
-        <p
-          className="m-0 mt-2 text-sm font-semibold"
-          style={{ color: colors.accent }}
-          data-testid={`watchlist-decision-hint-${model.symbol}`}
-        >
-          <span aria-hidden>{model.decisionIcon} </span>
-          {model.decisionHint}
-        </p>
           </>
         )}
 

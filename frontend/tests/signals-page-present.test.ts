@@ -13,6 +13,7 @@ import {
   layerPolarity,
   layerRoleLabel,
   groupLayersByForce,
+  buildBiasRationaleIntro,
   buildLayerRoleHeadline,
   formatLayerForceNames,
   normalizeSetupBias,
@@ -112,6 +113,12 @@ describe("signals-page-present", () => {
     expect(g.againstOrMixed.map((r) => r.name)).toContain("Internals");
     expect(formatLayerForceNames(g.withBias)).toMatch(/Technical/);
     expect(g.titles.withBias).toMatch(/supporting bearish bias/i);
+  });
+
+  test("buildBiasRationaleIntro summarizes bearish layer split", () => {
+    const intro = buildBiasRationaleIntro("Bearish", bearishRows, "bearish");
+    expect(intro).toMatch(/bearish/i);
+    expect(intro).toMatch(/support/i);
   });
 
   test("layerRoleLabel is bias-anchored", () => {

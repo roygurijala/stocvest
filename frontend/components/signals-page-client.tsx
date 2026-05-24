@@ -26,15 +26,17 @@ import { SignalsRadarPanel } from "@/components/signals/signals-radar-panel";
 import { CausalNarrativePanel } from "@/components/signals/causal-narrative-panel";
 import { TimeframeContextPanel } from "@/components/signals/timeframe-context-panel";
 import { SignalsWhyNotPanel } from "@/components/signals/signals-why-not-panel";
+import { SignalsBiasRationalePanel } from "@/components/signals/signals-bias-rationale-panel";
 import { resolveCausalNarrative } from "@/lib/signal-evidence/causal-narrative";
 import { isTickerSearchQueryReady } from "@/lib/ticker-search-query";
 import {
   isTimeframeCounterTrend,
   resolveTimeframeContext
 } from "@/lib/signal-evidence/timeframe-context";
-import { SIGNALS_SECTION_TARGET } from "@/lib/signals-page-sections";
+import { SIGNALS_SECTION_TARGET, scrollToSignalsSection } from "@/lib/signals-page-sections";
 import { buildSignalsDeskKpiItems } from "@/lib/signals-desk-kpi-present";
 import {
+  kpiTargetScrollId,
   kpiTargetToDeskTab,
   parseSignalsDeskTab,
   SIGNALS_TAB_QUERY_KEY,
@@ -56,6 +58,7 @@ import { buildScenarioPlanningBundle } from "@/lib/scenario/scenario-planning-bu
 import type { ScenarioBuilderDrillDown } from "@/lib/scenario/scenario-builder-drill-down";
 import { useWatchlistMaturationLine } from "@/lib/hooks/use-watchlist-maturation-line";
 import { buildSignalEvaluationFreshness } from "@/lib/signals-evaluation-present";
+import { buildSignalsDeskPriceContext } from "@/lib/signals-desk-price-present";
 import {
   buildSignalsPageDecision,
   formatSignalsAlignmentDisplayLine,
@@ -278,6 +281,7 @@ export function SignalsPageClient({
   const [newsPanelOpen, setNewsPanelOpen] = useState(false);
   const [newsUiTick, setNewsUiTick] = useState(0);
   const [deskTab, setDeskTab] = useState<SignalsDeskTab>("setup");
+  const [deskKpiScrollTarget, setDeskKpiScrollTarget] = useState<SignalsKpiTarget | null>(null);
   // Tier 1 → Layer 4: per-symbol snapshot is now backed by SWR.
   // The cache lives under `stocvest:symbol-snapshot:<TICKER>` and
   // returns stale data instantly on repeat visits while silently
@@ -593,6 +597,11 @@ export function SignalsPageClient({
     return marketOverview.snapshots.find((s) => s.symbol === sym) ?? symbolSnapshot;
   }, [marketOverview.snapshots, symbol, symbolSnapshot]);
 
+  const deskPriceContext = useMemo(
+    () => buildSignalsDeskPriceContext(rawSnapshot ?? undefined),
+    [rawSnapshot]
+  );
+
   const snapshot = useMemo(() => coerceSnapshotForReferenceLevels(rawSnapshot), [rawSnapshot]);
 
   useEffect(() => {
@@ -649,6 +658,7 @@ export function SignalsPageClient({
   const applyDeskKpiTarget = useCallback(
     (target: SignalsKpiTarget) => {
       applyDeskTab(kpiTargetToDeskTab(target));
+      setDeskKpiScrollTarget(target);
     },
     [applyDeskTab]
   );
@@ -1004,6 +1014,20 @@ export function SignalsPageClient({
       timeframeCounterTrend: isTimeframeCounterTrend(tfCtx)
     });
   }, [compositeResult, setupBias, signalsPresentRows, aiStripSignalScore, tradingMode]);
+
+  useEffect(() => {
+    if (!deskKpiScrollTarget) return;
+    let scrollId = kpiTargetScrollId(deskKpiScrollTarget);
+    if (deskKpiScrollTarget === "execution" && pageDecision?.state === "actionable") {
+      scrollId = SIGNALS_SECTION_TARGET.executionDetail;
+    }
+    const fallbackId =
+      scrollId === SIGNALS_SECTION_TARGET.whyNotActionable
+        ? SIGNALS_SECTION_TARGET.executionDetail
+        : undefined;
+    scrollToSignalsSection(scrollId, { fallbackId });
+    setDeskKpiScrollTarget(null);
+  }, [deskKpiScrollTarget, deskTab, pageDecision?.state]);
 
   const compositeAlignmentRatio = useMemo(() => {
     if (!compositeResult || isInsufficientCompositeResponse(compositeResult)) return null;
@@ -1733,6 +1757,7 @@ export function SignalsPageClient({
           resumedFromSession={resumedFromSession}
           onTradingModeChange={updateTradingMode}
           onOpenEvidence={hasValidSignal ? () => void openEvidenceModal() : undefined}
+          priceContext={deskPriceContext}
         />
         {hasValidSignal && pageDecision && deskKpiItems.length > 0 ? (
           <SignalsDeskKpiStrip
@@ -1780,6 +1805,13 @@ export function SignalsPageClient({
             ) : null}
             {hasValidSignal && causalNarrative && pageDecision?.state !== "actionable" ? (
               <CausalNarrativePanel narrative={causalNarrative} compact />
+            ) : null}
+            {hasValidSignal ? (
+              <SignalsBiasRationalePanel
+                bias={setupBias}
+                rows={signalsPresentRows}
+                signalSummary={layerSignalSummary}
+              />
             ) : null}
             {hasValidSignal ? (
               <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2 [&>*]:min-w-0">

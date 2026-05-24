@@ -8,6 +8,7 @@ import {
   type CausalNarrative
 } from "@/lib/signal-evidence/causal-narrative";
 import { buildWhyNotBullets, type SignalsLayerRowInput, type SignalsSetupBias } from "@/lib/signals-page-present";
+import { SIGNALS_SECTION_TARGET } from "@/lib/signals-page-sections";
 import { borderRadius, spacing, surfaceGlowClassName } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -55,7 +56,8 @@ export function SignalsWhyNotPanel({
 
   return (
     <article
-      className={surfaceGlowClassName}
+      id={SIGNALS_SECTION_TARGET.whyNotActionable}
+      className={`scroll-mt-4 ${surfaceGlowClassName}`}
       data-testid="signals-why-not"
       style={{
         background: colors.surface,

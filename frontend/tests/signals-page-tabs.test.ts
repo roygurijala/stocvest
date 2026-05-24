@@ -1,10 +1,12 @@
 import { describe, expect, test } from "vitest";
 import {
   deskTabHighlightsKpi,
+  kpiTargetScrollId,
   kpiTargetToDeskTab,
   parseSignalsDeskTab,
   SIGNALS_DESK_TABS
 } from "@/lib/signals-page-tabs";
+import { SIGNALS_SECTION_TARGET } from "@/lib/signals-page-sections";
 import { buildSignalsDeskKpiItems } from "@/lib/signals-desk-kpi-present";
 import type { SignalsLayerRowInput } from "@/lib/signals-page-present";
 
@@ -32,6 +34,12 @@ describe("signals-page-tabs", () => {
     expect(deskTabHighlightsKpi("setup", "bias")).toBe(true);
     expect(deskTabHighlightsKpi("layers", "alignment")).toBe(true);
     expect(deskTabHighlightsKpi("setup", "alignment")).toBe(false);
+  });
+
+  test("maps KPI targets to scroll section ids", () => {
+    expect(kpiTargetScrollId("bias")).toBe(SIGNALS_SECTION_TARGET.biasRationale);
+    expect(kpiTargetScrollId("execution")).toBe(SIGNALS_SECTION_TARGET.whyNotActionable);
+    expect(kpiTargetScrollId("alignment")).toBe(SIGNALS_SECTION_TARGET.layers);
   });
 });
 

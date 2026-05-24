@@ -373,6 +373,49 @@ export function formatLayerForceNames(rows: SignalsLayerRowInput[]): string {
   return rows.map((r) => r.name).join(", ");
 }
 
+/** Intro copy for Setup → “Why this bias?” section. */
+export function buildBiasRationaleIntro(
+  bias: SignalsSetupBias,
+  rows: SignalsLayerRowInput[],
+  signalSummary: string
+): string {
+  const groups = groupLayersByForce(rows, bias);
+  const supportN = groups.withBias.length;
+  const opposeN = groups.againstOrMixed.length;
+  const neutralN = groups.noEdge.length;
+  const summary = signalSummary.trim().toLowerCase();
+
+  if (bias === "Neutral") {
+    if (supportN === 0 && opposeN === 0) {
+      return "Composite synthesis is neutral — most layers show no directional edge for this desk.";
+    }
+    return `Composite synthesis is neutral — ${supportN} layer${supportN === 1 ? "" : "s"} lean bullish, ${opposeN} bearish${neutralN > 0 ? `, and ${neutralN} neutral` : ""}. No single direction dominates.`;
+  }
+
+  const biasWord = bias.toLowerCase();
+  const summaryMatches = summary === biasWord;
+  const lead = summaryMatches
+    ? `Composite classifies this setup as ${biasWord}`
+    : `Desk bias is ${biasWord} (composite summary: ${summary || "—"})`;
+
+  const parts: string[] = [];
+  if (supportN > 0) {
+    parts.push(
+      `${supportN} layer${supportN === 1 ? "" : "s"} support the ${biasWord} read (${formatLayerForceNames(groups.withBias)})`
+    );
+  }
+  if (opposeN > 0) {
+    parts.push(
+      `${opposeN} layer${opposeN === 1 ? "" : "s"} oppose or are mixed (${formatLayerForceNames(groups.againstOrMixed)})`
+    );
+  }
+  if (neutralN > 0 && parts.length === 0) {
+    parts.push(`${neutralN} neutral layer${neutralN === 1 ? "" : "s"} — limited directional confirmation`);
+  }
+
+  return parts.length > 0 ? `${lead} — ${parts.join("; ")}.` : `${lead} based on how the six layers reconcile.`;
+}
+
 function layerBlockingScore(row: SignalsLayerRowInput, bias: SignalsSetupBias): number {
   const p = layerPolarity(row, bias);
   if (p !== "blocking" && p !== "mixed") return 99;

@@ -99,7 +99,6 @@ describe("WatchlistsPageClient maturation", () => {
     expect(within(card).getByText("(4/6)")).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByTestId("watchlist-badge-improved-AAPL")).toBeInTheDocument();
-      expect(screen.getByTestId("watchlist-decision-hint-AAPL")).toHaveTextContent(/Check Signals/i);
     });
     expect(global.fetch).toHaveBeenCalled();
     const urls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.map((c) =>

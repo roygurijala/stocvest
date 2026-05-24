@@ -50,6 +50,10 @@ describe("Signals desk tab UI", () => {
     );
     fireEvent.click(screen.getByTestId("signals-desk-kpi-alignment"));
     expect(onSelect).toHaveBeenCalledWith("alignment");
+    fireEvent.click(screen.getByTestId("signals-desk-kpi-bias"));
+    expect(onSelect).toHaveBeenCalledWith("bias");
+    fireEvent.click(screen.getByTestId("signals-desk-kpi-execution"));
+    expect(onSelect).toHaveBeenCalledWith("execution");
   });
 
   test("tab nav highlights active panel", () => {

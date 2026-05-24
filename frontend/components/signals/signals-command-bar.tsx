@@ -14,6 +14,7 @@ import {
   signalsDeskModeTooltip,
   type SignalEvaluationFreshness
 } from "@/lib/signals-evaluation-present";
+import type { SignalsDeskPriceContext } from "@/lib/signals-desk-price-present";
 import { formatLastEvaluatedShort } from "@/lib/watchlist-evaluation-present";
 
 type TradingMode = "day" | "swing";
@@ -32,6 +33,8 @@ type Props = {
   onTradingModeChange: (mode: TradingMode) => void;
   /** Primary evidence entry — full-width on mobile; inline on desktop. */
   onOpenEvidence?: () => void;
+  /** Snapshot-backed last price + session change (context only). */
+  priceContext?: SignalsDeskPriceContext | null;
 };
 
 const evidenceButtonClass =
@@ -47,7 +50,8 @@ export function SignalsCommandBar({
   evaluationFreshness,
   resumedFromSession = false,
   onTradingModeChange,
-  onOpenEvidence
+  onOpenEvidence,
+  priceContext = null
 }: Props) {
   const { colors } = useTheme();
   const symU = symbol.trim().toUpperCase();
@@ -78,12 +82,40 @@ export function SignalsCommandBar({
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
-          <h2
-            className="m-0 text-xl font-semibold tracking-tight sm:text-2xl"
-            style={{ color: colors.text, lineHeight: 1.15 }}
-          >
-            {symU}
-          </h2>
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <h2
+              className="m-0 text-xl font-semibold tracking-tight sm:text-2xl"
+              style={{ color: colors.text, lineHeight: 1.15 }}
+            >
+              {symU}
+            </h2>
+            {priceContext ? (
+              <span
+                className="inline-flex flex-wrap items-baseline gap-x-1.5 text-sm font-medium tabular-nums sm:text-base"
+                data-testid="signals-command-bar-price"
+                aria-label={priceContext.accessibleLabel}
+              >
+                <span className="text-xs font-normal" style={{ color: colors.textMuted }}>
+                  {priceContext.priceLabel}
+                </span>
+                <span style={{ color: colors.text }}>{priceContext.priceFormatted}</span>
+                {priceContext.dayChangeFormatted ? (
+                  <span
+                    style={{
+                      color:
+                        priceContext.dayChangeTone === "up"
+                          ? colors.bullish
+                          : priceContext.dayChangeTone === "down"
+                            ? colors.bearish
+                            : colors.textMuted
+                    }}
+                  >
+                    {priceContext.dayChangeFormatted}
+                  </span>
+                ) : null}
+              </span>
+            ) : null}
+          </div>
           {resumedFromSession ? (
             <p
               className="m-0 mt-0.5 text-[11px] leading-snug"

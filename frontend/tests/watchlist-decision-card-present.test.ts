@@ -49,7 +49,7 @@ describe("resolveWatchlistAttentionTier", () => {
 });
 
 describe("buildWatchlistCardModel", () => {
-  test("near-ready with blockers suggests checking signals", () => {
+  test("near-ready with blockers surfaces momentum and blockers", () => {
     const model = buildWatchlistCardModel(
       "AAPL",
       row({
@@ -66,11 +66,10 @@ describe("buildWatchlistCardModel", () => {
     expect(model.attentionTier).toBe("getting_close");
     expect(model.blockers).toEqual(["Internals", "Macro"]);
     expect(model.progressionBadge).toBe("improved");
-    expect(model.decisionHint).toContain("Monitor");
     expect(model.momentumLine).toContain("Building momentum");
   });
 
-  test("5/6 actionable tier gets check_now hint", () => {
+  test("5/6 actionable tier is check_now", () => {
     const model = buildWatchlistCardModel(
       "NVDA",
       row({ state: "actionable", layers_aligned: 5, layers_total: 6 }),
@@ -78,8 +77,6 @@ describe("buildWatchlistCardModel", () => {
       COLORS
     );
     expect(model.attentionTier).toBe("check_now");
-    expect(model.worthChecking).toBe(true);
-    expect(model.decisionHint).toContain("Check Signals");
   });
 });
 

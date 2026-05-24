@@ -5,7 +5,13 @@ export const SIGNALS_SECTION_TARGET = {
   layers: "signals-layers",
   radar: "signals-section-radar",
   evolution: "signals-section-evolution",
-  context: "signals-section-context"
+  context: "signals-section-context",
+  /** Setup tab — why execution is withheld. */
+  whyNotActionable: "signals-section-why-not-actionable",
+  /** Setup tab — how composite derived Bullish / Bearish / Neutral. */
+  biasRationale: "signals-section-bias-rationale",
+  /** Setup tab — execution read + conviction when actionable or detail block. */
+  executionDetail: "signals-section-execution-detail"
 } as const;
 
 export function buildSignalsSectionLinks(input: {
@@ -26,4 +32,29 @@ export function buildSignalsSectionLinks(input: {
     links.push({ id: "context", label: "Context", targetId: SIGNALS_SECTION_TARGET.context });
   }
   return links;
+}
+
+/** Smooth-scroll to a section anchor; retries until the tab panel mounts. */
+export function scrollToSignalsSection(
+  targetId: string,
+  options?: { fallbackId?: string; maxAttempts?: number }
+): void {
+  const maxAttempts = options?.maxAttempts ?? 12;
+  let attempt = 0;
+
+  const tryScroll = () => {
+    const el =
+      document.getElementById(targetId) ??
+      (options?.fallbackId ? document.getElementById(options.fallbackId) : null);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    attempt += 1;
+    if (attempt < maxAttempts) {
+      window.requestAnimationFrame(tryScroll);
+    }
+  };
+
+  window.requestAnimationFrame(tryScroll);
 }

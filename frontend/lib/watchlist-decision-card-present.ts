@@ -5,7 +5,6 @@
 import {
   formatAlignmentStatusLine,
   formatWatchlistProgressionDetail,
-  layersAwayFromActionable,
   resolveAlignmentDisplayTier,
   type AlignmentDisplayTier
 } from "@/lib/alignment-display-tier";
@@ -33,9 +32,6 @@ export type WatchlistCardModel = {
   momentumLine: string | null;
   progressionBadge: "improved" | "weakened" | null;
   blockers: string[];
-  worthChecking: boolean;
-  decisionHint: string;
-  decisionIcon: string;
   evaluatedAgo: string;
   evaluatedStale: boolean;
   quote: { price: string; pct: string | null; bullish: boolean | null } | null;
@@ -132,30 +128,6 @@ function extractBlockers(row: WatchlistMaturationRow | undefined): string[] {
   return blockers.slice(0, 2);
 }
 
-function worthChecking(row: WatchlistMaturationRow | undefined, attention: WatchlistAttentionTier): boolean {
-  if (attention === "check_now") return true;
-  const { aligned } = maturationAlignmentCounts(row);
-  const away = layersAwayFromActionable(aligned);
-  return attention === "getting_close" && away === 1;
-}
-
-function decisionHint(attention: WatchlistAttentionTier, alignmentTier: AlignmentDisplayTier): string {
-  if (attention === "check_now" || alignmentTier === "near_ready" || alignmentTier === "actionable") {
-    return "→ Check Signals (likely soon)";
-  }
-  if (attention === "getting_close") return "→ Monitor (not urgent)";
-  return "→ Low priority";
-}
-
-function decisionIcon(attention: WatchlistAttentionTier, row: WatchlistMaturationRow | undefined): string {
-  if (attention === "check_now") return "🔥";
-  if (row?.last_transition_type === "improved") return "↑";
-  if (row?.last_transition_type === "worsened") return "↓";
-  if (extractBlockers(row).length > 0) return "⚠";
-  if (attention === "getting_close") return "⚡";
-  return "🧊";
-}
-
 export function formatEvaluatedAgo(iso: string | undefined): { text: string; stale: boolean } {
   if (!iso?.trim()) return { text: "Not evaluated", stale: true };
   const t = Date.parse(iso);
@@ -246,9 +218,6 @@ export function buildWatchlistCardModel(
     momentumLine: buildMomentumLine(row),
     progressionBadge: progressionBadge(row),
     blockers: extractBlockers(row),
-    worthChecking: worthChecking(row, attentionTier),
-    decisionHint: decisionHint(attentionTier, alignmentTier),
-    decisionIcon: decisionIcon(attentionTier, row),
     evaluatedAgo: evalAgo.text,
     evaluatedStale: evalAgo.stale,
     quote: watchlistQuoteFromSnapshot(snapshot),
