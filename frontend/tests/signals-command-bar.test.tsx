@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 
 import { SignalsCommandBar } from "@/components/signals/signals-command-bar";
+import { buildSignalsDeskVerdict } from "@/lib/signals-desk-kpi-present";
 import { ThemeProvider } from "@/lib/theme-provider";
 
 vi.mock("next/link", () => ({
@@ -92,5 +93,48 @@ describe("SignalsCommandBar", () => {
     expect(screen.getByLabelText("About Day desk evaluation")).toBeInTheDocument();
     expect(screen.queryByText(/Swing desk:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Evaluated on live session structure/)).not.toBeInTheDocument();
+  });
+
+  test("renders inline verdict row when deskVerdict provided", () => {
+    const onDeskKpiTarget = vi.fn();
+    const verdict = buildSignalsDeskVerdict({
+      bias: "Bullish",
+      rows: [
+        { key: "technical", name: "Technical", status: "Bullish", explanation: "", score: 70 },
+        { key: "news", name: "News", status: "Bullish", explanation: "", score: 65 },
+        { key: "macro", name: "Macro", status: "Neutral", explanation: "", score: 50 },
+        { key: "sector", name: "Sector", status: "Bullish", explanation: "", score: 68 },
+        { key: "geopolitical", name: "Geopolitical", status: "Neutral", explanation: "", score: 50 },
+        { key: "internals", name: "Internals", status: "Bullish", explanation: "", score: 72 }
+      ],
+      tradingMode: "swing",
+      decision: {
+        state: "monitor",
+        line: "Setup is forming",
+        reinforcements: [],
+        rationale: { category: "alignment", detail: "Waiting on confirmation" }
+      }
+    });
+    render(
+      <ThemeProvider>
+        <SignalsCommandBar
+          symbol="AAPL"
+          tradingMode="swing"
+          dayTradingSurfaces={false}
+          watchlistControl={<span>Watchlist</span>}
+          maturationLine={null}
+          evaluationFreshness={null}
+          onTradingModeChange={vi.fn()}
+          deskVerdict={verdict}
+          activeDeskTab="setup"
+          decisionState="monitor"
+          onDeskKpiTarget={onDeskKpiTarget}
+        />
+      </ThemeProvider>
+    );
+    expect(screen.getByTestId("signals-desk-verdict-row")).toBeInTheDocument();
+    expect(screen.getByTestId("signals-desk-kpi-bias")).toHaveTextContent("Bullish");
+    fireEvent.click(screen.getByTestId("signals-desk-verdict-execution"));
+    expect(onDeskKpiTarget).toHaveBeenCalledWith("execution");
   });
 });

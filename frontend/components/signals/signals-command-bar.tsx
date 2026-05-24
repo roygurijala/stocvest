@@ -14,6 +14,10 @@ import {
   signalsDeskModeTooltip,
   type SignalEvaluationFreshness
 } from "@/lib/signals-evaluation-present";
+import type { TradeDecisionState } from "@/lib/signal-evidence/trade-decision";
+import type { SignalsDeskVerdictBundle } from "@/lib/signals-desk-kpi-present";
+import type { SignalsDeskTab, SignalsKpiTarget } from "@/lib/signals-page-tabs";
+import { SignalsDeskVerdictRow } from "@/components/signals/signals-desk-verdict-row";
 import type { SignalsDeskPriceContext } from "@/lib/signals-desk-price-present";
 import { formatLastEvaluatedShort } from "@/lib/watchlist-evaluation-present";
 
@@ -35,6 +39,11 @@ type Props = {
   onOpenEvidence?: () => void;
   /** Snapshot-backed last price + session change (context only). */
   priceContext?: SignalsDeskPriceContext | null;
+  /** Inline bias / alignment / execution verdict (replaces separate KPI strip). */
+  deskVerdict?: SignalsDeskVerdictBundle | null;
+  activeDeskTab?: SignalsDeskTab;
+  decisionState?: TradeDecisionState | null;
+  onDeskKpiTarget?: (target: SignalsKpiTarget) => void;
 };
 
 const evidenceButtonClass =
@@ -51,7 +60,11 @@ export function SignalsCommandBar({
   resumedFromSession = false,
   onTradingModeChange,
   onOpenEvidence,
-  priceContext = null
+  priceContext = null,
+  deskVerdict = null,
+  activeDeskTab = "setup",
+  decisionState = null,
+  onDeskKpiTarget
 }: Props) {
   const { colors } = useTheme();
   const symU = symbol.trim().toUpperCase();
@@ -212,6 +225,16 @@ export function SignalsCommandBar({
           )}
         </div>
       </div>
+      {deskVerdict && decisionState && onDeskKpiTarget ? (
+        <SignalsDeskVerdictRow
+          items={deskVerdict.items}
+          activeTab={activeDeskTab}
+          biasProof={deskVerdict.biasProof}
+          executionHint={deskVerdict.executionHint}
+          decisionState={decisionState}
+          onSelectTarget={onDeskKpiTarget}
+        />
+      ) : null}
       <p
         className="m-0 mt-2 flex flex-wrap items-center gap-x-1 gap-y-0.5 text-xs leading-snug"
         data-testid="signals-mode-eval-line"

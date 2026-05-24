@@ -1,8 +1,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
-import { SignalsDeskKpiStrip } from "@/components/signals/signals-desk-kpi-strip";
+import { SignalsDeskVerdictRow } from "@/components/signals/signals-desk-verdict-row";
 import { SignalsDeskTabNav } from "@/components/signals/signals-desk-tab-nav";
-import { buildSignalsDeskKpiItems } from "@/lib/signals-desk-kpi-present";
+import { buildSignalsDeskVerdict } from "@/lib/signals-desk-kpi-present";
 import type { SignalsLayerRowInput } from "@/lib/signals-page-present";
 
 vi.mock("@/lib/theme-provider", () => ({
@@ -32,9 +32,9 @@ const rows: SignalsLayerRowInput[] = [
 ];
 
 describe("Signals desk tab UI", () => {
-  test("KPI strip fires alignment → layers navigation", () => {
+  test("verdict row fires bias, alignment, and execution navigation", () => {
     const onSelect = vi.fn();
-    const items = buildSignalsDeskKpiItems({
+    const verdict = buildSignalsDeskVerdict({
       bias: "Bearish",
       rows,
       tradingMode: "swing",
@@ -46,13 +46,20 @@ describe("Signals desk tab UI", () => {
       }
     });
     render(
-      <SignalsDeskKpiStrip items={items} activeTab="setup" onSelectTarget={onSelect} />
+      <SignalsDeskVerdictRow
+        items={verdict.items}
+        activeTab="setup"
+        biasProof={verdict.biasProof}
+        executionHint={verdict.executionHint}
+        decisionState="monitor"
+        onSelectTarget={onSelect}
+      />
     );
     fireEvent.click(screen.getByTestId("signals-desk-kpi-alignment"));
     expect(onSelect).toHaveBeenCalledWith("alignment");
     fireEvent.click(screen.getByTestId("signals-desk-kpi-bias"));
     expect(onSelect).toHaveBeenCalledWith("bias");
-    fireEvent.click(screen.getByTestId("signals-desk-kpi-execution"));
+    fireEvent.click(screen.getByTestId("signals-desk-verdict-execution"));
     expect(onSelect).toHaveBeenCalledWith("execution");
   });
 

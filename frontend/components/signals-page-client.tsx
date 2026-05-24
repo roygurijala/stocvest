@@ -18,10 +18,7 @@ import { fetchEarningsCalendarClient } from "@/lib/api/earnings-client";
 import { AddToWatchlistButton } from "@/components/add-to-watchlist-button";
 import { APP_TOP_BAR_LAYOUT_HEIGHT } from "@/components/top-bar";
 import { SignalsCommandBar } from "@/components/signals/signals-command-bar";
-import { SignalsDeskKpiStrip } from "@/components/signals/signals-desk-kpi-strip";
 import { SignalsDeskTabNav } from "@/components/signals/signals-desk-tab-nav";
-import { SignalsExecutionContextStrip } from "@/components/signals/signals-execution-context-strip";
-import { SignalsFormingBanner } from "@/components/signals/signals-forming-banner";
 import { SignalsRadarPanel } from "@/components/signals/signals-radar-panel";
 import { CausalNarrativePanel } from "@/components/signals/causal-narrative-panel";
 import { TimeframeContextPanel } from "@/components/signals/timeframe-context-panel";
@@ -34,7 +31,7 @@ import {
   resolveTimeframeContext
 } from "@/lib/signal-evidence/timeframe-context";
 import { SIGNALS_SECTION_TARGET, scrollToSignalsSection } from "@/lib/signals-page-sections";
-import { buildSignalsDeskKpiItems } from "@/lib/signals-desk-kpi-present";
+import { buildSignalsDeskVerdict } from "@/lib/signals-desk-kpi-present";
 import {
   kpiTargetScrollId,
   kpiTargetToDeskTab,
@@ -1403,9 +1400,9 @@ export function SignalsPageClient({
     };
   }, [showAfterHoursPanel, symbol]);
 
-  const deskKpiItems = useMemo(() => {
-    if (!pageDecision) return [];
-    return buildSignalsDeskKpiItems({
+  const deskVerdict = useMemo(() => {
+    if (!pageDecision) return null;
+    return buildSignalsDeskVerdict({
       bias: setupBias,
       rows: signalsPresentRows,
       decision: pageDecision,
@@ -1758,17 +1755,11 @@ export function SignalsPageClient({
           onTradingModeChange={updateTradingMode}
           onOpenEvidence={hasValidSignal ? () => void openEvidenceModal() : undefined}
           priceContext={deskPriceContext}
+          deskVerdict={hasValidSignal ? deskVerdict : null}
+          activeDeskTab={deskTab}
+          decisionState={pageDecision?.state ?? null}
+          onDeskKpiTarget={applyDeskKpiTarget}
         />
-        {hasValidSignal && pageDecision && deskKpiItems.length > 0 ? (
-          <SignalsDeskKpiStrip
-            items={deskKpiItems}
-            activeTab={deskTab}
-            onSelectTarget={applyDeskKpiTarget}
-          />
-        ) : null}
-        {hasValidSignal && pageDecision ? (
-          <SignalsExecutionContextStrip decision={pageDecision} tradingMode={tradingMode} />
-        ) : null}
       </header>
 
       {symbolCommitted ? (
@@ -1793,12 +1784,6 @@ export function SignalsPageClient({
                   compact
                 />
               </div>
-            ) : null}
-            {hasValidSignal && pageDecision ? (
-              <SignalsFormingBanner
-                decisionState={pageDecision.state}
-                maturationLabel={commandBarMaturationLine?.label ?? null}
-              />
             ) : null}
             {hasValidSignal ? (
               <SignalsBiasRationalePanel

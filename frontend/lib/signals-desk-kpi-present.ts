@@ -1,8 +1,12 @@
 import { formatLayersFromActionableHint } from "@/lib/alignment-display-tier";
 import type { TradeDecision } from "@/lib/signal-evidence/trade-decision";
 import {
+  decisionGateCategoryLabel,
   executionReadinessLabel,
+  executionSupportingGates,
+  formatLayerForceNames,
   formatSignalsAlignmentDisplayLine,
+  groupLayersByForce,
   primaryExecutionBlockerLine,
   resolveSignalsLayerAlignment,
   type SignalsLayerRowInput,
@@ -41,6 +45,84 @@ function executionSubline(decision: TradeDecision, mode: "day" | "swing"): strin
     return `Desk needs ≥ ${min.toFixed(1)} : 1 R/R on reference geometry`;
   }
   return null;
+}
+
+/** One-line proof for command-bar bias chip (layer counts / names). */
+export function buildBiasHeaderProof(
+  rows: SignalsLayerRowInput[],
+  bias: SignalsSetupBias
+): string | null {
+  const groups = groupLayersByForce(rows, bias);
+  const supportN = groups.withBias.length;
+  const opposeN = groups.againstOrMixed.length;
+  const neutralN = groups.noEdge.length;
+
+  if (bias === "Neutral") {
+    if (supportN === 0 && opposeN === 0) return `${neutralN} neutral layers`;
+    return `${supportN} bullish · ${opposeN} bearish${neutralN > 0 ? ` · ${neutralN} neutral` : ""}`;
+  }
+  if (supportN === 0 && opposeN === 0) return `${neutralN} neutral · none opposing`;
+  const names = formatLayerForceNames(groups.withBias);
+  if (names !== "—" && names.length <= 36) {
+    return `${supportN} layers: ${names}`;
+  }
+  const parts = [`${supportN} support`];
+  if (opposeN > 0) parts.push(`${opposeN} oppose`);
+  if (neutralN > 0) parts.push(`${neutralN} neutral`);
+  return parts.join(" · ");
+}
+
+/** Short execution hint for command bar — avoids repeating full rationale paragraph. */
+export function buildExecutionHeaderHint(
+  decision: TradeDecision,
+  mode: "day" | "swing"
+): string | null {
+  if (decision.state === "actionable") {
+    return "Gates cleared — review levels and scenario";
+  }
+  const supporting = executionSupportingGates(decision);
+  if (supporting.length > 0) {
+    const category = decision.rationale
+      ? decisionGateCategoryLabel(decision.rationale.category)
+      : null;
+    const lead = supporting[0].replace(/\.$/, "");
+    if (category && !lead.toLowerCase().includes(category.toLowerCase())) {
+      return `${lead} · ${category}`;
+    }
+    return lead;
+  }
+  const blocker = primaryExecutionBlockerLine(decision);
+  if (blocker && blocker.length <= 88) return blocker;
+  if (decision.rationale?.category) {
+    return decisionGateCategoryLabel(decision.rationale.category);
+  }
+  const min = minRiskRewardForVerdict(mode);
+  if (decision.rationale?.category === "risk_reward") {
+    return `R/R below desk minimum (needs ≥ ${min.toFixed(1)} : 1)`;
+  }
+  return null;
+}
+
+export type SignalsDeskVerdictBundle = {
+  items: SignalsDeskKpiItem[];
+  biasProof: string | null;
+  executionHint: string | null;
+};
+
+export function buildSignalsDeskVerdict(input: {
+  bias: SignalsSetupBias;
+  rows: SignalsLayerRowInput[];
+  decision: TradeDecision;
+  tradingMode: "day" | "swing";
+  alignmentRatio?: number | null;
+  maturationState?: string | null;
+}): SignalsDeskVerdictBundle {
+  const items = buildSignalsDeskKpiItems(input);
+  return {
+    items,
+    biasProof: buildBiasHeaderProof(input.rows, input.bias),
+    executionHint: buildExecutionHeaderHint(input.decision, input.tradingMode)
+  };
 }
 
 export function buildSignalsDeskKpiItems(input: {
