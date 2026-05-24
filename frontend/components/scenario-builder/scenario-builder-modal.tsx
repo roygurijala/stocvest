@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   computeScenarioResult,
   formatRMultiple,
@@ -58,10 +58,15 @@ interface ScenarioBuilderModalProps {
 function deriveEntryDefault(ref: ScenarioInput["reference"]): number {
   const lo = typeof ref.entry_low === "number" && ref.entry_low > 0 ? ref.entry_low : null;
   const hi = typeof ref.entry_high === "number" && ref.entry_high > 0 ? ref.entry_high : null;
+  const last =
+    typeof ref.current_price === "number" && Number.isFinite(ref.current_price) && ref.current_price > 0
+      ? ref.current_price
+      : null;
+  // Match System default preset (mid_zone): last when available, else zone midpoint.
+  if (last !== null) return last;
   if (lo !== null && hi !== null) return (lo + hi) / 2;
   if (lo !== null) return lo;
   if (hi !== null) return hi;
-  if (typeof ref.current_price === "number" && ref.current_price > 0) return ref.current_price;
   if (typeof ref.session_open === "number" && ref.session_open > 0) return ref.session_open;
   if (typeof ref.prev_close === "number" && ref.prev_close > 0) return ref.prev_close;
   return Number.NaN;
@@ -334,6 +339,20 @@ export function ScenarioBuilderModal({
   const [accountSize, setAccountSize] = useState<number>(Number.NaN);
   const [orderTypeLabel, setOrderTypeLabel] = useState<"market" | "limit" | "stop">("limit");
 
+  /** Seed Your plan from System default geometry whenever the sheet opens. */
+  useEffect(() => {
+    if (!open) return;
+    if (catalog?.system) {
+      setEntry(catalog.system.entry);
+      setStop(catalog.system.stop);
+      setTarget(catalog.system.target);
+      return;
+    }
+    setEntry(entryDefault);
+    setStop(stopDefault);
+    setTarget(targetDefault);
+  }, [open, catalog, entryDefault, stopDefault, targetDefault]);
+
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
 
   const userInputs: ScenarioUserInputs = useMemo(
@@ -376,9 +395,15 @@ export function ScenarioBuilderModal({
   };
 
   const handleReset = () => {
-    setEntry(entryDefault);
-    setStop(stopDefault);
-    setTarget(targetDefault);
+    if (catalog?.system) {
+      setEntry(catalog.system.entry);
+      setStop(catalog.system.stop);
+      setTarget(catalog.system.target);
+    } else {
+      setEntry(entryDefault);
+      setStop(stopDefault);
+      setTarget(targetDefault);
+    }
     setShares(100);
     setAccountSize(Number.NaN);
     setOrderTypeLabel("limit");
