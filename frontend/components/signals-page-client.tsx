@@ -1800,12 +1800,6 @@ export function SignalsPageClient({
                 maturationLabel={commandBarMaturationLine?.label ?? null}
               />
             ) : null}
-            {hasValidSignal && timeframeContext ? (
-              <TimeframeContextPanel context={timeframeContext} tradingMode={tradingMode} compact />
-            ) : null}
-            {hasValidSignal && causalNarrative && pageDecision?.state !== "actionable" ? (
-              <CausalNarrativePanel narrative={causalNarrative} compact />
-            ) : null}
             {hasValidSignal ? (
               <SignalsBiasRationalePanel
                 bias={setupBias}
@@ -1822,7 +1816,9 @@ export function SignalsPageClient({
                     bias={setupBias}
                     allLayers={signalsPresentRows}
                     signalSummary={layerSignalSummary}
-                    causalNarrativeShown={Boolean(causalNarrative)}
+                    causalNarrativeOnPage={
+                      Boolean(causalNarrative && pageDecision?.state !== "actionable")
+                    }
                     causalNarrativeApi={
                       compositeResult && !isInsufficientCompositeResponse(compositeResult)
                         ? (compositeResult as Record<string, unknown>).causal_narrative
@@ -1839,6 +1835,12 @@ export function SignalsPageClient({
               <div data-testid="signals-setup-insufficient">{insufficientLayerMessage}</div>
             ) : compositeServiceMessage ? (
               <div data-testid="signals-setup-service-error">{compositeServiceMessage}</div>
+            ) : null}
+            {hasValidSignal && timeframeContext ? (
+              <TimeframeContextPanel context={timeframeContext} tradingMode={tradingMode} compact />
+            ) : null}
+            {hasValidSignal && causalNarrative && pageDecision?.state !== "actionable" ? (
+              <CausalNarrativePanel narrative={causalNarrative} compact />
             ) : null}
             {hasValidSignal && pageDecision ? (
               <SignalsSetupRead

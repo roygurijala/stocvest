@@ -9,6 +9,7 @@ import {
 } from "@/lib/alignment-display-tier";
 import {
   deriveDecisionRationale,
+  type DecisionRationaleCategory,
   type TradeDecision,
   type TradeDecisionState
 } from "@/lib/signal-evidence/trade-decision";
@@ -673,14 +674,43 @@ function mergeRiskRewardWhyNotLine(rationaleText: string, deskThresholdLine: str
   return `${rrPrefix} — ${deskPart[0].replace(/\.$/, "")}; does not meet internal thresholds for structured scenario building.`;
 }
 
+/** Short label for the primary execution gate (matches KPI → panel scroll target). */
+export function decisionGateCategoryLabel(category: DecisionRationaleCategory): string {
+  switch (category) {
+    case "data_insufficient":
+      return "Data coverage";
+    case "risk_reward":
+      return "Risk / reward";
+    case "confirmation":
+      return "Layer confirmation";
+    case "regime":
+      return "Regime / macro";
+    default:
+      return "Signal readiness";
+  }
+}
+
+/** Reinforcement lines that add detail beyond the primary rationale sentence. */
+export function executionSupportingGates(decision: TradeDecision): string[] {
+  const primary = decision.rationale?.text?.trim() ?? "";
+  return (decision.reinforcements ?? []).filter((line) => {
+    const t = line.trim();
+    if (!t) return false;
+    if (primary && (t === primary || primary.includes(t) || t.includes(primary))) return false;
+    return true;
+  });
+}
+
 /** Gate-focused bullets for “Why not actionable?” — distinct from causal layer narrative. */
 export function buildWhyNotBullets(
   decision: TradeDecision,
   previewLayers: SignalsLayerRowInput[],
   bias: SignalsSetupBias,
   max = 3,
-  /** @deprecated Prefer `causalNarrativeShown` on the panel — only used when no causal panel is visible. */
-  causalBullets?: string[] | null
+  /** @deprecated Prefer causal panel on page — only used when no causal panel is visible. */
+  causalBullets?: string[] | null,
+  /** When true, omit per-layer preview lines (causal narrative covers layer context). */
+  skipLayerPreview = false
 ): string[] {
   if (causalBullets && causalBullets.length > 0) {
     return causalBullets.slice(0, max);
@@ -699,10 +729,12 @@ export function buildWhyNotBullets(
     if (decision.rationale?.category === "risk_reward" && isRiskRewardBullet(line)) continue;
     pushUniqueBullet(out, line);
   }
-  for (const row of previewLayers) {
-    if (out.length >= max) break;
-    const line = buildLayerInsightLine(row, bias);
-    pushUniqueBullet(out, `${row.name}: ${line}`);
+  if (!skipLayerPreview) {
+    for (const row of previewLayers) {
+      if (out.length >= max) break;
+      const line = buildLayerInsightLine(row, bias);
+      pushUniqueBullet(out, `${row.name}: ${line}`);
+    }
   }
   return out.slice(0, max);
 }

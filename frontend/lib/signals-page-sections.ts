@@ -42,12 +42,22 @@ export function scrollToSignalsSection(
   const maxAttempts = options?.maxAttempts ?? 12;
   let attempt = 0;
 
+  const resolveScrollOffsetPx = (): number => {
+    let offset = 12;
+    const sticky = document.querySelector<HTMLElement>('[data-testid="signals-sticky-command"]');
+    if (sticky) offset += sticky.getBoundingClientRect().height;
+    const tabNav = document.querySelector<HTMLElement>('[data-testid="signals-desk-tab-nav-wrap"]');
+    if (tabNav) offset += tabNav.getBoundingClientRect().height;
+    return offset;
+  };
+
   const tryScroll = () => {
     const el =
       document.getElementById(targetId) ??
       (options?.fallbackId ? document.getElementById(options.fallbackId) : null);
     if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      const top = el.getBoundingClientRect().top + window.scrollY - resolveScrollOffsetPx();
+      window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
       return;
     }
     attempt += 1;

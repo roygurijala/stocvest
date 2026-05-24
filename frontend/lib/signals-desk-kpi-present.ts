@@ -25,6 +25,11 @@ function biasTone(bias: SignalsSetupBias): SignalsDeskKpiItem["headlineTone"] {
   return "caution";
 }
 
+/** Matches Bias KPI subline — reuse on Setup bias rationale panel. */
+export function biasKpiSubline(bias: SignalsSetupBias): string {
+  return bias === "Neutral" ? "No directional lean" : `${bias} read from composite`;
+}
+
 function executionSubline(decision: TradeDecision, mode: "day" | "swing"): string | null {
   if (decision.state === "actionable") {
     return "Gates cleared — review levels and scenario before acting";
@@ -63,7 +68,7 @@ export function buildSignalsDeskKpiItems(input: {
       target: "bias",
       label: "Bias",
       headline: input.bias,
-      subline: input.bias === "Neutral" ? "No directional lean" : `${input.bias} read from composite`,
+      subline: biasKpiSubline(input.bias),
       headlineTone: biasTone(input.bias)
     },
     {

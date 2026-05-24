@@ -1,6 +1,7 @@
 "use client";
 
 import { SignalsLayerForceSummary } from "@/components/signals/signals-layer-force-summary";
+import { biasKpiSubline } from "@/lib/signals-desk-kpi-present";
 import {
   buildBiasRationaleIntro,
   type SignalsLayerRowInput,
@@ -34,17 +35,23 @@ export function SignalsBiasRationalePanel({ bias, rows, signalSummary }: Props) 
         padding: spacing[4]
       }}
     >
-      <h3 className="m-0 text-base font-semibold" style={{ color: colors.text }}>
-        Why this bias?
-      </h3>
+      <p
+        className="m-0 text-[10px] font-semibold uppercase tracking-[0.14em]"
+        style={{ color: colors.textMuted }}
+      >
+        Bias
+      </p>
+      <p
+        className="m-0 mt-1 text-xl font-semibold leading-tight"
+        style={{ color: biasColor }}
+        data-testid="signals-bias-rationale-headline"
+      >
+        {bias}
+      </p>
       <p className="m-0 mt-1 text-xs leading-snug" style={{ color: colors.textMuted }}>
-        How the six layers reconcile into a desk read — informational only
+        {biasKpiSubline(bias)}
       </p>
       <p className="m-0 mt-3 text-sm leading-snug" style={{ color: colors.text }}>
-        <span className="font-semibold" style={{ color: biasColor }}>
-          {bias}
-        </span>
-        {" — "}
         {intro}
       </p>
       <SignalsLayerForceSummary rows={rows} bias={bias} />
