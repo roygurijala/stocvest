@@ -36,11 +36,11 @@ type Props = {
   trackingCompact?: boolean;
 };
 
-function tierCardListClass(tier: WatchlistAttentionTier, count: number): string {
-  if (tier === "check_now" || count < 3) {
+function tierCardListClass(count: number): string {
+  if (count < 2) {
     return "m-0 flex list-none flex-col gap-2 p-0";
   }
-  return "m-0 grid list-none grid-cols-1 gap-2 p-0 lg:grid-cols-2";
+  return "m-0 grid list-none grid-cols-1 gap-2 p-0 md:grid-cols-2";
 }
 
 function TierCardList({
@@ -68,7 +68,7 @@ function TierCardList({
 }) {
   const justAddedU = justAddedSymbol?.trim().toUpperCase() ?? "";
   return (
-    <ul className={tierCardListClass(tier, list.length)} data-testid={`watchlist-tier-list-${tier}`}>
+    <ul className={tierCardListClass(list.length)} data-testid={`watchlist-tier-list-${tier}`}>
       {list.map((symU) => (
         <li key={symU} id={`watchlist-row-${symU}`} data-watchlist-tier={tier}>
           <WatchlistDecisionCardFromRow

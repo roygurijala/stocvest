@@ -58,6 +58,21 @@ describe("WatchlistDecisionQueue layout", () => {
     expect(screen.getByTestId("watchlist-decision-card-NVDA")).toBeInTheDocument();
   });
 
+  it("uses a two-column grid for check_now when 2+ symbols", () => {
+    const checkNowRow = row({ state: "actionable", layers_aligned: 5, layers_total: 6 });
+    wrap(
+      <WatchlistDecisionQueue
+        symbols={["D", "GS", "AMD"]}
+        planMode="swing"
+        rowForSymbol={() => checkNowRow}
+        snapshotForSymbol={() => undefined}
+        onRemove={() => undefined}
+      />
+    );
+    const list = screen.getByTestId("watchlist-tier-list-check_now");
+    expect(list.className).toMatch(/md:grid-cols-2/);
+  });
+
   it("uses a two-column grid class for tracking when 3+ symbols", () => {
     const trackingRow = row({ state: "not_aligned", layers_aligned: 1, layers_total: 6 });
     wrap(
@@ -70,7 +85,7 @@ describe("WatchlistDecisionQueue layout", () => {
       />
     );
     const list = screen.getByTestId("watchlist-tier-list-tracking");
-    expect(list.className).toMatch(/lg:grid-cols-2/);
+    expect(list.className).toMatch(/md:grid-cols-2/);
   });
 
   it("shows just added badge when requested", () => {
