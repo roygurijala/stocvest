@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -38,6 +38,8 @@ import { isDashboardNavItemEnabled, type NavFeatureKey } from "@/lib/nav-feature
 
 export { NAV_FEATURES } from "@/lib/nav-features";
 import { useTheme } from "@/lib/theme-provider";
+import { UserProfileContext } from "@/lib/user-profile-context";
+import { TrialSidebarPill } from "@/components/trial/trial-sidebar-pill";
 import type { LucideIcon } from "lucide-react";
 
 interface SidebarProps {
@@ -139,6 +141,7 @@ function useAdminNavExpanded(autoExpand: boolean): [boolean, (next: boolean) => 
 export function Sidebar({ userLabel, isAdmin = false }: SidebarProps) {
   const pathname = usePathname();
   const { colors } = useTheme();
+  const { profile } = useContext(UserProfileContext);
   const adminItems = isAdmin ? DASHBOARD_ADMIN_NAV_ITEMS : [];
   const pathInAdmin =
     pathname === "/dashboard/admin" || pathname.startsWith("/dashboard/admin/");
@@ -299,6 +302,7 @@ export function Sidebar({ userLabel, isAdmin = false }: SidebarProps) {
             border: `1px solid ${colors.border}`
           }}
         >
+          <TrialSidebarPill profile={profile} />
           <p
             className="sidebar-user-label"
             style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.sm, overflowWrap: "anywhere", lineHeight: 1.4 }}

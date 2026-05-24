@@ -47,6 +47,15 @@ def _item_to_profile(user_id: str, item: dict[str, Any]) -> UserProfile:
         beta_full_access=bool(item.get("betaFullAccess")),
         beta_access_until=_s(item.get("betaAccessUntil")),
         beta_access_granted_at=_s(item.get("betaAccessGrantedAt")),
+        phone_verified=bool(item.get("phoneVerified")),
+        phone_verified_at=_s(item.get("phoneVerifiedAt")),
+        phone_hmac=_s(item.get("phoneHmac")),
+        phone_last4=_s(item.get("phoneLast4")),
+        sms_marketing_opt_in=bool(item.get("smsMarketingOptIn")),
+        trial_started_at=_s(item.get("trialStartedAt")),
+        trial_ends_at=_s(item.get("trialEndsAt")),
+        trial_reminder_day10_sent_at=_s(item.get("trialReminderDay10SentAt")),
+        trial_reminder_day14_sent_at=_s(item.get("trialReminderDay14SentAt")),
     )
 
 
@@ -80,6 +89,24 @@ def _profile_to_item(profile: UserProfile) -> dict[str, Any]:
         item["betaAccessUntil"] = profile.beta_access_until
     if profile.beta_access_granted_at:
         item["betaAccessGrantedAt"] = profile.beta_access_granted_at
+    if profile.phone_verified:
+        item["phoneVerified"] = True
+    if profile.phone_verified_at:
+        item["phoneVerifiedAt"] = profile.phone_verified_at
+    if profile.phone_hmac:
+        item["phoneHmac"] = profile.phone_hmac
+    if profile.phone_last4:
+        item["phoneLast4"] = profile.phone_last4
+    if profile.sms_marketing_opt_in:
+        item["smsMarketingOptIn"] = True
+    if profile.trial_started_at:
+        item["trialStartedAt"] = profile.trial_started_at
+    if profile.trial_ends_at:
+        item["trialEndsAt"] = profile.trial_ends_at
+    if profile.trial_reminder_day10_sent_at:
+        item["trialReminderDay10SentAt"] = profile.trial_reminder_day10_sent_at
+    if profile.trial_reminder_day14_sent_at:
+        item["trialReminderDay14SentAt"] = profile.trial_reminder_day14_sent_at
     return item
 
 
