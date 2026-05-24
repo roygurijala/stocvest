@@ -266,7 +266,7 @@ describe("SignalsPageClient — mode toggle clears the screen (load-bearing UX g
 
     // Initial swing composite lands → setup read shows swing bias.
     await waitFor(() =>
-      expect(screen.getByTestId("signals-setup-bias")).toHaveTextContent("Bullish")
+      expect(screen.getByTestId("signals-desk-kpi-bias")).toHaveTextContent("Bullish")
     );
 
     // Click the Day trade tab.
@@ -276,16 +276,16 @@ describe("SignalsPageClient — mode toggle clears the screen (load-bearing UX g
     // the loader MUST be visible. We use a tight assertion (no async
     // waitFor) because the contract is: state is cleared on the
     // *click handler*, not after some downstream effect.
-    expect(screen.queryByTestId("signals-setup-bias")).toBeNull();
+    expect(screen.queryByTestId("signals-desk-kpi-bias")).toBeNull();
     expect(screen.getByTestId("signals-setup-loading")).toBeTruthy();
 
     // The day-mode fetch is still in flight — setup read not shown yet.
-    expect(screen.queryByTestId("signals-setup-bias")).toBeNull();
+    expect(screen.queryByTestId("signals-desk-kpi-bias")).toBeNull();
 
     // Resolve the day fetch and assert the new mode lands.
     releaseDayFetch(mockCompositeOk(dayPayload));
     await waitFor(() =>
-      expect(screen.getByTestId("signals-setup-bias")).toHaveTextContent("Bearish")
+      expect(screen.getByTestId("signals-desk-kpi-bias")).toHaveTextContent("Bearish")
     );
     // And the loader is gone now that the data is in.
     expect(screen.queryByTestId("signals-setup-loading")).toBeNull();
@@ -319,17 +319,17 @@ describe("SignalsPageClient — mode toggle clears the screen (load-bearing UX g
     renderSignalsWithSymbol("AAPL", "day");
 
     await waitFor(() =>
-      expect(screen.getByTestId("signals-setup-bias")).toHaveTextContent("Bearish")
+      expect(screen.getByTestId("signals-desk-kpi-bias")).toHaveTextContent("Bearish")
     );
 
     fireEvent.click(screen.getByRole("tab", { name: /^Swing$/i }));
 
-    expect(screen.queryByTestId("signals-setup-bias")).toBeNull();
+    expect(screen.queryByTestId("signals-desk-kpi-bias")).toBeNull();
     expect(screen.getByTestId("signals-setup-loading")).toBeTruthy();
 
     releaseSwingFetch(mockCompositeOk(swingPayload));
     await waitFor(() =>
-      expect(screen.getByTestId("signals-setup-bias")).toHaveTextContent("Bullish")
+      expect(screen.getByTestId("signals-desk-kpi-bias")).toHaveTextContent("Bullish")
     );
     expect(screen.queryByTestId("signals-setup-loading")).toBeNull();
   });
@@ -351,7 +351,7 @@ describe("SignalsPageClient — mode toggle clears the screen (load-bearing UX g
 
     renderSignalsWithSymbol("AAPL", "swing");
     await waitFor(() =>
-      expect(screen.getByTestId("signals-setup-bias")).toHaveTextContent("Bullish")
+      expect(screen.getByTestId("signals-desk-kpi-bias")).toHaveTextContent("Bullish")
     );
 
     const swingFetchCountBefore = fetchMock.mock.calls.filter((c) =>
@@ -364,7 +364,7 @@ describe("SignalsPageClient — mode toggle clears the screen (load-bearing UX g
     fireEvent.click(screen.getByRole("tab", { name: /^Swing$/i }));
 
     expect(screen.queryByTestId("signals-setup-loading")).toBeNull();
-    expect(screen.getByTestId("signals-setup-bias")).toHaveTextContent("Bullish");
+    expect(screen.getByTestId("signals-desk-kpi-bias")).toHaveTextContent("Bullish");
 
     // Allow any micro-tasks to flush, then re-check fetch count is
     // unchanged. (We don't await waitFor here because the assertion
@@ -412,7 +412,7 @@ describe("SignalsPageClient — Swing Pro (dayTradingSurfaces=false)", () => {
     expect(screen.getByText(/Swing \(your plan\)/)).toBeInTheDocument();
 
     await waitFor(() =>
-      expect(screen.getByTestId("signals-setup-bias")).toHaveTextContent("Bullish")
+      expect(screen.getByTestId("signals-desk-kpi-bias")).toHaveTextContent("Bullish")
     );
   });
 });
