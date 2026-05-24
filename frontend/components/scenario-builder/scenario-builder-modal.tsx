@@ -444,24 +444,27 @@ export function ScenarioBuilderModal({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.98 }}
             transition={{ duration: 0.2 }}
-            className={`flex max-h-none min-h-screen w-full max-w-none flex-col overflow-y-auto rounded-none lg:max-h-[95vh] lg:min-h-0 lg:w-[min(720px,100vw-1.5rem)] lg:rounded-xl ${surfaceGlowClassName} ${MODAL_DIALOG_SCROLL_CLASS}`}
+            className={`flex max-h-none min-h-0 w-full max-w-none flex-col overflow-hidden rounded-none lg:max-h-[95vh] lg:min-h-0 lg:w-[min(720px,100vw-1.5rem)] lg:rounded-xl min-h-screen lg:min-h-0 ${surfaceGlowClassName}`}
             onClick={(e) => e.stopPropagation()}
             style={{
               background: colors.surface,
-              border: `1px solid ${colors.border}`,
-              padding: spacing[5]
+              border: `1px solid ${colors.border}`
             }}
             data-testid="scenario-builder-modal"
             role="dialog"
             aria-labelledby="scenario-builder-title"
           >
             <header
+              className="sticky top-0 z-10 shrink-0 border-b"
               style={{
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "flex-start",
                 gap: spacing[3],
-                marginBottom: spacing[4]
+                padding: spacing[5],
+                paddingBottom: spacing[3],
+                background: colors.surface,
+                borderColor: colors.border
               }}
             >
               <div style={{ display: "grid", gap: spacing[1] }}>
@@ -498,6 +501,10 @@ export function ScenarioBuilderModal({
               </button>
             </header>
 
+            <div
+              className={`min-h-0 flex-1 overflow-y-auto ${MODAL_DIALOG_SCROLL_CLASS}`}
+              style={{ padding: spacing[5], paddingTop: spacing[4] }}
+            >
             {input.structural_planning_banner ? (
               <p
                 className="mb-4 rounded-md border px-3 py-2 text-xs leading-relaxed"
@@ -782,13 +789,19 @@ export function ScenarioBuilderModal({
             >
               This is a planning scenario only. STOCVEST does not submit, queue, or persist this scenario to any broker. Reference values are derived mechanically from signal data and are not entry, stop, or exit endorsements.
             </div>
+            </div>
 
             <footer
+              className="sticky bottom-0 z-10 shrink-0 border-t"
               style={{
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
-                gap: spacing[3]
+                gap: spacing[3],
+                padding: spacing[5],
+                paddingTop: spacing[3],
+                background: colors.surface,
+                borderColor: colors.border
               }}
             >
               <button
