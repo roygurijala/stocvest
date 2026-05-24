@@ -79,7 +79,7 @@ describe("scenario-variants", () => {
     expect(formatScenarioRrQuickCalc(g)).toMatch(/301\.20 \+ 2\.0 ×/);
   });
 
-  test("remainingBlockersAfterScenarioRr drops R/R-only lines when scenario clears", () => {
+  test("remainingBlockersAfterScenarioRr drops R/R lines from blockers list", () => {
     const decision: TradeDecision = {
       state: "monitor",
       line: "Held",
@@ -91,7 +91,8 @@ describe("scenario-variants", () => {
       }
     };
     const blocked = remainingBlockersAfterScenarioRr(decision, false);
-    expect(blocked.some((l) => /risk\/reward/i.test(l))).toBe(true);
+    expect(blocked.some((l) => /risk\/reward/i.test(l))).toBe(false);
+    expect(blocked.some((l) => /Layer agreement/i.test(l))).toBe(true);
     const after = remainingBlockersAfterScenarioRr(decision, true);
     expect(after.some((l) => /risk\/reward/i.test(l))).toBe(false);
     expect(after.some((l) => /Layer agreement/i.test(l))).toBe(true);

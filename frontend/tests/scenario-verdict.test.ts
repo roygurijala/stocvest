@@ -55,16 +55,24 @@ describe("resolveScenarioVerdict — strict gates", () => {
     expect(v.blockers.length).toBeGreaterThan(0);
   });
 
-  test("amber when actionable but scenario R/R below desk minimum", () => {
+  test("red when actionable but scenario R/R below desk minimum", () => {
     const v = resolveScenarioVerdict({
-      systemDecision: decision({ state: "actionable" }),
+      systemDecision: decision({
+        state: "actionable",
+        rationale: {
+          category: "risk_reward",
+          text: "Risk/reward too low (1.3:1) — below threshold; does not meet internal thresholds for structured scenario building."
+        },
+        reinforcements: ["Risk/reward too low (1.3:1) — below swing desk threshold (2.0:1)."]
+      }),
       mode: "swing",
       direction: "bullish",
       entry: 100,
       stop: 95,
       target: 102
     });
-    expect(v.tone).toBe("amber");
+    expect(v.tone).toBe("red");
     expect(v.clearsDeskRr).toBe(false);
+    expect(v.blockers.some((b) => /risk\/reward/i.test(b))).toBe(false);
   });
 });

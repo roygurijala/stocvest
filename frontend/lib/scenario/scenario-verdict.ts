@@ -95,6 +95,20 @@ export function resolveScenarioVerdict(args: {
         : `Scenario R/R is ${scenarioRr.toFixed(1)} : 1 — below ${deskMinRr.toFixed(1)} : 1 desk minimum.`
       : "Enter valid entry, stop, and target to compute scenario R/R.";
 
+  const nonRrBlockers = blockers.filter((line) => !/risk\s*\/?\s*reward|r\/r/i.test(line));
+
+  if (!clearsDeskRr) {
+    return {
+      tone: "red",
+      headline: "We do not recommend this trade yet",
+      detail: `${rrLine} Other setup or execution gates may still apply.`,
+      blockers: nonRrBlockers,
+      scenarioRr,
+      deskMinRr,
+      clearsDeskRr
+    };
+  }
+
   return {
     tone: "amber",
     headline: "We do not recommend this trade yet",

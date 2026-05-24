@@ -641,12 +641,14 @@ export function remainingBlockersAfterScenarioRr(
 
   if (systemDecision.rationale?.text) {
     const isRrCat = systemDecision.rationale.category === "risk_reward";
-    if (!(scenarioClearsRr && isRrCat)) {
-      if (!out.includes(systemDecision.rationale.text)) out.push(systemDecision.rationale.text);
+    const skipRr =
+      (scenarioClearsRr && isRrCat) || (!scenarioClearsRr && (isRrCat || isRrText(systemDecision.rationale.text)));
+    if (!skipRr && !out.includes(systemDecision.rationale.text)) {
+      out.push(systemDecision.rationale.text);
     }
   }
   for (const line of systemDecision.reinforcements) {
-    if (scenarioClearsRr && isRrText(line)) continue;
+    if (isRrText(line)) continue;
     if (!out.includes(line)) out.push(line);
   }
   return out.slice(0, 3);
