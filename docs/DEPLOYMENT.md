@@ -10,17 +10,17 @@
 
 ## Vercel (frontend)
 
-`frontend/vercel.json` sets baseline **security headers** (frame protection, MIME sniffing, referrer policy, etc.) and **HSTS** on the primary production host **`stocvest.app`**. Adjust there if counsel or security review requires stricter CSP.
+`frontend/vercel.json` sets baseline **security headers** (frame protection, MIME sniffing, referrer policy, etc.) and **HSTS** on the primary production host **`stocvest.ai`**. **`stocvest.app`** redirects to **`.ai`**. Adjust there if counsel or security review requires stricter CSP.
 
 ## AWS SES (email alerts)
 
 Before alerts work in production:
 
-1. Verify domain `stocvest.app` in AWS SES Console → **Verified identities**.
-2. Verify sender `signals@stocvest.app` (or the address set in `STOCVEST_EMAIL_SENDER`).
+1. Verify domain **`stocvest.ai`** in AWS SES Console → **Verified identities** (add DKIM/SPF records SES provides).
+2. Sender is **`signals@stocvest.ai`** (set in `STOCVEST_EMAIL_SENDER`; no separate identity needed once the domain is verified).
 3. Request **SES production access** if the account is still in sandbox. In sandbox mode, SES only delivers to verified recipient addresses.
-4. Set Lambda (and local) env var `STOCVEST_EMAIL_SENDER=signals@stocvest.app` (see `infra/lambda_6e.tf` `local.lambda_common_env`).
+4. Lambda env is set in `infra/lambda_6e.tf` (`STOCVEST_EMAIL_SENDER=signals@stocvest.ai`). Redeploy after `terraform apply`.
 
 SES sandbox: emails only go to verified addresses. Open an AWS Support case to move SES out of sandbox before real users receive alerts.
 
-Optional: set `STOCVEST_PUBLIC_APP_URL` to the canonical app URL used in alert footers (defaults to `https://stocvest.app`).
+`STOCVEST_PUBLIC_APP_URL` defaults to **`https://stocvest.ai`** (links in alert footers).

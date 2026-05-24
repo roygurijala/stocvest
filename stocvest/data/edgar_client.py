@@ -17,7 +17,7 @@ from stocvest.utils.logging import get_logger
 
 log = get_logger(__name__)
 
-SEC_USER_AGENT = "STOCVEST/1.0 support@stocvest.app"
+SEC_USER_AGENT = "STOCVEST/1.0 support@stocvest.ai"
 EDGAR_8K_ATOM_URL = (
     "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K"
     "&dateb=&owner=include&count=40&search_text=&output=atom"

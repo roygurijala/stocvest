@@ -27,6 +27,7 @@ import { CausalNarrativePanel } from "@/components/signals/causal-narrative-pane
 import { TimeframeContextPanel } from "@/components/signals/timeframe-context-panel";
 import { SignalsWhyNotPanel } from "@/components/signals/signals-why-not-panel";
 import { resolveCausalNarrative } from "@/lib/signal-evidence/causal-narrative";
+import { isTickerSearchQueryReady } from "@/lib/ticker-search-query";
 import {
   isTimeframeCounterTrend,
   resolveTimeframeContext
@@ -359,7 +360,7 @@ export function SignalsPageClient({
 
   useEffect(() => {
     const q = symbolDraft.trim();
-    if (q.length < 2) {
+    if (!isTickerSearchQueryReady(q)) {
       setRemoteCandidates([]);
       setRemoteSearchLoading(false);
       setRemoteSearchError(null);
@@ -1576,8 +1577,8 @@ export function SignalsPageClient({
         </div>
         {suggestOpen &&
         (suggestionRows.length > 0 ||
-          (remoteSearchLoading && symbolDraft.trim().length >= 2) ||
-          (Boolean(remoteSearchError) && symbolDraft.trim().length >= 2)) ? (
+          (remoteSearchLoading && isTickerSearchQueryReady(symbolDraft)) ||
+          (Boolean(remoteSearchError) && isTickerSearchQueryReady(symbolDraft))) ? (
           <ul
             id="signal-symbol-suggestions"
             role="listbox"
@@ -1588,12 +1589,12 @@ export function SignalsPageClient({
               boxShadow: "0 12px 40px rgba(0,0,0,0.35)"
             }}
           >
-            {remoteSearchError && symbolDraft.trim().length >= 2 ? (
+            {remoteSearchError && isTickerSearchQueryReady(symbolDraft) ? (
               <li className="px-3 py-2 text-sm leading-snug" style={{ color: colors.bearish }}>
                 {remoteSearchError}
               </li>
             ) : null}
-            {remoteSearchLoading && suggestionRows.length === 0 && symbolDraft.trim().length >= 2 && !remoteSearchError ? (
+            {remoteSearchLoading && suggestionRows.length === 0 && isTickerSearchQueryReady(symbolDraft) && !remoteSearchError ? (
               <li className="px-3 py-2 text-sm" style={{ color: colors.textMuted }}>
                 Searching…
               </li>
@@ -1624,7 +1625,7 @@ export function SignalsPageClient({
             {!remoteSearchLoading &&
             !remoteSearchError &&
             suggestionRows.length === 0 &&
-            symbolDraft.trim().length >= 2 ? (
+            isTickerSearchQueryReady(symbolDraft) ? (
               <li className="px-3 py-2 text-sm" style={{ color: colors.textMuted }}>
                 No matching tickers. Try a symbol (e.g. AAPL) or another spelling.
               </li>

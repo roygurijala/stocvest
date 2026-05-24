@@ -9,6 +9,7 @@ import {
   normalizeLandingTicker,
   resolveLandingDemoVerdict
 } from "@/lib/landing/demo-verdicts";
+import { isTickerSearchQueryReady } from "@/lib/ticker-search-query";
 
 const QUICK_PICKS = ["NFLX", "AAPL", "NVDA"] as const;
 
@@ -67,7 +68,7 @@ export function LandingHeroSearch() {
 
   useEffect(() => {
     const q = query.trim();
-    if (q.length < 2) {
+    if (!isTickerSearchQueryReady(q)) {
       setSuggestions([]);
       return;
     }

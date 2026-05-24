@@ -948,6 +948,27 @@ class TestSearchReferenceTickers:
         assert rows[0]["ticker"] == "GS"
         assert "Goldman" in rows[0]["name"]
 
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_single_letter_ticker_lookup(self):
+        fuzzy = {"status": "OK", "results": []}
+        detail = {
+            "status": "OK",
+            "results": {"ticker": "F", "name": "Ford Motor Company"},
+        }
+        respx.get("https://api.polygon.io/v3/reference/tickers").mock(
+            return_value=httpx.Response(200, json=fuzzy)
+        )
+        respx.get("https://api.polygon.io/v3/reference/tickers/F").mock(
+            return_value=httpx.Response(200, json=detail)
+        )
+
+        async with PolygonClient(FAKE_KEY) as client:
+            rows = await client.search_reference_tickers("F", limit=5)
+
+        assert rows[0]["ticker"] == "F"
+        assert "Ford" in rows[0]["name"]
+
 
 class TestClientInit:
     def test_empty_api_key_raises(self):

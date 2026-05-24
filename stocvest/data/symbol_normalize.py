@@ -53,7 +53,10 @@ from __future__ import annotations
 
 import re
 
-__all__ = ["to_polygon_symbol"]
+__all__ = ["TICKER_SEARCH_MIN_QUERY_LEN", "to_polygon_symbol"]
+
+# Include single-letter US tickers (F, T, C, V, …) in symbol pickers.
+TICKER_SEARCH_MIN_QUERY_LEN = 1
 
 
 # A "class-share dash" is one or more letters, a single ``-``, and exactly

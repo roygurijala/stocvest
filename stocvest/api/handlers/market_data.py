@@ -185,8 +185,8 @@ def tickers_search_handler(
     _ = context
     query = _query_params(event)
     raw = str(query.get("q") or query.get("search") or "").strip()
-    if len(raw) < 2:
-        return bad_request("Query param 'q' must be at least 2 characters.")
+    if len(raw) < 1:
+        return bad_request("Query param 'q' is required.")
     if len(raw) > 80:
         return bad_request("Query too long.")
 

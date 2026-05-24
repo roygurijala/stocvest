@@ -13,7 +13,7 @@ from stocvest.utils.logging import get_logger
 _LOG = get_logger(__name__)
 
 SEC_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
-SEC_HEADERS = {"User-Agent": "STOCVEST/1.0 support@stocvest.app"}
+SEC_HEADERS = {"User-Agent": "STOCVEST/1.0 support@stocvest.ai"}
 
 CORP_SUFFIXES = (
     r"\bInc\.?$",

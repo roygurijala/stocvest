@@ -244,9 +244,23 @@ def test_vix_snapshot_handler_returns_usable_snapshot() -> None:
     assert body["snapshot"]["last_trade_price"] == 18.5
 
 
-def test_tickers_search_handler_requires_two_chars() -> None:
-    response = tickers_search_handler({"queryStringParameters": {"q": "a"}}, {}, client_factory=_FakePolygonClient)
+def test_tickers_search_handler_requires_query() -> None:
+    response = tickers_search_handler({"queryStringParameters": {"q": ""}}, {}, client_factory=_FakePolygonClient)
     assert response["statusCode"] == 400
+
+
+def test_tickers_search_handler_accepts_single_char() -> None:
+    class _SingleCharFake(_FakePolygonClient):
+        async def search_reference_tickers(self, query: str, *, limit: int = 15) -> list[dict[str, str]]:
+            _ = limit
+            if query.strip().upper() == "F":
+                return [{"ticker": "F", "name": "Ford Motor Company"}]
+            return await super().search_reference_tickers(query, limit=limit)
+
+    response = tickers_search_handler({"queryStringParameters": {"q": "F"}}, {}, client_factory=_SingleCharFake)
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["items"] == [{"symbol": "F", "name": "Ford Motor Company"}]
 
 
 def test_tickers_search_handler_returns_items() -> None:

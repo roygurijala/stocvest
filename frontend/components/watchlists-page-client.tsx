@@ -9,6 +9,7 @@ import { CuteLoader } from "@/components/cute-loader";
 import { WatchlistAlignmentSheet } from "@/components/watchlists/watchlist-alignment-sheet";
 import { WatchlistActivityCollapsible } from "@/components/watchlists/WatchlistActivityCollapsible";
 import { WatchlistDecisionQueue } from "@/components/watchlists/watchlist-decision-queue";
+import { WatchlistOrderExplainer } from "@/components/watchlists/watchlist-order-explainer";
 import { WatchlistSortControl } from "@/components/watchlists/watchlist-sort-control";
 import { WatchlistTrackingDensityToggle } from "@/components/watchlists/watchlist-tracking-density-toggle";
 import { WatchlistStatusRails } from "@/components/watchlists/WatchlistStatusRails";
@@ -19,6 +20,7 @@ import {
 } from "@/lib/alignment-display-tier";
 import { buildWatchlistPortfolioHeadline } from "@/lib/watchlist-row-present";
 import { formatSummaryFetchedAt, watchlistMaturationDeskSummary } from "@/lib/watchlist-evaluation-present";
+import { isTickerSearchQueryReady } from "@/lib/ticker-search-query";
 import {
   primeWatchlistSymbolMaturation,
   refreshWatchlistSymbolMaturationDesk,
@@ -606,7 +608,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
 
   useEffect(() => {
     const q = addDraft.trim();
-    if (q.length < 2) {
+    if (!isTickerSearchQueryReady(q)) {
       setAddRemoteCandidates([]);
       setAddRemoteSearchLoading(false);
       setAddRemoteSearchError(null);
@@ -1328,8 +1330,8 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
               </div>
               {addSuggestOpen &&
               (addSuggestionRows.length > 0 ||
-                (addRemoteSearchLoading && addDraft.trim().length >= 2) ||
-                (Boolean(addRemoteSearchError) && addDraft.trim().length >= 2)) ? (
+                (addRemoteSearchLoading && isTickerSearchQueryReady(addDraft)) ||
+                (Boolean(addRemoteSearchError) && isTickerSearchQueryReady(addDraft))) ? (
                 <ul
                   id="watchlist-add-ticker-suggestions"
                   role="listbox"
@@ -1340,14 +1342,14 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                     boxShadow: "0 12px 40px rgba(0,0,0,0.35)"
                   }}
                 >
-                  {addRemoteSearchError && addDraft.trim().length >= 2 ? (
+                  {addRemoteSearchError && isTickerSearchQueryReady(addDraft) ? (
                     <li className="px-3 py-2 text-sm leading-snug" style={{ color: colors.bearish }}>
                       {addRemoteSearchError}
                     </li>
                   ) : null}
                   {addRemoteSearchLoading &&
                   addSuggestionRows.length === 0 &&
-                  addDraft.trim().length >= 2 &&
+                  isTickerSearchQueryReady(addDraft) &&
                   !addRemoteSearchError ? (
                     <li className="px-3 py-2 text-sm" style={{ color: colors.textMuted }}>
                       Searching…
@@ -1390,7 +1392,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                   {!addRemoteSearchLoading &&
                   !addRemoteSearchError &&
                   addSuggestionRows.length === 0 &&
-                  addDraft.trim().length >= 2 ? (
+                  isTickerSearchQueryReady(addDraft) ? (
                     <li className="px-3 py-2 text-sm" style={{ color: colors.textMuted }}>
                       No matching tickers. Try a symbol (e.g. AAPL) or another spelling.
                     </li>
@@ -1493,8 +1495,10 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                     disabled={maturationFetchStatus !== "ready"}
                   />
                 </div>
+                <WatchlistOrderExplainer sortMode={sortMode} />
                 <p className="m-0 text-xs" style={{ color: colors.textMuted }}>
-                  {slotUsed} of {maxSymbols} slots · {slotsLeft} left · grouped by attention — click a card for Signals
+                  {slotUsed} of {maxSymbols} slots · {slotsLeft} left · grouped by alignment, then sorted within each
+                  section — click a card for Signals
                 </p>
               </div>
             ) : null}

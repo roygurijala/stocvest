@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { stocvestAuthedFetch } from "@/lib/bff/stocvest-authed";
 import { canonicalUsTickerFromSearch } from "@/lib/symbol-ticker";
+import { isTickerSearchQueryReady } from "@/lib/ticker-search-query";
 import { finalizeTickerSearchItems } from "@/lib/symbol-typeahead";
 
 function mapPolygonResults(data: unknown): { symbol: string; name: string }[] {
@@ -40,7 +41,7 @@ async function polygonDirectSearch(q: string): Promise<{ symbol: string; name: s
 export async function GET(req: Request) {
   const u = new URL(req.url);
   const q = (u.searchParams.get("q") ?? "").trim();
-  if (q.length < 2) {
+  if (!isTickerSearchQueryReady(q)) {
     return NextResponse.json({ items: [] }, { status: 200 });
   }
 

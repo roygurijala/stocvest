@@ -200,7 +200,7 @@ class Settings(BaseSettings):
     stocvest_analysis_admin_subs: str = Field("", alias="STOCVEST_ANALYSIS_ADMIN_SUBS")
 
     # ── Email (SES) for user alerts ───────────────────────────────
-    stocvest_email_sender: str = Field("signals@stocvest.app", alias="STOCVEST_EMAIL_SENDER")
+    stocvest_email_sender: str = Field("signals@stocvest.ai", alias="STOCVEST_EMAIL_SENDER")
     stocvest_public_app_url: str = Field("https://stocvest.ai", alias="STOCVEST_PUBLIC_APP_URL")
 
     # ── Scanner schedule + WebSocket broadcast ────────────────────

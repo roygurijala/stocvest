@@ -4,6 +4,7 @@ import {
   compareWatchlistSymbolsBySort,
   isWatchlistSortMode,
   readWatchlistSortMode,
+  watchlistSortModeDetail,
   writeWatchlistSortMode,
   WATCHLIST_SORT_STORAGE_KEY
 } from "@/lib/watchlist-sort-preference";
@@ -31,6 +32,13 @@ describe("watchlist sort preference", () => {
   test("compareWatchlistSymbolsBySort alphabetical", () => {
     const rowFor = () => undefined;
     expect(compareWatchlistSymbolsBySort("ZZZ", "AAA", "alphabetical", rowFor)).toBeGreaterThan(0);
+  });
+
+  test("watchlistSortModeDetail explains equal-score tie for attention", () => {
+    const detail = watchlistSortModeDetail("attention");
+    expect(detail).toMatch(/5\/6/);
+    expect(detail).toMatch(/A→Z/);
+    expect(detail).toMatch(/improved/i);
   });
 
   test("compareWatchlistSymbolsBySort recently_evaluated prefers newer", () => {

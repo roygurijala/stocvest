@@ -2,6 +2,7 @@
 
 import {
   WATCHLIST_SORT_OPTIONS,
+  watchlistSortModeHint,
   type WatchlistSortMode
 } from "@/lib/watchlist-sort-preference";
 import { useTheme } from "@/lib/theme-provider";
@@ -14,7 +15,7 @@ type Props = {
 
 export function WatchlistSortControl({ value, onChange, disabled = false }: Props) {
   const { colors } = useTheme();
-  const activeHint = WATCHLIST_SORT_OPTIONS.find((o) => o.value === value)?.hint ?? "";
+  const activeHint = watchlistSortModeHint(value);
 
   return (
     <div

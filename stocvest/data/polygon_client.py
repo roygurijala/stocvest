@@ -50,6 +50,7 @@ from stocvest.data.models import (
     Timeframe,
     Trade,
 )
+from stocvest.data.symbol_normalize import TICKER_SEARCH_MIN_QUERY_LEN
 from stocvest.utils.redis_client import get_sync_redis
 from stocvest.utils.logging import get_logger
 
@@ -1198,7 +1199,7 @@ class PolygonClient:
         Polygon ``GET /v3/reference/tickers`` — match ticker or company name (for symbol pickers).
         """
         q = (query or "").strip()
-        if len(q) < 2:
+        if len(q) < TICKER_SEARCH_MIN_QUERY_LEN:
             return []
         lim = max(1, min(int(limit), 25))
         q_upper = q.upper()
