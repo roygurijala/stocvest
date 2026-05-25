@@ -9,6 +9,7 @@ from stocvest.signals.assistant_prompts import (
     MAX_USER_MESSAGE_CHARS,
     sanitize_messages,
     serialize_page_context,
+    serialize_public_product_facts,
 )
 
 
@@ -119,6 +120,42 @@ def test_assistant_prompt_requires_plain_english_explanation_section() -> None:
     assert "PLAIN ENGLISH EXPLANATION (ALL SCREENS)" in ASSISTANT_SYSTEM_PROMPT
     assert "decision_reinforcement_N" in ASSISTANT_SYSTEM_PROMPT
     assert "Never invent metrics" in ASSISTANT_SYSTEM_PROMPT or "Never invent" in ASSISTANT_SYSTEM_PROMPT
+
+
+def test_serialize_page_context_emits_watchlist_plan_fields() -> None:
+    out = serialize_page_context(
+        {
+            "page": "dashboard/watchlists",
+            "subscription_plan": "swing_pro",
+            "watchlist_max_symbols": 50,
+            "watchlist_symbol_count": 12,
+            "rogue_key": "unlimited",
+        }
+    )
+    assert "page=dashboard/watchlists" in out
+    assert "subscription_plan=swing_pro" in out
+    assert "watchlist_max_symbols=50" in out
+    assert "watchlist_symbol_count=12" in out
+    assert "rogue_key" not in out
+    assert "unlimited" not in out
+
+
+def test_public_product_facts_include_watchlist_symbol_caps() -> None:
+    facts = serialize_public_product_facts()
+    assert "watchlist_symbol_caps=Swing Pro: 50 symbols" in facts
+    assert "Swing + Day Pro: 100 symbols" in facts
+    assert "Legacy free" in facts
+    assert "watchlist_limits=" in facts
+    assert "not unlimited" in facts
+    assert "paid_plans=" in facts
+
+
+def test_assistant_prompt_forbids_unlimited_watchlist_claims() -> None:
+    assert "WATCHLIST SYMBOL LIMITS (PRODUCT FACT)" in ASSISTANT_SYSTEM_PROMPT
+    assert "NO unlimited watchlist" in ASSISTANT_SYSTEM_PROMPT
+    assert "`swing_pro` → 50 symbols" in ASSISTANT_SYSTEM_PROMPT
+    assert "`swing_day_pro` → 100 symbols" in ASSISTANT_SYSTEM_PROMPT
+    assert "legacy tier" in ASSISTANT_SYSTEM_PROMPT.lower() or "legacy" in ASSISTANT_SYSTEM_PROMPT.lower()
 
 
 def test_serialize_page_context_includes_causal_narrative():

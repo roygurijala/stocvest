@@ -28,6 +28,7 @@ export default async function DashboardWatchlistsPage() {
         <WatchlistsPageClient
           dualDeskMaturation={dualDeskMaturation}
           planBadgeLabel={watchlistPlanBadgeLabel(plan)}
+          subscriptionPlan={plan ?? "free"}
           maxSymbols={watchlistMaxSymbolsForPlan(plan, me?.has_full_access === true)}
         />
       </Suspense>

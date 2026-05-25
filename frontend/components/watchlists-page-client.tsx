@@ -30,6 +30,7 @@ import { APP_TOP_BAR_LAYOUT_HEIGHT } from "@/components/top-bar";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, colorTokens, spacing, surfaceGlowClassName } from "@/lib/design-system";
 import { watchlistSignalsOpenAriaLabel, watchlistToSignalsHref } from "@/lib/nav/watchlist-signals-deeplink";
+import type { SubscriptionPlan } from "@/lib/api/contracts";
 import type { MarketStatusPayload, SnapshotPayload } from "@/lib/api/market";
 import { isRegularSessionOpen } from "@/lib/market/regular-session";
 import {
@@ -146,12 +147,19 @@ type WatchlistsPageClientProps = {
   dualDeskMaturation?: boolean;
   /** Short plan label for the header chip, e.g. ``Swing + Day Pro``. */
   planBadgeLabel?: string;
+  /** Canonical subscription tier for assistant context. */
+  subscriptionPlan?: SubscriptionPlan;
   /** Plan-based default-watchlist symbol cap (5 / 50 / 100). */
   maxSymbols?: number;
 };
 
 export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
-  const { dualDeskMaturation = false, planBadgeLabel = "Free", maxSymbols = 5 } = props;
+  const {
+    dualDeskMaturation = false,
+    planBadgeLabel = "Free",
+    subscriptionPlan = "free",
+    maxSymbols = 5
+  } = props;
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const { colors, theme } = useTheme();
@@ -212,12 +220,6 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     setTrackingCompact(compact);
     writeWatchlistTrackingCompact(compact);
   }, []);
-
-  usePublishAssistantContext({
-    page: "dashboard/watchlists",
-    decision_line:
-      "Watchlist maturation runs on weekdays after ~4:30 PM ET or when you open Evidence on Signals. Ask how evaluation cadence and layer bands work."
-  });
 
   useEffect(() => {
     if (loading) return;
@@ -305,6 +307,19 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   }
 
   const activeSymbolsDeduped = useMemo(() => dedupeSymbolsUpper(active?.symbols ?? []), [active?.symbols]);
+
+  const watchlistAssistantContext = useMemo(
+    () => ({
+      page: "dashboard/watchlists" as const,
+      subscription_plan: subscriptionPlan,
+      watchlist_max_symbols: maxSymbols,
+      watchlist_symbol_count: activeSymbolsDeduped.length,
+      decision_line:
+        "Watchlist maturation runs on weekdays after ~4:30 PM ET or when you open Evidence on Signals. Ask how evaluation cadence and layer bands work."
+    }),
+    [subscriptionPlan, maxSymbols, activeSymbolsDeduped.length]
+  );
+  usePublishAssistantContext(watchlistAssistantContext);
 
   const symbolTrackingMap = useMemo((): SymbolTrackingMap => {
     const raw = active?.symbol_tracking;
