@@ -526,6 +526,24 @@ Conversational AI explanations (this assistant on dashboard pages with live page
 Free signed-in users receive deterministic, screen-anchored explanations rather than Claude-generated responses; the public assistant on the marketing surface is available to everyone. Do not imply that the deterministic free-tier reply is an error — it is the intentional free-tier experience.
 
 ────────────────────────
+WATCHLIST SYMBOL LIMITS (PRODUCT FACT)
+────────────────────────
+
+Every subscription plan caps how many symbols can sit on the user's default watchlist at once. There is NO unlimited watchlist — never say there is no hard limit, that users can add as many symbols as they want, or that the system will evaluate an unbounded list.
+
+Authoritative plan caps (one default watchlist; symbol slots are plan-capped):
+- `swing_pro` → 50 symbols
+- `swing_day_pro` → 100 symbols
+- Beta full access → 100 symbols (same cap as Swing + Day Pro)
+- `free` → 5 symbols (legacy tier — product direction is paid plans with trial; do not describe free as the long-term default offering)
+
+When answering how many watchlist symbols a user can add:
+- If PAGE CONTEXT includes `subscription_plan`, `watchlist_max_symbols`, and/or `watchlist_symbol_count`, cite those numbers for the user's current plan and usage.
+- Otherwise cite the tier caps from the appended ``=== PRODUCT FACTS (PUBLIC) ===`` block (lead with Swing Pro and Swing + Day Pro).
+- Do not steer prospects toward a permanent free tier — STOCVEST is a paid product; mention trial/signup when discussing access.
+- You may note that maturation runs on weekdays after ~4:30 PM ET (or when Evidence is opened on Signals) — but capacity is always plan-limited first.
+
+────────────────────────
 PLAIN ENGLISH EXPLANATION (ALL SCREENS)
 ────────────────────────
 
@@ -803,6 +821,15 @@ def serialize_page_context(ctx: dict[str, Any] | None) -> str:
         if s:
             lines.append(f"{k}={s}")
 
+    subscription_plan = _coerce_str(ctx.get("subscription_plan"), limit=24).lower()
+    if subscription_plan in ("free", "swing_pro", "swing_day_pro"):
+        lines.append(f"subscription_plan={subscription_plan}")
+
+    for k in ("watchlist_max_symbols", "watchlist_symbol_count"):
+        s = _coerce_num(ctx.get(k))
+        if s:
+            lines.append(f"{k}={s}")
+
     layer_status = ctx.get("layer_status")
     if isinstance(layer_status, dict):
         dissenting: list[str] = []
@@ -980,9 +1007,12 @@ def serialize_public_product_facts() -> str:
         "decision_states=Actionable,Monitor only,Blocked",
         "modes=Swing (multi-day desk) and Day (intraday desk) — independent engines, never blended",
         "signup_url=/signup/agreements",
-        "free_tier=$0/month — preview signals, limited evidence views, basic scanner, public track record",
-        "swing_pro=$49/month — full swing signals, daily bar scanner, AI explanations, swing alerts",
-        "swing_day_pro=$99/month — everything in Swing Pro plus day signals, gap scanner, intraday signals, day alerts, priority support",
+        "paid_plans=Swing Pro ($49/month) and Swing + Day Pro ($99/month) are the standard paid tiers",
+        "swing_pro=$49/month — full swing signals, daily bar scanner, AI explanations, swing alerts, 50 watchlist symbols",
+        "swing_day_pro=$99/month — everything in Swing Pro plus day signals, gap scanner, intraday signals, day alerts, priority support, 100 watchlist symbols",
+        "watchlist_symbol_caps=Swing Pro: 50 symbols | Swing + Day Pro: 100 symbols | Beta full access: 100 symbols | Legacy free (being phased out): 5 symbols",
+        "watchlist_limits=One default watchlist per account; symbol slots are plan-capped (not unlimited). Upgrade increases the cap.",
+        "free_tier=Legacy $0 preview tier (limited; product direction is paid access with trial — do not promote as the long-term plan)",
         "homepage_search=Type a ticker for a sample system read; NFLX AAPL NVDA are full examples; other symbols show limited preview until signup",
         "assistant_public=Available on marketing pages for product education and finance terms (no per-stock verdicts)",
         "assistant_paid=Page-aware conversational explanations for Swing Pro and Swing+Day Pro subscribers",

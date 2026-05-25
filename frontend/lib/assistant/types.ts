@@ -68,6 +68,12 @@ export interface AssistantPageContext {
   session_mode?: "public" | "authenticated";
   /** Active trading mode if the page exposes one. */
   trading_mode?: "swing" | "day";
+  /** User subscription tier — forwarded from dashboard pages that know the plan. */
+  subscription_plan?: "free" | "swing_pro" | "swing_day_pro";
+  /** Plan-based default-watchlist symbol cap (5 / 50 / 100). */
+  watchlist_max_symbols?: number;
+  /** Symbols currently on the user's default watchlist. */
+  watchlist_symbol_count?: number;
   symbol?: string;
   decision_state?: AssistantDecisionState;
   decision_line?: string;
