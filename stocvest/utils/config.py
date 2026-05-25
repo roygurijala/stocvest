@@ -213,6 +213,7 @@ class Settings(BaseSettings):
     trial_otp_request_cooldown_seconds: int = Field(60, alias="TRIAL_OTP_REQUEST_COOLDOWN_SECONDS")
     trial_otp_max_requests_per_hour: int = Field(3, alias="TRIAL_OTP_MAX_REQUESTS_PER_HOUR")
     trial_otp_max_verify_attempts: int = Field(5, alias="TRIAL_OTP_MAX_VERIFY_ATTEMPTS")
+    trial_reminders_enabled: bool = Field(False, alias="TRIAL_REMINDERS_ENABLED")
 
     # ── Scanner schedule + WebSocket broadcast ────────────────────
     scanner_symbols: str = Field("AAPL,MSFT,NVDA", alias="STOCVEST_SCANNER_SYMBOLS")

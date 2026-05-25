@@ -58,6 +58,11 @@ locals {
     STOCVEST_PDT_STATE_TABLE                       = aws_dynamodb_table.pdt_state.name
     STOCVEST_EMAIL_SENDER                          = "signals@stocvest.ai"
     STOCVEST_PUBLIC_APP_URL                        = "https://stocvest.ai"
+    TRIAL_ENFORCEMENT_ENABLED                      = "false"
+    PHONE_VERIFICATION_REQUIRED                    = "false"
+    TRIAL_SMS_ENABLED                              = "false"
+    TRIAL_REMINDERS_ENABLED                        = "false"
+    TRIAL_DURATION_DAYS                            = "14"
     DYNAMODB_AUDIT_EVENTS_TABLE                    = aws_dynamodb_table.audit_events.name
     # Cognito identifiers needed by the D10 Admin hub
     # (`/v1/admin/users/*` + `/v1/admin/system-status`). Without these
@@ -258,6 +263,12 @@ resource "aws_iam_role_policy" "lambda_api_data_access" {
         Sid      = "SESSendUserAlerts"
         Effect   = "Allow"
         Action   = ["ses:SendEmail", "ses:SendRawEmail"]
+        Resource = "*"
+      },
+      {
+        Sid      = "SNSTrialOTP"
+        Effect   = "Allow"
+        Action   = ["sns:Publish"]
         Resource = "*"
       },
       {

@@ -21,7 +21,10 @@ class UserProfileStore(Protocol):
     def put_profile(self, profile: UserProfile) -> None: ...
 
 
-def _item_to_profile(user_id: str, item: dict[str, Any]) -> UserProfile:
+def item_to_profile(user_id: str, item: dict[str, Any]) -> UserProfile:
+    return _item_to_profile(user_id, item)
+
+
     raw_tm = item.get("tradingMode")
     mode = TradingMode.PAPER
     if raw_tm is not None:

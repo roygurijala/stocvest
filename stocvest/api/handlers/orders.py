@@ -369,6 +369,9 @@ def users_me_get_handler(event: LambdaEvent, context: LambdaContext) -> dict[str
         return unauthorized("Authenticated user is required.")
     store = get_user_profile_store()
     profile = store.get_profile(request_context.user_id)
+    if request_context.email and not (profile.email or "").strip():
+        profile = profile.model_copy(update={"email": request_context.email.strip()})
+        store.put_profile(profile)
     profile = _touch_last_active_if_stale(store, profile)
     is_admin = _caller_is_admin(event, request_context)
     return ok(_serialize_user_profile(profile, is_admin=is_admin))

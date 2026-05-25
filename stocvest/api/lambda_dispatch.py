@@ -19,6 +19,11 @@ def _dispatch_http_routes(
     routes: dict[str, _Handler],
 ) -> dict[str, Any]:
     route = http_route_descriptor(event)
+    from stocvest.trial.access_gate import trial_gate_response
+
+    gated = trial_gate_response(event, route)
+    if gated is not None:
+        return gated
     target = routes.get(route)
     if target is None:
         return not_found(f"Unknown route: {route or '(empty)'}.")
@@ -235,6 +240,11 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
             users_me_phone_request_code_handler,
             users_me_phone_verify_code_handler,
         )
+
+        if isinstance(event, dict) and event.get("trial_reminder_tick") is True:
+            from stocvest.workers.trial_reminder_tick import trial_reminder_tick_handler
+
+            return trial_reminder_tick_handler(event, context)
 
         return _with_cors_and_audit(
             event=event,
