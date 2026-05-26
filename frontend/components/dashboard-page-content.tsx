@@ -1,6 +1,5 @@
-import { Suspense } from "react";
 import { DashboardRedesign } from "@/components/dashboard-redesign";
-import { DashboardScannerDeferredFetch } from "@/components/dashboard/dashboard-scanner-deferred-fetch";
+import { DashboardScannerClientFetch } from "@/components/dashboard/dashboard-scanner-client-fetch";
 import { DEFAULT_EARNINGS_SYMBOLS, fetchDashboardFirstSegment } from "@/lib/dashboard/dashboard-page-data";
 import { timeDashboardPhase } from "@/lib/dashboard/load-timing";
 import { fetchDashboardUserMe, subscriptionPlanFromMe } from "@/lib/dashboard-user-subscription";
@@ -24,8 +23,7 @@ export const DASHBOARD_SCANNER_TUNING_BASE = {
 } as const;
 
 /**
- * Server component: Tier 1.C — `user/me` then **dashboard summary** (tape + daily + earnings)
- * when `GET /v1/dashboard/summary` is available; **scanner** streams in nested `Suspense`.
+ * Server component: Tier 1.C — `user/me` then dashboard summary; scanner loads on the client.
  */
 export async function DashboardPageContent() {
   const me = await timeDashboardPhase("user_me", () => fetchDashboardUserMe());
@@ -50,11 +48,7 @@ export async function DashboardPageContent() {
       weeklyIndexRows={weeklyIndexRows}
       sectorRotation={sectorRotation}
       dayTradingSurfaces={dayTradingSurfaces}
-      deferredScannerSlot={
-        <Suspense fallback={null}>
-          <DashboardScannerDeferredFetch tuning={dashboardScannerTuning} />
-        </Suspense>
-      }
+      deferredScannerSlot={<DashboardScannerClientFetch tuning={dashboardScannerTuning} />}
     />
   );
 }
