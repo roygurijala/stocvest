@@ -13,6 +13,7 @@ const MOVE_PCT_THRESHOLD = 4.0;
 
 export type WatchlistRadarRow = WatchlistCardModel & {
   attentionReason: string;
+  sessionMovePct: number | null;
 };
 
 function sessionMovePct(snapshot: SnapshotPayload | undefined): number | null {
@@ -93,7 +94,8 @@ export function buildWatchlistRadarRows(opts: {
     const model = buildWatchlistCardModel(sym, row, snap, opts.colors, opts.mode);
     out.push({
       ...model,
-      attentionReason: reason ?? model.alignmentLine
+      attentionReason: reason ?? model.alignmentLine,
+      sessionMovePct: movePct
     });
     seen.add(sym);
     if (out.length >= RADAR_MAX) break;

@@ -75,6 +75,16 @@ describe("hot-in-market-card-present", () => {
     expect(hotInMarketSourceSubtitle("desk_cache", 15)).toContain("platform desk");
   });
 
+  test("pending badge when desk row lacks composite detail", () => {
+    const model = buildHotInMarketCardModel(
+      baseLeader({ alignment_ratio: undefined, verdict: null, execution_hint: null }),
+      { rank: 10, mode: "day", source: "desk_cache", colors }
+    );
+    expect(model.setupBadge).toBe("pending");
+    expect(model.setupBadgeLabel).toBe("Setup scan pending");
+    expect(model.detailLine).toContain("open Signals");
+  });
+
   test("hotInMarketFeedSubtitle shows loading when scanner pending", () => {
     const line = hotInMarketFeedSubtitle({
       source: "empty",

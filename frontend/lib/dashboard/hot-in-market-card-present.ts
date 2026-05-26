@@ -27,6 +27,7 @@ export type HotInMarketSetupBadge =
   | "blocked"
   | "weak"
   | "review"
+  | "pending"
   | "mover";
 
 export type HotInMarketCardModel = {
@@ -40,6 +41,8 @@ export type HotInMarketCardModel = {
   layerDots: boolean[];
   layerTotal: number;
   verdictLine: string | null;
+  detailLine: string | null;
+  volumeLine: string | null;
   setupBadge: HotInMarketSetupBadge;
   setupBadgeLabel: string | null;
   cardTone: DashboardCardTone;
@@ -64,8 +67,18 @@ const SETUP_BADGE_LABEL: Record<HotInMarketSetupBadge, string> = {
   blocked: "R/R blocks entry",
   weak: "Weak execution",
   review: "Review on Signals",
+  pending: "Setup scan pending",
   mover: "Session mover"
 };
+
+export function leaderHasCompositeDetail(leader: DeskDiscoveryLeader): boolean {
+  return (
+    leader.alignment_ratio != null ||
+    Boolean(leader.verdict?.trim()) ||
+    Boolean(leader.execution_hint?.trim()) ||
+    Boolean(leader.composite_status?.trim())
+  );
+}
 
 function minRiskReward(mode: DashboardDeskMode): number {
   return mode === "day" ? 1.2 : 2.0;
@@ -77,6 +90,7 @@ function resolveSetupBadge(
   source: HotInMarketSource
 ): HotInMarketSetupBadge {
   if (source === "movers_radar" || source === "gap_fallback") return "mover";
+  if (!leaderHasCompositeDetail(leader)) return "pending";
 
   const hint = leader.execution_hint?.trim().toLowerCase() ?? "";
   if (hint.includes("risk/reward")) return "blocked";
@@ -104,6 +118,13 @@ function resolveSetupBadge(
 function resolveSetupBadgeLabel(badge: HotInMarketSetupBadge): string | null {
   if (badge === "mover") return null;
   return SETUP_BADGE_LABEL[badge];
+}
+
+function formatDayVolume(volume: number | undefined): string | null {
+  if (typeof volume !== "number" || !Number.isFinite(volume) || volume <= 0) return null;
+  if (volume >= 1_000_000) return `${(volume / 1_000_000).toFixed(1)}M shares today`;
+  if (volume >= 1_000) return `${Math.round(volume / 1_000)}K shares today`;
+  return `${Math.round(volume).toLocaleString()} shares today`;
 }
 
 function formatPrice(price: number | undefined): string | null {
@@ -195,9 +216,19 @@ export function buildHotInMarketCardModel(
   }
 
   const verdictLine = truncateVerdict(leader.verdict);
+  const volumeLine = formatDayVolume(leader.day_volume);
+  const detailLine =
+    alignmentLine || verdictLine
+      ? null
+      : setupBadge === "pending"
+        ? "Ranked by session move · open Signals for full alignment and execution read"
+        : volumeLine
+          ? `${volumeLine} · open Signals for setup detail`
+          : "Open Signals for alignment, R/R, and execution read";
   const peek =
     leader.execution_hint?.trim() ||
     verdictLine ||
+    detailLine ||
     alignmentLine ||
     gapLine;
 
@@ -212,6 +243,8 @@ export function buildHotInMarketCardModel(
     layerDots,
     layerTotal: LAYER_TOTAL,
     verdictLine,
+    detailLine,
+    volumeLine,
     setupBadge,
     setupBadgeLabel,
     cardTone: gapTone,

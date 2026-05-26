@@ -27,6 +27,7 @@ export function DashboardWatchlistRadar({ mode, snapshots }: Props) {
   const { colors } = useTheme();
   const [symbols, setSymbols] = useState<string[]>([]);
   const [bySymbol, setBySymbol] = useState<Record<string, WatchlistMaturationRow>>({});
+  const [fetchedSnapshots, setFetchedSnapshots] = useState<Map<string, SnapshotPayload>>(new Map());
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
 
   useEffect(() => {
@@ -63,10 +64,42 @@ export function DashboardWatchlistRadar({ mode, snapshots }: Props) {
     };
   }, [mode]);
 
-  const snapBySym = useMemo(
-    () => new Map(snapshots.map((s) => [(s.symbol || "").trim().toUpperCase(), s] as const)),
-    [snapshots]
-  );
+  useEffect(() => {
+    if (symbols.length === 0) return;
+    let cancelled = false;
+    const chunk = symbols.slice(0, 40);
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/stocvest/market/snapshots?symbols=${encodeURIComponent(chunk.join(","))}`,
+          { cache: "no-store" }
+        );
+        if (!res.ok || cancelled) return;
+        const json = (await res.json().catch(() => ({}))) as { snapshots?: SnapshotPayload[] };
+        const rows = Array.isArray(json.snapshots) ? json.snapshots : [];
+        if (cancelled) return;
+        const next = new Map<string, SnapshotPayload>();
+        for (const row of rows) {
+          const sym = (row.symbol || "").trim().toUpperCase();
+          if (sym) next.set(sym, row);
+        }
+        setFetchedSnapshots(next);
+      } catch {
+        /* best-effort — cards fall back to neutral chrome */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [symbols]);
+
+  const snapBySym = useMemo(() => {
+    const merged = new Map(snapshots.map((s) => [(s.symbol || "").trim().toUpperCase(), s] as const));
+    for (const [sym, snap] of fetchedSnapshots) {
+      merged.set(sym, snap);
+    }
+    return merged;
+  }, [snapshots, fetchedSnapshots]);
 
   const rows = useMemo(
     () =>
@@ -93,7 +126,7 @@ export function DashboardWatchlistRadar({ mode, snapshots }: Props) {
           textMuted: colors.textMuted
         })
       ),
-    [rows, colors.accent, colors.bullish, colors.bearish, colors.caution, colors.textMuted]
+    [rows, colors.surface, colors.border, colors.accent, colors.bullish, colors.bearish, colors.caution, colors.textMuted]
   );
 
   const watchlistHref = `/dashboard/watchlists?desk=${encodeURIComponent(mode)}`;

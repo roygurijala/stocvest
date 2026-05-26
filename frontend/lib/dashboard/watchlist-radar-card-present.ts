@@ -55,12 +55,27 @@ function tierBadgeWhenMuted(tier: WatchlistAttentionTier): string {
   return TIER_BADGE[tier];
 }
 
+export function resolveWatchlistCardTone(input: {
+  quoteBullish: boolean | null | undefined;
+  sessionMovePct: number | null;
+}): DashboardCardTone {
+  if (input.quoteBullish === true) return "bullish";
+  if (input.quoteBullish === false) return "bearish";
+  if (input.sessionMovePct != null && Number.isFinite(input.sessionMovePct)) {
+    if (input.sessionMovePct > 0) return "bullish";
+    if (input.sessionMovePct < 0) return "bearish";
+  }
+  return "muted";
+}
+
 export function buildWatchlistRadarCardModel(
   row: WatchlistRadarRow,
   colors: WatchlistRadarThemeColors
 ): WatchlistRadarCardModel {
-  const quoteTone: DashboardCardTone =
-    row.quote?.bullish === true ? "bullish" : row.quote?.bullish === false ? "bearish" : "muted";
+  const quoteTone = resolveWatchlistCardTone({
+    quoteBullish: row.quote?.bullish,
+    sessionMovePct: row.sessionMovePct
+  });
   const cardChrome = dashboardDirectionCardChrome(quoteTone, {
     surface: colors.surface,
     border: colors.border,
