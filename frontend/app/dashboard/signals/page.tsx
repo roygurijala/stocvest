@@ -11,6 +11,10 @@ import { getDashboardAuthContext } from "@/lib/auth/dashboard-session";
 import { fetchDashboardUserMe, subscriptionPlanFromMe } from "@/lib/dashboard-user-subscription";
 import { subscriptionAllowsDayTradingSurfaces } from "@/lib/subscription-access";
 import { stocvestAuthedFetch } from "@/lib/bff/stocvest-authed";
+import {
+  normalizeSignalsPrefillTicker,
+  resolveSignalsUrlSymbol
+} from "@/lib/signals-url-prefill";
 
 /**
  * `/dashboard/signals` — server component.
@@ -62,19 +66,9 @@ import { stocvestAuthedFetch } from "@/lib/bff/stocvest-authed";
  * page.
  */
 
-const CONTEXTUAL_SIGNALS_REFS = new Set(["scanner", "watchlist", "validation", "journal"]);
-
 function firstParam(v: string | string[] | undefined): string | undefined {
   if (v == null) return undefined;
   return Array.isArray(v) ? v[0] : v;
-}
-
-function normalizePrefillTicker(sym: string): string | null {
-  const u = sym.trim().toUpperCase();
-  if (!u) return null;
-  if (/^[A-Z]{1,6}$/.test(u)) return u;
-  if (/^[A-Z]{1,5}\.[A-Z]$/.test(u)) return u;
-  return null;
 }
 
 /** Resolve ticker from user's evaluated signal (`?signal_id=` deep-links). */
@@ -86,7 +80,7 @@ async function symbolFromUserSignalRecord(signalId: string): Promise<string | nu
   const body = (await res.json().catch(() => null)) as { symbol?: unknown } | null;
   if (!body || typeof body !== "object") return null;
   const sym = body.symbol;
-  return typeof sym === "string" ? normalizePrefillTicker(sym) : null;
+  return typeof sym === "string" ? normalizeSignalsPrefillTicker(sym) : null;
 }
 
 export default async function DashboardSignalsPage({
@@ -98,10 +92,9 @@ export default async function DashboardSignalsPage({
   if (!session) {
     redirect("/login");
   }
-  const refRaw = (firstParam(searchParams.ref) ?? "").trim().toLowerCase();
-  const symRaw = (firstParam(searchParams.symbol) ?? "").trim().toUpperCase();
-  const urlSymbol =
-    symRaw && CONTEXTUAL_SIGNALS_REFS.has(refRaw) ? normalizePrefillTicker(symRaw) : null;
+  const refRaw = firstParam(searchParams.ref) ?? "";
+  const symRaw = firstParam(searchParams.symbol) ?? "";
+  const urlSymbol = resolveSignalsUrlSymbol(symRaw, refRaw);
 
   const signalIdRaw = (firstParam(searchParams.signal_id) ?? "").trim();
 

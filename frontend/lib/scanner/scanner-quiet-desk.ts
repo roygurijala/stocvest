@@ -3,6 +3,7 @@ import {
   layersAwayFromActionable,
   resolveAlignmentDisplayTier
 } from "@/lib/alignment-display-tier";
+import { scannerOpenEvidenceHref } from "@/lib/nav/watchlist-signals-deeplink";
 import { regimeFromSpyQqq } from "@/lib/market-context/regime";
 import type { ScannerNearQualificationRow, ScannerWatchlistProgressionRow } from "@/lib/scanner-scan-summary";
 import type { ScannerSynthesis } from "@/lib/scanner-synthesis";
@@ -75,7 +76,7 @@ export function volumeLeadToNearReadyCard(
     urgencyLine: "→ First signal if participation recovers",
     momentum: lead.fillPct >= 25 ? "improving" : "stable",
     momentumLabel: lead.fillPct >= 25 ? "↑ closest on volume" : "→ closest on volume",
-    evidenceHref: `/dashboard/signals?symbol=${encodeURIComponent(lead.symbol)}&ref=scanner&trading_mode=swing`
+    evidenceHref: scannerOpenEvidenceHref(lead.symbol, "swing")
   };
 }
 
@@ -228,7 +229,7 @@ export function buildNearReadyCards(
         urgencyLine,
         momentum: momentum.kind,
         momentumLabel: momentum.label,
-        evidenceHref: `/dashboard/signals?symbol=${encodeURIComponent(row.symbol)}&ref=scanner&trading_mode=${mode}`
+        evidenceHref: scannerOpenEvidenceHref(row.symbol, mode)
       };
     })
     .sort((a, b) => a.symbol.localeCompare(b.symbol));
