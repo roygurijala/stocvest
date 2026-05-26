@@ -30,6 +30,19 @@ describe("buildSignalsDeskPriceContext", () => {
     expect(ctx?.dayChangeFormatted).toBe("+0.5%");
   });
 
+  test("shows after-hours price when last print missing (TJX-style)", () => {
+    const snapshot: SnapshotPayload = {
+      symbol: "TJX",
+      after_hours_price: 125.42,
+      prev_close: 124.1,
+      after_hours_change_percent: 1.06
+    };
+    const ctx = buildSignalsDeskPriceContext(snapshot);
+    expect(ctx?.priceLabel).toBe("After hours");
+    expect(ctx?.priceFormatted).toBe("$125.42");
+    expect(ctx?.dayChangeFormatted).toBe("+1.1%");
+  });
+
   test("returns null when no usable price", () => {
     expect(buildSignalsDeskPriceContext(null)).toBeNull();
     expect(buildSignalsDeskPriceContext({ symbol: "X" })).toBeNull();

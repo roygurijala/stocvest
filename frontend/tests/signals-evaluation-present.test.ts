@@ -20,6 +20,11 @@ describe("extractCompositeGeneratedAt", () => {
 });
 
 describe("formatSignalEvaluationFreshness", () => {
+  test("missing timestamp → Evaluating…", () => {
+    expect(formatSignalEvaluationFreshness(null)).toBe("Evaluating…");
+    expect(formatSignalEvaluationFreshness("")).toBe("Evaluating…");
+  });
+
   test("recent timestamp → Evaluated just now", () => {
     const now = Date.parse("2026-05-16T12:00:00Z");
     vi.setSystemTime(now);

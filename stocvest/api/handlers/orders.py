@@ -39,6 +39,7 @@ from stocvest.config.beta_access import default_beta_access_until_iso
 from stocvest.data import PolygonClient
 from stocvest.data.models import TradingMode, UserProfile
 from stocvest.data.models import AuditEvent
+from stocvest.trial.access import resolve_access
 from stocvest.utils.config import get_settings
 from stocvest.utils.log_privacy import user_ref_for_logs
 from stocvest.utils.logging import get_logger
@@ -298,8 +299,7 @@ def _serialize_user_profile(
     ``False``: bumping the target's flags based on the actor's group
     would be a privilege confusion bug.
     """
-    has_full = profile.has_full_access or is_admin
-    has_ai = profile.has_ai_explanations or is_admin
+    snap = resolve_access(profile, is_admin=is_admin)
     return {
         "user_id": profile.user_id,
         "trading_mode": profile.trading_mode.value,
@@ -312,9 +312,16 @@ def _serialize_user_profile(
         "beta_full_access": profile.beta_full_access,
         "beta_access_until": profile.beta_access_until,
         "beta_access_granted_at": profile.beta_access_granted_at,
-        "has_full_access": has_full,
-        "has_ai_explanations": has_ai,
+        "has_full_access": snap.has_full_access,
+        "has_ai_explanations": snap.has_ai_explanations,
         "is_admin": is_admin,
+        "access_state": snap.access_state,
+        "trial_days_remaining": snap.trial_days_remaining,
+        "phone_verified": snap.phone_verified,
+        "phone_last4": snap.phone_last4,
+        "trial_started_at": snap.trial_started_at,
+        "trial_ends_at": snap.trial_ends_at,
+        "trial_enforcement_enabled": snap.trial_enforcement_enabled,
     }
 
 
@@ -362,6 +369,9 @@ def users_me_get_handler(event: LambdaEvent, context: LambdaContext) -> dict[str
         return unauthorized("Authenticated user is required.")
     store = get_user_profile_store()
     profile = store.get_profile(request_context.user_id)
+    if request_context.email and not (profile.email or "").strip():
+        profile = profile.model_copy(update={"email": request_context.email.strip()})
+        store.put_profile(profile)
     profile = _touch_last_active_if_stale(store, profile)
     is_admin = _caller_is_admin(event, request_context)
     return ok(_serialize_user_profile(profile, is_admin=is_admin))
@@ -378,7 +388,21 @@ def users_me_patch_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
         return bad_request("Invalid JSON body.")
     # Billing-only field; ignore if client sends it.
     if isinstance(body, dict):
-        blocked = {"subscription_plan", "beta_full_access", "beta_access_until", "beta_access_granted_at"}
+        blocked = {
+            "subscription_plan",
+            "beta_full_access",
+            "beta_access_until",
+            "beta_access_granted_at",
+            "phone_verified",
+            "phone_verified_at",
+            "phone_hmac",
+            "phone_last4",
+            "sms_marketing_opt_in",
+            "trial_started_at",
+            "trial_ends_at",
+            "trial_reminder_day10_sent_at",
+            "trial_reminder_day14_sent_at",
+        }
         if any(k in body for k in blocked):
             body = {k: v for k, v in body.items() if k not in blocked}
     store = get_user_profile_store()

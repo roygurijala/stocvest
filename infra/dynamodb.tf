@@ -10,6 +10,11 @@ resource "aws_dynamodb_table" "users" {
     type = "S"
   }
 
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
   tags = merge(local.common_tags, {
     Name = "stocvest-development-ddb-users"
   })

@@ -41,6 +41,88 @@ class EmailService:
             _LOG.warning("SES send_alert_email failed: %s", exc)
             return False
 
+    def send_trial_reminder_email(
+        self,
+        *,
+        to_email: str,
+        kind: str,
+        days_remaining: int,
+    ) -> bool:
+        try:
+            settings = get_settings()
+            sender = (settings.stocvest_email_sender or "").strip()
+            if not sender or not (to_email or "").strip():
+                _LOG.warning("trial reminder skipped: missing sender or recipient")
+                return False
+            base = (settings.stocvest_public_app_url or "https://stocvest.ai").rstrip("/")
+            if kind == "day14":
+                subj = "STOCVEST · Your full-access trial ends today"
+                headline = "Your trial ends today"
+                detail = (
+                    "Upgrade to Swing Pro or Swing + Day Pro to keep signals, scanner, "
+                    "watchlists, and AI explanations."
+                )
+                cta = f"{base}/pricing"
+                cta_label = "View plans & upgrade"
+            else:
+                subj = f"STOCVEST · {days_remaining} days left in your trial"
+                headline = f"{days_remaining} days left in your trial"
+                detail = (
+                    "Your 14-day full-access trial is winding down. Upgrade anytime to keep "
+                    "uninterrupted access after trial end."
+                )
+                cta = f"{base}/dashboard"
+                cta_label = "Open Stocvest"
+            body_html = self._build_trial_reminder_html(
+                headline=headline,
+                detail=detail,
+                cta=cta,
+                cta_label=cta_label,
+            )
+            import boto3
+
+            client = boto3.client("ses", region_name=settings.aws_region)
+            client.send_email(
+                Source=sender,
+                Destination={"ToAddresses": [to_email.strip()]},
+                Message={
+                    "Subject": {"Data": subj[:998], "Charset": "UTF-8"},
+                    "Body": {"Html": {"Data": body_html, "Charset": "UTF-8"}},
+                },
+            )
+            return True
+        except Exception as exc:  # noqa: BLE001
+            _LOG.warning("SES send_trial_reminder_email failed: %s", exc)
+            return False
+
+    def _build_trial_reminder_html(
+        self,
+        *,
+        headline: str,
+        detail: str,
+        cta: str,
+        cta_label: str,
+    ) -> str:
+        import html as html_mod
+
+        h = html_mod.escape(headline)
+        d = html_mod.escape(detail)
+        label = html_mod.escape(cta_label)
+        cta_esc = html_mod.escape(cta)
+        return f"""<!DOCTYPE html>
+<html><body style="margin:0;padding:24px;background:#0a1628;color:#c8dff0;font-family:system-ui,sans-serif;">
+  <div style="max-width:560px;margin:0 auto;">
+    <div style="font-size:14px;letter-spacing:0.12em;color:#00b4ff;font-weight:700;">STOCVEST</div>
+    <h1 style="font-size:20px;margin:12px 0 16px;color:#e8f4ff;">{h}</h1>
+    <p style="font-size:15px;line-height:1.55;color:#c8dff0;">{d}</p>
+    <a href="{cta_esc}" style="display:inline-block;margin-top:20px;padding:12px 20px;background:#00b4ff;color:#041018;
+      text-decoration:none;border-radius:8px;font-weight:600;">{label}</a>
+    <p style="margin-top:28px;font-size:12px;color:#6b8799;line-height:1.5;">
+      You are receiving this because you started a Stocvest trial with email notifications enabled.
+    </p>
+  </div>
+</body></html>"""
+
     def _build_subject(self, alert_type: AlertType, context: dict[str, Any]) -> str:
         sym = str(context.get("symbol") or "").strip().upper()
         direction = str(context.get("direction") or "").strip().lower()

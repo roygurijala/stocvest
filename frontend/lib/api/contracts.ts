@@ -12,6 +12,14 @@ export interface BrokerHealthResponse {
 
 export type SubscriptionPlan = "free" | "swing_pro" | "swing_day_pro";
 
+export type TrialAccessState =
+  | "legacy_free"
+  | "phone_required"
+  | "trial_active"
+  | "trial_expired"
+  | "paid"
+  | "beta";
+
 export interface UserMePayload {
   user_id: string;
   trading_mode: "paper" | "live";
@@ -26,6 +34,13 @@ export interface UserMePayload {
   beta_access_granted_at?: string | null;
   has_full_access?: boolean;
   has_ai_explanations?: boolean;
+  access_state?: TrialAccessState;
+  trial_days_remaining?: number | null;
+  phone_verified?: boolean;
+  phone_last4?: string | null;
+  trial_started_at?: string | null;
+  trial_ends_at?: string | null;
+  trial_enforcement_enabled?: boolean;
 }
 
 export interface JournalEntryPayload {

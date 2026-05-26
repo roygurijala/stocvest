@@ -235,6 +235,16 @@ class UserProfile(BaseModel):
     beta_full_access: bool = False
     beta_access_until: str | None = None
     beta_access_granted_at: str | None = None
+    # Trial + phone verification (server-owned; not user-editable via PATCH).
+    phone_verified: bool = False
+    phone_verified_at: str | None = None
+    phone_hmac: str | None = None
+    phone_last4: str | None = None
+    sms_marketing_opt_in: bool = False
+    trial_started_at: str | None = None
+    trial_ends_at: str | None = None
+    trial_reminder_day10_sent_at: str | None = None
+    trial_reminder_day14_sent_at: str | None = None
 
     @field_validator("subscription_plan", mode="before")
     @classmethod
@@ -254,6 +264,19 @@ class UserProfile(BaseModel):
         raw = (self.beta_access_until or "").strip()
         if not raw:
             return True
+        try:
+            cutoff = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError:
+            return False
+        if cutoff.tzinfo is None:
+            cutoff = cutoff.replace(tzinfo=timezone.utc)
+        return datetime.now(timezone.utc) < cutoff
+
+    @property
+    def trial_active(self) -> bool:
+        raw = (self.trial_ends_at or "").strip()
+        if not raw:
+            return False
         try:
             cutoff = datetime.fromisoformat(raw.replace("Z", "+00:00"))
         except ValueError:

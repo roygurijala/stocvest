@@ -203,6 +203,18 @@ class Settings(BaseSettings):
     stocvest_email_sender: str = Field("signals@stocvest.ai", alias="STOCVEST_EMAIL_SENDER")
     stocvest_public_app_url: str = Field("https://stocvest.ai", alias="STOCVEST_PUBLIC_APP_URL")
 
+    # ── Trial + phone verification (defaults OFF — safe to ship on main) ──
+    trial_enforcement_enabled: bool = Field(False, alias="TRIAL_ENFORCEMENT_ENABLED")
+    phone_verification_required: bool = Field(False, alias="PHONE_VERIFICATION_REQUIRED")
+    trial_duration_days: int = Field(14, alias="TRIAL_DURATION_DAYS")
+    trial_sms_enabled: bool = Field(False, alias="TRIAL_SMS_ENABLED")
+    trial_phone_hmac_pepper: str = Field("", alias="TRIAL_PHONE_HMAC_PEPPER")
+    trial_otp_ttl_seconds: int = Field(600, alias="TRIAL_OTP_TTL_SECONDS")
+    trial_otp_request_cooldown_seconds: int = Field(60, alias="TRIAL_OTP_REQUEST_COOLDOWN_SECONDS")
+    trial_otp_max_requests_per_hour: int = Field(3, alias="TRIAL_OTP_MAX_REQUESTS_PER_HOUR")
+    trial_otp_max_verify_attempts: int = Field(5, alias="TRIAL_OTP_MAX_VERIFY_ATTEMPTS")
+    trial_reminders_enabled: bool = Field(False, alias="TRIAL_REMINDERS_ENABLED")
+
     # ── Scanner schedule + WebSocket broadcast ────────────────────
     scanner_symbols: str = Field("AAPL,MSFT,NVDA", alias="STOCVEST_SCANNER_SYMBOLS")
     websocket_management_api_url: str = Field("", alias="STOCVEST_WS_MANAGEMENT_API_URL")

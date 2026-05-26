@@ -19,6 +19,11 @@ def _dispatch_http_routes(
     routes: dict[str, _Handler],
 ) -> dict[str, Any]:
     route = http_route_descriptor(event)
+    from stocvest.trial.access_gate import trial_gate_response
+
+    gated = trial_gate_response(event, route)
+    if gated is not None:
+        return gated
     target = routes.get(route)
     if target is None:
         return not_found(f"Unknown route: {route or '(empty)'}.")
@@ -231,6 +236,15 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
             users_me_get_handler,
             users_me_patch_handler,
         )
+        from stocvest.api.handlers.trial_phone import (
+            users_me_phone_request_code_handler,
+            users_me_phone_verify_code_handler,
+        )
+
+        if isinstance(event, dict) and event.get("trial_reminder_tick") is True:
+            from stocvest.workers.trial_reminder_tick import trial_reminder_tick_handler
+
+            return trial_reminder_tick_handler(event, context)
 
         return _with_cors_and_audit(
             event=event,
@@ -253,6 +267,8 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
                     "POST /v1/profile/trading-mode": profile_trading_mode_post_handler,
                     "GET /v1/users/me": users_me_get_handler,
                     "PATCH /v1/users/me": users_me_patch_handler,
+                    "POST /v1/users/me/phone/request-code": users_me_phone_request_code_handler,
+                    "POST /v1/users/me/phone/verify-code": users_me_phone_verify_code_handler,
                     "PATCH /v1/admin/users/{user_id}/beta-access": admin_beta_access_patch_handler,
                     "GET /v1/admin/audit/users/{user_id}": admin_audit_user_events_handler,
                     "GET /v1/admin/audit/sessions/{session_id}": admin_audit_session_events_handler,

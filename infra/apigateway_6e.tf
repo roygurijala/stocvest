@@ -98,6 +98,8 @@ locals {
     "POST /v1/profile/trading-mode"               = { module_key = "brokers", authorizer = true }
     "GET /v1/users/me"                            = { module_key = "brokers", authorizer = true }
     "PATCH /v1/users/me"                          = { module_key = "brokers", authorizer = true }
+    "POST /v1/users/me/phone/request-code"        = { module_key = "brokers", authorizer = true }
+    "POST /v1/users/me/phone/verify-code"         = { module_key = "brokers", authorizer = true }
     "PATCH /v1/admin/users/{user_id}/beta-access" = { module_key = "brokers", authorizer = true }
     "GET /v1/admin/audit/users/{user_id}"         = { module_key = "brokers", authorizer = true }
     "GET /v1/admin/audit/sessions/{session_id}"   = { module_key = "brokers", authorizer = true }
