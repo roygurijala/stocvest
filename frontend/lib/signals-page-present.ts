@@ -620,15 +620,66 @@ export function executionHeadline(state: TradeDecisionState): string {
 /** @deprecated Use {@link executionHeadline} */
 export const actionableHeadline = executionHeadline;
 
+function executionBlockedByRiskReward(decision: TradeDecision): boolean {
+  if (decision.rationale?.category === "risk_reward") return true;
+  return (decision.reinforcements ?? []).some((line) => /risk\/?reward/i.test(line));
+}
+
+function riskRewardRatioFromDecision(decision: TradeDecision): number | null {
+  const fromRationale = decision.rationale?.text?.match(/risk\/?reward too low \(([\d.]+):1\)/i);
+  if (fromRationale?.[1]) {
+    const n = Number.parseFloat(fromRationale[1]);
+    if (Number.isFinite(n)) return n;
+  }
+  for (const line of decision.reinforcements ?? []) {
+    const m = line.match(/risk\/?reward too low \(([\d.]+):1\)/i);
+    if (m?.[1]) {
+      const n = Number.parseFloat(m[1]);
+      if (Number.isFinite(n)) return n;
+    }
+  }
+  return null;
+}
+
+/** When layer alignment is strong but execution is withheld (especially poor R/R). */
+export function strongSetupExecutionBridgeLine(
+  state: TradeDecisionState,
+  layersAligned: number,
+  layersTotal: number,
+  setupBias: SignalsSetupBias | undefined,
+  decision: TradeDecision
+): string | null {
+  if (setupBias === "Neutral" || state === "actionable") return null;
+  const tier = resolveAlignmentDisplayTier({ layersAligned, layersTotal });
+  if (tier !== "actionable") return null;
+  if (!executionBlockedByRiskReward(decision)) return null;
+  const rr = riskRewardRatioFromDecision(decision);
+  if (rr != null && Number.isFinite(rr)) {
+    return `Strong setup quality — execution blocked by risk/reward (${rr.toFixed(1)}:1).`;
+  }
+  return "Strong setup quality — execution blocked by risk/reward at this price.";
+}
+
 /** When alignment is strong but execution gates are not cleared yet. */
 export function executionProgressHint(
   state: TradeDecisionState,
   layersAligned: number,
   layersTotal: number,
-  setupBias?: SignalsSetupBias
+  setupBias?: SignalsSetupBias,
+  decision?: TradeDecision
 ): string | null {
   if (state === "actionable") return null;
   if (setupBias === "Neutral") return null;
+  if (decision) {
+    const bridge = strongSetupExecutionBridgeLine(
+      state,
+      layersAligned,
+      layersTotal,
+      setupBias,
+      decision
+    );
+    if (bridge) return bridge;
+  }
   const tier = resolveAlignmentDisplayTier({ layersAligned, layersTotal });
   if (tier === "actionable" && state === "monitor") {
     return "One condition remains before this becomes actionable";

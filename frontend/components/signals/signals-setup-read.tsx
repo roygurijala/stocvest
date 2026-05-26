@@ -61,7 +61,13 @@ export function SignalsSetupRead({
     bias === "Bullish" ? colors.bullish : bias === "Bearish" ? colors.bearish : colors.caution;
   const whyNot =
     decision.state === "actionable" ? [] : buildWhyNotBullets(decision, previewLayers, bias, 3);
-  const executionHint = executionProgressHint(decision.state, alignment.aligned, alignment.total, bias);
+  const executionHint = executionProgressHint(
+    decision.state,
+    alignment.aligned,
+    alignment.total,
+    bias,
+    decision
+  );
   const executionToggleLabel = executionDetailToggleLabel(decision.state, executionHint);
   const primaryBlocker = primaryExecutionBlockerLine(decision);
   const showExecutionDisclosure =

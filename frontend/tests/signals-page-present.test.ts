@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   executionHeadline,
   executionProgressHint,
+  strongSetupExecutionBridgeLine,
   buildLayerInsightLine,
   buildSignalsPageDecision,
   buildWhyNotBullets,
@@ -201,7 +202,43 @@ describe("signals-page-present", () => {
     ];
     const a = countLayerAlignment(bullishAligned, "Bullish");
     expect(a.aligned).toBeGreaterThanOrEqual(5);
-    expect(executionProgressHint("monitor", a.aligned, a.total)).toMatch(/One condition remains/);
+    const d = buildSignalsPageDecision({
+      mode: "swing",
+      bias: "Bullish",
+      rows: bullishAligned,
+      signalScore: 88,
+      alignmentRatio: 0.92,
+      riskReward: 2.1,
+      rrWarning: false,
+      isComplete: true
+    });
+    expect(executionProgressHint("monitor", a.aligned, a.total, "Bullish", d)).toMatch(/One condition remains/);
+  });
+
+  test("strongSetupExecutionBridgeLine when strong alignment and R/R blocks", () => {
+    const rows: SignalsLayerRowInput[] = [
+      { key: "technical", name: "Technical", status: "Bullish", explanation: "", score: 95 },
+      { key: "news", name: "News", status: "Bullish", explanation: "", score: 89 },
+      { key: "macro", name: "Macro", status: "Bullish", explanation: "", score: 65 },
+      { key: "sector", name: "Sector", status: "Bullish", explanation: "", score: 80 },
+      { key: "geopolitical", name: "Geopolitical", status: "Bullish", explanation: "", score: 55 },
+      { key: "internals", name: "Internals", status: "Bullish", explanation: "", score: 60 }
+    ];
+    const d = buildSignalsPageDecision({
+      mode: "swing",
+      bias: "Bullish",
+      rows,
+      signalScore: 90,
+      alignmentRatio: 1.0,
+      riskReward: 0.5,
+      rrWarning: false,
+      isComplete: true
+    });
+    const a = countLayerAlignment(rows, "Bullish");
+    const line = strongSetupExecutionBridgeLine("monitor", a.aligned, a.total, "Bullish", d);
+    expect(line).toMatch(/Strong setup quality/);
+    expect(line).toMatch(/0\.5:1/);
+    expect(executionProgressHint("monitor", a.aligned, a.total, "Bullish", d)).toBe(line);
   });
 
   test("why-not bullets avoid recommendation words", () => {

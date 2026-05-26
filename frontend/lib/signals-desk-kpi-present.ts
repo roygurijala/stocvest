@@ -2,6 +2,7 @@ import { formatLayersFromActionableHint } from "@/lib/alignment-display-tier";
 import type { TradeDecision } from "@/lib/signal-evidence/trade-decision";
 import {
   decisionGateCategoryLabel,
+  executionProgressHint,
   executionReadinessLabel,
   executionSupportingGates,
   formatLayerForceNames,
@@ -75,8 +76,25 @@ export function buildBiasHeaderProof(
 /** Short execution hint for command bar — avoids repeating full rationale paragraph. */
 export function buildExecutionHeaderHint(
   decision: TradeDecision,
-  mode: "day" | "swing"
+  mode: "day" | "swing",
+  layersAligned?: number,
+  layersTotal?: number,
+  bias?: SignalsSetupBias
 ): string | null {
+  if (
+    typeof layersAligned === "number" &&
+    typeof layersTotal === "number" &&
+    bias != null
+  ) {
+    const bridge = executionProgressHint(
+      decision.state,
+      layersAligned,
+      layersTotal,
+      bias,
+      decision
+    );
+    if (bridge) return bridge;
+  }
   if (decision.state === "actionable") {
     return "Gates cleared — review levels and scenario";
   }
@@ -117,11 +135,22 @@ export function buildSignalsDeskVerdict(input: {
   alignmentRatio?: number | null;
   maturationState?: string | null;
 }): SignalsDeskVerdictBundle {
+  const alignment = resolveSignalsLayerAlignment({
+    rows: input.rows,
+    bias: input.bias,
+    alignmentRatio: input.alignmentRatio
+  });
   const items = buildSignalsDeskKpiItems(input);
   return {
     items,
     biasProof: buildBiasHeaderProof(input.rows, input.bias),
-    executionHint: buildExecutionHeaderHint(input.decision, input.tradingMode)
+    executionHint: buildExecutionHeaderHint(
+      input.decision,
+      input.tradingMode,
+      alignment.aligned,
+      alignment.total,
+      input.bias
+    )
   };
 }
 
