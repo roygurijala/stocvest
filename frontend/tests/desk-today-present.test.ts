@@ -63,6 +63,17 @@ describe("desk-today-present", () => {
     expect(formatDeskGapLine(Number.NaN, "up")).toContain("0.0%");
   });
 
+  test("resolveDiscoveryLeaders falls back to alternate desk movers", () => {
+    const leaders = resolveDiscoveryLeaders(
+      { discovery: [], movers_radar: [] },
+      [],
+      "day",
+      { movers_radar: [{ symbol: "TSLA", gap_percent: 6, direction: "up", rank_score: 6 }] }
+    );
+    expect(leaders.source).toBe("movers_radar");
+    expect(leaders.leaders[0]?.symbol).toBe("TSLA");
+  });
+
   test("buildDashboardPageTitle includes weekday and regime", () => {
     const title = buildDashboardPageTitle("Risk-on");
     expect(title).toContain("Risk-on");

@@ -17,6 +17,7 @@ import { buildDashboardAssistantPageContext } from "@/lib/dashboard/dashboard-as
 import { buildDashboardPageTitle } from "@/lib/dashboard/desk-today-present";
 import { buildLiveStatusCopy, type DashboardDeskMode } from "@/lib/dashboard/live-status-copy";
 import { useDashboardDeskRefresh } from "@/lib/hooks/use-dashboard-desk-refresh";
+import { useDeskToday } from "@/lib/hooks/use-desk-today";
 import { EarningsCalendar } from "@/components/earnings-calendar";
 import { InfoTip } from "@/components/info-tip";
 import { type WeeklyIndexRow } from "@/components/weekly-market-context-widget";
@@ -399,6 +400,11 @@ function DashboardRedesignBody({
     refreshError: deskRefreshError
   } = useDashboardDeskRefresh(activeDeskMode);
 
+  const alternateDeskMode: DashboardDeskMode = activeDeskMode === "day" ? "swing" : "day";
+  const { data: alternateDeskToday } = useDeskToday(
+    dayTradingSurfaces ? alternateDeskMode : activeDeskMode
+  );
+
   const assistantPageContext = useMemo(
     () =>
       buildDashboardAssistantPageContext({
@@ -539,8 +545,10 @@ function DashboardRedesignBody({
       <DashboardDiscoveryFeed
         mode={activeDeskMode}
         deskData={deskToday?.data ?? null}
+        alternateDeskData={dayTradingSurfaces ? alternateDeskToday?.data ?? null : null}
         gapFallback={scannerOverview.gapIntelligence}
         isLoading={deskTodayLoading}
+        scannerPending={!scannerDataSettled}
         dualDeskSurfaces={dayTradingSurfaces}
         onRefreshDesk={() => void refreshDesk()}
         refreshBusy={manualRefreshBusy}

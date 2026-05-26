@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { DashboardLayerDots } from "@/components/dashboard/dashboard-layer-dots";
 import type { HotInMarketCardModel } from "@/lib/dashboard/hot-in-market-card-present";
 import { hotInMarketSignalsHref } from "@/lib/dashboard/hot-in-market-card-present";
 import type { DashboardDeskMode } from "@/lib/dashboard/live-status-copy";
@@ -13,33 +14,6 @@ type Props = {
   model: HotInMarketCardModel;
   mode: DashboardDeskMode;
 };
-
-function LayerDots({
-  filled,
-  total,
-  accent
-}: {
-  filled: boolean[];
-  total: number;
-  accent: string;
-}) {
-  return (
-    <span className="inline-flex items-center gap-0.5" aria-hidden>
-      {filled.map((on, i) => (
-        <span
-          key={i}
-          className="text-xs leading-none"
-          style={{ color: on ? accent : "color-mix(in srgb, currentColor 35%, transparent)" }}
-        >
-          {on ? "●" : "○"}
-        </span>
-      ))}
-      <span className="ml-1 text-[10px] font-medium opacity-80">
-        ({filled.filter(Boolean).length}/{total})
-      </span>
-    </span>
-  );
-}
 
 function badgeStyle(
   badge: HotInMarketCardModel["setupBadge"],
@@ -66,24 +40,21 @@ function badgeStyle(
         background: `color-mix(in srgb, ${colors.accent} 16%, transparent)`,
         color: colors.accent
       };
+    default:
+      return {
+        background: `color-mix(in srgb, ${colors.textMuted} 14%, transparent)`,
+        color: colors.textMuted
+      };
   }
-  return {
-    background: `color-mix(in srgb, ${colors.accent} 12%, transparent)`,
-    color: colors.textMuted
-  };
 }
 
 export function HotInMarketCard({ model, mode }: Props) {
   const { colors } = useTheme();
   const href = hotInMarketSignalsHref(model.symbol, mode);
   const hover = useHoverPrefetch(href);
-  const gapColor =
-    model.gapTone === "bullish"
-      ? colors.bullish
-      : model.gapTone === "bearish"
-        ? colors.bearish
-        : colors.textMuted;
-  const badge = badgeStyle(model.setupBadge, colors);
+  const chrome = model.cardChrome;
+  const gapColor = chrome.accent;
+  const badge = model.setupBadgeLabel ? badgeStyle(model.setupBadge, colors) : null;
 
   return (
     <li className="list-none" data-testid={`dashboard-hot-in-market-card-${model.symbol}`}>
@@ -93,16 +64,19 @@ export function HotInMarketCard({ model, mode }: Props) {
         {...interactionLevelProps("deep")}
         {...hover}
         className="group block h-full no-underline"
-        aria-label={`Open ${model.symbol} on Signals — ${model.setupBadgeLabel}`}
+        aria-label={`Open ${model.symbol} on Signals${
+          model.setupBadgeLabel ? ` — ${model.setupBadgeLabel}` : ""
+        }`}
         title={model.peek ? `Quick peek: ${model.peek}` : undefined}
       >
         <article
           className="relative flex h-full flex-col overflow-hidden rounded-xl transition hover:brightness-[1.04]"
+          data-card-tone={model.cardTone}
           style={{
-            background: colors.surface,
-            border: `1px solid ${colors.border}`,
-            borderLeft: `3px solid ${model.borderLeft}`,
-            borderBottom: `3px solid ${model.borderBottom}`,
+            background: chrome.background,
+            border: `1px solid ${chrome.border}`,
+            borderLeft: `3px solid ${chrome.borderLeft}`,
+            borderBottom: `3px solid ${chrome.borderBottom}`,
             borderRadius: borderRadius.lg,
             padding: spacing[3]
           }}
@@ -116,8 +90,8 @@ export function HotInMarketCard({ model, mode }: Props) {
                 <span
                   className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums"
                   style={{
-                    background: colors.surfaceMuted,
-                    color: colors.textMuted
+                    background: `color-mix(in srgb, ${chrome.accent} 18%, transparent)`,
+                    color: chrome.accent
                   }}
                 >
                   #{model.rank}
@@ -147,13 +121,13 @@ export function HotInMarketCard({ model, mode }: Props) {
 
           <div
             className="my-2 h-px w-full"
-            style={{ background: `color-mix(in srgb, ${colors.border} 80%, transparent)` }}
+            style={{ background: `color-mix(in srgb, ${chrome.border} 80%, transparent)` }}
             aria-hidden
           />
 
           {model.alignmentLine ? (
             <div className="flex flex-wrap items-center gap-2">
-              <LayerDots filled={model.layerDots} total={model.layerTotal} accent={colors.accent} />
+              <DashboardLayerDots filled={model.layerDots} total={model.layerTotal} accent={chrome.accent} />
             </div>
           ) : null}
 
@@ -163,15 +137,19 @@ export function HotInMarketCard({ model, mode }: Props) {
             </p>
           ) : null}
 
-          <footer className="mt-auto pt-2">
-            <span
-              className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
-              style={badge}
-              data-testid={`hot-in-market-badge-${model.symbol}`}
-            >
-              {model.setupBadgeLabel}
-            </span>
-          </footer>
+          {badge && model.setupBadgeLabel ? (
+            <footer className="mt-auto pt-2">
+              <span
+                className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                style={badge}
+                data-testid={`hot-in-market-badge-${model.symbol}`}
+              >
+                {model.setupBadgeLabel}
+              </span>
+            </footer>
+          ) : (
+            <div className="mt-auto pt-2" aria-hidden />
+          )}
         </article>
       </Link>
     </li>

@@ -2,11 +2,14 @@ import { describe, expect, test } from "vitest";
 import {
   buildHotInMarketCardModel,
   HOT_IN_MARKET_DISCLAIMER,
+  hotInMarketFeedSubtitle,
   hotInMarketSourceSubtitle
 } from "@/lib/dashboard/hot-in-market-card-present";
 import type { DeskDiscoveryLeader } from "@/lib/api/desk-today";
 
 const colors = {
+  surface: "#0f172a",
+  border: "#334155",
   accent: "#38bdf8",
   bullish: "#4ade80",
   bearish: "#f87171",
@@ -55,7 +58,7 @@ describe("hot-in-market-card-present", () => {
     expect(model.setupBadgeLabel).toBe("Meets our gates");
   });
 
-  test("mover badge for movers radar source", () => {
+  test("mover badge hidden for movers radar source", () => {
     const model = buildHotInMarketCardModel(baseLeader(), {
       rank: 3,
       mode: "day",
@@ -63,10 +66,22 @@ describe("hot-in-market-card-present", () => {
       colors
     });
     expect(model.setupBadge).toBe("mover");
+    expect(model.setupBadgeLabel).toBeNull();
+    expect(model.cardTone).toBe("bullish");
     expect(model.alignmentLine).toBeNull();
   });
 
   test("hotInMarketSourceSubtitle describes desk cache", () => {
     expect(hotInMarketSourceSubtitle("desk_cache", 15)).toContain("platform desk");
+  });
+
+  test("hotInMarketFeedSubtitle shows loading when scanner pending", () => {
+    const line = hotInMarketFeedSubtitle({
+      source: "empty",
+      count: 0,
+      scannerPending: true,
+      mode: "day"
+    });
+    expect(line.toLowerCase()).toContain("scanner");
   });
 });

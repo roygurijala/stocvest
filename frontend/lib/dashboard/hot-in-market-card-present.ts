@@ -5,6 +5,11 @@
 
 import type { DeskDiscoveryLeader } from "@/lib/api/desk-today";
 import { ACTIONABLE_ALIGNED_MIN } from "@/lib/alignment-display-tier";
+import {
+  dashboardDirectionCardChrome,
+  type DashboardCardChrome,
+  type DashboardCardTone
+} from "@/lib/dashboard/dashboard-card-surface";
 import type { DashboardDeskMode } from "@/lib/dashboard/live-status-copy";
 import { formatDeskGapLine } from "@/lib/dashboard/desk-today-present";
 import { alignedLayersFromAlignmentRatio } from "@/lib/signals-page-present";
@@ -36,13 +41,15 @@ export type HotInMarketCardModel = {
   layerTotal: number;
   verdictLine: string | null;
   setupBadge: HotInMarketSetupBadge;
-  setupBadgeLabel: string;
-  borderLeft: string;
-  borderBottom: string;
+  setupBadgeLabel: string | null;
+  cardTone: DashboardCardTone;
+  cardChrome: DashboardCardChrome;
   peek: string;
 };
 
 export type HotInMarketThemeColors = {
+  surface: string;
+  border: string;
   accent: string;
   bullish: string;
   bearish: string;
@@ -94,26 +101,9 @@ function resolveSetupBadge(
   return "mover";
 }
 
-function badgeColors(
-  badge: HotInMarketSetupBadge,
-  colors: HotInMarketThemeColors
-): { borderLeft: string; borderBottom: string } {
-  switch (badge) {
-    case "actionable":
-      return { borderLeft: colors.bullish, borderBottom: `color-mix(in srgb, ${colors.bullish} 55%, transparent)` };
-    case "blocked":
-      return { borderLeft: colors.caution, borderBottom: `color-mix(in srgb, ${colors.caution} 45%, transparent)` };
-    case "weak":
-      return { borderLeft: colors.bearish, borderBottom: `color-mix(in srgb, ${colors.bearish} 40%, transparent)` };
-    case "review":
-      return { borderLeft: colors.accent, borderBottom: `color-mix(in srgb, ${colors.accent} 40%, transparent)` };
-    case "mover":
-    default:
-      return {
-        borderLeft: `color-mix(in srgb, ${colors.accent} 70%, ${colors.textMuted})`,
-        borderBottom: `color-mix(in srgb, ${colors.accent} 30%, transparent)`
-      };
-  }
+function resolveSetupBadgeLabel(badge: HotInMarketSetupBadge): string | null {
+  if (badge === "mover") return null;
+  return SETUP_BADGE_LABEL[badge];
 }
 
 function formatPrice(price: number | undefined): string | null {
@@ -138,12 +128,35 @@ export function hotInMarketSourceSubtitle(
     case "desk_cache":
       return `${count} ranked ${noun} · platform desk scan`;
     case "movers_radar":
-      return `${count} session ${noun} · composite scan pending`;
+      return `${count} session ${noun} · math-only movers until full desk scan`;
     case "gap_fallback":
       return `${count} gap ${noun} · desk cache warming`;
     default:
       return "";
   }
+}
+
+export function hotInMarketFeedSubtitle(input: {
+  source: HotInMarketSource;
+  count: number;
+  deskLoading?: boolean;
+  scannerPending?: boolean;
+  mode: DashboardDeskMode;
+}): string {
+  const { source, count, deskLoading = false, scannerPending = false, mode } = input;
+  if (count === 0) {
+    if (deskLoading && scannerPending) {
+      return "Loading platform desk and session movers…";
+    }
+    if (deskLoading) {
+      return `Loading ${mode} desk scan…`;
+    }
+    if (scannerPending) {
+      return "Loading session movers from scanner…";
+    }
+    return hotInMarketSourceSubtitle(source, count);
+  }
+  return hotInMarketSourceSubtitle(source, count);
 }
 
 export function buildHotInMarketCardModel(
@@ -156,14 +169,21 @@ export function buildHotInMarketCardModel(
   }
 ): HotInMarketCardModel {
   const setupBadge = resolveSetupBadge(leader, input.mode, input.source);
-  const borders = badgeColors(setupBadge, input.colors);
+  const setupBadgeLabel = resolveSetupBadgeLabel(setupBadge);
   const aligned = alignedLayersFromAlignmentRatio(leader.alignment_ratio, LAYER_TOTAL);
   const layerDots = Array.from({ length: LAYER_TOTAL }, (_, i) =>
     aligned != null ? i < aligned : false
   );
   const gapLine = formatDeskGapLine(leader.gap_percent, leader.direction);
-  const gapTone =
+  const gapTone: DashboardCardTone =
     leader.direction === "up" ? "bullish" : leader.direction === "down" ? "bearish" : "muted";
+  const cardChrome = dashboardDirectionCardChrome(gapTone, {
+    surface: input.colors.surface,
+    border: input.colors.border,
+    bullish: input.colors.bullish,
+    bearish: input.colors.bearish,
+    textMuted: input.colors.textMuted
+  });
 
   let alignmentLine: string | null = null;
   if (aligned != null) {
@@ -193,9 +213,9 @@ export function buildHotInMarketCardModel(
     layerTotal: LAYER_TOTAL,
     verdictLine,
     setupBadge,
-    setupBadgeLabel: SETUP_BADGE_LABEL[setupBadge],
-    borderLeft: borders.borderLeft,
-    borderBottom: borders.borderBottom,
+    setupBadgeLabel,
+    cardTone: gapTone,
+    cardChrome,
     peek
   };
 }

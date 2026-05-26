@@ -58,7 +58,8 @@ function moversRadarToDiscoveryLeaders(
 export function resolveDiscoveryLeaders(
   deskData: DeskTodayData | null | undefined,
   gapFallback: GapIntelligenceItem[],
-  mode: DeskTodayMode
+  mode: DeskTodayMode,
+  alternateDeskData?: DeskTodayData | null | undefined
 ): { leaders: DeskDiscoveryLeader[]; source: "desk_cache" | "movers_radar" | "gap_fallback" | "empty" } {
   const fromDesk = deskData?.discovery;
   if (Array.isArray(fromDesk) && fromDesk.length > 0) {
@@ -73,6 +74,13 @@ export function resolveDiscoveryLeaders(
   }
   if (gapFallback.length > 0) {
     return { leaders: gapIntelToDiscoveryLeaders(gapFallback, mode), source: "gap_fallback" };
+  }
+  const altMovers = alternateDeskData?.movers_radar;
+  if (Array.isArray(altMovers) && altMovers.length > 0) {
+    return {
+      leaders: moversRadarToDiscoveryLeaders(altMovers, mode),
+      source: "movers_radar"
+    };
   }
   return { leaders: [], source: "empty" };
 }

@@ -11,6 +11,7 @@ import {
   formatCooldownRemaining,
   markDeskManualRefreshAt
 } from "@/lib/dashboard/desk-manual-refresh";
+import { formatDeskRefreshErrorMessage } from "@/lib/dashboard/desk-refresh-present";
 import {
   DESK_MANUAL_REFRESH_COOLDOWN_MS,
   DESK_REFRESH_TIER_B_MS,
@@ -60,7 +61,7 @@ export function useDashboardDeskRefresh(mode: DeskTodayMode) {
         setCooldownMs(err.retryAfterSeconds * 1000);
         setRefreshError(`On cooldown — try again in ${formatCooldownRemaining(err.retryAfterSeconds * 1000)}.`);
       } else {
-        setRefreshError(err instanceof Error ? err.message : "Refresh failed");
+        setRefreshError(formatDeskRefreshErrorMessage(err));
         await mutate();
       }
     } finally {

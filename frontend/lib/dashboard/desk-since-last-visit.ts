@@ -2,17 +2,23 @@
  * Dashboard discovery diff since last visit (localStorage).
  */
 
-const STORAGE_KEY = "stocvest:dashboard:desk-last-visit";
+import type { DeskTodayMode } from "@/lib/api/desk-today";
+
+const STORAGE_KEY_PREFIX = "stocvest:dashboard:desk-last-visit";
 
 export type DeskLastVisitSnapshot = {
   visitedAt: string;
   discoverySymbols: string[];
 };
 
-export function loadDeskLastVisit(): DeskLastVisitSnapshot | null {
+function storageKey(mode: DeskTodayMode): string {
+  return `${STORAGE_KEY_PREFIX}:${mode}`;
+}
+
+export function loadDeskLastVisit(mode: DeskTodayMode): DeskLastVisitSnapshot | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(storageKey(mode));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as DeskLastVisitSnapshot;
     if (!parsed?.visitedAt || !Array.isArray(parsed.discoverySymbols)) return null;
@@ -25,7 +31,11 @@ export function loadDeskLastVisit(): DeskLastVisitSnapshot | null {
   }
 }
 
-export function saveDeskLastVisit(symbols: string[], at: Date = new Date()): void {
+export function saveDeskLastVisit(
+  symbols: string[],
+  mode: DeskTodayMode,
+  at: Date = new Date()
+): void {
   if (typeof window === "undefined") return;
   const discoverySymbols = [...new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean))];
   const payload: DeskLastVisitSnapshot = {
@@ -33,7 +43,7 @@ export function saveDeskLastVisit(symbols: string[], at: Date = new Date()): voi
     discoverySymbols
   };
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    window.localStorage.setItem(storageKey(mode), JSON.stringify(payload));
   } catch {
     /* ignore */
   }
@@ -55,7 +65,7 @@ export function sinceLastVisitSummary(added: string[], removed: string[]): strin
   const parts: string[] = [];
   if (added.length > 0) {
     const label = added.length === 1 ? added[0] : `${added.length} new`;
-    parts.push(`${label} in discovery`);
+    parts.push(`${label} in hot list`);
   }
   if (removed.length > 0) {
     const label = removed.length === 1 ? `${removed[0]} dropped` : `${removed.length} dropped`;
