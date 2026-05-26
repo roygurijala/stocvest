@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
+import { browserApiFetch } from "@/lib/api/browser-api-fetch";
+import type { ScannerJsonFetch } from "@/lib/api/scanner-load";
 import { loadScannerDataWithoutBrief } from "@/lib/api/scanner-client-load";
 import type { ScannerLoadTuning } from "@/lib/api/scanner";
 import { useReplaceScannerOverview } from "@/components/dashboard/scanner-overview-context";
@@ -15,14 +17,18 @@ export function DashboardScannerClientFetch({ tuning }: { tuning: ScannerLoadTun
   const tuningKey = useMemo(() => JSON.stringify(tuning), [tuning]);
 
   useEffect(() => {
-    let cancelled = false;
+    const abort = new AbortController();
+    const jsonFetch: ScannerJsonFetch = (path, init) =>
+      browserApiFetch(path, { ...init, signal: abort.signal });
+
     void (async () => {
-      const core = await loadScannerDataWithoutBrief(null, [], tuning, null);
-      if (cancelled) return;
+      const core = await loadScannerDataWithoutBrief(null, [], tuning, null, jsonFetch);
+      if (abort.signal.aborted) return;
       replace(scannerCoreToOverview(core));
     })();
+
     return () => {
-      cancelled = true;
+      abort.abort();
     };
   }, [replace, tuning, tuningKey]);
 
