@@ -1,5 +1,6 @@
 /**
- * Shared direction-tinted chrome for dashboard opportunity cards.
+ * Shared direction chrome for dashboard opportunity cards — neutral surface,
+ * thick left/bottom accents keyed to session direction.
  */
 
 export type DashboardCardTone = "bullish" | "bearish" | "muted";
@@ -26,18 +27,12 @@ export function dashboardDirectionCardChrome(
 ): DashboardCardChrome {
   const accent =
     tone === "bullish" ? colors.bullish : tone === "bearish" ? colors.bearish : colors.textMuted;
-  const background =
-    tone === "bullish"
-      ? `color-mix(in srgb, ${colors.bullish} 16%, ${colors.surface})`
-      : tone === "bearish"
-        ? `color-mix(in srgb, ${colors.bearish} 16%, ${colors.surface})`
-        : colors.surface;
 
   return {
-    background,
-    border: `color-mix(in srgb, ${accent} 38%, ${colors.border})`,
+    background: colors.surface,
+    border: colors.border,
     borderLeft: accent,
-    borderBottom: `color-mix(in srgb, ${accent} 58%, transparent)`,
+    borderBottom: accent,
     accent
   };
 }
