@@ -108,7 +108,7 @@ const baseWeekly = [
 ];
 
 describe("DashboardDiscoveryFeed", () => {
-  test("renders MU row with execution hint from desk cache", () => {
+  test("renders Hot in market card with disclaimer and blocked badge", () => {
     wrap(
       <DashboardDiscoveryFeed
         mode="swing"
@@ -127,8 +127,13 @@ describe("DashboardDiscoveryFeed", () => {
         gapFallback={[]}
       />
     );
-    expect(screen.getByTestId("dashboard-discovery-row-MU")).toBeInTheDocument();
-    expect(screen.getByText(/execution blocked by risk\/reward/i)).toBeInTheDocument();
+    expect(screen.getByText("Hot in market")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-hot-in-market-disclaimer")).toHaveTextContent(
+      /not trade recommendations/i
+    );
+    expect(screen.getByTestId("dashboard-hot-in-market-card-MU")).toBeInTheDocument();
+    expect(screen.getByTestId("hot-in-market-badge-MU")).toHaveTextContent(/R\/R blocks entry/i);
+    expect(screen.queryByText(/Signals →/)).toBeNull();
   });
 });
 
@@ -181,7 +186,7 @@ describe("DashboardRedesign radar shell", () => {
     expect(screen.getByTestId("dashboard-market-pulse-hero")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-page-title")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-discovery-feed")).toBeInTheDocument();
-    expect(screen.getByTestId("dashboard-discovery-row-MU")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-hot-in-market-card-MU")).toBeInTheDocument();
     expect(screen.queryByTestId("dashboard-opportunities")).not.toBeInTheDocument();
     expect(screen.queryByTestId("dashboard-system-state-banner")).not.toBeInTheDocument();
 
