@@ -728,6 +728,7 @@ async def build_real_composite_response(
         ref_utc=_gen_at_eq,
     )
     response_body["execution_quality"] = _execution_quality
+    response_body["generated_at"] = _gen_at_eq.replace(microsecond=0).isoformat()
     _eval_src = evaluation_source_for_ledger_capture(ledger_capture)
 
     if direction_out:
