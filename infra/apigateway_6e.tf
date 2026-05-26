@@ -16,6 +16,8 @@ locals {
     "GET /v1/market/options"        = { module_key = "market_data", authorizer = true }
     "GET /v1/market/earnings"       = { module_key = "market_data", authorizer = true }
     "GET /v1/dashboard/summary"     = { module_key = "market_data", authorizer = true }
+    "GET /v1/desk/today"            = { module_key = "market_data", authorizer = true }
+    "POST /v1/desk/refresh"         = { module_key = "scanner", authorizer = true }
 
     "POST /v1/signals/ai/explanations"       = { module_key = "signals", authorizer = true }
     "POST /v1/signals/assistant/chat"        = { module_key = "signals", authorizer = true }

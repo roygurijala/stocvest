@@ -8,6 +8,7 @@ import {
   buildDashboardAssistantPageContext,
   DASHBOARD_CONTEXT_VERSION
 } from "@/lib/dashboard/dashboard-assistant-context";
+import type { DeskTodayData } from "@/lib/api/desk-today";
 import type { GapIntelligenceItem, IntradaySetupPayload } from "@/lib/api/scanner";
 
 const swingSetup: IntradaySetupPayload = {
@@ -72,6 +73,44 @@ describe("buildDashboardAssistantPageContext", () => {
     expect(ctx.dashboard_context?.macro_events[0]?.symbol).toBe("AAPL");
     expect(ctx.dashboard_context?.gap_leaders_detail).toBeUndefined();
     expect(ctx).not.toHaveProperty("trading_mode");
+  });
+
+  test("discovery_block_includes_desk_cache_fields", () => {
+    const deskData: DeskTodayData = {
+      generated_at: "2026-05-26T14:00:00Z",
+      eligible_symbol_count: 88,
+      discovery: [
+        {
+          symbol: "MU",
+          gap_percent: 16,
+          direction: "up",
+          rank_score: 16,
+          desk: "swing",
+          verdict: "gap + catalyst"
+        }
+      ],
+      recently_hot: [{ symbol: "AMD", dropped_at: "2026-05-26T13:00:00Z" }]
+    };
+    const ctx = buildDashboardAssistantPageContext({
+      regimeLabel: "Risk-on",
+      swingDeskPosture: "active",
+      dayTradingSurfaces: false,
+      daySetupsCount: 0,
+      swingTopSignals: [],
+      gapIntelligence: [],
+      swingUniverseSymbolCount: 50,
+      gapSnapshotSymbolCount: null,
+      upcomingEarnings: [],
+      scannerDataSettled: true,
+      discoveryExpanded: false,
+      activeDeskMode: "swing",
+      deskData
+    });
+    expect(ctx.dashboard_context?.discovery.source).toBe("desk_cache");
+    expect(ctx.dashboard_context?.discovery.scanned_count).toBe(88);
+    expect(ctx.dashboard_context?.discovery.generated_at).toBe("2026-05-26T14:00:00Z");
+    expect(ctx.dashboard_context?.discovery.recently_hot).toEqual(["AMD"]);
+    expect(ctx.dashboard_context?.discovery.preview_symbols).toEqual(["MU"]);
   });
 
   test("includes_gap_leaders_detail_only_when_discovery_expanded", () => {

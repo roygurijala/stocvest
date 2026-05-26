@@ -15,6 +15,38 @@ vi.mock("@/lib/hooks/use-is-mobile-layout", () => ({
   useIsMobileLayout: () => false
 }));
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn() })
+}));
+
+vi.mock("@/lib/hooks/use-dashboard-desk-refresh", () => ({
+  useDashboardDeskRefresh: () => ({
+    data: null,
+    isLoading: false,
+    isValidating: false,
+    error: null,
+    mutate: vi.fn(),
+    refreshDesk: vi.fn(),
+    manualRefreshBusy: false,
+    canManualRefresh: true,
+    cooldownRemainingMs: 0,
+    cooldownLabel: null,
+    refreshError: null
+  })
+}));
+
+vi.mock("@/lib/assistant/context", () => ({
+  usePublishAssistantContext: () => {}
+}));
+
+vi.mock("@/lib/hooks/use-macro-context", () => ({
+  useMacroContext: () => ({ data: null })
+}));
+
+vi.mock("@/lib/hooks/use-dashboard-payload", () => ({
+  useDashboardPayload: () => ({ data: null })
+}));
+
 beforeAll(() => {
   Object.defineProperty(window, "matchMedia", {
     writable: true,
@@ -74,8 +106,9 @@ describe("Dashboard degraded shell (Phase 5)", () => {
       />
     );
 
-    expect(screen.getByTestId("dashboard-system-state-banner")).toBeInTheDocument();
-    expect(screen.getByTestId("dashboard-system-state-banner").textContent || "").toMatch(/scanner incomplete/i);
+    expect(screen.getByTestId("dashboard-market-pulse-hero")).toBeInTheDocument();
+    const heroText = screen.getByTestId("dashboard-market-pulse-hero").textContent || "";
+    expect(heroText).toMatch(/scanner still loading|scanner/i);
     expect(screen.queryByTestId("dashboard-active-signal-ribbon")).toBeNull();
     expect(screen.queryByTestId("dashboard-universe-strip")).toBeNull();
     expect(screen.queryByTestId("dashboard-discovery-row")).toBeNull();

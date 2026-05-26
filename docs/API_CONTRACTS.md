@@ -49,6 +49,11 @@ All REST routes are versioned under `/v1/`.
 `timeframe` values are fixed to `Timeframe` enum values:
 `1min`, `5min`, `15min`, `30min`, `1hour`, `4hour`, `1day`, `1week`.
 
+### 4.2.1 Opportunity Desk (D13)
+
+- `GET /v1/desk/today` — **authenticated**. Query **`mode`** = `swing` \| `day` (default `swing`). Reads Upstash **`stocvest:dashboard:opportunity_desk_{swing|day}`** populated by EventBridge scanner jobs **`opportunity_desk`** (full) and **`opportunity_desk_movers`** (math-only refresh). Response: `{ mode, source: "cache" | "cache_miss", envelope, data, disclaimer }`. **`data`** when present includes **`discovery`** (leader rows), **`movers_radar`**, **`recently_hot`**, **`scanned_snapshot_count`**, **`eligible_symbol_count`**, **`generated_at`**, **`snapshot_source`**, **`tier`**. **BFF:** `GET /api/stocvest/desk/today?mode=…`.
+- `POST /v1/desk/refresh` — **authenticated** (scanner Lambda, 120s). Manual Tier B (`movers`) then Tier C (`full`) batch. Per-user **5 min** cooldown via Upstash `stocvest:desk:refresh_cooldown:{sub}`; **429** with **`retry_after_seconds`** when limited. Success: `{ status: "ok", tiers: ["movers","full"], movers, full, disclaimer }`. **BFF:** `POST /api/stocvest/desk/refresh` (`maxDuration` 120).
+
 ### 4.3 Signals (Phase 4d)
 
 - `POST /v1/signals/composite/real` — JSON body `{ "symbol": "AAPL" }`; server runs six analyzers on **intraday** data; success payload includes **`mode": "day"`**, **`signal_valid_until`** (next US RTH close, ISO UTC), plus composite fields (`layers`, `score`, …). When alignment data is available, may also include informational **`weekly_timeframe`**, **`timeframe_alignment`** (intraday vs weekly context; does not change actionable gates), **`causal_narrative`** (headwind chain object: **`summary`**, **`chain[]`**, **`layer_notes`**, **`setup_bias`** — display-only), and **`execution_quality`** (soft execution context: **`band`**, **`stop_atr_ratio`**, **`level_path`**, **`volume_band`**, **`session_window`**, **`setup_tags`**, **`disclaimer`** — informational only; does not change actionable gates). On scheduled **ledger capture**, response may include **`ledger_qualified`** (bool) and **`gate_status`** (object) when the caller is authenticated. **`insufficient_data`** still HTTP 200 with `market_status`.

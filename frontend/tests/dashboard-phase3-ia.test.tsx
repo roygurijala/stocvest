@@ -20,6 +20,38 @@ vi.mock("@/lib/hooks/use-is-mobile-layout", () => ({
   useIsMobileLayout: () => false
 }));
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn() })
+}));
+
+vi.mock("@/lib/hooks/use-dashboard-desk-refresh", () => ({
+  useDashboardDeskRefresh: () => ({
+    data: null,
+    isLoading: false,
+    isValidating: false,
+    error: null,
+    mutate: vi.fn(),
+    refreshDesk: vi.fn(),
+    manualRefreshBusy: false,
+    canManualRefresh: true,
+    cooldownRemainingMs: 0,
+    cooldownLabel: null,
+    refreshError: null
+  })
+}));
+
+vi.mock("@/lib/assistant/context", () => ({
+  usePublishAssistantContext: () => {}
+}));
+
+vi.mock("@/lib/hooks/use-macro-context", () => ({
+  useMacroContext: () => ({ data: null })
+}));
+
+vi.mock("@/lib/hooks/use-dashboard-payload", () => ({
+  useDashboardPayload: () => ({ data: null })
+}));
+
 beforeAll(() => {
   Object.defineProperty(window, "matchMedia", {
     writable: true,
@@ -194,7 +226,7 @@ describe("DashboardRedesign Phase 3 integration", () => {
       />
     );
 
-    const scannerCta = screen.getByRole("link", { name: /view scanner/i });
+    const scannerCta = screen.getByTestId("dashboard-discovery-scanner-link");
     expect(scannerCta.getAttribute("data-interaction-level")).toBe("deep");
     const liveCta = screen.getByTestId("dashboard-live-status").querySelector("a");
     expect(liveCta?.getAttribute("data-interaction-level")).toBe("deep");

@@ -50,11 +50,11 @@ def test_platform_watchlist_aggregation_merge_and_scan() -> None:
             if su not in seen:
                 seen.add(su)
                 platform.append(su)
-    out = merge_scheduled_scan_symbol_universe(["CFG1"], platform, cap=40)
+    out = merge_scheduled_scan_symbol_universe(["CFG1"], platform, cap=50)
     assert out[0] == "CFG1"
     assert "X1" in out and "X3" in out
     assert "SPY" in out
-    assert len(out) <= 40
+    assert len(out) <= 50
 
 
 @pytest.mark.asyncio

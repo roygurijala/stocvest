@@ -335,6 +335,10 @@ def test_serialize_page_context_emits_dashboard_context_v1() -> None:
                 "leader_count": 3,
                 "with_catalyst_count": 2,
                 "preview_symbols": ["GAP1", "GAP2"],
+                "source": "desk_cache",
+                "scanned_count": 4200,
+                "generated_at": "2026-05-26T14:00:00Z",
+                "recently_hot": ["MU"],
             },
             "universe": {
                 "swing_universe_symbol_count": 200,
@@ -366,6 +370,10 @@ def test_serialize_page_context_emits_dashboard_context_v1() -> None:
     assert "dashboard_regime=Risk-on" in out
     assert "discovery_leader_count=3" in out
     assert "discovery_preview_symbols=GAP1,GAP2" in out
+    assert "discovery_source=desk_cache" in out
+    assert "discovery_scanned_count=4200" in out
+    assert "discovery_generated_at=2026-05-26T14:00:00Z" in out
+    assert "discovery_recently_hot=MU" in out
     assert "universe_swing_symbol_count=200" in out
     assert "macro_event_1=symbol=AAPL|date=2026-05-20|time=after_market" in out
     assert "gap_leader_1=symbol=GAP1|gap=up|quality=high" in out

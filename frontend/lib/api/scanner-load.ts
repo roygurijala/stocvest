@@ -26,11 +26,18 @@ import {
   type ScannerSetupsDeskBundle
 } from "@/lib/scanner-setups-response";
 import type { ScannerSynthesis } from "@/lib/scanner-synthesis";
+import type { DeskTodayResponse } from "@/lib/api/desk-today";
+import {
+  buildScannerSymbolUniverse,
+  capScannerUniverse,
+  DASHBOARD_SCANNER_MAX_UNIVERSE,
+  scannerUniverseCapPriority,
+  SCANNER_MARKET_ANCHORS,
+  symbolsFromDeskPayloads,
+  topGapSymbolsForUniverse
+} from "@/lib/dashboard/scanner-universe";
 
 export type DefaultWatchlistFetch = () => Promise<DefaultWatchlistSnapshot>;
-
-/** Always load tape anchors so Market Pulse (spy/qqq %) and regime are populated even when gaps omit indices. */
-const MARKET_PULSE_ANCHORS = ["SPY", "QQQ"] as const;
 
 /** When the scanner has no gap symbols and no user watchlist, intraday bars use this liquid floor. */
 const INTRADAY_FALLBACK_SYMBOLS = [
@@ -210,18 +217,20 @@ async function loadPresentationMaturationBySymbol(
   }
 }
 
-function capScannerUniverse(universe: string[], max: number): string[] {
-  if (universe.length <= max) return universe;
-  const priority = ["SPY", "QQQ"];
-  const out: string[] = [];
-  for (const p of priority) {
-    if (universe.includes(p) && !out.includes(p)) out.push(p);
+async function loadDeskUniverseSymbols(
+  jsonFetch: ScannerJsonFetch,
+  includeDesk: boolean
+): Promise<string[]> {
+  if (!includeDesk) return [];
+  try {
+    const [swing, day] = await Promise.all([
+      jsonFetch<DeskTodayResponse>("/v1/desk/today?mode=swing"),
+      jsonFetch<DeskTodayResponse>("/v1/desk/today?mode=day")
+    ]);
+    return symbolsFromDeskPayloads([swing?.data ?? null, day?.data ?? null]);
+  } catch {
+    return [];
   }
-  for (const s of universe) {
-    if (out.length >= max) break;
-    if (!out.includes(s)) out.push(s);
-  }
-  return out;
 }
 
 async function fetchSnapshotsMatrix(
@@ -342,6 +351,7 @@ export async function runScannerLoadWithoutBrief(
       };
     }
 
+    const includeDeskUniverse = tuning?.includeOpportunityDeskUniverse !== false;
     const gapIntelPromise = jsonFetch<{
       items: GapIntelligenceItem[];
       disclaimer?: string;
@@ -362,7 +372,12 @@ export async function runScannerLoadWithoutBrief(
             symbols: watchlistSymbols,
             symbol_tracking: {} as SymbolTrackingMap
           });
-    const [gapIntelResp, wlSnap] = await Promise.all([gapIntelPromise, watchlistPromise]);
+    const deskUniversePromise = loadDeskUniverseSymbols(jsonFetch, includeDeskUniverse);
+    const [gapIntelResp, wlSnap, deskSymbols] = await Promise.all([
+      gapIntelPromise,
+      watchlistPromise,
+      deskUniversePromise
+    ]);
     /**
      * Gap-intelligence is best-effort for the dashboard/scanner shell: Polygon full-feed +
      * news can 5xx or time out. When the response is missing or malformed, continue with an
@@ -388,18 +403,30 @@ export async function runScannerLoadWithoutBrief(
       (gapIntelResp as { snapshot_symbol_count: number }).snapshot_symbol_count > 0
         ? Math.floor((gapIntelResp as { snapshot_symbol_count: number }).snapshot_symbol_count)
         : null;
-    const gapSyms = gapItems.map((g) => g.symbol.trim().toUpperCase()).filter(Boolean);
+    const gapTopSyms = topGapSymbolsForUniverse(gapItems);
     const wlSource = tuning?.parallelDefaultWatchlist === true ? wlSnap.symbols : watchlistSymbols;
     const watchUpper = wlSource.map((s) => s.trim().toUpperCase()).filter(Boolean);
     const trackingMap: SymbolTrackingMap = tuning?.parallelDefaultWatchlist === true ? wlSnap.symbol_tracking : {};
-    let universe = [...new Set([...MARKET_PULSE_ANCHORS, ...gapSyms, ...watchUpper])];
-    if (universe.length === 0) {
-      universe = [...INTRADAY_FALLBACK_SYMBOLS];
-    }
+    let universe = buildScannerSymbolUniverse({
+      anchors: SCANNER_MARKET_ANCHORS,
+      watchlist: watchUpper,
+      gapSymbols: gapTopSyms,
+      deskSymbols,
+      fallbackSymbols: INTRADAY_FALLBACK_SYMBOLS
+    });
     const barLimit = tuning?.intradayBarLimit ?? 120;
-    const maxU = tuning?.maxUniverseSymbols;
-    if (typeof maxU === "number" && maxU > 0) {
-      universe = capScannerUniverse(universe, maxU);
+    const maxU =
+      typeof tuning?.maxUniverseSymbols === "number" && tuning.maxUniverseSymbols > 0
+        ? tuning.maxUniverseSymbols
+        : includeDeskUniverse
+          ? DASHBOARD_SCANNER_MAX_UNIVERSE
+          : undefined;
+    if (typeof maxU === "number" && maxU > 0 && universe.length > maxU) {
+      universe = capScannerUniverse(
+        universe,
+        maxU,
+        scannerUniverseCapPriority({ deskSymbols, gapSymbols: gapTopSyms, watchlist: watchUpper })
+      );
     }
 
     const setupLoadMode = resolveScannerSetupLoadMode(tuning);

@@ -3,8 +3,11 @@
  * Mirrors on-screen sections only; lists come from the same arrays the UI renders.
  */
 
+import type { DeskTodayData } from "@/lib/api/desk-today";
 import type { EarningsEvent } from "@/lib/api/earnings-types";
 import type { GapIntelligenceItem, IntradaySetupPayload } from "@/lib/api/scanner";
+import type { DashboardDeskMode } from "@/lib/dashboard/live-status-copy";
+import { resolveDiscoveryLeaders } from "@/lib/dashboard/desk-today-present";
 import type {
   AssistantPageContext,
   AssistantScannerGapSummary,
@@ -30,6 +33,8 @@ export type BuildDashboardAssistantPageContextInput = {
   upcomingEarnings: EarningsEvent[];
   scannerDataSettled: boolean;
   discoveryExpanded: boolean;
+  activeDeskMode?: DashboardDeskMode;
+  deskData?: DeskTodayData | null;
 };
 
 function isLongDirection(direction: string): boolean {
@@ -98,17 +103,41 @@ export function buildDashboardAssistantPageContext(
   input: BuildDashboardAssistantPageContextInput
 ): AssistantPageContext {
   const regime = input.regimeLabel.trim() || "Neutral";
-  const leaders = input.scannerDataSettled ? sortGaps(input.gapIntelligence).slice(0, 10) : [];
-  const previewSymbols = leaders.slice(0, 3).map((g) => g.symbol.trim().toUpperCase());
-  const withCatalyst = leaders.filter((g) => g.has_catalyst).length;
+  const deskMode = input.activeDeskMode ?? "swing";
+  const { leaders: deskLeaders, source: deskSource } = resolveDiscoveryLeaders(
+    input.deskData,
+    input.gapIntelligence,
+    deskMode
+  );
+  const gapLeaders = input.scannerDataSettled ? sortGaps(input.gapIntelligence).slice(0, 10) : [];
+  const useDesk = deskSource === "desk_cache" && deskLeaders.length > 0;
+  const leaderSymbols = useDesk
+    ? deskLeaders.map((l) => l.symbol)
+    : gapLeaders.map((g) => g.symbol.trim().toUpperCase());
+  const previewSymbols = leaderSymbols.slice(0, 3);
+  const withCatalyst = useDesk
+    ? deskLeaders.filter((l) => (l.verdict ?? "").toLowerCase().includes("catalyst")).length
+    : gapLeaders.filter((g) => g.has_catalyst).length;
+  const recentlyHot = Array.isArray(input.deskData?.recently_hot)
+    ? input.deskData!.recently_hot!.map((r) => r.symbol.trim().toUpperCase()).filter(Boolean).slice(0, 5)
+    : [];
 
   const dashboard_context: DashboardAssistantContextV1 = {
     version: DASHBOARD_CONTEXT_VERSION,
     regime,
     discovery: {
-      leader_count: leaders.length,
+      leader_count: leaderSymbols.length,
       with_catalyst_count: withCatalyst,
-      preview_symbols: previewSymbols
+      preview_symbols: previewSymbols,
+      source: useDesk ? "desk_cache" : deskSource,
+      scanned_count:
+        typeof input.deskData?.eligible_symbol_count === "number"
+          ? input.deskData.eligible_symbol_count
+          : input.scannerDataSettled
+            ? input.gapSnapshotSymbolCount
+            : null,
+      generated_at: input.deskData?.generated_at ?? null,
+      ...(recentlyHot.length > 0 ? { recently_hot: recentlyHot } : {})
     },
     universe: {
       swing_universe_symbol_count: input.scannerDataSettled ? input.swingUniverseSymbolCount : null,
@@ -119,8 +148,8 @@ export function buildDashboardAssistantPageContext(
       ? { day_desk_posture: input.dayDeskPosture }
       : {}),
     top_setups: mapSetupSummaries(input.swingTopSignals),
-    ...(input.discoveryExpanded && leaders.length > 0
-      ? { gap_leaders_detail: mapGapSummaries(leaders, 10) }
+    ...(input.discoveryExpanded && gapLeaders.length > 0
+      ? { gap_leaders_detail: mapGapSummaries(gapLeaders, 10) }
       : {}),
     macro_events: input.upcomingEarnings.slice(0, 5).map((e) => ({
       symbol: e.symbol.trim().toUpperCase(),

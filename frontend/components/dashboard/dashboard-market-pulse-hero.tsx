@@ -1,0 +1,200 @@
+"use client";
+
+import type { MarketContextSnapshot } from "@/lib/market-context/snapshot";
+import type { SectorRotationChip } from "@/lib/market-context/types";
+import { InfoTip } from "@/components/info-tip";
+import { interactionLevelProps } from "@/lib/dashboard/click-hierarchy";
+import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
+import { useTheme } from "@/lib/theme-provider";
+type Props = {
+  pageTitle: string;
+  regimeLabel: string;
+  regimeTip: string;
+  spyPct: number | null;
+  qqqPct: number | null;
+  vixLevel: number | null;
+  vixPct: number | null;
+  vixPulseOk: boolean;
+  environmentSummary: string;
+  sectorRotation: SectorRotationChip[];
+  systemLabel: string;
+  swingDeskPhrase: string;
+  dayDeskPhrase?: string;
+  dayTradingSurfaces?: boolean;
+  scannerPending?: boolean;
+};
+
+function fmtPct(v: number | null): string {
+  if (v == null || !Number.isFinite(v)) return "—";
+  const sign = v > 0 ? "+" : "";
+  return `${sign}${v.toFixed(2)}%`;
+}
+
+function pctTone(v: number | null, colors: ReturnType<typeof useTheme>["colors"]) {
+  if (v == null || !Number.isFinite(v)) return colors.textMuted;
+  if (v > 0.05) return colors.bullish;
+  if (v < -0.05) return colors.bearish;
+  return colors.textMuted;
+}
+
+function topSectors(chips: SectorRotationChip[]): { lead: SectorRotationChip | null; lag: SectorRotationChip | null } {
+  const sorted = [...chips].filter((c) => c.pct5d != null && Number.isFinite(c.pct5d));
+  sorted.sort((a, b) => (b.pct5d ?? 0) - (a.pct5d ?? 0));
+  return { lead: sorted[0] ?? null, lag: sorted[sorted.length - 1] ?? null };
+}
+
+export function DashboardMarketPulseHero({
+  pageTitle,
+  regimeLabel,
+  regimeTip,
+  spyPct,
+  qqqPct,
+  vixLevel,
+  vixPct,
+  vixPulseOk,
+  environmentSummary,
+  sectorRotation,
+  systemLabel,
+  swingDeskPhrase,
+  dayDeskPhrase,
+  dayTradingSurfaces = true,
+  scannerPending = false
+}: Props) {
+  const { colors } = useTheme();
+  const { lead, lag } = topSectors(sectorRotation);
+
+  return (
+    <section
+      role="region"
+      aria-label="Market pulse"
+      data-testid="dashboard-market-pulse-hero"
+      className={surfaceGlowClassName}
+      style={{
+        borderRadius: borderRadius.lg,
+        border: `1px solid color-mix(in srgb, ${colors.border} 80%, ${colors.accent} 20%)`,
+        background: `linear-gradient(135deg, color-mix(in srgb, ${colors.surface} 92%, ${colors.accent} 8%) 0%, ${colors.surface} 100%)`,
+        padding: `${spacing[4]} ${spacing[4]}`
+      }}
+    >
+      <h1
+        data-testid="dashboard-page-title"
+        className="m-0 text-xl font-bold md:text-2xl"
+        style={{ color: colors.text }}
+      >
+        {pageTitle}
+      </h1>
+      <p
+        data-testid="dashboard-pulse-headline"
+        className="m-0 mt-2"
+        style={{ fontSize: typography.scale.base, color: colors.text, lineHeight: 1.45 }}
+      >
+        <span style={{ fontWeight: 700, color: colors.accent }}>{regimeLabel}</span>
+        <span style={{ color: colors.textMuted }}> · </span>
+        {environmentSummary}
+      </p>
+
+      <div
+        className="mt-3 flex flex-wrap gap-2"
+        data-testid="dashboard-pulse-tape"
+        {...interactionLevelProps("none")}
+      >
+        {[
+          { label: "SPY", pct: spyPct },
+          { label: "QQQ", pct: qqqPct },
+          {
+            label: "VIX",
+            pct: vixPulseOk ? vixPct : null,
+            extra: vixPulseOk && vixLevel != null ? `$${vixLevel.toFixed(2)}` : null
+          }
+        ].map((cell) => (
+          <div
+            key={cell.label}
+            data-testid={`dashboard-pulse-${cell.label}`}
+            style={{
+              borderRadius: borderRadius.md,
+              border: `1px solid ${colors.border}`,
+              padding: `${spacing[2]} ${spacing[3]}`,
+              minWidth: "5.5rem",
+              background: colors.surfaceMuted
+            }}
+          >
+            <div style={{ fontSize: typography.scale.xs, color: colors.textMuted, fontWeight: 600 }}>{cell.label}</div>
+            <div style={{ fontSize: typography.scale.sm, fontWeight: 700, color: pctTone(cell.pct, colors) }}>
+              {fmtPct(cell.pct)}
+            </div>
+            {cell.extra ? (
+              <div style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>{cell.extra}</div>
+            ) : null}
+          </div>
+        ))}
+        {lead ? (
+          <div
+            data-testid="dashboard-pulse-sector-lead"
+            style={{
+              borderRadius: borderRadius.md,
+              border: `1px solid ${colors.border}`,
+              padding: `${spacing[2]} ${spacing[3]}`,
+              background: colors.surfaceMuted
+            }}
+          >
+            <div style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Leading</div>
+            <div style={{ fontSize: typography.scale.sm, fontWeight: 600 }}>
+              {lead.label}{" "}
+              <span style={{ color: colors.bullish }}>{fmtPct(lead.pct5d)}</span>
+            </div>
+          </div>
+        ) : null}
+        {lag && lag.symbol !== lead?.symbol ? (
+          <div
+            data-testid="dashboard-pulse-sector-lag"
+            style={{
+              borderRadius: borderRadius.md,
+              border: `1px solid ${colors.border}`,
+              padding: `${spacing[2]} ${spacing[3]}`,
+              background: colors.surfaceMuted
+            }}
+          >
+            <div style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Lagging</div>
+            <div style={{ fontSize: typography.scale.sm, fontWeight: 600 }}>
+              {lag.label}{" "}
+              <span style={{ color: colors.bearish }}>{fmtPct(lag.pct5d)}</span>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <p className="m-0 mt-2" style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>
+        <strong style={{ color: colors.text }}>Desk:</strong> {systemLabel}
+        {scannerPending ? " · Scanner still loading" : ""}
+        <span {...interactionLevelProps("light")} className="ml-1 inline-flex align-middle">
+          <InfoTip text={regimeTip} label="How regime is read" maxWidth={300} />
+        </span>
+      </p>
+
+      <details className="mt-2" data-testid="dashboard-pulse-desk-detail">
+        <summary
+          style={{
+            fontSize: typography.scale.xs,
+            color: colors.textMuted,
+            cursor: "pointer",
+            listStylePosition: "outside"
+          }}
+        >
+          Desk posture detail
+        </summary>
+        <ul
+          style={{
+            margin: `${spacing[2]} 0 0`,
+            paddingLeft: spacing[4],
+            color: colors.textMuted,
+            fontSize: typography.scale.xs,
+            lineHeight: 1.5
+          }}
+        >
+          <li>Swing: {swingDeskPhrase}</li>
+          {dayTradingSurfaces && dayDeskPhrase ? <li>Day: {dayDeskPhrase}</li> : null}
+        </ul>
+      </details>
+    </section>
+  );
+}

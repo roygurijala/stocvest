@@ -5,6 +5,7 @@ import { DEFAULT_EARNINGS_SYMBOLS, fetchDashboardFirstSegment } from "@/lib/dash
 import { timeDashboardPhase } from "@/lib/dashboard/load-timing";
 import { fetchDashboardUserMe, subscriptionPlanFromMe } from "@/lib/dashboard-user-subscription";
 import { EMPTY_SCANNER_OVERVIEW } from "@/lib/api/scanner";
+import { DASHBOARD_SCANNER_MAX_UNIVERSE } from "@/lib/dashboard/scanner-universe";
 import { scannerSetupLoadModeForSubscription, subscriptionAllowsDayTradingSurfaces } from "@/lib/subscription-access";
 
 /**
@@ -13,7 +14,8 @@ import { scannerSetupLoadModeForSubscription, subscriptionAllowsDayTradingSurfac
  * Desk visibility matches the same rule on the client (`dayTradingSurfaces`).
  */
 export const DASHBOARD_SCANNER_TUNING_BASE = {
-  maxUniverseSymbols: 24,
+  maxUniverseSymbols: DASHBOARD_SCANNER_MAX_UNIVERSE,
+  includeOpportunityDeskUniverse: true,
   intradayBarLimit: 60,
   parallelDefaultWatchlist: true,
   swingDailyBarLimit: 220,

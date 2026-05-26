@@ -277,6 +277,8 @@ export function ScannerPageClient({
     void (async () => {
       const core = await loadScannerDataWithoutBrief(null, [], {
         parallelDefaultWatchlist: true,
+        includeOpportunityDeskUniverse: true,
+        maxUniverseSymbols: 50,
         scannerSetupLoadMode: scannerSetupMode,
         intradayBarLimit: 120,
         daySetupsLimit: 10,
@@ -1032,6 +1034,8 @@ export function ScannerPageClient({
       }
       const core = await loadScannerDataWithoutBrief(null, [], {
         parallelDefaultWatchlist: true,
+        includeOpportunityDeskUniverse: true,
+        maxUniverseSymbols: 50,
         scannerSetupLoadMode: scannerSetupMode,
         intradayBarLimit: 120,
         daySetupsLimit: 10,

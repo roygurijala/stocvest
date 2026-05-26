@@ -10,6 +10,7 @@ from stocvest.api.http_route import http_route_descriptor
 from stocvest.api.legal_copy import API_SIGNAL_DISCLAIMER
 from stocvest.api.response import bad_request, internal_error, not_found, ok
 from stocvest.api.services.gap_intelligence_news import collect_news_for_gap_intelligence
+from stocvest.api.handlers.desk import desk_refresh_handler
 from stocvest.api.handlers.laggard import scanner_laggards_handler
 from stocvest.api.services.scanner_response_cache import build_cache_key, cache_get, cache_set
 from stocvest.api.services.scanner_scheduled_pipeline import run_scheduled_scan_sync
@@ -57,11 +58,13 @@ _SCHEDULED_SCAN_TYPES = frozenset({
     "ledger_capture",
     "ledger_capture_day",
     "ledger_capture_swing",
+    "opportunity_desk",
+    "opportunity_desk_movers",
 })
 
 # Gap intelligence: prefer Polygon full-US snapshot, rank top N by |gap| + liquidity gates.
 # API Gateway integrates at ~30s — leave headroom for bounded fallback + news + scoring.
-_GAP_INTEL_TOP_N = 20
+_GAP_INTEL_TOP_N = 30
 _GAP_INTEL_FULL_SNAPSHOT_TIMEOUT_SEC = 12.0
 
 
@@ -191,6 +194,12 @@ def _handle_eventbridge_schedule(event: LambdaEvent, context: LambdaContext) -> 
                 desk = "swing"
             result = run_watchlist_ledger_capture_sync(desk=desk)
             return ok(result)
+        if scan_type in ("opportunity_desk", "opportunity_desk_movers"):
+            from stocvest.api.services.opportunity_desk.batch import run_opportunity_desk_batch_sync
+
+            tier = "full" if scan_type == "opportunity_desk" else "movers"
+            result = run_opportunity_desk_batch_sync(tier=tier)
+            return ok(result)
         result = run_scheduled_scan_sync(scan_type)
         return ok(result)
     except Exception as exc:
@@ -205,7 +214,8 @@ def handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
             return bad_request(
                 "Scheduled scanner event requires scan_type "
                 "premarket|intraday|eod_summary|maturation_refresh|maturation_refresh_swing|"
-                "maturation_refresh_day|ledger_capture|ledger_capture_day|ledger_capture_swing."
+                "maturation_refresh_day|ledger_capture|ledger_capture_day|ledger_capture_swing|"
+                "opportunity_desk|opportunity_desk_movers."
             )
         return _handle_eventbridge_schedule(event, context)
 
@@ -217,6 +227,7 @@ def handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
         "POST /v1/scanner/briefing": scanner_briefing_handler,
         "POST /v1/scanner/gap-intelligence": scanner_gap_intelligence_handler,
         "GET /v1/scanner/laggards": scanner_laggards_handler,
+        "POST /v1/desk/refresh": desk_refresh_handler,
     }
     target = routes.get(route)
     if target is None:
