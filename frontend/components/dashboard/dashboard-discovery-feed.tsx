@@ -3,10 +3,10 @@
 import { useEffect, useMemo } from "react";
 import Link from "next/link";
 import type { GapIntelligenceItem } from "@/lib/api/scanner";
-import type { DeskDiscoveryLeader, DeskTodayData } from "@/lib/api/desk-today";
+import type { DeskTodayData } from "@/lib/api/desk-today";
+import { HotInMarketCard } from "@/components/dashboard/hot-in-market-card";
 import {
   deskScanFootnote,
-  discoveryWhyLine,
   formatGeneratedAtEt,
   resolveDiscoveryLeaders
 } from "@/lib/dashboard/desk-today-present";
@@ -16,6 +16,13 @@ import {
   saveDeskLastVisit,
   sinceLastVisitSummary
 } from "@/lib/dashboard/desk-since-last-visit";
+import {
+  buildHotInMarketCardModel,
+  HOT_IN_MARKET_DISCLAIMER,
+  HOT_IN_MARKET_TITLE,
+  hotInMarketSignalsHref,
+  hotInMarketSourceSubtitle
+} from "@/lib/dashboard/hot-in-market-card-present";
 import type { DashboardDeskMode } from "@/lib/dashboard/live-status-copy";
 import { interactionLevelProps } from "@/lib/dashboard/click-hierarchy";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
@@ -34,58 +41,6 @@ type Props = {
   refreshCooldownLabel?: string | null;
   refreshError?: string | null;
 };
-
-function signalsHref(symbol: string, mode: DashboardDeskMode): string {
-  return `/dashboard/signals?symbol=${encodeURIComponent(symbol)}&trading_mode=${mode}&ref=dashboard`;
-}
-
-function DiscoveryRow({ leader, mode }: { leader: DeskDiscoveryLeader; mode: DashboardDeskMode }) {
-  const { colors } = useTheme();
-  const href = signalsHref(leader.symbol, mode);
-  const hover = useHoverPrefetch(href);
-  const why = discoveryWhyLine(leader);
-
-  return (
-    <li
-      data-testid={`dashboard-discovery-row-${leader.symbol}`}
-      className="flex flex-wrap items-start justify-between gap-2"
-      style={{
-        listStyle: "none",
-        padding: spacing[3],
-        borderRadius: borderRadius.md,
-        border: `1px solid ${colors.border}`,
-        background: colors.surfaceMuted
-      }}
-    >
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-baseline gap-2">
-          <strong style={{ fontSize: typography.scale.base }}>{leader.symbol}</strong>
-          <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, textTransform: "uppercase" }}>
-            {leader.desk} desk
-          </span>
-        </div>
-        <p className="m-0 mt-1" style={{ fontSize: typography.scale.sm, color: colors.textMuted, lineHeight: 1.45 }}>
-          {why}
-        </p>
-      </div>
-      <Link
-        href={href}
-        prefetch={false}
-        {...interactionLevelProps("deep")}
-        {...hover}
-        data-testid={`dashboard-discovery-cta-${leader.symbol}`}
-        style={{
-          fontSize: typography.scale.sm,
-          fontWeight: 600,
-          color: colors.accent,
-          whiteSpace: "nowrap"
-        }}
-      >
-        Signals →
-      </Link>
-    </li>
-  );
-}
 
 export function DashboardDiscoveryFeed({
   mode,
@@ -115,6 +70,26 @@ export function DashboardDiscoveryFeed({
     if (leaderSymbols.length === 0) return;
     saveDeskLastVisit(leaderSymbols);
   }, [leaderSymbols]);
+
+  const cardModels = useMemo(
+    () =>
+      leaders.map((leader, index) =>
+        buildHotInMarketCardModel(leader, {
+          rank: index + 1,
+          mode,
+          source,
+          colors: {
+            accent: colors.accent,
+            bullish: colors.bullish,
+            bearish: colors.bearish,
+            caution: colors.caution,
+            textMuted: colors.textMuted
+          }
+        })
+      ),
+    [leaders, mode, source, colors.accent, colors.bullish, colors.bearish, colors.caution, colors.textMuted]
+  );
+
   const recentlyHot = Array.isArray(deskData?.recently_hot) ? deskData!.recently_hot!.slice(0, 5) : [];
   const footnote = deskScanFootnote(deskData);
   const updated = formatGeneratedAtEt(deskData?.generated_at);
@@ -122,11 +97,14 @@ export function DashboardDiscoveryFeed({
     ? `/dashboard/scanner?mode=${mode === "swing" ? "swing" : "day"}`
     : "/dashboard/scanner?mode=swing";
   const scannerHover = useHoverPrefetch(scannerHref);
+  const subtitle = isLoading
+    ? "Refreshing opportunity desk…"
+    : hotInMarketSourceSubtitle(source, leaders.length);
 
   return (
     <section
       role="region"
-      aria-label="Discovery opportunities"
+      aria-label="Hot in market opportunities"
       data-testid="dashboard-discovery-feed"
       className={surfaceGlowClassName}
       style={{
@@ -137,22 +115,19 @@ export function DashboardDiscoveryFeed({
       }}
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
+        <div className="min-w-0 flex-1">
           <h2 className="m-0" style={{ fontSize: typography.scale.base, fontWeight: 700 }}>
-            Discovery
+            {HOT_IN_MARKET_TITLE}
           </h2>
           <p className="m-0 mt-1" style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>
-            {isLoading
-              ? "Refreshing opportunity desk…"
-              : leaders.length === 0
-                ? "No ranked opportunities this load — check back after the next scan."
-                : `${leaders.length} opportunit${leaders.length === 1 ? "y" : "ies"} from ${
-                    source === "desk_cache"
-                      ? "platform desk"
-                      : source === "movers_radar"
-                        ? "session movers"
-                        : "gap scan"
-                  }`}
+            {subtitle}
+          </p>
+          <p
+            className="m-0 mt-2"
+            data-testid="dashboard-hot-in-market-disclaimer"
+            style={{ fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45, maxWidth: "52rem" }}
+          >
+            {HOT_IN_MARKET_DISCLAIMER}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -202,10 +177,13 @@ export function DashboardDiscoveryFeed({
         </p>
       ) : null}
 
-      {leaders.length > 0 ? (
-        <ul className="m-0 mt-3 grid list-none gap-2 p-0" data-testid="dashboard-discovery-list">
-          {leaders.map((leader) => (
-            <DiscoveryRow key={leader.symbol} leader={leader} mode={mode} />
+      {cardModels.length > 0 ? (
+        <ul
+          className="m-0 mt-3 grid list-none gap-3 p-0 sm:grid-cols-2 xl:grid-cols-3"
+          data-testid="dashboard-discovery-list"
+        >
+          {cardModels.map((model) => (
+            <HotInMarketCard key={model.symbol} model={model} mode={mode} />
           ))}
         </ul>
       ) : null}
@@ -228,7 +206,7 @@ export function DashboardDiscoveryFeed({
             {recentlyHot.map((row) => (
               <Link
                 key={row.symbol}
-                href={signalsHref(row.symbol, mode)}
+                href={hotInMarketSignalsHref(row.symbol, mode)}
                 prefetch={false}
                 {...interactionLevelProps("deep")}
                 data-testid={`dashboard-recently-hot-${row.symbol}`}
