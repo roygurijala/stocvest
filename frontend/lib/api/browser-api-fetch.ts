@@ -4,6 +4,13 @@ import { refreshSession } from "@/lib/auth/refresh-session";
 
 const DEFAULT_BASE_URL = "http://localhost:3001";
 const DEFAULT_TIMEOUT_MS = 55_000;
+const RETRYABLE_STATUS = new Set([502, 503, 504]);
+const MAX_TRANSIENT_ATTEMPTS = 3;
+const RETRY_BASE_MS = 800;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function apiBaseUrl(): string {
   const a = typeof process.env.STOCVEST_API_BASE_URL === "string" ? process.env.STOCVEST_API_BASE_URL.trim() : "";
@@ -36,6 +43,7 @@ function buildHeaders(init?: RequestInit): Headers {
  *     `markSessionExpired("auth_error")` so `SessionExpiredBanner` renders.
  *   - 403 is intentionally NOT treated as auth failure: STOCVEST uses 403 for product-rule
  *     denials (PDT lockout, margin, paid-tier gating) where the user IS authenticated.
+ *   - 502/503/504 are retried up to 3 times with linear backoff before surfacing an error.
  */
 export async function browserApiFetch<T>(path: string, init?: RequestInit): Promise<T | null> {
   const timeoutSignal = AbortSignal.timeout(DEFAULT_TIMEOUT_MS);
@@ -68,25 +76,32 @@ export async function browserApiFetch<T>(path: string, init?: RequestInit): Prom
   let response = await doFetch();
   if (!response) return null;
 
-  if (response.status === 401) {
-    const refreshed = await refreshSession();
-    if (refreshed) {
-      // `refreshSession()` rewrote the mirror cookie via `Set-Cookie` on the refresh
-      // response; re-reading the cookie inside `buildHeaders` on the retry picks up the
-      // new token automatically.
-      response = await doFetch();
-      if (!response) return null;
-      if (response.status === 401) {
-        // Refreshed token also rejected — defensive: treat as hard expired so the banner
-        // renders rather than silently retrying forever.
+  for (let attempt = 0; attempt < MAX_TRANSIENT_ATTEMPTS; attempt++) {
+    if (!response) return null;
+
+    if (response.status === 401) {
+      const refreshed = await refreshSession();
+      if (refreshed) {
+        response = await doFetch();
+        if (!response) return null;
+        if (response.status === 401) {
+          markSessionExpired("auth_error");
+          return null;
+        }
+      } else {
         markSessionExpired("auth_error");
         return null;
       }
-    } else {
-      markSessionExpired("auth_error");
-      return null;
     }
+
+    if (response.ok || !RETRYABLE_STATUS.has(response.status) || attempt === MAX_TRANSIENT_ATTEMPTS - 1) {
+      break;
+    }
+    await sleep(RETRY_BASE_MS * (attempt + 1));
+    response = await doFetch();
   }
+
+  if (!response) return null;
 
   if (!response.ok) {
     if (response.status >= 500) {
