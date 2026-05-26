@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   buildWatchlistRadarCardModel,
+  resolveWatchlistCardTone,
   WATCHLIST_RADAR_DISCLAIMER
 } from "@/lib/dashboard/watchlist-radar-card-present";
 import type { WatchlistRadarRow } from "@/lib/dashboard/watchlist-radar";
@@ -35,6 +36,7 @@ function baseRow(overrides: Partial<WatchlistRadarRow> = {}): WatchlistRadarRow 
     borderBottom: colors.bullish,
     conviction: null,
     attentionReason: "Near actionable on your list",
+    sessionMovePct: 2.4,
     ...overrides
   };
 }
@@ -48,5 +50,10 @@ describe("watchlist-radar-card-present", () => {
     const model = buildWatchlistRadarCardModel(baseRow(), colors);
     expect(model.badgeLabel).toBe("Check now");
     expect(model.attentionLine).toContain("Near actionable");
+  });
+
+  test("resolveWatchlistCardTone uses session move when quote missing", () => {
+    expect(resolveWatchlistCardTone({ quoteBullish: null, sessionMovePct: -3.2 })).toBe("bearish");
+    expect(resolveWatchlistCardTone({ quoteBullish: null, sessionMovePct: 1.1 })).toBe("bullish");
   });
 });

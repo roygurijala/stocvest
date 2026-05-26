@@ -40,6 +40,11 @@ function badgeStyle(
         background: `color-mix(in srgb, ${colors.accent} 16%, transparent)`,
         color: colors.accent
       };
+    case "pending":
+      return {
+        background: `color-mix(in srgb, ${colors.caution} 14%, transparent)`,
+        color: colors.caution
+      };
     default:
       return {
         background: `color-mix(in srgb, ${colors.textMuted} 14%, transparent)`,
@@ -128,7 +133,14 @@ export function HotInMarketCard({ model, mode }: Props) {
           {model.alignmentLine ? (
             <div className="flex flex-wrap items-center gap-2">
               <DashboardLayerDots filled={model.layerDots} total={model.layerTotal} accent={chrome.accent} />
+              <span className="text-xs" style={{ color: colors.textMuted }}>
+                {model.alignmentLine}
+              </span>
             </div>
+          ) : model.detailLine ? (
+            <p className="m-0 text-xs leading-snug" style={{ color: colors.textMuted }}>
+              {model.detailLine}
+            </p>
           ) : null}
 
           {model.verdictLine ? (
