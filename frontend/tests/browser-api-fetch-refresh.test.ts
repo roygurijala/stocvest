@@ -114,6 +114,41 @@ describe("browserApiFetch — 401 refresh-and-retry contract", () => {
     expect(markSessionExpiredMock).not.toHaveBeenCalled();
   });
 
+  test("503 then 503 then 200 — retries transient gateway errors with backoff", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("unavailable", { status: 503 }))
+      .mockResolvedValueOnce(new Response("unavailable", { status: 503 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ ok: true, recovered: true }), { status: 200 })
+      );
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const pending = browserApiFetch<{ ok: boolean; recovered: boolean }>("/v1/watchlists/default/symbols");
+    await vi.runAllTimersAsync();
+    const result = await pending;
+
+    expect(result).toEqual({ ok: true, recovered: true });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(refreshSessionMock).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  test("returns null after exhausting transient retries", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockResolvedValue(new Response("unavailable", { status: 503 }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const pending = browserApiFetch<unknown>("/v1/market/bars-batch");
+    await vi.runAllTimersAsync();
+    const result = await pending;
+
+    expect(result).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
+  });
+
   test("returns null when fetch does not return a promise (e.g. unconfigured test mock)", async () => {
     global.fetch = vi.fn() as unknown as typeof fetch;
 
