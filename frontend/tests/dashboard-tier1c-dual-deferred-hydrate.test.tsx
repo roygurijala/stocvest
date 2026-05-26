@@ -3,6 +3,8 @@
  * Guards ordering/regressions when `deferredEarningsSlot` and `deferredScannerSlot` are both set.
  */
 
+import "./mocks/dashboard-desk-refresh";
+
 import type { ReactElement } from "react";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
@@ -97,7 +99,7 @@ describe("Tier 1.C — dual deferred hydrate (earnings + scanner)", () => {
       />
     );
 
-    expect(screen.getByTestId("dashboard-system-state-banner").textContent || "").toMatch(/ACTIONABLE/i);
+    expect(screen.getByTestId("dashboard-market-pulse-hero").textContent || "").toMatch(/ACTIONABLE/i);
     expect(screen.queryByTestId("dashboard-active-signal-ribbon")).toBeNull();
 
     const calendarHeading = screen.getByRole("heading", { name: /Upcoming Earnings \(Next 7 Days\)/i });

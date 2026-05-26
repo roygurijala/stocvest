@@ -4,7 +4,7 @@
 
 **Theme:** Keep **current site color tokens** (dark theme, existing `design-system` / `DashboardCard` patterns). External mockups are **IA and interaction reference only**, not pixel specs.
 
-**Companion docs:** [`PERFORMANCE.md`](./PERFORMANCE.md) (cross-cutting perf invariants), [`BACKLOG.md`](./BACKLOG.md) (D11 performance lane), [`README.md`](./README.md) (doc index).
+**Companion docs:** [`PERFORMANCE.md`](./PERFORMANCE.md) (cross-cutting perf invariants), [`BACKLOG.md`](./BACKLOG.md) (D11 performance lane), [`OPPORTUNITY_DESK_AND_DASHBOARD_RADAR.md`](./OPPORTUNITY_DESK_AND_DASHBOARD_RADAR.md) (D13 full-market discovery + dashboard radar), [`README.md`](./README.md) (doc index).
 
 **Scanner quiet day (B49, 2026-05-19):** On `/dashboard/scanner` when nothing qualifies, section roles are fixed — **Near Ready** = opportunity, **Market conditions** = explanation (regime ✓ + volume blocker), **Scan outcome** = conclusion, **Gap Intelligence** = edge case (de-emphasized when empty), **Setups** = desk confirmation (secondary chrome). Full “what would change” footer only when the cause is not obvious (`shouldShowQuietWhatWouldChangeSection` in `frontend/lib/scanner-quiet-copy.ts`); otherwise a one-line **Focus** / scan-outcome watch hint. Implementation: `ScannerQuietDesk`, `scanner-quiet-copy.ts`, `scanner-quiet-desk.ts`.
 

@@ -248,6 +248,10 @@ export type ScannerLoadTuning = {
    * day/swing setup endpoints on the SSR critical path (saves tens of seconds).
    */
   signalsPageMinimal?: boolean;
+  /**
+   * When true (default), merge Opportunity Desk discovery + movers from ``GET /v1/desk/today``.
+   */
+  includeOpportunityDeskUniverse?: boolean;
 };
 
 export type DaySetupsRequestExtras = {

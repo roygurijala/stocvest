@@ -32,6 +32,8 @@ class DashboardKeys:
     UPCOMING_EVENTS = "stocvest:dashboard:upcoming_events"
     ACTIVE_POSITIONS = "stocvest:dashboard:active_positions"
     GEO_THEMES = "stocvest:geo_themes:today"
+    OPPORTUNITY_DESK_SWING = "stocvest:dashboard:opportunity_desk_swing"
+    OPPORTUNITY_DESK_DAY = "stocvest:dashboard:opportunity_desk_day"
 
     LAYER_HEALTH = "stocvest:ops:layer_health"
     COMPUTE_LOG = "stocvest:ops:compute_log"
@@ -81,6 +83,7 @@ def get_market_ttl(key_type: str) -> int:
             "upcoming_events": 86400,
             "active_positions": 86400,
             "geo_themes": 86400,
+            "opportunity_desk": 3600,
             "evidence": 300,
         }.get(key_type, 86400)
 
@@ -92,6 +95,7 @@ def get_market_ttl(key_type: str) -> int:
         "upcoming_events": 86400,
         "active_positions": 300,
         "geo_themes": 86400,
+        "opportunity_desk": 300,
         "evidence": 300,
     }.get(key_type, 300)
 

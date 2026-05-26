@@ -17,6 +17,38 @@ vi.mock("@/lib/hooks/use-is-mobile-layout", () => ({
   useIsMobileLayout: () => false
 }));
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn() })
+}));
+
+vi.mock("@/lib/hooks/use-dashboard-desk-refresh", () => ({
+  useDashboardDeskRefresh: () => ({
+    data: null,
+    isLoading: false,
+    isValidating: false,
+    error: null,
+    mutate: vi.fn(),
+    refreshDesk: vi.fn(),
+    manualRefreshBusy: false,
+    canManualRefresh: true,
+    cooldownRemainingMs: 0,
+    cooldownLabel: null,
+    refreshError: null
+  })
+}));
+
+vi.mock("@/lib/assistant/context", () => ({
+  usePublishAssistantContext: () => {}
+}));
+
+vi.mock("@/lib/hooks/use-macro-context", () => ({
+  useMacroContext: () => ({ data: null })
+}));
+
+vi.mock("@/lib/hooks/use-dashboard-payload", () => ({
+  useDashboardPayload: () => ({ data: null })
+}));
+
 beforeAll(() => {
   Object.defineProperty(window, "matchMedia", {
     writable: true,
@@ -82,7 +114,18 @@ describe("Dashboard focus shell", () => {
     expect(screen.queryByTestId("dashboard-active-signal-ribbon")).toBeNull();
   });
 
-  test("next_actions_links_to_scanner_and_watchlist", () => {
+  test("discovery_and_watchlist_deep_links_present", () => {
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/watchlists/default/symbols")) {
+        return new Response(JSON.stringify({ symbols: [] }), { status: 200 });
+      }
+      if (url.includes("/maturation-summary")) {
+        return new Response(JSON.stringify({ mode: "day", by_symbol: {} }), { status: 200 });
+      }
+      return new Response("{}", { status: 404 });
+    }) as typeof fetch;
+
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
@@ -93,12 +136,32 @@ describe("Dashboard focus shell", () => {
         sectorRotation={[]}
       />
     );
-    const na = screen.getByTestId("dashboard-next-actions");
-    expect(na.querySelector('a[href="/dashboard/scanner?mode=day"]')).not.toBeNull();
-    expect(na.querySelector('a[href="/dashboard/watchlists"]')).not.toBeNull();
+    expect(screen.getByTestId("dashboard-discovery-scanner-link").getAttribute("href")).toContain(
+      "/dashboard/scanner"
+    );
+    expect(screen.getByTestId("dashboard-watchlist-radar-link").getAttribute("href")).toContain(
+      "/dashboard/watchlists"
+    );
   });
 
-  test("watchlist_opportunity_shows_empty_state_when_no_default_watchlist", () => {
+  test("watchlist_radar_empty_when_no_attention_symbols", async () => {
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/watchlists/default/symbols")) {
+        return new Response(JSON.stringify({ symbols: ["ZZZ"] }), { status: 200 });
+      }
+      if (url.includes("/maturation-summary")) {
+        return new Response(
+          JSON.stringify({
+            mode: "day",
+            by_symbol: { ZZZ: { symbol: "ZZZ", layers_aligned: 0, layers_total: 6, state: "not_aligned" } }
+          }),
+          { status: 200 }
+        );
+      }
+      return new Response("{}", { status: 404 });
+    }) as typeof fetch;
+
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
@@ -109,26 +172,9 @@ describe("Dashboard focus shell", () => {
         sectorRotation={[]}
       />
     );
-    const card = screen.getByTestId("dashboard-opportunity-watchlist");
-    expect(card.textContent || "").toMatch(/no default watchlist/i);
-  });
-
-  test("watchlist_opportunity_lists_tracked_symbols_when_monitored_positive", () => {
-    wrap(
-      <DashboardRedesign
-        marketOverview={baseMarket}
-        scannerOverview={{
-          ...baseScanner,
-          watchlistStatus: { monitored: 4, actionable: 0, developing: 2, inactive: 2 }
-        }}
-        earningsEvents={[]}
-        earningsRecent={[]}
-        weeklyIndexRows={baseWeekly}
-        sectorRotation={[]}
-      />
-    );
-    const card = screen.getByTestId("dashboard-opportunity-watchlist");
-    expect(card.textContent || "").toMatch(/4 symbols tracked/i);
-    expect(card.textContent || "").toMatch(/developing/i);
+    const radar = screen.getByTestId("dashboard-watchlist-radar");
+    await vi.waitFor(() => {
+      expect(radar.textContent || "").toMatch(/nothing on your list needs attention/i);
+    });
   });
 });

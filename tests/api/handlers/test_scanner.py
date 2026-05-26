@@ -77,6 +77,26 @@ def test_handler_routes_maturation_refresh_swing_and_day(monkeypatch: pytest.Mon
     assert seen == ["maturation_refresh_swing", "maturation_refresh_day"]
 
 
+def test_handler_routes_opportunity_desk_schedule(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[str] = []
+
+    def _fake_batch(*, tier: str = "full") -> dict:
+        seen.append(tier)
+        return {"tier": tier, "modes": {"swing": {"written": True}}}
+
+    monkeypatch.setattr(
+        "stocvest.api.services.opportunity_desk.batch.run_opportunity_desk_batch_sync",
+        _fake_batch,
+    )
+    for scan_type, expected_tier in (
+        ("opportunity_desk", "full"),
+        ("opportunity_desk_movers", "movers"),
+    ):
+        response = handler({"source": "eventbridge", "scan_type": scan_type}, {})
+        assert response["statusCode"] == 200
+    assert seen == ["full", "movers"]
+
+
 def test_handler_routes_ledger_capture_schedule(monkeypatch: pytest.MonkeyPatch) -> None:
     seen: list[str] = []
 

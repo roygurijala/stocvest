@@ -701,6 +701,21 @@ def _serialize_dashboard_context_v1(lines: list[str], dc: dict[str, Any]) -> Non
             syms = [s for s in syms if s]
             if syms:
                 lines.append(f"discovery_preview_symbols={','.join(syms)}")
+        src = _coerce_str(disc.get("source"), limit=24).lower()
+        if src in ("desk_cache", "gap_fallback", "empty"):
+            lines.append(f"discovery_source={src}")
+        scanned = _coerce_num(disc.get("scanned_count"))
+        if scanned:
+            lines.append(f"discovery_scanned_count={scanned}")
+        gen_at = _coerce_str(disc.get("generated_at"), limit=32)
+        if gen_at:
+            lines.append(f"discovery_generated_at={gen_at}")
+        hot = disc.get("recently_hot")
+        if isinstance(hot, list):
+            hot_syms = [_coerce_str(x, limit=12).upper() for x in hot[:5]]
+            hot_syms = [s for s in hot_syms if s]
+            if hot_syms:
+                lines.append(f"discovery_recently_hot={','.join(hot_syms)}")
 
     uni = dc.get("universe")
     if isinstance(uni, dict):

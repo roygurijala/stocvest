@@ -4,6 +4,8 @@
  * overview into `ScannerOverviewProvider` (same wiring as RSC nested Suspense).
  */
 
+import "./mocks/dashboard-desk-refresh";
+
 import type { ReactElement } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
@@ -103,14 +105,13 @@ describe("Tier 1.C — deferred scanner hydrate → dashboard surfaces", () => {
       />
     );
 
-    const banner = screen.getByTestId("dashboard-system-state-banner");
-    expect(banner.textContent).toMatch(/ACTIONABLE/i);
-    expect(banner.textContent).toMatch(/Status:\s*ACTIONABLE/i);
+    const hero = screen.getByTestId("dashboard-market-pulse-hero");
+    expect(hero.textContent).toMatch(/ACTIONABLE/i);
 
-    const opportunities = screen.getByTestId("dashboard-opportunities");
-    expect(opportunities.querySelector('a[href="/dashboard/scanner?mode=day"]')).not.toBeNull();
+    const discovery = screen.getByTestId("dashboard-discovery-feed");
+    expect(discovery.querySelector('a[href="/dashboard/scanner?mode=day"]')).not.toBeNull();
     fireEvent.click(screen.getByTestId("dashboard-desk-mode-swing"));
-    expect(opportunities.querySelector('a[href="/dashboard/scanner?mode=swing"]')).not.toBeNull();
+    expect(discovery.querySelector('a[href="/dashboard/scanner?mode=swing"]')).not.toBeNull();
   });
 
   test("hydrate_carries_scanSummary_into_scanner_overview_context", () => {

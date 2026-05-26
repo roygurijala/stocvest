@@ -84,6 +84,7 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
         return h(event, context)
 
     if module == "market_data":
+        from stocvest.api.handlers.desk import desk_today_handler
         from stocvest.api.handlers.market_data import (
             bars_batch_handler,
             bars_handler,
@@ -118,6 +119,7 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
                     "GET /v1/market/options": options_chain_handler,
                     "GET /v1/market/earnings": earnings_calendar_handler,
                     "GET /v1/dashboard/summary": dashboard_summary_handler,
+                    "GET /v1/desk/today": desk_today_handler,
                 },
             ),
         )

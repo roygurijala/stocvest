@@ -23,8 +23,8 @@
  *
  * What we assert (command-center dashboard):
  *
- *   1. Opportunities cards (Scanner, Watchlist, Signals) carry
- *      `prefetch={false}`.
+ *   1. Discovery scanner link, watchlist radar, insight callout, and live
+ *      status CTA carry `prefetch={false}`.
  *   2. Live status CTA carries `prefetch={false}`.
  *   3. Desk mode pills switch the Scanner card href between swing/day.
  *
@@ -42,6 +42,8 @@
  *     `dashboard-redesign-phase-b-c.test.tsx` suites which verify
  *     `href` values.
  */
+
+import "./mocks/dashboard-desk-refresh";
 
 import type { ReactElement, AnchorHTMLAttributes } from "react";
 import { beforeAll, describe, expect, test, vi } from "vitest";
@@ -181,18 +183,18 @@ describe("Opportunities overview (Tier 1.A prefetch invariant)", () => {
         sectorRotation={[]}
       />
     );
-    const opportunities = screen.getByTestId("dashboard-opportunities");
+    const discovery = screen.getByTestId("dashboard-discovery-feed");
     assertLinkHasPrefetchDisabled(
-      anchorByHref(opportunities, "/dashboard/scanner?mode=day"),
-      "opportunities View Scanner (default day desk)"
+      anchorByHref(discovery, "/dashboard/scanner?mode=day"),
+      "discovery Open Scanner (default day desk)"
     );
     assertLinkHasPrefetchDisabled(
-      anchorByHref(opportunities, "/dashboard/watchlists"),
-      "opportunities View Watchlist"
+      anchorByHref(screen.getByTestId("dashboard-watchlist-radar"), "/dashboard/watchlists?desk=day"),
+      "watchlist radar link"
     );
     assertLinkHasPrefetchDisabled(
-      anchorByHref(opportunities, "/dashboard/signals"),
-      "opportunities Review Signals"
+      anchorByHref(screen.getByTestId("dashboard-insight"), "/dashboard/scanner?mode=day"),
+      "insight Monitor Scanner"
     );
     const live = screen.getByTestId("dashboard-live-status");
     const liveCta = live.querySelector("a[href^='/dashboard/scanner']") as HTMLAnchorElement | null;
@@ -210,16 +212,16 @@ describe("Opportunities overview (Tier 1.A prefetch invariant)", () => {
         sectorRotation={[]}
       />
     );
-    const opportunities = screen.getByTestId("dashboard-opportunities");
+    const discovery = screen.getByTestId("dashboard-discovery-feed");
     fireEvent.click(screen.getByTestId("dashboard-desk-mode-swing"));
     assertLinkHasPrefetchDisabled(
-      anchorByHref(opportunities, "/dashboard/scanner?mode=swing"),
-      "opportunities View Scanner (swing desk)"
+      anchorByHref(discovery, "/dashboard/scanner?mode=swing"),
+      "discovery Open Scanner (swing desk)"
     );
     fireEvent.click(screen.getByTestId("dashboard-desk-mode-day"));
     assertLinkHasPrefetchDisabled(
-      anchorByHref(opportunities, "/dashboard/scanner?mode=day"),
-      "opportunities View Scanner (day desk)"
+      anchorByHref(discovery, "/dashboard/scanner?mode=day"),
+      "discovery Open Scanner (day desk)"
     );
   });
 });
@@ -255,11 +257,14 @@ describe("Dashboard heavy links (Tier 1.A prefetch invariant, with setups)", () 
         sectorRotation={[]}
       />
     );
-    const opportunities = screen.getByTestId("dashboard-opportunities");
+    const discovery = screen.getByTestId("dashboard-discovery-feed");
     assertLinkHasPrefetchDisabled(
-      anchorByHref(opportunities, "/dashboard/scanner?mode=day"),
-      "opportunities View Scanner"
+      anchorByHref(discovery, "/dashboard/scanner?mode=day"),
+      "discovery Open Scanner"
     );
-    assertLinkHasPrefetchDisabled(anchorByHref(opportunities, "/dashboard/signals"), "opportunities Signals");
+    assertLinkHasPrefetchDisabled(
+      anchorByHref(screen.getByTestId("dashboard-insight"), "/dashboard/scanner?mode=day"),
+      "insight Monitor Scanner"
+    );
   });
 });

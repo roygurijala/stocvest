@@ -259,6 +259,77 @@ resource "aws_scheduler_schedule" "scanner_maturation_refresh" {
   }
 }
 
+# Opportunity Desk — full batch (funnel + bounded composite) pre-open + mid-session.
+resource "aws_scheduler_schedule" "scanner_opportunity_desk_premarket" {
+  name       = "stocvest-development-scanner-opportunity-desk-premarket"
+  group_name = aws_scheduler_schedule_group.scanner.name
+
+  state = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  schedule_expression          = "cron(0 8 ? * MON-FRI *)"
+  schedule_expression_timezone = "America/New_York"
+
+  target {
+    arn      = aws_lambda_function.api["scanner"].arn
+    role_arn = aws_iam_role.eventbridge_scanner_invoke.arn
+    input = jsonencode({
+      source    = "eventbridge"
+      scan_type = "opportunity_desk"
+    })
+  }
+}
+
+resource "aws_scheduler_schedule" "scanner_opportunity_desk_midday" {
+  name       = "stocvest-development-scanner-opportunity-desk-10"
+  group_name = aws_scheduler_schedule_group.scanner.name
+
+  state = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  schedule_expression          = "cron(0 10,12,14 ? * MON-FRI *)"
+  schedule_expression_timezone = "America/New_York"
+
+  target {
+    arn      = aws_lambda_function.api["scanner"].arn
+    role_arn = aws_iam_role.eventbridge_scanner_invoke.arn
+    input = jsonencode({
+      source    = "eventbridge"
+      scan_type = "opportunity_desk"
+    })
+  }
+}
+
+# Tier B — movers radar only (snapshot math), every 15 minutes during RTH.
+resource "aws_scheduler_schedule" "scanner_opportunity_desk_movers" {
+  name       = "stocvest-development-scanner-opportunity-desk-movers"
+  group_name = aws_scheduler_schedule_group.scanner.name
+
+  state = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  schedule_expression          = "cron(0/15 9-15 ? * MON-FRI *)"
+  schedule_expression_timezone = "America/New_York"
+
+  target {
+    arn      = aws_lambda_function.api["scanner"].arn
+    role_arn = aws_iam_role.eventbridge_scanner_invoke.arn
+    input = jsonencode({
+      source    = "eventbridge"
+      scan_type = "opportunity_desk_movers"
+    })
+  }
+}
+
 resource "aws_lambda_permission" "scanner_eventbridge_scheduler" {
   statement_id  = "AllowExecutionFromEventBridgeScheduler"
   action        = "lambda:InvokeFunction"

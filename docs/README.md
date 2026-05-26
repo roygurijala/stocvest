@@ -9,6 +9,7 @@ Use this map to find the right doc quickly. **Authoritative technical specs** li
 | [`IMPLEMENTED.md`](./IMPLEMENTED.md) | Shipped work archive (stable IDs for PRs/commits). |
 | [`PERFORMANCE.md`](./PERFORMANCE.md) | Performance architecture, tiers, invariants — **source of truth** for latency, prefetch, caching, streaming. |
 | [`DASHBOARD_TERMINAL_UX_PLAN.md`](./DASHBOARD_TERMINAL_UX_PLAN.md) | **Dashboard + terminal-grade UX**: IA direction, click hierarchy, SLOs, phased delivery, assistant contract — aligned with current **dark theme** (mockups are reference only). Includes **scanner quiet-day** section roles (B49). |
+| [`OPPORTUNITY_DESK_AND_DASHBOARD_RADAR.md`](./OPPORTUNITY_DESK_AND_DASHBOARD_RADAR.md) | **Opportunity Desk (D13):** full-market funnel, tiered refresh, dashboard sentiment/discovery/watchlist radar — phased plan + acceptance criteria. |
 | [`API_CONTRACTS.md`](./API_CONTRACTS.md) | HTTP API contracts. |
 | [`SIGNAL_ENGINE.md`](./SIGNAL_ENGINE.md) | Signal engine reference. |
 | [`DEPLOYMENT.md`](./DEPLOYMENT.md) | Deploy / infra notes. |

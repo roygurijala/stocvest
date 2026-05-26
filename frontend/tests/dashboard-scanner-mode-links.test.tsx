@@ -2,6 +2,8 @@
  * Dashboard → Scanner URLs after the command-center redesign.
  */
 
+import "./mocks/dashboard-desk-refresh";
+
 import type { ReactElement } from "react";
 import { beforeAll, describe, expect, test, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -77,12 +79,12 @@ describe("Opportunities scanner links", () => {
         sectorRotation={[]}
       />
     );
-    const opportunities = screen.getByTestId("dashboard-opportunities");
-    expect(opportunities.querySelector('a[href="/dashboard/scanner?mode=day"]')).not.toBeNull();
+    const discovery = screen.getByTestId("dashboard-discovery-feed");
+    expect(discovery.querySelector('a[href="/dashboard/scanner?mode=day"]')).not.toBeNull();
     fireEvent.click(screen.getByTestId("dashboard-desk-mode-swing"));
-    expect(opportunities.querySelector('a[href="/dashboard/scanner?mode=swing"]')).not.toBeNull();
+    expect(discovery.querySelector('a[href="/dashboard/scanner?mode=swing"]')).not.toBeNull();
     fireEvent.click(screen.getByTestId("dashboard-desk-mode-day"));
-    expect(opportunities.querySelector('a[href="/dashboard/scanner?mode=day"]')).not.toBeNull();
+    expect(discovery.querySelector('a[href="/dashboard/scanner?mode=day"]')).not.toBeNull();
   });
 
   test("live_status_cta_points_at_scanner_for_active_desk", () => {

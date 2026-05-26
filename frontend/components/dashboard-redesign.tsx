@@ -4,16 +4,19 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { DashboardDeskModePills } from "@/components/dashboard/dashboard-desk-mode-pills";
 import { DashboardEdgeSync } from "@/components/dashboard-edge-sync";
+import { DashboardDiscoveryFeed } from "@/components/dashboard/dashboard-discovery-feed";
 import { DashboardInsightCallout } from "@/components/dashboard/dashboard-insight-callout";
-import { NearReadyEngagementStrip } from "@/components/dashboard/near-ready-engagement-strip";
 import { DashboardLiveStatus } from "@/components/dashboard/dashboard-live-status";
 import { DashboardMarketContextPanel } from "@/components/dashboard/dashboard-market-context-panel";
-import { DashboardOpportunitiesOverview } from "@/components/dashboard/dashboard-opportunities-overview";
+import { DashboardMarketPulseHero } from "@/components/dashboard/dashboard-market-pulse-hero";
 import { DashboardScannerLoadingStrip } from "@/components/dashboard/dashboard-scanner-suspense-fallback";
+import { DashboardWatchlistRadar } from "@/components/dashboard/dashboard-watchlist-radar";
 import { ScannerOverviewProvider, useScannerOverview } from "@/components/dashboard/scanner-overview-context";
 import { DashboardEarningsProvider, useDashboardEarnings } from "@/components/dashboard/dashboard-earnings-context";
 import { buildDashboardAssistantPageContext } from "@/lib/dashboard/dashboard-assistant-context";
+import { buildDashboardPageTitle } from "@/lib/dashboard/desk-today-present";
 import { buildLiveStatusCopy, type DashboardDeskMode } from "@/lib/dashboard/live-status-copy";
+import { useDashboardDeskRefresh } from "@/lib/hooks/use-dashboard-desk-refresh";
 import { EarningsCalendar } from "@/components/earnings-calendar";
 import { InfoTip } from "@/components/info-tip";
 import { type WeeklyIndexRow } from "@/components/weekly-market-context-widget";
@@ -383,6 +386,19 @@ function DashboardRedesignBody({
     [earningsEvents]
   );
 
+  const activeDeskMode: DashboardDeskMode =
+    dayTradingSurfaces && deskMode === "day" ? "day" : "swing";
+
+  const {
+    data: deskToday,
+    isLoading: deskTodayLoading,
+    refreshDesk,
+    manualRefreshBusy,
+    canManualRefresh,
+    cooldownLabel,
+    refreshError: deskRefreshError
+  } = useDashboardDeskRefresh(activeDeskMode);
+
   const assistantPageContext = useMemo(
     () =>
       buildDashboardAssistantPageContext({
@@ -397,7 +413,9 @@ function DashboardRedesignBody({
         gapSnapshotSymbolCount: scannerOverview.gapIntelligenceSnapshotSymbolCount ?? null,
         upcomingEarnings: upcomingCatalystWeek,
         scannerDataSettled,
-        discoveryExpanded: false
+        discoveryExpanded: false,
+        activeDeskMode,
+        deskData: deskToday?.data ?? null
       }),
     [
       regimeLabel,
@@ -410,7 +428,9 @@ function DashboardRedesignBody({
       scannerOverview.swingUniverseSymbolCount,
       scannerOverview.gapIntelligenceSnapshotSymbolCount,
       upcomingCatalystWeek,
-      scannerDataSettled
+      scannerDataSettled,
+      activeDeskMode,
+      deskToday?.data
     ]
   );
   usePublishAssistantContext(assistantPageContext);
@@ -453,8 +473,7 @@ function DashboardRedesignBody({
   const systemLabel = dashboardSystemStateLabel(systemKind);
   const systemSuppressed = systemKind === "suppressed";
 
-  const activeDeskMode: DashboardDeskMode =
-    dayTradingSurfaces && deskMode === "day" ? "day" : "swing";
+  const pageTitle = useMemo(() => buildDashboardPageTitle(regimeLabel), [regimeLabel]);
 
   const liveStatus = useMemo(
     () =>
@@ -475,14 +494,6 @@ function DashboardRedesignBody({
 
   return (
     <section className="stocvest-dashboard-v2" style={{ display: "grid", gap: spacing[4] }}>
-      <h1
-        data-testid="dashboard-page-title"
-        className="m-0 text-center text-2xl font-bold md:text-3xl"
-        style={{ color: colors.text }}
-      >
-        Dashboard
-      </h1>
-
       <DashboardDeskModePills
         mode={activeDeskMode}
         onModeChange={setDeskMode}
@@ -492,122 +503,72 @@ function DashboardRedesignBody({
       {!scannerDataSettled ? <DashboardScannerLoadingStrip /> : null}
       {deferredScannerSlot}
 
-      <div
-        role="region"
-        aria-label="System state"
-        data-testid="dashboard-system-state-banner"
-        className={surfaceGlowClassName}
-        style={{
-          borderRadius: borderRadius.lg,
-          border: `1px solid color-mix(in srgb, ${colors.border} 85%, ${colors.accent} 15%)`,
-          background: `color-mix(in srgb, ${colors.surface} 94%, ${colors.accent} 6%)`,
-          padding: `${spacing[3]} ${spacing[4]}`
-        }}
-      >
+      <DashboardMarketPulseHero
+        pageTitle={pageTitle}
+        regimeLabel={regimeLabel}
+        regimeTip={regimeTip}
+        spyPct={spyPct}
+        qqqPct={qqqPct}
+        vixLevel={vixLevel}
+        vixPct={vixPct}
+        vixPulseOk={vixPulseOk}
+        environmentSummary={marketContextSnapshot.environmentSummary}
+        sectorRotation={sectorRotation}
+        systemLabel={systemLabel}
+        swingDeskPhrase={swingDeskStatusPhrase(swingDeskPosture)}
+        dayDeskPhrase={dayTradingSurfaces ? dayDeskStatusPhrase(dayDeskPosture) : undefined}
+        dayTradingSurfaces={dayTradingSurfaces}
+        scannerPending={!scannerDataSettled}
+      />
+
+      {systemSuppressed && scannerDataSettled ? (
         <p
+          data-testid="dashboard-system-suppressed-callout"
           style={{
             margin: 0,
-            fontSize: typography.scale.xs,
-            fontWeight: 700,
-            letterSpacing: "0.12em",
-            textTransform: "uppercase",
-            color: colors.textMuted
+            fontSize: typography.scale.sm,
+            color: colors.textMuted,
+            lineHeight: 1.5
           }}
         >
-          System state
+          <strong style={{ color: colors.text, fontWeight: 600 }}>Desk gated.</strong> No actionable setups
+          on the {activeDeskMode} desk right now — normal when session or structure gates are closed.
         </p>
-        <div
-          className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1"
-          style={{ fontSize: typography.scale.sm, color: colors.text }}
-        >
-          <span>
-            <strong>Regime:</strong>{" "}
-            <span style={{ color: colors.accent, fontWeight: 600 }}>{regimeLabel}</span>
-          </span>
-          <span style={{ color: colors.textMuted }}>|</span>
-          <span>
-            <strong>Status:</strong> {systemLabel}
-          </span>
-          <InfoTip text={regimeTip} label="How regime is read" maxWidth={300} />
-        </div>
-        {!scannerDataSettled ? (
-          <p
-            data-testid="dashboard-system-state-pending"
-            style={{
-              margin: `${spacing[2]} 0 0`,
-              fontSize: typography.scale.sm,
-              color: colors.textMuted,
-              lineHeight: 1.5
-            }}
-          >
-            Scanner still loading — desk status may update when the universe finishes.
-          </p>
-        ) : systemSuppressed ? (
-          <p
-            data-testid="dashboard-system-suppressed-callout"
-            style={{
-              margin: `${spacing[2]} 0 0`,
-              fontSize: typography.scale.sm,
-              color: colors.textMuted,
-              lineHeight: 1.5
-            }}
-          >
-            <strong style={{ color: colors.text, fontWeight: 600 }}>Desk gated.</strong> No actionable
-            setups on the {activeDeskMode} desk right now — normal when session or structure gates are
-            closed, not a system error.
-          </p>
-        ) : null}
-        <details style={{ marginTop: spacing[2] }}>
-          <summary
-            style={{
-              fontSize: typography.scale.xs,
-              color: colors.textMuted,
-              cursor: "pointer",
-              listStylePosition: "outside"
-            }}
-          >
-            Desk posture detail
-          </summary>
-          <ul
-            style={{
-              margin: `${spacing[2]} 0 0`,
-              paddingLeft: spacing[4],
-              color: colors.textMuted,
-              fontSize: typography.scale.xs,
-              lineHeight: 1.5
-            }}
-          >
-            <li>
-              Swing: {swingDeskStatusPhrase(swingDeskPosture)}
-              {scannerOverview.error ? " — scanner incomplete" : ""}
-            </li>
-            {dayTradingSurfaces ? <li>Day: {dayDeskStatusPhrase(dayDeskPosture)}</li> : null}
-            <li className="inline-flex flex-wrap items-center gap-1">
-              VIX{" "}
-              {vixPulseOk && vixLevel != null ? (
-                <span style={{ color: colors.text }}>{toPrice(vixLevel)}</span>
-              ) : vixBlankKind ? (
-                <VixDashExplained kind={vixBlankKind} colors={colors} />
-              ) : (
-                "—"
-              )}
-            </li>
-          </ul>
-        </details>
-      </div>
+      ) : null}
+
+      <DashboardDiscoveryFeed
+        mode={activeDeskMode}
+        deskData={deskToday?.data ?? null}
+        gapFallback={scannerOverview.gapIntelligence}
+        isLoading={deskTodayLoading}
+        dualDeskSurfaces={dayTradingSurfaces}
+        onRefreshDesk={() => void refreshDesk()}
+        refreshBusy={manualRefreshBusy}
+        canRefreshDesk={canManualRefresh}
+        refreshCooldownLabel={cooldownLabel}
+        refreshError={deskRefreshError}
+      />
+
+      <DashboardWatchlistRadar mode={activeDeskMode} snapshots={marketOverview.snapshots} />
 
       <DashboardLiveStatus status={liveStatus} />
 
-      <DashboardOpportunitiesOverview
-        mode={activeDeskMode}
-        dayTradingSurfaces={dayTradingSurfaces}
-        scanSummary={scannerOverview.scanSummary}
-        watchlistStatus={scannerOverview.watchlistStatus}
-      />
-
-      <NearReadyEngagementStrip mode={activeDeskMode} />
-
-      <DashboardMarketContextPanel snapshot={marketContextSnapshot} />
+      <details data-testid="dashboard-market-context-fold">
+        <summary
+          style={{
+            fontSize: typography.scale.sm,
+            fontWeight: 600,
+            color: colors.accent,
+            cursor: "pointer",
+            listStylePosition: "outside"
+          }}
+        >
+          More market context
+        </summary>
+        <div className="mt-2">
+          <DashboardMarketContextPanel snapshot={marketContextSnapshot} />
+        </div>
+      </details>
 
       <DashboardInsightCallout mode={activeDeskMode} nearReadyInMarket={nearReadyInMarket} />
 

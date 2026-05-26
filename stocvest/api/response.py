@@ -47,6 +47,16 @@ def not_found(message: str = "Not found") -> dict[str, Any]:
     return json_response(404, {"error": "not_found", "message": message})
 
 
+def too_many_requests(message: str, *, retry_after_seconds: int | None = None) -> dict[str, Any]:
+    body: dict[str, Any] = {"error": "too_many_requests", "message": message}
+    if retry_after_seconds is not None:
+        body["retry_after_seconds"] = retry_after_seconds
+    headers = None
+    if retry_after_seconds is not None:
+        headers = {"Retry-After": str(retry_after_seconds)}
+    return json_response(429, body, headers=headers)
+
+
 def internal_error(message: str = "Internal server error") -> dict[str, Any]:
     return json_response(500, {"error": "internal_error", "message": message})
 

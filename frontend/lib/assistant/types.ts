@@ -177,6 +177,11 @@ export type DashboardAssistantContextV1 = {
     leader_count: number;
     with_catalyst_count: number;
     preview_symbols: string[];
+    /** D13 — Opportunity Desk cache when available. */
+    source?: "desk_cache" | "gap_fallback" | "empty";
+    scanned_count?: number | null;
+    generated_at?: string | null;
+    recently_hot?: string[];
   };
   universe: {
     swing_universe_symbol_count: number | null;

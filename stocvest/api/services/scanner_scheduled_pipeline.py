@@ -50,10 +50,15 @@ def _parse_scanner_symbols() -> list[str]:
 
 
 def merge_scheduled_scan_symbol_universe(
-    configured: list[str], platform: list[str], *, cap: int = 40
+    configured: list[str],
+    platform: list[str],
+    desk_movers: list[str] | None = None,
+    *,
+    cap: int = 50,
 ) -> list[str]:
-    """Dedupe configured symbols, aggregated default-watchlist symbols, and ``SYSTEM_DEFAULTS`` (caps total)."""
-    return list(dict.fromkeys([*configured, *platform, *SYSTEM_DEFAULTS]))[:cap]
+    """Dedupe configured, platform watchlists, desk movers, and ``SYSTEM_DEFAULTS`` (caps total)."""
+    desk = desk_movers or []
+    return list(dict.fromkeys([*configured, *desk, *platform, *SYSTEM_DEFAULTS]))[:cap]
 
 
 async def _resolve_scheduled_scan_symbols() -> list[str]:
@@ -77,7 +82,14 @@ async def _resolve_scheduled_scan_symbols() -> list[str]:
                 break
     except Exception as exc:  # noqa: BLE001 — includes get_watchlist_store failures; never block scheduled scan
         _LOG.warning("scheduled scan: platform watchlist aggregation failed: %s", exc)
-    return merge_scheduled_scan_symbol_universe(configured, platform_syms, cap=40)
+    desk_syms: list[str] = []
+    try:
+        from stocvest.api.services.opportunity_desk.scanner_universe import desk_universe_symbols_from_cache
+
+        desk_syms = desk_universe_symbols_from_cache(limit=30)
+    except Exception as exc:  # noqa: BLE001
+        _LOG.warning("scheduled scan: desk universe merge failed: %s", exc)
+    return merge_scheduled_scan_symbol_universe(configured, platform_syms, desk_syms, cap=50)
 
 
 async def _fetch_snapshots(client: PolygonClient, symbols: list[str]) -> list[Any]:
