@@ -301,29 +301,33 @@ async function fetchBarsMatrix(
     return true;
   };
 
+  const requestBatch = async (
+    syms: string[]
+  ): Promise<{ bars_by_symbol?: Record<string, Record<string, unknown>[]> } | null> => {
+    const payload = { requests: syms.map((symbol) => ({ symbol, timeframe: tf, limit: barLimit })) };
+    const batch = await jsonFetch<{ bars_by_symbol?: Record<string, Record<string, unknown>[]> }>(
+      "/v1/market/bars-batch",
+      { method: "POST", body: JSON.stringify(payload) }
+    );
+    if (batch !== null) return batch;
+    // One retry — transient 503/cold-start on VPC Lambda.
+    return jsonFetch<{ bars_by_symbol?: Record<string, Record<string, unknown>[]> }>(
+      "/v1/market/bars-batch",
+      { method: "POST", body: JSON.stringify(payload) }
+    );
+  };
+
   const barSlices: string[][] = [];
   for (let i = 0; i < universe.length; i += BARS_BATCH_MAX) {
     barSlices.push(universe.slice(i, i + BARS_BATCH_MAX));
   }
-  await Promise.all(
-    barSlices.map(async (syms) => {
-      const payload = { requests: syms.map((symbol) => ({ symbol, timeframe: tf, limit: barLimit })) };
-      const batch = await jsonFetch<{ bars_by_symbol?: Record<string, Record<string, unknown>[]> }>(
-        "/v1/market/bars-batch",
-        { method: "POST", body: JSON.stringify(payload) }
-      );
-      if (!fillFromBatch(syms, batch)) {
-        await Promise.all(
-          syms.map(async (symbol) => {
-            const bars = await jsonFetch<Record<string, unknown>[]>(
-              `/v1/market/bars?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(tf)}&limit=${barLimit}`
-            );
-            merge[symbol] = Array.isArray(bars) ? bars : [];
-          })
-        );
-      }
-    })
-  );
+  // Sequential slices — avoid parallel batch posts that trip API Gateway / Lambda concurrency.
+  for (const syms of barSlices) {
+    const batch = await requestBatch(syms);
+    if (fillFromBatch(syms, batch)) continue;
+    // Batch unavailable (503/timeout): degrade to empty bars — do not fan out N GET /bars calls.
+    for (const symbol of syms) merge[symbol] = [];
+  }
   return merge;
 }
 

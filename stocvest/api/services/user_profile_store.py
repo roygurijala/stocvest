@@ -21,10 +21,7 @@ class UserProfileStore(Protocol):
     def put_profile(self, profile: UserProfile) -> None: ...
 
 
-def item_to_profile(user_id: str, item: dict[str, Any]) -> UserProfile:
-    return _item_to_profile(user_id, item)
-
-
+def _item_to_profile(user_id: str, item: dict[str, Any]) -> UserProfile:
     raw_tm = item.get("tradingMode")
     mode = TradingMode.PAPER
     if raw_tm is not None:
@@ -60,6 +57,10 @@ def item_to_profile(user_id: str, item: dict[str, Any]) -> UserProfile:
         trial_reminder_day10_sent_at=_s(item.get("trialReminderDay10SentAt")),
         trial_reminder_day14_sent_at=_s(item.get("trialReminderDay14SentAt")),
     )
+
+
+def item_to_profile(user_id: str, item: dict[str, Any]) -> UserProfile:
+    return _item_to_profile(user_id, item)
 
 
 def _s(v: Any) -> str | None:
