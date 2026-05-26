@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 import useSWR from "swr";
 
 import { DeskRefreshCooldownError, postDeskRefresh } from "@/lib/api/desk-refresh";
@@ -19,23 +18,18 @@ import {
 } from "@/lib/dashboard/desk-refresh-tiers";
 import { deskTodayKey } from "@/lib/hooks/use-desk-today";
 
+/**
+ * Desk today SWR + manual refresh. Desk payload is client-fetched — do not call
+ * `router.refresh()` here; it re-streams the whole dashboard RSC tree and races
+ * with the deferred scanner Suspense boundary (`Connection closed` crash).
+ */
 export function useDashboardDeskRefresh(mode: DeskTodayMode) {
-  const router = useRouter();
   const refreshInterval = shouldPollDeskTier("movers") ? DESK_REFRESH_TIER_B_MS : 0;
-  const tierBPollRef = useRef(false);
 
   const { data, error, isLoading, isValidating, mutate } = useSWR(
     deskTodayKey(mode),
     async ([, m]: readonly [string, DeskTodayMode]) => fetchDeskToday(m),
-    {
-      refreshInterval,
-      onSuccess: () => {
-        if (tierBPollRef.current && shouldPollDeskTier("movers")) {
-          router.refresh();
-        }
-        tierBPollRef.current = true;
-      }
-    }
+    { refreshInterval }
   );
 
   const [manualBusy, setManualBusy] = useState(false);
@@ -58,7 +52,6 @@ export function useDashboardDeskRefresh(mode: DeskTodayMode) {
       markDeskManualRefreshAt();
       setCooldownMs(deskManualRefreshCooldownRemainingMs());
       await mutate();
-      router.refresh();
     } catch (err) {
       if (err instanceof DeskRefreshCooldownError) {
         markDeskManualRefreshAt(
@@ -69,12 +62,11 @@ export function useDashboardDeskRefresh(mode: DeskTodayMode) {
       } else {
         setRefreshError(err instanceof Error ? err.message : "Refresh failed");
         await mutate();
-        router.refresh();
       }
     } finally {
       setManualBusy(false);
     }
-  }, [manualBusy, mutate, router]);
+  }, [manualBusy, mutate]);
 
   const canManualRefresh = canDeskManualRefreshNow() && !manualBusy;
 

@@ -178,7 +178,7 @@ export type DashboardAssistantContextV1 = {
     with_catalyst_count: number;
     preview_symbols: string[];
     /** D13 — Opportunity Desk cache when available. */
-    source?: "desk_cache" | "gap_fallback" | "empty";
+    source?: "desk_cache" | "movers_radar" | "gap_fallback" | "empty";
     scanned_count?: number | null;
     generated_at?: string | null;
     recently_hot?: string[];

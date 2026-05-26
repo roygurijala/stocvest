@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   buildDashboardPageTitle,
   discoveryWhyLine,
+  formatDeskGapLine,
   gapIntelToDiscoveryLeaders,
   resolveDiscoveryLeaders
 } from "@/lib/dashboard/desk-today-present";
@@ -16,6 +17,19 @@ describe("desk-today-present", () => {
     );
     expect(leaders.source).toBe("desk_cache");
     expect(leaders.leaders[0]?.symbol).toBe("MU");
+  });
+
+  test("resolveDiscoveryLeaders falls back to movers radar when discovery is empty", () => {
+    const leaders = resolveDiscoveryLeaders(
+      {
+        discovery: [],
+        movers_radar: [{ symbol: "NVDA", gap_percent: 8, direction: "up", rank_score: 8 }]
+      },
+      [],
+      "day"
+    );
+    expect(leaders.source).toBe("movers_radar");
+    expect(leaders.leaders[0]?.symbol).toBe("NVDA");
   });
 
   test("resolveDiscoveryLeaders falls back to gap intel", () => {
@@ -43,6 +57,10 @@ describe("desk-today-present", () => {
     });
     expect(line).toContain("blocked by R/R");
     expect(line).toContain("+16.0%");
+  });
+
+  test("formatDeskGapLine tolerates non-finite gap percent", () => {
+    expect(formatDeskGapLine(Number.NaN, "up")).toContain("0.0%");
   });
 
   test("buildDashboardPageTitle includes weekday and regime", () => {

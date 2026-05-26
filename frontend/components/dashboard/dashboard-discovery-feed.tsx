@@ -146,7 +146,13 @@ export function DashboardDiscoveryFeed({
               ? "Refreshing opportunity desk…"
               : leaders.length === 0
                 ? "No ranked opportunities this load — check back after the next scan."
-                : `${leaders.length} opportunit${leaders.length === 1 ? "y" : "ies"} from ${source === "desk_cache" ? "platform desk" : "gap scan"}`}
+                : `${leaders.length} opportunit${leaders.length === 1 ? "y" : "ies"} from ${
+                    source === "desk_cache"
+                      ? "platform desk"
+                      : source === "movers_radar"
+                        ? "session movers"
+                        : "gap scan"
+                  }`}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
