@@ -30,6 +30,8 @@
  * multiple cards, or reintroduces evaluative language is caught here.
  */
 
+import "./mocks/dashboard-desk-refresh";
+
 import type { ReactElement } from "react";
 import { render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, test, vi } from "vitest";
@@ -112,12 +114,13 @@ describe("dashboard focus layout", () => {
         sectorRotation={[]}
       />
     );
-    expect(screen.getByTestId("dashboard-system-state-banner")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-market-pulse-hero")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-desk-mode")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-live-status")).toBeInTheDocument();
-    expect(screen.getByTestId("dashboard-opportunities")).toBeInTheDocument();
-    expect(screen.getByTestId("dashboard-next-actions")).toBeInTheDocument();
-    expect(screen.getByTestId("dashboard-market-context")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-discovery-feed")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-watchlist-radar")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-insight")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-market-context-fold")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-market-pill-regime")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-market-pill-volatility")).toBeInTheDocument();
     expect(screen.queryByTestId("shared-context-master-card")).toBeNull();

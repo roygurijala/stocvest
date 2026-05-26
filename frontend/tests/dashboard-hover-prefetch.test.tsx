@@ -19,7 +19,23 @@ vi.mock("@/lib/hooks/use-is-mobile-layout", () => ({
 }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ prefetch: vi.fn() })
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() })
+}));
+
+vi.mock("@/lib/hooks/use-dashboard-desk-refresh", () => ({
+  useDashboardDeskRefresh: () => ({
+    data: null,
+    isLoading: false,
+    isValidating: false,
+    error: null,
+    mutate: vi.fn(),
+    refreshDesk: vi.fn(),
+    manualRefreshBusy: false,
+    canManualRefresh: true,
+    cooldownRemainingMs: 0,
+    cooldownLabel: null,
+    refreshError: null
+  })
 }));
 
 vi.mock("next/link", () => ({
@@ -118,18 +134,18 @@ describe("Layer 4 — dashboard hover-prefetch markers", () => {
         sectorRotation={[]}
       />
     );
-    const opportunities = screen.getByTestId("dashboard-opportunities");
+    const discovery = screen.getByTestId("dashboard-discovery-feed");
     assertLayer4Link(
-      anchorByHref(opportunities, "/dashboard/scanner?mode=day"),
-      "opportunities View Scanner"
+      anchorByHref(discovery, "/dashboard/scanner?mode=day"),
+      "discovery Open Scanner"
     );
     assertLayer4Link(
-      anchorByHref(opportunities, "/dashboard/watchlists"),
-      "opportunities View Watchlist"
+      anchorByHref(screen.getByTestId("dashboard-watchlist-radar"), "/dashboard/watchlists?desk=day"),
+      "watchlist radar"
     );
     assertLayer4Link(
-      anchorByHref(opportunities, "/dashboard/signals"),
-      "opportunities Review Signals"
+      anchorByHref(screen.getByTestId("dashboard-insight"), "/dashboard/scanner?mode=day"),
+      "insight Monitor Scanner"
     );
     const live = screen.getByTestId("dashboard-live-status");
     const liveCta = live.querySelector("a[href^='/dashboard/scanner']") as HTMLAnchorElement | null;
@@ -147,11 +163,11 @@ describe("Layer 4 — dashboard hover-prefetch markers", () => {
         sectorRotation={[]}
       />
     );
-    const opportunities = screen.getByTestId("dashboard-opportunities");
+    const discovery = screen.getByTestId("dashboard-discovery-feed");
     fireEvent.click(screen.getByTestId("dashboard-desk-mode-swing"));
     assertLayer4Link(
-      anchorByHref(opportunities, "/dashboard/scanner?mode=swing"),
-      "opportunities View Scanner (swing)"
+      anchorByHref(discovery, "/dashboard/scanner?mode=swing"),
+      "discovery Open Scanner (swing)"
     );
   });
 });

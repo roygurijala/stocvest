@@ -2,6 +2,8 @@
  * Dual-desk dashboard: both desks appear as status lines (not full panels).
  */
 
+import "./mocks/dashboard-desk-refresh";
+
 import type { ReactElement } from "react";
 import { render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, test, vi } from "vitest";
@@ -72,9 +74,9 @@ describe("dashboard two-desk status (focus layout)", () => {
         sectorRotation={[]}
       />
     );
-    const banner = screen.getByTestId("dashboard-system-state-banner");
-    expect(banner.textContent || "").toMatch(/Swing:/i);
-    expect(banner.textContent || "").toMatch(/Day:/i);
+    const hero = screen.getByTestId("dashboard-market-pulse-hero");
+    expect(hero.textContent || "").toMatch(/Swing:/i);
+    expect(hero.textContent || "").toMatch(/Day:/i);
   });
 
   test("opportunities_cards_link_to_day_scanner_and_watchlist", () => {
@@ -88,9 +90,9 @@ describe("dashboard two-desk status (focus layout)", () => {
         sectorRotation={[]}
       />
     );
-    const opp = screen.getByTestId("dashboard-next-actions");
-    expect(opp.querySelector('a[href="/dashboard/scanner?mode=day"]')).not.toBeNull();
-    expect(opp.querySelector('a[href="/dashboard/watchlists"]')).not.toBeNull();
+    const radar = screen.getByTestId("dashboard-watchlist-radar");
+    expect(radar.querySelector('a[href="/dashboard/watchlists?desk=day"]')).not.toBeNull();
+    expect(screen.getByTestId("dashboard-discovery-feed").querySelector('a[href="/dashboard/scanner?mode=day"]')).not.toBeNull();
   });
 
   test("market_context_panel_replaces_legacy_shared_context_strip", () => {
@@ -119,7 +121,7 @@ describe("dashboard two-desk status (focus layout)", () => {
         sectorRotation={[]}
       />
     );
-    const link = screen.getByTestId("dashboard-opportunity-scanner").querySelector('a[href="/dashboard/scanner?mode=day"]');
-    expect(link).not.toBeNull();
+    const link = screen.getByTestId("dashboard-discovery-scanner-link");
+    expect(link.getAttribute("href")).toBe("/dashboard/scanner?mode=day");
   });
 });

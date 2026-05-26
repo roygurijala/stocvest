@@ -118,7 +118,9 @@ export function DashboardDiscoveryFeed({
   const recentlyHot = Array.isArray(deskData?.recently_hot) ? deskData!.recently_hot!.slice(0, 5) : [];
   const footnote = deskScanFootnote(deskData);
   const updated = formatGeneratedAtEt(deskData?.generated_at);
-  const scannerHref = dualDeskSurfaces ? "/dashboard/scanner?mode=both" : "/dashboard/scanner?mode=swing";
+  const scannerHref = dualDeskSurfaces
+    ? `/dashboard/scanner?mode=${mode === "swing" ? "swing" : "day"}`
+    : "/dashboard/scanner?mode=swing";
   const scannerHover = useHoverPrefetch(scannerHref);
 
   return (
@@ -249,6 +251,7 @@ export function DashboardDiscoveryFeed({
         <Link
           href={scannerHref}
           prefetch={false}
+          data-hover-prefetch="true"
           {...interactionLevelProps("deep")}
           {...scannerHover}
           data-testid="dashboard-discovery-scanner-link"

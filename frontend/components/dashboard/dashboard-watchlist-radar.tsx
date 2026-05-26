@@ -106,6 +106,7 @@ export function DashboardWatchlistRadar({ mode, snapshots }: Props) {
         <Link
           href={watchlistHref}
           prefetch={false}
+          data-hover-prefetch="true"
           {...interactionLevelProps("deep")}
           {...watchlistHover}
           data-testid="dashboard-watchlist-radar-link"

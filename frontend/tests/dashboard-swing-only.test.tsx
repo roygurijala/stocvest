@@ -1,3 +1,5 @@
+import "./mocks/dashboard-desk-refresh";
+
 import type { ReactElement } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, test, vi } from "vitest";
@@ -76,8 +78,8 @@ describe("Dashboard scanner partition (focus layout)", () => {
         sectorRotation={[]}
       />
     );
-    const banner = screen.getByTestId("dashboard-system-state-banner");
-    expect(banner.textContent || "").toMatch(/Status:\s*ACTIONABLE/i);
+    const hero = screen.getByTestId("dashboard-market-pulse-hero");
+    expect(hero.textContent || "").toMatch(/ACTIONABLE/i);
     expect(screen.getByTestId("dashboard-live-status").textContent || "").toMatch(/day/i);
     expect(screen.queryByTestId("swing-desk-panel")).toBeNull();
     expect(screen.queryByTestId("day-desk-panel")).toBeNull();
@@ -112,9 +114,7 @@ describe("Dashboard scanner partition (focus layout)", () => {
       />
     );
     fireEvent.click(screen.getByTestId("dashboard-desk-mode-swing"));
-    expect(screen.getByTestId("dashboard-system-state-banner").textContent || "").toMatch(
-      /Status:\s*ACTIONABLE/i
-    );
+    expect(screen.getByTestId("dashboard-market-pulse-hero").textContent || "").toMatch(/ACTIONABLE/i);
     expect(screen.getByTestId("dashboard-live-status").textContent || "").toMatch(/swing/i);
     expect(screen.queryByTestId("swing-desk-panel")).toBeNull();
     const dash = document.querySelector(".stocvest-dashboard-v2");
