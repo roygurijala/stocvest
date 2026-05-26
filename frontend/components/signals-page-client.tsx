@@ -55,7 +55,10 @@ import { buildScenarioPlanningBundle } from "@/lib/scenario/scenario-planning-bu
 import type { ScenarioBuilderDrillDown } from "@/lib/scenario/scenario-builder-drill-down";
 import { useWatchlistMaturationLine } from "@/lib/hooks/use-watchlist-maturation-line";
 import { buildSignalEvaluationFreshness } from "@/lib/signals-evaluation-present";
-import { buildSignalsDeskPriceContext } from "@/lib/signals-desk-price-present";
+import {
+  buildSignalsDeskPriceContext,
+  snapshotHasDeskDisplayPrice
+} from "@/lib/signals-desk-price-present";
 import {
   buildSignalsPageDecision,
   formatSignalsAlignmentDisplayLine,
@@ -291,8 +294,9 @@ export function SignalsPageClient({
   const symbolForSwr = useMemo(() => {
     const sym = symbol.trim().toUpperCase();
     if (!sym) return "";
-    const inOverview = marketOverview.snapshots.some((s) => s.symbol === sym);
-    return inOverview ? "" : sym;
+    const overviewSnap = marketOverview.snapshots.find((s) => s.symbol?.toUpperCase() === sym);
+    if (overviewSnap && snapshotHasDeskDisplayPrice(overviewSnap)) return "";
+    return sym;
   }, [symbol, marketOverview.snapshots]);
   const { snapshot: symbolSnapshot } = useSymbolSnapshot(symbolForSwr);
   // Layer 4 (second slice): per-symbol composite is now SWR-cached.
@@ -592,7 +596,11 @@ export function SignalsPageClient({
 
   const rawSnapshot = useMemo(() => {
     const sym = symbol.toUpperCase();
-    return marketOverview.snapshots.find((s) => s.symbol === sym) ?? symbolSnapshot;
+    const fromOverview = marketOverview.snapshots.find((s) => s.symbol?.toUpperCase() === sym);
+    const fromFetch = symbolSnapshot;
+    if (fromFetch && snapshotHasDeskDisplayPrice(fromFetch)) return fromFetch;
+    if (fromOverview && snapshotHasDeskDisplayPrice(fromOverview)) return fromOverview;
+    return fromFetch ?? fromOverview ?? null;
   }, [marketOverview.snapshots, symbol, symbolSnapshot]);
 
   const deskPriceContext = useMemo(

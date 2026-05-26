@@ -1,6 +1,6 @@
 import type { GapIntelSnapshot } from "@/lib/api/gap-intel";
 import type { SnapshotPayload } from "@/lib/api/market";
-import { deriveSessionReferenceLevels } from "@/lib/snapshot-reference-levels";
+import { deriveSessionReferenceLevels, effectiveSnapshotPrice } from "@/lib/snapshot-reference-levels";
 import { parseSwingCompositeInsight, referenceLevelsFromSessionStructure } from "@/lib/signal-evidence";
 import type { SignalsSetupBias } from "@/lib/signals-page-present";
 import type { ScenarioInput, ScenarioMode, VolatilityRegime } from "@/lib/scenario/types";
@@ -136,10 +136,7 @@ function resolveCompositeScenarioReference(args: {
 
   const direction = setupBiasToScenarioDirection(args.setupBias);
   if ((stop == null || target_1 == null) && (direction === "bullish" || direction === "bearish")) {
-    const last =
-      typeof args.snapshot?.last_trade_price === "number" && Number.isFinite(args.snapshot.last_trade_price)
-        ? args.snapshot.last_trade_price
-        : null;
+    const last = effectiveSnapshotPrice(args.snapshot ?? null);
     const prevClose =
       typeof args.snapshot?.prev_close === "number" && Number.isFinite(args.snapshot.prev_close)
         ? args.snapshot.prev_close
@@ -163,10 +160,7 @@ function resolveCompositeScenarioReference(args: {
     stop,
     target_1,
     target_2,
-    current_price:
-      typeof args.snapshot?.last_trade_price === "number" && Number.isFinite(args.snapshot.last_trade_price)
-        ? args.snapshot.last_trade_price
-        : null,
+    current_price: effectiveSnapshotPrice(args.snapshot ?? null),
     prev_close:
       typeof args.snapshot?.prev_close === "number" && Number.isFinite(args.snapshot.prev_close)
         ? args.snapshot.prev_close
