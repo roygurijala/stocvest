@@ -143,7 +143,7 @@ describe("SignalsSetupRead", () => {
       />
     );
     expect(screen.getByTestId("signals-setup-execution-detail-toggle")).toHaveTextContent(
-      /One condition remains/
+      /execution blocked by risk\/reward \(0\.5:1\)/
     );
     expect(screen.queryByTestId("signals-setup-execution-detail")).not.toBeInTheDocument();
     fireEvent.click(screen.getByTestId("signals-setup-execution-detail-toggle"));
