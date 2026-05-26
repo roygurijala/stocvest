@@ -124,7 +124,7 @@ interface LayerRow {
 }
 
 export type SignalsPagePrefill = {
-  /** From `?symbol=&ref=scanner|watchlist|validation|journal` only. */
+  /** From `?symbol=` when `ref` is an allowlisted in-app deep link (scanner, watchlist, dashboard*, etc.). */
   urlSymbol: string | null;
   /** When `?signal_id=` is present but server could not resolve ticker; client fetches me/records. */
   signalIdForResolve: string | null;

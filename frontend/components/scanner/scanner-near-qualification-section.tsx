@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { scannerToSignalsHref } from "@/lib/nav/watchlist-signals-deeplink";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { roleAccents } from "@/lib/design-system";
 import type { ScannerNearQualificationRow, ScannerWatchlistProgressionRow } from "@/lib/scanner-scan-summary";
@@ -138,7 +139,7 @@ function NearRow({
         </span>
       ) : null}
       <Link
-        href={`/dashboard/signals?ref=scanner&symbol=${encodeURIComponent(row.symbol)}&trading_mode=${row.desk}`}
+        href={scannerToSignalsHref(row.symbol, row.desk)}
         style={{ fontSize: typography.scale.xs, fontWeight: 600, color: colors.accent, textDecoration: "none" }}
       >
         Open Signals →

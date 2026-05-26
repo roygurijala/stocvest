@@ -52,6 +52,9 @@ describe("scanner-quiet-desk", () => {
     expect(cards[0].alignmentHeadline).toMatch(/5\/6 aligned/);
     expect(cards[0].blockedLine).toBe("Blocked by regime");
     expect(cards[0].urgencyLine).toMatch(/regime clears/i);
+    expect(cards[0].evidenceHref).toContain("symbol=AAPL");
+    expect(cards[0].evidenceHref).toContain("ref=scanner");
+    expect(cards[0].evidenceHref).toContain("open_evidence=1");
   });
 
   it("near ready section copy reflects regime gate", () => {

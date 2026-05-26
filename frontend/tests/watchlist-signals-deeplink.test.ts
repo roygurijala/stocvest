@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vitest";
 
-import { watchlistSignalsOpenAriaLabel, watchlistToSignalsHref } from "@/lib/nav/watchlist-signals-deeplink";
+import {
+  scannerOpenEvidenceHref,
+  watchlistSignalsOpenAriaLabel,
+  watchlistToSignalsHref
+} from "@/lib/nav/watchlist-signals-deeplink";
 
 describe("watchlistToSignalsHref", () => {
   test("includes symbol and ref=watchlist", () => {
@@ -21,6 +25,18 @@ describe("watchlistToSignalsHref", () => {
   test("blank symbol falls back to bare Signals path", () => {
     expect(watchlistToSignalsHref("")).toBe("/dashboard/signals");
     expect(watchlistToSignalsHref("   ")).toBe("/dashboard/signals");
+  });
+});
+
+describe("scannerOpenEvidenceHref", () => {
+  test("includes symbol, ref=scanner, trading_mode, and open_evidence", () => {
+    const href = scannerOpenEvidenceHref("powi", "swing");
+    const u = new URL(href, "http://local.test");
+    expect(u.pathname).toBe("/dashboard/signals");
+    expect(u.searchParams.get("symbol")).toBe("POWI");
+    expect(u.searchParams.get("ref")).toBe("scanner");
+    expect(u.searchParams.get("trading_mode")).toBe("swing");
+    expect(u.searchParams.get("open_evidence")).toBe("1");
   });
 });
 
