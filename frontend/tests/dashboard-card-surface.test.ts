@@ -11,16 +11,28 @@ describe("dashboard-card-surface", () => {
     textMuted: "#9ca3af"
   };
 
-  test("bullish tone tints card green", () => {
+  test("bullish tone uses neutral surface with green left and bottom accents", () => {
     const chrome = dashboardDirectionCardChrome("bullish", theme);
+    expect(chrome.background).toBe(theme.surface);
+    expect(chrome.border).toBe(theme.border);
     expect(chrome.borderLeft).toBe(theme.bullish);
-    expect(chrome.background).toContain(theme.bullish);
+    expect(chrome.borderBottom).toBe(theme.bullish);
+    expect(chrome.accent).toBe(theme.bullish);
   });
 
-  test("bearish tone tints card red", () => {
+  test("bearish tone uses neutral surface with red left and bottom accents", () => {
     const chrome = dashboardDirectionCardChrome("bearish", theme);
+    expect(chrome.background).toBe(theme.surface);
     expect(chrome.borderLeft).toBe(theme.bearish);
-    expect(chrome.background).toContain(theme.bearish);
+    expect(chrome.borderBottom).toBe(theme.bearish);
+    expect(chrome.accent).toBe(theme.bearish);
+  });
+
+  test("muted tone uses neutral accents on left and bottom", () => {
+    const chrome = dashboardDirectionCardChrome("muted", theme);
+    expect(chrome.background).toBe(theme.surface);
+    expect(chrome.borderLeft).toBe(theme.textMuted);
+    expect(chrome.borderBottom).toBe(theme.textMuted);
   });
 });
 
