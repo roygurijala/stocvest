@@ -7,12 +7,12 @@ import {
   formatSignalPrice,
   formatSignalPriceDeltaPct
 } from "@/lib/signal-evidence/signal-price-display";
+import { effectiveSnapshotPrice } from "@/lib/snapshot-reference-levels";
 
 export type SignalsDeskPriceDayTone = "up" | "down" | "flat";
 
 export type SignalsDeskPriceContext = {
-  /** "Last" when a trade print exists; "As of close" when using session close only. */
-  priceLabel: "Last" | "As of close";
+  priceLabel: "Last" | "After hours" | "Pre-market" | "As of close" | "Prior close";
   priceFormatted: string;
   dayChangePct: number | null;
   dayChangeFormatted: string | null;
@@ -48,11 +48,28 @@ function resolveDisplayPrice(snapshot: SnapshotPayload): { price: number; label:
   if (last != null) {
     return { price: last, label: "Last" };
   }
+  const afterHours = positivePrice(snapshot.after_hours_price);
+  if (afterHours != null) {
+    return { price: afterHours, label: "After hours" };
+  }
+  const preMarket = positivePrice(snapshot.pre_market_price);
+  if (preMarket != null) {
+    return { price: preMarket, label: "Pre-market" };
+  }
   const close = positivePrice(snapshot.day_close);
   if (close != null) {
     return { price: close, label: "As of close" };
   }
+  const prior = positivePrice(snapshot.prev_close);
+  if (prior != null) {
+    return { price: prior, label: "Prior close" };
+  }
   return null;
+}
+
+/** True when the command bar can show an inline price for this snapshot. */
+export function snapshotHasDeskDisplayPrice(snapshot: SnapshotPayload | null | undefined): boolean {
+  return effectiveSnapshotPrice(snapshot) != null;
 }
 
 function dayChangeTone(pct: number): SignalsDeskPriceDayTone {

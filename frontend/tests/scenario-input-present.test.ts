@@ -1,10 +1,12 @@
 import { describe, expect, test } from "vitest";
+import { canOpenFullScenarioSheet } from "@/lib/scenario/eligibility";
 import {
   buildScenarioInputFromCompositeContext,
   buildWatchlistScenarioInput,
   marketRegimeToVolatilityRegime,
   setupBiasToScenarioDirection
 } from "@/lib/scenario/scenario-input-present";
+import { buildScenarioPlanningBundle } from "@/lib/scenario/scenario-planning-bundle";
 
 describe("scenario-input-present", () => {
   test("setupBiasToScenarioDirection maps bullish and bearish", () => {
@@ -59,6 +61,77 @@ describe("scenario-input-present", () => {
     expect(input.reference.stop).not.toBeNull();
     expect(input.reference.target_1).not.toBeNull();
     expect(input.risk_reward).toBe(1.3);
+  });
+
+  test("buildScenarioInputFromCompositeContext derives levels from after_hours_price when last is missing", () => {
+    const input = buildScenarioInputFromCompositeContext({
+      symbol: "TJX",
+      tradingMode: "swing",
+      setupBias: "Bullish",
+      composite: {
+        signal_score: 68,
+        signal_summary: "bullish",
+        historical_entry_zone: { low: 123.5, high: 126.0 }
+      },
+      snapshot: {
+        symbol: "TJX",
+        after_hours_price: 125.42,
+        prev_close: 124.2,
+        day_low: 124.0,
+        day_high: 126.8
+      } as never
+    });
+    expect(input.reference.current_price).toBe(125.42);
+    expect(canOpenFullScenarioSheet(input)).toBe(true);
+  });
+
+  test("buildScenarioInputFromCompositeContext derives levels from day_close when last is missing", () => {
+    const input = buildScenarioInputFromCompositeContext({
+      symbol: "TJX",
+      tradingMode: "swing",
+      setupBias: "Bullish",
+      composite: {
+        signal_score: 68,
+        signal_summary: "bullish",
+        alignment_ratio: 1,
+        risk_reward: 1.4,
+        historical_entry_zone: { low: 123.5, high: 126.0 }
+      },
+      snapshot: {
+        symbol: "TJX",
+        day_close: 125.5,
+        prev_close: 124.2,
+        day_low: 124.0,
+        day_high: 126.8
+      } as never
+    });
+    expect(input.reference.current_price).toBe(125.5);
+    expect(input.reference.stop).not.toBeNull();
+    expect(input.reference.target_1).not.toBeNull();
+    expect(canOpenFullScenarioSheet(input)).toBe(true);
+  });
+
+  test("buildScenarioPlanningBundle opens full sheet for TJX-like after-hours snapshot", () => {
+    const bundle = buildScenarioPlanningBundle({
+      symbol: "TJX",
+      tradingMode: "swing",
+      setupBias: "Bullish",
+      composite: {
+        signal_summary: "bullish",
+        signal_score: 68,
+        alignment_ratio: 1,
+        historical_entry_zone: { low: 123.5, high: 126.0 },
+        layers: [{ layer: "technical", score: 70, verdict: "bullish", status: "ok" }]
+      },
+      snapshot: {
+        symbol: "TJX",
+        day_close: 125.5,
+        prev_close: 124.2,
+        day_low: 124.0,
+        day_high: 126.8
+      } as never
+    });
+    expect(canOpenFullScenarioSheet(bundle.input)).toBe(true);
   });
 
   test("buildWatchlistScenarioInput uses snapshot last and day_low", () => {

@@ -68,6 +68,21 @@ function positiveNum(v: unknown): number | null {
 }
 
 /**
+ * Tradeable anchor for reference geometry and command-bar price — matches desk display order.
+ * Equities after hours: no `last_trade_price`; extended-hours or session close still count.
+ */
+export function effectiveSnapshotPrice(snapshot: SnapshotPayload | null | undefined): number | null {
+  if (!snapshot) return null;
+  return (
+    positiveNum(snapshot.last_trade_price) ??
+    positiveNum(snapshot.after_hours_price) ??
+    positiveNum(snapshot.pre_market_price) ??
+    positiveNum(snapshot.day_close) ??
+    positiveNum(snapshot.prev_close)
+  );
+}
+
+/**
  * VWAP / support / resistance for dashboard strips. Uses snapshot session fields when last is missing;
  * fills gaps from composite API evidence (`historical_entry_zone`, targets, `vwap`) when present.
  */
@@ -80,7 +95,7 @@ export function deriveSessionReferenceLevels(
   let vwap: number | null = null;
 
   if (snapshot) {
-    const last = positiveNum(snapshot.last_trade_price);
+    const last = effectiveSnapshotPrice(snapshot);
     const dh = positiveNum(snapshot.day_high);
     const dl = positiveNum(snapshot.day_low);
     const dVwap = positiveNum(snapshot.day_vwap);

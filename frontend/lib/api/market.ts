@@ -25,6 +25,7 @@ export interface SnapshotPayload {
   /** Session VWAP from Polygon `day.vw` when present. */
   day_vwap?: number | null;
   pre_market_price?: number | null;
+  after_hours_price?: number | null;
   /** Issuer name when Polygon includes `name` on the ticker snapshot. */
   company_name?: string | null;
   /** Session change vs prior close when present on snapshot payload. */
