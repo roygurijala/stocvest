@@ -110,7 +110,8 @@ export function buildDashboardAssistantPageContext(
     deskMode
   );
   const gapLeaders = input.scannerDataSettled ? sortGaps(input.gapIntelligence).slice(0, 10) : [];
-  const useDesk = deskSource === "desk_cache" && deskLeaders.length > 0;
+  const useDesk =
+    (deskSource === "desk_cache" || deskSource === "movers_radar") && deskLeaders.length > 0;
   const leaderSymbols = useDesk
     ? deskLeaders.map((l) => l.symbol)
     : gapLeaders.map((g) => g.symbol.trim().toUpperCase());

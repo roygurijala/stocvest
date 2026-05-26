@@ -1,11 +1,12 @@
 import type { GapIntelligenceItem } from "@/lib/api/scanner";
-import type { DeskDiscoveryLeader, DeskTodayData, DeskTodayMode } from "@/lib/api/desk-today";
+import type { DeskDiscoveryLeader, DeskTodayData, DeskTodayMode, DeskMoverRadarRow } from "@/lib/api/desk-today";
 import { DESK_DISCOVERY_DISPLAY_LIMIT } from "@/lib/dashboard/desk-refresh-tiers";
 
 export function formatDeskGapLine(gapPercent: number, direction: string): string {
-  const sign = gapPercent >= 0 ? "+" : "";
+  const pct = typeof gapPercent === "number" && Number.isFinite(gapPercent) ? gapPercent : 0;
+  const sign = pct >= 0 ? "+" : "";
   const dir = direction === "down" ? "▼" : direction === "up" ? "▲" : "·";
-  return `${dir} ${sign}${gapPercent.toFixed(1)}% today`;
+  return `${dir} ${sign}${pct.toFixed(1)}% today`;
 }
 
 export function discoveryWhyLine(leader: DeskDiscoveryLeader): string {
@@ -38,14 +39,37 @@ export function gapIntelToDiscoveryLeaders(
     }));
 }
 
+function moversRadarToDiscoveryLeaders(
+  movers: DeskMoverRadarRow[],
+  mode: DeskTodayMode,
+  limit = DESK_DISCOVERY_DISPLAY_LIMIT
+): DeskDiscoveryLeader[] {
+  return movers.slice(0, limit).map((m) => ({
+    symbol: m.symbol.trim().toUpperCase(),
+    gap_percent: m.gap_percent,
+    direction: m.direction,
+    rank_score: m.rank_score,
+    desk: mode,
+    verdict: null,
+    execution_hint: null
+  }));
+}
+
 export function resolveDiscoveryLeaders(
   deskData: DeskTodayData | null | undefined,
   gapFallback: GapIntelligenceItem[],
   mode: DeskTodayMode
-): { leaders: DeskDiscoveryLeader[]; source: "desk_cache" | "gap_fallback" | "empty" } {
+): { leaders: DeskDiscoveryLeader[]; source: "desk_cache" | "movers_radar" | "gap_fallback" | "empty" } {
   const fromDesk = deskData?.discovery;
   if (Array.isArray(fromDesk) && fromDesk.length > 0) {
     return { leaders: fromDesk.slice(0, DESK_DISCOVERY_DISPLAY_LIMIT), source: "desk_cache" };
+  }
+  const fromMovers = deskData?.movers_radar;
+  if (Array.isArray(fromMovers) && fromMovers.length > 0) {
+    return {
+      leaders: moversRadarToDiscoveryLeaders(fromMovers, mode),
+      source: "movers_radar"
+    };
   }
   if (gapFallback.length > 0) {
     return { leaders: gapIntelToDiscoveryLeaders(gapFallback, mode), source: "gap_fallback" };
