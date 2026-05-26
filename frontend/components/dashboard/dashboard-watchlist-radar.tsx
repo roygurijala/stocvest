@@ -3,7 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { SnapshotPayload } from "@/lib/api/market";
-import { buildWatchlistRadarRows, type WatchlistRadarRow } from "@/lib/dashboard/watchlist-radar";
+import { WatchlistRadarCard } from "@/components/dashboard/watchlist-radar-card";
+import { buildWatchlistRadarRows } from "@/lib/dashboard/watchlist-radar";
+import {
+  buildWatchlistRadarCardModel,
+  WATCHLIST_RADAR_DISCLAIMER,
+  WATCHLIST_RADAR_TITLE
+} from "@/lib/dashboard/watchlist-radar-card-present";
 import type { DashboardDeskMode } from "@/lib/dashboard/live-status-copy";
 import { interactionLevelProps } from "@/lib/dashboard/click-hierarchy";
 import { parseMaturationSummaryEnvelope } from "@/lib/watchlist/maturation-summary-envelope";
@@ -16,60 +22,6 @@ type Props = {
   mode: DashboardDeskMode;
   snapshots: SnapshotPayload[];
 };
-
-function WatchlistRadarRowItem({ row, mode }: { row: WatchlistRadarRow; mode: DashboardDeskMode }) {
-  const { colors } = useTheme();
-  const href = `/dashboard/signals?symbol=${encodeURIComponent(row.symbol)}&trading_mode=${mode}&ref=dashboard`;
-  const hover = useHoverPrefetch(href);
-  const pctColor =
-    row.quote?.bullish === true
-      ? colors.bullish
-      : row.quote?.bullish === false
-        ? colors.bearish
-        : colors.textMuted;
-
-  return (
-    <li
-      data-testid={`dashboard-watchlist-radar-${row.symbol}`}
-      style={{
-        borderRadius: borderRadius.md,
-        border: `1px solid ${colors.border}`,
-        borderLeft: row.borderLeft,
-        padding: spacing[3],
-        background: colors.surfaceMuted
-      }}
-    >
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <strong>{row.symbol}</strong>
-          {row.quote?.price ? (
-            <span style={{ marginLeft: spacing[2], color: colors.textMuted, fontSize: typography.scale.sm }}>
-              {row.quote.price}
-              {row.quote.pct ? (
-                <span style={{ color: pctColor, marginLeft: 4 }}>{row.quote.pct}</span>
-              ) : null}
-            </span>
-          ) : null}
-          <p className="m-0 mt-1" style={{ fontSize: typography.scale.sm, color: colors.text }}>
-            {row.attentionReason}
-          </p>
-          <p className="m-0 mt-0.5" style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>
-            {row.alignmentLine}
-          </p>
-        </div>
-        <Link
-          href={href}
-          prefetch={false}
-          {...interactionLevelProps("deep")}
-          {...hover}
-          style={{ fontSize: typography.scale.sm, fontWeight: 600, color: colors.accent }}
-        >
-          Signals →
-        </Link>
-      </div>
-    </li>
-  );
-}
 
 export function DashboardWatchlistRadar({ mode, snapshots }: Props) {
   const { colors } = useTheme();
@@ -128,13 +80,29 @@ export function DashboardWatchlistRadar({ mode, snapshots }: Props) {
     [symbols, bySymbol, snapBySym, colors, mode]
   );
 
+  const cardModels = useMemo(
+    () =>
+      rows.map((row) =>
+        buildWatchlistRadarCardModel(row, {
+          surface: colors.surface,
+          border: colors.border,
+          accent: colors.accent,
+          bullish: colors.bullish,
+          bearish: colors.bearish,
+          caution: colors.caution,
+          textMuted: colors.textMuted
+        })
+      ),
+    [rows, colors.accent, colors.bullish, colors.bearish, colors.caution, colors.textMuted]
+  );
+
   const watchlistHref = `/dashboard/watchlists?desk=${encodeURIComponent(mode)}`;
   const watchlistHover = useHoverPrefetch(watchlistHref);
 
   return (
     <section
       role="region"
-      aria-label="Watchlist attention"
+      aria-label="Watchlist radar"
       data-testid="dashboard-watchlist-radar"
       className={surfaceGlowClassName}
       style={{
@@ -145,16 +113,23 @@ export function DashboardWatchlistRadar({ mode, snapshots }: Props) {
       }}
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
+        <div className="min-w-0 flex-1">
           <h2 className="m-0" style={{ fontSize: typography.scale.base, fontWeight: 700 }}>
-            Your watchlist
+            {WATCHLIST_RADAR_TITLE}
           </h2>
           <p className="m-0 mt-1" style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>
             {status === "loading"
               ? "Loading tracked symbols…"
-              : rows.length === 0
+              : cardModels.length === 0
                 ? "Nothing on your list needs attention right now."
-                : `${rows.length} symbol${rows.length === 1 ? "" : "s"} need a look`}
+                : `${cardModels.length} symbol${cardModels.length === 1 ? "" : "s"} need a look`}
+          </p>
+          <p
+            className="m-0 mt-2"
+            data-testid="dashboard-watchlist-radar-disclaimer"
+            style={{ fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45, maxWidth: "52rem" }}
+          >
+            {WATCHLIST_RADAR_DISCLAIMER}
           </p>
         </div>
         <Link
@@ -164,16 +139,19 @@ export function DashboardWatchlistRadar({ mode, snapshots }: Props) {
           {...interactionLevelProps("deep")}
           {...watchlistHover}
           data-testid="dashboard-watchlist-radar-link"
-          style={{ fontSize: typography.scale.sm, fontWeight: 600, color: colors.accent }}
+          style={{ fontSize: typography.scale.sm, fontWeight: 600, color: colors.accent, whiteSpace: "nowrap" }}
         >
-          Watchlists →
+          Full watchlist →
         </Link>
       </div>
 
-      {rows.length > 0 ? (
-        <ul className="m-0 mt-3 grid list-none gap-2 p-0" data-testid="dashboard-watchlist-radar-list">
-          {rows.map((row) => (
-            <WatchlistRadarRowItem key={row.symbol} row={row} mode={mode} />
+      {cardModels.length > 0 ? (
+        <ul
+          className="m-0 mt-3 grid list-none gap-3 p-0 sm:grid-cols-2 xl:grid-cols-3"
+          data-testid="dashboard-watchlist-radar-list"
+        >
+          {cardModels.map((model) => (
+            <WatchlistRadarCard key={model.symbol} model={model} mode={mode} />
           ))}
         </ul>
       ) : null}

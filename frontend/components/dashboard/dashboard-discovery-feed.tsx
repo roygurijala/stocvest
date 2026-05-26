@@ -20,8 +20,8 @@ import {
   buildHotInMarketCardModel,
   HOT_IN_MARKET_DISCLAIMER,
   HOT_IN_MARKET_TITLE,
-  hotInMarketSignalsHref,
-  hotInMarketSourceSubtitle
+  hotInMarketFeedSubtitle,
+  hotInMarketSignalsHref
 } from "@/lib/dashboard/hot-in-market-card-present";
 import type { DashboardDeskMode } from "@/lib/dashboard/live-status-copy";
 import { interactionLevelProps } from "@/lib/dashboard/click-hierarchy";
@@ -32,8 +32,10 @@ import { useTheme } from "@/lib/theme-provider";
 type Props = {
   mode: DashboardDeskMode;
   deskData: DeskTodayData | null | undefined;
+  alternateDeskData?: DeskTodayData | null | undefined;
   gapFallback: GapIntelligenceItem[];
   isLoading?: boolean;
+  scannerPending?: boolean;
   dualDeskSurfaces?: boolean;
   onRefreshDesk?: () => void;
   refreshBusy?: boolean;
@@ -45,8 +47,10 @@ type Props = {
 export function DashboardDiscoveryFeed({
   mode,
   deskData,
+  alternateDeskData,
   gapFallback,
   isLoading = false,
+  scannerPending = false,
   dualDeskSurfaces = true,
   onRefreshDesk,
   refreshBusy = false,
@@ -55,21 +59,21 @@ export function DashboardDiscoveryFeed({
   refreshError = null
 }: Props) {
   const { colors } = useTheme();
-  const { leaders, source } = resolveDiscoveryLeaders(deskData, gapFallback, mode);
+  const { leaders, source } = resolveDiscoveryLeaders(deskData, gapFallback, mode, alternateDeskData);
   const leaderSymbols = useMemo(() => leaders.map((l) => l.symbol), [leaders]);
   const sinceLastVisit = useMemo(() => {
-    const previous = loadDeskLastVisit();
+    const previous = loadDeskLastVisit(mode);
     return diffDeskSinceLastVisit(leaderSymbols, previous);
-  }, [leaderSymbols]);
-  const sinceSummary = useMemo(
-    () => sinceLastVisitSummary(sinceLastVisit.added, sinceLastVisit.removed),
-    [sinceLastVisit.added, sinceLastVisit.removed]
-  );
+  }, [leaderSymbols, mode]);
+  const sinceSummary = useMemo(() => {
+    if (leaderSymbols.length === 0) return null;
+    return sinceLastVisitSummary(sinceLastVisit.added, sinceLastVisit.removed);
+  }, [leaderSymbols.length, sinceLastVisit.added, sinceLastVisit.removed]);
 
   useEffect(() => {
     if (leaderSymbols.length === 0) return;
-    saveDeskLastVisit(leaderSymbols);
-  }, [leaderSymbols]);
+    saveDeskLastVisit(leaderSymbols, mode);
+  }, [leaderSymbols, mode]);
 
   const cardModels = useMemo(
     () =>
@@ -79,6 +83,8 @@ export function DashboardDiscoveryFeed({
           mode,
           source,
           colors: {
+            surface: colors.surface,
+            border: colors.border,
             accent: colors.accent,
             bullish: colors.bullish,
             bearish: colors.bearish,
@@ -97,9 +103,14 @@ export function DashboardDiscoveryFeed({
     ? `/dashboard/scanner?mode=${mode === "swing" ? "swing" : "day"}`
     : "/dashboard/scanner?mode=swing";
   const scannerHover = useHoverPrefetch(scannerHref);
-  const subtitle = isLoading
-    ? "Refreshing opportunity desk…"
-    : hotInMarketSourceSubtitle(source, leaders.length);
+  const subtitle = hotInMarketFeedSubtitle({
+    source,
+    count: leaders.length,
+    deskLoading: isLoading,
+    scannerPending,
+    mode
+  });
+  const awaitingData = leaders.length === 0 && (isLoading || scannerPending);
 
   return (
     <section
@@ -119,7 +130,11 @@ export function DashboardDiscoveryFeed({
           <h2 className="m-0" style={{ fontSize: typography.scale.base, fontWeight: 700 }}>
             {HOT_IN_MARKET_TITLE}
           </h2>
-          <p className="m-0 mt-1" style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>
+          <p
+            className="m-0 mt-1"
+            data-testid="dashboard-hot-in-market-subtitle"
+            style={{ fontSize: typography.scale.sm, color: colors.textMuted }}
+          >
             {subtitle}
           </p>
           <p
@@ -172,7 +187,11 @@ export function DashboardDiscoveryFeed({
       ) : null}
 
       {refreshError ? (
-        <p className="m-0 mt-1" style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>
+        <p
+          className="m-0 mt-2"
+          data-testid="dashboard-hot-in-market-refresh-error"
+          style={{ fontSize: typography.scale.xs, color: colors.caution, lineHeight: 1.45 }}
+        >
           {refreshError}
         </p>
       ) : null}
@@ -186,6 +205,14 @@ export function DashboardDiscoveryFeed({
             <HotInMarketCard key={model.symbol} model={model} mode={mode} />
           ))}
         </ul>
+      ) : awaitingData ? (
+        <p
+          className="m-0 mt-3"
+          data-testid="dashboard-hot-in-market-loading"
+          style={{ fontSize: typography.scale.sm, color: colors.textMuted }}
+        >
+          Hang tight — movers appear here once the desk cache and scanner finish loading.
+        </p>
       ) : null}
 
       {recentlyHot.length > 0 ? (

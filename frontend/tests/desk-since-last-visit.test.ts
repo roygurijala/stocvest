@@ -13,12 +13,19 @@ describe("desk since last visit", () => {
   });
 
   test("diffs added and removed symbols", () => {
-    saveDeskLastVisit(["MU", "NVDA"], new Date("2026-05-25T12:00:00Z"));
-    const prev = loadDeskLastVisit();
+    saveDeskLastVisit(["MU", "NVDA"], "swing", new Date("2026-05-25T12:00:00Z"));
+    const prev = loadDeskLastVisit("swing");
     const { added, removed } = diffDeskSinceLastVisit(["MU", "AMD"], prev);
     expect(added).toEqual(["AMD"]);
     expect(removed).toEqual(["NVDA"]);
-    expect(sinceLastVisitSummary(added, removed)).toBe("AMD in discovery · NVDA dropped");
+    expect(sinceLastVisitSummary(added, removed)).toBe("AMD in hot list · NVDA dropped");
+  });
+
+  test("scopes last visit by desk mode", () => {
+    saveDeskLastVisit(["MU"], "swing");
+    saveDeskLastVisit(["NVDA"], "day");
+    expect(loadDeskLastVisit("swing")?.discoverySymbols).toEqual(["MU"]);
+    expect(loadDeskLastVisit("day")?.discoverySymbols).toEqual(["NVDA"]);
   });
 
   test("returns null summary when no changes", () => {
