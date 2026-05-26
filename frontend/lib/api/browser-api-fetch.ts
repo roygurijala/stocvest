@@ -68,6 +68,9 @@ export async function browserApiFetch<T>(path: string, init?: RequestInit): Prom
       return null;
     }
     return pending.catch((error: unknown) => {
+      if (error instanceof Error && error.name === "AbortError") {
+        return null;
+      }
       console.error("Unable to connect. Check your connection.", error);
       return null;
     });

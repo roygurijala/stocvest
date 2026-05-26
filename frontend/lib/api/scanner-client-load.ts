@@ -1,11 +1,11 @@
 import { browserApiFetch } from "@/lib/api/browser-api-fetch";
-import { runScannerLoadWithoutBrief } from "@/lib/api/scanner-load";
+import { runScannerLoadWithoutBrief, type ScannerJsonFetch } from "@/lib/api/scanner-load";
 import type { PDTStatusPayload } from "@/lib/api/pdt";
 import type { DaySetupsRequestExtras, ScannerCoreData, ScannerLoadTuning } from "@/lib/api/scanner";
 
-async function fetchDefaultWatchlistSnapshotBrowser() {
+async function fetchDefaultWatchlistSnapshotBrowser(jsonFetch: ScannerJsonFetch) {
   try {
-    const data = await browserApiFetch<{
+    const data = await jsonFetch<{
       symbols?: string[];
       symbol_tracking?: Record<string, { swing?: boolean; day?: boolean }>;
     }>("/v1/watchlists/default/symbols");
@@ -33,11 +33,12 @@ export async function loadScannerDataWithoutBrief(
   _pdtStatus: PDTStatusPayload | null,
   watchlistSymbols: string[] = [],
   tuning: ScannerLoadTuning | null = null,
-  daySetupsExtras: DaySetupsRequestExtras | null = null
+  daySetupsExtras: DaySetupsRequestExtras | null = null,
+  jsonFetch: ScannerJsonFetch = browserApiFetch
 ): Promise<ScannerCoreData> {
   return runScannerLoadWithoutBrief(
-    browserApiFetch,
-    fetchDefaultWatchlistSnapshotBrowser,
+    jsonFetch,
+    () => fetchDefaultWatchlistSnapshotBrowser(jsonFetch),
     _pdtStatus,
     watchlistSymbols,
     tuning,
