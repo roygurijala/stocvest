@@ -10,7 +10,9 @@ from stocvest.signals.swing_technical_analyzer import (
     SwingTechnicalAnalyzer,
     _base_formation,
     _higher_highs_lows,
+    _macd_momentum_clause,
     _macd_series,
+    _rsi_momentum_phase,
     _sma,
     _volume_pattern,
 )
@@ -278,6 +280,44 @@ def test_strong_bullish_daily_setup() -> None:
     assert r.score is not None and r.score >= 70
 
 
+def test_rsi_momentum_phase_buckets() -> None:
+    p = SwingTechnicalParameters()
+    assert _rsi_momentum_phase(55.0, p) == "building"
+    assert _rsi_momentum_phase(65.0, p) == "strong"
+    assert _rsi_momentum_phase(74.0, p) == "extended"
+
+
+def test_macd_clause_uses_extended_wording_when_rsi_extended() -> None:
+    line = _macd_momentum_clause(phase="extended", macd_above=True, m_now=1.2, s_now=0.4)
+    assert "momentum strong but extended" in line
+    assert "momentum building" not in line
+
+
+def test_overbought_and_extension_penalties_reduce_score() -> None:
+    """Vertical last bar vs slow ramp — extension + overbought should score below unchecked breakout."""
+    bars = make_daily_bars(210, trend=0.003)
+    spike = bars[-1].close * 1.65
+    last = bars[-1]
+    bars[-1] = Bar(
+        symbol=last.symbol,
+        timestamp=last.timestamp,
+        timeframe=last.timeframe,
+        open=last.open,
+        high=spike * 1.02,
+        low=last.low,
+        close=spike,
+        volume=last.volume * 3,
+    )
+    snap = Snapshot(symbol="TEST", last_trade_price=spike, prev_close=bars[-2].close, change_percent=16.0, change=10.0)
+    mild = SwingTechnicalAnalyzer().analyze("TEST", bars, snap, SwingTechnicalParameters(rsi_overbought_penalty=0, extension_above_sma50_penalty=0, extension_above_sma200_penalty=0))
+    strict = SwingTechnicalAnalyzer().analyze("TEST", bars, snap, SwingTechnicalParameters())
+    assert mild.score is not None and strict.score is not None
+    assert strict.score < mild.score
+    assert strict.score <= 90
+    assert any("overbought" in ch.lower() for ch in strict.chips)
+    assert "extended" in strict.reasoning.lower() or "stretched" in strict.reasoning.lower()
+
+
 def test_strong_bearish_daily_setup() -> None:
     bars = make_daily_bars(210, trend=-0.02)
     snap = Snapshot(symbol="TEST", last_trade_price=bars[-1].close, prev_close=bars[-2].close, change_percent=-2.0, change=-2.0)
@@ -339,8 +379,13 @@ def test_above_sma50_score_param_actually_moves_score() -> None:
     )
     flat_kwargs = dict(
         rsi_score_delta=0,
+        rsi_overbought_penalty=0,
         above_sma50_score=0,
         above_sma200_score=0,
+        extension_above_sma50_penalty=0,
+        extension_above_sma50_pct=999.0,
+        extension_above_sma200_penalty=0,
+        extension_above_sma200_pct=999.0,
         higher_highs_lows_score=0,
         volume_accumulation_score=0,
         near_52w_high_score=0,

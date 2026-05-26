@@ -159,9 +159,16 @@ class SwingTechnicalParameters:
     rsi_overbought: float = 70.0
     rsi_oversold: float = 30.0
     rsi_score_delta: int = 15
+    rsi_momentum_building_max: float = 60.0
+    rsi_momentum_strong_max: float = 70.0
+    rsi_overbought_penalty: int = 12
 
     above_sma50_score: int = 20
     above_sma200_score: int = 15
+    extension_above_sma50_pct: float = 15.0
+    extension_above_sma50_penalty: int = 8
+    extension_above_sma200_pct: float = 40.0
+    extension_above_sma200_penalty: int = 15
     higher_highs_lows_score: int = 15
     volume_accumulation_score: int = 15
     near_52w_high_score: int = 10

@@ -125,6 +125,55 @@ def _volume_pattern(bars: list[Bar], params: SwingTechnicalParameters) -> tuple[
     return "neutral", acc, dist
 
 
+def _rsi_momentum_phase(rsi: Optional[float], params: SwingTechnicalParameters) -> Optional[str]:
+    """RSI phase for MACD copy: building (<60), strong (60–70), extended (≥70)."""
+    if rsi is None:
+        return None
+    if rsi >= params.rsi_overbought:
+        return "extended"
+    if rsi >= params.rsi_momentum_building_max:
+        return "strong"
+    return "building"
+
+
+def _macd_momentum_clause(
+    *,
+    phase: Optional[str],
+    macd_above: bool,
+    m_now: float,
+    s_now: float,
+) -> str:
+    line_vs_signal = "MACD line above its signal" if macd_above else "MACD line below its signal"
+    if m_now < 0 and s_now < 0:
+        return (
+            f"MACD {m_now:.3f} vs signal {s_now:.3f} ({line_vs_signal}; "
+            "both below zero — momentum remains weak)."
+        )
+    if m_now > 0 and s_now > 0 and macd_above:
+        if phase == "extended":
+            tail = "both above zero — momentum strong but extended."
+        elif phase == "strong":
+            tail = "both above zero — momentum strong."
+        else:
+            tail = "both above zero — momentum building."
+        return f"MACD {m_now:.3f} vs signal {s_now:.3f} ({line_vs_signal}; {tail}"
+    return f"MACD {m_now:.3f} vs signal {s_now:.3f} ({line_vs_signal})."
+
+
+def _extension_penalty(
+    last: float,
+    anchor: Optional[float],
+    threshold_pct: float,
+    penalty: int,
+) -> int:
+    if anchor is None or anchor <= 0 or threshold_pct <= 0:
+        return 0
+    pct_above = (last - anchor) / anchor * 100.0
+    if pct_above >= threshold_pct:
+        return penalty
+    return 0
+
+
 @dataclass
 class SwingTechnicalLayerResult:
     status: str
@@ -200,7 +249,18 @@ class SwingTechnicalAnalyzer:
         if sma200 is not None:
             score += params.above_sma200_score if last > sma200 else -params.above_sma200_score
         if rsi is not None:
-            score += params.rsi_score_delta if rsi >= params.rsi_bullish_zone else -params.rsi_score_delta
+            if rsi >= params.rsi_overbought:
+                score -= params.rsi_overbought_penalty
+            elif rsi >= params.rsi_bullish_zone:
+                score += params.rsi_score_delta
+            else:
+                score -= params.rsi_score_delta
+        score -= _extension_penalty(
+            last, sma50, params.extension_above_sma50_pct, params.extension_above_sma50_penalty
+        )
+        score -= _extension_penalty(
+            last, sma200, params.extension_above_sma200_pct, params.extension_above_sma200_penalty
+        )
         score += params.higher_highs_lows_score if hh else -params.higher_highs_lows_score
         if vol_regime == "accumulation":
             score += params.volume_accumulation_score
@@ -226,7 +286,12 @@ class SwingTechnicalAnalyzer:
         if sma200 is not None:
             chips.append("Above SMA200" if last > sma200 else "Below SMA200")
         if rsi is not None:
-            chips.append(f"RSI {rsi:.0f}")
+            if rsi >= params.rsi_overbought:
+                chips.append(f"RSI {rsi:.0f} (overbought)")
+            elif rsi <= params.rsi_oversold:
+                chips.append(f"RSI {rsi:.0f} (oversold)")
+            else:
+                chips.append(f"RSI {rsi:.0f}")
         if gc:
             chips.append("Golden Cross")
         elif dc:
@@ -249,24 +314,30 @@ class SwingTechnicalAnalyzer:
         parts: list[str] = []
         if sma50 is not None and sma200 is not None:
             parts.append(f"Price vs SMA50 (${sma50:.2f}) and SMA200 (${sma200:.2f}) — {'uptrend' if gc else 'mixed' if not dc else 'downtrend'} structure.")
+        rsi_phase = _rsi_momentum_phase(rsi, params)
         if rsi is not None:
-            parts.append(f"Daily RSI {rsi:.0f}.")
+            if rsi >= params.rsi_overbought:
+                parts.append(f"Daily RSI {rsi:.0f} — overbought; late-stage momentum.")
+            elif rsi <= params.rsi_oversold:
+                parts.append(f"Daily RSI {rsi:.0f} — oversold.")
+            else:
+                parts.append(f"Daily RSI {rsi:.0f}.")
+        if sma50 is not None and sma50 > 0:
+            ext50 = (last - sma50) / sma50 * 100.0
+            if ext50 >= params.extension_above_sma50_pct:
+                parts.append(f"Price {ext50:.0f}% above SMA50 — extended vs medium-term mean.")
+        if sma200 is not None and sma200 > 0:
+            ext200 = (last - sma200) / sma200 * 100.0
+            if ext200 >= params.extension_above_sma200_pct:
+                parts.append(f"Price {ext200:.0f}% above SMA200 — structurally stretched.")
         if in_base:
             parts.append(f"Base formation ~{bd}d ({brp * 100:.1f}% range).")
         if m_now is not None and s_now is not None:
-            line_vs_signal = "MACD line above its signal" if macd_above else "MACD line below its signal"
-            if m_now < 0 and s_now < 0:
-                parts.append(
-                    f"MACD {m_now:.3f} vs signal {s_now:.3f} ({line_vs_signal}; "
-                    "both below zero — momentum remains weak)."
+            parts.append(
+                _macd_momentum_clause(
+                    phase=rsi_phase, macd_above=bool(macd_above), m_now=m_now, s_now=s_now
                 )
-            elif m_now > 0 and s_now > 0 and macd_above:
-                parts.append(
-                    f"MACD {m_now:.3f} vs signal {s_now:.3f} ({line_vs_signal}; "
-                    "both above zero — momentum building)."
-                )
-            else:
-                parts.append(f"MACD {m_now:.3f} vs signal {s_now:.3f} ({line_vs_signal}).")
+            )
         reasoning = " ".join(parts) if parts else "Daily swing technical snapshot complete."
         reasoning = sanitize_swing_reasoning_text(reasoning, symbol=symbol)
 

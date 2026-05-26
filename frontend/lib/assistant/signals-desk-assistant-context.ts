@@ -41,7 +41,14 @@ export function enrichSignalsDeskAssistantContext(
       input.maturationState
     ),
     execution_readiness_label: executionReadinessLabel(input.decision.state),
-    execution_hint: buildExecutionHeaderHint(input.decision, input.tradingMode) ?? undefined,
+    execution_hint:
+      buildExecutionHeaderHint(
+        input.decision,
+        input.tradingMode,
+        alignment.aligned,
+        alignment.total,
+        input.setupBias
+      ) ?? undefined,
     decision_reinforcements: reinforcements.length > 0 ? reinforcements : undefined,
     maturation_label: input.maturationLabel?.trim() || undefined,
     conviction_tier: input.decision.conviction?.tier,
