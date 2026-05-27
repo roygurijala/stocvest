@@ -7,6 +7,7 @@ import { SetupEvolutionPanel } from "@/components/signals/setup-evolution-panel"
 import { MaturationFrequencyCallout } from "@/components/maturation-frequency-callout";
 import { setupEvolutionHubIntro } from "@/lib/maturation-expected-frequency";
 import { setupOutcomesHref } from "@/lib/nav/setup-analytics-deeplink";
+import { DeskModeTabNav } from "@/components/desk-mode-tab-nav";
 import { borderRadius, roleAccents, spacing } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
@@ -77,25 +78,13 @@ export function SetupEvolutionHubClient() {
 
       <MaturationFrequencyCallout desk={mode} showDisplayBands testId="setup-evolution-hub-frequency" />
 
-      <div className="flex flex-wrap gap-2">
-        {(["swing", "day"] as const).map((m) => (
-          <button
-            key={m}
-            type="button"
-            data-testid={`setup-evolution-hub-mode-${m}`}
-            className="min-h-11 rounded-md px-4 text-sm capitalize"
-            aria-pressed={mode === m}
-            onClick={() => setMode(m)}
-            style={{
-              border: `1px solid ${mode === m ? accent.borderAccent : colors.border}`,
-              background: mode === m ? `${accent.accent}22` : "transparent",
-              color: mode === m ? accent.accentStrong : colors.textMuted
-            }}
-          >
-            {m}
-          </button>
-        ))}
-      </div>
+      <DeskModeTabNav
+        value={mode}
+        onChange={setMode}
+        modes={["swing", "day"] as const}
+        ariaLabel="Setup evolution desk"
+        testIdPrefix="setup-evolution-hub-mode"
+      />
 
       {symbols.length === 0 ? (
         <p className="text-sm" style={{ color: colors.textMuted }}>

@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { fetchSetupOutcomes, type SetupOutcomesResponse } from "@/lib/api/setup-outcomes";
 import { SetupSystemBehaviorCard } from "@/components/setup-system-behavior-card";
 import { EMPTY_VALIDATION } from "@/lib/product-empty-states";
+import { DeskModeTabNav } from "@/components/desk-mode-tab-nav";
 import { borderRadius, roleAccents, spacing, surfaceGlowClassName } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
@@ -63,25 +64,13 @@ export function SetupOutcomesPageClient({ isAdmin = false }: { isAdmin?: boolean
         </p>
       </header>
 
-      <div className="flex flex-wrap gap-2">
-        {(["swing", "day"] as const).map((m) => (
-          <button
-            key={m}
-            type="button"
-            data-testid={`setup-outcomes-mode-${m}`}
-            className="min-h-11 rounded-md px-4 text-sm capitalize"
-            aria-pressed={mode === m}
-            onClick={() => setMode(m)}
-            style={{
-              border: `1px solid ${mode === m ? accent.borderAccent : colors.border}`,
-              background: mode === m ? `${accent.accent}22` : "transparent",
-              color: mode === m ? accent.accentStrong : colors.textMuted
-            }}
-          >
-            {m}
-          </button>
-        ))}
-      </div>
+      <DeskModeTabNav
+        value={mode}
+        onChange={setMode}
+        modes={["swing", "day"] as const}
+        ariaLabel="Setup outcomes desk"
+        testIdPrefix="setup-outcomes-mode"
+      />
 
       {data === undefined ? (
         <p className="text-sm" style={{ color: colors.textMuted }}>

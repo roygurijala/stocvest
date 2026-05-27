@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { TrendingUp, Zap } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { DeskModeTabNav } from "@/components/desk-mode-tab-nav";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CuteLoader } from "@/components/cute-loader";
 import { WatchlistAlignmentSheet } from "@/components/watchlists/watchlist-alignment-sheet";
@@ -1166,26 +1166,6 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     [statusCounts]
   );
 
-  const tabBtn = (mode: WatchlistViewMode, label: string, icon: ReactNode) => {
-    const on = viewMode === mode;
-    return (
-      <button
-        type="button"
-        onClick={() => setViewMode(mode)}
-        className="inline-flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-semibold sm:flex-none sm:px-3 sm:text-sm"
-        style={{
-          border: `1px solid ${on ? "rgba(0,180,255,0.45)" : colors.border}`,
-          background: on ? "rgba(0,180,255,0.12)" : colors.surfaceMuted,
-          color: on ? colors.accent : colors.textMuted,
-          cursor: "pointer"
-        }}
-      >
-        {icon}
-        {label}
-      </button>
-    );
-  };
-
   if (loading) {
     return <CuteLoader label="Loading watchlist" sublabel="Syncing your symbols" compact />;
   }
@@ -1424,10 +1404,14 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex min-w-0 flex-1 flex-wrap gap-1.5 sm:gap-2">
-                {tabBtn("swing", "Swing", <TrendingUp className="h-3.5 w-3.5 shrink-0" aria-hidden />)}
-                {dualDeskMaturation ? tabBtn("day", "Day", <Zap className="h-3.5 w-3.5 shrink-0" aria-hidden />) : null}
-              </div>
+              <DeskModeTabNav
+                value={viewMode}
+                onChange={setViewMode}
+                modes={dualDeskMaturation ? (["swing", "day"] as const) : (["swing"] as const)}
+                ariaLabel="Watchlist desk"
+                testIdPrefix="watchlist-desk"
+                className="min-w-0 flex-1 sm:flex-none"
+              />
               {maturationDeskSummary || maturationSummaryFetchedAt ? (
                 <span
                   className="max-w-md shrink-0 text-right text-xs leading-snug sm:text-sm"
