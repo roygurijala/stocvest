@@ -40,6 +40,8 @@ describe("SignalsCommandBar", () => {
     );
     const btn = screen.getByTestId("signals-open-evidence-button");
     expect(btn).toHaveTextContent("Open full evidence");
+    expect(screen.getByTestId("signals-desk-actions")).toContainElement(btn);
+    expect(screen.getByTestId("signals-desk-mode-controls")).not.toContainElement(btn);
     expect(screen.queryByTestId("signals-open-evidence-button-mobile")).toBeNull();
     fireEvent.click(btn);
     expect(onOpenEvidence).toHaveBeenCalledTimes(1);
