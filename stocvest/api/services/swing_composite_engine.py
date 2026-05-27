@@ -41,7 +41,7 @@ from stocvest.api.services.validation_timing import build_regime_window_key, is_
 from stocvest.api.services.swing_composite_evidence import build_swing_composite_evidence_fields
 from stocvest.config.parameter_store import ParameterStore
 from stocvest.config.signal_parameters import SignalParameters
-from stocvest.data.benzinga_client import BenzingaClient, BenzingaMultiResult
+from stocvest.data.benzinga_client import BenzingaClient, BenzingaMultiResult, benzinga_multi_shell, ensure_analyst_feed
 from stocvest.api.services.user_profile_store import get_user_profile_store
 from stocvest.data.earnings_calendar import merge_earnings_horizon_into_response, resolve_upcoming_earnings_horizon
 from stocvest.signals.fundamental_context import build_fundamental_context
@@ -147,7 +147,8 @@ async def build_swing_composite_response(
         daily_bars: list[Bar] = _safe_result(daily_r, [])
         sym_snap: Snapshot | None = _safe_result(sym_r, None)
         news_polygon: list[dict[str, Any]] = _safe_result(news_r, [])
-        bz_data: BenzingaMultiResult = _safe_result(bz_r, BenzingaMultiResult())
+        bz_data: BenzingaMultiResult = _safe_result(bz_r, benzinga_multi_shell())
+        bz_data = await ensure_analyst_feed(benzinga, sym, bz_data)
         news_rows = _merge_benzinga_first_news_rows(news_polygon, _benzinga_articles_to_rows(bz_data.news))
         spy_snap: Snapshot | None = _safe_result(spy_r, None)
         qqq_snap: Snapshot | None = _safe_result(qqq_r, None)
