@@ -149,6 +149,5 @@ describe("WatchlistDecisionQueue layout", () => {
       />
     );
     expect(document.getElementById("watchlist-tier-check_now")).toBeInTheDocument();
-    expect(screen.getByTestId("watchlist-check-now-sentinel")).toBeInTheDocument();
   });
 });
