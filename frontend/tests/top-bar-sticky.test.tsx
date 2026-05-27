@@ -68,7 +68,7 @@ describe("AppShell layout (document scroll on body)", () => {
     expect(main!.className).not.toMatch(/(^|\s)overflow-hidden(\s|$)/);
   });
 
-  test("watchlist-flush main uses top-bar clearance only (no extra spacing[6] gap)", () => {
+  test("watchlist-flush main defers top clearance to the fixed search chrome", () => {
     wrap(
       <AppShell session={SESSION} isAdmin={false} mainTopLayout="watchlist-flush">
         <p data-testid="watchlist-page-marker">Watchlist</p>
@@ -76,8 +76,7 @@ describe("AppShell layout (document scroll on body)", () => {
     );
     const main = screen.getByTestId("watchlist-page-marker").closest("main");
     expect(main).toHaveAttribute("data-main-top-layout", "watchlist-flush");
-    expect(main?.getAttribute("style")).toMatch(/padding-top:\s*calc\(/);
-    expect(main?.getAttribute("style")).not.toMatch(/1\.5rem/);
+    expect(main?.getAttribute("style")).toMatch(/padding-top:\s*0(px)?/);
   });
 
   test("app shell grid uses items-start so columns grow with content", () => {
