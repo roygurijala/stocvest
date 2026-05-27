@@ -162,22 +162,68 @@ export function hotInMarketFeedSubtitle(input: {
   count: number;
   deskLoading?: boolean;
   scannerPending?: boolean;
+  deskCacheMiss?: boolean;
   mode: DashboardDeskMode;
 }): string {
-  const { source, count, deskLoading = false, scannerPending = false, mode } = input;
-  if (count === 0) {
-    if (deskLoading && scannerPending) {
-      return "Loading platform desk and session movers…";
+  const {
+    source,
+    count,
+    deskLoading = false,
+    scannerPending = false,
+    deskCacheMiss = false,
+    mode
+  } = input;
+  if (count > 0) {
+    const base = hotInMarketSourceSubtitle(source, count);
+    if (scannerPending && (source === "desk_cache" || source === "movers_radar")) {
+      return `${base} · scanner still enriching gaps`;
     }
-    if (deskLoading) {
-      return `Loading ${mode} desk scan…`;
-    }
-    if (scannerPending) {
-      return "Loading session movers from scanner…";
-    }
-    return hotInMarketSourceSubtitle(source, count);
+    return base;
+  }
+  if (deskLoading && scannerPending) {
+    return "Loading platform desk and session movers…";
+  }
+  if (deskLoading) {
+    return `Loading ${mode} desk scan…`;
+  }
+  if (scannerPending && deskCacheMiss) {
+    return "Desk cache empty — waiting on scanner or use Refresh desk";
+  }
+  if (scannerPending) {
+    return "Loading session movers from scanner…";
+  }
+  if (deskCacheMiss) {
+    return "No cached movers yet — Refresh desk runs a live scan";
   }
   return hotInMarketSourceSubtitle(source, count);
+}
+
+export function hotInMarketAwaitingMessage(input: {
+  deskLoading?: boolean;
+  scannerPending?: boolean;
+  deskCacheMiss?: boolean;
+}): string {
+  const { deskLoading = false, scannerPending = false, deskCacheMiss = false } = input;
+  if (deskLoading && scannerPending) {
+    return "Hang tight — platform desk and scanner are still loading.";
+  }
+  if (deskLoading) {
+    return "Hang tight — loading the latest desk scan.";
+  }
+  if (scannerPending && deskCacheMiss) {
+    return "Desk cache is empty. Use Refresh desk for an immediate scan, or wait for the scanner to finish.";
+  }
+  if (scannerPending) {
+    return "Hang tight — session movers appear once the scanner finishes.";
+  }
+  return "Hang tight — movers appear here once data is available.";
+}
+
+export function hotInMarketEmptyMessage(deskCacheMiss: boolean): string {
+  if (deskCacheMiss) {
+    return "No ranked movers cached for this session. Refresh desk to run a live scan, or check back after the next scheduled desk job.";
+  }
+  return "No ranked movers this load — the session may be quiet or filters may have cleared the list.";
 }
 
 export function buildHotInMarketCardModel(

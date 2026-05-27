@@ -36,7 +36,7 @@ export async function DashboardPageContent() {
   } as const;
 
   const earningsSymbols = DEFAULT_EARNINGS_SYMBOLS.slice(0, 8);
-  const { marketOverview, weeklyIndexRows, sectorRotation, earnings } =
+  const { marketOverview, weeklyIndexRows, sectorRotation, earnings, deskInitial } =
     await fetchDashboardFirstSegment(earningsSymbols);
 
   return (
@@ -48,6 +48,7 @@ export async function DashboardPageContent() {
       weeklyIndexRows={weeklyIndexRows}
       sectorRotation={sectorRotation}
       dayTradingSurfaces={dayTradingSurfaces}
+      deskInitial={deskInitial}
       deferredScannerSlot={<DashboardScannerClientFetch tuning={dashboardScannerTuning} />}
     />
   );

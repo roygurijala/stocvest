@@ -2,10 +2,12 @@
  * Server-only dashboard data fetch helpers (RSC / `dashboard-page-content`).
  * Keeps timeouts + fallbacks in one module for Tier 1.C deferred scanner path.
  */
+import { apiFetch } from "@/lib/api/client";
 import {
   fetchDashboardSummary,
   marketOverviewFromDashboardSummary
 } from "@/lib/api/dashboard-summary";
+import type { DeskTodayResponse } from "@/lib/api/desk-today";
 import { fetchDailyBarClosesBySymbol, fetchMarketOverview } from "@/lib/api/market";
 import { loadScannerDataWithoutBrief } from "@/lib/api/scanner";
 import type { MarketOverview, SnapshotPayload } from "@/lib/api/market";
@@ -89,11 +91,32 @@ const scannerFallback: ScannerCoreData = {
   error: "Scanner timed out."
 };
 
+export type DashboardDeskInitial = {
+  swing: DeskTodayResponse | null;
+  day: DeskTodayResponse | null;
+};
+
+const deskInitialFallback: DashboardDeskInitial = { swing: null, day: null };
+
+/** Prefetch Opportunity Desk cache on the server so Hot in market can render on first paint. */
+export async function fetchDashboardDeskInitial(): Promise<DashboardDeskInitial> {
+  try {
+    const [swing, day] = await Promise.all([
+      apiFetch<DeskTodayResponse>("/v1/desk/today?mode=swing"),
+      apiFetch<DeskTodayResponse>("/v1/desk/today?mode=day")
+    ]);
+    return { swing: swing ?? null, day: day ?? null };
+  } catch {
+    return deskInitialFallback;
+  }
+}
+
 export type DashboardFirstSegment = {
   marketOverview: MarketOverview;
   weeklyIndexRows: WeeklyIndexRow[];
   sectorRotation: DashboardSectorRotationRow[];
   earnings: { upcoming: EarningsEvent[]; recent: EarningsEvent[] };
+  deskInitial: DashboardDeskInitial;
 };
 
 /**
@@ -101,18 +124,23 @@ export type DashboardFirstSegment = {
  * parallel fetches if the aggregate is unavailable (pre-deploy API or timeout).
  */
 export async function fetchDashboardFirstSegment(earningsSymbols: string[]): Promise<DashboardFirstSegment> {
-  const summary = await timeDashboardPhase("dashboard_summary", () =>
-    timeoutFallback(
-      fetchDashboardSummary({
-        earningsSymbols,
-        earningsDays: 7,
-        sparklineLimit: 12,
-        dailyLimit: 8
-      }),
-      DASHBOARD_MARKET_TIMEOUT_MS,
-      null
+  const [summary, deskInitial] = await Promise.all([
+    timeDashboardPhase("dashboard_summary", () =>
+      timeoutFallback(
+        fetchDashboardSummary({
+          earningsSymbols,
+          earningsDays: 7,
+          sparklineLimit: 12,
+          dailyLimit: 8
+        }),
+        DASHBOARD_MARKET_TIMEOUT_MS,
+        null
+      )
+    ),
+    timeDashboardPhase("desk_initial", () =>
+      timeoutFallback(fetchDashboardDeskInitial(), 12_000, deskInitialFallback)
     )
-  );
+  ]);
 
   if (summary) {
     const marketOverview = marketOverviewFromDashboardSummary(summary);
@@ -122,6 +150,7 @@ export async function fetchDashboardFirstSegment(earningsSymbols: string[]): Pro
       marketOverview,
       weeklyIndexRows,
       sectorRotation,
+      deskInitial,
       earnings: {
         upcoming: summary.earnings.upcoming ?? [],
         recent: summary.earnings.recent ?? []
@@ -137,6 +166,7 @@ export async function fetchDashboardFirstSegment(earningsSymbols: string[]): Pro
     marketOverview: marketSlice.marketOverview,
     weeklyIndexRows: marketSlice.weeklyIndexRows,
     sectorRotation: marketSlice.sectorRotation,
+    deskInitial,
     earnings: earningsSlice
   };
 }

@@ -10,13 +10,19 @@ export function deskTodayKey(mode: DeskTodayMode): readonly [string, DeskTodayMo
   return [`${STOCVEST_SWR_CACHE_NS}desk-today`, mode] as const;
 }
 
-export function useDeskToday(mode: DeskTodayMode) {
+type UseDeskTodayOptions = {
+  /** Server-prefetched desk payload — shows movers on first paint before client revalidation. */
+  fallbackData?: DeskTodayResponse | null;
+};
+
+export function useDeskToday(mode: DeskTodayMode, options: UseDeskTodayOptions = {}) {
   const refreshInterval = shouldPollDeskTier("movers") ? DESK_REFRESH_TIER_B_MS : 0;
+  const fallbackData = options.fallbackData ?? undefined;
 
   const { data, error, isLoading, isValidating, mutate } = useSWR(
     deskTodayKey(mode),
     async ([, m]: readonly [string, DeskTodayMode]) => fetchDeskToday(m),
-    { refreshInterval }
+    { refreshInterval, fallbackData }
   );
 
   return {

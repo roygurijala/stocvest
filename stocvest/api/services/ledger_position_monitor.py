@@ -71,6 +71,18 @@ def _structure_invalidated(direction: str, stop: float, close_px: float) -> bool
     return False
 
 
+def _snapshots_by_symbol(snaps: list[Any] | dict[str, Any]) -> dict[str, Any]:
+    """``get_snapshots_many`` returns a list; legacy callers expected a symbol map."""
+    if isinstance(snaps, dict):
+        return snaps
+    out: dict[str, Any] = {}
+    for snap in snaps:
+        sym = str(getattr(snap, "symbol", "") or "").strip().upper()
+        if sym:
+            out[sym] = snap
+    return out
+
+
 def _vwap_violated(direction: str, vwap: float, last_px: float) -> bool:
     if vwap <= 0 or last_px <= 0:
         return False
@@ -103,7 +115,8 @@ async def run_ledger_position_monitor(client: PolygonClient, recorder: Any) -> d
     snaps: dict[str, Any] = {}
     if syms:
         try:
-            snaps = await client.get_snapshots_many(syms, chunk_size=80)
+            batch = await client.get_snapshots_many(syms, chunk_size=80)
+            snaps = _snapshots_by_symbol(batch)
         except Exception as exc:
             _LOG.warning("batch snapshots failed: %s", exc)
 

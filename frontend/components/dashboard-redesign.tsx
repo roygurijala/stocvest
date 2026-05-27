@@ -14,6 +14,8 @@ import { DashboardWatchlistRadar } from "@/components/dashboard/dashboard-watchl
 import { ScannerOverviewProvider, useScannerOverview } from "@/components/dashboard/scanner-overview-context";
 import { DashboardEarningsProvider, useDashboardEarnings } from "@/components/dashboard/dashboard-earnings-context";
 import { buildDashboardAssistantPageContext } from "@/lib/dashboard/dashboard-assistant-context";
+import type { DeskTodayResponse } from "@/lib/api/desk-today";
+import type { DashboardDeskInitial } from "@/lib/dashboard/dashboard-page-data";
 import { buildDashboardPageTitle } from "@/lib/dashboard/desk-today-present";
 import { buildLiveStatusCopy, type DashboardDeskMode } from "@/lib/dashboard/live-status-copy";
 import { useDashboardDeskRefresh } from "@/lib/hooks/use-dashboard-desk-refresh";
@@ -65,6 +67,7 @@ interface DashboardRedesignProps {
   weeklyIndexRows: WeeklyIndexRow[];
   sectorRotation: SectorRotationChip[];
   dayTradingSurfaces?: boolean;
+  deskInitial?: DashboardDeskInitial;
   deferredEarningsSlot?: ReactNode;
   deferredScannerSlot?: ReactNode;
 }
@@ -228,6 +231,7 @@ function DashboardRedesignBody({
   weeklyIndexRows,
   sectorRotation,
   dayTradingSurfaces = true,
+  deskInitial,
   deferredEarningsSlot,
   deferredScannerSlot
 }: DashboardRedesignProps) {
@@ -390,6 +394,11 @@ function DashboardRedesignBody({
   const activeDeskMode: DashboardDeskMode =
     dayTradingSurfaces && deskMode === "day" ? "day" : "swing";
 
+  const deskFallbackForMode = (m: DashboardDeskMode): DeskTodayResponse | null | undefined => {
+    if (!deskInitial) return undefined;
+    return m === "day" ? deskInitial.day : deskInitial.swing;
+  };
+
   const {
     data: deskToday,
     isLoading: deskTodayLoading,
@@ -398,11 +407,12 @@ function DashboardRedesignBody({
     canManualRefresh,
     cooldownLabel,
     refreshError: deskRefreshError
-  } = useDashboardDeskRefresh(activeDeskMode);
+  } = useDashboardDeskRefresh(activeDeskMode, { fallbackData: deskFallbackForMode(activeDeskMode) });
 
   const alternateDeskMode: DashboardDeskMode = activeDeskMode === "day" ? "swing" : "day";
   const { data: alternateDeskToday } = useDeskToday(
-    dayTradingSurfaces ? alternateDeskMode : activeDeskMode
+    dayTradingSurfaces ? alternateDeskMode : activeDeskMode,
+    { fallbackData: deskFallbackForMode(dayTradingSurfaces ? alternateDeskMode : activeDeskMode) }
   );
 
   const assistantPageContext = useMemo(
@@ -545,6 +555,7 @@ function DashboardRedesignBody({
       <DashboardDiscoveryFeed
         mode={activeDeskMode}
         deskData={deskToday?.data ?? null}
+        deskSource={deskToday?.source ?? null}
         alternateDeskData={dayTradingSurfaces ? alternateDeskToday?.data ?? null : null}
         gapFallback={scannerOverview.gapIntelligence}
         isLoading={deskTodayLoading}
