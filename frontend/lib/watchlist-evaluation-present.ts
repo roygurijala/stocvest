@@ -99,7 +99,7 @@ export function countEvaluatedSymbols(
   symbols: string[],
   swingBySymbol: Record<string, WatchlistMaturationRow>,
   dayBySymbol: Record<string, WatchlistMaturationRow>,
-  viewMode: "swing" | "day" | "both",
+  viewMode: "swing" | "day",
   dualDesk: boolean
 ): { evaluated: number; total: number } {
   const total = symbols.length;
@@ -110,11 +110,9 @@ export function countEvaluatedSymbols(
     if (!u) continue;
     const swing = symbolHasMaturationRow(swingBySymbol[u]);
     const day = dualDesk ? symbolHasMaturationRow(dayBySymbol[u]) : false;
-    if (viewMode === "swing") {
-      if (swing) evaluated += 1;
-    } else if (viewMode === "day") {
+    if (viewMode === "day") {
       if (day) evaluated += 1;
-    } else if (swing || day) {
+    } else if (swing) {
       evaluated += 1;
     }
   }
@@ -126,23 +124,15 @@ export function watchlistMaturationDeskSummary(
   symbols: string[],
   swingBySymbol: Record<string, WatchlistMaturationRow>,
   dayBySymbol: Record<string, WatchlistMaturationRow>,
-  viewMode: "swing" | "day" | "both",
+  viewMode: "swing" | "day",
   dualDesk: boolean,
   opts?: { sessionClosed?: boolean }
 ): string | null {
   const { evaluated, total } = countEvaluatedSymbols(symbols, swingBySymbol, dayBySymbol, viewMode, dualDesk);
   if (total === 0) return null;
-  const merged: Record<string, WatchlistMaturationRow> = { ...swingBySymbol };
-  if (dualDesk) {
-    for (const [sym, row] of Object.entries(dayBySymbol)) {
-      const prev = merged[sym];
-      if (!prev?.last_evaluated_at) merged[sym] = row;
-      else if (row.last_evaluated_at && Date.parse(row.last_evaluated_at) > Date.parse(prev.last_evaluated_at)) {
-        merged[sym] = row;
-      }
-    }
-  }
-  const lastRun = newestLastEvaluatedAt(merged);
+  const deskRows = viewMode === "day" && dualDesk ? dayBySymbol : swingBySymbol;
+  const lastRun = newestLastEvaluatedAt(deskRows);
+  const deskLabel = viewMode === "day" ? "Day" : "Swing";
   if (evaluated === 0) {
     if (opts?.sessionClosed) {
       return "Market is closed — day desk updates at the next 9:35 AM ET session or via Refresh / Evidence; swing at ~8:15 AM ET";
@@ -150,9 +140,9 @@ export function watchlistMaturationDeskSummary(
     return "No maturation runs on this desk yet — use row Refresh, open Evidence on Signals, or wait for the weekday schedule";
   }
   if (lastRun) {
-    return `${evaluated} of ${total} evaluated on this desk · last engine run ${lastRun}`;
+    return `${evaluated} of ${total} on ${deskLabel} desk · last run ${lastRun}`;
   }
-  return `${evaluated} of ${total} evaluated on this desk`;
+  return `${evaluated} of ${total} on ${deskLabel} desk`;
 }
 
 export function watchlistUnevaluatedDeskHint(desk: "swing" | "day"): string {

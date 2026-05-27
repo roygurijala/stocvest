@@ -5,7 +5,7 @@ import {
   dedupeWatchlistSymbolsUpper,
   formatWatchlistMaturationLabel,
   normalizeWatchlistMaturationBySymbol,
-  pickWatchlistMaturationForPlan,
+  watchlistMaturationRowForDesk,
   parseCompanyNameFromTickerCandidateLabel,
   watchlistQuoteFromSnapshot,
   watchlistSymbolMatchesSearch
@@ -110,7 +110,7 @@ describe("watchlistSymbolMatchesSearch", () => {
 
   test("matches company name from snapshot", () => {
     const s = snap({ company_name: "Apple Inc." });
-    expect(watchlistSymbolMatchesSearch("AAPL", "apple", "both", true, s, ms, md)).toBe(true);
+    expect(watchlistSymbolMatchesSearch("AAPL", "apple", "swing", true, s, ms, md)).toBe(true);
   });
 
   test("matches company via fallback when snapshot has no name", () => {
@@ -127,15 +127,6 @@ describe("watchlistSymbolMatchesSearch", () => {
     expect(watchlistSymbolMatchesSearch("AAPL", "swing-ready", "day", true, snap(), ms, md)).toBe(false);
   });
 
-  test("both + dual desk: maturation text ignored unless ticker/company match", () => {
-    expect(watchlistSymbolMatchesSearch("AAPL", "swing-ready", "both", true, snap(), ms, md)).toBe(false);
-    expect(watchlistSymbolMatchesSearch("AAPL", "day-warm", "both", true, snap(), ms, md)).toBe(false);
-    expect(watchlistSymbolMatchesSearch("AAPL", "aapl", "both", true, snap(), ms, md)).toBe(true);
-  });
-
-  test("both + single desk uses swing maturation search", () => {
-    expect(watchlistSymbolMatchesSearch("AAPL", "swing-ready", "both", false, snap(), ms, md)).toBe(true);
-  });
 });
 
 describe("watchlistQuoteFromSnapshot", () => {
@@ -170,18 +161,11 @@ describe("watchlistQuoteFromSnapshot", () => {
   });
 });
 
-describe("pickWatchlistMaturationForPlan", () => {
-  test("both view prefers desk with newer last_evaluated_at", () => {
-    const swing = { state: "developing", last_evaluated_at: "2026-05-18T10:00:00Z", layers_aligned: 2 };
-    const day = { state: "near_ready", last_evaluated_at: "2026-05-19T12:00:00Z", layers_aligned: 4 };
-    expect(pickWatchlistMaturationForPlan("both", swing, day)).toBe(day);
-    expect(pickWatchlistMaturationForPlan("both", day, swing)).toBe(day);
-  });
-
-  test("single-desk view uses that desk row", () => {
+describe("watchlistMaturationRowForDesk", () => {
+  test("returns row for active desk", () => {
     const swing = { state: "developing", layers_aligned: 2 };
     const day = { state: "near_ready", layers_aligned: 4 };
-    expect(pickWatchlistMaturationForPlan("swing", swing, day)).toBe(swing);
-    expect(pickWatchlistMaturationForPlan("day", swing, day)).toBe(day);
+    expect(watchlistMaturationRowForDesk("swing", swing, day)).toBe(swing);
+    expect(watchlistMaturationRowForDesk("day", swing, day)).toBe(day);
   });
 });

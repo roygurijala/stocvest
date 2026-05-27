@@ -29,6 +29,8 @@ type Props = {
   deskEvaluatingForSymbol?: (sym: string) => boolean | undefined;
   onRemove: (sym: string) => void;
   onRefresh?: (sym: string) => void;
+  showDeskCompare?: boolean;
+  onCompareDesks?: (sym: string) => void;
   forceOpenTiers?: WatchlistAttentionTier[];
   justAddedSymbol?: string | null;
   sortMode?: WatchlistSortMode;
@@ -52,6 +54,8 @@ function TierCardList({
   deskEvaluatingForSymbol,
   onRemove,
   onRefresh,
+  showDeskCompare,
+  onCompareDesks,
   justAddedSymbol,
   compact
 }: {
@@ -63,6 +67,8 @@ function TierCardList({
   deskEvaluatingForSymbol?: (sym: string) => boolean | undefined;
   onRemove: (sym: string) => void;
   onRefresh?: (sym: string) => void;
+  showDeskCompare?: boolean;
+  onCompareDesks?: (sym: string) => void;
   justAddedSymbol?: string | null;
   compact?: boolean;
 }) {
@@ -79,8 +85,10 @@ function TierCardList({
             deskEvaluating={deskEvaluatingForSymbol?.(symU)}
             justAdded={justAddedU === symU}
             compact={compact}
+            showDeskCompare={showDeskCompare}
             onRemove={() => onRemove(symU)}
             onRefresh={onRefresh ? () => onRefresh(symU) : undefined}
+            onCompareDesks={onCompareDesks ? () => onCompareDesks(symU) : undefined}
           />
         </li>
       ))}
@@ -96,6 +104,8 @@ export function WatchlistDecisionQueue({
   deskEvaluatingForSymbol,
   onRemove,
   onRefresh,
+  showDeskCompare,
+  onCompareDesks,
   forceOpenTiers,
   justAddedSymbol,
   sortMode = "attention",
@@ -130,8 +140,10 @@ export function WatchlistDecisionQueue({
               snapshotForSymbol={snapshotForSymbol}
               planMode={planMode}
               deskEvaluatingForSymbol={deskEvaluatingForSymbol}
+              showDeskCompare={showDeskCompare}
               onRemove={onRemove}
               onRefresh={onRefresh}
+              onCompareDesks={onCompareDesks}
               justAddedSymbol={justAddedSymbol}
               compact={tier === "tracking" && trackingCompact}
             />

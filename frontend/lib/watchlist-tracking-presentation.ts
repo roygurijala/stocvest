@@ -37,7 +37,6 @@ export function shouldShowDeskRow(
 ): boolean {
   if (!tracksDesk(tracking, desk)) return false;
   if (!dualDesk) return desk === "swing";
-  if (viewMode === "both") return true;
   return viewMode === desk;
 }
 
