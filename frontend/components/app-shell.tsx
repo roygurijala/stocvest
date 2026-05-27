@@ -68,7 +68,7 @@ export function AppShell({
             style={{
               paddingTop:
                 mainTopLayout === "watchlist-flush"
-                  ? APP_TOP_BAR_LAYOUT_HEIGHT
+                  ? 0
                   : `calc(${APP_TOP_BAR_LAYOUT_HEIGHT} + ${mainTopExtra})`
             }}
           >
