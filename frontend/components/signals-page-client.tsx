@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Clock } from "lucide-react";
 import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
@@ -16,7 +16,7 @@ import type { ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
 import { fetchEarningsCalendarClient } from "@/lib/api/earnings-client";
 import { AddToWatchlistButton } from "@/components/add-to-watchlist-button";
-import { APP_TOP_BAR_LAYOUT_HEIGHT } from "@/components/top-bar";
+import { APP_TOP_BAR_LAYOUT_HEIGHT_PX, measureAppTopBarLayoutHeightPx } from "@/components/top-bar";
 import { SignalsCommandBar } from "@/components/signals/signals-command-bar";
 import { SignalsDeskTabNav } from "@/components/signals/signals-desk-tab-nav";
 import { SignalsRadarPanel } from "@/components/signals/signals-radar-panel";
@@ -276,6 +276,33 @@ export function SignalsPageClient({
   const [remoteSearchError, setRemoteSearchError] = useState<string | null>(null);
   /** Calm caution shown under the symbol input when free-text submission lacks corroboration. */
   const [unverifiedSymbolNote, setUnverifiedSymbolNote] = useState<string | null>(null);
+  const symbolChromeRef = useRef<HTMLDivElement | null>(null);
+  const [signalsChromeInsets, setSignalsChromeInsets] = useState({
+    topBarPx: APP_TOP_BAR_LAYOUT_HEIGHT_PX,
+    searchChromePx: 88
+  });
+
+  useLayoutEffect(() => {
+    const measure = () => {
+      const topBarPx = measureAppTopBarLayoutHeightPx();
+      const searchChromePx = symbolChromeRef.current
+        ? Math.ceil(symbolChromeRef.current.getBoundingClientRect().height)
+        : 0;
+      setSignalsChromeInsets((prev) => {
+        if (prev.topBarPx === topBarPx && prev.searchChromePx === searchChromePx) return prev;
+        return { topBarPx, searchChromePx: searchChromePx || prev.searchChromePx };
+      });
+    };
+    measure();
+    const el = symbolChromeRef.current;
+    const ro = typeof ResizeObserver !== "undefined" && el ? new ResizeObserver(measure) : null;
+    if (el) ro?.observe(el);
+    window.addEventListener("resize", measure);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [suggestOpen, symbolDraft, unverifiedSymbolNote]);
   const [signalEvidence, setSignalEvidence] = useState<SignalEvidenceData | null>(null);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [newsPanelSymbol, setNewsPanelSymbol] = useState("");
@@ -1533,15 +1560,40 @@ export function SignalsPageClient({
 
   usePublishAssistantContext(assistantContext);
 
+  const signalsMetaStickyTopPx = signalsChromeInsets.topBarPx + signalsChromeInsets.searchChromePx;
 
   return (
     <section className="signals-page-root min-w-0" style={{ display: "grid", gap: spacing[4] }}>
       <div
-        ref={symbolComboRef}
-        className={`relative w-full min-w-0 sm:max-w-xl${suggestOpen ? " z-50" : ""}`}
+        aria-hidden
+        className="signals-chrome-spacer shrink-0"
+        style={{ height: signalsMetaStickyTopPx }}
+        data-testid="signals-chrome-spacer"
+      />
+      <div
+        ref={symbolChromeRef}
+        className={`signals-fixed-symbol fixed left-0 right-0 px-4 pb-2 pt-2 lg:left-[248px] lg:px-6 ${suggestOpen ? "z-50" : "z-40"}`}
+        style={{
+          top: signalsChromeInsets.topBarPx,
+          background: colors.background,
+          borderBottom: `1px solid ${colors.border}`
+        }}
+        data-testid="signals-fixed-symbol"
       >
+        <section
+          className="signals-symbol-search rounded-xl border px-3 py-3"
+          data-testid="signals-symbol-search"
+          style={{
+            background: colors.surface,
+            borderColor: colors.border
+          }}
+        >
+          <div
+            ref={symbolComboRef}
+            className={`relative w-full min-w-0${suggestOpen ? " z-50" : ""}`}
+          >
         <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
-          <label htmlFor="signal-symbol" className="text-sm sm:shrink-0" style={{ color: colors.textMuted }}>
+          <label htmlFor="signal-symbol" className="text-sm font-semibold sm:shrink-0" style={{ color: colors.textMuted }}>
             Symbol
           </label>
           <input
@@ -1680,22 +1732,23 @@ export function SignalsPageClient({
             ) : null}
           </ul>
         ) : null}
+          </div>
+          {unverifiedSymbolNote ? (
+            <p
+              role="status"
+              aria-live="polite"
+              className="m-0 mt-2"
+              style={{
+                color: colors.textMuted,
+                fontSize: typography.scale.xs,
+                lineHeight: 1.6
+              }}
+            >
+              {unverifiedSymbolNote}
+            </p>
+          ) : null}
+        </section>
       </div>
-
-      {unverifiedSymbolNote ? (
-        <p
-          role="status"
-          aria-live="polite"
-          style={{
-            margin: `${spacing[1]} 0 0`,
-            color: colors.textMuted,
-            fontSize: typography.scale.xs,
-            lineHeight: 1.6
-          }}
-        >
-          {unverifiedSymbolNote}
-        </p>
-      ) : null}
 
       {!symbolCommitted ? (
         <article
@@ -1751,9 +1804,9 @@ export function SignalsPageClient({
       {symbolCommitted ? (
         <>
       <header
-        className="signals-sticky-command sticky z-20 -mx-4 mb-1 w-full max-w-none self-start px-4 pb-2 pt-0 lg:-mx-6 lg:px-6"
+        className="signals-sticky-command sticky z-30 mb-1 w-full min-w-0 self-start pb-2 pt-0"
         style={{
-          top: APP_TOP_BAR_LAYOUT_HEIGHT,
+          top: signalsMetaStickyTopPx,
           background: colors.background,
           borderBottom: `1px solid ${colors.border}`
         }}
@@ -1787,13 +1840,14 @@ export function SignalsPageClient({
           decisionState={pageDecision?.state ?? null}
           onDeskKpiTarget={applyDeskKpiTarget}
         />
-      </header>
-
-      {symbolCommitted ? (
-        <div className="mb-2 min-w-0" data-testid="signals-desk-tab-nav-wrap">
+        <div
+          className="mt-3 border-t pt-3"
+          data-testid="signals-desk-tab-nav-wrap"
+          style={{ borderColor: colors.border }}
+        >
           <SignalsDeskTabNav activeTab={deskTab} onTabChange={applyDeskTab} />
         </div>
-      ) : null}
+      </header>
 
       <div className="signals-page-flow min-w-0">
         {symbolCommitted && deskTab === "setup" ? (

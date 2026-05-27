@@ -79,6 +79,17 @@ describe("AppShell layout (document scroll on body)", () => {
     expect(main?.getAttribute("style")).toMatch(/padding-top:\s*0(px)?/);
   });
 
+  test("signals-flush main defers top clearance to the fixed symbol chrome", () => {
+    wrap(
+      <AppShell session={SESSION} isAdmin={false} mainTopLayout="signals-flush">
+        <p data-testid="signals-page-marker">Signals</p>
+      </AppShell>
+    );
+    const main = screen.getByTestId("signals-page-marker").closest("main");
+    expect(main).toHaveAttribute("data-main-top-layout", "signals-flush");
+    expect(main?.getAttribute("style")).toMatch(/padding-top:\s*0(px)?/);
+  });
+
   test("app shell grid uses items-start so columns grow with content", () => {
     wrap(
       <AppShell session={SESSION} isAdmin={false}>
