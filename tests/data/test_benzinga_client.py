@@ -161,14 +161,40 @@ async def test_rating_upgrade_mapped(fake_settings: MagicMock, monkeypatch: pyte
     api = [
         {"ticker": "AAPL", "action_company": "Upgrades", "rating_current": "Buy", "pt_current": "200", "analyst": "MS", "date": "2026-01-01"}
     ]
+    captured: dict[str, object] = {}
 
     async def fake_get_json(self: BenzingaClient, *, path: str, params: dict) -> object:
+        captured["path"] = path
+        captured["params"] = dict(params)
         return api
 
     monkeypatch.setattr(BenzingaClient, "_get_json", fake_get_json)
     rows = await BenzingaClient().get_analyst_ratings("AAPL")
     assert rows and rows[0].action == "Upgrade"
     assert rows[0].price_target == 200.0
+    assert captured["path"] == "/v2.1/calendar/ratings"
+    assert captured["params"]["parameters[tickers]"] == "AAPL"
+    assert "parameters[date_from]" in captured["params"]
+    assert "parameters[date_to]" in captured["params"]
+
+
+@pytest.mark.asyncio
+async def test_rating_reiterates_mapped_and_ticker_filtered(fake_settings: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
+    api = {
+        "ratings": [
+            {"ticker": "CRWD", "action_company": "Reiterates", "rating_current": "Outperform", "analyst": "Wolfe Research", "date": "2026-04-20"},
+            {"ticker": "AAPL", "action_company": "Upgrades", "rating_current": "Buy", "analyst": "MS", "date": "2026-04-20"},
+        ]
+    }
+
+    async def fake_get_json(self: BenzingaClient, *, path: str, params: dict) -> object:
+        return api
+
+    monkeypatch.setattr(BenzingaClient, "_get_json", fake_get_json)
+    rows = await BenzingaClient().get_analyst_ratings("CRWD")
+    assert len(rows) == 1
+    assert rows[0].action == "Maintains"
+    assert rows[0].analyst_firm == "Wolfe Research"
 
 
 @pytest.mark.asyncio

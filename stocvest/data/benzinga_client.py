@@ -96,6 +96,37 @@ def _parse_dt(value: object) -> datetime:
         return datetime.now(timezone.utc)
 
 
+def _calendar_query_params(
+    *,
+    token: str,
+    symbol: str,
+    date_from: date,
+    date_to: date,
+    pagesize: int = 100,
+) -> dict[str, Any]:
+    """Benzinga calendar v2.1 expects bracketed parameter names."""
+    return {
+        "token": token,
+        "parameters[tickers]": symbol.strip().upper(),
+        "parameters[date_from]": str(date_from),
+        "parameters[date_to]": str(date_to),
+        "pagesize": max(1, min(1000, int(pagesize))),
+    }
+
+
+def _map_rating_action(action_raw: str) -> str:
+    act = str(action_raw or "").lower()
+    if "upgrade" in act:
+        return "Upgrade"
+    if "downgrade" in act:
+        return "Downgrade"
+    if "maintain" in act or "reiterat" in act:
+        return "Maintains"
+    if "initiat" in act:
+        return "Initiates"
+    return act.title() or "Unknown"
+
+
 def _f(value: object) -> float | None:
     try:
         if value in (None, ""):
@@ -112,8 +143,9 @@ class BenzingaClient:
 
     async def _get_json(self, *, path: str, params: dict[str, Any]) -> Any:
         try:
+            headers = {"accept": "application/json"} if "/calendar/" in path else None
             async with httpx.AsyncClient(timeout=self._timeout) as client:
-                r = await client.get(f"{BENZINGA_BASE}{path}", params=params)
+                r = await client.get(f"{BENZINGA_BASE}{path}", params=params, headers=headers)
             if r.status_code >= 400:
                 _LOG.warning("benzinga_request_failed path=%s status=%s", path, r.status_code)
                 return None
@@ -334,36 +366,32 @@ class BenzingaClient:
         if not token:
             return []
         today = datetime.now(timezone.utc).date()
+        since = today - timedelta(days=max(1, int(days)))
         data = await self._get_json(
             path="/v2.1/calendar/ratings",
-            params={
-                "token": token,
-                "tickers": symbol.strip().upper(),
-                "dateFrom": str(today - timedelta(days=max(1, int(days)))),
-                "dateTo": str(today),
-            },
+            params=_calendar_query_params(
+                token=token,
+                symbol=symbol,
+                date_from=since,
+                date_to=today,
+                pagesize=100,
+            ),
         )
         rows = data if isinstance(data, list) else (data.get("ratings") if isinstance(data, dict) else [])
         if not isinstance(rows, list):
             return []
+        sym = symbol.strip().upper()
         out: list[BenzingaRating] = []
         for row in rows:
             if not isinstance(row, dict):
                 continue
-            action_raw = str(row.get("action_company") or row.get("action") or "").lower()
-            if "upgrade" in action_raw:
-                action = "Upgrade"
-            elif "downgrade" in action_raw:
-                action = "Downgrade"
-            elif "maintain" in action_raw:
-                action = "Maintains"
-            elif "initiat" in action_raw:
-                action = "Initiates"
-            else:
-                action = action_raw.title() or "Unknown"
+            row_sym = str(row.get("ticker") or sym).strip().upper()
+            if row_sym != sym:
+                continue
+            action = _map_rating_action(str(row.get("action_company") or row.get("action") or ""))
             out.append(
                 BenzingaRating(
-                    symbol=str(row.get("ticker") or symbol).upper(),
+                    symbol=row_sym,
                     action=action,
                     rating=str(row.get("rating_current") or row.get("rating") or "").strip(),
                     price_target=_f(row.get("pt_current") or row.get("price_target")),
@@ -379,14 +407,16 @@ class BenzingaClient:
         if not token:
             return []
         today = datetime.now(timezone.utc).date()
+        since = today - timedelta(days=max(1, int(days)))
         data = await self._get_json(
             path="/v2.1/calendar/guidance",
-            params={
-                "token": token,
-                "tickers": symbol.strip().upper(),
-                "dateFrom": str(today - timedelta(days=max(1, int(days)))),
-                "dateTo": str(today),
-            },
+            params=_calendar_query_params(
+                token=token,
+                symbol=symbol,
+                date_from=since,
+                date_to=today,
+                pagesize=100,
+            ),
         )
         rows = data if isinstance(data, list) else (data.get("guidance") if isinstance(data, dict) else [])
         if not isinstance(rows, list):
@@ -423,14 +453,16 @@ class BenzingaClient:
         if not token:
             return []
         today = datetime.now(timezone.utc).date()
+        since = today - timedelta(days=90)
         data = await self._get_json(
             path="/v2.1/calendar/earnings",
-            params={
-                "token": token,
-                "tickers": symbol.strip().upper(),
-                "dateFrom": str(today - timedelta(days=90)),
-                "dateTo": str(today),
-            },
+            params=_calendar_query_params(
+                token=token,
+                symbol=symbol,
+                date_from=since,
+                date_to=today,
+                pagesize=100,
+            ),
         )
         rows = data if isinstance(data, list) else (data.get("earnings") if isinstance(data, dict) else [])
         if not isinstance(rows, list):
@@ -474,12 +506,13 @@ class BenzingaClient:
         end = today + timedelta(days=max(1, int(days)))
         data = await self._get_json(
             path="/v2.1/calendar/earnings",
-            params={
-                "token": token,
-                "tickers": sym,
-                "dateFrom": str(today),
-                "dateTo": str(end),
-            },
+            params=_calendar_query_params(
+                token=token,
+                symbol=sym,
+                date_from=today,
+                date_to=end,
+                pagesize=100,
+            ),
         )
         rows = data if isinstance(data, list) else (data.get("earnings") if isinstance(data, dict) else [])
         if not isinstance(rows, list):
