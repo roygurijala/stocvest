@@ -356,6 +356,9 @@ async def build_swing_composite_response(
             row["latest_guidance"] = getattr(res, "latest_guidance", None)
             row["earnings_result"] = getattr(res, "earnings_result", None)
             row["analyst_consensus"] = getattr(res, "analyst_consensus", None)
+            row["analyst_feed_state"] = getattr(res, "analyst_feed_state", None)
+            row["headline_sentiment"] = getattr(res, "headline_sentiment", None)
+            row["analyst_sub_score"] = getattr(res, "analyst_sub_score", None)
         if lid == "geopolitical":
             row["geo_active_events"] = list(getattr(res, "geo_active_events", []) or [])
             row["geo_impact_sector_key"] = getattr(res, "geo_impact_sector_key", "") or ""

@@ -142,6 +142,11 @@ def _benzinga_articles_to_rows(items: list[Any]) -> list[dict[str, Any]]:
         title = str(getattr(a, "title", "") or "").strip()
         if not title:
             continue
+        bz_weight = getattr(a, "weight", 1.0)
+        try:
+            bz_weight_f = float(bz_weight)
+        except (TypeError, ValueError):
+            bz_weight_f = 1.0
         out.append(
             {
                 "id": str(getattr(a, "article_id", "") or ""),
@@ -153,6 +158,7 @@ def _benzinga_articles_to_rows(items: list[Any]) -> list[dict[str, Any]]:
                 "article_url": getattr(a, "url", None),
                 "publisher": {"name": "Benzinga"},
                 "insights": [],
+                "benzinga_weight": max(0.05, min(2.0, bz_weight_f)),
             }
         )
     return out
@@ -553,6 +559,9 @@ async def build_real_composite_response(
             row["latest_guidance"] = getattr(res, "latest_guidance", None)
             row["earnings_result"] = getattr(res, "earnings_result", None)
             row["analyst_consensus"] = getattr(res, "analyst_consensus", None)
+            row["analyst_feed_state"] = getattr(res, "analyst_feed_state", None)
+            row["headline_sentiment"] = getattr(res, "headline_sentiment", None)
+            row["analyst_sub_score"] = getattr(res, "analyst_sub_score", None)
         if lid == "geopolitical":
             row["geo_active_events"] = list(getattr(res, "geo_active_events", []) or [])
             row["geo_impact_sector_key"] = getattr(res, "geo_impact_sector_key", "") or ""

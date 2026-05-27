@@ -80,6 +80,7 @@ class BenzingaMultiResult:
     ratings: list[BenzingaRating] = field(default_factory=list)
     guidance: list[BenzingaGuidance] = field(default_factory=list)
     earnings: list[BenzingaEarningsResult] = field(default_factory=list)
+    analyst_feed_configured: bool = False
 
 
 def _parse_dt(value: object) -> datetime:
@@ -525,11 +526,13 @@ class BenzingaClient:
         def safe(val: Any, default: Any) -> Any:
             return default if isinstance(val, Exception) else val
 
+        analyst_configured = bool(self._settings.benzinga_analyst_key.strip())
         return BenzingaMultiResult(
             news=safe(results[0], []),
             wim=safe(results[1], None),
             ratings=safe(results[2], []),
             guidance=safe(results[3], []),
             earnings=safe(results[4], []),
+            analyst_feed_configured=analyst_configured,
         )
 

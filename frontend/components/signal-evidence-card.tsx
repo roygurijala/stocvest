@@ -1471,7 +1471,9 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
                     </div>
                   ) : null}
                   {layer.latest_rating &&
-                  ["upgrade", "downgrade", "initiates"].includes(layer.latest_rating.action.toLowerCase()) ? (
+                  ["upgrade", "downgrade", "initiates", "maintains"].some((k) =>
+                    layer.latest_rating!.action.toLowerCase().includes(k)
+                  ) ? (
                     <span
                       className="inline-flex w-fit rounded-full px-3 py-1 text-xs font-semibold"
                       style={{
@@ -1513,7 +1515,9 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
                     >
                       {layer.analyst_consensus.label}
                       {layer.analyst_consensus.upgrades_30d || layer.analyst_consensus.downgrades_30d
-                        ? ` (${layer.analyst_consensus.upgrades_30d}↑ ${layer.analyst_consensus.downgrades_30d}↓)`
+                        ? ` (${layer.analyst_consensus.upgrades_30d}↑ ${layer.analyst_consensus.downgrades_30d}↓${
+                            layer.analyst_consensus.unique_firms ? " firms" : ""
+                          })`
                         : ""}
                     </span>
                   ) : null}
@@ -1542,6 +1546,15 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
                       }}
                     >
                       {layer.latest_guidance.type === "raised" ? "Guidance raised" : "Guidance cut"}
+                    </span>
+                  ) : null}
+                  {layer.analyst_feed_state === "unconfigured" ? (
+                    <span
+                      className="inline-flex w-fit rounded-full px-3 py-1 text-xs font-semibold text-muted-foreground"
+                      data-testid="news-analyst-feed-unavailable"
+                      style={{ border: "1px solid rgba(148,163,184,0.4)", background: "rgba(148,163,184,0.08)" }}
+                    >
+                      Analyst feed unavailable
                     </span>
                   ) : null}
                   {layer.news_data_state === "stale" && (layer.articles_count === 0 || layer.articles_count === undefined) ? (

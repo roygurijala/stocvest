@@ -669,4 +669,36 @@ def test_news_endpoint_empty_result() -> None:
     assert body["articles"] == []
     assert body["has_recent_news"] is False
     assert body["total_found"] == 0
+    assert body["analyst"]["feed_state"] in ("empty", "unconfigured")
+
+
+def test_news_symbol_panel_includes_analyst_ratings(monkeypatch: pytest.MonkeyPatch) -> None:
+    now = datetime.now(timezone.utc)
+
+    async def _fake_ratings(self, symbol: str, days: int = 30):  # noqa: ARG001
+        return [
+            __import__("stocvest.data.benzinga_client", fromlist=["BenzingaRating"]).BenzingaRating(
+                symbol.upper(),
+                "Upgrade",
+                "Buy",
+                120.0,
+                "Goldman Sachs",
+                now - timedelta(days=1),
+            )
+        ]
+
+    monkeypatch.setattr(
+        "stocvest.api.handlers.market_data.BenzingaClient.get_analyst_ratings",
+        _fake_ratings,
+    )
+    monkeypatch.setattr(get_settings(), "benzinga_analyst_key", "test-key")
+
+    event = {"queryStringParameters": {"symbol": "AAPL", "limit": "5"}}
+    response = news_handler(event, {}, client_factory=_make_has_recent_news_client(True))
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["analyst"]["feed_state"] == "available"
+    assert len(body["analyst"]["ratings"]) == 1
+    assert body["analyst"]["ratings"][0]["firm"] == "Goldman Sachs"
+    assert body["analyst"]["ratings"][0]["action"] == "Upgrade"
 

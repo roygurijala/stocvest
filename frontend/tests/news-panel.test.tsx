@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
   NewsPanel,
+  analystActionToneForTests,
   sentimentDotClassForTests,
   sourceBadgeClassForTests
 } from "@/components/news-panel";
@@ -22,9 +23,29 @@ function panelJson(overrides: Record<string, unknown>) {
     articles: [] as unknown[],
     total_found: 0,
     oldest_included: null,
+    analyst: {
+      feed_state: "empty",
+      window_days: 30,
+      consensus: null,
+      ratings: [],
+      total_found: 0,
+      symbol: "AAPL"
+    },
     ...overrides
   };
 }
+
+const sampleAnalystRating = {
+  id: "goldman-20260506",
+  firm: "Goldman Sachs",
+  action: "Upgrade",
+  rating: "Buy",
+  price_target: 220,
+  upside_pct: 12.5,
+  firm_tier: "tier_1",
+  published_at: "2026-05-06T14:00:00.000Z",
+  age_label: "2h ago"
+};
 
 function wrap(ui: ReactElement) {
   return render(<ThemeProvider>{ui}</ThemeProvider>);
@@ -250,6 +271,72 @@ describe("NewsPanel", () => {
     expect(openSpy).toHaveBeenCalledWith("https://news.example/article", "_blank", "noopener,noreferrer");
     openSpy.mockRestore();
   });
+
+  test("renders analyst ratings section when API includes analyst data", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () =>
+        panelJson({
+          analyst: {
+            feed_state: "available",
+            window_days: 30,
+            consensus: {
+              upgrades_30d: 3,
+              downgrades_30d: 0,
+              momentum: 3,
+              label: "Analyst consensus improving",
+              unique_firms: true
+            },
+            ratings: [sampleAnalystRating],
+            total_found: 1,
+            symbol: "AAPL"
+          },
+          articles: [
+            {
+              id: "1",
+              title: "Fresh headline",
+              source: "polygon",
+              source_label: "Polygon",
+              published_at: "2026-05-06T15:30:00Z",
+              sentiment_score: 0.1,
+              sentiment_label: "neutral",
+              catalyst_type: null,
+              url: null,
+              is_recent: true,
+              age_label: "30m ago"
+            }
+          ],
+          total_found: 1
+        })
+    }) as unknown as typeof fetch;
+
+    wrap(<NewsPanel symbol="AAPL" isOpen onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTestId("analyst-panel-section")).toBeInTheDocument());
+    expect(screen.getByText(/Goldman Sachs/)).toBeInTheDocument();
+    expect(screen.getByText(/Analyst consensus improving/)).toBeInTheDocument();
+    expect(screen.getByText("Headlines")).toBeInTheDocument();
+    expect(screen.getByText("Fresh headline")).toBeInTheDocument();
+  });
+
+  test("shows analyst feed unavailable banner when unconfigured", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () =>
+        panelJson({
+          analyst: {
+            feed_state: "unconfigured",
+            window_days: 30,
+            consensus: null,
+            ratings: [],
+            total_found: 0,
+            symbol: "AAPL"
+          }
+        })
+    }) as unknown as typeof fetch;
+
+    wrap(<NewsPanel symbol="AAPL" isOpen onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTestId("analyst-feed-unavailable-banner")).toBeInTheDocument());
+  });
 });
 
 describe("news panel chrome", () => {
@@ -263,5 +350,11 @@ describe("news panel chrome", () => {
     expect(sourceBadgeClassForTests("benzinga")).toContain("orange");
     expect(sourceBadgeClassForTests("sec_edgar")).toContain("sky");
     expect(sourceBadgeClassForTests("polygon")).toContain("slate");
+  });
+
+  test("analyst action tone classification", () => {
+    expect(analystActionToneForTests("Upgrade")).toBe("bullish");
+    expect(analystActionToneForTests("Downgrade")).toBe("bearish");
+    expect(analystActionToneForTests("Maintains")).toBe("neutral");
   });
 });

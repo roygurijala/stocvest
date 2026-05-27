@@ -9,6 +9,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from stocvest.api.response import bad_request, internal_error, ok
+from stocvest.api.services.analyst_panel_format import format_analyst_ratings_for_panel
 from stocvest.api.services.news_impact_analyzer import analyze_news_impact, generate_impact_summary
 from stocvest.api.services.news_panel_format import (
     RECENT_NEWS_HOURS,
@@ -37,6 +38,7 @@ from stocvest.api.types import LambdaContext, LambdaEvent
 from stocvest.data import PolygonClient, PolygonError, Timeframe
 from stocvest.data.models import EconomicCalendarEvent
 from stocvest.data.polygon_client import LIQUID_NEWS_TICKERS
+from stocvest.data.benzinga_client import BenzingaClient
 from stocvest.data.watchlist_store import get_watchlist_store
 from stocvest.utils.config import get_settings
 from stocvest.api.services.dashboard_summary import build_dashboard_summary
@@ -411,12 +413,39 @@ def news_handler(
             recent_cutoff = now - timedelta(hours=recent_hours)
             fetch_limit = min(1000, max(80, panel_limit * 5))
             settings = get_settings()
-            raw_articles = await fetch_symbol_panel_raw_articles(
+            bz_client = BenzingaClient()
+            analyst_configured = bool(settings.benzinga_analyst_key.strip())
+
+            async def _symbol_mark_price() -> float | None:
+                try:
+                    async with client_factory(api_key=settings.polygon_api_key) as client:
+                        snap = await client.get_snapshot(symbol)
+                    for field in (snap.last_trade_price, snap.day_close):
+                        if isinstance(field, (int, float)) and float(field) > 0:
+                            return float(field)
+                except Exception:
+                    return None
+                return None
+
+            raw_articles, ratings_raw, current_price = await asyncio.gather(
+                fetch_symbol_panel_raw_articles(
+                    symbol=symbol,
+                    since=since,
+                    fetch_limit=fetch_limit,
+                    client_factory=client_factory,
+                    polygon_api_key=settings.polygon_api_key,
+                ),
+                bz_client.get_analyst_ratings(symbol, days=30),
+                _symbol_mark_price(),
+            )
+            ratings = ratings_raw if isinstance(ratings_raw, list) else []
+            analyst_panel = format_analyst_ratings_for_panel(
+                ratings,
                 symbol=symbol,
-                since=since,
-                fetch_limit=fetch_limit,
-                client_factory=client_factory,
-                polygon_api_key=settings.polygon_api_key,
+                analyst_feed_configured=analyst_configured,
+                current_price=current_price if isinstance(current_price, (int, float)) else None,
+                limit=min(30, panel_limit + 10),
+                now=now,
             )
 
             def collect_panel(min_relevance: int) -> list[dict[str, Any]]:
@@ -496,6 +525,7 @@ def news_handler(
                     "articles": articles_out,
                     "total_found": total_found,
                     "oldest_included": oldest_included,
+                    "analyst": analyst_panel,
                 }
             )
 

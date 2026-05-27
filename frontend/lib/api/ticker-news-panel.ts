@@ -32,6 +32,36 @@ export interface TickerNewsPanelResponse {
   articles: TickerNewsArticle[];
   total_found: number;
   oldest_included: string | null;
+  analyst?: TickerAnalystPanel | null;
+}
+
+export interface TickerAnalystConsensus {
+  upgrades_30d: number;
+  downgrades_30d: number;
+  momentum: number;
+  label?: string | null;
+  unique_firms?: boolean;
+}
+
+export interface TickerAnalystRatingRow {
+  id: string;
+  firm: string;
+  action: string;
+  rating: string;
+  price_target: number | null;
+  upside_pct: number | null;
+  firm_tier: "tier_1" | "standard" | string;
+  published_at: string;
+  age_label: string;
+}
+
+export interface TickerAnalystPanel {
+  feed_state: "available" | "unconfigured" | "empty" | string;
+  window_days: number;
+  consensus: TickerAnalystConsensus | null;
+  ratings: TickerAnalystRatingRow[];
+  total_found: number;
+  symbol: string;
 }
 
 const CACHE_TTL_MS = 120_000;

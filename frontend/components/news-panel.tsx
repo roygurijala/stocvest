@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   fetchTickerNewsPanel,
   tickerNewsCacheGet,
+  type TickerAnalystRatingRow,
   type TickerNewsArticle,
   type TickerNewsPanelResponse
 } from "@/lib/api/ticker-news-panel";
@@ -100,25 +101,119 @@ function formatScore(n: number): string {
   return `${sign}${n.toFixed(2)}`;
 }
 
+function analystActionTone(action: string): "bullish" | "bearish" | "neutral" {
+  const a = action.toLowerCase();
+  if (a.includes("downgrade") || a.includes("underperform") || a.includes("sell")) return "bearish";
+  if (a.includes("upgrade") || a.includes("outperform") || a.includes("buy") || a.includes("initiat")) {
+    return "bullish";
+  }
+  return "neutral";
+}
+
+/** @internal tests */
+export function analystActionToneForTests(action: string): "bullish" | "bearish" | "neutral" {
+  return analystActionTone(action);
+}
+
 function panelSummary(data: TickerNewsPanelResponse | null): string {
-  if (!data || data.articles.length === 0) return "";
+  if (!data) return "";
+  const parts: string[] = [];
+  const analyst = data.analyst;
+  if (analyst?.feed_state === "available" && analyst.ratings.length > 0) {
+    const c = analyst.consensus;
+    if (c && (c.upgrades_30d || c.downgrades_30d)) {
+      parts.push(`${c.upgrades_30d} firms↑ ${c.downgrades_30d}↓ (${analyst.window_days}d)`);
+    } else {
+      parts.push(`${analyst.total_found} analyst action${analyst.total_found === 1 ? "" : "s"}`);
+    }
+  } else if (analyst?.feed_state === "unconfigured") {
+    parts.push("Analyst feed unavailable");
+  }
+
+  if (data.articles.length === 0) {
+    if (parts.length) return parts.join(" · ");
+    return "";
+  }
+
   const n = data.total_found;
+  let articlePart = "";
   if (!data.has_recent_news) {
-    return `No articles in last ${data.recent_cutoff_hours}h · 20-day archive`;
+    articlePart = `No articles in last ${data.recent_cutoff_hours}h · 20-day archive`;
+  } else {
+    const labels = new Set(data.articles.map((a) => a.sentiment_label));
+    if (labels.has("bullish") && labels.has("bearish")) {
+      articlePart = `${n} articles · Mixed`;
+    } else {
+      const avg =
+        data.articles.reduce((acc, a) => acc + a.sentiment_score, 0) / Math.max(1, data.articles.length);
+      if (avg > 0.2) {
+        articlePart = `${n} articles · Bullish avg ${avg >= 0 ? "+" : ""}${avg.toFixed(2)}`;
+      } else if (avg < -0.2) {
+        articlePart = `${n} articles · Bearish avg ${avg.toFixed(2)}`;
+      } else {
+        articlePart = `${n} articles · Mixed`;
+      }
+    }
   }
-  const labels = new Set(data.articles.map((a) => a.sentiment_label));
-  if (labels.has("bullish") && labels.has("bearish")) {
-    return `${n} articles · Mixed`;
+  parts.push(articlePart);
+  return parts.join(" · ");
+}
+
+function AnalystRatingRow({
+  row,
+  colors
+}: {
+  row: TickerAnalystRatingRow;
+  colors: { text: string; textMuted: string; bullish: string; bearish: string; border: string; caution: string };
+}) {
+  const tone = analystActionTone(row.action);
+  const toneColor = tone === "bullish" ? colors.bullish : tone === "bearish" ? colors.bearish : colors.caution;
+  const ptBits: string[] = [];
+  if (typeof row.price_target === "number" && Number.isFinite(row.price_target)) {
+    ptBits.push(`PT $${row.price_target.toFixed(2)}`);
   }
-  const avg =
-    data.articles.reduce((acc, a) => acc + a.sentiment_score, 0) / Math.max(1, data.articles.length);
-  if (avg > 0.2) {
-    return `${n} articles · Bullish avg ${avg >= 0 ? "+" : ""}${avg.toFixed(2)}`;
+  if (typeof row.upside_pct === "number" && Number.isFinite(row.upside_pct)) {
+    ptBits.push(`${row.upside_pct >= 0 ? "+" : ""}${row.upside_pct.toFixed(1)}%`);
   }
-  if (avg < -0.2) {
-    return `${n} articles · Bearish avg ${avg.toFixed(2)}`;
-  }
-  return `${n} articles · Mixed`;
+  return (
+    <li
+      className="rounded-lg border p-3"
+      style={{ borderColor: colors.border, listStyle: "none" }}
+      data-testid="analyst-rating-row"
+    >
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <span className="text-sm font-semibold" style={{ color: colors.text }}>
+          {row.firm}
+        </span>
+        {row.firm_tier === "tier_1" ? (
+          <span
+            className="rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+            style={{ background: "rgba(245,158,11,0.15)", color: colors.caution, border: "1px solid rgba(245,158,11,0.35)" }}
+          >
+            Tier 1
+          </span>
+        ) : null}
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
+        <span
+          className="rounded-full px-2 py-0.5 font-semibold"
+          style={{
+            border: `1px solid ${tone === "bearish" ? "rgba(239,68,68,0.5)" : tone === "bullish" ? "rgba(34,197,94,0.5)" : "rgba(148,163,184,0.45)"}`,
+            background:
+              tone === "bearish" ? "rgba(239,68,68,0.1)" : tone === "bullish" ? "rgba(34,197,94,0.1)" : "rgba(148,163,184,0.08)",
+            color: toneColor
+          }}
+        >
+          {row.action}
+          {row.rating ? ` · ${row.rating}` : ""}
+        </span>
+        {ptBits.length ? (
+          <span style={{ color: colors.textMuted }}>{ptBits.join(" · ")}</span>
+        ) : null}
+        <span style={{ color: colors.textMuted }}>· {row.age_label}</span>
+      </div>
+    </li>
+  );
 }
 
 export interface NewsPanelProps {
@@ -256,7 +351,7 @@ export function NewsPanel({
       >
         <div className="min-w-0">
           <h2 className="truncate text-base font-bold" style={{ color: colors.text }}>
-            {sym} News
+            {sym} News & Analyst
           </h2>
           {data && !loading ? (
             <p className="mt-1 text-xs" style={{ color: colors.textMuted }}>
@@ -311,6 +406,75 @@ export function NewsPanel({
                 <div className="h-3 w-1/2 rounded bg-slate-600/25" />
               </div>
             ))}
+          </div>
+        ) : null}
+
+        {data?.analyst?.feed_state === "unconfigured" ? (
+          <div
+            className="mb-3 rounded-lg border px-3 py-2 text-xs leading-snug"
+            data-testid="analyst-feed-unavailable-banner"
+            style={{
+              borderColor: "rgba(148,163,184,0.45)",
+              background: "rgba(148,163,184,0.08)",
+              color: colors.textMuted
+            }}
+          >
+            Analyst ratings feed is not configured. Headline news below is still available.
+          </div>
+        ) : null}
+
+        {data?.analyst?.feed_state === "available" && (data.analyst.ratings.length > 0 || data.analyst.consensus?.label) ? (
+          <section className="mb-4" data-testid="analyst-panel-section">
+            <div
+              className="mb-2 border-b pb-1 text-[10px] font-bold uppercase tracking-wider"
+              style={{ color: colors.textMuted, borderColor: colors.border }}
+            >
+              Analyst actions · {data.analyst.window_days}d
+            </div>
+            {data.analyst.consensus?.label ? (
+              <div
+                className="mb-2 rounded-lg border px-3 py-2 text-xs font-semibold"
+                data-testid="analyst-consensus-banner"
+                style={{
+                  borderColor:
+                    (data.analyst.consensus.momentum ?? 0) < 0
+                      ? "rgba(239,68,68,0.45)"
+                      : "rgba(34,197,94,0.45)",
+                  background:
+                    (data.analyst.consensus.momentum ?? 0) < 0
+                      ? "rgba(239,68,68,0.08)"
+                      : "rgba(34,197,94,0.08)",
+                  color: (data.analyst.consensus.momentum ?? 0) < 0 ? colors.bearish : colors.bullish
+                }}
+              >
+                {data.analyst.consensus.label}
+                {data.analyst.consensus.upgrades_30d || data.analyst.consensus.downgrades_30d
+                  ? ` (${data.analyst.consensus.upgrades_30d} firms↑ ${data.analyst.consensus.downgrades_30d}↓)`
+                  : ""}
+              </div>
+            ) : null}
+            {data.analyst.ratings.length > 0 ? (
+              <ul className="flex flex-col gap-2 p-0">
+                {data.analyst.ratings.map((row) => (
+                  <AnalystRatingRow key={row.id} row={row} colors={colors} />
+                ))}
+              </ul>
+            ) : null}
+          </section>
+        ) : null}
+
+        {data?.analyst?.feed_state === "empty" && data.analyst.feed_state !== "unconfigured" ? (
+          <p className="mb-3 text-xs" style={{ color: colors.textMuted }} data-testid="analyst-empty-copy">
+            No analyst upgrades or downgrades in the last {data.analyst.window_days} days.
+          </p>
+        ) : null}
+
+        {(groupedVisible.length > 0 || (data && data.articles.length > 0)) ? (
+          <div
+            className="mb-2 border-b pb-1 text-[10px] font-bold uppercase tracking-wider"
+            style={{ color: colors.textMuted, borderColor: colors.border }}
+          >
+            Headlines
           </div>
         ) : null}
 
@@ -433,7 +597,7 @@ export function NewsPanel({
         ) : null}
 
         <p className="mt-6 text-center text-[10px]" style={{ color: colors.textMuted }}>
-          Sources: Benzinga · SEC EDGAR · Polygon
+          Sources: Benzinga analyst calendar · Benzinga · SEC EDGAR · Polygon
         </p>
       </div>
     </div>
@@ -448,7 +612,7 @@ export function NewsPanel({
       }
       role="dialog"
       aria-modal="true"
-      aria-label={`${sym} news`}
+      aria-label={`${sym} news and analyst actions`}
       onClick={onClose}
     >
       {mobile ? <div className="flex justify-center">{shell}</div> : shell}
