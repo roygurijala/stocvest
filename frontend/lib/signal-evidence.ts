@@ -57,6 +57,16 @@ export interface NewsLayerRating {
   firm: string;
   /** ISO date string (`YYYY-MM-DD`) */
   date: string;
+  price_target?: number | null;
+  upside_pct?: number | null;
+  firm_tier?: "tier_1" | "standard" | string;
+}
+
+export interface NewsLayerAnalystConsensus {
+  upgrades_30d: number;
+  downgrades_30d: number;
+  momentum: number;
+  label?: string | null;
 }
 
 export interface NewsLayerGuidance {
@@ -149,6 +159,7 @@ export interface EvidenceLayer {
   latest_rating?: NewsLayerRating;
   latest_guidance?: NewsLayerGuidance;
   earnings_result?: NewsLayerEarningsResult;
+  analyst_consensus?: NewsLayerAnalystConsensus;
   /** Sector layer momentum + resolver state (composite real/swing APIs). */
   sector_resolution_state?: SectorResolutionStateWire | null;
   sector_persistence?: number | null;
@@ -774,7 +785,21 @@ function evidencePatchFromApiLayer(match: Record<string, unknown>, layerKey?: st
         action: String(o.action ?? "").trim(),
         rating: String(o.rating ?? "").trim(),
         firm: String(o.firm ?? "").trim(),
-        date: String(o.date ?? o.date_str ?? "").trim()
+        date: String(o.date ?? o.date_str ?? "").trim(),
+        price_target:
+          typeof o.price_target === "number" && Number.isFinite(o.price_target) ? o.price_target : null,
+        upside_pct: typeof o.upside_pct === "number" && Number.isFinite(o.upside_pct) ? o.upside_pct : null,
+        firm_tier: typeof o.firm_tier === "string" ? o.firm_tier : undefined
+      };
+    }
+    const acRaw = match.analyst_consensus;
+    if (acRaw && typeof acRaw === "object") {
+      const c = acRaw as Record<string, unknown>;
+      patch.analyst_consensus = {
+        upgrades_30d: Number(c.upgrades_30d ?? 0) || 0,
+        downgrades_30d: Number(c.downgrades_30d ?? 0) || 0,
+        momentum: Number(c.momentum ?? 0) || 0,
+        label: typeof c.label === "string" ? c.label : null
       };
     }
     const lgRaw = match.latest_guidance;

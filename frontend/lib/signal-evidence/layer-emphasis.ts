@@ -167,6 +167,7 @@ export function layerHasActiveContent(layer: EvidenceLayer): boolean {
         const action = String(layer.latest_rating.action ?? "").toLowerCase();
         if (action === "upgrade" || action === "downgrade" || action === "initiates") return true;
       }
+      if (layer.analyst_consensus?.label) return true;
       if (layer.latest_guidance) {
         const t = String(layer.latest_guidance.type ?? "").toLowerCase();
         if (t === "raised" || t === "lowered") return true;
@@ -327,6 +328,7 @@ function hasNewsPositiveCatalyst(layer: EvidenceLayer): boolean {
     const action = String(layer.latest_rating.action ?? "").toLowerCase();
     if (action === "upgrade" || action === "downgrade" || action === "initiates") return true;
   }
+  if (layer.analyst_consensus && (layer.analyst_consensus.momentum ?? 0) >= 3) return true;
   if (layer.latest_guidance) {
     const t = String(layer.latest_guidance.type ?? "").toLowerCase();
     if (t === "raised" || t === "lowered") return true;

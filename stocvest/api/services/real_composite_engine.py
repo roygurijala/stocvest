@@ -85,6 +85,15 @@ _COMPOSITE_INSUFFICIENT_MESSAGE = (
 )
 
 
+def _snapshot_mark_price(snap: Snapshot | None) -> float | None:
+    if snap is None:
+        return None
+    for field in (snap.last_trade_price, snap.day_close):
+        if isinstance(field, (int, float)) and float(field) > 0:
+            return float(field)
+    return None
+
+
 def _next_rth_close_utc_iso() -> str:
     et = ZoneInfo("America/New_York")
     now = datetime.now(et)
@@ -358,6 +367,7 @@ async def run_real_composite_engine_phase(
         lookback_hours=params.news.lookback_hours,
         mode="day",
         benzinga_data=bz_data,
+        current_price=_snapshot_mark_price(sym_snap),
     )
     macro_ctx = await get_macro_context(polygon_econ_events=econ)
     macro = MacroAnalyzer().analyze(
@@ -542,6 +552,7 @@ async def build_real_composite_response(
             row["latest_rating"] = getattr(res, "latest_rating", None)
             row["latest_guidance"] = getattr(res, "latest_guidance", None)
             row["earnings_result"] = getattr(res, "earnings_result", None)
+            row["analyst_consensus"] = getattr(res, "analyst_consensus", None)
         if lid == "geopolitical":
             row["geo_active_events"] = list(getattr(res, "geo_active_events", []) or [])
             row["geo_impact_sector_key"] = getattr(res, "geo_impact_sector_key", "") or ""

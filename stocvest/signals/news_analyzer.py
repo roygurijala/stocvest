@@ -9,6 +9,7 @@ from typing import Any, Literal
 from stocvest.api.services.news_quality_filter import is_quality_article
 from stocvest.config.signal_parameters import NewsParameters
 from stocvest.data.benzinga_client import BenzingaMultiResult
+from stocvest.signals.analyst_rating_score import analyst_firm_weight, compute_structured_analyst_adjustment
 from stocvest.signals.news_copy import no_qualifying_news_reasoning
 from stocvest.signals.news_sentiment import (
     DAY_NEWS_LOOKBACK_HOURS,
@@ -33,6 +34,7 @@ class NewsLayerResult:
     latest_rating: dict[str, Any] | None = None
     latest_guidance: dict[str, Any] | None = None
     earnings_result: dict[str, Any] | None = None
+    analyst_consensus: dict[str, Any] | None = None
 
 
 _CATALYST_PATTERNS: dict[str, tuple[str, ...]] = {
@@ -57,7 +59,11 @@ def _article_sentiment(article: dict[str, Any]) -> float:
     return 0.0
 
 
-def _benzinga_layer_attachments(bz: BenzingaMultiResult | None) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None]:
+def _benzinga_layer_attachments(
+    bz: BenzingaMultiResult | None,
+    *,
+    current_price: float | None = None,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None]:
     if bz is None:
         return None, None, None
     now = datetime.now(timezone.utc)
@@ -66,11 +72,22 @@ def _benzinga_layer_attachments(bz: BenzingaMultiResult | None) -> tuple[dict[st
     if bz.ratings:
         r = bz.ratings[0]
         if (now - r.published_at) <= timedelta(days=7):
+            upside_pct: float | None = None
+            if (
+                current_price is not None
+                and current_price > 0
+                and r.price_target is not None
+                and r.price_target > 0
+            ):
+                upside_pct = round(((r.price_target - current_price) / current_price) * 100.0, 1)
             lr = {
                 "action": r.action,
                 "rating": r.rating,
                 "firm": r.analyst_firm,
                 "date_str": r.published_at.date().isoformat(),
+                "price_target": r.price_target,
+                "upside_pct": upside_pct,
+                "firm_tier": "tier_1" if analyst_firm_weight(r.analyst_firm) > 1.0 else "standard",
             }
 
     lg: dict[str, Any] | None = None
@@ -87,11 +104,18 @@ def _benzinga_layer_attachments(bz: BenzingaMultiResult | None) -> tuple[dict[st
     return lr, lg, ee
 
 
-def _fill_benzinga_fields(out: NewsLayerResult, bz: BenzingaMultiResult | None) -> NewsLayerResult:
-    lr, lg, ee = _benzinga_layer_attachments(bz)
+def _fill_benzinga_fields(
+    out: NewsLayerResult,
+    bz: BenzingaMultiResult | None,
+    *,
+    current_price: float | None = None,
+    analyst_consensus: dict[str, Any] | None = None,
+) -> NewsLayerResult:
+    lr, lg, ee = _benzinga_layer_attachments(bz, current_price=current_price)
     out.latest_rating = lr
     out.latest_guidance = lg
     out.earnings_result = ee
+    out.analyst_consensus = analyst_consensus
     return out
 
 
@@ -113,6 +137,7 @@ class NewsAnalyzer:
         lookback_hours: int | None = None,
         mode: Literal["day", "swing"] = "day",
         benzinga_data: BenzingaMultiResult | None = None,
+        current_price: float | None = None,
     ) -> NewsLayerResult:
         sym = symbol.upper().strip()
         now = datetime.now(timezone.utc)
@@ -152,6 +177,7 @@ class NewsAnalyzer:
                     chips=["News: neutral", "No qualifying headlines"],
                 ),
                 benzinga_data,
+                current_price=current_price,
             )
 
         weights: list[float] = []
@@ -210,10 +236,13 @@ class NewsAnalyzer:
                     chips=["News: neutral", "Weights collapsed"],
                 ),
                 benzinga_data,
+                current_price=current_price,
             )
 
         weighted_avg = sum(s * w for s, w in zip(sentiments, weights)) / wsum
-        catalyst_type_extra, adjust = self._benzinga_adjustment(benzinga_data)
+        catalyst_type_extra, adjust, analyst_consensus, analyst_chips = self._benzinga_adjustment(
+            benzinga_data, mode=mode, current_price=current_price
+        )
         if catalyst_type_extra:
             catalyst_type = catalyst_type_extra
         weighted_avg = max(-1.0, min(1.0, weighted_avg + adjust))
@@ -231,6 +260,7 @@ class NewsAnalyzer:
             chips.append(f"Catalyst: {catalyst_type}")
         if benzinga_data and benzinga_data.wim:
             chips.append("WIM context")
+        chips.extend(analyst_chips)
 
         return _fill_benzinga_fields(
             NewsLayerResult(
@@ -250,28 +280,34 @@ class NewsAnalyzer:
                 chips=chips,
             ),
             benzinga_data,
+            current_price=current_price,
+            analyst_consensus=analyst_consensus,
         )
 
-    def _benzinga_adjustment(self, bz: BenzingaMultiResult | None) -> tuple[str | None, float]:
+    def _benzinga_adjustment(
+        self,
+        bz: BenzingaMultiResult | None,
+        *,
+        mode: Literal["day", "swing"] = "day",
+        current_price: float | None = None,
+    ) -> tuple[str | None, float, dict[str, Any] | None, list[str]]:
         if bz is None:
-            return None, 0.0
+            return None, 0.0, None, []
+
         now = datetime.now(timezone.utc)
         catalyst: str | None = None
         adjust = 0.0
+        analyst_chips: list[str] = []
+        analyst_consensus: dict[str, Any] | None = None
 
-        if bz.ratings:
-            latest = bz.ratings[0]
-            if (now - latest.published_at) <= timedelta(days=7):
-                act = latest.action.lower()
-                if "upgrade" in act:
-                    adjust += 0.15
-                    catalyst = "analyst_upgrade"
-                elif "downgrade" in act:
-                    adjust -= 0.15
-                    catalyst = "analyst_downgrade"
-                elif "initiate" in act and "buy" in (latest.rating or "").lower():
-                    adjust += 0.10
-                    catalyst = "analyst_initiates_buy"
+        structured = compute_structured_analyst_adjustment(
+            bz, mode=mode, current_price=current_price, now=now
+        )
+        adjust += structured.adjust
+        if structured.catalyst:
+            catalyst = structured.catalyst
+        analyst_consensus = structured.consensus
+        analyst_chips.extend(structured.chips)
 
         if bz.guidance:
             latest_g = bz.guidance[0]
@@ -294,4 +330,4 @@ class NewsAnalyzer:
                     adjust -= 0.25
                     catalyst = "earnings_miss"
 
-        return catalyst, adjust
+        return catalyst, adjust, analyst_consensus, analyst_chips
