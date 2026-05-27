@@ -1413,11 +1413,11 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
             </div>
 
             <section
-              className="watchlist-header-desk mt-3 border-t pt-3"
+              className="watchlist-header-desk mt-4 border-t"
               data-testid="watchlist-header-desk"
               style={{ borderColor: colors.border }}
             >
-              <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-5">
                 <DeskModeTabNav
                   value={viewMode}
                   onChange={setViewMode}

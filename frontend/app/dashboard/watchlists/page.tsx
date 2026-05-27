@@ -5,6 +5,7 @@ import { ContentLoading } from "@/components/content-loading";
 import { WatchlistsPageClient } from "@/components/watchlists-page-client";
 import { getDashboardAuthContext } from "@/lib/auth/dashboard-session";
 import { fetchDashboardUserMe, subscriptionPlanFromMe } from "@/lib/dashboard-user-subscription";
+import { spacing } from "@/lib/design-system";
 import { watchlistAllowsDualDeskModes, watchlistMaxSymbolsForPlan } from "@/lib/subscription-access";
 import type { SubscriptionPlan } from "@/lib/api/contracts";
 
@@ -23,7 +24,7 @@ export default async function DashboardWatchlistsPage() {
   const plan = subscriptionPlanFromMe(me);
   const dualDeskMaturation = watchlistAllowsDualDeskModes(plan, me?.has_full_access === true);
   return (
-    <AppShell session={session} isAdmin={isAdmin}>
+    <AppShell session={session} isAdmin={isAdmin} mainTopExtra={spacing[1]}>
       <Suspense fallback={<ContentLoading compact />}>
         <WatchlistsPageClient
           dualDeskMaturation={dualDeskMaturation}
