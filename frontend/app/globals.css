@@ -702,6 +702,33 @@ a {
   display: grid;
   gap: 0.5rem;
 }
+
+/* Watchlist attention tiers — fixed headers for Check now / Getting close */
+.watchlist-tier-section--spaced-below-check-now {
+  margin-top: 1.25rem;
+}
+
+.watchlist-decision-queue .watchlist-tier-section--getting_close {
+  margin-top: 2.5rem;
+}
+
+.watchlist-tier-section-header--check_now {
+  background: color-mix(in srgb, var(--color-bullish) 16%, var(--color-surface));
+  border-left: 3px solid var(--color-bullish);
+}
+
+.watchlist-tier-section-header--getting_close {
+  background: color-mix(in srgb, var(--color-caution) 16%, var(--color-surface));
+  border-left: 3px solid var(--color-caution);
+}
+
+.theme-light .watchlist-tier-section-header--check_now {
+  background: color-mix(in srgb, var(--color-bullish) 12%, var(--color-surface));
+}
+
+.theme-light .watchlist-tier-section-header--getting_close {
+  background: color-mix(in srgb, var(--color-caution) 14%, var(--color-surface));
+}
 .watchlist-desk-status__pill {
   flex-shrink: 0;
   border-radius: 0.25rem;

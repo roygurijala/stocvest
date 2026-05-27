@@ -13,7 +13,7 @@ import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
 import type { SnapshotPayload } from "@/lib/api/market";
 import { spacing } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 
 const TIER_ORDER: WatchlistAttentionTier[] = ["check_now", "getting_close", "tracking"];
 
@@ -42,6 +42,43 @@ function tierCardListClass(count: number): string {
     return "m-0 flex list-none flex-col gap-2 p-0";
   }
   return "m-0 grid list-none grid-cols-1 gap-2 p-0 md:grid-cols-2";
+}
+
+function WatchlistFixedTierSection({
+  tier,
+  meta,
+  hint,
+  cards,
+  extraTopClassName = ""
+}: {
+  tier: "check_now" | "getting_close";
+  meta: ReturnType<typeof watchlistAttentionSectionMeta>;
+  hint: string;
+  cards: ReactNode;
+  extraTopClassName?: string;
+}) {
+  const { colors } = useTheme();
+  return (
+    <section
+      id={`watchlist-tier-${tier}`}
+      data-testid={`watchlist-tier-${tier}`}
+      className={`watchlist-tier-section watchlist-tier-section--${tier} ${extraTopClassName}`.trim()}
+    >
+      <header
+        className={`watchlist-tier-section-header watchlist-tier-section-header--${tier} mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2.5`}
+        style={{ borderColor: colors.border }}
+      >
+        <h3 className="m-0 text-sm font-bold tracking-wide" style={{ color: colors.text }}>
+          <span aria-hidden>{meta.icon} </span>
+          {meta.title}
+        </h3>
+        <span className="text-xs font-medium" style={{ color: colors.textMuted }}>
+          {hint}
+        </span>
+      </header>
+      {cards}
+    </section>
+  );
 }
 
 function TierCardList({
@@ -110,7 +147,6 @@ export function WatchlistDecisionQueue({
   sortMode = "attention",
   trackingCompact = false
 }: Props) {
-  const { colors } = useTheme();
   const grouped = useMemo(
     () => groupSymbolsIntoAttentionTiers(symbols, rowForSymbol),
     [symbols, rowForSymbol]
@@ -119,7 +155,7 @@ export function WatchlistDecisionQueue({
 
   return (
     <>
-      <div className="flex flex-col" style={{ gap: spacing[4] }} data-testid="watchlist-decision-queue">
+      <div className="watchlist-decision-queue flex flex-col" style={{ gap: spacing[4] }} data-testid="watchlist-decision-queue">
         {TIER_ORDER.map((tier) => {
           const list = sortWatchlistSymbolsInTier(grouped[tier], sortMode, rowForSymbol);
           if (list.length === 0) return null;
@@ -142,25 +178,20 @@ export function WatchlistDecisionQueue({
             />
           );
 
-          if (tier === "check_now") {
+          if (tier === "check_now" || tier === "getting_close") {
             return (
-              <section key={tier} id="watchlist-tier-check_now" data-testid="watchlist-tier-check_now">
-                <header className="mb-2 flex flex-wrap items-baseline gap-2">
-                  <h3 className="m-0 text-sm font-bold tracking-wide" style={{ color: colors.text }}>
-                    <span aria-hidden>{meta.icon} </span>
-                    {meta.title}
-                  </h3>
-                  <span className="text-xs" style={{ color: colors.textMuted }}>
-                    {hint}
-                  </span>
-                </header>
-                {cards}
-              </section>
+              <WatchlistFixedTierSection
+                key={tier}
+                tier={tier}
+                meta={meta}
+                hint={hint}
+                cards={cards}
+                extraTopClassName={tier === "getting_close" ? "watchlist-tier-section--getting_close" : ""}
+              />
             );
           }
 
-          const defaultOpen =
-            tier === "getting_close" ? true : list.length < WATCHLIST_TRACKING_COLLAPSE_MIN;
+          const defaultOpen = list.length < WATCHLIST_TRACKING_COLLAPSE_MIN;
 
           return (
             <ScannerCollapsible

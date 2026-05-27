@@ -18,9 +18,11 @@ interface AppShellProps {
    *  conditionally render the admin nav section. The backend gate is the real
    *  perimeter; this flag only controls UI visibility. */
   isAdmin?: boolean;
+  /** Space between the fixed top bar and page content. Defaults to `spacing[6]`. */
+  mainTopExtra?: string;
 }
 
-export function AppShell({ session, children, isAdmin = false }: AppShellProps) {
+export function AppShell({ session, children, isAdmin = false, mainTopExtra = spacing[6] }: AppShellProps) {
   const { colors } = useTheme();
   const pathname = usePathname();
   const [loading, setLoading] = useState(false);
@@ -53,7 +55,7 @@ export function AppShell({ session, children, isAdmin = false }: AppShellProps) 
           <main
             className="min-w-0 px-4 pb-6 lg:px-6"
             style={{
-              paddingTop: `calc(${APP_TOP_BAR_LAYOUT_HEIGHT} + ${spacing[6]})`
+              paddingTop: `calc(${APP_TOP_BAR_LAYOUT_HEIGHT} + ${mainTopExtra})`
             }}
           >
             {children}

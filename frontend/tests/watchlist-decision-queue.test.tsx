@@ -55,6 +55,9 @@ describe("WatchlistDecisionQueue layout", () => {
       />
     );
     expect(screen.getByTestId("watchlist-tier-check_now").tagName).toBe("SECTION");
+    expect(
+      screen.getByTestId("watchlist-tier-check_now").querySelector(".watchlist-tier-section-header--check_now")
+    ).toBeTruthy();
     expect(screen.getByTestId("watchlist-decision-card-NVDA")).toBeInTheDocument();
   });
 
@@ -134,6 +137,23 @@ describe("WatchlistDecisionQueue layout", () => {
       "data-watchlist-card-density",
       "compact"
     );
+  });
+
+  it("renders getting_close as a non-collapsible section with a colored header", () => {
+    wrap(
+      <WatchlistDecisionQueue
+        symbols={["AMZN"]}
+        planMode="swing"
+        rowForSymbol={() =>
+          row({ state: "developing", layers_aligned: 3, layers_total: 6, label: "Developing" })
+        }
+        snapshotForSymbol={() => undefined}
+        onRemove={() => undefined}
+      />
+    );
+    expect(screen.getByTestId("watchlist-tier-getting_close").tagName).toBe("SECTION");
+    expect(screen.getByTestId("watchlist-tier-getting_close").querySelector(".watchlist-tier-section-header--getting_close")).toBeTruthy();
+    expect(screen.queryByRole("group")).not.toBeInTheDocument();
   });
 
   it("exposes check now section anchor for sticky jump", () => {
