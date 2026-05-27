@@ -465,7 +465,7 @@ export function NewsPanel({
 
         {data?.analyst?.feed_state === "empty" ? (
           <p className="mb-3 text-xs" style={{ color: colors.textMuted }} data-testid="analyst-empty-copy">
-            No analyst upgrades or downgrades in the last {data.analyst.window_days} days.
+            No analyst rating changes in the last {data.analyst.window_days} days. TipRanks may still show older active coverage.
           </p>
         ) : null}
 
