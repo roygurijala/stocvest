@@ -1184,50 +1184,18 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
       {active ? (
         <>
           <header
-            className="app-sticky-page-header sticky z-40 w-full max-w-none self-start pb-3 pt-2"
+            className="app-sticky-page-header sticky z-40 w-full max-w-none self-start pb-2 pt-0"
             style={headerStickyStyle}
           >
-            <div className="flex flex-wrap items-start justify-between gap-2 pb-2">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <h1 className="m-0 truncate text-xl font-bold tracking-tight sm:text-2xl" style={{ color: colors.text }}>
-                    Watchlist
-                  </h1>
-                  {maturationEligible ? (
-                    <WatchlistEvaluationInfoTip desk={viewMode === "day" ? "day" : "swing"} />
-                  ) : null}
-                </div>
-                {maturationEligible ? (
-                  <p
-                    className="m-0 mt-1 max-w-2xl text-sm font-medium"
-                    style={{ color: colors.text }}
-                    data-testid="watchlist-portfolio-headline"
-                  >
-                    {maturationFetchStatus === "ready"
-                      ? portfolioHeadline
-                      : maturationFetchStatus === "loading"
-                        ? "Loading maturation…"
-                        : maturationFetchStatus === "error"
-                          ? "Maturation unavailable"
-                          : "Track symbols for maturation status"}
-                  </p>
-                ) : null}
-              </div>
-              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-                <span
-                  className="rounded-full px-3 py-1 text-xs font-semibold tabular-nums sm:text-sm"
-                  style={{
-                    background: colors.surfaceMuted,
-                    border: `1px solid ${colors.border}`,
-                    color: colors.text
-                  }}
-                >
-                  {planBadgeLabel} · {slotUsed}/{maxSymbols}
-                </span>
-              </div>
-            </div>
-
-            <div ref={addComboRef} className="relative pb-2">
+            <section
+              className="watchlist-header-search rounded-xl border px-3 py-3"
+              data-testid="watchlist-header-search"
+              style={{
+                background: colors.surface,
+                borderColor: colors.border
+              }}
+            >
+            <div ref={addComboRef} className="relative">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
                 <input
                   id="watchlist-add-ticker"
@@ -1402,34 +1370,81 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                 </p>
               )}
             </div>
+            </section>
 
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <DeskModeTabNav
-                value={viewMode}
-                onChange={setViewMode}
-                modes={dualDeskMaturation ? (["swing", "day"] as const) : (["swing"] as const)}
-                ariaLabel="Watchlist desk"
-                testIdPrefix="watchlist-desk"
-                className="min-w-0 flex-1 sm:flex-none"
-              />
-              {maturationDeskSummary || maturationSummaryFetchedAt ? (
-                <span
-                  className="max-w-md shrink-0 text-right text-xs leading-snug sm:text-sm"
-                  style={{ color: colors.textMuted }}
-                  data-testid="watchlist-maturation-desk-summary"
-                >
-                  {maturationDeskSummary}
-                  {maturationSummaryFetchedAt && maturationFetchStatus === "ready" ? (
-                    <>
-                      {maturationDeskSummary ? " · " : null}
-                      <span data-testid="watchlist-summary-fetched-at">
-                        Fetched {formatSummaryFetchedAt(maturationSummaryFetchedAt)}
-                      </span>
-                    </>
+            <div className="flex flex-wrap items-start justify-between gap-2 pt-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <h1 className="m-0 truncate text-xl font-bold tracking-tight sm:text-2xl" style={{ color: colors.text }}>
+                    Watchlist
+                  </h1>
+                  {maturationEligible ? (
+                    <WatchlistEvaluationInfoTip desk={viewMode === "day" ? "day" : "swing"} />
                   ) : null}
+                </div>
+                {maturationEligible ? (
+                  <p
+                    className="m-0 mt-1 max-w-2xl text-sm font-medium"
+                    style={{ color: colors.text }}
+                    data-testid="watchlist-portfolio-headline"
+                  >
+                    {maturationFetchStatus === "ready"
+                      ? portfolioHeadline
+                      : maturationFetchStatus === "loading"
+                        ? "Loading maturation…"
+                        : maturationFetchStatus === "error"
+                          ? "Maturation unavailable"
+                          : "Track symbols for maturation status"}
+                  </p>
+                ) : null}
+              </div>
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                <span
+                  className="rounded-full px-3 py-1 text-xs font-semibold tabular-nums sm:text-sm"
+                  style={{
+                    background: colors.surfaceMuted,
+                    border: `1px solid ${colors.border}`,
+                    color: colors.text
+                  }}
+                >
+                  {planBadgeLabel} · {slotUsed}/{maxSymbols}
                 </span>
-              ) : null}
+              </div>
             </div>
+
+            <section
+              className="watchlist-header-desk mt-3 border-t pt-3"
+              data-testid="watchlist-header-desk"
+              style={{ borderColor: colors.border }}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <DeskModeTabNav
+                  value={viewMode}
+                  onChange={setViewMode}
+                  modes={dualDeskMaturation ? (["swing", "day"] as const) : (["swing"] as const)}
+                  ariaLabel="Watchlist desk"
+                  testIdPrefix="watchlist-desk"
+                  className="min-w-0 flex-1 sm:flex-none"
+                />
+                {maturationDeskSummary || maturationSummaryFetchedAt ? (
+                  <span
+                    className="max-w-md shrink-0 text-right text-xs leading-snug sm:text-sm"
+                    style={{ color: colors.textMuted }}
+                    data-testid="watchlist-maturation-desk-summary"
+                  >
+                    {maturationDeskSummary}
+                    {maturationSummaryFetchedAt && maturationFetchStatus === "ready" ? (
+                      <>
+                        {maturationDeskSummary ? " · " : null}
+                        <span data-testid="watchlist-summary-fetched-at">
+                          Fetched {formatSummaryFetchedAt(maturationSummaryFetchedAt)}
+                        </span>
+                      </>
+                    ) : null}
+                  </span>
+                ) : null}
+              </div>
+            </section>
           </header>
 
           <div style={{ display: "grid", gap: spacing[3] }}>

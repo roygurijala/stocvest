@@ -1,6 +1,5 @@
 "use client";
 
-import { WatchlistCheckNowStickyBar } from "@/components/watchlists/watchlist-check-now-sticky-bar";
 import { WatchlistDecisionCardFromRow } from "@/components/watchlists/watchlist-decision-card";
 import { ScannerCollapsible } from "@/components/scanner/ScannerCollapsible";
 import {
@@ -14,7 +13,7 @@ import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
 import type { SnapshotPayload } from "@/lib/api/market";
 import { spacing } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
-import { useMemo, useRef } from "react";
+import { useMemo } from "react";
 
 const TIER_ORDER: WatchlistAttentionTier[] = ["check_now", "getting_close", "tracking"];
 
@@ -112,20 +111,14 @@ export function WatchlistDecisionQueue({
   trackingCompact = false
 }: Props) {
   const { colors } = useTheme();
-  const checkNowSentinelRef = useRef<HTMLDivElement | null>(null);
   const grouped = useMemo(
     () => groupSymbolsIntoAttentionTiers(symbols, rowForSymbol),
     [symbols, rowForSymbol]
   );
   const forceOpenSet = useMemo(() => new Set(forceOpenTiers ?? []), [forceOpenTiers]);
-  const checkNowList = useMemo(
-    () => sortWatchlistSymbolsInTier(grouped.check_now, sortMode, rowForSymbol),
-    [grouped.check_now, sortMode, rowForSymbol]
-  );
 
   return (
     <>
-      <WatchlistCheckNowStickyBar count={checkNowList.length} sentinelRef={checkNowSentinelRef} />
       <div className="flex flex-col" style={{ gap: spacing[4] }} data-testid="watchlist-decision-queue">
         {TIER_ORDER.map((tier) => {
           const list = sortWatchlistSymbolsInTier(grouped[tier], sortMode, rowForSymbol);
@@ -162,7 +155,6 @@ export function WatchlistDecisionQueue({
                   </span>
                 </header>
                 {cards}
-                <div ref={checkNowSentinelRef} className="h-px w-full" aria-hidden data-testid="watchlist-check-now-sentinel" />
               </section>
             );
           }

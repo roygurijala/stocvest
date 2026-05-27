@@ -692,6 +692,16 @@ a {
 .theme-light .watchlist-search-input::placeholder {
   color: rgba(100, 116, 139, 0.38);
 }
+
+.watchlist-header-search {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.watchlist-header-desk {
+  display: grid;
+  gap: 0.5rem;
+}
 .watchlist-desk-status__pill {
   flex-shrink: 0;
   border-radius: 0.25rem;
