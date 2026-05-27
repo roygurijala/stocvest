@@ -44,10 +44,10 @@ export function scrollToSignalsSection(
 
   const resolveScrollOffsetPx = (): number => {
     let offset = 12;
+    const symbolChrome = document.querySelector<HTMLElement>('[data-testid="signals-fixed-symbol"]');
+    if (symbolChrome) offset += symbolChrome.getBoundingClientRect().height;
     const sticky = document.querySelector<HTMLElement>('[data-testid="signals-sticky-command"]');
     if (sticky) offset += sticky.getBoundingClientRect().height;
-    const tabNav = document.querySelector<HTMLElement>('[data-testid="signals-desk-tab-nav-wrap"]');
-    if (tabNav) offset += tabNav.getBoundingClientRect().height;
     return offset;
   };
 

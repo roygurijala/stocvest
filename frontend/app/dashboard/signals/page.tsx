@@ -111,7 +111,7 @@ export default async function DashboardSignalsPage({
     tradingModeRaw === "day" || tradingModeRaw === "swing" ? tradingModeRaw : null;
 
   return (
-    <AppShell session={session} isAdmin={isAdmin}>
+    <AppShell session={session} isAdmin={isAdmin} mainTopLayout="signals-flush">
       {/*
         Tier 1.B streaming Suspense island. The fallback shell
         (`<SignalsPageShell />`) renders inline as part of the

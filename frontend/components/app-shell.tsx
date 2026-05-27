@@ -21,9 +21,10 @@ interface AppShellProps {
   /** Space between the fixed top bar and page content. Defaults to `spacing[6]`. */
   mainTopExtra?: string;
   /**
-   * Watchlists: top-bar clearance only (no extra `spacing[6]` gap below the chrome).
+   * Flush layouts: page chrome (search/symbol bar) is fixed under the top bar;
+   * `<main>` top padding is zero and spacing is reserved in-page.
    */
-  mainTopLayout?: "default" | "watchlist-flush";
+  mainTopLayout?: "default" | "watchlist-flush" | "signals-flush";
 }
 
 export function AppShell({
@@ -33,6 +34,7 @@ export function AppShell({
   mainTopExtra = spacing[6],
   mainTopLayout = "default"
 }: AppShellProps) {
+  const mainFlushTop = mainTopLayout !== "default";
   const { colors } = useTheme();
   const pathname = usePathname();
   const [loading, setLoading] = useState(false);
@@ -66,10 +68,7 @@ export function AppShell({
             className="min-w-0 px-4 pb-6 lg:px-6"
             data-main-top-layout={mainTopLayout}
             style={{
-              paddingTop:
-                mainTopLayout === "watchlist-flush"
-                  ? 0
-                  : `calc(${APP_TOP_BAR_LAYOUT_HEIGHT} + ${mainTopExtra})`
+              paddingTop: mainFlushTop ? 0 : `calc(${APP_TOP_BAR_LAYOUT_HEIGHT} + ${mainTopExtra})`
             }}
           >
             {children}

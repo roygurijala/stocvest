@@ -212,11 +212,8 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     setTrackingCompact(readWatchlistTrackingCompact());
   }, []);
 
-  const searchChromeRef = useRef<HTMLDivElement | null>(null);
-  const [watchlistChromeInsets, setWatchlistChromeInsets] = useState({
-    topBarPx: APP_TOP_BAR_LAYOUT_HEIGHT_PX,
-    searchChromePx: 132
-  });
+  const watchlistHeaderRef = useRef<HTMLElement | null>(null);
+  const [watchlistTopBarPx, setWatchlistTopBarPx] = useState(APP_TOP_BAR_LAYOUT_HEIGHT_PX);
 
   const handleSortModeChange = useCallback((mode: WatchlistSortMode) => {
     setSortMode(mode);
@@ -304,29 +301,17 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
 
   const active = useMemo(() => rows[0] ?? null, [rows]);
 
-  /** Pin search under the fixed top bar; reserve exact space in document flow for content below. */
+  /** Match sticky header offset to the live fixed top bar height. */
   useLayoutEffect(() => {
     if (!active) return;
     const measure = () => {
       const topBarPx = measureAppTopBarLayoutHeightPx();
-      const searchChromePx = searchChromeRef.current
-        ? Math.ceil(searchChromeRef.current.getBoundingClientRect().height)
-        : 0;
-      setWatchlistChromeInsets((prev) => {
-        if (prev.topBarPx === topBarPx && prev.searchChromePx === searchChromePx) return prev;
-        return { topBarPx, searchChromePx: searchChromePx || prev.searchChromePx };
-      });
+      setWatchlistTopBarPx((prev) => (prev === topBarPx ? prev : topBarPx));
     };
     measure();
-    const el = searchChromeRef.current;
-    const ro = typeof ResizeObserver !== "undefined" && el ? new ResizeObserver(measure) : null;
-    if (el) ro?.observe(el);
     window.addEventListener("resize", measure);
-    return () => {
-      ro?.disconnect();
-      window.removeEventListener("resize", measure);
-    };
-  }, [active, addSuggestOpen, addDraft, symErr]);
+    return () => window.removeEventListener("resize", measure);
+  }, [active]);
 
   /** Maturation API is keyed to the default list; with a single list we always surface it. */
   const maturationEligible = Boolean(active && (active.is_default || rows.length <= 1));
@@ -1205,12 +1190,10 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
 
   const slotUsed = activeSymbolsDeduped.length;
   const slotsLeft = Math.max(0, maxSymbols - slotUsed);
-  const metaHeaderStickyTopPx = watchlistChromeInsets.topBarPx + watchlistChromeInsets.searchChromePx;
-  const watchlistFlowOffsetPx = metaHeaderStickyTopPx;
 
   const watchlistSearchSection = (
     <section
-      className="watchlist-header-search rounded-xl border px-3 py-3"
+      className="watchlist-header-search rounded-xl border px-3 py-2"
       data-testid="watchlist-header-search"
       style={{
         background: colors.surface,
@@ -1396,33 +1379,17 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   );
 
   return (
-    <div className="relative flex min-h-0 min-w-0 flex-col overflow-visible" style={{ gap: spacing[3] }}>
+    <div className="relative flex min-h-0 min-w-0 flex-col overflow-visible" style={{ gap: spacing[2] }}>
       {active ? (
         <>
-          <div
-            aria-hidden
-            className="watchlist-chrome-spacer shrink-0"
-            style={{ height: watchlistFlowOffsetPx }}
-            data-testid="watchlist-chrome-spacer"
-          />
-          <div
-            ref={searchChromeRef}
-            className="watchlist-fixed-search fixed left-0 right-0 z-40 px-4 pb-2 pt-2 lg:left-[248px] lg:px-6"
-            style={{
-              top: watchlistChromeInsets.topBarPx,
-              background: colors.background,
-              borderBottom: `1px solid ${colors.border}`
-            }}
-            data-testid="watchlist-fixed-search"
+          <header
+            ref={watchlistHeaderRef}
+            className="watchlist-sticky-header app-sticky-page-header sticky z-40 w-full max-w-none self-start pb-2 pt-0"
+            style={{ top: watchlistTopBarPx, marginTop: watchlistTopBarPx }}
           >
             {watchlistSearchSection}
-          </div>
 
-          <header
-            className="watchlist-sticky-header app-sticky-page-header sticky z-30 w-full max-w-none self-start pb-2 pt-0"
-            style={{ top: metaHeaderStickyTopPx }}
-          >
-            <div className="flex flex-wrap items-start justify-between gap-2 pt-3">
+            <div className="flex flex-wrap items-start justify-between gap-2 pt-2">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <h1 className="m-0 truncate text-xl font-bold tracking-tight sm:text-2xl" style={{ color: colors.text }}>
@@ -1463,11 +1430,11 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
             </div>
 
             <section
-              className="watchlist-header-desk mt-4 border-t"
+              className="watchlist-header-desk mt-2 border-t"
               data-testid="watchlist-header-desk"
               style={{ borderColor: colors.border }}
             >
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-5">
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-3">
                 <DeskModeTabNav
                   value={viewMode}
                   onChange={setViewMode}
