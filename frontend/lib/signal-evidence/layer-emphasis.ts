@@ -326,7 +326,15 @@ function hasNewsPositiveCatalyst(layer: EvidenceLayer): boolean {
   if (typeof layer.wim_summary === "string" && layer.wim_summary.trim().length > 0) return true;
   if (layer.latest_rating) {
     const action = String(layer.latest_rating.action ?? "").toLowerCase();
-    if (action === "upgrade" || action === "downgrade" || action === "initiates") return true;
+    if (
+      action === "upgrade" ||
+      action === "downgrade" ||
+      action === "initiates" ||
+      action === "maintains" ||
+      action.includes("reiterat")
+    ) {
+      return true;
+    }
   }
   if (layer.analyst_consensus && (layer.analyst_consensus.momentum ?? 0) >= 3) return true;
   if (layer.latest_guidance) {

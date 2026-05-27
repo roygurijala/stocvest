@@ -9,7 +9,11 @@ from typing import Any, Literal
 from stocvest.api.services.news_quality_filter import is_quality_article
 from stocvest.config.signal_parameters import NewsParameters
 from stocvest.data.benzinga_client import BenzingaMultiResult
-from stocvest.signals.analyst_rating_score import analyst_firm_weight, compute_structured_analyst_adjustment
+from stocvest.signals.analyst_rating_score import (
+    analyst_firm_weight,
+    blend_headline_and_analyst,
+    compute_structured_analyst_score,
+)
 from stocvest.signals.news_copy import no_qualifying_news_reasoning
 from stocvest.signals.news_sentiment import (
     DAY_NEWS_LOOKBACK_HOURS,
@@ -25,10 +29,13 @@ class NewsLayerResult:
     verdict: str
     article_count: int = 0
     weighted_sentiment: float | None = None
+    headline_sentiment: float | None = None
+    analyst_sub_score: float | None = None
     catalyst_type: str | None = None
     catalyst_headline: str | None = None
     wim_summary: str | None = None
     data_state: str = "fresh"
+    analyst_feed_state: str | None = None
     reasoning: str = ""
     chips: list[str] = field(default_factory=list)
     latest_rating: dict[str, Any] | None = None
@@ -57,6 +64,15 @@ def _article_sentiment(article: dict[str, Any]) -> float:
             if s in ("negative", "bearish"):
                 return -1.0
     return 0.0
+
+
+def _article_benzinga_weight(article: dict[str, Any]) -> float:
+    raw = article.get("benzinga_weight")
+    try:
+        w = float(raw)
+    except (TypeError, ValueError):
+        return 1.0
+    return max(0.05, min(2.0, w))
 
 
 def _benzinga_layer_attachments(
@@ -110,12 +126,15 @@ def _fill_benzinga_fields(
     *,
     current_price: float | None = None,
     analyst_consensus: dict[str, Any] | None = None,
+    analyst_feed_state: str | None = None,
 ) -> NewsLayerResult:
     lr, lg, ee = _benzinga_layer_attachments(bz, current_price=current_price)
     out.latest_rating = lr
     out.latest_guidance = lg
     out.earnings_result = ee
     out.analyst_consensus = analyst_consensus
+    if analyst_feed_state:
+        out.analyst_feed_state = analyst_feed_state
     return out
 
 
@@ -163,21 +182,67 @@ class NewsAnalyzer:
                 time_filtered.append(a)
         rows = time_filtered[: params.max_articles]
         quality = [a for a in rows if is_quality_article(a)]
+
+        structured = compute_structured_analyst_score(
+            benzinga_data, mode=mode, current_price=current_price, now=now
+        )
+        analyst_feed_state = structured.feed_state
+        analyst_active = structured.feed_state == "available" and (
+            structured.score != 0.0 or structured.consensus is not None
+        )
+
         if not quality:
+            headline_avg = 0.0
+            catalyst_type_extra, event_adjust, analyst_consensus, analyst_chips = self._benzinga_event_adjustment(
+                benzinga_data, mode=mode, now=now, structured=structured
+            )
+            weighted_avg = blend_headline_and_analyst(
+                headline_avg,
+                structured.score,
+                mode=mode,
+                analyst_active=analyst_active,
+            )
+            weighted_avg = max(-1.0, min(1.0, weighted_avg + event_adjust))
+            score = int(round((weighted_avg + 1) / 2 * 100))
+
+            if score >= params.bullish_threshold:
+                verdict = "bullish"
+            elif score <= params.bearish_threshold:
+                verdict = "bearish"
+            else:
+                verdict = "neutral"
+
+            chips = ["News: neutral", "No qualifying headlines"]
+            if analyst_feed_state == "unconfigured":
+                chips.append("Analyst feed unavailable")
+            chips.extend(analyst_chips)
+            if analyst_active and structured.score != 0.0:
+                chips.append(f"analyst {structured.score:+.2f}")
+
+            data_state = "stale"
+            if analyst_active and score != 50:
+                data_state = "fresh"
+
             return _fill_benzinga_fields(
                 NewsLayerResult(
                     status="available",
-                    score=50,
-                    verdict="neutral",
+                    score=score,
+                    verdict=verdict,
                     article_count=0,
-                    weighted_sentiment=0.0,
+                    weighted_sentiment=weighted_avg,
+                    headline_sentiment=headline_avg,
+                    analyst_sub_score=structured.score if analyst_active else None,
+                    catalyst_type=catalyst_type_extra,
                     wim_summary=(benzinga_data.wim.reason if benzinga_data and benzinga_data.wim else None),
-                    data_state="stale",
+                    data_state=data_state,
+                    analyst_feed_state=analyst_feed_state,
                     reasoning=no_qualifying_news_reasoning(sym),
-                    chips=["News: neutral", "No qualifying headlines"],
+                    chips=chips,
                 ),
                 benzinga_data,
                 current_price=current_price,
+                analyst_consensus=analyst_consensus,
+                analyst_feed_state=analyst_feed_state,
             )
 
         weights: list[float] = []
@@ -215,7 +280,7 @@ class NewsAnalyzer:
             tickers = art.get("tickers")
             tset = {str(t).strip().upper() for t in tickers} if isinstance(tickers, list) else set()
             rel = params.direct_mention_weight if sym in tset else params.indirect_mention_weight
-            combined = w_time * rel
+            combined = w_time * rel * _article_benzinga_weight(art)
             if mode == "swing":
                 combined *= swing_recency_weight(pub.astimezone(timezone.utc), now)
             weights.append(combined)
@@ -230,22 +295,32 @@ class NewsAnalyzer:
                     verdict="neutral",
                     article_count=len(quality),
                     weighted_sentiment=0.0,
+                    headline_sentiment=0.0,
                     wim_summary=(benzinga_data.wim.reason if benzinga_data and benzinga_data.wim else None),
                     data_state="stale",
+                    analyst_feed_state=analyst_feed_state,
                     reasoning="No dominant catalyst in current lookback; sentiment baseline remains neutral.",
                     chips=["News: neutral", "Weights collapsed"],
                 ),
                 benzinga_data,
                 current_price=current_price,
+                analyst_feed_state=analyst_feed_state,
             )
 
-        weighted_avg = sum(s * w for s, w in zip(sentiments, weights)) / wsum
-        catalyst_type_extra, adjust, analyst_consensus, analyst_chips = self._benzinga_adjustment(
-            benzinga_data, mode=mode, current_price=current_price
+        headline_avg = sum(s * w for s, w in zip(sentiments, weights)) / wsum
+        catalyst_type_extra, event_adjust, analyst_consensus, analyst_chips = self._benzinga_event_adjustment(
+            benzinga_data, mode=mode, now=now, structured=structured
         )
         if catalyst_type_extra:
             catalyst_type = catalyst_type_extra
-        weighted_avg = max(-1.0, min(1.0, weighted_avg + adjust))
+
+        weighted_avg = blend_headline_and_analyst(
+            headline_avg,
+            structured.score,
+            mode=mode,
+            analyst_active=analyst_active,
+        )
+        weighted_avg = max(-1.0, min(1.0, weighted_avg + event_adjust))
         score = int(round((weighted_avg + 1) / 2 * 100))
 
         if score >= params.bullish_threshold:
@@ -256,10 +331,14 @@ class NewsAnalyzer:
             verdict = "neutral"
 
         chips = [f"{len(quality)} articles", f"sent_avg {weighted_avg:+.2f}"]
+        if analyst_active:
+            chips.append(f"headline {headline_avg:+.2f} · analyst {structured.score:+.2f}")
         if catalyst_type:
             chips.append(f"Catalyst: {catalyst_type}")
         if benzinga_data and benzinga_data.wim:
             chips.append("WIM context")
+        if analyst_feed_state == "unconfigured":
+            chips.append("Analyst feed unavailable")
         chips.extend(analyst_chips)
 
         return _fill_benzinga_fields(
@@ -269,45 +348,42 @@ class NewsAnalyzer:
                 verdict=verdict,
                 article_count=len(quality),
                 weighted_sentiment=weighted_avg,
+                headline_sentiment=headline_avg,
+                analyst_sub_score=structured.score if analyst_active else None,
                 catalyst_type=catalyst_type,
                 catalyst_headline=catalyst_headline,
                 wim_summary=(benzinga_data.wim.reason if benzinga_data and benzinga_data.wim else None),
                 data_state="fresh",
+                analyst_feed_state=analyst_feed_state,
                 reasoning=(
                     f"News score {score}/100 from {len(quality)} quality articles "
-                    f"(weighted sentiment {weighted_avg:+.2f})."
+                    f"(blended sentiment {weighted_avg:+.2f}; "
+                    f"headline {headline_avg:+.2f}, analyst {structured.score:+.2f})."
                 ),
                 chips=chips,
             ),
             benzinga_data,
             current_price=current_price,
             analyst_consensus=analyst_consensus,
+            analyst_feed_state=analyst_feed_state,
         )
 
-    def _benzinga_adjustment(
+    def _benzinga_event_adjustment(
         self,
         bz: BenzingaMultiResult | None,
         *,
-        mode: Literal["day", "swing"] = "day",
-        current_price: float | None = None,
+        mode: Literal["day", "swing"],
+        now: datetime,
+        structured: Any,
     ) -> tuple[str | None, float, dict[str, Any] | None, list[str]]:
+        """Guidance/earnings nudges plus structured analyst metadata (score blended separately)."""
         if bz is None:
             return None, 0.0, None, []
 
-        now = datetime.now(timezone.utc)
-        catalyst: str | None = None
+        catalyst: str | None = structured.catalyst
         adjust = 0.0
-        analyst_chips: list[str] = []
-        analyst_consensus: dict[str, Any] | None = None
-
-        structured = compute_structured_analyst_adjustment(
-            bz, mode=mode, current_price=current_price, now=now
-        )
-        adjust += structured.adjust
-        if structured.catalyst:
-            catalyst = structured.catalyst
+        analyst_chips: list[str] = list(structured.chips)
         analyst_consensus = structured.consensus
-        analyst_chips.extend(structured.chips)
 
         if bz.guidance:
             latest_g = bz.guidance[0]

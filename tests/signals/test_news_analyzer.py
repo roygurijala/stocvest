@@ -49,7 +49,8 @@ def test_structured_analyst_consensus_chip_on_swing(mock_parameter_store) -> Non
             BenzingaRating("TEST", "Upgrade", "Buy", 118.0, "Morgan Stanley", now - timedelta(days=5)),
             BenzingaRating("TEST", "Upgrade", "Outperform", 115.0, "JPMorgan", now - timedelta(days=12)),
             BenzingaRating("TEST", "Upgrade", "Buy", 117.0, "Bank of America", now - timedelta(days=18)),
-        ]
+        ],
+        analyst_feed_configured=True,
     )
     n = NewsAnalyzer().analyze(
         "TEST",
@@ -61,7 +62,39 @@ def test_structured_analyst_consensus_chip_on_swing(mock_parameter_store) -> Non
     )
     assert n.analyst_consensus is not None
     assert n.analyst_consensus.get("momentum", 0) >= 3
+    assert n.analyst_feed_state == "available"
+    assert n.headline_sentiment is not None
+    assert n.analyst_sub_score is not None
     assert any("consensus improving" in c.lower() for c in n.chips)
+
+
+def test_analyst_only_when_no_headlines(mock_parameter_store) -> None:
+    now = datetime.now(timezone.utc)
+    bz = BenzingaMultiResult(
+        ratings=[BenzingaRating("TEST", "Upgrade", "Buy", 120.0, "Goldman Sachs", now - timedelta(days=1))],
+        analyst_feed_configured=True,
+    )
+    n = NewsAnalyzer().analyze(
+        "TEST",
+        [],
+        mock_parameter_store.news,
+        mode="day",
+        benzinga_data=bz,
+        current_price=100.0,
+    )
+    assert n.score is not None and n.score > 50
+    assert n.analyst_sub_score is not None and n.analyst_sub_score > 0
+
+
+def test_benzinga_article_weight_boosts_headline(mock_parameter_store) -> None:
+    articles = make_positive_articles(2)
+    articles[0]["benzinga_weight"] = 2.0
+    articles[1]["benzinga_weight"] = 0.1
+    n_weighted = NewsAnalyzer().analyze("TEST", articles, mock_parameter_store.news)
+    n_flat = NewsAnalyzer().analyze("TEST", make_positive_articles(2), mock_parameter_store.news)
+    assert n_weighted.headline_sentiment is not None
+    assert n_flat.headline_sentiment is not None
+    assert n_weighted.headline_sentiment >= n_flat.headline_sentiment
 
 
 def test_params_threshold_used(mock_parameter_store) -> None:

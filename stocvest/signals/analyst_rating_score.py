@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 from typing import Any, Literal
+from zoneinfo import ZoneInfo
 
 from stocvest.data.benzinga_client import BenzingaMultiResult, BenzingaRating
 
 TradingMode = Literal["day", "swing"]
+AnalystFeedState = Literal["available", "unconfigured", "empty"]
+
+ET = ZoneInfo("America/New_York")
 
 # Normalized substring match — Benzinga firm strings vary ("JPMorgan Chase", etc.).
 TIER_1_FIRM_FRAGMENTS: tuple[str, ...] = (
@@ -25,15 +29,38 @@ TIER_1_FIRM_FRAGMENTS: tuple[str, ...] = (
 CONSENSUS_WINDOW_DAYS = 30
 CONSENSUS_STRONG_THRESHOLD = 3
 
+HEADLINE_BLEND_WEIGHT: dict[TradingMode, float] = {"day": 0.5, "swing": 0.7}
+ANALYST_BLEND_WEIGHT: dict[TradingMode, float] = {"day": 0.5, "swing": 0.3}
+
+MAX_RATING_COMPONENT = 0.40
+MAX_CONSENSUS_COMPONENT = 0.20
+MAX_ANALYST_SCORE = 1.0
+
 
 @dataclass(frozen=True)
 class AnalystScoreBreakdown:
-    """Additive sentiment adjust in [-1, 1] space (same units as NewsAnalyzer weighted_avg nudge)."""
+    """Standalone analyst sub-score in [-1, 1] for blending with headline sentiment."""
 
-    adjust: float
+    score: float
     catalyst: str | None
     consensus: dict[str, Any] | None
     chips: tuple[str, ...]
+    feed_state: AnalystFeedState
+
+
+def blend_headline_and_analyst(
+    headline_sentiment: float,
+    analyst_score: float,
+    *,
+    mode: TradingMode,
+    analyst_active: bool,
+) -> float:
+    """Blend headline and analyst sub-scores with mode-specific weights."""
+    if not analyst_active:
+        return max(-1.0, min(1.0, headline_sentiment))
+    w_h = HEADLINE_BLEND_WEIGHT[mode]
+    w_a = ANALYST_BLEND_WEIGHT[mode]
+    return max(-1.0, min(1.0, w_h * headline_sentiment + w_a * analyst_score))
 
 
 def _normalize_firm(firm: str) -> str:
@@ -58,10 +85,48 @@ def _is_downgrade(action: str) -> bool:
     return "downgrade" in str(action or "").lower()
 
 
-def _is_initiate_buy(action: str, rating: str) -> bool:
-    act = str(action or "").lower()
-    rat = str(rating or "").lower()
-    return "initiate" in act and "buy" in rat
+def _pt_upside_pct(current_price: float | None, price_target: float | None) -> float | None:
+    if current_price is None or current_price <= 0 or price_target is None or price_target <= 0:
+        return None
+    return ((price_target - current_price) / current_price) * 100.0
+
+
+def _action_base_and_catalyst(
+    rating: BenzingaRating,
+    *,
+    current_price: float | None,
+) -> tuple[float, str | None]:
+    act = str(rating.action or "").lower()
+    rat = str(rating.rating or "").lower()
+    upside = _pt_upside_pct(current_price, rating.price_target)
+
+    if _is_upgrade(act):
+        return 0.15, "analyst_upgrade"
+    if _is_downgrade(act):
+        return -0.15, "analyst_downgrade"
+    if "initiat" in act:
+        if any(x in rat for x in ("buy", "outperform", "overweight")):
+            return 0.10, "analyst_initiates_buy"
+        if any(x in rat for x in ("sell", "underperform", "underweight")):
+            return -0.10, "analyst_initiates_sell"
+        if any(x in rat for x in ("hold", "neutral", "equal-weight", "equal weight")):
+            return 0.03, "analyst_initiates_hold"
+        return 0.05, "analyst_initiates"
+    if "maintain" in act or "reiterat" in act:
+        if upside is not None:
+            if upside > 10:
+                return 0.08, "analyst_pt_raise"
+            if upside > 5:
+                return 0.05, "analyst_maintains_bullish"
+            if upside < -10:
+                return -0.08, "analyst_pt_cut"
+            if upside < -5:
+                return -0.05, "analyst_maintains_bearish"
+        if any(x in rat for x in ("buy", "outperform", "overweight")):
+            return 0.03, "analyst_reiterates"
+        if any(x in rat for x in ("sell", "underperform", "underweight")):
+            return -0.03, "analyst_reiterates_bearish"
+    return 0.0, None
 
 
 def action_recency_weight(age_days: float) -> float:
@@ -73,19 +138,78 @@ def action_recency_weight(age_days: float) -> float:
     return 1.0
 
 
-def day_action_recency_boost(age_days: float) -> float:
-    """Day desk: today/yesterday actions are direct gap catalysts."""
+def et_session_bucket(published_at: datetime) -> str:
+    et = published_at.astimezone(ET)
+    t = et.time()
+    if time(4, 0) <= t < time(9, 30):
+        return "pre_market"
+    if time(9, 30) <= t < time(16, 0):
+        return "rth"
+    if time(16, 0) <= t < time(20, 0):
+        return "after_hours"
+    return "overnight"
+
+
+def day_session_recency_scale(published_at: datetime, now: datetime) -> float:
+    """Session-aware day desk catalyst weight (pre-market > after-hours > RTH)."""
+    et_now = now.astimezone(ET)
+    et_pub = published_at.astimezone(ET)
+    age_days = max(0.0, (now - published_at).total_seconds() / 86400.0)
+    bucket = et_session_bucket(published_at)
+
+    if et_pub.date() == et_now.date():
+        if bucket == "pre_market":
+            return 1.30
+        if bucket == "after_hours":
+            return 1.15
+        if bucket == "rth":
+            return 0.85
+        return 0.75
+
     if age_days <= 1.5:
-        return 1.25
+        if bucket in ("pre_market", "after_hours", "overnight"):
+            return 1.20
+        return 0.90
+
     if age_days <= 5:
+        return 0.75
+    return 0.50
+
+
+def pt_conviction_multiplier(
+    current_price: float | None,
+    price_target: float | None,
+    *,
+    bearish: bool,
+) -> float:
+    """
+    Modulate action magnitude (0.85–1.15) without flipping direction.
+    PT confirms conviction; it does not add a second directional bump.
+    """
+    upside = _pt_upside_pct(current_price, price_target)
+    if upside is None:
         return 1.0
-    return 0.65
+    if bearish:
+        if upside < -10:
+            return 1.15
+        if upside < 0:
+            return 1.08
+        if upside > 10:
+            return 0.85
+        return 0.92
+    if upside > 20:
+        return 1.15
+    if upside >= 5:
+        return 1.08
+    if upside > 0:
+        return 1.03
+    if upside < -10:
+        return 0.85
+    return 0.88
 
 
 def price_target_adjustment(current_price: float | None, price_target: float | None) -> float:
-    """
-    Map PT distance to sentiment nudge (≈ +15 / +8 / +3 / −10 on 0–100 news score scale).
-    """
+    """Legacy additive PT bands — kept for tests; scoring uses pt_conviction_multiplier."""
     if current_price is None or current_price <= 0 or price_target is None or price_target <= 0:
         return 0.0
     upside_pct = ((price_target - current_price) / current_price) * 100.0
@@ -104,16 +228,23 @@ def consensus_counts(
     window_days: int = CONSENSUS_WINDOW_DAYS,
     now: datetime | None = None,
 ) -> tuple[int, int, int]:
+    """Count unique firms (not raw events) with upgrade/downgrade in the window."""
     ref = now or datetime.now(timezone.utc)
     cutoff = ref - timedelta(days=window_days)
-    upgrades = downgrades = 0
+    upgrade_firms: set[str] = set()
+    downgrade_firms: set[str] = set()
     for r in ratings:
         if r.published_at < cutoff:
             continue
+        firm = _normalize_firm(r.analyst_firm)
+        if not firm:
+            continue
         if _is_upgrade(r.action):
-            upgrades += 1
+            upgrade_firms.add(firm)
         elif _is_downgrade(r.action):
-            downgrades += 1
+            downgrade_firms.add(firm)
+    upgrades = len(upgrade_firms)
+    downgrades = len(downgrade_firms)
     return upgrades, downgrades, upgrades - downgrades
 
 
@@ -125,7 +256,7 @@ def consensus_label(momentum: int) -> str | None:
     return None
 
 
-def _single_rating_adjustment(
+def _single_rating_score(
     rating: BenzingaRating,
     *,
     mode: TradingMode,
@@ -137,71 +268,79 @@ def _single_rating_adjustment(
     if recency <= 0:
         return 0.0, None
 
-    firm_w = analyst_firm_weight(rating.analyst_firm)
-    mode_scale = day_action_recency_boost(age_days) if mode == "day" else 1.0
-
-    base = 0.0
-    catalyst: str | None = None
-    if _is_upgrade(rating.action):
-        base = 0.15
-        catalyst = "analyst_upgrade"
-    elif _is_downgrade(rating.action):
-        base = -0.15
-        catalyst = "analyst_downgrade"
-    elif _is_initiate_buy(rating.action, rating.rating):
-        base = 0.10
-        catalyst = "analyst_initiates_buy"
-
+    base, catalyst = _action_base_and_catalyst(rating, current_price=current_price)
     if base == 0.0:
         return 0.0, None
 
-    pt_adj = price_target_adjustment(current_price, rating.price_target)
-    combined = (base + pt_adj) * firm_w * recency * mode_scale
+    firm_w = analyst_firm_weight(rating.analyst_firm)
+    mode_scale = day_session_recency_scale(rating.published_at, now) if mode == "day" else 1.0
+    pt_mult = pt_conviction_multiplier(
+        current_price,
+        rating.price_target,
+        bearish=base < 0,
+    )
+    combined = base * pt_mult * firm_w * recency * mode_scale
+    combined = max(-MAX_RATING_COMPONENT, min(MAX_RATING_COMPONENT, combined))
     return combined, catalyst
 
 
-def compute_structured_analyst_adjustment(
+def _resolve_feed_state(bz: BenzingaMultiResult | None) -> AnalystFeedState:
+    if bz is None:
+        return "unconfigured"
+    if not bz.analyst_feed_configured:
+        return "unconfigured"
+    if not bz.ratings:
+        return "empty"
+    return "available"
+
+
+def compute_structured_analyst_score(
     bz: BenzingaMultiResult | None,
     *,
     mode: TradingMode,
     current_price: float | None = None,
     now: datetime | None = None,
 ) -> AnalystScoreBreakdown:
-    if bz is None or not bz.ratings:
-        return AnalystScoreBreakdown(0.0, None, None, ())
+    feed_state = _resolve_feed_state(bz)
+    if bz is None or not bz.analyst_feed_configured:
+        chips: tuple[str, ...] = ("Analyst feed unavailable",) if feed_state == "unconfigured" else ()
+        return AnalystScoreBreakdown(0.0, None, None, chips, feed_state)
+
+    if not bz.ratings:
+        return AnalystScoreBreakdown(0.0, None, None, (), feed_state)
 
     ref = now or datetime.now(timezone.utc)
     ratings = sorted(bz.ratings, key=lambda r: r.published_at, reverse=True)
 
-    rating_adjust = 0.0
+    rating_score = 0.0
     catalyst: str | None = None
     if mode == "day":
         for r in ratings:
-            adj, cat = _single_rating_adjustment(r, mode=mode, current_price=current_price, now=ref)
-            if adj != 0.0:
-                rating_adjust += adj
+            score, cat = _single_rating_score(r, mode=mode, current_price=current_price, now=ref)
+            if score != 0.0:
+                rating_score += score
                 if catalyst is None and cat:
                     catalyst = cat
                 break
     else:
-        adj, cat = _single_rating_adjustment(ratings[0], mode=mode, current_price=current_price, now=ref)
-        rating_adjust += adj
+        score, cat = _single_rating_score(ratings[0], mode=mode, current_price=current_price, now=ref)
+        rating_score += score
         catalyst = cat
 
     upgrades, downgrades, momentum = consensus_counts(ratings, now=ref)
-    consensus_adj = 0.0
+    consensus_score = 0.0
     label = consensus_label(momentum)
     if mode == "swing" and label:
-        consensus_adj = 0.12 if momentum >= CONSENSUS_STRONG_THRESHOLD else -0.12
+        consensus_score = MAX_CONSENSUS_COMPONENT if momentum >= CONSENSUS_STRONG_THRESHOLD else -MAX_CONSENSUS_COMPONENT
     elif mode == "day" and label:
-        consensus_adj = 0.05 if momentum >= CONSENSUS_STRONG_THRESHOLD else -0.05
+        consensus_score = 0.08 if momentum >= CONSENSUS_STRONG_THRESHOLD else -0.08
 
-    total = max(-0.35, min(0.35, rating_adjust + consensus_adj))
-    chips: list[str] = []
+    total = max(-MAX_ANALYST_SCORE, min(MAX_ANALYST_SCORE, rating_score + consensus_score))
+    chip_list: list[str] = []
     if upgrades or downgrades:
-        chips.append(f"Analyst 30d: {upgrades}↑ {downgrades}↓")
+        chip_list.append(f"Analyst 30d: {upgrades} firms↑ {downgrades}↓")
     if label:
-        chips.append(label)
+        chip_list.append(label)
 
     consensus_payload: dict[str, Any] | None = None
     if upgrades or downgrades:
@@ -210,11 +349,17 @@ def compute_structured_analyst_adjustment(
             "downgrades_30d": downgrades,
             "momentum": momentum,
             "label": label,
+            "unique_firms": True,
         }
 
     return AnalystScoreBreakdown(
-        adjust=total,
+        score=total,
         catalyst=catalyst,
         consensus=consensus_payload,
-        chips=tuple(chips),
+        chips=tuple(chip_list),
+        feed_state=feed_state,
     )
+
+
+# Backward-compatible alias used during migration.
+compute_structured_analyst_adjustment = compute_structured_analyst_score

@@ -67,6 +67,7 @@ export interface NewsLayerAnalystConsensus {
   downgrades_30d: number;
   momentum: number;
   label?: string | null;
+  unique_firms?: boolean;
 }
 
 export interface NewsLayerGuidance {
@@ -156,6 +157,9 @@ export interface EvidenceLayer {
   wim_summary?: string;
   articles_count?: number;
   news_data_state?: string;
+  analyst_feed_state?: "available" | "unconfigured" | "empty" | string;
+  headline_sentiment?: number | null;
+  analyst_sub_score?: number | null;
   latest_rating?: NewsLayerRating;
   latest_guidance?: NewsLayerGuidance;
   earnings_result?: NewsLayerEarningsResult;
@@ -775,6 +779,12 @@ function evidencePatchFromApiLayer(match: Record<string, unknown>, layerKey?: st
     if (wim) patch.wim_summary = wim;
     const ds = typeof match.data_state === "string" ? match.data_state.trim() : undefined;
     if (ds) patch.news_data_state = ds;
+    const afs = typeof match.analyst_feed_state === "string" ? match.analyst_feed_state.trim() : undefined;
+    if (afs) patch.analyst_feed_state = afs;
+    const hs = numOrNull(match.headline_sentiment);
+    if (hs != null) patch.headline_sentiment = hs;
+    const ass = numOrNull(match.analyst_sub_score);
+    if (ass != null) patch.analyst_sub_score = ass;
     const ac = numOrNull(match.article_count ?? match.articles_count);
     if (ac != null) patch.articles_count = ac;
 
@@ -799,7 +809,8 @@ function evidencePatchFromApiLayer(match: Record<string, unknown>, layerKey?: st
         upgrades_30d: Number(c.upgrades_30d ?? 0) || 0,
         downgrades_30d: Number(c.downgrades_30d ?? 0) || 0,
         momentum: Number(c.momentum ?? 0) || 0,
-        label: typeof c.label === "string" ? c.label : null
+        label: typeof c.label === "string" ? c.label : null,
+        unique_firms: c.unique_firms === true
       };
     }
     const lgRaw = match.latest_guidance;
