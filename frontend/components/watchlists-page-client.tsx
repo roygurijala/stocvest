@@ -27,7 +27,7 @@ import {
   refreshWatchlistSymbolMaturationDesk,
   type WatchlistMaturationDesk
 } from "@/lib/watchlist-maturation-prime";
-import { APP_TOP_BAR_LAYOUT_HEIGHT } from "@/components/top-bar";
+import { APP_TOP_BAR_LAYOUT_HEIGHT, measureAppTopBarLayoutHeightPx } from "@/components/top-bar";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, colorTokens, spacing, surfaceGlowClassName } from "@/lib/design-system";
 import { watchlistSignalsOpenAriaLabel, watchlistToSignalsHref } from "@/lib/nav/watchlist-signals-deeplink";
@@ -210,6 +210,19 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   useEffect(() => {
     setSortMode(readWatchlistSortMode());
     setTrackingCompact(readWatchlistTrackingCompact());
+  }, []);
+
+  /** Match `<main>` top padding to the live fixed top bar so the search block sits flush under it. */
+  useEffect(() => {
+    const main = document.querySelector<HTMLElement>('main[data-main-top-layout="watchlist-flush"]');
+    if (!main) return;
+    const apply = () => {
+      const px = measureAppTopBarLayoutHeightPx();
+      if (px > 0) main.style.paddingTop = `${px}px`;
+    };
+    apply();
+    window.addEventListener("resize", apply);
+    return () => window.removeEventListener("resize", apply);
   }, []);
 
   const handleSortModeChange = useCallback((mode: WatchlistSortMode) => {
@@ -1184,7 +1197,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
       {active ? (
         <>
           <header
-            className="app-sticky-page-header sticky z-40 w-full max-w-none self-start pb-2 pt-0"
+            className="watchlist-sticky-header app-sticky-page-header sticky z-40 w-full max-w-none self-start pb-2 pt-0"
             style={headerStickyStyle}
           >
             <section
