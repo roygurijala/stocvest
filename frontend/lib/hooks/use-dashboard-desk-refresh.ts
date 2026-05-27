@@ -24,13 +24,19 @@ import { deskTodayKey } from "@/lib/hooks/use-desk-today";
  * `router.refresh()` here; it re-streams the whole dashboard RSC tree and races
  * with the deferred scanner Suspense boundary (`Connection closed` crash).
  */
-export function useDashboardDeskRefresh(mode: DeskTodayMode) {
+type UseDashboardDeskRefreshOptions = {
+  /** Server-prefetched desk payload — Hot in market can render before scanner finishes. */
+  fallbackData?: DeskTodayResponse | null;
+};
+
+export function useDashboardDeskRefresh(mode: DeskTodayMode, options: UseDashboardDeskRefreshOptions = {}) {
   const refreshInterval = shouldPollDeskTier("movers") ? DESK_REFRESH_TIER_B_MS : 0;
+  const fallbackData = options.fallbackData ?? undefined;
 
   const { data, error, isLoading, isValidating, mutate } = useSWR(
     deskTodayKey(mode),
     async ([, m]: readonly [string, DeskTodayMode]) => fetchDeskToday(m),
-    { refreshInterval }
+    { refreshInterval, fallbackData }
   );
 
   const [manualBusy, setManualBusy] = useState(false);

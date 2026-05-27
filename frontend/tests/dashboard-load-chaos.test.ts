@@ -107,7 +107,12 @@ describe("fetchDashboardFirstSegment chaos", () => {
   });
 
   test("uses_legacy_parallel_slice_when_summary_returns_null", async () => {
-    apiFetch.mockResolvedValue(null);
+    apiFetch.mockImplementation((path: string) => {
+      if (String(path).includes("/v1/desk/today")) {
+        return Promise.resolve({ mode: "swing", source: "cache_miss", data: null });
+      }
+      return Promise.resolve(null);
+    });
     fetchMarketOverview.mockResolvedValue({
       snapshots: [{ symbol: "SPY", last_trade_price: 501 }],
       news: [],
@@ -140,11 +145,17 @@ describe("fetchDashboardFirstSegment chaos", () => {
     expect(fetchEarningsCalendar).toHaveBeenCalled();
     expect(segment.marketOverview.snapshots[0]?.symbol).toBe("SPY");
     expect(segment.earnings.upcoming[0]?.symbol).toBe("AAPL");
+    expect(segment.deskInitial.swing?.source).toBe("cache_miss");
   });
 
   test("falls_back_to_market_timeout_payload_when_summary_hangs", async () => {
     vi.useFakeTimers();
-    apiFetch.mockImplementation(() => new Promise(() => {}));
+    apiFetch.mockImplementation((path: string) => {
+      if (String(path).includes("/v1/desk/today")) {
+        return Promise.resolve({ mode: "swing", source: "cache_miss", data: null });
+      }
+      return new Promise(() => {});
+    });
     fetchMarketOverview.mockResolvedValue({
       snapshots: [],
       news: [],

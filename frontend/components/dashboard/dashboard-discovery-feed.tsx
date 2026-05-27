@@ -20,6 +20,8 @@ import {
   buildHotInMarketCardModel,
   HOT_IN_MARKET_DISCLAIMER,
   HOT_IN_MARKET_TITLE,
+  hotInMarketAwaitingMessage,
+  hotInMarketEmptyMessage,
   hotInMarketFeedSubtitle,
   hotInMarketSignalsHref
 } from "@/lib/dashboard/hot-in-market-card-present";
@@ -32,6 +34,7 @@ import { useTheme } from "@/lib/theme-provider";
 type Props = {
   mode: DashboardDeskMode;
   deskData: DeskTodayData | null | undefined;
+  deskSource?: string | null;
   alternateDeskData?: DeskTodayData | null | undefined;
   gapFallback: GapIntelligenceItem[];
   isLoading?: boolean;
@@ -47,6 +50,7 @@ type Props = {
 export function DashboardDiscoveryFeed({
   mode,
   deskData,
+  deskSource = null,
   alternateDeskData,
   gapFallback,
   isLoading = false,
@@ -103,14 +107,17 @@ export function DashboardDiscoveryFeed({
     ? `/dashboard/scanner?mode=${mode === "swing" ? "swing" : "day"}`
     : "/dashboard/scanner?mode=swing";
   const scannerHover = useHoverPrefetch(scannerHref);
+  const deskCacheMiss = deskSource === "cache_miss" || (deskData == null && deskSource !== "cache");
   const subtitle = hotInMarketFeedSubtitle({
     source,
     count: leaders.length,
     deskLoading: isLoading,
     scannerPending,
+    deskCacheMiss,
     mode
   });
-  const awaitingData = leaders.length === 0 && (isLoading || scannerPending);
+  const awaitingData =
+    leaders.length === 0 && (isLoading || (scannerPending && deskCacheMiss && gapFallback.length === 0));
 
   return (
     <section
@@ -211,9 +218,17 @@ export function DashboardDiscoveryFeed({
           data-testid="dashboard-hot-in-market-loading"
           style={{ fontSize: typography.scale.sm, color: colors.textMuted }}
         >
-          Hang tight — movers appear here once the desk cache and scanner finish loading.
+          {hotInMarketAwaitingMessage({ deskLoading: isLoading, scannerPending, deskCacheMiss })}
         </p>
-      ) : null}
+      ) : (
+        <p
+          className="m-0 mt-3"
+          data-testid="dashboard-hot-in-market-empty"
+          style={{ fontSize: typography.scale.sm, color: colors.textMuted }}
+        >
+          {hotInMarketEmptyMessage(deskCacheMiss)}
+        </p>
+      )}
 
       {recentlyHot.length > 0 ? (
         <div className="mt-3" data-testid="dashboard-recently-hot">

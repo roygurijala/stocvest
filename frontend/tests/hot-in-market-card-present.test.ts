@@ -2,6 +2,8 @@ import { describe, expect, test } from "vitest";
 import {
   buildHotInMarketCardModel,
   HOT_IN_MARKET_DISCLAIMER,
+  hotInMarketAwaitingMessage,
+  hotInMarketEmptyMessage,
   hotInMarketFeedSubtitle,
   hotInMarketSourceSubtitle
 } from "@/lib/dashboard/hot-in-market-card-present";
@@ -93,5 +95,34 @@ describe("hot-in-market-card-present", () => {
       mode: "day"
     });
     expect(line.toLowerCase()).toContain("scanner");
+  });
+
+  test("hotInMarketFeedSubtitle suggests refresh on cache miss", () => {
+    const line = hotInMarketFeedSubtitle({
+      source: "empty",
+      count: 0,
+      deskCacheMiss: true,
+      mode: "day"
+    });
+    expect(line.toLowerCase()).toContain("refresh desk");
+  });
+
+  test("hotInMarketFeedSubtitle notes scanner still enriching when desk has movers", () => {
+    const line = hotInMarketFeedSubtitle({
+      source: "desk_cache",
+      count: 3,
+      scannerPending: true,
+      mode: "day"
+    });
+    expect(line.toLowerCase()).toContain("scanner");
+  });
+
+  test("hotInMarketAwaitingMessage distinguishes cache miss", () => {
+    const line = hotInMarketAwaitingMessage({ scannerPending: true, deskCacheMiss: true });
+    expect(line.toLowerCase()).toContain("refresh desk");
+  });
+
+  test("hotInMarketEmptyMessage suggests refresh on cache miss", () => {
+    expect(hotInMarketEmptyMessage(true).toLowerCase()).toContain("refresh desk");
   });
 });

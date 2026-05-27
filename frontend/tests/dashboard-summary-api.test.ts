@@ -53,7 +53,7 @@ describe("dashboard summary API", () => {
   });
 
   test("fetchDashboardFirstSegment_uses_summary_when_present", async () => {
-    apiFetch.mockResolvedValue({
+    const summaryPayload = {
       status: { market: "open", exchanges: {}, currencies: {} },
       snapshots: [
         { symbol: "SPY", last_trade_price: 500 },
@@ -79,6 +79,13 @@ describe("dashboard summary API", () => {
         ],
         recent: []
       }
+    };
+    apiFetch.mockImplementation((path: string) => {
+      if (String(path).includes("/v1/desk/today")) {
+        const mode = String(path).includes("mode=day") ? "day" : "swing";
+        return Promise.resolve({ mode, source: "cache_miss", data: null });
+      }
+      return Promise.resolve(summaryPayload);
     });
 
     const { fetchDashboardFirstSegment } = await import("@/lib/dashboard/dashboard-page-data");
