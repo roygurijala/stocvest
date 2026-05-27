@@ -20,9 +20,19 @@ interface AppShellProps {
   isAdmin?: boolean;
   /** Space between the fixed top bar and page content. Defaults to `spacing[6]`. */
   mainTopExtra?: string;
+  /**
+   * Watchlists: top-bar clearance only (no extra `spacing[6]` gap below the chrome).
+   */
+  mainTopLayout?: "default" | "watchlist-flush";
 }
 
-export function AppShell({ session, children, isAdmin = false, mainTopExtra = spacing[6] }: AppShellProps) {
+export function AppShell({
+  session,
+  children,
+  isAdmin = false,
+  mainTopExtra = spacing[6],
+  mainTopLayout = "default"
+}: AppShellProps) {
   const { colors } = useTheme();
   const pathname = usePathname();
   const [loading, setLoading] = useState(false);
@@ -54,8 +64,12 @@ export function AppShell({ session, children, isAdmin = false, mainTopExtra = sp
           <TopBar onMenuClick={() => setDrawerOpen(true)} />
           <main
             className="min-w-0 px-4 pb-6 lg:px-6"
+            data-main-top-layout={mainTopLayout}
             style={{
-              paddingTop: `calc(${APP_TOP_BAR_LAYOUT_HEIGHT} + ${mainTopExtra})`
+              paddingTop:
+                mainTopLayout === "watchlist-flush"
+                  ? APP_TOP_BAR_LAYOUT_HEIGHT
+                  : `calc(${APP_TOP_BAR_LAYOUT_HEIGHT} + ${mainTopExtra})`
             }}
           >
             {children}
