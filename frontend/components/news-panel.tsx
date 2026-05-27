@@ -463,7 +463,7 @@ export function NewsPanel({
           </section>
         ) : null}
 
-        {data?.analyst?.feed_state === "empty" && data.analyst.feed_state !== "unconfigured" ? (
+        {data?.analyst?.feed_state === "empty" ? (
           <p className="mb-3 text-xs" style={{ color: colors.textMuted }} data-testid="analyst-empty-copy">
             No analyst upgrades or downgrades in the last {data.analyst.window_days} days.
           </p>
