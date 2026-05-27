@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { Layers } from "lucide-react";
 import { DeskModeTabNav } from "@/components/desk-mode-tab-nav";
 import type { ReactNode } from "react";
 import { InfoTip } from "@/components/info-tip";
 import { setupEvolutionHubHref } from "@/lib/nav/setup-analytics-deeplink";
 import { TAB_LABEL_DAY, TAB_LABEL_SWING } from "@/lib/mode-terminology";
-import { borderRadius, surfaceGlowClassName } from "@/lib/design-system";
+import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import type { WatchlistMaturationLine } from "@/lib/hooks/use-watchlist-maturation-line";
 import {
@@ -46,8 +47,27 @@ type Props = {
   onDeskKpiTarget?: (target: SignalsKpiTarget) => void;
 };
 
-const evidenceButtonClass =
-  "inline-flex min-h-11 w-full items-center justify-center rounded-lg border px-4 text-sm font-semibold sm:min-h-9 sm:w-auto sm:px-3 sm:text-sm";
+function signalsDeskActionButtonStyle(colors: {
+  text: string;
+  surfaceMuted: string;
+  accent: string;
+}) {
+  return {
+    display: "inline-flex" as const,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    gap: spacing[2],
+    padding: `${spacing[2]} ${spacing[3]}`,
+    fontSize: typography.scale.xs,
+    fontWeight: 700,
+    color: colors.text,
+    background: colors.surfaceMuted,
+    border: `1px solid ${colors.accent}`,
+    borderRadius: borderRadius.md,
+    cursor: "pointer" as const,
+    whiteSpace: "nowrap" as const
+  };
+}
 
 export function SignalsCommandBar({
   symbol,
@@ -76,12 +96,7 @@ export function SignalsCommandBar({
   const freshnessAccent =
     evaluationFreshness?.phase === "refreshing" || evaluationFreshness?.phase === "loading";
 
-  const evidenceButtonStyle = {
-    borderColor: colors.accent,
-    background: `color-mix(in srgb, ${colors.accent} 16%, ${colors.surfaceMuted})`,
-    color: colors.text,
-    cursor: "pointer" as const
-  };
+  const deskActionButtonStyle = signalsDeskActionButtonStyle(colors);
 
   return (
     <article
@@ -138,9 +153,24 @@ export function SignalsCommandBar({
               Viewing {symU} (previous selection)
             </p>
           ) : null}
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+          <div
+            className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2"
+            data-testid="signals-desk-actions"
+          >
             {watchlistControl}
             {scenarioControl}
+            {onOpenEvidence ? (
+              <button
+                type="button"
+                data-testid="signals-open-evidence-button"
+                title="Inspect the full layer stack and trade rationale for this symbol."
+                style={deskActionButtonStyle}
+                onClick={onOpenEvidence}
+              >
+                <Layers size={13} aria-hidden="true" />
+                <span>Open full evidence</span>
+              </button>
+            ) : null}
             {maturationLine ? (
               <span
                 className="max-w-full text-xs leading-snug"
@@ -160,18 +190,10 @@ export function SignalsCommandBar({
             ) : null}
           </div>
         </div>
-        <div className="flex w-full min-w-0 flex-col gap-2 lg:w-auto lg:shrink-0 lg:flex-row lg:items-center lg:justify-end">
-          {onOpenEvidence ? (
-            <button
-              type="button"
-              data-testid="signals-open-evidence-button"
-              className={evidenceButtonClass}
-              style={evidenceButtonStyle}
-              onClick={onOpenEvidence}
-            >
-              Open full evidence
-            </button>
-          ) : null}
+        <div
+          className="flex w-full min-w-0 flex-col gap-2 lg:w-auto lg:shrink-0 lg:flex-row lg:items-center lg:justify-end"
+          data-testid="signals-desk-mode-controls"
+        >
           {dayTradingSurfaces ? (
             <DeskModeTabNav
               value={tradingMode}

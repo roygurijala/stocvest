@@ -1824,7 +1824,6 @@ export function SignalsPageClient({
                 readiness={scenarioReadiness}
                 drillDown={scenarioDrillDown}
                 previewPanels={scenarioPreviewPanels}
-                prominent
                 testId="signals-scenario-inline"
               />
             ) : null
