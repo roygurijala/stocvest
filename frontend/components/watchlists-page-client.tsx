@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Columns2, TrendingUp, Zap } from "lucide-react";
+import { TrendingUp, Zap } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { CuteLoader } from "@/components/cute-loader";
 import { WatchlistAlignmentSheet } from "@/components/watchlists/watchlist-alignment-sheet";
+import { WatchlistDeskCompareSheet } from "@/components/watchlists/watchlist-desk-compare-sheet";
 import { WatchlistActivityCollapsible } from "@/components/watchlists/WatchlistActivityCollapsible";
 import { WatchlistDecisionQueue } from "@/components/watchlists/watchlist-decision-queue";
 import { WatchlistOrderExplainer } from "@/components/watchlists/watchlist-order-explainer";
@@ -43,7 +44,7 @@ import {
   dedupeWatchlistSymbolsUpper as dedupeSymbolsUpper,
   formatWatchlistMaturationLabel as formatStateLabel,
   normalizeWatchlistMaturationBySymbol as normalizeMaturationBySymbol,
-  pickWatchlistMaturationForPlan,
+  watchlistMaturationRowForDesk,
   parseCompanyNameFromTickerCandidateLabel,
   watchlistQuoteFromSnapshot,
   watchlistSymbolMatchesSearch,
@@ -136,10 +137,9 @@ function displayStateForSymbol(
   return presentationMaturationState(sym, trackingMap, swing[sym], day[sym], dualDesk);
 }
 
-function tradingModeForSignalsNav(viewMode: WatchlistViewMode, dualDesk: boolean): "day" | "swing" | undefined {
-  if (!dualDesk) return "swing";
-  if (viewMode === "day") return "day";
-  return "swing";
+function tradingModeForSignalsNav(viewMode: WatchlistViewMode, dualDesk: boolean): "day" | "swing" {
+  if (!dualDesk || viewMode === "swing") return "swing";
+  return "day";
 }
 
 type WatchlistsPageClientProps = {
@@ -193,6 +193,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     symbol: string;
     deskMode: "swing" | "day";
   } | null>(null);
+  const [compareSheetSymbol, setCompareSheetSymbol] = useState<string | null>(null);
   const [forceOpenTiers, setForceOpenTiers] = useState<WatchlistAttentionTier[]>([]);
   const [maturationRailFilter, setMaturationRailFilter] = useState<WatchlistMaturationRailKey | null>(null);
   const [justAddedSymbol, setJustAddedSymbol] = useState<string | null>(null);
@@ -227,7 +228,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     if (!focus) return;
     const ms = maturationSwing[focus];
     const md = maturationDay[focus];
-    const row = pickWatchlistMaturationForPlan(viewMode, ms, md);
+    const row = watchlistMaturationRowForDesk(viewMode, ms, md);
     setForceOpenTiers([resolveWatchlistAttentionTier(row)]);
     window.requestAnimationFrame(() => {
       focusWatchlistRow(focus, colors.accent);
@@ -257,7 +258,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   useEffect(() => {
     const desk = (searchParams.get("desk") ?? "").trim().toLowerCase();
     if (desk === "day" && dualDeskMaturation) setViewMode("day");
-    else if (desk === "swing") setViewMode("swing");
+    else if (desk === "swing" || desk === "both") setViewMode("swing");
   }, [searchParams, dualDeskMaturation]);
 
   const load = useCallback(async () => {
@@ -699,19 +700,15 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
       const ms = maturationSwing[sym];
       const md = maturationDay[sym];
       let matSnippet = "";
-      if (!(viewMode === "both" && dualDeskMaturation)) {
-        if (viewMode === "swing" || !dualDeskMaturation) {
-          matSnippet = [formatWatchlistMaturationDisplayLine(ms) ?? formatStateLabel(ms), ms?.readiness_label]
-            .filter(Boolean)
-            .join(" ")
-            .trim();
-        } else if (viewMode === "day") {
-          matSnippet = [formatWatchlistMaturationDisplayLine(md) ?? formatStateLabel(md), md?.readiness_label]
-            .filter(Boolean)
-            .join(" ")
-            .trim();
-        }
-      }
+      const activeRow = watchlistMaturationRowForDesk(
+        viewMode,
+        ms,
+        dualDeskMaturation ? md : undefined
+      );
+      matSnippet = [formatWatchlistMaturationDisplayLine(activeRow) ?? formatStateLabel(activeRow), activeRow?.readiness_label]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
       const base = name ? `${sym} — ${name}` : sym;
       const label = matSnippet && matSnippet !== "—" ? `${base} ${matSnippet}` : base;
       return { symbol: sym, label };
@@ -988,7 +985,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
         const symU = sym.trim().toUpperCase();
         const ms = maturationSwing[symU];
         const md = maturationDay[symU];
-        const row = pickWatchlistMaturationForPlan(viewMode, ms, md);
+        const row = watchlistMaturationRowForDesk(viewMode, ms, md);
         if (row?.progress_band === "near_ready") return true;
         const aligned = typeof row?.layers_aligned === "number" ? row.layers_aligned : 0;
         return (
@@ -1057,7 +1054,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     (symU: string) => {
       const ms = maturationEligible ? maturationSwing[symU] : undefined;
       const md = maturationEligible && dualDeskMaturation ? maturationDay[symU] : undefined;
-      return pickWatchlistMaturationForPlan(viewMode, ms, md);
+      return watchlistMaturationRowForDesk(viewMode, ms, md);
     },
     [maturationEligible, maturationSwing, maturationDay, dualDeskMaturation, viewMode]
   );
@@ -1429,12 +1426,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex min-w-0 flex-1 flex-wrap gap-1.5 sm:gap-2">
                 {tabBtn("swing", "Swing", <TrendingUp className="h-3.5 w-3.5 shrink-0" aria-hidden />)}
-                {dualDeskMaturation ? (
-                  <>
-                    {tabBtn("day", "Day", <Zap className="h-3.5 w-3.5 shrink-0" aria-hidden />)}
-                    {tabBtn("both", "Both", <Columns2 className="h-3.5 w-3.5 shrink-0" aria-hidden />)}
-                  </>
-                ) : null}
+                {dualDeskMaturation ? tabBtn("day", "Day", <Zap className="h-3.5 w-3.5 shrink-0" aria-hidden />) : null}
               </div>
               {maturationDeskSummary || maturationSummaryFetchedAt ? (
                 <span
@@ -1601,13 +1593,13 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                     ) : null}
                     {activeSymbolsDeduped.length > 0 && addDraft.trim() && filteredSymbolsForList.length === 0 ? (
                       <p className="m-0 mb-3 text-sm" style={{ color: colors.textMuted }}>
-                        No symbols match &quot;{addDraft.trim()}&quot; in this {viewMode} view (symbol and company name
-                        {viewMode === "both" && dualDeskMaturation ? "" : "; maturation text for this desk only"}). Clear
+                        No symbols match &quot;{addDraft.trim()}&quot; on the {viewMode} desk (symbol, company, and
+                        maturation text). Clear
                         the bar to see all rows, or pick &quot;Add&quot; below to add a new ticker.
                       </p>
                     ) : null}
                     {(() => {
-                      const planMode = tradingModeForSignalsNav(viewMode, dualDeskMaturation) ?? "swing";
+                      const planMode = tradingModeForSignalsNav(viewMode, dualDeskMaturation);
                       const symbols = filteredSymbolsForList.map((s) => s.trim().toUpperCase());
                       return (
                         <WatchlistDecisionQueue
@@ -1617,10 +1609,14 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                             const ms = maturationEligible ? maturationSwing[symU] : undefined;
                             const md =
                               maturationEligible && dualDeskMaturation ? maturationDay[symU] : undefined;
-                            return pickWatchlistMaturationForPlan(viewMode, ms, md);
+                            return watchlistMaturationRowForDesk(viewMode, ms, md);
                           }}
                           snapshotForSymbol={(symU) => snapshotsBySymbol[symU]}
                           deskEvaluatingForSymbol={(symU) => evaluatingSymbols[symU]?.[planMode]}
+                          showDeskCompare={dualDeskMaturation}
+                          onCompareDesks={
+                            dualDeskMaturation ? (symU) => setCompareSheetSymbol(symU) : undefined
+                          }
                           onRemove={(symU) => void removeSymbol(symU)}
                           onRefresh={
                             maturationEligible
@@ -1640,8 +1636,8 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
             </article>
 
             <p className="m-0 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
-              Your watchlist is a prioritized queue — click a card for Signals. Use Refresh on a card to re-run composite
-              for that desk.
+              Your watchlist is a prioritized queue — click a card for Signals. Use Refresh for the active desk
+              {dualDeskMaturation ? "; Compare desks opens swing vs day for that symbol" : ""}.
               <Link href="/dashboard/signals" prefetch={false} className="ml-1 font-semibold" style={{ color: colors.accent }}>
                 Open Signals
               </Link>
@@ -1658,6 +1654,37 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
         row={alignmentSheetRow}
         onClose={() => setAlignmentSheet(null)}
       />
+      {dualDeskMaturation ? (
+        <WatchlistDeskCompareSheet
+          open={compareSheetSymbol != null}
+          symbol={compareSheetSymbol ?? ""}
+          swingRow={
+            compareSheetSymbol ? maturationSwing[compareSheetSymbol.trim().toUpperCase()] : undefined
+          }
+          dayRow={compareSheetSymbol ? maturationDay[compareSheetSymbol.trim().toUpperCase()] : undefined}
+          swingEvaluating={
+            compareSheetSymbol
+              ? evaluatingSymbols[compareSheetSymbol.trim().toUpperCase()]?.swing
+              : undefined
+          }
+          dayEvaluating={
+            compareSheetSymbol
+              ? evaluatingSymbols[compareSheetSymbol.trim().toUpperCase()]?.day
+              : undefined
+          }
+          onClose={() => setCompareSheetSymbol(null)}
+          onRefreshDesk={(desk) => {
+            if (!compareSheetSymbol) return;
+            void refreshSymbolMaturationDesk(compareSheetSymbol, desk);
+          }}
+          onOpenAlignment={(desk) => {
+            if (!compareSheetSymbol) return;
+            const symU = compareSheetSymbol.trim().toUpperCase();
+            setCompareSheetSymbol(null);
+            setAlignmentSheet({ symbol: symU, deskMode: desk });
+          }}
+        />
+      ) : null}
       {watchlistToast && typeof document !== "undefined"
         ? createPortal(
             <div

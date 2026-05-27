@@ -19,8 +19,10 @@ type Props = {
   deskEvaluating?: boolean;
   justAdded?: boolean;
   compact?: boolean;
+  showDeskCompare?: boolean;
   onRemove: () => void;
   onRefresh?: () => void;
+  onCompareDesks?: () => void;
 };
 
 function LayerDots({ filled, total, accent }: { filled: boolean[]; total: number; accent: string }) {
@@ -48,8 +50,10 @@ export function WatchlistDecisionCard({
   deskEvaluating,
   justAdded,
   compact = false,
+  showDeskCompare = false,
   onRemove,
-  onRefresh
+  onRefresh,
+  onCompareDesks
 }: Props) {
   const { colors } = useTheme();
   const peek =
@@ -196,7 +200,7 @@ export function WatchlistDecisionCard({
         )}
 
         <footer
-          className={`flex items-center justify-between gap-2 border-t ${compact ? "mt-2 pt-1.5" : "mt-3 pt-2"}`}
+          className={`flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-t ${compact ? "mt-2 pt-1.5" : "mt-3 pt-2"}`}
           style={{ borderColor: colors.border }}
         >
           <span
@@ -207,23 +211,41 @@ export function WatchlistDecisionCard({
             Updated: {model.evaluatedAgo}
             {model.evaluatedStale ? " · stale" : ""}
           </span>
-          {onRefresh ? (
-            <button
-              type="button"
-              className={`${WATCHLIST_EVALUATE_LINK_CLASS} shrink-0`}
-              data-testid={`watchlist-refresh-${model.symbol}-${planMode}`}
-              aria-label={`Refresh ${planMode} evaluation for ${model.symbol}`}
-              title="Re-run composite and update maturation"
-              disabled={deskEvaluating}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onRefresh();
-              }}
-            >
-              {deskEvaluating ? "Refreshing…" : "Refresh"}
-            </button>
-          ) : null}
+          <span className="ml-auto flex shrink-0 items-center gap-2">
+            {showDeskCompare && onCompareDesks ? (
+              <button
+                type="button"
+                className={`${WATCHLIST_EVALUATE_LINK_CLASS} text-xs`}
+                data-testid={`watchlist-compare-desks-${model.symbol}`}
+                aria-label={`Compare swing and day desks for ${model.symbol}`}
+                title="Swing vs day maturation for this symbol"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onCompareDesks();
+                }}
+              >
+                Compare desks
+              </button>
+            ) : null}
+            {onRefresh ? (
+              <button
+                type="button"
+                className={`${WATCHLIST_EVALUATE_LINK_CLASS} shrink-0 text-xs`}
+                data-testid={`watchlist-refresh-${model.symbol}-${planMode}`}
+                aria-label={`Refresh ${planMode} evaluation for ${model.symbol}`}
+                title="Re-run composite and update maturation"
+                disabled={deskEvaluating}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onRefresh();
+                }}
+              >
+                {deskEvaluating ? "Refreshing…" : "Refresh"}
+              </button>
+            ) : null}
+          </span>
         </footer>
       </article>
     </SignalsDeeplinkLink>
@@ -238,8 +260,10 @@ export function WatchlistDecisionCardFromRow({
   deskEvaluating,
   justAdded,
   compact,
+  showDeskCompare,
   onRemove,
-  onRefresh
+  onRefresh,
+  onCompareDesks
 }: {
   symbol: string;
   row: WatchlistMaturationRow | undefined;
@@ -248,8 +272,10 @@ export function WatchlistDecisionCardFromRow({
   deskEvaluating?: boolean;
   justAdded?: boolean;
   compact?: boolean;
+  showDeskCompare?: boolean;
   onRemove: () => void;
   onRefresh?: () => void;
+  onCompareDesks?: () => void;
 }) {
   const { colors } = useTheme();
   const model = buildWatchlistCardModel(
@@ -272,8 +298,10 @@ export function WatchlistDecisionCardFromRow({
       deskEvaluating={deskEvaluating}
       justAdded={justAdded}
       compact={compact}
+      showDeskCompare={showDeskCompare}
       onRemove={onRemove}
       onRefresh={onRefresh}
+      onCompareDesks={onCompareDesks}
     />
   );
 }

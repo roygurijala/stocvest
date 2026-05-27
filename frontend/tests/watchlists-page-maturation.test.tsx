@@ -392,6 +392,103 @@ describe("WatchlistsPageClient maturation", () => {
     expect(symLink.getAttribute("href")).toContain("trading_mode=swing");
   });
 
+  it("shows Swing and Day tabs with Compare desks link when dualDeskMaturation", async () => {
+    global.fetch = vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/alerts/history")) {
+        return emptyAlertsHistory();
+      }
+      if (url.includes("/maturation-summary")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            by_symbol: {
+              AAPL: {
+                state: "developing",
+                label: "Developing",
+                layers_aligned: 3,
+                layers_total: 6,
+                last_evaluated_at: "2026-05-26T14:00:00+00:00"
+              }
+            }
+          })
+        });
+      }
+      if (url.includes("/api/stocvest/watchlists") && !url.includes("/watchlists/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            watchlists: [
+              {
+                watchlist_id: "wl-default",
+                name: "Main",
+                symbols: ["AAPL"],
+                is_default: true
+              }
+            ]
+          })
+        });
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    }) as unknown as typeof fetch;
+
+    wrap(<WatchlistsPageClient dualDeskMaturation={true} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Swing" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Day" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Both" })).not.toBeInTheDocument();
+      expect(screen.getByTestId("watchlist-compare-desks-AAPL")).toBeInTheDocument();
+    });
+  });
+
+  it("does not show Day tab or Compare desks when dualDeskMaturation is false", async () => {
+    global.fetch = vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/alerts/history")) {
+        return emptyAlertsHistory();
+      }
+      if (url.includes("/maturation-summary")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            by_symbol: {
+              AAPL: { state: "developing", label: "Developing", layers_aligned: 3, layers_total: 6 }
+            }
+          })
+        });
+      }
+      if (url.includes("/api/stocvest/watchlists") && !url.includes("/watchlists/")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            watchlists: [
+              {
+                watchlist_id: "wl-default",
+                name: "Main",
+                symbols: ["AAPL"],
+                is_default: true
+              }
+            ]
+          })
+        });
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    }) as unknown as typeof fetch;
+
+    wrap(<WatchlistsPageClient dualDeskMaturation={false} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Swing" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Day" })).not.toBeInTheDocument();
+      expect(screen.queryByTestId("watchlist-compare-desks-AAPL")).not.toBeInTheDocument();
+    });
+    const urls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.map((c) =>
+      typeof c[0] === "string" ? c[0] : String(c[0])
+    );
+    expect(urls.some((u) => u.includes("maturation-summary") && u.includes("mode=day"))).toBe(false);
+  });
+
   it("filters cards when a maturation status rail is clicked", async () => {
     global.fetch = vi.fn((input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input.toString();

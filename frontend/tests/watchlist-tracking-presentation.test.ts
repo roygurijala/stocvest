@@ -47,7 +47,8 @@ describe("watchlist-tracking-presentation", () => {
 
   it("hides desk rows when tracking off", () => {
     const t = { swing: true, day: false };
-    expect(shouldShowDeskRow(t, "day", "both", true)).toBe(false);
+    expect(shouldShowDeskRow(t, "day", "swing", true)).toBe(false);
+    expect(shouldShowDeskRow(t, "day", "day", true)).toBe(false);
     expect(tracksDesk(t, "day")).toBe(false);
   });
 });
