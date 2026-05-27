@@ -1184,7 +1184,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
       {active ? (
         <>
           <header
-            className="app-sticky-page-header sticky z-40 w-full max-w-none self-start -mx-4 px-4 pb-3 pt-2 lg:-mx-6 lg:px-6"
+            className="app-sticky-page-header sticky z-40 w-full max-w-none self-start pb-3 pt-2"
             style={headerStickyStyle}
           >
             <div className="flex flex-wrap items-start justify-between gap-2 pb-2">
