@@ -435,9 +435,9 @@ describe("WatchlistsPageClient maturation", () => {
     wrap(<WatchlistsPageClient dualDeskMaturation={true} />);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Swing" })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Day" })).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Both" })).not.toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: "Swing" })).toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: "Day" })).toBeInTheDocument();
+      expect(screen.queryByRole("tab", { name: "Both" })).not.toBeInTheDocument();
       expect(screen.getByTestId("watchlist-compare-desks-AAPL")).toBeInTheDocument();
     });
   });
@@ -479,8 +479,8 @@ describe("WatchlistsPageClient maturation", () => {
     wrap(<WatchlistsPageClient dualDeskMaturation={false} />);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Swing" })).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Day" })).not.toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: "Swing" })).toBeInTheDocument();
+      expect(screen.queryByRole("tab", { name: "Day" })).not.toBeInTheDocument();
       expect(screen.queryByTestId("watchlist-compare-desks-AAPL")).not.toBeInTheDocument();
     });
     const urls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.map((c) =>

@@ -65,6 +65,7 @@ import {
 } from "@/lib/scanner-empty-state";
 import type { ScenarioInput } from "@/lib/scenario/types";
 import { overviewRegimeToVolatilityRegime } from "@/lib/scenario/scenario-input-present";
+import { DeskModeTabNav } from "@/components/desk-mode-tab-nav";
 import { roleAccents } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -1334,84 +1335,15 @@ export function ScannerPageClient({
       )}
 
       {dayTradingSurfaces ? (
-      <div
-        role="tablist"
-        aria-label="Scanner setup source"
-        className="flex flex-wrap gap-2"
-        style={{ marginTop: 0 }}
-        data-testid="scanner-mode-tablist"
-      >
-        {(["swing", "day", "both"] as const).map((m) => {
-          const active = scannerSetupMode === m;
-          // Tab labels and role accents live in `lib/mode-terminology` +
-          // `lib/design-system.roleAccents`. The role accent is the SAME
-          // hue family used on the dashboard's Swing Desk / Day Desk /
-          // Shared Context master cards — so the user reading a Swing
-          // pill anywhere in the app gets the same indigo-violet at a
-          // glance. Active-state tab gets the role's `borderAccent` (the
-          // "rail line" hue) and a tinted background mixed from that
-          // same accent, so peripheral vision can resolve mode without
-          // reading copy.
-          const role = m === "swing" ? "swing" : m === "day" ? "day" : "shared";
-          const accent = roleAccents[theme][role];
-          const railHue = accent.borderAccent;
-          const label = m === "swing" ? TAB_LABEL_SWING : m === "day" ? TAB_LABEL_DAY : TAB_LABEL_BOTH;
-          const cadence = m === "swing" ? "Multi-day" : m === "day" ? "Intraday" : "Swing + Day";
-          return (
-            <button
-              key={m}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              // Pin the accessible name to the short tab label so
-              // screen-readers and `getByRole("tab", { name: "Swing" })`
-              // assertions don't catch the secondary cadence sub-line
-              // ("Multi-day" / "Intraday" / "Two desks"). The cadence
-              // word is decorative — it reinforces what the tab means
-              // for sighted users but should not bloat the accessible
-              // name.
-              aria-label={label}
-              data-testid={`scanner-mode-tab-${m}`}
-              data-active={active ? "true" : "false"}
-              data-role={role}
-              onClick={() => persistScannerMode(m)}
-              style={{
-                position: "relative",
-                display: "inline-flex",
-                flexDirection: "column",
-                alignItems: "flex-start",
-                gap: 2,
-                borderRadius: borderRadius.md,
-                border: `${active ? 2 : 1}px solid ${active ? railHue : colors.border}`,
-                padding: `${spacing[2]} ${spacing[4]}`,
-                fontSize: typography.scale.sm,
-                fontWeight: active ? 700 : 500,
-                background: active
-                  ? `color-mix(in srgb, ${railHue} 14%, ${colors.surface})`
-                  : colors.surface,
-                color: active ? accent.accentStrong : colors.text,
-                cursor: "pointer",
-                minWidth: 84,
-                transition: "background 120ms ease, border-color 120ms ease"
-              }}
-            >
-              <span style={{ fontSize: typography.scale.sm, lineHeight: 1.1 }}>{label}</span>
-              <span
-                style={{
-                  fontSize: 10,
-                  fontWeight: 600,
-                  letterSpacing: "0.05em",
-                  textTransform: "uppercase",
-                  color: active ? railHue : colors.textMuted,
-                  lineHeight: 1.1
-                }}
-              >
-                {cadence}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+        <DeskModeTabNav
+          value={scannerSetupMode}
+          onChange={persistScannerMode}
+          modes={["swing", "day", "both"] as const}
+          ariaLabel="Scanner setup source"
+          testIdPrefix="scanner-mode-tab"
+          showCadence
+          className="mt-0"
+        />
       ) : (
         <div
           data-testid="scanner-swing-pro-plan-banner"

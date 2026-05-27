@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Zap } from "lucide-react";
+import { DeskModeTabNav } from "@/components/desk-mode-tab-nav";
 import type { ReactNode } from "react";
 import { InfoTip } from "@/components/info-tip";
 import { setupEvolutionHubHref } from "@/lib/nav/setup-analytics-deeplink";
@@ -173,44 +173,14 @@ export function SignalsCommandBar({
             </button>
           ) : null}
           {dayTradingSurfaces ? (
-            <div
-              className="grid w-full min-w-0 grid-cols-2 gap-1 rounded-lg p-1 sm:w-auto sm:min-w-[200px]"
-              style={{ border: `1px solid ${colors.border}`, background: colors.background }}
-              role="tablist"
-              aria-label="Trading mode"
-            >
-              <button
-                type="button"
-                role="tab"
-                aria-selected={tradingMode === "day"}
-                className="min-h-9 rounded-md px-2.5 text-xs font-semibold transition-colors"
-                onClick={() => onTradingModeChange("day")}
-                style={{
-                  background: tradingMode === "day" ? "rgba(0,200,220,0.25)" : "transparent",
-                  color: tradingMode === "day" ? "#00C8DC" : colors.textMuted,
-                  border: tradingMode === "day" ? "1px solid rgba(0,200,220,0.45)" : "1px solid transparent"
-                }}
-              >
-                <span className="inline-flex items-center justify-center gap-1">
-                  <Zap size={14} aria-hidden />
-                  {TAB_LABEL_DAY}
-                </span>
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={tradingMode === "swing"}
-                className="min-h-9 rounded-md px-2.5 text-xs font-semibold transition-colors"
-                onClick={() => onTradingModeChange("swing")}
-                style={{
-                  background: tradingMode === "swing" ? "rgba(168,85,247,0.22)" : "transparent",
-                  color: tradingMode === "swing" ? "#A855F7" : colors.textMuted,
-                  border: tradingMode === "swing" ? "1px solid rgba(168,85,247,0.45)" : "1px solid transparent"
-                }}
-              >
-                {TAB_LABEL_SWING}
-              </button>
-            </div>
+            <DeskModeTabNav
+              value={tradingMode}
+              onChange={onTradingModeChange}
+              modes={["day", "swing"] as const}
+              ariaLabel="Trading mode"
+              testIdPrefix="signals-trading-mode"
+              className="w-full min-w-0 sm:w-auto sm:min-w-[220px]"
+            />
           ) : (
             <span
               className="inline-flex min-h-9 w-full items-center justify-center rounded-lg px-3 text-xs font-semibold sm:w-auto"
