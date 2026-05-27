@@ -40,7 +40,7 @@ from stocvest.api.services.symbol_news_fetch import (
 )
 from stocvest.config.parameter_store import ParameterStore
 from stocvest.config.signal_parameters import SignalParameters
-from stocvest.data.benzinga_client import BenzingaClient, BenzingaMultiResult
+from stocvest.data.benzinga_client import BenzingaClient, BenzingaMultiResult, benzinga_multi_shell, ensure_analyst_feed
 from stocvest.data.models import Bar, SignalRecord, Snapshot, Timeframe
 from stocvest.data.polygon_client import PolygonClient, PolygonError
 from stocvest.data.symbol_normalize import to_polygon_symbol
@@ -302,7 +302,8 @@ async def run_real_composite_engine_phase(
         bars: list[Bar] = _safe_result(bars_r, [])
         daily_bars: list[Bar] = _safe_result(daily_r, [])
         sym_snap: Snapshot | None = _safe_result(sym_r, None)
-        bz_data: BenzingaMultiResult = _safe_result(bz_r, BenzingaMultiResult())
+        bz_data: BenzingaMultiResult = _safe_result(bz_r, benzinga_multi_shell())
+        bz_data = await ensure_analyst_feed(benzinga, sym, bz_data)
         news_raw: list[dict[str, Any]] = _safe_result(news_raw_r, [])
         news_rows = [
             enrich_article_ticker_metadata(a, sym) for a in news_raw if isinstance(a, dict)

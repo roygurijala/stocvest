@@ -167,7 +167,7 @@ def publish_signals_live_hint(state_version: str) -> None:
 def evidence_cache_key(symbol: str, mode: str) -> str:
     sym = str(symbol or "").strip().upper()
     m = "day" if str(mode or "").strip().lower() in ("day", "intraday", "real") else "swing"
-    return f"stocvest:evidence:{sym}:{m}:v2"
+    return f"stocvest:evidence:{sym}:{m}:v3"
 
 
 def evidence_rate_limit_exceeded(user_id: str | None) -> bool:

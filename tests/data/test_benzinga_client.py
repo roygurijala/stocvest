@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from stocvest.data import benzinga_client as bzc
-from stocvest.data.benzinga_client import BenzingaArticle, BenzingaClient, BenzingaMultiResult
+from stocvest.data.benzinga_client import BenzingaArticle, BenzingaClient, BenzingaMultiResult, BenzingaRating, benzinga_multi_shell, ensure_analyst_feed
 
 
 @pytest.fixture
@@ -243,3 +244,40 @@ async def test_get_multi_wrapsFailures(fake_settings: MagicMock, monkeypatch: py
     res = await BenzingaClient().get_multi("AAPL")
     assert len(res.news) == 1
     assert isinstance(res, BenzingaMultiResult)
+    assert res.analyst_feed_configured is True
+
+
+@pytest.mark.asyncio
+async def test_get_multi_timeout_preserves_analyst_configured(fake_settings: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_wait_for(coro, *args, **kwargs):  # type: ignore[no-untyped-def]
+        coro.close()
+        raise asyncio.TimeoutError()
+
+    monkeypatch.setattr(asyncio, "wait_for", fake_wait_for)
+    res = await BenzingaClient().get_multi("MRVL")
+    assert res.analyst_feed_configured is True
+    assert res.ratings == []
+
+
+@pytest.mark.asyncio
+async def test_ensure_analyst_feed_recovers_ratings_after_empty_multi(fake_settings: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
+    now = datetime.now(timezone.utc)
+    rating = BenzingaRating("MRVL", "Upgrade", "Buy", 220.0, "Goldman Sachs", now)
+
+    async def fake_ratings(self: BenzingaClient, symbol: str, days: int = 30) -> list[BenzingaRating]:
+        assert symbol == "MRVL"
+        return [rating]
+
+    monkeypatch.setattr(BenzingaClient, "get_analyst_ratings", fake_ratings)
+    recovered = await ensure_analyst_feed(BenzingaClient(), "MRVL", benzinga_multi_shell())
+    assert recovered.analyst_feed_configured is True
+    assert len(recovered.ratings) == 1
+    assert recovered.ratings[0].action == "Upgrade"
+
+
+@pytest.mark.asyncio
+async def test_benzinga_multi_shell_reflects_missing_analyst_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    s = MagicMock()
+    s.benzinga_analyst_key = ""
+    monkeypatch.setattr(bzc, "get_settings", lambda: s)
+    assert benzinga_multi_shell().analyst_feed_configured is False

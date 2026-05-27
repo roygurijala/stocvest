@@ -83,6 +83,51 @@ class BenzingaMultiResult:
     analyst_feed_configured: bool = False
 
 
+def benzinga_multi_shell() -> BenzingaMultiResult:
+    """Empty Benzinga bundle that still reflects whether the analyst calendar key is configured."""
+    return BenzingaMultiResult(
+        analyst_feed_configured=bool(get_settings().benzinga_analyst_key.strip())
+    )
+
+
+async def ensure_analyst_feed(
+    client: BenzingaClient,
+    symbol: str,
+    data: BenzingaMultiResult,
+) -> BenzingaMultiResult:
+    """Recover analyst ratings when get_multi timed out or the ratings sub-call failed."""
+    sym = symbol.strip().upper()
+    if not sym:
+        return data
+    if not bool(get_settings().benzinga_analyst_key.strip()):
+        return data
+    if data.ratings:
+        if data.analyst_feed_configured:
+            return data
+        return BenzingaMultiResult(
+            news=data.news,
+            wim=data.wim,
+            ratings=data.ratings,
+            guidance=data.guidance,
+            earnings=data.earnings,
+            analyst_feed_configured=True,
+        )
+
+    try:
+        ratings = await asyncio.wait_for(client.get_analyst_ratings(sym), timeout=2.5)
+    except Exception:
+        ratings = []
+
+    return BenzingaMultiResult(
+        news=data.news,
+        wim=data.wim,
+        ratings=ratings,
+        guidance=data.guidance,
+        earnings=data.earnings,
+        analyst_feed_configured=True,
+    )
+
+
 def _parse_dt(value: object) -> datetime:
     raw = str(value or "").strip()
     if not raw:
@@ -550,11 +595,11 @@ class BenzingaClient:
                     self.get_earnings_results(symbol),
                     return_exceptions=True,
                 ),
-                timeout=3.0,
+                timeout=6.0,
             )
         except Exception as exc:
             _LOG.warning("benzinga_multi_failed symbol=%s error=%s", symbol, type(exc).__name__)
-            return BenzingaMultiResult()
+            return benzinga_multi_shell()
 
         def safe(val: Any, default: Any) -> Any:
             return default if isinstance(val, Exception) else val
