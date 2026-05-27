@@ -20,6 +20,7 @@ from stocvest.api.services.real_composite_engine import (
     _regime_for_engine,
     _safe_result,
     _score_to_layer_signal,
+    _snapshot_mark_price,
 )
 from stocvest.api.services.sector_cache_dynamo import DynamoSectorCache
 from stocvest.api.services.signal_snapshot_builders import build_real_composite_snapshot_payload
@@ -208,7 +209,14 @@ async def build_swing_composite_response(
             list(set(_chips_before_audit) - set(_chips_clean)),
         )
     tech.chips = _chips_clean
-    news = NewsAnalyzer().analyze(sym, news_rows, params.news, mode="swing", benzinga_data=bz_data)
+    news = NewsAnalyzer().analyze(
+        sym,
+        news_rows,
+        params.news,
+        mode="swing",
+        benzinga_data=bz_data,
+        current_price=_snapshot_mark_price(sym_snap),
+    )
     macro_ctx = await get_macro_context(polygon_econ_events=econ)
     macro = MacroAnalyzer().analyze(
         spy_snap,
@@ -347,6 +355,7 @@ async def build_swing_composite_response(
             row["latest_rating"] = getattr(res, "latest_rating", None)
             row["latest_guidance"] = getattr(res, "latest_guidance", None)
             row["earnings_result"] = getattr(res, "earnings_result", None)
+            row["analyst_consensus"] = getattr(res, "analyst_consensus", None)
         if lid == "geopolitical":
             row["geo_active_events"] = list(getattr(res, "geo_active_events", []) or [])
             row["geo_impact_sector_key"] = getattr(res, "geo_impact_sector_key", "") or ""

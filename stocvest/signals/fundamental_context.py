@@ -107,12 +107,15 @@ def _compute_guidance_direction(guidance_items: list[BenzingaGuidance]) -> Guida
 def _compute_analyst_direction(ratings: list[BenzingaRating]) -> tuple[AnalystDir, int, int]:
     if not ratings:
         return "unknown", 0, 0
-    cutoff = datetime.now(timezone.utc) - timedelta(days=90)
-    recent = [r for r in ratings if r.published_at >= cutoff]
-    upgrades = sum(1 for r in recent if r.action == "Upgrade")
-    downgrades = sum(1 for r in recent if r.action == "Downgrade")
+    from stocvest.signals.analyst_rating_score import CONSENSUS_WINDOW_DAYS, consensus_counts
+
+    upgrades, downgrades, momentum = consensus_counts(ratings, window_days=CONSENSUS_WINDOW_DAYS)
     if upgrades == 0 and downgrades == 0:
-        return ("stable" if recent else "unknown"), upgrades, downgrades
+        return "unknown", upgrades, downgrades
+    if momentum >= 3:
+        return "upgrading", upgrades, downgrades
+    if momentum <= -3:
+        return "downgrading", upgrades, downgrades
     if upgrades > downgrades:
         return "upgrading", upgrades, downgrades
     if downgrades > upgrades:

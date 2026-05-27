@@ -1487,6 +1487,34 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
                     >
                       {layer.latest_rating.firm}: {layer.latest_rating.action}
                       {layer.latest_rating.rating ? ` (${layer.latest_rating.rating})` : ""}
+                      {typeof layer.latest_rating.upside_pct === "number" &&
+                      Number.isFinite(layer.latest_rating.upside_pct)
+                        ? ` · PT ${layer.latest_rating.upside_pct >= 0 ? "+" : ""}${layer.latest_rating.upside_pct.toFixed(1)}%`
+                        : ""}
+                    </span>
+                  ) : null}
+                  {layer.analyst_consensus?.label ? (
+                    <span
+                      className="inline-flex w-fit rounded-full px-3 py-1 text-xs font-semibold"
+                      data-testid="news-analyst-consensus-chip"
+                      style={{
+                        border: `1px solid ${
+                          (layer.analyst_consensus.momentum ?? 0) < 0
+                            ? "rgba(239,68,68,0.5)"
+                            : "rgba(34,197,94,0.5)"
+                        }`,
+                        background:
+                          (layer.analyst_consensus.momentum ?? 0) < 0
+                            ? "rgba(239,68,68,0.1)"
+                            : "rgba(34,197,94,0.1)",
+                        color:
+                          (layer.analyst_consensus.momentum ?? 0) < 0 ? colors.bearish : colors.bullish
+                      }}
+                    >
+                      {layer.analyst_consensus.label}
+                      {layer.analyst_consensus.upgrades_30d || layer.analyst_consensus.downgrades_30d
+                        ? ` (${layer.analyst_consensus.upgrades_30d}↑ ${layer.analyst_consensus.downgrades_30d}↓)`
+                        : ""}
                     </span>
                   ) : null}
                   {layer.earnings_result && layer.earnings_result.beat !== null ? (
