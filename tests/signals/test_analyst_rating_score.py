@@ -163,7 +163,7 @@ def test_unconfigured_feed_state() -> None:
         current_price=100.0,
     )
     assert out.feed_state == "unconfigured"
-    assert any("unavailable" in c.lower() for c in out.chips)
+    assert out.chips == ()
 
 
 def test_blend_headline_and_analyst_mode_weights() -> None:

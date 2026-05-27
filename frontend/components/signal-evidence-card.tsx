@@ -1548,7 +1548,9 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
                       {layer.latest_guidance.type === "raised" ? "Guidance raised" : "Guidance cut"}
                     </span>
                   ) : null}
-                  {layer.analyst_feed_state === "unconfigured" ? (
+                  {layer.analyst_feed_state === "unconfigured" &&
+                  !layer.latest_rating &&
+                  !layer.analyst_consensus?.label ? (
                     <span
                       className="inline-flex w-fit rounded-full px-3 py-1 text-xs font-semibold text-muted-foreground"
                       data-testid="news-analyst-feed-unavailable"

@@ -249,10 +249,44 @@ class Settings(BaseSettings):
         return self.env == "development"
 
 
+def _merge_external_api_keys_into_environ() -> None:
+    """Load vendor keys from ``stocvest/external-api-keys`` into os.environ before Settings()."""
+    if not os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+        return
+    secret_name = (os.environ.get("STOCVEST_EXTERNAL_API_KEYS_SECRET") or "stocvest/external-api-keys").strip()
+    if not secret_name:
+        return
+    region = (
+        os.environ.get("AWS_REGION")
+        or os.environ.get("AWS_DEFAULT_REGION")
+        or "us-east-1"
+    )
+    try:
+        client = boto3.client("secretsmanager", region_name=region)
+        resp = client.get_secret_value(SecretId=secret_name)
+        payload = json.loads(str(resp.get("SecretString") or "{}"))
+    except Exception:
+        return
+    if not isinstance(payload, dict):
+        return
+    for key, val in payload.items():
+        if val is None:
+            continue
+        env_key = str(key).strip()
+        if not env_key:
+            continue
+        s = str(val).strip()
+        if not s:
+            continue
+        if not (os.environ.get(env_key) or "").strip():
+            os.environ[env_key] = s
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """Return cached Settings instance. Call this everywhere instead of reading env directly."""
     _apply_lambda_runtime_secret_to_environ()
+    _merge_external_api_keys_into_environ()
     settings = Settings()
     # Do not return early until optional vendor keys that may live *only* in
     # ``stocvest/external-api-keys`` (e.g. Upstash) are also present. Otherwise

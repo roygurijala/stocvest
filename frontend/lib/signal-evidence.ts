@@ -1864,16 +1864,21 @@ export const ORB_CHIP_REMAP: Record<string, string> = {
 };
 
 export function sanitizeEvidenceChips(rawChips: string[]): string[] {
+  const seen = new Set<string>();
   const out: string[] = [];
   for (const raw of rawChips) {
-    const chip = String(raw).trim();
+    const chip = String(raw || "").trim();
     if (!chip) continue;
     const lower = chip.toLowerCase();
+    if (lower === "analyst feed unavailable") continue;
     if (lower.includes("expired")) continue;
     if (lower.startsWith("orb") && lower.includes("unavailable")) continue;
     const mapped = ORB_CHIP_REMAP[chip] ?? ORB_CHIP_REMAP[chip.trim()];
     const next = (mapped !== undefined ? mapped : chip).trim();
     if (!next) continue;
+    const key = next.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
     out.push(next);
   }
   return out;
