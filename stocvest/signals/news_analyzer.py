@@ -213,11 +213,9 @@ class NewsAnalyzer:
                 verdict = "neutral"
 
             chips = ["News: neutral", "No qualifying headlines"]
-            if analyst_feed_state == "unconfigured":
-                chips.append("Analyst feed unavailable")
-            chips.extend(analyst_chips)
             if analyst_active and structured.score != 0.0:
                 chips.append(f"analyst {structured.score:+.2f}")
+            chips.extend(analyst_chips)
 
             data_state = "stale"
             if analyst_active and score != 50:
@@ -337,8 +335,6 @@ class NewsAnalyzer:
             chips.append(f"Catalyst: {catalyst_type}")
         if benzinga_data and benzinga_data.wim:
             chips.append("WIM context")
-        if analyst_feed_state == "unconfigured":
-            chips.append("Analyst feed unavailable")
         chips.extend(analyst_chips)
 
         return _fill_benzinga_fields(

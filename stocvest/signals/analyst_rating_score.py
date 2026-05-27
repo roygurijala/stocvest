@@ -303,8 +303,7 @@ def compute_structured_analyst_score(
 ) -> AnalystScoreBreakdown:
     feed_state = _resolve_feed_state(bz)
     if bz is None or not bz.analyst_feed_configured:
-        chips: tuple[str, ...] = ("Analyst feed unavailable",) if feed_state == "unconfigured" else ()
-        return AnalystScoreBreakdown(0.0, None, None, chips, feed_state)
+        return AnalystScoreBreakdown(0.0, None, None, (), feed_state)
 
     if not bz.ratings:
         return AnalystScoreBreakdown(0.0, None, None, (), feed_state)
