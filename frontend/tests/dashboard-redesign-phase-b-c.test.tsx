@@ -174,7 +174,7 @@ describe("Dashboard focus shell", () => {
     );
     const radar = screen.getByTestId("dashboard-watchlist-radar");
     await vi.waitFor(() => {
-      expect(radar.textContent || "").toMatch(/nothing on your list needs attention/i);
+      expect(radar.textContent || "").toMatch(/progress on symbols you track/i);
     });
   });
 });

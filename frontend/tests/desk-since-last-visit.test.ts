@@ -18,7 +18,9 @@ describe("desk since last visit", () => {
     const { added, removed } = diffDeskSinceLastVisit(["MU", "AMD"], prev);
     expect(added).toEqual(["AMD"]);
     expect(removed).toEqual(["NVDA"]);
-    expect(sinceLastVisitSummary(added, removed)).toBe("AMD in hot list · NVDA dropped");
+    expect(sinceLastVisitSummary(added, removed)).toBe(
+      "AMD entered market activity list · NVDA left the list"
+    );
   });
 
   test("scopes last visit by desk mode", () => {
