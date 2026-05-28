@@ -119,8 +119,9 @@ describe("dashboard focus layout", () => {
     expect(screen.getByTestId("dashboard-live-status")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-discovery-feed")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-watchlist-radar")).toBeInTheDocument();
-    expect(screen.getByTestId("dashboard-insight")).toBeInTheDocument();
-    expect(screen.getByTestId("dashboard-market-context-fold")).toBeInTheDocument();
+    expect(screen.queryByTestId("dashboard-insight")).toBeNull();
+    expect(screen.getByTestId("dashboard-market-detail")).toBeInTheDocument();
+    expect(screen.queryByTestId("dashboard-market-context-fold")).toBeNull();
     expect(screen.getByTestId("dashboard-market-pill-regime")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-market-pill-volatility")).toBeInTheDocument();
     expect(screen.queryByTestId("shared-context-master-card")).toBeNull();

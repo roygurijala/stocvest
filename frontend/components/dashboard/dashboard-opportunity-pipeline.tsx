@@ -6,21 +6,12 @@ import type { SnapshotPayload } from "@/lib/api/market";
 import { DashboardDiscoveryFeed } from "@/components/dashboard/dashboard-discovery-feed";
 import { DashboardQuietLeadersFeed } from "@/components/dashboard/dashboard-quiet-leaders-feed";
 import { DashboardWatchlistRadar } from "@/components/dashboard/dashboard-watchlist-radar";
-import { PipelineSectionNote } from "@/components/dashboard/pipeline-section-note";
 import { PipelineStagePanel } from "@/components/dashboard/pipeline-stage-panel";
-import {
-  buildPipelineStatusLine,
-  OPPORTUNITY_PIPELINE_INTRO,
-  OPPORTUNITY_PIPELINE_TITLE,
-  PIPELINE_STAGES
-} from "@/lib/dashboard/dashboard-opportunity-pipeline-present";
-import { WATCHLIST_RADAR_DISCLAIMER } from "@/lib/dashboard/watchlist-radar-card-present";
-import { MARKET_ACTIVITY_DISCLAIMER } from "@/lib/dashboard/hot-in-market-card-present";
-import { QUIET_LEADERS_DISCLAIMER } from "@/lib/dashboard/quiet-leaders-present";
+import { buildPipelineStatusLine, PIPELINE_STAGES } from "@/lib/dashboard/dashboard-opportunity-pipeline-present";
 import type { WatchlistRadarDeskContext } from "@/lib/dashboard/watchlist-radar-attention";
 import { quietLeadersFromDesk } from "@/lib/dashboard/quiet-leaders-present";
 import type { DashboardDeskMode } from "@/lib/dashboard/live-status-copy";
-import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { spacing } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
 type Props = {
@@ -86,26 +77,13 @@ export function DashboardOpportunityPipeline({
       data-testid="dashboard-opportunity-pipeline"
       style={{ display: "grid", gap: spacing[4] }}
     >
-      <header
-        style={{
-          borderRadius: borderRadius.lg,
-          border: `1px solid ${colors.border}`,
-          background: colors.surface,
-          padding: spacing[4]
-        }}
+      <p
+        className="m-0 text-base font-semibold leading-snug"
+        data-testid="dashboard-pipeline-status"
+        style={{ color: colors.text }}
       >
-        <h2 className="m-0" style={{ fontSize: typography.scale.lg, fontWeight: 700 }}>
-          {OPPORTUNITY_PIPELINE_TITLE}
-        </h2>
-        <p
-          className="m-0 mt-1.5 text-sm leading-snug"
-          data-testid="dashboard-pipeline-status"
-          style={{ color: colors.text }}
-        >
-          {statusLine}
-        </p>
-        <PipelineSectionNote testId="dashboard-pipeline-intro-note">{OPPORTUNITY_PIPELINE_INTRO}</PipelineSectionNote>
-      </header>
+        {statusLine}
+      </p>
 
       <PipelineStagePanel
         stageId="watchlist"
@@ -120,9 +98,6 @@ export function DashboardOpportunityPipeline({
           variant="pipeline"
           onAttentionCountChange={onWatchlistAttentionCount}
         />
-        <PipelineSectionNote testId="dashboard-watchlist-pipeline-note">
-          {WATCHLIST_RADAR_DISCLAIMER}
-        </PipelineSectionNote>
       </PipelineStagePanel>
 
       {mode === "swing" ? (
@@ -133,7 +108,6 @@ export function DashboardOpportunityPipeline({
           hint="Strong structure before the session heats up (move under 2%)"
         >
           <DashboardQuietLeadersFeed mode={mode} deskData={deskData} isLoading={deskLoading} variant="pipeline" />
-          <PipelineSectionNote testId="dashboard-quiet-pipeline-note">{QUIET_LEADERS_DISCLAIMER}</PipelineSectionNote>
         </PipelineStagePanel>
       ) : null}
 
@@ -159,9 +133,6 @@ export function DashboardOpportunityPipeline({
           refreshError={refreshError}
           variant="pipeline"
         />
-        <PipelineSectionNote testId="dashboard-market-pipeline-note">
-          {MARKET_ACTIVITY_DISCLAIMER}
-        </PipelineSectionNote>
       </PipelineStagePanel>
     </section>
   );

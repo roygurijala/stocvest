@@ -169,20 +169,26 @@ export function DashboardWatchlistRadar({
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           {!embedded ? (
-            <h2 className="m-0" style={{ fontSize: typography.scale.base, fontWeight: 700 }}>
-              {WATCHLIST_RADAR_TITLE}
-            </h2>
+            <>
+              <h2 className="m-0" style={{ fontSize: typography.scale.base, fontWeight: 700 }}>
+                {WATCHLIST_RADAR_TITLE}
+              </h2>
+              <p className="m-0 mt-1" style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>
+                {status === "loading"
+                  ? "Loading tracked symbols…"
+                  : cardModels.length === 0
+                    ? WATCHLIST_RADAR_SUBTITLE
+                    : `${cardModels.length} symbol${cardModels.length === 1 ? "" : "s"} need a look`}
+              </p>
+            </>
+          ) : status === "loading" ? (
+            <p className="m-0 text-sm" style={{ color: colors.textMuted }}>
+              Loading…
+            </p>
           ) : null}
-          <p className={embedded ? "m-0" : "m-0 mt-1"} style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>
-            {status === "loading"
-              ? "Loading tracked symbols…"
-              : cardModels.length === 0
-                ? WATCHLIST_RADAR_SUBTITLE
-                : `${cardModels.length} symbol${cardModels.length === 1 ? "" : "s"} need a look`}
-          </p>
           {dailyChanges ? (
             <p
-              className="m-0 mt-2"
+              className={`m-0 ${embedded ? "" : "mt-2"}`}
               data-testid="dashboard-watchlist-daily-changes"
               style={{ fontSize: typography.scale.xs, color: colors.accent, lineHeight: 1.45 }}
             >

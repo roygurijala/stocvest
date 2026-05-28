@@ -1,21 +1,23 @@
 "use client";
 
+import { DashboardMarketContextPanelBody } from "@/components/dashboard/dashboard-market-context-panel";
 import type { MarketContextSnapshot } from "@/lib/market-context/snapshot";
 import type { SectorRotationChip } from "@/lib/market-context/types";
 import { InfoTip } from "@/components/info-tip";
 import { interactionLevelProps } from "@/lib/dashboard/click-hierarchy";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
+
 type Props = {
   pageTitle: string;
   regimeLabel: string;
   regimeTip: string;
+  marketContext: MarketContextSnapshot;
   spyPct: number | null;
   qqqPct: number | null;
   vixLevel: number | null;
   vixPct: number | null;
   vixPulseOk: boolean;
-  environmentSummary: string;
   sectorRotation: SectorRotationChip[];
   systemLabel: string;
   swingDeskPhrase: string;
@@ -47,12 +49,12 @@ export function DashboardMarketPulseHero({
   pageTitle,
   regimeLabel,
   regimeTip,
+  marketContext,
   spyPct,
   qqqPct,
   vixLevel,
   vixPct,
   vixPulseOk,
-  environmentSummary,
   sectorRotation,
   systemLabel,
   swingDeskPhrase,
@@ -62,6 +64,7 @@ export function DashboardMarketPulseHero({
 }: Props) {
   const { colors } = useTheme();
   const { lead, lag } = topSectors(sectorRotation);
+  const environmentSummary = marketContext.environmentSummary;
 
   return (
     <section
@@ -93,8 +96,11 @@ export function DashboardMarketPulseHero({
         {environmentSummary}
       </p>
 
+      <p className="m-0 mt-2 text-[10px] font-semibold uppercase tracking-wide" style={{ color: colors.textMuted }}>
+        Session
+      </p>
       <div
-        className="mt-3 flex flex-wrap gap-2"
+        className="mt-1 flex flex-wrap gap-2"
         data-testid="dashboard-pulse-tape"
         {...interactionLevelProps("none")}
       >
@@ -137,7 +143,7 @@ export function DashboardMarketPulseHero({
               background: colors.surfaceMuted
             }}
           >
-            <div style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Leading</div>
+            <div style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Leading (5d)</div>
             <div style={{ fontSize: typography.scale.sm, fontWeight: 600 }}>
               {lead.label}{" "}
               <span style={{ color: colors.bullish }}>{fmtPct(lead.pct5d)}</span>
@@ -154,7 +160,7 @@ export function DashboardMarketPulseHero({
               background: colors.surfaceMuted
             }}
           >
-            <div style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Lagging</div>
+            <div style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Lagging (5d)</div>
             <div style={{ fontSize: typography.scale.sm, fontWeight: 600 }}>
               {lag.label}{" "}
               <span style={{ color: colors.bearish }}>{fmtPct(lag.pct5d)}</span>
@@ -171,29 +177,54 @@ export function DashboardMarketPulseHero({
         </span>
       </p>
 
-      <details className="mt-2" data-testid="dashboard-pulse-desk-detail">
+      <details className="mt-2" data-testid="dashboard-market-detail">
         <summary
           style={{
-            fontSize: typography.scale.xs,
-            color: colors.textMuted,
+            fontSize: typography.scale.sm,
+            fontWeight: 600,
+            color: colors.accent,
             cursor: "pointer",
             listStylePosition: "outside"
           }}
         >
-          Desk posture detail
+          Market detail
         </summary>
-        <ul
+        <div
+          className="mt-3"
+          data-testid="dashboard-market-context"
           style={{
-            margin: `${spacing[2]} 0 0`,
-            paddingLeft: spacing[4],
-            color: colors.textMuted,
-            fontSize: typography.scale.xs,
-            lineHeight: 1.5
+            borderRadius: borderRadius.md,
+            border: `1px solid ${colors.border}`,
+            background: colors.surface,
+            padding: spacing[3]
           }}
         >
-          <li>Swing: {swingDeskPhrase}</li>
-          {dayTradingSurfaces && dayDeskPhrase ? <li>Day: {dayDeskPhrase}</li> : null}
-        </ul>
+          <p
+            className="m-0 text-[10px] font-semibold uppercase tracking-wide"
+            style={{ color: colors.textMuted }}
+          >
+            Desk posture
+          </p>
+          <ul
+            className="m-0 mt-1.5 list-disc pl-4"
+            data-testid="dashboard-pulse-desk-detail"
+            style={{
+              color: colors.textMuted,
+              fontSize: typography.scale.xs,
+              lineHeight: 1.5
+            }}
+          >
+            <li>Swing: {swingDeskPhrase}</li>
+            {dayTradingSurfaces && dayDeskPhrase ? <li>Day: {dayDeskPhrase}</li> : null}
+          </ul>
+          <div className="mt-3 border-t pt-3" style={{ borderColor: colors.border }}>
+            <DashboardMarketContextPanelBody
+              snapshot={marketContext}
+              showSummary={false}
+              showSessionToday={false}
+            />
+          </div>
+        </div>
       </details>
     </section>
   );

@@ -106,7 +106,8 @@ describe("dashboard two-desk status (focus layout)", () => {
         sectorRotation={[]}
       />
     );
-    expect(screen.getByTestId("dashboard-market-context")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-market-detail")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-market-context", { hidden: true })).toBeInTheDocument();
     expect(screen.queryByTestId("shared-context-master-card")).toBeNull();
   });
 

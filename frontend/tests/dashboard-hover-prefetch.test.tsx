@@ -143,10 +143,6 @@ describe("Layer 4 — dashboard hover-prefetch markers", () => {
       anchorByHref(screen.getByTestId("dashboard-watchlist-radar"), "/dashboard/watchlists?desk=day"),
       "watchlist radar"
     );
-    assertLayer4Link(
-      anchorByHref(screen.getByTestId("dashboard-insight"), "/dashboard/scanner?mode=day"),
-      "insight Monitor Scanner"
-    );
     const live = screen.getByTestId("dashboard-live-status");
     const liveCta = live.querySelector("a[href^='/dashboard/scanner']") as HTMLAnchorElement | null;
     assertLayer4Link(liveCta, "live status scanner CTA");
