@@ -172,9 +172,11 @@ describe("Dashboard focus shell", () => {
         sectorRotation={[]}
       />
     );
-    const radar = screen.getByTestId("dashboard-watchlist-radar");
     await vi.waitFor(() => {
-      expect(radar.textContent || "").toMatch(/progress on symbols you track/i);
+      expect(screen.queryByTestId("dashboard-watchlist-radar-list")).toBeNull();
     });
+    const stage = screen.getByTestId("pipeline-stage-panel-watchlist");
+    expect(stage.textContent || "").toMatch(/symbols you track/i);
+    expect(screen.getByTestId("dashboard-watchlist-radar-link")).toBeInTheDocument();
   });
 });
