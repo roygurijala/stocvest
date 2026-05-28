@@ -22,7 +22,7 @@ This document captures **everything discussed** in the Opportunity Desk / full-m
 
 | Issue | Current behavior | User impact |
 |-------|------------------|-------------|
-| **Scanner universe cap** | `maxUniverseSymbols: 24` in dashboard scanner tuning; `capScannerUniverse()` in `frontend/lib/api/scanner-load.ts` | Pattern setups and heavy loads only on watchlist + gap symbols + SPY/QQQ |
+| **Scanner universe cap** | `maxUniverseSymbols: 50` in dashboard scanner tuning; `capScannerUniverse()` in `frontend/lib/api/scanner-load.ts` | Pattern setups and heavy loads only on desk + gap + watchlist (capped); **10 watchlist slots reserved** so default-list symbols are never dropped when desk/gap fill the cap |
 | **Gap display cap** | `_GAP_INTEL_TOP_N = 20` in `stocvest/api/handlers/scanner.py` | Movers outside top 20 by \|gap\| never appear in gap intelligence |
 | **Dashboard scanner frozen** | `DashboardScannerDeferredFetch` runs once per navigation; `DashboardScannerHydrate` has no polling | MU rips at 11:00 — dashboard still shows 10:00 load |
 | **No Discovery top 15** | Opportunity cards are counts (`buildOpportunityCards`), not ranked symbols | “Discovery” is implied, not shown |
@@ -124,6 +124,14 @@ Replace monotonous “system state + three equal cards” with:
 
 **Data:** Tier C cache (`PlatformDeskSnapshot`); v0 = gap top 20 + scanner setups until cache ships.
 
+### 5.2b Pillar 2b — Quiet leaders (under the surface) ✅ **Shipped 2026-05-27**
+
+- **Swing dashboard only** — separate from Hot in market (velocity-ranked movers)
+- **5–8 rows** of names with **|session gap| &lt; 2%**, excluded from top **50** movers radar, **price &gt; SMA50 & SMA200**, **RSI 55–70**, **bullish** swing technical score **≥ 58**, then bounded swing composite
+- UI: **`DashboardQuietLeadersFeed`**; Scanner section **`#scanner-quiet-leaders`**
+- Backend: **`stocvest/api/services/opportunity_desk/quiet_leaders.py`** on full **`opportunity_desk`** batch; cache field **`quiet_leaders`** on swing desk envelope
+- Quiet-leader symbols merge into scanner universe (up to **15**) via **`symbolsFromDeskSlice`**
+
 ### 5.3 Pillar 3 — Watchlist radar
 
 - **3–6 rows** only when attention triggers fire:
@@ -152,7 +160,7 @@ Calm urgency — no hype. Dynamic page title: *Tuesday · Risk-on open*.
 | Surface | Role | Universe |
 |---------|------|----------|
 | **Dashboard** | Orient + act | Discovery 15 + watchlist radar + sentiment |
-| **Scanner** | Pattern desk (ORB, gap, etc.) | Watchlist ∪ gap leaders ∪ discovery (cap **40–60** for bars) |
+| **Scanner** | Pattern desk (ORB, gap, etc.) | Watchlist (**10 reserved**) ∪ gap ∪ desk discovery/movers/quiet leaders (cap **50** for bars) |
 | **Signals** | Full composite + execution | Single symbol deep dive |
 | **Gap intelligence desk** | Gap + catalyst narrative | Top 20 (align with funnel or subset of Tier B) |
 
@@ -239,6 +247,21 @@ Each phase has **acceptance criteria** and **tests**. Do not start phase N+1 unt
 - CloudWatch namespace **`OpportunityDesk`**: `BatchDuration`, `SurvivorCount`, `CompositeFailures`, `ScannedSnapshotCount` (tier dimension)
 - `stocvest/api/services/opportunity_desk/metrics.py` — published at end of each batch run
 
+### Phase 7 — Quiet leaders + watchlist universe reserve ✅ **Shipped 2026-05-27**
+
+**Scope (implemented):**
+
+- **`quiet_leaders.py`** — low-velocity funnel + technical screen + bounded composite; written on **`opportunity_desk`** full batch (swing cache only)
+- **`WATCHLIST_UNIVERSE_RESERVE = 10`** — `capScannerUniverse()` guarantees up to 10 default-watchlist symbols survive the 50-symbol cap (`scanner-load.ts`, `scanner_scheduled_pipeline.py`)
+- Dashboard **`DashboardQuietLeadersFeed`**; Scanner **`ScannerQuietLeadersSection`**
+- Tests: `test_quiet_leaders.py`, extended `scanner-universe.test.ts`, `test_opportunity_desk_scanner_universe.py`
+
+**Acceptance:**
+
+- [x] Watchlist symbols on default list are always evaluated for pattern setups when present in merged universe
+- [x] Quiet leaders do not duplicate Hot in market rows (gap &lt; 2%, not in top movers)
+- [ ] Prod: full desk batch populates `quiet_leaders` after deploy (manual)
+
 ---
 
 ## 8. Business logic review (why this order)
@@ -268,6 +291,7 @@ Each phase has **acceptance criteria** and **tests**. Do not start phase N+1 unt
 | Layer | Tests |
 |-------|--------|
 | Funnel math | `tests/api/services/test_opportunity_desk_funnel.py` |
+| Quiet leaders | `tests/api/services/test_quiet_leaders.py` |
 | Batch worker | `tests/api/services/test_opportunity_desk_batch.py` (Phase 1) |
 | API contract | `tests/api/test_desk_today.py` (Phase 1) |
 | Dashboard present | `frontend/tests/dashboard-discovery-feed.test.ts` (Phase 3) |

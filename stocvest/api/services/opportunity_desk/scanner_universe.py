@@ -9,6 +9,7 @@ from stocvest.data.dashboard_cache import read_dashboard_cache
 
 DISCOVERY_UNIVERSE_LIMIT = 15
 MOVERS_RADAR_UNIVERSE_LIMIT = 30
+QUIET_LEADERS_UNIVERSE_LIMIT = 15
 
 
 def _symbols_from_desk_data(data: dict[str, Any] | None) -> list[str]:
@@ -25,6 +26,13 @@ def _symbols_from_desk_data(data: dict[str, Any] | None) -> list[str]:
     movers = data.get("movers_radar")
     if isinstance(movers, list):
         for row in movers[:MOVERS_RADAR_UNIVERSE_LIMIT]:
+            if isinstance(row, dict):
+                sym = str(row.get("symbol") or "").strip().upper()
+                if sym:
+                    out.append(sym)
+    quiet = data.get("quiet_leaders")
+    if isinstance(quiet, list):
+        for row in quiet[:QUIET_LEADERS_UNIVERSE_LIMIT]:
             if isinstance(row, dict):
                 sym = str(row.get("symbol") or "").strip().upper()
                 if sym:

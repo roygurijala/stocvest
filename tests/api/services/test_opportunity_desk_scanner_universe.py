@@ -23,6 +23,7 @@ def test_desk_universe_symbols_from_cache(monkeypatch: pytest.MonkeyPatch) -> No
             "data": {
                 "discovery": [{"symbol": "MU"}],
                 "movers_radar": [{"symbol": "NVDA"}],
+                "quiet_leaders": [{"symbol": "MRVL"}],
             }
         }
 
@@ -31,4 +32,13 @@ def test_desk_universe_symbols_from_cache(monkeypatch: pytest.MonkeyPatch) -> No
         _read,
     )
     syms = desk_universe_symbols_from_cache(limit=10)
-    assert syms == ["MU", "NVDA"]
+    assert syms == ["MU", "NVDA", "MRVL"]
+
+
+def test_merge_scheduled_scan_reserves_watchlist_slots() -> None:
+    platform = [f"WL{i}" for i in range(15)]
+    desk = [f"MV{i}" for i in range(40)]
+    out = merge_scheduled_scan_symbol_universe([], platform, desk, cap=20, watchlist_reserve=10)
+    assert len(out) == 20
+    assert out[0] == "WL0"
+    assert "WL9" in out

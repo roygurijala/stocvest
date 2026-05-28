@@ -31,6 +31,7 @@ import {
   buildScannerSymbolUniverse,
   capScannerUniverse,
   DASHBOARD_SCANNER_MAX_UNIVERSE,
+  WATCHLIST_UNIVERSE_RESERVE,
   scannerUniverseCapPriority,
   SCANNER_MARKET_ANCHORS,
   symbolsFromDeskPayloads,
@@ -429,7 +430,8 @@ export async function runScannerLoadWithoutBrief(
       universe = capScannerUniverse(
         universe,
         maxU,
-        scannerUniverseCapPriority({ deskSymbols, gapSymbols: gapTopSyms, watchlist: watchUpper })
+        scannerUniverseCapPriority({ deskSymbols, gapSymbols: gapTopSyms, watchlist: watchUpper }),
+        { watchlist: watchUpper, watchlistReserve: WATCHLIST_UNIVERSE_RESERVE }
       );
     }
 

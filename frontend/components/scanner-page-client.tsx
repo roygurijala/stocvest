@@ -20,6 +20,7 @@ import { NewsPanel } from "@/components/news-panel";
 import { ScenarioBuilderInline } from "@/components/scenario-builder/scenario-builder-inline";
 import { ScannerEmptyStateCard } from "@/components/scanner-empty-state-card";
 import { ScannerNearQualificationSection } from "@/components/scanner/scanner-near-qualification-section";
+import { ScannerQuietLeadersSection } from "@/components/scanner/scanner-quiet-leaders-section";
 import { ScannerOutcomeCards } from "@/components/scanner/ScannerOutcomeCards";
 import { ScannerQuietDesk } from "@/components/scanner/scanner-quiet-desk";
 import { ScannerScanResultHero } from "@/components/scanner/scanner-scan-result-hero";
@@ -1326,13 +1327,17 @@ export function ScannerPageClient({
           nearQualification={scanSummary.near_qualification}
           watchlistProgression={scanSummary.watchlist_progression}
         />
-      ) : (
+      ) : null}
+      {!showQuietInterpretation ? (
+        <ScannerQuietLeadersSection scannerMode={scannerSetupMode === "both" ? "swing" : scannerSetupMode} />
+      ) : null}
+      {showQuietInterpretation ? (
         <ScannerQuietDesk
           summary={scanSummary}
           synthesis={scannerSynthesis}
           deskFilter={evaluationTraceDeskFilter}
         />
-      )}
+      ) : null}
 
       {dayTradingSurfaces ? (
         <DeskModeTabNav

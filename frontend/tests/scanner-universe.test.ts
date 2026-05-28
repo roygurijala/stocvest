@@ -5,7 +5,8 @@ import {
   capScannerUniverse,
   scannerUniverseCapPriority,
   symbolsFromDeskSlice,
-  topGapSymbolsForUniverse
+  topGapSymbolsForUniverse,
+  WATCHLIST_UNIVERSE_RESERVE
 } from "@/lib/dashboard/scanner-universe";
 import type { GapIntelligenceItem } from "@/lib/api/scanner";
 
@@ -16,6 +17,31 @@ describe("scanner universe", () => {
       movers_radar: [{ symbol: "NVDA" }, { symbol: "MU" }]
     });
     expect(syms).toEqual(["MU", "NVDA"]);
+  });
+
+  test("merges quiet leaders into desk slice", () => {
+    const syms = symbolsFromDeskSlice({
+      discovery: [{ symbol: "MU" }],
+      quiet_leaders: [{ symbol: "MRVL" }]
+    });
+    expect(syms).toEqual(["MU", "MRVL"]);
+  });
+
+  test("watchlist reserve keeps symbols when universe is capped", () => {
+    const desk = ["MU", "NVDA", "AMD", "INTC", "QCOM", "AVGO", "SMCI", "ARM"];
+    const gap = ["TSLA", "AAPL", "MSFT", "META", "GOOGL", "AMZN", "NFLX", "CRM"];
+    const watch = ["MRVL", "ZZZ"];
+    const universe = buildScannerSymbolUniverse({
+      watchlist: watch,
+      gapSymbols: gap,
+      deskSymbols: desk
+    });
+    const capped = capScannerUniverse(universe, 12, scannerUniverseCapPriority({ deskSymbols: desk, gapSymbols: gap, watchlist: watch }), {
+      watchlist: watch,
+      watchlistReserve: WATCHLIST_UNIVERSE_RESERVE
+    });
+    expect(capped).toContain("MRVL");
+    expect(capped).toContain("SPY");
   });
 
   test("desk symbol wins cap priority over watchlist-only name", () => {

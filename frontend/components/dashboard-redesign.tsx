@@ -5,6 +5,7 @@ import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { DashboardDeskModePills } from "@/components/dashboard/dashboard-desk-mode-pills";
 import { DashboardEdgeSync } from "@/components/dashboard-edge-sync";
 import { DashboardDiscoveryFeed } from "@/components/dashboard/dashboard-discovery-feed";
+import { DashboardQuietLeadersFeed } from "@/components/dashboard/dashboard-quiet-leaders-feed";
 import { DashboardInsightCallout } from "@/components/dashboard/dashboard-insight-callout";
 import { DashboardLiveStatus } from "@/components/dashboard/dashboard-live-status";
 import { DashboardMarketContextPanel } from "@/components/dashboard/dashboard-market-context-panel";
@@ -566,6 +567,12 @@ function DashboardRedesignBody({
         canRefreshDesk={canManualRefresh}
         refreshCooldownLabel={cooldownLabel}
         refreshError={deskRefreshError}
+      />
+
+      <DashboardQuietLeadersFeed
+        mode={activeDeskMode}
+        deskData={deskToday?.data ?? null}
+        isLoading={deskTodayLoading}
       />
 
       <DashboardWatchlistRadar mode={activeDeskMode} snapshots={marketOverview.snapshots} />

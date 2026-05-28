@@ -34,6 +34,13 @@ export type DeskRecentlyHotRow = {
   reason?: string;
 };
 
+export type DeskQuietLeader = DeskDiscoveryLeader & {
+  technical_score?: number | null;
+  daily_rsi?: number | null;
+  quiet_leader?: boolean;
+  why_line?: string | null;
+};
+
 export type DeskTodayData = {
   tier?: string;
   snapshot_source?: string;
@@ -43,6 +50,7 @@ export type DeskTodayData = {
   discovery?: DeskDiscoveryLeader[];
   movers_radar?: DeskMoverRadarRow[];
   recently_hot?: DeskRecentlyHotRow[];
+  quiet_leaders?: DeskQuietLeader[];
 };
 
 export type DeskTodayResponse = {
