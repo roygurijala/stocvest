@@ -30,6 +30,7 @@ function pillColors(tone: MarketContextPill["tone"], colors: ReturnType<typeof u
 }
 
 export function DashboardMarketContextPanel({ snapshot, embedded = false }: Props) {
+  const { colors } = useTheme();
   const body = (
     <DashboardMarketContextPanelBody snapshot={snapshot} showSummary={!embedded} showSessionToday={!embedded} />
   );
