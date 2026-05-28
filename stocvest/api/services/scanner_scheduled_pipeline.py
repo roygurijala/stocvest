@@ -55,10 +55,32 @@ def merge_scheduled_scan_symbol_universe(
     desk_movers: list[str] | None = None,
     *,
     cap: int = 50,
+    watchlist_reserve: int = 10,
 ) -> list[str]:
     """Dedupe configured, platform watchlists, desk movers, and ``SYSTEM_DEFAULTS`` (caps total)."""
     desk = desk_movers or []
-    return list(dict.fromkeys([*configured, *desk, *platform, *SYSTEM_DEFAULTS]))[:cap]
+    merged = list(dict.fromkeys([*configured, *desk, *platform, *SYSTEM_DEFAULTS]))
+    if len(merged) <= cap:
+        return merged
+    reserved: list[str] = []
+    for sym in platform:
+        su = str(sym).strip().upper()
+        if not su or su in reserved:
+            continue
+        if su in merged:
+            reserved.append(su)
+        if len(reserved) >= max(0, watchlist_reserve):
+            break
+    out: list[str] = []
+    for s in reserved:
+        if s not in out:
+            out.append(s)
+    for s in merged:
+        if len(out) >= cap:
+            break
+        if s not in out:
+            out.append(s)
+    return out[:cap]
 
 
 async def _resolve_scheduled_scan_symbols() -> list[str]:

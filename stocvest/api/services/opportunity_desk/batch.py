@@ -24,6 +24,7 @@ from stocvest.api.services.opportunity_desk.funnel import (
     run_snapshot_funnel,
 )
 from stocvest.api.services.opportunity_desk.metrics import publish_opportunity_desk_batch_metrics
+from stocvest.api.services.opportunity_desk.quiet_leaders import build_quiet_leaders
 from stocvest.api.services.opportunity_desk.snapshot_load import load_us_equity_snapshots_for_funnel
 from stocvest.api.services.real_composite_engine import real_composite_body_sync
 from stocvest.api.services.swing_composite_engine import swing_composite_body_sync
@@ -213,6 +214,17 @@ async def run_opportunity_desk_batch(
     snapshots, snapshot_source = await load_us_equity_snapshots_for_funnel()
     funnel = run_snapshot_funnel(snapshots, cfg.funnel)
     movers_by_symbol = {m.symbol: m for m in funnel.movers}
+    quiet_leaders_swing: list[dict[str, Any]] = []
+    if tier == "full":
+        try:
+            quiet_leaders_swing = await build_quiet_leaders(
+                snapshots,
+                funnel.movers,
+                composite_fn=lambda sym: _composite_for_mode(sym, "swing"),
+                funnel_cfg=cfg.funnel,
+            )
+        except Exception as exc:  # noqa: BLE001
+            _LOG.warning("opportunity_desk quiet_leaders failed: %s", exc)
     now = datetime.now(timezone.utc)
     results: dict[str, Any] = {
         "tier": tier,
@@ -260,6 +272,10 @@ async def run_opportunity_desk_batch(
                 movers_by_symbol=movers_by_symbol,
                 now=now,
             )
+            if mode_lit == "swing":
+                payload["quiet_leaders"] = quiet_leaders_swing
+            else:
+                payload["quiet_leaders"] = []
         else:
             if isinstance(previous_data, dict):
                 payload["discovery"] = previous_data.get("discovery") or []
@@ -267,9 +283,15 @@ async def run_opportunity_desk_batch(
                     _parse_recently_hot(previous_data),
                     now=now,
                 )
+                payload["quiet_leaders"] = (
+                    quiet_leaders_swing
+                    if mode_lit == "swing"
+                    else list(previous_data.get("quiet_leaders") or [])
+                )
             else:
                 payload["discovery"] = []
                 payload["recently_hot"] = []
+                payload["quiet_leaders"] = quiet_leaders_swing if mode_lit == "swing" else []
 
         written = write_dashboard_cache(
             key,

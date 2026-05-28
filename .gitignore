@@ -52,3 +52,14 @@ infra/backend.hcl
 infra/.terraform_placeholder_lambda.zip
 infra/tfplan
 *.tfplan
+
+# Ops/debug artifacts (local Lambda invokes, error dumps — do not commit)
+infra/*-out.json
+infra/*-errors.json
+infra/lambda-payload-*.json
+infra/maturation-*.json
+infra/md-errors.json
+infra/brokers-*.json
+infra/scanner-*.json
+infra/watchlist-symbols-out.json
+vitest-summary.log
