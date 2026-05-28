@@ -12,6 +12,8 @@ import { useTheme } from "@/lib/theme-provider";
 
 type Props = {
   snapshot: MarketContextSnapshot;
+  /** When true, omit duplicate environment summary (hero already shows it). */
+  embedded?: boolean;
 };
 
 function pillColors(tone: MarketContextPill["tone"], colors: ReturnType<typeof useTheme>["colors"]) {
@@ -27,9 +29,17 @@ function pillColors(tone: MarketContextPill["tone"], colors: ReturnType<typeof u
   }
 }
 
-export function DashboardMarketContextPanel({ snapshot }: Props) {
-  const { colors } = useTheme();
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+export function DashboardMarketContextPanel({ snapshot, embedded = false }: Props) {
+  const body = (
+    <DashboardMarketContextPanelBody snapshot={snapshot} showSummary={!embedded} showSessionToday={!embedded} />
+  );
+  if (embedded) {
+    return (
+      <div role="group" aria-label="Market context detail" data-testid="dashboard-market-context">
+        {body}
+      </div>
+    );
+  }
 
   return (
     <section
@@ -56,7 +66,25 @@ export function DashboardMarketContextPanel({ snapshot }: Props) {
       >
         Market context
       </p>
+      {body}
+    </section>
+  );
+}
 
+export function DashboardMarketContextPanelBody({
+  snapshot,
+  showSummary = true,
+  showSessionToday = true
+}: {
+  snapshot: MarketContextSnapshot;
+  showSummary?: boolean;
+  showSessionToday?: boolean;
+}) {
+  const { colors } = useTheme();
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  return (
+    <>
       <div
         className="grid gap-2 sm:grid-cols-3"
         data-testid="dashboard-market-context-index-stats"
@@ -101,7 +129,7 @@ export function DashboardMarketContextPanel({ snapshot }: Props) {
         {MARKET_CONTEXT_INDEX_FOOTNOTE}
       </p>
 
-      {snapshot.sessionToday.items.length > 0 ? (
+      {showSessionToday && snapshot.sessionToday.items.length > 0 ? (
         <div
           data-testid="dashboard-market-context-today"
           style={{
@@ -171,18 +199,20 @@ export function DashboardMarketContextPanel({ snapshot }: Props) {
         />
       ) : null}
 
-      <p
-        data-testid="dashboard-market-context-summary"
-        style={{
-          margin: `${spacing[3]} 0 0`,
-          fontSize: typography.scale.sm,
-          color: colors.textMuted,
-          lineHeight: 1.5
-        }}
-      >
-        {snapshot.environmentSummary}
-      </p>
-    </section>
+      {showSummary ? (
+        <p
+          data-testid="dashboard-market-context-summary"
+          style={{
+            margin: `${spacing[3]} 0 0`,
+            fontSize: typography.scale.sm,
+            color: colors.textMuted,
+            lineHeight: 1.5
+          }}
+        >
+          {snapshot.environmentSummary}
+        </p>
+      ) : null}
+    </>
   );
 }
 

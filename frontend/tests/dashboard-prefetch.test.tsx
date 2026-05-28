@@ -192,10 +192,6 @@ describe("Opportunities overview (Tier 1.A prefetch invariant)", () => {
       anchorByHref(screen.getByTestId("dashboard-watchlist-radar"), "/dashboard/watchlists?desk=day"),
       "watchlist radar link"
     );
-    assertLinkHasPrefetchDisabled(
-      anchorByHref(screen.getByTestId("dashboard-insight"), "/dashboard/scanner?mode=day"),
-      "insight Monitor Scanner"
-    );
     const live = screen.getByTestId("dashboard-live-status");
     const liveCta = live.querySelector("a[href^='/dashboard/scanner']") as HTMLAnchorElement | null;
     assertLinkHasPrefetchDisabled(liveCta, "live status scanner CTA");
@@ -261,10 +257,6 @@ describe("Dashboard heavy links (Tier 1.A prefetch invariant, with setups)", () 
     assertLinkHasPrefetchDisabled(
       anchorByHref(discovery, "/dashboard/scanner?mode=day"),
       "discovery Open Scanner"
-    );
-    assertLinkHasPrefetchDisabled(
-      anchorByHref(screen.getByTestId("dashboard-insight"), "/dashboard/scanner?mode=day"),
-      "insight Monitor Scanner"
     );
   });
 });

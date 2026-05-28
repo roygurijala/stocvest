@@ -77,7 +77,8 @@ describe("Dashboard — Swing Pro surfaces (dayTradingSurfaces=false)", () => {
     expect(screen.queryByTestId("swing-desk-panel")).toBeNull();
     expect(screen.queryByTestId("shared-context-master-card")).toBeNull();
     expect(screen.queryByTestId("day-desk-panel")).toBeNull();
-    expect(screen.getByTestId("dashboard-market-context")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-market-detail")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-market-context", { hidden: true })).toBeInTheDocument();
     expect(screen.queryByTestId("dashboard-desk-mode-day")).toBeNull();
     expect(screen.queryByRole("link", { name: /day scanner/i })).toBeNull();
   });

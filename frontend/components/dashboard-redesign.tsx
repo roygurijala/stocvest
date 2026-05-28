@@ -5,9 +5,7 @@ import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { DashboardDeskModePills } from "@/components/dashboard/dashboard-desk-mode-pills";
 import { DashboardEdgeSync } from "@/components/dashboard-edge-sync";
 import { DashboardOpportunityPipeline } from "@/components/dashboard/dashboard-opportunity-pipeline";
-import { DashboardInsightCallout } from "@/components/dashboard/dashboard-insight-callout";
 import { DashboardLiveStatus } from "@/components/dashboard/dashboard-live-status";
-import { DashboardMarketContextPanel } from "@/components/dashboard/dashboard-market-context-panel";
 import { DashboardMarketPulseHero } from "@/components/dashboard/dashboard-market-pulse-hero";
 import { DashboardScannerLoadingStrip } from "@/components/dashboard/dashboard-scanner-suspense-fallback";
 import { resolveDiscoveryLeaders } from "@/lib/dashboard/desk-today-present";
@@ -554,12 +552,12 @@ function DashboardRedesignBody({
         pageTitle={pageTitle}
         regimeLabel={regimeLabel}
         regimeTip={regimeTip}
+        marketContext={marketContextSnapshot}
         spyPct={spyPct}
         qqqPct={qqqPct}
         vixLevel={vixLevel}
         vixPct={vixPct}
         vixPulseOk={vixPulseOk}
-        environmentSummary={marketContextSnapshot.environmentSummary}
         sectorRotation={sectorRotation}
         systemLabel={systemLabel}
         swingDeskPhrase={swingDeskStatusPhrase(swingDeskPosture)}
@@ -609,25 +607,6 @@ function DashboardRedesignBody({
       />
 
       <DashboardLiveStatus status={liveStatus} />
-
-      <details data-testid="dashboard-market-context-fold">
-        <summary
-          style={{
-            fontSize: typography.scale.sm,
-            fontWeight: 600,
-            color: colors.accent,
-            cursor: "pointer",
-            listStylePosition: "outside"
-          }}
-        >
-          More market context
-        </summary>
-        <div className="mt-2">
-          <DashboardMarketContextPanel snapshot={marketContextSnapshot} />
-        </div>
-      </details>
-
-      <DashboardInsightCallout mode={activeDeskMode} nearReadyInMarket={nearReadyInMarket} />
 
       <nav
         data-testid="dashboard-desk-status"

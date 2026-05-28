@@ -4,10 +4,8 @@
 
 import type { DashboardDeskMode } from "@/lib/dashboard/live-status-copy";
 
+/** @deprecated Title removed from dashboard UI — status line only. Kept for tests/docs. */
 export const OPPORTUNITY_PIPELINE_TITLE = "Opportunity pipeline";
-
-export const OPPORTUNITY_PIPELINE_INTRO =
-  "Three steps: your list → quiet structure → session movers. Open Signals before trading.";
 
 export type PipelineStageId = "watchlist" | "quiet" | "market";
 
