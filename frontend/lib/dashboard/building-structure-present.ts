@@ -41,7 +41,7 @@ export type BuildingStructureRow = {
   symbol: string;
   quietLeader?: DeskQuietLeader;
   nearQual?: ScannerNearQualificationRow;
-  lowVelocity?: DeskMoverRadarRow | DeskDiscoveryLeader;
+  lowVelocity?: DeskMoverRadarRow;
 };
 
 function symbolInSet(symbol: string, set: Set<string>): boolean {
@@ -278,16 +278,7 @@ export function buildBuildingStructureCardModel(
     return buildNearStructureCardModel(row.nearQual, input);
   }
   if (row.source === "low_velocity" && row.lowVelocity) {
-    const mover: DeskMoverRadarRow =
-      "rank_score" in row.lowVelocity && "gap_percent" in row.lowVelocity
-        ? (row.lowVelocity as DeskMoverRadarRow)
-        : {
-            symbol: row.lowVelocity.symbol,
-            gap_percent: row.lowVelocity.gap_percent,
-            direction: row.lowVelocity.direction,
-            rank_score: row.lowVelocity.rank_score
-          };
-    return buildLowVelocityStructureCardModel(mover, input);
+    return buildLowVelocityStructureCardModel(row.lowVelocity, input);
   }
   return {
     symbol: row.symbol,
