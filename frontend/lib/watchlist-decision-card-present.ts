@@ -18,8 +18,17 @@ import {
   resolveTradeConvictionTier,
   type TradeConvictionTierResult
 } from "@/lib/trade-conviction-tier";
+import {
+  isWatchlistRadarDeskGated,
+  resolveWatchlistRadarAttentionLine,
+  WATCHLIST_DESK_OPEN,
+  type WatchlistRadarDeskContext
+} from "@/lib/dashboard/watchlist-radar-attention";
 
 export type WatchlistAttentionTier = "check_now" | "getting_close" | "tracking";
+
+export type { WatchlistRadarDeskContext } from "@/lib/dashboard/watchlist-radar-attention";
+export { WATCHLIST_DESK_OPEN } from "@/lib/dashboard/watchlist-radar-attention";
 
 export type WatchlistCardModel = {
   symbol: string;
@@ -29,6 +38,8 @@ export type WatchlistCardModel = {
   alignmentTier: AlignmentDisplayTier;
   attentionTier: WatchlistAttentionTier;
   alignmentLine: string;
+  /** Desk-aware status line (layers vs desk gating); shown as primary card subline. */
+  attentionLine: string | null;
   momentumLine: string | null;
   progressionBadge: "improved" | "weakened" | null;
   blockers: string[];
@@ -48,17 +59,17 @@ const TIER_SECTION: Record<
   check_now: {
     title: "Check now",
     subtitle: "Worth opening on Signals",
-    icon: "🔥"
+    icon: "●"
   },
   getting_close: {
     title: "Getting close",
     subtitle: "Building — monitor progression",
-    icon: "⚡"
+    icon: "◐"
   },
   tracking: {
     title: "Tracking",
     subtitle: "Lower priority today",
-    icon: "🧊"
+    icon: "○"
   }
 };
 
@@ -87,7 +98,13 @@ function progressionBadge(
   return null;
 }
 
-function buildMomentumLine(row: WatchlistMaturationRow | undefined): string | null {
+function buildMomentumLine(
+  row: WatchlistMaturationRow | undefined,
+  opts: {
+    attentionTier: WatchlistAttentionTier;
+    attentionLine: string | null;
+  }
+): string | null {
   const detail = formatWatchlistProgressionDetail(row);
   if (detail) {
     const type = row?.last_transition_type;
@@ -95,13 +112,18 @@ function buildMomentumLine(row: WatchlistMaturationRow | undefined): string | nu
     if (type === "worsened") return `Losing momentum ↓ (${detail})`;
     return detail;
   }
+  if (
+    opts.attentionLine &&
+    (opts.attentionTier === "check_now" || opts.attentionTier === "getting_close")
+  ) {
+    return opts.attentionLine;
+  }
   const { aligned, total } = maturationAlignmentCounts(row);
   const tier = resolveAlignmentDisplayTier({
     layersAligned: aligned,
     layersTotal: total,
     maturationState: row?.state
   });
-  if (tier === "near_ready") return "Near actionable threshold";
   if (tier === "developing") return "Building momentum";
   if (tier === "not_aligned") return "Early stage";
   return null;
@@ -189,7 +211,8 @@ export function buildWatchlistCardModel(
   row: WatchlistMaturationRow | undefined,
   snapshot: SnapshotPayload | undefined,
   colors: { accent: string; bullish: string; bearish: string; caution: string; textMuted: string },
-  planMode: "swing" | "day" = "swing"
+  planMode: "swing" | "day" = "swing",
+  desk: WatchlistRadarDeskContext = WATCHLIST_DESK_OPEN
 ): WatchlistCardModel {
   const symU = symbol.trim().toUpperCase();
   const { aligned, total } = maturationAlignmentCounts(row);
@@ -202,6 +225,14 @@ export function buildWatchlistCardModel(
   const layerDots = Array.from({ length: total }, (_, i) => i < aligned);
   const borders = watchlistCardBorderAccent(alignmentTier, colors);
   const evalAgo = formatEvaluatedAgo(row?.last_evaluated_at);
+  const blockers = extractBlockers(row);
+  const attentionLine = resolveWatchlistRadarAttentionLine({
+    tier: attentionTier,
+    row,
+    alignmentTier,
+    blockers,
+    desk
+  });
 
   return {
     symbol: symU,
@@ -215,9 +246,10 @@ export function buildWatchlistCardModel(
       layersTotal: total,
       maturationState: row?.state
     }),
-    momentumLine: buildMomentumLine(row),
+    attentionLine,
+    momentumLine: buildMomentumLine(row, { attentionTier, attentionLine }),
     progressionBadge: progressionBadge(row),
-    blockers: extractBlockers(row),
+    blockers,
     evaluatedAgo: evalAgo.text,
     evaluatedStale: evalAgo.stale,
     quote: watchlistQuoteFromSnapshot(snapshot),
@@ -258,14 +290,18 @@ export function sortSymbolsInAttentionTier(
 export function buildWatchlistTierPreview(
   tier: WatchlistAttentionTier,
   symbols: string[],
-  rowForSymbol: (sym: string) => WatchlistMaturationRow | undefined
+  rowForSymbol: (sym: string) => WatchlistMaturationRow | undefined,
+  desk: WatchlistRadarDeskContext = WATCHLIST_DESK_OPEN
 ): string | null {
   if (symbols.length === 0) return null;
 
   let actionable = 0;
   let nearReady = 0;
+  let deskGatedStrong = 0;
+  let deskGatedNear = 0;
   let improved = 0;
   let early = 0;
+  const deskGated = isWatchlistRadarDeskGated(desk);
 
   for (const sym of symbols) {
     const row = rowForSymbol(sym);
@@ -275,15 +311,28 @@ export function buildWatchlistTierPreview(
       layersTotal: total,
       maturationState: row?.state ?? row?.label
     });
-    if (displayTier === "actionable") actionable += 1;
-    else if (displayTier === "near_ready") nearReady += 1;
+    if (displayTier === "actionable") {
+      if (deskGated) deskGatedStrong += 1;
+      else actionable += 1;
+    } else if (displayTier === "near_ready") {
+      if (deskGated) deskGatedNear += 1;
+      else nearReady += 1;
+    }
     if (row?.last_transition_type === "improved") improved += 1;
     if (displayTier === "not_aligned" || aligned <= 1) early += 1;
   }
 
   if (tier === "check_now") {
     const parts: string[] = [];
+    if (deskGatedStrong > 0) {
+      parts.push(
+        deskGatedStrong === 1 ? "1 desk gated" : `${deskGatedStrong} desk gated`
+      );
+    }
     if (actionable > 0) parts.push(`${actionable} actionable`);
+    if (deskGatedNear > 0) {
+      parts.push(deskGatedNear === 1 ? "1 near ready, desk gated" : `${deskGatedNear} near ready, desk gated`);
+    }
     if (nearReady > 0) parts.push(`${nearReady} near actionable`);
     return parts.length > 0 ? parts.join(", ") : null;
   }
@@ -304,11 +353,12 @@ export function formatWatchlistTierHeaderHint(
   tier: WatchlistAttentionTier,
   count: number,
   rowForSymbol: (sym: string) => WatchlistMaturationRow | undefined,
-  symbolsInTier: string[]
+  symbolsInTier: string[],
+  desk: WatchlistRadarDeskContext = WATCHLIST_DESK_OPEN
 ): string {
   const meta = watchlistAttentionSectionMeta(tier);
   const countLabel = count === 1 ? "1 symbol" : `${count} symbols`;
-  const preview = buildWatchlistTierPreview(tier, symbolsInTier, rowForSymbol);
+  const preview = buildWatchlistTierPreview(tier, symbolsInTier, rowForSymbol, desk);
   const parts = [countLabel, meta.subtitle];
   if (preview) parts.push(preview);
   return parts.join(" · ");

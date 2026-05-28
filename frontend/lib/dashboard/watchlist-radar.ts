@@ -7,6 +7,12 @@ import {
   type WatchlistCardModel
 } from "@/lib/watchlist-decision-card-present";
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
+import {
+  resolveWatchlistRadarAttentionLine,
+  type WatchlistRadarDeskContext
+} from "@/lib/dashboard/watchlist-radar-attention";
+
+export type { WatchlistRadarDeskContext } from "@/lib/dashboard/watchlist-radar-attention";
 
 const RADAR_MAX = 6;
 const MOVE_PCT_THRESHOLD = 4.0;
@@ -34,18 +40,7 @@ function sessionMovePct(snapshot: SnapshotPayload | undefined): number | null {
   return null;
 }
 
-function attentionReasonFor(
-  tier: WatchlistAttentionTier,
-  row: WatchlistMaturationRow | undefined,
-  movePct: number | null
-): string | null {
-  if (tier === "check_now") {
-    if (row?.progress_band === "near_ready" || row?.progress_band === "actionable") {
-      return "Near actionable on your list";
-    }
-    return "Worth opening on Signals";
-  }
-  if (tier === "getting_close") return "Building on your watchlist";
+function sessionMoveAttentionLine(movePct: number | null): string | null {
   if (movePct != null && Math.abs(movePct) >= MOVE_PCT_THRESHOLD) {
     return `${movePct >= 0 ? "+" : ""}${movePct.toFixed(1)}% session move`;
   }
@@ -58,6 +53,7 @@ export function buildWatchlistRadarRows(opts: {
   snapshotForSymbol: (sym: string) => SnapshotPayload | undefined;
   colors: { accent: string; bullish: string; bearish: string; caution: string; textMuted: string };
   mode: "swing" | "day";
+  desk: WatchlistRadarDeskContext;
 }): WatchlistRadarRow[] {
   const buckets: Record<WatchlistAttentionTier, string[]> = {
     check_now: [],
@@ -85,13 +81,20 @@ export function buildWatchlistRadarRows(opts: {
     const snap = opts.snapshotForSymbol(sym);
     const tier = resolveWatchlistAttentionTier(row);
     const movePct = sessionMovePct(snap);
-    let reason = attentionReasonFor(tier, row, movePct);
+    const model = buildWatchlistCardModel(sym, row, snap, opts.colors, opts.mode);
+    let reason =
+      resolveWatchlistRadarAttentionLine({
+        tier,
+        row,
+        alignmentTier: model.alignmentTier,
+        blockers: model.blockers,
+        desk: opts.desk
+      }) ?? sessionMoveAttentionLine(movePct);
     if (!reason && movePct != null && Math.abs(movePct) >= MOVE_PCT_THRESHOLD) {
       reason = `${movePct >= 0 ? "+" : ""}${movePct.toFixed(1)}% today`;
     }
     if (!reason && tier === "tracking") continue;
 
-    const model = buildWatchlistCardModel(sym, row, snap, opts.colors, opts.mode);
     out.push({
       ...model,
       attentionReason: reason ?? model.alignmentLine,

@@ -9,6 +9,7 @@ import {
   type WatchlistAttentionTier
 } from "@/lib/watchlist-decision-card-present";
 import { sortWatchlistSymbolsInTier, type WatchlistSortMode } from "@/lib/watchlist-sort-preference";
+import type { WatchlistRadarDeskContext } from "@/lib/watchlist-decision-card-present";
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
 import type { SnapshotPayload } from "@/lib/api/market";
 import { spacing } from "@/lib/design-system";
@@ -35,6 +36,8 @@ type Props = {
   sortMode?: WatchlistSortMode;
   /** Smaller cards in the Tracking tier only. */
   trackingCompact?: boolean;
+  /** Regime + desk suppression for card copy (mirrors dashboard Watchlist radar). */
+  desk?: WatchlistRadarDeskContext;
 };
 
 function tierCardListClass(count: number): string {
@@ -93,7 +96,8 @@ function TierCardList({
   showDeskCompare,
   onCompareDesks,
   justAddedSymbol,
-  compact
+  compact,
+  desk
 }: {
   tier: WatchlistAttentionTier;
   list: string[];
@@ -107,6 +111,7 @@ function TierCardList({
   onCompareDesks?: (sym: string) => void;
   justAddedSymbol?: string | null;
   compact?: boolean;
+  desk?: WatchlistRadarDeskContext;
 }) {
   const justAddedU = justAddedSymbol?.trim().toUpperCase() ?? "";
   return (
@@ -125,6 +130,7 @@ function TierCardList({
             onRemove={() => onRemove(symU)}
             onRefresh={onRefresh ? () => onRefresh(symU) : undefined}
             onCompareDesks={onCompareDesks ? () => onCompareDesks(symU) : undefined}
+            desk={desk}
           />
         </li>
       ))}
@@ -145,7 +151,8 @@ export function WatchlistDecisionQueue({
   forceOpenTiers,
   justAddedSymbol,
   sortMode = "attention",
-  trackingCompact = false
+  trackingCompact = false,
+  desk
 }: Props) {
   const grouped = useMemo(
     () => groupSymbolsIntoAttentionTiers(symbols, rowForSymbol),
@@ -160,7 +167,7 @@ export function WatchlistDecisionQueue({
           const list = sortWatchlistSymbolsInTier(grouped[tier], sortMode, rowForSymbol);
           if (list.length === 0) return null;
           const meta = watchlistAttentionSectionMeta(tier);
-          const hint = formatWatchlistTierHeaderHint(tier, list.length, rowForSymbol, list);
+          const hint = formatWatchlistTierHeaderHint(tier, list.length, rowForSymbol, list, desk);
           const cards = (
             <TierCardList
               tier={tier}
@@ -175,6 +182,7 @@ export function WatchlistDecisionQueue({
               onCompareDesks={onCompareDesks}
               justAddedSymbol={justAddedSymbol}
               compact={tier === "tracking" && trackingCompact}
+              desk={desk}
             />
           );
 

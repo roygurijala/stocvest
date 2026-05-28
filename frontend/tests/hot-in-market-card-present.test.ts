@@ -60,7 +60,7 @@ describe("hot-in-market-card-present", () => {
     expect(model.setupBadgeLabel).toBe("Meets our gates");
   });
 
-  test("mover badge hidden for movers radar source", () => {
+  test("mover badge shows friction label for movers radar source", () => {
     const model = buildHotInMarketCardModel(baseLeader(), {
       rank: 3,
       mode: "day",
@@ -68,7 +68,9 @@ describe("hot-in-market-card-present", () => {
       colors
     });
     expect(model.setupBadge).toBe("mover");
-    expect(model.setupBadgeLabel).toBeNull();
+    expect(model.setupBadgeLabel).toMatch(/not an entry/i);
+    expect(model.gapEmphasis).toBe("secondary");
+    expect(model.statusHeadline).toMatch(/momentum/i);
     expect(model.cardTone).toBe("bullish");
     expect(model.alignmentLine).toBeNull();
   });
@@ -84,7 +86,7 @@ describe("hot-in-market-card-present", () => {
     );
     expect(model.setupBadge).toBe("pending");
     expect(model.setupBadgeLabel).toBe("Setup scan pending");
-    expect(model.detailLine).toContain("open Signals");
+    expect(model.statusHeadline).toMatch(/desk scan/i);
   });
 
   test("hotInMarketFeedSubtitle shows loading when scanner pending", () => {

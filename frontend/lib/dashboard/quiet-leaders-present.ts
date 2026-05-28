@@ -16,7 +16,7 @@ import type { HotInMarketCardModel } from "@/lib/dashboard/hot-in-market-card-pr
 
 export const QUIET_LEADERS_TITLE = "Quiet leaders";
 export const QUIET_LEADERS_SUBTITLE =
-  "Strong swing structure with low session velocity — often before names hit Hot in market.";
+  "Strong swing structure with low session velocity — often before names show up in market activity.";
 export const QUIET_LEADERS_DISCLAIMER =
   "Structure-ranked from a broad scan — not trade recommendations. Confirm on the Signals desk before sizing.";
 

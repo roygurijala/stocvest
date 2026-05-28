@@ -4,12 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { SnapshotPayload } from "@/lib/api/market";
 import { WatchlistRadarCard } from "@/components/dashboard/watchlist-radar-card";
-import { buildWatchlistRadarRows } from "@/lib/dashboard/watchlist-radar";
+import { buildWatchlistRadarRows, type WatchlistRadarDeskContext } from "@/lib/dashboard/watchlist-radar";
 import {
   buildWatchlistRadarCardModel,
   WATCHLIST_RADAR_DISCLAIMER,
+  WATCHLIST_RADAR_SUBTITLE,
   WATCHLIST_RADAR_TITLE
 } from "@/lib/dashboard/watchlist-radar-card-present";
+import { summarizeWatchlistDailyChanges } from "@/lib/dashboard/watchlist-daily-changes";
 import type { DashboardDeskMode } from "@/lib/dashboard/live-status-copy";
 import { interactionLevelProps } from "@/lib/dashboard/click-hierarchy";
 import { parseMaturationSummaryEnvelope } from "@/lib/watchlist/maturation-summary-envelope";
@@ -21,9 +23,18 @@ import { useTheme } from "@/lib/theme-provider";
 type Props = {
   mode: DashboardDeskMode;
   snapshots: SnapshotPayload[];
+  desk: WatchlistRadarDeskContext;
+  variant?: "standalone" | "pipeline";
+  onAttentionCountChange?: (count: number) => void;
 };
 
-export function DashboardWatchlistRadar({ mode, snapshots }: Props) {
+export function DashboardWatchlistRadar({
+  mode,
+  snapshots,
+  desk,
+  variant = "standalone",
+  onAttentionCountChange
+}: Props) {
   const { colors } = useTheme();
   const [symbols, setSymbols] = useState<string[]>([]);
   const [bySymbol, setBySymbol] = useState<Record<string, WatchlistMaturationRow>>({});
@@ -108,9 +119,10 @@ export function DashboardWatchlistRadar({ mode, snapshots }: Props) {
         rowForSymbol: (sym) => bySymbol[sym],
         snapshotForSymbol: (sym) => snapBySym.get(sym),
         colors,
-        mode
+        mode,
+        desk
       }),
-    [symbols, bySymbol, snapBySym, colors, mode]
+    [symbols, bySymbol, snapBySym, colors, mode, desk]
   );
 
   const cardModels = useMemo(
@@ -131,32 +143,53 @@ export function DashboardWatchlistRadar({ mode, snapshots }: Props) {
 
   const watchlistHref = `/dashboard/watchlists?desk=${encodeURIComponent(mode)}`;
   const watchlistHover = useHoverPrefetch(watchlistHref);
+  const dailyChanges = useMemo(() => summarizeWatchlistDailyChanges(bySymbol), [bySymbol]);
+  const embedded = variant === "pipeline";
+
+  useEffect(() => {
+    onAttentionCountChange?.(cardModels.length);
+  }, [cardModels.length, onAttentionCountChange]);
+
+  const shellStyle = embedded
+    ? { padding: 0, border: "none", background: "transparent", borderRadius: 0 }
+    : {
+        borderRadius: borderRadius.lg,
+        border: `1px solid ${colors.border}`,
+        background: colors.surface,
+        padding: spacing[4]
+      };
 
   return (
     <section
       role="region"
       aria-label="Watchlist radar"
       data-testid="dashboard-watchlist-radar"
-      className={surfaceGlowClassName}
-      style={{
-        borderRadius: borderRadius.lg,
-        border: `1px solid ${colors.border}`,
-        background: colors.surface,
-        padding: spacing[4]
-      }}
+      className={embedded ? undefined : surfaceGlowClassName}
+      style={shellStyle}
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <h2 className="m-0" style={{ fontSize: typography.scale.base, fontWeight: 700 }}>
-            {WATCHLIST_RADAR_TITLE}
-          </h2>
-          <p className="m-0 mt-1" style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>
+          {!embedded ? (
+            <h2 className="m-0" style={{ fontSize: typography.scale.base, fontWeight: 700 }}>
+              {WATCHLIST_RADAR_TITLE}
+            </h2>
+          ) : null}
+          <p className={embedded ? "m-0" : "m-0 mt-1"} style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>
             {status === "loading"
               ? "Loading tracked symbols…"
               : cardModels.length === 0
-                ? "Nothing on your list needs attention right now."
+                ? WATCHLIST_RADAR_SUBTITLE
                 : `${cardModels.length} symbol${cardModels.length === 1 ? "" : "s"} need a look`}
           </p>
+          {dailyChanges ? (
+            <p
+              className="m-0 mt-2"
+              data-testid="dashboard-watchlist-daily-changes"
+              style={{ fontSize: typography.scale.xs, color: colors.accent, lineHeight: 1.45 }}
+            >
+              What changed: {dailyChanges}
+            </p>
+          ) : null}
           <p
             className="m-0 mt-2"
             data-testid="dashboard-watchlist-radar-disclaimer"

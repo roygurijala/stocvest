@@ -65,10 +65,10 @@ export function sinceLastVisitSummary(added: string[], removed: string[]): strin
   const parts: string[] = [];
   if (added.length > 0) {
     const label = added.length === 1 ? added[0] : `${added.length} new`;
-    parts.push(`${label} in hot list`);
+    parts.push(`${label} entered market activity list`);
   }
   if (removed.length > 0) {
-    const label = removed.length === 1 ? `${removed[0]} dropped` : `${removed.length} dropped`;
+    const label = removed.length === 1 ? `${removed[0]} left the list` : `${removed.length} left the list`;
     parts.push(label);
   }
   if (parts.length === 0) return null;

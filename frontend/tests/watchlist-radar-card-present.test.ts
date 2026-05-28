@@ -35,7 +35,8 @@ function baseRow(overrides: Partial<WatchlistRadarRow> = {}): WatchlistRadarRow 
     borderLeft: colors.bullish,
     borderBottom: colors.bullish,
     conviction: null,
-    attentionReason: "Near actionable on your list",
+    attentionLine: "Strong setup — desk gated (bearish regime)",
+    attentionReason: "Strong setup — desk gated (bearish regime)",
     sessionMovePct: 2.4,
     ...overrides
   };
@@ -43,13 +44,17 @@ function baseRow(overrides: Partial<WatchlistRadarRow> = {}): WatchlistRadarRow 
 
 describe("watchlist-radar-card-present", () => {
   test("disclaimer distinguishes radar from full watchlist", () => {
-    expect(WATCHLIST_RADAR_DISCLAIMER.toLowerCase()).toContain("full watchlists");
+    expect(WATCHLIST_RADAR_DISCLAIMER.toLowerCase()).toContain("open watchlists");
   });
 
   test("check_now tier gets bullish badge", () => {
     const model = buildWatchlistRadarCardModel(baseRow(), colors);
     expect(model.badgeLabel).toBe("Check now");
-    expect(model.attentionLine).toContain("Near actionable");
+    expect(model.attentionLine).toContain("desk gated");
+  });
+
+  test("disclaimer explains strong vs desk gated", () => {
+    expect(WATCHLIST_RADAR_DISCLAIMER.toLowerCase()).toContain("desk gated");
   });
 
   test("resolveWatchlistCardTone uses session move when quote missing", () => {

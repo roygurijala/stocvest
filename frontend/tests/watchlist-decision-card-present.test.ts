@@ -56,6 +56,7 @@ describe("buildWatchlistCardModel", () => {
         state: "developing",
         layers_aligned: 3,
         layers_total: 6,
+        previous_layers_aligned: 2,
         missing_layers: ["internals", "macro"],
         last_transition_type: "improved",
         last_evaluated_at: new Date(Date.now() - 2 * 60_000).toISOString()
@@ -77,6 +78,24 @@ describe("buildWatchlistCardModel", () => {
       COLORS
     );
     expect(model.attentionTier).toBe("check_now");
+  });
+
+  test("6/6 on bearish desk shows desk gated copy (not near actionable)", () => {
+    const model = buildWatchlistCardModel(
+      "AMD",
+      row({
+        state: "actionable",
+        layers_aligned: 6,
+        layers_total: 6,
+        progress_band: "actionable"
+      }),
+      undefined,
+      COLORS,
+      "swing",
+      { regimeLabel: "Bearish", systemSuppressed: true }
+    );
+    expect(model.alignmentLine).toContain("Strong");
+    expect(model.momentumLine).toBe("Strong setup — desk gated (bearish regime)");
   });
 });
 
