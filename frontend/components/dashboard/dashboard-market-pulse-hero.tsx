@@ -1,5 +1,6 @@
 "use client";
 
+import { DashboardIndexChip } from "@/components/dashboard/dashboard-index-chip";
 import { DashboardMarketContextPanelBody } from "@/components/dashboard/dashboard-market-context-panel";
 import type { MarketContextSnapshot } from "@/lib/market-context/snapshot";
 import type { SectorRotationChip } from "@/lib/market-context/types";
@@ -30,13 +31,6 @@ function fmtPct(v: number | null): string {
   if (v == null || !Number.isFinite(v)) return "—";
   const sign = v > 0 ? "+" : "";
   return `${sign}${v.toFixed(2)}%`;
-}
-
-function pctTone(v: number | null, colors: ReturnType<typeof useTheme>["colors"]) {
-  if (v == null || !Number.isFinite(v)) return colors.textMuted;
-  if (v > 0.05) return colors.bullish;
-  if (v < -0.05) return colors.bearish;
-  return colors.textMuted;
 }
 
 function topSectors(chips: SectorRotationChip[]): { lead: SectorRotationChip | null; lag: SectorRotationChip | null } {
@@ -96,11 +90,18 @@ export function DashboardMarketPulseHero({
         {environmentSummary}
       </p>
 
-      <p className="m-0 mt-2 text-[10px] font-semibold uppercase tracking-wide" style={{ color: colors.textMuted }}>
-        Session
+      <p
+        className="m-0 mt-3 text-[10px] font-semibold uppercase tracking-wide"
+        style={{ color: colors.textMuted }}
+        data-testid="dashboard-pulse-session-heading"
+      >
+        Today (session)
+      </p>
+      <p className="m-0 mt-0.5" style={{ fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.4 }}>
+        Index moves since the open — live tape, not 5-day trend.
       </p>
       <div
-        className="mt-1 flex flex-wrap gap-2"
+        className="mt-1.5 flex flex-wrap gap-2"
         data-testid="dashboard-pulse-tape"
         {...interactionLevelProps("none")}
       >
@@ -112,27 +113,22 @@ export function DashboardMarketPulseHero({
             pct: vixPulseOk ? vixPct : null,
             extra: vixPulseOk && vixLevel != null ? `$${vixLevel.toFixed(2)}` : null
           }
-        ].map((cell) => (
-          <div
-            key={cell.label}
-            data-testid={`dashboard-pulse-${cell.label}`}
-            style={{
-              borderRadius: borderRadius.md,
-              border: `1px solid ${colors.border}`,
-              padding: `${spacing[2]} ${spacing[3]}`,
-              minWidth: "5.5rem",
-              background: colors.surfaceMuted
-            }}
-          >
-            <div style={{ fontSize: typography.scale.xs, color: colors.textMuted, fontWeight: 600 }}>{cell.label}</div>
-            <div style={{ fontSize: typography.scale.sm, fontWeight: 700, color: pctTone(cell.pct, colors) }}>
-              {fmtPct(cell.pct)}
-            </div>
-            {cell.extra ? (
-              <div style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>{cell.extra}</div>
-            ) : null}
-          </div>
-        ))}
+        ].map((cell) => {
+          const pct = cell.pct;
+          const tone =
+            pct == null || !Number.isFinite(pct) ? "muted" : pct > 0.05 ? "bullish" : pct < -0.05 ? "bearish" : "muted";
+          return (
+            <DashboardIndexChip
+              key={cell.label}
+              symbol={cell.label}
+              horizon="today"
+              formattedPct={fmtPct(pct)}
+              tone={tone}
+              extra={cell.extra ?? undefined}
+              testId={`dashboard-pulse-${cell.label}`}
+            />
+          );
+        })}
         {lead ? (
           <div
             data-testid="dashboard-pulse-sector-lead"

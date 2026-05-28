@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { DashboardIndexChip } from "@/components/dashboard/dashboard-index-chip";
 import {
-  MARKET_CONTEXT_INDEX_FOOTNOTE,
+  MARKET_CONTEXT_INDEX_SECTION_HINT,
+  MARKET_CONTEXT_INDEX_SECTION_TITLE,
   type MarketContextPill,
   type MarketContextSnapshot
 } from "@/lib/market-context/snapshot";
@@ -86,49 +88,32 @@ export function DashboardMarketContextPanelBody({
 
   return (
     <>
+      <p
+        className="m-0 text-[10px] font-semibold uppercase tracking-wide"
+        style={{ color: colors.textMuted }}
+        data-testid="dashboard-market-context-5d-heading"
+      >
+        {MARKET_CONTEXT_INDEX_SECTION_TITLE}
+      </p>
+      <p className="m-0 mt-0.5" style={{ fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.4 }}>
+        {MARKET_CONTEXT_INDEX_SECTION_HINT}
+      </p>
       <div
-        className="grid gap-2 sm:grid-cols-3"
+        className="mt-1.5 grid gap-2 sm:grid-cols-3"
         data-testid="dashboard-market-context-index-stats"
       >
-        {snapshot.indexStats.map((stat) => {
-          const toneColor =
-            stat.tone === "bullish"
-              ? colors.bullish
-              : stat.tone === "bearish"
-                ? colors.bearish
-                : colors.textMuted;
-          return (
-            <div
-              key={stat.symbol}
-              data-testid={`dashboard-market-index-${stat.symbol}`}
-              style={{
-                borderRadius: borderRadius.md,
-                border: `1px solid ${colors.border}`,
-                padding: spacing[3],
-                background: `color-mix(in srgb, ${colors.surface} 96%, ${toneColor} 4%)`
-              }}
-            >
-              <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted }}>
-                {stat.symbol} · {stat.label}
-              </p>
-              <p
-                style={{
-                  margin: `${spacing[1]} 0 0`,
-                  fontSize: typography.scale.lg,
-                  fontWeight: 700,
-                  fontVariantNumeric: "tabular-nums",
-                  color: toneColor
-                }}
-              >
-                {stat.formattedPct}
-              </p>
-            </div>
-          );
-        })}
+        {snapshot.indexStats.map((stat) => (
+          <DashboardIndexChip
+            key={stat.symbol}
+            symbol={stat.symbol}
+            descriptor={stat.label}
+            horizon="5d"
+            formattedPct={stat.formattedPct}
+            tone={stat.tone}
+            testId={`dashboard-market-index-${stat.symbol}`}
+          />
+        ))}
       </div>
-      <p style={{ margin: `${spacing[2]} 0 ${spacing[2]}`, fontSize: typography.scale.xs, color: colors.textMuted }}>
-        {MARKET_CONTEXT_INDEX_FOOTNOTE}
-      </p>
 
       {showSessionToday && snapshot.sessionToday.items.length > 0 ? (
         <div
