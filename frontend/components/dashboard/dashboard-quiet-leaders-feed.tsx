@@ -21,9 +21,15 @@ type Props = {
   mode: DashboardDeskMode;
   deskData: DeskTodayData | null | undefined;
   isLoading?: boolean;
+  variant?: "standalone" | "pipeline";
 };
 
-export function DashboardQuietLeadersFeed({ mode, deskData, isLoading = false }: Props) {
+export function DashboardQuietLeadersFeed({
+  mode,
+  deskData,
+  isLoading = false,
+  variant = "standalone"
+}: Props) {
   const { colors } = useTheme();
   const leaders = useMemo(() => {
     if (mode !== "swing") return [];
@@ -52,23 +58,30 @@ export function DashboardQuietLeadersFeed({ mode, deskData, isLoading = false }:
 
   if (mode !== "swing") return null;
 
+  const embedded = variant === "pipeline";
+  const shellStyle = embedded
+    ? { padding: 0, border: "none", background: "transparent", borderRadius: 0 }
+    : {
+        borderRadius: borderRadius.lg,
+        border: `1px solid ${colors.border}`,
+        background: colors.surface,
+        padding: spacing[4]
+      };
+
   return (
     <section
       role="region"
       aria-label="Quiet leaders"
       data-testid="dashboard-quiet-leaders-feed"
-      className={surfaceGlowClassName}
-      style={{
-        borderRadius: borderRadius.lg,
-        border: `1px solid ${colors.border}`,
-        background: colors.surface,
-        padding: spacing[4]
-      }}
+      className={embedded ? undefined : surfaceGlowClassName}
+      style={shellStyle}
     >
       <div>
-        <h2 className="m-0" style={{ fontSize: typography.scale.base, fontWeight: 700 }}>
-          {QUIET_LEADERS_TITLE}
-        </h2>
+        {!embedded ? (
+          <h2 className="m-0" style={{ fontSize: typography.scale.base, fontWeight: 700 }}>
+            {QUIET_LEADERS_TITLE}
+          </h2>
+        ) : null}
         <p className="m-0 mt-1" style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>
           {QUIET_LEADERS_SUBTITLE}
         </p>

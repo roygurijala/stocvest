@@ -4,7 +4,8 @@ import { X } from "lucide-react";
 import { SignalsDeeplinkLink } from "@/components/nav/signals-deeplink-link";
 import {
   buildWatchlistCardModel,
-  type WatchlistCardModel
+  type WatchlistCardModel,
+  type WatchlistRadarDeskContext
 } from "@/lib/watchlist-decision-card-present";
 import { watchlistSignalsOpenAriaLabel } from "@/lib/nav/watchlist-signals-deeplink";
 import { WATCHLIST_EVALUATE_LINK_CLASS } from "@/lib/watchlist-interactive-styles";
@@ -59,7 +60,7 @@ export function WatchlistDecisionCard({
   const peek =
     model.blockers.length > 0
       ? `Blocked: ${model.blockers.join(" · ")}`
-      : model.row?.readiness_label?.trim() || model.alignmentLine;
+      : model.momentumLine || model.attentionLine || model.row?.readiness_label?.trim() || model.alignmentLine;
 
   return (
     <SignalsDeeplinkLink
@@ -171,8 +172,12 @@ export function WatchlistDecisionCard({
           ) : null}
         </div>
 
+        <p className="m-0 mt-2 text-xs font-medium tabular-nums" style={{ color: colors.textMuted }}>
+          {model.alignmentLine}
+        </p>
+
         {model.momentumLine ? (
-          <p className="m-0 mt-2 text-sm leading-snug" style={{ color: colors.text }}>
+          <p className="m-0 mt-1 text-sm leading-snug" style={{ color: colors.text }}>
             {model.momentumLine}
           </p>
         ) : null}
@@ -263,7 +268,8 @@ export function WatchlistDecisionCardFromRow({
   showDeskCompare,
   onRemove,
   onRefresh,
-  onCompareDesks
+  onCompareDesks,
+  desk
 }: {
   symbol: string;
   row: WatchlistMaturationRow | undefined;
@@ -273,6 +279,7 @@ export function WatchlistDecisionCardFromRow({
   justAdded?: boolean;
   compact?: boolean;
   showDeskCompare?: boolean;
+  desk?: WatchlistRadarDeskContext;
   onRemove: () => void;
   onRefresh?: () => void;
   onCompareDesks?: () => void;
@@ -289,7 +296,8 @@ export function WatchlistDecisionCardFromRow({
       caution: colors.caution,
       textMuted: colors.textMuted
     },
-    planMode
+    planMode,
+    desk
   );
   return (
     <WatchlistDecisionCard

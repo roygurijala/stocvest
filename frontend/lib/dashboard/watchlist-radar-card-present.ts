@@ -14,11 +14,14 @@ import {
   type WatchlistAttentionTier
 } from "@/lib/watchlist-decision-card-present";
 
-export const WATCHLIST_RADAR_TITLE = "Watchlist radar";
+export const WATCHLIST_RADAR_TITLE = "Your watchlist";
+
+export const WATCHLIST_RADAR_SUBTITLE =
+  "Progress on symbols you track — near actionable beats session hype.";
 
 export const WATCHLIST_RADAR_DISCLAIMER =
-  "Your tracked symbols that need a look today — not trade recommendations. " +
-  "Open the full Watchlists page to manage tiers, refresh evaluations, and remove symbols.";
+  "Not trade recommendations. Strong means layer alignment on your list; desk gated means the market desk is holding execution. " +
+  "Open Watchlists to manage tiers and refresh evaluations.";
 
 const TIER_BADGE: Record<WatchlistAttentionTier, string> = {
   check_now: "Check now",

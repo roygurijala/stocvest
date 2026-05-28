@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { GapIntelligenceItem } from "@/lib/api/scanner";
 import type { DeskTodayData } from "@/lib/api/desk-today";
 import { HotInMarketCard } from "@/components/dashboard/hot-in-market-card";
+import { DashboardMissedTodayStrip } from "@/components/dashboard/dashboard-missed-today-strip";
 import {
   deskScanFootnote,
   formatGeneratedAtEt,
@@ -18,12 +19,12 @@ import {
 } from "@/lib/dashboard/desk-since-last-visit";
 import {
   buildHotInMarketCardModel,
-  HOT_IN_MARKET_DISCLAIMER,
-  HOT_IN_MARKET_TITLE,
   hotInMarketAwaitingMessage,
   hotInMarketEmptyMessage,
   hotInMarketFeedSubtitle,
-  hotInMarketSignalsHref
+  MARKET_ACTIVITY_DISCLAIMER,
+  MARKET_ACTIVITY_SUBTITLE,
+  MARKET_ACTIVITY_TITLE
 } from "@/lib/dashboard/hot-in-market-card-present";
 import type { DashboardDeskMode } from "@/lib/dashboard/live-status-copy";
 import { interactionLevelProps } from "@/lib/dashboard/click-hierarchy";
@@ -45,6 +46,7 @@ type Props = {
   canRefreshDesk?: boolean;
   refreshCooldownLabel?: string | null;
   refreshError?: string | null;
+  variant?: "standalone" | "pipeline";
 };
 
 export function DashboardDiscoveryFeed({
@@ -60,7 +62,8 @@ export function DashboardDiscoveryFeed({
   refreshBusy = false,
   canRefreshDesk = false,
   refreshCooldownLabel = null,
-  refreshError = null
+  refreshError = null,
+  variant = "standalone"
 }: Props) {
   const { colors } = useTheme();
   const { leaders, source } = resolveDiscoveryLeaders(deskData, gapFallback, mode, alternateDeskData);
@@ -100,7 +103,6 @@ export function DashboardDiscoveryFeed({
     [leaders, mode, source, colors.accent, colors.bullish, colors.bearish, colors.caution, colors.textMuted]
   );
 
-  const recentlyHot = Array.isArray(deskData?.recently_hot) ? deskData!.recently_hot!.slice(0, 5) : [];
   const footnote = deskScanFootnote(deskData);
   const updated = formatGeneratedAtEt(deskData?.generated_at);
   const scannerHref = dualDeskSurfaces
@@ -119,37 +121,44 @@ export function DashboardDiscoveryFeed({
   const awaitingData =
     leaders.length === 0 && (isLoading || (scannerPending && deskCacheMiss && gapFallback.length === 0));
 
-  return (
-    <section
-      role="region"
-      aria-label="Hot in market opportunities"
-      data-testid="dashboard-discovery-feed"
-      className={surfaceGlowClassName}
-      style={{
+  const embedded = variant === "pipeline";
+  const shellStyle = embedded
+    ? { padding: 0, border: "none", background: "transparent", borderRadius: 0 }
+    : {
         borderRadius: borderRadius.lg,
         border: `1px solid ${colors.border}`,
         background: colors.surface,
         padding: spacing[4]
-      }}
+      };
+
+  return (
+    <section
+      role="region"
+      aria-label="Market activity"
+      data-testid="dashboard-discovery-feed"
+      className={embedded ? undefined : surfaceGlowClassName}
+      style={shellStyle}
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <h2 className="m-0" style={{ fontSize: typography.scale.base, fontWeight: 700 }}>
-            {HOT_IN_MARKET_TITLE}
-          </h2>
+          {!embedded ? (
+            <h2 className="m-0" style={{ fontSize: typography.scale.base, fontWeight: 700 }}>
+              {MARKET_ACTIVITY_TITLE}
+            </h2>
+          ) : null}
           <p
-            className="m-0 mt-1"
+            className={embedded ? "m-0" : "m-0 mt-1"}
             data-testid="dashboard-hot-in-market-subtitle"
             style={{ fontSize: typography.scale.sm, color: colors.textMuted }}
           >
-            {subtitle}
+            {embedded ? `${MARKET_ACTIVITY_SUBTITLE} · ${subtitle}` : subtitle}
           </p>
           <p
             className="m-0 mt-2"
             data-testid="dashboard-hot-in-market-disclaimer"
             style={{ fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45, maxWidth: "52rem" }}
           >
-            {HOT_IN_MARKET_DISCLAIMER}
+            {MARKET_ACTIVITY_DISCLAIMER}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -230,42 +239,7 @@ export function DashboardDiscoveryFeed({
         </p>
       )}
 
-      {recentlyHot.length > 0 ? (
-        <div className="mt-3" data-testid="dashboard-recently-hot">
-          <p
-            className="m-0"
-            style={{
-              fontSize: typography.scale.xs,
-              fontWeight: 700,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              color: colors.textMuted
-            }}
-          >
-            Recently hot
-          </p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {recentlyHot.map((row) => (
-              <Link
-                key={row.symbol}
-                href={hotInMarketSignalsHref(row.symbol, mode)}
-                prefetch={false}
-                {...interactionLevelProps("deep")}
-                data-testid={`dashboard-recently-hot-${row.symbol}`}
-                style={{
-                  fontSize: typography.scale.xs,
-                  padding: "4px 10px",
-                  borderRadius: borderRadius.full,
-                  border: `1px dashed ${colors.border}`,
-                  color: colors.textMuted
-                }}
-              >
-                {row.symbol} · dropped off top list
-              </Link>
-            ))}
-          </div>
-        </div>
-      ) : null}
+      <DashboardMissedTodayStrip mode={mode} deskData={deskData} gapFallback={gapFallback} />
 
       {footnote ? (
         <p className="m-0 mt-3" style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>

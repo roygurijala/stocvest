@@ -4,14 +4,13 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { DashboardDeskModePills } from "@/components/dashboard/dashboard-desk-mode-pills";
 import { DashboardEdgeSync } from "@/components/dashboard-edge-sync";
-import { DashboardDiscoveryFeed } from "@/components/dashboard/dashboard-discovery-feed";
-import { DashboardQuietLeadersFeed } from "@/components/dashboard/dashboard-quiet-leaders-feed";
+import { DashboardOpportunityPipeline } from "@/components/dashboard/dashboard-opportunity-pipeline";
 import { DashboardInsightCallout } from "@/components/dashboard/dashboard-insight-callout";
 import { DashboardLiveStatus } from "@/components/dashboard/dashboard-live-status";
 import { DashboardMarketContextPanel } from "@/components/dashboard/dashboard-market-context-panel";
 import { DashboardMarketPulseHero } from "@/components/dashboard/dashboard-market-pulse-hero";
 import { DashboardScannerLoadingStrip } from "@/components/dashboard/dashboard-scanner-suspense-fallback";
-import { DashboardWatchlistRadar } from "@/components/dashboard/dashboard-watchlist-radar";
+import { resolveDiscoveryLeaders } from "@/lib/dashboard/desk-today-present";
 import { ScannerOverviewProvider, useScannerOverview } from "@/components/dashboard/scanner-overview-context";
 import { DashboardEarningsProvider, useDashboardEarnings } from "@/components/dashboard/dashboard-earnings-context";
 import { buildDashboardAssistantPageContext } from "@/lib/dashboard/dashboard-assistant-context";
@@ -509,6 +508,24 @@ function DashboardRedesignBody({
     return rows.filter((r) => r.desk === activeDeskMode).length;
   }, [scannerOverview.scanSummary, activeDeskMode]);
 
+  const [watchlistAttentionCount, setWatchlistAttentionCount] = useState(0);
+
+  const marketActivityCount = useMemo(() => {
+    const { leaders } = resolveDiscoveryLeaders(
+      deskToday?.data ?? null,
+      scannerOverview.gapIntelligence,
+      activeDeskMode,
+      dayTradingSurfaces ? alternateDeskToday?.data ?? null : undefined
+    );
+    return leaders.length;
+  }, [
+    deskToday?.data,
+    scannerOverview.gapIntelligence,
+    activeDeskMode,
+    alternateDeskToday?.data,
+    dayTradingSurfaces
+  ]);
+
   return (
     <section className="stocvest-dashboard-v2" style={{ display: "grid", gap: spacing[4] }}>
       <DashboardDeskModePills
@@ -553,13 +570,13 @@ function DashboardRedesignBody({
         </p>
       ) : null}
 
-      <DashboardDiscoveryFeed
+      <DashboardOpportunityPipeline
         mode={activeDeskMode}
         deskData={deskToday?.data ?? null}
         deskSource={deskToday?.source ?? null}
         alternateDeskData={dayTradingSurfaces ? alternateDeskToday?.data ?? null : null}
         gapFallback={scannerOverview.gapIntelligence}
-        isLoading={deskTodayLoading}
+        deskLoading={deskTodayLoading}
         scannerPending={!scannerDataSettled}
         dualDeskSurfaces={dayTradingSurfaces}
         onRefreshDesk={() => void refreshDesk()}
@@ -567,15 +584,16 @@ function DashboardRedesignBody({
         canRefreshDesk={canManualRefresh}
         refreshCooldownLabel={cooldownLabel}
         refreshError={deskRefreshError}
+        snapshots={marketOverview.snapshots}
+        desk={{
+          regimeLabel,
+          systemSuppressed
+        }}
+        nearReadyInMarket={nearReadyInMarket}
+        marketActivityCount={marketActivityCount}
+        watchlistAttentionCount={watchlistAttentionCount}
+        onWatchlistAttentionCount={setWatchlistAttentionCount}
       />
-
-      <DashboardQuietLeadersFeed
-        mode={activeDeskMode}
-        deskData={deskToday?.data ?? null}
-        isLoading={deskTodayLoading}
-      />
-
-      <DashboardWatchlistRadar mode={activeDeskMode} snapshots={marketOverview.snapshots} />
 
       <DashboardLiveStatus status={liveStatus} />
 

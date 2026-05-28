@@ -11,12 +11,16 @@ import {
 import type { DashboardDeskMode } from "@/lib/dashboard/live-status-copy";
 import { formatDeskGapLine } from "@/lib/dashboard/desk-today-present";
 import { alignedLayersFromAlignmentRatio } from "@/lib/signals-page-present";
-import { hotInMarketSignalsHref, type HotInMarketThemeColors } from "@/lib/dashboard/hot-in-market-card-present";
-import type { HotInMarketCardModel } from "@/lib/dashboard/hot-in-market-card-present";
+import {
+  hotInMarketSignalsHref,
+  resolveHotInMarketGapEmphasis,
+  type HotInMarketCardModel,
+  type HotInMarketThemeColors
+} from "@/lib/dashboard/hot-in-market-card-present";
 
 export const QUIET_LEADERS_TITLE = "Quiet leaders";
 export const QUIET_LEADERS_SUBTITLE =
-  "Strong swing structure with low session velocity — often before names hit Hot in market.";
+  "Strong swing structure with low session velocity — often before names show up in market activity.";
 export const QUIET_LEADERS_DISCLAIMER =
   "Structure-ranked from a broad scan — not trade recommendations. Confirm on the Signals desk before sizing.";
 
@@ -69,22 +73,29 @@ export function buildQuietLeaderCardModel(
       : tech != null
         ? `Technical ${tech}`
         : null;
+  const setupBadge = "review" as const;
+  const setupBadgeLabel = "Quiet leader";
+  const gapEmphasis = resolveHotInMarketGapEmphasis(setupBadge);
+  const statusHeadline =
+    leader.execution_hint?.trim() || "Strong structure before the session heats up";
 
   return {
     symbol: leader.symbol,
     rank: input.rank,
     gapLine,
     gapTone,
+    gapEmphasis,
     priceLine: null,
     deskLabel: "swing · under the surface",
+    statusHeadline,
     alignmentLine,
     layerDots,
     layerTotal: LAYER_TOTAL,
     verdictLine: leader.verdict?.trim() || null,
     detailLine: why,
     volumeLine: null,
-    setupBadge: "review",
-    setupBadgeLabel: "Quiet leader",
+    setupBadge,
+    setupBadgeLabel,
     cardTone: gapTone,
     cardChrome,
     peek: leader.execution_hint?.trim() || why

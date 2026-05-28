@@ -7,6 +7,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 
 import { DashboardDiscoveryFeed } from "@/components/dashboard/dashboard-discovery-feed";
+import { DashboardMissedTodayStrip } from "@/components/dashboard/dashboard-missed-today-strip";
 import { DashboardRedesign } from "@/components/dashboard-redesign";
 import { ThemeProvider } from "@/lib/theme-provider";
 import type { MarketOverview, MarketStatusPayload } from "@/lib/api/market";
@@ -108,7 +109,23 @@ const baseWeekly = [
 ];
 
 describe("DashboardDiscoveryFeed", () => {
-  test("renders Hot in market card with disclaimer and blocked badge", () => {
+  test("renders missed today educational strip for recently_hot rows", () => {
+    wrap(
+      <DashboardMissedTodayStrip
+        mode="swing"
+        deskData={{
+          recently_hot: [{ symbol: "MU", dropped_at: "2026-05-26T14:00:00Z", gap_percent: 16.2 }],
+          movers_radar: [{ symbol: "MU", gap_percent: 16.2, direction: "up", rank_score: 16.2 }]
+        }}
+      />
+    );
+    expect(screen.getByTestId("dashboard-missed-today")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-missed-today-MU")).toBeInTheDocument();
+    expect(screen.getByText(/extended/i)).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-missed-today-link-MU")).toHaveAttribute("href", expect.stringContaining("MU"));
+  });
+
+  test("renders market activity card with disclaimer and blocked badge", () => {
     wrap(
       <DashboardDiscoveryFeed
         mode="swing"
@@ -127,7 +144,7 @@ describe("DashboardDiscoveryFeed", () => {
         gapFallback={[]}
       />
     );
-    expect(screen.getByText("Hot in market")).toBeInTheDocument();
+    expect(screen.getByText("Market activity")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-hot-in-market-disclaimer")).toHaveTextContent(
       /not trade recommendations/i
     );
@@ -185,6 +202,7 @@ describe("DashboardRedesign radar shell", () => {
 
     expect(screen.getByTestId("dashboard-market-pulse-hero")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-page-title")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-opportunity-pipeline")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-discovery-feed")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-hot-in-market-card-MU")).toBeInTheDocument();
     expect(screen.queryByTestId("dashboard-opportunities")).not.toBeInTheDocument();

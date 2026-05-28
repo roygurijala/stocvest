@@ -45,9 +45,10 @@ function badgeStyle(
         background: `color-mix(in srgb, ${colors.caution} 14%, transparent)`,
         color: colors.caution
       };
+    case "mover":
     default:
       return {
-        background: `color-mix(in srgb, ${colors.textMuted} 14%, transparent)`,
+        background: `color-mix(in srgb, ${colors.textMuted} 16%, transparent)`,
         color: colors.textMuted
       };
   }
@@ -58,8 +59,10 @@ export function HotInMarketCard({ model, mode }: Props) {
   const href = hotInMarketSignalsHref(model.symbol, mode);
   const hover = useHoverPrefetch(href);
   const chrome = model.cardChrome;
-  const gapColor = chrome.accent;
+  const gapColor =
+    model.gapEmphasis === "primary" ? chrome.accent : colors.textMuted;
   const badge = model.setupBadgeLabel ? badgeStyle(model.setupBadge, colors) : null;
+  const secondary = model.gapEmphasis === "secondary";
 
   return (
     <li className="list-none" data-testid={`dashboard-hot-in-market-card-${model.symbol}`}>
@@ -77,6 +80,7 @@ export function HotInMarketCard({ model, mode }: Props) {
         <article
           className="relative flex h-full flex-col overflow-hidden rounded-xl transition hover:brightness-[1.04]"
           data-card-tone={model.cardTone}
+          data-gap-emphasis={model.gapEmphasis}
           style={{
             background: chrome.background,
             border: `1px solid ${chrome.border}`,
@@ -96,7 +100,7 @@ export function HotInMarketCard({ model, mode }: Props) {
                   className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums"
                   style={{
                     background: `color-mix(in srgb, ${chrome.accent} 18%, transparent)`,
-                    color: chrome.accent
+                    color: colors.textMuted
                   }}
                 >
                   #{model.rank}
@@ -116,29 +120,33 @@ export function HotInMarketCard({ model, mode }: Props) {
             ) : null}
           </header>
 
+          {badge && model.setupBadgeLabel ? (
+            <span
+              className="mt-2 inline-block w-fit max-w-full rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+              style={badge}
+              data-testid={`hot-in-market-badge-${model.symbol}`}
+            >
+              {model.setupBadgeLabel}
+            </span>
+          ) : null}
+
           <p
-            className="m-0 mt-2 text-lg font-bold tabular-nums leading-none"
-            style={{ color: gapColor }}
-            data-testid={`hot-in-market-gap-${model.symbol}`}
+            className={`m-0 leading-snug ${secondary ? "mt-2 text-sm font-semibold" : "mt-2 text-sm font-semibold"}`}
+            style={{ color: colors.text }}
+            data-testid={`hot-in-market-status-${model.symbol}`}
           >
-            {model.gapLine}
+            {model.statusHeadline}
           </p>
 
-          <div
-            className="my-2 h-px w-full"
-            style={{ background: `color-mix(in srgb, ${chrome.border} 80%, transparent)` }}
-            aria-hidden
-          />
-
           {model.alignmentLine ? (
-            <div className="flex flex-wrap items-center gap-2">
+            <div className={`flex flex-wrap items-center gap-2 ${secondary ? "mt-2" : "mt-2"}`}>
               <DashboardLayerDots filled={model.layerDots} total={model.layerTotal} accent={chrome.accent} />
               <span className="text-xs" style={{ color: colors.textMuted }}>
                 {model.alignmentLine}
               </span>
             </div>
           ) : model.detailLine ? (
-            <p className="m-0 text-xs leading-snug" style={{ color: colors.textMuted }}>
+            <p className="m-0 mt-2 text-xs leading-snug" style={{ color: colors.textMuted }}>
               {model.detailLine}
             </p>
           ) : null}
@@ -149,19 +157,23 @@ export function HotInMarketCard({ model, mode }: Props) {
             </p>
           ) : null}
 
-          {badge && model.setupBadgeLabel ? (
-            <footer className="mt-auto pt-2">
-              <span
-                className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
-                style={badge}
-                data-testid={`hot-in-market-badge-${model.symbol}`}
-              >
-                {model.setupBadgeLabel}
-              </span>
-            </footer>
-          ) : (
-            <div className="mt-auto pt-2" aria-hidden />
-          )}
+          <div
+            className="my-2 h-px w-full"
+            style={{ background: `color-mix(in srgb, ${chrome.border} 80%, transparent)` }}
+            aria-hidden
+          />
+
+          <p
+            className={`m-0 tabular-nums leading-none ${
+              secondary ? "text-sm font-medium" : "text-lg font-bold"
+            }`}
+            style={{ color: gapColor }}
+            data-testid={`hot-in-market-gap-${model.symbol}`}
+          >
+            {secondary ? `Session ${model.gapLine}` : model.gapLine}
+          </p>
+
+          {!badge ? <div className="mt-auto pt-2" aria-hidden /> : null}
         </article>
       </Link>
     </li>

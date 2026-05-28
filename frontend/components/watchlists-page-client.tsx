@@ -74,6 +74,7 @@ import {
   writeWatchlistSortMode,
   type WatchlistSortMode
 } from "@/lib/watchlist-sort-preference";
+import { useWatchlistDeskContext } from "@/lib/hooks/use-watchlist-desk-context";
 import {
   compareSymbolsByPresentationPriority,
   maturationAlertPassesTracking,
@@ -255,6 +256,12 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   useEffect(() => {
     if (!dualDeskMaturation && viewMode !== "swing") setViewMode("swing");
   }, [dualDeskMaturation, viewMode]);
+
+  const decisionPlanMode = useMemo(
+    () => tradingModeForSignalsNav(viewMode, dualDeskMaturation),
+    [viewMode, dualDeskMaturation]
+  );
+  const watchlistDesk = useWatchlistDeskContext(decisionPlanMode);
 
   const nearReadyFilterActive = searchParams.get("near_ready") === "1";
 
@@ -1643,6 +1650,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
                           justAddedSymbol={justAddedSymbol}
                           sortMode={sortMode}
                           trackingCompact={trackingCompact}
+                          desk={watchlistDesk}
                         />
                       );
                     })()}
@@ -1652,7 +1660,9 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
             </article>
 
             <p className="m-0 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
-              Your watchlist is a prioritized queue — click a card for Signals. Use Refresh for the active desk
+              Your watchlist is a prioritized queue — click a card for Signals. Strong means layer alignment on your
+              list; desk gated means the market desk is holding execution (regime or quiet desk). Use Refresh for the
+              active desk
               {dualDeskMaturation ? "; Compare desks opens swing vs day for that symbol" : ""}.
               <Link href="/dashboard/signals" prefetch={false} className="ml-1 font-semibold" style={{ color: colors.accent }}>
                 Open Signals

@@ -1,5 +1,5 @@
 /**
- * Hot in market — dashboard discovery card presentation.
+ * Market activity — dashboard discovery card presentation (session movers, not signals).
  * @see docs/OPPORTUNITY_DESK_AND_DASHBOARD_RADAR.md §5.2
  */
 
@@ -14,11 +14,20 @@ import type { DashboardDeskMode } from "@/lib/dashboard/live-status-copy";
 import { formatDeskGapLine } from "@/lib/dashboard/desk-today-present";
 import { alignedLayersFromAlignmentRatio } from "@/lib/signals-page-present";
 
-export const HOT_IN_MARKET_TITLE = "Hot in market";
+/** @deprecated Use MARKET_ACTIVITY_TITLE — kept for imports/tests */
+export const HOT_IN_MARKET_TITLE = "Market activity";
+
+export const MARKET_ACTIVITY_TITLE = "Market activity";
+
+export const MARKET_ACTIVITY_SUBTITLE =
+  "Session movers from our platform scan — momentum and context only, not entries.";
 
 export const HOT_IN_MARKET_DISCLAIMER =
-  "Ranked session movers from our platform scan — not trade recommendations. " +
-  "Only symbols that pass our alignment, risk/reward, and execution gates are actionable on Signals.";
+  "Not trade recommendations. Most rows are not actionable until alignment, risk/reward, and execution clear on Signals.";
+
+export const MARKET_ACTIVITY_DISCLAIMER = HOT_IN_MARKET_DISCLAIMER;
+
+export type HotInMarketGapEmphasis = "primary" | "secondary";
 
 export type HotInMarketSource = "desk_cache" | "movers_radar" | "gap_fallback" | "empty";
 
@@ -35,8 +44,10 @@ export type HotInMarketCardModel = {
   rank: number;
   gapLine: string;
   gapTone: "bullish" | "bearish" | "muted";
+  gapEmphasis: HotInMarketGapEmphasis;
   priceLine: string | null;
   deskLabel: string;
+  statusHeadline: string;
   alignmentLine: string | null;
   layerDots: boolean[];
   layerTotal: number;
@@ -68,8 +79,12 @@ const SETUP_BADGE_LABEL: Record<HotInMarketSetupBadge, string> = {
   weak: "Weak execution",
   review: "Review on Signals",
   pending: "Setup scan pending",
-  mover: "Session mover"
+  mover: "Session mover · not an entry"
 };
+
+export function resolveHotInMarketGapEmphasis(setupBadge: HotInMarketSetupBadge): HotInMarketGapEmphasis {
+  return setupBadge === "actionable" ? "primary" : "secondary";
+}
 
 export function leaderHasCompositeDetail(leader: DeskDiscoveryLeader): boolean {
   return (
@@ -116,8 +131,35 @@ function resolveSetupBadge(
 }
 
 function resolveSetupBadgeLabel(badge: HotInMarketSetupBadge): string | null {
-  if (badge === "mover") return null;
   return SETUP_BADGE_LABEL[badge];
+}
+
+function resolveStatusHeadline(input: {
+  setupBadge: HotInMarketSetupBadge;
+  setupBadgeLabel: string | null;
+  alignmentLine: string | null;
+  verdictLine: string | null;
+  executionHint: string | null;
+  source: HotInMarketSource;
+}): string {
+  if (input.setupBadge === "mover" || input.source === "movers_radar" || input.source === "gap_fallback") {
+    return "Momentum move — open Signals for structure and gates";
+  }
+  if (input.setupBadge === "blocked") {
+    return input.executionHint?.trim() || "Strong move — execution blocked by desk gates";
+  }
+  if (input.setupBadge === "weak") {
+    return "Setup forming — execution quality weak";
+  }
+  if (input.setupBadge === "pending") {
+    return "Ranked by session move — full desk scan still loading";
+  }
+  if (input.setupBadgeLabel && input.setupBadge !== "actionable") {
+    return input.setupBadgeLabel;
+  }
+  if (input.alignmentLine) return input.alignmentLine;
+  if (input.verdictLine) return input.verdictLine;
+  return "Open Signals for alignment and execution read";
 }
 
 function formatDayVolume(volume: number | undefined): string | null {
@@ -237,6 +279,7 @@ export function buildHotInMarketCardModel(
 ): HotInMarketCardModel {
   const setupBadge = resolveSetupBadge(leader, input.mode, input.source);
   const setupBadgeLabel = resolveSetupBadgeLabel(setupBadge);
+  const gapEmphasis = resolveHotInMarketGapEmphasis(setupBadge);
   const aligned = alignedLayersFromAlignmentRatio(leader.alignment_ratio, LAYER_TOTAL);
   const layerDots = Array.from({ length: LAYER_TOTAL }, (_, i) =>
     aligned != null ? i < aligned : false
@@ -263,19 +306,27 @@ export function buildHotInMarketCardModel(
 
   const verdictLine = truncateVerdict(leader.verdict);
   const volumeLine = formatDayVolume(leader.day_volume);
+  const statusHeadline = resolveStatusHeadline({
+    setupBadge,
+    setupBadgeLabel,
+    alignmentLine,
+    verdictLine,
+    executionHint: leader.execution_hint ?? null,
+    source: input.source
+  });
   const detailLine =
-    alignmentLine || verdictLine
+    alignmentLine && gapEmphasis === "secondary"
       ? null
       : setupBadge === "pending"
-        ? "Ranked by session move · open Signals for full alignment and execution read"
-        : volumeLine
-          ? `${volumeLine} · open Signals for setup detail`
-          : "Open Signals for alignment, R/R, and execution read";
+        ? volumeLine ?? null
+        : volumeLine && !alignmentLine
+          ? volumeLine
+          : null;
   const peek =
     leader.execution_hint?.trim() ||
-    verdictLine ||
-    detailLine ||
+    statusHeadline ||
     alignmentLine ||
+    verdictLine ||
     gapLine;
 
   return {
@@ -283,12 +334,14 @@ export function buildHotInMarketCardModel(
     rank: input.rank,
     gapLine,
     gapTone,
+    gapEmphasis,
     priceLine: formatPrice(leader.session_price),
     deskLabel: `${leader.desk} desk`,
+    statusHeadline,
     alignmentLine,
     layerDots,
     layerTotal: LAYER_TOTAL,
-    verdictLine,
+    verdictLine: gapEmphasis === "primary" ? verdictLine : null,
     detailLine,
     volumeLine,
     setupBadge,
