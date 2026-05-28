@@ -18,6 +18,7 @@ import type { DeskTodayResponse } from "@/lib/api/desk-today";
 import type { DashboardDeskInitial } from "@/lib/dashboard/dashboard-page-data";
 import { buildDashboardPageTitle } from "@/lib/dashboard/desk-today-present";
 import { buildLiveStatusCopy, type DashboardDeskMode } from "@/lib/dashboard/live-status-copy";
+import { useDashboardDeskAutoLoad } from "@/lib/hooks/use-dashboard-desk-auto-load";
 import { useDashboardDeskRefresh } from "@/lib/hooks/use-dashboard-desk-refresh";
 import { useDeskToday } from "@/lib/hooks/use-desk-today";
 import { EarningsCalendar } from "@/components/earnings-calendar";
@@ -406,8 +407,20 @@ function DashboardRedesignBody({
     manualRefreshBusy,
     canManualRefresh,
     cooldownLabel,
-    refreshError: deskRefreshError
+    refreshError: deskRefreshError,
+    mutate: mutateDeskToday
   } = useDashboardDeskRefresh(activeDeskMode, { fallbackData: deskFallbackForMode(activeDeskMode) });
+
+  useDashboardDeskAutoLoad({
+    mode: activeDeskMode,
+    deskToday,
+    scannerDataSettled,
+    gapFallbackCount: scannerOverview.gapIntelligence.length,
+    canManualRefresh,
+    manualRefreshBusy,
+    refreshDesk,
+    revalidateDesk: mutateDeskToday
+  });
 
   const alternateDeskMode: DashboardDeskMode = activeDeskMode === "day" ? "swing" : "day";
   const { data: alternateDeskToday } = useDeskToday(

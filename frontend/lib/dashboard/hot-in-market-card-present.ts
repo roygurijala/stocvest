@@ -263,7 +263,7 @@ export function hotInMarketAwaitingMessage(input: {
 
 export function hotInMarketEmptyMessage(deskCacheMiss: boolean): string {
   if (deskCacheMiss) {
-    return "No ranked movers cached for this session. Refresh desk to run a live scan, or check back after the next scheduled desk job.";
+    return "Session movers are not cached yet for this desk. We can load them now (one scan per few minutes), or they will appear after the next scheduled platform scan.";
   }
   return "No ranked movers this load — the session may be quiet or filters may have cleared the list.";
 }

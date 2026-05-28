@@ -477,6 +477,17 @@ describe("layerHasActiveContent — sector thresholds", () => {
         })
       )
     ).toBe(false);
+    expect(
+      layerHasActiveContent(
+        makeLayer({
+          key: "sector",
+          status: "Neutral",
+          sector_resolution_state: "pending_cache_refresh",
+          sector_etf: "ITA",
+          sector_display_name: "Aerospace & Defense"
+        })
+      )
+    ).toBe(true);
   });
 
   test("test_sector_resolved_no_data_is_not_active", () => {

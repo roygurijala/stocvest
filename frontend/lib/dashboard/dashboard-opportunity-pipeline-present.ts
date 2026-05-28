@@ -7,8 +7,7 @@ import type { DashboardDeskMode } from "@/lib/dashboard/live-status-copy";
 export const OPPORTUNITY_PIPELINE_TITLE = "Opportunity pipeline";
 
 export const OPPORTUNITY_PIPELINE_INTRO =
-  "Your watchlist progression comes first, then structure building quietly, then broad session activity. " +
-  "None of these are trade signals — open Signals for the full desk read.";
+  "Three steps: your list → quiet structure → session movers. Open Signals before trading.";
 
 export type PipelineStageId = "watchlist" | "quiet" | "market";
 

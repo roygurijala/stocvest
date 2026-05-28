@@ -125,6 +125,6 @@ describe("hot-in-market-card-present", () => {
   });
 
   test("hotInMarketEmptyMessage suggests refresh on cache miss", () => {
-    expect(hotInMarketEmptyMessage(true).toLowerCase()).toContain("refresh desk");
+    expect(hotInMarketEmptyMessage(true).toLowerCase()).toContain("load them");
   });
 });
