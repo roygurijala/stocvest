@@ -253,4 +253,9 @@ export function buildMarketContextSnapshot(input: {
 }
 
 /** Footnote under 5d index stats — shared copy. */
-export const MARKET_CONTEXT_INDEX_FOOTNOTE = "5-Day Trend (Context)";
+/** Shown above the 5-day index chip row in market detail (not today’s session tape). */
+export const MARKET_CONTEXT_INDEX_SECTION_TITLE = "5-day index trend";
+export const MARKET_CONTEXT_INDEX_SECTION_HINT =
+  "Rolling weekly index performance — separate from today’s session tape above.";
+/** @deprecated Use MARKET_CONTEXT_INDEX_SECTION_TITLE — kept for tests migrating copy. */
+export const MARKET_CONTEXT_INDEX_FOOTNOTE = MARKET_CONTEXT_INDEX_SECTION_TITLE;

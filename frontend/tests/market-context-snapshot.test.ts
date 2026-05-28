@@ -1,5 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { buildMarketContextSnapshot, MARKET_CONTEXT_INDEX_FOOTNOTE } from "@/lib/market-context/snapshot";
+import {
+  buildMarketContextSnapshot,
+  MARKET_CONTEXT_INDEX_SECTION_TITLE
+} from "@/lib/market-context/snapshot";
 import { volatilityPillLabel } from "@/lib/market-context/derivations";
 
 describe("buildMarketContextSnapshot", () => {
@@ -29,7 +32,7 @@ describe("buildMarketContextSnapshot", () => {
     expect(vol?.value).toBe(volatilityPillLabel("Contained", { vixPulseOk: true }));
     expect(vol?.value).toBe("Low");
     expect(snap.sessionToday.items).toHaveLength(2);
-    expect(MARKET_CONTEXT_INDEX_FOOTNOTE).toBe("5-Day Trend (Context)");
+    expect(MARKET_CONTEXT_INDEX_SECTION_TITLE).toBe("5-day index trend");
   });
 
   test("volatility pill unknown when VIX pulse missing", () => {
