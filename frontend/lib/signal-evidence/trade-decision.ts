@@ -150,8 +150,12 @@ export function synthTradeDecision(
       ? Math.round(Math.max(0, Math.min(1, insight.alignment_ratio)) * 100)
       : null;
   const weakAgreement = agreementPct != null ? agreementPct < 52 : directionalLayers < 3;
-  const lowReadiness = insight.signal_score < 58;
-  const strongReadiness = insight.signal_score >= 68;
+  const layersAligned =
+    insight.alignment_ratio != null && Number.isFinite(insight.alignment_ratio)
+      ? Math.round(Math.max(0, Math.min(1, insight.alignment_ratio)) * totalLayers)
+      : directionalLayers;
+  const lowReadiness = layersAligned < 3;
+  const strongReadiness = layersAligned >= 5;
   const strongAgreement = agreementPct != null ? agreementPct >= 60 : directionalLayers >= 4;
   const goodCoverage = availableLayers >= 5;
   const counterTrend = evidence.alignment?.is_counter_trend === true;
@@ -174,10 +178,7 @@ export function synthTradeDecision(
     regimeConflict
   };
 
-  const alignedForConviction =
-    agreementPct != null
-      ? Math.round(Math.max(0, Math.min(1, insight.alignment_ratio ?? 0)) * totalLayers)
-      : directionalLayers;
+  const alignedForConviction = layersAligned;
 
   const convictionInput = {
     mode,

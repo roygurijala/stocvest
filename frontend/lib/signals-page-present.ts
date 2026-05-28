@@ -512,7 +512,8 @@ export function buildSignalsPageDecision(input: {
   mode: "swing" | "day";
   bias: SignalsSetupBias;
   rows: SignalsLayerRowInput[];
-  signalScore: number | null;
+  /** @deprecated Use layer alignment — kept for callers not yet migrated. */
+  signalScore?: number | null;
   alignmentRatio: number | null;
   riskReward: number;
   rrWarning: boolean;
@@ -521,8 +522,7 @@ export function buildSignalsPageDecision(input: {
   regimeConflict?: boolean;
   timeframeCounterTrend?: boolean;
 }): TradeDecision {
-  const { rows, bias, signalScore, alignmentRatio, riskReward, rrWarning, isComplete, mode } = input;
-  const score = signalScore ?? 50;
+  const { rows, bias, alignmentRatio, riskReward, rrWarning, isComplete, mode } = input;
   const availableLayers = rows.filter((r) => r.status !== "Unavailable").length;
   const directionalLayers = rows.filter((r) => r.status === "Bullish" || r.status === "Bearish").length;
   const alignment = resolveSignalsLayerAlignment({ rows, bias, alignmentRatio });
@@ -531,8 +531,8 @@ export function buildSignalsPageDecision(input: {
       ? Math.round(Math.max(0, Math.min(1, alignmentRatio)) * 100)
       : null;
   const weakAgreement = agreementPct != null ? agreementPct < 52 : directionalLayers < 3;
-  const lowReadiness = score < 58;
-  const strongReadiness = score >= 68;
+  const lowReadiness = alignment.aligned < 3;
+  const strongReadiness = alignment.aligned >= 5;
   const strongAgreement = agreementPct != null ? agreementPct >= 60 : directionalLayers >= 4;
   const goodCoverage = availableLayers >= 5;
   const hasInsufficient = !isComplete;

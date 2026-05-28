@@ -52,6 +52,7 @@ from stocvest.signals.composite_score import (
     build_composite_score_engine_from_params,
     resolve_composite_block,
 )
+from stocvest.signals.setup_judgment import build_setup_judgment
 from stocvest.signals.geo_analyzer import GeoAnalyzer
 from stocvest.signals.internals_analyzer import InternalsAnalyzer
 from stocvest.signals.macro_analyzer import MacroAnalyzer
@@ -634,6 +635,20 @@ async def build_real_composite_response(
         signal_summary=str(composite.verdict.value),
         layers=layers_out,
     )
+
+    try:
+        response_body["setup_judgment"] = build_setup_judgment(
+            mode="day",
+            layers=layers_out,
+            signal_summary=str(composite.verdict.value),
+            alignment_ratio=float(composite.alignment_ratio),
+            unlock_forecast=None,
+            tech_result=tech,
+            bars=bars,
+        )
+    except Exception as exc:
+        _LOG.warning("setup_judgment_failed symbol=%s err=%s", sym, type(exc).__name__)
+        response_body["setup_judgment"] = None
 
     nc: dict[str, Any] | None = None
     if news.catalyst_headline:

@@ -71,6 +71,7 @@ import {
 } from "@/lib/signals-page-present";
 import { sectorLayerStatusLabelFromEntry } from "@/lib/signals/composite-layer-rows";
 import { isRrBelowVerdictThreshold } from "@/lib/trade-conviction-tier";
+import { resolveSetupJudgmentFromComposite } from "@/lib/signal-evidence/setup-judgment";
 import {
   resolveScenarioBuilderCapability,
   type ScenarioReadinessContext
@@ -931,13 +932,6 @@ export function SignalsPageClient({
     return Math.round(overall);
   }, [layerAgreementPercent, compositeResult, overall]);
 
-  /** Same 0–100 trade readiness as the evidence modal (API `signal_score` / strength / score map, not layer agreement). */
-  const aiStripSignalScore = useMemo(() => {
-    if (!compositeResult || isInsufficientCompositeResponse(compositeResult)) return null;
-    const insight = parseSwingCompositeInsight(compositeResult as Record<string, unknown>);
-    return insight?.signal_score ?? null;
-  }, [compositeResult]);
-
   const setupBias = useMemo(() => normalizeSetupBias(layerSignalSummary), [layerSignalSummary]);
   const signalsPresentRows: SignalsLayerRowInput[] = useMemo(
     () =>
@@ -1039,7 +1033,6 @@ export function SignalsPageClient({
       mode: tradingMode,
       bias: setupBias,
       rows: signalsPresentRows,
-      signalScore: aiStripSignalScore,
       alignmentRatio: ar,
       riskReward: rr,
       rrWarning,
@@ -1047,7 +1040,7 @@ export function SignalsPageClient({
       counterTrend: parseCompositeAlignment(compositeResult)?.is_counter_trend === true,
       timeframeCounterTrend: isTimeframeCounterTrend(tfCtx)
     });
-  }, [compositeResult, setupBias, signalsPresentRows, aiStripSignalScore, tradingMode]);
+  }, [compositeResult, setupBias, signalsPresentRows, tradingMode]);
 
   useEffect(() => {
     if (!deskKpiScrollTarget) return;
@@ -1068,6 +1061,16 @@ export function SignalsPageClient({
     const ar = (compositeResult as Record<string, unknown>).alignment_ratio;
     return typeof ar === "number" && Number.isFinite(ar) ? ar : null;
   }, [compositeResult]);
+
+  const setupJudgment = useMemo(() => {
+    if (!compositeResult || isInsufficientCompositeResponse(compositeResult)) return null;
+    return resolveSetupJudgmentFromComposite(compositeResult as Record<string, unknown>, {
+      mode: tradingMode,
+      rows: signalsPresentRows,
+      bias: setupBias,
+      alignmentRatio: compositeAlignmentRatio
+    });
+  }, [compositeResult, tradingMode, signalsPresentRows, setupBias, compositeAlignmentRatio]);
 
   const commandBarMaturationLine = useMemo(() => {
     if (!maturationLine || compositeAlignmentRatio == null) return maturationLine;
@@ -1516,9 +1519,10 @@ export function SignalsPageClient({
       decision_line: decision.line,
       decision_rationale: decision.rationale ?? undefined,
       trade_readiness:
-        typeof insight.signal_score === "number" && Number.isFinite(insight.signal_score)
+        setupJudgment?.engineScores?.quality ??
+        (typeof insight.signal_score === "number" && Number.isFinite(insight.signal_score)
           ? insight.signal_score
-          : null,
+          : null),
       risk_reward:
         typeof insight.risk_reward === "number" && Number.isFinite(insight.risk_reward)
           ? insight.risk_reward
@@ -1921,6 +1925,7 @@ export function SignalsPageClient({
                 fundamentalSummary={fundamentalSummary}
                 showFundamentalUpgrade={showFundamentalUpgrade}
                 layout="desk"
+                setupJudgment={setupJudgment}
               />
             ) : null}
             {showAfterHoursPanel ? (
