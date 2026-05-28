@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import type { GapIntelligenceItem } from "@/lib/api/scanner";
 import type { DeskTodayData } from "@/lib/api/desk-today";
 import type { SnapshotPayload } from "@/lib/api/market";
