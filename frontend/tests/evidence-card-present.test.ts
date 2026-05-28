@@ -47,6 +47,19 @@ describe("evidenceLayerToRow", () => {
     expect(row.status).toBe("Unavailable");
     expect(row.sectorCachePending).toBe(true);
     expect(row.score).toBeNull();
+    expect(row.statusLabel).toBe("Unavailable (not factored)");
+  });
+
+  test("pending sector still surfaces mapped benchmark label", () => {
+    const row = evidenceLayerToRow(
+      Object.assign(layer("sector", "Sector", "Neutral", 45), {
+        sector_resolution_state: "pending_cache_refresh" as const,
+        sector_etf: "ITA",
+        sector_display_name: "Aerospace & Defense",
+        sector_data_available: false
+      })
+    );
+    expect(row.statusLabel).toBe("Aerospace & Defense (ITA) · resolving");
     const alignment = resolveCompositeLayerAlignment({
       rows: [
         ...evidenceLayersToRows([

@@ -38,6 +38,43 @@ describe("compositeToSignalsLayerRows", () => {
     expect(tech?.score).toBe(58);
   });
 
+  test("sector row shows benchmark label when resolved", () => {
+    const rows = compositeToSignalsLayerRows({
+      layers: [
+        {
+          layer: "sector",
+          status: "available",
+          score: 62,
+          verdict: "bullish",
+          sector_etf: "ITA",
+          sector_display_name: "Aerospace & Defense",
+          sector_resolution_state: "resolved"
+        }
+      ]
+    });
+    const sector = rows.find((r) => r.key === "sector");
+    expect(sector?.statusLabel).toBe("Aerospace & Defense (ITA)");
+  });
+
+  test("sector row shows benchmark while cache resolves", () => {
+    const rows = compositeToSignalsLayerRows({
+      layers: [
+        {
+          layer: "sector",
+          status: "unavailable",
+          score: null,
+          verdict: "neutral",
+          sector_display_name: "Aerospace & Defense",
+          sector_etf: "ITA",
+          sector_resolution_state: "pending_cache_refresh"
+        }
+      ]
+    });
+    const sector = rows.find((r) => r.key === "sector");
+    expect(sector?.statusLabel).toBe("Aerospace & Defense (ITA) · resolving");
+    expect(sector?.sectorCachePending).toBe(true);
+  });
+
   test("preserves legitimate technical score of zero", () => {
     const rows = compositeToSignalsLayerRows({
       layers: [

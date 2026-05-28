@@ -145,9 +145,6 @@ describe("DashboardDiscoveryFeed", () => {
       />
     );
     expect(screen.getByText("Market activity")).toBeInTheDocument();
-    expect(screen.getByTestId("dashboard-hot-in-market-disclaimer")).toHaveTextContent(
-      /not trade recommendations/i
-    );
     expect(screen.getByTestId("dashboard-hot-in-market-card-MU")).toBeInTheDocument();
     expect(screen.getByTestId("hot-in-market-badge-MU")).toHaveTextContent(/R\/R blocks entry/i);
     expect(screen.queryByText(/Signals →/)).toBeNull();

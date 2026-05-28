@@ -12,6 +12,7 @@ import {
   decisionGateCategoryLabel,
   executionReadinessLabel,
   executionSupportingGates,
+  primaryGateDisplayText,
   type SignalsLayerRowInput,
   type SignalsSetupBias
 } from "@/lib/signals-page-present";
@@ -53,21 +54,27 @@ export function SignalsWhyNotPanel({
   });
   const causalFallback =
     !causalNarrativeOnPage && narrative ? causalBulletsForWhyNot(narrative, maxBullets) : null;
+  const primaryGateText = primaryGateDisplayText(decision);
   const supportingGates = executionSupportingGates(decision);
+  const skipGateBulletFallback =
+    Boolean(primaryGateText) && decision.rationale?.category === "risk_reward";
   const layerPreviewBullets =
     causalFallback ??
-    buildWhyNotBullets(
-      decision,
-      previewLayers,
-      bias,
-      maxBullets,
-      null,
-      causalNarrativeOnPage
-    ).filter((bullet) => {
-      const primary = decision.rationale?.text?.trim();
-      if (primary && (bullet === primary || bullet.includes(primary))) return false;
-      return !supportingGates.some((g) => bullet === g || bullet.includes(g));
-    });
+    (skipGateBulletFallback
+      ? []
+      : buildWhyNotBullets(
+          decision,
+          previewLayers,
+          bias,
+          maxBullets,
+          null,
+          causalNarrativeOnPage
+        ).filter((bullet) => {
+          if (primaryGateText && (bullet === primaryGateText || bullet.includes(primaryGateText))) {
+            return false;
+          }
+          return !supportingGates.some((g) => bullet === g || bullet.includes(g));
+        }));
 
   const hasPrimaryGate = Boolean(decision.rationale?.text);
   if (!hasPrimaryGate && supportingGates.length === 0 && layerPreviewBullets.length === 0) {
@@ -121,7 +128,7 @@ export function SignalsWhyNotPanel({
             Primary gate · {decisionGateCategoryLabel(decision.rationale.category)}
           </p>
           <p className="m-0 mt-2 text-sm font-medium leading-snug" style={{ color: colors.text }}>
-            {decision.rationale.text}
+            {primaryGateText ?? decision.rationale.text}
           </p>
         </div>
       ) : null}

@@ -6,7 +6,6 @@ import type { DeskTodayData } from "@/lib/api/desk-today";
 import { HotInMarketCard } from "@/components/dashboard/hot-in-market-card";
 import {
   buildQuietLeaderCardModel,
-  QUIET_LEADERS_DISCLAIMER,
   QUIET_LEADERS_SUBTITLE,
   QUIET_LEADERS_TITLE,
   quietLeadersFromDesk,
@@ -76,22 +75,16 @@ export function DashboardQuietLeadersFeed({
       className={embedded ? undefined : surfaceGlowClassName}
       style={shellStyle}
     >
-      <div>
-        {!embedded ? (
+      {!embedded ? (
+        <div>
           <h2 className="m-0" style={{ fontSize: typography.scale.base, fontWeight: 700 }}>
             {QUIET_LEADERS_TITLE}
           </h2>
-        ) : null}
-        <p className="m-0 mt-1" style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>
-          {QUIET_LEADERS_SUBTITLE}
-        </p>
-        <p
-          className="m-0 mt-2"
-          style={{ fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45, maxWidth: "52rem" }}
-        >
-          {QUIET_LEADERS_DISCLAIMER}
-        </p>
-      </div>
+          <p className="m-0 mt-1" style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>
+            {QUIET_LEADERS_SUBTITLE}
+          </p>
+        </div>
+      ) : null}
 
       {cardModels.length > 0 ? (
         <ul
@@ -109,8 +102,8 @@ export function DashboardQuietLeadersFeed({
           style={{ fontSize: typography.scale.sm, color: colors.textMuted }}
         >
           {isLoading
-            ? "Scanning for low-velocity leaders with strong swing structure…"
-            : "No quiet leaders this load — names appear after the full desk scan when structure is strong but session move is under 2%."}
+            ? "Scanning for low-velocity leaders…"
+            : "None right now — common on hot days when most names are already up 2%+."}
         </p>
       )}
 

@@ -687,10 +687,20 @@ export function executionProgressHint(
   return null;
 }
 
+/** One-line primary gate copy (merges desk R/R threshold into rationale when applicable). */
+export function primaryGateDisplayText(decision: TradeDecision): string | null {
+  const text = decision.rationale?.text?.trim();
+  if (!text) return null;
+  if (decision.rationale?.category === "risk_reward") {
+    const deskRr = (decision.reinforcements ?? []).find(isRiskRewardBullet);
+    if (deskRr) return mergeRiskRewardWhyNotLine(text, deskRr);
+  }
+  return text;
+}
+
 /** Primary gate sentence when execution is withheld (from trade-decision rationale). */
 export function primaryExecutionBlockerLine(decision: TradeDecision): string | null {
-  const text = decision.rationale?.text?.trim();
-  return text || null;
+  return primaryGateDisplayText(decision);
 }
 
 /** Label for the execution disclosure control under “Not actionable yet”. */
@@ -743,10 +753,11 @@ export function decisionGateCategoryLabel(category: DecisionRationaleCategory): 
 
 /** Reinforcement lines that add detail beyond the primary rationale sentence. */
 export function executionSupportingGates(decision: TradeDecision): string[] {
-  const primary = decision.rationale?.text?.trim() ?? "";
+  const primary = primaryGateDisplayText(decision) ?? decision.rationale?.text?.trim() ?? "";
   return (decision.reinforcements ?? []).filter((line) => {
     const t = line.trim();
     if (!t) return false;
+    if (decision.rationale?.category === "risk_reward" && isRiskRewardBullet(t)) return false;
     if (primary && (t === primary || primary.includes(t) || t.includes(primary))) return false;
     return true;
   });

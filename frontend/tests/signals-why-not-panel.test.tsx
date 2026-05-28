@@ -57,4 +57,31 @@ describe("SignalsWhyNotPanel", () => {
     );
     expect(screen.queryByTestId("signals-why-not-layer-preview")).toBeNull();
   });
+
+  test("risk/reward gate shows once without Also in play or Additional context repeats", () => {
+    const rrDecision: TradeDecision = {
+      state: "monitor",
+      line: "Monitor",
+      reinforcements: ["Risk/reward too low (0.5:1) — below swing desk threshold (2.0:1)."],
+      rationale: {
+        category: "risk_reward",
+        label: "Why hold:",
+        text: "Risk/reward too low (0.5:1) — below threshold; does not meet internal thresholds for structured scenario building."
+      }
+    };
+    render(
+      <SignalsWhyNotPanel
+        decision={rrDecision}
+        previewLayers={[row("technical", "Technical")]}
+        bias="Bullish"
+        causalNarrativeOnPage
+      />
+    );
+    const primary = screen.getByTestId("signals-why-not-primary-gate");
+    expect(primary).toHaveTextContent(/0\.5:1/);
+    expect(primary).toHaveTextContent(/swing desk threshold \(2\.0:1\)/);
+    expect(primary).toHaveTextContent(/structured scenario building/);
+    expect(screen.queryByTestId("signals-why-not-supporting-gates")).toBeNull();
+    expect(screen.queryByTestId("signals-why-not-layer-preview")).toBeNull();
+  });
 });

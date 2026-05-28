@@ -30,6 +30,32 @@ type LayerStatus =
   | "Unavailable"
   | "As of close";
 
+/** Sector benchmark line for Signals layer rows and Evidence (RKLB → ITA / display name). */
+export function sectorLayerStatusLabelFromEntry(
+  entry: Record<string, unknown> | undefined
+): { statusLabel?: string; sectorCachePending?: boolean } {
+  const sectorCachePending =
+    String(entry?.sector_resolution_state ?? "") === "pending_cache_refresh";
+  const sectorEtf = typeof entry?.sector_etf === "string" ? entry.sector_etf.trim().toUpperCase() : "";
+  const sectorDisplay =
+    typeof entry?.sector_display_name === "string" ? entry.sector_display_name.trim() : "";
+  const benchmark =
+    sectorDisplay && sectorEtf
+      ? `${sectorDisplay} (${sectorEtf})`
+      : sectorEtf || sectorDisplay || "";
+
+  if (sectorCachePending) {
+    if (benchmark) {
+      return { statusLabel: `${benchmark} · resolving`, sectorCachePending: true };
+    }
+    return { statusLabel: "Unavailable (not factored)", sectorCachePending: true };
+  }
+  if (benchmark) {
+    return { statusLabel: benchmark };
+  }
+  return {};
+}
+
 function verdictToLayerStatus(verdict: string, status: string): LayerStatus {
   const s = status.toLowerCase();
   if (s === "as_of_close") {
@@ -64,11 +90,8 @@ export function compositeToSignalsLayerRows(
     const verdict = typeof entry?.verdict === "string" ? entry.verdict : "neutral";
     const apiStatus = st.toLowerCase();
     const asOfClose = apiStatus === "as_of_close";
-    const sectorCachePending =
-      key === "sector" && String(entry?.sector_resolution_state ?? "") === "pending_cache_refresh";
-    const sectorEtf = typeof entry?.sector_etf === "string" ? entry.sector_etf.trim().toUpperCase() : "";
-    const sectorDisplay =
-      typeof entry?.sector_display_name === "string" ? entry.sector_display_name.trim() : "";
+    const sectorMeta = key === "sector" ? sectorLayerStatusLabelFromEntry(entry) : {};
+    const sectorCachePending = Boolean(sectorMeta.sectorCachePending);
     const status = sectorCachePending
       ? "Unavailable"
       : asOfClose
@@ -84,18 +107,12 @@ export function compositeToSignalsLayerRows(
       key,
       name: LAYER_DISPLAY[key] ?? key,
       status,
-      statusLabel: sectorCachePending
-        ? "Unavailable (not factored)"
-        : key === "sector" && (sectorEtf || sectorDisplay)
-          ? sectorDisplay && sectorEtf
-            ? `${sectorDisplay} (${sectorEtf})`
-            : sectorEtf || sectorDisplay
-          : asOfClose
-            ? "As of close · daily structure"
-            : undefined,
+      statusLabel:
+        sectorMeta.statusLabel ??
+        (asOfClose ? "As of close · daily structure" : undefined),
       explanation: reasoning,
       score,
-      sectorCachePending
+      sectorCachePending: sectorMeta.sectorCachePending
     };
   });
 }

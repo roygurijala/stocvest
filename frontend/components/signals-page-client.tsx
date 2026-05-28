@@ -69,6 +69,7 @@ import {
   SIGNAL_LAYER_LEVEL_BASELINE,
   type SignalsLayerRowInput
 } from "@/lib/signals-page-present";
+import { sectorLayerStatusLabelFromEntry } from "@/lib/signals/composite-layer-rows";
 import { isRrBelowVerdictThreshold } from "@/lib/trade-conviction-tier";
 import {
   resolveScenarioBuilderCapability,
@@ -859,9 +860,9 @@ export function SignalsPageClient({
           : 0;
       const verdict = typeof entry?.verdict === "string" ? entry.verdict : "neutral";
       const st = typeof entry?.status === "string" ? entry.status : "unavailable";
-      const sectorCachePending =
-        key === "sector" && String(entry?.sector_resolution_state ?? "") === "pending_cache_refresh";
-      const statusLabel = sectorCachePending ? "Unavailable (not factored)" : undefined;
+      const sectorMeta = key === "sector" ? sectorLayerStatusLabelFromEntry(entry) : {};
+      const sectorCachePending = Boolean(sectorMeta.sectorCachePending);
+      const statusLabel = sectorMeta.statusLabel;
       const baseStatus = verdictToLayerStatus(verdict, st);
       const status: LayerStatus = sectorCachePending ? "Unavailable" : baseStatus;
       const reasoning =

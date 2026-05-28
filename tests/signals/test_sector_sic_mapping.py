@@ -98,6 +98,25 @@ async def test_unmapped_after_polygon_etfs_valid(mock_parameter_store: object) -
 
 
 @pytest.mark.asyncio
+async def test_rklb_sic_3760_maps_aerospace_ita(mock_parameter_store: object) -> None:
+    """Rocket Lab class SIC 3760 → defense bucket → ITA (Aerospace & Defense display)."""
+    from unittest.mock import AsyncMock
+
+    from stocvest.signals.sector_mapper import ETF_DISPLAY_NAMES, SectorMapper, SectorResolutionState
+
+    SectorMapper.clear_memory_cache()
+    mock_client = AsyncMock()
+    mock_client.get_ticker_details.return_value = {"sic_code": "3760"}
+    etf, display, bucket, st, _tier = await SectorMapper.get_sector_etf(
+        "RKLB", mock_client, None, mock_parameter_store.sector
+    )
+    assert etf == "ITA"
+    assert display == ETF_DISPLAY_NAMES["ITA"]
+    assert bucket == "defense"
+    assert st == SectorResolutionState.RESOLVED
+
+
+@pytest.mark.asyncio
 async def test_unknown_sic_coarse_two_digit_maps_industrials(mock_parameter_store: object) -> None:
     """SIC not in exact table but in manufacturing division (20–39) maps to XLI via 2-digit fallback."""
     from unittest.mock import AsyncMock

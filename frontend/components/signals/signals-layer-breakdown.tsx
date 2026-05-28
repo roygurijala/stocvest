@@ -186,6 +186,15 @@ function LayerRow({
           </span>
           {hint ? <InfoTip text={hint} label={row.name} /> : null}
         </div>
+        {row.statusLabel ? (
+          <p
+            className="m-0 mt-0.5 text-xs leading-snug"
+            style={{ color: colors.textMuted }}
+            data-testid={`signals-layer-benchmark-${row.key}`}
+          >
+            {row.statusLabel}
+          </p>
+        ) : null}
         <p className="m-0 mt-0.5 text-xs font-medium leading-snug" style={{ color: colors.text }}>
           {roleHeadline}
         </p>

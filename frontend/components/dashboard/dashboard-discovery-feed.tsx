@@ -4,6 +4,7 @@ import { useEffect, useMemo } from "react";
 import Link from "next/link";
 import type { GapIntelligenceItem } from "@/lib/api/scanner";
 import type { DeskTodayData } from "@/lib/api/desk-today";
+import { DeskRefreshButton } from "@/components/dashboard/desk-refresh-button";
 import { HotInMarketCard } from "@/components/dashboard/hot-in-market-card";
 import { DashboardMissedTodayStrip } from "@/components/dashboard/dashboard-missed-today-strip";
 import {
@@ -22,8 +23,6 @@ import {
   hotInMarketAwaitingMessage,
   hotInMarketEmptyMessage,
   hotInMarketFeedSubtitle,
-  MARKET_ACTIVITY_DISCLAIMER,
-  MARKET_ACTIVITY_SUBTITLE,
   MARKET_ACTIVITY_TITLE
 } from "@/lib/dashboard/hot-in-market-card-present";
 import type { DashboardDeskMode } from "@/lib/dashboard/live-status-copy";
@@ -119,7 +118,9 @@ export function DashboardDiscoveryFeed({
     mode
   });
   const awaitingData =
-    leaders.length === 0 && (isLoading || (scannerPending && deskCacheMiss && gapFallback.length === 0));
+    leaders.length === 0 &&
+    (isLoading || refreshBusy || (scannerPending && deskCacheMiss && gapFallback.length === 0));
+  const needsDeskLoad = leaders.length === 0 && deskCacheMiss && !awaitingData;
 
   const embedded = variant === "pipeline";
   const shellStyle = embedded
@@ -139,58 +140,62 @@ export function DashboardDiscoveryFeed({
       className={embedded ? undefined : surfaceGlowClassName}
       style={shellStyle}
     >
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          {!embedded ? (
+      {!embedded ? (
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
             <h2 className="m-0" style={{ fontSize: typography.scale.base, fontWeight: 700 }}>
               {MARKET_ACTIVITY_TITLE}
             </h2>
-          ) : null}
-          <p
-            className={embedded ? "m-0" : "m-0 mt-1"}
-            data-testid="dashboard-hot-in-market-subtitle"
-            style={{ fontSize: typography.scale.sm, color: colors.textMuted }}
-          >
-            {embedded ? `${MARKET_ACTIVITY_SUBTITLE} · ${subtitle}` : subtitle}
-          </p>
-          <p
-            className="m-0 mt-2"
-            data-testid="dashboard-hot-in-market-disclaimer"
-            style={{ fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45, maxWidth: "52rem" }}
-          >
-            {MARKET_ACTIVITY_DISCLAIMER}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {updated ? (
-            <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Updated {updated}</span>
-          ) : null}
-          {onRefreshDesk ? (
-            <button
-              type="button"
-              data-testid="dashboard-discovery-refresh-desk"
-              disabled={!canRefreshDesk || refreshBusy}
-              onClick={() => onRefreshDesk()}
-              style={{
-                fontSize: typography.scale.xs,
-                fontWeight: 600,
-                padding: "4px 10px",
-                borderRadius: borderRadius.full,
-                border: `1px solid ${colors.border}`,
-                background: colors.surfaceMuted,
-                color: canRefreshDesk ? colors.accent : colors.textMuted,
-                cursor: canRefreshDesk && !refreshBusy ? "pointer" : "not-allowed"
-              }}
+            <p
+              className="m-0 mt-1"
+              data-testid="dashboard-hot-in-market-subtitle"
+              style={{ fontSize: typography.scale.sm, color: colors.textMuted }}
             >
-              {refreshBusy
-                ? "Refreshing…"
-                : refreshCooldownLabel
-                  ? `Refresh in ${refreshCooldownLabel}`
-                  : "Refresh desk"}
-            </button>
-          ) : null}
+              {subtitle}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {updated ? (
+              <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Updated {updated}</span>
+            ) : null}
+            {onRefreshDesk ? (
+              <DeskRefreshButton
+                onClick={() => onRefreshDesk()}
+                busy={refreshBusy}
+                disabled={!canRefreshDesk}
+                cooldownLabel={refreshCooldownLabel}
+                label="Refresh desk"
+              />
+            ) : null}
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p
+            className="m-0 text-sm tabular-nums"
+            data-testid="dashboard-hot-in-market-subtitle"
+            style={{ color: colors.textMuted }}
+          >
+            {subtitle}
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            {updated ? (
+              <span className="text-xs tabular-nums" style={{ color: colors.textMuted }}>
+                {updated}
+              </span>
+            ) : null}
+            {onRefreshDesk ? (
+              <DeskRefreshButton
+                onClick={() => onRefreshDesk()}
+                busy={refreshBusy}
+                disabled={!canRefreshDesk}
+                cooldownLabel={refreshCooldownLabel}
+                label={needsDeskLoad ? "Load movers" : "Refresh"}
+              />
+            ) : null}
+          </div>
+        </div>
+      )}
 
       {sinceSummary ? (
         <p
@@ -230,13 +235,29 @@ export function DashboardDiscoveryFeed({
           {hotInMarketAwaitingMessage({ deskLoading: isLoading, scannerPending, deskCacheMiss })}
         </p>
       ) : (
-        <p
-          className="m-0 mt-3"
+        <div
+          className="mt-3 rounded-xl p-4"
           data-testid="dashboard-hot-in-market-empty"
-          style={{ fontSize: typography.scale.sm, color: colors.textMuted }}
+          style={{
+            border: `1px dashed ${colors.border}`,
+            background: `color-mix(in srgb, ${colors.surfaceMuted} 50%, transparent)`
+          }}
         >
-          {hotInMarketEmptyMessage(deskCacheMiss)}
-        </p>
+          <p className="m-0 text-sm leading-snug" style={{ color: colors.text }}>
+            {hotInMarketEmptyMessage(deskCacheMiss)}
+          </p>
+          {needsDeskLoad && onRefreshDesk ? (
+            <div className="mt-3">
+              <DeskRefreshButton
+                onClick={() => onRefreshDesk()}
+                busy={refreshBusy}
+                disabled={!canRefreshDesk}
+                cooldownLabel={refreshCooldownLabel}
+                label="Load session movers"
+              />
+            </div>
+          ) : null}
+        </div>
       )}
 
       <DashboardMissedTodayStrip mode={mode} deskData={deskData} gapFallback={gapFallback} />

@@ -7,7 +7,6 @@ import { WatchlistRadarCard } from "@/components/dashboard/watchlist-radar-card"
 import { buildWatchlistRadarRows, type WatchlistRadarDeskContext } from "@/lib/dashboard/watchlist-radar";
 import {
   buildWatchlistRadarCardModel,
-  WATCHLIST_RADAR_DISCLAIMER,
   WATCHLIST_RADAR_SUBTITLE,
   WATCHLIST_RADAR_TITLE
 } from "@/lib/dashboard/watchlist-radar-card-present";
@@ -190,13 +189,6 @@ export function DashboardWatchlistRadar({
               What changed: {dailyChanges}
             </p>
           ) : null}
-          <p
-            className="m-0 mt-2"
-            data-testid="dashboard-watchlist-radar-disclaimer"
-            style={{ fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45, maxWidth: "52rem" }}
-          >
-            {WATCHLIST_RADAR_DISCLAIMER}
-          </p>
         </div>
         <Link
           href={watchlistHref}
