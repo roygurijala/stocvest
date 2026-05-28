@@ -22,6 +22,8 @@ import { SIGNALS_SECTION_TARGET } from "@/lib/signals-page-sections";
 import { SignalsFundamentalBackdrop } from "@/components/signals/signals-fundamental-backdrop";
 import { SignalsFundamentalBackdropUpgrade } from "@/components/signals/signals-fundamental-upgrade";
 import { ConvictionTierBadge } from "@/components/signals/conviction-tier-badge";
+import { SetupJudgmentSummary } from "@/components/signals/setup-judgment-summary";
+import type { SetupJudgment } from "@/lib/signal-evidence/setup-judgment";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -38,6 +40,7 @@ type Props = {
   showFundamentalUpgrade?: boolean;
   /** Desk tabs: KPIs live in sticky strip; omit grid + why-not panel here. */
   layout?: "full" | "desk";
+  setupJudgment?: SetupJudgment | null;
 };
 
 export function SignalsSetupRead({
@@ -51,7 +54,8 @@ export function SignalsSetupRead({
   alignmentRatio,
   fundamentalSummary,
   showFundamentalUpgrade = false,
-  layout = "full"
+  layout = "full",
+  setupJudgment = null
 }: Props) {
   const { colors } = useTheme();
   const [executionDetailOpen, setExecutionDetailOpen] = useState(false);
@@ -84,6 +88,14 @@ export function SignalsSetupRead({
         padding: spacing[4]
       }}
     >
+      {setupJudgment ? (
+        <SetupJudgmentSummary
+          judgment={setupJudgment}
+          executionLabel={executionReadinessLabel(decision.state)}
+          executionTone={decision.state === "actionable" ? "bullish" : "caution"}
+        />
+      ) : null}
+
       {layout === "full" ? (
         <>
           <p

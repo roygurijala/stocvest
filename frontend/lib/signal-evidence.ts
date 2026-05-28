@@ -7,6 +7,7 @@ import {
   type ExecutionQualityPayload
 } from "@/lib/signal-evidence/execution-quality";
 import { coerceSnapshotForReferenceLevels } from "@/lib/snapshot-reference-levels";
+import { parseSetupJudgment, type SetupJudgment } from "@/lib/signal-evidence/setup-judgment";
 
 export type EvidenceDirection = "bullish" | "bearish" | "neutral";
 export type EvidenceStatus = "Bullish" | "Bearish" | "Neutral" | "Unavailable" | "As of close";
@@ -470,6 +471,8 @@ export interface SignalEvidenceData {
   executionQuality?: ExecutionQualityPayload | null;
   /** Raw composite JSON used for enrichment (weekly / timeframe fields). */
   compositePayload?: Record<string, unknown> | null;
+  /** Quality vs tradeability judgment (no hero score — process, phase, blockers). */
+  setupJudgment?: SetupJudgment | null;
 }
 
 function clamp(v: number, min: number, max: number): number {
@@ -2059,6 +2062,7 @@ export function applySwingCompositeEnrichment(
 
   const causalFromApi = parseCausalNarrativeFromApi(body.causal_narrative);
   const executionQuality = parseExecutionQuality(body);
+  const setupJudgment = parseSetupJudgment(body) ?? evidence.setupJudgment ?? null;
 
   return {
     ...evidence,
@@ -2076,7 +2080,8 @@ export function applySwingCompositeEnrichment(
     unlockForecast: unlockForecast.length ? unlockForecast : undefined,
     causalNarrative: causalFromApi ?? evidence.causalNarrative ?? null,
     executionQuality: executionQuality ?? evidence.executionQuality ?? null,
-    compositePayload: body
+    compositePayload: body,
+    setupJudgment
   };
 }
 

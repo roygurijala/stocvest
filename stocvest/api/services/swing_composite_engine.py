@@ -45,6 +45,7 @@ from stocvest.data.benzinga_client import BenzingaClient, BenzingaMultiResult, b
 from stocvest.api.services.user_profile_store import get_user_profile_store
 from stocvest.data.earnings_calendar import merge_earnings_horizon_into_response, resolve_upcoming_earnings_horizon
 from stocvest.signals.fundamental_context import build_fundamental_context
+from stocvest.signals.setup_judgment import build_setup_judgment
 from stocvest.analytics.unlock_forecast import (
     composite_bias_from_summary,
     compute_unlock_forecast,
@@ -451,6 +452,20 @@ async def build_swing_composite_response(
     except Exception as exc:
         _LOG.warning("unlock_forecast_failed symbol=%s err=%s", sym, type(exc).__name__)
         response_body["unlock_forecast"] = []
+
+    try:
+        response_body["setup_judgment"] = build_setup_judgment(
+            mode="swing",
+            layers=layers_out,
+            signal_summary=str(composite.verdict.value),
+            alignment_ratio=float(composite.alignment_ratio),
+            unlock_forecast=response_body.get("unlock_forecast"),
+            tech_result=tech,
+            bars=daily_bars,
+        )
+    except Exception as exc:
+        _LOG.warning("setup_judgment_failed symbol=%s err=%s", sym, type(exc).__name__)
+        response_body["setup_judgment"] = None
 
     response_body["fundamental_context"] = None
     if user_id:

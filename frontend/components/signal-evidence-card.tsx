@@ -76,7 +76,10 @@ import {
 } from "@/lib/scenario/scenario-readiness";
 import { buildScenarioPreviewPanelData } from "@/lib/scenario/scenario-preview-panels";
 import { synthTradeDecision } from "@/lib/signal-evidence/trade-decision";
+import { SetupJudgmentSummary } from "@/components/signals/setup-judgment-summary";
+import { deriveSetupJudgment } from "@/lib/signal-evidence/setup-judgment";
 import { resolveCompositeLayerAlignment } from "@/lib/signals-page-present";
+import { executionReadinessLabel } from "@/lib/signals-page-present";
 import { buildEvidenceRiskHorizonFactors } from "@/lib/signal-evidence/fundamental-present";
 import { EvidenceSetupEvolutionLink } from "@/components/signal-evidence/evidence-setup-evolution-link";
 
@@ -879,7 +882,18 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
     }),
     gapIntelSnapshot
   );
-  const evidenceDecision = synthTradeDecision(evidence, insight);
+  const evidenceDecision = synthTradeDecision(evidence, insight, evidenceMode);
+  const evidenceSetupJudgment = useMemo(() => {
+    if (evidence.setupJudgment) return evidence.setupJudgment;
+    return deriveSetupJudgment({
+      mode: evidenceMode,
+      rows: layerRows,
+      bias: setupBias,
+      alignmentRatio: insight.alignment_ratio ?? null,
+      technicalReasoning: evidence.layers.find((l) => l.key === "technical")?.keyPoints?.join(" ") ?? null,
+      unlockWatchFor: evidence.unlockForecast?.[0]?.trigger_condition ?? null
+    });
+  }, [evidence.setupJudgment, evidenceMode, layerRows, setupBias, insight.alignment_ratio, evidence.layers, evidence.unlockForecast]);
   const evidenceCausalNarrative = useMemo(
     () =>
       evidence.causalNarrative ??
@@ -1118,6 +1132,12 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
           );
         })()}
       </EvidenceCardHeader>
+
+      <SetupJudgmentSummary
+        judgment={evidenceSetupJudgment}
+        executionLabel={executionReadinessLabel(evidenceDecision.state)}
+        executionTone={evidenceDecision.state === "actionable" ? "bullish" : "caution"}
+      />
 
       {evidence.executionQuality ? (
         <p
