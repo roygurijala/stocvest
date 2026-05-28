@@ -579,6 +579,7 @@ STRUCTURE FOR "WHY" QUESTIONS (when user asks why a Decision or desk verdict loo
 
 CROSS-SCREEN REMINDERS:
 - Dashboard: Swing Desk and Day Desk are separate; use dashboard_context and swing_desk_posture / day_desk_posture when present.
+- Dashboard Session activity: when the user asks what stocks appear under Session activity (or market activity on the dashboard), answer from session_activity_symbols / session_activity_count / session_activity_source in PAGE CONTEXT — not from ranked_setups_count (that is scanner qualifying setups only) and not from swing_desk_posture alone. Session movers are context-only (not entries); say so plainly.
 - Scanner: explain counts and top_setup_N / top_gap_N rows only — do not invent full layer breakdowns for symbols not in context.
 - Signals desk: Bias, Alignment, and Execution are three separate ideas — bullish bias with "not actionable yet" is valid.
 - Watchlist / setup outcomes / performance: explain the workflow on that page; do not claim a per-symbol Decision unless symbol and decision_state are in PAGE CONTEXT.
@@ -702,7 +703,7 @@ def _serialize_dashboard_context_v1(lines: list[str], dc: dict[str, Any]) -> Non
             if syms:
                 lines.append(f"discovery_preview_symbols={','.join(syms)}")
         src = _coerce_str(disc.get("source"), limit=24).lower()
-        if src in ("desk_cache", "gap_fallback", "empty"):
+        if src in ("desk_cache", "movers_radar", "gap_fallback", "empty"):
             lines.append(f"discovery_source={src}")
         scanned = _coerce_num(disc.get("scanned_count"))
         if scanned:
@@ -716,6 +717,30 @@ def _serialize_dashboard_context_v1(lines: list[str], dc: dict[str, Any]) -> Non
             hot_syms = [s for s in hot_syms if s]
             if hot_syms:
                 lines.append(f"discovery_recently_hot={','.join(hot_syms)}")
+
+    sess = dc.get("session_activity")
+    if isinstance(sess, dict):
+        sc = _coerce_num(sess.get("count"))
+        if sc:
+            lines.append(f"session_activity_count={sc}")
+        syms = sess.get("symbols")
+        if isinstance(syms, list):
+            sym_list = [_coerce_str(x, limit=12).upper() for x in syms[:15]]
+            sym_list = [s for s in sym_list if s]
+            if sym_list:
+                lines.append(f"session_activity_symbols={','.join(sym_list)}")
+        prev = sess.get("preview_symbols")
+        if isinstance(prev, list):
+            prev_list = [_coerce_str(x, limit=12).upper() for x in prev[:8]]
+            prev_list = [s for s in prev_list if s]
+            if prev_list:
+                lines.append(f"session_activity_preview_symbols={','.join(prev_list)}")
+        ssrc = _coerce_str(sess.get("source"), limit=24).lower()
+        if ssrc in ("desk_cache", "movers_radar", "gap_fallback", "empty"):
+            lines.append(f"session_activity_source={ssrc}")
+        note = _coerce_str(sess.get("note"), limit=200)
+        if note:
+            lines.append(f"session_activity_note={note}")
 
     uni = dc.get("universe")
     if isinstance(uni, dict):

@@ -191,7 +191,7 @@ export function hotInMarketSourceSubtitle(
     case "desk_cache":
       return `${count} ranked ${noun} · platform desk scan`;
     case "movers_radar":
-      return `${count} session ${noun} · math-only movers until full desk scan`;
+      return `${count} session ${noun} · ranked by today's % move (context only — not entries)`;
     case "gap_fallback":
       return `${count} gap ${noun} · desk cache warming`;
     default:
@@ -205,6 +205,7 @@ export function hotInMarketFeedSubtitle(input: {
   deskLoading?: boolean;
   scannerPending?: boolean;
   deskCacheMiss?: boolean;
+  sessionActivityLoading?: boolean;
   mode: DashboardDeskMode;
 }): string {
   const {
@@ -213,8 +214,12 @@ export function hotInMarketFeedSubtitle(input: {
     deskLoading = false,
     scannerPending = false,
     deskCacheMiss = false,
+    sessionActivityLoading = false,
     mode
   } = input;
+  if (count === 0 && sessionActivityLoading) {
+    return "Loading session movers from the platform desk…";
+  }
   if (count > 0) {
     const base = hotInMarketSourceSubtitle(source, count);
     if (scannerPending && (source === "desk_cache" || source === "movers_radar")) {
@@ -228,14 +233,14 @@ export function hotInMarketFeedSubtitle(input: {
   if (deskLoading) {
     return `Loading ${mode} desk scan…`;
   }
-  if (scannerPending && deskCacheMiss) {
-    return "Desk cache empty — waiting on scanner or use Refresh desk";
+  if (deskCacheMiss && (scannerPending || sessionActivityLoading)) {
+    return "Loading session movers from the platform desk…";
   }
   if (scannerPending) {
-    return "Loading session movers from scanner…";
+    return "Loading session movers…";
   }
   if (deskCacheMiss) {
-    return "No cached movers yet — Refresh desk runs a live scan";
+    return "Session movers not cached yet — use Load movers or Refresh";
   }
   return hotInMarketSourceSubtitle(source, count);
 }
@@ -244,28 +249,31 @@ export function hotInMarketAwaitingMessage(input: {
   deskLoading?: boolean;
   scannerPending?: boolean;
   deskCacheMiss?: boolean;
+  sessionActivityLoading?: boolean;
 }): string {
-  const { deskLoading = false, scannerPending = false, deskCacheMiss = false } = input;
-  if (deskLoading && scannerPending) {
-    return "Hang tight — platform desk and scanner are still loading.";
+  const {
+    deskLoading = false,
+    scannerPending = false,
+    deskCacheMiss = false,
+    sessionActivityLoading = false
+  } = input;
+  if (sessionActivityLoading || (deskCacheMiss && (deskLoading || scannerPending))) {
+    return "Loading session movers from the platform desk…";
   }
   if (deskLoading) {
-    return "Hang tight — loading the latest desk scan.";
-  }
-  if (scannerPending && deskCacheMiss) {
-    return "Desk cache is empty. Use Refresh desk for an immediate scan, or wait for the scanner to finish.";
+    return "Loading the latest desk scan…";
   }
   if (scannerPending) {
-    return "Hang tight — session movers appear once the scanner finishes.";
+    return "Session movers appear once the scanner finishes loading.";
   }
-  return "Hang tight — movers appear here once data is available.";
+  return "Session movers appear here once data is available.";
 }
 
 export function hotInMarketEmptyMessage(deskCacheMiss: boolean): string {
   if (deskCacheMiss) {
-    return "Session movers are not cached yet for this desk. We can load them now (one scan per few minutes), or they will appear after the next scheduled platform scan.";
+    return "Nothing cached for this desk yet. Tap Load movers for a quick scan (a few minutes between runs).";
   }
-  return "No ranked movers this load — the session may be quiet or filters may have cleared the list.";
+  return "No session movers this load — the tape may be quiet or filters cleared the list.";
 }
 
 export function buildHotInMarketCardModel(

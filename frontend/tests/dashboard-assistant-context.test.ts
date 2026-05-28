@@ -145,6 +145,34 @@ describe("buildDashboardAssistantPageContext", () => {
     expect(expanded.dashboard_context?.gap_leaders_detail?.[0]?.symbol).toBe("GAP1");
   });
 
+  test("session_activity_lists_movers_radar_symbols", () => {
+    const deskData: DeskTodayData = {
+      movers_radar: [
+        { symbol: "ASTC", gap_percent: 141.9, direction: "up", rank_score: 141.9 },
+        { symbol: "ATPC", gap_percent: 110.7, direction: "up", rank_score: 110.7 }
+      ]
+    };
+    const ctx = buildDashboardAssistantPageContext({
+      regimeLabel: "Bullish",
+      swingDeskPosture: "suppressed",
+      dayTradingSurfaces: false,
+      daySetupsCount: 0,
+      swingTopSignals: [],
+      gapIntelligence: [],
+      swingUniverseSymbolCount: 50,
+      gapSnapshotSymbolCount: null,
+      upcomingEarnings: [],
+      scannerDataSettled: true,
+      discoveryExpanded: false,
+      activeDeskMode: "swing",
+      deskData
+    });
+    expect(ctx.dashboard_context?.discovery.source).toBe("movers_radar");
+    expect(ctx.dashboard_context?.session_activity.count).toBe(2);
+    expect(ctx.dashboard_context?.session_activity.symbols).toEqual(["ASTC", "ATPC"]);
+    expect(ctx.dashboard_context?.session_activity.source).toBe("movers_radar");
+  });
+
   test("omits_universe_counts_until_scanner_settles", () => {
     const ctx = buildDashboardAssistantPageContext({
       regimeLabel: "Neutral",

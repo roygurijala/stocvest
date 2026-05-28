@@ -9,8 +9,13 @@ import { DashboardWatchlistRadar } from "@/components/dashboard/dashboard-watchl
 import { PipelineStagePanel } from "@/components/dashboard/pipeline-stage-panel";
 import { buildPipelineStatusLine, PIPELINE_STAGES } from "@/lib/dashboard/dashboard-opportunity-pipeline-present";
 import type { WatchlistRadarDeskContext } from "@/lib/dashboard/watchlist-radar-attention";
-import { quietLeadersFromDesk } from "@/lib/dashboard/quiet-leaders-present";
+import {
+  buildingStructureQuietCount,
+  resolveBuildingStructureRows
+} from "@/lib/dashboard/building-structure-present";
+import { resolveDiscoveryLeaders } from "@/lib/dashboard/desk-today-present";
 import type { DashboardDeskMode } from "@/lib/dashboard/live-status-copy";
+import type { ScannerNearQualificationRow } from "@/lib/scanner-scan-summary";
 import { spacing } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -21,6 +26,7 @@ type Props = {
   alternateDeskData?: DeskTodayData | null | undefined;
   gapFallback: GapIntelligenceItem[];
   deskLoading?: boolean;
+  sessionActivityLoading?: boolean;
   scannerPending?: boolean;
   dualDeskSurfaces?: boolean;
   onRefreshDesk?: () => void;
@@ -31,6 +37,7 @@ type Props = {
   snapshots: SnapshotPayload[];
   desk: WatchlistRadarDeskContext;
   nearReadyInMarket: number;
+  nearQualification?: ScannerNearQualificationRow[];
   marketActivityCount: number;
   watchlistAttentionCount: number;
   onWatchlistAttentionCount?: (count: number) => void;
@@ -43,6 +50,7 @@ export function DashboardOpportunityPipeline({
   alternateDeskData,
   gapFallback,
   deskLoading = false,
+  sessionActivityLoading = false,
   scannerPending = false,
   dualDeskSurfaces = true,
   onRefreshDesk,
@@ -53,16 +61,36 @@ export function DashboardOpportunityPipeline({
   snapshots,
   desk,
   nearReadyInMarket,
+  nearQualification = [],
   marketActivityCount,
   watchlistAttentionCount,
   onWatchlistAttentionCount
 }: Props) {
   const { colors } = useTheme();
-  const quietCount = mode === "swing" ? quietLeadersFromDesk(deskData).length : 0;
+
+  const sessionActivitySymbols = useMemo(() => {
+    const { leaders } = resolveDiscoveryLeaders(deskData, gapFallback, mode, alternateDeskData);
+    return leaders.map((l) => l.symbol);
+  }, [deskData, gapFallback, mode, alternateDeskData]);
+
+  const buildingStructureRows = useMemo(() => {
+    if (mode !== "swing") return [];
+    return resolveBuildingStructureRows({
+      deskData,
+      nearQualification,
+      sessionActivitySymbols
+    });
+  }, [deskData, mode, nearQualification, sessionActivitySymbols]);
+
+  const buildingStructureCount = buildingStructureRows.length;
+  const quietLeadersCount =
+    mode === "swing" ? buildingStructureQuietCount(buildingStructureRows) : 0;
+
   const statusLine = buildPipelineStatusLine({
     mode,
     watchlistAttentionCount,
-    quietLeadersCount: quietCount,
+    buildingStructureCount,
+    quietLeadersCount,
     marketActivityCount,
     nearReadyInMarket,
     systemSuppressed: desk.systemSuppressed
@@ -107,7 +135,14 @@ export function DashboardOpportunityPipeline({
           label={PIPELINE_STAGES.quiet.label}
           hint="Strong structure before the session heats up (move under 2%)"
         >
-          <DashboardQuietLeadersFeed mode={mode} deskData={deskData} isLoading={deskLoading} variant="pipeline" />
+          <DashboardQuietLeadersFeed
+            mode={mode}
+            deskData={deskData}
+            nearQualification={nearQualification}
+            sessionActivitySymbols={sessionActivitySymbols}
+            isLoading={deskLoading}
+            variant="pipeline"
+          />
         </PipelineStagePanel>
       ) : null}
 
@@ -124,6 +159,7 @@ export function DashboardOpportunityPipeline({
           alternateDeskData={alternateDeskData}
           gapFallback={gapFallback}
           isLoading={deskLoading}
+          sessionActivityLoading={sessionActivityLoading}
           scannerPending={scannerPending}
           dualDeskSurfaces={dualDeskSurfaces}
           onRefreshDesk={onRefreshDesk}

@@ -409,7 +409,7 @@ function DashboardRedesignBody({
     mutate: mutateDeskToday
   } = useDashboardDeskRefresh(activeDeskMode, { fallbackData: deskFallbackForMode(activeDeskMode) });
 
-  useDashboardDeskAutoLoad({
+  const { sessionActivityLoading } = useDashboardDeskAutoLoad({
     mode: activeDeskMode,
     deskToday,
     scannerDataSettled,
@@ -588,6 +588,7 @@ function DashboardRedesignBody({
         alternateDeskData={dayTradingSurfaces ? alternateDeskToday?.data ?? null : null}
         gapFallback={scannerOverview.gapIntelligence}
         deskLoading={deskTodayLoading}
+        sessionActivityLoading={sessionActivityLoading}
         scannerPending={!scannerDataSettled}
         dualDeskSurfaces={dayTradingSurfaces}
         onRefreshDesk={() => void refreshDesk()}
@@ -601,6 +602,7 @@ function DashboardRedesignBody({
           systemSuppressed
         }}
         nearReadyInMarket={nearReadyInMarket}
+        nearQualification={scannerOverview.scanSummary?.near_qualification ?? []}
         marketActivityCount={marketActivityCount}
         watchlistAttentionCount={watchlistAttentionCount}
         onWatchlistAttentionCount={setWatchlistAttentionCount}

@@ -36,6 +36,7 @@ export const PIPELINE_STAGES: Record<PipelineStageId, PipelineStageMeta> = {
 export function buildPipelineStatusLine(opts: {
   mode: DashboardDeskMode;
   watchlistAttentionCount: number;
+  buildingStructureCount: number;
   quietLeadersCount: number;
   marketActivityCount: number;
   nearReadyInMarket: number;
@@ -47,8 +48,14 @@ export function buildPipelineStatusLine(opts: {
       `${opts.watchlistAttentionCount} on your list need${opts.watchlistAttentionCount === 1 ? "s" : ""} a look`
     );
   }
-  if (opts.mode === "swing" && opts.quietLeadersCount > 0) {
-    parts.push(`${opts.quietLeadersCount} quiet leader${opts.quietLeadersCount === 1 ? "" : "s"}`);
+  if (opts.mode === "swing" && opts.buildingStructureCount > 0) {
+    const n = opts.buildingStructureCount;
+    const quiet = opts.quietLeadersCount;
+    if (quiet > 0 && quiet < n) {
+      parts.push(`${n} building structure (${quiet} quiet)`);
+    } else {
+      parts.push(`${n} building structure`);
+    }
   }
   if (opts.marketActivityCount > 0) {
     parts.push(`${opts.marketActivityCount} active in market scan`);
