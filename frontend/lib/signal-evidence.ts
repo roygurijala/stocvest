@@ -8,6 +8,11 @@ import {
 } from "@/lib/signal-evidence/execution-quality";
 import { coerceSnapshotForReferenceLevels } from "@/lib/snapshot-reference-levels";
 import { parseSetupJudgment, type SetupJudgment } from "@/lib/signal-evidence/setup-judgment";
+import {
+  roundRiskRewardDisplay,
+  structureRiskRewardLong,
+  structureRiskRewardShort
+} from "@/lib/risk-reward-structure";
 
 export type EvidenceDirection = "bullish" | "bearish" | "neutral";
 export type EvidenceStatus = "Bullish" | "Bearish" | "Neutral" | "Unavailable" | "As of close";
@@ -1610,20 +1615,6 @@ function entryPriceForRr(last: number | null, zoneLo: number | null, zoneHi: num
   return null;
 }
 
-function rrFromLevelsLong(entry: number, target: number, stop: number): number | null {
-  const risk = entry - stop;
-  const reward = target - entry;
-  if (risk <= 1e-6 || reward <= 1e-6) return null;
-  return reward / risk;
-}
-
-function rrFromLevelsShort(entry: number, target: number, stop: number): number | null {
-  const risk = stop - entry;
-  const reward = entry - target;
-  if (risk <= 1e-6 || reward <= 1e-6) return null;
-  return reward / risk;
-}
-
 function syntheticRrFromConfidence(confidencePercent: number): number {
   const conf = clamp(confidencePercent, 0, 100) / 100;
   return Math.round(Math.min(3.5, Math.max(1.0, 1.15 + conf * 1.55)) * 10) / 10;
@@ -1817,12 +1808,22 @@ export function deriveEvidenceInsightFallback(evidence: SignalEvidenceData): Sig
     Number.isFinite(reference_target_1)
   ) {
     rrFromStructure = useLong
-      ? rrFromLevelsLong(entry, reference_target_1, reference_stop_level)
-      : rrFromLevelsShort(entry, reference_target_1, reference_stop_level);
+      ? structureRiskRewardLong(
+          entry,
+          reference_target_1,
+          reference_stop_level,
+          reference_target_2 ?? null
+        )
+      : structureRiskRewardShort(
+          entry,
+          reference_target_1,
+          reference_stop_level,
+          reference_target_2 ?? null
+        );
   }
   const risk_reward =
     rrFromStructure != null
-      ? Math.round(Math.min(10.0, Math.max(0.5, rrFromStructure)) * 10) / 10
+      ? roundRiskRewardDisplay(rrFromStructure)
       : syntheticRrFromConfidence(evidence.confidencePercent);
   const rr_warning = risk_reward < 2.0;
   const rr_quality = rrQualityFromValue(risk_reward);

@@ -195,8 +195,12 @@ describe("session reference levels and fallback R/R", () => {
     const insight = deriveEvidenceInsightFallback(ev);
     expect(insight.reference_target_1).toBe(102);
     const stop = Math.min(98, 99.5) * 0.998;
-    const rr = (102 - 100) / (100 - stop);
-    expect(insight.risk_reward).toBe(Math.round(Math.min(10, Math.max(0.5, rr)) * 10) / 10);
+    const t2 = 100 + 2 * (100 - stop);
+    const rrT1 = (102 - 100) / (100 - stop);
+    const rrT2 = (t2 - 100) / (100 - stop);
+    const expected = rrT1 < 1.0 && rrT2 > rrT1 ? rrT2 : rrT1;
+    expect(insight.risk_reward).toBe(Math.round(Math.min(10, Math.max(0, expected)) * 10) / 10);
+    expect(insight.risk_reward).not.toBe(0.5);
     expect(insight.rr_warning).toBe(insight.risk_reward < 2.0);
   });
 });
