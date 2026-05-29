@@ -8,7 +8,7 @@ import httpx
 import pytest
 import respx
 
-from stocvest.data.earnings_calendar_fetch import fetch_earnings_payload
+from stocvest.data.earnings_calendar_fetch import fetch_earnings_payload, fetch_market_earnings_payload
 
 
 @pytest.mark.asyncio
@@ -42,3 +42,30 @@ async def test_fetch_earnings_payload_uses_finnhub(monkeypatch: pytest.MonkeyPat
     assert len(payload["upcoming"]) >= 1
     assert payload["upcoming"][0]["symbol"] == "DELL"
     assert payload["notice"] is None
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_fetch_market_earnings_payload_returns_full_calendar(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FINNHUB_API_KEY", "test-finnhub")
+    from stocvest.utils.config import get_settings
+
+    get_settings.cache_clear()
+
+    report_day = (date.today() + timedelta(days=2)).isoformat()
+    respx.get("https://finnhub.io/api/v1/calendar/earnings").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "earningsCalendar": [
+                    {"date": report_day, "symbol": "CRWD", "hour": "amc", "epsEstimate": 1.09},
+                    {"date": report_day, "symbol": "AVGO", "hour": "amc", "epsEstimate": 1.5},
+                ]
+            },
+        )
+    )
+
+    payload = await fetch_market_earnings_payload(days=14)
+    assert payload["scope"] == "market"
+    assert payload["source"] == "finnhub"
+    assert len(payload["upcoming"]) >= 2

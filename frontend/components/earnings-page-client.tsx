@@ -484,7 +484,7 @@ export function EarningsPageClient({ events, notice, source }: EarningsPageClien
             lineHeight: typography.lineHeight.normal
           }}
         >
-          Showing earnings for the next 30 days
+          US market earnings calendar · next 30 days
           {source && SOURCE_LABELS[source] ? ` · ${SOURCE_LABELS[source]}` : ""}. Updates daily before market open.
         </p>
       </div>

@@ -763,9 +763,8 @@ def earnings_calendar_handler(
 ) -> dict[str, Any]:
     _ = context
     query = _query_params(event)
+    scope = str(query.get("scope") or "").strip().lower()
     symbols_raw = str(query.get("symbols") or "").strip()
-    if not symbols_raw:
-        return bad_request("Query param 'symbols' is required.")
 
     try:
         days = int(query.get("days") or 7)
@@ -774,15 +773,25 @@ def earnings_calendar_handler(
     if days < 1 or days > 30:
         return bad_request("days must be between 1 and 30.")
 
+    if scope != "market" and not symbols_raw:
+        return bad_request("Query param 'symbols' is required (or scope=market).")
+
     symbols = [s.strip().upper() for s in symbols_raw.split(",") if s.strip()]
-    if not symbols:
+    if scope != "market" and not symbols:
         return bad_request("Query param 'symbols' is required.")
 
     async def _run() -> dict[str, Any]:
         settings = get_settings()
-        async with client_factory(api_key=settings.polygon_api_key) as client:
-            from stocvest.data.earnings_calendar_fetch import fetch_earnings_payload
+        from stocvest.data.earnings_calendar_fetch import (
+            fetch_earnings_payload,
+            fetch_market_earnings_payload,
+        )
 
+        if scope == "market":
+            payload = await fetch_market_earnings_payload(days=days)
+            return ok(payload)
+
+        async with client_factory(api_key=settings.polygon_api_key) as client:
             payload = await fetch_earnings_payload(symbols, days=days, polygon_client=client)
         return ok(payload)
 

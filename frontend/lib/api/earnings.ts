@@ -21,4 +21,12 @@ export async function fetchEarningsCalendar(symbols: string[], days = 7): Promis
   return normalizeEarningsResponse(cleanSymbols, days, payload);
 }
 
+/** Full US earnings calendar for the next ``days`` (Finnhub market scope, not watchlist-filtered). */
+export async function fetchMarketEarningsCalendar(days = 30): Promise<EarningsResponse> {
+  const payload = await apiFetch<EarningsResponse>(
+    `/v1/market/earnings?scope=market&days=${days}`
+  );
+  return normalizeEarningsResponse([], days, payload);
+}
+
 export const earningsTimingLabel = earningsTimingLabelImpl;

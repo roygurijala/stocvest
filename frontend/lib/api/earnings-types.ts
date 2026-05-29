@@ -17,6 +17,8 @@ export interface EarningsEvent {
 export interface EarningsResponse {
   symbols: string[];
   days: number;
+  /** Present when the API returns the full market calendar (not symbol-filtered). */
+  scope?: "market" | "symbols";
   upcoming: EarningsEvent[];
   recent: EarningsEvent[];
   /** Set when no earnings provider returned data (e.g. missing FINNHUB_API_KEY or Polygon tier). */
@@ -60,9 +62,11 @@ export function normalizeEarningsResponse(
   }
   const source =
     typeof payload.source === "string" && payload.source.trim() ? payload.source.trim() : null;
+  const scope = payload.scope === "market" ? "market" : payload.scope === "symbols" ? "symbols" : undefined;
   return {
     symbols: payload.symbols || cleanSymbols,
     days: payload.days || days,
+    scope,
     upcoming: Array.isArray(payload.upcoming) ? payload.upcoming : [],
     recent: Array.isArray(payload.recent) ? payload.recent : [],
     notice: typeof payload.notice === "string" && payload.notice.trim() ? payload.notice.trim() : null,
