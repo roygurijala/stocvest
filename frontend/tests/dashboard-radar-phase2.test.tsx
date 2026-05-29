@@ -145,8 +145,8 @@ describe("DashboardDiscoveryFeed", () => {
       />
     );
     expect(screen.getByText("Market activity")).toBeInTheDocument();
-    expect(screen.getByTestId("dashboard-hot-in-market-card-MU")).toBeInTheDocument();
-    expect(screen.getByTestId("hot-in-market-badge-MU")).toHaveTextContent(/R\/R blocks entry/i);
+    expect(screen.getByTestId("dashboard-opportunity-row-MU")).toBeInTheDocument();
+    expect(screen.getByTestId("opportunity-row-badge-MU")).toHaveTextContent(/R\/R blocks entry/i);
     expect(screen.queryByText(/Signals →/)).toBeNull();
   });
 });
@@ -201,7 +201,7 @@ describe("DashboardRedesign radar shell", () => {
     expect(screen.getByTestId("dashboard-page-title")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-opportunity-pipeline")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-discovery-feed")).toBeInTheDocument();
-    expect(screen.getByTestId("dashboard-hot-in-market-card-MU")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-opportunity-row-MU")).toBeInTheDocument();
     expect(screen.queryByTestId("dashboard-opportunities")).not.toBeInTheDocument();
     expect(screen.queryByTestId("dashboard-system-state-banner")).not.toBeInTheDocument();
 

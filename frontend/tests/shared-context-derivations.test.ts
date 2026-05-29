@@ -192,36 +192,33 @@ describe("classifyRiskHorizon (Phase 2b)", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("buildEnvironmentSummary (Phase 2b)", () => {
-  test("joins all four signals into one strategy-agnostic sentence", () => {
-    const s = buildEnvironmentSummary(1.5, "Contained", "Broad", "Elevated").toLowerCase();
-    expect(s).toContain("short-horizon price drift up");
-    expect(s).toContain("volatility contained");
-    expect(s).toContain("participation broad");
-    expect(s).toContain("macro risk approaching");
+  test("uses at most two natural sentences with drift and risk", () => {
+    const s = buildEnvironmentSummary(1.5, "Contained", "Broad", "Elevated");
+    expect(s).toBe("Bullish drift with broad participation. Watch macro risk.");
+    expect(s.split(".").filter((p) => p.trim().length > 0).length).toBeLessThanOrEqual(2);
   });
 
-  test("drift maps to 'down' when avg pct5d <= -0.6", () => {
+  test("drift down with mixed breadth", () => {
     const s = buildEnvironmentSummary(-1.5, "Contained", "Mixed", "Quiet").toLowerCase();
-    expect(s).toContain("short-horizon price drift down");
+    expect(s).toContain("indexes drifting down");
+    expect(s).toContain("breadth mixed");
   });
 
-  test("drift maps to 'mixed' for the in-between band", () => {
+  test("mixed drift band without strong directional read", () => {
     const s = buildEnvironmentSummary(0.1, "Contained", "Mixed", "Quiet").toLowerCase();
-    expect(s).toContain("short-horizon price drift mixed");
+    expect(s).toContain("mixed short-term index drift");
   });
 
-  test("drift maps to 'unknown' when avg pct5d is null", () => {
+  test("pending weekly drift when avg pct5d is null", () => {
     const s = buildEnvironmentSummary(null, "Contained", "Mixed", "Quiet").toLowerCase();
-    expect(s).toContain("short-horizon price drift unknown");
+    expect(s).toContain("weekly index drift still forming");
+    expect(s).not.toContain("unknown");
   });
 
-  test("Active risk maps to 'earnings risk approaching' not 'macro risk approaching'", () => {
-    // Risk Horizon=Active reflects earnings density, NOT macro events. The
-    // summary phrase must distinguish those — confusing them would imply a
-    // Fed event when there is only an earnings cluster.
+  test("Active risk mentions earnings calendar not macro risk", () => {
     const s = buildEnvironmentSummary(0.7, "Contained", "Mixed", "Active").toLowerCase();
-    expect(s).toContain("earnings risk approaching");
-    expect(s).not.toContain("macro risk approaching");
+    expect(s).toContain("earnings calendar active");
+    expect(s).not.toContain("macro risk");
   });
 
   test("strategy-agnostic — banned evaluative words never appear", () => {
@@ -231,7 +228,7 @@ describe("buildEnvironmentSummary (Phase 2b)", () => {
     const vols = ["Contained", "Expanding", "Compressed", "Unknown"] as const;
     const parts = ["Broad", "Mixed", "Narrow", "Unknown"] as const;
     const risks = ["Elevated", "Active", "Quiet"] as const;
-    const banned = ["setup", "continuation", "trend intact", "constructive", "buy", "sell"];
+    const banned = ["setup", "continuation", "trend intact", "constructive", "buy", "sell", "unknown"];
     for (const d of drifts) {
       for (const v of vols) {
         for (const p of parts) {

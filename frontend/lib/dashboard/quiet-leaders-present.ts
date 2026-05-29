@@ -13,7 +13,9 @@ import { formatDeskGapLine } from "@/lib/dashboard/desk-today-present";
 import { alignedLayersFromAlignmentRatio } from "@/lib/signals-page-present";
 import {
   hotInMarketSignalsHref,
+  resolveCompactStatusHeadline,
   resolveHotInMarketGapEmphasis,
+  resolveRiskReward,
   type HotInMarketCardModel,
   type HotInMarketThemeColors
 } from "@/lib/dashboard/hot-in-market-card-present";
@@ -62,22 +64,22 @@ export function buildQuietLeaderCardModel(
   const layerDots = Array.from({ length: LAYER_TOTAL }, (_, i) => (aligned != null ? i < aligned : false));
   const rsi =
     typeof leader.daily_rsi === "number" && Number.isFinite(leader.daily_rsi) ? leader.daily_rsi : null;
-  const tech =
-    typeof leader.technical_score === "number" && Number.isFinite(leader.technical_score)
-      ? leader.technical_score
-      : null;
   const why = leader.why_line?.trim() || (rsi != null ? `RSI ${rsi.toFixed(0)} · low velocity` : "Low velocity · structure");
-  const alignmentLine =
-    aligned != null
-      ? `${aligned}/${LAYER_TOTAL} layers aligned${tech != null ? ` · technical ${tech}` : ""}`
-      : tech != null
-        ? `Technical ${tech}`
-        : null;
-  const setupBadge = "review" as const;
-  const setupBadgeLabel = "Quiet leader";
+  const alignmentLine = aligned != null ? `${aligned}/${LAYER_TOTAL} layers aligned` : null;
+  const riskReward = resolveRiskReward(leader.risk_reward, leader.execution_hint);
+  const hint = leader.execution_hint?.trim().toLowerCase() ?? "";
+  const setupBadge = hint.includes("risk/reward") ? ("blocked" as const) : ("review" as const);
+  const setupBadgeLabel = setupBadge === "blocked" ? "R/R blocks entry" : "Quiet leader";
   const gapEmphasis = resolveHotInMarketGapEmphasis(setupBadge);
-  const statusHeadline =
-    leader.execution_hint?.trim() || "Strong structure before the session heats up";
+  const statusHeadline = resolveCompactStatusHeadline({
+    setupBadge,
+    source: "desk_cache",
+    aligned,
+    riskReward,
+    executionHint: leader.execution_hint ?? null,
+    sessionMode: "live",
+    quietLeader: true
+  });
 
   return {
     symbol: leader.symbol,

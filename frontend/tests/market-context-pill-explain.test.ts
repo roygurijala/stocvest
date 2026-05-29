@@ -35,7 +35,7 @@ describe("buildVolatilityStructuredExplain", () => {
       vixPulseOk: false,
       regimePriceBreadthOnly: true
     });
-    expect(ex.result).toMatch(/Unknown.*breadth \+ price only/i);
+    expect(ex.result).toMatch(/chip hidden/i);
     expect(ex.why.some((l) => /VIX feed is unavailable/i.test(l))).toBe(true);
   });
 });

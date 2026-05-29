@@ -74,7 +74,12 @@ function status(market: string): MarketStatusPayload {
 }
 
 const baseMarket: MarketOverview = {
-  snapshots: [],
+  snapshots: [
+    { symbol: "I:VIX", last_trade_price: 18.5, prev_close: 18.2 },
+    { symbol: "SPY", last_trade_price: 500, prev_close: 499 },
+    { symbol: "QQQ", last_trade_price: 400, prev_close: 399 },
+    { symbol: "IWM", last_trade_price: 200, prev_close: 199 }
+  ],
   news: [],
   status: status("open")
 };
@@ -342,12 +347,9 @@ describe("Shared Context master card structure (Mode Separation B28 Phase 2b)", 
     const summary = e.querySelector('[data-testid="shared-context-environment-summary"]');
     expect(summary).not.toBeNull();
     const summaryText = (summary?.textContent || "").toLowerCase();
-    // Anchored vocabulary: every summary mentions price drift + volatility +
-    // participation + macro risk in one sentence. For the upward-bias baseline
-    // weekly rows, drift is "up".
-    expect(summaryText).toContain("short-horizon price drift");
-    expect(summaryText).toContain("volatility");
-    expect(summaryText).toContain("participation");
+    // Natural-language anchor — at most two sentences, no "unknown" leakage.
+    expect(summaryText).not.toContain("unknown");
+    expect(summaryText).toMatch(/drift|indexes|leaning|mixed|weekly index/);
     // Guardrails — both rendered verbatim under the summary.
     const guardrails = e.querySelector('[data-testid="shared-context-guardrails"]');
     if (screen.getByTestId("shared-context-master-card").getAttribute("data-shared-layout") === "strip") {

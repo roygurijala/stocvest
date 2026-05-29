@@ -84,7 +84,7 @@ export function buildVolatilityStructuredExplain(opts: {
         "VIX feed is unavailable this load",
         "Volatility band is not confirmed — read range from price action and breadth instead"
       ],
-      result: "Volatility is Unknown (using breadth + price only)",
+      result: "Volatility chip hidden — VIX feed unavailable",
       impact: [
         "Treat range reads as provisional",
         "Regime and desk gates still use index session % and breadth"
@@ -120,11 +120,16 @@ export type MarketContextSessionToday = {
   items: Array<{ symbol: string; formattedPct: string; tone: "bullish" | "bearish" | "muted" }>;
 };
 
-export function buildSessionTodayLine(spyPct: number | null, qqqPct: number | null): MarketContextSessionToday {
+export function buildSessionTodayLine(
+  spyPct: number | null,
+  qqqPct: number | null,
+  iwmPct: number | null = null
+): MarketContextSessionToday {
   const items: MarketContextSessionToday["items"] = [];
   for (const [symbol, pct] of [
     ["SPY", spyPct],
-    ["QQQ", qqqPct]
+    ["QQQ", qqqPct],
+    ["IWM", iwmPct]
   ] as const) {
     const formatted = formatSessionPct(pct);
     if (!formatted) continue;

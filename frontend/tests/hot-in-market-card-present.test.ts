@@ -45,6 +45,9 @@ describe("hot-in-market-card-present", () => {
     );
     expect(model.setupBadge).toBe("blocked");
     expect(model.setupBadgeLabel).toBe("R/R blocks entry");
+    expect(model.statusHeadline).toMatch(/strong alignment/i);
+    expect(model.statusHeadline).toMatch(/0\.5:1/i);
+    expect(model.statusHeadline.toLowerCase()).not.toContain("strong setup quality");
   });
 
   test("actionable badge when alignment and R/R meet swing gates", () => {
@@ -70,7 +73,7 @@ describe("hot-in-market-card-present", () => {
     expect(model.setupBadge).toBe("mover");
     expect(model.setupBadgeLabel).toMatch(/not an entry/i);
     expect(model.gapEmphasis).toBe("secondary");
-    expect(model.statusHeadline).toMatch(/momentum/i);
+    expect(model.statusHeadline).toMatch(/session mover/i);
     expect(model.cardTone).toBe("bullish");
     expect(model.alignmentLine).toBeNull();
   });

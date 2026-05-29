@@ -338,6 +338,7 @@ function DashboardRedesignBody({
       : null;
   const spyPct = spyFromScanner ?? snapshotSessionChangePct(snapshotsBySymbol.get("SPY"));
   const qqqPct = qqqFromScanner ?? snapshotSessionChangePct(snapshotsBySymbol.get("QQQ"));
+  const iwmPct = snapshotSessionChangePct(snapshotsBySymbol.get("IWM"));
   const { label: regimeLabel } = resolveRegimeLabel({
     scannerError: scannerOverview.error,
     scannerRegimeLabel: scannerOverview.regimeLabel,
@@ -475,7 +476,8 @@ function DashboardRedesignBody({
         vixSessionPct: vixPct,
         vixPulseOk,
         spyPct,
-        qqqPct
+        qqqPct,
+        iwmPct
       }),
     [
       weeklyIndexRows,
@@ -488,7 +490,8 @@ function DashboardRedesignBody({
       vixPct,
       vixPulseOk,
       spyPct,
-      qqqPct
+      qqqPct,
+      iwmPct
     ]
   );
 
@@ -555,6 +558,7 @@ function DashboardRedesignBody({
         marketContext={marketContextSnapshot}
         spyPct={spyPct}
         qqqPct={qqqPct}
+        iwmPct={iwmPct}
         vixLevel={vixLevel}
         vixPct={vixPct}
         vixPulseOk={vixPulseOk}
@@ -597,6 +601,7 @@ function DashboardRedesignBody({
         refreshCooldownLabel={cooldownLabel}
         refreshError={deskRefreshError}
         snapshots={marketOverview.snapshots}
+        marketStatus={marketOverview.status}
         desk={{
           regimeLabel,
           systemSuppressed
