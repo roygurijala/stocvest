@@ -388,6 +388,7 @@ export type BuildScenarioGeometryBundleArgs = {
   target1?: number | null;
   target2?: number | null;
   vwap?: number | null;
+  atr?: number | null;
   support?: number | null;
   resistance?: number | null;
   prevClose?: number | null;
