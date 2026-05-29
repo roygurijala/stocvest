@@ -1484,6 +1484,20 @@ export function ScannerPageClient({
             </div>
             <InfoTip text={GAP_INTELLIGENCE_TIP} label="About gap intelligence" />
           </div>
+          {overview.gapIntelligenceUniverseNote ? (
+            <p
+              role="status"
+              data-testid="scanner-gap-universe-note"
+              style={{
+                margin: `0 0 ${spacing[2]}`,
+                fontSize: typography.scale.xs,
+                color: colors.textMuted,
+                lineHeight: typography.lineHeight.normal
+              }}
+            >
+              {overview.gapIntelligenceUniverseNote}
+            </p>
+          ) : null}
           {(scannerSetupMode === "swing" || scannerSetupMode === "day") && overview.gapIntelligence.length > 0 ? (
             <div
               style={{

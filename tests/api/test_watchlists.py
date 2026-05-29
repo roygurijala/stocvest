@@ -155,9 +155,11 @@ def test_default_watchlist_returned_for_scanner(brokers: None) -> None:
 
 
 def test_system_defaults_when_no_watchlist() -> None:
-    assert get_scan_symbols(None, InMemoryWatchlistStore()) == list(SYSTEM_DEFAULTS)
+    liquid = get_scan_symbols(None, InMemoryWatchlistStore())
+    assert liquid[: len(SYSTEM_DEFAULTS)] == list(SYSTEM_DEFAULTS)
+    assert "DELL" in liquid
     store = InMemoryWatchlistStore()
-    assert get_scan_symbols("u-empty", store) == list(SYSTEM_DEFAULTS)
+    assert get_scan_symbols("u-empty", store) == liquid
 
 
 def test_delete_last_watchlist_blocked(brokers: None) -> None:

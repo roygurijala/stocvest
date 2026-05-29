@@ -30,6 +30,7 @@ export type BuildDashboardAssistantPageContextInput = {
   gapIntelligence: GapIntelligenceItem[];
   swingUniverseSymbolCount: number | null;
   gapSnapshotSymbolCount: number | null;
+  gapUniverseNote?: string | null;
   upcomingEarnings: EarningsEvent[];
   scannerDataSettled: boolean;
   discoveryExpanded: boolean;
@@ -130,10 +131,11 @@ export function buildDashboardAssistantPageContext(
   const gapWithoutCatalyst = Math.max(0, gapLeaders.length - gapWithCatalyst);
   const gapIntelNote =
     input.scannerDataSettled && gapLeaders.length === 0
-      ? input.gapSnapshotSymbolCount != null && input.gapSnapshotSymbolCount < 100
-        ? "Gap Intelligence empty — scan may have used a bounded symbol list (watchlist + defaults) or no names met gap/volume gates."
-        : "Gap Intelligence empty — no symbols met gap magnitude, volume, and quality gates this session."
-      : null;
+      ? (input.gapUniverseNote?.trim() ||
+          (input.gapSnapshotSymbolCount != null && input.gapSnapshotSymbolCount < 100
+            ? "Gap Intelligence empty — scan may have used a bounded symbol list (watchlist + liquid leaders) or no names met gap/volume gates."
+            : "Gap Intelligence empty — no symbols met gap magnitude, volume, and quality gates this session."))
+      : input.gapUniverseNote?.trim() || null;
 
   const dashboard_context: DashboardAssistantContextV1 = {
     version: DASHBOARD_CONTEXT_VERSION,

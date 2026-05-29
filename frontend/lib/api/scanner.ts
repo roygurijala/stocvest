@@ -183,6 +183,10 @@ export interface ScannerOverview {
   swingUniverseSymbolCount?: number | null;
   /** Gap-intelligence snapshot size from API when present (full-US or bounded Polygon load). */
   gapIntelligenceSnapshotSymbolCount?: number | null;
+  /** ``full_us`` | ``bounded_liquid`` | ``client`` — how gap snapshots were loaded. */
+  gapIntelligenceSnapshotSource?: string | null;
+  /** Set when bounded fallback was used (explains limited universe). */
+  gapIntelligenceUniverseNote?: string | null;
   /** Present when the user default watchlist had at least one symbol this scan. */
   watchlistStatus?: WatchlistDashboardStatus | null;
   /** Unified scan summary for hero, next actions, and near-qualification lane. */
@@ -202,6 +206,8 @@ export const EMPTY_SCANNER_OVERVIEW: ScannerOverview = {
   regimeLabel: "Neutral",
   swingUniverseSymbolCount: null,
   gapIntelligenceSnapshotSymbolCount: null,
+  gapIntelligenceSnapshotSource: null,
+  gapIntelligenceUniverseNote: null,
   watchlistStatus: null,
   scanSummary: null,
   evaluationTrace: [],
@@ -218,6 +224,8 @@ export type ScannerCoreData = {
   error?: string;
   swingUniverseSymbolCount?: number | null;
   gapIntelligenceSnapshotSymbolCount?: number | null;
+  gapIntelligenceSnapshotSource?: string | null;
+  gapIntelligenceUniverseNote?: string | null;
   watchlistStatus?: WatchlistDashboardStatus | null;
   scanSummary?: ScannerScanSummary | null;
   evaluationTrace?: ScannerEvaluationTraceRow[];
@@ -333,6 +341,8 @@ export async function fetchScannerOverview(
       error: core.error,
       swingUniverseSymbolCount: null,
       gapIntelligenceSnapshotSymbolCount: null,
+      gapIntelligenceSnapshotSource: null,
+      gapIntelligenceUniverseNote: null,
       watchlistStatus: core.watchlistStatus ?? null,
       scanSummary: core.scanSummary ?? null,
       evaluationTrace: core.evaluationTrace ?? [],
@@ -353,6 +363,8 @@ export async function fetchScannerOverview(
     regimeLabel: core.regimeLabel,
     swingUniverseSymbolCount: core.swingUniverseSymbolCount ?? null,
     gapIntelligenceSnapshotSymbolCount: core.gapIntelligenceSnapshotSymbolCount ?? null,
+    gapIntelligenceSnapshotSource: core.gapIntelligenceSnapshotSource ?? null,
+    gapIntelligenceUniverseNote: core.gapIntelligenceUniverseNote ?? null,
     watchlistStatus: core.watchlistStatus ?? null,
     scanSummary: core.scanSummary ?? null,
     evaluationTrace: core.evaluationTrace ?? [],

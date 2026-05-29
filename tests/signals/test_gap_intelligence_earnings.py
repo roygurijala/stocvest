@@ -27,7 +27,15 @@ def _gap() -> PremarketGapCandidate:
 
 def test_passes_volume_gate_outside_rth_with_low_ratio() -> None:
     with patch("stocvest.signals.gap_intelligence._is_outside_rth_ny", return_value=True):
-        assert _passes_volume_vs_adv_gate(0.1) is True
+        assert _passes_volume_vs_adv_gate(100_000, 5_000_000, 0.1) is True
+
+
+def test_time_adjusted_volume_passes_early_session_large_opening_print() -> None:
+    with (
+        patch("stocvest.signals.gap_intelligence._is_outside_rth_ny", return_value=False),
+        patch("stocvest.signals.gap_intelligence._minutes_since_open_ny", return_value=5),
+    ):
+        assert _passes_volume_vs_adv_gate(800_000, 10_000_000, 0.08) is True
 
 
 def test_build_gap_items_earnings_catalyst_without_news() -> None:

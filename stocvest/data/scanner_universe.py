@@ -21,5 +21,6 @@ LIQUID_SYMBOLS_FALLBACK: tuple[str, ...] = (
     "T", "VZ",
     "NEE", "DUK",
     "BRK.B", "BRK.A",
+    "DELL", "PLTR", "SOFI", "RIVN", "AAL", "CRWD", "ZS", "HOOD", "COIN", "SMCI", "MARA",
 )
 # fmt: on

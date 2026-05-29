@@ -14,6 +14,8 @@ const DISCOVERY_TIP =
 
 export type DashboardDiscoveryRowProps = {
   gapIntelligence: GapIntelligenceItem[];
+  /** When gap scan used bounded fallback (watchlist + liquid list). */
+  universeNote?: string | null;
   scannerError?: string;
   dualDeskSurfaces?: boolean;
   /** Fires when the Level-2 gap leaders `<details>` opens or closes (assistant context). */
@@ -37,6 +39,7 @@ function sortGaps(items: GapIntelligenceItem[]): GapIntelligenceItem[] {
 /** Level 2 — expandable gap discovery summary; Level 1 deep link to Scanner only in footer. */
 export function DashboardDiscoveryRow({
   gapIntelligence,
+  universeNote,
   scannerError,
   dualDeskSurfaces = true,
   onDiscoveryExpandedChange
@@ -72,6 +75,19 @@ export function DashboardDiscoveryRow({
               ? "No symbols passed gap filters this session."
               : `${leaders.length} gap leader${leaders.length === 1 ? "" : "s"} · ${withCatalyst} with catalyst`}
           </p>
+          {universeNote ? (
+            <p
+              role="status"
+              style={{
+                margin: `${spacing[2]} 0 0`,
+                fontSize: typography.scale.xs,
+                color: colors.textMuted,
+                lineHeight: typography.lineHeight.normal
+              }}
+            >
+              {universeNote}
+            </p>
+          ) : null}
         </div>
         <span {...interactionLevelProps("light")} className="inline-flex shrink-0">
           <InfoTip text={DISCOVERY_TIP} label="About discovery engine" maxWidth={320} />

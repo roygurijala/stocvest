@@ -362,6 +362,9 @@ export async function runScannerLoadWithoutBrief(
       disclaimer?: string;
       /** Symbols that passed gap-intel liquidity/price/gap gates (before top-N), not raw Polygon row count. */
       snapshot_symbol_count?: number;
+      snapshot_source?: string;
+      universe_note?: string | null;
+      snapshot_rows_loaded?: number;
     }>("/v1/scanner/gap-intelligence", {
       method: "POST",
       body: JSON.stringify({
@@ -400,13 +403,22 @@ export async function runScannerLoadWithoutBrief(
       console.warn("scanner-load: gap-intelligence request failed; using empty gaps + fallback universe");
     }
 
+    const gapIntelObj =
+      gapIntelResp != null && typeof gapIntelResp === "object" ? (gapIntelResp as Record<string, unknown>) : null;
     const gapIntelSnapshotCount =
-      gapIntelResp != null &&
-      typeof gapIntelResp === "object" &&
-      typeof (gapIntelResp as { snapshot_symbol_count?: unknown }).snapshot_symbol_count === "number" &&
-      Number.isFinite((gapIntelResp as { snapshot_symbol_count: number }).snapshot_symbol_count) &&
-      (gapIntelResp as { snapshot_symbol_count: number }).snapshot_symbol_count > 0
-        ? Math.floor((gapIntelResp as { snapshot_symbol_count: number }).snapshot_symbol_count)
+      gapIntelObj != null &&
+      typeof gapIntelObj.snapshot_symbol_count === "number" &&
+      Number.isFinite(gapIntelObj.snapshot_symbol_count) &&
+      gapIntelObj.snapshot_symbol_count > 0
+        ? Math.floor(gapIntelObj.snapshot_symbol_count)
+        : null;
+    const gapIntelSnapshotSource =
+      gapIntelObj != null && typeof gapIntelObj.snapshot_source === "string"
+        ? gapIntelObj.snapshot_source.trim() || null
+        : null;
+    const gapIntelUniverseNote =
+      gapIntelObj != null && typeof gapIntelObj.universe_note === "string"
+        ? gapIntelObj.universe_note.trim() || null
         : null;
     const gapTopSyms = topGapSymbolsForUniverse(gapItems);
     const wlSource = tuning?.parallelDefaultWatchlist === true ? wlSnap.symbols : watchlistSymbols;
@@ -593,6 +605,8 @@ export async function runScannerLoadWithoutBrief(
           regimeLabel,
           swingUniverseSymbolCount: universe.length,
           gapIntelligenceSnapshotSymbolCount: gapIntelSnapshotCount,
+          gapIntelligenceSnapshotSource: gapIntelSnapshotSource,
+          gapIntelligenceUniverseNote: gapIntelUniverseNote,
           watchlistStatus: buildWatchlistDashboardStatus(watchUpper, universe, []),
           error: "Service temporarily unavailable. Please try again."
         };
@@ -618,6 +632,8 @@ export async function runScannerLoadWithoutBrief(
           regimeLabel,
           swingUniverseSymbolCount: universe.length,
           gapIntelligenceSnapshotSymbolCount: gapIntelSnapshotCount,
+          gapIntelligenceSnapshotSource: gapIntelSnapshotSource,
+          gapIntelligenceUniverseNote: gapIntelUniverseNote,
           watchlistStatus: buildWatchlistDashboardStatus(watchUpper, universe, []),
           error: "Service temporarily unavailable. Please try again."
         };
@@ -684,6 +700,8 @@ export async function runScannerLoadWithoutBrief(
       regimeLabel,
       swingUniverseSymbolCount: universe.length,
       gapIntelligenceSnapshotSymbolCount: gapIntelSnapshotCount,
+      gapIntelligenceSnapshotSource: gapIntelSnapshotSource,
+      gapIntelligenceUniverseNote: gapIntelUniverseNote,
       watchlistStatus,
       scanSummary,
       evaluationTrace,
@@ -699,6 +717,8 @@ export async function runScannerLoadWithoutBrief(
       regimeLabel: "Neutral",
       swingUniverseSymbolCount: null,
       gapIntelligenceSnapshotSymbolCount: null,
+      gapIntelligenceSnapshotSource: null,
+      gapIntelligenceUniverseNote: null,
       watchlistStatus: null,
       error: error instanceof Error ? error.message : "Unable to connect. Check your connection."
     };
