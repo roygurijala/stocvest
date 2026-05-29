@@ -11,16 +11,24 @@ export function setupOutcomesHref(mode: "swing" | "day"): string {
   return `/dashboard/setup-outcomes?${qs.toString()}`;
 }
 
-export function signalsWithSymbolHref(symbol: string, mode: "swing" | "day"): string {
+export function signalsWithSymbolHref(
+  symbol: string,
+  mode: "swing" | "day",
+  ref: "setup-evolution" | "setup-outcomes" = "setup-evolution"
+): string {
   const sym = symbol.trim().toUpperCase();
-  const qs = new URLSearchParams({ symbol: sym, trading_mode: mode });
+  const qs = new URLSearchParams({ symbol: sym, trading_mode: mode, ref });
   return `/dashboard/signals?${qs.toString()}`;
 }
 
 /** Opens Signals and auto-opens the evidence modal (client strips query after load). */
-export function signalsOpenEvidenceHref(symbol: string, mode: "swing" | "day"): string {
+export function signalsOpenEvidenceHref(
+  symbol: string,
+  mode: "swing" | "day",
+  ref: "setup-evolution" | "setup-outcomes" = "setup-evolution"
+): string {
   const sym = symbol.trim().toUpperCase();
-  const qs = new URLSearchParams({ symbol: sym, trading_mode: mode, open_evidence: "1" });
+  const qs = new URLSearchParams({ symbol: sym, trading_mode: mode, ref, open_evidence: "1" });
   return `/dashboard/signals?${qs.toString()}`;
 }
 

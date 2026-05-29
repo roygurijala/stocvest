@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { hotInMarketSignalsHref } from "@/lib/dashboard/hot-in-market-card-present";
 import { useEffect, useMemo, useState } from "react";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { interactionLevelProps } from "@/lib/dashboard/click-hierarchy";
@@ -95,7 +96,7 @@ export function NearReadyEngagementStrip({ mode }: Props) {
           <span key={sym}>
             {i > 0 ? " · " : null}
             <Link
-              href={`/dashboard/signals?symbol=${encodeURIComponent(sym)}&trading_mode=${mode}`}
+              href={hotInMarketSignalsHref(sym, mode)}
               style={{ color: colors.accent, fontWeight: 600, textDecoration: "none" }}
             >
               {sym}

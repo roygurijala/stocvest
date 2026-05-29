@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { scannerToSignalsHref } from "@/lib/nav/watchlist-signals-deeplink";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { useHasAIExplanations } from "@/lib/api/user";
@@ -158,7 +159,7 @@ function LaggardScannerRow({ row }: { row: ScannerLaggardRow }) {
     >
       <div style={{ display: "flex", flexWrap: "wrap", gap: spacing[2], alignItems: "center", marginBottom: spacing[1] }}>
         <Link
-          href={`/dashboard/signals?symbol=${encodeURIComponent(sym)}&trading_mode=swing`}
+          href={scannerToSignalsHref(sym, "swing")}
           className="font-mono text-sm font-bold no-underline hover:underline"
           style={{ color: colors.text }}
         >

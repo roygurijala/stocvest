@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { signalsWithSymbolHref } from "@/lib/nav/setup-analytics-deeplink";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { fetchSetupOutcomes, type SetupOutcomesResponse } from "@/lib/api/setup-outcomes";
@@ -149,7 +150,7 @@ export function SetupOutcomesPageClient({ isAdmin = false }: { isAdmin?: boolean
                     style={{ color: colors.text }}
                   >
                     <Link
-                      href={`/dashboard/signals?symbol=${encodeURIComponent(e.symbol)}&trading_mode=${mode}`}
+                      href={signalsWithSymbolHref(e.symbol, mode, "setup-outcomes")}
                       className="font-medium no-underline hover:underline"
                       style={{ color: colors.accent }}
                     >

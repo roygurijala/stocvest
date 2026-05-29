@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { fetchDeskToday, type DeskTodayResponse } from "@/lib/api/desk-today";
 import { buildQuietLeaderCardModel, quietLeadersFromDesk } from "@/lib/dashboard/quiet-leaders-present";
-import { hotInMarketSignalsHref } from "@/lib/dashboard/hot-in-market-card-present";
+import { scannerToSignalsHref } from "@/lib/nav/watchlist-signals-deeplink";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -99,7 +99,7 @@ export function ScannerQuietLeadersSection({ scannerMode }: Props) {
                 </span>
               </div>
               <Link
-                href={hotInMarketSignalsHref(row.symbol, "swing")}
+                href={scannerToSignalsHref(row.symbol, "swing")}
                 style={{ fontSize: typography.scale.xs, fontWeight: 600, color: colors.accent }}
               >
                 Signals →
