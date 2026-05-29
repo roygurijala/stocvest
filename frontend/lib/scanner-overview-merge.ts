@@ -12,6 +12,8 @@ export function mergeScannerCoreIntoOverview(prev: ScannerOverview, core: Scanne
     regimeLabel: core.regimeLabel,
     swingUniverseSymbolCount: core.swingUniverseSymbolCount ?? null,
     gapIntelligenceSnapshotSymbolCount: core.gapIntelligenceSnapshotSymbolCount ?? null,
+    gapIntelligenceSnapshotSource: core.gapIntelligenceSnapshotSource ?? null,
+    gapIntelligenceUniverseNote: core.gapIntelligenceUniverseNote ?? null,
     watchlistStatus: core.watchlistStatus ?? null,
     scanSummary: core.scanSummary ?? null,
     evaluationTrace: core.evaluationTrace ?? [],

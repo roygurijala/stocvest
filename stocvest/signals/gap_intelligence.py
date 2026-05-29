@@ -292,20 +292,79 @@ def _get_catalyst_lookback_hours() -> int:
     return _catalyst_lookback_hours_at(ny)
 
 
+_RTH_SESSION_MINUTES = 390  # 9:30–16:00 ET
+
+
 def _is_outside_rth_ny(now_utc: datetime | None = None) -> bool:
     """True before 9:30 or after 16:00 ET Mon–Fri, or on weekends."""
+    return _minutes_since_open_ny(now_utc) is None
+
+
+def _minutes_since_open_ny(now_utc: datetime | None = None) -> int | None:
+    """Minutes since 9:30 ET on a weekday session, or None outside RTH."""
     ny = (now_utc or datetime.now(timezone.utc)).astimezone(ZoneInfo("America/New_York"))
     if ny.weekday() >= 5:
-        return True
+        return None
     mins = ny.hour * 60 + ny.minute
-    return mins < 9 * 60 + 30 or mins >= 16 * 60
+    open_mins = 9 * 60 + 30
+    close_mins = 16 * 60
+    if mins < open_mins or mins >= close_mins:
+        return None
+    return mins - open_mins
 
 
-def _passes_volume_vs_adv_gate(volume_vs_avg: float) -> bool:
-    """Defer strict volume-vs-prior-day gate until regular session has volume."""
-    if _is_outside_rth_ny():
+def _time_adjusted_volume_ratio(
+    day_volume: float,
+    prev_day_volume: float | None,
+    *,
+    now_utc: datetime | None = None,
+) -> float:
+    """Today's volume vs expected cumulative volume at this point in the session."""
+    if prev_day_volume is None or prev_day_volume <= 0:
+        return 1.0
+    mins = _minutes_since_open_ny(now_utc)
+    if mins is None:
+        return 1.0
+    frac = max(mins / _RTH_SESSION_MINUTES, 1.0 / _RTH_SESSION_MINUTES)
+    expected = float(prev_day_volume) * frac
+    if expected <= 0:
+        return 0.0
+    return float(day_volume) / expected
+
+
+def _passes_volume_vs_adv_gate(
+    day_volume: float,
+    prev_day_volume: float | None,
+    volume_vs_avg: float,
+    *,
+    now_utc: datetime | None = None,
+) -> bool:
+    """
+    Session-aware relative volume gate.
+
+    Pre-open: no gate. Early RTH: time-adjusted RVOL with loose thresholds; later
+    sessions require stronger participation vs expected volume at this clock time.
+    """
+    if _is_outside_rth_ny(now_utc):
         return True
-    return volume_vs_avg >= 0.5
+    mins = _minutes_since_open_ny(now_utc)
+    if mins is None:
+        return True
+    tadj = _time_adjusted_volume_ratio(day_volume, prev_day_volume, now_utc=now_utc)
+    if mins < 30:
+        return tadj >= 0.3
+    if mins < 60:
+        return tadj >= 0.5
+    return tadj >= 0.8
+
+
+def _min_gap_quality_score(*, has_earnings_catalyst: bool, now_utc: datetime | None = None) -> int:
+    if has_earnings_catalyst:
+        return 20
+    mins = _minutes_since_open_ny(now_utc)
+    if mins is not None and mins < 30:
+        return 25
+    return 40
 
 
 def _filter_articles_last_hours(articles: list[NewsArticle], *, hours: int) -> list[NewsArticle]:
@@ -410,7 +469,9 @@ def build_gap_intelligence_items(
 
         if price < 5.0 or day_vol < 500_000:
             continue
-        if prev_v is not None and prev_v > 0 and not _passes_volume_vs_adv_gate(w.volume_vs_avg):
+        if prev_v is not None and prev_v > 0 and not _passes_volume_vs_adv_gate(
+            day_vol, prev_v, w.volume_vs_avg
+        ):
             continue
 
         best: NewsCatalystCandidate | None = None
@@ -427,7 +488,8 @@ def build_gap_intelligence_items(
         earnings_payload, _earnings_ev = match_earnings_catalyst(
             g.symbol, earnings_index, session_date=sess_date
         )
-        has_cat = best is not None or earnings_payload is not None
+        has_earnings_cat = earnings_payload is not None
+        has_cat = best is not None or has_earnings_cat
         if not has_cat:
             mismatch = 0
             noise_c = 0
@@ -463,7 +525,7 @@ def build_gap_intelligence_items(
             catalyst_type=cat_type,
             catalyst_sentiment=cat_sent,
         )
-        if gqs < 40:
+        if gqs < _min_gap_quality_score(has_earnings_catalyst=has_earnings_cat):
             continue
 
         gap_dollars = round(price - float(g.prev_close), 4)

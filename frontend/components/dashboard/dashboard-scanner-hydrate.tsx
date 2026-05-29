@@ -12,6 +12,8 @@ export const EMPTY_SCANNER_OVERVIEW: ScannerOverview = {
   regimeLabel: "Neutral",
   swingUniverseSymbolCount: null,
   gapIntelligenceSnapshotSymbolCount: null,
+  gapIntelligenceSnapshotSource: null,
+  gapIntelligenceUniverseNote: null,
   watchlistStatus: null,
   scanSummary: null,
   evaluationTrace: [],
@@ -38,6 +40,8 @@ export function scannerCoreToOverview(scannerCore: ScannerCoreData): ScannerOver
     regimeLabel: scannerCore.regimeLabel,
     swingUniverseSymbolCount: scannerCore.swingUniverseSymbolCount ?? null,
     gapIntelligenceSnapshotSymbolCount: scannerCore.gapIntelligenceSnapshotSymbolCount ?? null,
+    gapIntelligenceSnapshotSource: scannerCore.gapIntelligenceSnapshotSource ?? null,
+    gapIntelligenceUniverseNote: scannerCore.gapIntelligenceUniverseNote ?? null,
     watchlistStatus: scannerCore.watchlistStatus ?? null,
     scanSummary: scannerCore.scanSummary ?? null,
     evaluationTrace: scannerCore.evaluationTrace ?? []

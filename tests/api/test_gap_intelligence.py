@@ -120,7 +120,10 @@ def test_thin_volume_filtered_out() -> None:
     ]
     snaps = {"THIN": _snap("THIN", prev_close=100, price=110, vol=900_000, adv=5_000_000)}
     arts = [_art("THIN news", ["THIN"])]
-    with patch("stocvest.signals.gap_intelligence._is_outside_rth_ny", return_value=False):
+    with (
+        patch("stocvest.signals.gap_intelligence._is_outside_rth_ny", return_value=False),
+        patch("stocvest.signals.gap_intelligence._minutes_since_open_ny", return_value=120),
+    ):
         items = build_gap_intelligence_items(gaps, snaps, arts)
     assert items == []
 

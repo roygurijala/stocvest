@@ -67,6 +67,15 @@ _SCHEDULED_SCAN_TYPES = frozenset({
 _GAP_INTEL_TOP_N = 30
 _GAP_INTEL_FULL_SNAPSHOT_TIMEOUT_SEC = 12.0
 
+_GAP_SNAPSHOT_SOURCE_FULL = "full_us"
+_GAP_SNAPSHOT_SOURCE_BOUNDED = "bounded_liquid"
+
+_UNIVERSE_NOTE_BOUNDED = (
+    "Showing gaps from your watchlist plus top liquid names (~120). "
+    "Full US market scan timed out or is still loading."
+)
+_UNIVERSE_NOTE_FULL = None
+
 
 async def _enrich_gap_company_names(client: PolygonClient, items: list[dict[str, Any]]) -> None:
     """Polygon aggregate snapshots often omit ticker name; fill from v3 reference/tickers."""
@@ -143,27 +152,29 @@ async def _load_snapshots_for_dynamic_gaps(user_id: str | None = None, *, bounde
             raise
 
 
-async def _snapshots_for_gap_intelligence(user_id: str | None) -> list[Snapshot]:
+async def _snapshots_for_gap_intelligence(user_id: str | None) -> tuple[list[Snapshot], str, str | None]:
     """Load snapshots across the broadest universe we can afford under API Gateway latency.
 
-    Prefer Polygon's paginated full-US feed (same as ``POST /v1/scanner/gaps`` with empty snapshots).
-    On slow responses (common with very large feeds) or unexpected errors, fall back to the bounded
-    watchlist + system-default universe so the route still answers within the integration window.
+    Returns ``(snapshots, snapshot_source, universe_note)`` where ``snapshot_source`` is
+    ``full_us`` or ``bounded_liquid``.
     """
     try:
-        return await asyncio.wait_for(
+        snaps = await asyncio.wait_for(
             _load_snapshots_for_dynamic_gaps(user_id, bounded=False),
             timeout=_GAP_INTEL_FULL_SNAPSHOT_TIMEOUT_SEC,
         )
+        return snaps, _GAP_SNAPSHOT_SOURCE_FULL, _UNIVERSE_NOTE_FULL
     except TimeoutError:
         _LOG.warning(
             "gap_intelligence full US snapshot exceeded %.0fs; bounded_fallback",
             _GAP_INTEL_FULL_SNAPSHOT_TIMEOUT_SEC,
         )
-        return await _load_snapshots_for_dynamic_gaps(user_id, bounded=True)
+        snaps = await _load_snapshots_for_dynamic_gaps(user_id, bounded=True)
+        return snaps, _GAP_SNAPSHOT_SOURCE_BOUNDED, _UNIVERSE_NOTE_BOUNDED
     except Exception as exc:  # noqa: BLE001 — never 500 gap-intel on snapshot transport quirks
         _LOG.warning("gap_intelligence full_universe_snapshot_failed err=%s; bounded_fallback", str(exc)[:200])
-        return await _load_snapshots_for_dynamic_gaps(user_id, bounded=True)
+        snaps = await _load_snapshots_for_dynamic_gaps(user_id, bounded=True)
+        return snaps, _GAP_SNAPSHOT_SOURCE_BOUNDED, _UNIVERSE_NOTE_BOUNDED
 
 
 def _is_eventbridge_schedule_event(event: LambdaEvent) -> bool:
@@ -376,8 +387,10 @@ async def _gap_intelligence_async(payload: dict[str, Any], user_id: str | None) 
     min_day_volume = float(payload.get("min_day_volume", 500_000))
     news_limit = min(1000, max(50, int(payload.get("news_limit", 400))))
 
+    snapshot_source = "client"
+    universe_note: str | None = None
     if len(snapshots_raw) == 0:
-        snapshots = await _snapshots_for_gap_intelligence(user_id)
+        snapshots, snapshot_source, universe_note = await _snapshots_for_gap_intelligence(user_id)
     else:
         snapshots = [Snapshot.model_validate(item) for item in snapshots_raw]
 
@@ -428,6 +441,9 @@ async def _gap_intelligence_async(payload: dict[str, Any], user_id: str | None) 
             "items": items,
             "disclaimer": API_SIGNAL_DISCLAIMER,
             "snapshot_symbol_count": gap_scan.eligible_symbol_count,
+            "snapshot_source": snapshot_source,
+            "universe_note": universe_note,
+            "snapshot_rows_loaded": len(snapshots),
         }
     )
 
