@@ -5,6 +5,11 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from stocvest.api.services.risk_reward_structure import (
+    round_risk_reward_display,
+    structure_risk_reward_long,
+    structure_risk_reward_short,
+)
 from stocvest.api.services.signal_validation_eligibility import MIN_RISK_REWARD_DAY, MIN_RISK_REWARD_SWING
 from stocvest.signals.composite_score import CompositeSignal, CompositeVerdict
 from stocvest.signals.vwap_state import VWAP_STATE_TOOLTIP, VWAPState, build_vwap_chip, resolve_vwap_state
@@ -364,22 +369,6 @@ def _use_long_rr_structure(verdict: CompositeVerdict, day_lo: float | None, day_
     return True
 
 
-def _rr_from_levels_long(entry: float, target: float, stop: float) -> float | None:
-    risk = entry - stop
-    reward = target - entry
-    if risk <= 1e-6 or reward <= 1e-6:
-        return None
-    return float(reward / risk)
-
-
-def _rr_from_levels_short(entry: float, target: float, stop: float) -> float | None:
-    risk = stop - entry
-    reward = entry - target
-    if risk <= 1e-6 or reward <= 1e-6:
-        return None
-    return float(reward / risk)
-
-
 def build_swing_composite_evidence_fields(
     *,
     composite: CompositeSignal,
@@ -527,12 +516,22 @@ def build_swing_composite_evidence_fields(
         and reference_target_1 is not None
     ):
         if use_long:
-            rr_from_structure = _rr_from_levels_long(entry, reference_target_1, reference_stop_level)
+            rr_from_structure = structure_risk_reward_long(
+                entry,
+                reference_target_1,
+                reference_stop_level,
+                reference_target_2,
+            )
         else:
-            rr_from_structure = _rr_from_levels_short(entry, reference_target_1, reference_stop_level)
+            rr_from_structure = structure_risk_reward_short(
+                entry,
+                reference_target_1,
+                reference_stop_level,
+                reference_target_2,
+            )
 
     if rr_from_structure is not None:
-        risk_reward = round(min(10.0, max(0.5, rr_from_structure)), 1)
+        risk_reward = round_risk_reward_display(rr_from_structure)
     else:
         risk_reward = _synthetic_rr_from_composite(composite)
 
