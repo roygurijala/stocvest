@@ -1909,6 +1909,7 @@ export function sanitizeEvidenceChips(rawChips: string[]): string[] {
     if (!chip) continue;
     const lower = chip.toLowerCase();
     if (lower === "analyst feed unavailable") continue;
+    if (/^sentiment score\b/i.test(chip)) continue;
     if (lower.includes("expired")) continue;
     if (lower.startsWith("orb") && lower.includes("unavailable")) continue;
     const mapped = ORB_CHIP_REMAP[chip] ?? ORB_CHIP_REMAP[chip.trim()];

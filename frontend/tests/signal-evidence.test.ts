@@ -835,7 +835,7 @@ describe("SignalEvidenceCard sector + cross-layer alignment", () => {
     expect(html).toContain("Bias");
     expect(html).toContain("evidence-card-alignment-context");
     expect(html).toContain("context only; setup validity is on Signals");
-    expect(html).toContain("Layer contribution (directional pressure)");
+    expect(html).toContain("Layer read (by verdict)");
     expect(html).toContain("Tech bid");
     expect(html).toContain("Resolved");
   });
@@ -844,6 +844,10 @@ describe("SignalEvidenceCard sector + cross-layer alignment", () => {
 describe("ORB technical chips (evidence)", () => {
   test("sanitizeEvidenceChips removes expired and keeps RSI", () => {
     expect(sanitizeEvidenceChips(["ORB Expired", "RSI 47"])).toEqual(["RSI 47"]);
+  });
+
+  test("sanitizeEvidenceChips drops internal sentiment score lines", () => {
+    expect(sanitizeEvidenceChips(["Sentiment score +0.42", "Beat headline"])).toEqual(["Beat headline"]);
   });
 
   test("expired ORB chip filtered from layer keyPoints in static markup", () => {

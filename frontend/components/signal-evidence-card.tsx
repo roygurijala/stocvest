@@ -503,11 +503,6 @@ function formatCatalystSource(source: string | undefined): string {
   return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
 }
 
-function formatSentimentScore(score: number): string {
-  if (!Number.isFinite(score)) return "";
-  return score > 0 ? `+${score.toFixed(2)}` : score.toFixed(2);
-}
-
 function formatGeoEventTypeLabel(et: string): string {
   return et.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
@@ -682,25 +677,11 @@ function GeopoliticalExposurePanel({ geo, colors }: { geo: GeopoliticalLayerExtr
           {geo.eventDetails.map((row) => (
             <li key={row.event_type} style={{ lineHeight: 1.5 }}>
               <span style={{ color: colors.text }}>{formatGeoEventTypeLabel(row.event_type)}</span>
-              <span style={{ fontVariantNumeric: "tabular-nums" }}> · intensity {row.score.toFixed(2)}</span>
               <span style={{ fontVariantNumeric: "tabular-nums", color: bandSt.fg }}> · {formatSectorMultiplier(row.sector_multiplier)}</span>
               <span style={{ fontSize: typography.scale.xs, opacity: 0.88 }}> for this sector</span>
             </li>
           ))}
         </ul>
-      ) : null}
-      {geo.stockExposureScore != null ? (
-        <p
-          style={{
-            margin: 0,
-            fontSize: typography.scale.xs,
-            color: colors.textMuted,
-            fontVariantNumeric: "tabular-nums"
-          }}
-        >
-          Weighted score:{" "}
-          <strong style={{ color: colors.text }}>{geo.stockExposureScore.toFixed(2)}</strong>
-        </p>
       ) : null}
       {geo.exposureSummary ? (
         <p
@@ -1923,10 +1904,6 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
                             bg: "rgba(245,158,11,0.1)",
                             border: "1px solid rgba(245,158,11,0.35)"
                           };
-                  const scoreStr =
-                    typeof c.sentiment_score === "number" && Number.isFinite(c.sentiment_score)
-                      ? formatSentimentScore(c.sentiment_score)
-                      : "";
                   const openNews = () => onOpenNewsPanel?.(evidence.symbol);
                   return (
                     <li key={`cat-${i}`} style={{ display: "grid", gap: spacing[1] }}>
@@ -1978,7 +1955,6 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
                           }}
                         >
                           {sentimentChip.label}
-                          {scoreStr ? ` ${scoreStr}` : ""}
                         </span>
                       </div>
                       {onOpenNewsPanel ? (

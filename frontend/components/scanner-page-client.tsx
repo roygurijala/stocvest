@@ -30,6 +30,7 @@ import { fetchSymbolNews } from "@/lib/api/fetch-symbol-news";
 import { loadScannerDataWithoutBrief } from "@/lib/api/scanner-client-load";
 import { fetchScannerTraceBundleClient } from "@/lib/api/scanner-trace-client";
 import type { ScannerSynthesis } from "@/lib/scanner-synthesis";
+import { buildEvidenceAssistantContext } from "@/lib/assistant/build-evidence-assistant-context";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import type {
   AssistantPageContext,
@@ -1236,7 +1237,45 @@ export function ScannerPageClient({
     showSwingScanContextBanner,
     setupsEmptyMessage
   ]);
-  usePublishAssistantContext(assistantContext);
+
+  const evidenceAssistantContext = useMemo<AssistantPageContext | null>(() => {
+    if (!evidenceOpen) return null;
+    if (!evidence) {
+      const sym = (evidenceLoadingSymbol ?? "").trim().toUpperCase();
+      if (!sym) return null;
+      return {
+        page: "dashboard/scanner",
+        symbol: sym,
+        analysis_status: "loading",
+        trading_mode:
+          scannerSetupMode === "swing" ? "swing" : scannerSetupMode === "day" ? "day" : undefined
+      };
+    }
+    const tradingMode =
+      evidence.compositeMode ??
+      (scannerSetupMode === "swing" ? "swing" : scannerSetupMode === "day" ? "day" : "swing");
+    const sym = evidence.symbol.trim().toUpperCase();
+    const gapSnap = sym ? (scannerGapIntelBySymbol[sym] ?? null) : null;
+    return (
+      buildEvidenceAssistantContext({
+        evidence,
+        tradingMode,
+        page: "dashboard/scanner",
+        gapIntelSnapshot: gapSnap,
+        analysisStatus: evidence.insight ? "loaded" : evidenceLoading ? "loading" : undefined
+      }) ?? null
+    );
+  }, [
+    evidenceOpen,
+    evidence,
+    evidenceLoading,
+    evidenceLoadingSymbol,
+    scannerSetupMode,
+    scannerGapIntelBySymbol
+  ]);
+
+  const publishedAssistantContext = evidenceAssistantContext ?? assistantContext;
+  usePublishAssistantContext(publishedAssistantContext);
 
   const openGapEvidence = useCallback(
     async (item: GapIntelligenceItem) => {
