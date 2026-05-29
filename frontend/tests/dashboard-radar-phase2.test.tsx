@@ -12,6 +12,7 @@ import { DashboardRedesign } from "@/components/dashboard-redesign";
 import { ThemeProvider } from "@/lib/theme-provider";
 import type { MarketOverview, MarketStatusPayload } from "@/lib/api/market";
 import { EMPTY_SCANNER_OVERVIEW, type GapIntelligenceItem } from "@/lib/api/scanner";
+import { nyTradingDateIso } from "@/lib/dashboard/desk-session-freshness";
 
 vi.mock("@/lib/hooks/use-is-mobile-layout", () => ({
   useIsMobileLayout: () => false
@@ -39,7 +40,8 @@ vi.mock("@/lib/hooks/use-dashboard-desk-refresh", () => ({
         ],
         eligible_symbol_count: 120,
         scanned_snapshot_count: 4500,
-        generated_at: "2026-05-26T14:00:00Z"
+        session_trading_date: deskSessionToday,
+        generated_at: `${deskSessionToday}T14:00:00.000Z`
       }
     },
     isLoading: false,
@@ -93,6 +95,8 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+const deskSessionToday = nyTradingDateIso();
+
 const baseMarket: MarketOverview = {
   snapshots: [
     { symbol: "SPY", last_trade_price: 500, change_percent: 0.5, prev_close: 498 },
@@ -130,6 +134,8 @@ describe("DashboardDiscoveryFeed", () => {
       <DashboardDiscoveryFeed
         mode="swing"
         deskData={{
+          session_trading_date: deskSessionToday,
+          generated_at: `${deskSessionToday}T14:00:00.000Z`,
           discovery: [
             {
               symbol: "MU",
