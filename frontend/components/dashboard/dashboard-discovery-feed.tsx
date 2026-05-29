@@ -38,6 +38,7 @@ type Props = {
   alternateDeskData?: DeskTodayData | null | undefined;
   gapFallback: GapIntelligenceItem[];
   isLoading?: boolean;
+  sessionActivityLoading?: boolean;
   scannerPending?: boolean;
   dualDeskSurfaces?: boolean;
   onRefreshDesk?: () => void;
@@ -55,6 +56,7 @@ export function DashboardDiscoveryFeed({
   alternateDeskData,
   gapFallback,
   isLoading = false,
+  sessionActivityLoading = false,
   scannerPending = false,
   dualDeskSurfaces = true,
   onRefreshDesk,
@@ -109,20 +111,25 @@ export function DashboardDiscoveryFeed({
     : "/dashboard/scanner?mode=swing";
   const scannerHover = useHoverPrefetch(scannerHref);
   const deskCacheMiss = deskSource === "cache_miss" || (deskData == null && deskSource !== "cache");
+  const embedded = variant === "pipeline";
   const subtitle = hotInMarketFeedSubtitle({
     source,
     count: leaders.length,
     deskLoading: isLoading,
     scannerPending,
     deskCacheMiss,
+    sessionActivityLoading,
     mode
   });
   const awaitingData =
     leaders.length === 0 &&
-    (isLoading || refreshBusy || (scannerPending && deskCacheMiss && gapFallback.length === 0));
+    (isLoading ||
+      refreshBusy ||
+      sessionActivityLoading ||
+      (scannerPending && deskCacheMiss && gapFallback.length === 0));
   const needsDeskLoad = leaders.length === 0 && deskCacheMiss && !awaitingData;
+  const pipelineLoadingOnly = embedded && awaitingData && !needsDeskLoad;
 
-  const embedded = variant === "pipeline";
   const shellStyle = embedded
     ? { padding: 0, border: "none", background: "transparent", borderRadius: 0 }
     : {
@@ -226,15 +233,20 @@ export function DashboardDiscoveryFeed({
             <HotInMarketCard key={model.symbol} model={model} mode={mode} />
           ))}
         </ul>
-      ) : awaitingData ? (
+      ) : awaitingData && !pipelineLoadingOnly ? (
         <p
           className="m-0 mt-3"
           data-testid="dashboard-hot-in-market-loading"
           style={{ fontSize: typography.scale.sm, color: colors.textMuted }}
         >
-          {hotInMarketAwaitingMessage({ deskLoading: isLoading, scannerPending, deskCacheMiss })}
+          {hotInMarketAwaitingMessage({
+            deskLoading: isLoading,
+            scannerPending,
+            deskCacheMiss,
+            sessionActivityLoading
+          })}
         </p>
-      ) : (
+      ) : awaitingData ? null : (
         <div
           className="mt-3 rounded-xl p-4"
           data-testid="dashboard-hot-in-market-empty"

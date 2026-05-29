@@ -363,6 +363,13 @@ def test_serialize_page_context_emits_dashboard_context_v1() -> None:
                     "catalyst_sentiment": "bullish",
                 }
             ],
+            "session_activity": {
+                "count": 2,
+                "symbols": ["ASTC", "ATPC"],
+                "preview_symbols": ["ASTC", "ATPC"],
+                "source": "movers_radar",
+                "note": "Session movers for context only.",
+            },
         },
     }
     out = serialize_page_context(ctx)
@@ -371,6 +378,9 @@ def test_serialize_page_context_emits_dashboard_context_v1() -> None:
     assert "discovery_leader_count=3" in out
     assert "discovery_preview_symbols=GAP1,GAP2" in out
     assert "discovery_source=desk_cache" in out
+    assert "session_activity_count=2" in out
+    assert "session_activity_symbols=ASTC,ATPC" in out
+    assert "session_activity_source=movers_radar" in out
     assert "discovery_scanned_count=4200" in out
     assert "discovery_generated_at=2026-05-26T14:00:00Z" in out
     assert "discovery_recently_hot=MU" in out

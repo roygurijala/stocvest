@@ -106,19 +106,22 @@ export function buildDashboardAssistantPageContext(
   const deskMode = input.activeDeskMode ?? "swing";
   const { leaders: deskLeaders, source: deskSource } = resolveDiscoveryLeaders(
     input.deskData,
-    input.gapIntelligence,
+    input.scannerDataSettled ? input.gapIntelligence : [],
     deskMode
   );
   const gapLeaders = input.scannerDataSettled ? sortGaps(input.gapIntelligence).slice(0, 10) : [];
-  const useDesk =
-    (deskSource === "desk_cache" || deskSource === "movers_radar") && deskLeaders.length > 0;
-  const leaderSymbols = useDesk
-    ? deskLeaders.map((l) => l.symbol)
-    : gapLeaders.map((g) => g.symbol.trim().toUpperCase());
+  const leaderSymbols =
+    deskLeaders.length > 0
+      ? deskLeaders.map((l) => l.symbol)
+      : gapLeaders.map((g) => g.symbol.trim().toUpperCase());
+  const discoverySource: DashboardAssistantContextV1["discovery"]["source"] =
+    deskLeaders.length > 0 ? deskSource : deskLeaders.length === 0 && gapLeaders.length > 0 ? "gap_fallback" : "empty";
   const previewSymbols = leaderSymbols.slice(0, 3);
-  const withCatalyst = useDesk
-    ? deskLeaders.filter((l) => (l.verdict ?? "").toLowerCase().includes("catalyst")).length
-    : gapLeaders.filter((g) => g.has_catalyst).length;
+  const sessionActivitySymbols = deskLeaders.map((l) => l.symbol.trim().toUpperCase()).filter(Boolean);
+  const withCatalyst =
+    deskLeaders.length > 0
+      ? deskLeaders.filter((l) => (l.verdict ?? "").toLowerCase().includes("catalyst")).length
+      : gapLeaders.filter((g) => g.has_catalyst).length;
   const recentlyHot = Array.isArray(input.deskData?.recently_hot)
     ? input.deskData!.recently_hot!.map((r) => r.symbol.trim().toUpperCase()).filter(Boolean).slice(0, 5)
     : [];
@@ -130,7 +133,7 @@ export function buildDashboardAssistantPageContext(
       leader_count: leaderSymbols.length,
       with_catalyst_count: withCatalyst,
       preview_symbols: previewSymbols,
-      source: useDesk ? "desk_cache" : deskSource,
+      source: discoverySource,
       scanned_count:
         typeof input.deskData?.eligible_symbol_count === "number"
           ? input.deskData.eligible_symbol_count
@@ -139,6 +142,14 @@ export function buildDashboardAssistantPageContext(
             : null,
       generated_at: input.deskData?.generated_at ?? null,
       ...(recentlyHot.length > 0 ? { recently_hot: recentlyHot } : {})
+    },
+    session_activity: {
+      count: sessionActivitySymbols.length,
+      symbols: sessionActivitySymbols.slice(0, 15),
+      preview_symbols: sessionActivitySymbols.slice(0, 8),
+      source: sessionActivitySymbols.length > 0 ? deskSource : "empty",
+      note:
+        "Opportunity pipeline stage Session activity — today's session movers for context only (not actionable swing/day desk setups). ranked_setups_count is scanner qualifying setups, not this list."
     },
     universe: {
       swing_universe_symbol_count: input.scannerDataSettled ? input.swingUniverseSymbolCount : null,

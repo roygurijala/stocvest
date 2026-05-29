@@ -96,7 +96,7 @@ describe("hot-in-market-card-present", () => {
       scannerPending: true,
       mode: "day"
     });
-    expect(line.toLowerCase()).toContain("scanner");
+    expect(line.toLowerCase()).toContain("loading session movers");
   });
 
   test("hotInMarketFeedSubtitle suggests refresh on cache miss", () => {
@@ -106,7 +106,24 @@ describe("hot-in-market-card-present", () => {
       deskCacheMiss: true,
       mode: "day"
     });
-    expect(line.toLowerCase()).toContain("refresh desk");
+    expect(line.toLowerCase()).toContain("load movers");
+  });
+
+  test("hotInMarketSourceSubtitle describes movers radar in plain language", () => {
+    const line = hotInMarketSourceSubtitle("movers_radar", 15);
+    expect(line.toLowerCase()).not.toContain("math-only");
+    expect(line.toLowerCase()).toContain("context only");
+  });
+
+  test("hotInMarketFeedSubtitle shows loading while session activity loads", () => {
+    const line = hotInMarketFeedSubtitle({
+      source: "empty",
+      count: 0,
+      deskCacheMiss: true,
+      sessionActivityLoading: true,
+      mode: "swing"
+    });
+    expect(line.toLowerCase()).toContain("loading session movers");
   });
 
   test("hotInMarketFeedSubtitle notes scanner still enriching when desk has movers", () => {
@@ -121,10 +138,10 @@ describe("hot-in-market-card-present", () => {
 
   test("hotInMarketAwaitingMessage distinguishes cache miss", () => {
     const line = hotInMarketAwaitingMessage({ scannerPending: true, deskCacheMiss: true });
-    expect(line.toLowerCase()).toContain("refresh desk");
+    expect(line.toLowerCase()).toContain("loading session movers");
   });
 
   test("hotInMarketEmptyMessage suggests refresh on cache miss", () => {
-    expect(hotInMarketEmptyMessage(true).toLowerCase()).toContain("load them");
+    expect(hotInMarketEmptyMessage(true).toLowerCase()).toContain("load movers");
   });
 });

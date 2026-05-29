@@ -183,6 +183,14 @@ export type DashboardAssistantContextV1 = {
     generated_at?: string | null;
     recently_hot?: string[];
   };
+  /** Session activity pipeline stage — desk movers, not scanner qualifying setups. */
+  session_activity: {
+    count: number;
+    symbols: string[];
+    preview_symbols: string[];
+    source: "desk_cache" | "movers_radar" | "gap_fallback" | "empty";
+    note: string;
+  };
   universe: {
     swing_universe_symbol_count: number | null;
     gap_snapshot_symbol_count: number | null;

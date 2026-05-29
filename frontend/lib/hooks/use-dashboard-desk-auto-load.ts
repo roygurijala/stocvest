@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { DeskTodayResponse } from "@/lib/api/desk-today";
 import type { DashboardDeskMode } from "@/lib/dashboard/live-status-copy";
 
@@ -18,8 +18,8 @@ function autoRefreshStorageKey(mode: DashboardDeskMode): string {
 
 /**
  * When the Opportunity Desk Redis cache is empty, session activity stays blank until
- * a manual refresh. Re-fetch after scanner settles; optionally run one refresh per
- * browser session so movers populate without hunting the button.
+ * a manual refresh. Re-fetch after cache miss; run desk refresh when empty so movers
+ * populate without hunting the button.
  */
 export function useDashboardDeskAutoLoad(opts: {
   mode: DashboardDeskMode;
@@ -30,7 +30,7 @@ export function useDashboardDeskAutoLoad(opts: {
   manualRefreshBusy: boolean;
   refreshDesk: () => Promise<void>;
   revalidateDesk: () => Promise<DeskTodayResponse | null | undefined>;
-}): void {
+}): { sessionActivityLoading: boolean } {
   const {
     mode,
     deskToday,
@@ -42,6 +42,7 @@ export function useDashboardDeskAutoLoad(opts: {
     revalidateDesk
   } = opts;
   const autoRefreshStarted = useRef(false);
+  const [autoRefreshBusy, setAutoRefreshBusy] = useState(false);
 
   useEffect(() => {
     if (!scannerDataSettled) return;
@@ -50,25 +51,43 @@ export function useDashboardDeskAutoLoad(opts: {
   }, [scannerDataSettled, deskToday?.source, revalidateDesk]);
 
   useEffect(() => {
-    if (!scannerDataSettled) return;
-    if (manualRefreshBusy || autoRefreshStarted.current) return;
-    if (deskHasSessionLeaders(deskToday)) return;
-    if (gapFallbackCount > 0) return;
-    if (deskToday?.source !== "cache_miss") return;
-    if (!canManualRefresh) return;
+    if (deskHasSessionLeaders(deskToday)) {
+      setAutoRefreshBusy(false);
+      if (typeof window !== "undefined") {
+        window.sessionStorage.setItem(autoRefreshStorageKey(mode), "1");
+      }
+      return;
+    }
+    if (gapFallbackCount > 0) {
+      setAutoRefreshBusy(false);
+      return;
+    }
+    if (deskToday?.source !== "cache_miss") {
+      setAutoRefreshBusy(false);
+      return;
+    }
+    if (!canManualRefresh || manualRefreshBusy || autoRefreshStarted.current) return;
     if (typeof window === "undefined") return;
     if (window.sessionStorage.getItem(autoRefreshStorageKey(mode)) === "1") return;
 
     autoRefreshStarted.current = true;
-    window.sessionStorage.setItem(autoRefreshStorageKey(mode), "1");
-    void refreshDesk();
+    setAutoRefreshBusy(true);
+    void refreshDesk().finally(() => setAutoRefreshBusy(false));
   }, [
-    scannerDataSettled,
-    manualRefreshBusy,
     deskToday,
     gapFallbackCount,
     canManualRefresh,
+    manualRefreshBusy,
     refreshDesk,
     mode
   ]);
+
+  const sessionActivityLoading =
+    autoRefreshBusy ||
+    (manualRefreshBusy &&
+      deskToday?.source === "cache_miss" &&
+      !deskHasSessionLeaders(deskToday) &&
+      gapFallbackCount === 0);
+
+  return { sessionActivityLoading };
 }
