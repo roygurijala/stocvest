@@ -87,39 +87,41 @@ export function DashboardMarketContextPanelBody({
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   return (
-    <>
-      <p
-        className="m-0 text-[10px] font-semibold uppercase tracking-wide"
-        style={{ color: colors.textMuted }}
-        data-testid="dashboard-market-context-5d-heading"
-      >
-        {MARKET_CONTEXT_INDEX_SECTION_TITLE}
-      </p>
-      <p className="m-0 mt-0.5" style={{ fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.4 }}>
-        {MARKET_CONTEXT_INDEX_SECTION_HINT}
-      </p>
-      <div
-        className="mt-1.5 grid gap-2 sm:grid-cols-3"
-        data-testid="dashboard-market-context-index-stats"
-      >
-        {snapshot.indexStats.map((stat) => (
-          <DashboardIndexChip
-            key={stat.symbol}
-            symbol={stat.symbol}
-            descriptor={stat.label}
-            horizon="5d"
-            formattedPct={stat.formattedPct}
-            tone={stat.tone}
-            testId={`dashboard-market-index-${stat.symbol}`}
-          />
-        ))}
-      </div>
+    <div className="flex flex-col" style={{ gap: spacing[4] }}>
+      <section aria-labelledby="dashboard-market-context-5d-heading">
+        <p
+          id="dashboard-market-context-5d-heading"
+          className="m-0 text-[10px] font-semibold uppercase tracking-wide"
+          style={{ color: colors.textMuted }}
+          data-testid="dashboard-market-context-5d-heading"
+        >
+          {MARKET_CONTEXT_INDEX_SECTION_TITLE}
+        </p>
+        <p className="m-0 mt-0.5" style={{ fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.4 }}>
+          {MARKET_CONTEXT_INDEX_SECTION_HINT}
+        </p>
+        <div
+          className="mt-2 grid gap-2 sm:grid-cols-3"
+          data-testid="dashboard-market-context-index-stats"
+        >
+          {snapshot.indexStats.map((stat) => (
+            <DashboardIndexChip
+              key={stat.symbol}
+              symbol={stat.symbol}
+              descriptor={stat.label}
+              horizon="5d"
+              formattedPct={stat.formattedPct}
+              tone={stat.tone}
+              testId={`dashboard-market-index-${stat.symbol}`}
+            />
+          ))}
+        </div>
+      </section>
 
       {showSessionToday && snapshot.sessionToday.items.length > 0 ? (
         <div
           data-testid="dashboard-market-context-today"
           style={{
-            marginBottom: spacing[3],
             padding: spacing[3],
             borderRadius: borderRadius.md,
             border: `1px solid color-mix(in srgb, ${colors.accent} 25%, ${colors.border})`,
@@ -167,29 +169,35 @@ export function DashboardMarketContextPanelBody({
         </div>
       ) : null}
 
-      <div className="flex flex-wrap gap-2" data-testid="dashboard-market-context-pills">
-        {snapshot.pills.map((pill) => (
-          <MarketContextPillButton
-            key={pill.id}
-            pill={pill}
-            expanded={expandedId === pill.id}
-            onToggle={() => setExpandedId((cur) => (cur === pill.id ? null : pill.id))}
-          />
-        ))}
-      </div>
+      <section aria-label="Market context signals">
+        <div
+          className="flex flex-wrap gap-2"
+          data-testid="dashboard-market-context-pills"
+          style={{ paddingTop: spacing[1] }}
+        >
+          {snapshot.pills.map((pill) => (
+            <MarketContextPillButton
+              key={pill.id}
+              pill={pill}
+              expanded={expandedId === pill.id}
+              onToggle={() => setExpandedId((cur) => (cur === pill.id ? null : pill.id))}
+            />
+          ))}
+        </div>
 
-      {expandedId ? (
-        <MarketContextExplainPanel
-          pill={snapshot.pills.find((p) => p.id === expandedId)!}
-          onClose={() => setExpandedId(null)}
-        />
-      ) : null}
+        {expandedId ? (
+          <MarketContextExplainPanel
+            pill={snapshot.pills.find((p) => p.id === expandedId)!}
+            onClose={() => setExpandedId(null)}
+          />
+        ) : null}
+      </section>
 
       {showSummary ? (
         <p
           data-testid="dashboard-market-context-summary"
+          className="m-0"
           style={{
-            margin: `${spacing[3]} 0 0`,
             fontSize: typography.scale.sm,
             color: colors.textMuted,
             lineHeight: 1.5
@@ -198,7 +206,7 @@ export function DashboardMarketContextPanelBody({
           {snapshot.environmentSummary}
         </p>
       ) : null}
-    </>
+    </div>
   );
 }
 
