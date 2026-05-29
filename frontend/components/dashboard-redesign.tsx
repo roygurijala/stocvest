@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { DashboardDeskModePills } from "@/components/dashboard/dashboard-desk-mode-pills";
 import { DashboardEdgeSync } from "@/components/dashboard-edge-sync";
+import { DashboardExecutionReadyStrip } from "@/components/dashboard/dashboard-execution-ready-strip";
 import { DashboardOpportunityPipeline } from "@/components/dashboard/dashboard-opportunity-pipeline";
-import { DashboardLiveStatus } from "@/components/dashboard/dashboard-live-status";
 import { DashboardMarketPulseHero } from "@/components/dashboard/dashboard-market-pulse-hero";
 import { DashboardScannerLoadingStrip } from "@/components/dashboard/dashboard-scanner-suspense-fallback";
 import { resolveDiscoveryLeaders } from "@/lib/dashboard/desk-today-present";
@@ -15,7 +15,7 @@ import { buildDashboardAssistantPageContext } from "@/lib/dashboard/dashboard-as
 import type { DeskTodayResponse } from "@/lib/api/desk-today";
 import type { DashboardDeskInitial } from "@/lib/dashboard/dashboard-page-data";
 import { buildDashboardPageTitle } from "@/lib/dashboard/desk-today-present";
-import { buildLiveStatusCopy, type DashboardDeskMode } from "@/lib/dashboard/live-status-copy";
+import type { DashboardDeskMode } from "@/lib/dashboard/live-status-copy";
 import { useDashboardDeskAutoLoad } from "@/lib/hooks/use-dashboard-desk-auto-load";
 import { useDashboardDeskRefresh } from "@/lib/hooks/use-dashboard-desk-refresh";
 import { useDeskToday } from "@/lib/hooks/use-desk-today";
@@ -505,18 +505,6 @@ function DashboardRedesignBody({
 
   const pageTitle = useMemo(() => buildDashboardPageTitle(regimeLabel), [regimeLabel]);
 
-  const liveStatus = useMemo(
-    () =>
-      buildLiveStatusCopy({
-        mode: activeDeskMode,
-        swingDeskActive: swingDeskPosture === "active",
-        dayDeskPosture,
-        scanSummary: scannerOverview.scanSummary,
-        systemSuppressed
-      }),
-    [activeDeskMode, swingDeskPosture, dayDeskPosture, scannerOverview.scanSummary, systemSuppressed]
-  );
-
   const nearReadyInMarket = useMemo(() => {
     const rows = scannerOverview.scanSummary?.near_qualification ?? [];
     return rows.filter((r) => r.desk === activeDeskMode).length;
@@ -546,6 +534,13 @@ function DashboardRedesignBody({
         mode={activeDeskMode}
         onModeChange={setDeskMode}
         showDay={dayTradingSurfaces}
+      />
+
+      <DashboardExecutionReadyStrip
+        mode={activeDeskMode}
+        scanSummary={scannerOverview.scanSummary}
+        scannerPending={!scannerDataSettled}
+        systemSuppressed={systemSuppressed}
       />
 
       {!scannerDataSettled ? <DashboardScannerLoadingStrip /> : null}
@@ -613,14 +608,12 @@ function DashboardRedesignBody({
         onWatchlistAttentionCount={setWatchlistAttentionCount}
       />
 
-      <DashboardLiveStatus status={liveStatus} />
-
       <nav
         data-testid="dashboard-desk-status"
         aria-label="Scanner shortcuts"
         className="sr-only"
       >
-        <span>Scanner shortcuts moved to Opportunities and Live status</span>
+        <span>Scanner shortcuts moved to Opportunities and execution-ready strip</span>
       </nav>
 
       <EarningsCalendar events={earningsEvents} title="Upcoming Earnings (Next 7 Days)" maxDays={7} />

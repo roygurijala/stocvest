@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from stocvest.data.models import AlertType
 from stocvest.services.email_service import EmailService
+from stocvest.utils.config import get_settings
 
 
 def test_subject_line_signal_fired() -> None:
@@ -69,15 +70,35 @@ def test_html_contains_unsubscribe_link() -> None:
 
 
 def test_send_failure_returns_false_not_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    mock_client = MagicMock()
-    mock_client.send_email.side_effect = OSError("network")
-    monkeypatch.setattr("boto3.client", lambda *a, **k: mock_client)
-    es = EmailService()
-    assert (
-        es.send_alert_email(
-            to_email="u@example.com",
-            alert_type=AlertType.SIGNAL_FIRED,
-            context={"symbol": "SPY", "direction": "long", "strength": 1},
+    monkeypatch.setenv("POSTMARK_SERVER_TOKEN", "pm-test-token")
+    monkeypatch.setenv("STOCVEST_EMAIL_SENDER", "signals@stocvest.ai")
+    get_settings.cache_clear()
+
+    with patch("stocvest.services.email_service.send_postmark_html_email", return_value=False):
+        es = EmailService()
+        assert (
+            es.send_alert_email(
+                to_email="u@example.com",
+                alert_type=AlertType.SIGNAL_FIRED,
+                context={"symbol": "SPY", "direction": "long", "strength": 1},
+            )
+            is False
         )
-        is False
-    )
+
+
+def test_send_skips_without_postmark_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("POSTMARK_SERVER_TOKEN", raising=False)
+    monkeypatch.setenv("STOCVEST_EMAIL_SENDER", "signals@stocvest.ai")
+    get_settings.cache_clear()
+
+    with patch("stocvest.services.email_service.send_postmark_html_email") as mock_send:
+        es = EmailService()
+        assert (
+            es.send_alert_email(
+                to_email="u@example.com",
+                alert_type=AlertType.SIGNAL_FIRED,
+                context={"symbol": "SPY", "direction": "long", "strength": 1},
+            )
+            is False
+        )
+        mock_send.assert_not_called()

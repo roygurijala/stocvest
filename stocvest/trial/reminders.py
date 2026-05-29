@@ -1,4 +1,4 @@
-"""Day-10 and day-14 trial reminder emails (SES)."""
+"""Day-10 and day-14 trial reminder emails (Postmark)."""
 
 from __future__ import annotations
 

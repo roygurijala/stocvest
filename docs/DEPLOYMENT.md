@@ -12,15 +12,38 @@
 
 `frontend/vercel.json` sets baseline **security headers** (frame protection, MIME sniffing, referrer policy, etc.) and **HSTS** on the primary production host **`stocvest.ai`**. **`stocvest.app`** redirects to **`.ai`**. Adjust there if counsel or security review requires stricter CSP.
 
-## AWS SES (email alerts)
+## Postmark (transactional email — alerts + trial reminders)
 
-Before alerts work in production:
+Production email uses **Postmark**, not AWS SES. Alert and trial flows call `stocvest/services/email_service.py` → Postmark **`POST /email`**.
 
-1. Verify domain **`stocvest.ai`** in AWS SES Console → **Verified identities** (add DKIM/SPF records SES provides).
-2. Sender is **`signals@stocvest.ai`** (set in `STOCVEST_EMAIL_SENDER`; no separate identity needed once the domain is verified).
-3. Request **SES production access** if the account is still in sandbox. In sandbox mode, SES only delivers to verified recipient addresses.
-4. Lambda env is set in `infra/lambda_6e.tf` (`STOCVEST_EMAIL_SENDER=signals@stocvest.ai`). Redeploy after `terraform apply`.
+### One-time setup
 
-SES sandbox: emails only go to verified addresses. Open an AWS Support case to move SES out of sandbox before real users receive alerts.
+1. In [Postmark](https://account.postmarkapp.com/), create a **Server** for STOCVEST (transactional).
+2. **Verify sender domain** `stocvest.ai`:
+   - Add the DKIM + Return-Path DNS records Postmark provides.
+   - Confirm the default **From** address matches Lambda env: **`signals@stocvest.ai`** (`STOCVEST_EMAIL_SENDER` in `infra/lambda_6e.tf`).
+3. Copy the **Server API token** (not the Account token).
+4. Store the token in AWS Secrets Manager secret **`stocvest/external-api-keys`**:
+
+   ```json
+   {
+     "POSTMARK_SERVER_TOKEN": "your-server-token-here"
+   }
+   ```
+
+   Lambda loads this via `stocvest/utils/config.py` (`get_settings()`). For local dev, set `POSTMARK_SERVER_TOKEN` in `.env` (see `.env.example`).
+
+5. **Upgrade your Postmark plan** before production traffic — the free developer tier is for testing (low monthly send cap). Your account must be **approved** to send to arbitrary recipients.
+
+6. Redeploy Lambda after updating the secret (`deploy-lambda` on `main`). No SES IAM permission is required.
+
+### Smoke test
+
+- Postmark UI → **Send test email** from the server, or trigger a watchlist maturation / alert path in staging.
+- Check **Activity** in Postmark for bounces and spam complaints.
 
 `STOCVEST_PUBLIC_APP_URL` defaults to **`https://stocvest.ai`** (links in alert footers).
+
+### Legacy note
+
+Earlier docs referenced **AWS SES**. SES is no longer used for outbound mail; remove any unused SES verified identities from AWS if you are not using them elsewhere.

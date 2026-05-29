@@ -260,12 +260,6 @@ resource "aws_iam_role_policy" "lambda_api_data_access" {
         ]
       },
       {
-        Sid      = "SESSendUserAlerts"
-        Effect   = "Allow"
-        Action   = ["ses:SendEmail", "ses:SendRawEmail"]
-        Resource = "*"
-      },
-      {
         Sid      = "SNSTrialOTP"
         Effect   = "Allow"
         Action   = ["sns:Publish"]
