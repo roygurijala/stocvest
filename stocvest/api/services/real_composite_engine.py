@@ -33,7 +33,10 @@ from stocvest.api.services.validation_timing import (
     build_regime_window_key,
     is_day_ledger_entry_session_et,
 )
-from stocvest.api.services.swing_composite_evidence import build_swing_composite_evidence_fields
+from stocvest.api.services.swing_composite_evidence import (
+    build_swing_composite_evidence_fields,
+    serialize_daily_bars_for_range,
+)
 from stocvest.api.services.symbol_news_fetch import (
     enrich_article_ticker_metadata,
     fetch_symbol_panel_raw_articles,
@@ -44,6 +47,9 @@ from stocvest.data.benzinga_client import BenzingaClient, BenzingaMultiResult, b
 from stocvest.data.models import Bar, SignalRecord, Snapshot, Timeframe
 from stocvest.data.polygon_client import PolygonClient, PolygonError
 from stocvest.data.symbol_normalize import to_polygon_symbol
+from stocvest.data.corporate_actions import recent_split_symbols, symbols_with_frequent_reverse_splits
+from stocvest.data.symbol_universe_eligibility import UniverseEligibilityContext, universe_exclusion_reason
+from stocvest.data.ticker_reference_cache import get_ticker_reference
 from stocvest.signals.confluence import ConfluenceDetector, confluence_result_to_response_fields, normalize_direction
 from stocvest.signals.composite_score import (
     CompositeSignal,
@@ -335,6 +341,42 @@ async def run_real_composite_engine_phase(
                     sector_snap = await client.get_snapshot(etf)
             except (PolygonError, Exception) as exc:
                 _LOG.warning("sector snapshot chain failed for %s: %s", sym, exc)
+
+        ref_r, splits_r, freq_rev_r = await asyncio.gather(
+            get_ticker_reference(client, sym),
+            recent_split_symbols(client),
+            symbols_with_frequent_reverse_splits(client),
+            return_exceptions=True,
+        )
+        ticker_ref = _safe_result(ref_r, None)
+        recent_splits = _safe_result(splits_r, frozenset())
+        frequent_reverse = _safe_result(freq_rev_r, frozenset())
+
+    exclusion = universe_exclusion_reason(
+        sym,
+        UniverseEligibilityContext(
+            snapshot=sym_snap,
+            reference=ticker_ref,
+            recent_split_symbols=recent_splits if isinstance(recent_splits, frozenset) else frozenset(),
+            frequent_reverse_split_symbols=frequent_reverse if isinstance(frequent_reverse, frozenset) else frozenset(),
+        ),
+        mode="day",
+    )
+    if exclusion:
+        return {
+            "symbol": sym,
+            "status": "liquidity_filtered",
+            "decision_state": "blocked",
+            "available_layers": 0,
+            "required_layers": 3,
+            "message": (
+                f"Symbol does not meet minimum universe eligibility for day evaluation ({exclusion}). "
+                "Micro-cap, low-volume, and high-risk names are excluded before composite scoring."
+            ),
+            "market_status": fetch_composite_market_status_payload_sync(),
+            "disclaimer": API_SIGNAL_DISCLAIMER,
+            "mode": "day",
+        }
 
     all_sector_daily = get_all_cached_sector_data()
     sector_momentum: SectorMomentumScore | None = None
@@ -711,6 +753,7 @@ async def build_real_composite_response(
         "intraday_bars": [
             {"high": b.high, "low": b.low, "close": b.close, "volume": b.volume} for b in bars
         ],
+        "daily_bars_range": serialize_daily_bars_for_range(daily_bars, limit=10),
     }
     response_body.update(
         build_swing_composite_evidence_fields(

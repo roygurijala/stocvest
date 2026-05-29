@@ -55,6 +55,39 @@ def test_evidence_fields_neutral_regime_label() -> None:
     assert fields["trend_strength"] == "Weak"
 
 
+def test_swing_range_zone_from_daily_bars() -> None:
+    comp = _composite(
+        [
+            LayerSignal(layer="technical", score=0.8, confidence=0.9),
+            LayerSignal(layer="news", score=0.6, confidence=0.85),
+            LayerSignal(layer="macro", score=0.5, confidence=0.8),
+        ],
+        "bull",
+    )
+    fields = build_swing_composite_evidence_fields(
+        composite=comp,
+        regime="bull",
+        payload={
+            "symbol": "AMZN",
+            "daily_bars_range": [
+                {"low": 262.0, "high": 269.0},
+                {"low": 265.0, "high": 272.0},
+                {"low": 267.0, "high": 274.0},
+                {"low": 268.0, "high": 276.0},
+            ],
+        },
+        confluence={"confirming_signals": [], "conflicting_signals": [], "n_confirming": 2, "n_conflicting": 0},
+        snapshot={"last_trade_price": 272.0, "day_low": 269.64, "day_high": 274.75, "day_vwap": 271.0},
+    )
+    assert fields.get("swing_range_zone") is not None
+    assert fields["swing_range_zone"]["low"] == 262.0
+    assert fields["swing_range_zone"]["high"] == 276.0
+    assert fields.get("reference_stop_provenance")
+    assert "session" in str(fields["reference_stop_provenance"]).lower() or "vwap" in str(
+        fields["reference_stop_provenance"]
+    ).lower()
+
+
 def test_catalyst_headlines_preserve_source_and_scores() -> None:
     comp = _composite(
         [

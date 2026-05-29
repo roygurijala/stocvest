@@ -17,9 +17,9 @@ export type ScenarioComparisonRow = {
 };
 
 const PRESET_LABELS: Record<ScenarioPresetId, string> = {
-  default: "System default",
-  conservative: "Conservative",
-  aggressive: "Aggressive"
+  continuation: "Continuation (mid-range)",
+  dip: "Dip buy (support edge)",
+  breakout: "Breakout (above resistance)"
 };
 
 export function scenarioGeometryLevelsMatch(
@@ -65,11 +65,11 @@ export function buildScenarioComparisonRows(
   const rows: ScenarioComparisonRow[] = [];
   let systemDefault: { entry: number; stop: number; target: number } | null = null;
 
-  for (const preset of ["default", "conservative", "aggressive"] as ScenarioPresetId[]) {
+  for (const preset of ["continuation", "dip", "breakout"] as ScenarioPresetId[]) {
     const selection = catalog.presets[preset];
     const resolved = resolveScenarioLevels(catalog.source, selection);
     if (!resolved) continue;
-    if (preset === "default") {
+    if (preset === "continuation") {
       systemDefault = resolved;
     }
     rows.push({

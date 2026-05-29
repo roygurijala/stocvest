@@ -51,6 +51,7 @@ from stocvest.data.models import (
     Trade,
 )
 from stocvest.data.symbol_normalize import TICKER_SEARCH_MIN_QUERY_LEN
+from stocvest.signals.session_price_guard import sanitize_session_change_pct
 from stocvest.utils.redis_client import get_sync_redis
 from stocvest.utils.logging import get_logger
 
@@ -703,6 +704,15 @@ class PolygonClient:
                 change_pct = (change / pc) * 100
             except (TypeError, ValueError):
                 pass
+
+        change_pct = sanitize_session_change_pct(
+            float(prev_close) if prev_close not in (None, 0) else None,
+            float(last_price) if last_price is not None else None,
+            change_pct,
+            symbol=symbol,
+        )
+        if change_pct is None:
+            change = None
 
         should_validate = last_price is not None and last_price > 0
         if should_validate and not PolygonClient._session_day_prices_align_with_last(

@@ -11,6 +11,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
+from zoneinfo import ZoneInfo
 
 from stocvest.api.services.opportunity_desk.discovery_row import (
     DeskMode,
@@ -28,14 +29,19 @@ from stocvest.api.services.opportunity_desk.quiet_leaders import build_quiet_lea
 from stocvest.api.services.opportunity_desk.snapshot_load import load_us_equity_snapshots_for_funnel
 from stocvest.api.services.real_composite_engine import real_composite_body_sync
 from stocvest.api.services.swing_composite_engine import swing_composite_body_sync
+from stocvest.data import PolygonClient
+from stocvest.data.corporate_actions import recent_split_symbols, symbols_with_frequent_reverse_splits
+from stocvest.data.ticker_reference_cache import filter_symbols_by_reference_eligibility
 from stocvest.data.dashboard_cache import (
     DashboardKeys,
     read_dashboard_cache,
     write_dashboard_cache,
 )
+from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
+_ET = ZoneInfo("America/New_York")
 
 DeskBatchTier = Literal["full", "movers"]
 
@@ -185,6 +191,7 @@ def _desk_payload_base(
     *,
     snapshot_source: str,
     tier: DeskBatchTier,
+    session_trading_date: str,
 ) -> dict[str, Any]:
     fcfg = DEFAULT_BATCH_CONFIG.funnel
     return {
@@ -194,6 +201,7 @@ def _desk_payload_base(
         "eligible_symbol_count": funnel.eligible_symbol_count,
         "movers_radar": movers_radar_payload(funnel.movers, limit=fcfg.movers_radar_limit),
         "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "session_trading_date": session_trading_date,
     }
 
 
@@ -211,8 +219,45 @@ async def run_opportunity_desk_batch(
     started = time.perf_counter()
     composite_failures_total = 0
     cfg = config or DEFAULT_BATCH_CONFIG
+    session_trading_date = datetime.now(_ET).date().isoformat()
     snapshots, snapshot_source = await load_us_equity_snapshots_for_funnel()
-    funnel = run_snapshot_funnel(snapshots, cfg.funnel)
+    recent_splits: frozenset[str] = frozenset()
+    frequent_reverse: frozenset[str] = frozenset()
+    funnel: OpportunityDeskFunnelResult
+    try:
+        settings = get_settings()
+        async with PolygonClient(api_key=settings.polygon_api_key) as client:
+            recent_splits, frequent_reverse = await asyncio.gather(
+                recent_split_symbols(client),
+                symbols_with_frequent_reverse_splits(client),
+            )
+            funnel = run_snapshot_funnel(
+                snapshots,
+                cfg.funnel,
+                recent_split_symbols=recent_splits,
+                frequent_reverse_split_symbols=frequent_reverse,
+            )
+            if funnel.movers:
+                snapshots_by_symbol = {s.symbol.strip().upper(): s for s in snapshots if s.symbol}
+                allowed = await filter_symbols_by_reference_eligibility(
+                    client,
+                    [m.symbol for m in funnel.movers],
+                    snapshots_by_symbol,
+                    recent_split_symbols=recent_splits,
+                    frequent_reverse_split_symbols=frequent_reverse,
+                    mode="swing",
+                    concurrency=8,
+                )
+                if allowed != {m.symbol for m in funnel.movers}:
+                    filtered_movers = tuple(m for m in funnel.movers if m.symbol in allowed)
+                    funnel = OpportunityDeskFunnelResult(
+                        movers=filtered_movers,
+                        eligible_symbol_count=len(filtered_movers),
+                        scanned_snapshot_count=funnel.scanned_snapshot_count,
+                    )
+    except Exception as exc:  # noqa: BLE001
+        _LOG.warning("opportunity_desk corporate_actions / reference filter failed: %s", str(exc)[:200])
+        funnel = run_snapshot_funnel(snapshots, cfg.funnel)
     movers_by_symbol = {m.symbol: m for m in funnel.movers}
     quiet_leaders_swing: list[dict[str, Any]] = []
     if tier == "full":
@@ -222,6 +267,8 @@ async def run_opportunity_desk_batch(
                 funnel.movers,
                 composite_fn=lambda sym: _composite_for_mode(sym, "swing"),
                 funnel_cfg=cfg.funnel,
+                recent_split_symbols=recent_splits,
+                frequent_reverse_split_symbols=frequent_reverse,
             )
         except Exception as exc:  # noqa: BLE001
             _LOG.warning("opportunity_desk quiet_leaders failed: %s", exc)
@@ -243,7 +290,12 @@ async def run_opportunity_desk_batch(
             if isinstance(previous_envelope, dict) and isinstance(previous_envelope.get("data"), dict)
             else None
         )
-        payload = _desk_payload_base(funnel, snapshot_source=snapshot_source, tier=tier)
+        payload = _desk_payload_base(
+            funnel,
+            snapshot_source=snapshot_source,
+            tier=tier,
+            session_trading_date=session_trading_date,
+        )
 
         if tier == "full":
             composite_limit = (

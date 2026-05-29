@@ -209,9 +209,13 @@ export interface SignalEvidenceInsight {
   risk_factors_detailed?: Array<{ label: string; severity: "high" | "medium" | "low"; detail: string }>;
   signal_parameters: string;
   historical_entry_zone: { low: number; high: number } | null;
+  session_entry_zone?: { low: number; high: number } | null;
+  swing_range_zone?: { low: number; high: number; sessions?: number } | null;
   reference_target_1: number | null;
   reference_target_2: number | null;
   reference_stop_level: number | null;
+  reference_stop_provenance?: string | null;
+  reference_target_provenance?: string | null;
   /** Session VWAP when available; modal uses this before `keyLevels.vwap`. */
   vwap: number | null;
   vwap_state?: string;
@@ -1393,6 +1397,22 @@ function parseHistoricalZone(raw: unknown): { low: number; high: number } | null
   return { low, high };
 }
 
+function parseSwingRangeZone(
+  raw: unknown
+): { low: number; high: number; sessions?: number } | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const low = numOrNull(o.low);
+  const high = numOrNull(o.high);
+  if (low == null || high == null || !(high > low)) return null;
+  const sessions = numOrNull(o.sessions);
+  return {
+    low,
+    high,
+    ...(sessions != null && sessions > 0 ? { sessions: Math.round(sessions) } : {})
+  };
+}
+
 type ParsedCatalystRow = {
   text: string;
   sentiment: string;
@@ -1703,6 +1723,16 @@ export function parseSwingCompositeInsight(body: Record<string, unknown>): Signa
       ? body.signal_parameters.trim()
       : "Observe how price behaves versus the Historical Entry Zone on a closing basis. Signal data only — not investment advice.";
   const historical_entry_zone = parseHistoricalZone(body.historical_entry_zone);
+  const session_entry_zone = parseHistoricalZone(body.session_entry_zone) ?? historical_entry_zone;
+  const swing_range_zone = parseSwingRangeZone(body.swing_range_zone);
+  const reference_stop_provenance =
+    typeof body.reference_stop_provenance === "string" && body.reference_stop_provenance.trim()
+      ? body.reference_stop_provenance.trim()
+      : null;
+  const reference_target_provenance =
+    typeof body.reference_target_provenance === "string" && body.reference_target_provenance.trim()
+      ? body.reference_target_provenance.trim()
+      : null;
   const vwapRaw = numOrNull(body.vwap ?? body.day_vwap);
   const vwap_state_parsed = String(body.vwap_state ?? "").trim() || undefined;
   const vwap_display_parsed = String(body.vwap_display ?? "").trim() || undefined;
@@ -1722,9 +1752,13 @@ export function parseSwingCompositeInsight(body: Record<string, unknown>): Signa
     risk_factors_detailed,
     signal_parameters,
     historical_entry_zone,
+    session_entry_zone,
+    swing_range_zone,
     reference_target_1: numOrNull(body.reference_target_1),
     reference_target_2: numOrNull(body.reference_target_2),
     reference_stop_level: numOrNull(body.reference_stop_level),
+    reference_stop_provenance,
+    reference_target_provenance,
     vwap: vwapRaw != null && vwapRaw > 0 ? Math.round(vwapRaw * 10000) / 10000 : null,
     vwap_state: vwap_state_parsed,
     vwap_display: vwap_display_parsed,

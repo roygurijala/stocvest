@@ -72,6 +72,18 @@ def _count_aligned(layers: list[dict[str, Any]], *, composite_bias: str) -> int:
     return n
 
 
+def _display_aligned_count(
+    binary_aligned: int,
+    alignment_ratio: float | None,
+    total: int,
+) -> int:
+    """Match Signals / Evidence KPI — weighted ``alignment_ratio`` rounded to layer count."""
+    if alignment_ratio is not None:
+        ar = max(0.0, min(1.0, float(alignment_ratio)))
+        return max(0, min(total, int(round(ar * total))))
+    return binary_aligned
+
+
 def _process_tier(aligned: int, total: int = 6) -> ProcessTier:
     if aligned >= 5:
         return "actionable"
@@ -265,7 +277,8 @@ def build_setup_judgment(
     """Build API ``setup_judgment`` object for composite responses."""
     total = len(MATURATION_LAYER_KEYS)
     summary = (signal_summary or "neutral").strip().lower()
-    aligned = _count_aligned(layers, composite_bias=summary)
+    binary_aligned = _count_aligned(layers, composite_bias=summary)
+    aligned = _display_aligned_count(binary_aligned, alignment_ratio, total)
     tier = _process_tier(aligned, total)
     missing = derive_missing_layers(layers, composite_bias=composite_bias_from_summary(summary))
 
@@ -309,7 +322,7 @@ def build_setup_judgment(
             atr=float(atr) if atr is not None else None,
         )
 
-    q_score = _quality_score(aligned, alignment_ratio, total)
+    q_score = _quality_score(binary_aligned, alignment_ratio, total)
     t_score = _tradeability_score(flags, phase)
     t_band = _tradeability_band(t_score, flags)
     blocker = _primary_blocker(missing, flags)

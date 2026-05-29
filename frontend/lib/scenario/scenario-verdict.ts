@@ -7,7 +7,13 @@
 
 import { minRiskRewardForVerdict } from "@/lib/trade-conviction-tier";
 import type { ScenarioMode } from "@/lib/scenario/types";
+import { scenarioGeometryError } from "@/lib/scenario/scenario-geometry";
 import { remainingBlockersAfterScenarioRr } from "@/lib/scenario/scenario-variants";
+import {
+  hasWeakExecutionTiming,
+  weakExecutionTimingDetail,
+  type ScenarioExecutionTiming
+} from "@/lib/scenario/scenario-execution-timing";
 import type { TradeDecision } from "@/lib/signal-evidence/trade-decision";
 
 export type ScenarioVerdictTone = "red" | "amber" | "green";
@@ -52,12 +58,34 @@ export function resolveScenarioVerdict(args: {
   entry: number;
   stop: number;
   target: number;
+  executionTiming?: ScenarioExecutionTiming;
 }): ScenarioVerdict {
   const deskMinRr = minRiskRewardForVerdict(args.mode);
+  const geometryError = scenarioGeometryError(
+    args.direction,
+    args.entry,
+    args.stop,
+    args.target
+  );
+  if (geometryError) {
+    return {
+      tone: "red",
+      headline: "Invalid trade geometry",
+      detail: geometryError,
+      blockers: [geometryError],
+      scenarioRr: null,
+      deskMinRr,
+      clearsDeskRr: false
+    };
+  }
+
   const scenarioRr = rrFromLevels(args.entry, args.stop, args.target, args.direction);
   const clearsDeskRr =
     scenarioRr != null && scenarioClearsDeskRrGate(scenarioRr, args.mode);
   const blockers = remainingBlockersAfterScenarioRr(args.systemDecision, clearsDeskRr);
+  const weakTiming = hasWeakExecutionTiming(args.executionTiming, args.systemDecision);
+  const timingDetail = weakExecutionTimingDetail(args.executionTiming, args.systemDecision);
+  const timingBlockers = timingDetail ? [timingDetail] : [];
 
   if (args.systemDecision.state === "blocked") {
     return {
@@ -75,7 +103,8 @@ export function resolveScenarioVerdict(args: {
   if (
     args.systemDecision.state === "actionable" &&
     clearsDeskRr &&
-    blockers.length === 0
+    blockers.length === 0 &&
+    !weakTiming
   ) {
     return {
       tone: "green",
@@ -88,6 +117,10 @@ export function resolveScenarioVerdict(args: {
     };
   }
 
+  const mergedBlockers = [...timingBlockers, ...blockers].filter(
+    (line, idx, arr) => arr.indexOf(line) === idx
+  );
+
   const rrLine =
     scenarioRr != null
       ? clearsDeskRr
@@ -95,7 +128,7 @@ export function resolveScenarioVerdict(args: {
         : `Scenario R/R is ${scenarioRr.toFixed(1)} : 1 — below ${deskMinRr.toFixed(1)} : 1 desk minimum.`
       : "Enter valid entry, stop, and target to compute scenario R/R.";
 
-  const nonRrBlockers = blockers.filter((line) => !/risk\s*\/?\s*reward|r\/r/i.test(line));
+  const nonRrBlockers = mergedBlockers.filter((line) => !/risk\s*\/?\s*reward|r\/r/i.test(line));
 
   if (!clearsDeskRr) {
     return {
@@ -113,7 +146,7 @@ export function resolveScenarioVerdict(args: {
     tone: "amber",
     headline: "We do not recommend this trade yet",
     detail: `${rrLine} Other setup or execution gates may still apply.`,
-    blockers,
+    blockers: mergedBlockers,
     scenarioRr,
     deskMinRr,
     clearsDeskRr

@@ -139,6 +139,29 @@ def test_dynamic_gap_candidates_filters_penny_and_volume():
 
 
 @pytest.mark.unit
+def test_dynamic_gap_candidates_excludes_reverse_split_artifact():
+    """QH-style unadjusted prev vs post-split price must not rank as a mover."""
+    snaps = [
+        Snapshot(
+            symbol="QH",
+            prev_close=0.094,
+            last_trade_price=2.82,
+            day_volume=600_000.0,
+            prev_day_volume=2_000_000.0,
+        ),
+        Snapshot(
+            symbol="OK",
+            prev_close=100.0,
+            last_trade_price=110.0,
+            day_volume=600_000.0,
+            prev_day_volume=2_000_000.0,
+        ),
+    ]
+    out = dynamic_gap_candidates_from_snapshots(snaps, limit=10, min_abs_gap_percent=2.0)
+    assert [c.symbol for c in out] == ["OK"]
+
+
+@pytest.mark.unit
 def test_dynamic_gap_candidates_with_stats_eligible_before_limit():
     snaps = [
         Snapshot(

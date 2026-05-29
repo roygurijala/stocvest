@@ -19,6 +19,28 @@ describe("scenario-input-present", () => {
     expect(marketRegimeToVolatilityRegime("risk_on")).toBe("low");
   });
 
+  test("buildScenarioInputFromCompositeContext maps swing range and stop provenance", () => {
+    const input = buildScenarioInputFromCompositeContext({
+      symbol: "amzn",
+      tradingMode: "swing",
+      setupBias: "Bullish",
+      composite: {
+        signal_score: 72,
+        risk_reward: 2.5,
+        market_regime: "neutral",
+        historical_entry_zone: { low: 269.64, high: 274.75 },
+        swing_range_zone: { low: 262, high: 276, sessions: 10 },
+        reference_stop_level: 269.1,
+        reference_stop_provenance: "Below min(session low, VWAP) — structural buffer",
+        reference_target_1: 274.75
+      }
+    });
+    expect(input.reference.swing_range_low).toBe(262);
+    expect(input.reference.swing_range_high).toBe(276);
+    expect(input.reference.swing_range_sessions).toBe(10);
+    expect(input.reference.stop_provenance).toContain("VWAP");
+  });
+
   test("buildScenarioInputFromCompositeContext uses composite zone", () => {
     const input = buildScenarioInputFromCompositeContext({
       symbol: "aapl",
@@ -29,7 +51,10 @@ describe("scenario-input-present", () => {
         risk_reward: 2.5,
         market_regime: "neutral",
         historical_entry_zone: { low: 100, high: 102 },
+        session_entry_zone: { low: 100, high: 102 },
+        swing_range_zone: { low: 95, high: 108, sessions: 10 },
         reference_stop_level: 98,
+        reference_stop_provenance: "Below session low — structural buffer",
         reference_target_1: 110
       }
     });

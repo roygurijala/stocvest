@@ -6,12 +6,9 @@
  *
  * Mathematical conventions:
  *
- *   - Risk-per-share = `|entry - stop|`. Sign-agnostic — works for both
- *     long (entry > stop) and short (entry < stop) scenarios. The
- *     direction field on the scenario is purely an annotation; the math
- *     never assumes long.
- *   - R-multiple to target = `|target - entry| / |entry - stop|`. NaN
- *     when stop == entry (zero-risk edge case — caller renders "—").
+ *   - Risk-per-share and R-multiple are **direction-aware** — long trades
+ *     require stop below entry; short trades require stop above entry.
+ *     Invalid geometry returns NaN (caller renders "—").
  *   - All money values are in $ — there's no currency conversion in
  *     scope. If we ever ship multi-currency scenarios the modal should
  *     surface the symbol's quote currency explicitly.
@@ -27,6 +24,11 @@
  */
 
 import type { ScenarioComputedResult, ScenarioUserInputs } from "@/lib/scenario/types";
+import {
+  directionalRewardPerShare,
+  directionalRiskPerShare,
+  type ScenarioDirection
+} from "@/lib/scenario/scenario-geometry";
 
 function isFinitePositive(n: unknown): n is number {
   return typeof n === "number" && Number.isFinite(n) && n > 0;
@@ -35,35 +37,29 @@ function isFinitePositive(n: unknown): n is number {
 /**
  * Compute the full Computed block for a scenario.
  *
- * Caller is responsible for sanitizing user input upstream (the modal
- * uses `<input type="number">` with `min="0"` and explicit coerce-to-
- * Number on change), but this helper is **defensive** in case the
- * input slips through with NaN/Infinity/zero: every output that can't
- * be honestly computed returns NaN, and the caller renders "—" for
- * any NaN cell.
+ * ``direction`` is required — risk and R-multiple use directional geometry
+ * (long: stop below entry; short: stop above entry). Invalid geometry yields NaN.
  */
-export function computeScenarioResult(inputs: ScenarioUserInputs): ScenarioComputedResult {
+export function computeScenarioResult(
+  inputs: ScenarioUserInputs,
+  direction: ScenarioDirection
+): ScenarioComputedResult {
   const entry = inputs.entry;
   const stop = inputs.stop;
   const target = inputs.target;
   const shares = inputs.shares;
 
-  const risk_per_share =
-    Number.isFinite(entry) && Number.isFinite(stop) ? Math.abs(entry - stop) : Number.NaN;
+  const risk_per_share = directionalRiskPerShare(direction, entry, stop);
 
   const total_risk_dollars =
     Number.isFinite(risk_per_share) && isFinitePositive(shares)
       ? risk_per_share * shares
       : Number.NaN;
 
-  // R-multiple: target distance / stop distance. Zero stop distance =
-  // undefined R (you cannot have an R-multiple on a zero-risk trade).
+  const reward = directionalRewardPerShare(direction, entry, target);
   const r_multiple_to_target =
-    Number.isFinite(entry) &&
-    Number.isFinite(target) &&
-    Number.isFinite(risk_per_share) &&
-    risk_per_share > 0
-      ? Math.abs(target - entry) / risk_per_share
+    Number.isFinite(reward) && Number.isFinite(risk_per_share) && risk_per_share > 0
+      ? reward / risk_per_share
       : Number.NaN;
 
   const cost_basis_dollars =

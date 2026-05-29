@@ -1135,7 +1135,9 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
 
       <SetupJudgmentSummary
         judgment={evidenceSetupJudgment}
-        executionLabel={executionReadinessLabel(evidenceDecision.state)}
+        executionLabel={executionReadinessLabel(evidenceDecision.state, {
+          entryTimingWeak: evidenceSetupJudgment.tradeability.band === "weak"
+        })}
         executionTone={evidenceDecision.state === "actionable" ? "bullish" : "caution"}
       />
 

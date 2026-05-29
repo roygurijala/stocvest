@@ -92,6 +92,7 @@ def _snap(symbol: str) -> Snapshot:
         change=2.0,
         day_close=180.0,
         day_volume=50_000_000,
+        prev_day_volume=50_000_000,
         day_vwap=179.0,
         day_high=181.0,
         day_low=177.0,
@@ -149,6 +150,25 @@ class _RecordingPoly:
 
     async def get_economic_calendar_for_day(self, *a, **k):
         return []
+
+    async def get_ticker_details(self, symbol: str) -> dict:
+        sym = (symbol or "AAPL").strip().upper()
+        return {
+            "ticker": sym,
+            "active": True,
+            "market_cap": 3_000_000_000_000,
+            "type": "CS",
+            "locale": "us",
+            "country_code": "US",
+            "primary_exchange": "XNAS",
+            "list_date": "1980-12-12",
+            "name": f"{sym} Inc.",
+        }
+
+    async def _get(self, path: str, params: dict | None = None) -> dict:
+        if path == "/v3/reference/splits":
+            return {"results": []}
+        return {"results": []}
 
 
 # ---------------------------------------------------------------------------

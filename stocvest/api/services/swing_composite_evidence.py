@@ -140,6 +140,127 @@ def _entry_price_for_rr(
     return None
 
 
+def _swing_range_from_payload(payload: dict[str, Any], *, lookback: int = 10) -> dict[str, float | int] | None:
+    """High/low over the last ``lookback`` daily bars when the engine passes OHLC rows."""
+    raw = payload.get("daily_bars_range")
+    if not isinstance(raw, list) or len(raw) < 3:
+        return None
+    lows: list[float] = []
+    highs: list[float] = []
+    for row in raw[-lookback:]:
+        if not isinstance(row, dict):
+            continue
+        lo = _float_or_none(row.get("low"))
+        hi = _float_or_none(row.get("high"))
+        if lo is not None and lo > 0:
+            lows.append(lo)
+        if hi is not None and hi > 0:
+            highs.append(hi)
+    if len(lows) < 3 or len(highs) < 3:
+        return None
+    swing_lo = min(lows)
+    swing_hi = max(highs)
+    if swing_hi <= swing_lo:
+        return None
+    return {
+        "low": round(swing_lo, 4),
+        "high": round(swing_hi, 4),
+        "sessions": min(lookback, len(lows)),
+    }
+
+
+def _long_stop_provenance_label(
+    *,
+    day_lo: float | None,
+    day_hi: float | None,
+    vwap: float | None,
+    prev_close: float | None,
+    last: float | None,
+) -> str:
+    if day_lo is not None and day_lo > 0 and vwap is not None and vwap > 0:
+        return "Below min(session low, VWAP) — structural buffer"
+    if day_lo is not None and day_lo > 0:
+        return "Below session low — structural buffer"
+    if vwap is not None and vwap > 0:
+        return "Below VWAP — structural buffer"
+    if prev_close is not None and prev_close > 0:
+        return "Below prior close (99% rule) — fallback"
+    if last is not None and last > 0:
+        return "Below last price (98% rule) — fallback"
+    return "Structural stop — source unavailable"
+
+
+def _long_target_provenance_label(
+    *,
+    day_hi: float | None,
+    last: float | None,
+    reference_target_2: float | None,
+) -> str:
+    if day_hi is not None and day_hi > 0:
+        if reference_target_2 is not None:
+            return "Session high (T1) + 2R extension (T2)"
+        return "Session high — primary target"
+    if last is not None and last > 0:
+        return "Percent extension from last — fallback"
+    return "Target — source unavailable"
+
+
+def _short_stop_provenance_label(
+    *,
+    day_lo: float | None,
+    day_hi: float | None,
+    vwap: float | None,
+    prev_close: float | None,
+    last: float | None,
+) -> str:
+    if day_hi is not None and day_hi > 0 and vwap is not None and vwap > 0:
+        return "Above max(session high, VWAP) — structural buffer"
+    if day_hi is not None and day_hi > 0:
+        return "Above session high — structural buffer"
+    if vwap is not None and vwap > 0:
+        return "Above VWAP — structural buffer"
+    if prev_close is not None and prev_close > 0:
+        return "Above prior close (101% rule) — fallback"
+    if last is not None and last > 0:
+        return "Above last price (102% rule) — fallback"
+    return "Structural stop — source unavailable"
+
+
+def _short_target_provenance_label(
+    *,
+    day_lo: float | None,
+    last: float | None,
+    reference_target_2: float | None,
+) -> str:
+    if day_lo is not None and day_lo > 0:
+        if reference_target_2 is not None:
+            return "Session low (T1) + 2R extension (T2)"
+        return "Session low — primary target"
+    if last is not None and last > 0:
+        return "Percent extension from last — fallback"
+    return "Target — source unavailable"
+
+
+def serialize_daily_bars_for_range(bars: list[Any], *, limit: int = 10) -> list[dict[str, float]]:
+    """Compact daily OHLC rows for swing range (newest ``limit`` sessions)."""
+    if not bars:
+        return []
+    try:
+        ordered = sorted(bars, key=lambda b: b.timestamp)[-limit:]
+    except AttributeError:
+        return []
+    out: list[dict[str, float]] = []
+    for b in ordered:
+        try:
+            lo = float(b.low)
+            hi = float(b.high)
+        except (TypeError, ValueError, AttributeError):
+            continue
+        if lo > 0 and hi > 0 and hi >= lo:
+            out.append({"low": lo, "high": hi})
+    return out
+
+
 def _long_side_geometry(
     *,
     day_lo: float | None,
@@ -363,6 +484,18 @@ def build_swing_composite_evidence_fields(
             prev_close=prev_close,
             last=last,
         )
+        reference_stop_provenance = _long_stop_provenance_label(
+            day_lo=day_lo,
+            day_hi=day_hi,
+            vwap=vwap,
+            prev_close=prev_close,
+            last=last,
+        )
+        reference_target_provenance = _long_target_provenance_label(
+            day_hi=day_hi,
+            last=last,
+            reference_target_2=reference_target_2,
+        )
     else:
         reference_stop_level, reference_target_1, reference_target_2 = _short_side_geometry(
             day_lo=day_lo,
@@ -371,6 +504,20 @@ def build_swing_composite_evidence_fields(
             prev_close=prev_close,
             last=last,
         )
+        reference_stop_provenance = _short_stop_provenance_label(
+            day_lo=day_lo,
+            day_hi=day_hi,
+            vwap=vwap,
+            prev_close=prev_close,
+            last=last,
+        )
+        reference_target_provenance = _short_target_provenance_label(
+            day_lo=day_lo,
+            last=last,
+            reference_target_2=reference_target_2,
+        )
+
+    swing_range_zone = _swing_range_from_payload(payload)
 
     entry = _entry_price_for_rr(last, zone_lo, zone_hi)
     rr_from_structure: float | None = None
@@ -548,9 +695,13 @@ def build_swing_composite_evidence_fields(
         "risk_factors_detailed": risk_factors_detailed,
         "signal_parameters": signal_parameters,
         "historical_entry_zone": historical_entry_zone,
+        "session_entry_zone": historical_entry_zone,
+        "swing_range_zone": swing_range_zone,
         "reference_target_1": reference_target_1,
         "reference_target_2": reference_target_2,
         "reference_stop_level": reference_stop_level,
+        "reference_stop_provenance": reference_stop_provenance,
+        "reference_target_provenance": reference_target_provenance,
         "alignment_ratio": round(float(composite.alignment_ratio), 4),
         "conflicted_layers": list(composite.conflicted_layers or []),
         "vwap_state": vs.value,

@@ -16,7 +16,7 @@ describe("computeScenarioResult", () => {
       stop: 95,
       target: 110,
       shares: 50
-    });
+    }, "bullish");
     expect(result.risk_per_share).toBe(5);
     expect(result.total_risk_dollars).toBe(250);
     expect(result.r_multiple_to_target).toBe(2);
@@ -31,7 +31,7 @@ describe("computeScenarioResult", () => {
       stop: 105,
       target: 90,
       shares: 20
-    });
+    }, "bearish");
     expect(result.risk_per_share).toBe(5);
     expect(result.total_risk_dollars).toBe(100);
     expect(result.r_multiple_to_target).toBe(2);
@@ -44,7 +44,16 @@ describe("computeScenarioResult", () => {
       stop: 100,
       target: 110,
       shares: 10
-    });
+    }, "bullish");
+    expect(Number.isNaN(result.r_multiple_to_target)).toBe(true);
+  });
+
+  test("long_stop_above_entry_invalid_geometry", () => {
+    const result = computeScenarioResult(
+      { entry: 5.05, stop: 5.1696, target: 5.55, shares: 100 },
+      "bullish"
+    );
+    expect(Number.isNaN(result.risk_per_share)).toBe(true);
     expect(Number.isNaN(result.r_multiple_to_target)).toBe(true);
   });
 
@@ -54,7 +63,7 @@ describe("computeScenarioResult", () => {
       stop: 95,
       target: 110,
       shares: 0
-    });
+    }, "bullish");
     expect(result.risk_per_share).toBe(5);
     // Defensive: shares must be positive to produce risk_dollars. Zero
     // shares is structurally invalid (the modal's input has min=0 but
@@ -69,7 +78,7 @@ describe("computeScenarioResult", () => {
       stop: 95,
       target: 110,
       shares: 10
-    });
+    }, "bullish");
     expect(Number.isNaN(result.risk_per_share)).toBe(true);
     expect(Number.isNaN(result.r_multiple_to_target)).toBe(true);
     expect(Number.isNaN(result.cost_basis_dollars)).toBe(true);
@@ -82,7 +91,7 @@ describe("computeScenarioResult", () => {
       target: 110,
       shares: 50,
       account_size: 25000
-    });
+    }, "bullish");
     // total_risk = 250, account = 25000 → 1.0%.
     expect(result.risk_pct_of_account).toBeCloseTo(1.0, 6);
   });
@@ -94,14 +103,14 @@ describe("computeScenarioResult", () => {
       target: 110,
       shares: 50,
       account_size: 0
-    });
+    }, "bullish");
     const b = computeScenarioResult({
       entry: 100,
       stop: 95,
       target: 110,
       shares: 50,
       account_size: -100
-    });
+    }, "bullish");
     expect(a.risk_pct_of_account).toBeNull();
     expect(b.risk_pct_of_account).toBeNull();
   });
@@ -152,7 +161,7 @@ describe("formatScenarioForClipboard", () => {
         target: 110,
         shares: 50,
         account_size: 25000
-      })
+      }, "bullish")
     );
     // Disclaimer must be present in every clipboard payload — this is
     // the legal-safety boilerplate the user pastes into their broker.
@@ -176,7 +185,7 @@ describe("formatScenarioForClipboard", () => {
         stop: 95,
         target: 110,
         shares: 50
-      })
+      }, "bullish")
     );
     expect(text).toContain("Planning inputs:");
     expect(text).toContain("Computed:");
@@ -199,7 +208,7 @@ describe("formatScenarioForClipboard", () => {
         stop: 105,
         target: 90,
         shares: 30
-      })
+      }, "bearish")
     ).toLowerCase();
     for (const banned of ["recommend", "approve", "validated", "qualified", "cleared", "endorsed"]) {
       expect(text).not.toContain(banned);

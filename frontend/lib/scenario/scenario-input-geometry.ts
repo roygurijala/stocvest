@@ -17,7 +17,8 @@ export function scenarioInputToGeometrySource(input: ScenarioInput): ScenarioGeo
     structuralStop: typeof ref.stop === "number" ? ref.stop : null,
     target1: typeof ref.target_1 === "number" ? ref.target_1 : null,
     target2: typeof ref.target_2 === "number" ? ref.target_2 : null,
-    vwap: null,
+    vwap: typeof ref.vwap === "number" ? ref.vwap : null,
+    atr: typeof ref.atr === "number" ? ref.atr : null,
     systemRiskReward: typeof input.risk_reward === "number" ? input.risk_reward : null
   };
 }

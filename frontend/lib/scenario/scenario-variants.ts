@@ -8,15 +8,17 @@
 import { resolveAlignmentDisplayTier } from "@/lib/alignment-display-tier";
 import type { SignalsSetupBias } from "@/lib/signals-page-present";
 import { referenceLevelsFromSessionStructure } from "@/lib/signal-evidence";
+import { applyMinStopDistance } from "@/lib/scenario/scenario-stop-policy";
 import type { TradeDecision } from "@/lib/signal-evidence/trade-decision";
 
 /** Matches `buildSignalsPageDecision` R/R gate — keep in sync. */
 export const SCENARIO_RR_MIN = 2.0;
 
-export type ScenarioEntryStyle = "mid_zone" | "aggressive" | "conservative";
+export type ScenarioEntryStyle = "mid_zone" | "aggressive" | "conservative" | "breakout";
 export type ScenarioStopStrategy = "structural" | "tight" | "vwap";
 export type ScenarioTargetChoice = "t1" | "t2";
-export type ScenarioPresetId = "default" | "conservative" | "aggressive";
+/** Trade archetype presets — dip / breakout / continuation. */
+export type ScenarioPresetId = "continuation" | "dip" | "breakout";
 
 export type ScenarioGeometrySource = {
   direction: "bullish" | "bearish";
@@ -27,6 +29,7 @@ export type ScenarioGeometrySource = {
   target1: number | null;
   target2: number | null;
   vwap: number | null;
+  atr: number | null;
   systemRiskReward: number | null;
 };
 
@@ -100,6 +103,11 @@ function resolveEntry(
   const mid = entryMid(last, lo, hi);
   if (mid == null) return null;
   if (style === "mid_zone") return round4(mid);
+  if (style === "breakout") {
+    if (direction === "bullish" && hi != null && hi > 0) return round4(hi * 1.002);
+    if (direction === "bearish" && lo != null && lo > 0) return round4(lo * 0.998);
+    return round4(mid);
+  }
   if (direction === "bullish") {
     if (style === "aggressive") {
       if (lo != null && lo > 0) return round4(lo);
@@ -121,26 +129,30 @@ function resolveStop(
   direction: "bullish" | "bearish",
   entry: number,
   structural: number | null,
-  vwap: number | null
+  vwap: number | null,
+  atr: number | null
 ): number | null {
   if (structural == null || !Number.isFinite(structural)) return null;
   const base = structural;
-  if (strategy === "structural") return round4(base);
-  if (strategy === "vwap" && vwap != null && vwap > 0) {
+  let stop: number;
+  if (strategy === "structural") stop = round4(base);
+  else if (strategy === "vwap" && vwap != null && vwap > 0) {
     const vStop = direction === "bullish" ? round4(vwap * 0.995) : round4(vwap * 1.005);
-    if (direction === "bullish" && vStop < entry) return vStop;
-    if (direction === "bearish" && vStop > entry) return vStop;
-    return round4(base);
-  }
-  if (strategy === "tight") {
+    if (direction === "bullish" && vStop < entry) stop = vStop;
+    else if (direction === "bearish" && vStop > entry) stop = vStop;
+    else stop = round4(base);
+  } else if (strategy === "tight") {
     if (direction === "bullish" && base < entry) {
-      return round4(base + (entry - base) * 0.35);
+      stop = round4(base + (entry - base) * 0.35);
+    } else if (direction === "bearish" && base > entry) {
+      stop = round4(base - (base - entry) * 0.35);
+    } else {
+      stop = round4(base);
     }
-    if (direction === "bearish" && base > entry) {
-      return round4(base - (base - entry) * 0.35);
-    }
+  } else {
+    stop = round4(base);
   }
-  return round4(base);
+  return applyMinStopDistance(direction, entry, stop, atr);
 }
 
 function resolveTarget(
@@ -206,7 +218,8 @@ function resolveScenarioLevelsOnce(
     source.direction,
     entry,
     source.structuralStop,
-    source.vwap
+    source.vwap,
+    source.atr
   );
   if (stop == null) return null;
   const target = resolveTarget(
@@ -248,7 +261,8 @@ export function describeInvalidScenarioSelection(
     source.direction,
     entry,
     source.structuralStop,
-    source.vwap
+    source.vwap,
+    source.atr
   );
   if (stop == null) {
     return "Stop does not fit this entry — try Structural stop or a different entry style.";
@@ -299,6 +313,7 @@ export function buildScenarioGeometrySource(args: {
   target1?: number | null;
   target2?: number | null;
   vwap?: number | null;
+  atr?: number | null;
   systemRiskReward?: number | null;
 }): ScenarioGeometrySource | null {
   const direction = setupBiasToScenarioDirection(args.bias);
@@ -312,6 +327,7 @@ export function buildScenarioGeometrySource(args: {
     target1: args.target1 ?? null,
     target2: args.target2 ?? null,
     vwap: args.vwap ?? null,
+    atr: args.atr ?? null,
     systemRiskReward: args.systemRiskReward ?? null
   };
 }
@@ -372,6 +388,7 @@ export type BuildScenarioGeometryBundleArgs = {
   target1?: number | null;
   target2?: number | null;
   vwap?: number | null;
+  atr?: number | null;
   support?: number | null;
   resistance?: number | null;
   prevClose?: number | null;
@@ -477,6 +494,7 @@ export function buildScenarioGeometryBundle(
     target1: t1,
     target2: t2,
     vwap,
+    atr: positivePrice(args.atr),
     systemRiskReward: args.systemRiskReward ?? null
   };
 
@@ -502,19 +520,19 @@ export function buildScenarioGeometryBundle(
 }
 
 const PRESET_SELECTIONS: Record<ScenarioPresetId, ScenarioSelection> = {
-  default: { preset: "default", entry: "mid_zone", stop: "structural", target: "t1" },
-  conservative: { preset: "conservative", entry: "conservative", stop: "structural", target: "t1" },
-  aggressive: { preset: "aggressive", entry: "aggressive", stop: "tight", target: "t2" }
+  continuation: { preset: "continuation", entry: "mid_zone", stop: "structural", target: "t1" },
+  dip: { preset: "dip", entry: "aggressive", stop: "structural", target: "t1" },
+  breakout: { preset: "breakout", entry: "breakout", stop: "structural", target: "t2" }
 };
 
 export function buildScenarioVariantCatalog(source: ScenarioGeometrySource): ScenarioVariantCatalog | null {
-  const system = resolveScenarioLevels(source, PRESET_SELECTIONS.default);
+  const system = resolveScenarioLevels(source, PRESET_SELECTIONS.continuation);
   if (!system) return null;
   return {
     source,
     system,
     presets: PRESET_SELECTIONS,
-    defaultSelection: PRESET_SELECTIONS.default
+    defaultSelection: PRESET_SELECTIONS.continuation
   };
 }
 

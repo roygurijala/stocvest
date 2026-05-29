@@ -14,6 +14,8 @@ from stocvest.api.services.opportunity_desk.discovery_row import discovery_row_f
 from stocvest.api.services.opportunity_desk.funnel import FunnelMover, OpportunityDeskFunnelConfig
 from stocvest.config.parameter_store import ParameterStore
 from stocvest.data.models import Snapshot, Timeframe
+from stocvest.data.symbol_universe_eligibility import snapshot_universe_exclusion_reason
+from stocvest.signals.session_price_guard import is_corporate_action_session_move
 from stocvest.data.polygon_client import PolygonClient
 from stocvest.signals.swing_technical_analyzer import SwingTechnicalAnalyzer, SwingTechnicalLayerResult
 from stocvest.utils.config import get_settings
@@ -55,7 +57,10 @@ def _session_gap_percent(snap: Snapshot) -> float | None:
         price = float(o)
     else:
         return None
-    return round((price - float(prev)) / float(prev) * 100.0, 4)
+    gap = (price - float(prev)) / float(prev) * 100.0
+    if is_corporate_action_session_move(float(prev), price, gap, symbol=snap.symbol):
+        return None
+    return round(gap, 4)
 
 
 def select_quiet_leader_snapshots(
@@ -63,6 +68,8 @@ def select_quiet_leader_snapshots(
     *,
     exclude_symbols: set[str],
     config: QuietLeadersConfig | None = None,
+    recent_split_symbols: frozenset[str] | None = None,
+    frequent_reverse_split_symbols: frozenset[str] | None = None,
 ) -> list[tuple[Snapshot, float]]:
     """Liquid names with |gap| below mover threshold, excluding top session movers."""
     cfg = config or QuietLeadersConfig()
@@ -70,6 +77,15 @@ def select_quiet_leader_snapshots(
     for snap in snapshots:
         sym = snap.symbol.strip().upper()
         if not sym or sym in exclude_symbols:
+            continue
+        universe_reason = snapshot_universe_exclusion_reason(
+            sym,
+            snap,
+            min_trade_price=cfg.min_trade_price,
+            recent_split_symbols=recent_split_symbols,
+            frequent_reverse_split_symbols=frequent_reverse_split_symbols,
+        )
+        if universe_reason:
             continue
         prev = snap.prev_close
         if prev is None or prev <= 0:
@@ -82,17 +98,13 @@ def select_quiet_leader_snapshots(
             price = float(o)
         else:
             continue
-        if price < cfg.min_trade_price:
-            continue
         vol = float(snap.day_volume or 0.0)
         if vol < cfg.min_day_volume:
-            continue
-        prev_vol = snap.prev_day_volume
-        if prev_vol is not None and float(prev_vol) < cfg.min_prev_day_volume:
             continue
         gap_pct = _session_gap_percent(snap)
         if gap_pct is None or abs(gap_pct) >= cfg.max_abs_gap_percent:
             continue
+        prev_vol = snap.prev_day_volume
         adv = float(prev_vol or vol or 0.0)
         scored.append((adv, snap, gap_pct))
     scored.sort(key=lambda x: x[0], reverse=True)
@@ -160,6 +172,8 @@ async def build_quiet_leaders(
     composite_fn: Any,
     funnel_cfg: OpportunityDeskFunnelConfig | None = None,
     config: QuietLeadersConfig | None = None,
+    recent_split_symbols: frozenset[str] | None = None,
+    frequent_reverse_split_symbols: frozenset[str] | None = None,
 ) -> list[dict[str, Any]]:
     """
     Screen low-velocity names, run swing composite on survivors, return display rows.
@@ -168,7 +182,13 @@ async def build_quiet_leaders(
     cfg = config or QuietLeadersConfig()
     fcfg = funnel_cfg or OpportunityDeskFunnelConfig()
     exclude = {m.symbol for m in movers[: max(0, fcfg.movers_radar_limit)]}
-    candidates = select_quiet_leader_snapshots(snapshots, exclude_symbols=exclude, config=cfg)
+    candidates = select_quiet_leader_snapshots(
+        snapshots,
+        exclude_symbols=exclude,
+        config=cfg,
+        recent_split_symbols=recent_split_symbols,
+        frequent_reverse_split_symbols=frequent_reverse_split_symbols,
+    )
     if not candidates:
         return []
 
