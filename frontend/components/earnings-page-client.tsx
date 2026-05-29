@@ -12,6 +12,11 @@ import {
   formatEarningsGroupHeader,
   isHighMarketImpact
 } from "@/lib/earnings-row-present";
+import {
+  type EarningsPageFilter,
+  earningsFilterScopeLabel,
+  filterEarningsByTab
+} from "@/lib/earnings-filters";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -20,9 +25,9 @@ interface EarningsPageClientProps {
   notice?: string | null;
   source?: string | null;
   watchlistSymbols?: string[];
+  /** Server fetch window (e.g. 30) — used in scope subtitle only. */
+  calendarDays?: number;
 }
-
-type Filter = "upcoming" | "today" | "week" | "all";
 
 const MONO = `'DM Mono', 'IBM Plex Mono', ${typography.fontFamilyMono}`;
 
@@ -43,32 +48,6 @@ function localTodayIso(): string {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
-}
-
-function mondayOfWeekContaining(refIso: string): string {
-  const [y, mo, da] = refIso.split("-").map(Number);
-  const d = new Date(y, mo - 1, da);
-  const day = d.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setDate(d.getDate() + diff);
-  const yy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yy}-${mm}-${dd}`;
-}
-
-function addDays(iso: string, delta: number): string {
-  const [y, mo, da] = iso.split("-").map(Number);
-  const d = new Date(y, mo - 1, da);
-  d.setDate(d.getDate() + delta);
-  const yy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yy}-${mm}-${dd}`;
-}
-
-function fridayOfSameWeek(mondayIso: string): string {
-  return addDays(mondayIso, 4);
 }
 
 function sortRows(list: EarningsEvent[]): EarningsEvent[] {
@@ -305,31 +284,28 @@ function EarningsRow({
   );
 }
 
-export function EarningsPageClient({ events, notice, source, watchlistSymbols = [] }: EarningsPageClientProps) {
+export function EarningsPageClient({
+  events,
+  notice,
+  source,
+  watchlistSymbols = [],
+  calendarDays = 30
+}: EarningsPageClientProps) {
   const { colors } = useTheme();
-  const [filter, setFilter] = useState<Filter>("upcoming");
+  const [filter, setFilter] = useState<EarningsPageFilter>("upcoming");
 
   usePublishAssistantContext({ page: "dashboard/earnings" });
   const today = localTodayIso();
-  const weekMon = mondayOfWeekContaining(today);
-  const weekFri = fridayOfSameWeek(weekMon);
 
   const watchlistSet = useMemo(() => new Set(watchlistSymbols.map((s) => s.trim().toUpperCase())), [watchlistSymbols]);
 
-  const filtered = useMemo(() => {
-    const merged = [...events];
-    if (filter === "upcoming") return merged.filter((e) => e.report_date >= today);
-    if (filter === "today") return merged.filter((e) => e.report_date === today);
-    if (filter === "week") {
-      return merged.filter((e) => e.report_date >= today && e.report_date >= weekMon && e.report_date <= weekFri);
-    }
-    return merged;
-  }, [events, filter, today, weekMon, weekFri]);
+  const filtered = useMemo(() => filterEarningsByTab(events, filter, today), [events, filter, today]);
 
   const groups = useMemo(() => buildDateGroups(filtered), [filtered]);
 
   const rowCount = filtered.length;
-  const filterIds: { id: Filter; label: string }[] = [
+  const scopeLabel = earningsFilterScopeLabel(filter, today, calendarDays);
+  const filterIds: { id: EarningsPageFilter; label: string }[] = [
     { id: "upcoming", label: "Upcoming" },
     { id: "today", label: "Today" },
     { id: "week", label: "This week" },
@@ -359,9 +335,9 @@ export function EarningsPageClient({ events, notice, source, watchlistSymbols = 
         <div style={{ marginBottom: spacing[3] }}>
           <h2 style={{ margin: 0, fontSize: typography.scale.lg, fontWeight: 700 }}>Earnings calendar</h2>
           <p style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.sm, color: colors.textMuted }}>
-            US market · next 30 days
+            US market · {scopeLabel}
             {source && SOURCE_LABELS[source] ? ` · ${SOURCE_LABELS[source]}` : ""}
-            {rowCount > 0 ? ` · ${rowCount} report${rowCount === 1 ? "" : "s"}` : ""}
+            {rowCount > 0 ? ` · ${rowCount} shown` : ""}
           </p>
         </div>
 
@@ -466,7 +442,7 @@ export function EarningsPageClient({ events, notice, source, watchlistSymbols = 
                       {header}
                     </h3>
                     <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, whiteSpace: "nowrap" }}>
-                      {count} reporting
+                      {count} report{count === 1 ? "" : "s"}
                     </span>
                   </header>
                   <div style={{ overflowX: "auto" }}>
