@@ -6,6 +6,7 @@ import type { DeskTodayData } from "@/lib/api/desk-today";
 import { HotInMarketCard } from "@/components/dashboard/hot-in-market-card";
 import {
   buildingStructureBackfillNote,
+  buildingStructureEmptyMessage,
   buildBuildingStructureCardModel,
   resolveBuildingStructureRows
 } from "@/lib/dashboard/building-structure-present";
@@ -139,7 +140,7 @@ export function DashboardQuietLeadersFeed({
         >
           {isLoading
             ? "Scanning for low-velocity leaders…"
-            : "None right now — common on hot days when most names are already up 2%+."}
+            : buildingStructureEmptyMessage(sessionActivitySymbols.length)}
         </p>
       )}
 

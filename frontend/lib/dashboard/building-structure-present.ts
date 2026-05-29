@@ -31,10 +31,16 @@ import type { ScannerNearQualificationRow } from "@/lib/scanner-scan-summary";
 export const BUILDING_STRUCTURE_MIN_CARDS = 6;
 export const BUILDING_STRUCTURE_MAX_CARDS = 8;
 export const BUILDING_STRUCTURE_LOW_VELOCITY_GAP_MAX = 2;
+/** Hot-tape fallback — smallest session % among names not in Session activity top list. */
+export const BUILDING_STRUCTURE_MODERATE_GAP_MAX = 15;
 
 const LAYER_TOTAL = 6;
 
-export type BuildingStructureSource = "quiet_leader" | "near_qualification" | "low_velocity";
+export type BuildingStructureSource =
+  | "quiet_leader"
+  | "near_qualification"
+  | "low_velocity"
+  | "moderate_velocity";
 
 export type BuildingStructureRow = {
   source: BuildingStructureSource;
@@ -119,14 +125,40 @@ export function resolveBuildingStructureRows(input: {
     }
   }
 
+  const moversRadar = input.deskData?.movers_radar ?? [];
+
   if (result.length < BUILDING_STRUCTURE_MIN_CARDS) {
-    const movers = input.deskData?.movers_radar ?? [];
-    const lowVelocity = [...movers]
+    const lowVelocity = [...moversRadar]
       .filter((m) => Math.abs(m.gap_percent) < BUILDING_STRUCTURE_LOW_VELOCITY_GAP_MAX)
       .sort((a, b) => b.rank_score - a.rank_score);
 
     for (const mover of lowVelocity) {
       push({ source: "low_velocity", symbol: mover.symbol, lowVelocity: mover });
+      if (result.length >= BUILDING_STRUCTURE_MAX_CARDS) break;
+    }
+  }
+
+  if (result.length < BUILDING_STRUCTURE_MIN_CARDS) {
+    const moderate = [...moversRadar]
+      .filter((m) => {
+        const g = Math.abs(m.gap_percent);
+        return g >= BUILDING_STRUCTURE_LOW_VELOCITY_GAP_MAX && g <= BUILDING_STRUCTURE_MODERATE_GAP_MAX;
+      })
+      .sort((a, b) => Math.abs(a.gap_percent) - Math.abs(b.gap_percent));
+
+    for (const mover of moderate) {
+      push({ source: "moderate_velocity", symbol: mover.symbol, lowVelocity: mover });
+      if (result.length >= BUILDING_STRUCTURE_MAX_CARDS) break;
+    }
+  }
+
+  if (result.length < BUILDING_STRUCTURE_MIN_CARDS) {
+    const remainder = [...moversRadar].sort(
+      (a, b) => Math.abs(a.gap_percent) - Math.abs(b.gap_percent)
+    );
+
+    for (const mover of remainder) {
+      push({ source: "moderate_velocity", symbol: mover.symbol, lowVelocity: mover });
       if (result.length >= BUILDING_STRUCTURE_MAX_CARDS) break;
     }
   }
@@ -146,10 +178,19 @@ export function buildingStructureBackfillNote(rows: BuildingStructureRow[]): str
   if (!buildingStructureHasBackfill(rows)) return null;
   const near = rows.filter((r) => r.source === "near_qualification").length;
   const low = rows.filter((r) => r.source === "low_velocity").length;
+  const moderate = rows.filter((r) => r.source === "moderate_velocity").length;
   const parts: string[] = [];
   if (near > 0) parts.push(`${near} near-ready from scanner`);
-  if (low > 0) parts.push(`${low} low-velocity from desk`);
+  if (low > 0) parts.push(`${low} under 2% from desk`);
+  if (moderate > 0) parts.push(`${moderate} smaller movers (not in top session list)`);
   return `Quiet leaders scarce today — includes ${parts.join(" and ")}. Open Signals before trading.`;
+}
+
+export function buildingStructureEmptyMessage(sessionActivityCount: number): string {
+  if (sessionActivityCount > 0) {
+    return "No names under the 2% quiet threshold right now — common on hot days. Session activity above shows today's bigger movers; open Scanner for the full quiet-leader list.";
+  }
+  return "None right now — common on hot days when most names are already up 2%+.";
 }
 
 function buildNearStructureCardModel(
@@ -222,6 +263,7 @@ function buildLowVelocityStructureCardModel(
     mode: DashboardDeskMode;
     deskData: DeskTodayData | null | undefined;
     colors: HotInMarketThemeColors;
+    moderateSessionMove?: boolean;
   }
 ): HotInMarketCardModel {
   const leader: DeskDiscoveryLeader = {
@@ -238,6 +280,18 @@ function buildLowVelocityStructureCardModel(
     source: hasDetail ? "desk_cache" : "movers_radar",
     colors: input.colors
   });
+  if (input.moderateSessionMove) {
+    return {
+      ...base,
+      setupBadge: "review",
+      setupBadgeLabel: "Under the surface",
+      gapEmphasis: resolveHotInMarketGapEmphasis("review"),
+      deskLabel: "swing · smaller session move",
+      statusHeadline: "Smaller session % — structure context, not a top mover",
+      detailLine: "Not in your top session list · open Signals for gates",
+      peek: "Smaller session move — structure context only"
+    };
+  }
   if (hasDetail) {
     return {
       ...base,
@@ -277,8 +331,11 @@ export function buildBuildingStructureCardModel(
   if (row.source === "near_qualification" && row.nearQual) {
     return buildNearStructureCardModel(row.nearQual, input);
   }
-  if (row.source === "low_velocity" && row.lowVelocity) {
-    return buildLowVelocityStructureCardModel(row.lowVelocity, input);
+  if ((row.source === "low_velocity" || row.source === "moderate_velocity") && row.lowVelocity) {
+    return buildLowVelocityStructureCardModel(row.lowVelocity, {
+      ...input,
+      moderateSessionMove: row.source === "moderate_velocity"
+    });
   }
   return {
     symbol: row.symbol,
