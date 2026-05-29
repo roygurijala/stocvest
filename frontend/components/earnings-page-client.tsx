@@ -2,20 +2,36 @@
 
 import { useMemo, useState } from "react";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
-import { borderRadius, spacing, typography } from "@/lib/design-system";
-import { useTheme } from "@/lib/theme-provider";
 import type { EarningsEvent } from "@/lib/api/earnings";
+import {
+  earningsCompanyLabel,
+  earningsShowsReportedActual,
+  earningsTimingLabel,
+  formatEarningsReportDate
+} from "@/lib/earnings-row-present";
+import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
+import { useTheme } from "@/lib/theme-provider";
 
 interface EarningsPageClientProps {
   events: EarningsEvent[];
   notice?: string | null;
-  /** finnhub | benzinga | polygon | fmp — omitted when unknown */
   source?: string | null;
 }
 
 type Filter = "upcoming" | "today" | "week" | "all";
 
 const MONO = `'DM Mono', 'IBM Plex Mono', ${typography.fontFamilyMono}`;
+
+/** Shared column template — header and rows must match exactly. */
+const TABLE_GRID =
+  "minmax(3.5rem,4.5rem) minmax(8rem,1.6fr) minmax(5.5rem,6.5rem) 2.75rem minmax(3.5rem,4.25rem) minmax(3.5rem,4.25rem) minmax(3.75rem,4.5rem)";
+
+const SOURCE_LABELS: Record<string, string> = {
+  finnhub: "Finnhub",
+  benzinga: "Benzinga",
+  polygon: "Polygon",
+  fmp: "FMP"
+};
 
 function localTodayIso(): string {
   const d = new Date();
@@ -25,11 +41,10 @@ function localTodayIso(): string {
   return `${y}-${m}-${day}`;
 }
 
-/** Monday (YYYY-MM-DD) of the week containing `ref`, local calendar; week starts Monday. */
 function mondayOfWeekContaining(refIso: string): string {
   const [y, mo, da] = refIso.split("-").map(Number);
   const d = new Date(y, mo - 1, da);
-  const day = d.getDay(); // 0 Sun … 6 Sat
+  const day = d.getDay();
   const diff = day === 0 ? -6 : 1 - day;
   d.setDate(d.getDate() + diff);
   const yy = d.getFullYear();
@@ -58,31 +73,8 @@ function formatSectionDate(iso: string): string {
   return dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-function formatMonthDayUpper(iso: string): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  const dt = new Date(y, m - 1, d);
-  const mon = dt.toLocaleDateString("en-US", { month: "short" }).toUpperCase();
-  return `${mon} ${d}`;
-}
-
-function timingShort(t: EarningsEvent["report_time"]): string {
-  if (t === "before_market") return "BMO";
-  if (t === "after_market") return "AMC";
-  if (t === "during_market") return "DURING";
-  return "TBD";
-}
-
 function sortRows(list: EarningsEvent[]): EarningsEvent[] {
   return [...list].sort((a, b) => a.report_date.localeCompare(b.report_date) || a.symbol.localeCompare(b.symbol));
-}
-
-function beatMissBarPercent(actual: number, est: number): { width: number; beat: boolean | null } {
-  if (!Number.isFinite(est) || est === 0) return { width: 0, beat: null };
-  const pct = ((actual - est) / Math.abs(est)) * 100;
-  const width = Math.min(Math.abs(pct) * 2, 100);
-  if (actual > est) return { width, beat: true };
-  if (actual < est) return { width, beat: false };
-  return { width: 0, beat: null };
 }
 
 type RowGroup = { key: string; label: string; rows: EarningsEvent[] };
@@ -93,7 +85,7 @@ function buildRowGroups(filter: Filter, source: EarningsEvent[], today: string, 
     return rows.length ? [{ key: "today", label: "Today", rows }] : [];
   }
 
-  if (filter === "week") {
+  if (filter === "week" || filter === "all") {
     const rows = sortRows(source);
     const byDate = new Map<string, EarningsEvent[]>();
     for (const e of rows) {
@@ -101,31 +93,13 @@ function buildRowGroups(filter: Filter, source: EarningsEvent[], today: string, 
       list.push(e);
       byDate.set(e.report_date, list);
     }
-    const dates = [...byDate.keys()].sort();
-    return dates.map((d) => ({
+    return [...byDate.keys()].sort().map((d) => ({
       key: d,
-      label: formatSectionDate(d),
+      label: filter === "week" ? formatSectionDate(d) : formatSectionDate(d),
       rows: sortRows(byDate.get(d)!)
     }));
   }
 
-  if (filter === "all") {
-    const rows = sortRows(source);
-    const byDate = new Map<string, EarningsEvent[]>();
-    for (const e of rows) {
-      const list = byDate.get(e.report_date) ?? [];
-      list.push(e);
-      byDate.set(e.report_date, list);
-    }
-    const dates = [...byDate.keys()].sort();
-    return dates.map((d) => ({
-      key: d,
-      label: formatSectionDate(d),
-      rows: sortRows(byDate.get(d)!)
-    }));
-  }
-
-  // upcoming
   const rows = sortRows(source);
   const todayRows = rows.filter((r) => r.report_date === today);
   const weekRest = rows.filter((r) => r.report_date !== today && r.report_date >= weekMon && r.report_date <= weekFri);
@@ -133,16 +107,121 @@ function buildRowGroups(filter: Filter, source: EarningsEvent[], today: string, 
   const groups: RowGroup[] = [];
   if (todayRows.length) groups.push({ key: "g-today", label: "Today", rows: todayRows });
   if (weekRest.length) groups.push({ key: "g-week", label: "This Week", rows: weekRest });
-  if (beyond.length) groups.push({ key: "g-upcoming", label: "Upcoming", rows: beyond });
+  if (beyond.length) groups.push({ key: "g-upcoming", label: "Later", rows: beyond });
   return groups;
 }
 
-const SOURCE_LABELS: Record<string, string> = {
-  finnhub: "Finnhub",
-  benzinga: "Benzinga",
-  polygon: "Polygon",
-  fmp: "FMP"
-};
+function TableHeader({ colors }: { colors: ReturnType<typeof useTheme>["colors"] }) {
+  return (
+    <div
+      role="row"
+      style={{
+        display: "grid",
+        gridTemplateColumns: TABLE_GRID,
+        columnGap: spacing[3],
+        alignItems: "end",
+        padding: `${spacing[2]} ${spacing[3]}`,
+        borderBottom: `1px solid ${colors.border}`,
+        fontSize: "10px",
+        textTransform: "uppercase",
+        letterSpacing: "1.5px",
+        color: colors.textMuted,
+        fontFamily: typography.fontFamilySans
+      }}
+    >
+      <span>Symbol</span>
+      <span>Company</span>
+      <span>Report</span>
+      <span>Time</span>
+      <span style={{ textAlign: "right" }}>Est EPS</span>
+      <span style={{ textAlign: "right" }}>Actual</span>
+      <span style={{ textAlign: "right" }}>Surprise</span>
+    </div>
+  );
+}
+
+function EarningsRow({
+  row,
+  today,
+  colors
+}: {
+  row: EarningsEvent;
+  today: string;
+  colors: ReturnType<typeof useTheme>["colors"];
+}) {
+  const est = row.estimated_eps;
+  const reported = earningsShowsReportedActual(row, today);
+  const act = reported && typeof row.actual_eps === "number" ? row.actual_eps : null;
+  const surprise = reported && typeof row.surprise_percent === "number" ? row.surprise_percent : null;
+  const beatGreen = colors.bullish;
+  const missRed = colors.bearish;
+
+  let surpriseText = "—";
+  let surpriseColor = colors.textMuted;
+  if (surprise !== null) {
+    surpriseText = `${surprise >= 0 ? "+" : ""}${surprise.toFixed(1)}%`;
+    surpriseColor = surprise >= 0 ? beatGreen : missRed;
+  }
+
+  let actualColor = colors.text;
+  let actualText = "—";
+  if (act !== null) {
+    actualText = act.toFixed(2);
+    if (typeof est === "number") {
+      if (act > est) actualColor = beatGreen;
+      else if (act < est) actualColor = missRed;
+    }
+  }
+
+  const company = earningsCompanyLabel(row);
+
+  return (
+    <div
+      role="row"
+      className="earnings-table-row"
+      style={{
+        display: "grid",
+        gridTemplateColumns: TABLE_GRID,
+        columnGap: spacing[3],
+        alignItems: "center",
+        padding: `${spacing[2]} ${spacing[3]}`,
+        borderBottom: `1px solid ${colors.border}`,
+        fontFamily: typography.fontFamilySans,
+        transition: "background 0.12s ease"
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = colors.surfaceMuted;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = "transparent";
+      }}
+    >
+      <span style={{ fontSize: typography.scale.sm, fontWeight: 700, letterSpacing: "0.04em" }}>{row.symbol}</span>
+      <span
+        style={{
+          fontSize: typography.scale.sm,
+          color: colors.textMuted,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          minWidth: 0
+        }}
+        title={company}
+      >
+        {company}
+      </span>
+      <span style={{ fontSize: "11px", color: colors.textMuted, whiteSpace: "nowrap" }}>
+        {formatEarningsReportDate(row.report_date)}
+      </span>
+      <span style={{ fontSize: "10px", fontWeight: 600, color: colors.textMuted }}>{earningsTimingLabel(row.report_time)}</span>
+      <span style={{ fontSize: typography.scale.sm, fontFamily: MONO, textAlign: "right", color: colors.textMuted }}>
+        {typeof est === "number" ? est.toFixed(2) : "—"}
+      </span>
+      <span style={{ fontSize: typography.scale.sm, fontFamily: MONO, textAlign: "right", color: actualColor }}>{actualText}</span>
+      <span style={{ fontSize: "11px", fontFamily: MONO, textAlign: "right", color: surpriseColor }}>{surpriseText}</span>
+    </div>
+  );
+}
 
 export function EarningsPageClient({ events, notice, source }: EarningsPageClientProps) {
   const { colors } = useTheme();
@@ -155,12 +234,8 @@ export function EarningsPageClient({ events, notice, source }: EarningsPageClien
 
   const filtered = useMemo(() => {
     const merged = [...events];
-    if (filter === "upcoming") {
-      return merged.filter((e) => e.report_date >= today);
-    }
-    if (filter === "today") {
-      return merged.filter((e) => e.report_date === today);
-    }
+    if (filter === "upcoming") return merged.filter((e) => e.report_date >= today);
+    if (filter === "today") return merged.filter((e) => e.report_date === today);
     if (filter === "week") {
       return merged.filter((e) => e.report_date >= today && e.report_date >= weekMon && e.report_date <= weekFri);
     }
@@ -172,17 +247,7 @@ export function EarningsPageClient({ events, notice, source }: EarningsPageClien
     [filter, filtered, today, weekMon, weekFri]
   );
 
-  const emptyCopy =
-    filter === "today"
-      ? "No earnings reports today."
-      : filter === "upcoming"
-        ? "No earnings in the next 30 days."
-        : filter === "week"
-          ? "No earnings reports this week."
-          : "No earnings to display.";
-
-  const showEmpty = filtered.length === 0;
-
+  const rowCount = filtered.length;
   const filterIds: { id: Filter; label: string }[] = [
     { id: "upcoming", label: "Upcoming" },
     { id: "today", label: "Today" },
@@ -190,304 +255,142 @@ export function EarningsPageClient({ events, notice, source }: EarningsPageClien
     { id: "all", label: "All" }
   ];
 
-  const gridCols = "52px minmax(0,1fr) 60px 80px 80px 90px";
+  const emptyCopy =
+    filter === "today"
+      ? "No earnings reports scheduled for today."
+      : filter === "upcoming"
+        ? "No upcoming earnings in the next 30 days."
+        : filter === "week"
+          ? "No earnings reports this week."
+          : "No earnings to display.";
 
   return (
-    <section style={{ display: "grid", gap: spacing[4] }}>
-      <header
+    <section style={{ display: "grid", gap: spacing[4], maxWidth: 1120, margin: "0 auto", width: "100%" }}>
+      <article
+        className={surfaceGlowClassName}
         style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: spacing[3],
-          flexWrap: "wrap"
+          background: colors.surface,
+          border: `1px solid ${colors.border}`,
+          borderRadius: borderRadius.xl,
+          padding: spacing[4]
         }}
       >
-        <span
+        <div
           style={{
-            fontSize: "11px",
-            textTransform: "uppercase",
-            letterSpacing: "3px",
-            color: colors.textMuted,
-            fontFamily: typography.fontFamilySans
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: spacing[3],
+            flexWrap: "wrap",
+            marginBottom: spacing[3]
           }}
         >
-          Earnings · 30 days
-        </span>
-        <div style={{ display: "inline-flex", gap: spacing[2], flexWrap: "wrap" }}>
-          {filterIds.map(({ id, label }) => {
-            const active = filter === id;
-            return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setFilter(id)}
-                style={{
-                  borderRadius: borderRadius.full,
-                  border: `1px solid ${colors.border}`,
-                  background: active ? colors.surfaceMuted : "transparent",
-                  color: active ? colors.text : colors.textMuted,
-                  padding: "6px 12px",
-                  cursor: "pointer",
-                  fontSize: "10px",
-                  textTransform: "uppercase",
-                  letterSpacing: "1.5px",
-                  fontFamily: typography.fontFamilySans,
-                  boxShadow: active ? "0 1px 3px rgba(0,0,0,.12)" : "none",
-                  opacity: active ? 1 : 0.75,
-                  transition: "background 0.1s ease, box-shadow 0.1s ease"
-                }}
-              >
-                {label}
-              </button>
-            );
-          })}
+          <div>
+            <h2 style={{ margin: 0, fontSize: typography.scale.lg, fontWeight: 700 }}>Earnings calendar</h2>
+            <p style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.sm, color: colors.textMuted }}>
+              US market · next 30 days
+              {source && SOURCE_LABELS[source] ? ` · ${SOURCE_LABELS[source]}` : ""}
+              {rowCount > 0 ? ` · ${rowCount} report${rowCount === 1 ? "" : "s"}` : ""}
+            </p>
+          </div>
+          <div style={{ display: "inline-flex", gap: spacing[2], flexWrap: "wrap" }}>
+            {filterIds.map(({ id, label }) => {
+              const active = filter === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setFilter(id)}
+                  style={{
+                    borderRadius: borderRadius.full,
+                    border: `1px solid ${active ? colors.accent : colors.border}`,
+                    background: active ? colors.surfaceMuted : "transparent",
+                    color: active ? colors.text : colors.textMuted,
+                    padding: "6px 14px",
+                    cursor: "pointer",
+                    fontSize: "11px",
+                    fontWeight: active ? 600 : 500,
+                    textTransform: "uppercase",
+                    letterSpacing: "1px",
+                    fontFamily: typography.fontFamilySans
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </header>
 
-      {notice ? (
-        <p
-          role="status"
-          style={{
-            margin: 0,
-            padding: spacing[3],
-            borderRadius: borderRadius.lg,
-            background: "rgba(234,179,8,.12)",
-            border: `1px solid ${colors.border}`,
-            color: colors.text,
-            fontSize: typography.scale.sm
-          }}
-        >
-          {notice}
-        </p>
-      ) : null}
-
-      <div style={{ minWidth: 0 }}>
-        {showEmpty ? (
+        {notice ? (
           <p
+            role="status"
             style={{
-              margin: 0,
-              padding: spacing[4],
-              color: colors.textMuted,
+              margin: `0 0 ${spacing[3]}`,
+              padding: spacing[3],
+              borderRadius: borderRadius.lg,
+              background: "rgba(245,158,11,.1)",
+              border: `1px solid ${colors.caution}`,
+              color: colors.text,
               fontSize: typography.scale.sm
             }}
           >
-            {emptyCopy}
+            {notice}
           </p>
+        ) : null}
+
+        {rowCount === 0 ? (
+          <p style={{ margin: 0, padding: spacing[4], color: colors.textMuted, fontSize: typography.scale.sm }}>{emptyCopy}</p>
         ) : (
-          groups.map((g, gi) => (
-            <div key={g.key} style={{ marginBottom: gi < groups.length - 1 ? spacing[5] : 0 }}>
-              <div
-                style={{
-                  marginTop: gi > 0 ? "20px" : 0,
-                  marginBottom: "6px",
-                  padding: "0 8px",
-                  paddingBottom: spacing[2],
-                  fontSize: "10px",
-                  textTransform: "uppercase",
-                  letterSpacing: "2px",
-                  color: "var(--color-text-tertiary)",
-                  fontFamily: typography.fontFamilySans,
-                  borderBottom: `0.5px solid ${colors.border}`
-                }}
-              >
-                {g.label}
+          <div style={{ display: "grid", gap: spacing[4] }}>
+            {groups.map((g) => (
+              <div key={g.key}>
+                <h3
+                  style={{
+                    margin: `0 0 ${spacing[2]}`,
+                    fontSize: "11px",
+                    textTransform: "uppercase",
+                    letterSpacing: "2px",
+                    color: colors.textMuted,
+                    fontWeight: 600
+                  }}
+                >
+                  {g.label}
+                  <span style={{ marginLeft: spacing[2], fontWeight: 500, opacity: 0.8 }}>({g.rows.length})</span>
+                </h3>
+                <div
+                  style={{
+                    borderRadius: borderRadius.lg,
+                    border: `1px solid ${colors.border}`,
+                    overflowX: "auto",
+                    background: colors.background
+                  }}
+                >
+                  <div style={{ minWidth: 640 }}>
+                    <TableHeader colors={colors} />
+                    {g.rows.map((row, idx) => (
+                      <EarningsRow key={`${row.symbol}-${row.report_date}-${idx}`} row={row} today={today} colors={colors} />
+                    ))}
+                  </div>
+                </div>
               </div>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: gridCols,
-                  gap: "0 8px",
-                  alignItems: "center",
-                  padding: "6px 8px",
-                  paddingTop: "4px",
-                  fontSize: "9px",
-                  textTransform: "uppercase",
-                  letterSpacing: "2px",
-                  color: colors.textMuted,
-                  fontFamily: typography.fontFamilySans,
-                  borderBottom: "0.5px solid var(--color-border-tertiary)"
-                }}
-              >
-                <span>Symbol</span>
-                <span>Company</span>
-                <span>Time</span>
-                <span style={{ justifySelf: "end", textAlign: "right" }}>Est EPS</span>
-                <span style={{ justifySelf: "end", textAlign: "right" }}>Actual</span>
-                <span style={{ justifySelf: "end", textAlign: "right" }}>Surprise %</span>
-              </div>
-              <div style={{ display: "grid", gap: 0 }}>
-                {g.rows.map((row, idx) => {
-                  const est = row.estimated_eps;
-                  const act = row.actual_eps;
-                  const surprise = row.surprise_percent;
-                  const isUpcoming = typeof act !== "number";
-                  let bar: { width: number; beat: boolean | null } = { width: 0, beat: null };
-                  if (!isUpcoming && typeof est === "number") {
-                    bar = beatMissBarPercent(act, est);
-                  }
-                  const beatGreen = "#22c55e";
-                  const missRed = "#ef4444";
-
-                  let surpriseText = "—";
-                  let surpriseColor = colors.textMuted;
-                  if (typeof surprise === "number") {
-                    surpriseText = `${surprise >= 0 ? "+" : ""}${surprise.toFixed(1)}%`;
-                    surpriseColor = surprise >= 0 ? beatGreen : missRed;
-                  }
-
-                  let actualColor = colors.text;
-                  if (!isUpcoming && typeof est === "number") {
-                    if (act > est) actualColor = beatGreen;
-                    else if (act < est) actualColor = missRed;
-                  }
-
-                  return (
-                    <div
-                      key={`${row.symbol}-${row.report_date}-${idx}`}
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: gridCols,
-                        gap: "0 8px",
-                        alignItems: "center",
-                        padding: "6px 8px",
-                        borderRadius: "6px",
-                        transition: "background 0.1s ease",
-                        fontFamily: typography.fontFamilySans
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = "var(--color-background-secondary)";
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = "transparent";
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontSize: "13px",
-                          fontWeight: 600,
-                          color: "var(--color-text-primary)",
-                          letterSpacing: "0.5px"
-                        }}
-                      >
-                        {row.symbol}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: "12px",
-                          color: colors.textMuted,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                          minWidth: 0
-                        }}
-                        title={row.company_name}
-                      >
-                        {row.company_name}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: "10px",
-                          textTransform: "uppercase",
-                          color: colors.textMuted
-                        }}
-                      >
-                        {timingShort(row.report_time)}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: "12px",
-                          fontFamily: MONO,
-                          justifySelf: "end",
-                          textAlign: "right",
-                          color: colors.textMuted
-                        }}
-                      >
-                        {typeof est === "number" ? est.toFixed(2) : "—"}
-                      </span>
-                      <div
-                        style={{
-                          textAlign: "right",
-                          minWidth: 0,
-                          justifySelf: "stretch"
-                        }}
-                      >
-                        {isUpcoming ? (
-                          <span
-                            style={{
-                              display: "block",
-                              width: "100%",
-                              fontSize: "10px",
-                              letterSpacing: "1.5px",
-                              textTransform: "uppercase",
-                              color: "var(--color-text-tertiary)",
-                              fontFamily: MONO,
-                              textAlign: "right"
-                            }}
-                          >
-                            {formatMonthDayUpper(row.report_date)}
-                          </span>
-                        ) : (
-                          <>
-                            <span style={{ fontSize: "12px", fontFamily: MONO, color: actualColor, display: "block" }}>
-                              {act.toFixed(2)}
-                            </span>
-                            {bar.beat !== null && bar.width > 0 ? (
-                              <div
-                                style={{
-                                  marginTop: "4px",
-                                  width: "100%",
-                                  height: "2px",
-                                  borderRadius: "1px",
-                                  background: colors.border
-                                }}
-                              >
-                                <div
-                                  style={{
-                                    width: `${bar.width}%`,
-                                    height: "2px",
-                                    borderRadius: "1px",
-                                    background: bar.beat ? beatGreen : missRed,
-                                    transition: "width 0.1s ease"
-                                  }}
-                                />
-                              </div>
-                            ) : null}
-                          </>
-                        )}
-                      </div>
-                      <span
-                        style={{
-                          fontSize: "11px",
-                          fontFamily: MONO,
-                          justifySelf: "end",
-                          textAlign: "right",
-                          color: surpriseColor
-                        }}
-                      >
-                        {surpriseText}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
+
         <p
           style={{
             margin: `${spacing[4]} 0 0`,
-            padding: showEmpty ? `${spacing[2]} ${spacing[4]} 0` : `${spacing[3]} ${spacing[2]} 0`,
-            textAlign: "center",
-            fontSize: "12px",
+            fontSize: typography.scale.xs,
             color: colors.textMuted,
+            textAlign: "center",
             lineHeight: typography.lineHeight.normal
           }}
         >
-          US market earnings calendar · next 30 days
-          {source && SOURCE_LABELS[source] ? ` · ${SOURCE_LABELS[source]}` : ""}. Updates daily before market open.
+          Scheduled reports show actual EPS after the report date. Beat/miss uses estimate vs reported EPS when both are
+          available.
         </p>
-      </div>
+      </article>
     </section>
   );
 }

@@ -8,6 +8,7 @@ from typing import Any
 from stocvest.data.benzinga_client import BenzingaClient
 from stocvest.data.finnhub_client import get_earnings_calendar as finnhub_earnings_calendar
 from stocvest.data.finnhub_client import get_market_earnings_calendar
+from stocvest.data.ticker_name_resolver import get_resolver
 from stocvest.data.fmp_client import get_upcoming_earnings_date
 from stocvest.data.models import EarningsEvent
 from stocvest.data.polygon_client import PolygonClient, PolygonError
@@ -174,6 +175,22 @@ async def fetch_earnings_events(
     return events, notice, source or ("empty" if not events else source)
 
 
+def enrich_earnings_company_names(events: list[EarningsEvent]) -> list[EarningsEvent]:
+    """Replace symbol-only Finnhub names with SEC company titles when available."""
+    resolver = get_resolver()
+    out: list[EarningsEvent] = []
+    for ev in events:
+        sym = ev.symbol.strip().upper()
+        cn = (ev.company_name or "").strip()
+        if cn and cn.upper() != sym:
+            out.append(ev)
+            continue
+        variants = resolver.get_name_variants(sym)
+        name = variants[0] if variants else sym
+        out.append(ev.model_copy(update={"company_name": name}))
+    return out
+
+
 def split_upcoming_recent(
     events: list[EarningsEvent],
     *,
@@ -217,6 +234,7 @@ async def fetch_market_earnings_payload(
         from_date=recent_from,
         to_date=to_date,
     )
+    events = enrich_earnings_company_names(events)
     upcoming, recent = split_upcoming_recent(events, today=today)
     return {
         "symbols": [],
@@ -245,6 +263,7 @@ async def fetch_earnings_payload(
         to_date=to_date,
         polygon_client=polygon_client,
     )
+    events = enrich_earnings_company_names(events)
     upcoming, recent = split_upcoming_recent(events, today=today)
     return {
         "symbols": [s.strip().upper() for s in symbols if s.strip()],
