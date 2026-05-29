@@ -71,7 +71,8 @@ describe("buildDashboardAssistantPageContext", () => {
     expect(ctx.dashboard_context?.discovery.leader_count).toBe(1);
     expect(ctx.dashboard_context?.universe.swing_universe_symbol_count).toBe(200);
     expect(ctx.dashboard_context?.macro_events[0]?.symbol).toBe("AAPL");
-    expect(ctx.dashboard_context?.gap_leaders_detail).toBeUndefined();
+    expect(ctx.dashboard_context?.gap_intel_summary.leader_count).toBe(1);
+    expect(ctx.dashboard_context?.gap_leaders_detail?.[0]?.symbol).toBe("GAP1");
     expect(ctx).not.toHaveProperty("trading_mode");
   });
 
@@ -113,8 +114,8 @@ describe("buildDashboardAssistantPageContext", () => {
     expect(ctx.dashboard_context?.discovery.preview_symbols).toEqual(["MU"]);
   });
 
-  test("includes_gap_leaders_detail_only_when_discovery_expanded", () => {
-    const collapsed = buildDashboardAssistantPageContext({
+  test("always_includes_gap_intel_summary_and_leaders_for_assistant", () => {
+    const ctx = buildDashboardAssistantPageContext({
       regimeLabel: "Neutral",
       swingDeskPosture: "suppressed",
       dayTradingSurfaces: false,
@@ -127,22 +128,9 @@ describe("buildDashboardAssistantPageContext", () => {
       scannerDataSettled: true,
       discoveryExpanded: false
     });
-    expect(collapsed.dashboard_context?.gap_leaders_detail).toBeUndefined();
-
-    const expanded = buildDashboardAssistantPageContext({
-      regimeLabel: "Neutral",
-      swingDeskPosture: "suppressed",
-      dayTradingSurfaces: false,
-      daySetupsCount: 0,
-      swingTopSignals: [],
-      gapIntelligence: [gapUp],
-      swingUniverseSymbolCount: 10,
-      gapSnapshotSymbolCount: 10,
-      upcomingEarnings: [],
-      scannerDataSettled: true,
-      discoveryExpanded: true
-    });
-    expect(expanded.dashboard_context?.gap_leaders_detail?.[0]?.symbol).toBe("GAP1");
+    expect(ctx.dashboard_context?.gap_intel_summary.leader_count).toBe(1);
+    expect(ctx.dashboard_context?.gap_intel_summary.with_catalyst_count).toBe(1);
+    expect(ctx.dashboard_context?.gap_leaders_detail?.[0]?.symbol).toBe("GAP1");
   });
 
   test("session_activity_lists_movers_radar_symbols", () => {

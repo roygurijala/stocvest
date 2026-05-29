@@ -495,6 +495,7 @@ def test_earnings_calendar_handler_returns_upcoming_and_recent() -> None:
     assert body["symbols"] == ["AAPL", "MSFT"]
     assert isinstance(body["upcoming"], list)
     assert isinstance(body["recent"], list)
+    assert body.get("source") in ("polygon", "finnhub", "benzinga", "fmp", "empty", None)
 
 
 class _ForbiddenPolygonClient:

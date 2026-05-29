@@ -579,6 +579,8 @@ STRUCTURE FOR "WHY" QUESTIONS (when user asks why a Decision or desk verdict loo
 
 CROSS-SCREEN REMINDERS:
 - Dashboard: Swing Desk and Day Desk are separate; use dashboard_context and swing_desk_posture / day_desk_posture when present.
+- Dashboard page (page=dashboard): use dashboard_context fields only — discovery_with_catalyst_count, discovery_preview_symbols, gap_intel_summary_* (leader_count, with_catalyst_count, without_catalyst_count, preview_symbols, empty_note), gap_leader_N rows, macro_event_N. Do NOT cite gap_with_catalyst_count or top_gap_N on the dashboard; those are scanner-page fields.
+- Dashboard Gap Intelligence: when the user asks why a symbol (e.g. DELL) is missing from Gap Intelligence, answer from gap_intel_summary and gap_leader_N — if empty, use empty_note and universe_gap_snapshot_count. Earnings for a symbol may appear in macro_event_N even when Gap Intelligence is empty. Do not claim the symbol had no earnings event if macro_event lists it.
 - Dashboard Session activity: when the user asks what stocks appear under Session activity (or market activity on the dashboard), answer from session_activity_symbols / session_activity_count / session_activity_source in PAGE CONTEXT — not from ranked_setups_count (that is scanner qualifying setups only) and not from swing_desk_posture alone. Session movers are context-only (not entries); say so plainly.
 - Scanner: explain counts and top_setup_N / top_gap_N rows only — do not invent full layer breakdowns for symbols not in context.
 - Signals desk: Bias, Alignment, and Execution are three separate ideas — bullish bias with "not actionable yet" is valid.
@@ -765,6 +767,27 @@ def _serialize_dashboard_context_v1(lines: list[str], dc: dict[str, Any]) -> Non
             if rtime in ("before_market", "after_market", "during_market", "unknown"):
                 parts.append(f"time={rtime}")
             lines.append(f"macro_event_{idx + 1}={'|'.join(parts)}")
+
+    gis = dc.get("gap_intel_summary")
+    if isinstance(gis, dict):
+        glc = _coerce_num(gis.get("leader_count"))
+        if glc is not None:
+            lines.append(f"gap_intel_summary_leader_count={int(glc)}")
+        gwc = _coerce_num(gis.get("with_catalyst_count"))
+        if gwc is not None:
+            lines.append(f"gap_intel_summary_with_catalyst_count={int(gwc)}")
+        gwoc = _coerce_num(gis.get("without_catalyst_count"))
+        if gwoc is not None:
+            lines.append(f"gap_intel_summary_without_catalyst_count={int(gwoc)}")
+        gprev = gis.get("preview_symbols")
+        if isinstance(gprev, list):
+            syms = [_coerce_str(x, limit=12).upper() for x in gprev[:8]]
+            syms = [s for s in syms if s]
+            if syms:
+                lines.append(f"gap_intel_summary_preview_symbols={','.join(syms)}")
+        empty_note = _coerce_str(gis.get("empty_note"), limit=220)
+        if empty_note:
+            lines.append(f"gap_intel_summary_empty_note={empty_note}")
 
     _append_gap_summary_lines(lines, dc.get("gap_leaders_detail"), "gap_leader", 10)
 

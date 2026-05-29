@@ -92,18 +92,10 @@ async def _fetch_earnings(
     *,
     days: int,
 ) -> dict[str, Any]:
-    today = date.today()
-    to_date = today + timedelta(days=days)
-    recent_from = today - timedelta(days=3)
-    rows = await client.get_earnings_calendar(symbols=symbols, from_date=recent_from, to_date=to_date)
-    upcoming = [r for r in rows if r.report_date >= today]
-    recent = [r for r in rows if r.report_date < today]
-    return {
-        "symbols": symbols,
-        "days": days,
-        "upcoming": [x.model_dump(mode="json") for x in upcoming],
-        "recent": [x.model_dump(mode="json") for x in recent],
-    }
+    from stocvest.data.earnings_calendar_fetch import fetch_earnings_payload
+
+    payload = await fetch_earnings_payload(symbols, days=days, polygon_client=client)
+    return payload
 
 
 def _snapshot_symbol_is_vix(sym: str) -> bool:
@@ -208,6 +200,13 @@ async def build_dashboard_summary(
                 earnings = await _fetch_earnings(client, earn_syms, days=earnings_days)
             except PolygonError as exc:
                 earnings = _earnings_entitlement_fallback(earn_syms, earnings_days, exc)
+            except Exception:
+                earnings = {
+                    "symbols": earn_syms,
+                    "days": earnings_days,
+                    "upcoming": [],
+                    "recent": [],
+                }
         else:
             earnings = {"symbols": [], "days": earnings_days, "upcoming": [], "recent": []}
 

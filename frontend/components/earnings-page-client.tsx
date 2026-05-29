@@ -9,6 +9,8 @@ import type { EarningsEvent } from "@/lib/api/earnings";
 interface EarningsPageClientProps {
   events: EarningsEvent[];
   notice?: string | null;
+  /** finnhub | benzinga | polygon | fmp — omitted when unknown */
+  source?: string | null;
 }
 
 type Filter = "upcoming" | "today" | "week" | "all";
@@ -135,7 +137,14 @@ function buildRowGroups(filter: Filter, source: EarningsEvent[], today: string, 
   return groups;
 }
 
-export function EarningsPageClient({ events, notice }: EarningsPageClientProps) {
+const SOURCE_LABELS: Record<string, string> = {
+  finnhub: "Finnhub",
+  benzinga: "Benzinga",
+  polygon: "Polygon",
+  fmp: "FMP"
+};
+
+export function EarningsPageClient({ events, notice, source }: EarningsPageClientProps) {
   const { colors } = useTheme();
   const [filter, setFilter] = useState<Filter>("upcoming");
 
@@ -475,7 +484,8 @@ export function EarningsPageClient({ events, notice }: EarningsPageClientProps) 
             lineHeight: typography.lineHeight.normal
           }}
         >
-          Showing earnings for the next 30 days. Updates daily before market open.
+          Showing earnings for the next 30 days
+          {source && SOURCE_LABELS[source] ? ` · ${SOURCE_LABELS[source]}` : ""}. Updates daily before market open.
         </p>
       </div>
     </section>

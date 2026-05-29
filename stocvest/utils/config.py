@@ -135,6 +135,9 @@ class Settings(BaseSettings):
     # ── FMP (optional fundamentals context — revenue / earnings calendar) ──
     fmp_api_key: str = Field("", alias="FMP_API_KEY")
 
+    # ── Finnhub (optional earnings calendar — dashboard + gap catalyst) ──
+    finnhub_api_key: str = Field("", alias="FINNHUB_API_KEY")
+
     # ── App ──────────────────────────────────────────────────────
     env: str = Field("development", alias="STOCVEST_ENV")
     redis_url: str = Field("redis://localhost:6379", alias="REDIS_URL")
@@ -350,6 +353,8 @@ def get_settings() -> Settings:
             )
         if not settings.fmp_api_key:
             settings.fmp_api_key = _load_secret_key("FMP_API_KEY", "fmp_api_key")
+        if not settings.finnhub_api_key:
+            settings.finnhub_api_key = _load_secret_key("FINNHUB_API_KEY", "finnhub_api_key")
         if not settings.postmark_server_token:
             settings.postmark_server_token = _load_secret_key(
                 "POSTMARK_SERVER_TOKEN",

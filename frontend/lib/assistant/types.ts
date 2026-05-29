@@ -203,7 +203,15 @@ export type DashboardAssistantContextV1 = {
     | "suppressed_no_confirmation"
     | "suppressed_scanner_error";
   top_setups: AssistantScannerSetupSummary[];
-  gap_leaders_detail?: AssistantScannerGapSummary[];
+  /** Always populated on dashboard — top Gap Intelligence rows for the assistant. */
+  gap_intel_summary: {
+    leader_count: number;
+    with_catalyst_count: number;
+    without_catalyst_count: number;
+    preview_symbols: string[];
+    empty_note?: string;
+  };
+  gap_leaders_detail: AssistantScannerGapSummary[];
   macro_events: Array<{
     symbol: string;
     report_date: string;

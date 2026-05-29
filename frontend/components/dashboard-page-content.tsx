@@ -1,6 +1,8 @@
 import { DashboardRedesign } from "@/components/dashboard-redesign";
 import { DashboardScannerClientFetch } from "@/components/dashboard/dashboard-scanner-client-fetch";
-import { DEFAULT_EARNINGS_SYMBOLS, fetchDashboardFirstSegment } from "@/lib/dashboard/dashboard-page-data";
+import { fetchDashboardFirstSegment } from "@/lib/dashboard/dashboard-page-data";
+import { DEFAULT_EARNINGS_SYMBOLS, resolveEarningsSymbolList } from "@/lib/api/earnings";
+import { fetchDefaultWatchlistSymbols } from "@/lib/api/watchlists";
 import { timeDashboardPhase } from "@/lib/dashboard/load-timing";
 import { fetchDashboardUserMe, subscriptionPlanFromMe } from "@/lib/dashboard-user-subscription";
 import { EMPTY_SCANNER_OVERVIEW } from "@/lib/api/scanner";
@@ -35,7 +37,8 @@ export async function DashboardPageContent() {
     scannerSetupLoadMode
   } as const;
 
-  const earningsSymbols = DEFAULT_EARNINGS_SYMBOLS.slice(0, 8);
+  const watchlist = await fetchDefaultWatchlistSymbols().catch(() => []);
+  const earningsSymbols = resolveEarningsSymbolList(DEFAULT_EARNINGS_SYMBOLS, watchlist, { max: 12 });
   const { marketOverview, weeklyIndexRows, sectorRotation, earnings, deskInitial } =
     await fetchDashboardFirstSegment(earningsSymbols);
 
