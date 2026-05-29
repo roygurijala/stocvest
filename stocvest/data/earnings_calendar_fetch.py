@@ -7,6 +7,7 @@ from typing import Any
 
 from stocvest.data.benzinga_client import BenzingaClient
 from stocvest.data.finnhub_client import get_earnings_calendar as finnhub_earnings_calendar
+from stocvest.data.finnhub_client import get_market_earnings_calendar
 from stocvest.data.fmp_client import get_upcoming_earnings_date
 from stocvest.data.models import EarningsEvent
 from stocvest.data.polygon_client import PolygonClient, PolygonError
@@ -183,6 +184,49 @@ def split_upcoming_recent(
     upcoming = [e for e in events if e.report_date >= ref]
     recent = [e for e in events if e.report_date < ref]
     return upcoming, recent
+
+
+async def fetch_market_earnings_events(
+    *,
+    from_date: date,
+    to_date: date,
+) -> tuple[list[EarningsEvent], str | None, str | None]:
+    """Full-market earnings calendar (Finnhub); used by the dedicated earnings page."""
+    try:
+        fh = await get_market_earnings_calendar(from_date=from_date, to_date=to_date)
+        if fh:
+            return _dedupe_events(fh), None, "finnhub"
+    except Exception as exc:
+        _LOG.warning("earnings_fetch_market_finnhub err=%s", type(exc).__name__)
+    notice = (
+        "Market-wide earnings require FINNHUB_API_KEY. "
+        "Configure the key in stocvest/external-api-keys."
+    )
+    return [], notice, "empty"
+
+
+async def fetch_market_earnings_payload(
+    *,
+    days: int,
+) -> dict[str, Any]:
+    """Payload for scope=market earnings requests."""
+    today = date.today()
+    to_date = today + timedelta(days=max(1, int(days)))
+    recent_from = today - timedelta(days=3)
+    events, notice, source = await fetch_market_earnings_events(
+        from_date=recent_from,
+        to_date=to_date,
+    )
+    upcoming, recent = split_upcoming_recent(events, today=today)
+    return {
+        "symbols": [],
+        "days": days,
+        "scope": "market",
+        "upcoming": [x.model_dump(mode="json") for x in upcoming],
+        "recent": [x.model_dump(mode="json") for x in recent],
+        "notice": notice,
+        "source": source,
+    }
 
 
 async def fetch_earnings_payload(

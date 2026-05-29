@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
@@ -485,6 +485,36 @@ def test_options_chain_handler_returns_contracts_with_greeks() -> None:
     assert body[0]["gamma"] == 0.03
     assert body[0]["theta"] == -0.02
     assert body[0]["vega"] == 0.11
+
+
+def test_earnings_calendar_handler_market_scope_returns_full_calendar(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FINNHUB_API_KEY", "test-finnhub")
+    get_settings.cache_clear()
+
+    import httpx
+    import respx
+
+    report_day = (date.today() + timedelta(days=2)).isoformat()
+
+    with respx.mock:
+        respx.get("https://finnhub.io/api/v1/calendar/earnings").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "earningsCalendar": [
+                        {"date": report_day, "symbol": "CRWD", "hour": "amc"},
+                        {"date": report_day, "symbol": "AVGO", "hour": "amc"},
+                    ]
+                },
+            )
+        )
+        event = {"queryStringParameters": {"scope": "market", "days": "7"}}
+        response = earnings_calendar_handler(event, {}, client_factory=_FakePolygonClient)
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body.get("scope") == "market"
+    syms = {row["symbol"] for row in body["upcoming"]}
+    assert "CRWD" in syms and "AVGO" in syms
 
 
 def test_earnings_calendar_handler_returns_upcoming_and_recent() -> None:

@@ -110,6 +110,87 @@ def _event_from_stock_earnings_row(row: dict[str, Any], *, symbol: str) -> Earni
     )
 
 
+async def _calendar_rows_from_finnhub(
+    *,
+    from_date: date,
+    to_date: date,
+    client: httpx.AsyncClient,
+    key: str,
+) -> list[dict[str, Any]]:
+    resp = await client.get(
+        f"{FINNHUB_BASE}/calendar/earnings",
+        params={
+            "from": from_date.isoformat(),
+            "to": to_date.isoformat(),
+            "token": key,
+        },
+    )
+    if resp.status_code != 200:
+        _LOG.warning(
+            "finnhub_earnings_calendar_http status=%s body=%s",
+            resp.status_code,
+            resp.text[:200],
+        )
+        return []
+    payload = resp.json()
+    rows = payload.get("earningsCalendar") if isinstance(payload, dict) else None
+    if not isinstance(rows, list):
+        return []
+    return [r for r in rows if isinstance(r, dict)]
+
+
+def _events_in_range(
+    rows: list[dict[str, Any]],
+    *,
+    from_date: date,
+    to_date: date,
+    symbols: frozenset[str] | None = None,
+) -> list[EarningsEvent]:
+    out: list[EarningsEvent] = []
+    seen: set[tuple[str, str]] = set()
+    for row in rows:
+        ev = _event_from_calendar_row(row)
+        if ev is None:
+            continue
+        if symbols is not None and ev.symbol not in symbols:
+            continue
+        if ev.report_date < from_date or ev.report_date > to_date:
+            continue
+        k = (ev.symbol, ev.report_date.isoformat())
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append(ev)
+    out.sort(key=lambda e: (e.report_date, e.symbol))
+    return out
+
+
+async def get_market_earnings_calendar(
+    *,
+    from_date: date,
+    to_date: date,
+) -> list[EarningsEvent]:
+    """
+    Full US earnings calendar from Finnhub for [from_date, to_date] (no symbol filter).
+    Never raises.
+    """
+    key = _api_key()
+    if not key:
+        return []
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(20.0)) as client:
+            rows = await _calendar_rows_from_finnhub(
+                from_date=from_date,
+                to_date=to_date,
+                client=client,
+                key=key,
+            )
+            return _events_in_range(rows, from_date=from_date, to_date=to_date, symbols=None)
+    except Exception as exc:
+        _LOG.warning("finnhub_market_earnings_calendar_failed err=%s", type(exc).__name__)
+        return []
+
+
 async def get_earnings_calendar(
     symbols: list[str],
     *,
@@ -144,30 +225,14 @@ async def get_earnings_calendar(
 
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(15.0)) as client:
-            resp = await client.get(
-                f"{FINNHUB_BASE}/calendar/earnings",
-                params={
-                    "from": from_date.isoformat(),
-                    "to": to_date.isoformat(),
-                    "token": key,
-                },
+            rows = await _calendar_rows_from_finnhub(
+                from_date=from_date,
+                to_date=to_date,
+                client=client,
+                key=key,
             )
-            if resp.status_code == 200:
-                payload = resp.json()
-                rows = payload.get("earningsCalendar") if isinstance(payload, dict) else None
-                if isinstance(rows, list):
-                    for row in rows:
-                        if not isinstance(row, dict):
-                            continue
-                        ev = _event_from_calendar_row(row)
-                        if ev is not None:
-                            _add(ev)
-            else:
-                _LOG.warning(
-                    "finnhub_earnings_calendar_http status=%s body=%s",
-                    resp.status_code,
-                    resp.text[:200],
-                )
+            for ev in _events_in_range(rows, from_date=from_date, to_date=to_date, symbols=sym_set):
+                _add(ev)
 
             today = datetime.now(timezone.utc).date()
             if from_date < today:
