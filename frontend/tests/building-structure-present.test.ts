@@ -4,6 +4,7 @@ import {
   BUILDING_STRUCTURE_MIN_CARDS,
   buildBuildingStructureCardModel,
   buildingStructureBackfillNote,
+  buildingStructureEmptyMessage,
   buildingStructureQuietCount,
   resolveBuildingStructureRows
 } from "@/lib/dashboard/building-structure-present";
@@ -106,13 +107,41 @@ describe("resolveBuildingStructureRows", () => {
         { symbol: "LV1", gap_percent: 0.8, direction: "up", rank_score: 10 },
         { symbol: "LV2", gap_percent: -1.1, direction: "down", rank_score: 9 },
         { symbol: "LV3", gap_percent: 1.5, direction: "up", rank_score: 8 },
-        { symbol: "FAST", gap_percent: 12, direction: "up", rank_score: 99 }
+        { symbol: "LV4", gap_percent: 0.4, direction: "up", rank_score: 7 },
+        { symbol: "LV5", gap_percent: 1.2, direction: "up", rank_score: 6 },
+        { symbol: "LV6", gap_percent: 1.8, direction: "up", rank_score: 5 }
       ]
     };
     const rows = resolveBuildingStructureRows({ deskData: desk, nearQualification: [] });
-    expect(rows.length).toBeGreaterThanOrEqual(2);
-    expect(rows.some((r) => r.symbol === "FAST")).toBe(false);
-    expect(rows.some((r) => r.source === "low_velocity")).toBe(true);
+    expect(rows.length).toBe(6);
+    expect(rows.every((r) => r.source === "low_velocity")).toBe(true);
+  });
+
+  test("hot-tape backfill uses smaller movers not in session activity top list", () => {
+    const hotMovers = Array.from({ length: 20 }, (_, i) => ({
+      symbol: `HOT${i}`,
+      gap_percent: 40 + i,
+      direction: "up" as const,
+      rank_score: 100 - i
+    }));
+    hotMovers.push({ symbol: "CALM", gap_percent: 4.2, direction: "up", rank_score: 1 });
+    hotMovers.push({ symbol: "MILD", gap_percent: 6.5, direction: "up", rank_score: 2 });
+    const desk: DeskTodayData = { quiet_leaders: [], movers_radar: hotMovers };
+    const sessionTop = hotMovers.slice(0, 15).map((m) => m.symbol);
+    const rows = resolveBuildingStructureRows({
+      deskData: desk,
+      nearQualification: [],
+      sessionActivitySymbols: sessionTop
+    });
+    expect(rows.length).toBeGreaterThanOrEqual(BUILDING_STRUCTURE_MIN_CARDS);
+    expect(rows.some((r) => r.symbol === "CALM" || r.symbol === "MILD")).toBe(true);
+    expect(rows.every((r) => !sessionTop.includes(r.symbol))).toBe(true);
+  });
+});
+
+describe("buildingStructureEmptyMessage", () => {
+  test("points to session activity on hot days", () => {
+    expect(buildingStructureEmptyMessage(15).toLowerCase()).toContain("session activity");
   });
 });
 
