@@ -1,8 +1,11 @@
 import { describe, expect, test } from "vitest";
 import {
   earningsCompanyLabel,
+  earningsImpactLevel,
   earningsShowsReportedActual,
-  formatEarningsReportDate
+  formatEarningsGroupHeader,
+  formatEarningsReportDate,
+  isHighMarketImpact
 } from "@/lib/earnings-row-present";
 import type { EarningsEvent } from "@/lib/api/earnings-types";
 
@@ -42,5 +45,26 @@ describe("earningsCompanyLabel", () => {
 describe("formatEarningsReportDate", () => {
   test("formats readable report date", () => {
     expect(formatEarningsReportDate("2026-06-03")).toMatch(/Jun/);
+  });
+});
+
+describe("formatEarningsGroupHeader", () => {
+  test("prefixes today in header", () => {
+    expect(formatEarningsGroupHeader("2026-05-29", "2026-05-29")).toMatch(/^TODAY ·/);
+  });
+
+  test("uses weekday for other dates", () => {
+    expect(formatEarningsGroupHeader("2026-06-01", "2026-05-29")).toMatch(/^MON/);
+  });
+});
+
+describe("earningsImpactLevel", () => {
+  test("classifies mega-cap as high", () => {
+    expect(earningsImpactLevel(250_000_000_000)).toBe("high");
+    expect(isHighMarketImpact(row({ market_cap: 250_000_000_000 }))).toBe(true);
+  });
+
+  test("falls back to known mega-cap symbols", () => {
+    expect(isHighMarketImpact(row({ symbol: "AAPL", market_cap: null }))).toBe(true);
   });
 });

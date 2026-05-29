@@ -28,3 +28,32 @@ export function earningsTimingLabel(
   if (reportTime === "during_market") return "DURING";
   return "TBD";
 }
+
+export type EarningsImpactLevel = "high" | "medium" | "low";
+
+/** Market-cap tiers aligned with dashboard earnings calendar. */
+export function earningsImpactLevel(marketCap?: number | null): EarningsImpactLevel {
+  const cap = typeof marketCap === "number" && Number.isFinite(marketCap) ? marketCap : 0;
+  if (cap >= 200_000_000_000) return "high";
+  if (cap >= 20_000_000_000) return "medium";
+  return "low";
+}
+
+const MEGA_CAP_FALLBACK = new Set([
+  "AAPL", "MSFT", "NVDA", "GOOGL", "GOOG", "AMZN", "META", "BRK.B", "BRK.A", "TSLA", "LLY", "AVGO", "JPM", "V", "UNH"
+]);
+
+export function isHighMarketImpact(row: EarningsEvent): boolean {
+  if (earningsImpactLevel(row.market_cap) === "high") return true;
+  return MEGA_CAP_FALLBACK.has(row.symbol.trim().toUpperCase());
+}
+
+/** Section title like mockup: `TODAY · FRI MAY 29` or `MON JUN 1`. */
+export function formatEarningsGroupHeader(reportDateIso: string, todayIso: string): string {
+  const [y, m, d] = reportDateIso.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  const weekday = dt.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
+  const monthDay = dt.toLocaleDateString("en-US", { month: "short", day: "numeric" }).toUpperCase();
+  if (reportDateIso === todayIso) return `TODAY · ${weekday} ${monthDay}`;
+  return `${weekday} ${monthDay}`;
+}

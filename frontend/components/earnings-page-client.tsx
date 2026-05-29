@@ -1,13 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Clock } from "lucide-react";
+import { useMemo, useState, type CSSProperties } from "react";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import type { EarningsEvent } from "@/lib/api/earnings";
+import { earningsSectorLabel } from "@/lib/earnings-sector-label";
 import {
   earningsCompanyLabel,
   earningsShowsReportedActual,
   earningsTimingLabel,
-  formatEarningsReportDate
+  formatEarningsGroupHeader,
+  isHighMarketImpact
 } from "@/lib/earnings-row-present";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
@@ -16,15 +19,16 @@ interface EarningsPageClientProps {
   events: EarningsEvent[];
   notice?: string | null;
   source?: string | null;
+  watchlistSymbols?: string[];
 }
 
 type Filter = "upcoming" | "today" | "week" | "all";
 
 const MONO = `'DM Mono', 'IBM Plex Mono', ${typography.fontFamilyMono}`;
 
-/** Shared column template — header and rows must match exactly. */
+/** Symbol (stacked) · Sector · Time · Est · Actual · Surprise */
 const TABLE_GRID =
-  "minmax(3.5rem,4.5rem) minmax(8rem,1.6fr) minmax(5.5rem,6.5rem) 2.75rem minmax(3.5rem,4.25rem) minmax(3.5rem,4.25rem) minmax(3.75rem,4.5rem)";
+  "minmax(11rem,1.5fr) minmax(4.25rem,5.25rem) 2.75rem minmax(3.75rem,4.5rem) minmax(3.75rem,4.5rem) minmax(4rem,4.75rem)";
 
 const SOURCE_LABELS: Record<string, string> = {
   finnhub: "Finnhub",
@@ -67,48 +71,25 @@ function fridayOfSameWeek(mondayIso: string): string {
   return addDays(mondayIso, 4);
 }
 
-function formatSectionDate(iso: string): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  const dt = new Date(y, m - 1, d);
-  return dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
 function sortRows(list: EarningsEvent[]): EarningsEvent[] {
   return [...list].sort((a, b) => a.report_date.localeCompare(b.report_date) || a.symbol.localeCompare(b.symbol));
 }
 
-type RowGroup = { key: string; label: string; rows: EarningsEvent[] };
+type RowGroup = { key: string; reportDate: string; rows: EarningsEvent[] };
 
-function buildRowGroups(filter: Filter, source: EarningsEvent[], today: string, weekMon: string, weekFri: string): RowGroup[] {
-  if (filter === "today") {
-    const rows = sortRows(source);
-    return rows.length ? [{ key: "today", label: "Today", rows }] : [];
+function buildDateGroups(rows: EarningsEvent[]): RowGroup[] {
+  const sorted = sortRows(rows);
+  const byDate = new Map<string, EarningsEvent[]>();
+  for (const e of sorted) {
+    const list = byDate.get(e.report_date) ?? [];
+    list.push(e);
+    byDate.set(e.report_date, list);
   }
-
-  if (filter === "week" || filter === "all") {
-    const rows = sortRows(source);
-    const byDate = new Map<string, EarningsEvent[]>();
-    for (const e of rows) {
-      const list = byDate.get(e.report_date) ?? [];
-      list.push(e);
-      byDate.set(e.report_date, list);
-    }
-    return [...byDate.keys()].sort().map((d) => ({
-      key: d,
-      label: filter === "week" ? formatSectionDate(d) : formatSectionDate(d),
-      rows: sortRows(byDate.get(d)!)
-    }));
-  }
-
-  const rows = sortRows(source);
-  const todayRows = rows.filter((r) => r.report_date === today);
-  const weekRest = rows.filter((r) => r.report_date !== today && r.report_date >= weekMon && r.report_date <= weekFri);
-  const beyond = rows.filter((r) => r.report_date !== today && !(r.report_date >= weekMon && r.report_date <= weekFri));
-  const groups: RowGroup[] = [];
-  if (todayRows.length) groups.push({ key: "g-today", label: "Today", rows: todayRows });
-  if (weekRest.length) groups.push({ key: "g-week", label: "This Week", rows: weekRest });
-  if (beyond.length) groups.push({ key: "g-upcoming", label: "Later", rows: beyond });
-  return groups;
+  return [...byDate.keys()].sort().map((d) => ({
+    key: d,
+    reportDate: d,
+    rows: byDate.get(d)!
+  }));
 }
 
 function TableHeader({ colors }: { colors: ReturnType<typeof useTheme>["colors"] }) {
@@ -130,8 +111,7 @@ function TableHeader({ colors }: { colors: ReturnType<typeof useTheme>["colors"]
       }}
     >
       <span>Symbol</span>
-      <span>Company</span>
-      <span>Report</span>
+      <span>Sector</span>
       <span>Time</span>
       <span style={{ textAlign: "right" }}>Est EPS</span>
       <span style={{ textAlign: "right" }}>Actual</span>
@@ -140,14 +120,69 @@ function TableHeader({ colors }: { colors: ReturnType<typeof useTheme>["colors"]
   );
 }
 
+function EarningsLegend({ colors }: { colors: ReturnType<typeof useTheme>["colors"] }) {
+  const itemStyle: CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    fontSize: typography.scale.xs,
+    color: colors.textMuted
+  };
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        gap: spacing[3],
+        alignItems: "center",
+        padding: `${spacing[2]} 0 0`
+      }}
+    >
+      <span style={itemStyle}>
+        <span
+          aria-hidden
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: borderRadius.full,
+            background: colors.accent,
+            flexShrink: 0
+          }}
+        />
+        High market impact
+      </span>
+      <span style={itemStyle}>
+        <span
+          aria-hidden
+          style={{
+            width: 10,
+            height: 10,
+            borderRadius: borderRadius.full,
+            border: `2px solid ${colors.bullish}`,
+            background: "transparent",
+            flexShrink: 0
+          }}
+        />
+        On your watchlist
+      </span>
+      <span style={itemStyle}>
+        <Clock size={12} strokeWidth={2} aria-hidden style={{ flexShrink: 0, opacity: 0.85 }} />
+        BMO = before open · AMC = after close
+      </span>
+    </div>
+  );
+}
+
 function EarningsRow({
   row,
   today,
-  colors
+  colors,
+  onWatchlist
 }: {
   row: EarningsEvent;
   today: string;
   colors: ReturnType<typeof useTheme>["colors"];
+  onWatchlist: boolean;
 }) {
   const est = row.estimated_eps;
   const reported = earningsShowsReportedActual(row, today);
@@ -155,6 +190,9 @@ function EarningsRow({
   const surprise = reported && typeof row.surprise_percent === "number" ? row.surprise_percent : null;
   const beatGreen = colors.bullish;
   const missRed = colors.bearish;
+  const highImpact = isHighMarketImpact(row);
+  const company = earningsCompanyLabel(row);
+  const sector = earningsSectorLabel(row.symbol, row.company_name);
 
   let surpriseText = "—";
   let surpriseColor = colors.textMuted;
@@ -163,17 +201,16 @@ function EarningsRow({
     surpriseColor = surprise >= 0 ? beatGreen : missRed;
   }
 
-  let actualColor = colors.text;
+  let actualColor = colors.textMuted;
   let actualText = "—";
   if (act !== null) {
     actualText = act.toFixed(2);
+    actualColor = colors.text;
     if (typeof est === "number") {
       if (act > est) actualColor = beatGreen;
       else if (act < est) actualColor = missRed;
     }
   }
-
-  const company = earningsCompanyLabel(row);
 
   return (
     <div
@@ -184,7 +221,7 @@ function EarningsRow({
         gridTemplateColumns: TABLE_GRID,
         columnGap: spacing[3],
         alignItems: "center",
-        padding: `${spacing[2]} ${spacing[3]}`,
+        padding: `${spacing[3]} ${spacing[3]}`,
         borderBottom: `1px solid ${colors.border}`,
         fontFamily: typography.fontFamilySans,
         transition: "background 0.12s ease"
@@ -196,23 +233,68 @@ function EarningsRow({
         e.currentTarget.style.background = "transparent";
       }}
     >
-      <span style={{ fontSize: typography.scale.sm, fontWeight: 700, letterSpacing: "0.04em" }}>{row.symbol}</span>
-      <span
-        style={{
-          fontSize: typography.scale.sm,
-          color: colors.textMuted,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-          minWidth: 0
-        }}
-        title={company}
-      >
-        {company}
-      </span>
-      <span style={{ fontSize: "11px", color: colors.textMuted, whiteSpace: "nowrap" }}>
-        {formatEarningsReportDate(row.report_date)}
-      </span>
+      <div style={{ display: "flex", alignItems: "center", gap: spacing[2], minWidth: 0 }}>
+        {onWatchlist ? (
+          <span
+            aria-label="On your watchlist"
+            title="On your watchlist"
+            style={{
+              width: 10,
+              height: 10,
+              borderRadius: borderRadius.full,
+              border: `2px solid ${colors.bullish}`,
+              flexShrink: 0
+            }}
+          />
+        ) : highImpact ? (
+          <span
+            aria-label="High market impact"
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: borderRadius.full,
+              background: colors.accent,
+              flexShrink: 0
+            }}
+          />
+        ) : (
+          <span style={{ width: 10, flexShrink: 0 }} aria-hidden />
+        )}
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: spacing[2], flexWrap: "wrap" }}>
+            <span style={{ fontSize: typography.scale.sm, fontWeight: 700, letterSpacing: "0.04em" }}>{row.symbol}</span>
+            {highImpact ? (
+              <span
+                style={{
+                  fontSize: "10px",
+                  fontWeight: 600,
+                  color: colors.accent,
+                  background: `color-mix(in srgb, ${colors.accent} 18%, transparent)`,
+                  padding: "2px 8px",
+                  borderRadius: borderRadius.full,
+                  whiteSpace: "nowrap"
+                }}
+              >
+                High impact
+              </span>
+            ) : null}
+          </div>
+          <div
+            style={{
+              fontSize: typography.scale.xs,
+              color: colors.textMuted,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              marginTop: 2
+            }}
+            title={company}
+          >
+            {company}
+          </div>
+        </div>
+      </div>
+      <span style={{ fontSize: typography.scale.sm, color: colors.text }}>{sector}</span>
       <span style={{ fontSize: "10px", fontWeight: 600, color: colors.textMuted }}>{earningsTimingLabel(row.report_time)}</span>
       <span style={{ fontSize: typography.scale.sm, fontFamily: MONO, textAlign: "right", color: colors.textMuted }}>
         {typeof est === "number" ? est.toFixed(2) : "—"}
@@ -223,7 +305,7 @@ function EarningsRow({
   );
 }
 
-export function EarningsPageClient({ events, notice, source }: EarningsPageClientProps) {
+export function EarningsPageClient({ events, notice, source, watchlistSymbols = [] }: EarningsPageClientProps) {
   const { colors } = useTheme();
   const [filter, setFilter] = useState<Filter>("upcoming");
 
@@ -231,6 +313,8 @@ export function EarningsPageClient({ events, notice, source }: EarningsPageClien
   const today = localTodayIso();
   const weekMon = mondayOfWeekContaining(today);
   const weekFri = fridayOfSameWeek(weekMon);
+
+  const watchlistSet = useMemo(() => new Set(watchlistSymbols.map((s) => s.trim().toUpperCase())), [watchlistSymbols]);
 
   const filtered = useMemo(() => {
     const merged = [...events];
@@ -242,16 +326,13 @@ export function EarningsPageClient({ events, notice, source }: EarningsPageClien
     return merged;
   }, [events, filter, today, weekMon, weekFri]);
 
-  const groups = useMemo(
-    () => buildRowGroups(filter, filtered, today, weekMon, weekFri),
-    [filter, filtered, today, weekMon, weekFri]
-  );
+  const groups = useMemo(() => buildDateGroups(filtered), [filtered]);
 
   const rowCount = filtered.length;
   const filterIds: { id: Filter; label: string }[] = [
     { id: "upcoming", label: "Upcoming" },
     { id: "today", label: "Today" },
-    { id: "week", label: "This Week" },
+    { id: "week", label: "This week" },
     { id: "all", label: "All" }
   ];
 
@@ -275,58 +356,59 @@ export function EarningsPageClient({ events, notice, source }: EarningsPageClien
           padding: spacing[4]
         }}
       >
+        <div style={{ marginBottom: spacing[3] }}>
+          <h2 style={{ margin: 0, fontSize: typography.scale.lg, fontWeight: 700 }}>Earnings calendar</h2>
+          <p style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.sm, color: colors.textMuted }}>
+            US market · next 30 days
+            {source && SOURCE_LABELS[source] ? ` · ${SOURCE_LABELS[source]}` : ""}
+            {rowCount > 0 ? ` · ${rowCount} report${rowCount === 1 ? "" : "s"}` : ""}
+          </p>
+        </div>
+
         <div
           style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "flex-start",
-            gap: spacing[3],
-            flexWrap: "wrap",
-            marginBottom: spacing[3]
+            display: "inline-flex",
+            gap: 2,
+            padding: 4,
+            borderRadius: borderRadius.lg,
+            background: colors.surfaceMuted,
+            border: `1px solid ${colors.border}`,
+            flexWrap: "wrap"
           }}
         >
-          <div>
-            <h2 style={{ margin: 0, fontSize: typography.scale.lg, fontWeight: 700 }}>Earnings calendar</h2>
-            <p style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.sm, color: colors.textMuted }}>
-              US market · next 30 days
-              {source && SOURCE_LABELS[source] ? ` · ${SOURCE_LABELS[source]}` : ""}
-              {rowCount > 0 ? ` · ${rowCount} report${rowCount === 1 ? "" : "s"}` : ""}
-            </p>
-          </div>
-          <div style={{ display: "inline-flex", gap: spacing[2], flexWrap: "wrap" }}>
-            {filterIds.map(({ id, label }) => {
-              const active = filter === id;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setFilter(id)}
-                  style={{
-                    borderRadius: borderRadius.full,
-                    border: `1px solid ${active ? colors.accent : colors.border}`,
-                    background: active ? colors.surfaceMuted : "transparent",
-                    color: active ? colors.text : colors.textMuted,
-                    padding: "6px 14px",
-                    cursor: "pointer",
-                    fontSize: "11px",
-                    fontWeight: active ? 600 : 500,
-                    textTransform: "uppercase",
-                    letterSpacing: "1px",
-                    fontFamily: typography.fontFamilySans
-                  }}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
+          {filterIds.map(({ id, label }) => {
+            const active = filter === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setFilter(id)}
+                style={{
+                  borderRadius: borderRadius.md,
+                  border: active ? `1px solid ${colors.border}` : "1px solid transparent",
+                  background: active ? colors.surface : "transparent",
+                  color: active ? colors.text : colors.textMuted,
+                  padding: "8px 16px",
+                  cursor: "pointer",
+                  fontSize: typography.scale.sm,
+                  fontWeight: active ? 600 : 500,
+                  fontFamily: typography.fontFamilySans,
+                  boxShadow: active ? "0 1px 2px rgba(0,0,0,.06)" : "none"
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
+
+        <EarningsLegend colors={colors} />
 
         {notice ? (
           <p
             role="status"
             style={{
-              margin: `0 0 ${spacing[3]}`,
+              margin: `${spacing[3]} 0 0`,
               padding: spacing[3],
               borderRadius: borderRadius.lg,
               background: "rgba(245,158,11,.1)",
@@ -340,41 +422,70 @@ export function EarningsPageClient({ events, notice, source }: EarningsPageClien
         ) : null}
 
         {rowCount === 0 ? (
-          <p style={{ margin: 0, padding: spacing[4], color: colors.textMuted, fontSize: typography.scale.sm }}>{emptyCopy}</p>
+          <p style={{ margin: `${spacing[4]} 0 0`, padding: spacing[4], color: colors.textMuted, fontSize: typography.scale.sm }}>
+            {emptyCopy}
+          </p>
         ) : (
-          <div style={{ display: "grid", gap: spacing[4] }}>
-            {groups.map((g) => (
-              <div key={g.key}>
-                <h3
-                  style={{
-                    margin: `0 0 ${spacing[2]}`,
-                    fontSize: "11px",
-                    textTransform: "uppercase",
-                    letterSpacing: "2px",
-                    color: colors.textMuted,
-                    fontWeight: 600
-                  }}
-                >
-                  {g.label}
-                  <span style={{ marginLeft: spacing[2], fontWeight: 500, opacity: 0.8 }}>({g.rows.length})</span>
-                </h3>
-                <div
+          <div style={{ display: "grid", gap: spacing[4], marginTop: spacing[4] }}>
+            {groups.map((g) => {
+              const isToday = g.reportDate === today;
+              const header = formatEarningsGroupHeader(g.reportDate, today);
+              const count = g.rows.length;
+              return (
+                <section
+                  key={g.key}
                   style={{
                     borderRadius: borderRadius.lg,
-                    border: `1px solid ${colors.border}`,
-                    overflowX: "auto",
-                    background: colors.background
+                    border: `1px solid ${isToday ? `color-mix(in srgb, ${colors.accent} 35%, ${colors.border})` : colors.border}`,
+                    background: isToday
+                      ? `color-mix(in srgb, ${colors.accent} 6%, ${colors.background})`
+                      : colors.background,
+                    overflow: "hidden"
                   }}
                 >
-                  <div style={{ minWidth: 640 }}>
-                    <TableHeader colors={colors} />
-                    {g.rows.map((row, idx) => (
-                      <EarningsRow key={`${row.symbol}-${row.report_date}-${idx}`} row={row} today={today} colors={colors} />
-                    ))}
+                  <header
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "baseline",
+                      gap: spacing[2],
+                      padding: `${spacing[3]} ${spacing[3]} ${spacing[2]}`,
+                      borderBottom: `1px solid ${colors.border}`
+                    }}
+                  >
+                    <h3
+                      style={{
+                        margin: 0,
+                        fontSize: "11px",
+                        textTransform: "uppercase",
+                        letterSpacing: "1.5px",
+                        color: colors.text,
+                        fontWeight: 700
+                      }}
+                    >
+                      {header}
+                    </h3>
+                    <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, whiteSpace: "nowrap" }}>
+                      {count} reporting
+                    </span>
+                  </header>
+                  <div style={{ overflowX: "auto" }}>
+                    <div style={{ minWidth: 560 }}>
+                      <TableHeader colors={colors} />
+                      {g.rows.map((row, idx) => (
+                        <EarningsRow
+                          key={`${row.symbol}-${row.report_date}-${idx}`}
+                          row={row}
+                          today={today}
+                          colors={colors}
+                          onWatchlist={watchlistSet.has(row.symbol.trim().toUpperCase())}
+                        />
+                      ))}
+                    </div>
                   </div>
-                </div>
-              </div>
-            ))}
+                </section>
+              );
+            })}
           </div>
         )}
 
