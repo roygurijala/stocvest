@@ -1,5 +1,12 @@
 /** Refs that authorize `?symbol=` prefill on `/dashboard/signals`. */
-const CONTEXTUAL_SIGNALS_REFS = new Set(["scanner", "watchlist", "validation", "journal"]);
+const CONTEXTUAL_SIGNALS_REFS = new Set([
+  "scanner",
+  "watchlist",
+  "validation",
+  "journal",
+  "setup-outcomes",
+  "setup-evolution"
+]);
 
 export function normalizeSignalsPrefillTicker(sym: string): string | null {
   const u = sym.trim().toUpperCase();

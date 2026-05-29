@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { hotInMarketSignalsHref } from "@/lib/dashboard/hot-in-market-card-present";
 import { useEffect, useMemo, useState } from "react";
 import {
   buildDailyPulseRollup,
@@ -200,7 +201,7 @@ function DeskPulseBlock({
           {summary.closest.map((row) => (
             <li key={`${row.desk}-${row.symbol}`}>
               <Link
-                href={`/dashboard/signals?symbol=${encodeURIComponent(row.symbol)}&trading_mode=${row.desk}`}
+                href={hotInMarketSignalsHref(row.symbol, row.desk)}
                 style={{
                   fontSize: typography.scale.sm,
                   color: colors.accent,

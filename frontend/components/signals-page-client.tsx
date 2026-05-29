@@ -18,6 +18,7 @@ import { fetchEarningsCalendarClient } from "@/lib/api/earnings-client";
 import { AddToWatchlistButton } from "@/components/add-to-watchlist-button";
 import { APP_TOP_BAR_LAYOUT_HEIGHT_PX, measureAppTopBarLayoutHeightPx } from "@/components/top-bar";
 import { SignalsCommandBar } from "@/components/signals/signals-command-bar";
+import { SignalsReturnLink } from "@/components/signals/signals-return-link";
 import { SignalsDeskTabNav } from "@/components/signals/signals-desk-tab-nav";
 import { SignalsRadarPanel } from "@/components/signals/signals-radar-panel";
 import { CausalNarrativePanel } from "@/components/signals/causal-narrative-panel";
@@ -139,6 +140,8 @@ export type SignalsPagePrefill = {
    * not specify a mode, so the client falls back to localStorage / default.
    */
   initialTradingMode: "day" | "swing" | null;
+  /** From `?ref=` — preserved for contextual back navigation after URL cleanup. */
+  navigationRef: string | null;
 };
 
 interface SignalsPageClientProps {
@@ -152,6 +155,16 @@ interface SignalsPageClientProps {
 }
 
 const SIGNALS_SESSION_SYMBOL_KEY = "stocvest_signals_session_symbol";
+
+function readNavigationRefFromUrl(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const ref = new URL(window.location.href).searchParams.get("ref");
+    return ref?.trim() || null;
+  } catch {
+    return null;
+  }
+}
 
 type SymbolCandidate = { symbol: string; label: string };
 
@@ -235,7 +248,8 @@ export function SignalsPageClient({
     urlSymbol: null,
     signalIdForResolve: null,
     hadSignalIdQuery: false,
-    initialTradingMode: null
+    initialTradingMode: null,
+    navigationRef: null
   },
   dayTradingSurfaces = true
 }: SignalsPageClientProps) {
@@ -257,6 +271,9 @@ export function SignalsPageClient({
   });
   const [symbol, setSymbol] = useState(() => signalsPrefill.urlSymbol ?? "");
   const [symbolDraft, setSymbolDraft] = useState(() => signalsPrefill.urlSymbol ?? "");
+  const [navigationRef] = useState(
+    () => signalsPrefill.navigationRef ?? readNavigationRefFromUrl()
+  );
   const [resumedFromSession, setResumedFromSession] = useState(false);
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [suggestHighlight, setSuggestHighlight] = useState(0);
@@ -1593,6 +1610,7 @@ export function SignalsPageClient({
             borderColor: colors.border
           }}
         >
+          <SignalsReturnLink navigationRef={navigationRef} />
           <div
             ref={symbolComboRef}
             className={`relative w-full min-w-0${suggestOpen ? " z-50" : ""}`}

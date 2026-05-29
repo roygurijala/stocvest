@@ -21,14 +21,16 @@ describe("setup-analytics-deeplink", () => {
 
   test("signalsWithSymbolHref", () => {
     expect(signalsWithSymbolHref("aapl", "swing")).toBe(
-      "/dashboard/signals?symbol=AAPL&trading_mode=swing"
+      "/dashboard/signals?symbol=AAPL&trading_mode=swing&ref=setup-evolution"
     );
+    expect(signalsWithSymbolHref("aapl", "swing", "setup-outcomes")).toContain("ref=setup-outcomes");
   });
 
   test("signalsOpenEvidenceHref and layers anchor", () => {
     expect(signalsOpenEvidenceHref("tsla", "day")).toContain("open_evidence=1");
+    expect(signalsOpenEvidenceHref("tsla", "day")).toContain("ref=setup-evolution");
     expect(signalsLayersSectionHref("tsla", "day")).toBe(
-      "/dashboard/signals?symbol=TSLA&trading_mode=day#signals-layers"
+      "/dashboard/signals?symbol=TSLA&trading_mode=day&ref=setup-evolution#signals-layers"
     );
   });
 });

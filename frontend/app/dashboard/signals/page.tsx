@@ -134,6 +134,7 @@ export default async function DashboardSignalsPage({
           urlSymbol={urlSymbol}
           signalIdRaw={signalIdRaw}
           initialTradingMode={initialTradingMode}
+          navigationRef={refRaw.trim() || null}
         />
       </Suspense>
     </AppShell>
@@ -151,11 +152,13 @@ export default async function DashboardSignalsPage({
 async function SignalsPageData({
   urlSymbol,
   signalIdRaw,
-  initialTradingMode
+  initialTradingMode,
+  navigationRef
 }: {
   urlSymbol: string | null;
   signalIdRaw: string;
   initialTradingMode: "day" | "swing" | null;
+  navigationRef: string | null;
 }) {
   // Resolve `?signal_id=` -> symbol inside the Suspense boundary
   // so the page chrome paints regardless of whether the deep-link
@@ -196,7 +199,8 @@ async function SignalsPageData({
         urlSymbol: resolvedUrlSymbol,
         signalIdForResolve: signalIdRaw && !resolvedUrlSymbol ? signalIdRaw : null,
         hadSignalIdQuery: Boolean(signalIdRaw),
-        initialTradingMode: coercedInitialTradingMode
+        initialTradingMode: coercedInitialTradingMode,
+        navigationRef
       }}
     />
   );
