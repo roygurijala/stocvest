@@ -80,7 +80,7 @@ describe("Dashboard scanner partition (focus layout)", () => {
     );
     const hero = screen.getByTestId("dashboard-market-pulse-hero");
     expect(hero.textContent || "").toMatch(/ACTIONABLE/i);
-    expect(screen.getByTestId("dashboard-live-status").textContent || "").toMatch(/day/i);
+    expect(screen.getByTestId("dashboard-desk-mode-day")).toHaveAttribute("data-active", "true");
     expect(screen.queryByTestId("swing-desk-panel")).toBeNull();
     expect(screen.queryByTestId("day-desk-panel")).toBeNull();
   });
@@ -115,7 +115,7 @@ describe("Dashboard scanner partition (focus layout)", () => {
     );
     fireEvent.click(screen.getByTestId("dashboard-desk-mode-swing"));
     expect(screen.getByTestId("dashboard-market-pulse-hero").textContent || "").toMatch(/ACTIONABLE/i);
-    expect(screen.getByTestId("dashboard-live-status").textContent || "").toMatch(/swing/i);
+    expect(screen.getByTestId("dashboard-desk-mode-swing")).toHaveAttribute("data-active", "true");
     expect(screen.queryByTestId("swing-desk-panel")).toBeNull();
     const dash = document.querySelector(".stocvest-dashboard-v2");
     expect((dash?.textContent || "").toLowerCase()).not.toContain("pattern maturity");

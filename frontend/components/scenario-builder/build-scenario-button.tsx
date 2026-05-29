@@ -20,12 +20,14 @@ import {
 } from "@/lib/scenario/scenario-preview-panels";
 import type { ScenarioInput } from "@/lib/scenario/types";
 import type { TradeDecision } from "@/lib/signal-evidence/trade-decision";
+import type { ScenarioExecutionTiming } from "@/lib/scenario/scenario-execution-timing";
 import { useTheme } from "@/lib/theme-provider";
 
 type ModalSession = {
   input: ScenarioInput;
   resolved: ScenarioReadinessResolved;
   systemDecision: TradeDecision;
+  executionTiming?: ScenarioExecutionTiming;
 };
 
 function fallbackSystemDecision(): TradeDecision {
@@ -107,9 +109,17 @@ export function BuildScenarioButton({
   const handleOpen = useCallback(() => {
     const systemDecision =
       readinessCtx.systemDecision ?? fallbackSystemDecision();
-    setSession({ input, resolved, systemDecision });
+    setSession({
+      input,
+      resolved,
+      systemDecision,
+      executionTiming: {
+        entryTimingWeak: readinessCtx.entryTimingWeak,
+        vwapConflict: readinessCtx.vwapConflict
+      }
+    });
     setOpen(true);
-  }, [input, resolved, readinessCtx.systemDecision]);
+  }, [input, resolved, readinessCtx.systemDecision, readinessCtx.entryTimingWeak, readinessCtx.vwapConflict]);
 
   const handleClose = useCallback(() => {
     setOpen(false);
@@ -159,6 +169,7 @@ export function BuildScenarioButton({
               open
               input={session.input}
               systemDecision={session.systemDecision}
+              executionTiming={session.executionTiming}
               onClose={handleClose}
             />
           ) : (

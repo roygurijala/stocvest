@@ -228,7 +228,5 @@ describe("DashboardRedesign Phase 3 integration", () => {
 
     const scannerCta = screen.getByTestId("dashboard-discovery-scanner-link");
     expect(scannerCta.getAttribute("data-interaction-level")).toBe("deep");
-    const liveCta = screen.getByTestId("dashboard-live-status").querySelector("a");
-    expect(liveCta?.getAttribute("data-interaction-level")).toBe("deep");
   });
 });

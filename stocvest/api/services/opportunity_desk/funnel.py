@@ -86,6 +86,9 @@ def _candidate_to_mover(c: PremarketGapCandidate) -> FunnelMover:
 def run_snapshot_funnel(
     snapshots: Iterable[Snapshot],
     config: OpportunityDeskFunnelConfig | None = None,
+    *,
+    recent_split_symbols: frozenset[str] | None = None,
+    frequent_reverse_split_symbols: frozenset[str] | None = None,
 ) -> OpportunityDeskFunnelResult:
     """
     Rank movers from a US equities snapshot feed using gap-intelligence gates.
@@ -102,6 +105,8 @@ def run_snapshot_funnel(
         min_abs_gap_percent=cfg.min_abs_gap_percent,
         min_day_volume=cfg.min_day_volume,
         min_trade_price=cfg.min_trade_price,
+        recent_split_symbols=recent_split_symbols,
+        frequent_reverse_split_symbols=frequent_reverse_split_symbols,
     )
     movers = tuple(_candidate_to_mover(c) for c in scan.candidates)
     return OpportunityDeskFunnelResult(

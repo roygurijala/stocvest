@@ -36,7 +36,8 @@ async def test_free_user_gets_deterministic_copy(monkeypatch: pytest.MonkeyPatch
     )
     assert r.source == "deterministic"
     assert r.upgrade_available is True
-    assert "72/100" in r.text
+    assert "72/100" not in r.text
+    assert "multi-layer agreement" in r.text
     assert r.cached is False
 
 

@@ -112,7 +112,10 @@ class AIExplanationService:
         text_ai = await self._claude_text_or_none(
             system=(
                 "You are a signal analysis assistant. Output exactly 2 sentences explaining "
-                "why this trading setup qualifies from the data given. Be specific. "
+                "why this trading setup qualifies from the data given. Be specific about which "
+                "layers support or oppose the bias. "
+                "Do NOT mention any numerical scores, composite values, layer scores, "
+                "percentages, or risk/reward ratios — qualitative terms only. "
                 "Never give investment advice. End with: Signal data only."
             ),
             user_prompt=self._build_capture_prompt(sym, sc, v, top_layers, rr),
@@ -174,9 +177,10 @@ class AIExplanationService:
 
     def _deterministic_capture_copy(self, score: int, verdict: str, rr: float) -> str:
         rr_text = "acceptable" if rr >= 2.0 else "tight"
+        _ = score  # score informs cache key only — never shown to users
         return (
-            f"This {verdict} setup scored {score}/100 based on layer agreement and signal strength. "
-            f"R/R is {rr:.1f}:1 ({rr_text}). Open Evidence for full layer detail."
+            f"This {verdict} setup shows multi-layer agreement with {rr_text} reward-to-risk geometry. "
+            "Open Evidence for full layer detail. Signal data only."
         )
 
     def _deterministic_news_copy(self, article_count: int, verdict: str, symbol: str) -> str:
@@ -190,24 +194,21 @@ class AIExplanationService:
     def _build_capture_prompt(
         self,
         symbol: str,
-        score: int,
+        _score: int,
         verdict: str,
         top_layers: list[dict[str, Any]],
-        risk_reward: float,
+        _risk_reward: float,
     ) -> str:
         layers_compact = [
             {
                 "layer": str(x.get("layer") or ""),
                 "status": str(x.get("status") or ""),
-                "score": x.get("score"),
             }
             for x in (top_layers or [])[:6]
         ]
         return (
             f"symbol={symbol}\n"
-            f"composite_score_0_100={score}\n"
             f"verdict={verdict}\n"
-            f"risk_reward={risk_reward}\n"
             f"top_layers={json.dumps(layers_compact)}\n"
         )
 

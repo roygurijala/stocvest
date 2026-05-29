@@ -23,3 +23,23 @@ vi.mock("@/lib/hooks/use-dashboard-desk-refresh", () => ({
     refreshError: null
   })
 }));
+
+vi.stubGlobal(
+  "fetch",
+  vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("/watchlists/maturation-summary")) {
+      return {
+        ok: true,
+        json: async () => ({ mode: "swing", by_symbol: {} })
+      };
+    }
+    if (url.includes("/watchlists/default/symbols")) {
+      return { ok: true, json: async () => ({ symbols: [] }) };
+    }
+    if (url.includes("/market/snapshots")) {
+      return { ok: true, json: async () => ({ snapshots: [] }) };
+    }
+    return { ok: false, json: async () => ({}) };
+  })
+);

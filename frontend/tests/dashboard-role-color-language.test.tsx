@@ -121,7 +121,7 @@ describe("dashboard focus layout", () => {
     );
     expect(screen.getByTestId("dashboard-market-pulse-hero")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-desk-mode")).toBeInTheDocument();
-    expect(screen.getByTestId("dashboard-live-status")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-opportunity-pipeline")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-discovery-feed")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-watchlist-radar")).toBeInTheDocument();
     expect(screen.queryByTestId("dashboard-insight")).toBeNull();

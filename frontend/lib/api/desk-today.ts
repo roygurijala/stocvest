@@ -47,6 +47,8 @@ export type DeskTodayData = {
   scanned_snapshot_count?: number;
   eligible_symbol_count?: number;
   generated_at?: string;
+  /** NY trading date (YYYY-MM-DD) when movers were computed — clears stale session activity at open. */
+  session_trading_date?: string;
   discovery?: DeskDiscoveryLeader[];
   movers_radar?: DeskMoverRadarRow[];
   recently_hot?: DeskRecentlyHotRow[];

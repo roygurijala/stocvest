@@ -91,7 +91,9 @@ export function SignalsSetupRead({
       {setupJudgment ? (
         <SetupJudgmentSummary
           judgment={setupJudgment}
-          executionLabel={executionReadinessLabel(decision.state)}
+          executionLabel={executionReadinessLabel(decision.state, {
+            entryTimingWeak: setupJudgment.tradeability.band === "weak"
+          })}
           executionTone={decision.state === "actionable" ? "bullish" : "caution"}
         />
       ) : null}

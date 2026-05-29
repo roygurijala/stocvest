@@ -6,13 +6,14 @@ import "./mocks/dashboard-desk-refresh";
 
 import type { ReactElement } from "react";
 import { beforeAll, describe, expect, test, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach } from "vitest";
 
 import { DashboardRedesign } from "@/components/dashboard-redesign";
 import { ThemeProvider } from "@/lib/theme-provider";
 import type { MarketOverview, MarketStatusPayload } from "@/lib/api/market";
 import type { ScannerOverview } from "@/lib/api/scanner";
+import { buildScannerScanSummary } from "@/lib/scanner-scan-summary";
 
 vi.mock("@/lib/hooks/use-is-mobile-layout", () => ({
   useIsMobileLayout: () => false
@@ -87,20 +88,53 @@ describe("Opportunities scanner links", () => {
     expect(discovery.querySelector('a[href="/dashboard/scanner?mode=day"]')).not.toBeNull();
   });
 
-  test("live_status_cta_points_at_scanner_for_active_desk", () => {
+  test("execution_ready_strip_market_pill_points_at_scanner_for_active_desk", async () => {
+    const setups = [
+      {
+        symbol: "INTRADAY",
+        direction: "long",
+        score: 0.9,
+        triggers: ["orb_breakout_long"],
+        timestamp_iso: "2026-05-01T14:30:00Z"
+      },
+      {
+        symbol: "AAA",
+        direction: "bullish",
+        score: 0.88,
+        triggers: ["ema50_cross_above_200"],
+        timestamp_iso: "2026-05-01T12:00:00Z",
+        scanner_mode: "swing_daily"
+      }
+    ];
+    const overview = {
+      ...baseScanner,
+      setups,
+      scanSummary: buildScannerScanSummary({
+        scannedAtIso: "2026-05-01T14:30:00Z",
+        overview: { ...baseScanner, setups },
+        nearQualificationSetups: [],
+        watchlistProgression: []
+      })
+    };
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
-        scannerOverview={baseScanner}
+        scannerOverview={overview}
         earningsEvents={[]}
         earningsRecent={[]}
         weeklyIndexRows={baseWeekly}
         sectorRotation={[]}
       />
     );
-    const live = screen.getByTestId("dashboard-live-status");
-    expect(live.querySelector('a[href="/dashboard/scanner?mode=day"]')).not.toBeNull();
+    expect(await screen.findByTestId("dashboard-execution-ready-pill-market")).toBeTruthy();
+    expect(
+      screen.getByTestId("dashboard-execution-ready-pill-market").getAttribute("href")
+    ).toBe("/dashboard/scanner?mode=day");
     fireEvent.click(screen.getByTestId("dashboard-desk-mode-swing"));
-    expect(live.querySelector('a[href="/dashboard/scanner?mode=swing"]')).not.toBeNull();
+    await waitFor(() => {
+      expect(screen.getByTestId("dashboard-execution-ready-pill-market").getAttribute("href")).toBe(
+        "/dashboard/scanner?mode=swing"
+      );
+    });
   });
 });

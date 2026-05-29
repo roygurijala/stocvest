@@ -16,6 +16,8 @@ from zoneinfo import ZoneInfo
 
 from stocvest.data.models import Bar, Snapshot, Timeframe
 from stocvest.indicators.core import OpeningRange, gap_percent, opening_range
+from stocvest.signals.session_price_guard import is_corporate_action_session_move
+from stocvest.data.symbol_universe_eligibility import snapshot_universe_exclusion_reason
 
 
 @dataclass(frozen=True)
@@ -43,6 +45,8 @@ def dynamic_gap_candidates_from_snapshots_with_stats(
     min_abs_gap_percent: float = 2.0,
     min_day_volume: float = 500_000.0,
     min_trade_price: float = 5.0,
+    recent_split_symbols: frozenset[str] | None = None,
+    frequent_reverse_split_symbols: frozenset[str] | None = None,
 ) -> GapCandidateScanResult:
     """
     Rank gap candidates from Polygon snapshots using session price vs prior close.
@@ -66,15 +70,27 @@ def dynamic_gap_candidates_from_snapshots_with_stats(
             price = float(o)
         else:
             continue
-        if price < min_trade_price:
+        universe_reason = snapshot_universe_exclusion_reason(
+            snap.symbol,
+            snap,
+            min_trade_price=min_trade_price,
+            recent_split_symbols=recent_split_symbols,
+            frequent_reverse_split_symbols=frequent_reverse_split_symbols,
+        )
+        if universe_reason:
             continue
         vol = float(snap.day_volume or 0.0)
         if vol < min_day_volume:
             continue
-        prev_vol = snap.prev_day_volume
-        if prev_vol is not None and float(prev_vol) < 1_000_000.0:
-            continue
         gap_pct = (price - float(prev)) / float(prev) * 100.0
+        if is_corporate_action_session_move(
+            float(prev),
+            price,
+            gap_pct,
+            symbol=snap.symbol,
+            recent_split_symbols=recent_split_symbols,
+        ):
+            continue
         if abs(gap_pct) < min_abs_gap_percent:
             continue
         direction = "up" if gap_pct >= 0 else "down"
@@ -102,6 +118,8 @@ def dynamic_gap_candidates_from_snapshots(
     min_abs_gap_percent: float = 2.0,
     min_day_volume: float = 500_000.0,
     min_trade_price: float = 5.0,
+    recent_split_symbols: frozenset[str] | None = None,
+    frequent_reverse_split_symbols: frozenset[str] | None = None,
 ) -> list[PremarketGapCandidate]:
     """Same filters as :func:`dynamic_gap_candidates_from_snapshots_with_stats`; returns top ``limit`` only."""
     return dynamic_gap_candidates_from_snapshots_with_stats(
@@ -110,6 +128,8 @@ def dynamic_gap_candidates_from_snapshots(
         min_abs_gap_percent=min_abs_gap_percent,
         min_day_volume=min_day_volume,
         min_trade_price=min_trade_price,
+        recent_split_symbols=recent_split_symbols,
+        frequent_reverse_split_symbols=frequent_reverse_split_symbols,
     ).candidates
 
 
@@ -126,9 +146,13 @@ class PremarketGapScanner:
         *,
         min_abs_gap_percent: float = 2.0,
         min_day_volume: float = 0.0,
+        min_trade_price: float = 5.0,
+        recent_split_symbols: frozenset[str] | None = None,
     ) -> None:
         self._min_abs_gap_percent = min_abs_gap_percent
         self._min_day_volume = min_day_volume
+        self._min_trade_price = min_trade_price
+        self._recent_split_symbols = recent_split_symbols
 
     def scan_snapshots(
         self,
@@ -160,8 +184,18 @@ class PremarketGapScanner:
         premarket_price = self._resolve_premarket_price(snapshot)
         if prev_close is None or prev_close <= 0 or premarket_price is None or premarket_price <= 0:
             return None
+        if float(premarket_price) < self._min_trade_price:
+            return None
 
         gp = gap_percent(prev_close, premarket_price)
+        if is_corporate_action_session_move(
+            float(prev_close),
+            float(premarket_price),
+            gp,
+            symbol=snapshot.symbol,
+            recent_split_symbols=self._recent_split_symbols,
+        ):
+            return None
         day_volume = float(snapshot.day_volume or 0.0)
         direction = "up" if gp >= 0 else "down"
 

@@ -26,6 +26,10 @@ import {
   hotInMarketFeedSubtitle,
   MARKET_ACTIVITY_TITLE
 } from "@/lib/dashboard/hot-in-market-card-present";
+import {
+  isDeskSessionActivityStale,
+  sessionActivityAwaitingTodayMessage
+} from "@/lib/dashboard/desk-session-freshness";
 import { buildSessionActivityRowModels } from "@/lib/dashboard/opportunity-row-present";
 import {
   resolveSessionActivityUiMode,
@@ -79,7 +83,15 @@ export function DashboardDiscoveryFeed({
   const sessionMode = resolveSessionActivityUiMode(marketStatus);
   const sessionClosed = sessionMode === "closed";
   const sessionExtended = sessionMode === "extended";
-  const { leaders, source } = resolveDiscoveryLeaders(deskData, gapFallback, mode, alternateDeskData);
+  const deskSessionStale = isDeskSessionActivityStale(deskData, sessionMode);
+  const effectiveDeskData = deskSessionStale ? null : deskData;
+  const effectiveAlternateDesk = deskSessionStale ? null : alternateDeskData;
+  const { leaders, source } = resolveDiscoveryLeaders(
+    effectiveDeskData,
+    gapFallback,
+    mode,
+    effectiveAlternateDesk
+  );
   const leaderSymbols = useMemo(() => leaders.map((l) => l.symbol), [leaders]);
   const sinceLastVisit = useMemo(() => {
     const previous = loadDeskLastVisit(mode);
@@ -100,8 +112,8 @@ export function DashboardDiscoveryFeed({
     [leaders, mode, source, sessionMode]
   );
 
-  const footnote = deskScanFootnote(deskData);
-  const updated = formatGeneratedAtEt(deskData?.generated_at);
+  const footnote = deskScanFootnote(effectiveDeskData);
+  const updated = formatGeneratedAtEt(effectiveDeskData?.generated_at ?? deskData?.generated_at);
   const scannerHref = dualDeskSurfaces
     ? `/dashboard/scanner?mode=${mode === "swing" ? "swing" : "day"}`
     : "/dashboard/scanner?mode=swing";
@@ -124,6 +136,7 @@ export function DashboardDiscoveryFeed({
     (isLoading ||
       refreshBusy ||
       sessionActivityLoading ||
+      deskSessionStale ||
       (scannerPending && deskCacheMiss && gapFallback.length === 0));
   const needsDeskLoad = leaders.length === 0 && deskCacheMiss && !awaitingData;
   const pipelineLoadingOnly = embedded && awaitingData && !needsDeskLoad;
@@ -261,12 +274,14 @@ export function DashboardDiscoveryFeed({
           data-testid="dashboard-hot-in-market-loading"
           style={{ fontSize: typography.scale.sm, color: colors.textMuted }}
         >
-          {hotInMarketAwaitingMessage({
-            deskLoading: isLoading,
-            scannerPending,
-            deskCacheMiss,
-            sessionActivityLoading
-          })}
+          {deskSessionStale
+            ? sessionActivityAwaitingTodayMessage()
+            : hotInMarketAwaitingMessage({
+                deskLoading: isLoading,
+                scannerPending,
+                deskCacheMiss,
+                sessionActivityLoading
+              })}
         </p>
       ) : awaitingData ? null : (
         <div
@@ -294,7 +309,7 @@ export function DashboardDiscoveryFeed({
         </div>
       )}
 
-      <DashboardMissedTodayStrip mode={mode} deskData={deskData} gapFallback={gapFallback} />
+      <DashboardMissedTodayStrip mode={mode} deskData={effectiveDeskData} gapFallback={gapFallback} />
 
       {footnote ? (
         <p className="m-0 mt-3" style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>

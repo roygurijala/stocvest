@@ -27,15 +27,15 @@ describe("scenario-variants", () => {
     systemRiskReward: 0.5
   })!;
 
-  test("default preset matches structural mid entry", () => {
+  test("continuation preset matches structural mid entry", () => {
     const catalog = buildScenarioVariantCatalog(bullishSource)!;
     expect(catalog.system?.riskReward).toBeGreaterThan(0);
-    const aggressive = resolveScenarioLevels(bullishSource, catalog.presets.aggressive)!;
-    const conservative = resolveScenarioLevels(bullishSource, catalog.presets.conservative)!;
-    expect(aggressive.riskReward).toBeGreaterThan(conservative.riskReward);
+    const dip = resolveScenarioLevels(bullishSource, catalog.presets.dip)!;
+    const breakout = resolveScenarioLevels(bullishSource, catalog.presets.breakout)!;
+    expect(dip.entry).toBeLessThanOrEqual(breakout.entry);
   });
 
-  test("conservative entry above T1 still resolves (target fallback + entry cap)", () => {
+  test("breakout entry above zone still resolves with T2 target", () => {
     const src = buildScenarioGeometrySource({
       bias: "Bullish",
       entryZoneLow: 440,
@@ -47,20 +47,20 @@ describe("scenario-variants", () => {
       vwap: 441,
       systemRiskReward: 0.5
     })!;
-    const conservative = resolveScenarioLevels(src, {
-      preset: "conservative",
-      entry: "conservative",
+    const breakout = resolveScenarioLevels(src, {
+      preset: "breakout",
+      entry: "breakout",
       stop: "structural",
-      target: "t1"
+      target: "t2"
     });
-    expect(conservative).not.toBeNull();
-    expect(conservative!.entry).toBeLessThan(conservative!.target);
-    expect(conservative!.riskReward).toBeGreaterThan(0);
+    expect(breakout).not.toBeNull();
+    expect(breakout!.entry).toBeGreaterThan(447);
+    expect(breakout!.riskReward).toBeGreaterThan(0);
   });
 
-  test("aggressive + tight + t2 can clear R/R gate when system cannot", () => {
+  test("dip preset can clear R/R gate when system cannot", () => {
     const catalog = buildScenarioVariantCatalog(bullishSource)!;
-    const tuned = resolveScenarioLevels(bullishSource, catalog.presets.aggressive)!;
+    const tuned = resolveScenarioLevels(bullishSource, catalog.presets.dip)!;
     expect(tuned.riskReward).toBeGreaterThanOrEqual(SCENARIO_RR_MIN);
     expect(scenarioClearsRrGate(tuned.riskReward)).toBe(true);
     expect(scenarioClearsRrGate(bullishSource.systemRiskReward!)).toBe(false);

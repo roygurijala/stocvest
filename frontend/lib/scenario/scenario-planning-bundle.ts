@@ -30,6 +30,8 @@ import type { ScenarioReadinessContext } from "@/lib/scenario/scenario-readiness
 import type { ScenarioInput } from "@/lib/scenario/types";
 import type { TradeDecisionState, TradeDecision } from "@/lib/signal-evidence/trade-decision";
 import { parseSwingCompositeInsight } from "@/lib/signal-evidence";
+import { parseSetupJudgment } from "@/lib/signal-evidence/setup-judgment";
+import { detectExecutionTimingFlags } from "@/lib/scenario/scenario-execution-timing";
 
 export type ScenarioPlanningBundle = {
   input: ScenarioInput;
@@ -156,6 +158,8 @@ export function buildScenarioPlanningBundle(args: BuildScenarioPlanningBundleArg
     if (!decisionState) decisionState = systemDecision.state;
   }
 
+  const setupJudgment = comp ? parseSetupJudgment(comp) : null;
+
   const readiness: ScenarioReadinessContext = {
     symbol: sym,
     mode: args.tradingMode,
@@ -168,7 +172,9 @@ export function buildScenarioPlanningBundle(args: BuildScenarioPlanningBundleArg
     systemDecision,
     maturationState: args.maturation?.state ?? null,
     readinessLabel: args.maturation?.readiness_label ?? null,
-    hasReferenceLevels: fromComposite ? hasStructuralReference(input) : Boolean(input.reference.current_price)
+    hasReferenceLevels: fromComposite ? hasStructuralReference(input) : Boolean(input.reference.current_price),
+    entryTimingWeak: setupJudgment?.tradeability.band === "weak",
+    vwapConflict: detectExecutionTimingFlags(systemDecision).vwapConflict
   };
 
   return { input, readiness, setupBias, fromComposite };

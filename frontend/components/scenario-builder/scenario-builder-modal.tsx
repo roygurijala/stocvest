@@ -17,6 +17,20 @@ import {
   type ScenarioPresetId
 } from "@/lib/scenario/scenario-variants";
 import { scenarioInputToGeometrySource } from "@/lib/scenario/scenario-input-geometry";
+import {
+  classifyEntryEdge,
+  effectiveEntryZoneForClassification,
+  entryEdgeHint,
+  suggestStopForEntry,
+  applyMinStopDistance,
+  isLongGeometryInvalid,
+  isShortGeometryInvalid
+} from "@/lib/scenario/scenario-stop-policy";
+import {
+  detectExecutionTimingFlags,
+  type ScenarioExecutionTiming
+} from "@/lib/scenario/scenario-execution-timing";
+import { scenarioGeometryError } from "@/lib/scenario/scenario-geometry";
 import { resolveScenarioVerdict } from "@/lib/scenario/scenario-verdict";
 import type { TradeDecision } from "@/lib/signal-evidence/trade-decision";
 import { ScenarioBuilderVerdictBanner } from "@/components/scenario-builder/scenario-builder-verdict-banner";
@@ -46,6 +60,8 @@ interface ScenarioBuilderModalProps {
   onClose: () => void;
   /** Desk decision for verdict banner; defaults to monitor when omitted (tests, legacy callers). */
   systemDecision?: TradeDecision;
+  /** Weak timing / VWAP conflict — caps green verdict and seeds Dip preset on open. */
+  executionTiming?: ScenarioExecutionTiming;
 }
 
 /**
@@ -104,8 +120,12 @@ function deriveStopDefault(
   entry: number,
   regime: ScenarioInput["volatility_regime"]
 ): number {
-  if (typeof ref.stop === "number" && Number.isFinite(ref.stop) && ref.stop > 0) {
-    return ref.stop;
+  const atr = typeof ref.atr === "number" && ref.atr > 0 ? ref.atr : null;
+  if (typeof ref.stop === "number" && Number.isFinite(ref.stop) && ref.stop > 0 && Number.isFinite(entry)) {
+    const adjusted = applyMinStopDistance(direction, entry, ref.stop, atr);
+    const invalid =
+      direction === "bullish" ? isLongGeometryInvalid(entry, adjusted) : isShortGeometryInvalid(entry, adjusted);
+    if (!invalid) return adjusted;
   }
   if (
     typeof ref.atr === "number" &&
@@ -113,11 +133,13 @@ function deriveStopDefault(
     ref.atr > 0 &&
     Number.isFinite(entry)
   ) {
-    return direction === "bullish" ? entry - 1.5 * ref.atr : entry + 1.5 * ref.atr;
+    const raw = direction === "bullish" ? entry - 1.5 * ref.atr : entry + 1.5 * ref.atr;
+    return applyMinStopDistance(direction, entry, raw, atr);
   }
   const regimePct = REGIME_DEFAULT_STOP_PCT[regime];
   if (regimePct && Number.isFinite(entry) && entry > 0) {
-    return direction === "bullish" ? entry * (1 - regimePct) : entry * (1 + regimePct);
+    const raw = direction === "bullish" ? entry * (1 - regimePct) : entry * (1 + regimePct);
+    return applyMinStopDistance(direction, entry, raw, atr);
   }
   return Number.NaN;
 }
@@ -310,7 +332,8 @@ export function ScenarioBuilderModal({
   open,
   input,
   onClose,
-  systemDecision = defaultSystemDecision()
+  systemDecision = defaultSystemDecision(),
+  executionTiming
 }: ScenarioBuilderModalProps) {
   const { colors } = useTheme();
   useModalOverlay(open, onClose);
@@ -338,22 +361,75 @@ export function ScenarioBuilderModal({
   const [shares, setShares] = useState<number>(100);
   const [accountSize, setAccountSize] = useState<number>(Number.NaN);
   const [orderTypeLabel, setOrderTypeLabel] = useState<"market" | "limit" | "stop">("limit");
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
+  const [stopAutoAdjusted, setStopAutoAdjusted] = useState(false);
 
-  /** Seed Your plan from System default geometry whenever the sheet opens. */
+  const timingFlags = useMemo(
+    () => ({
+      ...detectExecutionTimingFlags(systemDecision),
+      ...executionTiming
+    }),
+    [systemDecision, executionTiming]
+  );
+
+  /** Seed Your plan from best-fit preset whenever the sheet opens. */
   useEffect(() => {
     if (!open) return;
+    setStopAutoAdjusted(false);
     if (catalog?.system) {
-      setEntry(catalog.system.entry);
-      setStop(catalog.system.stop);
-      setTarget(catalog.system.target);
+      const presetId: ScenarioPresetId =
+        timingFlags.entryTimingWeak || timingFlags.vwapConflict ? "dip" : "continuation";
+      const resolved =
+        resolveScenarioLevels(catalog.source, catalog.presets[presetId]) ?? catalog.system;
+      setEntry(resolved.entry);
+      setStop(resolved.stop);
+      setTarget(resolved.target);
       return;
     }
     setEntry(entryDefault);
     setStop(stopDefault);
     setTarget(targetDefault);
-  }, [open, catalog, entryDefault, stopDefault, targetDefault]);
+  }, [open, catalog, entryDefault, stopDefault, targetDefault, timingFlags.entryTimingWeak, timingFlags.vwapConflict]);
 
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
+  const entryEdgeQuality = useMemo(() => {
+    if (!catalog) return "unknown" as const;
+    const zone = effectiveEntryZoneForClassification({
+      sessionLo: catalog.source.entryZoneLow,
+      sessionHi: catalog.source.entryZoneHigh,
+      swingLo: input.reference.swing_range_low ?? null,
+      swingHi: input.reference.swing_range_high ?? null
+    });
+    return classifyEntryEdge(entry, zone.lo, zone.hi);
+  }, [catalog, entry, input.reference.swing_range_low, input.reference.swing_range_high]);
+
+  const entryEdgeMessage = entryEdgeHint(entryEdgeQuality);
+
+  const geometryError = useMemo(
+    () => scenarioGeometryError(direction, entry, stop, target),
+    [direction, entry, stop, target]
+  );
+
+  const handleEntryChange = (nextEntry: number) => {
+    setEntry(nextEntry);
+    if (!catalog || !Number.isFinite(nextEntry)) return;
+    const invalid =
+      direction === "bullish"
+        ? isLongGeometryInvalid(nextEntry, stop)
+        : isShortGeometryInvalid(nextEntry, stop);
+    if (!invalid) return;
+    const suggested = suggestStopForEntry({
+      direction,
+      entry: nextEntry,
+      structuralStop: catalog.source.structuralStop,
+      zoneLo: catalog.source.entryZoneLow,
+      zoneHi: catalog.source.entryZoneHigh,
+      atr: catalog.source.atr
+    });
+    if (suggested != null) {
+      setStop(suggested);
+      setStopAutoAdjusted(true);
+    }
+  };
 
   const userInputs: ScenarioUserInputs = useMemo(
     () => ({
@@ -368,8 +444,8 @@ export function ScenarioBuilderModal({
   );
 
   const result: ScenarioComputedResult = useMemo(
-    () => computeScenarioResult(userInputs),
-    [userInputs]
+    () => computeScenarioResult(userInputs, direction),
+    [userInputs, direction]
   );
 
   const verdict = useMemo(
@@ -380,9 +456,10 @@ export function ScenarioBuilderModal({
         direction,
         entry,
         stop,
-        target
+        target,
+        executionTiming: timingFlags
       }),
-    [systemDecision, input.mode, direction, entry, stop, target]
+    [systemDecision, input.mode, direction, entry, stop, target, timingFlags]
   );
 
   const applyPreset = (preset: ScenarioPresetId) => {
@@ -392,13 +469,19 @@ export function ScenarioBuilderModal({
     setEntry(resolved.entry);
     setStop(resolved.stop);
     setTarget(resolved.target);
+    setStopAutoAdjusted(false);
   };
 
   const handleReset = () => {
+    setStopAutoAdjusted(false);
     if (catalog?.system) {
-      setEntry(catalog.system.entry);
-      setStop(catalog.system.stop);
-      setTarget(catalog.system.target);
+      const presetId: ScenarioPresetId =
+        timingFlags.entryTimingWeak || timingFlags.vwapConflict ? "dip" : "continuation";
+      const resolved =
+        resolveScenarioLevels(catalog.source, catalog.presets[presetId]) ?? catalog.system;
+      setEntry(resolved.entry);
+      setStop(resolved.stop);
+      setTarget(resolved.target);
     } else {
       setEntry(entryDefault);
       setStop(stopDefault);
@@ -579,10 +662,31 @@ export function ScenarioBuilderModal({
               />
               {Number.isFinite(input.reference.entry_low) && Number.isFinite(input.reference.entry_high) ? (
                 <ReferenceRow
-                  label="Reference entry zone"
+                  label="Session entry zone (reference)"
                   value={`${formatScenarioDollars(input.reference.entry_low as number, { fractionDigits: 4 })} – ${formatScenarioDollars(input.reference.entry_high as number, { fractionDigits: 4 })}`}
                   tag="Reference"
                   testId="scenario-ref-entry-zone"
+                />
+              ) : null}
+              {Number.isFinite(input.reference.vwap) ? (
+                <ReferenceRow
+                  label="Session VWAP"
+                  value={formatScenarioDollars(input.reference.vwap as number, { fractionDigits: 4 })}
+                  tag="Reference"
+                  testId="scenario-ref-vwap"
+                />
+              ) : null}
+              {Number.isFinite(input.reference.swing_range_low) &&
+              Number.isFinite(input.reference.swing_range_high) ? (
+                <ReferenceRow
+                  label={
+                    input.reference.swing_range_sessions != null
+                      ? `Swing range (~${input.reference.swing_range_sessions} sessions)`
+                      : "Swing range (recent daily bars)"
+                  }
+                  value={`${formatScenarioDollars(input.reference.swing_range_low as number, { fractionDigits: 4 })} – ${formatScenarioDollars(input.reference.swing_range_high as number, { fractionDigits: 4 })}`}
+                  tag="Reference"
+                  testId="scenario-ref-swing-range"
                 />
               ) : null}
               {Number.isFinite(input.reference.stop) ? (
@@ -591,6 +695,14 @@ export function ScenarioBuilderModal({
                   value={formatScenarioDollars(input.reference.stop as number, { fractionDigits: 4 })}
                   tag="Reference"
                   testId="scenario-ref-stop"
+                />
+              ) : null}
+              {input.reference.stop_provenance?.trim() ? (
+                <ReferenceRow
+                  label="Stop provenance"
+                  value={input.reference.stop_provenance.trim()}
+                  tag="How derived"
+                  testId="scenario-ref-stop-provenance"
                 />
               ) : null}
               {Number.isFinite(input.reference.target_1) ? (
@@ -606,6 +718,14 @@ export function ScenarioBuilderModal({
                   label="Reference target 2"
                   value={formatScenarioDollars(input.reference.target_2 as number, { fractionDigits: 4 })}
                   tag="Reference"
+                />
+              ) : null}
+              {input.reference.target_provenance?.trim() ? (
+                <ReferenceRow
+                  label="Target provenance"
+                  value={input.reference.target_provenance.trim()}
+                  tag="How derived"
+                  testId="scenario-ref-target-provenance"
                 />
               ) : null}
               {Number.isFinite(input.reference.atr) ? (
@@ -656,12 +776,48 @@ export function ScenarioBuilderModal({
               <p style={{ margin: 0, marginBottom: spacing[2], color: colors.textMuted, fontSize: typography.scale.xs }}>
                 Defaults are derived from reference data. Confirm or override every value before treating any number as actionable.
               </p>
+              {entryEdgeMessage ? (
+                <p
+                  data-testid="scenario-entry-edge-hint"
+                  style={{
+                    margin: `0 0 ${spacing[2]} 0`,
+                    color: colors.caution,
+                    fontSize: typography.scale.xs
+                  }}
+                >
+                  {entryEdgeMessage}
+                </p>
+              ) : null}
+              {stopAutoAdjusted ? (
+                <p
+                  data-testid="scenario-stop-auto-adjusted"
+                  style={{
+                    margin: `0 0 ${spacing[2]} 0`,
+                    color: colors.caution,
+                    fontSize: typography.scale.xs
+                  }}
+                >
+                  Stop was adjusted to sit below your entry with a minimum risk width (structure + ATR floor).
+                </p>
+              ) : null}
+              {geometryError ? (
+                <p
+                  data-testid="scenario-geometry-inline-error"
+                  style={{
+                    margin: `0 0 ${spacing[2]} 0`,
+                    color: colors.bearish,
+                    fontSize: typography.scale.xs
+                  }}
+                >
+                  {geometryError}
+                </p>
+              ) : null}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: `0 ${spacing[4]}` }}>
                 <InputRow
                   label="Entry price"
                   value={entry}
                   step={0.01}
-                  onChange={setEntry}
+                  onChange={handleEntryChange}
                   testId="scenario-input-entry"
                   helper="Pre-filled from reference entry zone."
                 />

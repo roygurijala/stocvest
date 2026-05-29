@@ -51,6 +51,10 @@ export type ScenarioReadinessContext = {
   decisionState?: TradeDecisionState | null;
   /** Full desk decision for Scenario Builder verdict banner (strict gates). */
   systemDecision?: TradeDecision | null;
+  /** Setup judgment tradeability — weak band caps scenario green verdict. */
+  entryTimingWeak?: boolean;
+  /** Confluence VWAP conflict — caps scenario green verdict. */
+  vwapConflict?: boolean;
   /** True when reference levels exist on the payload — qualitative only in UI. */
   hasReferenceLevels?: boolean;
   readinessLabel?: string | null;

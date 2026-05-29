@@ -605,8 +605,13 @@ export function buildSignalsPageDecision(input: {
 }
 
 /** Execution readiness — separate from layer alignment strength. */
-export function executionReadinessLabel(state: TradeDecisionState): string {
-  if (state === "actionable") return "Actionable";
+export function executionReadinessLabel(
+  state: TradeDecisionState,
+  opts?: { entryTimingWeak?: boolean }
+): string {
+  if (state === "actionable") {
+    return opts?.entryTimingWeak ? "Actionable — entry timing caution" : "Actionable";
+  }
   if (state === "monitor") return "Not actionable yet";
   return "Not actionable";
 }

@@ -50,6 +50,7 @@ def test_run_snapshot_funnel_respects_liquidity_gates() -> None:
         _snap("CHEAP", last=4.0, prev=3.8),  # below min_trade_price
         _snap("LOWVOL", last=110.0, prev=100.0, day_vol=100_000.0),
         _snap("LOWADV", last=110.0, prev=100.0, prev_vol=500_000.0),
+        _snap("CCM", last=110.0, prev=100.0),  # Chinese ADR watchlist
         _snap("OK", last=110.0, prev=100.0),
     ]
     result = run_snapshot_funnel(snaps, OpportunityDeskFunnelConfig())

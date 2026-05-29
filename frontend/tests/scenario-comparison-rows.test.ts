@@ -23,7 +23,7 @@ describe("scenario-comparison-rows", () => {
   })!;
 
   const catalog = buildScenarioVariantCatalog(source)!;
-  const systemDefault = resolveScenarioLevels(source, catalog.presets.default)!;
+  const systemDefault = resolveScenarioLevels(source, catalog.presets.continuation)!;
 
   test("scenarioGeometryLevelsMatch ignores sub-cent drift", () => {
     expect(
@@ -41,7 +41,7 @@ describe("scenario-comparison-rows", () => {
       systemDefault.stop,
       systemDefault.target
     );
-    expect(rows.map((r) => r.id)).toEqual(["default", "conservative", "aggressive"]);
+    expect(rows.map((r) => r.id)).toEqual(["continuation", "dip", "breakout"]);
     expect(rows.some((r) => r.id === "your_draft")).toBe(false);
   });
 
@@ -53,8 +53,8 @@ describe("scenario-comparison-rows", () => {
   });
 
   test("shows Your draft after applying a non-default preset", () => {
-    const conservative = resolveScenarioLevels(source, catalog.presets.conservative)!;
-    const rows = buildScenarioComparisonRows(catalog, conservative.entry, conservative.stop, conservative.target);
+    const breakout = resolveScenarioLevels(source, catalog.presets.breakout)!;
+    const rows = buildScenarioComparisonRows(catalog, breakout.entry, breakout.stop, breakout.target);
     expect(rows.some((r) => r.id === "your_draft")).toBe(true);
   });
 });

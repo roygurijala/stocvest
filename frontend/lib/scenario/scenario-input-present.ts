@@ -122,6 +122,8 @@ function resolveCompositeScenarioReference(args: {
 }): ScenarioInput["reference"] {
   const comp = args.composite;
   const zone = args.insight?.historical_entry_zone;
+  const sessionZone = args.insight?.session_entry_zone ?? zone;
+  const swingRange = args.insight?.swing_range_zone;
   const session = deriveSessionReferenceLevels(args.snapshot ?? null, comp ?? null);
 
   let stop =
@@ -155,8 +157,8 @@ function resolveCompositeScenarioReference(args: {
   }
 
   return {
-    entry_low: zone?.low ?? session.support ?? null,
-    entry_high: zone?.high ?? session.resistance ?? null,
+    entry_low: sessionZone?.low ?? zone?.low ?? session.support ?? null,
+    entry_high: sessionZone?.high ?? zone?.high ?? session.resistance ?? null,
     stop,
     target_1,
     target_2,
@@ -164,7 +166,30 @@ function resolveCompositeScenarioReference(args: {
     prev_close:
       typeof args.snapshot?.prev_close === "number" && Number.isFinite(args.snapshot.prev_close)
         ? args.snapshot.prev_close
-        : null
+        : null,
+    atr:
+      comp && typeof comp["atr"] === "number" && Number.isFinite(comp["atr"])
+        ? (comp["atr"] as number)
+        : null,
+    vwap: session.vwap ?? null,
+    swing_range_low: swingRange?.low ?? null,
+    swing_range_high: swingRange?.high ?? null,
+    swing_range_sessions:
+      swingRange?.sessions != null && Number.isFinite(swingRange.sessions)
+        ? swingRange.sessions
+        : null,
+    stop_provenance:
+      typeof args.insight?.reference_stop_provenance === "string"
+        ? args.insight.reference_stop_provenance
+        : typeof comp?.reference_stop_provenance === "string"
+          ? String(comp.reference_stop_provenance)
+          : null,
+    target_provenance:
+      typeof args.insight?.reference_target_provenance === "string"
+        ? args.insight.reference_target_provenance
+        : typeof comp?.reference_target_provenance === "string"
+          ? String(comp.reference_target_provenance)
+          : null
   };
 }
 

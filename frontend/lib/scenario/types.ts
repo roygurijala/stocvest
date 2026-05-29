@@ -71,8 +71,18 @@ export interface ReferenceLevels {
   session_open?: number | null;
   /** Previous session's close. */
   prev_close?: number | null;
-  /** ATR if the signal payload computed one — used to suggest stop sizing. */
+  /** ATR if the signal payload computed one — used for stop floor and suggestions. */
   atr?: number | null;
+  /** Session VWAP when available — stop presets and timing context. */
+  vwap?: number | null;
+  /** ~10-session swing high/low when composite passes daily bars (swing mode). */
+  swing_range_low?: number | null;
+  swing_range_high?: number | null;
+  swing_range_sessions?: number | null;
+  /** How the API derived reference stop (display only). */
+  stop_provenance?: string | null;
+  /** How the API derived reference target (display only). */
+  target_provenance?: string | null;
 }
 
 /**
