@@ -1,4 +1,4 @@
-"""Send user alert emails via AWS SES (never raises from public entrypoints)."""
+"""Send user alert and trial emails via Postmark (never raises from public entrypoints)."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import json
 from typing import Any
 
 from stocvest.data.models import AlertType
+from stocvest.services.postmark_client import send_postmark_html_email
 from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
 
@@ -14,31 +15,31 @@ _LOG = get_logger(__name__)
 
 
 class EmailService:
-    """Thin SES wrapper; failures are logged and surfaced as ``False`` return values."""
+    """Thin Postmark wrapper; failures are logged and surfaced as ``False`` return values."""
 
     def send_alert_email(self, *, to_email: str, alert_type: AlertType, context: dict[str, Any]) -> bool:
         try:
             settings = get_settings()
             sender = (settings.stocvest_email_sender or "").strip()
-            if not sender or not (to_email or "").strip():
-                _LOG.warning("email send skipped: missing sender or recipient")
+            token = (settings.postmark_server_token or "").strip()
+            if not sender or not token or not (to_email or "").strip():
+                _LOG.warning("email send skipped: missing sender, Postmark token, or recipient")
                 return False
             subj = self._build_subject(alert_type, context)
             body_html = self._build_html_body(alert_type, context)
-            import boto3
-
-            client = boto3.client("ses", region_name=settings.aws_region)
-            client.send_email(
-                Source=sender,
-                Destination={"ToAddresses": [to_email.strip()]},
-                Message={
-                    "Subject": {"Data": subj[:998], "Charset": "UTF-8"},
-                    "Body": {"Html": {"Data": body_html, "Charset": "UTF-8"}},
-                },
+            ok = send_postmark_html_email(
+                server_token=token,
+                sender=sender,
+                to_email=to_email.strip(),
+                subject=subj,
+                html_body=body_html,
+                message_stream=settings.postmark_message_stream,
             )
-            return True
-        except Exception as exc:  # noqa: BLE001 — SES errors must not propagate
-            _LOG.warning("SES send_alert_email failed: %s", exc)
+            if not ok:
+                _LOG.warning("Postmark send_alert_email failed for %s", to_email.strip())
+            return ok
+        except Exception as exc:  # noqa: BLE001 — delivery errors must not propagate
+            _LOG.warning("Postmark send_alert_email failed: %s", exc)
             return False
 
     def send_trial_reminder_email(
@@ -51,8 +52,9 @@ class EmailService:
         try:
             settings = get_settings()
             sender = (settings.stocvest_email_sender or "").strip()
-            if not sender or not (to_email or "").strip():
-                _LOG.warning("trial reminder skipped: missing sender or recipient")
+            token = (settings.postmark_server_token or "").strip()
+            if not sender or not token or not (to_email or "").strip():
+                _LOG.warning("trial reminder skipped: missing sender, Postmark token, or recipient")
                 return False
             base = (settings.stocvest_public_app_url or "https://stocvest.ai").rstrip("/")
             if kind == "day14":
@@ -79,20 +81,19 @@ class EmailService:
                 cta=cta,
                 cta_label=cta_label,
             )
-            import boto3
-
-            client = boto3.client("ses", region_name=settings.aws_region)
-            client.send_email(
-                Source=sender,
-                Destination={"ToAddresses": [to_email.strip()]},
-                Message={
-                    "Subject": {"Data": subj[:998], "Charset": "UTF-8"},
-                    "Body": {"Html": {"Data": body_html, "Charset": "UTF-8"}},
-                },
+            ok = send_postmark_html_email(
+                server_token=token,
+                sender=sender,
+                to_email=to_email.strip(),
+                subject=subj,
+                html_body=body_html,
+                message_stream=settings.postmark_message_stream,
             )
-            return True
+            if not ok:
+                _LOG.warning("Postmark send_trial_reminder_email failed for %s", to_email.strip())
+            return ok
         except Exception as exc:  # noqa: BLE001
-            _LOG.warning("SES send_trial_reminder_email failed: %s", exc)
+            _LOG.warning("Postmark send_trial_reminder_email failed: %s", exc)
             return False
 
     def _build_trial_reminder_html(

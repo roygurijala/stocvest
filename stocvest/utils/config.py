@@ -199,8 +199,10 @@ class Settings(BaseSettings):
     stocvest_internal_analysis_key: str = Field("", alias="STOCVEST_INTERNAL_ANALYSIS_KEY")
     stocvest_analysis_admin_subs: str = Field("", alias="STOCVEST_ANALYSIS_ADMIN_SUBS")
 
-    # ── Email (SES) for user alerts ───────────────────────────────
+    # ── Email (Postmark) for user alerts ──────────────────────────
     stocvest_email_sender: str = Field("signals@stocvest.ai", alias="STOCVEST_EMAIL_SENDER")
+    postmark_server_token: str = Field("", alias="POSTMARK_SERVER_TOKEN")
+    postmark_message_stream: str = Field("outbound", alias="POSTMARK_MESSAGE_STREAM")
     stocvest_public_app_url: str = Field("https://stocvest.ai", alias="STOCVEST_PUBLIC_APP_URL")
 
     # ── Trial + phone verification (defaults OFF — safe to ship on main) ──
@@ -348,6 +350,11 @@ def get_settings() -> Settings:
             )
         if not settings.fmp_api_key:
             settings.fmp_api_key = _load_secret_key("FMP_API_KEY", "fmp_api_key")
+        if not settings.postmark_server_token:
+            settings.postmark_server_token = _load_secret_key(
+                "POSTMARK_SERVER_TOKEN",
+                "postmark_server_token",
+            )
     except Exception:
         # Best-effort fallback for local dev / non-AWS contexts.
         pass

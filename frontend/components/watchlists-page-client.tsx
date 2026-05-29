@@ -264,12 +264,17 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   const watchlistDesk = useWatchlistDeskContext(decisionPlanMode);
 
   const nearReadyFilterActive = searchParams.get("near_ready") === "1";
+  const actionableRailFromUrl = searchParams.get("rail") === "actionable";
 
   useEffect(() => {
     const desk = (searchParams.get("desk") ?? "").trim().toLowerCase();
     if (desk === "day" && dualDeskMaturation) setViewMode("day");
     else if (desk === "swing" || desk === "both") setViewMode("swing");
   }, [searchParams, dualDeskMaturation]);
+
+  useEffect(() => {
+    if (actionableRailFromUrl) setMaturationRailFilter("actionable");
+  }, [actionableRailFromUrl]);
 
   const load = useCallback(async () => {
     setLoading(true);
