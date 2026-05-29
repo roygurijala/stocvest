@@ -242,7 +242,7 @@ export function DashboardMarketPulseHero({
             <li>Swing: {swingDeskPhrase}</li>
             {dayTradingSurfaces && dayDeskPhrase ? <li>Day: {dayDeskPhrase}</li> : null}
           </ul>
-          <div className="mt-3 border-t pt-3" style={{ borderColor: colors.border }}>
+          <div className="mt-4 border-t pt-4" style={{ borderColor: colors.border }}>
             <DashboardMarketContextPanelBody
               snapshot={marketContext}
               showSummary={false}
