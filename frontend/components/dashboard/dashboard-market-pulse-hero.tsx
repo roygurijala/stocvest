@@ -16,6 +16,7 @@ type Props = {
   marketContext: MarketContextSnapshot;
   spyPct: number | null;
   qqqPct: number | null;
+  iwmPct: number | null;
   vixLevel: number | null;
   vixPct: number | null;
   vixPulseOk: boolean;
@@ -39,6 +40,39 @@ function topSectors(chips: SectorRotationChip[]): { lead: SectorRotationChip | n
   return { lead: sorted[0] ?? null, lag: sorted[sorted.length - 1] ?? null };
 }
 
+type SessionTapeCell = {
+  label: string;
+  pct: number | null;
+  formattedPct?: string;
+  extra?: string;
+};
+
+function buildSessionTapeCells(
+  spyPct: number | null,
+  qqqPct: number | null,
+  iwmPct: number | null,
+  vixPulseOk: boolean,
+  vixPct: number | null,
+  vixLevel: number | null
+): SessionTapeCell[] {
+  const cells: SessionTapeCell[] = [
+    { label: "SPY", pct: spyPct },
+    { label: "QQQ", pct: qqqPct },
+    { label: "IWM", pct: iwmPct }
+  ];
+  const hasVixPct = vixPct != null && Number.isFinite(vixPct);
+  const hasVixLevel = vixLevel != null && Number.isFinite(vixLevel);
+  if (vixPulseOk && (hasVixPct || hasVixLevel)) {
+    cells.push({
+      label: "VIX",
+      pct: hasVixPct ? vixPct : null,
+      formattedPct: hasVixPct ? fmtPct(vixPct) : `$${vixLevel!.toFixed(2)}`,
+      extra: hasVixPct && hasVixLevel ? `$${vixLevel!.toFixed(2)}` : undefined
+    });
+  }
+  return cells;
+}
+
 export function DashboardMarketPulseHero({
   pageTitle,
   regimeLabel,
@@ -46,6 +80,7 @@ export function DashboardMarketPulseHero({
   marketContext,
   spyPct,
   qqqPct,
+  iwmPct,
   vixLevel,
   vixPct,
   vixPulseOk,
@@ -59,6 +94,7 @@ export function DashboardMarketPulseHero({
   const { colors } = useTheme();
   const { lead, lag } = topSectors(sectorRotation);
   const environmentSummary = marketContext.environmentSummary;
+  const sessionTapeCells = buildSessionTapeCells(spyPct, qqqPct, iwmPct, vixPulseOk, vixPct, vixLevel);
 
   return (
     <section
@@ -105,16 +141,9 @@ export function DashboardMarketPulseHero({
         data-testid="dashboard-pulse-tape"
         {...interactionLevelProps("none")}
       >
-        {[
-          { label: "SPY", pct: spyPct },
-          { label: "QQQ", pct: qqqPct },
-          {
-            label: "VIX",
-            pct: vixPulseOk ? vixPct : null,
-            extra: vixPulseOk && vixLevel != null ? `$${vixLevel.toFixed(2)}` : null
-          }
-        ].map((cell) => {
+        {sessionTapeCells.map((cell) => {
           const pct = cell.pct;
+          const formattedPct = cell.formattedPct ?? fmtPct(pct);
           const tone =
             pct == null || !Number.isFinite(pct) ? "muted" : pct > 0.05 ? "bullish" : pct < -0.05 ? "bearish" : "muted";
           return (
@@ -122,9 +151,9 @@ export function DashboardMarketPulseHero({
               key={cell.label}
               symbol={cell.label}
               horizon="today"
-              formattedPct={fmtPct(pct)}
+              formattedPct={formattedPct}
               tone={tone}
-              extra={cell.extra ?? undefined}
+              extra={cell.extra}
               testId={`dashboard-pulse-${cell.label}`}
             />
           );

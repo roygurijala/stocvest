@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import type { GapIntelligenceItem } from "@/lib/api/scanner";
+import type { MarketStatusPayload } from "@/lib/api/market";
 import type { DeskTodayData } from "@/lib/api/desk-today";
 import type { SnapshotPayload } from "@/lib/api/market";
 import { DashboardDiscoveryFeed } from "@/components/dashboard/dashboard-discovery-feed";
@@ -36,6 +37,7 @@ type Props = {
   refreshCooldownLabel?: string | null;
   refreshError?: string | null;
   snapshots: SnapshotPayload[];
+  marketStatus?: MarketStatusPayload | null;
   desk: WatchlistRadarDeskContext;
   nearReadyInMarket: number;
   nearQualification?: ScannerNearQualificationRow[];
@@ -60,6 +62,7 @@ export function DashboardOpportunityPipeline({
   refreshCooldownLabel = null,
   refreshError = null,
   snapshots,
+  marketStatus = null,
   desk,
   nearReadyInMarket,
   nearQualification = [],
@@ -141,6 +144,7 @@ export function DashboardOpportunityPipeline({
             deskData={deskData}
             nearQualification={nearQualification}
             sessionActivitySymbols={sessionActivitySymbols}
+            marketStatus={marketStatus}
             isLoading={deskLoading}
             variant="pipeline"
           />
@@ -168,6 +172,7 @@ export function DashboardOpportunityPipeline({
           canRefreshDesk={canRefreshDesk}
           refreshCooldownLabel={refreshCooldownLabel}
           refreshError={refreshError}
+          marketStatus={marketStatus}
           variant="pipeline"
         />
       </PipelineStagePanel>

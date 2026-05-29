@@ -355,9 +355,17 @@ export function SharedContextMasterCard(props: Props) {
   const soonestDateLabel = soonest
     ? `${earningsTimingLabel(soonest.report_time)} · ${soonest.report_date.slice(5).replace("-", "/")}`
     : undefined;
+  const vixPulseOk = useMemo(() => {
+    const level = vixLevel;
+    const pct = vixSessionPct;
+    return (pct != null && Number.isFinite(pct)) || (level != null && Number.isFinite(level));
+  }, [vixLevel, vixSessionPct]);
   const environmentSummary = useMemo(
-    () => buildEnvironmentSummary(weeklyAvgPct5d, volatility, participation, risk),
-    [weeklyAvgPct5d, volatility, participation, risk]
+    () =>
+      buildEnvironmentSummary(weeklyAvgPct5d, volatility, participation, risk, {
+        vixPulseOk
+      }),
+    [weeklyAvgPct5d, volatility, participation, risk, vixPulseOk]
   );
 
   /*

@@ -32,10 +32,10 @@ describe("buildMarketContextSnapshot", () => {
     expect(vol?.value).toBe(volatilityPillLabel("Contained", { vixPulseOk: true }));
     expect(vol?.value).toBe("Low");
     expect(snap.sessionToday.items).toHaveLength(2);
-    expect(MARKET_CONTEXT_INDEX_SECTION_TITLE).toBe("5-day index trend");
+    expect(MARKET_CONTEXT_INDEX_SECTION_TITLE).toBe("Weekly trend (5 sessions)");
   });
 
-  test("volatility pill unknown when VIX pulse missing", () => {
+  test("omits volatility pill when VIX pulse missing", () => {
     const snap = buildMarketContextSnapshot({
       weeklyIndexRows: [],
       sectorRotation: [],
@@ -49,9 +49,8 @@ describe("buildMarketContextSnapshot", () => {
       spyPct: 0.5,
       qqqPct: 0.4
     });
-    const vol = snap.pills.find((p) => p.id === "volatility");
-    expect(vol?.value).toBe("Unknown (breadth + price only)");
-    expect(vol?.structured?.result).toMatch(/breadth \+ price only/i);
+    expect(snap.pills.find((p) => p.id === "volatility")).toBeUndefined();
+    expect(snap.environmentSummary.toLowerCase()).not.toContain("unknown");
   });
 
   test("regime pill uses structured explain with why and advanced thresholds", () => {

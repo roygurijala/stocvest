@@ -2,14 +2,17 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
+import type { MarketStatusPayload } from "@/lib/api/market";
 import type { DeskTodayData } from "@/lib/api/desk-today";
-import { HotInMarketCard } from "@/components/dashboard/hot-in-market-card";
+import { DashboardOpportunityListSection } from "@/components/dashboard/dashboard-opportunity-list-section";
+import { BUILDING_STRUCTURE_PREVIEW_COUNT } from "@/lib/dashboard/opportunity-row-present";
 import {
   buildingStructureBackfillNote,
   buildingStructureEmptyMessage,
-  buildBuildingStructureCardModel,
+  buildBuildingStructureRowModels,
   resolveBuildingStructureRows
 } from "@/lib/dashboard/building-structure-present";
+import { buildingStructureListHeadline } from "@/lib/dashboard/opportunity-row-present";
 import {
   QUIET_LEADERS_SUBTITLE,
   QUIET_LEADERS_TITLE,
@@ -18,6 +21,7 @@ import {
 import type { DashboardDeskMode } from "@/lib/dashboard/live-status-copy";
 import type { ScannerNearQualificationRow } from "@/lib/scanner-scan-summary";
 import { interactionLevelProps } from "@/lib/dashboard/click-hierarchy";
+import { resolveSessionActivityUiMode } from "@/lib/market/session-activity-mode";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -26,6 +30,7 @@ type Props = {
   deskData: DeskTodayData | null | undefined;
   nearQualification?: ScannerNearQualificationRow[];
   sessionActivitySymbols?: string[];
+  marketStatus?: MarketStatusPayload | null;
   isLoading?: boolean;
   variant?: "standalone" | "pipeline";
 };
@@ -35,10 +40,12 @@ export function DashboardQuietLeadersFeed({
   deskData,
   nearQualification = [],
   sessionActivitySymbols = [],
+  marketStatus = null,
   isLoading = false,
   variant = "standalone"
 }: Props) {
   const { colors } = useTheme();
+  const sessionMode = resolveSessionActivityUiMode(marketStatus);
   const structureRows = useMemo(() => {
     if (mode !== "swing") return [];
     return resolveBuildingStructureRows({
@@ -49,36 +56,17 @@ export function DashboardQuietLeadersFeed({
   }, [deskData, mode, nearQualification, sessionActivitySymbols]);
 
   const backfillNote = useMemo(() => buildingStructureBackfillNote(structureRows), [structureRows]);
+  const listHeadline = useMemo(() => buildingStructureListHeadline(structureRows), [structureRows]);
 
-  const cardModels = useMemo(
+  const rowModels = useMemo(
     () =>
-      structureRows.map((row, index) =>
-        buildBuildingStructureCardModel(row, {
-          rank: index + 1,
-          mode: "swing",
-          deskData,
-          colors: {
-            surface: colors.surface,
-            border: colors.border,
-            accent: colors.accent,
-            bullish: colors.bullish,
-            bearish: colors.bearish,
-            caution: colors.caution,
-            textMuted: colors.textMuted
-          }
-        })
-      ),
-    [
-      structureRows,
-      deskData,
-      colors.accent,
-      colors.bearish,
-      colors.bullish,
-      colors.border,
-      colors.caution,
-      colors.surface,
-      colors.textMuted
-    ]
+      buildBuildingStructureRowModels({
+        rows: structureRows,
+        mode: "swing",
+        deskData,
+        sessionMode
+      }),
+    [structureRows, deskData, sessionMode]
   );
 
   if (mode !== "swing") return null;
@@ -112,8 +100,17 @@ export function DashboardQuietLeadersFeed({
         </div>
       ) : null}
 
-      {cardModels.length > 0 ? (
+      {rowModels.length > 0 ? (
         <>
+          {listHeadline ? (
+            <p
+              className={`m-0 text-xs font-semibold uppercase tracking-wide ${embedded ? "mt-0" : "mt-3"}`}
+              data-testid="dashboard-building-structure-headline"
+              style={{ color: colors.textMuted }}
+            >
+              {listHeadline}
+            </p>
+          ) : null}
           {backfillNote ? (
             <p
               className="m-0 mt-2"
@@ -123,14 +120,14 @@ export function DashboardQuietLeadersFeed({
               {backfillNote}
             </p>
           ) : null}
-          <ul
-            className={`m-0 grid list-none gap-3 p-0 sm:grid-cols-2 xl:grid-cols-3 ${backfillNote ? "mt-2" : "mt-3"}`}
-            data-testid="dashboard-quiet-leaders-list"
-          >
-            {cardModels.map((model) => (
-              <HotInMarketCard key={model.symbol} model={model} mode="swing" />
-            ))}
-          </ul>
+          <div className={listHeadline || backfillNote ? "mt-2" : embedded ? "" : "mt-3"}>
+            <DashboardOpportunityListSection
+              rows={rowModels}
+              testId="dashboard-quiet-leaders-list"
+              previewCount={BUILDING_STRUCTURE_PREVIEW_COUNT}
+              expandTestId="dashboard-building-structure-expand"
+            />
+          </div>
         </>
       ) : (
         <p
@@ -152,7 +149,7 @@ export function DashboardQuietLeadersFeed({
           data-testid="dashboard-quiet-leaders-scanner-link"
           style={{ fontSize: typography.scale.sm, color: colors.accent, fontWeight: 600 }}
         >
-          View on Scanner →
+          View all on Scanner →
         </Link>
       </p>
     </section>

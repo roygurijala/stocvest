@@ -18,11 +18,20 @@ import {
   hotInMarketSignalsHref,
   leaderHasCompositeDetail,
   resolveHotInMarketGapEmphasis,
+  resolveRiskReward,
+  resolveSetupBadge,
   type HotInMarketCardModel,
   type HotInMarketThemeColors
 } from "@/lib/dashboard/hot-in-market-card-present";
 import type { DashboardDeskMode } from "@/lib/dashboard/live-status-copy";
 import { buildQuietLeaderCardModel, quietLeadersFromDesk } from "@/lib/dashboard/quiet-leaders-present";
+import {
+  buildBuildingStructureRowModel,
+  sortBuildingStructureRows,
+  type OpportunityRowModel
+} from "@/lib/dashboard/opportunity-row-present";
+import { alignedLayersFromAlignmentRatio } from "@/lib/signals-page-present";
+import type { SessionActivityUiMode } from "@/lib/market/session-activity-mode";
 import { resolveAlignmentDisplayTier } from "@/lib/alignment-display-tier";
 import { MIN_DEVELOPING_ALIGNED } from "@/lib/scanner/scanner-quiet-desk";
 import type { ScannerNearQualificationRow } from "@/lib/scanner-scan-summary";
@@ -364,6 +373,124 @@ export function buildBuildingStructureCardModel(
     }),
     peek: "Open Signals for structure read"
   };
+}
+
+export function buildBuildingStructureRowModels(input: {
+  rows: BuildingStructureRow[];
+  mode: DashboardDeskMode;
+  deskData: DeskTodayData | null | undefined;
+  sessionMode: SessionActivityUiMode;
+}): OpportunityRowModel[] {
+  const sorted = sortBuildingStructureRows(input.rows);
+  return sorted.map((row, index) => {
+    if (row.source === "quiet_leader" && row.quietLeader) {
+      const leader = row.quietLeader;
+      const aligned = alignedLayersFromAlignmentRatio(leader.alignment_ratio, LAYER_TOTAL);
+      const layerDots = Array.from({ length: LAYER_TOTAL }, (_, i) => (aligned != null ? i < aligned : false));
+      const riskReward = resolveRiskReward(leader.risk_reward, leader.execution_hint);
+      const hint = leader.execution_hint?.trim().toLowerCase() ?? "";
+      const setupBadge = hint.includes("risk/reward")
+        ? ("blocked" as const)
+        : ("review" as const);
+      const gapLine = formatDeskGapLine(leader.gap_percent, leader.direction);
+      const gapTone: DashboardCardTone =
+        leader.direction === "up" ? "bullish" : leader.direction === "down" ? "bearish" : "muted";
+      return buildBuildingStructureRowModel(row, {
+        rank: index + 1,
+        mode: input.mode,
+        aligned,
+        layerDots,
+        setupBadge,
+        riskReward,
+        executionHint: leader.execution_hint ?? null,
+        gapLine,
+        gapTone,
+        peek: leader.execution_hint?.trim() || leader.why_line?.trim() || gapLine,
+        detailFallback: leader.why_line?.trim() || null,
+        sessionMode: input.sessionMode
+      });
+    }
+    if (row.source === "near_qualification" && row.nearQual) {
+      const aligned = row.nearQual.alignment?.aligned ?? 0;
+      const layerDots = Array.from({ length: LAYER_TOTAL }, (_, i) => i < aligned);
+      const gap = gapFromDesk(row.symbol, input.deskData);
+      const gapLine = gap
+        ? formatDeskGapLine(gap.gap_percent, gap.direction)
+        : null;
+      const gapTone: DashboardCardTone = gap
+        ? gap.direction === "up"
+          ? "bullish"
+          : gap.direction === "down"
+            ? "bearish"
+            : "muted"
+        : "muted";
+      const away =
+        typeof row.nearQual.layers_away === "number" && Number.isFinite(row.nearQual.layers_away)
+          ? row.nearQual.layers_away
+          : Math.max(0, 5 - aligned);
+      return buildBuildingStructureRowModel(row, {
+        rank: index + 1,
+        mode: input.mode,
+        aligned,
+        layerDots,
+        setupBadge: "review",
+        riskReward: null,
+        executionHint: null,
+        gapLine,
+        gapTone,
+        peek: away <= 1 ? "Close to desk gates" : "Structure building",
+        detailFallback: away <= 1 ? "closest to desk gates" : null,
+        sessionMode: input.sessionMode
+      });
+    }
+    if (row.source === "low_velocity" && row.lowVelocity) {
+      const mover = row.lowVelocity;
+      const leader: DeskDiscoveryLeader = {
+        symbol: mover.symbol.trim().toUpperCase(),
+        gap_percent: mover.gap_percent,
+        direction: mover.direction,
+        rank_score: mover.rank_score,
+        desk: "swing"
+      };
+      const hasDetail = leaderHasCompositeDetail(leader);
+      const setupBadge = hasDetail
+        ? resolveSetupBadge(leader, input.mode, "desk_cache")
+        : ("pending" as const);
+      const aligned = alignedLayersFromAlignmentRatio(leader.alignment_ratio, LAYER_TOTAL);
+      const layerDots = Array.from({ length: LAYER_TOTAL }, (_, i) => (aligned != null ? i < aligned : false));
+      const gapLine = formatDeskGapLine(mover.gap_percent, mover.direction);
+      const gapTone: DashboardCardTone =
+        mover.direction === "up" ? "bullish" : mover.direction === "down" ? "bearish" : "muted";
+      return buildBuildingStructureRowModel(row, {
+        rank: index + 1,
+        mode: input.mode,
+        aligned,
+        layerDots,
+        setupBadge,
+        riskReward: resolveRiskReward(leader.risk_reward, leader.execution_hint),
+        executionHint: leader.execution_hint ?? null,
+        gapLine,
+        gapTone,
+        peek: "Low velocity on desk",
+        detailFallback: "under 2% today",
+        sessionMode: input.sessionMode
+      });
+    }
+    return buildBuildingStructureRowModel(row, {
+      rank: index + 1,
+      mode: input.mode,
+      aligned: null,
+      layerDots: Array(LAYER_TOTAL).fill(false),
+      setupBadge: "review",
+      riskReward: null,
+      executionHint: null,
+      gapLine: null,
+      gapTone: "muted",
+      peek: "Open Signals",
+      detailFallback: null,
+      sessionMode: input.sessionMode
+    });
+  });
 }
 
 export { hotInMarketSignalsHref as buildingStructureSignalsHref };

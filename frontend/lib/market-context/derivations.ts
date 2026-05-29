@@ -35,14 +35,12 @@ export function volatilityPlainLine(cat: VolatilityCategory): string {
   }
 }
 
-/** User-facing volatility band on dashboard pills (not raw VIX). */
+/** User-facing volatility band on dashboard pills (not raw VIX). Null = omit chip. */
 export function volatilityPillLabel(
   cat: VolatilityCategory,
   opts?: { vixPulseOk?: boolean }
-): string {
-  if (cat === "Unknown" || opts?.vixPulseOk === false) {
-    return "Unknown (breadth + price only)";
-  }
+): string | null {
+  if (cat === "Unknown" || opts?.vixPulseOk === false) return null;
   switch (cat) {
     case "Expanding":
       return "High";
@@ -50,7 +48,7 @@ export function volatilityPillLabel(
     case "Contained":
       return "Low";
     default:
-      return "Unknown (breadth + price only)";
+      return null;
   }
 }
 
@@ -164,19 +162,44 @@ export function buildEnvironmentSummary(
   weeklyAvgPct5d: number | null,
   volatility: VolatilityCategory,
   participation: ParticipationCategory,
-  risk: RiskHorizonCategory
+  risk: RiskHorizonCategory,
+  opts?: { vixPulseOk?: boolean }
 ): string {
-  let drift: string;
-  if (weeklyAvgPct5d == null) drift = "Short-horizon price drift unknown";
-  else if (weeklyAvgPct5d >= 0.6) drift = "Short-horizon price drift up";
-  else if (weeklyAvgPct5d <= -0.6) drift = "Short-horizon price drift down";
-  else drift = "Short-horizon price drift mixed";
+  const sentences: string[] = [];
+  const driftUp = weeklyAvgPct5d != null && weeklyAvgPct5d >= 0.6;
+  const driftDown = weeklyAvgPct5d != null && weeklyAvgPct5d <= -0.6;
 
-  const volPhrase = volatility === "Unknown" ? "volatility pending" : `volatility ${volatility.toLowerCase()}`;
-  const partPhrase =
-    participation === "Unknown" ? "participation pending" : `participation ${participation.toLowerCase()}`;
-  const riskPhrase =
-    risk === "Elevated" ? "macro risk approaching" : risk === "Active" ? "earnings risk approaching" : "macro risk quiet";
+  if (driftUp && participation === "Broad") {
+    sentences.push("Bullish drift with broad participation.");
+  } else if (driftUp && participation === "Narrow") {
+    sentences.push("Indexes leaning up — leadership narrow.");
+  } else if (driftUp && participation === "Mixed") {
+    sentences.push("Indexes drifting up — breadth mixed.");
+  } else if (driftUp) {
+    sentences.push("Short-term indexes leaning up.");
+  } else if (driftDown && participation === "Broad") {
+    sentences.push("Defensive drift across indexes.");
+  } else if (driftDown && participation === "Narrow") {
+    sentences.push("Indexes drifting down — participation narrow.");
+  } else if (driftDown) {
+    sentences.push("Indexes drifting down — breadth mixed.");
+  } else if (weeklyAvgPct5d == null) {
+    sentences.push("Weekly index drift still forming.");
+  } else {
+    sentences.push("Mixed short-term index drift.");
+  }
 
-  return `${drift}, ${volPhrase}, ${partPhrase}, ${riskPhrase}.`;
+  if (risk === "Elevated") {
+    sentences.push("Watch macro risk.");
+  } else if (risk === "Active") {
+    sentences.push("Earnings calendar active this week.");
+  } else if (opts?.vixPulseOk && volatility === "Expanding") {
+    sentences.push("Volatility expanding — allow wider ranges.");
+  } else if (opts?.vixPulseOk && volatility === "Compressed") {
+    sentences.push("Ranges compressing — breakouts may lack follow-through.");
+  } else if (participation === "Mixed" && !sentences[0]?.includes("breadth mixed")) {
+    sentences.push("Breadth mixed — confirm sector follow-through.");
+  }
+
+  return sentences.slice(0, 2).join(" ");
 }

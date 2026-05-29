@@ -140,6 +140,7 @@ export function buildMarketContextSnapshot(input: {
   vixPulseOk: boolean;
   spyPct: number | null;
   qqqPct: number | null;
+  iwmPct?: number | null;
 }): MarketContextSnapshot {
   const sectorPcts = input.sectorRotation.map((s) => s.pct5d);
   const indexPcts = input.weeklyIndexRows.map((r) => r.pct5d);
@@ -160,7 +161,8 @@ export function buildMarketContextSnapshot(input: {
     return { symbol: row.symbol, label: row.label, pct5d: row.pct5d, formattedPct: formatted, tone };
   });
 
-  const sessionToday = buildSessionTodayLine(input.spyPct, input.qqqPct);
+  const sessionToday = buildSessionTodayLine(input.spyPct, input.qqqPct, input.iwmPct ?? null);
+  const volPillValue = volatilityPillLabel(volatility, { vixPulseOk: input.vixPulseOk });
   const pills: MarketContextPill[] = [
     {
       id: "regime",
@@ -178,20 +180,24 @@ export function buildMarketContextSnapshot(input: {
         vixPulseOk: input.vixPulseOk
       })
     },
-    {
-      id: "volatility",
-      category: "Volatility",
-      value: volatilityPillLabel(volatility, { vixPulseOk: input.vixPulseOk }),
-      tone: pillToneForVolatility(volatility),
-      summaryLine: volatilityPlainLine(volatility),
-      inputs: [],
-      rule: "",
-      structured: buildVolatilityStructuredExplain({
-        category: volatility,
-        vixPulseOk: input.vixPulseOk,
-        regimePriceBreadthOnly: input.regimePriceBreadthOnly
-      })
-    },
+    ...(volPillValue
+      ? [
+          {
+            id: "volatility" as const,
+            category: "Volatility",
+            value: volPillValue,
+            tone: pillToneForVolatility(volatility),
+            summaryLine: volatilityPlainLine(volatility),
+            inputs: [],
+            rule: "",
+            structured: buildVolatilityStructuredExplain({
+              category: volatility,
+              vixPulseOk: input.vixPulseOk,
+              regimePriceBreadthOnly: input.regimePriceBreadthOnly
+            })
+          }
+        ]
+      : []),
     {
       id: "breadth",
       category: "Breadth",
@@ -240,7 +246,9 @@ export function buildMarketContextSnapshot(input: {
     indexStats,
     sessionToday,
     pills,
-    environmentSummary: buildEnvironmentSummary(weeklyAvg, volatility, participation, riskHorizon),
+    environmentSummary: buildEnvironmentSummary(weeklyAvg, volatility, participation, riskHorizon, {
+      vixPulseOk: input.vixPulseOk
+    }),
     derived: {
       volatility,
       participation,
@@ -254,8 +262,8 @@ export function buildMarketContextSnapshot(input: {
 
 /** Footnote under 5d index stats — shared copy. */
 /** Shown above the 5-day index chip row in market detail (not today’s session tape). */
-export const MARKET_CONTEXT_INDEX_SECTION_TITLE = "5-day index trend";
+export const MARKET_CONTEXT_INDEX_SECTION_TITLE = "Weekly trend (5 sessions)";
 export const MARKET_CONTEXT_INDEX_SECTION_HINT =
-  "Rolling weekly index performance — separate from today’s session tape above.";
+  "Multi-day index performance — not today’s session tape.";
 /** @deprecated Use MARKET_CONTEXT_INDEX_SECTION_TITLE — kept for tests migrating copy. */
 export const MARKET_CONTEXT_INDEX_FOOTNOTE = MARKET_CONTEXT_INDEX_SECTION_TITLE;

@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
+import { DashboardOpportunityListSection } from "@/components/dashboard/dashboard-opportunity-list-section";
 import Link from "next/link";
 import type { GapIntelligenceItem } from "@/lib/api/scanner";
 import type { DeskTodayData } from "@/lib/api/desk-today";
 import { DeskRefreshButton } from "@/components/dashboard/desk-refresh-button";
-import { HotInMarketCard } from "@/components/dashboard/hot-in-market-card";
+import { DashboardOpportunityRowList } from "@/components/dashboard/dashboard-opportunity-row";
+import type { MarketStatusPayload } from "@/lib/api/market";
 import { DashboardMissedTodayStrip } from "@/components/dashboard/dashboard-missed-today-strip";
 import {
   deskScanFootnote,
@@ -19,12 +21,17 @@ import {
   sinceLastVisitSummary
 } from "@/lib/dashboard/desk-since-last-visit";
 import {
-  buildHotInMarketCardModel,
   hotInMarketAwaitingMessage,
   hotInMarketEmptyMessage,
   hotInMarketFeedSubtitle,
   MARKET_ACTIVITY_TITLE
 } from "@/lib/dashboard/hot-in-market-card-present";
+import { buildSessionActivityRowModels } from "@/lib/dashboard/opportunity-row-present";
+import {
+  resolveSessionActivityUiMode,
+  sessionActivityClosedSummary,
+  sessionActivitySubtitleSuffix
+} from "@/lib/market/session-activity-mode";
 import type { DashboardDeskMode } from "@/lib/dashboard/live-status-copy";
 import { interactionLevelProps } from "@/lib/dashboard/click-hierarchy";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
@@ -46,6 +53,7 @@ type Props = {
   canRefreshDesk?: boolean;
   refreshCooldownLabel?: string | null;
   refreshError?: string | null;
+  marketStatus?: MarketStatusPayload | null;
   variant?: "standalone" | "pipeline";
 };
 
@@ -64,9 +72,13 @@ export function DashboardDiscoveryFeed({
   canRefreshDesk = false,
   refreshCooldownLabel = null,
   refreshError = null,
+  marketStatus = null,
   variant = "standalone"
 }: Props) {
   const { colors } = useTheme();
+  const sessionMode = resolveSessionActivityUiMode(marketStatus);
+  const sessionClosed = sessionMode === "closed";
+  const sessionExtended = sessionMode === "extended";
   const { leaders, source } = resolveDiscoveryLeaders(deskData, gapFallback, mode, alternateDeskData);
   const leaderSymbols = useMemo(() => leaders.map((l) => l.symbol), [leaders]);
   const sinceLastVisit = useMemo(() => {
@@ -83,25 +95,9 @@ export function DashboardDiscoveryFeed({
     saveDeskLastVisit(leaderSymbols, mode);
   }, [leaderSymbols, mode]);
 
-  const cardModels = useMemo(
-    () =>
-      leaders.map((leader, index) =>
-        buildHotInMarketCardModel(leader, {
-          rank: index + 1,
-          mode,
-          source,
-          colors: {
-            surface: colors.surface,
-            border: colors.border,
-            accent: colors.accent,
-            bullish: colors.bullish,
-            bearish: colors.bearish,
-            caution: colors.caution,
-            textMuted: colors.textMuted
-          }
-        })
-      ),
-    [leaders, mode, source, colors.accent, colors.bullish, colors.bearish, colors.caution, colors.textMuted]
+  const rowModels = useMemo(
+    () => buildSessionActivityRowModels(leaders, { mode, source, sessionMode }),
+    [leaders, mode, source, sessionMode]
   );
 
   const footnote = deskScanFootnote(deskData);
@@ -119,8 +115,10 @@ export function DashboardDiscoveryFeed({
     scannerPending,
     deskCacheMiss,
     sessionActivityLoading,
+    sessionMode,
     mode
   });
+  const sessionSuffix = sessionActivitySubtitleSuffix(sessionMode);
   const awaitingData =
     leaders.length === 0 &&
     (isLoading ||
@@ -224,15 +222,39 @@ export function DashboardDiscoveryFeed({
         </p>
       ) : null}
 
-      {cardModels.length > 0 ? (
-        <ul
-          className="m-0 mt-3 grid list-none gap-3 p-0 sm:grid-cols-2 xl:grid-cols-3"
-          data-testid="dashboard-discovery-list"
+      {sessionClosed && leaders.length > 0 ? (
+        <p
+          className="m-0 mt-3 text-sm font-medium leading-snug"
+          data-testid="dashboard-session-activity-closed"
+          style={{ color: colors.text }}
         >
-          {cardModels.map((model) => (
-            <HotInMarketCard key={model.symbol} model={model} mode={mode} />
-          ))}
-        </ul>
+          {sessionActivityClosedSummary(leaders.length)}
+        </p>
+      ) : null}
+
+      {sessionExtended && sessionSuffix ? (
+        <p
+          className="m-0 mt-3 text-xs leading-snug"
+          data-testid="dashboard-session-activity-extended"
+          style={{ color: colors.textMuted }}
+        >
+          {sessionSuffix}
+        </p>
+      ) : null}
+
+      {rowModels.length > 0 ? (
+        <div className="mt-3">
+          <DashboardOpportunityListSection
+            rows={rowModels}
+            demoteGap
+            testId="dashboard-discovery-list"
+            collapseAllUntilExpand={sessionClosed}
+            expandTestId="dashboard-session-activity-expand"
+            expandLabel={(n) =>
+              `View ${n} logged ${n === 1 ? "mover" : "movers"}`
+            }
+          />
+        </div>
       ) : awaitingData && !pipelineLoadingOnly ? (
         <p
           className="m-0 mt-3"
