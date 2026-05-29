@@ -123,6 +123,31 @@ async def resolve_upcoming_earnings_horizon(
     horizon: EarningsHorizon | None = None
 
     try:
+        from stocvest.data.earnings_calendar_fetch import fetch_earnings_events
+
+        fh_rows, _, _ = await fetch_earnings_events(
+            [sym],
+            from_date=today,
+            to_date=today + timedelta(days=window_days),
+            polygon_client=polygon_client,
+        )
+        best_fh: EarningsHorizon | None = None
+        for ev in fh_rows:
+            h = _horizon_from_event(ev, today=today)
+            if h is None:
+                continue
+            if best_fh is None or h.report_date < best_fh.report_date:
+                best_fh = h
+        if best_fh is not None:
+            horizon = best_fh
+    except Exception as exc:
+        _LOG.warning("earnings_calendar_finnhub_failed symbol=%s err=%s", sym, type(exc).__name__)
+
+    if horizon is not None:
+        _horizon_cache[sym] = (now, horizon)
+        return horizon
+
+    try:
         bz_date = await _from_benzinga(sym, today=today, window_days=window_days)
         if bz_date is not None:
             days = (bz_date - today).days

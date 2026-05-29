@@ -4,7 +4,11 @@ import { normalizeEarningsResponse } from "@/lib/api/earnings-types";
 import { earningsTimingLabel as earningsTimingLabelImpl } from "@/lib/earnings-timing";
 
 export type { EarningsEvent, EarningsResponse } from "@/lib/api/earnings-types";
-export { DEFAULT_EARNINGS_SYMBOLS, normalizeEarningsResponse } from "@/lib/api/earnings-types";
+export {
+  DEFAULT_EARNINGS_SYMBOLS,
+  normalizeEarningsResponse,
+  resolveEarningsSymbolList
+} from "@/lib/api/earnings-types";
 
 export async function fetchEarningsCalendar(symbols: string[], days = 7): Promise<EarningsResponse> {
   const cleanSymbols = symbols.map((s) => s.trim().toUpperCase()).filter(Boolean);

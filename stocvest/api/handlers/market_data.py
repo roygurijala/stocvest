@@ -780,45 +780,17 @@ def earnings_calendar_handler(
 
     async def _run() -> dict[str, Any]:
         settings = get_settings()
-        today = date.today()
-        to_date = today + timedelta(days=days)
-        recent_from = today - timedelta(days=3)
         async with client_factory(api_key=settings.polygon_api_key) as client:
-            rows = await client.get_earnings_calendar(symbols=symbols, from_date=recent_from, to_date=to_date)
-        upcoming = [r for r in rows if r.report_date >= today]
-        recent = [r for r in rows if r.report_date < today]
-        return ok(
-            {
-                "symbols": symbols,
-                "days": days,
-                "upcoming": [x.model_dump(mode="json") for x in upcoming],
-                "recent": [x.model_dump(mode="json") for x in recent],
-            }
-        )
+            from stocvest.data.earnings_calendar_fetch import fetch_earnings_payload
+
+            payload = await fetch_earnings_payload(symbols, days=days, polygon_client=client)
+        return ok(payload)
 
     try:
         return asyncio.run(_run())
     except PolygonError as exc:
-        msg_l = str(exc).lower()
-        if (
-            "403" in str(exc)
-            or "401" in str(exc)
-            or "forbidden" in msg_l
-            or "not entitled" in msg_l
-            or "subscription" in msg_l
-        ):
-            return ok(
-                {
-                    "symbols": symbols,
-                    "days": days,
-                    "upcoming": [],
-                    "recent": [],
-                    "notice": (
-                        "Earnings data requires a Polygon Stocks Developer plan or Benzinga earnings add-on. "
-                        "Upgrade at polygon.io to enable this feature."
-                    ),
-                }
-            )
+        return internal_error(str(exc))
+    except Exception as exc:
         return internal_error(str(exc))
 
 

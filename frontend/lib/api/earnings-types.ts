@@ -19,13 +19,34 @@ export interface EarningsResponse {
   days: number;
   upcoming: EarningsEvent[];
   recent: EarningsEvent[];
-  /** Set when Polygon denies earnings/Benzinga access (plan tier). */
+  /** Set when no earnings provider returned data (e.g. missing FINNHUB_API_KEY or Polygon tier). */
   notice?: string | null;
+  /** Provider that supplied rows: finnhub | benzinga | polygon | fmp | empty */
+  source?: string | null;
+}
+
+/** Merge watchlist + defaults for earnings API queries (watchlist symbols first). */
+export function resolveEarningsSymbolList(
+  defaults: readonly string[],
+  extra: readonly string[],
+  opts?: { max?: number }
+): string[] {
+  const max = opts?.max ?? 30;
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of [...extra, ...defaults]) {
+    const sym = String(raw || "").trim().toUpperCase();
+    if (!sym || seen.has(sym)) continue;
+    seen.add(sym);
+    out.push(sym);
+    if (out.length >= max) break;
+  }
+  return out;
 }
 
 export const DEFAULT_EARNINGS_SYMBOLS = [
   "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "BRK.B", "UNH", "JNJ",
-  "V", "MA", "JPM", "HD", "PG", "XOM", "CVX", "LLY", "AVGO", "MRK"
+  "V", "MA", "JPM", "HD", "PG", "XOM", "CVX", "LLY", "AVGO", "MRK", "DELL"
 ];
 
 export function normalizeEarningsResponse(
@@ -37,11 +58,14 @@ export function normalizeEarningsResponse(
   if (!payload) {
     return fallback;
   }
+  const source =
+    typeof payload.source === "string" && payload.source.trim() ? payload.source.trim() : null;
   return {
     symbols: payload.symbols || cleanSymbols,
     days: payload.days || days,
     upcoming: Array.isArray(payload.upcoming) ? payload.upcoming : [],
     recent: Array.isArray(payload.recent) ? payload.recent : [],
-    notice: typeof payload.notice === "string" && payload.notice.trim() ? payload.notice.trim() : null
+    notice: typeof payload.notice === "string" && payload.notice.trim() ? payload.notice.trim() : null,
+    source
   };
 }

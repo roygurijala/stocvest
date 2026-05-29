@@ -404,7 +404,24 @@ async def _gap_intelligence_async(payload: dict[str, Any], user_id: str | None) 
             max_symbols=_GAP_INTEL_TOP_N,
         )
         sym_map = {s.symbol: s for s in snapshots if s.symbol in sym_need}
-        items = build_gap_intelligence_items(gaps, sym_map, news)
+        from datetime import date as date_cls, timedelta as td
+
+        from stocvest.data.earnings_calendar_fetch import fetch_earnings_events
+
+        today = date_cls.today()
+        earn_rows, _, _ = await fetch_earnings_events(
+            gap_symbols,
+            from_date=today - td(days=3),
+            to_date=today + td(days=14),
+            polygon_client=client,
+        )
+        items = build_gap_intelligence_items(
+            gaps,
+            sym_map,
+            news,
+            earnings_events=earn_rows,
+            session_date=today,
+        )
         await _enrich_gap_company_names(client, items)
     return ok(
         {

@@ -8,11 +8,13 @@ import math
 import re
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from stocvest.data.models import NewsArticle, Snapshot
+from stocvest.data.earnings_catalyst import match_earnings_catalyst
+from stocvest.data.earnings_calendar_fetch import index_earnings_by_symbol
+from stocvest.data.models import EarningsEvent, NewsArticle, Snapshot
 from stocvest.signals.day_trading_scanner import PremarketGapCandidate
 from stocvest.signals.news_catalyst_detector import NewsCatalystCandidate, NewsCatalystDetector
 from stocvest.utils.logging import get_logger
@@ -290,6 +292,22 @@ def _get_catalyst_lookback_hours() -> int:
     return _catalyst_lookback_hours_at(ny)
 
 
+def _is_outside_rth_ny(now_utc: datetime | None = None) -> bool:
+    """True before 9:30 or after 16:00 ET Mon–Fri, or on weekends."""
+    ny = (now_utc or datetime.now(timezone.utc)).astimezone(ZoneInfo("America/New_York"))
+    if ny.weekday() >= 5:
+        return True
+    mins = ny.hour * 60 + ny.minute
+    return mins < 9 * 60 + 30 or mins >= 16 * 60
+
+
+def _passes_volume_vs_adv_gate(volume_vs_avg: float) -> bool:
+    """Defer strict volume-vs-prior-day gate until regular session has volume."""
+    if _is_outside_rth_ny():
+        return True
+    return volume_vs_avg >= 0.5
+
+
 def _filter_articles_last_hours(articles: list[NewsArticle], *, hours: int) -> list[NewsArticle]:
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
     return [a for a in articles if a.published_at >= cutoff]
@@ -373,11 +391,15 @@ def build_gap_intelligence_items(
     *,
     detector: NewsCatalystDetector | None = None,
     news_lookback_hours: int | None = None,
+    earnings_events: list[EarningsEvent] | None = None,
+    session_date: date | None = None,
 ) -> list[dict[str, Any]]:
     det = detector or NewsCatalystDetector(min_score=0.35)
     lookback_hours = news_lookback_hours if news_lookback_hours is not None else _get_catalyst_lookback_hours()
     arts = _filter_articles_last_hours(articles, hours=lookback_hours)
     work = _prepare_work_items(gaps, snapshot_by_symbol)
+    earnings_index = index_earnings_by_symbol(earnings_events or [])
+    sess_date = session_date or datetime.now(timezone.utc).astimezone(ZoneInfo("America/New_York")).date()
     items: list[dict[str, Any]] = []
 
     for w in work:
@@ -388,7 +410,7 @@ def build_gap_intelligence_items(
 
         if price < 5.0 or day_vol < 500_000:
             continue
-        if prev_v is not None and prev_v > 0 and w.volume_vs_avg < 0.5:
+        if prev_v is not None and prev_v > 0 and not _passes_volume_vs_adv_gate(w.volume_vs_avg):
             continue
 
         best: NewsCatalystCandidate | None = None
@@ -402,7 +424,10 @@ def build_gap_intelligence_items(
                 best = c
                 best_article = art
 
-        has_cat = best is not None
+        earnings_payload, _earnings_ev = match_earnings_catalyst(
+            g.symbol, earnings_index, session_date=sess_date
+        )
+        has_cat = best is not None or earnings_payload is not None
         if not has_cat:
             mismatch = 0
             noise_c = 0
@@ -425,6 +450,10 @@ def build_gap_intelligence_items(
         narrative = int(best.narrative_score) if best is not None else None
         cat_type = best.catalyst_type if best is not None else None
         cat_sent = best.sentiment_label if best is not None else None
+        if earnings_payload is not None and best is None:
+            narrative = int(earnings_payload.get("score") or 72)
+            cat_type = str(earnings_payload.get("category") or "earnings")
+            cat_sent = str(earnings_payload.get("sentiment") or "neutral")
         gqs = calculate_gap_quality_score(
             g.gap_percent,
             w.volume_vs_avg,
@@ -460,6 +489,8 @@ def build_gap_intelligence_items(
                 "sentiment": best.sentiment_label,
                 "score": best.narrative_score,
             }
+        elif earnings_payload is not None:
+            catalyst_payload = dict(earnings_payload)
 
         mode_best_fit, mode_best_fit_reasons = classify_mode_best_fit(
             gap_pct=g.gap_percent,

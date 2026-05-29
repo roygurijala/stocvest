@@ -69,6 +69,10 @@ async def test_resolve_prefers_benzinga_then_polygon() -> None:
     with (
         patch("stocvest.data.earnings_calendar.datetime") as dt_mock,
         patch(
+            "stocvest.data.earnings_calendar_fetch.fetch_earnings_events",
+            new=AsyncMock(return_value=([], None, None)),
+        ),
+        patch(
             "stocvest.data.earnings_calendar._from_benzinga",
             new=AsyncMock(return_value=bz_date),
         ),

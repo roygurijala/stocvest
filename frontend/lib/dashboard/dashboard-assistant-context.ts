@@ -126,6 +126,15 @@ export function buildDashboardAssistantPageContext(
     ? input.deskData!.recently_hot!.map((r) => r.symbol.trim().toUpperCase()).filter(Boolean).slice(0, 5)
     : [];
 
+  const gapWithCatalyst = gapLeaders.filter((g) => g.has_catalyst).length;
+  const gapWithoutCatalyst = Math.max(0, gapLeaders.length - gapWithCatalyst);
+  const gapIntelNote =
+    input.scannerDataSettled && gapLeaders.length === 0
+      ? input.gapSnapshotSymbolCount != null && input.gapSnapshotSymbolCount < 100
+        ? "Gap Intelligence empty — scan may have used a bounded symbol list (watchlist + defaults) or no names met gap/volume gates."
+        : "Gap Intelligence empty — no symbols met gap magnitude, volume, and quality gates this session."
+      : null;
+
   const dashboard_context: DashboardAssistantContextV1 = {
     version: DASHBOARD_CONTEXT_VERSION,
     regime,
@@ -160,9 +169,14 @@ export function buildDashboardAssistantPageContext(
       ? { day_desk_posture: input.dayDeskPosture }
       : {}),
     top_setups: mapSetupSummaries(input.swingTopSignals),
-    ...(input.discoveryExpanded && gapLeaders.length > 0
-      ? { gap_leaders_detail: mapGapSummaries(gapLeaders, 10) }
-      : {}),
+    gap_intel_summary: {
+      leader_count: gapLeaders.length,
+      with_catalyst_count: gapWithCatalyst,
+      without_catalyst_count: gapWithoutCatalyst,
+      preview_symbols: gapLeaders.slice(0, 5).map((g) => g.symbol.trim().toUpperCase()),
+      ...(gapIntelNote ? { empty_note: gapIntelNote } : {})
+    },
+    gap_leaders_detail: input.scannerDataSettled ? mapGapSummaries(gapLeaders, 8) : [],
     macro_events: input.upcomingEarnings.slice(0, 5).map((e) => ({
       symbol: e.symbol.trim().toUpperCase(),
       report_date: e.report_date,

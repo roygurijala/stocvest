@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
 from stocvest.data.models import NewsArticle, Snapshot
 from stocvest.signals.day_trading_scanner import PremarketGapCandidate
@@ -119,7 +120,8 @@ def test_thin_volume_filtered_out() -> None:
     ]
     snaps = {"THIN": _snap("THIN", prev_close=100, price=110, vol=900_000, adv=5_000_000)}
     arts = [_art("THIN news", ["THIN"])]
-    items = build_gap_intelligence_items(gaps, snaps, arts)
+    with patch("stocvest.signals.gap_intelligence._is_outside_rth_ny", return_value=False):
+        items = build_gap_intelligence_items(gaps, snaps, arts)
     assert items == []
 
 

@@ -354,6 +354,12 @@ def test_serialize_page_context_emits_dashboard_context_v1() -> None:
                     "report_time": "after_market",
                 }
             ],
+            "gap_intel_summary": {
+                "leader_count": 1,
+                "with_catalyst_count": 1,
+                "without_catalyst_count": 0,
+                "preview_symbols": ["GAP1"],
+            },
             "gap_leaders_detail": [
                 {
                     "symbol": "GAP1",
@@ -386,6 +392,8 @@ def test_serialize_page_context_emits_dashboard_context_v1() -> None:
     assert "discovery_recently_hot=MU" in out
     assert "universe_swing_symbol_count=200" in out
     assert "macro_event_1=symbol=AAPL|date=2026-05-20|time=after_market" in out
+    assert "gap_intel_summary_leader_count=1" in out
+    assert "gap_intel_summary_with_catalyst_count=1" in out
     assert "gap_leader_1=symbol=GAP1|gap=up|quality=high" in out
     assert "top_setup_1=symbol=AAA|direction=long|strength=strong|confluence=true" in out
 
