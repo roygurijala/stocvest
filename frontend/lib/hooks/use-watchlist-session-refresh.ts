@@ -41,7 +41,7 @@ export function useWatchlistSessionRefresh(opts: {
         dayBySymbol: dayBySymbol ?? {},
         desks
       });
-      if (cancelled || result.refreshed.length === 0) return;
+      if (cancelled || !result?.refreshed?.length) return;
       onRefreshedRef.current?.();
     })();
 

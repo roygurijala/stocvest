@@ -30,6 +30,15 @@ vi.mock("@/lib/assistant/context", () => ({
   usePublishAssistantContext: () => undefined
 }));
 
+vi.mock("@/lib/watchlist-maturation-session-refresh", () => ({
+  refreshStaleWatchlistMaturation: vi.fn().mockResolvedValue({
+    sessionDate: "2099-01-01",
+    attempted: 0,
+    refreshed: [],
+    skippedAlreadyDone: 0
+  })
+}));
+
 function wrap(ui: ReactElement) {
   return render(<ThemeProvider>{ui}</ThemeProvider>);
 }
@@ -43,7 +52,6 @@ describe("WatchlistsPageClient maturation", () => {
 
   afterEach(() => {
     global.fetch = originalFetch;
-    vi.restoreAllMocks();
   });
 
   it("fetches maturation-summary for the default list and shows readiness under the symbol", async () => {

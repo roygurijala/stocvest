@@ -37,6 +37,9 @@ vi.stubGlobal(
     if (url.includes("/watchlists/default/symbols")) {
       return { ok: true, json: async () => ({ symbols: [] }) };
     }
+    if (url.includes("/signals/composite/")) {
+      return { ok: true, json: async () => ({ status: "ok" }) };
+    }
     if (url.includes("/market/snapshots")) {
       return { ok: true, json: async () => ({ snapshots: [] }) };
     }
