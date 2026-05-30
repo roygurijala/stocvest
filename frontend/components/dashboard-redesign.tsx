@@ -516,7 +516,11 @@ function DashboardRedesignBody({
     [marketOverview.status]
   );
 
-  const pageTitle = useMemo(() => buildDashboardPageTitle(regimeLabel), [regimeLabel]);
+  const pageTitle = useMemo(
+    () => buildDashboardPageTitle(regimeLabel, { sessionMode }),
+    [regimeLabel, sessionMode]
+  );
+  const pulseHeadlinePrefix = useMemo(() => dashboardPulseHeadlinePrefix(sessionMode), [sessionMode]);
 
   const nearReadyInMarket = useMemo(() => {
     const rows = scannerOverview.scanSummary?.near_qualification ?? [];

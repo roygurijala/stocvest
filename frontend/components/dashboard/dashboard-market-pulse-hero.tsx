@@ -108,6 +108,7 @@ export function DashboardMarketPulseHero({
   const { colors } = useTheme();
   const { lead, lag } = topSectors(sectorRotation);
   const environmentSummary = marketContext.environmentSummary;
+  const sessionCopy = dashboardPulseSessionHeading(sessionMode);
   const sessionTapeCells = buildSessionTapeCells(
     spyPct,
     qqqPct,
