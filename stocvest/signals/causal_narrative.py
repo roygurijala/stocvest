@@ -82,11 +82,24 @@ def _verdict_polarity(verdict: str, status: str, bias: str) -> LayerPolarity:
     return "neutral"
 
 
+_INTERNAL_SCORE_COPY_RE = re.compile(
+    r"/\s*100\b|\bscore\s*\d|\bNews score\b|\bMacro\s+\d|\bInternals\s+\d|"
+    r"\bMarket Internals\s+\d|VIX component|blended sentiment|sent_avg|layer blend|model tilt",
+    re.I,
+)
+
+
+def _reasoning_looks_internal(text: str) -> bool:
+    return bool(_INTERNAL_SCORE_COPY_RE.search((text or "").strip()))
+
+
 def _substantive_reasoning(text: str) -> bool:
     raw = (text or "").strip()
     if len(raw) < 12:
         return False
     if GENERIC_REASONING_RE.search(raw):
+        return False
+    if _reasoning_looks_internal(raw):
         return False
     return True
 

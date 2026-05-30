@@ -2,6 +2,7 @@
 
 import { InfoTip } from "@/components/info-tip";
 import type { CausalNarrative } from "@/lib/signal-evidence/causal-narrative";
+import { sanitizeCausalBecause } from "@/lib/signal-evidence/causal-narrative";
 import { borderRadius, spacing, surfaceGlowClassName } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -59,7 +60,7 @@ export function CausalNarrativePanel({ narrative, compact = false }: Props) {
                 {note.name}
               </span>
               <span className="block mt-0.5" style={{ color: colors.textMuted }}>
-                {note.because}
+                {sanitizeCausalBecause(note.layer, note.polarity, note.because, note.causedBy)}
               </span>
             </li>
           ))}

@@ -3,6 +3,7 @@ import type { IntradaySetupPayload } from "@/lib/api/scanner";
 import { parseLaggardSignal, parseUnlockForecast, type LaggardSignal, type UnlockHint } from "@/lib/laggard";
 import { parseCausalNarrativeFromApi } from "@/lib/signal-evidence/causal-narrative";
 import {
+  EVIDENCE_PLAIN_ENGLISH_LAYER_KEYS,
   evidenceLayerPlainEnglishExplanation,
   filterInternalLayerScoreCopy,
   layerCopyLooksInternal
@@ -1938,10 +1939,9 @@ function finalizeEnrichedEvidenceLayer(
   fin: (merged: EvidenceLayer) => EvidenceLayer
 ): EvidenceLayer {
   const merged: EvidenceLayer = { ...layer, ...apiLayer };
-  const explanation =
-    layer.key === "news" || layer.key === "macro" || layer.key === "internals"
-      ? evidenceLayerPlainEnglishExplanation(merged)
-      : merged.explanation;
+  const explanation = EVIDENCE_PLAIN_ENGLISH_LAYER_KEYS.has(layer.key)
+    ? evidenceLayerPlainEnglishExplanation(merged)
+    : merged.explanation;
   const points = sanitizeEvidenceChips(filterInternalLayerScoreCopy(layer.key, keyPoints), layer.key).slice(
     0,
     maxChips
@@ -2071,10 +2071,9 @@ export function applySwingCompositeEnrichment(
         return finalizeEnrichedEvidenceLayer(layer, apiLayer, synth, maxChips, fin);
       }
       const merged = { ...layer, ...apiLayer };
-      const explanation =
-        layer.key === "news" || layer.key === "macro" || layer.key === "internals"
-          ? evidenceLayerPlainEnglishExplanation({ ...layer, ...apiLayer })
-          : merged.explanation;
+      const explanation = EVIDENCE_PLAIN_ENGLISH_LAYER_KEYS.has(layer.key)
+        ? evidenceLayerPlainEnglishExplanation({ ...layer, ...apiLayer })
+        : merged.explanation;
       return fin({ ...merged, explanation });
     });
   }

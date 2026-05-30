@@ -1,8 +1,10 @@
 import { describe, expect, test } from "vitest";
 import { buildEvidenceFromSetup } from "@/lib/signal-evidence";
 import { applySwingCompositeEnrichment } from "@/lib/signal-evidence";
+import { sanitizeCausalBecause } from "@/lib/signal-evidence/causal-narrative";
 import {
   evidenceLayerDisplayExplanation,
+  evidenceLayerInsightText,
   evidenceLayerPlainEnglishExplanation,
   filterInternalLayerScoreCopy,
   layerCopyLooksInternal
@@ -107,5 +109,52 @@ describe("layer-plain-english", () => {
         "News score 92/100 from 2 quality articles (blended sentiment +0.83)."
       ])
     ).toEqual([]);
+    expect(filterInternalLayerScoreCopy("technical", ["Model tilt ~68 / 100", "RSI 45"])).toEqual([
+      "RSI 45"
+    ]);
+  });
+
+  test("sector plain English drops score tail from API reasoning", () => {
+    const sector = evidenceLayerPlainEnglishExplanation({
+      key: "sector",
+      icon: "🏭",
+      name: "Sector",
+      status: "Bullish",
+      weightPercent: 10,
+      explanation: "Sector IGV +6.25% vs SPY +0.25% (1d rel +6.00%) → score 80.",
+      keyPoints: [],
+      sector_etf: "IGV",
+      sector_display_name: "Software"
+    });
+    expect(sector).not.toMatch(/score\s*80/i);
+    expect(sector).toContain("Software");
+  });
+
+  test("sanitizeCausalBecause replaces internal API because lines", () => {
+    const line = sanitizeCausalBecause(
+      "news",
+      "blocking",
+      "News score 92/100 from 2 quality articles (blended sentiment +0.83)."
+    );
+    expect(line).not.toMatch(/\/100/);
+    expect(line).toContain("catalyst");
+  });
+
+  test("evidenceLayerInsightText never returns score-heavy causal copy", () => {
+    const layer = {
+      key: "internals",
+      icon: "📈",
+      name: "Market Internals",
+      status: "Neutral" as const,
+      weightPercent: 10,
+      explanation: "Internals 60/100 — VIX component 50.",
+      keyPoints: []
+    };
+    const insight = evidenceLayerInsightText(
+      layer,
+      "Internals 60/100 — VIX component 50, breadth 60, participation 75."
+    );
+    expect(insight).not.toMatch(/\/100/);
+    expect(insight).not.toContain("VIX component");
   });
 });

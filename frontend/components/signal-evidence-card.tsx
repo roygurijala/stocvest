@@ -14,12 +14,14 @@ import { LaggardInsight } from "@/components/signal/LaggardInsight";
 import { InfoTip } from "@/components/info-tip";
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import {
-  buildLayerInsightLine,
   evidenceDirectionToBias,
   evidenceLayerToRow,
   evidenceLayersToRows
 } from "@/lib/signal-evidence/evidence-card-present";
-import { evidenceLayerDisplayExplanation } from "@/lib/signal-evidence/layer-plain-english";
+import {
+  evidenceLayerDisplayExplanation,
+  evidenceLayerInsightText
+} from "@/lib/signal-evidence/layer-plain-english";
 import { CausalNarrativePanel } from "@/components/signals/causal-narrative-panel";
 import { TimeframeContextPanel } from "@/components/signals/timeframe-context-panel";
 import { resolveCausalNarrative } from "@/lib/signal-evidence/causal-narrative";
@@ -1643,11 +1645,10 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
                     </span>
                   </div>
                   {(() => {
-                    const layerRow = evidenceLayerToRow(layer);
-                    const causalLine = evidenceCausalNarrative
-                      ? evidenceCausalNarrative.layerNotes[layer.key]?.because
-                      : null;
-                    const layerInsight = causalLine ?? buildLayerInsightLine(layerRow, setupBias);
+                    const causalBecause = evidenceCausalNarrative?.layerNotes[layer.key]?.because;
+                    const displayExp = evidenceLayerDisplayExplanation(layer);
+                    const layerInsight = evidenceLayerInsightText(layer, causalBecause);
+                    if (layerInsight.trim() === displayExp.trim()) return null;
                     return (
                       <p
                         className="m-0 text-xs leading-snug"
