@@ -7,10 +7,10 @@ import {
 } from "@/lib/maturation-expected-frequency";
 
 describe("maturation-expected-frequency", () => {
-  test("watchlist header mentions scheduled and on-demand evaluation", () => {
+  test("watchlist header mentions session refresh and on-demand evaluation", () => {
     const h = watchlistEvaluationHeader();
-    expect(h).toContain("8:15 AM ET");
-    expect(h).toContain("9:35 AM ET");
+    expect(h).toContain("Dashboard");
+    expect(h).toContain("Watchlists");
     expect(h).toContain("Refresh");
   });
 

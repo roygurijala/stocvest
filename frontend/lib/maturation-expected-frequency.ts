@@ -7,17 +7,22 @@
 
 export type MaturationFrequencyDesk = "swing" | "day";
 
-/** Weekday swing batch after price warm (~8:15 AM ET). */
-export const MATURATION_SCHEDULED_SWING_OPEN_LINE =
-  "Swing desk: default-watchlist symbols refresh on weekdays around 8:15 AM ET (after the price warm).";
+/** Login / page-load background refresh (Dashboard + default Watchlists). */
+export const MATURATION_SESSION_SWING_LINE =
+  "Swing desk: stale default-watchlist symbols refresh in the background when you open Dashboard or Watchlists.";
 
-/** Weekday day batch after the open (~9:35 AM ET, regular session only). */
-export const MATURATION_SCHEDULED_DAY_OPEN_LINE =
-  "Day desk: default-watchlist symbols refresh on weekdays around 9:35 AM ET when the regular session is open.";
+export const MATURATION_SESSION_DAY_LINE =
+  "Day desk: same session refresh on Dashboard or Watchlists when the regular session is active.";
 
-/** Weekday batch reconciliation after cash close. */
+/** @deprecated Batch schedules removed; kept for tests importing legacy names. */
+export const MATURATION_SCHEDULED_SWING_OPEN_LINE = MATURATION_SESSION_SWING_LINE;
+
+/** @deprecated */
+export const MATURATION_SCHEDULED_DAY_OPEN_LINE = MATURATION_SESSION_DAY_LINE;
+
+/** @deprecated */
 export const MATURATION_SCHEDULED_EOD_LINE =
-  "Both desks also reconcile on weekdays after the cash close (~4:30 PM ET).";
+  "Scheduled platform-wide maturation batches are disabled; use session refresh or row Refresh.";
 
 /** @deprecated Use desk-specific lines; kept for tests that import the old name. */
 export const MATURATION_SCHEDULED_REFRESH_LINE = MATURATION_SCHEDULED_EOD_LINE;
@@ -47,8 +52,8 @@ export type MaturationFrequencyCopy = {
 export function expectedFrequencyForDesk(desk: MaturationFrequencyDesk): MaturationFrequencyCopy {
   const scheduled =
     desk === "swing"
-      ? `${MATURATION_SCHEDULED_SWING_OPEN_LINE} ${MATURATION_SCHEDULED_EOD_LINE}`
-      : `${MATURATION_SCHEDULED_DAY_OPEN_LINE} ${MATURATION_SCHEDULED_EOD_LINE}`;
+      ? MATURATION_SESSION_SWING_LINE
+      : `${MATURATION_SESSION_DAY_LINE} ${MATURATION_SESSION_SWING_LINE}`;
   return {
     desk,
     scheduled,
@@ -60,7 +65,7 @@ export function expectedFrequencyForDesk(desk: MaturationFrequencyDesk): Maturat
 
 /** Signals command bar + watchlist maturation header. */
 export function watchlistEvaluationHeader(): string {
-  return `${MATURATION_SCHEDULED_SWING_OPEN_LINE} ${MATURATION_SCHEDULED_DAY_OPEN_LINE} ${MATURATION_ON_DEMAND_SWING_LINE}`;
+  return `${MATURATION_SESSION_SWING_LINE} ${MATURATION_SESSION_DAY_LINE} ${MATURATION_ON_DEMAND_SWING_LINE}`;
 }
 
 /** Setup evolution hub intro + empty warming body. */
@@ -89,8 +94,8 @@ export function dailyPulseFrequencyFootnote(desk: MaturationFrequencyDesk): stri
 /** Onboarding wizard bullets (progress + cadence). */
 export function onboardingMaturationExpectationBullets(): string[] {
   return [
-    MATURATION_SCHEDULED_SWING_OPEN_LINE,
-    MATURATION_SCHEDULED_DAY_OPEN_LINE,
+    MATURATION_SESSION_SWING_LINE,
+    MATURATION_SESSION_DAY_LINE,
     MATURATION_ON_DEMAND_SWING_LINE,
     MATURATION_PROGRESSION_EXPECTATION_LINE
   ];

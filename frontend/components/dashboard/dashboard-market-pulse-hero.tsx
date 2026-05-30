@@ -137,7 +137,7 @@ export function DashboardMarketPulseHero({
         Index moves since the open — live tape, not 5-day trend.
       </p>
       <div
-        className="mt-1.5 flex flex-wrap gap-2"
+        className="mt-2 grid w-full gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5"
         data-testid="dashboard-pulse-tape"
         {...interactionLevelProps("none")}
       >
@@ -147,25 +147,28 @@ export function DashboardMarketPulseHero({
           const tone =
             pct == null || !Number.isFinite(pct) ? "muted" : pct > 0.05 ? "bullish" : pct < -0.05 ? "bearish" : "muted";
           return (
-            <DashboardIndexChip
-              key={cell.label}
-              symbol={cell.label}
-              horizon="today"
-              formattedPct={formattedPct}
-              tone={tone}
-              extra={cell.extra}
-              testId={`dashboard-pulse-${cell.label}`}
-            />
+            <div key={cell.label} className="min-w-0">
+              <DashboardIndexChip
+                symbol={cell.label}
+                horizon="today"
+                formattedPct={formattedPct}
+                tone={tone}
+                extra={cell.extra}
+                testId={`dashboard-pulse-${cell.label}`}
+              />
+            </div>
           );
         })}
         {lead ? (
           <div
             data-testid="dashboard-pulse-sector-lead"
+            className="min-w-0"
             style={{
               borderRadius: borderRadius.md,
               border: `1px solid ${colors.border}`,
               padding: `${spacing[2]} ${spacing[3]}`,
-              background: colors.surfaceMuted
+              background: colors.surfaceMuted,
+              height: "100%"
             }}
           >
             <div style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Leading (5d)</div>
@@ -178,11 +181,13 @@ export function DashboardMarketPulseHero({
         {lag && lag.symbol !== lead?.symbol ? (
           <div
             data-testid="dashboard-pulse-sector-lag"
+            className="min-w-0"
             style={{
               borderRadius: borderRadius.md,
               border: `1px solid ${colors.border}`,
               padding: `${spacing[2]} ${spacing[3]}`,
-              background: colors.surfaceMuted
+              background: colors.surfaceMuted,
+              height: "100%"
             }}
           >
             <div style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Lagging (5d)</div>
@@ -202,7 +207,7 @@ export function DashboardMarketPulseHero({
         </span>
       </p>
 
-      <details className="mt-2" data-testid="dashboard-market-detail">
+      <details className="mt-2" data-testid="dashboard-market-detail" open>
         <summary
           style={{
             fontSize: typography.scale.sm,

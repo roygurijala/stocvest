@@ -7,6 +7,7 @@ import { DashboardEdgeSync } from "@/components/dashboard-edge-sync";
 import { DashboardExecutionReadyStrip } from "@/components/dashboard/dashboard-execution-ready-strip";
 import { DashboardOpportunityPipeline } from "@/components/dashboard/dashboard-opportunity-pipeline";
 import { DashboardMarketPulseHero } from "@/components/dashboard/dashboard-market-pulse-hero";
+import { WatchlistSessionRefreshOrchestrator } from "@/components/watchlists/watchlist-session-refresh-orchestrator";
 import { DashboardScannerLoadingStrip } from "@/components/dashboard/dashboard-scanner-suspense-fallback";
 import { resolveDiscoveryLeaders } from "@/lib/dashboard/desk-today-present";
 import { ScannerOverviewProvider, useScannerOverview } from "@/components/dashboard/scanner-overview-context";
@@ -532,6 +533,7 @@ function DashboardRedesignBody({
 
   return (
     <section className="stocvest-dashboard-v2" style={{ display: "grid", gap: spacing[4] }}>
+      <WatchlistSessionRefreshOrchestrator dayTradingSurfaces={dayTradingSurfaces} />
       <DashboardDeskModePills
         mode={activeDeskMode}
         onModeChange={setDeskMode}

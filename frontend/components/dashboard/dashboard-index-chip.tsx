@@ -35,11 +35,12 @@ export function DashboardIndexChip({ symbol, descriptor, horizon, formattedPct, 
   return (
     <div
       data-testid={testId}
+      className="h-full w-full"
       style={{
         borderRadius: borderRadius.md,
         border: `1px solid ${colors.border}`,
         padding: `${spacing[2]} ${spacing[3]}`,
-        minWidth: "5.5rem",
+        minWidth: 0,
         background: `color-mix(in srgb, ${colors.surfaceMuted} 96%, ${pctColor} 4%)`
       }}
     >

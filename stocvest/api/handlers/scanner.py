@@ -191,10 +191,18 @@ def _handle_eventbridge_schedule(event: LambdaEvent, context: LambdaContext) -> 
     _LOG.info("scanner schedule invocation scan_type=%s", scan_type)
     try:
         if scan_type in ("maturation_refresh", "maturation_refresh_swing", "maturation_refresh_day"):
-            from stocvest.workers.watchlist_maturation_refresh import run_watchlist_maturation_refresh_sync
-
-            result = run_watchlist_maturation_refresh_sync(scan_type=scan_type)
-            return ok(result)
+            _LOG.info(
+                "scanner schedule maturation_refresh ignored scan_type=%s (per-user login refresh)",
+                scan_type,
+            )
+            return ok(
+                {
+                    "job": "watchlist_maturation_refresh",
+                    "skipped": True,
+                    "reason": "batch_maturation_refresh_disabled",
+                    "scan_type": scan_type,
+                }
+            )
         if scan_type in ("ledger_capture", "ledger_capture_day", "ledger_capture_swing"):
             from stocvest.workers.watchlist_ledger_capture import run_watchlist_ledger_capture_sync
 

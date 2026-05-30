@@ -3,13 +3,13 @@
  */
 
 import {
-  MATURATION_SCHEDULED_DAY_OPEN_LINE,
-  MATURATION_SCHEDULED_SWING_OPEN_LINE
+  MATURATION_SESSION_DAY_LINE,
+  MATURATION_SESSION_SWING_LINE
 } from "@/lib/maturation-expected-frequency";
 import { formatLastEvaluatedShort } from "@/lib/watchlist-evaluation-present";
 
 export const SIGNALS_UPDATE_MICROCOPY =
-  "Signals update when you open a symbol, refresh this page, or after the scheduled desk evaluation.";
+  "Signals update when you open a symbol, refresh this page, or when Dashboard / Watchlists run session refresh.";
 
 /** Full cadence + evaluation copy for the Signals command-bar ⓘ tooltip. */
 export function signalsDeskModeTooltip(mode: "day" | "swing"): string {
@@ -19,8 +19,8 @@ export function signalsDeskModeTooltip(mode: "day" | "swing"): string {
       : "Evaluated on daily close · horizon ~5 calendar days.";
   return [
     structure,
-    MATURATION_SCHEDULED_SWING_OPEN_LINE,
-    MATURATION_SCHEDULED_DAY_OPEN_LINE,
+    MATURATION_SESSION_SWING_LINE,
+    MATURATION_SESSION_DAY_LINE,
     SIGNALS_UPDATE_MICROCOPY
   ].join("\n\n");
 }

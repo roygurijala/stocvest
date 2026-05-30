@@ -94,8 +94,8 @@ describe("signalsDeskModeTooltip", () => {
   test("day tooltip includes structure and refresh lines", () => {
     const tip = signalsDeskModeTooltip("day");
     expect(tip).toContain("live session structure");
-    expect(tip).toContain("8:15 AM ET");
-    expect(tip).toContain("9:35 AM ET");
+    expect(tip).toContain("Dashboard");
+    expect(tip).toContain("Watchlists");
     expect(tip).toContain("Signals update when you open");
   });
 });
@@ -121,8 +121,8 @@ describe("signalsDeskModeTooltip", () => {
   test("day tooltip includes structure and refresh lines", () => {
     const tip = signalsDeskModeTooltip("day");
     expect(tip).toContain("live session structure");
-    expect(tip).toContain("8:15 AM ET");
-    expect(tip).toContain("9:35 AM ET");
+    expect(tip).toContain("Dashboard");
+    expect(tip).toContain("Watchlists");
     expect(tip).toContain("Signals update when you open");
   });
 });
