@@ -1,14 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useWatchlistSessionRefresh } from "@/lib/hooks/use-watchlist-session-refresh";
 import type { WatchlistMaturationDesk } from "@/lib/watchlist-maturation-session-staleness";
 import {
   normalizeWatchlistMaturationBySymbol,
   type WatchlistMaturationRow
 } from "@/lib/watchlist-page-utils";
-import { notifyWatchlistMaturationUpdated } from "@/lib/watchlist-maturation-bump";
-
 type Props = {
   dayTradingSurfaces: boolean;
 };
@@ -85,6 +83,38 @@ export function WatchlistSessionRefreshOrchestrator({ dayTradingSurfaces }: Prop
     };
   }, [dayTradingSurfaces]);
 
+  const reloadMaturationSummaries = useCallback(async () => {
+    if (symbols.length === 0) return;
+    try {
+      const fetches = dayTradingSurfaces
+        ? [
+            fetch("/api/stocvest/watchlists/maturation-summary?mode=swing", {
+              cache: "no-store",
+              credentials: "same-origin"
+            }),
+            fetch("/api/stocvest/watchlists/maturation-summary?mode=day", {
+              cache: "no-store",
+              credentials: "same-origin"
+            })
+          ]
+        : [
+            fetch("/api/stocvest/watchlists/maturation-summary?mode=swing", {
+              cache: "no-store",
+              credentials: "same-origin"
+            })
+          ];
+      const results = await Promise.all(fetches);
+      const swingJson = results[0]?.ok ? await results[0].json().catch(() => ({})) : {};
+      const dayJson = results[1]?.ok ? await results[1].json().catch(() => ({})) : {};
+      setSwingBySymbol(normalizeWatchlistMaturationBySymbol(swingJson));
+      if (dayTradingSurfaces) {
+        setDayBySymbol(normalizeWatchlistMaturationBySymbol(dayJson));
+      }
+    } catch {
+      /* keep prior rows */
+    }
+  }, [symbols, dayTradingSurfaces]);
+
   useWatchlistSessionRefresh({
     enabled: ready && symbols.length > 0,
     symbols,
@@ -93,10 +123,7 @@ export function WatchlistSessionRefreshOrchestrator({ dayTradingSurfaces }: Prop
     desks,
     maturationReady: ready,
     onRefreshed: () => {
-      for (const sym of symbols) {
-        notifyWatchlistMaturationUpdated(sym, "swing");
-        if (dayTradingSurfaces) notifyWatchlistMaturationUpdated(sym, "day");
-      }
+      void reloadMaturationSummaries();
     }
   });
 

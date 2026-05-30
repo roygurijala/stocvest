@@ -23,6 +23,7 @@ import type { DashboardDeskMode } from "@/lib/dashboard/live-status-copy";
 import { useDashboardDeskAutoLoad } from "@/lib/hooks/use-dashboard-desk-auto-load";
 import { useDashboardDeskRefresh } from "@/lib/hooks/use-dashboard-desk-refresh";
 import { useDeskToday } from "@/lib/hooks/use-desk-today";
+import { useWatchlistDeskContext } from "@/lib/hooks/use-watchlist-desk-context";
 import { EarningsCalendar } from "@/components/earnings-calendar";
 import { InfoTip } from "@/components/info-tip";
 import { type WeeklyIndexRow } from "@/components/weekly-market-context-widget";
@@ -516,6 +517,8 @@ function DashboardRedesignBody({
     [marketOverview.status]
   );
 
+  const watchlistDeskContext = useWatchlistDeskContext(activeDeskMode);
+
   const pageTitle = useMemo(
     () => buildDashboardPageTitle(regimeLabel, { sessionMode }),
     [regimeLabel, sessionMode]
@@ -619,9 +622,9 @@ function DashboardRedesignBody({
         snapshots={marketOverview.snapshots}
         marketStatus={marketOverview.status}
         desk={{
-          regimeLabel,
-          systemSuppressed,
-          sessionMode
+          regimeLabel: watchlistDeskContext.regimeLabel || regimeLabel,
+          systemSuppressed: watchlistDeskContext.systemSuppressed,
+          sessionMode: watchlistDeskContext.sessionMode ?? sessionMode
         }}
         nearReadyInMarket={nearReadyInMarket}
         nearQualification={scannerOverview.scanSummary?.near_qualification ?? []}

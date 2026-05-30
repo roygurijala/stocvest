@@ -17,6 +17,7 @@ import { parseMaturationSummaryEnvelope } from "@/lib/watchlist/maturation-summa
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useHoverPrefetch } from "@/lib/hooks/use-hover-prefetch";
+import { useWatchlistMaturationReloadNonce } from "@/lib/hooks/use-watchlist-maturation-reload";
 import { useTheme } from "@/lib/theme-provider";
 
 type Props = {
@@ -39,6 +40,7 @@ export function DashboardWatchlistRadar({
   const [bySymbol, setBySymbol] = useState<Record<string, WatchlistMaturationRow>>({});
   const [fetchedSnapshots, setFetchedSnapshots] = useState<Map<string, SnapshotPayload>>(new Map());
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [maturationReloadNonce] = useWatchlistMaturationReloadNonce();
 
   useEffect(() => {
     let cancelled = false;
@@ -72,7 +74,7 @@ export function DashboardWatchlistRadar({
     return () => {
       cancelled = true;
     };
-  }, [mode]);
+  }, [mode, maturationReloadNonce]);
 
   useEffect(() => {
     if (symbols.length === 0) return;
