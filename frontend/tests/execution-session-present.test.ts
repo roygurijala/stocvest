@@ -12,7 +12,7 @@ describe("resolveExecutionDisplay — session timing", () => {
       tradingMode: "swing",
       regularSessionOpen: false
     });
-    expect(d.label).toContain("Plan for tomorrow");
+    expect(d.label).toContain("For next market open");
     expect(d.subline).toMatch(/next regular open/i);
     expect(d.tone).toBe("bullish");
     expect(d.gatesCleared).toBe(true);

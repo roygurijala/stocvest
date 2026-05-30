@@ -15,7 +15,10 @@ import { DashboardEarningsProvider, useDashboardEarnings } from "@/components/da
 import { buildDashboardAssistantPageContext } from "@/lib/dashboard/dashboard-assistant-context";
 import type { DeskTodayResponse } from "@/lib/api/desk-today";
 import type { DashboardDeskInitial } from "@/lib/dashboard/dashboard-page-data";
-import { buildDashboardPageTitle } from "@/lib/dashboard/desk-today-present";
+import {
+  buildDashboardPageTitle,
+  dashboardPulseHeadlinePrefix
+} from "@/lib/dashboard/desk-today-present";
 import type { DashboardDeskMode } from "@/lib/dashboard/live-status-copy";
 import { useDashboardDeskAutoLoad } from "@/lib/hooks/use-dashboard-desk-auto-load";
 import { useDashboardDeskRefresh } from "@/lib/hooks/use-dashboard-desk-refresh";
@@ -559,6 +562,8 @@ function DashboardRedesignBody({
 
       <DashboardMarketPulseHero
         pageTitle={pageTitle}
+        pulseHeadlinePrefix={pulseHeadlinePrefix}
+        sessionMode={sessionMode}
         regimeLabel={regimeLabel}
         regimeTip={regimeTip}
         marketContext={marketContextSnapshot}

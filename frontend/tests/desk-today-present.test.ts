@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
 import {
   buildDashboardPageTitle,
+  dashboardPulseHeadlinePrefix,
+  dashboardPulseSessionHeading,
   discoveryWhyLine,
   formatDeskGapLine,
   gapIntelToDiscoveryLeaders,
@@ -74,9 +76,18 @@ describe("desk-today-present", () => {
     expect(leaders.leaders[0]?.symbol).toBe("TSLA");
   });
 
-  test("buildDashboardPageTitle includes weekday and regime", () => {
-    const title = buildDashboardPageTitle("Risk-on");
+  test("buildDashboardPageTitle includes weekday and regime when live", () => {
+    const title = buildDashboardPageTitle("Risk-on", { sessionMode: "live" });
     expect(title).toContain("Risk-on");
     expect(title.length).toBeGreaterThan(5);
+  });
+
+  test("buildDashboardPageTitle does not imply live regime when session closed", () => {
+    const title = buildDashboardPageTitle("Neutral", { sessionMode: "closed" });
+    expect(title === "Markets closed" || title === "Weekend · Markets closed").toBe(true);
+    expect(title).not.toContain("Neutral");
+    expect(dashboardPulseHeadlinePrefix("closed")).toBe("As of last close · ");
+    expect(dashboardPulseSessionHeading("closed").title).toBe("Last session");
+    expect(dashboardPulseSessionHeading("closed").subline).toMatch(/last regular close/i);
   });
 });
