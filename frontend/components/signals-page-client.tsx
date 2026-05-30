@@ -1496,7 +1496,8 @@ export function SignalsPageClient({
       alignmentRatio: compositeAlignmentRatio,
       maturationState: maturationLine?.state,
       regularSessionOpen,
-      compositeDirection
+      compositeDirection,
+      setupJudgment
     });
   }, [
     pageDecision,
@@ -1506,7 +1507,8 @@ export function SignalsPageClient({
     compositeAlignmentRatio,
     maturationLine?.state,
     regularSessionOpen,
-    compositeDirection
+    compositeDirection,
+    setupJudgment
   ]);
 
   /**

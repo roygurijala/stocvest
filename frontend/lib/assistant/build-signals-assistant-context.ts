@@ -157,7 +157,8 @@ export function buildSignalsPageAssistantContext(
     maturationState: input.maturationState,
     maturationLabel: input.maturationLabel,
     tradingMode: input.tradingMode,
-    regularSessionOpen: input.regularSessionOpen
+    regularSessionOpen: input.regularSessionOpen,
+    setupJudgment: input.setupJudgment
   };
 
   if (input.hasValidSignal && input.pageDecision) {

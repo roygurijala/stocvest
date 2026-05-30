@@ -1,4 +1,5 @@
 import type { AssistantPageContext } from "@/lib/assistant/types";
+import type { SetupJudgment } from "@/lib/signal-evidence/setup-judgment";
 import type { TradeDecision } from "@/lib/signal-evidence/trade-decision";
 import { buildExecutionHeaderHint } from "@/lib/signals-desk-kpi-present";
 import {
@@ -21,6 +22,7 @@ export function enrichSignalsDeskAssistantContext(
     maturationLabel?: string | null;
     tradingMode: "day" | "swing";
     regularSessionOpen?: boolean | null;
+    setupJudgment?: SetupJudgment | null;
   }
 ): AssistantPageContext {
   const alignment = resolveSignalsLayerAlignment({
@@ -52,7 +54,8 @@ export function enrichSignalsDeskAssistantContext(
         alignment.aligned,
         alignment.total,
         input.setupBias,
-        input.regularSessionOpen
+        input.regularSessionOpen,
+        input.setupJudgment
       ) ?? undefined,
     decision_reinforcements: reinforcements.length > 0 ? reinforcements : undefined,
     maturation_label: input.maturationLabel?.trim() || undefined,

@@ -1,3 +1,8 @@
+import {
+  mergeExecutionDeskHints,
+  resolveExecutionWatchHint
+} from "@/lib/signal-evidence/execution-watch-present";
+import type { SetupJudgment } from "@/lib/signal-evidence/setup-judgment";
 import type { TradeDecision } from "@/lib/signal-evidence/trade-decision";
 import {
   decisionGateCategoryLabel,
@@ -41,7 +46,9 @@ export function biasKpiSubline(bias: SignalsSetupBias): string {
 function executionSubline(
   decision: TradeDecision,
   mode: "day" | "swing",
-  regularSessionOpen?: boolean | null
+  bias: SignalsSetupBias,
+  regularSessionOpen?: boolean | null,
+  setupJudgment?: SetupJudgment | null
 ): string | null {
   if (decision.state === "actionable") {
     const fromDisplay = resolveExecutionDisplay(decision.state, {
@@ -52,12 +59,18 @@ function executionSubline(
     return "Checks passed — review levels and scenario before acting";
   }
   const blocker = primaryExecutionBlockerLine(decision);
-  if (blocker) return blocker;
+  const watch = resolveExecutionWatchHint(setupJudgment, bias, decision.state);
+  if (blocker) {
+    return mergeExecutionDeskHints(blocker, watch);
+  }
   const min = minRiskRewardForVerdict(mode);
   if (decision.rationale?.category === "risk_reward") {
-    return `Desk needs ≥ ${min.toFixed(1)} : 1 R/R on reference geometry`;
+    return mergeExecutionDeskHints(
+      `Desk needs ≥ ${min.toFixed(1)} : 1 R/R on reference geometry`,
+      watch
+    );
   }
-  return null;
+  return watch;
 }
 
 /** One-line proof for command-bar bias chip (layer counts / names). */
@@ -92,51 +105,60 @@ export function buildExecutionHeaderHint(
   layersAligned?: number,
   layersTotal?: number,
   bias?: SignalsSetupBias,
-  regularSessionOpen?: boolean | null
+  regularSessionOpen?: boolean | null,
+  setupJudgment?: SetupJudgment | null
 ): string | null {
+  const setupBias: SignalsSetupBias = bias ?? "Neutral";
+  let primary: string | null = null;
+
   if (
     typeof layersAligned === "number" &&
     typeof layersTotal === "number" &&
     bias != null
   ) {
-    const bridge = executionProgressHint(
+    primary = executionProgressHint(
       decision.state,
       layersAligned,
       layersTotal,
       bias,
       decision
     );
-    if (bridge) return bridge;
   }
-  if (decision.state === "actionable") {
-    const hint = resolveExecutionDisplay(decision.state, {
-      tradingMode: mode,
-      regularSessionOpen
-    }).subline;
-    if (hint) return hint;
-    return "Checks passed — review levels and scenario";
+  if (!primary && decision.state === "actionable") {
+    primary =
+      resolveExecutionDisplay(decision.state, {
+        tradingMode: mode,
+        regularSessionOpen
+      }).subline ?? "Checks passed — review levels and scenario";
+    return primary;
   }
-  const supporting = executionSupportingGates(decision);
-  if (supporting.length > 0) {
-    const category = decision.rationale
-      ? decisionGateCategoryLabel(decision.rationale.category)
-      : null;
-    const lead = supporting[0].replace(/\.$/, "");
-    if (category && !lead.toLowerCase().includes(category.toLowerCase())) {
-      return `${lead} · ${category}`;
+  if (!primary) {
+    const supporting = executionSupportingGates(decision);
+    if (supporting.length > 0) {
+      const category = decision.rationale
+        ? decisionGateCategoryLabel(decision.rationale.category)
+        : null;
+      const lead = supporting[0].replace(/\.$/, "");
+      primary =
+        category && !lead.toLowerCase().includes(category.toLowerCase())
+          ? `${lead} · ${category}`
+          : lead;
     }
-    return lead;
   }
-  const blocker = primaryExecutionBlockerLine(decision);
-  if (blocker && blocker.length <= 88) return blocker;
-  if (decision.rationale?.category) {
-    return decisionGateCategoryLabel(decision.rationale.category);
+  if (!primary) {
+    const blocker = primaryExecutionBlockerLine(decision);
+    if (blocker && blocker.length <= 88) primary = blocker;
+    else if (decision.rationale?.category) {
+      primary = decisionGateCategoryLabel(decision.rationale.category);
+    }
   }
-  const min = minRiskRewardForVerdict(mode);
-  if (decision.rationale?.category === "risk_reward") {
-    return `R/R below desk minimum (needs ≥ ${min.toFixed(1)} : 1)`;
+  if (!primary && decision.rationale?.category === "risk_reward") {
+    const min = minRiskRewardForVerdict(mode);
+    primary = `R/R below desk minimum (needs ≥ ${min.toFixed(1)} : 1)`;
   }
-  return null;
+
+  const watch = resolveExecutionWatchHint(setupJudgment, setupBias, decision.state);
+  return mergeExecutionDeskHints(primary, watch);
 }
 
 export type SignalsDeskVerdictBundle = {
@@ -164,6 +186,7 @@ export function buildSignalsDeskVerdict(input: {
   maturationState?: string | null;
   regularSessionOpen?: boolean | null;
   compositeDirection?: CompositeDirectionFields | null;
+  setupJudgment?: SetupJudgment | null;
 }): SignalsDeskVerdictBundle {
   const alignment = resolveSignalsLayerAlignment({
     rows: input.rows,
@@ -181,7 +204,8 @@ export function buildSignalsDeskVerdict(input: {
       alignment.aligned,
       alignment.total,
       input.bias,
-      input.regularSessionOpen
+      input.regularSessionOpen,
+      input.setupJudgment
     )
   };
 }
@@ -195,6 +219,7 @@ export function buildSignalsDeskKpiItems(input: {
   maturationState?: string | null;
   regularSessionOpen?: boolean | null;
   compositeDirection?: CompositeDirectionFields | null;
+  setupJudgment?: SetupJudgment | null;
 }): SignalsDeskKpiItem[] {
   const alignment = resolveSignalsLayerAlignment({
     rows: input.rows,
@@ -234,7 +259,13 @@ export function buildSignalsDeskKpiItems(input: {
         tradingMode: input.tradingMode,
         regularSessionOpen: input.regularSessionOpen
       }),
-      subline: executionSubline(input.decision, input.tradingMode, input.regularSessionOpen),
+      subline: executionSubline(
+        input.decision,
+        input.tradingMode,
+        input.bias,
+        input.regularSessionOpen,
+        input.setupJudgment
+      ),
       headlineTone: executionDisplayTone(input.decision.state, {
         tradingMode: input.tradingMode,
         regularSessionOpen: input.regularSessionOpen

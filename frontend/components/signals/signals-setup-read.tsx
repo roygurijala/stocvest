@@ -9,7 +9,6 @@ import {
   executionDetailToggleLabel,
   executionDisplayTone,
   executionHeadline,
-  executionProgressHint,
   executionReadinessLabel,
   formatSignalsAlignmentDisplayLine,
   primaryExecutionBlockerLine,
@@ -17,6 +16,7 @@ import {
   type SignalsLayerRowInput,
   type SignalsSetupBias
 } from "@/lib/signals-page-present";
+import { buildExecutionHeaderHint } from "@/lib/signals-desk-kpi-present";
 import type { TradeDecision } from "@/lib/signal-evidence/trade-decision";
 import type { FundamentalBackdropSummary } from "@/lib/signal-evidence/fundamental-present";
 import { SIGNALS_SECTION_TARGET } from "@/lib/signals-page-sections";
@@ -69,12 +69,14 @@ export function SignalsSetupRead({
     bias === "Bullish" ? colors.bullish : bias === "Bearish" ? colors.bearish : colors.caution;
   const whyNot =
     decision.state === "actionable" ? [] : buildWhyNotBullets(decision, previewLayers, bias, 3);
-  const executionHint = executionProgressHint(
-    decision.state,
+  const executionHint = buildExecutionHeaderHint(
+    decision,
+    tradingMode,
     alignment.aligned,
     alignment.total,
     bias,
-    decision
+    regularSessionOpen,
+    setupJudgment
   );
   const executionToggleLabel = executionDetailToggleLabel(decision.state, executionHint);
   const executionOpts = { tradingMode, regularSessionOpen };
