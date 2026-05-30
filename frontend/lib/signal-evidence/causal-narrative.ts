@@ -3,6 +3,7 @@
  * Informational only; does not change gating or scores.
  */
 
+import { layerCopyLooksInternal } from "@/lib/signal-evidence/layer-plain-english";
 import { signalLayerDisplayName } from "@/lib/signals/layer-display-names";
 import {
   layerPolarity,
@@ -65,7 +66,19 @@ function substantiveExplanation(text: string): boolean {
   const raw = text.trim();
   if (raw.length < 12) return false;
   if (GENERIC_EXPLANATION_RE.test(raw)) return false;
+  if (layerCopyLooksInternal(raw)) return false;
   return true;
+}
+
+export function sanitizeCausalBecause(
+  key: string,
+  polarity: CausalLayerNote["polarity"],
+  because: string,
+  causedBy: string[] = []
+): string {
+  const raw = because.trim();
+  if (raw && !layerCopyLooksInternal(raw)) return clampText(raw, 200);
+  return defaultBecause(key, polarity === "unavailable" ? "unavailable" : polarity, causedBy);
 }
 
 function clampText(text: string, limit = 220): string {
@@ -269,13 +282,14 @@ export function parseCausalNarrativeFromApi(raw: unknown): CausalNarrative | nul
       : Array.isArray(n.causedBy)
         ? (n.causedBy as unknown[]).map((x) => String(x).trim().toLowerCase()).filter(Boolean)
         : [];
+    const polarity = (String(n.polarity ?? "neutral") as CausalLayerNote["polarity"]) || "neutral";
     return {
       layer,
       name: String(n.name ?? signalLayerDisplayName(layer) ?? layer),
-      polarity: (String(n.polarity ?? "neutral") as CausalLayerNote["polarity"]) || "neutral",
+      polarity,
       role: (String(n.role ?? "context") as CausalLayerRole) || "context",
-        headline: String(n.headline ?? "").trim() || (signalLayerDisplayName(layer) ?? layer),
-      because,
+      headline: String(n.headline ?? "").trim() || (signalLayerDisplayName(layer) ?? layer),
+      because: sanitizeCausalBecause(layer, polarity, because, causedBy),
       causedBy
     };
   };
