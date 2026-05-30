@@ -74,7 +74,7 @@ describe("evidenceLayerToRow", () => {
       bias: "Neutral",
       alignmentRatio: 0.5
     });
-    expect(alignment.displayLine).toBe("Mixed direction (3/6)");
+    expect(alignment.displayLine).toBe("Balanced");
   });
 });
 
