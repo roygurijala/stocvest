@@ -413,26 +413,85 @@ class PolygonClient:
     # REST — Snapshot (intraday scanner + pre-market gaps)
     # ──────────────────────────────────────────────────────────────────────────
 
-    async def get_snapshot(self, symbol: str) -> Snapshot:
-        """Fetch a single ticker's full snapshot (last trade, quote, day bar, pre/after)."""
+    @staticmethod
+    def _is_polygon_index_snapshot_symbol(symbol: str) -> bool:
+        """Index tape (VIX, etc.) — use ``GET /v3/snapshot/indices``, not stocks v2."""
+        return PolygonClient._snapshot_last_trade_may_use_day_close(symbol)
+
+    @staticmethod
+    def _index_snapshot_ticker_candidates(symbol: str) -> list[str]:
+        """Polygon index tickers for VIX-style symbols (``I:VIX`` not bare ``VIX`` on indices API)."""
+        u = (symbol or "").strip().upper()
+        if not u:
+            return []
+        if u.startswith("I:"):
+            return [u]
+        core = u.lstrip("^")
+        if core == "VIX":
+            return list(dict.fromkeys([f"I:{core}", u, f"^{core}"]))
+        if u.startswith("^"):
+            return list(dict.fromkeys([f"I:{core}", u]))
+        return [u]
+
+    async def _get_snapshot_from_stocks_endpoint(self, symbol: str) -> Snapshot:
         data = await self._get(f"/v2/snapshot/locale/us/markets/stocks/tickers/{symbol}")
         ticker = data.get("ticker", {})
         return self._parse_snapshot(symbol, ticker)
 
+    async def get_snapshot(self, symbol: str) -> Snapshot:
+        """Fetch a single ticker snapshot (equities via stocks v2; indices via v3 indices first)."""
+        sym = (symbol or "").strip().upper()
+        if self._is_polygon_index_snapshot_symbol(sym):
+            for candidate in self._index_snapshot_ticker_candidates(sym):
+                try:
+                    by_sym = await self.get_indices_snapshots([candidate])
+                except PolygonError:
+                    continue
+                hit = by_sym.get(candidate)
+                if hit is not None:
+                    return hit
+            try:
+                return await self._get_snapshot_from_stocks_endpoint(sym)
+            except PolygonError:
+                for alt in self._index_snapshot_ticker_candidates(sym):
+                    if alt == sym:
+                        continue
+                    try:
+                        return await self._get_snapshot_from_stocks_endpoint(alt)
+                    except PolygonError:
+                        continue
+                raise
+        return await self._get_snapshot_from_stocks_endpoint(sym)
+
     async def get_snapshots(self, symbols: list[str]) -> dict[str, Snapshot]:
         """
-        Fetch snapshots for multiple tickers in one API call.
+        Fetch snapshots for multiple tickers (stocks batch + indices batch when needed).
         Returns dict keyed by symbol.
         """
         if not symbols:
             return {}
-        params = {"tickers": ",".join(symbols)}
-        data = await self._get("/v2/snapshot/locale/us/markets/stocks/tickers", params)
+        unique = list(dict.fromkeys(str(s).strip().upper() for s in symbols if str(s).strip()))
+        index_syms = [s for s in unique if self._is_polygon_index_snapshot_symbol(s)]
+        stock_syms = [s for s in unique if s not in index_syms]
         result: dict[str, Snapshot] = {}
-        for ticker_data in data.get("tickers", []):
-            sym = ticker_data.get("ticker", "")
-            if sym:
-                result[sym] = self._parse_snapshot(sym, ticker_data)
+        if stock_syms:
+            params = {"tickers": ",".join(stock_syms)}
+            data = await self._get("/v2/snapshot/locale/us/markets/stocks/tickers", params)
+            for ticker_data in data.get("tickers", []) or []:
+                sym = ticker_data.get("ticker", "")
+                if sym:
+                    result[str(sym).strip().upper()] = self._parse_snapshot(sym, ticker_data)
+        if index_syms:
+            index_tickers: list[str] = []
+            for sym in index_syms:
+                index_tickers.extend(self._index_snapshot_ticker_candidates(sym))
+            by_index = await self.get_indices_snapshots(list(dict.fromkeys(index_tickers)))
+            for sym in index_syms:
+                for candidate in self._index_snapshot_ticker_candidates(sym):
+                    hit = by_index.get(candidate)
+                    if hit is not None:
+                        result[sym] = hit
+                        break
         log.debug("get_snapshots(%d symbols) → %d results", len(symbols), len(result))
         return result
 
