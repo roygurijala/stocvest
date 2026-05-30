@@ -19,6 +19,7 @@ import {
   evidenceLayerToRow,
   evidenceLayersToRows
 } from "@/lib/signal-evidence/evidence-card-present";
+import { evidenceLayerDisplayExplanation } from "@/lib/signal-evidence/layer-plain-english";
 import { CausalNarrativePanel } from "@/components/signals/causal-narrative-panel";
 import { TimeframeContextPanel } from "@/components/signals/timeframe-context-panel";
 import { resolveCausalNarrative } from "@/lib/signal-evidence/causal-narrative";
@@ -1323,7 +1324,7 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
                                 lineHeight: 1.45
                               }}
                             >
-                              {inner.explanation}
+                              {evidenceLayerDisplayExplanation(inner)}
                             </p>
                           </div>
                         ))}
@@ -1351,7 +1352,7 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
                     className="text-sm leading-relaxed sm:text-base"
                     style={{ margin: 0, color: colors.textMuted, fontSize: bodyFontSize }}
                   >
-                    {layer.explanation}
+                    {evidenceLayerDisplayExplanation(layer)}
                   </p>
                   {layer.key === "macro" ? (
                 <div className="flex flex-col gap-2">
