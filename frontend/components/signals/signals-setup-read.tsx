@@ -7,6 +7,7 @@ import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import {
   buildWhyNotBullets,
   executionDetailToggleLabel,
+  executionDisplayTone,
   executionHeadline,
   executionProgressHint,
   executionReadinessLabel,
@@ -41,6 +42,8 @@ type Props = {
   /** Desk tabs: KPIs live in sticky strip; omit grid + why-not panel here. */
   layout?: "full" | "desk";
   setupJudgment?: SetupJudgment | null;
+  /** Regular session open (Polygon `market` === open). Omit when unknown. */
+  regularSessionOpen?: boolean | null;
 };
 
 export function SignalsSetupRead({
@@ -55,7 +58,8 @@ export function SignalsSetupRead({
   fundamentalSummary,
   showFundamentalUpgrade = false,
   layout = "full",
-  setupJudgment = null
+  setupJudgment = null,
+  regularSessionOpen = null
 }: Props) {
   const { colors } = useTheme();
   const [executionDetailOpen, setExecutionDetailOpen] = useState(false);
@@ -73,6 +77,8 @@ export function SignalsSetupRead({
     decision
   );
   const executionToggleLabel = executionDetailToggleLabel(decision.state, executionHint);
+  const executionOpts = { tradingMode, regularSessionOpen };
+  const executionTone = executionDisplayTone(decision.state, executionOpts);
   const primaryBlocker = primaryExecutionBlockerLine(decision);
   const showExecutionDisclosure =
     decision.state !== "actionable" && Boolean(executionToggleLabel && (primaryBlocker || whyNot.length > 0));
@@ -92,9 +98,11 @@ export function SignalsSetupRead({
         <SetupJudgmentSummary
           judgment={setupJudgment}
           executionLabel={executionReadinessLabel(decision.state, {
+            tradingMode,
+            regularSessionOpen,
             entryTimingWeak: setupJudgment.tradeability.band === "weak"
           })}
-          executionTone={decision.state === "actionable" ? "bullish" : "caution"}
+          executionTone={executionTone}
         />
       ) : null}
 
@@ -137,10 +145,19 @@ export function SignalsSetupRead({
               </p>
               <p
                 className="m-0 mt-0.5 text-xl font-semibold"
-                style={{ color: decision.state === "actionable" ? colors.bullish : colors.textMuted }}
+                style={{
+                  color:
+                    executionTone === "bullish"
+                      ? colors.bullish
+                      : executionTone === "bearish"
+                        ? colors.bearish
+                        : executionTone === "caution"
+                          ? colors.caution
+                          : colors.textMuted
+                }}
                 data-testid="signals-setup-execution"
               >
-                {executionReadinessLabel(decision.state)}
+                {executionReadinessLabel(decision.state, executionOpts)}
               </p>
               {showExecutionDisclosure && executionToggleLabel ? (
                 <div className="mt-1">
@@ -207,10 +224,17 @@ export function SignalsSetupRead({
       >
       <p
         className="m-0 mt-3 text-sm font-medium leading-snug"
-        style={{ color: decision.state === "actionable" ? colors.bullish : colors.textMuted }}
+        style={{
+          color:
+            executionTone === "bullish"
+              ? colors.bullish
+              : executionTone === "caution"
+                ? colors.caution
+                : colors.textMuted
+        }}
         data-testid="signals-setup-actionable"
       >
-        {executionHeadline(decision.state)}
+        {executionHeadline(decision.state, executionOpts)}
       </p>
       <p className="m-0 mt-1 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
         {decision.line}

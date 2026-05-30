@@ -66,6 +66,7 @@ import {
   layerDeltaVsBaseline,
   normalizeSetupBias,
   pickPreviewLayers,
+  resolveRegularSessionOpenFromSources,
   resolveSignalsLayerAlignment,
   SIGNAL_LAYER_LEVEL_BASELINE,
   type SignalsLayerRowInput
@@ -1458,6 +1459,17 @@ export function SignalsPageClient({
     };
   }, [showAfterHoursPanel, symbol]);
 
+  const regularSessionOpen = useMemo(() => {
+    const compositeMs =
+      compositeResult && !isInsufficientCompositeResponse(compositeResult)
+        ? (compositeResult.market_status as SwingCompositeMarketStatus | undefined)
+        : undefined;
+    return resolveRegularSessionOpenFromSources({
+      marketStatus: marketOverview.status ?? null,
+      compositeMarketStatus: compositeMs ?? null
+    });
+  }, [marketOverview.status, compositeResult]);
+
   const deskVerdict = useMemo(() => {
     if (!pageDecision) return null;
     return buildSignalsDeskVerdict({
@@ -1466,7 +1478,8 @@ export function SignalsPageClient({
       decision: pageDecision,
       tradingMode,
       alignmentRatio: compositeAlignmentRatio,
-      maturationState: maturationLine?.state
+      maturationState: maturationLine?.state,
+      regularSessionOpen
     });
   }, [
     pageDecision,
@@ -1474,7 +1487,8 @@ export function SignalsPageClient({
     signalsPresentRows,
     tradingMode,
     compositeAlignmentRatio,
-    maturationLine?.state
+    maturationLine?.state,
+    regularSessionOpen
   ]);
 
   /**
@@ -1565,7 +1579,8 @@ export function SignalsPageClient({
       alignmentRatio: compositeAlignmentRatio,
       maturationState: maturationLine?.state,
       maturationLabel: commandBarMaturationLine?.label ?? null,
-      tradingMode
+      tradingMode,
+      regularSessionOpen
     });
   }, [
     tradingMode,
@@ -1578,7 +1593,8 @@ export function SignalsPageClient({
     signalsPresentRows,
     compositeAlignmentRatio,
     maturationLine?.state,
-    commandBarMaturationLine?.label
+    commandBarMaturationLine?.label,
+    regularSessionOpen
   ]);
 
   usePublishAssistantContext(assistantContext);
@@ -1945,6 +1961,7 @@ export function SignalsPageClient({
                 showFundamentalUpgrade={showFundamentalUpgrade}
                 layout="desk"
                 setupJudgment={setupJudgment}
+                regularSessionOpen={regularSessionOpen}
               />
             ) : null}
             {showAfterHoursPanel ? (
