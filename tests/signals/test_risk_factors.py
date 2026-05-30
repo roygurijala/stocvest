@@ -30,8 +30,19 @@ def test_ema_conflict_generates_risk_factor() -> None:
 
 
 def test_low_rr_generates_risk_factor() -> None:
-    comp = CompositeScoreEngine().compute([LayerSignal("technical", 0.0, 0.0)], regime="sideways")
-    out = build_swing_composite_evidence_fields(composite=comp, regime="sideways", payload={}, confluence=None, snapshot={"last_trade_price": 100.0})
+    comp = CompositeScoreEngine().compute([LayerSignal("technical", 0.9, 1.0)], regime="sideways")
+    out = build_swing_composite_evidence_fields(
+        composite=comp,
+        regime="sideways",
+        payload={},
+        confluence=None,
+        snapshot={
+            "last_trade_price": 100.0,
+            "day_low": 95.0,
+            "day_high": 106.0,
+        },
+    )
+    assert out["risk_reward"] < 2.0
     assert any("Low Risk/Reward" in x for x in out["risk_factors"])
 
 
