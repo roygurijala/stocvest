@@ -1,7 +1,7 @@
 import type { GapIntelSnapshot } from "@/lib/api/gap-intel";
 import { narrowGapIntelForAssistant } from "@/lib/assistant/gap-intel-context";
 import type { AssistantLayerKey, AssistantLayerStatus, AssistantPageContext } from "@/lib/assistant/types";
-import type { SignalEvidenceData } from "@/lib/signal-evidence";
+import { deriveEvidenceInsightFallback, type SignalEvidenceData } from "@/lib/signal-evidence";
 import { synthTradeDecision } from "@/lib/signal-evidence/trade-decision";
 
 export interface BuildEvidenceAssistantContextInput {
@@ -42,7 +42,9 @@ export function buildEvidenceAssistantContext(
   const gapIntelForAssistant = narrowGapIntelForAssistant(input.gapIntelSnapshot);
   const layerStatusForCtx = Object.keys(layerStatus).length > 0 ? layerStatus : undefined;
 
-  if (!input.evidence.insight) {
+  const hasRenderableLayers = (input.evidence.layers?.length ?? 0) > 0;
+  const insight = input.evidence.insight ?? deriveEvidenceInsightFallback(input.evidence);
+  if (!input.evidence.insight && !hasRenderableLayers) {
     return {
       page: input.page,
       trading_mode: input.tradingMode,
@@ -52,8 +54,6 @@ export function buildEvidenceAssistantContext(
       ...(gapIntelForAssistant ? { gap_intel: gapIntelForAssistant } : {})
     };
   }
-
-  const insight = input.evidence.insight;
   const decision = synthTradeDecision(input.evidence, insight, input.tradingMode);
   const reinforcements = (decision.reinforcements ?? [])
     .map((line) => line.trim())
