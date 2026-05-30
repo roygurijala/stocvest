@@ -55,7 +55,7 @@ export const LANDING_ENGINE_SWING_DEMO: LandingEngineDemo = {
     { label: "Macro", score: 68, polarity: "supportive" },
     { label: "Sector", score: 87, polarity: "supportive" },
     { label: "Geopolitical", score: 32, polarity: "opposing" },
-    { label: "Internals", score: 88, polarity: "supportive" }
+    { label: "Market Internals", score: 88, polarity: "supportive" }
   ],
   geoCallout: {
     title: "Structural exposure",
@@ -85,7 +85,7 @@ export const LANDING_ENGINE_DAY_DEMO: LandingEngineDemo = {
     { label: "Macro", score: 71, polarity: "supportive" },
     { label: "Sector", score: 85, polarity: "supportive" },
     { label: "Geopolitical", score: 54, polarity: "neutral" },
-    { label: "Internals", score: 76, polarity: "supportive" }
+    { label: "Market Internals", score: 76, polarity: "supportive" }
   ],
   narrative:
     "ORB structure and sector leadership look fine, but session gates are closed — alignment alone does not authorize a day chase.",

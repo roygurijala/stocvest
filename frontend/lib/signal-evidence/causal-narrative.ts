@@ -3,6 +3,7 @@
  * Informational only; does not change gating or scores.
  */
 
+import { signalLayerDisplayName } from "@/lib/signals/layer-display-names";
 import {
   layerPolarity,
   type SignalsLayerPolarity,
@@ -39,15 +40,6 @@ const CAUSAL_LAYER_ORDER = [
   "news",
   "technical"
 ] as const;
-
-const LAYER_DISPLAY: Record<string, string> = {
-  macro: "Macro",
-  geopolitical: "Geopolitical",
-  internals: "Market Internals",
-  sector: "Sector",
-  news: "News",
-  technical: "Technical"
-};
 
 const ENVIRONMENT_LAYERS = new Set(["macro", "geopolitical", "internals"]);
 
@@ -115,8 +107,8 @@ function defaultBecause(
   polarity: SignalsLayerPolarity | "unavailable",
   upstream: string[]
 ): string {
-  const name = LAYER_DISPLAY[key] ?? key;
-  const upNames = upstream.map((u) => LAYER_DISPLAY[u] ?? u);
+  const name = signalLayerDisplayName(key) ?? key;
+  const upNames = upstream.map((u) => signalLayerDisplayName(u) ?? u);
   if (polarity === "supportive") {
     if (key === "technical") return "Structure and momentum line up with the setup bias.";
     if (key === "internals") return "Participation breadth supports this direction on the tape.";
@@ -141,14 +133,14 @@ function defaultBecause(
   }
   if (polarity === "mixed") {
     if (key === "sector") return "Sector participation is mixed — no clear leadership versus SPY.";
-    if (key === "internals") return "Internals are split — tape is not giving a clean confirmation.";
+    if (key === "internals") return "Market internals are split — tape is not giving a clean confirmation.";
     return `${name} is mixed and does not confirm the bias.`;
   }
   return "Coverage is unavailable — this layer is not factored into the read.";
 }
 
 function headlineForNote(key: string, polarity: SignalsLayerPolarity | "unavailable", role: CausalLayerRole): string {
-  const name = LAYER_DISPLAY[key] ?? key;
+  const name = signalLayerDisplayName(key) ?? key;
   if (role === "root_cause") return `${name} is the main environmental headwind`;
   if (role === "amplifier") return `${name} is not confirming while broader conditions stay muted`;
   if (role === "symptom") return `${name} has not cleared while upstream conditions stay unfavorable`;
@@ -177,7 +169,7 @@ function buildLayerNote(
     : defaultBecause(key, polarity, upstream);
   return {
     layer: key,
-    name: row.name || LAYER_DISPLAY[key] || key,
+    name: row.name || signalLayerDisplayName(key) || key,
     polarity,
     role,
     headline: headlineForNote(key, polarity, role),
@@ -279,10 +271,10 @@ export function parseCausalNarrativeFromApi(raw: unknown): CausalNarrative | nul
         : [];
     return {
       layer,
-      name: String(n.name ?? LAYER_DISPLAY[layer] ?? layer),
+      name: String(n.name ?? signalLayerDisplayName(layer) ?? layer),
       polarity: (String(n.polarity ?? "neutral") as CausalLayerNote["polarity"]) || "neutral",
       role: (String(n.role ?? "context") as CausalLayerRole) || "context",
-        headline: String(n.headline ?? "").trim() || (LAYER_DISPLAY[layer] ?? layer),
+        headline: String(n.headline ?? "").trim() || (signalLayerDisplayName(layer) ?? layer),
       because,
       causedBy
     };
@@ -331,7 +323,7 @@ export function causalBulletsForWhyNot(narrative: CausalNarrative, max = 4): str
   for (const note of narrative.chain) {
     if (out.length >= max) break;
     const tag = note.causedBy.length
-      ? `${note.name}: ${note.because} (follows ${note.causedBy.map((k) => LAYER_DISPLAY[k] ?? k).join(", ")})`
+      ? `${note.name}: ${note.because} (follows ${note.causedBy.map((k) => signalLayerDisplayName(k) ?? k).join(", ")})`
       : `${note.name}: ${note.because}`;
     if (!out.some((b) => b.includes(note.name))) out.push(tag);
   }

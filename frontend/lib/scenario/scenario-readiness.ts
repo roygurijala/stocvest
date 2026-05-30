@@ -16,6 +16,7 @@ import {
 } from "@/lib/alignment-display-tier";
 import { canOpenFullScenarioSheet } from "@/lib/scenario/eligibility";
 import { pickMissingConfirmationLayers } from "@/lib/signal-evidence/evidence-card-present";
+import { signalLayerDisplayName } from "@/lib/signals/layer-display-names";
 import {
   resolveSignalsLayerAlignment,
   type SignalsLayerRowInput,
@@ -206,7 +207,7 @@ export function resolveScenarioBuilderCapability(
 }
 
 export function formatMissingLayerDisplayName(name: string): string {
-  if (name === "Internals") return "Participation / breadth";
+  if (name === signalLayerDisplayName("internals")) return "Participation / breadth";
   if (name === "Technical") return "Trend structure";
   return name;
 }

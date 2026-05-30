@@ -68,7 +68,7 @@ describe("evidenceLayerToRow", () => {
           layer("macro", "Macro", "Neutral", 46),
           row,
           layer("geopolitical", "Geopolitical", "Neutral", 58),
-          layer("internals", "Internals", "Neutral", 37)
+          layer("internals", "Market Internals", "Neutral", 37)
         ])
       ],
       bias: "Neutral",
@@ -85,7 +85,7 @@ describe("buildEvidenceAnchorLine", () => {
       layer("news", "News", "Neutral", 50),
       layer("macro", "Macro", "Neutral", 50),
       layer("sector", "Sector", "Neutral", 50),
-      layer("internals", "Internals", "Neutral", 50),
+      layer("internals", "Market Internals", "Neutral", 50),
       layer("geopolitical", "Geopolitical", "Neutral", 50)
     ]);
     const alignment = countLayerAlignment(rows, "Bearish");
@@ -99,10 +99,10 @@ describe("pickPrimaryLayerDrivers", () => {
   test("returns top two layers matching bearish bias when aligned", () => {
     const layers = [
       layer("technical", "Technical", "Bearish", 90),
-      layer("internals", "Internals", "Bearish", 75),
+      layer("internals", "Market Internals", "Bearish", 75),
       layer("news", "News", "Neutral", 40)
     ];
-    expect(pickPrimaryLayerDrivers(layers, "Bearish")).toEqual(["Technical", "Internals"]);
+    expect(pickPrimaryLayerDrivers(layers, "Bearish")).toEqual(["Technical", "Market Internals"]);
   });
 });
 

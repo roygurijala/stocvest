@@ -26,7 +26,7 @@ describe("scenario-preview-panels", () => {
       { key: "macro", name: "Macro", status: "Neutral", explanation: "", score: 50 },
       { key: "sector", name: "Sector", status: "Neutral", explanation: "", score: 48 },
       { key: "geopolitical", name: "Geopolitical", status: "Neutral", explanation: "", score: 50 },
-      { key: "internals", name: "Internals", status: "Neutral", explanation: "", score: 50 }
+      { key: "internals", name: "Market Internals", status: "Neutral", explanation: "", score: 50 }
     ];
     const marks = resolveLayerPreviewMarks(rows, "Neutral", {
       alignmentRatio: 0.5,

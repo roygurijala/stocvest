@@ -1859,23 +1859,23 @@ describe("buildVerdictTagReconciler", () => {
     // Reproduces the full BRK-B chip rail from the second report
     // (2026-05-13 — second pass):
     //   confirming: [Sector lags market]
-    //   conflicting: [Internals bullish, Weak Volume]
+    //   conflicting: [Market Internals bullish, Weak Volume]
     //   direction: bearish (short setup)
     // (Once Issue 3 — stale 2003 bars — is fixed, VWAP/EMA chips no
     //  longer mis-fire as conflicts, so the genuine counterweight on
-    //  a BRK.B short becomes Internals bullish — the chip we just
+    //  a BRK.B short becomes Market Internals bullish — the chip we just
     //  added to confluence.py for Issue 4.)
     const sentence = buildVerdictTagReconciler(
       "bearish",
       [{ label: "Sector lags market" }],
-      [{ label: "Internals bullish" }, { label: "Weak Volume (<0.05× avg)" }],
+      [{ label: "Market Internals bullish" }, { label: "Weak Volume (<0.05× avg)" }],
       false
     );
     expect(sentence).not.toBeNull();
     // Anchor-first shape.
     expect(sentence!).toMatch(/^Anchored by Sector lags market/);
     // Counterweights enumerate the real opposing context.
-    expect(sentence!).toContain("Internals bullish");
+    expect(sentence!).toContain("Market Internals bullish");
     expect(sentence!).toContain("Weak Volume");
     // Anti-regression on every deprecated form.
     expect(sentence!).not.toMatch(/Bullish inputs present/i);
@@ -1906,7 +1906,7 @@ describe("SignalEvidenceCard verdict-tag reconciler rendering", () => {
       confluence: {
         confirming_signals: [{ label: "Sector lags market", detail: "" }],
         conflicting_signals: [
-          { label: "Internals bullish", detail: "" },
+          { label: "Market Internals bullish", detail: "" },
           { label: "Weak Volume (0.42× avg)", detail: "" }
         ],
         score: 30,
@@ -1930,7 +1930,7 @@ describe("SignalEvidenceCard verdict-tag reconciler rendering", () => {
     expect(html).toContain("verdict-tag-reconciler");
     // The relabelled chip must render unchanged from backend wire.
     expect(html).toContain("Sector lags market");
-    expect(html).toContain("Internals bullish");
+    expect(html).toContain("Market Internals bullish");
     expect(html).toContain("Weak Volume");
     // Anchor-first sentence shape — "Anchored by X; counterweight(s): Y".
     expect(html).toMatch(/Anchored by Sector lags market/);

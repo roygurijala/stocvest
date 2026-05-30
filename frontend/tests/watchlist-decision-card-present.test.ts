@@ -65,7 +65,7 @@ describe("buildWatchlistCardModel", () => {
       COLORS
     );
     expect(model.attentionTier).toBe("getting_close");
-    expect(model.blockers).toEqual(["Internals", "Macro"]);
+    expect(model.blockers).toEqual(["Market Internals", "Macro"]);
     expect(model.progressionBadge).toBe("improved");
     expect(model.momentumLine).toContain("Building momentum");
   });

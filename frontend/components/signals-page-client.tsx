@@ -71,6 +71,7 @@ import {
   type SignalsLayerRowInput
 } from "@/lib/signals-page-present";
 import { sectorLayerStatusLabelFromEntry } from "@/lib/signals/composite-layer-rows";
+import { signalLayerDisplayName } from "@/lib/signals/layer-display-names";
 import { isRrBelowVerdictThreshold } from "@/lib/trade-conviction-tier";
 import { resolveSetupJudgmentFromComposite } from "@/lib/signal-evidence/setup-judgment";
 import {
@@ -178,7 +179,7 @@ const layerMeta = [
   ["🌍", "Macro"],
   ["🏭", "Sector"],
   ["🌐", "Geopolitical"],
-  ["📈", "Internals"]
+  ["📈", signalLayerDisplayName("internals")]
 ] as const;
 
 const SIGNAL_LAYER_KEYS = ["technical", "news", "macro", "sector", "geopolitical", "internals"] as const;

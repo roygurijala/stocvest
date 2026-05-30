@@ -32,7 +32,7 @@ const bearishRows: SignalsLayerRowInput[] = [
   { key: "macro", name: "Macro", status: "Neutral", explanation: "", score: 50 },
   { key: "sector", name: "Sector", status: "Bearish", explanation: "", score: 35 },
   { key: "geopolitical", name: "Geopolitical", status: "Neutral", explanation: "", score: 50 },
-  { key: "internals", name: "Internals", status: "Bullish", explanation: "", score: 58 }
+  { key: "internals", name: "Market Internals", status: "Bullish", explanation: "", score: 58 }
 ];
 
 describe("signals-page-present", () => {
@@ -91,7 +91,7 @@ describe("signals-page-present", () => {
       { key: "macro", name: "Macro", status: "Neutral", explanation: "", score: 50 },
       { key: "sector", name: "Sector", status: "Neutral", explanation: "", score: 50 },
       { key: "geopolitical", name: "Geopolitical", status: "Neutral", explanation: "", score: 50 },
-      { key: "internals", name: "Internals", status: "Neutral", explanation: "", score: 50 }
+      { key: "internals", name: "Market Internals", status: "Neutral", explanation: "", score: 50 }
     ];
     expect(countLayerAlignment(rows, "Bullish").aligned).toBe(1);
   });
@@ -111,7 +111,7 @@ describe("signals-page-present", () => {
   test("groupLayersByForce splits bearish setup into supporting and opposing lists", () => {
     const g = groupLayersByForce(bearishRows, "Bearish");
     expect(g.withBias.map((r) => r.name)).toEqual(expect.arrayContaining(["Technical", "Sector"]));
-    expect(g.againstOrMixed.map((r) => r.name)).toContain("Internals");
+    expect(g.againstOrMixed.map((r) => r.name)).toContain("Market Internals");
     expect(formatLayerForceNames(g.withBias)).toMatch(/Technical/);
     expect(g.titles.withBias).toMatch(/supporting bearish bias/i);
   });
@@ -159,7 +159,7 @@ describe("signals-page-present", () => {
       { key: "macro", name: "Macro", status: "Bullish", explanation: "", score: 65 },
       { key: "sector", name: "Sector", status: "Bullish", explanation: "", score: 70 },
       { key: "geopolitical", name: "Geopolitical", status: "Neutral", explanation: "", score: 52 },
-      { key: "internals", name: "Internals", status: "Bullish", explanation: "", score: 66 }
+      { key: "internals", name: "Market Internals", status: "Bullish", explanation: "", score: 66 }
     ];
     const d = buildSignalsPageDecision({
       mode: "swing",
@@ -198,7 +198,7 @@ describe("signals-page-present", () => {
       { key: "macro", name: "Macro", status: "Bullish", explanation: "", score: 65 },
       { key: "sector", name: "Sector", status: "Bullish", explanation: "", score: 70 },
       { key: "geopolitical", name: "Geopolitical", status: "Neutral", explanation: "", score: 52 },
-      { key: "internals", name: "Internals", status: "Bullish", explanation: "", score: 66 }
+      { key: "internals", name: "Market Internals", status: "Bullish", explanation: "", score: 66 }
     ];
     const a = countLayerAlignment(bullishAligned, "Bullish");
     expect(a.aligned).toBeGreaterThanOrEqual(5);
@@ -222,7 +222,7 @@ describe("signals-page-present", () => {
       { key: "macro", name: "Macro", status: "Bullish", explanation: "", score: 65 },
       { key: "sector", name: "Sector", status: "Bullish", explanation: "", score: 80 },
       { key: "geopolitical", name: "Geopolitical", status: "Bullish", explanation: "", score: 55 },
-      { key: "internals", name: "Internals", status: "Bullish", explanation: "", score: 60 }
+      { key: "internals", name: "Market Internals", status: "Bullish", explanation: "", score: 60 }
     ];
     const d = buildSignalsPageDecision({
       mode: "swing",

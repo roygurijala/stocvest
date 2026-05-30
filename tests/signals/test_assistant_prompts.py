@@ -574,7 +574,7 @@ def test_prompt_carries_primary_goal_and_product_philosophy_sections() -> None:
 def test_prompt_lists_real_six_layers_not_user_proposed_five() -> None:
     """STOCVEST ships six layers. The prompt must enumerate all six by their product names."""
     # Note: the sixth layer is "Market Internals" in the new prompt (the layer_status
-    # key is still "internals"; the UI label is "Internals").
+    # key is still "internals"; the UI label is "Market Internals").
     for layer in ("Technical", "News", "Macro", "Sector", "Geopolitical", "Market Internals"):
         assert layer in ASSISTANT_SYSTEM_PROMPT, f"missing layer name: {layer}"
 

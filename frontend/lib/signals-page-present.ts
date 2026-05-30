@@ -228,8 +228,8 @@ export function layerPolarity(row: SignalsLayerRowInput, bias: SignalsSetupBias)
   if (row.status === "Neutral" || row.status === "As of close") {
     const s = row.score;
     if (s == null) return "neutral";
-    if (row.name === "Sector" && s > 0 && s < 55) return "mixed";
-    if (row.name === "Internals" && s >= 48 && s <= 62) return "mixed";
+    if (row.key === "sector" && s > 0 && s < 55) return "mixed";
+    if (row.key === "internals" && s >= 48 && s <= 62) return "mixed";
     return "neutral";
   }
   return "neutral";
@@ -473,7 +473,7 @@ export function buildLayerInsightLine(row: SignalsLayerRowInput, bias: SignalsSe
     return short;
   }
   const p = layerPolarity(row, bias);
-  const name = row.name;
+  const key = row.key;
   if (row.sectorCachePending || row.status === "Unavailable") {
     return "Coverage unavailable — not factored into this read";
   }
@@ -484,27 +484,27 @@ export function buildLayerInsightLine(row: SignalsLayerRowInput, bias: SignalsSe
     return "As of last close — not a live session read";
   }
   if (p === "supportive") {
-    if (name === "Technical") return "Structure supports the setup bias";
-    if (name === "Internals") return "Breadth supportive for this direction";
-    if (name === "Sector") return "Sector participation supportive vs tape";
+    if (key === "technical") return "Structure supports the setup bias";
+    if (key === "internals") return "Breadth supportive for this direction";
+    if (key === "sector") return "Sector participation supportive vs tape";
     return "Supportive vs setup bias";
   }
   if (p === "blocking") {
-    if (name === "Technical") return "Weak trend structure — no continuation";
-    if (name === "Internals") return "Weak breadth — no confirmation";
-    if (name === "Sector") return "Mixed participation — no leadership";
-    if (name === "News") return "No catalyst support for this direction";
-    if (name === "Macro") return "Macro headwind vs setup bias";
+    if (key === "technical") return "Weak trend structure — no continuation";
+    if (key === "internals") return "Weak breadth — no confirmation";
+    if (key === "sector") return "Mixed participation — no leadership";
+    if (key === "news") return "No catalyst support for this direction";
+    if (key === "macro") return "Macro headwind vs setup bias";
     return "Opposes setup bias";
   }
   if (p === "mixed") {
-    if (name === "Sector") return "Mixed participation — no leadership";
-    if (name === "Internals") return "Participation mixed — not confirming";
+    if (key === "sector") return "Mixed participation — no leadership";
+    if (key === "internals") return "Participation mixed — not confirming";
     return "Mixed — not confirming";
   }
-  if (name === "News") return "No catalyst — background only";
-  if (name === "Macro") return "Neutral — background only";
-  if (name === "Geopolitical") return "Neutral — no direct impact";
+  if (key === "news") return "No catalyst — background only";
+  if (key === "macro") return "Neutral — background only";
+  if (key === "geopolitical") return "Neutral — no direct impact";
   return "Neutral — no signal";
 }
 

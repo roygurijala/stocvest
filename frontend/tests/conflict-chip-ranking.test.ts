@@ -89,7 +89,7 @@ describe("rankConflictingSignals — sorts by source priority", () => {
       { label: "News", source: "news_catalyst" },
       { label: "Regime", source: "market_regime" },
       { label: "Sector", source: "sector_alignment" },
-      { label: "Internals", source: "internals_alignment" },
+      { label: "Market Internals", source: "internals_alignment" },
       { label: "EMA", source: "ema_9_position" },
       { label: "Volume", source: "volume_confirm" },
       { label: "VWAP", source: "vwap_position" }
@@ -99,7 +99,7 @@ describe("rankConflictingSignals — sorts by source priority", () => {
       "VWAP",
       "Volume",
       "EMA",
-      "Internals",
+      "Market Internals",
       "Sector",
       "Regime",
       "News",

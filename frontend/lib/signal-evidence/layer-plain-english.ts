@@ -48,7 +48,7 @@ export function evidenceLayerPlainEnglishExplanation(layer: EvidenceLayer): stri
     if (layer.status === "Bullish") return `${scope} ${lean} for this setup.`;
     if (layer.status === "Bearish") return `${scope} ${lean} for this setup.`;
     if (layer.status === "Unavailable") return `${scope}; news coverage ${lean}.`;
-    return `${scope} ${lean} — no strong catalyst either way.`;
+    return "News coverage is neutral — no strong catalyst either way.";
   }
 
   if (layer.key === "macro") {
@@ -60,7 +60,7 @@ export function evidenceLayerPlainEnglishExplanation(layer: EvidenceLayer): stri
       return risk ? `Macro backdrop ${lean}. ${risk}` : `Macro backdrop ${lean} for this direction.`;
     }
     if (layer.status === "Unavailable") return `Macro gauges ${lean}.`;
-    return risk ?? `Macro gauges ${lean} — mixed without a strong directional push.`;
+    return risk ?? "Macro backdrop is neutral — mixed without a strong directional push.";
   }
 
   if (layer.key === "internals") {

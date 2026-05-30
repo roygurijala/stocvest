@@ -31,7 +31,7 @@ describe("EvidenceCardHeader", () => {
             { key: "news", name: "News", status: "Neutral", explanation: "", score: 50 },
             { key: "macro", name: "Macro", status: "Neutral", explanation: "", score: 50 },
             { key: "sector", name: "Sector", status: "Neutral", explanation: "", score: 50 },
-            { key: "internals", name: "Internals", status: "Neutral", explanation: "", score: 50 },
+            { key: "internals", name: "Market Internals", status: "Neutral", explanation: "", score: 50 },
             { key: "geopolitical", name: "Geopolitical", status: "Neutral", explanation: "", score: 50 }
           ]}
         />

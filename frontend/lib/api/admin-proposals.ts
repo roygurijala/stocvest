@@ -533,7 +533,7 @@ export function compositeWeightLabel(key: keyof CompositeOverrideBlock): string 
     case "geopolitical_weight":
       return "Geopolitical";
     case "internals_weight":
-      return "Internals";
+      return "Market Internals";
     case "bullish_threshold":
       return "Bullish threshold";
     case "bearish_threshold":

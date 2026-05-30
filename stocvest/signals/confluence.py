@@ -289,13 +289,13 @@ class ConfluenceDetector:
         if internals_l == "bullish":
             internals_chip = {
                 "source": "internals_alignment",
-                "label": "Internals bullish",
+                "label": "Market Internals bullish",
                 "detail": "Breadth and participation broadly up — broad market is rising.",
             }
         elif internals_l == "bearish":
             internals_chip = {
                 "source": "internals_alignment",
-                "label": "Internals bearish",
+                "label": "Market Internals bearish",
                 "detail": "Breadth and participation broadly down — broad market is falling.",
             }
         if internals_chip is not None and direction in ("long", "short"):

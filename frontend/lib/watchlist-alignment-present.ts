@@ -3,6 +3,7 @@
  */
 
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
+import { signalLayerDisplayName } from "@/lib/signals/layer-display-names";
 
 export const MATURATION_LAYER_ORDER = [
   "technical",
@@ -13,18 +14,11 @@ export const MATURATION_LAYER_ORDER = [
   "geopolitical"
 ] as const;
 
-const LAYER_DISPLAY: Record<string, string> = {
-  technical: "Technical",
-  sector: "Sector",
-  internals: "Internals",
-  macro: "Macro",
-  news: "News",
-  geopolitical: "Geopolitical"
-};
-
 export function formatMaturationLayerKey(key: string): string {
   const k = key.trim().toLowerCase();
-  return LAYER_DISPLAY[k] ?? key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  const named = signalLayerDisplayName(k);
+  if (named !== k) return named;
+  return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export function maturationAlignmentCounts(row: WatchlistMaturationRow | undefined): {

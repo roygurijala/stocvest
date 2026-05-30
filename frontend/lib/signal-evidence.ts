@@ -7,6 +7,7 @@ import {
   filterInternalLayerScoreCopy,
   layerCopyLooksInternal
 } from "@/lib/signal-evidence/layer-plain-english";
+import { signalLayerDisplayName } from "@/lib/signals/layer-display-names";
 import {
   parseExecutionQuality,
   type ExecutionQualityPayload
@@ -1072,7 +1073,7 @@ export function buildEvidenceFromSetup(
     {
       key: "internals",
       icon: "📈",
-      name: "Internals",
+      name: signalLayerDisplayName("internals"),
       status: statusFromScore(internals),
       weightPercent: 14,
       explanation: "Breadth, VIX trend, and A/D line provide market participation confirmation.",
