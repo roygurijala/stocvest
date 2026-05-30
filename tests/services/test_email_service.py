@@ -58,8 +58,29 @@ def test_html_maturation_links_watchlists() -> None:
 
 def test_html_contains_disclaimer() -> None:
     es = EmailService()
-    html = es._build_html_body(AlertType.SIGNAL_FIRED, {"symbol": "X", "direction": "long", "strength": 50})
-    assert "informational purposes" in html.lower()
+    html_out = es._build_html_body(
+        AlertType.SIGNAL_FIRED,
+        {"symbol": "X", "direction": "Long", "strength": 72, "pattern": "VWAP Reclaim"},
+    )
+    assert "informational purposes" in html_out.lower()
+
+
+def test_html_signal_uses_light_theme_and_readable_text() -> None:
+    es = EmailService()
+    html_out = es._build_html_body(
+        AlertType.SIGNAL_FIRED,
+        {
+            "symbol": "BRK.B",
+            "direction": "Long",
+            "strength": 72,
+            "pattern": "VWAP Reclaim · EMA9 Bounce",
+        },
+    )
+    assert "background:#f4f7fa" in html_out or "background:#ffffff" in html_out
+    assert "color:#0f1c2e" in html_out
+    assert "Setup" in html_out
+    assert "VWAP Reclaim" in html_out
+    assert "n_confirming" not in html_out
 
 
 def test_html_contains_unsubscribe_link() -> None:

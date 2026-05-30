@@ -119,6 +119,94 @@ def test_signal_alert_skipped_when_not_on_watchlist(monkeypatch: pytest.MonkeyPa
     send.assert_not_called()
 
 
+def test_signal_alert_skipped_below_ledger_strength_floor(monkeypatch: pytest.MonkeyPatch) -> None:
+    send = MagicMock(return_value=True)
+    monkeypatch.setattr(EmailService, "send_alert_email", send)
+    store = get_in_memory_alert_store()
+    wl = get_watchlist_store()
+    wl.create_watchlist("u1", "D", ["NVDA"], is_default=True)
+    trig = AlertTriggerService(store, EmailService(), wl)
+    trig.trigger_signal_alert(
+        user_id="u1",
+        user_email="a@b.com",
+        symbol="NVDA",
+        direction="long",
+        signal_strength=55,
+        pattern="vwap_reclaim",
+        is_confluence=False,
+        confluence_score=None,
+        macro_regime="neutral",
+        trigger_count=3,
+    )
+    send.assert_not_called()
+
+
+def test_signal_alert_skipped_regime_avoid(monkeypatch: pytest.MonkeyPatch) -> None:
+    send = MagicMock(return_value=True)
+    monkeypatch.setattr(EmailService, "send_alert_email", send)
+    store = get_in_memory_alert_store()
+    wl = get_watchlist_store()
+    wl.create_watchlist("u1", "D", ["NVDA"], is_default=True)
+    trig = AlertTriggerService(store, EmailService(), wl)
+    trig.trigger_signal_alert(
+        user_id="u1",
+        user_email="a@b.com",
+        symbol="NVDA",
+        direction="long",
+        signal_strength=80,
+        pattern="vwap_reclaim ema9_bounce",
+        is_confluence=False,
+        confluence_score=None,
+        macro_regime="avoid",
+        trigger_count=3,
+    )
+    send.assert_not_called()
+
+
+def test_signal_alert_skipped_without_confirming_or_triggers(monkeypatch: pytest.MonkeyPatch) -> None:
+    send = MagicMock(return_value=True)
+    monkeypatch.setattr(EmailService, "send_alert_email", send)
+    store = get_in_memory_alert_store()
+    wl = get_watchlist_store()
+    wl.create_watchlist("u1", "D", ["NVDA"], is_default=True)
+    trig = AlertTriggerService(store, EmailService(), wl)
+    trig.trigger_signal_alert(
+        user_id="u1",
+        user_email="a@b.com",
+        symbol="NVDA",
+        direction="long",
+        signal_strength=80,
+        pattern="vwap_reclaim",
+        is_confluence=False,
+        confluence_score=0,
+        macro_regime="neutral",
+        trigger_count=1,
+    )
+    send.assert_not_called()
+
+
+def test_signal_alert_sent_at_72_with_two_triggers(monkeypatch: pytest.MonkeyPatch) -> None:
+    send = MagicMock(return_value=True)
+    monkeypatch.setattr(EmailService, "send_alert_email", send)
+    store = get_in_memory_alert_store()
+    wl = get_watchlist_store()
+    wl.create_watchlist("u1", "D", ["NVDA"], is_default=True)
+    trig = AlertTriggerService(store, EmailService(), wl)
+    trig.trigger_signal_alert(
+        user_id="u1",
+        user_email="a@b.com",
+        symbol="NVDA",
+        direction="long",
+        signal_strength=72,
+        pattern="vwap_reclaim ema9_bounce",
+        is_confluence=False,
+        confluence_score=None,
+        macro_regime="risk_on",
+        trigger_count=2,
+    )
+    send.assert_called_once()
+
+
 def test_signal_alert_sent_when_on_watchlist(monkeypatch: pytest.MonkeyPatch) -> None:
     send = MagicMock(return_value=True)
     monkeypatch.setattr(EmailService, "send_alert_email", send)
@@ -135,6 +223,8 @@ def test_signal_alert_sent_when_on_watchlist(monkeypatch: pytest.MonkeyPatch) ->
         pattern="swing_composite",
         is_confluence=False,
         confluence_score=None,
+        macro_regime="neutral",
+        ledger_qualified=True,
     )
     send.assert_called_once()
 

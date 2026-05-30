@@ -88,8 +88,8 @@ def test_notify_watchlist_users_fires_alert() -> None:
     setup = IntradaySetupCandidate(
         symbol="AAPL",
         direction="long",
-        score=0.6,
-        triggers=["orb_breakout_long"],
+        score=0.75,
+        triggers=["orb_breakout_long", "vwap_reclaim"],
         last_price=100.0,
         vwap=None,
         ema9=None,
@@ -97,12 +97,116 @@ def test_notify_watchlist_users_fires_alert() -> None:
     )
     notify_intraday_setups_for_watchlist_users(
         [setup],
+        macro_regime="risk_on",
         watchlist_store=wl,
         alert_store=alerts,
         profile_store=profiles,
         alert_trigger=trigger,
     )
     assert mock_email.send_alert_email.called
+    ctx = mock_email.send_alert_email.call_args.kwargs["context"]
+    assert "ORB Long" in str(ctx.get("pattern") or "")
+
+
+def test_notify_skips_regime_avoid() -> None:
+    from stocvest.api.services.user_profile_store import InMemoryUserProfileStore
+
+    wl = InMemoryWatchlistStore()
+    wl.create_watchlist("u1", "Main", ["AAPL"], is_default=True)
+    profiles = InMemoryUserProfileStore()
+    profiles.put_profile(UserProfile(user_id="u1", email="u1@example.com"))
+    alerts = InMemoryAlertStore()
+    mock_email = MagicMock()
+    mock_email.send_alert_email.return_value = True
+    mock_email._build_subject = MagicMock(return_value="Alert")
+    trigger = AlertTriggerService(alert_store=alerts, email_service=mock_email, watchlist_store=wl)
+    ts = datetime.now(timezone.utc).isoformat()
+    setup = IntradaySetupCandidate(
+        symbol="AAPL",
+        direction="long",
+        score=0.8,
+        triggers=["vwap_reclaim", "ema9_bounce"],
+        last_price=100.0,
+        vwap=None,
+        ema9=None,
+        timestamp_iso=ts,
+    )
+    notify_intraday_setups_for_watchlist_users(
+        [setup],
+        macro_regime="avoid",
+        watchlist_store=wl,
+        alert_store=alerts,
+        profile_store=profiles,
+        alert_trigger=trigger,
+    )
+    assert not mock_email.send_alert_email.called
+
+
+def test_notify_skips_weak_setup_below_email_floor() -> None:
+    from stocvest.api.services.user_profile_store import InMemoryUserProfileStore
+
+    wl = InMemoryWatchlistStore()
+    wl.create_watchlist("u1", "Main", ["AAPL"], is_default=True)
+    profiles = InMemoryUserProfileStore()
+    profiles.put_profile(UserProfile(user_id="u1", email="u1@example.com"))
+    alerts = InMemoryAlertStore()
+    mock_email = MagicMock()
+    mock_email.send_alert_email.return_value = True
+    mock_email._build_subject = MagicMock(return_value="Alert")
+    trigger = AlertTriggerService(alert_store=alerts, email_service=mock_email, watchlist_store=wl)
+    ts = datetime.now(timezone.utc).isoformat()
+    setup = IntradaySetupCandidate(
+        symbol="AAPL",
+        direction="long",
+        score=0.55,
+        triggers=["vwap_reclaim"],
+        last_price=100.0,
+        vwap=None,
+        ema9=None,
+        timestamp_iso=ts,
+    )
+    notify_intraday_setups_for_watchlist_users(
+        [setup],
+        macro_regime="neutral",
+        watchlist_store=wl,
+        alert_store=alerts,
+        profile_store=profiles,
+        alert_trigger=trigger,
+    )
+    assert not mock_email.send_alert_email.called
+
+
+def test_notify_skips_single_trigger_even_at_high_score() -> None:
+    from stocvest.api.services.user_profile_store import InMemoryUserProfileStore
+
+    wl = InMemoryWatchlistStore()
+    wl.create_watchlist("u1", "Main", ["AAPL"], is_default=True)
+    profiles = InMemoryUserProfileStore()
+    profiles.put_profile(UserProfile(user_id="u1", email="u1@example.com"))
+    alerts = InMemoryAlertStore()
+    mock_email = MagicMock()
+    mock_email.send_alert_email.return_value = True
+    trigger = AlertTriggerService(alert_store=alerts, email_service=mock_email, watchlist_store=wl)
+    ts = datetime.now(timezone.utc).isoformat()
+    setup = IntradaySetupCandidate(
+        symbol="AAPL",
+        direction="long",
+        score=0.8,
+        triggers=["vwap_reclaim"],
+        last_price=100.0,
+        vwap=None,
+        ema9=None,
+        timestamp_iso=ts,
+    )
+    notify_intraday_setups_for_watchlist_users(
+        [setup],
+        macro_regime="neutral",
+        watchlist_store=wl,
+        alert_store=alerts,
+        profile_store=profiles,
+        alert_trigger=trigger,
+    )
+    assert not mock_email.send_alert_email.called
 
 
 def test_notify_skips_if_recent_alert() -> None:
@@ -146,6 +250,7 @@ def test_notify_skips_if_recent_alert() -> None:
     )
     notify_intraday_setups_for_watchlist_users(
         [setup],
+        macro_regime="neutral",
         watchlist_store=wl,
         alert_store=alerts,
         profile_store=profiles,

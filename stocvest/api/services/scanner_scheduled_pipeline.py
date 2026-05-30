@@ -8,6 +8,7 @@ from typing import Any
 
 from stocvest.api.services.alerts_store import put_scanner_alert
 from stocvest.api.services.day_trading_setups_store import SCANNER_SYSTEM_ACCOUNT_ID, get_day_trading_setups_store
+from stocvest.api.services.scanner_alert_macro import fetch_macro_regime_for_scanner_alerts
 from stocvest.api.services.watchlist_scanner_alerts import notify_intraday_setups_for_watchlist_users
 from stocvest.api.services.signal_dto import (
     serialize_catalyst,
@@ -172,8 +173,13 @@ async def run_scheduled_scan(scan_type: str) -> dict[str, Any]:
                 document["data"]["setups"] = [serialize_intraday_setup(s) for s in setups]
                 if setups:
                     try:
+                        macro_regime = await fetch_macro_regime_for_scanner_alerts(client)
                         await asyncio.wait_for(
-                            asyncio.to_thread(notify_intraday_setups_for_watchlist_users, setups),
+                            asyncio.to_thread(
+                                notify_intraday_setups_for_watchlist_users,
+                                setups,
+                                macro_regime=macro_regime,
+                            ),
                             timeout=2.0,
                         )
                     except asyncio.TimeoutError:
@@ -206,8 +212,13 @@ async def run_scheduled_scan(scan_type: str) -> dict[str, Any]:
                 document["data"]["setups"] = [serialize_intraday_setup(s) for s in setup_objs]
                 if setup_objs:
                     try:
+                        macro_regime = await fetch_macro_regime_for_scanner_alerts(client)
                         await asyncio.wait_for(
-                            asyncio.to_thread(notify_intraday_setups_for_watchlist_users, setup_objs),
+                            asyncio.to_thread(
+                                notify_intraday_setups_for_watchlist_users,
+                                setup_objs,
+                                macro_regime=macro_regime,
+                            ),
                             timeout=2.0,
                         )
                     except asyncio.TimeoutError:
