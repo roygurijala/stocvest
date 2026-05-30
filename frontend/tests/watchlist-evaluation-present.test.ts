@@ -61,4 +61,17 @@ describe("watchlist-evaluation-present", () => {
     const line = watchlistMaturationDeskSummary(["AAPL"], {}, {}, "swing", false, { sessionClosed: true });
     expect(line).toMatch(/Market is closed/);
   });
+
+  test("watchlistMaturationDeskSummary when session closed and rows evaluated", () => {
+    const line = watchlistMaturationDeskSummary(
+      ["AAPL"],
+      { AAPL: { state: "actionable", last_evaluated_at: "2026-05-28T20:00:00Z", layers_aligned: 5, layers_total: 6 } as never },
+      {},
+      "swing",
+      false,
+      { sessionClosed: true }
+    );
+    expect(line).toMatch(/1 of 1/);
+    expect(line).toMatch(/Market closed/i);
+  });
 });

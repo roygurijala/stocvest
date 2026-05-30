@@ -75,6 +75,7 @@ export function WatchlistDecisionCard({
     >
       <article
         className="relative overflow-hidden rounded-xl transition hover:brightness-[1.03]"
+        data-card-tone={model.chromeKind}
         style={{
           background: colors.surface,
           border: `1px solid ${colors.border}`,
@@ -99,10 +100,22 @@ export function WatchlistDecisionCard({
           <X size={14} aria-hidden />
         </button>
 
-        <header className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 pr-8">
+        <header className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 pr-8">
           <span className="text-base font-bold tracking-wide" style={{ color: colors.text }}>
             {model.symbol}
           </span>
+          {model.directionChip ? (
+            <span
+              className="rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide"
+              style={{
+                color: model.directionChip.color,
+                background: model.directionChip.background
+              }}
+              data-testid={`watchlist-direction-${model.symbol}`}
+            >
+              {model.directionChip.label}
+            </span>
+          ) : null}
           {justAdded ? (
             <span
               className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
@@ -138,7 +151,7 @@ export function WatchlistDecisionCard({
 
         {compact ? (
           <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-            <LayerDots filled={model.layerDots} total={model.total} accent={colors.accent} />
+            <LayerDots filled={model.layerDots} total={model.total} accent={model.dotAccent} />
             <span className="text-xs" style={{ color: colors.textMuted }}>
               {model.alignmentLine}
             </span>
@@ -152,7 +165,7 @@ export function WatchlistDecisionCard({
         />
 
         <div className="flex flex-wrap items-center gap-2">
-          <LayerDots filled={model.layerDots} total={model.total} accent={colors.accent} />
+          <LayerDots filled={model.layerDots} total={model.total} accent={model.dotAccent} />
           {model.progressionBadge === "improved" ? (
             <span
               className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
@@ -182,6 +195,16 @@ export function WatchlistDecisionCard({
           </p>
         ) : null}
 
+        {model.statusBanner ? (
+          <p
+            className="m-0 mt-1.5 text-sm font-medium leading-snug"
+            style={{ color: colors.bearish }}
+            data-testid={`watchlist-status-banner-${model.symbol}`}
+          >
+            {model.statusBanner}
+          </p>
+        ) : null}
+
         {model.blockers.length > 0 ? (
           <p className="m-0 mt-1.5 text-sm leading-snug" style={{ color: colors.caution }}>
             <span aria-hidden>⚠ </span>
@@ -208,13 +231,25 @@ export function WatchlistDecisionCard({
           className={`flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-t ${compact ? "mt-2 pt-1.5" : "mt-3 pt-2"}`}
           style={{ borderColor: colors.border }}
         >
-          <span
-            className="text-xs"
-            style={{ color: model.evaluatedStale ? colors.caution : colors.textMuted }}
-            data-testid={`watchlist-evaluated-ago-${model.symbol}`}
-          >
-            Updated: {model.evaluatedAgo}
-            {model.evaluatedStale ? " · stale" : ""}
+          <span className="flex flex-wrap items-center gap-2">
+            <span
+              className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+              style={{
+                color: model.chromeBadgeColor,
+                background: model.chromeBadgeBackground
+              }}
+              data-testid={`watchlist-chrome-badge-${model.symbol}`}
+            >
+              {model.chromeBadgeLabel}
+            </span>
+            <span
+              className="text-xs"
+              style={{ color: model.evaluatedStale ? colors.caution : colors.textMuted }}
+              data-testid={`watchlist-evaluated-ago-${model.symbol}`}
+            >
+              Updated: {model.evaluatedAgo}
+              {model.evaluatedStale ? " · stale" : ""}
+            </span>
           </span>
           <span className="ml-auto flex shrink-0 items-center gap-2">
             {showDeskCompare && onCompareDesks ? (

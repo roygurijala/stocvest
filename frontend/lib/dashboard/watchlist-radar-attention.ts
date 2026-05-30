@@ -3,6 +3,7 @@
  */
 
 import type { AlignmentDisplayTier } from "@/lib/alignment-display-tier";
+import type { SessionActivityUiMode } from "@/lib/market/session-activity-mode";
 import { regimeBlocksDesk } from "@/lib/scanner/scanner-quiet-desk";
 import type { WatchlistAttentionTier } from "@/lib/watchlist-decision-card-present";
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
@@ -11,12 +12,15 @@ export type WatchlistRadarDeskContext = {
   regimeLabel: string;
   /** Dashboard system banner suppressed (no desk setups firing). */
   systemSuppressed: boolean;
+  /** Regular session not open — matches Watchlists maturation copy and pipeline session mode. */
+  sessionMode?: SessionActivityUiMode;
 };
 
 /** Default when regime/desk context is not loaded (neutral, desk open). */
 export const WATCHLIST_DESK_OPEN: WatchlistRadarDeskContext = {
   regimeLabel: "Neutral",
-  systemSuppressed: false
+  systemSuppressed: false,
+  sessionMode: "live"
 };
 
 export type WatchlistRadarAttentionInput = {
@@ -53,6 +57,12 @@ function deskGatedPhrase(desk: WatchlistRadarDeskContext, prefix: string): strin
   return qualifier ? `${prefix} — desk gated (${qualifier})` : `${prefix} — desk gated`;
 }
 
+function sessionGatePhrase(prefix: string, sessionMode: SessionActivityUiMode | undefined): string | null {
+  if (sessionMode === "closed") return `${prefix} — session closed`;
+  if (sessionMode === "extended") return `${prefix} — extended hours (context only)`;
+  return null;
+}
+
 function symbolHoldPhrase(blockers: string[]): string | null {
   const labels = blockers.filter((b) => b !== "Macro").slice(0, 2);
   if (labels.length === 0) return null;
@@ -70,6 +80,8 @@ export function resolveWatchlistRadarAttentionLine(input: WatchlistRadarAttentio
 
   if (tier === "check_now") {
     if (isFullyAligned(input)) {
+      const sessionPhrase = sessionGatePhrase("Strong setup", desk.sessionMode);
+      if (sessionPhrase) return sessionPhrase;
       if (isWatchlistRadarDeskGated(desk)) {
         return deskGatedPhrase(desk, "Strong setup");
       }
@@ -83,6 +95,8 @@ export function resolveWatchlistRadarAttentionLine(input: WatchlistRadarAttentio
       return "Strong on your list — open on Signals";
     }
     if (isNearReadyBand(input)) {
+      const sessionPhrase = sessionGatePhrase("Near ready", desk.sessionMode);
+      if (sessionPhrase) return sessionPhrase;
       if (isWatchlistRadarDeskGated(desk)) {
         return deskGatedPhrase(desk, "Near ready");
       }

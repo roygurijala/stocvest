@@ -858,6 +858,78 @@ class TestRetries:
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+class TestGetSnapshotIndexRouting:
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_vix_uses_indices_endpoint_not_stocks(self):
+        indices_route = respx.get(url__regex=r"https://api\.polygon\.io/v3/snapshot/indices.*").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "results": [
+                        {
+                            "ticker": "I:VIX",
+                            "value": 19.1,
+                            "session": {"change_percent": 2.5, "previous_close": 18.6, "close": 19.1},
+                        }
+                    ]
+                },
+            )
+        )
+        stocks_route = respx.get(
+            url__regex=r"https://api\.polygon\.io/v2/snapshot/locale/us/markets/stocks/tickers/.*"
+        ).mock(return_value=httpx.Response(404, json={"status": "NOT_FOUND"}))
+
+        async with PolygonClient(FAKE_KEY) as client:
+            snap = await client.get_snapshot("I:VIX")
+
+        assert snap.symbol == "I:VIX"
+        assert snap.last_trade_price == pytest.approx(19.1)
+        assert indices_route.call_count >= 1
+        assert stocks_route.call_count == 0
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_mixed_snapshots_use_stocks_and_indices(self):
+        respx.get(url__regex=r"https://api\.polygon\.io/v2/snapshot/locale/us/markets/stocks/tickers.*").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "status": "OK",
+                    "tickers": [
+                        {
+                            "ticker": "SPY",
+                            "day": {"c": 500.0},
+                            "prevDay": {"c": 498.0},
+                            "lastTrade": {"p": 500.0},
+                        }
+                    ],
+                },
+            )
+        )
+        respx.get(url__regex=r"https://api\.polygon\.io/v3/snapshot/indices.*").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "results": [
+                        {
+                            "ticker": "I:VIX",
+                            "value": 17.2,
+                            "session": {"change_percent": -1.1, "previous_close": 17.4, "close": 17.2},
+                        }
+                    ]
+                },
+            )
+        )
+
+        async with PolygonClient(FAKE_KEY) as client:
+            snaps = await client.get_snapshots(["SPY", "I:VIX"])
+
+        assert set(snaps.keys()) == {"SPY", "I:VIX"}
+        assert snaps["SPY"].last_trade_price == pytest.approx(500.0)
+        assert snaps["I:VIX"].last_trade_price == pytest.approx(17.2)
+
+
 class TestParseIndexSnapshotRow:
     def test_indices_vix_row_maps_to_snapshot(self):
         row = {

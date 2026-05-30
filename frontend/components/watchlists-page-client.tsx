@@ -27,6 +27,8 @@ import {
   refreshWatchlistSymbolMaturationDesk,
   type WatchlistMaturationDesk
 } from "@/lib/watchlist-maturation-prime";
+import { useWatchlistSessionRefresh } from "@/lib/hooks/use-watchlist-session-refresh";
+import type { WatchlistMaturationDesk as SessionRefreshDesk } from "@/lib/watchlist-maturation-session-staleness";
 import { APP_TOP_BAR_LAYOUT_HEIGHT_PX, measureAppTopBarLayoutHeightPx } from "@/components/top-bar";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, colorTokens, spacing, surfaceGlowClassName } from "@/lib/design-system";
@@ -475,6 +477,21 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
       setMaturationReloadNonce((n) => n + 1);
     }
   }, [maturationEligible, activeSymbolsDeduped.length]);
+
+  const sessionRefreshDesks = useMemo((): SessionRefreshDesk[] => {
+    if (dualDeskMaturation) return ["swing", "day"];
+    return viewMode === "day" ? ["day"] : ["swing"];
+  }, [dualDeskMaturation, viewMode]);
+
+  useWatchlistSessionRefresh({
+    enabled: maturationEligible && active?.is_default === true,
+    symbols: activeSymbolsDeduped,
+    swingBySymbol: maturationSwing,
+    dayBySymbol: maturationDay,
+    desks: sessionRefreshDesks,
+    maturationReady: maturationFetchStatus === "ready",
+    onRefreshed: requestMaturationReload
+  });
 
   useEffect(() => {
     const onVisible = () => {

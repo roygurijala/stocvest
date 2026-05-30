@@ -40,41 +40,21 @@ def test_handler_routes_eventbridge_schedule_payload(monkeypatch: pytest.MonkeyP
         assert body["status"] == "completed"
 
 
-def test_handler_routes_maturation_refresh_schedule(monkeypatch: pytest.MonkeyPatch) -> None:
-    seen: list[str | None] = []
-
-    def _fake_refresh(*, scan_type: str | None = None, slot: str | None = None) -> dict:
-        _ = slot
-        seen.append(scan_type)
-        return {"job": "watchlist_maturation_refresh", "composite_calls": 0}
-
-    monkeypatch.setattr(
-        "stocvest.workers.watchlist_maturation_refresh.run_watchlist_maturation_refresh_sync",
-        _fake_refresh,
-    )
+def test_handler_routes_maturation_refresh_schedule() -> None:
     response = handler({"source": "eventbridge", "scan_type": "maturation_refresh"}, {})
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
-    assert body.get("job") == "watchlist_maturation_refresh"
-    assert seen == ["maturation_refresh"]
+    assert body.get("skipped") is True
+    assert body.get("reason") == "batch_maturation_refresh_disabled"
 
 
-def test_handler_routes_maturation_refresh_swing_and_day(monkeypatch: pytest.MonkeyPatch) -> None:
-    seen: list[str | None] = []
-
-    def _fake_refresh(*, scan_type: str | None = None, slot: str | None = None) -> dict:
-        _ = slot
-        seen.append(scan_type)
-        return {"job": "watchlist_maturation_refresh", "slot": scan_type}
-
-    monkeypatch.setattr(
-        "stocvest.workers.watchlist_maturation_refresh.run_watchlist_maturation_refresh_sync",
-        _fake_refresh,
-    )
+def test_handler_ignores_maturation_refresh_swing_and_day() -> None:
     for scan_type in ("maturation_refresh_swing", "maturation_refresh_day"):
         response = handler({"source": "eventbridge", "scan_type": scan_type}, {})
         assert response["statusCode"] == 200
-    assert seen == ["maturation_refresh_swing", "maturation_refresh_day"]
+        body = json.loads(response["body"])
+        assert body.get("skipped") is True
+        assert body.get("reason") == "batch_maturation_refresh_disabled"
 
 
 def test_handler_routes_opportunity_desk_schedule(monkeypatch: pytest.MonkeyPatch) -> None:

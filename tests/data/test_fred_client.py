@@ -8,7 +8,7 @@ import httpx
 import pytest
 import respx
 
-from stocvest.data.fred_client import FREDClient, FRED_RELEASES
+from stocvest.data.fred_client import FREDClient, FRED_RELEASES, FRED_VIX_MARKET_STATUS, FRED_VIX_SERIES_ID
 from stocvest.signals.macro_event import MacroEventCategory
 
 
@@ -184,6 +184,76 @@ async def test_redis_cache_used_on_second_call(monkeypatch: pytest.MonkeyPatch) 
     assert n_second == n_first
     assert any(k.startswith("stocvest:fred:events:") for k in store)
     get_settings.cache_clear()
+
+
+def _vix_obs_two() -> dict:
+    return {
+        "observations": [
+            {"date": "2026-05-22", "value": "18.5"},
+            {"date": "2026-05-21", "value": "19.0"},
+        ]
+    }
+
+
+@pytest.mark.asyncio
+async def test_get_vix_snapshot_from_vixcls(fred_api_key) -> None:
+    def obs_side_effect(request: httpx.Request) -> httpx.Response:
+        u = str(request.url)
+        if FRED_VIX_SERIES_ID in u:
+            return httpx.Response(200, json=_vix_obs_two())
+        return httpx.Response(200, json=_obs("."))
+
+    with respx.mock:
+        respx.get(re.compile(r"https://api\.stlouisfed\.org/fred/series/observations\?.*")).mock(side_effect=obs_side_effect)
+        snap = await FREDClient().get_vix_snapshot()
+    assert snap is not None
+    assert snap.symbol == "I:VIX"
+    assert snap.last_trade_price == pytest.approx(18.5)
+    assert snap.prev_close == pytest.approx(19.0)
+    assert snap.change_percent == pytest.approx(-2.6316, rel=1e-4)
+    assert snap.market_status == FRED_VIX_MARKET_STATUS
+
+
+@pytest.mark.asyncio
+async def test_get_vix_snapshot_public_csv_without_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("FRED_API_KEY", raising=False)
+    monkeypatch.setenv("STOCVEST_DISABLE_REDIS", "1")
+    from stocvest.utils.config import get_settings
+
+    get_settings.cache_clear()
+
+    csv_body = "DATE,VIXCLS\n2026-05-27,16.29\n2026-05-28,15.74\n"
+
+    with respx.mock:
+        respx.get("https://fred.stlouisfed.org/graph/fredgraph.csv?id=VIXCLS").mock(
+            return_value=httpx.Response(200, text=csv_body)
+        )
+        snap = await FREDClient().get_vix_snapshot()
+
+    get_settings.cache_clear()
+    assert snap is not None
+    assert snap.last_trade_price == pytest.approx(15.74)
+    assert snap.prev_close == pytest.approx(16.29)
+    assert snap.market_status == FRED_VIX_MARKET_STATUS
+
+
+@pytest.mark.asyncio
+async def test_get_vix_snapshot_skips_dot_observations(fred_api_key) -> None:
+    payload = {
+        "observations": [
+            {"date": "2026-05-23", "value": "."},
+            {"date": "2026-05-22", "value": "17.0"},
+        ]
+    }
+
+    with respx.mock:
+        respx.get(re.compile(r"https://api\.stlouisfed\.org/fred/series/observations\?.*")).mock(
+            return_value=httpx.Response(200, json=payload)
+        )
+        snap = await FREDClient().get_vix_snapshot()
+    assert snap is not None
+    assert snap.last_trade_price == pytest.approx(17.0)
+    assert snap.prev_close is None
 
 
 @pytest.mark.asyncio

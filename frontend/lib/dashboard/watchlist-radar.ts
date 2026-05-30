@@ -81,7 +81,7 @@ export function buildWatchlistRadarRows(opts: {
     const snap = opts.snapshotForSymbol(sym);
     const tier = resolveWatchlistAttentionTier(row);
     const movePct = sessionMovePct(snap);
-    const model = buildWatchlistCardModel(sym, row, snap, opts.colors, opts.mode);
+    const model = buildWatchlistCardModel(sym, row, snap, opts.colors, opts.mode, opts.desk);
     let reason =
       resolveWatchlistRadarAttentionLine({
         tier,

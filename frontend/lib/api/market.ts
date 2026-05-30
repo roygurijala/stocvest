@@ -32,6 +32,8 @@ export interface SnapshotPayload {
   change_percent?: number | null;
   pre_market_change_percent?: number | null;
   after_hours_change_percent?: number | null;
+  /** e.g. ``fred_daily`` when level is FRED VIXCLS (prior close), not live Polygon indices. */
+  market_status?: string | null;
 }
 
 /** Primary tab category from API (`/v1/market/news`). */

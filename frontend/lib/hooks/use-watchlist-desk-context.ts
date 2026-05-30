@@ -4,8 +4,9 @@ import { useMemo } from "react";
 import useSWR from "swr";
 
 import { fetchDeskToday, type DeskTodayMode } from "@/lib/api/desk-today";
-import type { SnapshotPayload } from "@/lib/api/market";
+import type { MarketStatusPayload, SnapshotPayload } from "@/lib/api/market";
 import type { WatchlistRadarDeskContext } from "@/lib/dashboard/watchlist-radar-attention";
+import { resolveSessionActivityUiMode } from "@/lib/market/session-activity-mode";
 import { deskTodayKey } from "@/lib/hooks/use-desk-today";
 import { regimeFromSpyQqq } from "@/lib/market-context/regime";
 import { STOCVEST_SWR_CACHE_NS } from "@/lib/swr/config";
@@ -60,6 +61,16 @@ export function useWatchlistDeskContext(planMode: DeskTodayMode): WatchlistRadar
     { revalidateOnFocus: false, dedupingInterval: 60_000 }
   );
 
+  const { data: marketStatus } = useSWR(
+    `${STOCVEST_SWR_CACHE_NS}watchlist-market-status`,
+    async () => {
+      const res = await fetch("/api/stocvest/market/status", { cache: "no-store" });
+      if (!res.ok) return null;
+      return (await res.json().catch(() => null)) as MarketStatusPayload | null;
+    },
+    { revalidateOnFocus: false, dedupingInterval: 60_000 }
+  );
+
   return useMemo(() => {
     const bySym = new Map(
       (benchmarkSnaps ?? []).map((s) => [(s.symbol || "").trim().toUpperCase(), s] as const)
@@ -68,6 +79,7 @@ export function useWatchlistDeskContext(planMode: DeskTodayMode): WatchlistRadar
     const qqqPct = sessionChangePct(bySym.get("QQQ"));
     const regimeLabel = regimeFromSpyQqq(spyPct, qqqPct, "Neutral");
     const systemSuppressed = inferWatchlistSystemSuppressed(deskResponse?.data ?? null);
-    return { regimeLabel, systemSuppressed };
-  }, [benchmarkSnaps, deskResponse?.data]);
+    const sessionMode = resolveSessionActivityUiMode(marketStatus ?? undefined);
+    return { regimeLabel, systemSuppressed, sessionMode };
+  }, [benchmarkSnaps, deskResponse?.data, marketStatus]);
 }

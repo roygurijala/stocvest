@@ -355,6 +355,8 @@ def get_settings() -> Settings:
             settings.fmp_api_key = _load_secret_key("FMP_API_KEY", "fmp_api_key")
         if not settings.finnhub_api_key:
             settings.finnhub_api_key = _load_secret_key("FINNHUB_API_KEY", "finnhub_api_key")
+        if not settings.fred_api_key:
+            settings.fred_api_key = _load_secret_key("FRED_API_KEY", "fred_api_key")
         if not settings.postmark_server_token:
             settings.postmark_server_token = _load_secret_key(
                 "POSTMARK_SERVER_TOKEN",

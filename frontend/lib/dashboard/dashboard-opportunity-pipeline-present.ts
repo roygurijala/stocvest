@@ -3,6 +3,7 @@
  */
 
 import type { DashboardDeskMode } from "@/lib/dashboard/live-status-copy";
+import type { SessionActivityUiMode } from "@/lib/market/session-activity-mode";
 
 /** @deprecated Title removed from dashboard UI — status line only. Kept for tests/docs. */
 export const OPPORTUNITY_PIPELINE_TITLE = "Opportunity pipeline";
@@ -41,7 +42,14 @@ export function buildPipelineStatusLine(opts: {
   marketActivityCount: number;
   nearReadyInMarket: number;
   systemSuppressed: boolean;
+  sessionMode?: SessionActivityUiMode;
 }): string {
+  if (opts.sessionMode === "closed") {
+    return "Market closed — watchlist progress is structure only until the next regular open.";
+  }
+  if (opts.sessionMode === "extended") {
+    return "Extended hours — desk entries resume at the regular open; watchlist progress is context only.";
+  }
   const parts: string[] = [];
   if (opts.watchlistAttentionCount > 0) {
     parts.push(

@@ -4,11 +4,7 @@
 
 import type { DashboardDeskMode } from "@/lib/dashboard/live-status-copy";
 import type { WatchlistRadarRow } from "@/lib/dashboard/watchlist-radar";
-import {
-  dashboardDirectionCardChrome,
-  type DashboardCardChrome,
-  type DashboardCardTone
-} from "@/lib/dashboard/dashboard-card-surface";
+import type { DashboardCardTone } from "@/lib/dashboard/dashboard-card-surface";
 import {
   watchlistAttentionSectionMeta,
   type WatchlistAttentionTier
@@ -40,7 +36,14 @@ export type WatchlistRadarCardModel = {
   layerDots: boolean[];
   layerTotal: number;
   cardTone: DashboardCardTone;
-  cardChrome: DashboardCardChrome;
+  borderLeft: string;
+  borderBottom: string;
+  dotAccent: string;
+  chromeBadgeLabel: string;
+  chromeBadgeColor: string;
+  chromeBadgeBackground: string;
+  directionChip: { label: string; color: string; background: string } | null;
+  statusBanner: string | null;
   peek: string;
 };
 
@@ -79,13 +82,6 @@ export function buildWatchlistRadarCardModel(
     quoteBullish: row.quote?.bullish,
     sessionMovePct: row.sessionMovePct
   });
-  const cardChrome = dashboardDirectionCardChrome(quoteTone, {
-    surface: colors.surface,
-    border: colors.border,
-    bullish: colors.bullish,
-    bearish: colors.bearish,
-    textMuted: colors.textMuted
-  });
   const quoteLine =
     row.quote?.price && row.quote?.pct
       ? `${row.quote.price} ${row.quote.pct}`
@@ -106,7 +102,14 @@ export function buildWatchlistRadarCardModel(
     layerDots: row.layerDots,
     layerTotal: row.total,
     cardTone: quoteTone,
-    cardChrome,
+    borderLeft: row.borderLeft,
+    borderBottom: row.borderBottom,
+    dotAccent: row.dotAccent,
+    chromeBadgeLabel: row.chromeBadgeLabel,
+    chromeBadgeColor: row.chromeBadgeColor,
+    chromeBadgeBackground: row.chromeBadgeBackground,
+    directionChip: row.directionChip,
+    statusBanner: row.statusBanner,
     peek: row.blockers.length > 0 ? `Blocked: ${row.blockers.join(" · ")}` : row.attentionReason
   };
 }

@@ -9,6 +9,8 @@ import {
   type AlignmentDisplayTier
 } from "@/lib/alignment-display-tier";
 import { maturationAlignmentCounts, missingLayerNames } from "@/lib/watchlist-alignment-present";
+import { readinessDuplicatesAlignmentCount } from "@/lib/watchlist-row-present";
+import type { SessionActivityUiMode } from "@/lib/market/session-activity-mode";
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
 import type { SnapshotPayload } from "@/lib/api/market";
 import { watchlistQuoteFromSnapshot } from "@/lib/watchlist-page-utils";
@@ -24,6 +26,11 @@ import {
   WATCHLIST_DESK_OPEN,
   type WatchlistRadarDeskContext
 } from "@/lib/dashboard/watchlist-radar-attention";
+import {
+  resolveWatchlistCardChrome,
+  type WatchlistCardChromeKind,
+  type WatchlistDirectionChip
+} from "@/lib/watchlist-card-chrome";
 
 export type WatchlistAttentionTier = "check_now" | "getting_close" | "tracking";
 
@@ -49,6 +56,13 @@ export type WatchlistCardModel = {
   layerDots: boolean[];
   borderLeft: string;
   borderBottom: string;
+  chromeKind: WatchlistCardChromeKind;
+  dotAccent: string;
+  chromeBadgeLabel: string;
+  chromeBadgeColor: string;
+  chromeBadgeBackground: string;
+  directionChip: WatchlistDirectionChip | null;
+  statusBanner: string | null;
   conviction: TradeConvictionTierResult | null;
 };
 
@@ -103,8 +117,16 @@ function buildMomentumLine(
   opts: {
     attentionTier: WatchlistAttentionTier;
     attentionLine: string | null;
+    sessionMode?: SessionActivityUiMode;
   }
 ): string | null {
+  if (
+    opts.attentionLine &&
+    (opts.sessionMode === "closed" || opts.sessionMode === "extended") &&
+    (opts.attentionTier === "check_now" || opts.attentionTier === "getting_close")
+  ) {
+    return opts.attentionLine;
+  }
   const detail = formatWatchlistProgressionDetail(row);
   if (detail) {
     const type = row?.last_transition_type;
@@ -129,13 +151,30 @@ function buildMomentumLine(
   return null;
 }
 
+function readinessIsAlignmentSummary(
+  readiness: string,
+  aligned: number,
+  total: number
+): boolean {
+  const r = readiness.trim();
+  if (!r) return false;
+  if (readinessDuplicatesAlignmentCount(r, aligned, total)) return true;
+  const lower = r.toLowerCase();
+  if (/\b\d+\s*\/\s*\d+\s+aligned\b/.test(lower)) return true;
+  if (/\b\d+\s+of\s+\d+\s+aligned\b/.test(lower)) return true;
+  if (/^strong\b/.test(lower) && lower.includes("aligned")) return true;
+  return false;
+}
+
 function extractBlockers(row: WatchlistMaturationRow | undefined): string[] {
+  const { aligned, total } = maturationAlignmentCounts(row);
   const fromMissing = missingLayerNames(row).filter(
     (n) => n !== "Remaining confirmation layers"
   );
   if (fromMissing.length > 0) return fromMissing.slice(0, 2);
   const readiness = (row?.readiness_label ?? "").trim();
   if (!readiness) return [];
+  if (readinessIsAlignmentSummary(readiness, aligned, total)) return [];
   const blockers: string[] = [];
   const lower = readiness.toLowerCase();
   if (lower.includes("risk/reward") || lower.includes("risk reward")) blockers.push("Risk/Reward");
@@ -145,7 +184,13 @@ function extractBlockers(row: WatchlistMaturationRow | undefined): string[] {
   if (lower.includes("data") || lower.includes("coverage")) blockers.push("Data");
   if (blockers.length === 0 && readiness.length < 80) {
     const trimmed = readiness.replace(/^Why hold:\s*/i, "").split(/[.—]/)[0]?.trim();
-    if (trimmed && trimmed.length < 60) blockers.push(trimmed);
+    if (
+      trimmed &&
+      trimmed.length < 60 &&
+      !readinessIsAlignmentSummary(trimmed, aligned, total)
+    ) {
+      blockers.push(trimmed);
+    }
   }
   return blockers.slice(0, 2);
 }
@@ -161,25 +206,6 @@ export function formatEvaluatedAgo(iso: string | undefined): { text: string; sta
   if (diffH < 24) return { text: `${diffH}h ago`, stale: true };
   const diffD = Math.floor(diffH / 24);
   return { text: `${diffD}d ago`, stale: true };
-}
-
-export function watchlistCardBorderAccent(
-  alignmentTier: AlignmentDisplayTier,
-  colors: { accent: string; bullish: string; bearish: string; caution: string; textMuted: string }
-): { left: string; bottom: string } {
-  switch (alignmentTier) {
-    case "actionable":
-    case "near_ready":
-      return { left: colors.bullish, bottom: colors.bullish };
-    case "developing":
-    case "re_evaluating":
-      return { left: colors.caution, bottom: colors.caution };
-    case "invalidated":
-    case "not_aligned":
-      return { left: colors.textMuted, bottom: `color-mix(in srgb, ${colors.textMuted} 65%, transparent)` };
-    default:
-      return { left: colors.accent, bottom: `color-mix(in srgb, ${colors.accent} 40%, transparent)` };
-  }
 }
 
 function resolveWatchlistConviction(
@@ -223,7 +249,6 @@ export function buildWatchlistCardModel(
   });
   const attentionTier = resolveWatchlistAttentionTier(row);
   const layerDots = Array.from({ length: total }, (_, i) => i < aligned);
-  const borders = watchlistCardBorderAccent(alignmentTier, colors);
   const evalAgo = formatEvaluatedAgo(row?.last_evaluated_at);
   const blockers = extractBlockers(row);
   const attentionLine = resolveWatchlistRadarAttentionLine({
@@ -232,6 +257,15 @@ export function buildWatchlistCardModel(
     alignmentTier,
     blockers,
     desk
+  });
+  const chrome = resolveWatchlistCardChrome({
+    alignmentTier,
+    row,
+    blockers,
+    desk,
+    planMode,
+    colors,
+    attentionTier
   });
 
   return {
@@ -247,15 +281,26 @@ export function buildWatchlistCardModel(
       maturationState: row?.state
     }),
     attentionLine,
-    momentumLine: buildMomentumLine(row, { attentionTier, attentionLine }),
+    momentumLine: buildMomentumLine(row, {
+      attentionTier,
+      attentionLine,
+      sessionMode: desk.sessionMode
+    }),
     progressionBadge: progressionBadge(row),
     blockers,
     evaluatedAgo: evalAgo.text,
     evaluatedStale: evalAgo.stale,
     quote: watchlistQuoteFromSnapshot(snapshot),
     layerDots,
-    borderLeft: borders.left,
-    borderBottom: borders.bottom,
+    borderLeft: chrome.borderLeft,
+    borderBottom: chrome.borderBottom,
+    chromeKind: chrome.kind,
+    dotAccent: chrome.dotAccent,
+    chromeBadgeLabel: chrome.badgeLabel,
+    chromeBadgeColor: chrome.badgeColor,
+    chromeBadgeBackground: chrome.badgeBackground,
+    directionChip: chrome.directionChip,
+    statusBanner: chrome.statusBanner,
     conviction: resolveWatchlistConviction(row, aligned, total, planMode)
   };
 }
@@ -360,6 +405,11 @@ export function formatWatchlistTierHeaderHint(
   const countLabel = count === 1 ? "1 symbol" : `${count} symbols`;
   const preview = buildWatchlistTierPreview(tier, symbolsInTier, rowForSymbol, desk);
   const parts = [countLabel, meta.subtitle];
+  if (desk.sessionMode === "closed") {
+    parts.push("Market closed — cards show structure, not live entries");
+  } else if (desk.sessionMode === "extended") {
+    parts.push("Extended hours — context only until regular open");
+  }
   if (preview) parts.push(preview);
   return parts.join(" · ");
 }

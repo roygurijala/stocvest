@@ -80,6 +80,40 @@ describe("buildWatchlistCardModel", () => {
     expect(model.attentionTier).toBe("check_now");
   });
 
+  test("6/6 aligned readiness is not listed as a blocker", () => {
+    const model = buildWatchlistCardModel(
+      "DELL",
+      row({
+        state: "actionable",
+        layers_aligned: 6,
+        layers_total: 6,
+        progress_band: "actionable",
+        readiness_label: "6/6 aligned"
+      }),
+      undefined,
+      COLORS
+    );
+    expect(model.blockers).toEqual([]);
+  });
+
+  test("session closed overrides building momentum on card", () => {
+    const model = buildWatchlistCardModel(
+      "AMZN",
+      row({
+        state: "actionable",
+        layers_aligned: 5,
+        layers_total: 6,
+        progress_band: "actionable",
+        last_transition_type: "improved"
+      }),
+      undefined,
+      COLORS,
+      "swing",
+      { regimeLabel: "Bullish", systemSuppressed: false, sessionMode: "closed" }
+    );
+    expect(model.momentumLine).toBe("Strong setup — session closed");
+  });
+
   test("6/6 on bearish desk shows desk gated copy (not near actionable)", () => {
     const model = buildWatchlistCardModel(
       "AMD",
@@ -92,10 +126,39 @@ describe("buildWatchlistCardModel", () => {
       undefined,
       COLORS,
       "swing",
-      { regimeLabel: "Bearish", systemSuppressed: true }
+      { regimeLabel: "Bearish", systemSuppressed: true, sessionMode: "live" }
     );
     expect(model.alignmentLine).toContain("Strong");
     expect(model.momentumLine).toBe("Strong setup — desk gated (bearish regime)");
+    expect(model.chromeKind).toBe("blocked");
+    expect(model.borderLeft).toBe(COLORS.caution);
+  });
+
+  test("swing 6/6 closed session gets green plan chrome", () => {
+    const model = buildWatchlistCardModel(
+      "NVDA",
+      row({ state: "actionable", layers_aligned: 6, layers_total: 6 }),
+      undefined,
+      COLORS,
+      "swing",
+      { regimeLabel: "Bullish", systemSuppressed: false, sessionMode: "closed" }
+    );
+    expect(model.chromeKind).toBe("actionable_plan");
+    expect(model.chromeBadgeLabel).toBe("Plan");
+    expect(model.borderLeft).toBe(COLORS.bullish);
+  });
+
+  test("short bias exposes direction chip without red border", () => {
+    const model = buildWatchlistCardModel(
+      "SPY",
+      row({ state: "actionable", layers_aligned: 6, layers_total: 6, bias: "short" }),
+      undefined,
+      COLORS,
+      "swing",
+      { regimeLabel: "Bullish", systemSuppressed: false, sessionMode: "live" }
+    );
+    expect(model.directionChip?.label).toBe("↓ Short");
+    expect(model.borderLeft).toBe(COLORS.bullish);
   });
 });
 

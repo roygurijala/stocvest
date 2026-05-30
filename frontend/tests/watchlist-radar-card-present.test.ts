@@ -34,6 +34,13 @@ function baseRow(overrides: Partial<WatchlistRadarRow> = {}): WatchlistRadarRow 
     layerDots: [true, true, true, true, true, false],
     borderLeft: colors.bullish,
     borderBottom: colors.bullish,
+    chromeKind: "actionable_ready",
+    dotAccent: colors.bullish,
+    chromeBadgeLabel: "Ready",
+    chromeBadgeColor: colors.bullish,
+    chromeBadgeBackground: `color-mix(in srgb, ${colors.bullish} 20%, transparent)`,
+    directionChip: null,
+    statusBanner: null,
     conviction: null,
     attentionLine: "Strong setup — desk gated (bearish regime)",
     attentionReason: "Strong setup — desk gated (bearish regime)",
@@ -60,5 +67,20 @@ describe("watchlist-radar-card-present", () => {
   test("resolveWatchlistCardTone uses session move when quote missing", () => {
     expect(resolveWatchlistCardTone({ quoteBullish: null, sessionMovePct: -3.2 })).toBe("bearish");
     expect(resolveWatchlistCardTone({ quoteBullish: null, sessionMovePct: 1.1 })).toBe("bullish");
+  });
+
+  test("card borders follow alignment chrome not session price tone", () => {
+    const model = buildWatchlistRadarCardModel(
+      baseRow({
+        quote: { price: "$10.00", pct: "-2.00%", bullish: false },
+        borderLeft: colors.bullish,
+        borderBottom: colors.bullish,
+        dotAccent: colors.bullish
+      }),
+      colors
+    );
+    expect(model.quoteTone).toBe("bearish");
+    expect(model.borderLeft).toBe(colors.bullish);
+    expect(model.dotAccent).toBe(colors.bullish);
   });
 });

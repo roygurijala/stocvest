@@ -14,6 +14,7 @@ Without a key, upcoming events fall back to static FOMC placeholders and yield c
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -21,6 +22,8 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
+from stocvest.data.models import Snapshot
+from stocvest.data.vix_snapshot import snapshot_has_usable_vix_pulse
 from stocvest.signals.macro_event import (
     MacroEvent,
     MacroEventCategory,
@@ -38,6 +41,12 @@ FRED_SERIES = {
     "treasury_2yr": "DGS2",
     "treasury_10yr": "DGS10",
 }
+
+# CBOE VIX close (daily) — fallback when Polygon indices snapshot is unavailable.
+FRED_VIX_SERIES_ID = "VIXCLS"
+FRED_VIX_MARKET_STATUS = "fred_daily"
+# Public CSV export (no API key) — last resort when ``FRED_API_KEY`` is unset or API fails.
+FRED_VIX_PUBLIC_CSV_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=VIXCLS"
 
 # Release IDs — best-effort; unknown IDs yield empty dates (fallback still applies).
 FRED_RELEASES: dict[str, int] = {
@@ -60,6 +69,7 @@ RELEASE_IMPORTANCE: dict[str, int] = {
 
 REDIS_PREFIX = "stocvest:fred:"
 REDIS_TTL = 86400
+VIX_REDIS_TTL = 300
 
 
 class FREDClient:
@@ -80,14 +90,14 @@ class FREDClient:
         except Exception:
             return None
 
-    def _redis_set(self, key: str, value: str) -> None:
+    def _redis_set(self, key: str, value: str, *, ttl: int | None = None) -> None:
         if get_settings().stocvest_disable_redis:
             return
         try:
             import redis
 
             r = redis.Redis.from_url(str(get_settings().redis_url), decode_responses=True)
-            r.setex(key, REDIS_TTL, value)
+            r.setex(key, ttl if ttl is not None else REDIS_TTL, value)
         except Exception as exc:
             _LOG.warning("fred_redis_set_failed error=%s", exc)
 
@@ -276,6 +286,158 @@ class FREDClient:
         except Exception:
             pass
         return result
+
+    async def get_vix_snapshot(self) -> Snapshot | None:
+        """Latest CBOE VIX close from FRED ``VIXCLS`` (daily; not intraday session).
+
+        Uses the FRED observations API when ``FRED_API_KEY`` is set; otherwise falls back to
+        the public ``fredgraph.csv`` export for the same series.
+
+        ``market_status`` is ``fred_daily`` so UIs can label prior-close / day-over-day %.
+        """
+        cache_key = f"{REDIS_PREFIX}vixcls"
+        cached = self._redis_get(cache_key)
+        if cached:
+            try:
+                snap = Snapshot.model_validate_json(cached)
+                if snapshot_has_usable_vix_pulse(snap):
+                    return snap
+            except Exception:
+                pass
+
+        points: list[tuple[date, float]] = []
+        api_key = self._api_key()
+        if api_key:
+            try:
+                points = await self._fetch_recent_valid_observations(api_key, FRED_VIX_SERIES_ID, limit=10)
+            except Exception as exc:
+                _LOG.warning("fred_vix_api_fetch_failed error=%s", exc)
+
+        if not points:
+            try:
+                points = await self._fetch_vixcls_public_csv_points()
+            except Exception as exc:
+                _LOG.warning("fred_vix_csv_fetch_failed error=%s", exc, exc_info=True)
+                return None
+
+        snap = self._vix_snapshot_from_points(points)
+        if snap is None:
+            return None
+
+        try:
+            self._redis_set(cache_key, snap.model_dump_json(), ttl=VIX_REDIS_TTL)
+        except Exception:
+            pass
+        return snap
+
+    def _vix_snapshot_from_points(self, points: list[tuple[date, float]]) -> Snapshot | None:
+        if not points:
+            return None
+        level = points[0][1]
+        prev_close = points[1][1] if len(points) >= 2 else None
+        change: float | None = None
+        change_pct: float | None = None
+        if prev_close is not None and prev_close > 0:
+            change = round(level - prev_close, 4)
+            change_pct = round(((level - prev_close) / prev_close) * 100, 4)
+
+        snap = Snapshot(
+            symbol="I:VIX",
+            last_trade_price=level,
+            day_close=level,
+            prev_close=prev_close,
+            change=change,
+            change_percent=change_pct,
+            market_status=FRED_VIX_MARKET_STATUS,
+        )
+        return snap if snapshot_has_usable_vix_pulse(snap) else None
+
+    async def _fetch_vixcls_public_csv_points(self, *, tail_rows: int = 12) -> list[tuple[date, float]]:
+        """Parse trailing rows from FRED's public VIXCLS CSV (no API key)."""
+        headers = {"User-Agent": "Stocvest/1.0 (+https://github.com/roygurijala/stocvest)"}
+        last_exc: Exception | None = None
+        text: str | None = None
+        for attempt in range(3):
+            try:
+                async with httpx.AsyncClient(
+                    timeout=self._timeout,
+                    follow_redirects=True,
+                    headers=headers,
+                ) as client:
+                    resp = await client.get(FRED_VIX_PUBLIC_CSV_URL)
+                if resp.status_code in (502, 503, 504) and attempt < 2:
+                    await asyncio.sleep(0.6 * (attempt + 1))
+                    continue
+                resp.raise_for_status()
+                text = resp.text
+                break
+            except Exception as exc:
+                last_exc = exc
+                if attempt < 2:
+                    await asyncio.sleep(0.6 * (attempt + 1))
+                    continue
+                raise
+        if text is None:
+            if last_exc is not None:
+                raise last_exc
+            return []
+
+        lines = [ln.strip() for ln in text.strip().splitlines() if ln.strip()]
+        data_lines = [ln for ln in lines if not ln.lower().startswith("date")]
+        if not data_lines:
+            return []
+
+        out: list[tuple[date, float]] = []
+        for line in reversed(data_lines[-tail_rows:]):
+            parts = line.split(",", 1)
+            if len(parts) != 2:
+                continue
+            date_str, value_str = parts[0].strip(), parts[1].strip()
+            if not value_str or value_str == ".":
+                continue
+            try:
+                obs_date = date.fromisoformat(date_str[:10])
+                out.append((obs_date, float(value_str)))
+            except (TypeError, ValueError):
+                continue
+            if len(out) >= 2:
+                break
+        return out
+
+    async def _fetch_recent_valid_observations(
+        self,
+        api_key: str,
+        series_id: str,
+        *,
+        limit: int = 10,
+    ) -> list[tuple[date, float]]:
+        async with httpx.AsyncClient(timeout=self._timeout) as client:
+            resp = await client.get(
+                f"{FRED_BASE}/series/observations",
+                params={
+                    "api_key": api_key,
+                    "series_id": series_id,
+                    "sort_order": "desc",
+                    "limit": limit,
+                    "file_type": "json",
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+        out: list[tuple[date, float]] = []
+        for item in data.get("observations") or []:
+            if not isinstance(item, dict):
+                continue
+            value_str = str(item.get("value") or ".")
+            if value_str == ".":
+                continue
+            try:
+                obs_date = date.fromisoformat(str(item.get("date") or "")[:10])
+                out.append((obs_date, float(value_str)))
+            except (TypeError, ValueError):
+                continue
+        return out
 
     async def _fetch_latest_series(self, api_key: str, series_id: str) -> float | None:
         async with httpx.AsyncClient(timeout=self._timeout) as client:

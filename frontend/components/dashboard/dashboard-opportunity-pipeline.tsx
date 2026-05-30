@@ -11,6 +11,7 @@ import { DashboardWatchlistRadar } from "@/components/dashboard/dashboard-watchl
 import { PipelineStagePanel } from "@/components/dashboard/pipeline-stage-panel";
 import { buildPipelineStatusLine, PIPELINE_STAGES } from "@/lib/dashboard/dashboard-opportunity-pipeline-present";
 import type { WatchlistRadarDeskContext } from "@/lib/dashboard/watchlist-radar-attention";
+import { resolveSessionActivityUiMode } from "@/lib/market/session-activity-mode";
 import {
   buildingStructureQuietCount,
   resolveBuildingStructureRows
@@ -90,6 +91,8 @@ export function DashboardOpportunityPipeline({
   const quietLeadersCount =
     mode === "swing" ? buildingStructureQuietCount(buildingStructureRows) : 0;
 
+  const sessionMode = desk.sessionMode ?? resolveSessionActivityUiMode(marketStatus);
+
   const statusLine = buildPipelineStatusLine({
     mode,
     watchlistAttentionCount,
@@ -97,7 +100,8 @@ export function DashboardOpportunityPipeline({
     quietLeadersCount,
     marketActivityCount,
     nearReadyInMarket,
-    systemSuppressed: desk.systemSuppressed
+    systemSuppressed: desk.systemSuppressed,
+    sessionMode
   });
 
   const marketStageNumber = mode === "swing" ? 3 : 2;

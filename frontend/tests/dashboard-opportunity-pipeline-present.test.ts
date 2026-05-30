@@ -31,6 +31,20 @@ describe("dashboard-opportunity-pipeline-present", () => {
     expect(line).toContain("6 building structure (1 quiet)");
   });
 
+  test("buildPipelineStatusLine when market closed", () => {
+    const line = buildPipelineStatusLine({
+      mode: "swing",
+      watchlistAttentionCount: 6,
+      buildingStructureCount: 8,
+      quietLeadersCount: 0,
+      marketActivityCount: 15,
+      nearReadyInMarket: 3,
+      systemSuppressed: true,
+      sessionMode: "closed"
+    });
+    expect(line.toLowerCase()).toContain("market closed");
+  });
+
   test("buildPipelineStatusLine when quiet and suppressed", () => {
     const line = buildPipelineStatusLine({
       mode: "day",
