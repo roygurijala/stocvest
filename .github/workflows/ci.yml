@@ -32,7 +32,7 @@ jobs:
       - name: Run tests
         env:
           POLYGON_API_KEY: ci-dummy-key
-        run: pytest tests/ -q
+        run: pytest tests/ -q -m "not integration"
 
       - uses: hashicorp/setup-terraform@v4
         with:

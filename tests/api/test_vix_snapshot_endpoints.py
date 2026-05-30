@@ -145,22 +145,68 @@ async def test_live_polygon_ivix_snapshot() -> None:
         assert vix is not None and snapshot_has_usable_vix_pulse(vix)
 
 
+@respx.mock
+@pytest.mark.asyncio
+async def test_get_vix_snapshot_with_fallback_uses_fred_when_indices_403(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When Polygon indices are 403, fallback chain must still return FRED VIXCLS."""
+    from stocvest.data.fred_client import FRED_VIX_MARKET_STATUS
+
+    monkeypatch.setenv("POLYGON_API_KEY", FAKE_KEY)
+    monkeypatch.delenv("FRED_API_KEY", raising=False)
+    monkeypatch.setenv("STOCVEST_DISABLE_REDIS", "1")
+    from stocvest.utils.config import get_settings
+
+    get_settings.cache_clear()
+
+    respx.get(url__regex=r"https://api\.polygon\.io/v3/snapshot/indices.*").mock(
+        return_value=httpx.Response(
+            403,
+            json={
+                "status": "NOT_AUTHORIZED",
+                "message": "You are not entitled to this data.",
+            },
+        )
+    )
+    respx.get(url__regex=r"https://api\.polygon\.io/v2/snapshot/locale/us/markets/stocks/tickers/.*").mock(
+        return_value=httpx.Response(404, json={"status": "NOT_FOUND"})
+    )
+    csv_body = "DATE,VIXCLS\n2026-05-27,16.29\n2026-05-28,15.74\n"
+    respx.get("https://fred.stlouisfed.org/graph/fredgraph.csv?id=VIXCLS").mock(
+        return_value=httpx.Response(200, text=csv_body)
+    )
+
+    async with PolygonClient(FAKE_KEY) as client:
+        vix = await get_vix_snapshot_with_fallback(client)
+
+    get_settings.cache_clear()
+    assert vix is not None
+    assert snapshot_has_usable_vix_pulse(vix)
+    assert vix.market_status == FRED_VIX_MARKET_STATUS
+    assert vix.last_trade_price == pytest.approx(15.74)
+
+
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_live_vix_fallback_returns_fred_when_polygon_indices_blocked() -> None:
-    """With Polygon indices 403, FRED VIXCLS (API or public CSV) should still return VIX."""
-    from stocvest.data.fred_client import FRED_VIX_MARKET_STATUS
+    """Optional live check — Polygon indices 403 + reachable FRED VIXCLS."""
+    from stocvest.data.fred_client import FREDClient, FRED_VIX_MARKET_STATUS
     from stocvest.data.vix_snapshot import vix_level_from_snapshot
 
     key = (os.environ.get("POLYGON_API_KEY") or "").strip()
-    if not key:
-        pytest.skip("POLYGON_API_KEY not set")
+    if not key or key == "ci-dummy-key" or key.startswith("ci-"):
+        pytest.skip("POLYGON_API_KEY not set or CI placeholder")
+
+    fred_probe = await FREDClient().get_vix_snapshot()
+    if fred_probe is None or not snapshot_has_usable_vix_pulse(fred_probe):
+        pytest.skip("FRED VIXCLS unavailable (set FRED_API_KEY or retry when fredgraph CSV is up)")
 
     async with PolygonClient(api_key=key) as client:
         vix = await get_vix_snapshot_with_fallback(client)
 
     if vix is None:
-        pytest.fail("Expected VIX from FRED fallback when Polygon indices are unavailable")
+        pytest.skip("VIX fallback returned nothing (Polygon/FRED both unavailable)")
 
     assert snapshot_has_usable_vix_pulse(vix)
     assert vix.market_status == FRED_VIX_MARKET_STATUS

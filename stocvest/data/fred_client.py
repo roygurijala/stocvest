@@ -14,6 +14,7 @@ Without a key, upcoming events fall back to static FOMC placeholders and yield c
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -316,7 +317,7 @@ class FREDClient:
             try:
                 points = await self._fetch_vixcls_public_csv_points()
             except Exception as exc:
-                _LOG.warning("fred_vix_csv_fetch_failed error=%s", exc)
+                _LOG.warning("fred_vix_csv_fetch_failed error=%s", exc, exc_info=True)
                 return None
 
         snap = self._vix_snapshot_from_points(points)
@@ -353,11 +354,35 @@ class FREDClient:
 
     async def _fetch_vixcls_public_csv_points(self, *, tail_rows: int = 12) -> list[tuple[date, float]]:
         """Parse trailing rows from FRED's public VIXCLS CSV (no API key)."""
-        async with httpx.AsyncClient(timeout=self._timeout, follow_redirects=True) as client:
-            resp = await client.get(FRED_VIX_PUBLIC_CSV_URL)
-            resp.raise_for_status()
+        headers = {"User-Agent": "Stocvest/1.0 (+https://github.com/roygurijala/stocvest)"}
+        last_exc: Exception | None = None
+        text: str | None = None
+        for attempt in range(3):
+            try:
+                async with httpx.AsyncClient(
+                    timeout=self._timeout,
+                    follow_redirects=True,
+                    headers=headers,
+                ) as client:
+                    resp = await client.get(FRED_VIX_PUBLIC_CSV_URL)
+                if resp.status_code in (502, 503, 504) and attempt < 2:
+                    await asyncio.sleep(0.6 * (attempt + 1))
+                    continue
+                resp.raise_for_status()
+                text = resp.text
+                break
+            except Exception as exc:
+                last_exc = exc
+                if attempt < 2:
+                    await asyncio.sleep(0.6 * (attempt + 1))
+                    continue
+                raise
+        if text is None:
+            if last_exc is not None:
+                raise last_exc
+            return []
 
-        lines = [ln.strip() for ln in resp.text.strip().splitlines() if ln.strip()]
+        lines = [ln.strip() for ln in text.strip().splitlines() if ln.strip()]
         data_lines = [ln for ln in lines if not ln.lower().startswith("date")]
         if not data_lines:
             return []
