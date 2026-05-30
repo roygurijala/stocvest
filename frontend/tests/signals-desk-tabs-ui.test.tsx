@@ -28,7 +28,7 @@ const rows: SignalsLayerRowInput[] = [
   { key: "macro", name: "Macro", status: "Neutral", explanation: "", score: 50 },
   { key: "sector", name: "Sector", status: "Bearish", explanation: "", score: 35 },
   { key: "geopolitical", name: "Geopolitical", status: "Neutral", explanation: "", score: 50 },
-  { key: "internals", name: "Internals", status: "Bullish", explanation: "", score: 58 }
+  { key: "internals", name: "Market Internals", status: "Bullish", explanation: "", score: 58 }
 ];
 
 describe("Signals desk tab UI", () => {

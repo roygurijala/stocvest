@@ -12,9 +12,11 @@ import { useTheme } from "@/lib/theme-provider";
 type Props = {
   rows: SignalsLayerRowInput[];
   bias: SignalsSetupBias;
+  /** Evidence card omits level-score footnote (verdict-only surface). */
+  showLevelFootnote?: boolean;
 };
 
-export function SignalsLayerForceSummary({ rows, bias }: Props) {
+export function SignalsLayerForceSummary({ rows, bias, showLevelFootnote = true }: Props) {
   const { colors } = useTheme();
   const groups = groupLayersByForce(rows, bias);
   const hasForces =
@@ -58,10 +60,12 @@ export function SignalsLayerForceSummary({ rows, bias }: Props) {
           />
         </div>
       ) : null}
-      <p className="m-0 sm:col-span-2 text-[11px] leading-relaxed" style={{ color: colors.textMuted }}>
-        Level scores show today&apos;s layer read, not how much each layer weighs in the composite.
-        Structure and breadth usually matter more than a single headline.
-      </p>
+      {showLevelFootnote ? (
+        <p className="m-0 sm:col-span-2 text-[11px] leading-relaxed" style={{ color: colors.textMuted }}>
+          Level scores show today&apos;s layer read, not how much each layer weighs in the composite.
+          Structure and breadth usually matter more than a single headline.
+        </p>
+      ) : null}
     </div>
   );
 }

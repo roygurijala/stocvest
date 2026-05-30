@@ -445,7 +445,7 @@ describe("compositeWeightLabel", () => {
     expect(compositeWeightLabel("macro_weight")).toBe("Macro");
     expect(compositeWeightLabel("sector_weight")).toBe("Sector");
     expect(compositeWeightLabel("geopolitical_weight")).toBe("Geopolitical");
-    expect(compositeWeightLabel("internals_weight")).toBe("Internals");
+    expect(compositeWeightLabel("internals_weight")).toBe("Market Internals");
     expect(compositeWeightLabel("bullish_threshold")).toBe("Bullish threshold");
     expect(compositeWeightLabel("bearish_threshold")).toBe("Bearish threshold");
   });

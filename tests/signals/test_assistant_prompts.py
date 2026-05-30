@@ -7,6 +7,7 @@ from stocvest.signals.assistant_prompts import (
     ASSISTANT_SYSTEM_PROMPT,
     MAX_HISTORY_TURNS,
     MAX_USER_MESSAGE_CHARS,
+    sanitize_assistant_user_reply,
     sanitize_messages,
     serialize_page_context,
     serialize_public_product_facts,
@@ -118,8 +119,45 @@ def test_serialize_page_context_emits_signals_desk_and_conviction_fields() -> No
 
 def test_assistant_prompt_requires_plain_english_explanation_section() -> None:
     assert "PLAIN ENGLISH EXPLANATION (ALL SCREENS)" in ASSISTANT_SYSTEM_PROMPT
-    assert "decision_reinforcement_N" in ASSISTANT_SYSTEM_PROMPT
+    assert "USER-FACING OUTPUT RULE" in ASSISTANT_SYSTEM_PROMPT
+    assert "decision_reinforcement" in ASSISTANT_SYSTEM_PROMPT
     assert "Never invent metrics" in ASSISTANT_SYSTEM_PROMPT or "Never invent" in ASSISTANT_SYSTEM_PROMPT
+
+
+def test_serialize_page_context_includes_plain_english_summary() -> None:
+    out = serialize_page_context(
+        {
+            "page": "signals/layers",
+            "symbol": "AAPL",
+            "trading_mode": "swing",
+            "decision_state": "monitor",
+            "decision_line": "Monitor only — mixed layer agreement.",
+            "decision_rationale": {
+                "category": "confirmation",
+                "label": "Why hold:",
+                "text": "Layers disagree on direction.",
+            },
+            "trade_readiness": 62,
+            "layer_status": {"technical": "Bullish", "news": "Neutral"},
+        }
+    )
+    assert "=== WHAT THE USER SEES (PLAIN ENGLISH" in out
+    assert "Symbol under discussion: AAPL" in out
+    assert "Monitor only" in out
+    assert "Mixed agreement across the six evidence layers" in out
+    assert "Trade readiness score on screen: 62" in out
+
+
+def test_sanitize_assistant_user_reply_strips_internal_tokens() -> None:
+    raw = (
+        "The decision_state=monitor means gap_intel_phase_state=PRE_MARKET. "
+        "See decision_reinforcement_1 for more."
+    )
+    cleaned = sanitize_assistant_user_reply(raw)
+    assert "decision_state" not in cleaned
+    assert "gap_intel_phase_state" not in cleaned
+    assert "decision_reinforcement_1" not in cleaned
+    assert "monitor" in cleaned or "means" in cleaned
 
 
 def test_serialize_page_context_emits_watchlist_plan_fields() -> None:
@@ -536,7 +574,7 @@ def test_prompt_carries_primary_goal_and_product_philosophy_sections() -> None:
 def test_prompt_lists_real_six_layers_not_user_proposed_five() -> None:
     """STOCVEST ships six layers. The prompt must enumerate all six by their product names."""
     # Note: the sixth layer is "Market Internals" in the new prompt (the layer_status
-    # key is still "internals"; the UI label is "Internals").
+    # key is still "internals"; the UI label is "Market Internals").
     for layer in ("Technical", "News", "Macro", "Sector", "Geopolitical", "Market Internals"):
         assert layer in ASSISTANT_SYSTEM_PROMPT, f"missing layer name: {layer}"
 

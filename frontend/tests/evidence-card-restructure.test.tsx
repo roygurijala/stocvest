@@ -36,7 +36,9 @@ describe("Evidence card B44 restructure", () => {
       )
     );
     expect(html).toContain("evidence-card-header");
-    expect(html).toContain("Layer contribution (directional pressure)");
+    expect(html).toContain("Layer read (by verdict)");
+    expect(html).not.toContain("Layer contribution (directional pressure)");
+    expect(html).not.toContain("weight ");
     expect(html).not.toContain("TRADE READINESS");
     expect(html).not.toContain("LAYER ALIGNMENT");
     expect(html).not.toContain("Signal Strength Breakdown");

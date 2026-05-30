@@ -9,7 +9,7 @@ import {
 
 describe("watchlist-alignment-present", () => {
   test("formats layer keys for display", () => {
-    expect(formatMaturationLayerKey("internals")).toBe("Internals");
+    expect(formatMaturationLayerKey("internals")).toBe("Market Internals");
     expect(formatMaturationLayerKey("macro")).toBe("Macro");
   });
 
@@ -21,7 +21,7 @@ describe("watchlist-alignment-present", () => {
       missing_layers: ["macro", "news", "geopolitical"]
     };
     expect(maturationAlignmentCounts(row)).toEqual({ aligned: 3, total: 6 });
-    expect(alignedLayerNames(row)).toEqual(["Technical", "Sector", "Internals"]);
+    expect(alignedLayerNames(row)).toEqual(["Technical", "Sector", "Market Internals"]);
     expect(missingLayerNames(row)).toEqual(["Macro", "News", "Geopolitical"]);
   });
 });

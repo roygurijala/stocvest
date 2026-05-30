@@ -1,7 +1,10 @@
 /** Risk/reward from reference entry, stop, and targets — keep in sync with `risk_reward_structure.py`. */
 
+/** One decimal place — matches Python `round(min(10, max(0, rr)), 1)` (not `Math.round(x*10)/10`). */
 export function roundRiskRewardDisplay(rr: number): number {
-  return Math.round(Math.min(10, Math.max(0, rr)) * 10) / 10;
+  if (!Number.isFinite(rr)) return 0;
+  const clamped = Math.min(10, Math.max(0, rr));
+  return parseFloat(clamped.toFixed(1));
 }
 
 export function rrFromLevelsLong(entry: number, target: number, stop: number): number | null {

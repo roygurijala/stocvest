@@ -107,7 +107,7 @@ describe("SignalsCommandBar", () => {
         { key: "macro", name: "Macro", status: "Neutral", explanation: "", score: 50 },
         { key: "sector", name: "Sector", status: "Bullish", explanation: "", score: 68 },
         { key: "geopolitical", name: "Geopolitical", status: "Neutral", explanation: "", score: 50 },
-        { key: "internals", name: "Internals", status: "Bullish", explanation: "", score: 72 }
+        { key: "internals", name: "Market Internals", status: "Bullish", explanation: "", score: 72 }
       ],
       tradingMode: "swing",
       decision: {

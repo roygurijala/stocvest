@@ -31,6 +31,7 @@ import math
 from stocvest.data.models import UserProfile
 from stocvest.signals.assistant_prompts import (
     ASSISTANT_SYSTEM_PROMPT,
+    sanitize_assistant_user_reply,
     sanitize_messages,
     sanitize_public_page_context,
     serialize_page_context,
@@ -229,7 +230,7 @@ class AssistantChatService:
         )
         if ai_text:
             return AssistantChatResult(
-                text=ai_text.strip(),
+                text=sanitize_assistant_user_reply(ai_text.strip()),
                 source="ai",
                 mode=mode,
                 upgrade_available=False,
@@ -288,7 +289,7 @@ class AssistantChatService:
         )
         if ai_text:
             return AssistantChatResult(
-                text=ai_text.strip(),
+                text=sanitize_assistant_user_reply(ai_text.strip()),
                 source="ai",
                 mode="general",
                 upgrade_available=True,

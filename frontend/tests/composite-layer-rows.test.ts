@@ -75,6 +75,22 @@ describe("compositeToSignalsLayerRows", () => {
     expect(sector?.sectorCachePending).toBe(true);
   });
 
+  test("internals row uses Market Internals display name", () => {
+    const rows = compositeToSignalsLayerRows({
+      layers: [
+        {
+          layer: "internals",
+          status: "available",
+          score: 72,
+          verdict: "bullish",
+          reasoning: "Breadth supportive."
+        }
+      ]
+    });
+    const internals = rows.find((r) => r.key === "internals");
+    expect(internals?.name).toBe("Market Internals");
+  });
+
   test("preserves legitimate technical score of zero", () => {
     const rows = compositeToSignalsLayerRows({
       layers: [

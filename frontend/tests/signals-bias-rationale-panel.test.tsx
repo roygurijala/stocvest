@@ -23,7 +23,7 @@ vi.mock("@/lib/theme-provider", () => ({
 const rows: SignalsLayerRowInput[] = [
   { key: "technical", name: "Technical", status: "Bullish", explanation: "", score: 95 },
   { key: "sector", name: "Sector", status: "Bullish", explanation: "", score: 80 },
-  { key: "internals", name: "Internals", status: "Bullish", explanation: "", score: 70 },
+  { key: "internals", name: "Market Internals", status: "Bullish", explanation: "", score: 70 },
   { key: "news", name: "News", status: "Neutral", explanation: "", score: 50 },
   { key: "macro", name: "Macro", status: "Neutral", explanation: "", score: 50 },
   { key: "geopolitical", name: "Geopolitical", status: "Neutral", explanation: "", score: 50 }

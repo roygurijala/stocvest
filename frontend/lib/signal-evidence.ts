@@ -3,6 +3,12 @@ import type { IntradaySetupPayload } from "@/lib/api/scanner";
 import { parseLaggardSignal, parseUnlockForecast, type LaggardSignal, type UnlockHint } from "@/lib/laggard";
 import { parseCausalNarrativeFromApi } from "@/lib/signal-evidence/causal-narrative";
 import {
+  evidenceLayerPlainEnglishExplanation,
+  filterInternalLayerScoreCopy,
+  layerCopyLooksInternal
+} from "@/lib/signal-evidence/layer-plain-english";
+import { signalLayerDisplayName } from "@/lib/signals/layer-display-names";
+import {
   parseExecutionQuality,
   type ExecutionQualityPayload
 } from "@/lib/signal-evidence/execution-quality";
@@ -1067,7 +1073,7 @@ export function buildEvidenceFromSetup(
     {
       key: "internals",
       icon: "📈",
-      name: "Internals",
+      name: signalLayerDisplayName("internals"),
       status: statusFromScore(internals),
       weightPercent: 14,
       explanation: "Breadth, VIX trend, and A/D line provide market participation confirmation.",
@@ -1901,7 +1907,7 @@ export const ORB_CHIP_REMAP: Record<string, string> = {
   orb_forming: "ORB Forming"
 };
 
-export function sanitizeEvidenceChips(rawChips: string[]): string[] {
+export function sanitizeEvidenceChips(rawChips: string[], layerKey?: string): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const raw of rawChips) {
@@ -1909,6 +1915,8 @@ export function sanitizeEvidenceChips(rawChips: string[]): string[] {
     if (!chip) continue;
     const lower = chip.toLowerCase();
     if (lower === "analyst feed unavailable") continue;
+    if (/^sentiment score\b/i.test(chip)) continue;
+    if (layerKey && layerCopyLooksInternal(chip)) continue;
     if (lower.includes("expired")) continue;
     if (lower.startsWith("orb") && lower.includes("unavailable")) continue;
     const mapped = ORB_CHIP_REMAP[chip] ?? ORB_CHIP_REMAP[chip.trim()];
@@ -1920,6 +1928,25 @@ export function sanitizeEvidenceChips(rawChips: string[]): string[] {
     out.push(next);
   }
   return out;
+}
+
+function finalizeEnrichedEvidenceLayer(
+  layer: EvidenceLayer,
+  apiLayer: Partial<EvidenceLayer>,
+  keyPoints: string[],
+  maxChips: number,
+  fin: (merged: EvidenceLayer) => EvidenceLayer
+): EvidenceLayer {
+  const merged: EvidenceLayer = { ...layer, ...apiLayer };
+  const explanation =
+    layer.key === "news" || layer.key === "macro" || layer.key === "internals"
+      ? evidenceLayerPlainEnglishExplanation(merged)
+      : merged.explanation;
+  const points = sanitizeEvidenceChips(filterInternalLayerScoreCopy(layer.key, keyPoints), layer.key).slice(
+    0,
+    maxChips
+  );
+  return fin({ ...merged, explanation, keyPoints: points });
 }
 
 function findContributionRow(body: Record<string, unknown>, layerKey: string): Record<string, unknown> | undefined {
@@ -2008,7 +2035,9 @@ export function applySwingCompositeEnrichment(
         const cr = typeof contribOnly?.reasoning === "string" ? contribOnly.reasoning.trim() : "";
         if (cr) {
           const parts = reasoningToKeyPoints(cr, 4);
-          if (parts.length) return { ...layer, keyPoints: parts };
+          if (parts.length) {
+            return finalizeEnrichedEvidenceLayer(layer, {}, parts, 4, (m) => m);
+          }
         }
         return layer;
       }
@@ -2022,30 +2051,31 @@ export function applySwingCompositeEnrichment(
         if (layer.key === "technical" && cm === "swing") {
           raw = filterChipsForMode(raw, "swing");
         }
-        return fin({
-          ...layer,
-          ...apiLayer,
-          keyPoints: sanitizeEvidenceChips(raw).slice(0, maxChips)
-        });
+        return finalizeEnrichedEvidenceLayer(layer, apiLayer, raw, maxChips, fin);
       }
       const reasoning = typeof match.reasoning === "string" ? match.reasoning.trim() : "";
       if (reasoning) {
         const parts = reasoningToKeyPoints(reasoning, maxChips);
         if (parts.length) {
-          return fin({ ...layer, ...apiLayer, keyPoints: parts });
+          return finalizeEnrichedEvidenceLayer(layer, apiLayer, parts, maxChips, fin);
         }
       }
       const contrib = findContributionRow(body, layer.key);
       const contribR = typeof contrib?.reasoning === "string" ? contrib.reasoning.trim() : "";
       if (contribR) {
         const parts = reasoningToKeyPoints(contribR, maxChips);
-        if (parts.length) return fin({ ...layer, ...apiLayer, keyPoints: parts });
+        if (parts.length) return finalizeEnrichedEvidenceLayer(layer, apiLayer, parts, maxChips, fin);
       }
       const synth = synthKeyPointsFromLayerApi(match);
       if (synth.length) {
-        return fin({ ...layer, ...apiLayer, keyPoints: synth });
+        return finalizeEnrichedEvidenceLayer(layer, apiLayer, synth, maxChips, fin);
       }
-      return fin({ ...layer, ...apiLayer });
+      const merged = { ...layer, ...apiLayer };
+      const explanation =
+        layer.key === "news" || layer.key === "macro" || layer.key === "internals"
+          ? evidenceLayerPlainEnglishExplanation({ ...layer, ...apiLayer })
+          : merged.explanation;
+      return fin({ ...merged, explanation });
     });
   }
 

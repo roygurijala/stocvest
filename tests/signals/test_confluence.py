@@ -549,8 +549,8 @@ def test_internals_bullish_on_long_setup_lands_in_confirming() -> None:
     )
     labels_conf = [c["label"] for c in r.confirming_signals]
     labels_conflict = [c["label"] for c in r.conflicting_signals]
-    assert "Internals bullish" in labels_conf
-    assert "Internals bullish" not in labels_conflict
+    assert "Market Internals bullish" in labels_conf
+    assert "Market Internals bullish" not in labels_conflict
 
 
 def test_internals_bearish_on_short_setup_lands_in_confirming() -> None:
@@ -560,8 +560,8 @@ def test_internals_bearish_on_short_setup_lands_in_confirming() -> None:
     )
     labels_conf = [c["label"] for c in r.confirming_signals]
     labels_conflict = [c["label"] for c in r.conflicting_signals]
-    assert "Internals bearish" in labels_conf
-    assert "Internals bearish" not in labels_conflict
+    assert "Market Internals bearish" in labels_conf
+    assert "Market Internals bearish" not in labels_conflict
 
 
 def test_internals_bullish_on_short_setup_lands_in_conflicting_BRK_B_regression() -> None:
@@ -572,13 +572,13 @@ def test_internals_bullish_on_short_setup_lands_in_conflicting_BRK_B_regression(
     )
     labels_conflict = [c["label"] for c in r.conflicting_signals]
     labels_conf = [c["label"] for c in r.confirming_signals]
-    assert "Internals bullish" in labels_conflict, (
+    assert "Market Internals bullish" in labels_conflict, (
         "Bullish broad-market internals on a short setup MUST appear in the conflicting "
         "rail — that's the entire point of the Issue 4 fix."
     )
-    assert "Internals bullish" not in labels_conf
+    assert "Market Internals bullish" not in labels_conf
     # And the chip carries a useful detail that explains what's going on.
-    internals_chip = next(c for c in r.conflicting_signals if c["label"] == "Internals bullish")
+    internals_chip = next(c for c in r.conflicting_signals if c["label"] == "Market Internals bullish")
     assert "broad market" in internals_chip["detail"].lower()
 
 
@@ -588,7 +588,7 @@ def test_internals_bearish_on_long_setup_lands_in_conflicting() -> None:
         symbol="X", direction="long", internals_signal="bearish", **_internals_base_kwargs()
     )
     labels_conflict = [c["label"] for c in r.conflicting_signals]
-    assert "Internals bearish" in labels_conflict
+    assert "Market Internals bearish" in labels_conflict
 
 
 def test_internals_neutral_does_not_emit_chip() -> None:
@@ -600,8 +600,8 @@ def test_internals_neutral_does_not_emit_chip() -> None:
     all_labels = {c["label"] for c in r.confirming_signals} | {
         c["label"] for c in r.conflicting_signals
     }
-    assert "Internals bullish" not in all_labels
-    assert "Internals bearish" not in all_labels
+    assert "Market Internals bullish" not in all_labels
+    assert "Market Internals bearish" not in all_labels
 
 
 def test_internals_default_argument_keeps_backwards_compatibility() -> None:
@@ -621,8 +621,8 @@ def test_internals_default_argument_keeps_backwards_compatibility() -> None:
     all_labels = {c["label"] for c in r.confirming_signals} | {
         c["label"] for c in r.conflicting_signals
     }
-    assert "Internals bullish" not in all_labels
-    assert "Internals bearish" not in all_labels
+    assert "Market Internals bullish" not in all_labels
+    assert "Market Internals bearish" not in all_labels
 
 
 def test_internals_chip_signal_source_listed_in_class_constants() -> None:

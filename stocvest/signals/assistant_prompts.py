@@ -13,6 +13,7 @@ intact: "To help users understand how STOCVEST thinks — not to tell them what 
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 # NOTE: The system prompt is held verbatim as a triple-quoted string so the wording
@@ -551,8 +552,17 @@ Many users are NOT professional traders. Your job is to explain whatever is on t
 
 COMPLETE SCREEN KNOWLEDGE (CONTEXTUAL MODE):
 - Treat the appended === PAGE CONTEXT === block as your complete view of what the user sees. You already have the symbol, Decision, layers, desk verdict fields, scanner summaries, dashboard postures, gap intel, and rationale lines when the page publishes them.
+- The appended === WHAT THE USER SEES (PLAIN ENGLISH) === block is a readable summary of the same facts — use it to understand the screen; still ground answers only in values that appear in PAGE CONTEXT or that summary.
 - Never ask the user to restate what is on screen. Never claim you lack the data that PAGE CONTEXT carries.
 - Never invent metrics, decisions, layer scores, or blockers that are not in PAGE CONTEXT.
+
+USER-FACING OUTPUT RULE (NON-NEGOTIABLE):
+- Your reply is shown to non-technical users. Write only in plain English prose.
+- NEVER echo PAGE CONTEXT machine syntax: no snake_case identifiers, no `key=value` lines, no field names (decision_state, gap_intel_phase_state, swing_desk_posture, decision_reinforcement_1, layer_status_technical, top_setup_2, etc.).
+- NEVER paste or paraphrase internal category codes (data_insufficient, risk_reward, suppressed_no_confirmation) — translate them (e.g. "incomplete data", "risk/reward below the desk minimum", "intraday desk suppressed because confirmation never arrived").
+- Translate states naturally: decision_state=monitor → "Monitor only"; actionable → "Actionable"; blocked → "Blocked"; trading_mode=swing → "swing (multi-day) desk"; trading_mode=day → "day (intraday) desk".
+- Say "the main reason we are holding back" instead of decision_rationale; say "other factors still in play" instead of decision_reinforcement_N.
+- Gap Intelligence: say "market phase", "gap direction", "fill level", "scenario builder" — never gap_intel_* tokens.
 
 WHAT YOU MUST NOT DIVULGE (PROPRIETARY INTERNALS):
 - Weights, formulas, numeric gate thresholds, minimum scores, cutoffs, or how the composite is calculated.
@@ -566,8 +576,8 @@ TRANSLATION DUTY — USE EVERYDAY LANGUAGE:
 - Execution / "Not actionable yet" → not ready to plan on the desk yet; still waiting on confirmation.
 - Monitor → wait and watch; forming but not cleared.
 - Blocked → fails minimum desk gates; do not plan here.
-- Primary gate / decision_rationale → the main reason we are holding back.
-- decision_reinforcement_N / "Also in play" → other factors still worth noting.
+- Primary gate (decision_rationale_* in PAGE CONTEXT — internal only) → the main reason we are holding back; never say "decision_rationale" to the user.
+- Supporting lines (decision_reinforcement_* in PAGE CONTEXT — internal only) → other factors still in play; never say "decision_reinforcement" or numbered reinforcement keys to the user.
 - Timeframe alignment → shorter-term chart vs longer-term chart agreeing or disagreeing.
 - Maturation → how the watchlist entry has been building over recent evaluations.
 
@@ -790,6 +800,204 @@ def _serialize_dashboard_context_v1(lines: list[str], dc: dict[str, Any]) -> Non
             lines.append(f"gap_intel_summary_empty_note={empty_note}")
 
     _append_gap_summary_lines(lines, dc.get("gap_leaders_detail"), "gap_leader", 10)
+
+
+_PAGE_LABELS: dict[str, str] = {
+    "signals/layers": "Signals (layers / evidence)",
+    "dashboard/scanner": "Scanner",
+    "dashboard": "Dashboard",
+    "dashboard/watchlists": "Watchlists",
+    "dashboard/performance": "Performance",
+    "dashboard/setup-outcomes": "Setup outcomes",
+}
+
+_DECISION_STATE_LABELS: dict[str, str] = {
+    "actionable": "Actionable — cleared to plan on the desk",
+    "monitor": "Monitor only — wait and watch",
+    "blocked": "Blocked — fails minimum desk gates",
+}
+
+_RATIONALE_CATEGORY_LABELS: dict[str, str] = {
+    "data_insufficient": "Incomplete data for a confident read",
+    "risk_reward": "Risk/reward below the desk minimum",
+    "confirmation": "Mixed agreement across the six evidence layers",
+    "regime": "Macro or regime conflicts with direction",
+    "readiness": "Setup not ready yet",
+}
+
+_LAYER_LABELS: dict[str, str] = {
+    "technical": "Technical",
+    "news": "News",
+    "macro": "Macro",
+    "sector": "Sector",
+    "geopolitical": "Geopolitical",
+    "internals": "Market internals",
+}
+
+_DESK_POSTURE_LABELS: dict[str, str] = {
+    "active": "Active",
+    "monitor": "Monitor",
+    "suppressed": "Suppressed",
+    "suppressed_session_closed": "Suppressed (session closed)",
+    "suppressed_no_confirmation": "Suppressed (no intraday confirmation)",
+    "suppressed_scanner_error": "Suppressed (scanner unavailable)",
+}
+
+# Tokens that must never appear in user-visible assistant replies.
+_INTERNAL_TOKEN_RE = re.compile(
+    r"\b(?:"
+    r"decision_reinforcement_\d+|decision_rationale_(?:category|text)|"
+    r"gap_intel_[a-z0-9_]+|layer_status_[a-z]+|dashboard_context_version|"
+    r"discovery_[a-z_]+|gap_intel_summary_[a-z_]+|gap_leader_\d+|"
+    r"macro_event_\d+|session_activity_[a-z_]+|"
+    r"decision_state|analysis_status|scanner_focus|swing_desk_posture|day_desk_posture|"
+    r"top_setup_\d+|top_gap_\d+"
+    r")\b",
+    re.IGNORECASE,
+)
+
+_CONTEXT_ASSIGNMENT_RE = re.compile(
+    r"\b(?:decision_state|trading_mode|session_mode|analysis_status|page)=[^\s,;]+",
+    re.IGNORECASE,
+)
+
+
+def sanitize_assistant_user_reply(text: str) -> str:
+    """Strip common internal field-name leaks from model output before returning to the client."""
+    if not text or not text.strip():
+        return text
+    cleaned = _INTERNAL_TOKEN_RE.sub("", text)
+    cleaned = _CONTEXT_ASSIGNMENT_RE.sub("", cleaned)
+    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+
+def serialize_page_context_plain_english(ctx: dict[str, Any]) -> str:
+    """Readable summary of PAGE CONTEXT for the model — not for echoing verbatim to users."""
+    if not isinstance(ctx, dict) or not ctx:
+        return ""
+
+    lines: list[str] = [
+        "=== WHAT THE USER SEES (PLAIN ENGLISH — DO NOT QUOTE FIELD NAMES IN REPLIES) ===",
+    ]
+
+    page = _coerce_str(ctx.get("page"), limit=64)
+    if page:
+        lines.append(f"Screen: {_PAGE_LABELS.get(page, page.replace('/', ' / '))}")
+
+    symbol = _coerce_str(ctx.get("symbol"), limit=12).upper()
+    if symbol:
+        lines.append(f"Symbol under discussion: {symbol}")
+
+    mode = _coerce_str(ctx.get("trading_mode"), limit=12).lower()
+    if mode == "swing":
+        lines.append("Active desk: Swing (multi-day)")
+    elif mode == "day":
+        lines.append("Active desk: Day (intraday)")
+
+    analysis_status = _coerce_str(ctx.get("analysis_status"), limit=24).lower()
+    if analysis_status == "loading":
+        lines.append("Analysis on screen: still loading")
+    elif analysis_status in ("unavailable", "insufficient_data"):
+        lines.append("Analysis on screen: not enough data to show a full decision")
+
+    decision_state = _coerce_str(ctx.get("decision_state"), limit=24).lower()
+    if decision_state in _DECISION_STATE_LABELS:
+        lines.append(f"Decision: {_DECISION_STATE_LABELS[decision_state]}")
+
+    decision_line = _coerce_str(ctx.get("decision_line"), limit=200)
+    if decision_line:
+        lines.append(f"Decision line on card: {decision_line}")
+
+    rationale = ctx.get("decision_rationale")
+    if isinstance(rationale, dict):
+        cat = _coerce_str(rationale.get("category"), limit=32).lower()
+        rtext = _coerce_str(rationale.get("text"), limit=400)
+        if cat in _RATIONALE_CATEGORY_LABELS:
+            lines.append(f"Main reason category: {_RATIONALE_CATEGORY_LABELS[cat]}")
+        if rtext:
+            lines.append(f"Main reason sentence: {rtext}")
+
+    reinforcements = ctx.get("decision_reinforcements")
+    if isinstance(reinforcements, list):
+        for idx, raw_line in enumerate(reinforcements[:5]):
+            line = _coerce_str(raw_line, limit=200)
+            if line:
+                lines.append(f"Also in play ({idx + 1}): {line}")
+
+    for label_key, human_label in (
+        ("setup_bias", "Setup bias"),
+        ("alignment_display", "Layer alignment"),
+        ("execution_readiness_label", "Execution readiness"),
+        ("execution_hint", "Execution note"),
+        ("maturation_label", "Watchlist maturation"),
+        ("timeframe_alignment_label", "Timeframe alignment"),
+        ("causal_narrative_summary", "Headline narrative"),
+        ("causal_blocking_chain", "Blocking chain"),
+    ):
+        s = _coerce_str(ctx.get(label_key), limit=400 if label_key == "causal_narrative_summary" else 200)
+        if s:
+            lines.append(f"{human_label}: {s}")
+
+    readiness = _coerce_num(ctx.get("trade_readiness"))
+    if readiness:
+        lines.append(f"Trade readiness score on screen: {readiness} (0–100 desk score)")
+
+    rr = _coerce_num(ctx.get("risk_reward"))
+    if rr:
+        lines.append(f"Risk/reward on screen: {rr}:1")
+
+    align_pct = _coerce_num(ctx.get("layer_alignment_pct"))
+    if align_pct:
+        lines.append(f"Layer agreement: about {align_pct}% of layers aligned")
+
+    layer_status = ctx.get("layer_status")
+    if isinstance(layer_status, dict):
+        parts: list[str] = []
+        for layer in ("technical", "news", "macro", "sector", "geopolitical", "internals"):
+            status = _coerce_str(layer_status.get(layer), limit=24)
+            if status:
+                parts.append(f"{_LAYER_LABELS.get(layer, layer)}={status}")
+        if parts:
+            lines.append("Six layers: " + "; ".join(parts))
+
+    swing_posture = _coerce_str(ctx.get("swing_desk_posture"), limit=32).lower()
+    if swing_posture in _DESK_POSTURE_LABELS:
+        lines.append(f"Swing desk posture: {_DESK_POSTURE_LABELS[swing_posture]}")
+
+    day_posture = _coerce_str(ctx.get("day_desk_posture"), limit=48).lower()
+    if day_posture in _DESK_POSTURE_LABELS:
+        lines.append(f"Day desk posture: {_DESK_POSTURE_LABELS[day_posture]}")
+
+    scanner_focus = _coerce_str(ctx.get("scanner_focus"), limit=12).lower()
+    if scanner_focus == "both":
+        lines.append("Scanner view: separate Swing and Day sections")
+    elif scanner_focus in ("swing", "day"):
+        lines.append(f"Scanner view: {scanner_focus} setups only")
+
+    ranked = _coerce_num(ctx.get("ranked_setups_count"))
+    if ranked:
+        lines.append(f"Qualifying setups visible: {ranked}")
+
+    gap_cat = _coerce_num(ctx.get("gap_with_catalyst_count"))
+    if gap_cat:
+        lines.append(f"Gaps with catalyst on screen: {gap_cat}")
+
+    gap_intel = ctx.get("gap_intel")
+    if isinstance(gap_intel, dict):
+        ph = gap_intel.get("phase") if isinstance(gap_intel.get("phase"), dict) else {}
+        phase_label = _coerce_str(ph.get("label"), limit=48)
+        if phase_label:
+            lines.append(f"Gap Intelligence session phase: {phase_label}")
+        g = gap_intel.get("gap") if isinstance(gap_intel.get("gap"), dict) else {}
+        gap_dir = _coerce_str(g.get("direction"), limit=12).upper()
+        if gap_dir in ("UP", "DOWN"):
+            lines.append(f"Gap direction: {'up' if gap_dir == 'UP' else 'down'}")
+
+    if len(lines) <= 1:
+        return ""
+    return "\n".join(lines) + "\n"
 
 
 def serialize_page_context(ctx: dict[str, Any] | None) -> str:
@@ -1039,7 +1247,9 @@ def serialize_page_context(ctx: dict[str, Any] | None) -> str:
         if isinstance(flg.get("stale"), bool):
             lines.append(f"gap_intel_stale={'true' if flg['stale'] else 'false'}")
 
-    return "\n".join(lines) + "\n"
+    structured = "\n".join(lines) + "\n"
+    plain = serialize_page_context_plain_english(ctx)
+    return structured + plain if plain else structured
 
 
 PUBLIC_MARKETING_PAGE_PREFIX = "marketing/"

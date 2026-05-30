@@ -28,7 +28,7 @@ _LAYER_LABEL: dict[str, str] = {
     "macro": "Macro",
     "sector": "Sector",
     "geopolitical": "Geopolitical",
-    "internals": "Internals",
+    "internals": "Market Internals",
 }
 
 _PROCESS_LABEL: dict[ProcessTier, str] = {

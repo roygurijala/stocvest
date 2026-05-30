@@ -105,10 +105,9 @@ describe("Signal Evidence Card — context compression (BRK.B regression)", () =
 
   test("test_compressed_card_keeps_inner_layer_explanations_for_disclosure", () => {
     const html = renderCard(NEUTRAL_INSIGHT_BODY);
-    // Each inner mini-summary carries its layer's explanation so the
-    // user can peek without losing the original copy.
-    expect(html).toMatch(/Headline sentiment and catalyst intensity/);
-    expect(html).toMatch(/Rates and macro event pressure/);
+    // Each inner mini-summary carries user-facing verdict copy (not internal scores).
+    expect(html).toMatch(/no strong catalyst either way/);
+    expect(html).toMatch(/mixed without a strong directional push/);
     expect(html).toMatch(/External risk events are monitored/);
   });
 

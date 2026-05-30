@@ -3,6 +3,7 @@
  */
 
 import { isInsufficientCompositeResponse } from "@/lib/api/swing-composite";
+import { signalLayerDisplayName } from "@/lib/signals/layer-display-names";
 import { normalizeSetupBias, type SignalsLayerRowInput, type SignalsSetupBias } from "@/lib/signals-page-present";
 
 export const COMPOSITE_LAYER_KEYS = [
@@ -13,15 +14,6 @@ export const COMPOSITE_LAYER_KEYS = [
   "geopolitical",
   "internals"
 ] as const;
-
-const LAYER_DISPLAY: Record<string, string> = {
-  technical: "Technical",
-  news: "News",
-  macro: "Macro",
-  sector: "Sector",
-  geopolitical: "Geopolitical",
-  internals: "Internals"
-};
 
 type LayerStatus =
   | "Bullish"
@@ -105,7 +97,7 @@ export function compositeToSignalsLayerRows(
           : "";
     return {
       key,
-      name: LAYER_DISPLAY[key] ?? key,
+      name: signalLayerDisplayName(key),
       status,
       statusLabel:
         sectorMeta.statusLabel ??

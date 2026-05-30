@@ -159,7 +159,7 @@ def _default_because(key: str, polarity: LayerPolarity, bias: str, upstream: lis
         if key == "sector":
             return "Sector participation is mixed — no clear leadership versus SPY."
         if key == "internals":
-            return "Internals are split — tape is not giving a clean confirmation."
+            return "Market internals are split — tape is not giving a clean confirmation."
         return f"{name} is mixed and does not confirm the bias."
     if polarity == "unavailable":
         return "Coverage is unavailable — this layer is not factored into the read."
