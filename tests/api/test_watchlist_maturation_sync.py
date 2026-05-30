@@ -126,11 +126,39 @@ def test_neutral_composite_counts_available_layers_without_ratio() -> None:
     )
     got = repo.get_entry("u1", "AAPL", "swing")
     assert got is not None
-    assert got.layers_aligned == 6
-    assert got.state == WatchlistState.ACTIONABLE
+    assert got.layers_aligned == 0
+    assert got.state == WatchlistState.NOT_ALIGNED
 
 
-def test_neutral_composite_uses_alignment_ratio_when_present() -> None:
+def test_neutral_composite_directional_count_with_layer_split() -> None:
+    table = _FakeDynamoTable()
+    repo = WatchlistMaturationRepository(table)
+    store = InMemoryWatchlistStore()
+    store.create_watchlist("u1", "Main", ["TSLA"], is_default=True)
+    layers = [
+        _layer("technical", verdict="bullish"),
+        _layer("news", verdict="bullish"),
+        _layer("macro", verdict="bullish"),
+        _layer("sector", verdict="bullish"),
+        _layer("geopolitical", verdict="neutral"),
+        _layer("internals", verdict="bearish"),
+    ]
+    body = {"symbol": "TSLA", "signal_summary": "neutral", "layers": layers}
+    sync_watchlist_maturation_from_composite(
+        user_id="u1",
+        symbol="TSLA",
+        mode="swing",
+        composite_body=body,
+        maturation_repo=repo,
+        watchlist_store=store,
+    )
+    got = repo.get_entry("u1", "TSLA", "swing")
+    assert got is not None
+    assert got.layers_aligned == 4
+    assert got.bias == "neutral"
+
+
+def test_neutral_composite_ignores_alignment_ratio_for_maturation_count() -> None:
     table = _FakeDynamoTable()
     repo = WatchlistMaturationRepository(table)
     store = InMemoryWatchlistStore()
@@ -152,9 +180,8 @@ def test_neutral_composite_uses_alignment_ratio_when_present() -> None:
     )
     got = repo.get_entry("u1", "AMZN", "swing")
     assert got is not None
-    assert got.layers_aligned == 4
-    assert got.state == WatchlistState.DEVELOPING
-    assert got.missing_layers == ["news", "internals"]
+    assert got.layers_aligned == 0
+    assert got.state == WatchlistState.NOT_ALIGNED
 
 
 def test_composite_evidence_cache_hit_also_syncs_maturation(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -26,6 +26,7 @@ from stocvest.models.watchlist import (
     derive_state,
 )
 from stocvest.models.watchlist_transition import EvaluationSource
+from stocvest.signals.layer_directional_alignment import count_directional_layers
 from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
@@ -92,12 +93,19 @@ def _layer_aligned_with_composite(
     row: dict[str, Any],
     *,
     composite_bias: Literal["long", "short", "neutral"],
+    dominant_tilt: Literal["long", "short"] | None = None,
 ) -> bool:
     if not _layer_row_available(row):
         return False
-    if composite_bias == "neutral":
-        return True
     v = _layer_verdict(row)
+    if composite_bias == "neutral":
+        if v not in ("bullish", "bearish"):
+            return False
+        if dominant_tilt == "long":
+            return v == "bullish"
+        if dominant_tilt == "short":
+            return v == "bearish"
+        return False
     if composite_bias == "long":
         return v == "bullish"
     if composite_bias == "short":
@@ -126,6 +134,7 @@ def _missing_layers_for_alignment(
     *,
     composite_bias: Literal["long", "short", "neutral"],
     aligned: int,
+    dominant_tilt: Literal["long", "short"] | None = None,
 ) -> tuple[list[str], str]:
     total = len(MATURATION_LAYER_KEYS)
     need = max(0, total - aligned)
@@ -151,7 +160,9 @@ def _missing_layers_for_alignment(
             if not top_reason:
                 top_reason = f"{lid}: no layer row"
             continue
-        if not _layer_aligned_with_composite(row, composite_bias=composite_bias):
+        if not _layer_aligned_with_composite(
+            row, composite_bias=composite_bias, dominant_tilt=dominant_tilt
+        ):
             missing.append(lid)
             if not top_reason:
                 reason = str(row.get("reasoning") or row.get("status") or "").strip()
@@ -185,10 +196,26 @@ def _alignment_fields(
     summary = str(body.get("signal_summary") or "")
     cb = _composite_bias(summary)
     bias = cast(Literal["long", "short", "neutral"], cb)
+    layer_metrics = count_directional_layers(
+        body.get("layers") if isinstance(body.get("layers"), list) else None
+    )
+    dominant_tilt = layer_metrics.get("directional_tilt")
+    tilt_arg = dominant_tilt if dominant_tilt in ("long", "short") else None
     from_ratio = _aligned_layers_from_ratio(body)
-    if from_ratio is not None:
+
+    if cb == "neutral":
+        aligned = int(layer_metrics["directional_aligned"])
+        missing, top_reason = _missing_layers_for_alignment(
+            body,
+            composite_bias=cb,
+            aligned=aligned,
+            dominant_tilt=tilt_arg,
+        )
+    elif from_ratio is not None:
         aligned = from_ratio
-        missing, top_reason = _missing_layers_for_alignment(body, composite_bias=cb, aligned=aligned)
+        missing, top_reason = _missing_layers_for_alignment(
+            body, composite_bias=cb, aligned=aligned, dominant_tilt=tilt_arg
+        )
     else:
         by_layer = _layers_index(body)
         missing = []
@@ -201,7 +228,9 @@ def _alignment_fields(
                 if not top_reason:
                     top_reason = f"{lid}: no layer row"
                 continue
-            if _layer_aligned_with_composite(row, composite_bias=cb):
+            if _layer_aligned_with_composite(
+                row, composite_bias=cb, dominant_tilt=tilt_arg
+            ):
                 aligned += 1
             else:
                 missing.append(lid)

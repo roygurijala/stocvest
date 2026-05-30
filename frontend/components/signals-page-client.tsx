@@ -65,8 +65,10 @@ import {
   formatSignalsAlignmentDisplayLine,
   layerDeltaVsBaseline,
   normalizeSetupBias,
+  parseCompositeDirectionFields,
   pickPreviewLayers,
   resolveRegularSessionOpenFromSources,
+  resolveSignalsDirectionChip,
   resolveSignalsLayerAlignment,
   SIGNAL_LAYER_LEVEL_BASELINE,
   type SignalsLayerRowInput
@@ -1341,8 +1343,14 @@ export function SignalsPageClient({
 
   const evidenceModalLoading = evidenceOpen && !signalEvidence;
 
+  const compositeHasServiceError = Boolean(
+    compositeFetchErrorMessage || compositeTransportError?.message
+  );
+  const showCompositeLoading =
+    !compositeHasServiceError && (compositeInitialLoading || compositeRevalidating);
+
   const compositeServiceMessage: ReactNode =
-    compositeFetchErrorMessage || compositeTransportError?.message ? (
+    compositeHasServiceError ? (
       <div
         data-testid="signals-composite-service-error"
         style={{
@@ -1470,6 +1478,16 @@ export function SignalsPageClient({
     });
   }, [marketOverview.status, compositeResult]);
 
+  const compositeDirection = useMemo(() => {
+    if (!compositeResult || isInsufficientCompositeResponse(compositeResult)) return null;
+    return parseCompositeDirectionFields(compositeResult as Record<string, unknown>);
+  }, [compositeResult]);
+
+  const signalsDirectionChip = useMemo(
+    () => (hasValidSignal ? resolveSignalsDirectionChip(setupBias, colors) : null),
+    [hasValidSignal, setupBias, colors]
+  );
+
   const deskVerdict = useMemo(() => {
     if (!pageDecision) return null;
     return buildSignalsDeskVerdict({
@@ -1479,7 +1497,8 @@ export function SignalsPageClient({
       tradingMode,
       alignmentRatio: compositeAlignmentRatio,
       maturationState: maturationLine?.state,
-      regularSessionOpen
+      regularSessionOpen,
+      compositeDirection
     });
   }, [
     pageDecision,
@@ -1488,7 +1507,8 @@ export function SignalsPageClient({
     tradingMode,
     compositeAlignmentRatio,
     maturationLine?.state,
-    regularSessionOpen
+    regularSessionOpen,
+    compositeDirection
   ]);
 
   /**
@@ -1875,6 +1895,7 @@ export function SignalsPageClient({
           onOpenEvidence={hasValidSignal ? () => void openEvidenceModal() : undefined}
           priceContext={deskPriceContext}
           deskVerdict={hasValidSignal ? deskVerdict : null}
+          directionChip={signalsDirectionChip}
           activeDeskTab={deskTab}
           decisionState={pageDecision?.state ?? null}
           onDeskKpiTarget={applyDeskKpiTarget}
@@ -1896,7 +1917,7 @@ export function SignalsPageClient({
             data-testid="signals-tab-panel-setup"
             role="tabpanel"
           >
-            {compositeResult === null ? (
+            {showCompositeLoading ? (
               <div style={{ padding: `${spacing[6]} ${spacing[2]}` }} data-testid="signals-setup-loading">
                 <CuteLoader
                   label={`Loading ${tradingMode === "swing" ? "swing" : "day"} signal`}
@@ -1993,8 +2014,8 @@ export function SignalsPageClient({
               tradingMode={tradingMode}
               bias={setupBias}
               rows={signalsPresentRows}
-              loading={compositeResult === null}
-              insufficient={Boolean(insufficientComposite) || Boolean(compositeServiceMessage)}
+              loading={showCompositeLoading}
+              insufficient={Boolean(insufficientComposite) || compositeHasServiceError}
               insufficientMessage={compositeServiceMessage ?? insufficientLayerMessage}
               maturationState={maturationLine?.state}
               alignmentRatio={compositeAlignmentRatio}

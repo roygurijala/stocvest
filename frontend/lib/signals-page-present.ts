@@ -5,8 +5,13 @@
 
 import {
   formatAlignmentStatusLine,
+  formatLayersFromActionableHint,
   resolveAlignmentDisplayTier
 } from "@/lib/alignment-display-tier";
+import {
+  formatNeutralAlignmentUserLine,
+  NEUTRAL_ALIGNMENT_SUBLINE
+} from "@/lib/watchlist-maturation-bias-present";
 import {
   deriveDecisionRationale,
   type DecisionRationaleCategory,
@@ -90,6 +95,69 @@ export function normalizeSetupBias(summary: string): SignalsSetupBias {
   return "Neutral";
 }
 
+export type SignalsDirectionChip = {
+  label: string;
+  color: string;
+  background: string;
+};
+
+/** Command-bar / desk chip — mirrors watchlist Long / Short / No edge. */
+export function resolveSignalsDirectionChip(
+  bias: SignalsSetupBias,
+  colors: { bullish: string; bearish: string; textMuted: string }
+): SignalsDirectionChip | null {
+  if (bias === "Bullish") {
+    return {
+      label: "↑ Long",
+      color: colors.bullish,
+      background: `color-mix(in srgb, ${colors.bullish} 18%, transparent)`
+    };
+  }
+  if (bias === "Bearish") {
+    return {
+      label: "↓ Short",
+      color: colors.bearish,
+      background: `color-mix(in srgb, ${colors.bearish} 18%, transparent)`
+    };
+  }
+  if (bias === "Neutral") {
+    return {
+      label: "No edge",
+      color: colors.textMuted,
+      background: `color-mix(in srgb, ${colors.textMuted} 14%, transparent)`
+    };
+  }
+  return null;
+}
+
+export type CompositeDirectionFields = {
+  consistency: number;
+  directional: number;
+  total: number;
+  tilt?: "long" | "short" | null;
+};
+
+/** Parsed from composite API (`composite_direction_fields` on swing/real). */
+export function parseCompositeDirectionFields(
+  body: Record<string, unknown> | null | undefined
+): CompositeDirectionFields | null {
+  if (!body) return null;
+  const consistency = body.consistency_layers_aligned;
+  const directional = body.directional_layers_aligned;
+  if (typeof consistency !== "number" || typeof directional !== "number") return null;
+  const totalRaw = body.layers_total;
+  const total =
+    typeof totalRaw === "number" && totalRaw > 0 ? Math.round(totalRaw) : SIGNAL_LAYER_ALIGN_TOTAL;
+  const tiltRaw = body.directional_tilt;
+  const tilt = tiltRaw === "long" || tiltRaw === "short" ? tiltRaw : null;
+  return {
+    consistency: Math.max(0, Math.min(total, Math.round(consistency))),
+    directional: Math.max(0, Math.min(total, Math.round(directional))),
+    total,
+    tilt
+  };
+}
+
 /**
  * Whether a layer row counts toward X/6 alignment on Signals and in watchlist maturation
  * (see ``watchlist_maturation_sync._layer_row_available``).
@@ -147,7 +215,24 @@ export function resolveSignalsLayerAlignment(input: {
   rows: SignalsLayerRowInput[];
   bias: SignalsSetupBias;
   alignmentRatio?: number | null;
+  compositeDirection?: CompositeDirectionFields | null;
 }): { aligned: number; total: number; label: string } {
+  const dir = input.compositeDirection;
+  if (input.bias === "Neutral" && dir) {
+    const label =
+      dir.consistency >= 5
+        ? "Balanced"
+        : dir.directional >= 4
+          ? dir.tilt === "long"
+            ? "Bullish lean"
+            : dir.tilt === "short"
+              ? "Bearish lean"
+              : "Directional lean"
+          : dir.consistency >= 4
+            ? "Mostly neutral"
+            : "Mixed direction";
+    return { aligned: dir.consistency, total: dir.total, label };
+  }
   const fromRatio = alignedLayersFromAlignmentRatio(input.alignmentRatio);
   if (fromRatio != null) {
     const total = SIGNAL_LAYER_ALIGN_TOTAL;
@@ -174,11 +259,13 @@ export function resolveCompositeLayerAlignment(input: {
   bias: SignalsSetupBias;
   alignmentRatio?: number | null;
   maturationState?: string | null;
+  compositeDirection?: CompositeDirectionFields | null;
 }): { aligned: number; total: number; label: string; displayLine: string } {
   const alignment = resolveSignalsLayerAlignment({
     rows: input.rows,
     bias: input.bias,
-    alignmentRatio: input.alignmentRatio
+    alignmentRatio: input.alignmentRatio,
+    compositeDirection: input.compositeDirection
   });
   return {
     ...alignment,
@@ -193,17 +280,24 @@ export function formatSignalsAlignmentDisplayLine(
   maturationState?: string | null
 ): string {
   if (bias === "Neutral") {
-    const { aligned, total, label } = alignment;
-    if (aligned <= 1 && label === "Mixed direction") {
-      return aligned === 0 ? "Not aligned" : `${label} (${aligned}/${total})`;
-    }
-    return `${label} (${aligned}/${total})`;
+    return formatNeutralAlignmentUserLine();
   }
   return formatAlignmentStatusLine({
     layersAligned: alignment.aligned,
     layersTotal: alignment.total,
     maturationState
   });
+}
+
+/** Alignment KPI subline — neutral uses verdict copy; long/short keep distance-to-actionable hint. */
+export function signalsAlignmentKpiSubline(input: {
+  bias: SignalsSetupBias;
+  alignment: { aligned: number; total: number };
+}): string | null {
+  if (input.bias === "Neutral") {
+    return NEUTRAL_ALIGNMENT_SUBLINE;
+  }
+  return formatLayersFromActionableHint(input.alignment.aligned, input.alignment.total);
 }
 
 export function layerPolarity(row: SignalsLayerRowInput, bias: SignalsSetupBias): SignalsLayerPolarity {

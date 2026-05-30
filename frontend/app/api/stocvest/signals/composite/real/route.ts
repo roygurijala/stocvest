@@ -14,11 +14,19 @@ export async function POST(req: Request) {
       signal: controller.signal
     });
     const body = await res.json().catch(() => ({}));
-    if (res.status === 503 || res.status === 502 || res.status === 504) {
+    if (res.status >= 500 || res.status === 429) {
+      const transport =
+        res.status === 429
+          ? ("rate_limited" as const)
+          : ("upstream_unavailable" as const);
+      const message =
+        res.status === 429
+          ? "Too many requests. Wait a moment and try again."
+          : "The signal service is temporarily unavailable. Try again in a moment.";
       return NextResponse.json(
         {
-          error: "upstream_unavailable",
-          message: "The signal service is temporarily unavailable. Try again in a moment.",
+          error: transport,
+          message,
           disclaimer: typeof body.disclaimer === "string" ? body.disclaimer : undefined
         },
         { status: 200 }

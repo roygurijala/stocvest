@@ -278,7 +278,8 @@ export function buildWatchlistCardModel(
     alignmentLine: formatAlignmentStatusLine({
       layersAligned: aligned,
       layersTotal: total,
-      maturationState: row?.state
+      maturationState: row?.state,
+      bias: row?.bias
     }),
     attentionLine,
     momentumLine: buildMomentumLine(row, {

@@ -7,6 +7,11 @@ import type { SessionActivityUiMode } from "@/lib/market/session-activity-mode";
 import { regimeBlocksDesk } from "@/lib/scanner/scanner-quiet-desk";
 import type { WatchlistAttentionTier } from "@/lib/watchlist-decision-card-present";
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
+import {
+  isExplicitNeutralMaturationBias,
+  WATCHLIST_BALANCED_NO_EDGE_LINE,
+  watchlistSetupQualityPrefix
+} from "@/lib/watchlist-maturation-bias-present";
 
 export type WatchlistRadarDeskContext = {
   regimeLabel: string;
@@ -63,12 +68,13 @@ function sessionGatePhrase(prefix: string, sessionMode: SessionActivityUiMode | 
   return null;
 }
 
-function symbolHoldPhrase(blockers: string[]): string | null {
+function symbolHoldPhrase(blockers: string[], bias: string | undefined): string | null {
   const labels = blockers.filter((b) => b !== "Macro").slice(0, 2);
   if (labels.length === 0) return null;
+  const prefix = watchlistSetupQualityPrefix(bias);
   return labels.length === 1
-    ? `Strong setup — ${labels[0]} on Signals`
-    : `Strong setup — ${labels.join(" · ")} on Signals`;
+    ? `${prefix} — ${labels[0]} on Signals`
+    : `${prefix} — ${labels.join(" · ")} on Signals`;
 }
 
 /**
@@ -76,21 +82,35 @@ function symbolHoldPhrase(blockers: string[]): string | null {
  * Distinguishes "signal ready, market isn't" from "still building layers".
  */
 export function resolveWatchlistRadarAttentionLine(input: WatchlistRadarAttentionInput): string | null {
-  const { tier, blockers, desk } = input;
+  const { tier, blockers, desk, row } = input;
+  const bias = row?.bias;
+  const setupPrefix = watchlistSetupQualityPrefix(bias);
 
   if (tier === "check_now") {
     if (isFullyAligned(input)) {
-      const sessionPhrase = sessionGatePhrase("Strong setup", desk.sessionMode);
+      if (isExplicitNeutralMaturationBias(bias)) {
+        const sessionPhrase = sessionGatePhrase("Balanced", desk.sessionMode);
+        if (sessionPhrase) return sessionPhrase;
+        if (isWatchlistRadarDeskGated(desk)) {
+          return deskGatedPhrase(desk, "Balanced");
+        }
+        if (blockers.length > 0) {
+          const hold = symbolHoldPhrase(blockers, bias);
+          if (hold) return hold;
+        }
+        return WATCHLIST_BALANCED_NO_EDGE_LINE;
+      }
+      const sessionPhrase = sessionGatePhrase(setupPrefix, desk.sessionMode);
       if (sessionPhrase) return sessionPhrase;
       if (isWatchlistRadarDeskGated(desk)) {
-        return deskGatedPhrase(desk, "Strong setup");
+        return deskGatedPhrase(desk, setupPrefix);
       }
       const macroOnly =
         blockers.includes("Macro") && blockers.filter((b) => b !== "Macro").length === 0;
       if (macroOnly) {
-        return "Strong setup — macro gate on Signals";
+        return `${setupPrefix} — macro gate on Signals`;
       }
-      const hold = symbolHoldPhrase(blockers);
+      const hold = symbolHoldPhrase(blockers, bias);
       if (hold) return hold;
       return "Strong on your list — open on Signals";
     }

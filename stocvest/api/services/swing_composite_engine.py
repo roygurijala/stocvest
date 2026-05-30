@@ -71,6 +71,7 @@ from stocvest.signals.composite_score import (
     resolve_composite_block,
 )
 from stocvest.signals.alignment_score import adjust_composite_with_alignment, alignment_to_response_dict
+from stocvest.signals.layer_directional_alignment import composite_direction_fields
 from stocvest.signals.geo_analyzer import GeoAnalyzer
 from stocvest.signals.internals_analyzer import InternalsAnalyzer
 from stocvest.signals.macro_analyzer import MacroAnalyzer
@@ -472,6 +473,7 @@ async def build_swing_composite_response(
         "conflicted_layers": list(composite.conflicted_layers or []),
     }
     response_body["alignment"] = alignment_to_response_dict(alignment)
+    response_body.update(composite_direction_fields(response_body))
     response_body["weekly_timeframe"] = weekly_timeframe
     response_body["timeframe_alignment"] = timeframe_alignment
     response_body["causal_narrative"] = build_causal_narrative(

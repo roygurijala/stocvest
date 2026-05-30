@@ -22,10 +22,27 @@ describe("watchlist-radar-attention", () => {
     expect(isWatchlistRadarDeskGated(deskSuppressed)).toBe(true);
   });
 
+  test("6/6 neutral + session closed → balanced session closed", () => {
+    const line = resolveWatchlistRadarAttentionLine({
+      tier: "check_now",
+      row: { bias: "neutral", layers_aligned: 6, layers_total: 6, progress_band: "actionable" },
+      alignmentTier: "actionable",
+      blockers: [],
+      desk: deskClosed
+    });
+    expect(line).toBe("Balanced — session closed");
+  });
+
   test("6/6 actionable + session closed → session closed (not desk gated regime)", () => {
     const line = resolveWatchlistRadarAttentionLine({
       tier: "check_now",
-      row: { progress_band: "actionable", layers_aligned: 6, layers_total: 6, state: "actionable" },
+      row: {
+        bias: "long",
+        progress_band: "actionable",
+        layers_aligned: 6,
+        layers_total: 6,
+        state: "actionable"
+      },
       alignmentTier: "actionable",
       blockers: [],
       desk: deskClosed
@@ -37,7 +54,13 @@ describe("watchlist-radar-attention", () => {
   test("6/6 actionable + bearish desk → desk gated (not near actionable)", () => {
     const line = resolveWatchlistRadarAttentionLine({
       tier: "check_now",
-      row: { progress_band: "actionable", layers_aligned: 6, layers_total: 6, state: "actionable" },
+      row: {
+        bias: "long",
+        progress_band: "actionable",
+        layers_aligned: 6,
+        layers_total: 6,
+        state: "actionable"
+      },
       alignmentTier: "actionable",
       blockers: [],
       desk: deskBearish
@@ -49,7 +72,13 @@ describe("watchlist-radar-attention", () => {
   test("6/6 actionable + open desk → open on Signals", () => {
     const line = resolveWatchlistRadarAttentionLine({
       tier: "check_now",
-      row: { progress_band: "actionable", layers_aligned: 6, layers_total: 6, state: "actionable" },
+      row: {
+        bias: "long",
+        progress_band: "actionable",
+        layers_aligned: 6,
+        layers_total: 6,
+        state: "actionable"
+      },
       alignmentTier: "actionable",
       blockers: [],
       desk: deskOpen
@@ -82,7 +111,7 @@ describe("watchlist-radar-attention", () => {
   test("actionable band + suppressed desk without regime qualifier", () => {
     const line = resolveWatchlistRadarAttentionLine({
       tier: "check_now",
-      row: { progress_band: "actionable", layers_aligned: 6, layers_total: 6 },
+      row: { bias: "long", progress_band: "actionable", layers_aligned: 6, layers_total: 6 },
       alignmentTier: "actionable",
       blockers: [],
       desk: deskSuppressed
@@ -93,7 +122,7 @@ describe("watchlist-radar-attention", () => {
   test("actionable + macro blocker only on open desk", () => {
     const line = resolveWatchlistRadarAttentionLine({
       tier: "check_now",
-      row: { progress_band: "actionable", layers_aligned: 6, layers_total: 6 },
+      row: { bias: "long", progress_band: "actionable", layers_aligned: 6, layers_total: 6 },
       alignmentTier: "actionable",
       blockers: ["Macro"],
       desk: deskOpen
@@ -104,7 +133,7 @@ describe("watchlist-radar-attention", () => {
   test("actionable + R/R blocker on open desk", () => {
     const line = resolveWatchlistRadarAttentionLine({
       tier: "check_now",
-      row: { progress_band: "actionable", layers_aligned: 6, layers_total: 6 },
+      row: { bias: "long", progress_band: "actionable", layers_aligned: 6, layers_total: 6 },
       alignmentTier: "actionable",
       blockers: ["Risk/Reward"],
       desk: deskOpen

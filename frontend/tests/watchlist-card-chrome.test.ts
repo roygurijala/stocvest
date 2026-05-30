@@ -22,7 +22,7 @@ describe("resolveWatchlistDirectionChip", () => {
   test("long and short biases get distinct pills", () => {
     expect(resolveWatchlistDirectionChip(row({ bias: "long" }), COLORS)?.label).toBe("↑ Long");
     expect(resolveWatchlistDirectionChip(row({ bias: "short" }), COLORS)?.label).toBe("↓ Short");
-    expect(resolveWatchlistDirectionChip(row({ bias: "neutral" }), COLORS)).toBeNull();
+    expect(resolveWatchlistDirectionChip(row({ bias: "neutral" }), COLORS)?.label).toBe("No edge");
   });
 });
 
@@ -30,7 +30,7 @@ describe("resolveWatchlistCardChrome", () => {
   test("swing actionable stays green when session closed (plan)", () => {
     const chrome = resolveWatchlistCardChrome({
       alignmentTier: "actionable",
-      row: row({ state: "actionable", layers_aligned: 6, layers_total: 6 }),
+      row: row({ state: "actionable", layers_aligned: 6, layers_total: 6, bias: "long" }),
       blockers: [],
       desk: { ...WATCHLIST_DESK_OPEN, sessionMode: "closed" },
       planMode: "swing",
@@ -45,7 +45,7 @@ describe("resolveWatchlistCardChrome", () => {
   test("day actionable is amber when session closed", () => {
     const chrome = resolveWatchlistCardChrome({
       alignmentTier: "actionable",
-      row: row({ state: "actionable", layers_aligned: 6, layers_total: 6 }),
+      row: row({ state: "actionable", layers_aligned: 6, layers_total: 6, bias: "long" }),
       blockers: [],
       desk: { ...WATCHLIST_DESK_OPEN, sessionMode: "closed" },
       planMode: "day",
@@ -73,7 +73,7 @@ describe("resolveWatchlistCardChrome", () => {
   test("6/6 on bearish desk is amber not green", () => {
     const chrome = resolveWatchlistCardChrome({
       alignmentTier: "actionable",
-      row: row({ state: "actionable", layers_aligned: 6, layers_total: 6 }),
+      row: row({ state: "actionable", layers_aligned: 6, layers_total: 6, bias: "long" }),
       blockers: [],
       desk: { regimeLabel: "Bearish", systemSuppressed: true, sessionMode: "live" },
       planMode: "swing",

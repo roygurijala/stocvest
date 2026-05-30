@@ -65,6 +65,7 @@ from stocvest.signals.macro_analyzer import MacroAnalyzer
 from stocvest.signals.macro_context import get_macro_context
 from stocvest.signals.news_analyzer import NewsAnalyzer
 from stocvest.signals.alignment_score import AlignmentResult, adjust_composite_with_alignment, alignment_to_response_dict
+from stocvest.signals.layer_directional_alignment import composite_direction_fields
 from stocvest.signals.causal_narrative import build_causal_narrative
 from stocvest.signals.multi_timeframe import apply_multi_timeframe_to_composite
 from stocvest.signals.sector_analyzer import SectorAnalyzer
@@ -669,6 +670,7 @@ async def build_real_composite_response(
     }
     if alignment is not None:
         response_body["alignment"] = alignment_to_response_dict(alignment)
+    response_body.update(composite_direction_fields(response_body))
 
     response_body["weekly_timeframe"] = weekly_timeframe
     response_body["timeframe_alignment"] = timeframe_alignment

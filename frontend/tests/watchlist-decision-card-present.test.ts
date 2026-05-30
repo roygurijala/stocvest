@@ -104,6 +104,7 @@ describe("buildWatchlistCardModel", () => {
         layers_aligned: 5,
         layers_total: 6,
         progress_band: "actionable",
+        bias: "long",
         last_transition_type: "improved"
       }),
       undefined,
@@ -114,6 +115,27 @@ describe("buildWatchlistCardModel", () => {
     expect(model.momentumLine).toBe("Strong setup — session closed");
   });
 
+  test("neutral 6/6 shows balanced copy not strong setup", () => {
+    const model = buildWatchlistCardModel(
+      "NVDA",
+      row({
+        state: "actionable",
+        layers_aligned: 6,
+        layers_total: 6,
+        progress_band: "actionable",
+        bias: "neutral"
+      }),
+      undefined,
+      COLORS,
+      "swing",
+      { regimeLabel: "Bullish", systemSuppressed: false, sessionMode: "closed" }
+    );
+    expect(model.alignmentLine).toBe("Balanced");
+    expect(model.momentumLine).toBe("Balanced — session closed");
+    expect(model.directionChip?.label).toBe("No edge");
+    expect(model.chromeBadgeLabel).toBe("Balanced");
+  });
+
   test("6/6 on bearish desk shows desk gated copy (not near actionable)", () => {
     const model = buildWatchlistCardModel(
       "AMD",
@@ -121,7 +143,8 @@ describe("buildWatchlistCardModel", () => {
         state: "actionable",
         layers_aligned: 6,
         layers_total: 6,
-        progress_band: "actionable"
+        progress_band: "actionable",
+        bias: "long"
       }),
       undefined,
       COLORS,
@@ -137,7 +160,7 @@ describe("buildWatchlistCardModel", () => {
   test("swing 6/6 closed session gets green plan chrome", () => {
     const model = buildWatchlistCardModel(
       "NVDA",
-      row({ state: "actionable", layers_aligned: 6, layers_total: 6 }),
+      row({ state: "actionable", layers_aligned: 6, layers_total: 6, bias: "long" }),
       undefined,
       COLORS,
       "swing",
