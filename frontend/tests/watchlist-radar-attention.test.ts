@@ -5,9 +5,10 @@ import {
   resolveWatchlistRadarAttentionLine
 } from "@/lib/dashboard/watchlist-radar-attention";
 
-const deskOpen = { regimeLabel: "Bullish", systemSuppressed: false };
-const deskBearish = { regimeLabel: "Bearish", systemSuppressed: false };
-const deskSuppressed = { regimeLabel: "Neutral", systemSuppressed: true };
+const deskOpen = { regimeLabel: "Bullish", systemSuppressed: false, sessionMode: "live" as const };
+const deskBearish = { regimeLabel: "Bearish", systemSuppressed: false, sessionMode: "live" as const };
+const deskSuppressed = { regimeLabel: "Neutral", systemSuppressed: true, sessionMode: "live" as const };
+const deskClosed = { regimeLabel: "Bullish", systemSuppressed: true, sessionMode: "closed" as const };
 
 describe("watchlist-radar-attention", () => {
   test("formatRegimeGateQualifier skips neutral", () => {
@@ -19,6 +20,18 @@ describe("watchlist-radar-attention", () => {
     expect(isWatchlistRadarDeskGated(deskOpen)).toBe(false);
     expect(isWatchlistRadarDeskGated(deskBearish)).toBe(true);
     expect(isWatchlistRadarDeskGated(deskSuppressed)).toBe(true);
+  });
+
+  test("6/6 actionable + session closed → session closed (not desk gated regime)", () => {
+    const line = resolveWatchlistRadarAttentionLine({
+      tier: "check_now",
+      row: { progress_band: "actionable", layers_aligned: 6, layers_total: 6, state: "actionable" },
+      alignmentTier: "actionable",
+      blockers: [],
+      desk: deskClosed
+    });
+    expect(line).toBe("Strong setup — session closed");
+    expect(line).not.toMatch(/desk gated/i);
   });
 
   test("6/6 actionable + bearish desk → desk gated (not near actionable)", () => {

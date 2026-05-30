@@ -20,6 +20,7 @@ type Props = {
   vixLevel: number | null;
   vixPct: number | null;
   vixPulseOk: boolean;
+  vixFredDaily?: boolean;
   sectorRotation: SectorRotationChip[];
   systemLabel: string;
   swingDeskPhrase: string;
@@ -53,7 +54,8 @@ function buildSessionTapeCells(
   iwmPct: number | null,
   vixPulseOk: boolean,
   vixPct: number | null,
-  vixLevel: number | null
+  vixLevel: number | null,
+  vixFredDaily?: boolean
 ): SessionTapeCell[] {
   const cells: SessionTapeCell[] = [
     { label: "SPY", pct: spyPct },
@@ -67,7 +69,12 @@ function buildSessionTapeCells(
       label: "VIX",
       pct: hasVixPct ? vixPct : null,
       formattedPct: hasVixPct ? fmtPct(vixPct) : `$${vixLevel!.toFixed(2)}`,
-      extra: hasVixPct && hasVixLevel ? `$${vixLevel!.toFixed(2)}` : undefined
+      extra:
+        hasVixPct && hasVixLevel
+          ? `$${vixLevel!.toFixed(2)}${vixFredDaily ? " · FRED close" : ""}`
+          : vixFredDaily && hasVixLevel
+            ? "FRED close"
+            : undefined
     });
   }
   return cells;
@@ -84,6 +91,7 @@ export function DashboardMarketPulseHero({
   vixLevel,
   vixPct,
   vixPulseOk,
+  vixFredDaily = false,
   sectorRotation,
   systemLabel,
   swingDeskPhrase,
@@ -94,7 +102,15 @@ export function DashboardMarketPulseHero({
   const { colors } = useTheme();
   const { lead, lag } = topSectors(sectorRotation);
   const environmentSummary = marketContext.environmentSummary;
-  const sessionTapeCells = buildSessionTapeCells(spyPct, qqqPct, iwmPct, vixPulseOk, vixPct, vixLevel);
+  const sessionTapeCells = buildSessionTapeCells(
+    spyPct,
+    qqqPct,
+    iwmPct,
+    vixPulseOk,
+    vixPct,
+    vixLevel,
+    vixFredDaily
+  );
 
   return (
     <section

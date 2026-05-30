@@ -39,11 +39,23 @@ class SupportsPolygonSnapshotFetch(Protocol):
         ...
 
 
+async def _fred_vix_snapshot() -> Snapshot | None:
+    """FRED ``VIXCLS`` when Polygon indices/stocks are unavailable (e.g. plan 403)."""
+    try:
+        from stocvest.data.fred_client import FREDClient
+
+        return await FREDClient().get_vix_snapshot()
+    except Exception as exc:
+        _LOG.debug("fred_vix_snapshot_failed error=%s", exc)
+        return None
+
+
 async def get_vix_snapshot_with_fallback(client: SupportsPolygonSnapshotFetch) -> Snapshot | None:
     """Return the first VIX snapshot that has a usable level or session %.
 
-    Tries Polygon **indices** snapshot first (``GET /v3/snapshot/indices``), then the legacy
-  stocks snapshot per symbol. Order within each path: ``VIX_SNAPSHOT_FALLBACK_SYMBOLS``.
+    Tries Polygon **indices** snapshot first (``GET /v3/snapshot/indices``), then FRED
+    ``VIXCLS`` (daily close), then legacy stocks snapshot per symbol.
+    Order within Polygon paths: ``VIX_SNAPSHOT_FALLBACK_SYMBOLS``.
     """
     get_indices = getattr(client, "get_indices_snapshots", None)
     if callable(get_indices):
@@ -55,6 +67,10 @@ async def get_vix_snapshot_with_fallback(client: SupportsPolygonSnapshotFetch) -
                     return hit
         except PolygonError:
             pass
+
+    fred_snap = await _fred_vix_snapshot()
+    if snapshot_has_usable_vix_pulse(fred_snap):
+        return fred_snap
 
     for vix_sym in VIX_SNAPSHOT_FALLBACK_SYMBOLS:
         try:

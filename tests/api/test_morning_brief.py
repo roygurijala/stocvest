@@ -168,8 +168,13 @@ async def test_vix_fallback_prefers_indices_snapshot() -> None:
 
 
 @pytest.mark.asyncio
-async def test_vix_fallback_order_skips_unusable_then_errors() -> None:
+async def test_vix_fallback_order_skips_unusable_then_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     """Design: try I:VIX then ^VIX then VIX; empty last price and PolygonError do not stop the chain."""
+
+    async def _no_fred() -> None:
+        return None
+
+    monkeypatch.setattr("stocvest.api.services.morning_brief_fetch._fred_vix_snapshot", _no_fred)
 
     class _FakeClient:
         def __init__(self) -> None:
@@ -190,7 +195,12 @@ async def test_vix_fallback_order_skips_unusable_then_errors() -> None:
 
 
 @pytest.mark.asyncio
-async def test_vix_fallback_accepts_day_close_without_last() -> None:
+async def test_vix_fallback_accepts_day_close_without_last(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _no_fred() -> None:
+        return None
+
+    monkeypatch.setattr("stocvest.api.services.morning_brief_fetch._fred_vix_snapshot", _no_fred)
+
     class _FakeClient:
         async def get_snapshot(self, sym: str) -> Snapshot:
             if sym == "I:VIX":
@@ -199,3 +209,53 @@ async def test_vix_fallback_accepts_day_close_without_last() -> None:
 
     out = await get_vix_snapshot_with_fallback(_FakeClient())
     assert out is not None and out.day_close == 19.1
+
+
+@pytest.mark.asyncio
+async def test_vix_fallback_uses_fred_when_polygon_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _FakeClient:
+        async def get_indices_snapshots(self, tickers: list[str]) -> dict[str, Snapshot]:
+            return {}
+
+        async def get_snapshot(self, sym: str) -> Snapshot:
+            raise PolygonError("404")
+
+    async def _fake_fred() -> Snapshot:
+        return Snapshot(
+            symbol="I:VIX",
+            last_trade_price=20.0,
+            prev_close=20.2,
+            change_percent=-0.99,
+            market_status="fred_daily",
+        )
+
+    monkeypatch.setattr(
+        "stocvest.api.services.morning_brief_fetch._fred_vix_snapshot",
+        _fake_fred,
+    )
+    out = await get_vix_snapshot_with_fallback(_FakeClient())
+    assert out is not None
+    assert out.market_status == "fred_daily"
+    assert out.last_trade_price == 20.0
+
+
+@pytest.mark.asyncio
+async def test_vix_fallback_prefers_polygon_over_fred(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _FakeClient:
+        async def get_indices_snapshots(self, tickers: list[str]) -> dict[str, Snapshot]:
+            return {
+                "I:VIX": Snapshot(symbol="I:VIX", last_trade_price=15.0, change_percent=1.0),
+            }
+
+        async def get_snapshot(self, sym: str) -> Snapshot:
+            raise PolygonError("should not run")
+
+    async def _fake_fred() -> Snapshot:
+        raise AssertionError("FRED must not run when indices succeed")
+
+    monkeypatch.setattr(
+        "stocvest.api.services.morning_brief_fetch._fred_vix_snapshot",
+        _fake_fred,
+    )
+    out = await get_vix_snapshot_with_fallback(_FakeClient())
+    assert out is not None and out.last_trade_price == 15.0

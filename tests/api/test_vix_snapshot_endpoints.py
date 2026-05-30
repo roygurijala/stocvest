@@ -143,3 +143,26 @@ async def test_live_polygon_ivix_snapshot() -> None:
 
         vix = await get_vix_snapshot_with_fallback(client)
         assert vix is not None and snapshot_has_usable_vix_pulse(vix)
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_live_vix_fallback_returns_fred_when_polygon_indices_blocked() -> None:
+    """With Polygon indices 403, FRED VIXCLS (API or public CSV) should still return VIX."""
+    from stocvest.data.fred_client import FRED_VIX_MARKET_STATUS
+    from stocvest.data.vix_snapshot import vix_level_from_snapshot
+
+    key = (os.environ.get("POLYGON_API_KEY") or "").strip()
+    if not key:
+        pytest.skip("POLYGON_API_KEY not set")
+
+    async with PolygonClient(api_key=key) as client:
+        vix = await get_vix_snapshot_with_fallback(client)
+
+    if vix is None:
+        pytest.fail("Expected VIX from FRED fallback when Polygon indices are unavailable")
+
+    assert snapshot_has_usable_vix_pulse(vix)
+    assert vix.market_status == FRED_VIX_MARKET_STATUS
+    level = vix_level_from_snapshot(vix)
+    assert level is not None and 5 < level < 100

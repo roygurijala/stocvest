@@ -34,10 +34,12 @@ import { useMacroContext } from "@/lib/hooks/use-macro-context";
 import { useDashboardPayload } from "@/lib/hooks/use-dashboard-payload";
 import { isStale } from "@/lib/api/dashboard";
 import type { MarketOverview, SnapshotPayload } from "@/lib/api/market";
+import { resolveSessionActivityUiMode } from "@/lib/market/session-activity-mode";
 import {
   isVixTickerSymbol,
   vixPulseDataAvailable,
   vixSnapshotDisplayLevel,
+  vixSnapshotIsFredDaily,
   vixSnapshotSessionChangePct
 } from "@/lib/api/market-snapshot-helpers";
 import type { ScannerOverview } from "@/lib/api/scanner";
@@ -352,6 +354,7 @@ function DashboardRedesignBody({
   const regimeBadgePriceBreadthOnly = !vixPulseOk && regimeLabelIsDirectional(regimeLabel);
   const regimeTip = useMemo(() => regimeBadgeExplanation(vixPulseOk), [vixPulseOk]);
   const vixLevel = vixSnapshot ? vixSnapshotDisplayLevel(vixSnapshot) : null;
+  const vixFredDaily = vixSnapshotIsFredDaily(vixSnapshot);
 
   const dayDeskPosture: DayDeskPostureKind = useMemo(
     () =>
@@ -505,6 +508,10 @@ function DashboardRedesignBody({
   });
   const systemLabel = dashboardSystemStateLabel(systemKind);
   const systemSuppressed = systemKind === "suppressed";
+  const sessionMode = useMemo(
+    () => resolveSessionActivityUiMode(marketOverview.status),
+    [marketOverview.status]
+  );
 
   const pageTitle = useMemo(() => buildDashboardPageTitle(regimeLabel), [regimeLabel]);
 
@@ -561,6 +568,7 @@ function DashboardRedesignBody({
         vixLevel={vixLevel}
         vixPct={vixPct}
         vixPulseOk={vixPulseOk}
+        vixFredDaily={vixFredDaily}
         sectorRotation={sectorRotation}
         systemLabel={systemLabel}
         swingDeskPhrase={swingDeskStatusPhrase(swingDeskPosture)}
@@ -603,7 +611,8 @@ function DashboardRedesignBody({
         marketStatus={marketOverview.status}
         desk={{
           regimeLabel,
-          systemSuppressed
+          systemSuppressed,
+          sessionMode
         }}
         nearReadyInMarket={nearReadyInMarket}
         nearQualification={scannerOverview.scanSummary?.near_qualification ?? []}

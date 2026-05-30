@@ -13,7 +13,13 @@ export type MarketSnapshotVixFields = {
   change_percent?: number | null;
   pre_market_change_percent?: number | null;
   after_hours_change_percent?: number | null;
+  market_status?: string | null;
 };
+
+/** FRED ``VIXCLS`` daily close — day-over-day % only, not intraday session. */
+export function vixSnapshotIsFredDaily(s: MarketSnapshotVixFields | null | undefined): boolean {
+  return String(s?.market_status || "").trim() === "fred_daily";
+}
 
 function numish(v: unknown): number | null {
   if (typeof v === "number" && Number.isFinite(v)) return v;

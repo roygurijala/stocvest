@@ -139,10 +139,13 @@ export function watchlistMaturationDeskSummary(
     }
     return "No maturation runs on this desk yet — use row Refresh, open Evidence on Signals, or wait for the weekday schedule";
   }
+  const closedSuffix = opts?.sessionClosed
+    ? " · Market closed — layer progress is structure only until the next regular open"
+    : "";
   if (lastRun) {
-    return `${evaluated} of ${total} on ${deskLabel} desk · last run ${lastRun}`;
+    return `${evaluated} of ${total} on ${deskLabel} desk · last run ${lastRun}${closedSuffix}`;
   }
-  return `${evaluated} of ${total} on ${deskLabel} desk`;
+  return `${evaluated} of ${total} on ${deskLabel} desk${closedSuffix}`;
 }
 
 export function watchlistUnevaluatedDeskHint(desk: "swing" | "day"): string {
