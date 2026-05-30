@@ -7,10 +7,14 @@ import type { SectorRotationChip } from "@/lib/market-context/types";
 import { InfoTip } from "@/components/info-tip";
 import { interactionLevelProps } from "@/lib/dashboard/click-hierarchy";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
+import { dashboardPulseSessionHeading } from "@/lib/dashboard/desk-today-present";
+import type { SessionActivityUiMode } from "@/lib/market/session-activity-mode";
 import { useTheme } from "@/lib/theme-provider";
 
 type Props = {
   pageTitle: string;
+  pulseHeadlinePrefix?: string | null;
+  sessionMode?: SessionActivityUiMode;
   regimeLabel: string;
   regimeTip: string;
   marketContext: MarketContextSnapshot;
@@ -82,6 +86,8 @@ function buildSessionTapeCells(
 
 export function DashboardMarketPulseHero({
   pageTitle,
+  pulseHeadlinePrefix = null,
+  sessionMode = "live",
   regimeLabel,
   regimeTip,
   marketContext,
@@ -102,6 +108,7 @@ export function DashboardMarketPulseHero({
   const { colors } = useTheme();
   const { lead, lag } = topSectors(sectorRotation);
   const environmentSummary = marketContext.environmentSummary;
+  const sessionCopy = dashboardPulseSessionHeading(sessionMode);
   const sessionTapeCells = buildSessionTapeCells(
     spyPct,
     qqqPct,
@@ -137,6 +144,9 @@ export function DashboardMarketPulseHero({
         className="m-0 mt-2"
         style={{ fontSize: typography.scale.base, color: colors.text, lineHeight: 1.45 }}
       >
+        {pulseHeadlinePrefix ? (
+          <span style={{ color: colors.textMuted }}>{pulseHeadlinePrefix}</span>
+        ) : null}
         <span style={{ fontWeight: 700, color: colors.accent }}>{regimeLabel}</span>
         <span style={{ color: colors.textMuted }}> · </span>
         {environmentSummary}
@@ -147,10 +157,10 @@ export function DashboardMarketPulseHero({
         style={{ color: colors.textMuted }}
         data-testid="dashboard-pulse-session-heading"
       >
-        Today (session)
+        {sessionCopy.title}
       </p>
       <p className="m-0 mt-0.5" style={{ fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.4 }}>
-        Index moves since the open — live tape, not 5-day trend.
+        {sessionCopy.subline}
       </p>
       <div
         className="mt-2 grid w-full gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5"

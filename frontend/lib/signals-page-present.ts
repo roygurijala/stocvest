@@ -760,12 +760,12 @@ export function resolveExecutionDisplay(
       };
     }
     const label = opts?.entryTimingWeak
-      ? "Actionable · Plan for tomorrow · timing caution"
-      : "Actionable · Plan for tomorrow";
+      ? "Actionable · For next market open · timing caution"
+      : "Actionable · For next market open";
     return {
       label,
       subline: "Gates cleared — valid through next regular open; review scenario before the open",
-      headline: "→ Actionable setup — plan for next session open",
+      headline: "→ Actionable setup — for next market open",
       tone: "bullish",
       gatesCleared: true
     };

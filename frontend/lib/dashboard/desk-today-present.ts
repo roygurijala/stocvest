@@ -1,6 +1,18 @@
 import type { GapIntelligenceItem } from "@/lib/api/scanner";
 import type { DeskDiscoveryLeader, DeskTodayData, DeskTodayMode, DeskMoverRadarRow } from "@/lib/api/desk-today";
 import { DESK_DISCOVERY_DISPLAY_LIMIT } from "@/lib/dashboard/desk-refresh-tiers";
+import type { SessionActivityUiMode } from "@/lib/market/session-activity-mode";
+
+const ET = "America/New_York";
+
+function weekdayLongEt(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-US", { timeZone: ET, weekday: "long" }).format(now);
+}
+
+function isWeekendEt(now: Date = new Date()): boolean {
+  const wd = weekdayLongEt(now);
+  return wd === "Saturday" || wd === "Sunday";
+}
 
 export function formatDeskGapLine(gapPercent: number, direction: string): string {
   const pct = typeof gapPercent === "number" && Number.isFinite(gapPercent) ? gapPercent : 0;
@@ -114,12 +126,49 @@ export function formatGeneratedAtEt(iso: string | undefined): string | null {
   }
 }
 
-export function buildDashboardPageTitle(regimeLabel: string): string {
-  const now = new Date();
-  const weekday = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    weekday: "long"
-  }).format(now);
+export type DashboardPageTitleOpts = {
+  /** When regular session is closed, do not imply live regime for the calendar day. */
+  sessionMode?: SessionActivityUiMode;
+};
+
+/** H1 on dashboard pulse — regime belongs in the subline when session is closed. */
+export function buildDashboardPageTitle(
+  regimeLabel: string,
+  opts?: DashboardPageTitleOpts
+): string {
+  const mode = opts?.sessionMode ?? "live";
+  if (mode === "closed") {
+    return isWeekendEt() ? "Weekend · Markets closed" : "Markets closed";
+  }
   const regime = regimeLabel?.trim() || "Market";
-  return `${weekday} · ${regime}`;
+  return `${weekdayLongEt()} · ${regime}`;
+}
+
+/** Prefix for regime + environment line when tape is not live. */
+export function dashboardPulseHeadlinePrefix(sessionMode: SessionActivityUiMode): string | null {
+  if (sessionMode === "closed") return "As of last close · ";
+  if (sessionMode === "extended") return "Extended hours · ";
+  return null;
+}
+
+export function dashboardPulseSessionHeading(sessionMode: SessionActivityUiMode): {
+  title: string;
+  subline: string;
+} {
+  if (sessionMode === "closed") {
+    return {
+      title: "Last session",
+      subline: "Index moves at the last regular close — not live tape."
+    };
+  }
+  if (sessionMode === "extended") {
+    return {
+      title: "Today (extended)",
+      subline: "Index context during extended hours — intraday gates resume at the regular open."
+    };
+  }
+  return {
+    title: "Today (session)",
+    subline: "Index moves since the open — live tape, not 5-day trend."
+  };
 }
