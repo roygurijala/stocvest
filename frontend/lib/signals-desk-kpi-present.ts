@@ -4,6 +4,8 @@ import {
   decisionGateCategoryLabel,
   executionProgressHint,
   executionReadinessLabel,
+  executionDisplayTone,
+  resolveExecutionDisplay,
   executionSupportingGates,
   formatLayerForceNames,
   formatSignalsAlignmentDisplayLine,
@@ -35,8 +37,17 @@ export function biasKpiSubline(bias: SignalsSetupBias): string {
   return bias === "Neutral" ? "No directional lean" : `${bias} read from composite`;
 }
 
-function executionSubline(decision: TradeDecision, mode: "day" | "swing"): string | null {
+function executionSubline(
+  decision: TradeDecision,
+  mode: "day" | "swing",
+  regularSessionOpen?: boolean | null
+): string | null {
   if (decision.state === "actionable") {
+    const fromDisplay = resolveExecutionDisplay(decision.state, {
+      tradingMode: mode,
+      regularSessionOpen
+    }).subline;
+    if (fromDisplay) return fromDisplay;
     return "Gates cleared — review levels and scenario before acting";
   }
   const blocker = primaryExecutionBlockerLine(decision);
@@ -79,7 +90,8 @@ export function buildExecutionHeaderHint(
   mode: "day" | "swing",
   layersAligned?: number,
   layersTotal?: number,
-  bias?: SignalsSetupBias
+  bias?: SignalsSetupBias,
+  regularSessionOpen?: boolean | null
 ): string | null {
   if (
     typeof layersAligned === "number" &&
@@ -96,6 +108,11 @@ export function buildExecutionHeaderHint(
     if (bridge) return bridge;
   }
   if (decision.state === "actionable") {
+    const hint = resolveExecutionDisplay(decision.state, {
+      tradingMode: mode,
+      regularSessionOpen
+    }).subline;
+    if (hint) return hint;
     return "Gates cleared — review levels and scenario";
   }
   const supporting = executionSupportingGates(decision);
@@ -134,6 +151,7 @@ export function buildSignalsDeskVerdict(input: {
   tradingMode: "day" | "swing";
   alignmentRatio?: number | null;
   maturationState?: string | null;
+  regularSessionOpen?: boolean | null;
 }): SignalsDeskVerdictBundle {
   const alignment = resolveSignalsLayerAlignment({
     rows: input.rows,
@@ -149,7 +167,8 @@ export function buildSignalsDeskVerdict(input: {
       input.tradingMode,
       alignment.aligned,
       alignment.total,
-      input.bias
+      input.bias,
+      input.regularSessionOpen
     )
   };
 }
@@ -161,6 +180,7 @@ export function buildSignalsDeskKpiItems(input: {
   tradingMode: "day" | "swing";
   alignmentRatio?: number | null;
   maturationState?: string | null;
+  regularSessionOpen?: boolean | null;
 }): SignalsDeskKpiItem[] {
   const alignment = resolveSignalsLayerAlignment({
     rows: input.rows,
@@ -192,9 +212,15 @@ export function buildSignalsDeskKpiItems(input: {
     {
       target: "execution",
       label: "Execution",
-      headline: executionReadinessLabel(input.decision.state),
-      subline: executionSubline(input.decision, input.tradingMode),
-      headlineTone: input.decision.state === "actionable" ? "bullish" : "muted"
+      headline: executionReadinessLabel(input.decision.state, {
+        tradingMode: input.tradingMode,
+        regularSessionOpen: input.regularSessionOpen
+      }),
+      subline: executionSubline(input.decision, input.tradingMode, input.regularSessionOpen),
+      headlineTone: executionDisplayTone(input.decision.state, {
+        tradingMode: input.tradingMode,
+        regularSessionOpen: input.regularSessionOpen
+      })
     }
   ];
 }

@@ -13,6 +13,9 @@ import {
   type TradeDecision,
   type TradeDecisionState
 } from "@/lib/signal-evidence/trade-decision";
+import type { MarketStatusPayload } from "@/lib/api/market";
+import type { SwingCompositeMarketStatus } from "@/lib/api/swing-composite";
+import { isRegularSessionOpen } from "@/lib/market/regular-session";
 import {
   isRrBelowVerdictThreshold,
   minRiskRewardForVerdict,
@@ -604,22 +607,129 @@ export function buildSignalsPageDecision(input: {
   };
 }
 
+export type ExecutionSessionOpts = {
+  tradingMode?: "day" | "swing";
+  /** False only when regular NYSE session is closed (not extended-hours). Omit when unknown. */
+  regularSessionOpen?: boolean | null;
+  entryTimingWeak?: boolean;
+};
+
+export type ExecutionDisplayTone = "bullish" | "bearish" | "caution" | "muted";
+
+export type ExecutionDisplay = {
+  label: string;
+  subline: string | null;
+  headline: string;
+  tone: ExecutionDisplayTone;
+  /** Desk gates cleared at synthesis — may still lack a live execution window (day after close). */
+  gatesCleared: boolean;
+};
+
+/** Prefer dashboard market status; fall back to composite envelope. */
+export function resolveRegularSessionOpenFromSources(sources: {
+  marketStatus?: Pick<MarketStatusPayload, "market"> | null;
+  compositeMarketStatus?: Pick<SwingCompositeMarketStatus, "is_market_open"> | null;
+}): boolean | null {
+  if (sources.marketStatus != null) {
+    return isRegularSessionOpen(sources.marketStatus);
+  }
+  if (sources.compositeMarketStatus != null) {
+    return sources.compositeMarketStatus.is_market_open;
+  }
+  return null;
+}
+
+export function regularSessionOpenFromCompositePayload(
+  body: Record<string, unknown> | null | undefined
+): boolean | null {
+  const raw = body?.market_status;
+  if (!raw || typeof raw !== "object") return null;
+  const open = (raw as { is_market_open?: unknown }).is_market_open;
+  return typeof open === "boolean" ? open : null;
+}
+
+export function resolveExecutionDisplay(
+  state: TradeDecisionState,
+  opts?: ExecutionSessionOpts
+): ExecutionDisplay {
+  const mode = opts?.tradingMode ?? "swing";
+  const sessionClosed = opts?.regularSessionOpen === false;
+
+  if (state === "actionable" && sessionClosed) {
+    if (mode === "day") {
+      return {
+        label: "Session closed",
+        subline: "Day setup from earlier session — re-evaluates at next open",
+        headline: "→ Session closed — no live execution window",
+        tone: "caution",
+        gatesCleared: false
+      };
+    }
+    const label = opts?.entryTimingWeak
+      ? "Actionable · Plan for tomorrow · timing caution"
+      : "Actionable · Plan for tomorrow";
+    return {
+      label,
+      subline: "Gates cleared — valid through next regular open; review scenario before the open",
+      headline: "→ Actionable setup — plan for next session open",
+      tone: "bullish",
+      gatesCleared: true
+    };
+  }
+
+  if (state === "actionable") {
+    const label = opts?.entryTimingWeak ? "Actionable — entry timing caution" : "Actionable";
+    return {
+      label,
+      subline:
+        mode === "swing"
+          ? "Gates cleared — review levels and scenario before acting"
+          : "Gates cleared — review levels and scenario",
+      headline: "→ Actionable setup — gates cleared",
+      tone: "bullish",
+      gatesCleared: true
+    };
+  }
+
+  if (state === "monitor") {
+    return {
+      label: "Not actionable yet",
+      subline: null,
+      headline: "→ Setup is forming — waiting on final confirmation",
+      tone: "muted",
+      gatesCleared: false
+    };
+  }
+
+  return {
+    label: "Not actionable",
+    subline: null,
+    headline: "→ Setup not ready — minimum gates not met",
+    tone: "muted",
+    gatesCleared: false
+  };
+}
+
+export function executionDisplayTone(
+  state: TradeDecisionState,
+  opts?: ExecutionSessionOpts
+): ExecutionDisplayTone {
+  return resolveExecutionDisplay(state, opts).tone;
+}
+
 /** Execution readiness — separate from layer alignment strength. */
 export function executionReadinessLabel(
   state: TradeDecisionState,
-  opts?: { entryTimingWeak?: boolean }
+  opts?: ExecutionSessionOpts
 ): string {
-  if (state === "actionable") {
-    return opts?.entryTimingWeak ? "Actionable — entry timing caution" : "Actionable";
-  }
-  if (state === "monitor") return "Not actionable yet";
-  return "Not actionable";
+  return resolveExecutionDisplay(state, opts).label;
 }
 
-export function executionHeadline(state: TradeDecisionState): string {
-  if (state === "actionable") return "→ Actionable setup — gates cleared";
-  if (state === "monitor") return "→ Setup is forming — waiting on final confirmation";
-  return "→ Setup not ready — minimum gates not met";
+export function executionHeadline(
+  state: TradeDecisionState,
+  opts?: ExecutionSessionOpts
+): string {
+  return resolveExecutionDisplay(state, opts).headline;
 }
 
 /** @deprecated Use {@link executionHeadline} */

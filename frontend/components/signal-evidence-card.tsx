@@ -82,7 +82,11 @@ import { synthTradeDecision } from "@/lib/signal-evidence/trade-decision";
 import { SetupJudgmentSummary } from "@/components/signals/setup-judgment-summary";
 import { deriveSetupJudgment } from "@/lib/signal-evidence/setup-judgment";
 import { resolveCompositeLayerAlignment } from "@/lib/signals-page-present";
-import { executionReadinessLabel } from "@/lib/signals-page-present";
+import {
+  executionDisplayTone,
+  executionReadinessLabel,
+  regularSessionOpenFromCompositePayload
+} from "@/lib/signals-page-present";
 import { buildEvidenceRiskHorizonFactors } from "@/lib/signal-evidence/fundamental-present";
 import { EvidenceSetupEvolutionLink } from "@/components/signal-evidence/evidence-setup-evolution-link";
 
@@ -844,6 +848,7 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
   const levelsComplete = Boolean(entryZone && rt1 != null && stopLvl != null);
   const evidenceMode: ScenarioMode =
     evidence.compositeMode === "swing" || evidence.signal_basis === "daily_bars_rth" ? "swing" : "day";
+  const evidenceRegularSessionOpen = regularSessionOpenFromCompositePayload(evidence.compositePayload ?? null);
   const evidenceDirection: ScenarioInput["direction"] =
     evidence.direction === "bullish" || evidence.direction === "bearish" ? evidence.direction : "neutral";
   const scenarioForBuild = augmentScenarioInputWithGapIntel(
@@ -1120,9 +1125,14 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
       <SetupJudgmentSummary
         judgment={evidenceSetupJudgment}
         executionLabel={executionReadinessLabel(evidenceDecision.state, {
+          tradingMode: evidenceMode,
+          regularSessionOpen: evidenceRegularSessionOpen,
           entryTimingWeak: evidenceSetupJudgment.tradeability.band === "weak"
         })}
-        executionTone={evidenceDecision.state === "actionable" ? "bullish" : "caution"}
+        executionTone={executionDisplayTone(evidenceDecision.state, {
+          tradingMode: evidenceMode,
+          regularSessionOpen: evidenceRegularSessionOpen
+        })}
       />
 
       {evidence.executionQuality ? (
