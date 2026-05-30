@@ -1459,17 +1459,16 @@ export function SignalsPageClient({
     };
   }, [showAfterHoursPanel, symbol]);
 
-  const regularSessionOpen = useMemo(
-    () =>
-      resolveRegularSessionOpenFromSources({
-        marketStatus: marketOverview.status ?? null,
-        compositeMarketStatus:
-          compositeResult && !isInsufficientCompositeResponse(compositeResult)
-            ? compositeResult.market_status
-            : null
-      }),
-    [marketOverview.status, compositeResult]
-  );
+  const regularSessionOpen = useMemo(() => {
+    const compositeMs =
+      compositeResult && !isInsufficientCompositeResponse(compositeResult)
+        ? (compositeResult.market_status as SwingCompositeMarketStatus | undefined)
+        : undefined;
+    return resolveRegularSessionOpenFromSources({
+      marketStatus: marketOverview.status ?? null,
+      compositeMarketStatus: compositeMs ?? null
+    });
+  }, [marketOverview.status, compositeResult]);
 
   const deskVerdict = useMemo(() => {
     if (!pageDecision) return null;
