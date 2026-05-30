@@ -83,7 +83,10 @@ describe("scenario-variants", () => {
     const decision: TradeDecision = {
       state: "monitor",
       line: "Held",
-      reinforcements: ["Risk/reward too low (0.5:1) — below threshold.", "Layer agreement is mixed."],
+      reinforcements: [
+        "Risk/reward is too low (0.5:1) for this desk's minimum.",
+        "Layers don't agree enough across the desk."
+      ],
       rationale: {
         category: "risk_reward",
         label: "Why hold:",
@@ -92,10 +95,10 @@ describe("scenario-variants", () => {
     };
     const blocked = remainingBlockersAfterScenarioRr(decision, false);
     expect(blocked.some((l) => /risk\/reward/i.test(l))).toBe(false);
-    expect(blocked.some((l) => /Layer agreement/i.test(l))).toBe(true);
+    expect(blocked.some((l) => /don't agree/i.test(l))).toBe(true);
     const after = remainingBlockersAfterScenarioRr(decision, true);
     expect(after.some((l) => /risk\/reward/i.test(l))).toBe(false);
-    expect(after.some((l) => /Layer agreement/i.test(l))).toBe(true);
+    expect(after.some((l) => /don't agree/i.test(l))).toBe(true);
   });
 
   test("neutral bias yields no geometry bundle", () => {

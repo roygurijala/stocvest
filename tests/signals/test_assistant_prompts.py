@@ -121,7 +121,9 @@ def test_assistant_prompt_requires_plain_english_explanation_section() -> None:
     assert "PLAIN ENGLISH EXPLANATION (ALL SCREENS)" in ASSISTANT_SYSTEM_PROMPT
     assert "USER-FACING OUTPUT RULE" in ASSISTANT_SYSTEM_PROMPT
     assert "decision_reinforcement" in ASSISTANT_SYSTEM_PROMPT
+    assert "NEVER SAY TO USERS" in ASSISTANT_SYSTEM_PROMPT
     assert "Never invent metrics" in ASSISTANT_SYSTEM_PROMPT or "Never invent" in ASSISTANT_SYSTEM_PROMPT
+    assert "internal thresholds for structured scenario building" not in ASSISTANT_SYSTEM_PROMPT
 
 
 def test_serialize_page_context_includes_plain_english_summary() -> None:
@@ -144,7 +146,7 @@ def test_serialize_page_context_includes_plain_english_summary() -> None:
     assert "=== WHAT THE USER SEES (PLAIN ENGLISH" in out
     assert "Symbol under discussion: AAPL" in out
     assert "Monitor only" in out
-    assert "Mixed agreement across the six evidence layers" in out
+    assert "Layers don't fully agree on direction yet" in out
     assert "Trade readiness score on screen: 62" in out
 
 
@@ -158,6 +160,19 @@ def test_sanitize_assistant_user_reply_strips_internal_tokens() -> None:
     assert "gap_intel_phase_state" not in cleaned
     assert "decision_reinforcement_1" not in cleaned
     assert "monitor" in cleaned or "means" in cleaned
+
+
+def test_sanitize_assistant_user_reply_replaces_compliance_jargon() -> None:
+    raw = (
+        "Risk/reward does not meet internal thresholds for structured scenario building. "
+        "Daily and weekly timeframes diverge."
+    )
+    cleaned = sanitize_assistant_user_reply(raw)
+    assert "internal thresholds" not in cleaned.lower()
+    assert "structured scenario building" not in cleaned.lower()
+    assert "timeframes diverge" not in cleaned.lower()
+    assert "trade plan on the desk" in cleaned.lower()
+    assert "caution flag" in cleaned.lower()
 
 
 def test_serialize_page_context_emits_watchlist_plan_fields() -> None:

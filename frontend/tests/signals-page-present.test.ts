@@ -209,8 +209,8 @@ describe("signals-page-present", () => {
       isComplete: true
     });
     expect(d.state).toBe("monitor");
-    expect(executionHeadline(d.state)).toMatch(/Setup is forming/);
-    expect(d.line).toMatch(/Final confirmation/);
+    expect(executionHeadline(d.state)).toMatch(/Setup still forming/);
+    expect(d.line).toMatch(/layer agreement|risk\/reward/);
   });
 
   test("executionProgressHint when strong alignment but monitor gates", () => {
@@ -234,7 +234,7 @@ describe("signals-page-present", () => {
       rrWarning: false,
       isComplete: true
     });
-    expect(executionProgressHint("monitor", a.aligned, a.total, "Bullish", d)).toMatch(/One condition remains/);
+    expect(executionProgressHint("monitor", a.aligned, a.total, "Bullish", d)).toMatch(/One more condition/);
   });
 
   test("strongSetupExecutionBridgeLine when strong alignment and R/R blocks", () => {
@@ -258,7 +258,7 @@ describe("signals-page-present", () => {
     });
     const a = countLayerAlignment(rows, "Bullish");
     const line = strongSetupExecutionBridgeLine("monitor", a.aligned, a.total, "Bullish", d);
-    expect(line).toMatch(/Strong setup quality/);
+    expect(line).toMatch(/Layers look strong/);
     expect(line).toMatch(/0\.5:1/);
     expect(executionProgressHint("monitor", a.aligned, a.total, "Bullish", d)).toBe(line);
   });
@@ -276,7 +276,8 @@ describe("signals-page-present", () => {
     });
     const bullets = buildWhyNotBullets(d, pickPreviewLayers(bearishRows, "Bearish", 3), "Bearish", 3);
     const joined = bullets.join(" ").toLowerCase();
-    expect(joined).not.toMatch(/buy|sell|consider|watch closely|near miss/);
+    expect(joined).not.toMatch(/\b(buy|sell|watch closely|near miss)\b/);
+    expect(joined).not.toMatch(/\bconsider (buying|selling|entering)\b/);
   });
 
   test("layerPolarity blocking when internals oppose bearish", () => {

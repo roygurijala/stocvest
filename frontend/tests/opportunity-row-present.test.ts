@@ -22,7 +22,7 @@ describe("opportunity-row-present", () => {
       desk: "swing",
       alignment_ratio: 1,
       risk_reward: 0.8,
-      execution_hint: "Strong setup quality — execution blocked by risk/reward (0.8:1)."
+      execution_hint: "Layers look strong — but risk/reward (0.8:1) is too low to act on yet."
     };
     const row = buildSessionActivityRowModel(leader, {
       rank: 1,

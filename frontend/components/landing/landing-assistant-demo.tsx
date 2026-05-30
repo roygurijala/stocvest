@@ -18,7 +18,7 @@ export function LandingAssistantDemo() {
           <span className="font-semibold text-emerald-300">Assistant:</span>
           <p className="mt-2 leading-relaxed">
             The setup is bearish and five of six layers agree, but risk/reward is about 1.4:1 — below the 2.0:1 swing
-            desk threshold. The setup does not meet internal thresholds for structured scenario building yet. Best
+            desk threshold — not worth considering for scenario planning yet. Best
             adjustment: wait for a cleaner entry rather than force the trade.
           </p>
         </div>

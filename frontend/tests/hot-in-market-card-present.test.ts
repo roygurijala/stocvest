@@ -39,7 +39,7 @@ describe("hot-in-market-card-present", () => {
   test("blocked badge when execution hint mentions risk/reward", () => {
     const model = buildHotInMarketCardModel(
       baseLeader({
-        execution_hint: "Strong setup quality — execution blocked by risk/reward (0.5:1)."
+        execution_hint: "Layers look strong — but risk/reward (0.5:1) is too low to act on yet."
       }),
       { rank: 1, mode: "swing", source: "desk_cache", colors }
     );

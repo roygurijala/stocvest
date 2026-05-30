@@ -18,6 +18,10 @@ import {
   type TradeDecision,
   type TradeDecisionState
 } from "@/lib/signal-evidence/trade-decision";
+import {
+  mergeRiskRewardGateLine,
+  timeframeDivergenceReinforcement
+} from "@/lib/signal-evidence/decision-copy";
 import type { MarketStatusPayload } from "@/lib/api/market";
 import type { SwingCompositeMarketStatus } from "@/lib/api/swing-composite";
 import { isRegularSessionOpen } from "@/lib/market/regular-session";
@@ -665,19 +669,15 @@ export function buildSignalsPageDecision(input: {
       `Risk/reward too low (${riskReward.toFixed(1)}:1) — below ${mode} desk threshold (${minRr.toFixed(1)}:1).`
     );
   }
-  if (weakAgreement) reinforcements.push("Layer agreement is mixed across desks.");
+  if (weakAgreement) reinforcements.push("Layers don't agree enough across the desk.");
   if (timeframeCounterTrend) {
-    reinforcements.push(
-      mode === "day"
-        ? "Intraday and weekly timeframes diverge."
-        : "Daily and weekly timeframes diverge."
-    );
+    reinforcements.push(timeframeDivergenceReinforcement(mode));
   }
 
   if (hasInsufficient || (rrFail && weakAgreement && lowReadiness) || availableLayers < 4) {
     return {
       state: "blocked",
-      line: "Not actionable — minimum synthesis and risk gates not met",
+      line: "Not actionable — key data or risk checks not met",
       reinforcements,
       rationale: deriveDecisionRationale("blocked", rationaleCtx),
       conviction: resolveTradeConvictionTier({ ...convictionBase, decisionState: "blocked" })
@@ -686,7 +686,7 @@ export function buildSignalsPageDecision(input: {
   if (strongReadiness && !rrFail && strongAgreement && goodCoverage && !counterTrend && !timeframeCounterTrend) {
     return {
       state: "actionable",
-      line: "Actionable — internal gates cleared for this setup",
+      line: "Actionable — layers and risk/reward checks passed",
       reinforcements: [],
       rationale: null,
       conviction: resolveTradeConvictionTier({ ...convictionBase, decisionState: "actionable" })
@@ -694,7 +694,7 @@ export function buildSignalsPageDecision(input: {
   }
   return {
     state: "monitor",
-    line: "Final confirmation and/or risk conditions not yet satisfied",
+    line: "Waiting on more layer agreement and/or better risk/reward",
     reinforcements,
     rationale: deriveDecisionRationale("monitor", rationaleCtx),
     conviction: resolveTradeConvictionTier({ ...convictionBase, decisionState: "monitor" })
@@ -764,7 +764,7 @@ export function resolveExecutionDisplay(
       : "Actionable · For next market open";
     return {
       label,
-      subline: "Gates cleared — valid through next regular open; review scenario before the open",
+      subline: "Checks passed — valid through next regular open; review levels before the open",
       headline: "→ Actionable setup — for next market open",
       tone: "bullish",
       gatesCleared: true
@@ -777,9 +777,9 @@ export function resolveExecutionDisplay(
       label,
       subline:
         mode === "swing"
-          ? "Gates cleared — review levels and scenario before acting"
-          : "Gates cleared — review levels and scenario",
-      headline: "→ Actionable setup — gates cleared",
+          ? "Checks passed — review levels and scenario before acting"
+          : "Checks passed — review levels and scenario",
+      headline: "→ Actionable setup — ready to review",
       tone: "bullish",
       gatesCleared: true
     };
@@ -789,7 +789,7 @@ export function resolveExecutionDisplay(
     return {
       label: "Not actionable yet",
       subline: null,
-      headline: "→ Setup is forming — waiting on final confirmation",
+      headline: "→ Setup still forming — waiting on more agreement or better risk/reward",
       tone: "muted",
       gatesCleared: false
     };
@@ -835,13 +835,15 @@ function executionBlockedByRiskReward(decision: TradeDecision): boolean {
 }
 
 function riskRewardRatioFromDecision(decision: TradeDecision): number | null {
-  const fromRationale = decision.rationale?.text?.match(/risk\/?reward too low \(([\d.]+):1\)/i);
+  const fromRationale =
+    decision.rationale?.text?.match(/(?:risk\/?reward too low|reward doesn't justify the risk at) \(([\d.]+):1\)/i) ??
+    decision.rationale?.text?.match(/at ([\d.]+):1/i);
   if (fromRationale?.[1]) {
     const n = Number.parseFloat(fromRationale[1]);
     if (Number.isFinite(n)) return n;
   }
   for (const line of decision.reinforcements ?? []) {
-    const m = line.match(/risk\/?reward too low \(([\d.]+):1\)/i);
+    const m = line.match(/risk\/?reward(?: is)? too low \(([\d.]+):1\)/i);
     if (m?.[1]) {
       const n = Number.parseFloat(m[1]);
       if (Number.isFinite(n)) return n;
@@ -864,9 +866,9 @@ export function strongSetupExecutionBridgeLine(
   if (!executionBlockedByRiskReward(decision)) return null;
   const rr = riskRewardRatioFromDecision(decision);
   if (rr != null && Number.isFinite(rr)) {
-    return `Strong setup quality — execution blocked by risk/reward (${rr.toFixed(1)}:1).`;
+    return `Layers look strong — but risk/reward (${rr.toFixed(1)}:1) is too low to act on yet.`;
   }
-  return "Strong setup quality — execution blocked by risk/reward at this price.";
+  return "Layers look strong — but risk/reward is too low to act on at this price.";
 }
 
 /** When alignment is strong but execution gates are not cleared yet. */
@@ -891,7 +893,7 @@ export function executionProgressHint(
   }
   const tier = resolveAlignmentDisplayTier({ layersAligned, layersTotal });
   if (tier === "actionable" && state === "monitor") {
-    return "One condition remains before this becomes actionable";
+    return "One more condition before this is trade-ready";
   }
   return null;
 }
@@ -919,7 +921,7 @@ export function executionDetailToggleLabel(
 ): string | null {
   if (state === "actionable") return null;
   if (executionHint) return executionHint;
-  if (state === "monitor" || state === "blocked") return "See what is blocking execution";
+  if (state === "monitor" || state === "blocked") return "See what's holding this back";
   return null;
 }
 
@@ -933,15 +935,12 @@ function pushUniqueBullet(out: string[], line: string): void {
 }
 
 function isRiskRewardBullet(line: string): boolean {
-  return /risk\/?reward too low/i.test(line);
+  return /risk\/?reward/i.test(line) && /too low/i.test(line);
 }
 
-/** One R/R bullet: desk threshold + structured-scenario framing (avoid duplicate lines). */
+/** One R/R bullet: desk threshold + plain framing (avoid duplicate lines). */
 function mergeRiskRewardWhyNotLine(rationaleText: string, deskThresholdLine: string): string {
-  const deskPart = deskThresholdLine.match(/below .+?\(\d+(?:\.\d+)?:1\)\.?/i);
-  const rrPrefix = rationaleText.match(/^Risk\/reward too low \([^)]+\)/i)?.[0];
-  if (!rrPrefix || !deskPart) return rationaleText;
-  return `${rrPrefix} — ${deskPart[0].replace(/\.$/, "")}; does not meet internal thresholds for structured scenario building.`;
+  return mergeRiskRewardGateLine(rationaleText, deskThresholdLine);
 }
 
 /** Short label for the primary execution gate (matches KPI → panel scroll target). */
@@ -952,11 +951,11 @@ export function decisionGateCategoryLabel(category: DecisionRationaleCategory): 
     case "risk_reward":
       return "Risk / reward";
     case "confirmation":
-      return "Layer confirmation";
+      return "Layer agreement";
     case "regime":
-      return "Regime / macro";
+      return "Market tone";
     default:
-      return "Signal readiness";
+      return "Setup readiness";
   }
 }
 

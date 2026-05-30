@@ -23,7 +23,7 @@ const monitorDecision: TradeDecision = {
   rationale: {
     category: "confirmation",
     label: "Why hold:",
-    text: "Layer agreement is mixed across the six signal layers."
+    text: "The layers don't fully agree on direction yet. More need to line up before this becomes a trade worth considering."
   }
 };
 
@@ -74,13 +74,13 @@ describe("Why not vs causal narrative deduplication", () => {
       rationale: {
         category: "risk_reward",
         label: "Why hold:",
-        text: "Risk/reward too low (1.3:1) — below threshold; does not meet internal thresholds for structured scenario building."
+        text: "The reward doesn't justify the risk at 1.3:1 (below our minimum). Not worth considering for scenario planning yet."
       }
     };
     const bullets = buildWhyNotBullets(rrDecision, [], "Bullish", 5, null);
     expect(bullets).toHaveLength(1);
     expect(bullets[0]).toContain("1.3:1");
     expect(bullets[0]).toContain("swing desk threshold (2.0:1)");
-    expect(bullets[0]).toContain("structured scenario building");
+    expect(bullets[0]).toContain("worth considering");
   });
 });

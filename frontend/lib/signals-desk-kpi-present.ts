@@ -49,7 +49,7 @@ function executionSubline(
       regularSessionOpen
     }).subline;
     if (fromDisplay) return fromDisplay;
-    return "Gates cleared — review levels and scenario before acting";
+    return "Checks passed — review levels and scenario before acting";
   }
   const blocker = primaryExecutionBlockerLine(decision);
   if (blocker) return blocker;
@@ -114,7 +114,7 @@ export function buildExecutionHeaderHint(
       regularSessionOpen
     }).subline;
     if (hint) return hint;
-    return "Gates cleared — review levels and scenario";
+    return "Checks passed — review levels and scenario";
   }
   const supporting = executionSupportingGates(decision);
   if (supporting.length > 0) {
