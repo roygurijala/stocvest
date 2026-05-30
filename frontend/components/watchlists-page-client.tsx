@@ -472,11 +472,21 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     maturationReloadNonce
   ]);
 
+  const maturationReloadDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestMaturationReload = useCallback(() => {
-    if (maturationEligible && activeSymbolsDeduped.length > 0) {
+    if (!maturationEligible || activeSymbolsDeduped.length === 0) return;
+    if (maturationReloadDebounceRef.current) clearTimeout(maturationReloadDebounceRef.current);
+    maturationReloadDebounceRef.current = setTimeout(() => {
+      maturationReloadDebounceRef.current = null;
       setMaturationReloadNonce((n) => n + 1);
-    }
+    }, 400);
   }, [maturationEligible, activeSymbolsDeduped.length]);
+
+  useEffect(() => {
+    return () => {
+      if (maturationReloadDebounceRef.current) clearTimeout(maturationReloadDebounceRef.current);
+    };
+  }, []);
 
   const sessionRefreshDesks = useMemo((): SessionRefreshDesk[] => {
     if (dualDeskMaturation) return ["swing", "day"];
