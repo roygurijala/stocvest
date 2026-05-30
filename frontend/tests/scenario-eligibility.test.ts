@@ -350,8 +350,7 @@ describe("isEligibleForScenario — low risk/reward gate (BRK.B feedback, 2026-0
     // trade" or "STOCVEST will not approve this trade." It MUST frame
     // the gate as an internal threshold on structured scenario building.
     const label = scenarioIneligibilityLabel("low_risk_reward");
-    expect(label.toLowerCase()).toContain("internal thresholds");
-    expect(label.toLowerCase()).toContain("structured scenario building");
+    expect(label.toLowerCase()).toContain("scenario planning");
     // Anti-regression: phrases that imply endorsement.
     expect(label.toLowerCase()).not.toContain("we do not recommend");
     expect(label.toLowerCase()).not.toContain("trade permission");

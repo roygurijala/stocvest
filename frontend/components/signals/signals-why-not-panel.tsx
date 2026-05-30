@@ -111,8 +111,8 @@ export function SignalsWhyNotPanel({
       </p>
       <p className="m-0 mt-1 text-xs leading-snug" style={{ color: colors.textMuted }}>
         {causalNarrativeOnPage
-          ? "Primary gate and supporting conditions — layer story is in “Why layers read this way” below"
-          : "Which internal thresholds are still open — informational only"}
+          ? "Main blocker and related flags — full layer story is in “Why layers read this way” below"
+          : "What's still open on this setup — informational only"}
       </p>
 
       {hasPrimaryGate && decision.rationale ? (
@@ -125,7 +125,7 @@ export function SignalsWhyNotPanel({
           data-testid="signals-why-not-primary-gate"
         >
           <p className="m-0 text-[10px] font-semibold uppercase tracking-wide" style={{ color: colors.caution }}>
-            Primary gate · {decisionGateCategoryLabel(decision.rationale.category)}
+            Main check · {decisionGateCategoryLabel(decision.rationale.category)}
           </p>
           <p className="m-0 mt-2 text-sm font-medium leading-snug" style={{ color: colors.text }}>
             {primaryGateText ?? decision.rationale.text}

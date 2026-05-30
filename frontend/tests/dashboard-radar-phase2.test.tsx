@@ -35,7 +35,7 @@ vi.mock("@/lib/hooks/use-dashboard-desk-refresh", () => ({
             direction: "up",
             rank_score: 16.2,
             desk: "swing",
-            execution_hint: "Strong setup quality — execution blocked by risk/reward (0.5:1)."
+            execution_hint: "Layers look strong — but risk/reward (0.5:1) is too low to act on yet."
           }
         ],
         eligible_symbol_count: 120,
@@ -143,7 +143,7 @@ describe("DashboardDiscoveryFeed", () => {
               direction: "up",
               rank_score: 16.2,
               desk: "swing",
-              execution_hint: "Strong setup quality — execution blocked by risk/reward (0.5:1)."
+              execution_hint: "Layers look strong — but risk/reward (0.5:1) is too low to act on yet."
             }
           ]
         }}

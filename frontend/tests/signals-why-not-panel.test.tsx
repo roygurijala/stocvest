@@ -32,11 +32,13 @@ const row = (key: string, name: string): SignalsLayerRowInput => ({
 const monitorDecision: TradeDecision = {
   state: "monitor",
   line: "Final confirmation not yet satisfied",
-  reinforcements: ["Daily and weekly timeframes diverge."],
+  reinforcements: [
+    "The short-term and longer-term trend are pointing in different directions — that's a caution flag."
+  ],
   rationale: {
     category: "readiness",
     label: "Why hold:",
-    text: "Signal readiness is not yet decisive across the six layers. The setup does not meet internal thresholds for structured scenario building."
+    text: "Not enough signals agree yet. We need more layers to align before this becomes a trade worth considering."
   }
 };
 
@@ -51,10 +53,8 @@ describe("SignalsWhyNotPanel", () => {
       />
     );
     expect(screen.getByTestId("signals-why-not-headline")).toHaveTextContent("Not actionable yet");
-    expect(screen.getByTestId("signals-why-not-primary-gate")).toHaveTextContent(/Primary gate · Signal readiness/i);
-    expect(screen.getByTestId("signals-why-not-supporting-gates")).toHaveTextContent(
-      /Daily and weekly timeframes diverge/i
-    );
+    expect(screen.getByTestId("signals-why-not-primary-gate")).toHaveTextContent(/Main check · Setup readiness/i);
+    expect(screen.getByTestId("signals-why-not-supporting-gates")).toHaveTextContent(/caution flag/i);
     expect(screen.queryByTestId("signals-why-not-layer-preview")).toBeNull();
   });
 
@@ -66,7 +66,7 @@ describe("SignalsWhyNotPanel", () => {
       rationale: {
         category: "risk_reward",
         label: "Why hold:",
-        text: "Risk/reward too low (0.5:1) — below threshold; does not meet internal thresholds for structured scenario building."
+        text: "The reward doesn't justify the risk at 0.5:1 (below our minimum). Not worth considering for scenario planning yet."
       }
     };
     render(
@@ -79,8 +79,8 @@ describe("SignalsWhyNotPanel", () => {
     );
     const primary = screen.getByTestId("signals-why-not-primary-gate");
     expect(primary).toHaveTextContent(/0\.5:1/);
-    expect(primary).toHaveTextContent(/swing desk threshold \(2\.0:1\)/);
-    expect(primary).toHaveTextContent(/structured scenario building/);
+    expect(primary).toHaveTextContent(/below our minimum/i);
+    expect(primary).toHaveTextContent(/worth considering/i);
     expect(screen.queryByTestId("signals-why-not-supporting-gates")).toBeNull();
     expect(screen.queryByTestId("signals-why-not-layer-preview")).toBeNull();
   });

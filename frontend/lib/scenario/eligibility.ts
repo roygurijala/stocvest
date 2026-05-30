@@ -229,7 +229,7 @@ export function scenarioIneligibilityLabel(reason: ScenarioIneligibilityReason):
     case "signal_expired":
       return "Signal carries an explicit expiry that has already passed.";
     case "low_risk_reward":
-      return `Risk/reward does not meet internal thresholds for structured scenario building (desk minimum applies; A-tier is ${MIN_RR_A_TIER.toFixed(1)} : 1).`;
+      return `Risk/reward is below what we need for scenario planning (desk minimum applies; A-tier is ${MIN_RR_A_TIER.toFixed(1)} : 1).`;
     case "gap_intel_blocked":
       return "Scenario drafting is not structurally available for this market phase or data state (Gap Intelligence).";
     default: {

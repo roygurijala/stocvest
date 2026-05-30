@@ -793,10 +793,10 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
     const dir = evidence.direction;
     const sym = evidence.symbol;
     if (dir === "bullish") {
-      return `${sym} setup leans bullish based on layer agreement. Open Evidence for layer detail.`;
+      return `${sym} setup leans bullish — layers mostly agree. Open Evidence for layer detail.`;
     }
     if (dir === "bearish") {
-      return `${sym} setup leans bearish based on layer agreement. Open Evidence for layer detail.`;
+      return `${sym} setup leans bearish — layers mostly agree. Open Evidence for layer detail.`;
     }
     return `${sym} signal layers are mixed. Open Evidence for layer detail.`;
   })();

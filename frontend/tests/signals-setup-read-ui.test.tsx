@@ -72,7 +72,7 @@ describe("SignalsSetupRead", () => {
           rationale: {
             category: "confirmation",
             label: "Why hold:",
-            text: "Layer agreement is mixed across the six signal layers."
+            text: "The layers don't fully agree on direction yet. More need to line up before this becomes a trade worth considering."
           }
         }}
       />
@@ -90,7 +90,7 @@ describe("SignalsSetupRead", () => {
     expect(screen.queryByText(/Monitor progression/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/View setup evolution/i)).not.toBeInTheDocument();
     const html = document.body.innerHTML;
-    expect(html).not.toMatch(/consider|watch closely|near miss|buy|sell/i);
+    expect(html).not.toMatch(/watch closely|near miss|\bbuy\b|\bsell\b/i);
   });
 
   test("renders fundamental backdrop when summary provided", () => {
@@ -143,7 +143,7 @@ describe("SignalsSetupRead", () => {
       />
     );
     expect(screen.getByTestId("signals-setup-execution-detail-toggle")).toHaveTextContent(
-      /execution blocked by risk\/reward \(0\.5:1\)/
+      /risk\/reward \(0\.5:1\) is too low/
     );
     expect(screen.queryByTestId("signals-setup-execution-detail")).not.toBeInTheDocument();
     fireEvent.click(screen.getByTestId("signals-setup-execution-detail-toggle"));

@@ -11,6 +11,13 @@
 
 import type { SignalEvidenceData, SignalEvidenceInsight } from "@/lib/signal-evidence";
 import {
+  confirmationRationaleText,
+  dataInsufficientRationaleText,
+  readinessRationaleText,
+  regimeRationaleText,
+  riskRewardRationaleText
+} from "@/lib/signal-evidence/decision-copy";
+import {
   isRrBelowVerdictThreshold,
   resolveTradeConvictionTier,
   type TradeConvictionTierResult
@@ -75,30 +82,11 @@ export function deriveDecisionRationale(
   if (state === "actionable") return null;
   const label = state === "blocked" ? "Why blocked:" : "Why hold:";
 
-  // Copy invariants (BRK.B feedback, 2026-05-13):
-  //
-  // The previous wording threaded "STOCVEST … before granting trade
-  // permission" through every rationale variant. Users read that phrase
-  // as STOCVEST claiming gatekeeper authority over their trade
-  // decisions — which is exactly the implication our legal posture is
-  // built to avoid. STOCVEST does not grant or withhold trade
-  // permission; we surface signal data and the user decides.
-  //
-  // Replacement framing throughout this function: describe the gate as
-  // an *internal threshold for structured scenario building*. That is:
-  // STOCVEST has internal numerical thresholds for when the reference
-  // levels it carries form a coherent planning structure, and the
-  // current setup hasn't cleared those thresholds. The user is free to
-  // proceed however they wish on their own broker — STOCVEST is simply
-  // declining to construct a Scenario Builder sheet against
-  // structurally degenerate inputs.
-
   if (ctx.hasInsufficient || ctx.coverageThin) {
     return {
       category: "data_insufficient",
       label,
-      text:
-        "Layer coverage is too thin to evaluate this setup with conviction. The setup does not meet internal thresholds for structured scenario building until additional layers populate."
+      text: dataInsufficientRationaleText()
     };
   }
   if (ctx.rrFail) {
@@ -106,30 +94,27 @@ export function deriveDecisionRationale(
     return {
       category: "risk_reward",
       label,
-      text: `Risk/reward too low (${rrStr}:1) — below threshold; does not meet internal thresholds for structured scenario building.`
+      text: riskRewardRationaleText(rrStr)
     };
   }
   if (ctx.weakAgreement) {
     return {
       category: "confirmation",
       label,
-      text:
-        "Layer agreement is mixed across the six signal layers. The setup does not meet internal thresholds for structured scenario building until directional confirmation strengthens."
+      text: confirmationRationaleText()
     };
   }
   if (ctx.counterTrend || ctx.regimeConflict) {
     return {
       category: "regime",
       label,
-      text:
-        "Macro or regime context conflicts with this direction. The setup does not meet internal thresholds for structured scenario building while regime alignment is opposed."
+      text: regimeRationaleText()
     };
   }
   return {
     category: "readiness",
     label,
-    text:
-      "Signal readiness is not yet decisive across the six layers. The setup does not meet internal thresholds for structured scenario building."
+    text: readinessRationaleText()
   };
 }
 
@@ -162,11 +147,19 @@ export function synthTradeDecision(
   const regimeConflict = evidence.alignment?.macro_supports === false;
 
   const reinforcements: string[] = [];
-  if (rrFail) reinforcements.push(`Risk/Reward below minimum threshold (${rr.toFixed(1)} : 1).`);
-  if (agreementPct != null && weakAgreement) reinforcements.push(`Mixed layer alignment (${agreementPct}%).`);
-  if (agreementPct == null && directionalLayers < 3) reinforcements.push("Limited directional confirmation across layers.");
-  if (availableLayers < 5) reinforcements.push(`Limited layer coverage (${availableLayers}/${totalLayers} available).`);
-  if (counterTrend) reinforcements.push("Counter-trend versus macro/sector context.");
+  if (rrFail) {
+    reinforcements.push(`Risk/reward is too low (${rr.toFixed(1)}:1) for this desk's minimum.`);
+  }
+  if (agreementPct != null && weakAgreement) {
+    reinforcements.push(`Only ${agreementPct}% of layers agree on direction.`);
+  }
+  if (agreementPct == null && directionalLayers < 3) {
+    reinforcements.push("Few layers are pointing clearly in one direction.");
+  }
+  if (availableLayers < 5) {
+    reinforcements.push(`Limited layer coverage (${availableLayers}/${totalLayers} available).`);
+  }
+  if (counterTrend) reinforcements.push("Setup fights the broader market tone.");
 
   const rationaleCtx = {
     rr,
@@ -194,7 +187,7 @@ export function synthTradeDecision(
   if (hasInsufficient || (rrFail && weakAgreement && lowReadiness) || availableLayers < 4) {
     return {
       state: "blocked",
-      line: "Decision: 🚫 Blocked — fails minimum synthesis and risk gates",
+      line: "Decision: Blocked — not enough data or key risk checks failed",
       reinforcements,
       rationale: deriveDecisionRationale("blocked", rationaleCtx),
       conviction: resolveTradeConvictionTier({ ...convictionInput, decisionState: "blocked" })
@@ -203,7 +196,7 @@ export function synthTradeDecision(
   if (strongReadiness && !rrFail && strongAgreement && goodCoverage && !counterTrend) {
     return {
       state: "actionable",
-      line: "Decision: ✅ Actionable — passes risk/reward and confirmation thresholds",
+      line: "Decision: Actionable — layers and risk/reward checks passed",
       reinforcements: [],
       rationale: null,
       conviction: resolveTradeConvictionTier({ ...convictionInput, decisionState: "actionable" })
@@ -211,7 +204,7 @@ export function synthTradeDecision(
   }
   return {
     state: "monitor",
-    line: "Decision: ⚠️ Monitor only — confirmation and/or risk gates are not fully cleared",
+    line: "Decision: Monitor — waiting on more confirmation or better risk/reward",
     reinforcements,
     rationale: deriveDecisionRationale("monitor", rationaleCtx),
     conviction: resolveTradeConvictionTier({ ...convictionInput, decisionState: "monitor" })

@@ -31,19 +31,21 @@ describe("enrichSignalsDeskAssistantContext", () => {
       decision: {
         state: "monitor",
         line: "Final confirmation not yet satisfied",
-        reinforcements: ["Daily and weekly timeframes diverge."],
+        reinforcements: [
+          "The short-term and longer-term trend are pointing in different directions — that's a caution flag."
+        ],
         rationale: {
           category: "readiness",
           label: "Why hold:",
           text:
-            "Signal readiness is not yet decisive across the six layers. The setup does not meet internal thresholds for structured scenario building."
+            "Not enough signals agree yet. We need more layers to align before this becomes a trade worth considering."
         }
       }
     });
     expect(enriched.setup_bias).toBe("Bullish");
     expect(enriched.alignment_display).toContain("Strong");
     expect(enriched.execution_readiness_label).toBe("Not actionable yet");
-    expect(enriched.decision_reinforcements).toEqual(["Daily and weekly timeframes diverge."]);
+    expect(enriched.decision_reinforcements?.[0]).toContain("caution flag");
     expect(enriched.maturation_label).toBe("Strong (5/6)");
     expect(enriched.execution_hint).toBeTruthy();
   });

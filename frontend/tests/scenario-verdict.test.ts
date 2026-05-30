@@ -43,7 +43,7 @@ describe("resolveScenarioVerdict — strict gates", () => {
     const v = resolveScenarioVerdict({
       systemDecision: decision({
         state: "monitor",
-        reinforcements: ["Layer agreement is mixed across desks."]
+        reinforcements: ["Layers don't agree enough across the desk."]
       }),
       mode: "swing",
       direction: "bullish",
@@ -61,7 +61,7 @@ describe("resolveScenarioVerdict — strict gates", () => {
         state: "actionable",
         rationale: {
           category: "risk_reward",
-          text: "Risk/reward too low (1.3:1) — below threshold; does not meet internal thresholds for structured scenario building."
+          text: "The reward doesn't justify the risk at 1.3:1 (below our minimum). Not worth considering for scenario planning yet."
         },
         reinforcements: ["Risk/reward too low (1.3:1) — below swing desk threshold (2.0:1)."]
       }),

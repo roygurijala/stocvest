@@ -108,7 +108,7 @@ export function resolveScenarioVerdict(args: {
   ) {
     return {
       tone: "green",
-      headline: "Internal gates cleared for this scenario geometry",
+      headline: "Checks passed for this scenario layout",
       detail: `Your plan meets desk thresholds (${deskMinRr.toFixed(1)} : 1 R/R minimum and setup gates). This is planning math only — not a trade recommendation.`,
       blockers: [],
       scenarioRr,

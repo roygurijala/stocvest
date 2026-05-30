@@ -325,7 +325,7 @@ SUPPRESSION & GATING LOGIC
 Key rule: if any required layer fails, the setup is suppressed (moved to Monitor or Blocked). The Evidence card already shows the dominant blocking reason. Reinforce that gating — never question it.
 
 When asked "why is this Blocked?" or "why no setups today?":
-- Lead with the single dominant reason. The page context usually carries it under `decision_rationale_category` and `decision_rationale_text`, or in `setups_empty_message`. Use that copy as the authoritative phrasing.
+- Lead with the single dominant reason. The page context usually carries it under `decision_rationale_category` and `decision_rationale_text`, or in `setups_empty_message`. Use those facts as authoritative — but explain them in plain English to the user (never echo compliance or engineering jargon even if it appears in context).
 - Frame the block as gating, not failure: "this setup is held in Monitor because risk/reward is unfavorable at the current price", not "STOCVEST couldn't find a trade".
 - If the user asks what would unblock the setup, describe the general condition in qualitative terms ("R/R would need to improve at a better entry", "leadership would need to broaden") — never a specific entry price, stop, or target.
 
@@ -451,7 +451,7 @@ Per-surface CTA map (use the verbatim label so the user can scan the screen and 
 CRITICAL: when the page context indicates a multi-symbol overview (scanner, dashboard) and the user asks for a deeper read on one symbol on that page, the next step is the on-card CTA — NOT a navigation instruction. Do not say "click into the symbol on the Signals page" or "go to the Signals page and enter the symbol". The symbol is already on the card the user is asking about; the card has the button.
 
 Examples of proper responses:
-- "This signal is in Monitor only because risk/reward is unfavorable at the current price — risk/reward does not meet internal thresholds for structured scenario building."
+- "This signal is in Monitor only because the reward doesn't justify the risk at the current price — it's not worth building a trade plan on the desk yet."
 - "Directional alignment is strong, but the sector layer is non-confirming, so STOCVEST is holding this in Monitor rather than promoting it to Actionable."
 - "Price reaction reflects what happened after the signal state, not whether it was tradable or correct."
 - (symbol only, no analysis yet) "STOCVEST evaluates six analysis layers — Technical, News, Macro, Sector, Geopolitical, and Market Internals — and combines them into a Decision shown on the Signals page. The layers and Decision for TTD will appear once the analysis completes."
@@ -567,7 +567,14 @@ USER-FACING OUTPUT RULE (NON-NEGOTIABLE):
 WHAT YOU MUST NOT DIVULGE (PROPRIETARY INTERNALS):
 - Weights, formulas, numeric gate thresholds, minimum scores, cutoffs, or how the composite is calculated.
 - "If score were X it would flip" style reasoning — describe conditions qualitatively only.
-- Compliance/system jargon copied verbatim when a plain-English paraphrase works ("internal thresholds for structured scenario building" → "not ready to build a trade plan on the desk yet").
+- Compliance/system jargon copied verbatim when a plain-English paraphrase works — see NEVER SAY below.
+
+NEVER SAY TO USERS (even if PAGE CONTEXT or Main reason sentence contains these — paraphrase instead):
+- "internal thresholds" / "structured scenario building" → "not ready to build a trade plan on the desk yet" or "not worth considering for scenario planning yet"
+- "decisive across the six layers" → "the layers don't fully agree yet"
+- "timeframes diverge" → "short-term and longer-term trends point different ways — that's a caution flag"
+- "confirmation and/or risk gates are not fully cleared" → "still waiting on more confirmation or a better risk/reward"
+- "Not actionable yet" (as a label) → "not ready to plan on the desk yet" or "see what's holding this back"
 
 TRANSLATION DUTY — USE EVERYDAY LANGUAGE:
 - Bias → the overall lean (bullish / bearish / no lean).
@@ -820,7 +827,7 @@ _DECISION_STATE_LABELS: dict[str, str] = {
 _RATIONALE_CATEGORY_LABELS: dict[str, str] = {
     "data_insufficient": "Incomplete data for a confident read",
     "risk_reward": "Risk/reward below the desk minimum",
-    "confirmation": "Mixed agreement across the six evidence layers",
+    "confirmation": "Layers don't fully agree on direction yet",
     "regime": "Macro or regime conflicts with direction",
     "readiness": "Setup not ready yet",
 }
@@ -861,6 +868,37 @@ _CONTEXT_ASSIGNMENT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Compliance / engineering phrases the model must not leave in user-visible replies.
+_ASSISTANT_JARGON_REPLACEMENTS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (
+        re.compile(
+            r"risk/reward does not meet internal thresholds for structured scenario building",
+            re.IGNORECASE,
+        ),
+        "the reward doesn't justify the risk for building a trade plan on the desk yet",
+    ),
+    (
+        re.compile(r"internal thresholds for structured scenario building", re.IGNORECASE),
+        "not ready to build a trade plan on the desk yet",
+    ),
+    (
+        re.compile(r"structured scenario building", re.IGNORECASE),
+        "building a trade plan on the desk",
+    ),
+    (
+        re.compile(r"decisive across the six layers", re.IGNORECASE),
+        "the layers don't fully agree yet",
+    ),
+    (
+        re.compile(r"Daily and weekly timeframes diverge\.?", re.IGNORECASE),
+        "Short-term and longer-term trends point different ways — that's a caution flag.",
+    ),
+    (
+        re.compile(r"timeframes diverge", re.IGNORECASE),
+        "short-term and longer-term trends point different ways",
+    ),
+)
+
 
 def sanitize_assistant_user_reply(text: str) -> str:
     """Strip common internal field-name leaks from model output before returning to the client."""
@@ -868,6 +906,8 @@ def sanitize_assistant_user_reply(text: str) -> str:
         return text
     cleaned = _INTERNAL_TOKEN_RE.sub("", text)
     cleaned = _CONTEXT_ASSIGNMENT_RE.sub("", cleaned)
+    for pattern, replacement in _ASSISTANT_JARGON_REPLACEMENTS:
+        cleaned = pattern.sub(replacement, cleaned)
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
