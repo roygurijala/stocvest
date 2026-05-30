@@ -438,29 +438,38 @@ class PolygonClient:
         ticker = data.get("ticker", {})
         return self._parse_snapshot(symbol, ticker)
 
+    @staticmethod
+    def _index_snapshot_try_order(symbol: str) -> list[str]:
+        """Ordered Polygon tickers to try for VIX / index snapshots."""
+        from stocvest.api.services.morning_brief_fetch import VIX_SNAPSHOT_FALLBACK_SYMBOLS
+
+        u = (symbol or "").strip().upper()
+        if not u:
+            return []
+        if u in VIX_SNAPSHOT_FALLBACK_SYMBOLS or "VIX" in u:
+            return list(dict.fromkeys([*VIX_SNAPSHOT_FALLBACK_SYMBOLS, u]))
+        return PolygonClient._index_snapshot_ticker_candidates(u)
+
     async def get_snapshot(self, symbol: str) -> Snapshot:
         """Fetch a single ticker snapshot (equities via stocks v2; indices via v3 indices first)."""
         sym = (symbol or "").strip().upper()
         if self._is_polygon_index_snapshot_symbol(sym):
-            for candidate in self._index_snapshot_ticker_candidates(sym):
-                try:
-                    by_sym = await self.get_indices_snapshots([candidate])
-                except PolygonError:
-                    continue
-                hit = by_sym.get(candidate)
+            candidates = self._index_snapshot_try_order(sym)
+            by_index = await self.get_indices_snapshots(candidates)
+            for candidate in candidates:
+                hit = by_index.get(candidate)
                 if hit is not None:
                     return hit
-            try:
-                return await self._get_snapshot_from_stocks_endpoint(sym)
-            except PolygonError:
-                for alt in self._index_snapshot_ticker_candidates(sym):
-                    if alt == sym:
-                        continue
-                    try:
-                        return await self._get_snapshot_from_stocks_endpoint(alt)
-                    except PolygonError:
-                        continue
-                raise
+            last_error: PolygonError | None = None
+            for candidate in candidates:
+                try:
+                    return await self._get_snapshot_from_stocks_endpoint(candidate)
+                except PolygonError as exc:
+                    last_error = exc
+                    continue
+            if last_error is not None:
+                raise last_error
+            raise PolygonError(f"No snapshot for index symbol {sym}")
         return await self._get_snapshot_from_stocks_endpoint(sym)
 
     async def get_snapshots(self, symbols: list[str]) -> dict[str, Snapshot]:
@@ -484,14 +493,21 @@ class PolygonClient:
         if index_syms:
             index_tickers: list[str] = []
             for sym in index_syms:
-                index_tickers.extend(self._index_snapshot_ticker_candidates(sym))
+                index_tickers.extend(self._index_snapshot_try_order(sym))
             by_index = await self.get_indices_snapshots(list(dict.fromkeys(index_tickers)))
             for sym in index_syms:
-                for candidate in self._index_snapshot_ticker_candidates(sym):
+                for candidate in self._index_snapshot_try_order(sym):
                     hit = by_index.get(candidate)
                     if hit is not None:
                         result[sym] = hit
                         break
+            for sym in index_syms:
+                if sym in result:
+                    continue
+                try:
+                    result[sym] = await self.get_snapshot(sym)
+                except PolygonError as exc:
+                    log.debug("get_snapshots index fallback failed sym=%s: %s", sym, exc)
         log.debug("get_snapshots(%d symbols) → %d results", len(symbols), len(result))
         return result
 
@@ -512,7 +528,14 @@ class PolygonClient:
             return {}
         unique = list(dict.fromkeys(str(t).strip().upper() for t in tickers if str(t).strip()))
         params = {"ticker.any_of": ",".join(unique)}
-        data = await self._get("/v3/snapshot/indices", params)
+        try:
+            data = await self._get("/v3/snapshot/indices", params)
+        except PolygonError as exc:
+            msg = str(exc)
+            if "403" in msg or "NOT_AUTHORIZED" in msg or "not entitled" in msg.lower():
+                log.warning("indices snapshot unavailable (plan): %s", msg[:160])
+                return {}
+            raise
         out: dict[str, Snapshot] = {}
         for row in data.get("results", []) or []:
             if not isinstance(row, dict):
