@@ -110,11 +110,9 @@ import {
 import { WATCHLIST_SYMBOLS_CHANGED_EVENT } from "@/lib/watchlist-membership-client";
 import { LAYER_NAME_HINTS } from "@/lib/ui-tooltips";
 import { isInsufficientCompositeResponse, type SwingCompositeMarketStatus } from "@/lib/api/swing-composite";
-import { synthTradeDecision } from "@/lib/signal-evidence/trade-decision";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
-import { narrowGapIntelForAssistant } from "@/lib/assistant/gap-intel-context";
-import { enrichSignalsDeskAssistantContext } from "@/lib/assistant/signals-desk-assistant-context";
-import type { AssistantPageContext, AssistantLayerKey, AssistantLayerStatus } from "@/lib/assistant/types";
+import { buildSignalsPageAssistantContext } from "@/lib/assistant/build-signals-assistant-context";
+import type { AssistantPageContext } from "@/lib/assistant/types";
 
 type LayerStatus = "Bullish" | "Bearish" | "Neutral" | "Unavailable" | "As of close";
 
@@ -1512,110 +1510,61 @@ export function SignalsPageClient({
   ]);
 
   /**
-   * Build the page-context payload published to the STOCVEST Assistant chatbot.
-   *
-   * The chatbot's locked system prompt lives on the server; this hook only forwards what
-   * is visible on screen so the assistant can ground its explanations in the same data
-   * the user is looking at. `synthTradeDecision` is the single source of truth for the
-   * Decision state and rationale — the Evidence card reads it for display, this hook
-   * reads it for chatbot context. No internal weights or thresholds are exposed.
+   * Assistant page context mirrors the Signals desk (composite + `pageDecision`), not only
+   * the Evidence modal payload — so chat stays aligned with what the user sees on screen.
    */
-  const assistantContext = useMemo<AssistantPageContext | null>(() => {
-    const pageId = "signals/layers";
-    const sym = symbol.trim().toUpperCase();
-    if (!sym) {
-      return { page: pageId, trading_mode: tradingMode };
-    }
-    /**
-     * Always derive the partial layer status from `signalEvidence.layers` if it exists, even
-     * when `insight` is missing. The assistant uses this to ground its answer in what the
-     * page can show, not just the symbol. When neither is loaded, mark analysis_status so
-     * the assistant explains STOCVEST in general terms instead of describing its own access.
-     */
-    const layerStatus: Partial<Record<AssistantLayerKey, AssistantLayerStatus>> = {};
-    for (const layer of signalEvidence?.layers ?? []) {
-      const k = layer.key as AssistantLayerKey;
-      if (
-        k === "technical" ||
-        k === "news" ||
-        k === "macro" ||
-        k === "sector" ||
-        k === "geopolitical" ||
-        k === "internals"
-      ) {
-        layerStatus[k] = layer.status;
-      }
-    }
-    const layerStatusForCtx = Object.keys(layerStatus).length > 0 ? layerStatus : undefined;
-
-    const gapIntelForAssistant = sym ? narrowGapIntelForAssistant(gapIntelSnapshot) : undefined;
-
-    if (!signalEvidence || !signalEvidence.insight) {
-      return {
-        page: pageId,
-        trading_mode: tradingMode,
-        symbol: sym || undefined,
-        analysis_status: sym ? "loading" : undefined,
-        layer_status: layerStatusForCtx,
-        ...(gapIntelForAssistant ? { gap_intel: gapIntelForAssistant } : {})
-      };
-    }
-    const insight = signalEvidence.insight;
-    const decision = synthTradeDecision(signalEvidence, insight, tradingMode);
-    const base: AssistantPageContext = {
-      page: pageId,
-      trading_mode: tradingMode,
-      symbol: sym,
-      analysis_status: "loaded",
-      decision_state: decision.state,
-      decision_line: decision.line,
-      decision_rationale: decision.rationale ?? undefined,
-      trade_readiness:
-        setupJudgment?.engineScores?.quality ??
-        (typeof insight.signal_score === "number" && Number.isFinite(insight.signal_score)
-          ? insight.signal_score
-          : null),
-      risk_reward:
-        typeof insight.risk_reward === "number" && Number.isFinite(insight.risk_reward)
-          ? insight.risk_reward
-          : null,
-      trend_strength: insight.trend_strength || undefined,
-      trend_direction: insight.trend_direction || undefined,
-      market_regime: insight.market_regime || undefined,
-      causal_narrative_summary: causalNarrative?.summary,
-      causal_blocking_chain: causalNarrative?.chainLabel || undefined,
-      timeframe_alignment_label: timeframeContext?.alignment.label,
-      layer_alignment_pct:
-        insight.alignment_ratio != null && Number.isFinite(insight.alignment_ratio)
-          ? Math.round(Math.max(0, Math.min(1, insight.alignment_ratio)) * 100)
-          : null,
-      layer_status: layerStatusForCtx,
-      ...(gapIntelForAssistant ? { gap_intel: gapIntelForAssistant } : {})
-    };
-    return enrichSignalsDeskAssistantContext(base, {
-      setupBias,
-      rows: signalsPresentRows,
-      decision,
-      alignmentRatio: compositeAlignmentRatio,
-      maturationState: maturationLine?.state,
-      maturationLabel: commandBarMaturationLine?.label ?? null,
+  const assistantContext = useMemo<AssistantPageContext | null>(
+    () =>
+      buildSignalsPageAssistantContext({
+        tradingMode,
+        symbol,
+        symbolCommitted,
+        hasValidSignal,
+        compositeLoading: showCompositeLoading,
+        isInsufficientComposite: Boolean(insufficientComposite),
+        pageDecision,
+        signalsPresentRows,
+        setupBias,
+        compositeAlignmentRatio,
+        layerAgreementPercent,
+        setupJudgment,
+        compositeResult:
+          compositeResult != null && !isInsufficientCompositeResponse(compositeResult)
+            ? (compositeResult as Record<string, unknown>)
+            : null,
+        causalNarrativeSummary: causalNarrative?.summary ?? null,
+        causalBlockingChain: causalNarrative?.chainLabel ?? null,
+        timeframeAlignmentLabel: timeframeContext?.alignment.label ?? null,
+        maturationState: maturationLine?.state ?? null,
+        maturationLabel: commandBarMaturationLine?.label ?? null,
+        regularSessionOpen,
+        gapIntelSnapshot,
+        signalEvidence
+      }),
+    [
       tradingMode,
-      regularSessionOpen
-    });
-  }, [
-    tradingMode,
-    symbol,
-    signalEvidence,
-    gapIntelSnapshot,
-    causalNarrative,
-    timeframeContext,
-    setupBias,
-    signalsPresentRows,
-    compositeAlignmentRatio,
-    maturationLine?.state,
-    commandBarMaturationLine?.label,
-    regularSessionOpen
-  ]);
+      symbol,
+      symbolCommitted,
+      hasValidSignal,
+      showCompositeLoading,
+      insufficientComposite,
+      pageDecision,
+      signalsPresentRows,
+      setupBias,
+      compositeAlignmentRatio,
+      layerAgreementPercent,
+      setupJudgment,
+      compositeResult,
+      causalNarrative?.summary,
+      causalNarrative?.chainLabel,
+      timeframeContext?.alignment.label,
+      maturationLine?.state,
+      commandBarMaturationLine?.label,
+      regularSessionOpen,
+      gapIntelSnapshot,
+      signalEvidence
+    ]
+  );
 
   usePublishAssistantContext(assistantContext);
 
