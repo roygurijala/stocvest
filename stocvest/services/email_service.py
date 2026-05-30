@@ -7,6 +7,7 @@ import json
 from typing import Any
 
 from stocvest.data.models import AlertType
+from stocvest.services.alert_email_present import format_direction
 from stocvest.services.postmark_client import send_postmark_html_email
 from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
@@ -110,19 +111,15 @@ class EmailService:
         d = html_mod.escape(detail)
         label = html_mod.escape(cta_label)
         cta_esc = html_mod.escape(cta)
-        return f"""<!DOCTYPE html>
-<html><body style="margin:0;padding:24px;background:#0a1628;color:#c8dff0;font-family:system-ui,sans-serif;">
-  <div style="max-width:560px;margin:0 auto;">
-    <div style="font-size:14px;letter-spacing:0.12em;color:#00b4ff;font-weight:700;">STOCVEST</div>
-    <h1 style="font-size:20px;margin:12px 0 16px;color:#e8f4ff;">{h}</h1>
-    <p style="font-size:15px;line-height:1.55;color:#c8dff0;">{d}</p>
-    <a href="{cta_esc}" style="display:inline-block;margin-top:20px;padding:12px 20px;background:#00b4ff;color:#041018;
-      text-decoration:none;border-radius:8px;font-weight:600;">{label}</a>
-    <p style="margin-top:28px;font-size:12px;color:#6b8799;line-height:1.5;">
-      You are receiving this because you started a Stocvest trial with email notifications enabled.
-    </p>
-  </div>
-</body></html>"""
+        return self._email_shell(
+            headline=h,
+            body_html=f'<p style="font-size:15px;line-height:1.55;color:#1a2b3c;margin:0 0 8px;">{d}</p>',
+            cta_href=cta_esc,
+            cta_label=label,
+            footer_note=(
+                "You are receiving this because you started a Stocvest trial with email notifications enabled."
+            ),
+        )
 
     def _build_subject(self, alert_type: AlertType, context: dict[str, Any]) -> str:
         sym = str(context.get("symbol") or "").strip().upper()
@@ -154,17 +151,92 @@ class EmailService:
             return f"STOCVEST · {sym}{mode_part} maturation: {arrow}"
         return "STOCVEST · Alert"
 
+    def _alert_detail_rows(self, alert_type: AlertType, context: dict[str, Any]) -> list[tuple[str, str]]:
+        if alert_type == AlertType.WATCHLIST_MATURATION:
+            mode_s = str(context.get("mode") or "").strip().lower()
+            mode_label = "Swing" if mode_s == "swing" else "Day" if mode_s == "day" else mode_s.capitalize()
+            rows: list[tuple[str, str]] = [
+                ("Symbol", str(context.get("symbol") or "").upper()),
+                ("Desk", mode_label or "—"),
+                ("Change", f"{context.get('previous_label') or '—'} → {context.get('new_label') or '—'}"),
+            ]
+            return rows
+        sym = str(context.get("symbol") or "").upper()
+        direction = format_direction(str(context.get("direction") or ""))
+        strength = int(context.get("strength") or context.get("signal_strength") or 0)
+        pattern = str(context.get("pattern") or "—")
+        rows = [
+            ("Symbol", sym),
+            ("Direction", direction),
+            ("Strength", f"{strength}%"),
+            ("Setup", pattern),
+        ]
+        n_conf = int(context.get("n_confirming") or 0)
+        if alert_type == AlertType.CONFLUENCE_ALERT or n_conf > 0:
+            rows.append(("Confirming layers", str(n_conf)))
+        return rows
+
+    @staticmethod
+    def _email_shell(
+        *,
+        headline: str,
+        body_html: str,
+        cta_href: str,
+        cta_label: str,
+        footer_note: str,
+        prefs_url: str | None = None,
+        disclaimer: str | None = None,
+    ) -> str:
+        prefs_line = ""
+        if prefs_url:
+            prefs_line = (
+                f'<p style="font-size:12px;color:#5c6f82;margin:8px 0 0;">'
+                f'<a href="{html.escape(prefs_url)}" style="color:#0077c8;">Manage alert preferences</a></p>'
+            )
+        disc = ""
+        if disclaimer:
+            disc = (
+                f'<p style="margin-top:20px;font-size:12px;color:#5c6f82;line-height:1.5;">'
+                f"{html.escape(disclaimer)}</p>"
+            )
+        footer = ""
+        if footer_note:
+            footer = (
+                f'<p style="margin-top:20px;font-size:12px;color:#5c6f82;line-height:1.5;">'
+                f"{html.escape(footer_note)}</p>"
+            )
+        return f"""<!DOCTYPE html>
+<html><head><meta name="color-scheme" content="light"/><meta name="supported-color-schemes" content="light"/></head>
+<body style="margin:0;padding:24px;background:#f4f7fa;color:#1a2b3c;font-family:system-ui,-apple-system,sans-serif;">
+  <div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #d8e2ec;border-radius:12px;padding:24px;">
+    <div style="font-size:13px;letter-spacing:0.12em;color:#0077c8;font-weight:700;">STOCVEST</div>
+    <h1 style="font-size:20px;margin:12px 0 16px;color:#0f1c2e;font-weight:700;line-height:1.35;">{headline}</h1>
+    {body_html}
+    <a href="{cta_href}" style="display:inline-block;margin-top:20px;padding:12px 20px;background:#0077c8;color:#ffffff;
+      text-decoration:none;border-radius:8px;font-weight:600;">{cta_label}</a>
+    {disc}
+    {footer}
+    {prefs_line}
+  </div>
+</body></html>"""
+
     def _build_html_body(self, alert_type: AlertType, context: dict[str, Any]) -> str:
         settings = get_settings()
         base = (settings.stocvest_public_app_url or "https://stocvest.ai").rstrip("/")
         prefs_url = f"{base}/dashboard/settings#alerts"
-        sym = html.escape(str(context.get("symbol") or "").upper())
         title = html.escape(self._build_subject(alert_type, context))
         detail_rows = "".join(
-            f"<tr><td style='padding:6px 12px;color:#8aa4bf;'>{html.escape(str(k))}</td>"
-            f"<td style='padding:6px 12px;color:#c8dff0;font-weight:600;'>{html.escape(str(v))}</td></tr>"
-            for k, v in context.items()
-            if v is not None
+            f"<tr><td style='padding:8px 12px;color:#5c6f82;font-size:14px;vertical-align:top;width:38%;'>"
+            f"{html.escape(label)}</td>"
+            f"<td style='padding:8px 12px;color:#0f1c2e;font-size:14px;font-weight:600;'>"
+            f"{html.escape(str(value))}</td></tr>"
+            for label, value in self._alert_detail_rows(alert_type, context)
+        )
+        table_html = (
+            f'<table style="width:100%;border-collapse:collapse;margin:0 0 8px;background:#f8fafc;'
+            f'border-radius:8px;">{detail_rows}</table>'
+            if detail_rows
+            else ""
         )
         if alert_type == AlertType.WATCHLIST_MATURATION:
             cta = f"{base}/dashboard/watchlists"
@@ -177,22 +249,15 @@ class EmailService:
             cta = f"{base}/dashboard/signals"
             cta_label = "View signal"
             disclaimer = "Signal data for informational purposes only. Not investment advice."
-        return f"""<!DOCTYPE html>
-<html><body style="margin:0;padding:24px;background:#0a1628;color:#c8dff0;font-family:system-ui,sans-serif;">
-  <div style="max-width:560px;margin:0 auto;">
-    <div style="font-size:14px;letter-spacing:0.12em;color:#00b4ff;font-weight:700;">STOCVEST</div>
-    <h1 style="font-size:20px;margin:12px 0 16px;color:#e8f4ff;">{title}</h1>
-    <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">{detail_rows}</table>
-    <a href="{cta}" style="display:inline-block;padding:12px 20px;background:#00b4ff;color:#041018;
-      text-decoration:none;border-radius:8px;font-weight:600;">{html.escape(cta_label)}</a>
-    <p style="margin-top:28px;font-size:12px;color:#6b8799;line-height:1.5;">
-      {disclaimer}
-    </p>
-    <p style="font-size:12px;color:#6b8799;">
-      <a href="{prefs_url}" style="color:#00b4ff;">Manage alert preferences</a>
-    </p>
-  </div>
-</body></html>"""
+        return self._email_shell(
+            headline=title,
+            body_html=table_html,
+            cta_href=html.escape(cta),
+            cta_label=html.escape(cta_label),
+            footer_note="",
+            prefs_url=prefs_url,
+            disclaimer=disclaimer,
+        )
 
 
 def preview_context_json(context: dict[str, Any]) -> str:

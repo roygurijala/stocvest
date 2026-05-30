@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from stocvest.data.alert_store import DynamoDBAlertStore, get_alert_store
 from stocvest.data.watchlist_store import WatchlistStore, get_watchlist_store
+from stocvest.services.alert_signal_email_gate import min_signal_fired_email_strength
 from stocvest.services.alert_trigger import AlertTriggerService, get_alert_trigger
 from stocvest.signals import IntradaySetupCandidate
 from stocvest.utils.log_privacy import user_ref_for_logs
@@ -15,6 +16,7 @@ _LOG = get_logger(__name__)
 def notify_intraday_setups_for_watchlist_users(
     setups: list[IntradaySetupCandidate],
     *,
+    macro_regime: str | None = None,
     watchlist_store: WatchlistStore | None = None,
     alert_store: DynamoDBAlertStore | None = None,
     profile_store: object | None = None,
@@ -29,8 +31,14 @@ def notify_intraday_setups_for_watchlist_users(
 
         profile_store = get_user_profile_store()
 
+    min_strength = min_signal_fired_email_strength()
+
     for setup in setups:
         sym = setup.symbol.strip().upper()
+        strength = int(max(0, min(100, round(float(setup.score) * 100))))
+        trigger_count = len(setup.triggers or [])
+        if strength < min_strength or trigger_count < 2:
+            continue
         try:
             user_ids = wl.find_users_with_default_watchlist_symbol(sym)
         except Exception as exc:  # noqa: BLE001 — never break caller
@@ -47,7 +55,6 @@ def notify_intraday_setups_for_watchlist_users(
                 prefs = alerts.get_preferences(uid)
                 if not prefs.email_enabled:
                     continue
-                strength = int(max(0, min(100, round(float(setup.score) * 100))))
                 pattern = " ".join(setup.triggers) if setup.triggers else "intraday_setup"
                 trigger.trigger_signal_alert(
                     user_id=uid,
@@ -58,6 +65,9 @@ def notify_intraday_setups_for_watchlist_users(
                     pattern=pattern,
                     is_confluence=False,
                     confluence_score=None,
+                    macro_regime=macro_regime,
+                    trigger_count=trigger_count,
+                    ledger_qualified=False,
                 )
             except Exception as exc:  # noqa: BLE001
                 _LOG.warning(

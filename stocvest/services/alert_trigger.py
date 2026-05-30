@@ -10,6 +10,8 @@ from stocvest.data.alert_store import DynamoDBAlertStore, new_history_alert_id
 from stocvest.data.models import AlertChannel, AlertPreferences, AlertRecord, AlertStatus, AlertType
 from stocvest.data.watchlist_store import WatchlistStore
 from stocvest.models.watchlist import STATE_LABELS, WatchlistMode, WatchlistState
+from stocvest.services.alert_email_present import format_alert_pattern, format_direction
+from stocvest.services.alert_signal_email_gate import signal_fired_email_allowed
 from stocvest.services.email_service import EmailService, preview_context_json
 from stocvest.utils.log_privacy import user_ref_for_logs
 from stocvest.utils.logging import get_logger
@@ -39,6 +41,9 @@ class AlertTriggerService:
         pattern: str,
         is_confluence: bool,
         confluence_score: int | None,
+        macro_regime: str | None = None,
+        trigger_count: int = 0,
+        ledger_qualified: bool = False,
     ) -> None:
         prefs = self.alert_store.get_preferences(user_id)
         if not prefs.email_enabled:
@@ -58,12 +63,32 @@ class AlertTriggerService:
             alert_type = AlertType.SIGNAL_FIRED
         else:
             return
+        n_conf = int(confluence_score or 0)
+        if alert_type == AlertType.SIGNAL_FIRED:
+            allowed, skip = signal_fired_email_allowed(
+                signal_strength=signal_strength,
+                n_confirming=n_conf,
+                macro_regime=macro_regime,
+                trigger_count=trigger_count,
+                ledger_qualified=ledger_qualified,
+            )
+            if not allowed:
+                _LOG.debug(
+                    "alert skipped: signal_fired gate %s strength=%s n_conf=%s triggers=%s regime=%s sym=%s",
+                    skip,
+                    signal_strength,
+                    n_conf,
+                    trigger_count,
+                    macro_regime,
+                    sym_u,
+                )
+                return
         ctx = {
             "symbol": sym_u,
-            "direction": direction,
+            "direction": format_direction(direction),
             "strength": signal_strength,
-            "pattern": pattern,
-            "n_confirming": int(confluence_score or 0),
+            "pattern": format_alert_pattern(pattern),
+            "n_confirming": n_conf,
         }
         success = self.email_service.send_alert_email(
             to_email=user_email,

@@ -628,6 +628,8 @@ def swing_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[
                             pattern=pattern,
                             is_confluence=bool(response_body.get("is_confluence_alert")),
                             confluence_score=int(response_body.get("confluence_score") or 0),
+                            macro_regime=str(macro_regime),
+                            ledger_qualified=True,
                         )
 
                     run_alert_background(_fire_alert)

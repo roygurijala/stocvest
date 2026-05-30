@@ -203,6 +203,8 @@ class CompositeParameters:
     # Signal quality gates
     min_signal_strength: int = 55
     min_available_layers: int = 3
+    # Email: min confirming layers for signal_fired (scanner uses trigger_count proxy)
+    alert_email_min_confirming: int = 2
 
     # Confluence
     confluence_min_confirming: int = 3
