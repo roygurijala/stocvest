@@ -7,6 +7,10 @@
  */
 
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
+import {
+  formatNeutralAlignmentUserLine,
+  isExplicitNeutralMaturationBias
+} from "@/lib/watchlist-maturation-bias-present";
 
 export const LAYER_TOTAL_DEFAULT = 6;
 
@@ -118,12 +122,16 @@ export function alignmentDisplayMeta(input: {
   };
 }
 
-/** e.g. "Near ready (4/6)" */
+/** e.g. "Near ready (4/6)" — optional `bias` swaps actionable "Strong" → "Balanced" when neutral. */
 export function formatAlignmentStatusLine(input: {
   layersAligned: number;
   layersTotal?: number;
   maturationState?: string | null;
+  bias?: string | null;
 }): string {
+  if (isExplicitNeutralMaturationBias(input.bias)) {
+    return formatNeutralAlignmentUserLine();
+  }
   const meta = alignmentDisplayMeta(input);
   if (meta.tier === "not_aligned" && meta.layersAligned <= 1) {
     return meta.label;
@@ -162,7 +170,8 @@ export function formatWatchlistMaturationDisplayLine(row: WatchlistMaturationRow
     return formatAlignmentStatusLine({
       layersAligned: aligned,
       layersTotal: total,
-      maturationState: row.state ?? st
+      maturationState: row.state ?? st,
+      bias: row.bias
     });
   }
   const raw = (row.label || row.state || "").trim();

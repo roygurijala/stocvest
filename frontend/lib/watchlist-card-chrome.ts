@@ -16,6 +16,11 @@ import type { WatchlistRadarDeskContext } from "@/lib/dashboard/watchlist-radar-
 import { isWatchlistRadarDeskGated } from "@/lib/dashboard/watchlist-radar-attention";
 import type { SessionActivityUiMode } from "@/lib/market/session-activity-mode";
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
+import {
+  isBalancedHighAlignment,
+  isExplicitNeutralMaturationBias,
+  normalizeMaturationBias
+} from "@/lib/watchlist-maturation-bias-present";
 
 export type WatchlistCardChromeKind =
   | "actionable_ready"
@@ -79,19 +84,26 @@ export function resolveWatchlistDirectionChip(
   row: WatchlistMaturationRow | undefined,
   colors: WatchlistCardThemeColors
 ): WatchlistDirectionChip | null {
-  const raw = (row?.bias ?? "").trim().toLowerCase();
-  if (raw === "long") {
+  const bias = normalizeMaturationBias(row?.bias);
+  if (bias === "long") {
     return {
       label: "↑ Long",
       color: colors.bullish,
       background: `color-mix(in srgb, ${colors.bullish} 18%, transparent)`
     };
   }
-  if (raw === "short") {
+  if (bias === "short") {
     return {
       label: "↓ Short",
       color: colors.bearish,
       background: `color-mix(in srgb, ${colors.bearish} 18%, transparent)`
+    };
+  }
+  if (isExplicitNeutralMaturationBias(row?.bias)) {
+    return {
+      label: "No edge",
+      color: colors.textMuted,
+      background: `color-mix(in srgb, ${colors.textMuted} 14%, transparent)`
     };
   }
   return null;
@@ -131,7 +143,15 @@ export function resolveWatchlistCardChrome(input: {
     input.alignmentTier === "near_ready" || input.row?.progress_band === "near_ready";
   const developing = input.alignmentTier === "developing" || input.row?.progress_band === "developing";
 
+  const balancedNoDirection = isBalancedHighAlignment({
+    row: input.row,
+    alignmentTier: input.alignmentTier,
+    aligned,
+    total
+  });
+
   const swingPlanGreen =
+    !balancedNoDirection &&
     input.planMode === "swing" &&
     sessionAllowsSwingGreenWhenClosed(sessionMode) &&
     structureStrong &&
@@ -139,7 +159,25 @@ export function resolveWatchlistCardChrome(input: {
     !deskGated;
 
   const liveGreen =
-    sessionMode === "live" && structureStrong && symbolClear && !deskGated;
+    !balancedNoDirection &&
+    sessionMode === "live" &&
+    structureStrong &&
+    symbolClear &&
+    !deskGated;
+
+  if (balancedNoDirection && structureStrong && symbolClear && !deskGated) {
+    return {
+      kind: "blocked",
+      borderLeft: input.colors.textMuted,
+      borderBottom: `color-mix(in srgb, ${input.colors.textMuted} 65%, transparent)`,
+      dotAccent: input.colors.textMuted,
+      badgeLabel: "Balanced",
+      badgeColor: input.colors.textMuted,
+      badgeBackground: `color-mix(in srgb, ${input.colors.textMuted} 14%, transparent)`,
+      directionChip,
+      statusBanner: null
+    };
+  }
 
   if (liveGreen || swingPlanGreen) {
     const plan = swingPlanGreen && !liveGreen;

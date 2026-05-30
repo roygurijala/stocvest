@@ -1,4 +1,3 @@
-import { formatLayersFromActionableHint } from "@/lib/alignment-display-tier";
 import type { TradeDecision } from "@/lib/signal-evidence/trade-decision";
 import {
   decisionGateCategoryLabel,
@@ -12,6 +11,8 @@ import {
   groupLayersByForce,
   primaryExecutionBlockerLine,
   resolveSignalsLayerAlignment,
+  signalsAlignmentKpiSubline,
+  type CompositeDirectionFields,
   type SignalsLayerRowInput,
   type SignalsSetupBias
 } from "@/lib/signals-page-present";
@@ -144,6 +145,16 @@ export type SignalsDeskVerdictBundle = {
   executionHint: string | null;
 };
 
+function alignmentHeadlineTone(
+  bias: SignalsSetupBias,
+  aligned: number
+): SignalsDeskKpiItem["headlineTone"] {
+  if (bias === "Neutral") {
+    return aligned >= 5 ? "muted" : aligned >= 3 ? "caution" : "muted";
+  }
+  return aligned >= 5 ? "bullish" : aligned >= 3 ? "caution" : "muted";
+}
+
 export function buildSignalsDeskVerdict(input: {
   bias: SignalsSetupBias;
   rows: SignalsLayerRowInput[];
@@ -152,11 +163,13 @@ export function buildSignalsDeskVerdict(input: {
   alignmentRatio?: number | null;
   maturationState?: string | null;
   regularSessionOpen?: boolean | null;
+  compositeDirection?: CompositeDirectionFields | null;
 }): SignalsDeskVerdictBundle {
   const alignment = resolveSignalsLayerAlignment({
     rows: input.rows,
     bias: input.bias,
-    alignmentRatio: input.alignmentRatio
+    alignmentRatio: input.alignmentRatio,
+    compositeDirection: input.compositeDirection
   });
   const items = buildSignalsDeskKpiItems(input);
   return {
@@ -181,18 +194,23 @@ export function buildSignalsDeskKpiItems(input: {
   alignmentRatio?: number | null;
   maturationState?: string | null;
   regularSessionOpen?: boolean | null;
+  compositeDirection?: CompositeDirectionFields | null;
 }): SignalsDeskKpiItem[] {
   const alignment = resolveSignalsLayerAlignment({
     rows: input.rows,
     bias: input.bias,
-    alignmentRatio: input.alignmentRatio
+    alignmentRatio: input.alignmentRatio,
+    compositeDirection: input.compositeDirection
   });
   const alignmentLine = formatSignalsAlignmentDisplayLine(
     alignment,
     input.bias,
     input.maturationState
   );
-  const layersHint = formatLayersFromActionableHint(alignment.aligned, alignment.total);
+  const layersHint = signalsAlignmentKpiSubline({
+    bias: input.bias,
+    alignment
+  });
 
   return [
     {
@@ -207,7 +225,7 @@ export function buildSignalsDeskKpiItems(input: {
       label: "Alignment",
       headline: alignmentLine,
       subline: layersHint,
-      headlineTone: alignment.aligned >= 5 ? "bullish" : alignment.aligned >= 3 ? "caution" : "muted"
+      headlineTone: alignmentHeadlineTone(input.bias, alignment.aligned)
     },
     {
       target: "execution",

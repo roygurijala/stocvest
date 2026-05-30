@@ -376,6 +376,33 @@ describe("SignalsPageClient — mode toggle clears the screen (load-bearing UX g
     ).length;
     expect(swingFetchCountAfter).toBe(swingFetchCountBefore);
   });
+
+  test("rate-limited composite shows service error without setup loader", async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
+      if (url.endsWith("/api/stocvest/signals/composite/swing")) {
+        return new Response(
+          JSON.stringify({
+            error: "rate_limited",
+            message: "Too many requests. Wait a moment and try again."
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+    });
+
+    renderSignalsWithSymbol("DELL", "swing");
+
+    await waitFor(() => expect(screen.getByTestId("signals-setup-service-error")).toBeTruthy());
+    expect(screen.queryByTestId("signals-setup-loading")).toBeNull();
+    expect(screen.getByText(/Too many requests/i)).toBeTruthy();
+  });
 });
 
 describe("SignalsPageClient — Swing Pro (dayTradingSurfaces=false)", () => {

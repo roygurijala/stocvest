@@ -139,4 +139,26 @@ describe("SignalsCommandBar", () => {
     fireEvent.click(screen.getByTestId("signals-desk-verdict-execution"));
     expect(onDeskKpiTarget).toHaveBeenCalledWith("execution");
   });
+
+  test("renders direction chip when provided", () => {
+    render(
+      <ThemeProvider>
+        <SignalsCommandBar
+          symbol="NVDA"
+          tradingMode="swing"
+          dayTradingSurfaces={false}
+          watchlistControl={<span>Watchlist</span>}
+          maturationLine={null}
+          evaluationFreshness={null}
+          onTradingModeChange={vi.fn()}
+          directionChip={{
+            label: "No edge",
+            color: "#888",
+            background: "rgba(0,0,0,0.1)"
+          }}
+        />
+      </ThemeProvider>
+    );
+    expect(screen.getByTestId("signals-command-bar-direction-chip")).toHaveTextContent("No edge");
+  });
 });

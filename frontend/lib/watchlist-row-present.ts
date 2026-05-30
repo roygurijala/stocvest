@@ -10,6 +10,7 @@ import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
 import { formatWatchlistMaturationLabel } from "@/lib/watchlist-page-utils";
 import { maturationAlignmentCounts } from "@/lib/watchlist-alignment-present";
 import { formatLastEvaluatedLine } from "@/lib/watchlist-evaluation-present";
+import { NEUTRAL_ALIGNMENT_SUBLINE } from "@/lib/watchlist-maturation-bias-present";
 import { formatSignalsAlignmentDisplayLine } from "@/lib/signals-page-present";
 
 export type WatchlistDeskStatusPresent = {
@@ -82,6 +83,8 @@ export function buildWatchlistDeskStatusPresent(
     statusNote = readiness;
   } else if (progression) {
     statusNote = progression;
+  } else if (biasKey === "neutral") {
+    statusNote = NEUTRAL_ALIGNMENT_SUBLINE;
   } else if (actionableHint) {
     statusNote = actionableHint;
   }

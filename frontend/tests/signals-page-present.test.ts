@@ -21,7 +21,9 @@ import {
   pickCollapsedLayerPreview,
   pickPreviewLayers,
   resolveCompositeLayerAlignment,
+  resolveSignalsDirectionChip,
   resolveSignalsLayerAlignment,
+  signalsAlignmentKpiSubline,
   SIGNAL_LAYER_LEVEL_BASELINE,
   type SignalsLayerRowInput
 } from "@/lib/signals-page-present";
@@ -57,7 +59,7 @@ describe("signals-page-present", () => {
       alignmentRatio: 0.5
     });
     expect(resolved.aligned).toBe(3);
-    expect(resolved.displayLine).toBe("Mixed direction (3/6)");
+    expect(resolved.displayLine).toBe("Balanced");
   });
 
   test("resolveSignalsLayerAlignment prefers alignment_ratio over chip count", () => {
@@ -72,7 +74,27 @@ describe("signals-page-present", () => {
       alignmentRatio: 0.67
     });
     expect(resolved.aligned).toBe(4);
-    expect(formatSignalsAlignmentDisplayLine(resolved, "Neutral")).toBe("Mostly neutral (4/6)");
+    expect(formatSignalsAlignmentDisplayLine(resolved, "Neutral")).toBe("Balanced");
+  });
+
+  test("neutral alignment subline is verdict copy not dual n/6", () => {
+    const resolved = resolveSignalsLayerAlignment({
+      rows: bearishRows,
+      bias: "Neutral",
+      compositeDirection: { consistency: 4, directional: 0, total: 6 }
+    });
+    expect(signalsAlignmentKpiSubline({ bias: "Neutral", alignment: resolved })).toBe(
+      "Layers balanced — no trade setup"
+    );
+  });
+
+  test("resolveSignalsDirectionChip for neutral shows No edge", () => {
+    const chip = resolveSignalsDirectionChip("Neutral", {
+      bullish: "#0f0",
+      bearish: "#f00",
+      textMuted: "#999"
+    });
+    expect(chip?.label).toBe("No edge");
   });
 
   test("alignedLayersFromAlignmentRatio rounds to nearest layer", () => {

@@ -20,6 +20,7 @@ import type { SignalsDeskVerdictBundle } from "@/lib/signals-desk-kpi-present";
 import type { SignalsDeskTab, SignalsKpiTarget } from "@/lib/signals-page-tabs";
 import { SignalsDeskVerdictRow } from "@/components/signals/signals-desk-verdict-row";
 import type { SignalsDeskPriceContext } from "@/lib/signals-desk-price-present";
+import type { SignalsDirectionChip } from "@/lib/signals-page-present";
 import { formatLastEvaluatedShort } from "@/lib/watchlist-evaluation-present";
 
 type TradingMode = "day" | "swing";
@@ -42,6 +43,8 @@ type Props = {
   priceContext?: SignalsDeskPriceContext | null;
   /** Inline bias / alignment / execution verdict (replaces separate KPI strip). */
   deskVerdict?: SignalsDeskVerdictBundle | null;
+  /** Long / Short / No edge — matches watchlist card chips. */
+  directionChip?: SignalsDirectionChip | null;
   activeDeskTab?: SignalsDeskTab;
   decisionState?: TradeDecisionState | null;
   onDeskKpiTarget?: (target: SignalsKpiTarget) => void;
@@ -82,6 +85,7 @@ export function SignalsCommandBar({
   onOpenEvidence,
   priceContext = null,
   deskVerdict = null,
+  directionChip = null,
   activeDeskTab = "setup",
   decisionState = null,
   onDeskKpiTarget
@@ -117,6 +121,18 @@ export function SignalsCommandBar({
             >
               {symU}
             </h2>
+            {directionChip ? (
+              <span
+                className="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold leading-none"
+                data-testid="signals-command-bar-direction-chip"
+                style={{
+                  color: directionChip.color,
+                  background: directionChip.background
+                }}
+              >
+                {directionChip.label}
+              </span>
+            ) : null}
             {priceContext ? (
               <span
                 className="inline-flex flex-wrap items-baseline gap-x-1.5 text-sm font-medium tabular-nums sm:text-base"
