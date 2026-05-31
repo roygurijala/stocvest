@@ -70,6 +70,20 @@ describe("resolveWatchlistCardChrome", () => {
     expect(chrome.statusBanner).toContain("invalidated");
   });
 
+  test("swing 6/6 stays green when desk is quiet but regime neutral", () => {
+    const chrome = resolveWatchlistCardChrome({
+      alignmentTier: "actionable",
+      row: row({ state: "actionable", layers_aligned: 6, layers_total: 6, bias: "long" }),
+      blockers: [],
+      desk: { regimeLabel: "Neutral", systemSuppressed: true, sessionMode: "closed" },
+      planMode: "swing",
+      colors: COLORS,
+      attentionTier: "check_now"
+    });
+    expect(chrome.kind).toBe("actionable_plan");
+    expect(chrome.borderLeft).toBe(COLORS.bullish);
+  });
+
   test("6/6 on bearish desk is amber not green", () => {
     const chrome = resolveWatchlistCardChrome({
       alignmentTier: "actionable",

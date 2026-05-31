@@ -256,7 +256,8 @@ export function buildWatchlistCardModel(
     row,
     alignmentTier,
     blockers,
-    desk
+    desk,
+    omitSessionClosedSuffix: true
   });
   const chrome = resolveWatchlistCardChrome({
     alignmentTier,

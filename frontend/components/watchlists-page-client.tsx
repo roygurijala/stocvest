@@ -181,6 +181,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   const [maturationSwing, setMaturationSwing] = useState<Record<string, MaturationRow>>({});
   const [maturationDay, setMaturationDay] = useState<Record<string, MaturationRow>>({});
   const [maturationFetchStatus, setMaturationFetchStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const maturationHasLoadedRef = useRef(false);
   const [maturationStorageReady, setMaturationStorageReady] = useState<boolean | null>(null);
   const [viewMode, setViewMode] = useState<WatchlistViewMode>("swing");
   const [maturationAlerts, setMaturationAlerts] = useState<MaturationAlertFeedItem[]>([]);
@@ -376,9 +377,12 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
       setMaturationFetchStatus("idle");
       setMaturationSummaryFetchedAt(null);
       setMaturationStorageReady(null);
+      maturationHasLoadedRef.current = false;
       return;
     }
-    setMaturationFetchStatus("loading");
+    if (!maturationHasLoadedRef.current) {
+      setMaturationFetchStatus("loading");
+    }
     setMaturationStorageReady(null);
     let cancelled = false;
     void (async () => {
@@ -415,6 +419,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
             if (swRes.status >= 500 || dyRes.status >= 500) {
               setMaturationFetchStatus("ready");
               setMaturationSummaryFetchedAt(new Date());
+              maturationHasLoadedRef.current = true;
               return;
             }
             setMaturationFetchStatus("error");
@@ -444,6 +449,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
               setMaturationDay({});
               setMaturationFetchStatus("ready");
               setMaturationSummaryFetchedAt(new Date());
+              maturationHasLoadedRef.current = true;
               return;
             }
             setMaturationSwing({});
@@ -457,12 +463,14 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
         }
         setMaturationFetchStatus("ready");
         setMaturationSummaryFetchedAt(new Date());
+        maturationHasLoadedRef.current = true;
       } catch {
         if (!cancelled) {
           setMaturationSwing({});
           setMaturationDay({});
           setMaturationFetchStatus("error");
           setMaturationSummaryFetchedAt(null);
+          maturationHasLoadedRef.current = false;
         }
       }
     })();

@@ -7,10 +7,7 @@ import {
   type WatchlistCardModel
 } from "@/lib/watchlist-decision-card-present";
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
-import {
-  resolveWatchlistRadarAttentionLine,
-  type WatchlistRadarDeskContext
-} from "@/lib/dashboard/watchlist-radar-attention";
+import type { WatchlistRadarDeskContext } from "@/lib/dashboard/watchlist-radar-attention";
 
 export type { WatchlistRadarDeskContext } from "@/lib/dashboard/watchlist-radar-attention";
 
@@ -83,13 +80,8 @@ export function buildWatchlistRadarRows(opts: {
     const movePct = sessionMovePct(snap);
     const model = buildWatchlistCardModel(sym, row, snap, opts.colors, opts.mode, opts.desk);
     let reason =
-      resolveWatchlistRadarAttentionLine({
-        tier,
-        row,
-        alignmentTier: model.alignmentTier,
-        blockers: model.blockers,
-        desk: opts.desk
-      }) ?? sessionMoveAttentionLine(movePct);
+      model.attentionLine ??
+      sessionMoveAttentionLine(movePct);
     if (!reason && movePct != null && Math.abs(movePct) >= MOVE_PCT_THRESHOLD) {
       reason = `${movePct >= 0 ? "+" : ""}${movePct.toFixed(1)}% today`;
     }

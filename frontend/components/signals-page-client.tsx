@@ -55,7 +55,10 @@ import { ScenarioBuilderInline } from "@/components/scenario-builder/scenario-bu
 import { buildScenarioPlanningBundle } from "@/lib/scenario/scenario-planning-bundle";
 import type { ScenarioBuilderDrillDown } from "@/lib/scenario/scenario-builder-drill-down";
 import { useWatchlistMaturationLine } from "@/lib/hooks/use-watchlist-maturation-line";
-import { buildSignalEvaluationFreshness } from "@/lib/signals-evaluation-present";
+import {
+  buildSignalEvaluationFreshness,
+  extractCompositeGeneratedAt
+} from "@/lib/signals-evaluation-present";
 import {
   buildSignalsDeskPriceContext,
   snapshotHasDeskDisplayPrice
@@ -1092,15 +1095,39 @@ export function SignalsPageClient({
   }, [compositeResult, tradingMode, signalsPresentRows, setupBias, compositeAlignmentRatio]);
 
   const commandBarMaturationLine = useMemo(() => {
-    if (!maturationLine || compositeAlignmentRatio == null) return maturationLine;
-    const alignment = resolveSignalsLayerAlignment({
-      rows: signalsPresentRows,
-      bias: setupBias,
-      alignmentRatio: compositeAlignmentRatio
-    });
-    const label = formatSignalsAlignmentDisplayLine(alignment, setupBias, maturationLine.state);
-    return { ...maturationLine, label };
-  }, [maturationLine, compositeAlignmentRatio, signalsPresentRows, setupBias]);
+    if (!maturationLine) return null;
+    let line = maturationLine;
+    if (compositeAlignmentRatio != null) {
+      const alignment = resolveSignalsLayerAlignment({
+        rows: signalsPresentRows,
+        bias: setupBias,
+        alignmentRatio: compositeAlignmentRatio
+      });
+      const label = formatSignalsAlignmentDisplayLine(alignment, setupBias, maturationLine.state);
+      line = { ...line, label };
+    }
+    const compositeAt = extractCompositeGeneratedAt(
+      compositeResult != null && !isInsufficientCompositeResponse(compositeResult)
+        ? (compositeResult as Record<string, unknown>)
+        : null
+    );
+    if (compositeAt && line.evaluatedAt) {
+      const compT = Date.parse(compositeAt);
+      const matT = Date.parse(line.evaluatedAt);
+      if (!Number.isNaN(compT) && !Number.isNaN(matT) && compT > matT) {
+        line = { ...line, evaluatedAt: compositeAt };
+      }
+    } else if (compositeAt && !line.evaluatedAt) {
+      line = { ...line, evaluatedAt: compositeAt };
+    }
+    return line;
+  }, [
+    maturationLine,
+    compositeAlignmentRatio,
+    signalsPresentRows,
+    setupBias,
+    compositeResult
+  ]);
 
   const previewBlockingLayers = useMemo(
     () => pickPreviewLayers(signalsPresentRows, setupBias, 3),

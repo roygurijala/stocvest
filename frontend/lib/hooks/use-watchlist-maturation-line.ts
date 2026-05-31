@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { formatWatchlistMaturationDisplayLine } from "@/lib/alignment-display-tier";
+import { WATCHLIST_MATURATION_UPDATED_EVENT } from "@/lib/watchlist-maturation-bump";
 import {
   normalizeWatchlistMaturationBySymbol,
   type WatchlistMaturationRow
@@ -33,7 +34,7 @@ export function useWatchlistMaturationLine(
       return;
     }
     let cancelled = false;
-    void (async () => {
+    const fetchRow = async () => {
       try {
         const res = await fetch(
           `/api/stocvest/watchlists/maturation-summary?mode=${encodeURIComponent(tradingMode)}`,
@@ -46,9 +47,19 @@ export function useWatchlistMaturationLine(
       } catch {
         if (!cancelled) setRow(undefined);
       }
-    })();
+    };
+    void fetchRow();
+    const onUpdated = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ symbol?: string; mode?: string }>).detail;
+      if (!detail?.symbol || !detail?.mode) return;
+      if (detail.symbol.toUpperCase() !== symU) return;
+      if (detail.mode !== tradingMode) return;
+      void fetchRow();
+    };
+    window.addEventListener(WATCHLIST_MATURATION_UPDATED_EVENT, onUpdated);
     return () => {
       cancelled = true;
+      window.removeEventListener(WATCHLIST_MATURATION_UPDATED_EVENT, onUpdated);
     };
   }, [symU, isOnList, tradingMode]);
 

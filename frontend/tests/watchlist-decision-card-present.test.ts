@@ -96,7 +96,7 @@ describe("buildWatchlistCardModel", () => {
     expect(model.blockers).toEqual([]);
   });
 
-  test("session closed overrides building momentum on card", () => {
+  test("session closed on card omits suffix when header states closed", () => {
     const model = buildWatchlistCardModel(
       "AMZN",
       row({
@@ -112,7 +112,7 @@ describe("buildWatchlistCardModel", () => {
       "swing",
       { regimeLabel: "Bullish", systemSuppressed: false, sessionMode: "closed" }
     );
-    expect(model.momentumLine).toBe("Strong setup — session closed");
+    expect(model.momentumLine).toBe("Strong setup");
   });
 
   test("neutral 6/6 shows balanced copy not strong setup", () => {
@@ -131,7 +131,7 @@ describe("buildWatchlistCardModel", () => {
       { regimeLabel: "Bullish", systemSuppressed: false, sessionMode: "closed" }
     );
     expect(model.alignmentLine).toBe("Balanced");
-    expect(model.momentumLine).toBe("Balanced — session closed");
+    expect(model.momentumLine).toBe("Balanced — no directional edge");
     expect(model.directionChip?.label).toBe("No edge");
     expect(model.chromeBadgeLabel).toBe("Balanced");
   });
@@ -155,6 +155,26 @@ describe("buildWatchlistCardModel", () => {
     expect(model.momentumLine).toBe("Strong setup — desk gated (bearish regime)");
     expect(model.chromeKind).toBe("blocked");
     expect(model.borderLeft).toBe(COLORS.caution);
+  });
+
+  test("swing 6/6 closed stays green when opportunity desk is quiet", () => {
+    const model = buildWatchlistCardModel(
+      "NVDA",
+      row({
+        state: "actionable",
+        layers_aligned: 6,
+        layers_total: 6,
+        progress_band: "actionable",
+        bias: "long"
+      }),
+      undefined,
+      COLORS,
+      "swing",
+      { regimeLabel: "Neutral", systemSuppressed: true, sessionMode: "closed" }
+    );
+    expect(model.chromeKind).toBe("actionable_plan");
+    expect(model.borderLeft).toBe(COLORS.bullish);
+    expect(model.momentumLine).toBe("Strong setup — desk gated");
   });
 
   test("swing 6/6 closed session gets green plan chrome", () => {

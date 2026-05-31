@@ -13,7 +13,7 @@
 import { ACTIONABLE_ALIGNED_MIN, type AlignmentDisplayTier } from "@/lib/alignment-display-tier";
 import { maturationAlignmentCounts } from "@/lib/watchlist-alignment-present";
 import type { WatchlistRadarDeskContext } from "@/lib/dashboard/watchlist-radar-attention";
-import { isWatchlistRadarDeskGated } from "@/lib/dashboard/watchlist-radar-attention";
+import { isWatchlistRadarRegimeGated } from "@/lib/dashboard/watchlist-radar-attention";
 import type { SessionActivityUiMode } from "@/lib/market/session-activity-mode";
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
 import {
@@ -138,7 +138,7 @@ export function resolveWatchlistCardChrome(input: {
 
   const structureStrong = structureAtActionableBand(input.alignmentTier, input.row, aligned);
   const symbolClear = input.blockers.length === 0;
-  const deskGated = isWatchlistRadarDeskGated(input.desk);
+  const deskGated = isWatchlistRadarRegimeGated(input.desk);
   const nearReady =
     input.alignmentTier === "near_ready" || input.row?.progress_band === "near_ready";
   const developing = input.alignmentTier === "developing" || input.row?.progress_band === "developing";
