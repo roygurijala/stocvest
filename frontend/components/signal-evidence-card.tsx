@@ -27,6 +27,7 @@ import { TimeframeContextPanel } from "@/components/signals/timeframe-context-pa
 import { resolveCausalNarrative } from "@/lib/signal-evidence/causal-narrative";
 import { resolveTimeframeContext } from "@/lib/signal-evidence/timeframe-context";
 import { executionQualitySummaryLine } from "@/lib/signal-evidence/execution-quality";
+import { PlanningGatesPanel } from "@/components/signal-evidence/planning-gates-panel";
 import {
   buildCompressedContextSummary,
   buildNewsNeutralParenthetical,
@@ -1144,6 +1145,8 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
           {executionQualitySummaryLine(evidence.executionQuality)}
         </p>
       ) : null}
+
+      {evidence.planningGates ? <PlanningGatesPanel gates={evidence.planningGates} /> : null}
 
       {gapIntelSnapshot ? (
         <section

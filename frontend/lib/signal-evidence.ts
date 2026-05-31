@@ -13,6 +13,12 @@ import {
   parseExecutionQuality,
   type ExecutionQualityPayload
 } from "@/lib/signal-evidence/execution-quality";
+import {
+  buildPlanningGatesClient,
+  parsePlanningGates,
+  type PlanningGatesPayload
+} from "@/lib/signal-evidence/planning-gates-present";
+import { isInDayDipWindowEt } from "@/lib/market-hours-et";
 import { coerceSnapshotForReferenceLevels } from "@/lib/snapshot-reference-levels";
 import { parseSetupJudgment, type SetupJudgment } from "@/lib/signal-evidence/setup-judgment";
 import {
@@ -20,6 +26,12 @@ import {
   structureRiskRewardLong,
   structureRiskRewardShort
 } from "@/lib/risk-reward-structure";
+import {
+  referenceStopAtrK,
+  resolveMergedReferenceStop,
+  resolveStructuralStopAnchor
+} from "@/lib/scenario/reference-stop-resolve";
+import type { ScenarioDirection } from "@/lib/scenario/types";
 
 export type EvidenceDirection = "bullish" | "bearish" | "neutral";
 export type EvidenceStatus = "Bullish" | "Bearish" | "Neutral" | "Unavailable" | "As of close";
@@ -228,6 +240,8 @@ export interface SignalEvidenceInsight {
   reference_stop_level: number | null;
   reference_stop_provenance?: string | null;
   reference_target_provenance?: string | null;
+  /** ATR14 from technical layer when composite exposes it. */
+  atr?: number | null;
   /** Session VWAP when available; modal uses this before `keyLevels.vwap`. */
   vwap: number | null;
   vwap_state?: string;
@@ -485,6 +499,7 @@ export interface SignalEvidenceData {
   causalNarrative?: import("@/lib/signal-evidence/causal-narrative").CausalNarrative | null;
   /** Soft execution-quality metrics from composite (informational; not a gate). */
   executionQuality?: ExecutionQualityPayload | null;
+  planningGates?: PlanningGatesPayload | null;
   /** Raw composite JSON used for enrichment (weekly / timeframe fields). */
   compositePayload?: Record<string, unknown> | null;
   /** Quality vs tradeability judgment (no hero score — process, phase, blockers). */
@@ -1641,6 +1656,10 @@ export interface SessionReferenceLevelsInput {
   vwap?: number | null;
   lastTradePrice?: number | null;
   prevClose?: number | null;
+  atr?: number | null;
+  tradingMode?: "day" | "swing" | null;
+  swingLow?: number | null;
+  swingHigh?: number | null;
 }
 
 /**
@@ -1669,11 +1688,38 @@ export function referenceLevelsFromSessionStructure(
     typeof input.prevClose === "number" && Number.isFinite(input.prevClose) && input.prevClose > 0 ? input.prevClose : null;
 
   const useLong = useLongRrStructure(input.direction, dayLo, dayHi, last);
+  const scenarioDir: ScenarioDirection = useLong ? "bullish" : "bearish";
   const g = useLong
     ? longSideGeometry({ dayLo, dayHi, vwap, prevClose, last })
     : shortSideGeometry({ dayLo, dayHi, vwap, prevClose, last });
+
+  const structural = resolveStructuralStopAnchor({
+    direction: scenarioDir,
+    sessionLow: dayLo,
+    sessionHigh: dayHi,
+    vwap,
+    prevClose,
+    last,
+    swingLow: input.swingLow ?? null,
+    swingHigh: input.swingHigh ?? null
+  });
+  const entry = entryPriceForRr(last, dayLo, dayHi);
+  const atr =
+    typeof input.atr === "number" && Number.isFinite(input.atr) && input.atr > 0 ? input.atr : null;
+  let reference_stop_level = g.stop;
+  if (entry != null && structural != null) {
+    const merged = resolveMergedReferenceStop({
+      direction: scenarioDir,
+      entry,
+      structuralStop: structural,
+      atr,
+      atrK: referenceStopAtrK({ tradingMode: input.tradingMode ?? null })
+    });
+    if (merged.stop != null) reference_stop_level = merged.stop;
+  }
+
   return {
-    reference_stop_level: g.stop,
+    reference_stop_level,
     reference_target_1: g.target1,
     reference_target_2: g.target2
   };
@@ -1757,6 +1803,7 @@ export function parseSwingCompositeInsight(body: Record<string, unknown>): Signa
     reference_stop_level: numOrNull(body.reference_stop_level),
     reference_stop_provenance,
     reference_target_provenance,
+    atr: numOrNull(body.atr),
     vwap: vwapRaw != null && vwapRaw > 0 ? Math.round(vwapRaw * 10000) / 10000 : null,
     vwap_state: vwap_state_parsed,
     vwap_display: vwap_display_parsed,
@@ -2127,6 +2174,19 @@ export function applySwingCompositeEnrichment(
   const causalFromApi = parseCausalNarrativeFromApi(body.causal_narrative);
   const executionQuality = parseExecutionQuality(body);
   const setupJudgment = parseSetupJudgment(body) ?? evidence.setupJudgment ?? null;
+  const modeForGates: "day" | "swing" = cm === "day" ? "day" : "swing";
+  const planningGates =
+    parsePlanningGates(body) ??
+    buildPlanningGatesClient({
+      mode: modeForGates,
+      marketRegime: insight.market_regime,
+      riskReward: insight.risk_reward,
+      executionQuality: executionQuality ?? evidence.executionQuality ?? null,
+      referenceStopProvenance: insight.reference_stop_provenance ?? null,
+      atr: insight.atr ?? numOrNull(body.atr),
+      setupJudgment,
+      inDayDipWindow: modeForGates === "day" ? isInDayDipWindowEt() : undefined
+    });
 
   return {
     ...evidence,
@@ -2144,6 +2204,7 @@ export function applySwingCompositeEnrichment(
     unlockForecast: unlockForecast.length ? unlockForecast : undefined,
     causalNarrative: causalFromApi ?? evidence.causalNarrative ?? null,
     executionQuality: executionQuality ?? evidence.executionQuality ?? null,
+    planningGates: planningGates ?? evidence.planningGates ?? null,
     compositePayload: body,
     setupJudgment
   };

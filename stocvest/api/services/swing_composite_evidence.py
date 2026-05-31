@@ -12,6 +12,12 @@ from stocvest.api.services.risk_reward_structure import (
 )
 from stocvest.api.services.signal_validation_eligibility import MIN_RISK_REWARD_DAY, MIN_RISK_REWARD_SWING
 from stocvest.signals.composite_score import CompositeSignal, CompositeVerdict
+from stocvest.api.services.reference_stop_policy import (
+    format_merged_stop_provenance,
+    reference_stop_atr_k,
+    resolve_merged_reference_stop,
+    resolve_structural_stop_anchor,
+)
 from stocvest.signals.vwap_state import VWAP_STATE_TOOLTIP, VWAPState, build_vwap_chip, resolve_vwap_state
 
 
@@ -266,6 +272,18 @@ def serialize_daily_bars_for_range(bars: list[Any], *, limit: int = 10) -> list[
     return out
 
 
+def _payload_atr(payload: dict[str, Any]) -> float | None:
+    raw = payload.get("atr")
+    if isinstance(raw, (int, float)) and float(raw) > 0:
+        return float(raw)
+    return None
+
+
+def _trading_mode_from_payload(payload: dict[str, Any]) -> str:
+    mode = str(payload.get("trading_mode") or payload.get("mode") or "swing").strip().lower()
+    return "day" if mode == "day" else "swing"
+
+
 def _long_side_geometry(
     *,
     day_lo: float | None,
@@ -273,25 +291,40 @@ def _long_side_geometry(
     vwap: float | None,
     prev_close: float | None,
     last: float | None,
-) -> tuple[float | None, float | None, float | None]:
+    entry: float | None = None,
+    atr: float | None = None,
+    trading_mode: str = "swing",
+    swing_lo: float | None = None,
+    swing_hi: float | None = None,
+) -> tuple[float | None, float | None, float | None, bool]:
     """
     Bullish reference levels anchored to session structure (not fixed % off day low).
 
-    Stop: slightly under min(session low, VWAP) when both exist; else session low,
-    VWAP alone, prior close support, then last-based fallback.
+    Stop: structural anchor merged with entry − k×ATR floor when ATR is available.
     Targets: session high as primary resistance; second target = 2R extension from entry when possible.
     """
-    reference_stop: float | None = None
-    if day_lo is not None and day_lo > 0 and vwap is not None and vwap > 0:
-        reference_stop = round(min(float(day_lo), float(vwap)) * 0.998, 4)
-    elif day_lo is not None and day_lo > 0:
-        reference_stop = round(float(day_lo) * 0.995, 4)
-    elif vwap is not None and vwap > 0:
-        reference_stop = round(float(vwap) * 0.995, 4)
-    elif prev_close is not None and prev_close > 0:
-        reference_stop = round(float(prev_close) * 0.99, 4)
-    elif last is not None and last > 0:
-        reference_stop = round(float(last) * 0.98, 4)
+    structural = resolve_structural_stop_anchor(
+        direction="bullish",
+        session_low=day_lo,
+        session_high=day_hi,
+        vwap=vwap,
+        prev_close=prev_close,
+        last=last,
+        swing_low=swing_lo,
+        swing_high=swing_hi,
+    )
+    entry_for_stop = entry if entry is not None and entry > 0 else (last if last is not None and last > 0 else None)
+    reference_stop = structural
+    used_atr_floor = False
+    if entry_for_stop is not None and structural is not None:
+        k = reference_stop_atr_k(trading_mode=trading_mode)  # type: ignore[arg-type]
+        reference_stop, used_atr_floor = resolve_merged_reference_stop(
+            direction="bullish",
+            entry=float(entry_for_stop),
+            structural_stop=structural,
+            atr=atr,
+            atr_k=k,
+        )
 
     reference_target_1: float | None = None
     if day_hi is not None and day_hi > 0:
@@ -309,7 +342,7 @@ def _long_side_geometry(
     if reference_target_2 is None and reference_target_1 is not None and last is not None and last > 0:
         reference_target_2 = round(float(reference_target_1) * 1.004, 4)
 
-    return reference_stop, reference_target_1, reference_target_2
+    return reference_stop, reference_target_1, reference_target_2, used_atr_floor
 
 
 def _short_side_geometry(
@@ -319,19 +352,35 @@ def _short_side_geometry(
     vwap: float | None,
     prev_close: float | None,
     last: float | None,
-) -> tuple[float | None, float | None, float | None]:
+    entry: float | None = None,
+    atr: float | None = None,
+    trading_mode: str = "swing",
+    swing_lo: float | None = None,
+    swing_hi: float | None = None,
+) -> tuple[float | None, float | None, float | None, bool]:
     """Bearish reference levels: stop above session/VWAP ceiling; target at session low."""
-    reference_stop: float | None = None
-    if day_hi is not None and day_hi > 0 and vwap is not None and vwap > 0:
-        reference_stop = round(max(float(day_hi), float(vwap)) * 1.002, 4)
-    elif day_hi is not None and day_hi > 0:
-        reference_stop = round(float(day_hi) * 1.005, 4)
-    elif vwap is not None and vwap > 0:
-        reference_stop = round(float(vwap) * 1.005, 4)
-    elif prev_close is not None and prev_close > 0:
-        reference_stop = round(float(prev_close) * 1.01, 4)
-    elif last is not None and last > 0:
-        reference_stop = round(float(last) * 1.02, 4)
+    structural = resolve_structural_stop_anchor(
+        direction="bearish",
+        session_low=day_lo,
+        session_high=day_hi,
+        vwap=vwap,
+        prev_close=prev_close,
+        last=last,
+        swing_low=swing_lo,
+        swing_high=swing_hi,
+    )
+    entry_for_stop = entry if entry is not None and entry > 0 else (last if last is not None and last > 0 else None)
+    reference_stop = structural
+    used_atr_floor = False
+    if entry_for_stop is not None and structural is not None:
+        k = reference_stop_atr_k(trading_mode=trading_mode)  # type: ignore[arg-type]
+        reference_stop, used_atr_floor = resolve_merged_reference_stop(
+            direction="bearish",
+            entry=float(entry_for_stop),
+            structural_stop=structural,
+            atr=atr,
+            atr_k=k,
+        )
 
     reference_target_1: float | None = None
     if day_lo is not None and day_lo > 0:
@@ -349,7 +398,7 @@ def _short_side_geometry(
     if reference_target_2 is None and reference_target_1 is not None and last is not None and last > 0:
         reference_target_2 = round(float(reference_target_1) * 0.996, 4)
 
-    return reference_stop, reference_target_1, reference_target_2
+    return reference_stop, reference_target_1, reference_target_2, used_atr_floor
 
 
 def _use_long_rr_structure(verdict: CompositeVerdict, day_lo: float | None, day_hi: float | None, last: float | None) -> bool:
@@ -464,21 +513,37 @@ def build_swing_composite_evidence_fields(
 
     zone_lo = historical_entry_zone["low"] if historical_entry_zone else None
     zone_hi = historical_entry_zone["high"] if historical_entry_zone else None
+    entry = _entry_price_for_rr(last, zone_lo, zone_hi)
+    swing_range_zone = _swing_range_from_payload(payload)
+    swing_lo = float(swing_range_zone["low"]) if swing_range_zone else None
+    swing_hi = float(swing_range_zone["high"]) if swing_range_zone else None
+    atr = _payload_atr(payload)
+    trading_mode = _trading_mode_from_payload(payload)
+
     use_long = _use_long_rr_structure(composite.verdict, day_lo, day_hi, last)
     if use_long:
-        reference_stop_level, reference_target_1, reference_target_2 = _long_side_geometry(
+        reference_stop_level, reference_target_1, reference_target_2, used_atr_floor = _long_side_geometry(
             day_lo=day_lo,
             day_hi=day_hi,
             vwap=vwap,
             prev_close=prev_close,
             last=last,
+            entry=entry,
+            atr=atr,
+            trading_mode=trading_mode,
+            swing_lo=swing_lo,
+            swing_hi=swing_hi,
         )
-        reference_stop_provenance = _long_stop_provenance_label(
-            day_lo=day_lo,
-            day_hi=day_hi,
-            vwap=vwap,
-            prev_close=prev_close,
-            last=last,
+        reference_stop_provenance = format_merged_stop_provenance(
+            _long_stop_provenance_label(
+                day_lo=day_lo,
+                day_hi=day_hi,
+                vwap=vwap,
+                prev_close=prev_close,
+                last=last,
+            ),
+            atr_k=reference_stop_atr_k(trading_mode=trading_mode),  # type: ignore[arg-type]
+            used_atr_floor=used_atr_floor,
         )
         reference_target_provenance = _long_target_provenance_label(
             day_hi=day_hi,
@@ -486,19 +551,28 @@ def build_swing_composite_evidence_fields(
             reference_target_2=reference_target_2,
         )
     else:
-        reference_stop_level, reference_target_1, reference_target_2 = _short_side_geometry(
+        reference_stop_level, reference_target_1, reference_target_2, used_atr_floor = _short_side_geometry(
             day_lo=day_lo,
             day_hi=day_hi,
             vwap=vwap,
             prev_close=prev_close,
             last=last,
+            entry=entry,
+            atr=atr,
+            trading_mode=trading_mode,
+            swing_lo=swing_lo,
+            swing_hi=swing_hi,
         )
-        reference_stop_provenance = _short_stop_provenance_label(
-            day_lo=day_lo,
-            day_hi=day_hi,
-            vwap=vwap,
-            prev_close=prev_close,
-            last=last,
+        reference_stop_provenance = format_merged_stop_provenance(
+            _short_stop_provenance_label(
+                day_lo=day_lo,
+                day_hi=day_hi,
+                vwap=vwap,
+                prev_close=prev_close,
+                last=last,
+            ),
+            atr_k=reference_stop_atr_k(trading_mode=trading_mode),  # type: ignore[arg-type]
+            used_atr_floor=used_atr_floor,
         )
         reference_target_provenance = _short_target_provenance_label(
             day_lo=day_lo,
@@ -506,9 +580,6 @@ def build_swing_composite_evidence_fields(
             reference_target_2=reference_target_2,
         )
 
-    swing_range_zone = _swing_range_from_payload(payload)
-
-    entry = _entry_price_for_rr(last, zone_lo, zone_hi)
     rr_from_structure: float | None = None
     if (
         entry is not None

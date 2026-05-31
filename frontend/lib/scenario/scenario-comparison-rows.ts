@@ -1,3 +1,4 @@
+import { riskPctOfEntry } from "@/lib/scenario/planning-risk-present";
 import {
   resolveScenarioLevels,
   type ScenarioPresetId,
@@ -14,6 +15,7 @@ export type ScenarioComparisonRow = {
   stop: number;
   target: number;
   riskReward: number | null;
+  riskPctOfEntry: number | null;
 };
 
 const PRESET_LABELS: Record<ScenarioPresetId, string> = {
@@ -78,7 +80,8 @@ export function buildScenarioComparisonRows(
       entry: resolved.entry,
       stop: resolved.stop,
       target: resolved.target,
-      riskReward: resolved.riskReward
+      riskReward: resolved.riskReward,
+      riskPctOfEntry: riskPctOfEntry(catalog.source.direction, resolved.entry, resolved.stop)
     });
   }
 
@@ -93,7 +96,8 @@ export function buildScenarioComparisonRows(
       entry: userEntry,
       stop: userStop,
       target: userTarget,
-      riskReward: computeUserScenarioRiskReward(catalog, userEntry, userStop, userTarget)
+      riskReward: computeUserScenarioRiskReward(catalog, userEntry, userStop, userTarget),
+      riskPctOfEntry: riskPctOfEntry(catalog.source.direction, userEntry, userStop)
     });
   }
 

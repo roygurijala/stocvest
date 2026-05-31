@@ -30,6 +30,16 @@ export function isUsRegularSessionOpenEt(now = new Date()): boolean {
   return t >= open && t < close;
 }
 
+/** Soft dip-buy window for day-desk planning context (2:00–3:30 PM ET, weekdays). */
+export function isInDayDipWindowEt(now = new Date()): boolean {
+  const { hour, minute, weekday } = getEtClock(now);
+  if (weekday === "Sat" || weekday === "Sun") return false;
+  const t = hour * 60 + minute;
+  const start = 14 * 60;
+  const end = 15 * 60 + 30;
+  return t >= start && t <= end;
+}
+
 /** True when ET wall clock is strictly after 10:00 AM (ORB window ended). */
 export function isAfterOrbCloseEt(now = new Date()): boolean {
   const { hour, minute, weekday } = getEtClock(now);

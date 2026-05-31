@@ -179,6 +179,20 @@ describe("session reference levels and fallback R/R", () => {
     expect(lv.reference_stop_level).toBeCloseTo(Math.round(Math.min(98, 99.5) * 0.998 * 10000) / 10000, 4);
   });
 
+  test("referenceLevelsFromSessionStructure widens stop to ATR floor when structural is tight", () => {
+    const lv = referenceLevelsFromSessionStructure({
+      direction: "bullish",
+      support: 99.2,
+      resistance: 102,
+      vwap: 99.5,
+      lastTradePrice: 100,
+      prevClose: 99,
+      atr: 3,
+      tradingMode: "swing"
+    });
+    expect(lv.reference_stop_level).toBeCloseTo(97, 4);
+  });
+
   test("deriveEvidenceInsightFallback uses (target-entry)/(entry-stop) not mid-range ratio", () => {
     const ev = buildEvidenceFromSetup(
       baseSetup,
