@@ -253,6 +253,7 @@ function DashboardRedesignBody({
   const { colors } = useTheme();
   const { data: macroPulse } = useMacroContext();
   const { data: edgeDashboard } = useDashboardPayload("swing");
+  const { data: dayDashboard } = useDashboardPayload("day");
   const [deskMode, setDeskMode] = useState<DashboardDeskMode>(
     dayTradingSurfaces ? "day" : "swing"
   );
@@ -293,13 +294,23 @@ function DashboardRedesignBody({
     snapshotsBySymbol.get("VIX") ||
     snapshotsBySymbol.get("^VIX");
 
-  const pulseVixLevel = useMemo(() => {
+  const swingMarketPulseRaw = useMemo(() => {
     const env = edgeDashboard?.market_pulse;
     if (!env || isStale(env)) return null;
-    const raw = (env.data ?? {}) as MarketPulseCacheData;
-    const v = raw.vix_level;
-    return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null;
+    return env.data && typeof env.data === "object" ? (env.data as Record<string, unknown>) : null;
   }, [edgeDashboard?.market_pulse]);
+
+  const dayMarketPulseRaw = useMemo(() => {
+    const env = dayDashboard?.market_pulse;
+    if (!env || isStale(env)) return null;
+    return env.data && typeof env.data === "object" ? (env.data as Record<string, unknown>) : null;
+  }, [dayDashboard?.market_pulse]);
+
+  const pulseVixLevel = useMemo(() => {
+    const raw = swingMarketPulseRaw as MarketPulseCacheData | null;
+    const v = raw?.vix_level;
+    return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null;
+  }, [swingMarketPulseRaw]);
 
   const [indicesVixSnap, setIndicesVixSnap] = useState<SnapshotPayload | null>(null);
   const tapeVixOk = useMemo(() => {
@@ -368,7 +379,7 @@ function DashboardRedesignBody({
   const vixFredDaily = vixSnapshotIsFredDaily(vixSnapshot);
 
   const swingMarketEnvironment = useMemo(() => {
-    const fromPulse = parseMarketEnvironmentFromPulse(marketPulseRaw, "swing");
+    const fromPulse = parseMarketEnvironmentFromPulse(swingMarketPulseRaw, "swing");
     if (fromPulse) return fromPulse;
     if (vixLevel == null) return null;
     return buildClientMarketEnvironmentPolicy({
@@ -377,10 +388,10 @@ function DashboardRedesignBody({
       vixChangePct: vixPct,
       macroRegime: regimeLabel
     });
-  }, [marketPulseRaw, vixLevel, vixPct, regimeLabel]);
+  }, [swingMarketPulseRaw, vixLevel, vixPct, regimeLabel]);
 
   const dayMarketEnvironment = useMemo(() => {
-    const fromPulse = parseMarketEnvironmentFromPulse(marketPulseRaw, "day");
+    const fromPulse = parseMarketEnvironmentFromPulse(dayMarketPulseRaw, "day");
     if (fromPulse) return fromPulse;
     if (vixLevel == null) return null;
     return buildClientMarketEnvironmentPolicy({
@@ -389,7 +400,7 @@ function DashboardRedesignBody({
       vixChangePct: vixPct,
       macroRegime: regimeLabel
     });
-  }, [marketPulseRaw, vixLevel, vixPct, regimeLabel]);
+  }, [dayMarketPulseRaw, vixLevel, vixPct, regimeLabel]);
 
   const dayDeskPosture: DayDeskPostureKind = useMemo(
     () =>
