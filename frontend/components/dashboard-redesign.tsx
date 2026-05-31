@@ -6,6 +6,7 @@ import { DashboardDeskModePills } from "@/components/dashboard/dashboard-desk-mo
 import { DashboardEdgeSync } from "@/components/dashboard-edge-sync";
 import { DashboardExecutionReadyStrip } from "@/components/dashboard/dashboard-execution-ready-strip";
 import { DashboardOpportunityPipeline } from "@/components/dashboard/dashboard-opportunity-pipeline";
+import { DashboardEnvironmentBanner } from "@/components/dashboard/dashboard-environment-banner";
 import { DashboardMarketPulseHero } from "@/components/dashboard/dashboard-market-pulse-hero";
 import { WatchlistSessionRefreshOrchestrator } from "@/components/watchlists/watchlist-session-refresh-orchestrator";
 import { DashboardScannerLoadingStrip } from "@/components/dashboard/dashboard-scanner-suspense-fallback";
@@ -37,6 +38,10 @@ import type { SectorRotationChip } from "@/lib/market-context/types";
 import { useMacroContext } from "@/lib/hooks/use-macro-context";
 import { useDashboardPayload } from "@/lib/hooks/use-dashboard-payload";
 import { isStale } from "@/lib/api/dashboard";
+import {
+  buildClientMarketEnvironmentPolicy,
+  parseMarketEnvironmentFromPulse
+} from "@/lib/market-environment/policy";
 import type { MarketOverview, SnapshotPayload } from "@/lib/api/market";
 import { resolveSessionActivityUiMode } from "@/lib/market/session-activity-mode";
 import {
@@ -142,8 +147,10 @@ function findVixSnapshot(snapshots: SnapshotPayload[]): SnapshotPayload | undefi
   return fringe[0];
 }
 
-type MarketPulseCacheData = {
+type MarketPulseCacheData = Record<string, unknown> & {
   vix_level?: number | null;
+  vix_change_pct?: number | null;
+  regime?: string | null;
 };
 
 function vixSnapshotFromPulseLevel(level: number): SnapshotPayload {
@@ -360,6 +367,30 @@ function DashboardRedesignBody({
   const vixLevel = vixSnapshot ? vixSnapshotDisplayLevel(vixSnapshot) : null;
   const vixFredDaily = vixSnapshotIsFredDaily(vixSnapshot);
 
+  const swingMarketEnvironment = useMemo(() => {
+    const fromPulse = parseMarketEnvironmentFromPulse(marketPulseRaw, "swing");
+    if (fromPulse) return fromPulse;
+    if (vixLevel == null) return null;
+    return buildClientMarketEnvironmentPolicy({
+      mode: "swing",
+      vixLevel,
+      vixChangePct: vixPct,
+      macroRegime: regimeLabel
+    });
+  }, [marketPulseRaw, vixLevel, vixPct, regimeLabel]);
+
+  const dayMarketEnvironment = useMemo(() => {
+    const fromPulse = parseMarketEnvironmentFromPulse(marketPulseRaw, "day");
+    if (fromPulse) return fromPulse;
+    if (vixLevel == null) return null;
+    return buildClientMarketEnvironmentPolicy({
+      mode: "day",
+      vixLevel,
+      vixChangePct: vixPct,
+      macroRegime: regimeLabel
+    });
+  }, [marketPulseRaw, vixLevel, vixPct, regimeLabel]);
+
   const dayDeskPosture: DayDeskPostureKind = useMemo(
     () =>
       dayDeskPostureKind({
@@ -452,7 +483,9 @@ function DashboardRedesignBody({
         scannerDataSettled,
         discoveryExpanded: false,
         activeDeskMode,
-        deskData: deskToday?.data ?? null
+        deskData: deskToday?.data ?? null,
+        marketEnvironmentSwing: swingMarketEnvironment,
+        marketEnvironmentDay: dayTradingSurfaces ? dayMarketEnvironment : null
       }),
     [
       regimeLabel,
@@ -468,7 +501,9 @@ function DashboardRedesignBody({
       upcomingCatalystWeek,
       scannerDataSettled,
       activeDeskMode,
-      deskToday?.data
+      deskToday?.data,
+      swingMarketEnvironment,
+      dayMarketEnvironment
     ]
   );
   usePublishAssistantContext(assistantPageContext);
@@ -566,6 +601,15 @@ function DashboardRedesignBody({
 
       {!scannerDataSettled ? <DashboardScannerLoadingStrip /> : null}
       {deferredScannerSlot}
+
+      {swingMarketEnvironment ? (
+        <DashboardEnvironmentBanner
+          swing={swingMarketEnvironment}
+          day={dayMarketEnvironment}
+          activeMode={activeDeskMode}
+          showDay={dayTradingSurfaces}
+        />
+      ) : null}
 
       <DashboardMarketPulseHero
         pageTitle={pageTitle}

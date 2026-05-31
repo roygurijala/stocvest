@@ -161,6 +161,8 @@ def _summary(
         by_pattern={},
         by_readiness={},
         by_direction={},
+        by_environment={},
+        by_capture_kind={},
         rows_examined=rows_examined,
         parameter_versions=("v1",),
     )

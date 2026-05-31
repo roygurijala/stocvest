@@ -81,6 +81,9 @@ const SAMPLE_SUMMARY = {
   by_direction: {
     bullish: { total_signals: 3, correct: 2, incorrect: 1, neutral: 0, resolved: 3, accuracy: 2 / 3 }
   },
+  by_environment: {
+    normal: { total_signals: 2, correct: 1, incorrect: 1, neutral: 0, resolved: 2, accuracy: 0.5 }
+  },
   rows_examined: 3,
   parameter_versions: ["v1"]
 };

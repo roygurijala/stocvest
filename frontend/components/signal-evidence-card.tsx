@@ -28,6 +28,7 @@ import { resolveCausalNarrative } from "@/lib/signal-evidence/causal-narrative";
 import { resolveTimeframeContext } from "@/lib/signal-evidence/timeframe-context";
 import { executionQualitySummaryLine } from "@/lib/signal-evidence/execution-quality";
 import { PlanningGatesPanel } from "@/components/signal-evidence/planning-gates-panel";
+import { RiskStackPanel } from "@/components/signal-evidence/risk-stack-panel";
 import {
   buildCompressedContextSummary,
   buildNewsNeutralParenthetical,
@@ -868,7 +869,9 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
       marketRegime: insight.market_regime ?? null,
       riskReward:
         typeof insight.risk_reward === "number" && Number.isFinite(insight.risk_reward) ? insight.risk_reward : null,
-      directionBadgeLabel: evidence.directionBadgeLabel ?? null
+      directionBadgeLabel: evidence.directionBadgeLabel ?? null,
+      deskEnvironmentHeadline: evidence.marketEnvironment?.headline ?? null,
+      environmentTier: evidence.marketEnvironment?.environment_tier ?? null
     }),
     gapIntelSnapshot
   );
@@ -1144,6 +1147,16 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
         >
           {executionQualitySummaryLine(evidence.executionQuality)}
         </p>
+      ) : null}
+
+      {evidence.marketEnvironment ? (
+        <RiskStackPanel
+          environment={evidence.marketEnvironment}
+          signalState={evidence.apiDecisionState ?? evidenceDecision.state}
+          insight={insight}
+          planningGates={evidence.planningGates}
+          ledgerGates={evidence.ledgerGateSummary}
+        />
       ) : null}
 
       {evidence.planningGates ? <PlanningGatesPanel gates={evidence.planningGates} /> : null}

@@ -89,6 +89,10 @@ export interface AssistantPageContext {
   /** Ordered headwind chain label, e.g. "Macro → Sector → Technical". */
   causal_blocking_chain?: string;
   timeframe_alignment_label?: string;
+  /** VIX environment tier when on Signals / Evidence (`normal` | `elevated` | `stressed` | `crisis`). */
+  environment_tier?: string;
+  /** One-line Layer 0 policy headline from composite `market_environment`. */
+  environment_headline?: string;
   layer_status?: Partial<Record<AssistantLayerKey, AssistantLayerStatus>>;
   /** Setup tab / command-bar bias headline (Bullish / Bearish / Neutral). */
   setup_bias?: "Bullish" | "Bearish" | "Neutral";
@@ -217,6 +221,16 @@ export type DashboardAssistantContextV1 = {
     report_date: string;
     report_time: "before_market" | "after_market" | "during_market" | "unknown";
   }>;
+  /** Layer 0 VIX tier policy for desk-wide risk (swing-oriented summary). */
+  market_environment?: {
+    tier: string;
+    headline: string;
+    vix_level: number | null;
+    new_swing_allowed: boolean;
+    new_day_allowed: boolean;
+    min_rr_swing: number;
+    min_rr_day: number;
+  };
 };
 
 /** Keys whitelisted for assistant serialization — nested object from gap-intel API. */

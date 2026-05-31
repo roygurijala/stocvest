@@ -707,6 +707,28 @@ def _serialize_dashboard_context_v1(lines: list[str], dc: dict[str, Any]) -> Non
     if reg:
         lines.append(f"dashboard_regime={reg}")
 
+    me = dc.get("market_environment")
+    if isinstance(me, dict):
+        tier = _coerce_str(me.get("tier"), limit=16).lower()
+        if tier in ("normal", "elevated", "stressed", "crisis"):
+            lines.append(f"market_environment_tier={tier}")
+        headline = _coerce_str(me.get("headline"), limit=280)
+        if headline:
+            lines.append(f"market_environment_headline={headline}")
+        vix = _coerce_num(me.get("vix_level"))
+        if vix:
+            lines.append(f"market_environment_vix={vix}")
+        if me.get("new_swing_allowed") is False:
+            lines.append("market_environment_new_swing_allowed=false")
+        if me.get("new_day_allowed") is False:
+            lines.append("market_environment_new_day_allowed=false")
+        min_swing = _coerce_num(me.get("min_rr_swing"))
+        if min_swing:
+            lines.append(f"market_environment_min_rr_swing={min_swing}")
+        min_day = _coerce_num(me.get("min_rr_day"))
+        if min_day:
+            lines.append(f"market_environment_min_rr_day={min_day}")
+
     disc = dc.get("discovery")
     if isinstance(disc, dict):
         lc = _coerce_num(disc.get("leader_count"))
@@ -1127,10 +1149,14 @@ def serialize_page_context(ctx: dict[str, Any] | None) -> str:
         if s:
             lines.append(f"{k}={s}")
 
-    for k in ("trend_strength", "trend_direction", "market_regime"):
+    for k in ("trend_strength", "trend_direction", "market_regime", "environment_tier"):
         s = _coerce_str(ctx.get(k), limit=24)
         if s:
             lines.append(f"{k}={s}")
+
+    env_headline = _coerce_str(ctx.get("environment_headline"), limit=280)
+    if env_headline:
+        lines.append(f"environment_headline={env_headline}")
 
     subscription_plan = _coerce_str(ctx.get("subscription_plan"), limit=24).lower()
     if subscription_plan in ("free", "swing_pro", "swing_day_pro"):

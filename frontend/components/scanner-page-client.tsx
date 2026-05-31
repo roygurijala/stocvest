@@ -68,6 +68,8 @@ import {
 import type { ScenarioInput } from "@/lib/scenario/types";
 import { overviewRegimeToVolatilityRegime } from "@/lib/scenario/scenario-input-present";
 import { DeskModeTabNav } from "@/components/desk-mode-tab-nav";
+import { MarketEnvironmentStrip } from "@/components/market-environment-strip";
+import { useMarketEnvironment } from "@/lib/hooks/use-market-environment";
 import { roleAccents } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -1085,6 +1087,11 @@ export function ScannerPageClient({
 
   const useCompactColumnEmpty = scanSummary.qualifying.total === 0;
   const showQuietInterpretation = scanSummary.qualifying.total === 0;
+  const envDeskMode: "day" | "swing" = scannerSetupMode === "day" ? "day" : "swing";
+  const deskMarketEnvironment = useMarketEnvironment(envDeskMode, {
+    morningBrief: overview.morningBrief as unknown as Record<string, unknown> | undefined,
+    macroRegime: overview.regimeLabel ?? null
+  });
   const gapIntelEmpty = overview.gapIntelligence.length === 0;
   const nearReadyCount = scanSummary.near_qualification.length;
   const evaluationTraceDeskFilter: "swing" | "day" | "all" =
@@ -1376,6 +1383,10 @@ export function ScannerPageClient({
           synthesis={scannerSynthesis}
           deskFilter={evaluationTraceDeskFilter}
         />
+      ) : null}
+
+      {deskMarketEnvironment ? (
+        <MarketEnvironmentStrip environment={deskMarketEnvironment} testId="scanner-environment-strip" />
       ) : null}
 
       {dayTradingSurfaces ? (

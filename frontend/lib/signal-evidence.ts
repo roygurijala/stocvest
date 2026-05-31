@@ -13,6 +13,12 @@ import {
   parseExecutionQuality,
   type ExecutionQualityPayload
 } from "@/lib/signal-evidence/execution-quality";
+import { parseLedgerGateSummary } from "@/lib/signal-evidence/ledger-gate-present";
+import { parseApiDecisionState } from "@/lib/signal-evidence/risk-stack-present";
+import {
+  parseMarketEnvironment,
+  type MarketEnvironmentPayload
+} from "@/lib/signal-evidence/market-environment-present";
 import {
   buildPlanningGatesClient,
   parsePlanningGates,
@@ -500,6 +506,12 @@ export interface SignalEvidenceData {
   /** Soft execution-quality metrics from composite (informational; not a gate). */
   executionQuality?: ExecutionQualityPayload | null;
   planningGates?: PlanningGatesPayload | null;
+  /** Layer 0 VIX environment policy from composite (`market_environment`). */
+  marketEnvironment?: MarketEnvironmentPayload | null;
+  /** Layer 3 ledger gate checklist from composite (`gate_status` / `ledger_qualified`). */
+  ledgerGateSummary?: import("@/lib/signal-evidence/ledger-gate-present").LedgerGateSummary | null;
+  /** Authoritative tri-state from composite API (`decision_state`), when present. */
+  apiDecisionState?: import("@/lib/signal-evidence/trade-decision").TradeDecisionState | null;
   /** Raw composite JSON used for enrichment (weekly / timeframe fields). */
   compositePayload?: Record<string, unknown> | null;
   /** Quality vs tradeability judgment (no hero score — process, phase, blockers). */
@@ -2175,6 +2187,9 @@ export function applySwingCompositeEnrichment(
   const executionQuality = parseExecutionQuality(body);
   const setupJudgment = parseSetupJudgment(body) ?? evidence.setupJudgment ?? null;
   const modeForGates: "day" | "swing" = cm === "day" ? "day" : "swing";
+  const marketEnvironment = parseMarketEnvironment(body);
+  const ledgerGateSummary = parseLedgerGateSummary(body) ?? evidence.ledgerGateSummary ?? null;
+  const apiDecisionState = parseApiDecisionState(body.decision_state) ?? evidence.apiDecisionState ?? null;
   const planningGates =
     parsePlanningGates(body) ??
     buildPlanningGatesClient({
@@ -2205,6 +2220,9 @@ export function applySwingCompositeEnrichment(
     causalNarrative: causalFromApi ?? evidence.causalNarrative ?? null,
     executionQuality: executionQuality ?? evidence.executionQuality ?? null,
     planningGates: planningGates ?? evidence.planningGates ?? null,
+    marketEnvironment: marketEnvironment ?? evidence.marketEnvironment ?? null,
+    ledgerGateSummary,
+    apiDecisionState,
     compositePayload: body,
     setupJudgment
   };

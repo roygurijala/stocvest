@@ -137,7 +137,21 @@ export function MorningBriefCollapse({ mb, pdt }: MorningBriefCollapseProps) {
                   </div>
                   <p style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted }}>
                     Regime: {mb.conditions.regime}
+                    {mb.conditions.environment_tier
+                      ? ` · Environment: ${String(mb.conditions.environment_tier)}`
+                      : ""}
                   </p>
+                  {mb.market_environment &&
+                  typeof mb.market_environment === "object" &&
+                  "headline" in mb.market_environment &&
+                  typeof (mb.market_environment as { headline?: string }).headline === "string" ? (
+                    <p
+                      data-testid="morning-brief-environment-headline"
+                      style={{ margin: `${spacing[2]} 0 0`, fontSize: typography.scale.xs, color: colors.text, lineHeight: 1.45 }}
+                    >
+                      {(mb.market_environment as { headline: string }).headline}
+                    </p>
+                  ) : null}
                 </section>
                 <section>
                   <h4 style={{ margin: 0, fontSize: typography.scale.sm }}>Economic events today</h4>

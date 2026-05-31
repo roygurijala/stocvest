@@ -211,15 +211,81 @@ class HistoricalValidationService:
         # microsecond / iso-format truncation the store applies before its GSI query.
         days_back = min(MAX_LOOKBACK_DAYS, int(seconds_back // 86400) + 1)
 
-        candidates = self._store.get_signal_history(
-            user_id=user_id,
-            symbol=symbol,
-            days=days_back,
-            limit=MAX_ROWS_PER_QUERY,
+        collected: list[SignalRecord] = []
+        cursor: str | None = None
+        page_size = min(500, MAX_ROWS_PER_QUERY)
+        while len(collected) < MAX_ROWS_PER_QUERY:
+            page, cursor = self._store.get_user_signal_history_page(
+                user_id=user_id,
+                symbol=symbol,
+                days=days_back,
+                page_size=page_size,
+                mode=mode,
+                ledger_qualified_only=False,
+                cursor=cursor,
+            )
+            for row in page:
+                if from_utc <= _ensure_utc(row.generated_at) < to_utc:
+                    collected.append(row)
+            if not cursor or not page:
+                break
+        return collected[:MAX_ROWS_PER_QUERY]
+
+    def fetch_backtest_window(
+        self,
+        *,
+        scope: str,
+        from_at: datetime,
+        to_at: datetime,
+        mode: str | None = None,
+        user_id: str | None = None,
+    ) -> list[SignalRecord]:
+        """Load rows for desk backtesting.
+
+        ``public`` — platform mirror partition (``user_id=None``).
+        ``mine`` — caller's user scope.
+        ``all`` — bounded full-table scan (admin only; dedupes platform mirrors).
+        """
+        scope_norm = (scope or "public").strip().lower()
+        if scope_norm == "all":
+            scan = getattr(self._store, "scan_records_in_window", None)
+            if callable(scan):
+                rows = scan(from_at=from_at, to_at=to_at, mode=mode, max_rows=MAX_ROWS_PER_QUERY)
+            else:
+                rows = []
+            # User-scoped rows only — mirrors duplicate the same captures under PUBLIC.
+            return [r for r in rows if r.user_id]
+        uid = user_id if scope_norm in ("mine", "user", "self") else None
+        return self._fetch(
+            user_id=uid,
+            from_at=from_at,
+            to_at=to_at,
             mode=mode,
-            ledger_qualified_only=False,
+            symbol=None,
         )
-        return [row for row in candidates if from_utc <= _ensure_utc(row.generated_at) < to_utc]
+
+    def summarize_backtest(
+        self,
+        *,
+        scope: str,
+        from_at: datetime,
+        to_at: datetime,
+        horizon: Horizon,
+        mode: str | None = None,
+        symbol: str | None = None,
+        user_id: str | None = None,
+    ) -> HistoricalValidationSummary:
+        rows = self.fetch_backtest_window(
+            scope=scope,
+            from_at=from_at,
+            to_at=to_at,
+            mode=mode,
+            user_id=user_id,
+        )
+        sym = symbol.strip().upper() if symbol else None
+        if sym:
+            rows = [r for r in rows if r.symbol.upper() == sym]
+        return validate_signal_history(rows, horizon=horizon)
 
 
 def _to_utc(dt: datetime) -> datetime:

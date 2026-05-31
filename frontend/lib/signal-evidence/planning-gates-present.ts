@@ -21,13 +21,15 @@ export type PlanningGatesPayload = {
   preset_fit: Record<string, string>;
   risk_cap_pct: Record<string, number>;
   atr_k_by_preset: Record<string, number>;
+  min_rr_desk?: number;
+  environment_tier?: string | null;
   checks: PlanningGateCheck[];
   all_favorable: boolean;
   summary: string;
 };
 
 const DISCLAIMER =
-  "Planning context is informational only — it does not change actionable verdicts, layer scores, or validation ledger eligibility.";
+  "Planning context summarizes desk readiness. Market environment tier affects validation ledger gates; it does not change actionable verdicts or layer scores.";
 
 function numOrNull(v: unknown): number | null {
   if (typeof v === "number" && Number.isFinite(v)) return v;
@@ -81,6 +83,9 @@ export function parsePlanningGates(body: Record<string, unknown>): PlanningGates
     preset_fit: Object.keys(presetFit).length ? presetFit : defaultPresetFit(String(o.regime_tag ?? "mixed")),
     risk_cap_pct: Object.keys(riskCap).length ? riskCap : { ...PRESET_MAX_RISK_PCT },
     atr_k_by_preset: Object.keys(atrK).length ? atrK : { ...REFERENCE_STOP_ATR_K_BY_PRESET },
+    min_rr_desk: numOrNull(o.min_rr_desk) ?? undefined,
+    environment_tier:
+      typeof o.environment_tier === "string" && o.environment_tier.trim() ? o.environment_tier.trim() : null,
     checks,
     all_favorable: Boolean(o.all_favorable),
     summary:

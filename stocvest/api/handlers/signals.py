@@ -1370,6 +1370,8 @@ def _summary_to_dict(summary: HistoricalValidationSummary) -> dict[str, Any]:
         "by_pattern": {k: _bucket_stats_to_dict(v) for k, v in summary.by_pattern.items()},
         "by_readiness": {k: _bucket_stats_to_dict(v) for k, v in summary.by_readiness.items()},
         "by_direction": {k: _bucket_stats_to_dict(v) for k, v in summary.by_direction.items()},
+        "by_environment": {k: _bucket_stats_to_dict(v) for k, v in summary.by_environment.items()},
+        "by_capture_kind": {k: _bucket_stats_to_dict(v) for k, v in summary.by_capture_kind.items()},
         "rows_examined": summary.rows_examined,
         "parameter_versions": list(summary.parameter_versions),
     }
@@ -1804,6 +1806,24 @@ def signals_http_dispatch(event: LambdaEvent, context: LambdaContext) -> dict[st
         )
 
         return admin_system_status_handler(event, context)
+    if (
+        route == "GET /v1/admin/historical-validation/summary"
+        or route.startswith("GET /v1/admin/historical-validation/summary?")
+    ):
+        from stocvest.api.handlers.admin_desk_backtest import (
+            admin_historical_validation_summary_handler,
+        )
+
+        return admin_historical_validation_summary_handler(event, context)
+    if (
+        route == "GET /v1/admin/environment-policy/backtest"
+        or route.startswith("GET /v1/admin/environment-policy/backtest?")
+    ):
+        from stocvest.api.handlers.admin_desk_backtest import (
+            admin_environment_policy_backtest_handler,
+        )
+
+        return admin_environment_policy_backtest_handler(event, context)
     if route.endswith("/laggard") and route.startswith("GET /v1/signals/"):
         from stocvest.api.handlers.laggard import signal_laggard_handler
 

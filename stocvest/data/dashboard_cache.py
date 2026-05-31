@@ -28,6 +28,7 @@ class DashboardKeys:
     TOP_SIGNALS_SWING = "stocvest:dashboard:top_signals_swing"
     TOP_SIGNALS_DAY = "stocvest:dashboard:top_signals_day"
     MARKET_PULSE = "stocvest:dashboard:market_pulse"
+    ENVIRONMENT_TIER_STATE = "stocvest:dashboard:environment_tier_state"
     SECTOR_ROTATION = "stocvest:dashboard:sector_rotation"
     UPCOMING_EVENTS = "stocvest:dashboard:upcoming_events"
     ACTIVE_POSITIONS = "stocvest:dashboard:active_positions"

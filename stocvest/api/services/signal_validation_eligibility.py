@@ -30,6 +30,10 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from stocvest.api.services.market_environment import (
+    environment_for_ledger_gate,
+    min_risk_reward_from_environment,
+)
 from stocvest.signals.composite_score import CompositeVerdict
 
 # Display-scale score: round((composite.score + 1) * 50), same as composite engines.
@@ -73,8 +77,9 @@ def evaluate_swing_ledger_entry(
     macro_market_regime: str,
     risk_reward: float | None,
     layer_scores: dict[str, float],
+    market_environment: dict[str, Any] | None = None,
 ) -> tuple[bool, dict[str, Any]]:
-    """Swing: multi-day framing; R/R minimum ``MIN_RISK_REWARD_SWING``."""
+    """Swing: multi-day framing; R/R minimum from environment policy when provided."""
     gates: dict[str, Any] = {}
     ds = derive_decision_state(response_status=response_status, verdict=verdict)
     gates["decision_state"] = {
@@ -86,7 +91,24 @@ def evaluate_swing_ledger_entry(
         return False, gates
 
     ok = True
-    min_rr = MIN_RISK_REWARD_SWING
+    min_rr = min_risk_reward_from_environment(market_environment, mode="swing")
+    env_ok, env_reason = environment_for_ledger_gate(market_environment, mode="swing")
+    gates["market_environment"] = {
+        "pass": env_ok,
+        "reason": env_reason,
+        "tier": (
+            str(market_environment.get("environment_tier"))
+            if isinstance(market_environment, dict)
+            else None
+        ),
+        "policy_version": (
+            str(market_environment.get("policy_version"))
+            if isinstance(market_environment, dict)
+            else None
+        ),
+    }
+    if not env_ok:
+        ok = False
 
     s100 = _score_0_100_from_composite(composite_score)
     if s100 < MIN_ACTIONABLE_SCORE_0_100:
@@ -140,8 +162,9 @@ def evaluate_day_ledger_entry(
     intraday_bar_count: int,
     orb_signal: str | None,
     vwap_state: str | None,
+    market_environment: dict[str, Any] | None = None,
 ) -> tuple[bool, dict[str, Any]]:
-    """Day: intraday structure plus shared gates; R/R minimum ``MIN_RISK_REWARD_DAY``."""
+    """Day: intraday structure plus shared gates; R/R minimum from environment when provided."""
     gates: dict[str, Any] = {}
     ds = derive_decision_state(response_status=response_status, verdict=verdict)
     gates["decision_state"] = {
@@ -153,7 +176,24 @@ def evaluate_day_ledger_entry(
         return False, gates
 
     ok = True
-    min_rr = MIN_RISK_REWARD_DAY
+    min_rr = min_risk_reward_from_environment(market_environment, mode="day")
+    env_ok, env_reason = environment_for_ledger_gate(market_environment, mode="day")
+    gates["market_environment"] = {
+        "pass": env_ok,
+        "reason": env_reason,
+        "tier": (
+            str(market_environment.get("environment_tier"))
+            if isinstance(market_environment, dict)
+            else None
+        ),
+        "policy_version": (
+            str(market_environment.get("policy_version"))
+            if isinstance(market_environment, dict)
+            else None
+        ),
+    }
+    if not env_ok:
+        ok = False
 
     s100 = _score_0_100_from_composite(composite_score)
     if s100 < MIN_ACTIONABLE_SCORE_0_100:
@@ -204,12 +244,44 @@ def evaluate_day_ledger_entry(
     return ok, gates
 
 
+def market_environment_audit_blob(market_environment: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Compact Layer 0 snapshot for ledger replay (gold-standard audit trail)."""
+    if not isinstance(market_environment, dict):
+        return None
+    tier = str(market_environment.get("environment_tier") or "").strip().lower()
+    if tier not in ("normal", "elevated", "stressed", "crisis"):
+        tier = "normal"
+    vix = market_environment.get("vix_level")
+    try:
+        vix_f = round(float(vix), 2) if vix is not None else None
+    except (TypeError, ValueError):
+        vix_f = None
+    chg = market_environment.get("vix_change_pct")
+    try:
+        chg_f = round(float(chg), 2) if chg is not None else None
+    except (TypeError, ValueError):
+        chg_f = None
+    return {
+        "policy_version": str(market_environment.get("policy_version") or ""),
+        "environment_tier": tier,
+        "environment_tier_raw": str(market_environment.get("environment_tier_raw") or tier),
+        "hysteresis_applied": bool(market_environment.get("hysteresis_applied")),
+        "vix_level": vix_f,
+        "vix_change_pct": chg_f,
+        "vix_change_5d_pct": market_environment.get("vix_change_5d_pct"),
+        "min_rr_swing": market_environment.get("min_rr_swing"),
+        "min_rr_day": market_environment.get("min_rr_day"),
+        "target_policy": market_environment.get("target_policy"),
+    }
+
+
 def gate_blob_json(
     gates: dict[str, Any],
     *,
     qualified: bool,
     execution_quality: dict[str, Any] | None = None,
     evaluation_source: str | None = None,
+    market_environment: dict[str, Any] | None = None,
 ) -> str:
     """Serialize gate outcome; optional study fields for Phase 1/2 audit rows."""
     blob: dict[str, Any] = {"qualified": qualified, "gates": gates}
@@ -217,6 +289,9 @@ def gate_blob_json(
         blob["execution_quality"] = execution_quality
     if evaluation_source:
         blob["evaluation_source"] = evaluation_source
+    env_audit = market_environment_audit_blob(market_environment)
+    if env_audit:
+        blob["market_environment_audit"] = env_audit
     return json.dumps(blob, separators=(",", ":"))
 
 

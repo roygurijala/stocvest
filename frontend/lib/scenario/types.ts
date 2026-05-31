@@ -153,6 +153,10 @@ export interface ScenarioInput {
    * phases (e.g. pre-market swing planning, day open volatility).
    */
   structural_planning_banner?: string | null;
+  /** Layer 0 desk headline from VIX environment policy (informational). */
+  desk_environment_headline?: string | null;
+  /** VIX tier label for scenario sheet context. */
+  environment_tier?: string | null;
   /**
    * Free-form display tags surfaced to the user inside the modal's
    * Reference block so they remember why this row was actionable in

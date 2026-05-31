@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 
+from stocvest.api.services.market_environment import build_market_environment_policy
 from stocvest.api.services.planning_gates import build_planning_gates_payload
 
 
@@ -22,8 +23,25 @@ def test_planning_gates_all_favorable_swing() -> None:
     )
     assert payload["regime_tag"] == "trending"
     assert payload["all_favorable"] is True
-    assert len(payload["checks"]) == 5
+    assert len(payload["checks"]) == 6
     assert payload["risk_cap_pct"]["dip"] == 1.5
+
+
+def test_planning_gates_uses_environment_min_rr() -> None:
+    env = build_market_environment_policy(mode="swing", vix_level=22.0)
+    payload = build_planning_gates_payload(
+        mode="swing",
+        market_regime="Bullish",
+        risk_reward=2.8,
+        execution_quality={"volume_ratio": 1.6, "volume_band": "strong"},
+        reference_stop_provenance="structural+ATR",
+        atr=3.0,
+        setup_judgment=None,
+        market_environment=env,
+    )
+    assert payload["min_rr_desk"] == 3.0
+    rr_check = next(c for c in payload["checks"] if c["id"] == "risk_reward")
+    assert rr_check["pass"] is False
 
 
 def test_day_dip_window_passes_afternoon_et() -> None:

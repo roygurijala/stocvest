@@ -167,6 +167,10 @@ def _record_to_item(rec: SignalRecord) -> dict[str, Any]:
         item["ledger_position_open"] = bool(rec.ledger_position_open)
     if rec.validation_outcome:
         item["validation_outcome"] = rec.validation_outcome
+    if rec.capture_kind:
+        item["capture_kind"] = rec.capture_kind
+    if rec.source_signal_id:
+        item["source_signal_id"] = rec.source_signal_id
     return item
 
 
@@ -308,6 +312,32 @@ class InMemorySignalRecorder:
         """Full table scan (admin / analysis only)."""
         return [_item_to_record(it) for it in self._items.values() if isinstance(it, dict)]
 
+    def scan_records_in_window(
+        self,
+        *,
+        from_at: datetime,
+        to_at: datetime,
+        mode: str | None = None,
+        max_rows: int = 5000,
+    ) -> list[SignalRecord]:
+        from_utc = from_at.astimezone(timezone.utc) if from_at.tzinfo else from_at.replace(tzinfo=timezone.utc)
+        to_utc = to_at.astimezone(timezone.utc) if to_at.tzinfo else to_at.replace(tzinfo=timezone.utc)
+        mode_filter = mode.strip().lower() if mode else None
+        if mode_filter not in (None, "", "day", "swing"):
+            mode_filter = None
+        out: list[SignalRecord] = []
+        for it in self._items.values():
+            rec = _item_to_record(it)
+            gen = rec.generated_at.astimezone(timezone.utc)
+            if gen < from_utc or gen >= to_utc:
+                continue
+            if mode_filter and rec.mode != mode_filter:
+                continue
+            out.append(rec)
+            if len(out) >= max_rows:
+                break
+        return out
+
     def list_raw_signal_items(self) -> list[dict[str, Any]]:
         """In-memory store snapshot for batched resolution (mirrors DynamoDB recorder API)."""
         return [it for it in self._items.values() if isinstance(it, dict)]
@@ -441,8 +471,9 @@ class DynamoDBSignalRecorder:
         if not name:
             raise ValueError("DYNAMODB_SIGNAL_HISTORY_TABLE is not set")
         kwargs: dict[str, Any] = {}
-        if settings.dynamodb_endpoint_url:
-            kwargs["endpoint_url"] = settings.dynamodb_endpoint_url
+        endpoint = (settings.dynamodb_endpoint_url or "").strip()
+        if endpoint.startswith("http://") or endpoint.startswith("https://"):
+            kwargs["endpoint_url"] = endpoint
         dynamodb = boto3.resource("dynamodb", **kwargs)
         return cls(table=dynamodb.Table(name))
 
@@ -630,6 +661,37 @@ class DynamoDBSignalRecorder:
         """Full table scan (admin / analysis only)."""
         return [_item_to_record(x) for x in self._scan_all() if isinstance(x, dict)]
 
+    def scan_records_in_window(
+        self,
+        *,
+        from_at: datetime,
+        to_at: datetime,
+        mode: str | None = None,
+        max_rows: int = 5000,
+    ) -> list[SignalRecord]:
+        """Bounded scan for admin backtest ``scope=all`` (all user + PUBLIC partitions)."""
+        from_utc = from_at.astimezone(timezone.utc) if from_at.tzinfo else from_at.replace(tzinfo=timezone.utc)
+        to_utc = to_at.astimezone(timezone.utc) if to_at.tzinfo else to_at.replace(tzinfo=timezone.utc)
+        mode_filter = mode.strip().lower() if mode else None
+        if mode_filter not in (None, "", "day", "swing"):
+            mode_filter = None
+        out: list[SignalRecord] = []
+        for raw in self._scan_all():
+            if not isinstance(raw, dict):
+                continue
+            gen = datetime.fromisoformat(str(raw.get("generated_at", "")).replace("Z", "+00:00"))
+            if gen.tzinfo is None:
+                gen = gen.replace(tzinfo=timezone.utc)
+            if gen < from_utc or gen >= to_utc:
+                continue
+            rec = _item_to_record(raw)
+            if mode_filter and rec.mode != mode_filter:
+                continue
+            out.append(rec)
+            if len(out) >= max_rows:
+                break
+        return out
+
     def list_raw_signal_items(self) -> list[dict[str, Any]]:
         """Single DynamoDB scan — reuse for multiple resolution passes in one Lambda invocation."""
         return self._scan_all()
@@ -715,6 +777,20 @@ class DynamoDBSignalRecorder:
                 log.warning("resolve update failed signal_id=%s: %s", item.get("signal_id"), exc)
                 continue
             updated += 1
+            uid = item.get("user_id")
+            if uid and not str(item.get("signal_id", "")).startswith("pub-"):
+                from stocvest.api.services.signal_backtest_capture import platform_mirror_signal_id
+
+                mirror_id = platform_mirror_signal_id(str(item["signal_id"]))
+                try:
+                    self._table.update_item(
+                        Key={"signal_id": mirror_id},
+                        UpdateExpression="SET " + ", ".join(expr_parts),
+                        ExpressionAttributeNames=names,
+                        ExpressionAttributeValues=vals,
+                    )
+                except ClientError:
+                    pass
         return updated
 
     def has_open_validation_position(self, user_id: str, symbol: str, mode: str) -> bool:

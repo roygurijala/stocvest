@@ -169,6 +169,9 @@ async def fetch_morning_brief_context_live(
     qqq_pct = _pct_from_snapshot(qqq)
     vix_level = vix_level_from_snapshot(vix_snap)
     vix_chg = float(vix_snap.change_percent) if vix_snap and vix_snap.change_percent is not None else None
+    from stocvest.api.services.market_environment import fetch_vix_change_5d_pct
+
+    vix_chg_5d = await fetch_vix_change_5d_pct(current_vix=vix_level)
     regime = infer_regime(spy_pct, qqq_pct, vix_level)
 
     econ_brief = [
@@ -191,6 +194,8 @@ async def fetch_morning_brief_context_live(
         futures_qqq_pct=qqq_pct,
         vix_level=vix_level,
         vix_direction=vix_direction_from_change(vix_chg),
+        vix_change_pct=vix_chg,
+        vix_change_5d_pct=vix_chg_5d,
         regime=regime,
         economic_events=econ_brief,
         earnings_today=earn_today,
@@ -234,6 +239,8 @@ def morning_brief_context_from_payload_dict(raw: dict[str, Any], briefing_date: 
         futures_qqq_pct=_f(raw.get("futures_qqq_pct")),
         vix_level=_f(raw.get("vix_level")),
         vix_direction=str(raw.get("vix_direction") or "flat"),
+        vix_change_pct=_f(raw.get("vix_change_pct")),
+        vix_change_5d_pct=_f(raw.get("vix_change_5d_pct")),
         regime=str(raw.get("regime") or "Neutral"),
         economic_events=econ,
         earnings_today=earn,

@@ -604,6 +604,30 @@ export function ScenarioBuilderModal({
               className={`min-h-0 flex-1 overflow-y-auto ${MODAL_DIALOG_SCROLL_CLASS}`}
               style={{ padding: spacing[5], paddingTop: spacing[4] }}
             >
+            {input.desk_environment_headline ? (
+              <p
+                className="mb-4 rounded-md border px-3 py-2 text-xs leading-relaxed"
+                style={{
+                  borderColor: colors.border,
+                  color: colors.text,
+                  background: colors.surfaceMuted
+                }}
+                role="status"
+                data-testid="scenario-desk-environment-banner"
+              >
+                {input.environment_tier ? (
+                  <span className="font-semibold" style={{ color: colors.textMuted }}>
+                    Desk environment ({input.environment_tier}) —{" "}
+                  </span>
+                ) : (
+                  <span className="font-semibold" style={{ color: colors.textMuted }}>
+                    Desk environment —{" "}
+                  </span>
+                )}
+                {input.desk_environment_headline}
+              </p>
+            ) : null}
+
             {input.structural_planning_banner ? (
               <p
                 className="mb-4 rounded-md border px-3 py-2 text-xs leading-relaxed"

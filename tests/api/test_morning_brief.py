@@ -27,6 +27,46 @@ def _pdt(used: int, *, warn: bool = False, limit: bool = False) -> PDTAssessment
     )
 
 
+def test_brief_includes_market_environment_policy() -> None:
+    ctx = MorningBriefContext(
+        briefing_date=date(2026, 5, 2),
+        futures_spy_pct=0.2,
+        futures_qqq_pct=0.3,
+        vix_level=29.0,
+        vix_direction="rising",
+        vix_change_pct=5.0,
+        regime="Neutral",
+        pdt=None,
+    )
+    out = build_morning_brief_payload(ctx)
+    assert out["conditions"]["environment_tier"] == "stressed"
+    assert out["market_environment"]["new_swing_allowed"] is False
+    assert out["market_environment"]["policy_version"] == "env_policy_v2"
+    assert "market_environment_day" in out["conditions"]
+
+
+def test_brief_hysteresis_holds_tier_on_improvement() -> None:
+    from unittest.mock import patch
+
+    ctx = MorningBriefContext(
+        briefing_date=date(2026, 5, 2),
+        futures_spy_pct=0.2,
+        futures_qqq_pct=0.3,
+        vix_level=18.0,
+        vix_direction="falling",
+        vix_change_pct=-1.0,
+        regime="Bullish",
+        pdt=None,
+    )
+    with patch(
+        "stocvest.signals.morning_brief.read_environment_tier_state",
+        return_value={"environment_tier": "stressed"},
+    ):
+        out = build_morning_brief_payload(ctx)
+    assert out["conditions"]["environment_tier"] == "elevated"
+    assert out["market_environment"]["environment_tier_raw"] == "normal"
+
+
 def test_brief_contains_all_six_sections() -> None:
     ctx = MorningBriefContext(
         briefing_date=date(2026, 5, 2),

@@ -2,6 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  fetchAdminHistoricalValidationByVersion,
+  fetchAdminHistoricalValidationSummary,
+  type AdminValidationScope
+} from "@/lib/api/admin-desk-backtest";
+import {
   ALL_VERSIONS_KEY,
   buildTrailingWindow,
   defaultCompareSelection,
@@ -40,7 +45,17 @@ import { useTheme } from "@/lib/theme-provider";
  *   drift between the assistant prompt, this panel, and any future public mirror.
  */
 
-type WindowDays = 30 | 60 | 90;
+type WindowDays = 30 | 60 | 90 | 180;
+
+export type HistoricalValidationLedgerScope = "user" | "admin-public";
+
+export interface HistoricalValidationPanelProps {
+  /** When `admin-public`, queries the platform PUBLIC ledger via admin API. */
+  ledgerScope?: HistoricalValidationLedgerScope;
+  /** Admin desk only: `public` (mirrors), `all` (user rows), `mine` (your scope). */
+  adminScope?: import("@/lib/api/admin-desk-backtest").AdminValidationScope;
+  windowOptions?: readonly WindowDays[];
+}
 /**
  * Mode Separation safety perimeter (assistant_prompts.py): "Statistics,
  * hit-rates, and outcomes must never be combined into a single headline
@@ -52,7 +67,7 @@ type WindowDays = 30 | 60 | 90;
  */
 export type ModeFilter = "swing" | "day";
 
-const WINDOW_OPTIONS: WindowDays[] = [30, 60, 90];
+const DEFAULT_WINDOW_OPTIONS: WindowDays[] = [30, 60, 90];
 const HORIZON_OPTIONS: ValidationHorizon[] = ["1h", "1d"];
 export const MODE_OPTIONS: ModeFilter[] = ["swing", "day"];
 
@@ -87,6 +102,14 @@ const BUCKET_LABELS: Record<string, string> = {
   // direction
   bullish: "Bullish",
   bearish: "Bearish",
+  // VIX environment tier at ledger capture
+  normal: "Normal VIX",
+  elevated: "Elevated VIX",
+  stressed: "Stressed VIX",
+  crisis: "Crisis VIX",
+  qualified: "Ledger-qualified",
+  shadow: "Shadow capture (gates failed)",
+  live: "Live composite (non-study)",
   // overflow / fallback buckets — these are produced by Phase 1 when the engine
   // emits a value outside the declared vocabulary. We surface them so the user can
   // see "there was data we couldn't categorize" rather than silently dropping it.
@@ -101,7 +124,14 @@ function labelFor(key: string): string {
 interface StratificationConfig {
   key: keyof Pick<
     HistoricalValidationSummary,
-    "by_decision" | "by_regime" | "by_mode" | "by_pattern" | "by_readiness" | "by_direction"
+    | "by_decision"
+    | "by_regime"
+    | "by_mode"
+    | "by_pattern"
+    | "by_readiness"
+    | "by_direction"
+    | "by_environment"
+    | "by_capture_kind"
   >;
   title: string;
   /** Optional explicit ordering — keys not listed here fall to the end alphabetically. */
@@ -145,6 +175,20 @@ const STRATIFICATIONS: StratificationConfig[] = [
     title: "Direction",
     preferredOrder: ["bullish", "bearish", "neutral"],
     description: "Direction declared at signal time. Neutral signals are tracked but never advised."
+  },
+  {
+    key: "by_environment",
+    title: "Market environment (VIX tier)",
+    preferredOrder: ["normal", "elevated", "stressed", "crisis", "unknown"],
+    description:
+      "Layer 0 VIX tier stored in the ledger gate blob at entry. Replay which desk conditions produced resolved outcomes."
+  },
+  {
+    key: "by_capture_kind",
+    title: "Capture kind",
+    preferredOrder: ["qualified", "shadow", "live", "unknown"],
+    description:
+      "Qualified ledger entries vs scheduled shadow captures vs other live writes. Use this to separate study rows from real desk entries."
   }
 ];
 
@@ -284,15 +328,24 @@ function StratificationCard({ config, summary, colors }: StratificationCardProps
   );
 }
 
-export function HistoricalValidationPanel() {
+export function HistoricalValidationPanel({
+  ledgerScope = "user",
+  adminScope: adminScopeProp = "public",
+  windowOptions = DEFAULT_WINDOW_OPTIONS
+}: HistoricalValidationPanelProps = {}) {
   const { colors } = useTheme();
+  const adminScope: AdminValidationScope | undefined =
+    ledgerScope === "admin-public" ? adminScopeProp : undefined;
   const [horizon, setHorizon] = useState<ValidationHorizon>("1h");
-  const [days, setDays] = useState<WindowDays>(30);
+  const [days, setDays] = useState<WindowDays>(windowOptions[0] ?? 30);
   // Default to swing — the first-class engine in STOCVEST's product framing,
   // with the deeper signal history. Users can flip to day with one click.
   const [mode, setMode] = useState<ModeFilter>("swing");
   // Phase 4 — cross-version compare toggle. Off by default so the panel still opens to
   // the calm single-version overview; the user opts into the more detailed A-vs-B view.
+  const [backtestScope, setBacktestScope] = useState<AdminValidationScope>(
+    adminScopeProp ?? "public"
+  );
   const [compare, setCompare] = useState(false);
   const [response, setResponse] = useState<HistoricalValidationResponse | null>(null);
   const [byVersion, setByVersion] = useState<HistoricalValidationByVersionResponse | null>(null);
@@ -317,7 +370,13 @@ export function HistoricalValidationPanel() {
         mode: m
       };
       if (cmp) {
-        const result = await fetchHistoricalValidationByVersion(params);
+        const result =
+          ledgerScope === "admin-public"
+            ? await fetchAdminHistoricalValidationByVersion({
+                ...params,
+                scope: adminScope
+              })
+            : await fetchHistoricalValidationByVersion(params);
         setByVersion(result);
         setResponse(null);
         setUnauthenticated(result === null);
@@ -343,7 +402,13 @@ export function HistoricalValidationPanel() {
           setVersionB(null);
         }
       } else {
-        const result = await fetchHistoricalValidationSummary(params);
+        const result =
+          ledgerScope === "admin-public"
+            ? await fetchAdminHistoricalValidationSummary({
+                ...params,
+                scope: adminScope
+              })
+            : await fetchHistoricalValidationSummary(params);
         setResponse(result);
         setByVersion(null);
         setUnauthenticated(result === null);
@@ -354,7 +419,7 @@ export function HistoricalValidationPanel() {
     // current values at call time, and including them would re-fetch every time the
     // user changes a dropdown (which is a pure local state change, not a refetch).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
+    [ledgerScope, adminScope, backtestScope]
   );
 
   useEffect(() => {
@@ -417,12 +482,26 @@ export function HistoricalValidationPanel() {
         />
         <FilterGroup
           label="Window"
-          options={WINDOW_OPTIONS.map((d) => ({ value: String(d), label: `${d} days` }))}
+          options={windowOptions.map((d) => ({ value: String(d), label: `${d} days` }))}
           value={String(days)}
           onChange={(v) => setDays(Number(v) as WindowDays)}
           colors={colors}
           testId="hv-window"
         />
+        {ledgerScope === "admin-public" ? (
+          <FilterGroup
+            label="Data scope"
+            options={[
+              { value: "public", label: "Platform (PUBLIC mirror)" },
+              { value: "all", label: "All users (deduped)" },
+              { value: "mine", label: "My scope" }
+            ]}
+            value={backtestScope}
+            onChange={(v) => setBacktestScope(v as AdminValidationScope)}
+            colors={colors}
+            testId="hv-backtest-scope"
+          />
+        ) : null}
         <FilterGroup
           label="Mode"
           options={MODE_OPTIONS.map((m) => ({

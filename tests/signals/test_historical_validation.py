@@ -18,6 +18,7 @@ These lock in the contract that Phase 2+ (service layer, API, UI) will depend on
 
 from __future__ import annotations
 
+import json
 import math
 from datetime import datetime, timezone
 
@@ -47,6 +48,7 @@ def _signal(
     outcome_1h: str | None = None,
     outcome_1d: str | None = None,
     parameter_version: str | None = "v1",
+    gate_status_json: str | None = None,
 ) -> SignalRecord:
     """Build a minimally-valid ``SignalRecord`` for tests.
 
@@ -70,6 +72,7 @@ def _signal(
         decision_state_entry=decision_state_entry,
         regime_label_at_entry=regime_label_at_entry,
         parameter_version=parameter_version,
+        gate_status_json=gate_status_json,
     )
 
 
@@ -364,3 +367,56 @@ def test_summary_and_bucket_stats_are_immutable_dataclasses() -> None:
     else:
         immutable_bucket = False
     assert immutable_bucket, "BucketStats must be frozen"
+
+
+def test_stratifies_by_capture_kind() -> None:
+    rows = [
+        _signal(
+            signal_id="q1",
+            outcome_1d="correct",
+            decision_state_entry="actionable",
+        ).model_copy(update={"ledger_qualified": True, "capture_kind": "qualified"}),
+        _signal(
+            signal_id="s1",
+            outcome_1d="incorrect",
+            pattern="orb:ledger_capture_shadow",
+            decision_state_entry="blocked",
+        ).model_copy(update={"ledger_qualified": False, "capture_kind": "shadow"}),
+    ]
+    summary = validate_signal_history(rows, horizon="1d")
+    assert summary.by_capture_kind["qualified"].correct == 1
+    assert summary.by_capture_kind["shadow"].incorrect == 1
+
+
+def test_stratifies_by_environment_tier_from_gate_blob() -> None:
+    stressed_blob = json.dumps(
+        {
+            "qualified": True,
+            "gates": {"market_environment": {"pass": True, "tier": "stressed"}},
+            "market_environment_audit": {
+                "policy_version": "env_policy_v2",
+                "environment_tier": "stressed",
+                "vix_level": 29.0,
+            },
+        }
+    )
+    normal_blob = json.dumps(
+        {
+            "qualified": False,
+            "gates": {"market_environment": {"pass": True, "tier": "normal"}},
+            "market_environment_audit": {
+                "policy_version": "env_policy_v2",
+                "environment_tier": "normal",
+                "vix_level": 17.0,
+            },
+        }
+    )
+    records = [
+        _signal(signal_id="a", outcome_1d="correct", gate_status_json=normal_blob),
+        _signal(signal_id="b", outcome_1d="incorrect", gate_status_json=stressed_blob),
+        _signal(signal_id="c", outcome_1d="correct"),  # unknown environment
+    ]
+    summary = validate_signal_history(records, horizon="1d")
+    assert summary.by_environment["normal"].correct == 1
+    assert summary.by_environment["stressed"].incorrect == 1
+    assert summary.by_environment["unknown"].correct == 1

@@ -10,6 +10,12 @@ import asyncio
 from datetime import datetime
 from typing import Any
 
+from stocvest.api.services.market_environment import (
+    build_market_environment_policy,
+    fetch_vix_change_5d_pct,
+    read_environment_tier_state,
+    write_environment_tier_state,
+)
 from stocvest.api.services.morning_brief_fetch import get_vix_snapshot_with_fallback
 from stocvest.data import PolygonClient
 from stocvest.data.dashboard_cache import DashboardKeys, write_dashboard_cache
@@ -56,12 +62,47 @@ async def refresh_market_pulse() -> dict[str, Any]:
         spy_pct = _session_pct(spy)
         qqq_pct = _session_pct(qqq)
         vix_level = vix_level_from_snapshot(vix_snap)
+        vix_chg = (
+            float(vix_snap.change_percent)
+            if vix_snap is not None and vix_snap.change_percent is not None
+            else None
+        )
         regime = infer_regime(spy_pct, qqq_pct, vix_level)
+        vix_chg_5d = await fetch_vix_change_5d_pct(current_vix=vix_level)
+        state = read_environment_tier_state()
+        prev_raw = str(state.get("environment_tier") or "").strip().lower() if state else ""
+        previous = prev_raw if prev_raw in ("normal", "elevated", "stressed", "crisis") else None
+        env_swing = build_market_environment_policy(
+            mode="swing",
+            vix_level=vix_level,
+            vix_change_pct=vix_chg,
+            vix_change_5d_pct=vix_chg_5d,
+            macro_regime=regime,
+            previous_environment_tier=previous,  # type: ignore[arg-type]
+            persist_tier_state=True,
+        )
+        env_day = build_market_environment_policy(
+            mode="day",
+            vix_level=vix_level,
+            vix_change_pct=vix_chg,
+            vix_change_5d_pct=vix_chg_5d,
+            macro_regime=regime,
+            previous_environment_tier=previous,  # type: ignore[arg-type]
+            persist_tier_state=False,
+        )
+        write_environment_tier_state(
+            environment_tier=str(env_swing.get("environment_tier") or "normal"),
+            vix_level=vix_level,
+        )
         payload = {
             "spy_pct": spy_pct,
             "qqq_pct": qqq_pct,
             "vix_level": vix_level,
+            "vix_change_pct": vix_chg,
             "regime": regime,
+            "market_environment": env_swing,
+            "market_environment_swing": env_swing,
+            "market_environment_day": env_day,
         }
     ok = write_dashboard_cache(
         DashboardKeys.MARKET_PULSE,

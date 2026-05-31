@@ -10,7 +10,11 @@ from stocvest.api.services.risk_reward_structure import (
     structure_risk_reward_long,
     structure_risk_reward_short,
 )
-from stocvest.api.services.signal_validation_eligibility import MIN_RISK_REWARD_DAY, MIN_RISK_REWARD_SWING
+from stocvest.api.services.market_environment import (
+    min_risk_reward_from_environment,
+    suppress_reference_target_2,
+    target_policy_from_environment,
+)
 from stocvest.signals.composite_score import CompositeSignal, CompositeVerdict
 from stocvest.api.services.reference_stop_policy import (
     format_merged_stop_provenance,
@@ -580,6 +584,27 @@ def build_swing_composite_evidence_fields(
             reference_target_2=reference_target_2,
         )
 
+    env_raw = payload.get("market_environment")
+    env_dict = env_raw if isinstance(env_raw, dict) else None
+    target_policy = target_policy_from_environment(env_dict)
+    reference_target_2_suppressed = False
+    if suppress_reference_target_2(target_policy) and reference_target_2 is not None:
+        reference_target_2 = None
+        reference_target_2_suppressed = True
+        suffix = " · T2 suppressed — elevated VIX environment (plan to T1)"
+        reference_target_provenance = (
+            f"{reference_target_provenance}{suffix}"
+            if reference_target_provenance
+            else "T2 suppressed — elevated VIX environment (plan to T1)"
+        )
+    elif target_policy == "t1_preferred" and reference_target_2 is not None:
+        suffix = " · T2 optional — elevated VIX; prefer T1 for R/R"
+        reference_target_provenance = (
+            f"{reference_target_provenance}{suffix}"
+            if reference_target_provenance
+            else "T2 optional — elevated VIX; prefer T1 for R/R"
+        )
+
     rr_from_structure: float | None = None
     if (
         entry is not None
@@ -607,7 +632,8 @@ def build_swing_composite_evidence_fields(
         risk_reward = _synthetic_rr_from_composite(composite)
 
     mode = str(payload.get("mode") or "swing").strip().lower()
-    min_rr = MIN_RISK_REWARD_DAY if mode == "day" else MIN_RISK_REWARD_SWING
+    mode_for_env: str = "day" if mode == "day" else "swing"
+    min_rr = min_risk_reward_from_environment(env_dict, mode=mode_for_env)  # type: ignore[arg-type]
     rr_warning = risk_reward < min_rr
     if risk_reward < min_rr:
         rr_quality = "low"
@@ -689,6 +715,25 @@ def build_swing_composite_evidence_fields(
                 "detail": "EMA stack does not confirm trend direction",
             }
         )
+    if env_dict:
+        tier = str(env_dict.get("environment_tier") or "normal")
+        headline = str(env_dict.get("headline") or "").strip()
+        if tier in ("stressed", "crisis"):
+            risk_factors_detailed.append(
+                {
+                    "label": "Market Environment",
+                    "severity": "high",
+                    "detail": headline or f"Environment tier {tier} — review before new entries.",
+                }
+            )
+        elif tier == "elevated":
+            risk_factors_detailed.append(
+                {
+                    "label": "Market Environment",
+                    "severity": "medium",
+                    "detail": headline or "Elevated VIX — stricter R/R and T1-first targets.",
+                }
+            )
     if rr_warning:
         risk_factors_detailed.append(
             {
@@ -772,6 +817,8 @@ def build_swing_composite_evidence_fields(
         "reference_stop_level": reference_stop_level,
         "reference_stop_provenance": reference_stop_provenance,
         "reference_target_provenance": reference_target_provenance,
+        "reference_target_2_suppressed": reference_target_2_suppressed,
+        "min_rr_desk": min_rr,
         "alignment_ratio": round(float(composite.alignment_ratio), 4),
         "conflicted_layers": list(composite.conflicted_layers or []),
         "vwap_state": vs.value,
@@ -784,4 +831,6 @@ def build_swing_composite_evidence_fields(
     out["is_complete"] = is_complete
     out["missing_fields"] = missing_fields
     out["status"] = "active" if is_complete else "incomplete"
+    if env_dict:
+        out["market_environment"] = env_dict
     return out
