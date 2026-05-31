@@ -168,7 +168,7 @@ export function EnvironmentPolicyBacktestPanel() {
                     <tr
                       key={row.config_key}
                       style={{
-                        borderBottom: `1px solid ${colors.borderSubtle ?? colors.border}`,
+                        borderBottom: `1px solid ${colors.border}`,
                         background: row.is_production ? `${colors.accent}12` : undefined
                       }}
                     >
