@@ -69,6 +69,7 @@ def maybe_persist_ledger_study_row(
     day_volume: float | None = None,
     atr: float | None = None,
     volume_ratio: float | None = None,
+    market_environment: dict[str, Any] | None = None,
 ) -> tuple[bool, dict[str, Any]]:
     """Persist qualified or shadow row when ``ledger_capture`` or normal directional persist ran.
 
@@ -96,6 +97,7 @@ def maybe_persist_ledger_study_row(
             intraday_bar_count=intraday_bar_count,
             orb_signal=orb_signal,
             vwap_state=vwap_state,
+            market_environment=market_environment,
         )
         if eligible:
             if not is_day_ledger_entry_session_et(gen_at):
@@ -129,6 +131,7 @@ def maybe_persist_ledger_study_row(
             macro_market_regime=macro_market_regime,
             risk_reward=risk_reward,
             layer_scores=layer_scores,
+            market_environment=market_environment,
         )
         if eligible:
             if not is_swing_ledger_entry_window_et(gen_at):
@@ -184,9 +187,11 @@ def maybe_persist_ledger_study_row(
             qualified=eligible,
             execution_quality=eq,
             evaluation_source=eval_src,
+            market_environment=market_environment,
         ),
         entry_rationale=entry_rationale_from_gates(eligible, mode),
-        decision_state_entry="actionable" if eligible else None,
+        decision_state_entry=None,
+        capture_kind="qualified" if eligible else "shadow",
         ledger_entry_date_et=ny_date if eligible else None,
         setup_type=setup_type,
         stop_level=stop_level,

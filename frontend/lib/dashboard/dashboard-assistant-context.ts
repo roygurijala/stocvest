@@ -15,6 +15,7 @@ import type {
   DashboardAssistantContextV1
 } from "@/lib/assistant/types";
 import type { DayDeskPostureKind } from "@/lib/dashboard-posture";
+import type { MarketEnvironmentPayload } from "@/lib/signal-evidence/market-environment-present";
 import { isAfterOrbCloseEt } from "@/lib/market-hours-et";
 import { topSignalStrengthPercent } from "@/lib/top-signal-strength";
 
@@ -36,6 +37,8 @@ export type BuildDashboardAssistantPageContextInput = {
   discoveryExpanded: boolean;
   activeDeskMode?: DashboardDeskMode;
   deskData?: DeskTodayData | null;
+  marketEnvironmentSwing?: MarketEnvironmentPayload | null;
+  marketEnvironmentDay?: MarketEnvironmentPayload | null;
 };
 
 function isLongDirection(direction: string): boolean {
@@ -183,12 +186,33 @@ export function buildDashboardAssistantPageContext(
       symbol: e.symbol.trim().toUpperCase(),
       report_date: e.report_date,
       report_time: e.report_time
-    }))
+    })),
+    ...(input.marketEnvironmentSwing
+      ? {
+          market_environment: {
+            tier: input.marketEnvironmentSwing.environment_tier,
+            headline: input.marketEnvironmentSwing.headline,
+            vix_level: input.marketEnvironmentSwing.vix_level,
+            new_swing_allowed: input.marketEnvironmentSwing.new_swing_allowed,
+            new_day_allowed: input.marketEnvironmentSwing.new_day_allowed,
+            min_rr_swing: input.marketEnvironmentSwing.min_rr_swing,
+            min_rr_day: input.marketEnvironmentSwing.min_rr_day
+          }
+        }
+      : {})
   };
+
+  const envHeadline = input.marketEnvironmentSwing?.headline;
 
   return {
     page: "dashboard",
     market_regime: regime,
+    ...(envHeadline
+      ? {
+          environment_tier: input.marketEnvironmentSwing?.environment_tier,
+          environment_headline: envHeadline
+        }
+      : {}),
     ranked_setups_count: input.swingTopSignals.length,
     swing_desk_posture: input.swingDeskPosture,
     top_setups: dashboard_context.top_setups,

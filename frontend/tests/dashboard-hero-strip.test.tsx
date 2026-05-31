@@ -169,6 +169,8 @@ describe("Dashboard chatbot contract (Phase A invariance)", () => {
         "dashboard_context",
         "day_desk_posture",
         "day_setups_count",
+        "environment_headline",
+        "environment_tier",
         "market_regime",
         "page",
         "ranked_setups_count",

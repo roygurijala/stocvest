@@ -64,6 +64,8 @@ export interface HistoricalValidationSummary {
   by_pattern: Record<string, BucketStats>;
   by_readiness: Record<string, BucketStats>;
   by_direction: Record<string, BucketStats>;
+  by_environment: Record<string, BucketStats>;
+  by_capture_kind: Record<string, BucketStats>;
   rows_examined: number;
   /** Sorted, unique list of `parameter_version` strings observed in the window. */
   parameter_versions: string[];
@@ -139,11 +141,11 @@ function parseBucketMap(raw: unknown): Record<string, BucketStats> {
   return out;
 }
 
-function parseHorizon(v: unknown): ValidationHorizon | null {
+export function parseHorizon(v: unknown): ValidationHorizon | null {
   return v === "1h" || v === "1d" ? v : null;
 }
 
-function parseSummary(raw: unknown): HistoricalValidationSummary | null {
+export function parseSummary(raw: unknown): HistoricalValidationSummary | null {
   if (!isRecord(raw)) return null;
   const horizon = parseHorizon(raw.horizon);
   const overall = parseBucketStats(raw.overall);
@@ -160,20 +162,22 @@ function parseSummary(raw: unknown): HistoricalValidationSummary | null {
     by_pattern: parseBucketMap(raw.by_pattern),
     by_readiness: parseBucketMap(raw.by_readiness),
     by_direction: parseBucketMap(raw.by_direction),
+    by_environment: parseBucketMap(raw.by_environment),
+    by_capture_kind: parseBucketMap(raw.by_capture_kind),
     rows_examined: parseInt0(raw.rows_examined),
     parameter_versions: versions
   };
 }
 
-function parseEchoedMode(v: unknown): "swing" | "day" | null {
+export function parseEchoedMode(v: unknown): "swing" | "day" | null {
   return v === "swing" || v === "day" ? v : null;
 }
 
-function parseEchoedString(v: unknown): string | null {
+export function parseEchoedString(v: unknown): string | null {
   return typeof v === "string" && v.trim() !== "" ? v : null;
 }
 
-function parseDisclaimer(v: unknown): string {
+export function parseDisclaimer(v: unknown): string {
   return typeof v === "string" ? v : "";
 }
 

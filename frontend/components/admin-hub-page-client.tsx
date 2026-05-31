@@ -62,6 +62,12 @@ const NAV_TILES: {
     Icon: History
   },
   {
+    href: "/dashboard/admin/backtesting",
+    label: "Desk backtesting",
+    description: "Platform success rate (PUBLIC ledger) + VIX environment policy grid replay.",
+    Icon: Activity
+  },
+  {
     href: "/dashboard/admin/historical-validation",
     label: "Historical validation",
     description: "D2 stratified accuracy from SignalHistory — tuning and ops only.",

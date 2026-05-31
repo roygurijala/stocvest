@@ -17,6 +17,7 @@ from stocvest.api.services.sector_cache_dynamo import DynamoSectorCache
 from stocvest.api.services.signal_snapshot_builders import build_real_composite_snapshot_payload
 from stocvest.api.services.signal_recorder import get_signal_recorder
 from stocvest.api.services.execution_quality import build_execution_quality_payload
+from stocvest.api.services.market_environment import build_market_environment_from_macro
 from stocvest.api.services.planning_gates import build_planning_gates_payload
 from stocvest.api.services.ledger_gate_attempt import persist_ledger_gate_attempt
 from stocvest.api.services.ledger_study_capture import (
@@ -264,6 +265,7 @@ class RealCompositeEnginePhase:
     sector_etf_sym: str = ""
     sector_display: str | None = None
     sic_bucket_for_geo: str | None = None
+    vix_snap: Snapshot | None = None
 
 
 async def run_real_composite_engine_phase(
@@ -519,6 +521,7 @@ async def run_real_composite_engine_phase(
         sector_etf_sym=sector_etf_sym,
         sector_display=sector_display,
         sic_bucket_for_geo=sic_bucket_for_geo,
+        vix_snap=vix_snap,
     )
 
 
@@ -735,9 +738,13 @@ async def build_real_composite_response(
 
     _ref_et = bars[-1].timestamp if bars else datetime.now(timezone.utc)
     _ipm, _mob = vwap_session_flags_et(_ref_et)
+    _market_env = build_market_environment_from_macro(
+        mode="day", macro=macro, vix_snap=getattr(phase, "vix_snap", None)
+    )
     payload_stub: dict[str, Any] = {
         "symbol": sym,
         "mode": "day",
+        "market_environment": _market_env,
         "regime": regime,
         "sector_signal": sector.sector_signal,
         "news_catalyst": nc,
@@ -820,6 +827,7 @@ async def build_real_composite_response(
     response_body["execution_quality"] = _execution_quality
     if payload_stub.get("atr") is not None:
         response_body["atr"] = payload_stub["atr"]
+    response_body["market_environment"] = _market_env
     response_body["planning_gates"] = build_planning_gates_payload(
         mode="day",
         market_regime=str(response_body.get("market_regime") or "Neutral"),
@@ -831,6 +839,7 @@ async def build_real_composite_response(
         if isinstance(response_body.get("setup_judgment"), dict)
         else None,
         ref_utc=_gen_at_eq,
+        market_environment=_market_env,
     )
     response_body["generated_at"] = _gen_at_eq.replace(microsecond=0).isoformat()
     _eval_src = evaluation_source_for_ledger_capture(ledger_capture)
@@ -870,6 +879,7 @@ async def build_real_composite_response(
                     intraday_bar_count=len(bars),
                     orb_signal=str(tech.orb_signal or "").strip() or None,
                     vwap_state=str(getattr(tech, "vwap_state", None) or "").strip() or None,
+                    market_environment=_market_env,
                 )
                 gen_at = datetime.now(timezone.utc)
                 if eligible:
@@ -938,6 +948,7 @@ async def build_real_composite_response(
                         qualified=eligible,
                         execution_quality=_execution_quality,
                         evaluation_source=_eval_src,
+                        market_environment=_market_env,
                     ),
                     entry_rationale=entry_rationale_from_gates(eligible, "day"),
                     decision_state_entry="actionable" if eligible else None,
@@ -1033,6 +1044,7 @@ async def build_real_composite_response(
                 day_volume=float(sym_snap.day_volume) if sym_snap and sym_snap.day_volume else None,
                 atr=getattr(tech, "atr", None),
                 volume_ratio=getattr(tech, "volume_vs_adv", None),
+                market_environment=_market_env,
             )
             response_body["ledger_qualified"] = eligible_n
             response_body["gate_status"] = gates_n

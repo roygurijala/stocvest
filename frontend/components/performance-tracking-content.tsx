@@ -9,6 +9,7 @@ import {
   type PerformanceSummary,
   type PublicSignal
 } from "@/lib/api/public-signals";
+import { formatEnvironmentAuditLine } from "@/lib/signal-evidence/ledger-gate-blob-present";
 import {
   fetchPublicHistoricalValidationSummary,
   formatAccuracyPercent,
@@ -189,6 +190,7 @@ export function PerformanceTrackingContent({ showHomeLink = false }: Performance
                 <th className="px-4 py-3">Date and Time</th>
                 <th className="px-4 py-3">1h</th>
                 <th className="px-4 py-3">1d</th>
+                <th className="px-4 py-3">Environment</th>
                 <th className="px-4 py-3">Legacy</th>
               </tr>
             </thead>
@@ -196,6 +198,7 @@ export function PerformanceTrackingContent({ showHomeLink = false }: Performance
               {signals.map((row) => {
                 const h1 = formatHorizonOutcome(row.outcome_1h);
                 const h1d = formatHorizonOutcome(row.outcome_1d);
+                const envLine = formatEnvironmentAuditLine(row.market_environment_audit ?? null);
                 return (
                   <tr key={row.signal_id ?? `${row.symbol}-${row.timestamp_iso}`} style={{ borderBottom: `1px solid ${colors.border}` }}>
                     <td className="px-4 py-3 font-semibold">{row.symbol}</td>
@@ -209,6 +212,13 @@ export function PerformanceTrackingContent({ showHomeLink = false }: Performance
                     </td>
                     <td className="px-4 py-3" style={{ color: colors.textMuted }}>
                       {h1d.label}
+                    </td>
+                    <td
+                      className="px-4 py-3 text-xs"
+                      style={{ color: colors.textMuted }}
+                      data-testid="performance-signal-environment"
+                    >
+                      {envLine ?? "—"}
                     </td>
                     <td className="px-4 py-3">{outcomeLabel(row.outcome)}</td>
                   </tr>
@@ -376,8 +386,8 @@ export function PublicValidationSection({
       </p>
 
       <p className="mt-3 text-xs" style={{ color: colors.textMuted }}>
-        Sign in to see the full stratified breakdown — decision state, regime, setup pattern, readiness, and direction
-        — for your own tracked outcomes.
+        Sign in to see the full stratified breakdown — decision state, regime, VIX environment tier, setup pattern,
+        readiness, and direction — for your own tracked outcomes.
       </p>
     </section>
   );

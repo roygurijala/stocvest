@@ -435,6 +435,10 @@ class SignalRecord(BaseModel):
     ledger_position_open: bool | None = None
     #: Maps directional outcome to audit vocabulary: favorable | unfavorable | neutral.
     validation_outcome: str | None = None
+    #: ``qualified`` | ``shadow`` | ``live`` — drives D2 ``by_capture_kind`` stratification.
+    capture_kind: Literal["qualified", "shadow", "live"] | None = None
+    #: User-scoped ``signal_id`` when this row is a PUBLIC platform mirror (``user_id`` is None).
+    source_signal_id: str | None = None
 
     @field_validator("direction")
     @classmethod
@@ -459,6 +463,16 @@ class SignalRecord(BaseModel):
         if m not in {"day", "swing"}:
             raise ValueError("mode must be day or swing")
         return m
+
+    @field_validator("capture_kind")
+    @classmethod
+    def _norm_capture_kind(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        k = str(v).strip().lower()
+        if k not in {"qualified", "shadow", "live"}:
+            raise ValueError("capture_kind must be qualified, shadow, or live")
+        return k
 
     @staticmethod
     def from_dynamo_item(item: dict) -> "SignalRecord":
@@ -554,6 +568,8 @@ class SignalRecord(BaseModel):
             regime_window_key=_s("regime_window_key"),
             ledger_position_open=_bool("ledger_position_open") if item.get("ledger_position_open") is not None else None,
             validation_outcome=_norm_vo(_s("validation_outcome")),
+            capture_kind=_s("capture_kind"),  # type: ignore[arg-type]
+            source_signal_id=_s("source_signal_id"),
         )
 
 

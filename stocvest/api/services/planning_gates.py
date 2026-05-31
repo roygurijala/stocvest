@@ -5,6 +5,10 @@ from __future__ import annotations
 from datetime import datetime, time, timezone
 from typing import Any, Literal
 
+from stocvest.api.services.market_environment import (
+    environment_for_ledger_gate,
+    min_risk_reward_from_environment,
+)
 from stocvest.api.services.reference_stop_policy import ATR_K_BY_PRESET
 from stocvest.api.services.validation_timing import now_et
 
@@ -12,8 +16,8 @@ Mode = Literal["day", "swing"]
 PresetId = Literal["continuation", "dip", "breakout"]
 
 DISCLAIMER = (
-    "Planning context is informational only — it does not change actionable verdicts, "
-    "layer scores, or validation ledger eligibility."
+    "Planning context summarizes desk readiness. Market environment tier affects validation "
+    "ledger gates; it does not change actionable verdicts or layer scores."
 )
 
 RISK_CAP_PCT: dict[str, float] = {
@@ -76,11 +80,12 @@ def build_planning_gates_payload(
     atr: float | None,
     setup_judgment: dict[str, Any] | None,
     ref_utc: datetime | None = None,
+    market_environment: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Informational checklist for Evidence / Scenario (Stage B only)."""
     now = ref_utc or datetime.now(timezone.utc)
     eq = execution_quality if isinstance(execution_quality, dict) else {}
-    min_rr = 1.3 if mode == "day" else 2.0
+    min_rr = min_risk_reward_from_environment(market_environment, mode=mode)
     regime_tag = _regime_tag(market_regime)
     macro_ok = str(market_regime or "").strip().lower() not in ("avoid",)
 
@@ -147,7 +152,24 @@ def build_planning_gates_payload(
     if tradeability == "weak":
         timing_note = " Entry timing band is weak — see setup judgment."
 
+    env_pass = True
+    env_detail = "Market environment policy not attached — using default desk R/R floors."
+    if isinstance(market_environment, dict):
+        env_ok, _ = environment_for_ledger_gate(market_environment, mode=mode)
+        env_pass = env_ok
+        tier = str(market_environment.get("environment_tier") or "normal")
+        headline = str(market_environment.get("headline") or "").strip()
+        env_detail = headline or f"Environment tier {tier}."
+        if not env_ok:
+            env_detail = f"{env_detail} New {mode} validation entries paused."
+
     checks: list[dict[str, Any]] = [
+        {
+            "id": "market_environment",
+            "label": "Market environment (VIX tier)",
+            "pass": env_pass,
+            "detail": env_detail,
+        },
         {
             "id": "regime",
             "label": "Regime context",
@@ -190,6 +212,12 @@ def build_planning_gates_payload(
         "preset_fit": _preset_fit_notes(regime_tag),
         "risk_cap_pct": dict(RISK_CAP_PCT),
         "atr_k_by_preset": dict(ATR_K_BY_PRESET),
+        "min_rr_desk": min_rr,
+        "environment_tier": (
+            str(market_environment.get("environment_tier"))
+            if isinstance(market_environment, dict)
+            else None
+        ),
         "checks": checks,
         "all_favorable": favorable,
         "summary": (

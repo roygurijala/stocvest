@@ -6,6 +6,7 @@ import {
   parseSwingCompositeInsight,
   type SignalEvidenceData
 } from "@/lib/signal-evidence";
+import { parseMarketEnvironment } from "@/lib/signal-evidence/market-environment-present";
 import { synthTradeDecision, type TradeDecision } from "@/lib/signal-evidence/trade-decision";
 import type { SetupJudgment } from "@/lib/signal-evidence/setup-judgment";
 import type { SignalsLayerRowInput, SignalsSetupBias } from "@/lib/signals-page-present";
@@ -87,6 +88,8 @@ function buildLoadedAssistantBase(input: {
   causalBlockingChain?: string;
   timeframeAlignmentLabel?: string;
   layerAlignmentPct: number | null;
+  environmentTier?: string;
+  environmentHeadline?: string;
 }): AssistantPageContext {
   return {
     page: input.pageId,
@@ -105,6 +108,8 @@ function buildLoadedAssistantBase(input: {
     causal_blocking_chain: input.causalBlockingChain,
     timeframe_alignment_label: input.timeframeAlignmentLabel,
     layer_alignment_pct: input.layerAlignmentPct,
+    environment_tier: input.environmentTier,
+    environment_headline: input.environmentHeadline,
     layer_status: input.layerStatusForCtx,
     ...(input.gapIntelForAssistant ? { gap_intel: input.gapIntelForAssistant } : {})
   };
@@ -124,9 +129,10 @@ export type BuildSignalsPageAssistantContextInput = {
   layerAgreementPercent: number | null;
   setupJudgment: SetupJudgment | null;
   compositeResult: Record<string, unknown> | null;
-  causalNarrativeSummary?: string | null;
+    causalNarrativeSummary?: string | null;
   causalBlockingChain?: string | null;
   timeframeAlignmentLabel?: string | null;
+  marketEnvironment?: import("@/lib/signal-evidence/market-environment-present").MarketEnvironmentPayload | null;
   maturationState?: string | null;
   maturationLabel?: string | null;
   regularSessionOpen?: boolean | null;
@@ -161,6 +167,11 @@ export function buildSignalsPageAssistantContext(
     setupJudgment: input.setupJudgment
   };
 
+  const deskEnvironment =
+    input.marketEnvironment ??
+    input.signalEvidence?.marketEnvironment ??
+    (input.compositeResult ? parseMarketEnvironment(input.compositeResult) : null);
+
   if (input.hasValidSignal && input.pageDecision) {
     const compositeInsight = input.compositeResult
       ? parseSwingCompositeInsight(input.compositeResult)
@@ -192,7 +203,9 @@ export function buildSignalsPageAssistantContext(
       causalNarrativeSummary: input.causalNarrativeSummary ?? undefined,
       causalBlockingChain: input.causalBlockingChain ?? undefined,
       timeframeAlignmentLabel: input.timeframeAlignmentLabel ?? undefined,
-      layerAlignmentPct
+      layerAlignmentPct,
+      environmentTier: deskEnvironment?.environment_tier,
+      environmentHeadline: deskEnvironment?.headline
     });
     return enrichSignalsDeskAssistantContext(base, {
       ...enrichInput,
@@ -230,7 +243,9 @@ export function buildSignalsPageAssistantContext(
       causalNarrativeSummary: input.causalNarrativeSummary ?? undefined,
       causalBlockingChain: input.causalBlockingChain ?? undefined,
       timeframeAlignmentLabel: input.timeframeAlignmentLabel ?? undefined,
-      layerAlignmentPct
+      layerAlignmentPct,
+      environmentTier: deskEnvironment?.environment_tier,
+      environmentHeadline: deskEnvironment?.headline
     });
     return enrichSignalsDeskAssistantContext(base, {
       ...enrichInput,

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from stocvest.api.services.market_environment import build_market_environment_policy
+import json
+
 from stocvest.api.services.signal_validation_eligibility import (
     DECISION_STATE_ACTIONABLE,
     DECISION_STATE_BLOCKED,
@@ -9,6 +12,8 @@ from stocvest.api.services.signal_validation_eligibility import (
     derive_decision_state,
     evaluate_day_ledger_entry,
     evaluate_swing_ledger_entry,
+    gate_blob_json,
+    market_environment_audit_blob,
 )
 from stocvest.signals.composite_score import CompositeVerdict
 
@@ -75,6 +80,38 @@ def test_day_rr_passes_at_floor() -> None:
     assert gates["risk_reward"]["pass"] is True
 
 
+def test_swing_crisis_environment_blocks_ledger() -> None:
+    env = build_market_environment_policy(mode="swing", vix_level=33.0)
+    ok, gates = evaluate_swing_ledger_entry(
+        response_status="active",
+        verdict=CompositeVerdict.BULLISH,
+        composite_score=0.5,
+        alignment_ratio=0.6,
+        macro_market_regime="bull",
+        risk_reward=5.0,
+        layer_scores={"sector": 50.0},
+        market_environment=env,
+    )
+    assert not ok
+    assert gates["market_environment"]["pass"] is False
+
+
+def test_swing_elevated_requires_3_to_1() -> None:
+    env = build_market_environment_policy(mode="swing", vix_level=22.0)
+    ok, gates = evaluate_swing_ledger_entry(
+        response_status="active",
+        verdict=CompositeVerdict.BULLISH,
+        composite_score=0.5,
+        alignment_ratio=0.6,
+        macro_market_regime="bull",
+        risk_reward=2.5,
+        layer_scores={"sector": 50.0},
+        market_environment=env,
+    )
+    assert not ok
+    assert gates["risk_reward"]["min"] == 3.0
+
+
 def test_blocked_short_circuits_other_gates() -> None:
     ok, gates = evaluate_swing_ledger_entry(
         response_status="insufficient_data",
@@ -88,3 +125,21 @@ def test_blocked_short_circuits_other_gates() -> None:
     assert not ok
     assert "decision_state" in gates
     assert "risk_reward" not in gates
+
+
+def test_gate_blob_includes_market_environment_audit() -> None:
+    env = build_market_environment_policy(mode="swing", vix_level=29.0, vix_change_5d_pct=8.0)
+    audit = market_environment_audit_blob(env)
+    assert audit is not None
+    assert audit["environment_tier"] == "stressed"
+    assert audit["policy_version"] == env["policy_version"]
+
+    blob = json.loads(
+        gate_blob_json(
+            {"risk_reward": {"pass": True}},
+            qualified=False,
+            market_environment=env,
+        )
+    )
+    assert blob["market_environment_audit"]["environment_tier"] == "stressed"
+    assert blob["market_environment_audit"]["vix_level"] == 29.0

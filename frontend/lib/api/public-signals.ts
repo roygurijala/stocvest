@@ -1,7 +1,9 @@
 "use client";
 
-import { isoDateInNewYork } from "@/lib/market-hours-et";
 import { surfaceAuthErrorIfAny } from "@/lib/auth/surface-auth-error";
+import type { MarketEnvironmentAudit } from "@/lib/signal-evidence/ledger-gate-blob-present";
+import { parseLedgerGateBlob } from "@/lib/signal-evidence/ledger-gate-blob-present";
+import { isoDateInNewYork } from "@/lib/market-hours-et";
 
 export type PublicSignalOutcome = "pending" | "correct" | "incorrect" | "neutral";
 export type PublicSignalDirection = "long" | "short" | "neutral";
@@ -43,6 +45,8 @@ export interface PublicSignal {
   decision_state_exit?: string | null;
   market_regime_exit?: string | null;
   gate_status?: GateStatusPayload | null;
+  /** Layer 0 snapshot from ledger gate blob (`market_environment_audit`). */
+  market_environment_audit?: MarketEnvironmentAudit | null;
   setup_type?: string | null;
   exit_rule?: string | null;
   max_adverse_excursion_pct?: number | null;
@@ -151,8 +155,11 @@ function normalizePublicSignal(raw: Record<string, unknown>): PublicSignal | nul
   const holdMin = raw.hold_duration_minutes;
   const gsRaw = raw.gate_status;
   let gate_status: GateStatusPayload | null | undefined;
+  let market_environment_audit: MarketEnvironmentAudit | null = null;
   if (gsRaw != null && typeof gsRaw === "object") {
     gate_status = gsRaw as GateStatusPayload;
+    const parsedBlob = parseLedgerGateBlob(gsRaw);
+    market_environment_audit = parsedBlob?.marketEnvironmentAudit ?? null;
   }
   return {
     signal_id: typeof sid === "string" ? sid : undefined,
@@ -193,6 +200,7 @@ function normalizePublicSignal(raw: Record<string, unknown>): PublicSignal | nul
     decision_state_exit: _optStr(raw.decision_state_exit),
     market_regime_exit: _optStr(raw.market_regime_exit),
     gate_status: gate_status ?? null,
+    market_environment_audit,
     setup_type: _optStr(raw.setup_type),
     exit_rule: _optStr(raw.exit_rule),
     max_adverse_excursion_pct: _numOrNull(mae),

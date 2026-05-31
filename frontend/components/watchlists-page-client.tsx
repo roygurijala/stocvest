@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { DeskModeTabNav } from "@/components/desk-mode-tab-nav";
+import { MarketEnvironmentStrip } from "@/components/market-environment-strip";
+import { useMarketEnvironment } from "@/lib/hooks/use-market-environment";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CuteLoader } from "@/components/cute-loader";
@@ -264,6 +266,9 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
     [viewMode, dualDeskMaturation]
   );
   const watchlistDesk = useWatchlistDeskContext(decisionPlanMode);
+  const deskMarketEnvironment = useMarketEnvironment(viewMode === "day" ? "day" : "swing", {
+    macroRegime: watchlistDesk.regimeLabel ?? null
+  });
 
   const nearReadyFilterActive = searchParams.get("near_ready") === "1";
   const actionableRailFromUrl = searchParams.get("rail") === "actionable";
@@ -1474,14 +1479,22 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
               style={{ borderColor: colors.border }}
             >
               <div className="flex flex-wrap items-center justify-between gap-2 pt-3">
-                <DeskModeTabNav
-                  value={viewMode}
-                  onChange={setViewMode}
-                  modes={dualDeskMaturation ? (["swing", "day"] as const) : (["swing"] as const)}
-                  ariaLabel="Watchlist desk"
-                  testIdPrefix="watchlist-desk"
-                  className="min-w-0 flex-1 sm:flex-none"
-                />
+                <div className="flex min-w-0 flex-1 flex-col gap-2">
+                  {deskMarketEnvironment ? (
+                    <MarketEnvironmentStrip
+                      environment={deskMarketEnvironment}
+                      testId="watchlist-environment-strip"
+                    />
+                  ) : null}
+                  <DeskModeTabNav
+                    value={viewMode}
+                    onChange={setViewMode}
+                    modes={dualDeskMaturation ? (["swing", "day"] as const) : (["swing"] as const)}
+                    ariaLabel="Watchlist desk"
+                    testIdPrefix="watchlist-desk"
+                    className="min-w-0 flex-1 sm:flex-none"
+                  />
+                </div>
                 {maturationDeskSummary || maturationSummaryFetchedAt ? (
                   <span
                     className="max-w-md shrink-0 text-right text-xs leading-snug sm:text-sm"

@@ -19,7 +19,11 @@ export function AdminHistoricalValidationPageClient() {
         </h1>
         <p className="m-0 mt-2 max-w-3xl text-sm leading-relaxed" style={{ color: colors.textMuted }}>
           Stratified directional accuracy from the SignalHistory ledger — for parameter tuning, weight proposals,
-          and operator review. Not shown to customers as a trade-performance surface. User-facing setup behavior
+          and operator review. Platform-wide success and VIX band tuning live on{" "}
+          <Link href="/dashboard/admin/backtesting" className="font-medium hover:underline" style={{ color: colors.accent }}>
+            Desk backtesting
+          </Link>
+          . Not shown to customers as a trade-performance surface. User-facing setup behavior
           lives on{" "}
           <Link href="/dashboard/setup-outcomes" className="font-medium hover:underline" style={{ color: colors.accent }}>
             Setup outcomes

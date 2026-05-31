@@ -91,6 +91,8 @@ export function buildScenarioInputFromEvidenceParts(parts: {
   marketRegime?: string | null;
   riskReward?: number | null;
   directionBadgeLabel?: string | null;
+  deskEnvironmentHeadline?: string | null;
+  environmentTier?: string | null;
 }): ScenarioInput {
   return {
     symbol: parts.symbol.trim().toUpperCase(),
@@ -109,7 +111,9 @@ export function buildScenarioInputFromEvidenceParts(parts: {
     volatility_regime: marketRegimeToVolatilityRegime(parts.marketRegime),
     risk_reward:
       typeof parts.riskReward === "number" && Number.isFinite(parts.riskReward) ? parts.riskReward : null,
-    tags: parts.directionBadgeLabel?.trim() ? [parts.directionBadgeLabel.trim()] : undefined
+    tags: parts.directionBadgeLabel?.trim() ? [parts.directionBadgeLabel.trim()] : undefined,
+    desk_environment_headline: parts.deskEnvironmentHeadline?.trim() || null,
+    environment_tier: parts.environmentTier?.trim() || null
   };
 }
 

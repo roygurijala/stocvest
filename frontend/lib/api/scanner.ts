@@ -139,7 +139,12 @@ export interface MorningBriefPayload {
     vix_level: number | null;
     vix_direction: string;
     regime: string;
+    environment_tier?: string;
+    market_environment?: Record<string, unknown>;
+    market_environment_swing?: Record<string, unknown>;
+    market_environment_day?: Record<string, unknown>;
   };
+  market_environment?: Record<string, unknown>;
   economic_events:
     | Array<{ time: string; event_name: string; impact: string }>
     | { message: string };

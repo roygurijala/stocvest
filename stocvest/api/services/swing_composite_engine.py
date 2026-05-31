@@ -26,6 +26,7 @@ from stocvest.api.services.sector_cache_dynamo import DynamoSectorCache
 from stocvest.api.services.signal_snapshot_builders import build_real_composite_snapshot_payload
 from stocvest.api.services.signal_recorder import get_signal_recorder
 from stocvest.api.services.execution_quality import build_execution_quality_payload
+from stocvest.api.services.market_environment import build_market_environment_from_macro
 from stocvest.api.services.planning_gates import build_planning_gates_payload
 from stocvest.api.services.ledger_gate_attempt import persist_ledger_gate_attempt
 from stocvest.api.services.ledger_study_capture import (
@@ -592,9 +593,11 @@ async def build_swing_composite_response(
 
     _sw_et = datetime.now(ZoneInfo("America/New_York"))
     _sw_ipm, _sw_mob = vwap_session_flags_et(_sw_et)
+    _market_env = build_market_environment_from_macro(mode="swing", macro=macro, vix_snap=vix_snap)
     payload_stub: dict[str, Any] = {
         "symbol": sym,
         "mode": "swing",
+        "market_environment": _market_env,
         "regime": regime,
         "sector_signal": sector.sector_signal,
         "news_catalyst": nc,
@@ -672,6 +675,7 @@ async def build_swing_composite_response(
     response_body["execution_quality"] = _execution_quality
     if payload_stub.get("atr") is not None:
         response_body["atr"] = payload_stub["atr"]
+    response_body["market_environment"] = _market_env
     response_body["planning_gates"] = build_planning_gates_payload(
         mode="swing",
         market_regime=str(response_body.get("market_regime") or "Neutral"),
@@ -683,6 +687,7 @@ async def build_swing_composite_response(
         if isinstance(response_body.get("setup_judgment"), dict)
         else None,
         ref_utc=_gen_at_eq,
+        market_environment=_market_env,
     )
     response_body["generated_at"] = _gen_at_eq.replace(microsecond=0).isoformat()
     _eval_src = evaluation_source_for_ledger_capture(ledger_capture)
@@ -720,6 +725,7 @@ async def build_swing_composite_response(
                     macro_market_regime=str(macro.market_regime or "neutral"),
                     risk_reward=rr_f,
                     layer_scores=layer_scores,
+                    market_environment=_market_env,
                 )
                 gen_at = datetime.now(timezone.utc)
                 if eligible:
@@ -774,6 +780,7 @@ async def build_swing_composite_response(
                         qualified=eligible,
                         execution_quality=_execution_quality,
                         evaluation_source=_eval_src,
+                        market_environment=_market_env,
                     ),
                     entry_rationale=entry_rationale_from_gates(eligible, "swing"),
                     decision_state_entry="actionable" if eligible else None,
@@ -867,6 +874,7 @@ async def build_swing_composite_response(
                 or None,
                 atr=getattr(tech, "atr", None),
                 volume_ratio=getattr(tech, "volume_vs_adv", None),
+                market_environment=_market_env,
             )
             response_body["ledger_qualified"] = eligible_n
             response_body["gate_status"] = gates_n

@@ -54,9 +54,10 @@ What is intentionally NOT in this module
 
 from __future__ import annotations
 
+import json
 import math
 from dataclasses import dataclass, field
-from typing import Iterable, Literal
+from typing import Any, Iterable, Literal
 
 from stocvest.data.models import SignalRecord
 
@@ -80,6 +81,11 @@ TRADING_MODES: tuple[str, ...] = ("swing", "day")
 READINESS_BUCKETS: tuple[str, ...] = ("high", "moderate", "low")
 
 DIRECTIONS: tuple[str, ...] = ("bullish", "bearish", "neutral")
+
+#: VIX environment tier at ledger capture (``market_environment_audit`` in gate blob).
+ENVIRONMENT_TIERS: tuple[str, ...] = ("normal", "elevated", "stressed", "crisis", "unknown")
+
+CAPTURE_KINDS: tuple[str, ...] = ("qualified", "shadow", "live", "unknown")
 
 # ── Result shapes ──────────────────────────────────────────────────────────────────────
 
@@ -125,6 +131,8 @@ class HistoricalValidationSummary:
     by_pattern: dict[str, BucketStats]
     by_readiness: dict[str, BucketStats]
     by_direction: dict[str, BucketStats]
+    by_environment: dict[str, BucketStats]
+    by_capture_kind: dict[str, BucketStats]
     #: Optional convenience: how many rows were considered in total (including ones with no
     #: outcome yet). The UI uses this to render "X signals resolved out of Y" alongside the
     #: accuracy number.
@@ -157,13 +165,60 @@ def _decision_key(record: SignalRecord) -> str:
     raw = (record.decision_state_entry or "").strip().lower()
     if raw in ("actionable", "monitor", "blocked"):
         return raw
+    if record.ledger_qualified:
+        return "actionable"
+    if str(record.direction or "").strip().lower() == "neutral":
+        return "monitor"
+    if ":ledger_capture_shadow" in (record.pattern or ""):
+        return "blocked"
     return "unknown"
+
+
+def _capture_kind_key(record: SignalRecord) -> str:
+    raw = (record.capture_kind or "").strip().lower()
+    if raw in ("qualified", "shadow", "live"):
+        return raw
+    if record.ledger_qualified:
+        return "qualified"
+    if ":ledger_capture_shadow" in (record.pattern or ""):
+        return "shadow"
+    return "live"
 
 
 def _regime_key(record: SignalRecord) -> str:
     raw = (record.regime_label_at_entry or "").strip().lower()
     if raw in ("risk_on", "neutral", "risk_off", "avoid"):
         return raw
+    return "unknown"
+
+
+def _environment_key(record: SignalRecord) -> str:
+    """Layer 0 tier from ``gate_status_json`` audit blob (env_policy_v2+)."""
+
+    raw = record.gate_status_json
+    if not raw or not str(raw).strip():
+        return "unknown"
+    try:
+        blob: Any = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return "unknown"
+    if not isinstance(blob, dict):
+        return "unknown"
+
+    audit = blob.get("market_environment_audit")
+    if isinstance(audit, dict):
+        tier = str(audit.get("environment_tier") or "").strip().lower()
+        if tier in ("normal", "elevated", "stressed", "crisis"):
+            return tier
+
+    gates = blob.get("gates")
+    if isinstance(gates, dict):
+        me = gates.get("market_environment")
+        if isinstance(me, dict):
+            tier = str(me.get("tier") or "").strip().lower()
+            if tier in ("normal", "elevated", "stressed", "crisis"):
+                return tier
+
     return "unknown"
 
 
@@ -289,6 +344,12 @@ def validate_signal_history(
     by_direction = _stratify(
         records_list, horizon=horizon, keys=DIRECTIONS, key_fn=lambda r: (r.direction or "").lower()
     )
+    by_environment = _stratify(
+        records_list, horizon=horizon, keys=ENVIRONMENT_TIERS, key_fn=_environment_key
+    )
+    by_capture_kind = _stratify(
+        records_list, horizon=horizon, keys=CAPTURE_KINDS, key_fn=_capture_kind_key
+    )
 
     versions = sorted({r.parameter_version for r in records_list if r.parameter_version})
 
@@ -301,6 +362,8 @@ def validate_signal_history(
         by_pattern=by_pattern,
         by_readiness=by_readiness,
         by_direction=by_direction,
+        by_environment=by_environment,
+        by_capture_kind=by_capture_kind,
         rows_examined=len(records_list),
         parameter_versions=tuple(versions),
     )
@@ -316,5 +379,7 @@ __all__ = [
     "TRADING_MODES",
     "READINESS_BUCKETS",
     "DIRECTIONS",
+    "ENVIRONMENT_TIERS",
+    "CAPTURE_KINDS",
     "validate_signal_history",
 ]

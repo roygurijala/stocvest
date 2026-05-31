@@ -8,6 +8,11 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from typing import Any
 
+from stocvest.api.services.market_environment import (
+    build_market_environment_policy,
+    legacy_conditions_label,
+    read_environment_tier_state,
+)
 from stocvest.signals.pdt_tracker import PDTAssessment
 
 
@@ -34,6 +39,8 @@ class MorningBriefContext:
     vix_level: float | None
     vix_direction: str  # rising | falling | flat
     regime: str  # Bullish | Neutral | Bearish
+    vix_change_pct: float | None = None
+    vix_change_5d_pct: float | None = None
     economic_events: list[EconomicEventBrief] = field(default_factory=list)
     earnings_today: list[EarningsBriefRow] = field(default_factory=list)
     gap_intelligence_items: list[dict[str, Any]] = field(default_factory=list)
@@ -161,7 +168,36 @@ def _top_watch(items: list[dict[str, Any]], intraday_setups: list[dict[str, Any]
 
 
 def build_morning_brief_payload(ctx: MorningBriefContext) -> dict[str, Any]:
-    cond_label = _trading_conditions_label(ctx.regime, ctx.vix_level, ctx.futures_spy_pct)
+    state = read_environment_tier_state()
+    prev_raw = str(state.get("environment_tier") or "").strip().lower() if state else ""
+    previous = prev_raw if prev_raw in ("normal", "elevated", "stressed", "crisis") else None
+
+    env_swing = build_market_environment_policy(
+        mode="swing",
+        vix_level=ctx.vix_level,
+        vix_change_pct=ctx.vix_change_pct,
+        vix_change_5d_pct=ctx.vix_change_5d_pct,
+        vix_direction=ctx.vix_direction,
+        macro_regime=ctx.regime,
+        previous_environment_tier=previous,  # type: ignore[arg-type]
+        persist_tier_state=True,
+    )
+    env_day = build_market_environment_policy(
+        mode="day",
+        vix_level=ctx.vix_level,
+        vix_change_pct=ctx.vix_change_pct,
+        vix_change_5d_pct=ctx.vix_change_5d_pct,
+        vix_direction=ctx.vix_direction,
+        macro_regime=ctx.regime,
+        previous_environment_tier=previous,  # type: ignore[arg-type]
+        persist_tier_state=False,
+    )
+    tier = str(env_swing.get("environment_tier") or "normal")
+    cond_label = legacy_conditions_label(
+        environment_tier=tier,  # type: ignore[arg-type]
+        regime=ctx.regime,
+        spy_pct=ctx.futures_spy_pct,
+    )
     econ = ctx.economic_events[:3]
     econ_impact_order = {"high": 0, "medium": 1, "low": 2}
     econ_sorted = sorted(econ, key=lambda e: econ_impact_order.get(e.impact, 3))
@@ -204,7 +240,12 @@ def build_morning_brief_payload(ctx: MorningBriefContext) -> dict[str, Any]:
             "vix_level": ctx.vix_level,
             "vix_direction": ctx.vix_direction,
             "regime": ctx.regime,
+            "environment_tier": tier,
+            "market_environment": env_swing,
+            "market_environment_swing": env_swing,
+            "market_environment_day": env_day,
         },
+        "market_environment": env_swing,
         "economic_events": economic_out,
         "earnings_today": earnings_out,
         "top_watch": top_out,
