@@ -211,11 +211,23 @@ class HistoricalValidationService:
         # microsecond / iso-format truncation the store applies before its GSI query.
         days_back = min(MAX_LOOKBACK_DAYS, int(seconds_back // 86400) + 1)
 
+        page_fn = getattr(self._store, "get_user_signal_history_page", None)
+        if not callable(page_fn):
+            candidates = self._store.get_signal_history(
+                user_id=user_id,
+                symbol=symbol,
+                days=days_back,
+                limit=MAX_ROWS_PER_QUERY,
+                mode=mode,
+                ledger_qualified_only=False,
+            )
+            return [row for row in candidates if from_utc <= _ensure_utc(row.generated_at) < to_utc]
+
         collected: list[SignalRecord] = []
         cursor: str | None = None
         page_size = min(500, MAX_ROWS_PER_QUERY)
         while len(collected) < MAX_ROWS_PER_QUERY:
-            page, cursor = self._store.get_user_signal_history_page(
+            page, cursor = page_fn(
                 user_id=user_id,
                 symbol=symbol,
                 days=days_back,

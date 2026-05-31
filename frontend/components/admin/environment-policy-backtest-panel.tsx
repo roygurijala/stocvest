@@ -132,7 +132,7 @@ export function EnvironmentPolicyBacktestPanel() {
       {loading ? (
         <CuteLoader label="Running environment policy grid…" />
       ) : error ? (
-        <p style={{ color: colors.danger, margin: 0 }}>{error}</p>
+        <p style={{ color: colors.bearish, margin: 0 }}>{error}</p>
       ) : data ? (
         <>
           <p className="m-0 text-sm" style={{ color: colors.textMuted }}>

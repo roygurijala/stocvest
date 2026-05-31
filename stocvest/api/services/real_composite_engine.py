@@ -265,6 +265,7 @@ class RealCompositeEnginePhase:
     sector_etf_sym: str = ""
     sector_display: str | None = None
     sic_bucket_for_geo: str | None = None
+    vix_snap: Snapshot | None = None
 
 
 async def run_real_composite_engine_phase(
@@ -520,6 +521,7 @@ async def run_real_composite_engine_phase(
         sector_etf_sym=sector_etf_sym,
         sector_display=sector_display,
         sic_bucket_for_geo=sic_bucket_for_geo,
+        vix_snap=vix_snap,
     )
 
 
@@ -736,7 +738,9 @@ async def build_real_composite_response(
 
     _ref_et = bars[-1].timestamp if bars else datetime.now(timezone.utc)
     _ipm, _mob = vwap_session_flags_et(_ref_et)
-    _market_env = build_market_environment_from_macro(mode="day", macro=macro, vix_snap=vix_snap)
+    _market_env = build_market_environment_from_macro(
+        mode="day", macro=macro, vix_snap=getattr(phase, "vix_snap", None)
+    )
     payload_stub: dict[str, Any] = {
         "symbol": sym,
         "mode": "day",
