@@ -485,49 +485,40 @@ def test_public_performance_summary_aggregates_outcomes(monkeypatch) -> None:
     mem = InMemorySignalRecorder()
     monkeypatch.setattr("stocvest.api.handlers.signals.get_signal_recorder", lambda: mem)
     now = datetime.now(timezone.utc)
-    mem.record_signal(
-        SignalRecord(
-            signal_id="a",
+    def _perf_row(signal_id: str, outcome_1d: str) -> SignalRecord:
+        return SignalRecord(
+            signal_id=signal_id,
             symbol="AAA",
             direction="bullish",
             signal_strength=84,
-            pattern="p",
+            pattern="swing_composite",
             layer_scores={},
             price_at_signal=100,
             generated_at=now - timedelta(hours=30),
             resolved_1d=True,
-            outcome_1d="correct",
+            outcome_1d=outcome_1d,
             price_1d_after=101,
+            ledger_qualified=True,
+            capture_kind="qualified",
+            decision_state_entry="actionable",
         )
-    )
+
+    mem.record_signal(_perf_row("a", "correct"))
+    mem.record_signal(_perf_row("b", "incorrect"))
+    mem.record_signal(_perf_row("c", "neutral"))
     mem.record_signal(
         SignalRecord(
-            signal_id="b",
-            symbol="BBB",
-            direction="bearish",
-            signal_strength=79,
-            pattern="p",
-            layer_scores={},
-            price_at_signal=100,
-            generated_at=now - timedelta(hours=30),
-            resolved_1d=True,
-            outcome_1d="incorrect",
-            price_1d_after=101,
-        )
-    )
-    mem.record_signal(
-        SignalRecord(
-            signal_id="c",
-            symbol="CCC",
+            signal_id="shadow",
+            symbol="ZZZ",
             direction="bullish",
-            signal_strength=52,
-            pattern="p",
+            signal_strength=50,
+            pattern="swing_composite:ledger_capture_shadow",
             layer_scores={},
             price_at_signal=100,
             generated_at=now - timedelta(hours=30),
-            resolved_1d=True,
-            outcome_1d="neutral",
-            price_1d_after=100.05,
+            outcome_1d="incorrect",
+            capture_kind="shadow",
+            ledger_qualified=False,
         )
     )
 
@@ -539,7 +530,8 @@ def test_public_performance_summary_aggregates_outcomes(monkeypatch) -> None:
     assert body["correct_direction_count"] == 1
     assert body["incorrect_direction_count"] == 1
     assert body["neutral_direction_count"] == 1
-    assert body["directional_accuracy_percent"] == 50.0
+    assert body["meets_minimum_sample"] is False
+    assert body["directional_accuracy_percent"] is None
     assert body["disclaimer"]
 
 

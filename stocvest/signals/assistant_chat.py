@@ -39,6 +39,7 @@ from stocvest.signals.assistant_prompts import (
 )
 from stocvest.signals.geopolitical_scanner import ANTHROPIC_API_URL, ANTHROPIC_VERSION
 from stocvest.signals.historical_validation import HistoricalValidationSummary
+from stocvest.signals.product_kpi import ProductKpiSummary
 from stocvest.utils.api_rate_limits import await_claude_api_slot
 from stocvest.utils.config import AI_MODEL_FAST, get_settings
 from stocvest.utils.logging import get_logger
@@ -134,9 +135,14 @@ def serialize_historical_validation_summary(
 
     lines: list[str] = [
         HISTORICAL_VALIDATION_BLOCK_HEADER,
+        "cohort=qualified_actionable_ledger_approved_only",
         f"window_days={int(window_days)}",
         f"horizon={summary.horizon}",
     ]
+    if product_kpi is not None:
+        lines.append(f"meets_minimum_sample={product_kpi.meets_minimum_sample}")
+        lines.append(f"resolved_non_neutral={product_kpi.coverage.resolved_non_neutral}")
+        lines.append(f"cohort_rows={product_kpi.coverage.cohort_rows}")
 
     overall = summary.overall
     resolved = overall.correct + overall.incorrect
@@ -180,6 +186,7 @@ class AssistantChatService:
         user_profile: UserProfile,
         historical_validation_summary: HistoricalValidationSummary | None = None,
         historical_validation_window_days: int = 90,
+        product_kpi_summary: ProductKpiSummary | None = None,
     ) -> AssistantChatResult:
         """Authenticated chat turn.
 
@@ -220,6 +227,7 @@ class AssistantChatService:
         validation_block = serialize_historical_validation_summary(
             historical_validation_summary,
             window_days=historical_validation_window_days,
+            product_kpi=product_kpi_summary,
         )
         if validation_block:
             system_text += "\n" + validation_block

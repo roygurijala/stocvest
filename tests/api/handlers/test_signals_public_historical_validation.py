@@ -69,6 +69,8 @@ def _signal(
     generated_at: datetime | None = None,
     decision_state_entry: str | None = "actionable",
     regime_label_at_entry: str | None = "risk_on",
+    ledger_qualified: bool = True,
+    capture_kind: str | None = "qualified",
 ) -> SignalRecord:
     return SignalRecord(
         signal_id=signal_id,
@@ -86,6 +88,8 @@ def _signal(
         regime_label_at_entry=regime_label_at_entry,
         parameter_version=parameter_version,
         user_id=user_id,
+        ledger_qualified=ledger_qualified,
+        capture_kind=capture_kind,  # type: ignore[arg-type]
     )
 
 
@@ -156,11 +160,25 @@ def test_response_omits_logged_in_only_stratifications(
     body = json.loads(resp["body"])
     summary = body["summary"]
 
-    # What MUST be present.
-    assert set(summary.keys()) == {"horizon", "overall", "by_mode", "rows_examined"}, (
-        "public summary must include exactly horizon + overall + by_mode + "
-        "rows_examined and nothing else"
-    )
+    # What MUST be present (product KPI cohort metadata + trimmed stratification).
+    assert set(summary.keys()) == {
+        "horizon",
+        "overall",
+        "by_mode",
+        "rows_examined",
+        "cohort_definition",
+        "meets_minimum_sample",
+        "minimum_resolved_required",
+        "resolved_non_neutral",
+        "cohort_rows",
+        "pending_outcome",
+        "signals_per_week",
+        "coverage_low",
+        "accuracy_ci_low_percent",
+        "accuracy_ci_high_percent",
+        "trading_days_in_window",
+        "trading_day_coverage_pct",
+    }
     assert summary["overall"]["total_signals"] == 3
     # Two swing correct + one day incorrect → swing 2/2, day 0/1.
     assert summary["by_mode"]["swing"]["correct"] == 2

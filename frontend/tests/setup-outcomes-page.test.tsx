@@ -35,6 +35,17 @@ describe("SetupOutcomesPageClient", () => {
     vi.clearAllMocks();
   });
 
+  test("links to Product KPI on /performance", async () => {
+    render(
+      <ThemeProvider>
+        <SetupOutcomesPageClient />
+      </ThemeProvider>
+    );
+    await screen.findByTestId("setup-outcomes-product-kpi-callout");
+    const links = screen.getAllByRole("link", { name: /Product signal accuracy|Signal tracking/i });
+    expect(links.some((a) => a.getAttribute("href") === "/performance")).toBe(true);
+  });
+
   test("renders building dataset state", async () => {
     render(
       <ThemeProvider>

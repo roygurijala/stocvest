@@ -11,6 +11,7 @@ import pytest
 from stocvest.api.handlers.admin_desk_backtest import (
     admin_environment_policy_backtest_handler,
     admin_historical_validation_summary_handler,
+    admin_product_kpi_summary_handler,
 )
 from stocvest.api.services.signal_recorder import (
     InMemorySignalRecorder,
@@ -122,3 +123,57 @@ def test_environment_backtest_returns_ranked_candidates() -> None:
     assert body["rows_with_vix"] >= 1
     assert len(body["candidates"]) >= 1
     assert any(c["is_production"] for c in body["candidates"])
+
+
+def test_product_kpi_summary_qualified_cohort_only() -> None:
+    qualified = SignalRecord(
+        signal_id="pub-kpi-1",
+        symbol="AAPL",
+        direction="bullish",
+        signal_strength=82,
+        pattern="swing_composite",
+        layer_scores={},
+        price_at_signal=100.0,
+        generated_at=datetime(2026, 2, 1, tzinfo=timezone.utc),
+        outcome_1d="correct",
+        mode="swing",
+        user_id=None,
+        ledger_qualified=True,
+        capture_kind="qualified",
+        decision_state_entry="actionable",
+        parameter_version="v-test",
+    )
+    shadow = qualified.model_copy(
+        update={
+            "signal_id": "pub-kpi-shadow",
+            "capture_kind": "shadow",
+            "ledger_qualified": False,
+            "decision_state_entry": "blocked",
+            "outcome_1d": "incorrect",
+        }
+    )
+    store = InMemorySignalRecorder()
+    store.record_signal(qualified)
+    store.record_signal(shadow)
+    event = _evt(
+        path="/v1/admin/product-kpi/summary",
+        qs={
+            "horizon": "1d",
+            "scope": "public",
+            "from": "2026-01-01T00:00:00Z",
+            "to": "2026-06-01T00:00:00Z",
+        },
+    )
+    with patch(
+        "stocvest.api.handlers.admin_desk_backtest.analysis_authorized",
+        return_value=True,
+    ), patch(
+        "stocvest.api.handlers.admin_desk_backtest.get_signal_recorder",
+        return_value=store,
+    ):
+        resp = admin_product_kpi_summary_handler(event, None)
+    assert resp["statusCode"] == 200
+    body = json.loads(resp["body"])
+    assert body["summary"]["coverage"]["cohort_rows"] == 1
+    assert body["summary"]["accuracy"]["correct"] == 1
+    assert "qualified" in body["cohort_definition"]

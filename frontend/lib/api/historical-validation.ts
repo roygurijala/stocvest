@@ -45,6 +45,9 @@ export interface BucketStats {
    * resolved-non-neutral rows in the bucket — UI renders "—" rather than "0%".
    */
   accuracy: number | null;
+  /** Per-mode Wilson 95% bounds (public `by_mode` only, when n ≥ 5 in that engine). */
+  accuracy_ci_low_percent?: number | null;
+  accuracy_ci_high_percent?: number | null;
 }
 
 /**
@@ -119,15 +122,26 @@ function parseAccuracy(v: unknown): number | null {
   return null;
 }
 
+function parseOptionalPercent(v: unknown): number | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === null) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
 function parseBucketStats(raw: unknown): BucketStats | null {
   if (!isRecord(raw)) return null;
+  const ciLow = parseOptionalPercent(raw.accuracy_ci_low_percent);
+  const ciHigh = parseOptionalPercent(raw.accuracy_ci_high_percent);
   return {
     total_signals: parseInt0(raw.total_signals),
     correct: parseInt0(raw.correct),
     incorrect: parseInt0(raw.incorrect),
     neutral: parseInt0(raw.neutral),
     resolved: parseInt0(raw.resolved),
-    accuracy: parseAccuracy(raw.accuracy)
+    accuracy: parseAccuracy(raw.accuracy),
+    ...(ciLow !== undefined ? { accuracy_ci_low_percent: ciLow } : {}),
+    ...(ciHigh !== undefined ? { accuracy_ci_high_percent: ciHigh } : {})
   };
 }
 
@@ -508,6 +522,18 @@ export interface PublicHistoricalValidationSummary {
   overall: BucketStats;
   by_mode: Record<string, BucketStats>;
   rows_examined: number;
+  cohort_definition: string;
+  meets_minimum_sample: boolean;
+  minimum_resolved_required: number;
+  resolved_non_neutral: number;
+  cohort_rows: number;
+  pending_outcome: number;
+  signals_per_week: number;
+  coverage_low: boolean;
+  accuracy_ci_low_percent: number | null;
+  accuracy_ci_high_percent: number | null;
+  trading_days_in_window?: number;
+  trading_day_coverage_pct?: number;
 }
 
 export interface PublicHistoricalValidationResponse {
@@ -528,7 +554,27 @@ function parsePublicSummary(raw: unknown): PublicHistoricalValidationSummary | n
     horizon,
     overall,
     by_mode: parseBucketMap(raw.by_mode),
-    rows_examined: parseInt0(raw.rows_examined)
+    rows_examined: parseInt0(raw.rows_examined),
+    cohort_definition: String(raw.cohort_definition ?? ""),
+    meets_minimum_sample: Boolean(raw.meets_minimum_sample),
+    minimum_resolved_required: parseInt0(raw.minimum_resolved_required) || 50,
+    resolved_non_neutral: parseInt0(raw.resolved_non_neutral),
+    cohort_rows: parseInt0(raw.cohort_rows),
+    pending_outcome: parseInt0(raw.pending_outcome),
+    signals_per_week: Number(raw.signals_per_week ?? 0),
+    coverage_low: Boolean(raw.coverage_low),
+    accuracy_ci_low_percent:
+      raw.accuracy_ci_low_percent === null || raw.accuracy_ci_low_percent === undefined
+        ? null
+        : Number(raw.accuracy_ci_low_percent),
+    accuracy_ci_high_percent:
+      raw.accuracy_ci_high_percent === null || raw.accuracy_ci_high_percent === undefined
+        ? null
+        : Number(raw.accuracy_ci_high_percent),
+    trading_days_in_window:
+      raw.trading_days_in_window === undefined ? undefined : parseInt0(raw.trading_days_in_window),
+    trading_day_coverage_pct:
+      raw.trading_day_coverage_pct === undefined ? undefined : Number(raw.trading_day_coverage_pct)
   };
 }
 

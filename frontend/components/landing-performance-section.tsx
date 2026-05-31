@@ -128,7 +128,8 @@ export function LandingPerformanceSection({ summary }: { summary: PerformanceSum
         </p>
         <h2 className="text-3xl font-extrabold tracking-tight text-[#e8f4ff] md:text-4xl">Every signal. Published.</h2>
         <p className="mx-auto mt-3 max-w-lg text-sm text-slate-400">
-          Signal outcome tracking: we compare each call to subsequent price movement. Directional accuracy is not trading performance.
+          We track qualified, actionable recommendations against subsequent price movement. Shadow and research captures are
+          excluded from headline accuracy. Directional accuracy is not trading performance.
         </p>
       </div>
 
@@ -240,8 +241,14 @@ export function LandingPerformanceSection({ summary }: { summary: PerformanceSum
            */}
           {evaluated > 0 && !hasPatternData ? (
             <p className="mb-3 text-center text-xs text-slate-400" style={{ fontFamily: MONO }}>
-              Resolved 1d signals so far: <span className="font-semibold text-slate-200">{evaluated}</span>.
-              Per-engine accuracy (Swing / Day) is reported on the Signal Tracking page.
+              Qualified actionable signals evaluated: <span className="font-semibold text-slate-200">{evaluated}</span>
+              {summary?.resolved_non_neutral != null ? (
+                <>
+                  {" "}
+                  · {summary.resolved_non_neutral} resolved non-neutral
+                </>
+              ) : null}
+              . Per-engine Product KPI (Swing / Day) on the Signal Tracking page.
             </p>
           ) : null}
 
