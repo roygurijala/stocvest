@@ -34,6 +34,8 @@ export type WatchlistRadarAttentionInput = {
   alignmentTier: AlignmentDisplayTier;
   blockers: string[];
   desk: WatchlistRadarDeskContext;
+  /** Omit "— session closed" when the page/pipeline header already states it (card surfaces). */
+  omitSessionClosedSuffix?: boolean;
 };
 
 function isFullyAligned(input: WatchlistRadarAttentionInput): boolean {
@@ -52,9 +54,14 @@ export function formatRegimeGateQualifier(regimeLabel: string): string | null {
   return `${r} regime`;
 }
 
-/** Desk-level or bearish-regime gate (not per-symbol layer gaps). */
+/** Bearish (or other blocking) regime — affects card chrome and copy. */
+export function isWatchlistRadarRegimeGated(desk: WatchlistRadarDeskContext): boolean {
+  return regimeBlocksDesk(desk.regimeLabel);
+}
+
+/** Desk-level gate for attention copy (quiet desk + regime). */
 export function isWatchlistRadarDeskGated(desk: WatchlistRadarDeskContext): boolean {
-  return desk.systemSuppressed || regimeBlocksDesk(desk.regimeLabel);
+  return desk.systemSuppressed || isWatchlistRadarRegimeGated(desk);
 }
 
 function deskGatedPhrase(desk: WatchlistRadarDeskContext, prefix: string): string {
@@ -62,7 +69,12 @@ function deskGatedPhrase(desk: WatchlistRadarDeskContext, prefix: string): strin
   return qualifier ? `${prefix} — desk gated (${qualifier})` : `${prefix} — desk gated`;
 }
 
-function sessionGatePhrase(prefix: string, sessionMode: SessionActivityUiMode | undefined): string | null {
+function sessionGatePhrase(
+  prefix: string,
+  sessionMode: SessionActivityUiMode | undefined,
+  omitSessionClosedSuffix?: boolean
+): string | null {
+  if (omitSessionClosedSuffix) return null;
   if (sessionMode === "closed") return `${prefix} — session closed`;
   if (sessionMode === "extended") return `${prefix} — extended hours (context only)`;
   return null;
@@ -82,14 +94,16 @@ function symbolHoldPhrase(blockers: string[], bias: string | undefined): string 
  * Distinguishes "signal ready, market isn't" from "still building layers".
  */
 export function resolveWatchlistRadarAttentionLine(input: WatchlistRadarAttentionInput): string | null {
-  const { tier, blockers, desk, row } = input;
+  const { tier, blockers, desk, row, omitSessionClosedSuffix } = input;
   const bias = row?.bias;
   const setupPrefix = watchlistSetupQualityPrefix(bias);
+  const sessionClosedOrExtended =
+    desk.sessionMode === "closed" || desk.sessionMode === "extended";
 
   if (tier === "check_now") {
     if (isFullyAligned(input)) {
       if (isExplicitNeutralMaturationBias(bias)) {
-        const sessionPhrase = sessionGatePhrase("Balanced", desk.sessionMode);
+        const sessionPhrase = sessionGatePhrase("Balanced", desk.sessionMode, omitSessionClosedSuffix);
         if (sessionPhrase) return sessionPhrase;
         if (isWatchlistRadarDeskGated(desk)) {
           return deskGatedPhrase(desk, "Balanced");
@@ -100,7 +114,7 @@ export function resolveWatchlistRadarAttentionLine(input: WatchlistRadarAttentio
         }
         return WATCHLIST_BALANCED_NO_EDGE_LINE;
       }
-      const sessionPhrase = sessionGatePhrase(setupPrefix, desk.sessionMode);
+      const sessionPhrase = sessionGatePhrase(setupPrefix, desk.sessionMode, omitSessionClosedSuffix);
       if (sessionPhrase) return sessionPhrase;
       if (isWatchlistRadarDeskGated(desk)) {
         return deskGatedPhrase(desk, setupPrefix);
@@ -112,13 +126,19 @@ export function resolveWatchlistRadarAttentionLine(input: WatchlistRadarAttentio
       }
       const hold = symbolHoldPhrase(blockers, bias);
       if (hold) return hold;
+      if (omitSessionClosedSuffix && sessionClosedOrExtended) {
+        return setupPrefix;
+      }
       return "Strong on your list — open on Signals";
     }
     if (isNearReadyBand(input)) {
-      const sessionPhrase = sessionGatePhrase("Near ready", desk.sessionMode);
+      const sessionPhrase = sessionGatePhrase("Near ready", desk.sessionMode, omitSessionClosedSuffix);
       if (sessionPhrase) return sessionPhrase;
       if (isWatchlistRadarDeskGated(desk)) {
         return deskGatedPhrase(desk, "Near ready");
+      }
+      if (omitSessionClosedSuffix && sessionClosedOrExtended) {
+        return "Near ready";
       }
       return "Near actionable on your list";
     }

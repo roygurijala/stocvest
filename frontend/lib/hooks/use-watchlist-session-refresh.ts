@@ -98,7 +98,9 @@ export function useWatchlistSessionRefresh(opts: {
         });
         if (cancelled) return;
         lastRunForEpochRef.current = maturationEpoch;
-        onRefreshedRef.current?.();
+        if (result.refreshed.length > 0) {
+          onRefreshedRef.current?.();
+        }
       } finally {
         if (!cancelled) inFlightRef.current = false;
       }

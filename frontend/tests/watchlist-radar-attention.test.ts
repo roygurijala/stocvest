@@ -119,6 +119,25 @@ describe("watchlist-radar-attention", () => {
     expect(line).toBe("Strong setup — desk gated");
   });
 
+  test("omitSessionClosedSuffix drops session closed on cards", () => {
+    const line = resolveWatchlistRadarAttentionLine({
+      tier: "check_now",
+      row: {
+        bias: "long",
+        progress_band: "actionable",
+        layers_aligned: 6,
+        layers_total: 6,
+        state: "actionable"
+      },
+      alignmentTier: "actionable",
+      blockers: [],
+      desk: { regimeLabel: "Bullish", systemSuppressed: false, sessionMode: "closed" },
+      omitSessionClosedSuffix: true
+    });
+    expect(line).toBe("Strong setup");
+    expect(line).not.toMatch(/session closed/i);
+  });
+
   test("actionable + macro blocker only on open desk", () => {
     const line = resolveWatchlistRadarAttentionLine({
       tier: "check_now",
