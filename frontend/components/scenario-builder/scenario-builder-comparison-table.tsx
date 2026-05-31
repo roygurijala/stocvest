@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { formatScenarioDollars } from "@/lib/scenario/compute";
 import { buildScenarioComparisonRows } from "@/lib/scenario/scenario-comparison-rows";
+import { evaluatePresetRiskCap, PRESET_MAX_RISK_PCT } from "@/lib/scenario/planning-risk-present";
 import { formatScenarioRatio, type ScenarioPresetId, type ScenarioVariantCatalog } from "@/lib/scenario/scenario-variants";
 import { scenarioClearsDeskRrGate } from "@/lib/scenario/scenario-verdict";
 import type { ScenarioMode } from "@/lib/scenario/types";
@@ -59,8 +60,9 @@ export function ScenarioBuilderComparisonTable({
         Scenario comparison — R/R at each geometry
       </h3>
       <p style={{ margin: 0, marginBottom: spacing[3], color: colors.textMuted, fontSize: typography.scale.xs }}>
-        Desk minimum {minRr.toFixed(1)} : 1 for {mode} mode. Click a preset to load its entry / stop / target into
-        your draft.
+        Desk minimum {minRr.toFixed(1)} : 1 for {mode} mode. Soft risk caps: dip {PRESET_MAX_RISK_PCT.dip}%, continuation{" "}
+        {PRESET_MAX_RISK_PCT.continuation}%, breakout {PRESET_MAX_RISK_PCT.breakout}% of entry (warnings only). Click a
+        preset to load its geometry into your draft.
       </p>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[520px] border-collapse text-left text-xs" style={{ color: colors.text }}>
@@ -70,6 +72,7 @@ export function ScenarioBuilderComparisonTable({
               <th className="pb-2 pr-2 font-semibold">Entry</th>
               <th className="pb-2 pr-2 font-semibold">Stop</th>
               <th className="pb-2 pr-2 font-semibold">Target</th>
+              <th className="pb-2 pr-2 font-semibold">Risk %</th>
               <th className="pb-2 font-semibold">R/R</th>
             </tr>
           </thead>
@@ -77,6 +80,10 @@ export function ScenarioBuilderComparisonTable({
             {rows.map((row) => {
               const clears = row.riskReward != null && scenarioClearsDeskRrGate(row.riskReward, mode);
               const isPreset = row.id !== "your_draft";
+              const riskCap =
+                isPreset && row.riskPctOfEntry != null
+                  ? evaluatePresetRiskCap(row.id as ScenarioPresetId, row.riskPctOfEntry)
+                  : null;
               return (
                 <tr key={row.id} data-testid={`scenario-comparison-row-${row.id}`}>
                   <td className="py-2 pr-2 align-top">
@@ -96,6 +103,13 @@ export function ScenarioBuilderComparisonTable({
                   <td className="py-2 pr-2 tabular-nums">{formatScenarioDollars(row.entry, { fractionDigits: 2 })}</td>
                   <td className="py-2 pr-2 tabular-nums">{formatScenarioDollars(row.stop, { fractionDigits: 2 })}</td>
                   <td className="py-2 pr-2 tabular-nums">{formatScenarioDollars(row.target, { fractionDigits: 2 })}</td>
+                  <td
+                    className="py-2 pr-2 tabular-nums"
+                    style={{ color: riskCap && !riskCap.withinCap ? colors.caution : colors.text }}
+                    title={riskCap?.message ?? undefined}
+                  >
+                    {row.riskPctOfEntry != null ? `${row.riskPctOfEntry.toFixed(2)}%` : "—"}
+                  </td>
                   <td
                     className="py-2 tabular-nums font-semibold"
                     style={{ color: clears ? colors.bullish : colors.caution }}

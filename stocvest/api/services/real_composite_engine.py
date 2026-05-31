@@ -17,6 +17,7 @@ from stocvest.api.services.sector_cache_dynamo import DynamoSectorCache
 from stocvest.api.services.signal_snapshot_builders import build_real_composite_snapshot_payload
 from stocvest.api.services.signal_recorder import get_signal_recorder
 from stocvest.api.services.execution_quality import build_execution_quality_payload
+from stocvest.api.services.planning_gates import build_planning_gates_payload
 from stocvest.api.services.ledger_gate_attempt import persist_ledger_gate_attempt
 from stocvest.api.services.ledger_study_capture import (
     evaluation_source_for_ledger_capture,
@@ -757,6 +758,14 @@ async def build_real_composite_response(
         ],
         "daily_bars_range": serialize_daily_bars_for_range(daily_bars, limit=10),
     }
+    _tech_atr = getattr(tech, "atr", None)
+    if _tech_atr is not None:
+        try:
+            _atr_f = float(_tech_atr)
+            if _atr_f > 0:
+                payload_stub["atr"] = round(_atr_f, 4)
+        except (TypeError, ValueError):
+            pass
     response_body.update(
         build_swing_composite_evidence_fields(
             composite=composite,
@@ -809,6 +818,20 @@ async def build_real_composite_response(
         ref_utc=_gen_at_eq,
     )
     response_body["execution_quality"] = _execution_quality
+    if payload_stub.get("atr") is not None:
+        response_body["atr"] = payload_stub["atr"]
+    response_body["planning_gates"] = build_planning_gates_payload(
+        mode="day",
+        market_regime=str(response_body.get("market_regime") or "Neutral"),
+        risk_reward=_rr_eq,
+        execution_quality=_execution_quality,
+        reference_stop_provenance=str(response_body.get("reference_stop_provenance") or "") or None,
+        atr=payload_stub.get("atr"),
+        setup_judgment=response_body.get("setup_judgment")
+        if isinstance(response_body.get("setup_judgment"), dict)
+        else None,
+        ref_utc=_gen_at_eq,
+    )
     response_body["generated_at"] = _gen_at_eq.replace(microsecond=0).isoformat()
     _eval_src = evaluation_source_for_ledger_capture(ledger_capture)
 

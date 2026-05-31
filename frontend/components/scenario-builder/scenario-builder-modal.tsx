@@ -17,6 +17,7 @@ import {
   type ScenarioPresetId
 } from "@/lib/scenario/scenario-variants";
 import { scenarioInputToGeometrySource } from "@/lib/scenario/scenario-input-geometry";
+import { evaluatePresetRiskCap, formatRiskPctLine, riskPctOfEntry } from "@/lib/scenario/planning-risk-present";
 import { referenceStopAtrK } from "@/lib/scenario/reference-stop-resolve";
 import {
   classifyEntryEdge,
@@ -365,6 +366,7 @@ export function ScenarioBuilderModal({
   const [orderTypeLabel, setOrderTypeLabel] = useState<"market" | "limit" | "stop">("limit");
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
   const [stopAutoAdjusted, setStopAutoAdjusted] = useState(false);
+  const [activePreset, setActivePreset] = useState<ScenarioPresetId>("continuation");
 
   const timingFlags = useMemo(
     () => ({
@@ -381,6 +383,7 @@ export function ScenarioBuilderModal({
     if (catalog?.system) {
       const presetId: ScenarioPresetId =
         timingFlags.entryTimingWeak || timingFlags.vwapConflict ? "dip" : "continuation";
+      setActivePreset(presetId);
       const resolved =
         resolveScenarioLevels(catalog.source, catalog.presets[presetId]) ?? catalog.system;
       setEntry(resolved.entry);
@@ -468,17 +471,28 @@ export function ScenarioBuilderModal({
     if (!catalog) return;
     const resolved = resolveScenarioLevels(catalog.source, catalog.presets[preset]);
     if (!resolved) return;
+    setActivePreset(preset);
     setEntry(resolved.entry);
     setStop(resolved.stop);
     setTarget(resolved.target);
     setStopAutoAdjusted(false);
   };
 
+  const draftRiskPct = useMemo(
+    () => riskPctOfEntry(direction, entry, stop),
+    [direction, entry, stop]
+  );
+  const draftRiskCapWarning = useMemo(() => {
+    if (draftRiskPct == null) return null;
+    return evaluatePresetRiskCap(activePreset, draftRiskPct);
+  }, [draftRiskPct, activePreset]);
+
   const handleReset = () => {
     setStopAutoAdjusted(false);
     if (catalog?.system) {
       const presetId: ScenarioPresetId =
         timingFlags.entryTimingWeak || timingFlags.vwapConflict ? "dip" : "continuation";
+      setActivePreset(presetId);
       const resolved =
         resolveScenarioLevels(catalog.source, catalog.presets[presetId]) ?? catalog.system;
       setEntry(resolved.entry);
@@ -800,6 +814,19 @@ export function ScenarioBuilderModal({
                   }}
                 >
                   Stop was adjusted to sit below your entry with a minimum risk width (structure + ATR floor).
+                </p>
+              ) : null}
+              {draftRiskPct != null ? (
+                <p
+                  data-testid="scenario-risk-pct-line"
+                  style={{
+                    margin: `0 0 ${spacing[2]} 0`,
+                    color: colors.textMuted,
+                    fontSize: typography.scale.xs
+                  }}
+                >
+                  {formatRiskPctLine(draftRiskPct)}
+                  {draftRiskCapWarning?.message ? ` — ${draftRiskCapWarning.message}` : null}
                 </p>
               ) : null}
               {geometryError ? (
