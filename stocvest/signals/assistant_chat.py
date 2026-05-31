@@ -101,6 +101,7 @@ def serialize_historical_validation_summary(
     summary: HistoricalValidationSummary | None,
     *,
     window_days: int,
+    product_kpi: ProductKpiSummary | None = None,
 ) -> str:
     """Render the user's HistoricalValidationSummary as a compact tail block.
 

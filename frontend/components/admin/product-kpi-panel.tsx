@@ -366,7 +366,7 @@ export function ProductKpiPanel({
               </p>
               <p
                 className="m-0 mt-1 font-semibold tabular-nums"
-                style={{ fontSize: typography.size2xl, color: colors.text }}
+                style={{ fontSize: typography.scale["2xl"], color: colors.text }}
               >
                 {heroAccuracy}
               </p>
@@ -570,7 +570,7 @@ export function ProductKpiPanel({
               ) : null}
               {promotion ? (
                 <div className="mt-3 text-xs" style={{ color: colors.textMuted }}>
-                  <p className="m-0 font-medium" style={{ color: promotion.promoted ? colors.positive ?? colors.accent : colors.text }}>
+                  <p className="m-0 font-medium" style={{ color: promotion.promoted ? colors.bullish : colors.text }}>
                     {promotion.promoted ? "Eligible for promotion" : "Not eligible for promotion"}
                   </p>
                   <p className="m-0 mt-1">

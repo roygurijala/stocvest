@@ -110,8 +110,9 @@ export function LandingSignalExplorer({
   const moreCount = Math.max(0, signals.length - 20);
 
   const accuracyPct = useMemo(() => {
-    if (performanceSummary.signals_evaluated > 0) {
-      return Math.round(performanceSummary.directional_accuracy_percent);
+    const headline = performanceSummary.directional_accuracy_percent;
+    if (performanceSummary.signals_evaluated > 0 && headline != null) {
+      return Math.round(headline);
     }
     const local = directionalAccuracyFromSignals(signals);
     return local != null ? local : null;

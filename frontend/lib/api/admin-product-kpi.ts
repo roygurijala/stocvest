@@ -110,7 +110,7 @@ function parseProductKpiSummary(raw: unknown): ProductKpiSummary | null {
   const accuracyRaw = isRecord(raw.accuracy) ? raw.accuracy : null;
   const coverageRaw = isRecord(raw.coverage) ? raw.coverage : null;
   const base = accuracyRaw ? parseBucketStats(accuracyRaw) : null;
-  if (!base || !coverageRaw) return null;
+  if (!base || !coverageRaw || !accuracyRaw) return null;
 
   const parseBandMap = (m: unknown): Record<string, BucketStats> => {
     if (!isRecord(m)) return {};

@@ -111,6 +111,7 @@ export function LandingActivityFeedSection({
   const sparkValues = useMemo(() => {
     if (!hasPerf) return [] as number[];
     const acc = performanceSummary.directional_accuracy_percent;
+    if (acc == null) return [] as number[];
     return [Math.max(0, acc * 0.6), Math.max(0, acc * 0.85), acc];
   }, [hasPerf, performanceSummary.directional_accuracy_percent]);
 
@@ -204,7 +205,9 @@ export function LandingActivityFeedSection({
                 </div>
                 <div>
                   <p className="text-[22px] font-semibold text-[#00d4ff]" style={{ fontFamily: MONO }}>
-                    {hasPerf ? `${performanceSummary.directional_accuracy_percent}%` : "—"}
+                    {hasPerf && performanceSummary.directional_accuracy_percent != null
+                      ? `${performanceSummary.directional_accuracy_percent}%`
+                      : "—"}
                   </p>
                   <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Directional Accuracy</p>
                 </div>
