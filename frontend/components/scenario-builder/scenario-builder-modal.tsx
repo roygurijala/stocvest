@@ -17,6 +17,7 @@ import {
   type ScenarioPresetId
 } from "@/lib/scenario/scenario-variants";
 import { scenarioInputToGeometrySource } from "@/lib/scenario/scenario-input-geometry";
+import { referenceStopAtrK } from "@/lib/scenario/reference-stop-resolve";
 import {
   classifyEntryEdge,
   effectiveEntryZoneForClassification,
@@ -106,7 +107,7 @@ const REGIME_DEFAULT_STOP_PCT: Record<string, number> = {
 /**
  * Derive a stop default. Priority order:
  *   1. Explicit reference stop (signal-carried).
- *   2. ATR-based: entry ± 1.5×ATR by direction.
+ *   2. ATR-based: entry ± k×ATR14 (continuation default k=1.0).
  *   3. Volatility-regime default: entry × (1 ± regime_pct).
  *
  * Each successive fallback is more approximate; the modal labels the
@@ -133,7 +134,8 @@ function deriveStopDefault(
     ref.atr > 0 &&
     Number.isFinite(entry)
   ) {
-    const raw = direction === "bullish" ? entry - 1.5 * ref.atr : entry + 1.5 * ref.atr;
+    const k = referenceStopAtrK({ preset: "continuation" });
+    const raw = direction === "bullish" ? entry - k * ref.atr : entry + k * ref.atr;
     return applyMinStopDistance(direction, entry, raw, atr);
   }
   const regimePct = REGIME_DEFAULT_STOP_PCT[regime];

@@ -20,6 +20,12 @@ import {
   structureRiskRewardLong,
   structureRiskRewardShort
 } from "@/lib/risk-reward-structure";
+import {
+  referenceStopAtrK,
+  resolveMergedReferenceStop,
+  resolveStructuralStopAnchor
+} from "@/lib/scenario/reference-stop-resolve";
+import type { ScenarioDirection } from "@/lib/scenario/types";
 
 export type EvidenceDirection = "bullish" | "bearish" | "neutral";
 export type EvidenceStatus = "Bullish" | "Bearish" | "Neutral" | "Unavailable" | "As of close";
@@ -1641,6 +1647,10 @@ export interface SessionReferenceLevelsInput {
   vwap?: number | null;
   lastTradePrice?: number | null;
   prevClose?: number | null;
+  atr?: number | null;
+  tradingMode?: "day" | "swing" | null;
+  swingLow?: number | null;
+  swingHigh?: number | null;
 }
 
 /**
@@ -1669,11 +1679,38 @@ export function referenceLevelsFromSessionStructure(
     typeof input.prevClose === "number" && Number.isFinite(input.prevClose) && input.prevClose > 0 ? input.prevClose : null;
 
   const useLong = useLongRrStructure(input.direction, dayLo, dayHi, last);
+  const scenarioDir: ScenarioDirection = useLong ? "bullish" : "bearish";
   const g = useLong
     ? longSideGeometry({ dayLo, dayHi, vwap, prevClose, last })
     : shortSideGeometry({ dayLo, dayHi, vwap, prevClose, last });
+
+  const structural = resolveStructuralStopAnchor({
+    direction: scenarioDir,
+    sessionLow: dayLo,
+    sessionHigh: dayHi,
+    vwap,
+    prevClose,
+    last,
+    swingLow: input.swingLow ?? null,
+    swingHigh: input.swingHigh ?? null
+  });
+  const entry = entryPriceForRr(last, dayLo, dayHi);
+  const atr =
+    typeof input.atr === "number" && Number.isFinite(input.atr) && input.atr > 0 ? input.atr : null;
+  let reference_stop_level = g.stop;
+  if (entry != null && structural != null) {
+    const merged = resolveMergedReferenceStop({
+      direction: scenarioDir,
+      entry,
+      structuralStop: structural,
+      atr,
+      atrK: referenceStopAtrK({ tradingMode: input.tradingMode ?? null })
+    });
+    if (merged.stop != null) reference_stop_level = merged.stop;
+  }
+
   return {
-    reference_stop_level: g.stop,
+    reference_stop_level,
     reference_target_1: g.target1,
     reference_target_2: g.target2
   };

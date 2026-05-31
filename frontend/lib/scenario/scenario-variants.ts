@@ -9,6 +9,11 @@ import { resolveAlignmentDisplayTier } from "@/lib/alignment-display-tier";
 import type { SignalsSetupBias } from "@/lib/signals-page-present";
 import { referenceLevelsFromSessionStructure } from "@/lib/signal-evidence";
 import { applyMinStopDistance } from "@/lib/scenario/scenario-stop-policy";
+import {
+  referenceStopAtrK,
+  resolveMergedReferenceStop,
+  resolveStructuralStopAnchor
+} from "@/lib/scenario/reference-stop-resolve";
 import type { TradeDecision } from "@/lib/signal-evidence/trade-decision";
 
 /** Matches `buildSignalsPageDecision` R/R gate — keep in sync. */
@@ -31,6 +36,12 @@ export type ScenarioGeometrySource = {
   vwap: number | null;
   atr: number | null;
   systemRiskReward: number | null;
+  sessionLow?: number | null;
+  sessionHigh?: number | null;
+  prevClose?: number | null;
+  swingLow?: number | null;
+  swingHigh?: number | null;
+  tradingMode?: "day" | "swing" | null;
 };
 
 export type ScenarioGeometryPrecision = "validated" | "estimated";
@@ -128,31 +139,48 @@ function resolveStop(
   strategy: ScenarioStopStrategy,
   direction: "bullish" | "bearish",
   entry: number,
-  structural: number | null,
-  vwap: number | null,
-  atr: number | null
+  source: ScenarioGeometrySource,
+  preset: ScenarioPresetId
 ): number | null {
+  const structural = source.structuralStop;
+  const vwap = source.vwap;
+  const atr = source.atr;
   if (structural == null || !Number.isFinite(structural)) return null;
-  const base = structural;
-  let stop: number;
-  if (strategy === "structural") stop = round4(base);
-  else if (strategy === "vwap" && vwap != null && vwap > 0) {
+
+  let base = structural;
+  if (strategy === "structural") {
+    const anchor = resolveStructuralStopAnchor({
+      direction,
+      sessionLow: source.sessionLow ?? null,
+      sessionHigh: source.sessionHigh ?? null,
+      vwap,
+      prevClose: source.prevClose ?? null,
+      last: source.last,
+      swingLow: source.swingLow ?? null,
+      swingHigh: source.swingHigh ?? null
+    });
+    const merged = resolveMergedReferenceStop({
+      direction,
+      entry,
+      structuralStop: anchor ?? structural,
+      atr,
+      atrK: referenceStopAtrK({ preset, tradingMode: source.tradingMode ?? null })
+    });
+    if (merged.stop != null) return merged.stop;
+    base = structural;
+  } else if (strategy === "vwap" && vwap != null && vwap > 0) {
     const vStop = direction === "bullish" ? round4(vwap * 0.995) : round4(vwap * 1.005);
-    if (direction === "bullish" && vStop < entry) stop = vStop;
-    else if (direction === "bearish" && vStop > entry) stop = vStop;
-    else stop = round4(base);
+    if (direction === "bullish" && vStop < entry) base = vStop;
+    else if (direction === "bearish" && vStop > entry) base = vStop;
   } else if (strategy === "tight") {
-    if (direction === "bullish" && base < entry) {
-      stop = round4(base + (entry - base) * 0.35);
-    } else if (direction === "bearish" && base > entry) {
-      stop = round4(base - (base - entry) * 0.35);
-    } else {
-      stop = round4(base);
+    if (direction === "bullish" && structural < entry) {
+      base = round4(structural + (entry - structural) * 0.35);
+    } else if (direction === "bearish" && structural > entry) {
+      base = round4(structural - (structural - entry) * 0.35);
     }
-  } else {
-    stop = round4(base);
   }
-  return applyMinStopDistance(direction, entry, stop, atr);
+
+  return applyMinStopDistance(direction, entry, round4(base), atr);
 }
 
 function resolveTarget(
@@ -213,14 +241,7 @@ function resolveScenarioLevelsOnce(
   if (selection.entry === "conservative") {
     entry = capConservativeEntry(entry, source);
   }
-  const stop = resolveStop(
-    selection.stop,
-    source.direction,
-    entry,
-    source.structuralStop,
-    source.vwap,
-    source.atr
-  );
+  const stop = resolveStop(selection.stop, source.direction, entry, source, selection.preset);
   if (stop == null) return null;
   const target = resolveTarget(
     selection.target,
@@ -256,14 +277,7 @@ export function describeInvalidScenarioSelection(
     return "No usable entry level for this symbol — check that price and entry zone are loaded.";
   }
 
-  const stop = resolveStop(
-    selection.stop,
-    source.direction,
-    entry,
-    source.structuralStop,
-    source.vwap,
-    source.atr
-  );
+  const stop = resolveStop(selection.stop, source.direction, entry, source, selection.preset);
   if (stop == null) {
     return "Stop does not fit this entry — try Structural stop or a different entry style.";
   }
@@ -397,6 +411,9 @@ export type BuildScenarioGeometryBundleArgs = {
   compositeStopProvided?: boolean;
   compositeTargetProvided?: boolean;
   compositeZoneProvided?: boolean;
+  tradingMode?: "day" | "swing" | null;
+  swingRangeLow?: number | null;
+  swingRangeHigh?: number | null;
 };
 
 /**
@@ -461,7 +478,11 @@ export function buildScenarioGeometryBundle(
     resistance,
     vwap,
     lastTradePrice: last,
-    prevClose: positivePrice(args.prevClose)
+    prevClose: positivePrice(args.prevClose),
+    atr: positivePrice(args.atr),
+    tradingMode: args.tradingMode ?? null,
+    swingLow: positivePrice(args.swingRangeLow),
+    swingHigh: positivePrice(args.swingRangeHigh)
   });
 
   if (stop == null && session.reference_stop_level != null) {
@@ -495,7 +516,13 @@ export function buildScenarioGeometryBundle(
     target2: t2,
     vwap,
     atr: positivePrice(args.atr),
-    systemRiskReward: args.systemRiskReward ?? null
+    systemRiskReward: args.systemRiskReward ?? null,
+    sessionLow: support,
+    sessionHigh: resistance,
+    prevClose: positivePrice(args.prevClose),
+    swingLow: positivePrice(args.swingRangeLow),
+    swingHigh: positivePrice(args.swingRangeHigh),
+    tradingMode: args.tradingMode ?? null
   };
 
   const catalog = buildScenarioVariantCatalog(source);
