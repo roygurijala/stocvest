@@ -54,8 +54,15 @@ from stocvest.api.services.morning_brief_fetch import (
 )
 from stocvest.api.services.signal_recorder import (
     get_signal_recorder,
-    performance_summary_from_records,
     public_signal_detail_dict,
+)
+from stocvest.signals.product_kpi import (
+    PRODUCT_KPI_DEFAULT_WINDOW_DAYS,
+    PUBLIC_PRODUCT_KPI_HORIZON,
+    filter_product_kpi_cohort,
+    performance_summary_from_product_kpi_records,
+    public_validation_summary_dict,
+    summarize_product_kpi,
 )
 from stocvest.api.services.swing_composite_evidence import build_swing_composite_evidence_fields
 from stocvest.api.services.signal_validation_eligibility import (
@@ -79,6 +86,7 @@ from stocvest.signals.historical_validation import (
     BucketStats,
     HistoricalValidationSummary,
     Horizon,
+    validate_signal_history,
 )
 from stocvest.signals import (
     AISynthesis,
@@ -958,7 +966,7 @@ def public_performance_summary_handler(event: LambdaEvent, context: LambdaContex
     _ = context
     try:
         records = get_signal_recorder().iter_public_records()
-        return ok(performance_summary_from_records(records))
+        return ok(performance_summary_from_product_kpi_records(records))
     except Exception as exc:
         return internal_error(str(exc))
 
@@ -1127,26 +1135,32 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     profile = get_user_profile_store().get_profile(rc.user_id)
     svc = AssistantChatService()
 
-    # Fetch the user's Phase 2 historical-validation summary (trailing 90 days, 1d
-    # horizon — same defaults as the public mirror on /performance, but scoped to this
-    # user). Failures are caught defensively: a chat turn must not break because the
-    # signal-history store is briefly slow / unavailable. When the summary cannot be
-    # fetched OR the user has zero rows in the window, the chat service skips the
-    # historical-validation tail block entirely and the prompt's "if the field is
-    # absent, do not comment" rule activates.
+    # Product KPI cohort for the user (trailing 90d, 1d) — same definition as /performance.
     historical_summary = None
+    product_kpi_summary = None
     try:
         validation_service = HistoricalValidationService(get_signal_recorder())
         _now = datetime.now(timezone.utc)
-        historical_summary = validation_service.summarize(
+        _from = _now - timedelta(days=PRODUCT_KPI_DEFAULT_WINDOW_DAYS)
+        rows = validation_service._fetch(
             user_id=rc.user_id,
-            from_at=_now - timedelta(days=90),
+            from_at=_from,
             to_at=_now,
+            mode=None,
+            symbol=None,
+        )
+        cohort = filter_product_kpi_cohort(rows)
+        historical_summary = validate_signal_history(cohort, horizon="1d")
+        product_kpi_summary = summarize_product_kpi(
+            cohort,
             horizon="1d",
+            from_at=_from,
+            to_at=_now,
         )
     except Exception:  # noqa: BLE001 — never let a fetch failure break the chat reply
         _LOG.exception("assistant_chat: failed to fetch historical validation summary")
         historical_summary = None
+        product_kpi_summary = None
 
     try:
         result = asyncio.run(
@@ -1155,6 +1169,7 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
                 page_context=page_context,
                 user_profile=profile,
                 historical_validation_summary=historical_summary,
+                product_kpi_summary=product_kpi_summary,
             )
         )
     except (TypeError, ValueError) as exc:
@@ -1502,12 +1517,9 @@ def _public_summary_to_dict(summary: HistoricalValidationSummary) -> dict[str, A
     }
 
 
-# Default window the public mirror serves when ``from`` / ``to`` are omitted: the
-# trailing 90 calendar days ending now. 90d is enough to smooth single-week variance,
-# short enough that the mirror reflects "recent track record" rather than legacy noise,
-# and well below the service-layer ``MAX_LOOKBACK_DAYS = 366`` cap.
-PUBLIC_HISTORICAL_VALIDATION_DEFAULT_DAYS = 90
-PUBLIC_HISTORICAL_VALIDATION_DEFAULT_HORIZON: Horizon = "1d"
+# Public mirror uses the same rolling window and horizon as Product KPI.
+PUBLIC_HISTORICAL_VALIDATION_DEFAULT_DAYS = PRODUCT_KPI_DEFAULT_WINDOW_DAYS
+PUBLIC_HISTORICAL_VALIDATION_DEFAULT_HORIZON: Horizon = PUBLIC_PRODUCT_KPI_HORIZON
 
 
 def public_historical_validation_summary_handler(
@@ -1582,13 +1594,20 @@ def public_historical_validation_summary_handler(
 
     try:
         service = HistoricalValidationService(get_signal_recorder())
-        summary = service.summarize(
-            user_id=None,  # platform scope; selects rows where scope_key == "PUBLIC"
+        rows = service._fetch(
+            user_id=None,
             from_at=from_at,
             to_at=to_at,
-            horizon=horizon,
             mode=mode_filter,
-            symbol=None,  # never honored on this surface — see symbol gate above
+            symbol=None,
+        )
+        cohort = filter_product_kpi_cohort(rows)
+        summary = validate_signal_history(cohort, horizon=horizon)
+        kpi = summarize_product_kpi(
+            cohort,
+            horizon=horizon,
+            from_at=from_at,
+            to_at=to_at,
         )
         body: dict[str, Any] = {
             "horizon": horizon,
@@ -1596,7 +1615,8 @@ def public_historical_validation_summary_handler(
             "to": to_at.isoformat(),
             "mode": mode_filter,
             "disclaimer": HISTORICAL_VALIDATION_DISCLAIMER,
-            "summary": _public_summary_to_dict(summary),
+            "cohort_definition": kpi.cohort_definition,
+            "summary": public_validation_summary_dict(summary, kpi=kpi),
         }
         return ok(body)
     except Exception as exc:  # noqa: BLE001 — defensive
@@ -1824,6 +1844,21 @@ def signals_http_dispatch(event: LambdaEvent, context: LambdaContext) -> dict[st
         )
 
         return admin_environment_policy_backtest_handler(event, context)
+    if (
+        route == "GET /v1/admin/product-kpi/summary"
+        or route.startswith("GET /v1/admin/product-kpi/summary?")
+    ):
+        from stocvest.api.handlers.admin_desk_backtest import (
+            admin_product_kpi_summary_handler,
+        )
+
+        return admin_product_kpi_summary_handler(event, context)
+    if route == "POST /v1/admin/product-kpi/apply-promotion":
+        from stocvest.api.handlers.admin_desk_backtest import (
+            admin_product_kpi_apply_promotion_handler,
+        )
+
+        return admin_product_kpi_apply_promotion_handler(event, context)
     if route.endswith("/laggard") and route.startswith("GET /v1/signals/"):
         from stocvest.api.handlers.laggard import signal_laggard_handler
 

@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { EnvironmentPolicyBacktestPanel } from "@/components/admin/environment-policy-backtest-panel";
+import { ProductKpiPanel } from "@/components/admin/product-kpi-panel";
 import { HistoricalValidationPanel } from "@/components/historical-validation-panel";
 import { spacing } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
@@ -22,9 +23,9 @@ export function AdminDeskBacktestPageClient() {
           Desk backtesting
         </h1>
         <p className="m-0 mt-2 max-w-3xl text-sm leading-relaxed" style={{ color: colors.textMuted }}>
-          Measure real product success from the platform signal ledger (PUBLIC mirrors of every capture)
-          and tune VIX environment enter bands. New captures automatically write a de-identified PUBLIC
-          row with decision state, VIX audit, and capture kind. Run{" "}
+          Product KPI is the default scorecard (qualified actionable only). Expand internal diagnostics
+          for full stratification or VIX policy replay. PUBLIC mirrors include decision state, VIX audit,
+          and capture kind. Run{" "}
           <code className="text-xs">scripts/backfill_platform_backtest_mirror.py</code> once to mirror
           existing history. Per-user tuning detail remains on{" "}
           <Link
@@ -40,19 +41,36 @@ export function AdminDeskBacktestPageClient() {
 
       <div
         style={{
-          display: "grid",
-          gap: spacing[5],
+          padding: spacing[4],
+          borderRadius: 12,
+          border: `1px solid ${colors.accent}`,
+          boxShadow: `0 0 0 1px ${colors.accent}22`
+        }}
+      >
+        <ProductKpiPanel adminScope="public" defaultWindowDays={90} />
+      </div>
+
+      <details
+        style={{
           padding: spacing[4],
           borderRadius: 12,
           border: `1px solid ${colors.border}`
         }}
       >
-        <HistoricalValidationPanel
-          ledgerScope="admin-public"
-          adminScope="public"
-          windowOptions={[30, 60, 90, 180]}
-        />
-      </div>
+        <summary
+          className="cursor-pointer text-sm font-medium"
+          style={{ color: colors.textMuted }}
+        >
+          Internal diagnostics — full D2 stratification (all capture kinds)
+        </summary>
+        <div style={{ marginTop: spacing[4] }}>
+          <HistoricalValidationPanel
+            ledgerScope="admin-public"
+            adminScope="public"
+            windowOptions={[30, 60, 90, 180]}
+          />
+        </div>
+      </details>
 
       <div
         style={{

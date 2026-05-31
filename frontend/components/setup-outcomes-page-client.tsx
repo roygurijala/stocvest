@@ -61,9 +61,36 @@ export function SetupOutcomesPageClient({ isAdmin = false }: { isAdmin?: boolean
         </h1>
         <p className="m-0 mt-2 max-w-2xl text-sm leading-relaxed" style={{ color: colors.textMuted }}>
           How setups on your watchlist behaved across sessions — observational only, not trade performance or win
-          rate.
+          rate. This is separate from{" "}
+          <Link href="/performance" className="font-medium hover:underline" style={{ color: colors.accent }}>
+            Product signal accuracy
+          </Link>{" "}
+          on the public performance page (qualified actionable signals vs later prices).
         </p>
       </header>
+
+      <article
+        className={surfaceGlowClassName}
+        data-testid="setup-outcomes-product-kpi-callout"
+        style={{
+          background: colors.surface,
+          border: `1px solid ${colors.border}`,
+          borderRadius: borderRadius.xl,
+          padding: spacing[3]
+        }}
+      >
+        <p className="m-0 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
+          <span className="font-semibold" style={{ color: colors.text }}>
+            Not Product KPI.
+          </span>{" "}
+          Session-to-session alignment on your watchlist is not the same as platform directional accuracy. For
+          qualified + actionable signal outcomes (Swing / Day, 90-day window), see{" "}
+          <Link href="/performance" className="font-medium hover:underline" style={{ color: colors.accent }}>
+            Signal tracking → Product signal accuracy
+          </Link>
+          .
+        </p>
+      </article>
 
       <DeskModeTabNav
         value={mode}

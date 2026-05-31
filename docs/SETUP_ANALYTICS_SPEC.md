@@ -6,11 +6,14 @@
 
 | Surface | Route | Data source |
 |---------|-------|-------------|
+| **Product KPI** (platform signal accuracy) | `/performance` · admin Desk backtesting | `SignalHistory` PUBLIC + `product_kpi.py` cohort — **not** setup-outcomes |
 | Setup Evolution (per symbol) | `/dashboard/signals?symbol=` + Past states panel | `WatchlistMaturationTransition` via `GET /v1/watchlists/symbols/{symbol}/setup-evolution` |
 | Setup Evolution (hub) | `/dashboard/setup-evolution` | Same API per selected watchlist symbol |
 | Setup Outcomes | `/dashboard/setup-outcomes` | `GET /v1/analytics/setup-outcomes` (v1: transition pairs on default watchlist) |
 | System behavior | Outcomes page (user) + admin | `GET /v1/admin/system-behavior` (admin, cached) |
-| D2 stratified accuracy (admin) | `/dashboard/admin/historical-validation` | `SignalHistory` via existing `GET /v1/signals/historical-validation/*` |
+| D2 stratified accuracy (admin) | `/dashboard/admin/historical-validation` | `SignalHistory` via existing `GET /v1/signals/historical-validation/*` (full stratification, internal) |
+
+See also [`MEASUREMENT_SURFACES.md`](./MEASUREMENT_SURFACES.md) for how Product KPI differs from setup outcomes.
 
 ## Mode separation
 

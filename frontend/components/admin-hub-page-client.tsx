@@ -64,7 +64,7 @@ const NAV_TILES: {
   {
     href: "/dashboard/admin/backtesting",
     label: "Desk backtesting",
-    description: "Platform success rate (PUBLIC ledger) + VIX environment policy grid replay.",
+    description: "Product KPI scorecard (qualified actionable) + internal diagnostics + VIX replay.",
     Icon: Activity
   },
   {

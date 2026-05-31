@@ -42,10 +42,31 @@ const PUBLIC_VALIDATION_PAYLOAD: PublicHistoricalValidationResponse = {
     horizon: "1d",
     overall: { total_signals: 5, correct: 3, incorrect: 2, neutral: 0, resolved: 5, accuracy: 0.6 },
     by_mode: {
-      swing: { total_signals: 3, correct: 2, incorrect: 1, neutral: 0, resolved: 3, accuracy: 2 / 3 },
+      swing: {
+        total_signals: 5,
+        correct: 4,
+        incorrect: 1,
+        neutral: 0,
+        resolved: 5,
+        accuracy: 0.8,
+        accuracy_ci_low_percent: 40,
+        accuracy_ci_high_percent: 95
+      },
       day: { total_signals: 2, correct: 1, incorrect: 1, neutral: 0, resolved: 2, accuracy: 0.5 }
     },
-    rows_examined: 5
+    rows_examined: 5,
+    cohort_definition:
+      "capture_kind=qualified AND decision_state_entry=actionable AND ledger_qualified=true",
+    meets_minimum_sample: true,
+    minimum_resolved_required: 50,
+    resolved_non_neutral: 55,
+    cohort_rows: 5,
+    pending_outcome: 0,
+    signals_per_week: 0.4,
+    coverage_low: false,
+    accuracy_ci_low_percent: 52,
+    accuracy_ci_high_percent: 68,
+    trading_day_coverage_pct: 12
   }
 };
 
@@ -69,8 +90,8 @@ describe("LandingPerformanceSection (homepage)", () => {
     // The replacement line is allowed to mention the resolved count (a
     // mode-agnostic VOLUME number, not an accuracy claim) and must point
     // users at the per-engine track records.
-    expect(html).toContain("Resolved 1d signals so far");
-    expect(html).toMatch(/Per-engine accuracy.*Swing.*Day/i);
+    expect(html).toContain("Qualified actionable signals evaluated");
+    expect(html).toMatch(/Product KPI.*Swing.*Day/i);
   });
 });
 
@@ -166,7 +187,10 @@ describe("PublicValidationSection (90-day historical mirror)", () => {
     // Numbers from the fixture must surface in the rendered output so we
     // know the cards are wired to the by_mode buckets, not just rendered as
     // empty placeholders.
-    expect(html).toMatch(/66\.7%/); // swing accuracy = 2/3
+    expect(html).toMatch(/80\.0%/); // swing accuracy = 4/5
     expect(html).toMatch(/50\.0%/); // day accuracy = 0.5
+    expect(html).toMatch(/Wilson interval/i);
+    expect(html).toMatch(/95% Wilson.*n=5/i);
+    expect(html).not.toMatch(/Overall accuracy/i);
   });
 });

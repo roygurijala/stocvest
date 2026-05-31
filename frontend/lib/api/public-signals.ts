@@ -85,10 +85,15 @@ export interface PatternAccuracyRow {
 export interface PerformanceSummary {
   total_signals_tracked: number;
   signals_evaluated: number;
+  resolved_non_neutral?: number;
   correct_direction_count: number;
   incorrect_direction_count: number;
   neutral_direction_count: number;
-  directional_accuracy_percent: number;
+  /** Null when sample is below product KPI minimum (50 resolved non-neutral). */
+  directional_accuracy_percent: number | null;
+  meets_minimum_sample?: boolean;
+  minimum_resolved_required?: number;
+  cohort_definition?: string;
   launch_date: string;
   date_range_days: number;
   disclaimer?: string;
@@ -377,7 +382,7 @@ export async function fetchPerformanceSummary(): Promise<PerformanceSummary> {
     correct_direction_count: 0,
     incorrect_direction_count: 0,
     neutral_direction_count: 0,
-    directional_accuracy_percent: 0,
+    directional_accuracy_percent: null,
     launch_date: isoDateInNewYork(),
     date_range_days: 0
   };
@@ -441,7 +446,22 @@ export async function fetchPerformanceSummary(): Promise<PerformanceSummary> {
       correct_direction_count: correctDir,
       incorrect_direction_count: incorrectDir,
       neutral_direction_count: neutralDir,
-      directional_accuracy_percent: typeof accuracy === "number" ? accuracy : fallback.directional_accuracy_percent,
+      directional_accuracy_percent:
+        accuracy === null || accuracy === undefined
+          ? null
+          : typeof accuracy === "number"
+            ? accuracy
+            : fallback.directional_accuracy_percent,
+      resolved_non_neutral:
+        typeof data.resolved_non_neutral === "number" ? data.resolved_non_neutral : undefined,
+      meets_minimum_sample:
+        typeof data.meets_minimum_sample === "boolean" ? data.meets_minimum_sample : undefined,
+      minimum_resolved_required:
+        typeof data.minimum_resolved_required === "number"
+          ? data.minimum_resolved_required
+          : undefined,
+      cohort_definition:
+        typeof data.cohort_definition === "string" ? data.cohort_definition : undefined,
       launch_date: typeof data.launch_date === "string" ? data.launch_date : fallback.launch_date,
       date_range_days: typeof data.date_range_days === "number" ? data.date_range_days : fallback.date_range_days,
       disclaimer: typeof data.disclaimer === "string" ? data.disclaimer : undefined,

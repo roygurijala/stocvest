@@ -153,28 +153,35 @@ def test_assistant_chat_handler_fetches_user_scoped_validation_summary_and_forwa
     )
 
     captured_service_init: dict[str, object] = {}
-    captured_summarize: dict[str, object] = {}
+    captured_fetch: dict[str, object] = {}
     captured_reply: dict[str, object] = {}
 
-    class _SentinelSummary:
-        """Stand-in for a HistoricalValidationSummary the service returns. We do not
-        construct a real one here — the only contract this test asserts is that
-        whatever `service.summarize(...)` returns is the SAME object the handler
-        passes to `svc.reply(historical_validation_summary=...)`."""
-
-    sentinel = _SentinelSummary()
+    hist_sentinel = object()
+    kpi_sentinel = object()
 
     class _FakeService:
         def __init__(self, recorder):  # noqa: D401, ANN001
             captured_service_init["recorder_class"] = recorder.__class__.__name__
 
-        def summarize(self, **kwargs):  # type: ignore[no-untyped-def]
-            captured_summarize.update(kwargs)
-            return sentinel
+        def _fetch(self, **kwargs):  # type: ignore[no-untyped-def]
+            captured_fetch.update(kwargs)
+            return ["cohort-row"]
 
     monkeypatch.setattr(
         "stocvest.api.handlers.signals.HistoricalValidationService",
         _FakeService,
+    )
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.filter_product_kpi_cohort",
+        lambda rows: rows,
+    )
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.validate_signal_history",
+        lambda _rows, horizon="1d": hist_sentinel,
+    )
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.summarize_product_kpi",
+        lambda *_args, **_kwargs: kpi_sentinel,
     )
 
     async def fake_reply(self, *, messages, page_context, user_profile, **kwargs):  # type: ignore[no-untyped-def]
@@ -182,6 +189,7 @@ def test_assistant_chat_handler_fetches_user_scoped_validation_summary_and_forwa
         captured_reply["historical_validation_summary"] = kwargs.get(
             "historical_validation_summary"
         )
+        captured_reply["product_kpi_summary"] = kwargs.get("product_kpi_summary")
         return AssistantChatResult(
             text="Explained.",
             source="ai",
@@ -204,25 +212,16 @@ def test_assistant_chat_handler_fetches_user_scoped_validation_summary_and_forwa
         {},
     )
     assert response["statusCode"] == 200
-    # The handler resolved a HistoricalValidationService against the live recorder.
     assert captured_service_init.get("recorder_class")
-    # User-scope: the summarize() call was scoped to the authenticated caller, never
-    # to the global platform (that would leak other users' performance into the LLM).
-    assert captured_summarize.get("user_id") == "u-paid"
-    # Default horizon and window match the public mirror's contract so the LLM never
-    # sees a window the user did not pick — the contract is the *same* trailing 90d,
-    # 1d-horizon view that powers /performance.
-    assert captured_summarize.get("horizon") == "1d"
-    assert captured_summarize.get("from_at") is not None
-    assert captured_summarize.get("to_at") is not None
-    # Sanity: the window is approximately 90 days wide. Allow a few seconds of jitter
-    # for the test runner's clock.
+    assert captured_fetch.get("user_id") == "u-paid"
+    assert captured_fetch.get("from_at") is not None
+    assert captured_fetch.get("to_at") is not None
     window_seconds = (
-        captured_summarize["to_at"] - captured_summarize["from_at"]
+        captured_fetch["to_at"] - captured_fetch["from_at"]
     ).total_seconds()
     assert 90 * 24 * 3600 - 60 <= window_seconds <= 90 * 24 * 3600 + 60
-    # The exact summary object returned by the service reaches `svc.reply` unchanged.
-    assert captured_reply.get("historical_validation_summary") is sentinel
+    assert captured_reply.get("historical_validation_summary") is hist_sentinel
+    assert captured_reply.get("product_kpi_summary") is kpi_sentinel
 
 
 def test_assistant_chat_handler_swallows_summary_fetch_failure(
@@ -242,7 +241,7 @@ def test_assistant_chat_handler_swallows_summary_fetch_failure(
         def __init__(self, recorder):  # noqa: ANN001
             pass
 
-        def summarize(self, **_kwargs):  # type: ignore[no-untyped-def]
+        def _fetch(self, **_kwargs):  # type: ignore[no-untyped-def]
             raise RuntimeError("signal history briefly unavailable")
 
     monkeypatch.setattr(

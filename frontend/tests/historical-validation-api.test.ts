@@ -332,6 +332,20 @@ describe("buildTrailingWindow", () => {
 
 // ── fetchPublicHistoricalValidationSummary (Phase 3c-1 public mirror) ──────────────
 
+const PUBLIC_PRODUCT_KPI_META = {
+  cohort_definition:
+    "capture_kind=qualified AND decision_state_entry=actionable AND ledger_qualified=true",
+  meets_minimum_sample: false,
+  minimum_resolved_required: 50,
+  resolved_non_neutral: 5,
+  cohort_rows: 5,
+  pending_outcome: 0,
+  signals_per_week: 0.4,
+  coverage_low: true,
+  accuracy_ci_low_percent: null,
+  accuracy_ci_high_percent: null
+};
+
 const PUBLIC_SAMPLE_RESPONSE = {
   horizon: "1d",
   from: "2026-02-09T00:00:00.000Z",
@@ -345,7 +359,8 @@ const PUBLIC_SAMPLE_RESPONSE = {
       swing: { total_signals: 3, correct: 2, incorrect: 1, neutral: 0, resolved: 3, accuracy: 2 / 3 },
       day: { total_signals: 2, correct: 1, incorrect: 1, neutral: 0, resolved: 2, accuracy: 0.5 }
     },
-    rows_examined: 5
+    rows_examined: 5,
+    ...PUBLIC_PRODUCT_KPI_META
   }
 };
 
