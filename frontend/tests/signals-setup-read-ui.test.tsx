@@ -86,6 +86,9 @@ describe("SignalsSetupRead", () => {
     expect(screen.getByText(/Setup read/i)).toBeInTheDocument();
     expect(screen.getByTestId("signals-setup-execution")).toHaveTextContent("Not actionable yet");
     expect(screen.getByTestId("signals-why-not")).toBeInTheDocument();
+    expect(screen.getByTestId("signals-why-not-working")).toHaveTextContent(/What is working/i);
+    expect(screen.getByTestId("signals-why-not-blocking")).toHaveTextContent(/What is blocking/i);
+    expect(screen.getByTestId("signals-why-not-unlock")).toHaveTextContent(/What must change/i);
     expect(screen.queryByText(/Review on Watchlist/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Monitor progression/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/View setup evolution/i)).not.toBeInTheDocument();

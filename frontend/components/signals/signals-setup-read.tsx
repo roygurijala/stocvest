@@ -5,13 +5,17 @@ import { ChevronDown } from "lucide-react";
 import { InfoTip } from "@/components/info-tip";
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import {
+  buildLayerInsightLine,
   buildWhyNotBullets,
   executionDetailToggleLabel,
   executionDisplayTone,
   executionHeadline,
   executionReadinessLabel,
+  executionSupportingGates,
   formatSignalsAlignmentDisplayLine,
+  groupLayersByForce,
   primaryExecutionBlockerLine,
+  primaryGateDisplayText,
   resolveSignalsLayerAlignment,
   type SignalsLayerRowInput,
   type SignalsSetupBias
@@ -82,6 +86,27 @@ export function SignalsSetupRead({
   const executionOpts = { tradingMode, regularSessionOpen };
   const executionTone = executionDisplayTone(decision.state, executionOpts);
   const primaryBlocker = primaryExecutionBlockerLine(decision);
+  const primaryGate = primaryGateDisplayText(decision);
+  const supportingGates = executionSupportingGates(decision);
+  const groupedPreview = groupLayersByForce(previewLayers, bias);
+  const workingLines = groupedPreview.withBias
+    .slice(0, 2)
+    .map((row) => `${row.name}: ${buildLayerInsightLine(row, bias)}`);
+  const layerBlockingLines = groupedPreview.againstOrMixed
+    .slice(0, 2)
+    .map((row) => `${row.name}: ${buildLayerInsightLine(row, bias)}`);
+  const blockingLines = [...(primaryGate ? [primaryGate] : []), ...supportingGates, ...layerBlockingLines]
+    .filter((line, idx, arr) => Boolean(line.trim()) && arr.indexOf(line) === idx)
+    .slice(0, 3);
+  const unlockLines = blockingLines
+    .map((line) => {
+      const cleaned = line.trim().replace(/\.$/, "");
+      if (!cleaned) return "";
+      if (/^need\b/i.test(cleaned)) return `${cleaned}.`;
+      return `Need to clear: ${cleaned}.`;
+    })
+    .filter((line, idx, arr) => Boolean(line.trim()) && arr.indexOf(line) === idx)
+    .slice(0, 2);
   const showExecutionDisclosure =
     decision.state !== "actionable" && Boolean(executionToggleLabel && (primaryBlocker || whyNot.length > 0));
   return (
@@ -251,19 +276,61 @@ export function SignalsSetupRead({
       {layout === "full" && whyNot.length > 0 ? (
         <div className="mt-4" data-testid="signals-why-not">
           <p className="m-0 text-xs font-semibold uppercase tracking-wide" style={{ color: colors.textMuted }}>
-            Why not?
+            Why we are skipping this setup right now
           </p>
-          <ul className="m-0 mt-2 list-none space-y-1.5 p-0">
-            {whyNot.map((bullet) => (
-              <li
-                key={bullet.slice(0, 48)}
-                className="text-sm leading-snug"
-                style={{ color: colors.text, paddingLeft: spacing[2], borderLeft: `2px solid ${colors.border}` }}
-              >
-                {bullet}
-              </li>
-            ))}
-          </ul>
+          <div className="mt-2 grid gap-2">
+            <section
+              data-testid="signals-why-not-working"
+              className="rounded-lg p-2"
+              style={{ border: `1px solid ${colors.border}`, background: colors.surfaceMuted }}
+            >
+              <p className="m-0 text-[10px] font-semibold uppercase tracking-wide" style={{ color: colors.bullish }}>
+                What is working
+              </p>
+              <ul className="m-0 mt-1 list-none space-y-1 p-0">
+                {(workingLines.length > 0 ? workingLines : ["No strong supportive check yet."]).map((line) => (
+                  <li key={line.slice(0, 48)} className="text-sm leading-snug" style={{ color: colors.text }}>
+                    {line}
+                  </li>
+                ))}
+              </ul>
+            </section>
+            <section
+              data-testid="signals-why-not-blocking"
+              className="rounded-lg p-2"
+              style={{ border: `1px solid ${colors.border}`, background: colors.surfaceMuted }}
+            >
+              <p className="m-0 text-[10px] font-semibold uppercase tracking-wide" style={{ color: colors.bearish }}>
+                What is blocking
+              </p>
+              <ul className="m-0 mt-1 list-none space-y-1 p-0">
+                {(blockingLines.length > 0 ? blockingLines : whyNot.slice(0, 2)).map((line) => (
+                  <li key={line.slice(0, 48)} className="text-sm leading-snug" style={{ color: colors.text }}>
+                    {line}
+                  </li>
+                ))}
+              </ul>
+            </section>
+            <section
+              data-testid="signals-why-not-unlock"
+              className="rounded-lg p-2"
+              style={{ border: `1px solid ${colors.border}`, background: colors.surfaceMuted }}
+            >
+              <p className="m-0 text-[10px] font-semibold uppercase tracking-wide" style={{ color: colors.accent }}>
+                What must change
+              </p>
+              <ul className="m-0 mt-1 list-none space-y-1 p-0">
+                {(unlockLines.length > 0
+                  ? unlockLines
+                  : ["Need more confirmation from technical and risk checks before this can be considered."]
+                ).map((line) => (
+                  <li key={line.slice(0, 48)} className="text-sm leading-snug" style={{ color: colors.text }}>
+                    {line}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          </div>
         </div>
       ) : null}
 

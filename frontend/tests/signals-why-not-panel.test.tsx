@@ -55,6 +55,10 @@ describe("SignalsWhyNotPanel", () => {
     expect(screen.getByTestId("signals-why-not-headline")).toHaveTextContent("Not actionable yet");
     expect(screen.getByTestId("signals-why-not-primary-gate")).toHaveTextContent(/Main check · Setup readiness/i);
     expect(screen.getByTestId("signals-why-not-supporting-gates")).toHaveTextContent(/caution flag/i);
+    expect(screen.getByTestId("signals-why-not-working")).toHaveTextContent(/What is working/i);
+    expect(screen.getByTestId("signals-why-not-working")).toHaveTextContent(/Technical:/i);
+    expect(screen.getByTestId("signals-why-not-blocking")).toHaveTextContent(/What is blocking this trade/i);
+    expect(screen.getByTestId("signals-why-not-unlock")).toHaveTextContent(/What must change before we can consider a trade/i);
     expect(screen.queryByTestId("signals-why-not-layer-preview")).toBeNull();
   });
 
