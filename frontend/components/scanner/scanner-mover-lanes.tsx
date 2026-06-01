@@ -106,7 +106,7 @@ export function ScannerMoverLanes({
   const near = nearRows(nearQualification);
   const hiddenForPotential = new Set([...actionable, ...near].map((r) => r.symbol));
   const potential = potentialRows(gapItems, hiddenForPotential);
-  const hiddenForCooling = new Set([...hiddenForPotential, ...potential].map((r) => r.symbol));
+  const hiddenForCooling = new Set([...hiddenForPotential, ...potential.map((r) => r.symbol)]);
   const cooling = coolingRows(evaluationTrace, hiddenForCooling);
 
   if (actionable.length + near.length + potential.length + cooling.length === 0) return null;
