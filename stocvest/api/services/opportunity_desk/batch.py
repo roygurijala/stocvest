@@ -192,6 +192,7 @@ def _desk_payload_base(
     snapshot_source: str,
     tier: DeskBatchTier,
     session_trading_date: str,
+    rejected_samples_window: list[dict[str, str]],
 ) -> dict[str, Any]:
     fcfg = DEFAULT_BATCH_CONFIG.funnel
     return {
@@ -199,10 +200,84 @@ def _desk_payload_base(
         "snapshot_source": snapshot_source,
         "scanned_snapshot_count": funnel.scanned_snapshot_count,
         "eligible_symbol_count": funnel.eligible_symbol_count,
+        "survivor_limit_used": funnel.survivor_limit_used,
         "movers_radar": movers_radar_payload(funnel.movers, limit=fcfg.movers_radar_limit),
+        "rejection_reason_counts": funnel.rejection_reason_counts,
+        "rejected_samples": rejected_samples_window,
         "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "session_trading_date": session_trading_date,
     }
+
+
+def _default_batch_config_from_settings() -> OpportunityDeskBatchConfig:
+    try:
+        settings = get_settings()
+        funnel = OpportunityDeskFunnelConfig(
+            survivor_limit=max(1, int(settings.opportunity_desk_survivor_limit)),
+            adaptive_survivor_limit=bool(settings.opportunity_desk_adaptive_survivor_limit),
+            elevated_survivor_limit=max(1, int(settings.opportunity_desk_elevated_survivor_limit)),
+            elevated_breadth_trigger=max(1, int(settings.opportunity_desk_elevated_breadth_trigger)),
+        )
+        return OpportunityDeskBatchConfig(funnel=funnel)
+    except Exception:
+        return DEFAULT_BATCH_CONFIG
+
+
+def _parse_rejected_samples(existing: dict[str, Any] | None) -> list[dict[str, str]]:
+    if not existing:
+        return []
+    raw = existing.get("rejected_samples")
+    if not isinstance(raw, list):
+        return []
+    out: list[dict[str, str]] = []
+    for row in raw:
+        if not isinstance(row, dict):
+            continue
+        sym = str(row.get("symbol") or "").strip().upper()
+        reason = str(row.get("reason") or "").strip()
+        seen_at = str(row.get("seen_at") or "").strip()
+        if sym and reason and seen_at:
+            out.append({"symbol": sym, "reason": reason, "seen_at": seen_at})
+    return out
+
+
+def _merge_rejected_samples_window(
+    *,
+    previous_data: dict[str, Any] | None,
+    current_samples: tuple[Any, ...],
+    now: datetime,
+    max_rows: int = 120,
+    ttl_hours: int = 24,
+) -> list[dict[str, str]]:
+    cutoff = now - timedelta(hours=max(1, ttl_hours))
+    current_seen_at = now.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    merged: list[dict[str, str]] = []
+    seen_keys: set[str] = set()
+    for s in current_samples:
+        sym = str(getattr(s, "symbol", "") or "").strip().upper()
+        reason = str(getattr(s, "reason", "") or "").strip()
+        if not sym or not reason:
+            continue
+        key = f"{sym}::{reason}"
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        merged.append({"symbol": sym, "reason": reason, "seen_at": current_seen_at})
+    for row in _parse_rejected_samples(previous_data):
+        key = f"{row['symbol']}::{row['reason']}"
+        if key in seen_keys:
+            continue
+        try:
+            ts = datetime.fromisoformat(row["seen_at"].replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if ts < cutoff:
+            continue
+        seen_keys.add(key)
+        merged.append(row)
+        if len(merged) >= max_rows:
+            break
+    return merged[:max_rows]
 
 
 async def run_opportunity_desk_batch(
@@ -218,7 +293,7 @@ async def run_opportunity_desk_batch(
     """
     started = time.perf_counter()
     composite_failures_total = 0
-    cfg = config or DEFAULT_BATCH_CONFIG
+    cfg = config or _default_batch_config_from_settings()
     session_trading_date = datetime.now(_ET).date().isoformat()
     snapshots, snapshot_source = await load_us_equity_snapshots_for_funnel()
     recent_splits: frozenset[str] = frozenset()
@@ -254,6 +329,12 @@ async def run_opportunity_desk_batch(
                         movers=filtered_movers,
                         eligible_symbol_count=len(filtered_movers),
                         scanned_snapshot_count=funnel.scanned_snapshot_count,
+                        survivor_limit_used=min(
+                            funnel.survivor_limit_used,
+                            len(filtered_movers),
+                        ),
+                        rejection_reason_counts=funnel.rejection_reason_counts,
+                        rejected_samples=funnel.rejected_samples,
                     )
     except Exception as exc:  # noqa: BLE001
         _LOG.warning("opportunity_desk corporate_actions / reference filter failed: %s", str(exc)[:200])
@@ -295,6 +376,11 @@ async def run_opportunity_desk_batch(
             snapshot_source=snapshot_source,
             tier=tier,
             session_trading_date=session_trading_date,
+            rejected_samples_window=_merge_rejected_samples_window(
+                previous_data=previous_data,
+                current_samples=funnel.rejected_samples,
+                now=now,
+            ),
         )
 
         if tier == "full":

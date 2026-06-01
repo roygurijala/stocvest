@@ -136,6 +136,8 @@ describe("DashboardDiscoveryFeed", () => {
         deskData={{
           session_trading_date: deskSessionToday,
           generated_at: `${deskSessionToday}T14:00:00.000Z`,
+          rejected_samples: [{ symbol: "NVDA", reason: "gap_below_2.0pct" }],
+          rejection_reason_counts: { "gap_below_2.0pct": 12 },
           discovery: [
             {
               symbol: "MU",
@@ -152,6 +154,7 @@ describe("DashboardDiscoveryFeed", () => {
     );
     expect(screen.getByText("Market activity")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-opportunity-row-MU")).toBeInTheDocument();
+    expect(screen.getByTestId("scanner-why-missing-panel")).toBeInTheDocument();
     expect(screen.getByTestId("opportunity-row-badge-MU")).toHaveTextContent(/R\/R blocks entry/i);
     expect(screen.queryByText(/Signals →/)).toBeNull();
   });

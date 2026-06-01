@@ -18,6 +18,7 @@ from stocvest.data.models import Bar, Snapshot, Timeframe
 from stocvest.indicators.core import OpeningRange, gap_percent, opening_range
 from stocvest.signals.session_price_guard import is_corporate_action_session_move
 from stocvest.data.symbol_universe_eligibility import snapshot_universe_exclusion_reason
+from stocvest.utils.config import get_settings
 
 
 @dataclass(frozen=True)
@@ -36,6 +37,53 @@ class GapCandidateScanResult(NamedTuple):
 
     candidates: list[PremarketGapCandidate]
     eligible_symbol_count: int
+
+
+def _cheap_gap_rank_score(
+    *,
+    gap_percent_value: float,
+    day_volume: float,
+    session_price: float,
+    prev_day_volume: float | None,
+) -> float:
+    """
+    Liquidity-aware cheap-pass ranking for broad snapshot funnels.
+
+    Weighted blend:
+      - 50% move magnitude (|gap|, normalized)
+      - 30% relative volume vs prior-day volume
+      - 20% dollar-volume liquidity (price * day_volume)
+    """
+    try:
+        cfg = get_settings()
+        move_weight = max(0.0, float(cfg.scanner_gap_rank_move_weight))
+        rvol_weight = max(0.0, float(cfg.scanner_gap_rank_rvol_weight))
+        dollar_weight = max(0.0, float(cfg.scanner_gap_rank_dollar_vol_weight))
+        move_norm_denom = max(1e-9, float(cfg.scanner_gap_rank_move_norm_pct))
+        rvol_norm_denom = max(1e-9, float(cfg.scanner_gap_rank_rvol_norm))
+        dollar_norm_denom = max(1e-9, float(cfg.scanner_gap_rank_dollar_vol_norm))
+    except Exception:
+        move_weight = 0.5
+        rvol_weight = 0.3
+        dollar_weight = 0.2
+        move_norm_denom = 15.0
+        rvol_norm_denom = 2.0
+        dollar_norm_denom = 250_000_000.0
+    total_weight = move_weight + rvol_weight + dollar_weight
+    if total_weight <= 0:
+        move_weight, rvol_weight, dollar_weight = 0.5, 0.3, 0.2
+        total_weight = 1.0
+    move_weight /= total_weight
+    rvol_weight /= total_weight
+    dollar_weight /= total_weight
+    move_norm = min(1.0, max(0.0, abs(gap_percent_value)) / move_norm_denom)
+    prev_vol = float(prev_day_volume or 0.0)
+    rel_vol_raw = float(day_volume) / max(1.0, prev_vol)
+    rel_vol_norm = min(1.0, max(0.0, rel_vol_raw) / rvol_norm_denom)
+    dollar_volume = max(0.0, float(session_price)) * max(0.0, float(day_volume))
+    dollar_vol_norm = min(1.0, dollar_volume / dollar_norm_denom)
+    composite = (move_weight * move_norm) + (rvol_weight * rel_vol_norm) + (dollar_weight * dollar_vol_norm)
+    return round(composite * 100.0, 4)
 
 
 def dynamic_gap_candidates_from_snapshots_with_stats(
@@ -94,7 +142,12 @@ def dynamic_gap_candidates_from_snapshots_with_stats(
         if abs(gap_pct) < min_abs_gap_percent:
             continue
         direction = "up" if gap_pct >= 0 else "down"
-        mag = abs(gap_pct)
+        rank_score = _cheap_gap_rank_score(
+            gap_percent_value=gap_pct,
+            day_volume=vol,
+            session_price=price,
+            prev_day_volume=snap.prev_day_volume,
+        )
         cand = PremarketGapCandidate(
             symbol=snap.symbol,
             prev_close=float(prev),
@@ -102,9 +155,9 @@ def dynamic_gap_candidates_from_snapshots_with_stats(
             gap_percent=round(gap_pct, 4),
             day_volume=vol,
             direction=direction,
-            rank_score=round(mag, 4),
+            rank_score=rank_score,
         )
-        scored.append((mag, cand))
+        scored.append((rank_score, cand))
     eligible_symbol_count = len(scored)
     scored.sort(key=lambda x: x[0], reverse=True)
     candidates = [c for _, c in scored[: max(0, limit)]]

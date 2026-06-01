@@ -7,6 +7,7 @@ import type { GapIntelligenceItem } from "@/lib/api/scanner";
 import type { DeskTodayData } from "@/lib/api/desk-today";
 import { DeskRefreshButton } from "@/components/dashboard/desk-refresh-button";
 import { DashboardOpportunityRowList } from "@/components/dashboard/dashboard-opportunity-row";
+import { ScannerWhyMissingPanel } from "@/components/scanner/scanner-why-missing-panel";
 import type { MarketStatusPayload } from "@/lib/api/market";
 import { DashboardMissedTodayStrip } from "@/components/dashboard/dashboard-missed-today-strip";
 import {
@@ -312,6 +313,16 @@ export function DashboardDiscoveryFeed({
       )}
 
       <DashboardMissedTodayStrip mode={mode} deskData={effectiveDeskData} gapFallback={gapFallback} />
+
+      {(effectiveDeskData?.rejected_samples?.length ?? 0) > 0 ? (
+        <div className="mt-3">
+          <ScannerWhyMissingPanel
+            rejectedSamples={effectiveDeskData?.rejected_samples ?? []}
+            rejectionReasonCounts={effectiveDeskData?.rejection_reason_counts}
+            suggestedSymbols={leaders.map((l) => l.symbol)}
+          />
+        </div>
+      ) : null}
 
       {footnote ? (
         <p className="m-0 mt-3" style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>

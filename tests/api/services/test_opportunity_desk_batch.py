@@ -59,6 +59,7 @@ async def test_run_opportunity_desk_batch_movers_tier(monkeypatch: pytest.Monkey
         return snaps, "full_us"
 
     writes: list[tuple[str, dict]] = []
+    recent_seen_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
     def fake_write(key: str, data: dict, key_type: str, mode: str = "swing") -> bool:
         writes.append((key, data))
@@ -74,7 +75,7 @@ async def test_run_opportunity_desk_batch_movers_tier(monkeypatch: pytest.Monkey
     )
     monkeypatch.setattr(
         "stocvest.api.services.opportunity_desk.batch.read_dashboard_cache",
-        lambda _k: None,
+        lambda _k: {"data": {"rejected_samples": [{"symbol": "OLD", "reason": "gap_below_2.0pct", "seen_at": recent_seen_at}]}},
     )
 
     result = await run_opportunity_desk_batch(tier="movers")
@@ -82,6 +83,10 @@ async def test_run_opportunity_desk_batch_movers_tier(monkeypatch: pytest.Monkey
     assert len(writes) == 2
     assert writes[0][1]["tier"] == "movers"
     assert writes[0][1]["movers_radar"][0]["symbol"] == "AAA"
+    assert writes[0][1]["survivor_limit_used"] >= 1
+    assert "rejection_reason_counts" in writes[0][1]
+    assert "rejected_samples" in writes[0][1]
+    assert any(row.get("symbol") == "OLD" for row in writes[0][1]["rejected_samples"])
 
 
 def test_discovery_row_without_composite() -> None:

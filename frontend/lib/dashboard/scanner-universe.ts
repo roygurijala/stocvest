@@ -9,7 +9,7 @@ import type { DeskTodayData } from "@/lib/api/desk-today";
 export const SCANNER_MARKET_ANCHORS = ["SPY", "QQQ"] as const;
 
 /** Max symbols evaluated for dashboard + scanner pattern loads (bars/setups). */
-export const DASHBOARD_SCANNER_MAX_UNIVERSE = 50;
+export const DASHBOARD_SCANNER_MAX_UNIVERSE = 100;
 
 /** Gap rows merged into universe (API may return fewer). */
 export const GAP_UNIVERSE_TOP_N = 30;

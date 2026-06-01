@@ -101,6 +101,29 @@ function formatScore(n: number): string {
   return `${sign}${n.toFixed(2)}`;
 }
 
+function sentimentLabel(score: number): "bullish" | "bearish" | "mixed" {
+  if (score > 0.2) return "bullish";
+  if (score < -0.2) return "bearish";
+  return "mixed";
+}
+
+/** @internal tests */
+export function sentimentLabelForTests(score: number): "bullish" | "bearish" | "mixed" {
+  return sentimentLabel(score);
+}
+
+function sentimentImpactLabel(score: number): "high impact" | "medium impact" | "low impact" {
+  const abs = Math.abs(score);
+  if (abs >= 0.6) return "high impact";
+  if (abs >= 0.3) return "medium impact";
+  return "low impact";
+}
+
+/** @internal tests */
+export function sentimentImpactLabelForTests(score: number): "high impact" | "medium impact" | "low impact" {
+  return sentimentImpactLabel(score);
+}
+
 function analystActionTone(action: string): "bullish" | "bearish" | "neutral" {
   const a = action.toLowerCase();
   if (a.includes("downgrade") || a.includes("underperform") || a.includes("sell")) return "bearish";
@@ -147,9 +170,9 @@ function panelSummary(data: TickerNewsPanelResponse | null): string {
       const avg =
         data.articles.reduce((acc, a) => acc + a.sentiment_score, 0) / Math.max(1, data.articles.length);
       if (avg > 0.2) {
-        articlePart = `${n} articles · Bullish avg ${avg >= 0 ? "+" : ""}${avg.toFixed(2)}`;
+        articlePart = `${n} articles · Bullish tilt · ${sentimentImpactLabel(avg)}`;
       } else if (avg < -0.2) {
-        articlePart = `${n} articles · Bearish avg ${avg.toFixed(2)}`;
+        articlePart = `${n} articles · Bearish tilt · ${sentimentImpactLabel(avg)}`;
       } else {
         articlePart = `${n} articles · Mixed`;
       }
@@ -545,17 +568,31 @@ export function NewsPanel({
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-baseline gap-2">
                                 <span
-                                  className="text-xs font-semibold tabular-nums"
+                                  className="rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
                                   style={{
                                     color:
                                       article.sentiment_score > 0.2
                                         ? colors.bullish
                                         : article.sentiment_score < -0.2
                                           ? colors.bearish
-                                          : colors.textMuted
+                                          : colors.textMuted,
+                                    borderColor:
+                                      article.sentiment_score > 0.2
+                                        ? "rgba(34,197,94,0.45)"
+                                        : article.sentiment_score < -0.2
+                                          ? "rgba(239,68,68,0.45)"
+                                          : "rgba(148,163,184,0.45)",
+                                    background:
+                                      article.sentiment_score > 0.2
+                                        ? "rgba(34,197,94,0.08)"
+                                        : article.sentiment_score < -0.2
+                                          ? "rgba(239,68,68,0.08)"
+                                          : "rgba(148,163,184,0.08)"
                                   }}
+                                  title={`Model confidence ${formatScore(article.sentiment_score)}`}
+                                  data-testid="news-article-impact-chip"
                                 >
-                                  {formatScore(article.sentiment_score)}
+                                  {sentimentLabel(article.sentiment_score)} · {sentimentImpactLabel(article.sentiment_score)}
                                 </span>
                                 <span
                                   className="line-clamp-2 text-sm font-semibold leading-snug"
