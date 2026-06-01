@@ -51,7 +51,7 @@ describe("watchlist-radar-attention", () => {
     expect(line).not.toMatch(/desk gated/i);
   });
 
-  test("6/6 actionable + bearish desk → desk gated (not near actionable)", () => {
+  test("6/6 actionable + bearish desk → bearish market hold (not near actionable)", () => {
     const line = resolveWatchlistRadarAttentionLine({
       tier: "check_now",
       row: {
@@ -65,7 +65,7 @@ describe("watchlist-radar-attention", () => {
       blockers: [],
       desk: deskBearish
     });
-    expect(line).toBe("Strong setup — desk gated (bearish regime)");
+    expect(line).toBe("Strong setup — bearish market");
     expect(line).not.toMatch(/near actionable/i);
   });
 
@@ -86,7 +86,7 @@ describe("watchlist-radar-attention", () => {
     expect(line).toBe("Strong on your list — open on Signals");
   });
 
-  test("near_ready + bearish desk → near ready desk gated", () => {
+  test("near_ready + bearish desk → near ready with bearish market hold", () => {
     const line = resolveWatchlistRadarAttentionLine({
       tier: "check_now",
       row: { progress_band: "near_ready", layers_aligned: 4, layers_total: 6, state: "developing" },
@@ -94,7 +94,7 @@ describe("watchlist-radar-attention", () => {
       blockers: [],
       desk: deskBearish
     });
-    expect(line).toBe("Near ready — desk gated (bearish regime)");
+    expect(line).toBe("Near ready — bearish market");
   });
 
   test("near_ready + open desk → near actionable on your list", () => {
@@ -116,7 +116,7 @@ describe("watchlist-radar-attention", () => {
       blockers: [],
       desk: deskSuppressed
     });
-    expect(line).toBe("Strong setup — desk gated");
+    expect(line).toBe("Strong setup — quiet market today");
   });
 
   test("omitSessionClosedSuffix drops session closed on cards", () => {

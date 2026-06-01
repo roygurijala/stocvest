@@ -136,7 +136,7 @@ describe("buildWatchlistCardModel", () => {
     expect(model.chromeBadgeLabel).toBe("Balanced");
   });
 
-  test("6/6 on bearish desk shows desk gated copy (not near actionable)", () => {
+  test("6/6 on bearish desk shows market hold copy (not near actionable)", () => {
     const model = buildWatchlistCardModel(
       "AMD",
       row({
@@ -152,7 +152,7 @@ describe("buildWatchlistCardModel", () => {
       { regimeLabel: "Bearish", systemSuppressed: true, sessionMode: "live" }
     );
     expect(model.alignmentLine).toContain("Strong");
-    expect(model.momentumLine).toBe("Strong setup — desk gated (bearish regime)");
+    expect(model.momentumLine).toBe("Strong setup — bearish market");
     expect(model.chromeKind).toBe("blocked");
     expect(model.borderLeft).toBe(COLORS.caution);
   });
@@ -174,7 +174,7 @@ describe("buildWatchlistCardModel", () => {
     );
     expect(model.chromeKind).toBe("actionable_plan");
     expect(model.borderLeft).toBe(COLORS.bullish);
-    expect(model.momentumLine).toBe("Strong setup — desk gated");
+    expect(model.momentumLine).toBe("Strong setup — quiet market today");
   });
 
   test("swing 6/6 closed session gets green plan chrome", () => {

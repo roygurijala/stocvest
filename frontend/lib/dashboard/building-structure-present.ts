@@ -195,11 +195,36 @@ export function buildingStructureBackfillNote(rows: BuildingStructureRow[]): str
   return `Quiet leaders scarce today — includes ${parts.join(" and ")}. Open Signals before trading.`;
 }
 
+export function buildingStructureLoadingMessage(): string {
+  return "Checking for low-move leaders…";
+}
+
+export function buildingStructureDeskChecked(
+  isLoading: boolean,
+  deskSource?: string | null,
+  deskData?: DeskTodayData | null
+): boolean {
+  if (isLoading) return false;
+  if (deskData != null) return true;
+  return deskSource != null && deskSource !== "cache_miss";
+}
+
+export function buildingStructureAwaitingDeskMessage(): string {
+  return "Load session movers below to scan building-structure names.";
+}
+
 export function buildingStructureEmptyMessage(sessionActivityCount: number): string {
   if (sessionActivityCount > 0) {
     return "No names under the 2% quiet threshold right now — common on hot days. Session activity above shows today's bigger movers; open Scanner for the full quiet-leader list.";
   }
   return "None right now — common on hot days when most names are already up 2%+.";
+}
+
+export function buildingStructureLoadedEmptyMessage(sessionActivityCount: number): string {
+  if (sessionActivityCount > 0) {
+    return "Checked — no names under the 2% quiet threshold right now. Session activity above has today's bigger movers; open Scanner for the full quiet-leader list.";
+  }
+  return "Checked — none under 2% right now. Common on hot days when most names are already up 2%+.";
 }
 
 function buildNearStructureCardModel(

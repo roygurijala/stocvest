@@ -150,6 +150,7 @@ export function DashboardOpportunityPipeline({
             sessionActivitySymbols={sessionActivitySymbols}
             marketStatus={marketStatus}
             isLoading={deskLoading}
+            deskSource={deskSource}
             variant="pipeline"
           />
         </PipelineStagePanel>

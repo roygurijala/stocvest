@@ -64,9 +64,20 @@ export function isWatchlistRadarDeskGated(desk: WatchlistRadarDeskContext): bool
   return desk.systemSuppressed || isWatchlistRadarRegimeGated(desk);
 }
 
-function deskGatedPhrase(desk: WatchlistRadarDeskContext, prefix: string): string {
-  const qualifier = formatRegimeGateQualifier(desk.regimeLabel);
-  return qualifier ? `${prefix} — desk gated (${qualifier})` : `${prefix} — desk gated`;
+/** Short label for tier previews (e.g. "2 held — quiet market today"). */
+export function watchlistMarketHoldShortLabel(desk: WatchlistRadarDeskContext): string {
+  if (isWatchlistRadarRegimeGated(desk)) {
+    const regime = desk.regimeLabel.trim().toLowerCase();
+    if (regime === "bearish") return "bearish market";
+    if (regime) return `${regime} market`;
+    return "cautious market";
+  }
+  if (desk.systemSuppressed) return "quiet market today";
+  return "market on hold";
+}
+
+function watchlistMarketHoldPhrase(desk: WatchlistRadarDeskContext, prefix: string): string {
+  return `${prefix} — ${watchlistMarketHoldShortLabel(desk)}`;
 }
 
 function sessionGatePhrase(
@@ -106,7 +117,7 @@ export function resolveWatchlistRadarAttentionLine(input: WatchlistRadarAttentio
         const sessionPhrase = sessionGatePhrase("Balanced", desk.sessionMode, omitSessionClosedSuffix);
         if (sessionPhrase) return sessionPhrase;
         if (isWatchlistRadarDeskGated(desk)) {
-          return deskGatedPhrase(desk, "Balanced");
+          return watchlistMarketHoldPhrase(desk, "Balanced");
         }
         if (blockers.length > 0) {
           const hold = symbolHoldPhrase(blockers, bias);
@@ -117,7 +128,7 @@ export function resolveWatchlistRadarAttentionLine(input: WatchlistRadarAttentio
       const sessionPhrase = sessionGatePhrase(setupPrefix, desk.sessionMode, omitSessionClosedSuffix);
       if (sessionPhrase) return sessionPhrase;
       if (isWatchlistRadarDeskGated(desk)) {
-        return deskGatedPhrase(desk, setupPrefix);
+        return watchlistMarketHoldPhrase(desk, setupPrefix);
       }
       const macroOnly =
         blockers.includes("Macro") && blockers.filter((b) => b !== "Macro").length === 0;
@@ -135,7 +146,7 @@ export function resolveWatchlistRadarAttentionLine(input: WatchlistRadarAttentio
       const sessionPhrase = sessionGatePhrase("Near ready", desk.sessionMode, omitSessionClosedSuffix);
       if (sessionPhrase) return sessionPhrase;
       if (isWatchlistRadarDeskGated(desk)) {
-        return deskGatedPhrase(desk, "Near ready");
+        return watchlistMarketHoldPhrase(desk, "Near ready");
       }
       if (omitSessionClosedSuffix && sessionClosedOrExtended) {
         return "Near ready";

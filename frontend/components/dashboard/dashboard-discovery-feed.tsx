@@ -293,9 +293,11 @@ export function DashboardDiscoveryFeed({
           }}
         >
           <p className="m-0 text-sm leading-snug" style={{ color: colors.text }}>
-            {hotInMarketEmptyMessage(deskCacheMiss)}
+            {hotInMarketEmptyMessage(deskCacheMiss, {
+              loadInHeader: embedded && needsDeskLoad
+            })}
           </p>
-          {needsDeskLoad && onRefreshDesk ? (
+          {needsDeskLoad && onRefreshDesk && !embedded ? (
             <div className="mt-3">
               <DeskRefreshButton
                 onClick={() => onRefreshDesk()}

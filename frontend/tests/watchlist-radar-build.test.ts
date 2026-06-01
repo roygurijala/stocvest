@@ -10,7 +10,7 @@ const colors = {
 };
 
 describe("buildWatchlistRadarRows desk context", () => {
-  test("AMD-style row uses desk gated copy when bearish", () => {
+  test("AMD-style row uses bearish market hold copy when bearish", () => {
     const rows = buildWatchlistRadarRows({
       symbols: ["AMD"],
       rowForSymbol: () => ({
@@ -26,7 +26,7 @@ describe("buildWatchlistRadarRows desk context", () => {
       desk: { regimeLabel: "Bearish", systemSuppressed: true }
     });
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.attentionReason).toBe("Strong setup — desk gated (bearish regime)");
+    expect(rows[0]?.attentionReason).toBe("Strong setup — bearish market");
     expect(rows[0]?.alignmentLine).toContain("Strong");
   });
 });
