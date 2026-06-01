@@ -16,6 +16,7 @@ import {
   buildScenarioVariantCatalog,
   type ScenarioPresetId
 } from "@/lib/scenario/scenario-variants";
+import { buildScenarioComparisonRows } from "@/lib/scenario/scenario-comparison-rows";
 import { scenarioInputToGeometrySource } from "@/lib/scenario/scenario-input-geometry";
 import { evaluatePresetRiskCap, formatRiskPctLine, riskPctOfEntry } from "@/lib/scenario/planning-risk-present";
 import { referenceStopAtrK } from "@/lib/scenario/reference-stop-resolve";
@@ -304,6 +305,104 @@ function ComputedRow({ label, value, testId }: { label: string; value: string; t
   );
 }
 
+type ScenarioViewMode = "guided" | "pro";
+
+function modeHint(viewMode: ScenarioViewMode): string {
+  return viewMode === "guided"
+    ? "Guided view explains each step in plain language."
+    : "Pro view is compact and metric-first.";
+}
+
+function presetPlaybook(preset: ScenarioPresetId): { title: string; whenToUse: string; skipWhen: string } {
+  if (preset === "dip") {
+    return {
+      title: "Option B — Pullback entry",
+      whenToUse: "Price pulls back toward support while structure remains intact.",
+      skipWhen: "Pullback slices through support or momentum breaks down."
+    };
+  }
+  if (preset === "breakout") {
+    return {
+      title: "Option C — Breakout entry",
+      whenToUse: "Price reclaims range highs with follow-through.",
+      skipWhen: "Breakout fails quickly back into range."
+    };
+  }
+  return {
+    title: "Option A — Base continuation",
+    whenToUse: "Trend context remains aligned and price holds the current range.",
+    skipWhen: "Trend alignment weakens before trigger."
+  };
+}
+
+function tradeStatusLine(tone: "red" | "amber" | "green"): string {
+  if (tone === "green") return "Plan conditions are aligned.";
+  if (tone === "amber") return "Partial alignment — tighten conditions.";
+  return "Do not act yet — conditions are incomplete.";
+}
+
+function breakEvenWinRate(rMultiple: number | null): string {
+  if (!Number.isFinite(rMultiple) || (rMultiple as number) <= 0) return "—";
+  const pct = (1 / (1 + (rMultiple as number))) * 100;
+  return `${pct.toFixed(1)}%`;
+}
+
+function round4(n: number): number {
+  return Math.round(n * 10000) / 10000;
+}
+
+function allocateScaleOutShares(totalShares: number): [number, number, number] {
+  if (!Number.isFinite(totalShares) || totalShares <= 0) return [0, 0, 0];
+  const total = Math.max(0, Math.floor(totalShares));
+  const first = Math.floor(total * 0.3);
+  const second = Math.floor(total * 0.3);
+  const runner = Math.max(0, total - first - second);
+  return [first, second, runner];
+}
+
+function isDirectionallyValidLevel(
+  direction: "bullish" | "bearish",
+  entry: number,
+  level: number | null
+): level is number {
+  if (!Number.isFinite(entry) || !Number.isFinite(level)) return false;
+  if (direction === "bullish") return (level as number) > entry;
+  return (level as number) < entry;
+}
+
+function normalizeTargetLevel(args: {
+  direction: "bullish" | "bearish";
+  floorFrom: number;
+  candidate: number | null;
+  riskPerShare: number;
+}): number | null {
+  const { direction, floorFrom, candidate, riskPerShare } = args;
+  if (!Number.isFinite(floorFrom) || !Number.isFinite(riskPerShare) || riskPerShare <= 1e-6) return null;
+  if (direction === "bullish") {
+    const minLevel = floorFrom + riskPerShare * 0.5;
+    const picked = Number.isFinite(candidate) ? (candidate as number) : minLevel;
+    return round4(Math.max(minLevel, picked));
+  }
+  const maxLevel = floorFrom - riskPerShare * 0.5;
+  const picked = Number.isFinite(candidate) ? (candidate as number) : maxLevel;
+  return round4(Math.min(maxLevel, picked));
+}
+
+function legRMultiple(args: {
+  direction: "bullish" | "bearish";
+  entry: number;
+  level: number;
+  riskPerShare: number;
+}): number | null {
+  const { direction, entry, level, riskPerShare } = args;
+  if (!Number.isFinite(entry) || !Number.isFinite(level) || !Number.isFinite(riskPerShare) || riskPerShare <= 1e-6) {
+    return null;
+  }
+  const reward = direction === "bullish" ? level - entry : entry - level;
+  if (reward <= 1e-6) return null;
+  return round4(reward / riskPerShare);
+}
+
 /**
  * Scenario Builder Modal.
  *
@@ -365,8 +464,10 @@ export function ScenarioBuilderModal({
   const [accountSize, setAccountSize] = useState<number>(Number.NaN);
   const [orderTypeLabel, setOrderTypeLabel] = useState<"market" | "limit" | "stop">("limit");
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
+  const [executionCopyState, setExecutionCopyState] = useState<"idle" | "copied" | "error">("idle");
   const [stopAutoAdjusted, setStopAutoAdjusted] = useState(false);
   const [activePreset, setActivePreset] = useState<ScenarioPresetId>("continuation");
+  const [viewMode, setViewMode] = useState<ScenarioViewMode>("guided");
 
   const timingFlags = useMemo(
     () => ({
@@ -487,6 +588,102 @@ export function ScenarioBuilderModal({
     return evaluatePresetRiskCap(activePreset, draftRiskPct);
   }, [draftRiskPct, activePreset]);
 
+  const postFillPlan = useMemo(() => {
+    const totalShares = Number.isFinite(shares) && shares > 0 ? Math.floor(shares) : 0;
+    const [leg1Shares, leg2Shares, runnerShares] = allocateScaleOutShares(totalShares);
+    const riskPerShare = Number.isFinite(result.risk_per_share) ? result.risk_per_share : Number.NaN;
+    const targetTwoRef = isDirectionallyValidLevel(direction, entry, input.reference.target_2 ?? null)
+      ? (input.reference.target_2 as number)
+      : null;
+    const targetThreeRef = isDirectionallyValidLevel(direction, entry, input.reference.target_3 ?? null)
+      ? (input.reference.target_3 as number)
+      : null;
+
+    const targetTwoAuto =
+      Number.isFinite(riskPerShare) && riskPerShare > 0
+        ? round4(direction === "bullish" ? entry + 2 * riskPerShare : entry - 2 * riskPerShare)
+        : null;
+    const targetThreeAuto =
+      Number.isFinite(riskPerShare) && riskPerShare > 0
+        ? round4(direction === "bullish" ? entry + 3 * riskPerShare : entry - 3 * riskPerShare)
+        : null;
+
+    const leg1Level = Number.isFinite(target) ? target : null;
+    const leg2Level = normalizeTargetLevel({
+      direction,
+      floorFrom: leg1Level ?? entry,
+      candidate: targetTwoRef ?? targetTwoAuto,
+      riskPerShare
+    });
+    const runnerLevel = normalizeTargetLevel({
+      direction,
+      floorFrom: leg2Level ?? leg1Level ?? entry,
+      candidate: targetThreeRef ?? targetThreeAuto,
+      riskPerShare
+    });
+
+    const leg1R = leg1Level != null ? legRMultiple({ direction, entry, level: leg1Level, riskPerShare }) : null;
+    const leg2R = leg2Level != null ? legRMultiple({ direction, entry, level: leg2Level, riskPerShare }) : null;
+    const runnerR = runnerLevel != null ? legRMultiple({ direction, entry, level: runnerLevel, riskPerShare }) : null;
+
+    return {
+      totalShares,
+      leg1Shares,
+      leg2Shares,
+      runnerShares,
+      leg1Level,
+      leg2Level,
+      runnerLevel,
+      leg1R,
+      leg2R,
+      runnerR
+    };
+  }, [shares, result.risk_per_share, direction, entry, target, input.reference.target_2, input.reference.target_3]);
+
+  const riskBudgetAssessment = useMemo(() => {
+    if (result.risk_pct_of_account == null) {
+      return {
+        tone: "info" as const,
+        line: "Add account size to validate whether this plan fits your risk budget."
+      };
+    }
+    if (result.risk_pct_of_account > 2) {
+      return {
+        tone: "risk" as const,
+        line: `Risk budget warning: ${result.risk_pct_of_account.toFixed(2)}% of account is above the 2.00% guardrail.`
+      };
+    }
+    if (result.risk_pct_of_account > 1) {
+      return {
+        tone: "caution" as const,
+        line: `Risk budget check: ${result.risk_pct_of_account.toFixed(2)}% of account is elevated.`
+      };
+    }
+    return {
+      tone: "ok" as const,
+      line: `Risk budget check: ${result.risk_pct_of_account.toFixed(2)}% of account is within conservative bounds.`
+    };
+  }, [result.risk_pct_of_account]);
+
+  const comparisonRows = useMemo(() => {
+    if (!catalog) return [];
+    return buildScenarioComparisonRows(catalog, entry, stop, target).filter((row) => row.id !== "your_draft");
+  }, [catalog, entry, stop, target]);
+
+  const noTradeConditions = useMemo(() => {
+    const lines = [...verdict.blockers];
+    if (timingFlags.entryTimingWeak) {
+      lines.push("Entry timing is weak for the current setup window.");
+    }
+    if (timingFlags.vwapConflict) {
+      lines.push("Price action conflicts with the intraday VWAP context.");
+    }
+    if (geometryError) {
+      lines.push(geometryError);
+    }
+    return lines.filter((line, idx, arr) => arr.indexOf(line) === idx).slice(0, 5);
+  }, [verdict.blockers, timingFlags.entryTimingWeak, timingFlags.vwapConflict, geometryError]);
+
   const handleReset = () => {
     setStopAutoAdjusted(false);
     if (catalog?.system) {
@@ -507,6 +704,8 @@ export function ScenarioBuilderModal({
     setAccountSize(Number.NaN);
     setOrderTypeLabel("limit");
     setCopyState("idle");
+    setExecutionCopyState("idle");
+    setViewMode("guided");
   };
 
   const handleCopy = async () => {
@@ -521,6 +720,37 @@ export function ScenarioBuilderModal({
       }
     } catch {
       setCopyState("error");
+    }
+  };
+
+  const handleCopyExecutionPlan = async () => {
+    const scaleVerb = direction === "bullish" ? "Sell" : "Cover";
+    const stopLine =
+      direction === "bullish"
+        ? `Sell stop all remaining @ ${formatScenarioDollars(stop, { fractionDigits: 2 })}`
+        : `Buy stop to cover all remaining @ ${formatScenarioDollars(stop, { fractionDigits: 2 })}`;
+    const lines = [
+      `Execution ticket — ${input.symbol.toUpperCase()} (${directionLabel}, ${modeLabel})`,
+      "",
+      `Entry plan: ${formatScenarioDollars(entry, { fractionDigits: 4 })}`,
+      `${scaleVerb} ${postFillPlan.leg1Shares} shares @ ${formatScenarioDollars(postFillPlan.leg1Level ?? Number.NaN, { fractionDigits: 2 })}${postFillPlan.leg1R != null ? ` (${postFillPlan.leg1R.toFixed(2)}R)` : ""}`,
+      `${scaleVerb} ${postFillPlan.leg2Shares} shares @ ${formatScenarioDollars(postFillPlan.leg2Level ?? Number.NaN, { fractionDigits: 2 })}${postFillPlan.leg2R != null ? ` (${postFillPlan.leg2R.toFixed(2)}R)` : ""}`,
+      `${scaleVerb} ${postFillPlan.runnerShares} shares @ ${formatScenarioDollars(postFillPlan.runnerLevel ?? Number.NaN, { fractionDigits: 2 })} (runner)${postFillPlan.runnerR != null ? ` (${postFillPlan.runnerR.toFixed(2)}R)` : ""}`,
+      stopLine,
+      "",
+      "Planning only. You control order routing and execution."
+    ];
+    const text = lines.join("\n");
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        await navigator.clipboard.writeText(text);
+        setExecutionCopyState("copied");
+        setTimeout(() => setExecutionCopyState("idle"), 2000);
+      } else {
+        setExecutionCopyState("error");
+      }
+    } catch {
+      setExecutionCopyState("error");
     }
   };
 
@@ -644,6 +874,337 @@ export function ScenarioBuilderModal({
             ) : null}
 
             <ScenarioBuilderVerdictBanner verdict={verdict} />
+
+            <section
+              data-testid="scenario-decision-plan"
+              style={{
+                background: colors.surfaceMuted,
+                border: `1px solid ${colors.border}`,
+                borderRadius: borderRadius.md,
+                padding: spacing[4],
+                marginBottom: spacing[3]
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: spacing[2],
+                  marginBottom: spacing[2],
+                  flexWrap: "wrap"
+                }}
+              >
+                <div style={{ display: "grid", gap: spacing[1] }}>
+                  <h3
+                    style={{
+                      margin: 0,
+                      color: colors.text,
+                      fontSize: typography.scale.sm,
+                      fontWeight: 700,
+                      letterSpacing: "0.02em",
+                      textTransform: "uppercase"
+                    }}
+                  >
+                    Trade plan summary
+                  </h3>
+                  <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>
+                    {tradeStatusLine(verdict.tone)}
+                  </p>
+                </div>
+                <div
+                  role="tablist"
+                  aria-label="Scenario view mode"
+                  style={{ display: "inline-flex", gap: spacing[1] }}
+                >
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={viewMode === "guided"}
+                    onClick={() => setViewMode("guided")}
+                    data-testid="scenario-view-guided"
+                    style={{
+                      borderRadius: borderRadius.md,
+                      border: `1px solid ${viewMode === "guided" ? colors.accent : colors.border}`,
+                      background: viewMode === "guided" ? colors.background : "transparent",
+                      color: colors.text,
+                      fontSize: typography.scale.xs,
+                      fontWeight: 600,
+                      padding: `${spacing[1]} ${spacing[2]}`,
+                      cursor: "pointer"
+                    }}
+                  >
+                    Guided
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={viewMode === "pro"}
+                    onClick={() => setViewMode("pro")}
+                    data-testid="scenario-view-pro"
+                    style={{
+                      borderRadius: borderRadius.md,
+                      border: `1px solid ${viewMode === "pro" ? colors.accent : colors.border}`,
+                      background: viewMode === "pro" ? colors.background : "transparent",
+                      color: colors.text,
+                      fontSize: typography.scale.xs,
+                      fontWeight: 600,
+                      padding: `${spacing[1]} ${spacing[2]}`,
+                      cursor: "pointer"
+                    }}
+                  >
+                    Pro
+                  </button>
+                </div>
+              </div>
+
+              <p style={{ margin: `0 0 ${spacing[2]} 0`, color: colors.textMuted, fontSize: typography.scale.xs }}>
+                {modeHint(viewMode)}
+              </p>
+
+              {viewMode === "guided" ? (
+                <div
+                  data-testid="scenario-what-to-do-box"
+                  style={{
+                    background: colors.background,
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: borderRadius.md,
+                    padding: spacing[3],
+                    marginBottom: spacing[3]
+                  }}
+                >
+                  <p style={{ margin: `0 0 ${spacing[2]} 0`, color: colors.text, fontWeight: 700, fontSize: typography.scale.sm }}>
+                    What to do now
+                  </p>
+                  <ol
+                    style={{
+                      margin: 0,
+                      paddingLeft: spacing[4],
+                      color: colors.text,
+                      fontSize: typography.scale.xs,
+                      lineHeight: 1.6
+                    }}
+                  >
+                    <li>
+                      Wait for trigger: use your selected setup condition before entering.
+                    </li>
+                    <li>
+                      Entry plan: {formatScenarioDollars(entry, { fractionDigits: 4 })} ({directionLabel} setup).
+                    </li>
+                    <li>
+                      Invalidation: stop at {formatScenarioDollars(stop, { fractionDigits: 4 })}.
+                    </li>
+                    <li>
+                      Profit objective: target {formatScenarioDollars(target, { fractionDigits: 4 })} ({formatRMultiple(result.r_multiple_to_target)}).
+                    </li>
+                    <li>
+                      Risk check: total risk {formatScenarioDollars(result.total_risk_dollars)} for {shares} shares.
+                    </li>
+                  </ol>
+                </div>
+              ) : (
+                <div
+                  data-testid="scenario-pro-metrics-box"
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+                    gap: spacing[2],
+                    marginBottom: spacing[3]
+                  }}
+                >
+                  <div style={{ border: `1px solid ${colors.border}`, borderRadius: borderRadius.md, padding: spacing[2] }}>
+                    <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>R/R</p>
+                    <p style={{ margin: `${spacing[1]} 0 0 0`, color: colors.text, fontWeight: 700 }}>
+                      {formatRMultiple(result.r_multiple_to_target)}
+                    </p>
+                  </div>
+                  <div style={{ border: `1px solid ${colors.border}`, borderRadius: borderRadius.md, padding: spacing[2] }}>
+                    <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>Risk % of entry</p>
+                    <p style={{ margin: `${spacing[1]} 0 0 0`, color: colors.text, fontWeight: 700 }}>
+                      {draftRiskPct != null ? `${draftRiskPct.toFixed(2)}%` : "—"}
+                    </p>
+                  </div>
+                  <div style={{ border: `1px solid ${colors.border}`, borderRadius: borderRadius.md, padding: spacing[2] }}>
+                    <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>Break-even win rate</p>
+                    <p style={{ margin: `${spacing[1]} 0 0 0`, color: colors.text, fontWeight: 700 }}>
+                      {breakEvenWinRate(result.r_multiple_to_target)}
+                    </p>
+                  </div>
+                  <div style={{ border: `1px solid ${colors.border}`, borderRadius: borderRadius.md, padding: spacing[2] }}>
+                    <p style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.xs }}>Desk floor</p>
+                    <p style={{ margin: `${spacing[1]} 0 0 0`, color: colors.text, fontWeight: 700 }}>
+                      {verdict.deskMinRr.toFixed(1)} : 1
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div
+                data-testid="scenario-post-fill-plan"
+                style={{
+                  borderRadius: borderRadius.md,
+                  border: `1px solid ${colors.border}`,
+                  background: colors.background,
+                  padding: spacing[3],
+                  marginBottom: spacing[3]
+                }}
+              >
+                <p style={{ margin: 0, color: colors.text, fontSize: typography.scale.sm, fontWeight: 700 }}>
+                  If your entry fills, run this execution plan
+                </p>
+                <p style={{ margin: `${spacing[1]} 0 ${spacing[2]} 0`, color: colors.textMuted, fontSize: typography.scale.xs }}>
+                  This sequence is plan logic only. You control whether and when each step is sent to your broker.
+                </p>
+                <ul
+                  style={{
+                    margin: 0,
+                    paddingLeft: spacing[4],
+                    color: colors.text,
+                    fontSize: typography.scale.xs,
+                    lineHeight: 1.65
+                  }}
+                >
+                  <li>
+                    {(direction === "bullish" ? "Sell" : "Cover")} {postFillPlan.leg1Shares} shares @{" "}
+                    {formatScenarioDollars(postFillPlan.leg1Level ?? Number.NaN, { fractionDigits: 2 })}
+                    {postFillPlan.leg1R != null ? ` (${postFillPlan.leg1R.toFixed(2)}R)` : ""}
+                  </li>
+                  <li>
+                    {(direction === "bullish" ? "Sell" : "Cover")} {postFillPlan.leg2Shares} shares @{" "}
+                    {formatScenarioDollars(postFillPlan.leg2Level ?? Number.NaN, { fractionDigits: 2 })}
+                    {postFillPlan.leg2R != null ? ` (${postFillPlan.leg2R.toFixed(2)}R)` : ""}
+                  </li>
+                  <li>
+                    {(direction === "bullish" ? "Sell" : "Cover")} {postFillPlan.runnerShares} shares @{" "}
+                    {formatScenarioDollars(postFillPlan.runnerLevel ?? Number.NaN, { fractionDigits: 2 })} (runner)
+                    {postFillPlan.runnerR != null ? ` (${postFillPlan.runnerR.toFixed(2)}R)` : ""}
+                  </li>
+                  <li>
+                    {direction === "bullish" ? "Sell stop" : "Buy stop to cover"} all remaining shares @{" "}
+                    {formatScenarioDollars(stop, { fractionDigits: 2 })}.
+                  </li>
+                </ul>
+                <p style={{ margin: `${spacing[2]} 0 0 0`, color: colors.textMuted, fontSize: typography.scale.xs }}>
+                  Share split: {postFillPlan.leg1Shares + postFillPlan.leg2Shares + postFillPlan.runnerShares} planned
+                  shares (30% / 30% / 40% allocation).
+                </p>
+                <p
+                  data-testid="scenario-risk-budget-assessment"
+                  style={{
+                    margin: `${spacing[2]} 0 0 0`,
+                    color:
+                      riskBudgetAssessment.tone === "risk"
+                        ? colors.bearish
+                        : riskBudgetAssessment.tone === "caution"
+                          ? colors.caution
+                          : colors.textMuted,
+                    fontSize: typography.scale.xs
+                  }}
+                >
+                  {riskBudgetAssessment.line}
+                </p>
+                <p style={{ margin: `${spacing[1]} 0 0 0`, color: colors.textMuted, fontSize: typography.scale.xs }}>
+                  Management rule: once the first scale-out fills, tighten remaining risk only if that is part of your
+                  predefined process.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleCopyExecutionPlan}
+                  data-testid="scenario-copy-execution-plan"
+                  aria-live="polite"
+                  style={{
+                    marginTop: spacing[2],
+                    padding: `${spacing[1]} ${spacing[3]}`,
+                    background: "transparent",
+                    color: colors.text,
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: borderRadius.md,
+                    cursor: "pointer",
+                    fontSize: typography.scale.xs,
+                    fontWeight: 600
+                  }}
+                >
+                  {executionCopyState === "copied"
+                    ? "Execution copied"
+                    : executionCopyState === "error"
+                      ? "Copy failed"
+                      : "Copy execution ticket"}
+                </button>
+              </div>
+
+              {comparisonRows.length > 0 ? (
+                <div
+                  data-testid="scenario-option-cards"
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+                    gap: spacing[2],
+                    marginBottom: spacing[3]
+                  }}
+                >
+                  {comparisonRows.map((row) => {
+                    const playbook = presetPlaybook(row.id as ScenarioPresetId);
+                    const isActive = row.id === activePreset;
+                    return (
+                      <button
+                        key={row.id}
+                        type="button"
+                        onClick={() => applyPreset(row.id as ScenarioPresetId)}
+                        data-testid={`scenario-option-card-${row.id}`}
+                        style={{
+                          textAlign: "left",
+                          borderRadius: borderRadius.md,
+                          border: `1px solid ${isActive ? colors.accent : colors.border}`,
+                          background: isActive ? colors.background : "transparent",
+                          padding: spacing[3],
+                          cursor: "pointer"
+                        }}
+                      >
+                        <p style={{ margin: 0, color: colors.text, fontSize: typography.scale.xs, fontWeight: 700 }}>
+                          {playbook.title}
+                        </p>
+                        <p style={{ margin: `${spacing[1]} 0 0 0`, color: colors.textMuted, fontSize: typography.scale.xs }}>
+                          {playbook.whenToUse}
+                        </p>
+                        <p style={{ margin: `${spacing[2]} 0 0 0`, color: colors.text, fontSize: typography.scale.xs }}>
+                          Entry {formatScenarioDollars(row.entry, { fractionDigits: 2 })} · Stop{" "}
+                          {formatScenarioDollars(row.stop, { fractionDigits: 2 })} · Target{" "}
+                          {formatScenarioDollars(row.target, { fractionDigits: 2 })}
+                        </p>
+                        <p style={{ margin: `${spacing[1]} 0 0 0`, color: colors.textMuted, fontSize: typography.scale.xs }}>
+                          Skip when: {playbook.skipWhen}
+                        </p>
+                        <p style={{ margin: `${spacing[1]} 0 0 0`, color: colors.text, fontSize: typography.scale.xs, fontWeight: 600 }}>
+                          {row.riskReward != null ? formatScenarioRatio(row.riskReward) : "—"} R/R
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+
+              <div
+                data-testid="scenario-no-trade-rules"
+                style={{
+                  borderRadius: borderRadius.md,
+                  border: `1px solid ${colors.caution}`,
+                  background: "rgba(245,158,11,.08)",
+                  padding: spacing[3]
+                }}
+              >
+                <p style={{ margin: `0 0 ${spacing[1]} 0`, color: colors.text, fontSize: typography.scale.xs, fontWeight: 700 }}>
+                  Skip this setup if any of these remain true
+                </p>
+                <ul style={{ margin: 0, paddingLeft: spacing[4], color: colors.textMuted, fontSize: typography.scale.xs, lineHeight: 1.6 }}>
+                  {(noTradeConditions.length > 0
+                    ? noTradeConditions
+                    : ["Wait for cleaner structure and timing alignment before acting."]
+                  ).map((line) => (
+                    <li key={line.slice(0, 64)}>{line}</li>
+                  ))}
+                </ul>
+              </div>
+            </section>
 
             {catalog ? (
               <ScenarioBuilderComparisonTable

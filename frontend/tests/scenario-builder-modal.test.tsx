@@ -82,6 +82,22 @@ describe("ScenarioBuilderModal — structural blocks present", () => {
     );
     expect(screen.getByTestId("scenario-structural-planning-banner")).toBeInTheDocument();
   });
+
+  test("test_post_fill_execution_plan_renders_share_split_and_stop", () => {
+    wrap(<ScenarioBuilderModal open input={baseInput} onClose={vi.fn()} />);
+    const postFill = screen.getByTestId("scenario-post-fill-plan");
+    const text = postFill.textContent ?? "";
+    expect(text).toContain("If your entry fills, run this execution plan");
+    expect(text).toContain("Sell 30 shares");
+    expect(text).toContain("Sell 40 shares");
+    expect(text).toContain("Sell stop all remaining shares");
+    expect(text).toContain("30% / 30% / 40%");
+  });
+
+  test("test_post_fill_execution_plan_has_copy_ticket_action", () => {
+    wrap(<ScenarioBuilderModal open input={baseInput} onClose={vi.fn()} />);
+    expect(screen.getByTestId("scenario-copy-execution-plan")).toBeInTheDocument();
+  });
 });
 
 describe("ScenarioBuilderModal — terminal actions are NOT submit", () => {
