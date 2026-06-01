@@ -1205,7 +1205,12 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
 
       <EvidenceLayerContribution layers={evidence.layers} bias={setupBias} />
       {evidenceTimeframeContext ? (
-        <TimeframeContextPanel context={evidenceTimeframeContext} tradingMode={evidenceMode} compact />
+        <TimeframeContextPanel
+          context={evidenceTimeframeContext}
+          tradingMode={evidenceMode}
+          setupBias={setupBias}
+          compact
+        />
       ) : null}
       {evidenceDecision.state !== "actionable" && evidenceCausalNarrative ? (
         <CausalNarrativePanel narrative={evidenceCausalNarrative} compact />

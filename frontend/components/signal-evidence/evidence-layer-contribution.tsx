@@ -48,6 +48,9 @@ export function EvidenceLayerContribution({ layers, bias }: Props) {
         <p className="m-0 mt-1 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
           How each layer lines up with today&apos;s bias — verdict only, not internal layer scores or trade readiness.
         </p>
+        <p className="m-0 mt-1 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
+          Current setup bias: <span style={{ fontWeight: 600, color: colors.text }}>{bias}</span>
+        </p>
       </div>
       <SignalsLayerForceSummary rows={rows} bias={bias} showLevelFootnote={false} />
       {primary.length > 0 ? (

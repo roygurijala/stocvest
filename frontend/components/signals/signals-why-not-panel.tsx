@@ -8,6 +8,7 @@ import {
   type CausalNarrative
 } from "@/lib/signal-evidence/causal-narrative";
 import {
+  buildExecutionUnlockSteps,
   buildLayerInsightLine,
   buildWhyNotBullets,
   decisionGateCategoryLabel,
@@ -109,10 +110,9 @@ export function SignalsWhyNotPanel({
   const blockingLines = [...gateBlockingLines, ...blockingLayerLines]
     .filter((line, idx, arr) => Boolean(line.trim()) && arr.indexOf(line) === idx)
     .slice(0, 4);
-  const unlockLines = [...blockingLines]
+  const unlockLines = buildExecutionUnlockSteps(decision, layerSource, bias, 3)
     .map(plainEnglishUnlockLine)
-    .filter((line, idx, arr) => Boolean(line.trim()) && arr.indexOf(line) === idx)
-    .slice(0, 3);
+    .filter((line, idx, arr) => Boolean(line.trim()) && arr.indexOf(line) === idx);
 
   return (
     <article
