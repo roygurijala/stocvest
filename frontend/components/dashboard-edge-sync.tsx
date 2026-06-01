@@ -33,10 +33,10 @@ export function DashboardEdgeSync() {
   const { mutate } = useSWRConfig();
 
   useEffect(() => {
-    setMode(resolveTradingModeForSurfaces(true, "swing"));
+    setMode(resolveTradingModeForSurfaces(true));
     const onStorage = (e: StorageEvent) => {
       if (e.key === TRADING_MODE_STORAGE_KEY) {
-        setMode(resolveTradingModeForSurfaces(true, "swing"));
+        setMode(resolveTradingModeForSurfaces(true));
       }
     };
     window.addEventListener("storage", onStorage);

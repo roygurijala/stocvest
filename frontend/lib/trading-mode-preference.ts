@@ -27,9 +27,11 @@ export function writeTradingModePreference(mode: TradingModePreference): void {
 /** Resolve stored mode for surfaces that may hide the day desk. */
 export function resolveTradingModeForSurfaces(
   dayTradingSurfaces: boolean,
-  fallback: TradingModePreference = "swing"
+  fallback?: TradingModePreference
 ): TradingModePreference {
-  const stored = readTradingModePreference(fallback);
+  const resolvedFallback: TradingModePreference =
+    fallback ?? (dayTradingSurfaces ? "day" : "swing");
+  const stored = readTradingModePreference(resolvedFallback);
   if (stored === "day" && dayTradingSurfaces) return "day";
   return "swing";
 }

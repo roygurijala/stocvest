@@ -53,7 +53,8 @@ function wrap(ui: ReactElement) {
 }
 
 describe("Dashboard scanner partition (focus layout)", () => {
-  test("defaults to swing desk when no saved preference", () => {
+  test("defaults to day desk when no saved preference", () => {
+    localStorage.clear();
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
@@ -68,7 +69,7 @@ describe("Dashboard scanner partition (focus layout)", () => {
         sectorRotation={[]}
       />
     );
-    expect(screen.getByTestId("dashboard-desk-mode-swing")).toHaveAttribute("data-active", "true");
+    expect(screen.getByTestId("dashboard-desk-mode-day")).toHaveAttribute("data-active", "true");
   });
 
   test("intraday_row_surfaces_as_day_active_while_swing_stays_suppressed", () => {

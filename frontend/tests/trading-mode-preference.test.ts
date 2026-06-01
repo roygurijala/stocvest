@@ -11,9 +11,10 @@ describe("trading-mode-preference", () => {
     localStorage.clear();
   });
 
-  test("defaults to swing when unset", () => {
+  test("defaults to day on dashboard when day desk is available and unset", () => {
     expect(readTradingModePreference()).toBe("swing");
-    expect(resolveTradingModeForSurfaces(true)).toBe("swing");
+    expect(resolveTradingModeForSurfaces(true)).toBe("day");
+    expect(resolveTradingModeForSurfaces(false)).toBe("swing");
   });
 
   test("persists and restores day when day desk is available", () => {
@@ -22,7 +23,7 @@ describe("trading-mode-preference", () => {
     expect(resolveTradingModeForSurfaces(true)).toBe("day");
   });
 
-  test("falls back to swing when day desk is hidden", () => {
+  test("falls back to swing when day desk is hidden even if day was saved", () => {
     writeTradingModePreference("day");
     expect(resolveTradingModeForSurfaces(false)).toBe("swing");
   });

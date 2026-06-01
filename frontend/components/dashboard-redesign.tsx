@@ -260,17 +260,17 @@ function DashboardRedesignBody({
   const { data: edgeDashboard } = useDashboardPayload("swing");
   const { data: dayDashboard } = useDashboardPayload("day");
   const [deskMode, setDeskModeState] = useState<DashboardDeskMode>(() =>
-    resolveTradingModeForSurfaces(dayTradingSurfaces, "swing")
+    resolveTradingModeForSurfaces(dayTradingSurfaces)
   );
 
   useEffect(() => {
-    setDeskModeState(resolveTradingModeForSurfaces(dayTradingSurfaces, "swing"));
+    setDeskModeState(resolveTradingModeForSurfaces(dayTradingSurfaces));
   }, [dayTradingSurfaces]);
 
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
       if (e.key !== TRADING_MODE_STORAGE_KEY) return;
-      setDeskModeState(resolveTradingModeForSurfaces(dayTradingSurfaces, "swing"));
+      setDeskModeState(resolveTradingModeForSurfaces(dayTradingSurfaces));
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
