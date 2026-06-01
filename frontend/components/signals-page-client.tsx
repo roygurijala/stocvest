@@ -1941,7 +1941,7 @@ export function SignalsPageClient({
               <div data-testid="signals-setup-service-error">{compositeServiceMessage}</div>
             ) : null}
             {hasValidSignal && timeframeContext ? (
-              <TimeframeContextPanel context={timeframeContext} tradingMode={tradingMode} compact />
+              <TimeframeContextPanel context={timeframeContext} tradingMode={tradingMode} setupBias={setupBias} compact />
             ) : null}
             {hasValidSignal && causalNarrative && pageDecision?.state !== "actionable" ? (
               <CausalNarrativePanel narrative={causalNarrative} compact />

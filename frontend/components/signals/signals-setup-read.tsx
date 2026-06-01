@@ -5,6 +5,7 @@ import { ChevronDown } from "lucide-react";
 import { InfoTip } from "@/components/info-tip";
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import {
+  buildExecutionUnlockSteps,
   buildLayerInsightLine,
   buildWhyNotBullets,
   executionDetailToggleLabel,
@@ -98,7 +99,7 @@ export function SignalsSetupRead({
   const blockingLines = [...(primaryGate ? [primaryGate] : []), ...supportingGates, ...layerBlockingLines]
     .filter((line, idx, arr) => Boolean(line.trim()) && arr.indexOf(line) === idx)
     .slice(0, 3);
-  const unlockLines = blockingLines
+  const unlockLines = buildExecutionUnlockSteps(decision, previewLayers, bias, 2)
     .map((line) => {
       const cleaned = line.trim().replace(/\.$/, "");
       if (!cleaned) return "";

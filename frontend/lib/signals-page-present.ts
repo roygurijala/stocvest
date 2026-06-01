@@ -305,6 +305,16 @@ export function signalsAlignmentKpiSubline(input: {
 }
 
 export function layerPolarity(row: SignalsLayerRowInput, bias: SignalsSetupBias): SignalsLayerPolarity {
+  // Geopolitical "no active themes" means no directional edge, even if upstream status
+  // arrives as bullish/bearish by score math.
+  if (
+    row.key === "geopolitical" &&
+    /no active geo themes detected|baseline monitoring active|no direct impact/i.test(
+      row.explanation || ""
+    )
+  ) {
+    return "neutral";
+  }
   if (row.sectorCachePending || row.status === "Unavailable") return "blocking";
   if (row.statusLabel?.toLowerCase().includes("as of close")) {
     if (bias === "Neutral") return "neutral";
@@ -969,6 +979,46 @@ export function executionSupportingGates(decision: TradeDecision): string[] {
     if (primary && (t === primary || primary.includes(t) || t.includes(primary))) return false;
     return true;
   });
+}
+
+/** Plain-English unlock steps that do not repeat blocker lines verbatim. */
+export function buildExecutionUnlockSteps(
+  decision: TradeDecision,
+  rows: SignalsLayerRowInput[],
+  bias: SignalsSetupBias,
+  max = 3
+): string[] {
+  const out: string[] = [];
+  const groups = groupLayersByForce(rows, bias);
+  const blockerNames = groups.againstOrMixed.slice(0, 2).map((r) => r.name);
+  const category = decision.rationale?.category;
+
+  if (category === "risk_reward") {
+    out.push("Need better upside versus downside before this setup can be considered.");
+  }
+  if (category === "regime") {
+    out.push("Need broader market conditions to align with this setup direction.");
+  }
+  if (category === "data_insufficient") {
+    out.push("Need complete data coverage across core checks before reassessing.");
+  }
+  if (category === "confirmation" || category === "readiness" || category == null) {
+    if (blockerNames.length > 0) {
+      out.push(`Need clearer confirmation from ${blockerNames.join(" and ")}.`);
+    } else {
+      out.push("Need more technical and participation checks to align.");
+    }
+  }
+
+  const hasTimingBlock = (decision.reinforcements ?? []).some((line) =>
+    /timing|vwap|entry/i.test(line)
+  );
+  if (hasTimingBlock) {
+    out.push("Need cleaner entry timing confirmation before acting.");
+  }
+
+  const unique = out.filter((line, idx, arr) => arr.indexOf(line) === idx);
+  return unique.slice(0, max);
 }
 
 /** Gate-focused bullets for “Why not actionable?” — distinct from causal layer narrative. */

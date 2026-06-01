@@ -2,7 +2,7 @@
 
 import { InfoTip } from "@/components/info-tip";
 import type { TimeframeContext } from "@/lib/signal-evidence/timeframe-context";
-import { timeframeStrengthTone } from "@/lib/signal-evidence/timeframe-context";
+import type { SignalsSetupBias } from "@/lib/signals-page-present";
 import { borderRadius, spacing, surfaceGlowClassName } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -12,14 +12,19 @@ const TIMEFRAME_TIP =
 type Props = {
   context: TimeframeContext;
   tradingMode: "swing" | "day";
+  setupBias?: SignalsSetupBias;
   compact?: boolean;
 };
 
-export function TimeframeContextPanel({ context, tradingMode, compact = false }: Props) {
+export function TimeframeContextPanel({
+  context,
+  tradingMode,
+  setupBias = "Neutral",
+  compact = false
+}: Props) {
   const { colors } = useTheme();
-  const tone = timeframeStrengthTone(context.alignment.strength);
-  const accent =
-    tone === "aligned" ? colors.bullish : tone === "caution" ? colors.caution : colors.textMuted;
+  const impact = timeframeImpactAgainstBias(context.weekly.weekly_bias, setupBias);
+  const accent = impact.tone === "support" ? colors.bullish : impact.tone === "conflict" ? colors.bearish : colors.textMuted;
 
   return (
     <article
@@ -51,6 +56,9 @@ export function TimeframeContextPanel({ context, tradingMode, compact = false }:
       >
         {context.alignment.label}
       </p>
+      <p className="m-0 mt-1 text-xs leading-relaxed" style={{ color: accent }} data-testid="timeframe-impact-label">
+        Impact on current setup: {impact.label}
+      </p>
       <p className="m-0 mt-2 text-sm leading-relaxed" style={{ color: colors.text }}>
         <span className="font-semibold">{context.shortHorizonLabel}</span> vs{" "}
         <span className="font-semibold">Weekly</span> ({context.weekly.weekly_bias}) —{" "}
@@ -71,4 +79,22 @@ function formatPct(value: number): string {
   if (!Number.isFinite(n)) return "—";
   const sign = n > 0 ? "+" : "";
   return `${sign}${n.toFixed(1)}%`;
+}
+
+function timeframeImpactAgainstBias(
+  weeklyBias: string,
+  setupBias: SignalsSetupBias
+): { tone: "support" | "conflict" | "neutral"; label: string } {
+  const wb = weeklyBias.trim().toLowerCase();
+  if (setupBias === "Neutral") {
+    return { tone: "neutral", label: "No directional setup bias selected." };
+  }
+  if (setupBias === "Bullish") {
+    if (wb === "bullish") return { tone: "support", label: "Supports current bullish setup." };
+    if (wb === "bearish") return { tone: "conflict", label: "Conflicts with current bullish setup." };
+    return { tone: "neutral", label: "Weekly context is neutral for this setup." };
+  }
+  if (wb === "bearish") return { tone: "support", label: "Supports current bearish setup." };
+  if (wb === "bullish") return { tone: "conflict", label: "Conflicts with current bearish setup." };
+  return { tone: "neutral", label: "Weekly context is neutral for this setup." };
 }
