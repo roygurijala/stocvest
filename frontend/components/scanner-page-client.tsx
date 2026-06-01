@@ -20,6 +20,8 @@ import { NewsPanel } from "@/components/news-panel";
 import { ScenarioBuilderInline } from "@/components/scenario-builder/scenario-builder-inline";
 import { ScannerEmptyStateCard } from "@/components/scanner-empty-state-card";
 import { ScannerNearQualificationSection } from "@/components/scanner/scanner-near-qualification-section";
+import { ScannerMoverLanes } from "@/components/scanner/scanner-mover-lanes";
+import { ScannerWhyMissingPanel } from "@/components/scanner/scanner-why-missing-panel";
 import { ScannerQuietLeadersSection } from "@/components/scanner/scanner-quiet-leaders-section";
 import { ScannerOutcomeCards } from "@/components/scanner/ScannerOutcomeCards";
 import { ScannerQuietDesk } from "@/components/scanner/scanner-quiet-desk";
@@ -49,6 +51,7 @@ import { buildScannerProgressHints } from "@/lib/scanner-progress-messaging";
 import type { ScannerEvaluationTraceRow } from "@/lib/scanner-setups-response";
 import { fetchEarningsCalendarClient } from "@/lib/api/earnings-client";
 import type { EarningsEvent } from "@/lib/api/earnings";
+import { fetchDeskToday, type DeskTodayData, type DeskTodayMode } from "@/lib/api/desk-today";
 import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { GAP_INTEL_ACTIVE_GUIDANCE, GAP_INTEL_EMPTY_CONTEXT } from "@/lib/scanner-quiet-copy";
@@ -86,6 +89,7 @@ import {
   resolveSetupRowTradingMode
 } from "@/lib/scanner-mode-resolution";
 import { topSignalStrengthPercent } from "@/lib/top-signal-strength";
+import { scannerSignificanceLabel } from "@/lib/scanner-significance-present";
 import {
   CONFIDENCE_PERCENT_TIP,
   GAP_INTELLIGENCE_TIP,
@@ -178,6 +182,35 @@ function isSecondarySharedCatalyst(item: GapIntelligenceItem): boolean {
   return typeof h === "string" && h.trim() === SECONDARY_SHARED_CATALYST_HEADLINE;
 }
 
+type DeskRejectionSnapshot = {
+  rejectionReasonCounts: Record<string, number>;
+  rejectedSamples: Array<{ symbol: string; reason: string }>;
+};
+
+const EMPTY_DESK_REJECTION_SNAPSHOT: DeskRejectionSnapshot = {
+  rejectionReasonCounts: {},
+  rejectedSamples: []
+};
+
+function extractDeskRejectionSnapshot(data: DeskTodayData | null | undefined): DeskRejectionSnapshot {
+  const rejectionReasonCounts =
+    data?.rejection_reason_counts && typeof data.rejection_reason_counts === "object"
+      ? data.rejection_reason_counts
+      : {};
+  const rejectedSamples = Array.isArray(data?.rejected_samples)
+    ? data.rejected_samples
+        .map((row) => ({
+          symbol: String(row.symbol ?? "").trim().toUpperCase(),
+          reason: String(row.reason ?? "").trim()
+        }))
+        .filter((row) => row.symbol && row.reason)
+    : [];
+  return {
+    rejectionReasonCounts,
+    rejectedSamples
+  };
+}
+
 export function ScannerPageClient({
   initialOverview,
   initialTimestampIso,
@@ -199,6 +232,11 @@ export function ScannerPageClient({
   const [newsPanelSymbol, setNewsPanelSymbol] = useState("");
   const [newsPanelOpen, setNewsPanelOpen] = useState(false);
   const [gapNewsDrawerItem, setGapNewsDrawerItem] = useState<GapIntelligenceItem | null>(null);
+  const [deskRejections, setDeskRejections] = useState<Record<"swing" | "day", DeskRejectionSnapshot>>({
+    swing: EMPTY_DESK_REJECTION_SNAPSHOT,
+    day: EMPTY_DESK_REJECTION_SNAPSHOT
+  });
+  const [whyMissingPrefillSymbol, setWhyMissingPrefillSymbol] = useState<string>("");
   const [evidence, setEvidence] = useState<SignalEvidenceData | null>(null);
   const router = useRouter();
   const [, forceTick] = useState(0);
@@ -283,7 +321,7 @@ export function ScannerPageClient({
       const core = await loadScannerDataWithoutBrief(null, [], {
         parallelDefaultWatchlist: true,
         includeOpportunityDeskUniverse: true,
-        maxUniverseSymbols: 50,
+        maxUniverseSymbols: 150,
         scannerSetupLoadMode: scannerSetupMode,
         intradayBarLimit: 120,
         daySetupsLimit: 10,
@@ -304,6 +342,33 @@ export function ScannerPageClient({
   useEffect(() => {
     setShowAllGaps(false);
   }, [scannerSetupMode]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const modes: DeskTodayMode[] = dayTradingSurfaces ? ["swing", "day"] : ["swing"];
+    void Promise.all(
+      modes.map(async (mode) => {
+        try {
+          const payload = await fetchDeskToday(mode);
+          return [mode, extractDeskRejectionSnapshot(payload?.data)] as const;
+        } catch {
+          return [mode, EMPTY_DESK_REJECTION_SNAPSHOT] as const;
+        }
+      })
+    ).then((rows) => {
+      if (cancelled) return;
+      setDeskRejections((prev) => {
+        const next = { ...prev };
+        for (const [mode, snapshot] of rows) {
+          next[mode] = snapshot;
+        }
+        return next;
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [scannerSetupMode, dayTradingSurfaces]);
 
   const persistScannerMode = useCallback(
     (m: ScannerSetupLoadMode) => {
@@ -634,8 +699,12 @@ export function ScannerPageClient({
               <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Event significance</span>
               <InfoTip text={EVENT_SIGNIFICANCE_SCORE_TIP} label="What event significance measures" maxWidth={280} />
             </div>
-            <span style={{ fontSize: typography.scale.xs, fontFamily: MONO }}>
-              {item.gap_quality_score}/100
+            <span
+              style={{ fontSize: typography.scale.xs, fontFamily: MONO }}
+              title={`Model event significance ${item.gap_quality_score}/100`}
+              data-testid={`scanner-event-significance-${item.symbol.trim().toUpperCase()}`}
+            >
+              {scannerSignificanceLabel(item.gap_quality_score)}
             </span>
           </div>
           <div
@@ -1040,7 +1109,7 @@ export function ScannerPageClient({
       const core = await loadScannerDataWithoutBrief(null, [], {
         parallelDefaultWatchlist: true,
         includeOpportunityDeskUniverse: true,
-        maxUniverseSymbols: 50,
+        maxUniverseSymbols: 150,
         scannerSetupLoadMode: scannerSetupMode,
         intradayBarLimit: 120,
         daySetupsLimit: 10,
@@ -1140,6 +1209,47 @@ export function ScannerPageClient({
         : "Day setups (intraday)";
 
   const panelNewsTradingMode = scannerSetupMode === "day" ? "day" : "swing";
+  const activeDeskRejections = useMemo<DeskRejectionSnapshot>(() => {
+    if (scannerSetupMode === "swing") return deskRejections.swing;
+    if (scannerSetupMode === "day") return deskRejections.day;
+    const counts: Record<string, number> = {};
+    for (const [reason, count] of Object.entries(deskRejections.swing.rejectionReasonCounts)) {
+      counts[reason] = (counts[reason] ?? 0) + count;
+    }
+    for (const [reason, count] of Object.entries(deskRejections.day.rejectionReasonCounts)) {
+      counts[reason] = (counts[reason] ?? 0) + count;
+    }
+    const seen = new Set<string>();
+    const rejectedSamples = [...deskRejections.swing.rejectedSamples, ...deskRejections.day.rejectedSamples].filter(
+      (row) => {
+        const key = `${row.symbol}::${row.reason}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }
+    );
+    return { rejectionReasonCounts: counts, rejectedSamples };
+  }, [deskRejections, scannerSetupMode]);
+  const whyMissingSuggestedSymbols = useMemo(() => {
+    return [
+      ...new Set([
+        ...overview.gapIntelligence.map((g) => g.symbol.trim().toUpperCase()),
+        ...overview.setups.map((s) => s.symbol.trim().toUpperCase()),
+        ...scanSummary.near_qualification.map((n) => n.symbol.trim().toUpperCase())
+      ])
+    ]
+      .filter(Boolean)
+      .slice(0, 40);
+  }, [overview.gapIntelligence, overview.setups, scanSummary.near_qualification]);
+  const handleExplainMissingFromPotential = useCallback((symbol: string) => {
+    const sym = symbol.trim().toUpperCase();
+    if (!sym) return;
+    setWhyMissingPrefillSymbol(sym);
+    const target = document.getElementById("scanner-why-missing-panel");
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, []);
   /**
    * Trading mode used to enrich Evidence-card composite reads from this surface.
    * The resolution rule lives in `@/lib/scanner-mode-resolution` as a single
@@ -1368,6 +1478,19 @@ export function ScannerPageClient({
         nextScanLabel={marketOpen ? scanCountdownLabel : null}
       />
       {!showQuietInterpretation ? <ScannerOutcomeCards summary={scanSummary} /> : null}
+      <ScannerMoverLanes
+        gapItems={overview.gapIntelligence}
+        setups={overview.setups}
+        nearQualification={scanSummary.near_qualification}
+        evaluationTrace={evaluationTrace}
+        onExplainMissingSymbol={handleExplainMissingFromPotential}
+      />
+      <ScannerWhyMissingPanel
+        rejectedSamples={activeDeskRejections.rejectedSamples}
+        rejectionReasonCounts={activeDeskRejections.rejectionReasonCounts}
+        suggestedSymbols={whyMissingSuggestedSymbols}
+        prefillSymbol={whyMissingPrefillSymbol}
+      />
       {!showQuietInterpretation ? (
         <ScannerNearQualificationSection
           nearQualification={scanSummary.near_qualification}

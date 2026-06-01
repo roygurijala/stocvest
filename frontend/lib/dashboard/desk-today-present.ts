@@ -101,12 +101,17 @@ export function deskScanFootnote(data: DeskTodayData | null | undefined): string
   const eligible = data?.eligible_symbol_count;
   const scanned = data?.scanned_snapshot_count;
   if (typeof eligible !== "number" || eligible <= 0) return null;
+  const survivorUsed =
+    typeof data?.survivor_limit_used === "number" && data.survivor_limit_used > 0
+      ? data.survivor_limit_used
+      : null;
   const src =
     data?.snapshot_source === "liquid_fallback"
       ? "limited universe (plan fallback)"
       : "full market scan";
   const scannedPart = typeof scanned === "number" && scanned > 0 ? `${scanned.toLocaleString()} tickers · ` : "";
-  return `${scannedPart}${eligible.toLocaleString()} passed filters (${src})`;
+  const survivorPart = survivorUsed != null ? ` · top ${survivorUsed.toLocaleString()} retained` : "";
+  return `${scannedPart}${eligible.toLocaleString()} passed filters (${src})${survivorPart}`;
 }
 
 export function formatGeneratedAtEt(iso: string | undefined): string | null {

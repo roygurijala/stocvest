@@ -46,11 +46,14 @@ export type DeskTodayData = {
   snapshot_source?: string;
   scanned_snapshot_count?: number;
   eligible_symbol_count?: number;
+  survivor_limit_used?: number;
   generated_at?: string;
   /** NY trading date (YYYY-MM-DD) when movers were computed — clears stale session activity at open. */
   session_trading_date?: string;
   discovery?: DeskDiscoveryLeader[];
   movers_radar?: DeskMoverRadarRow[];
+  rejection_reason_counts?: Record<string, number>;
+  rejected_samples?: Array<{ symbol: string; reason: string; seen_at?: string }>;
   recently_hot?: DeskRecentlyHotRow[];
   quiet_leaders?: DeskQuietLeader[];
 };

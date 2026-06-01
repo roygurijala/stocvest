@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
   NewsPanel,
   analystActionToneForTests,
+  sentimentImpactLabelForTests,
+  sentimentLabelForTests,
   sentimentDotClassForTests,
   sourceBadgeClassForTests
 } from "@/components/news-panel";
@@ -121,6 +123,38 @@ describe("NewsPanel", () => {
     wrap(<NewsPanel symbol="AAPL" isOpen onClose={vi.fn()} />);
     await waitFor(() => expect(screen.getByText("Fresh")).toBeInTheDocument());
     expect(screen.queryByText(/No news in the last 4h/i)).toBeNull();
+  });
+
+  test("summary uses qualitative sentiment impact labels (no raw averages)", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () =>
+        panelJson({
+          has_recent_news: true,
+          articles: [
+            {
+              id: "1",
+              title: "Strong article",
+              source: "polygon",
+              source_label: "Polygon",
+              published_at: "2026-05-06T15:30:00Z",
+              sentiment_score: 0.55,
+              sentiment_label: "bullish",
+              catalyst_type: null,
+              url: null,
+              is_recent: true,
+              age_label: "30m ago"
+            }
+          ],
+          total_found: 1
+        })
+    }) as unknown as typeof fetch;
+
+    wrap(<NewsPanel symbol="AAPL" isOpen onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Strong article")).toBeInTheDocument());
+    const summary = screen.getByText(/articles · bullish tilt/i);
+    expect(summary.textContent).toMatch(/medium impact/i);
+    expect(summary.textContent).not.toMatch(/[+-]0\.\d+/);
   });
 
   test("test_news_panel_groups_by_date", async () => {
@@ -350,6 +384,15 @@ describe("news panel chrome", () => {
     expect(sourceBadgeClassForTests("benzinga")).toContain("orange");
     expect(sourceBadgeClassForTests("sec_edgar")).toContain("sky");
     expect(sourceBadgeClassForTests("polygon")).toContain("slate");
+  });
+
+  test("sentiment impact labels map from score", () => {
+    expect(sentimentLabelForTests(0.55)).toBe("bullish");
+    expect(sentimentImpactLabelForTests(0.55)).toBe("medium impact");
+    expect(sentimentLabelForTests(-0.8)).toBe("bearish");
+    expect(sentimentImpactLabelForTests(-0.8)).toBe("high impact");
+    expect(sentimentLabelForTests(0.1)).toBe("mixed");
+    expect(sentimentImpactLabelForTests(0.1)).toBe("low impact");
   });
 
   test("analyst action tone classification", () => {

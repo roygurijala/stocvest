@@ -148,6 +148,22 @@ class Settings(BaseSettings):
     claude_rate_limit_per_minute: int = Field(20, alias="STOCVEST_CLAUDE_RATE_PER_MIN")
     scanner_cache_bucket_seconds: int = Field(60, alias="STOCVEST_SCANNER_CACHE_BUCKET_SEC")
     scanner_cache_bucket_seconds_intraday: int = Field(300, alias="STOCVEST_SCANNER_CACHE_BUCKET_INTRADAY_SEC")
+    scanner_gap_rank_move_weight: float = Field(0.5, alias="STOCVEST_SCANNER_GAP_RANK_MOVE_WEIGHT")
+    scanner_gap_rank_rvol_weight: float = Field(0.3, alias="STOCVEST_SCANNER_GAP_RANK_RVOL_WEIGHT")
+    scanner_gap_rank_dollar_vol_weight: float = Field(0.2, alias="STOCVEST_SCANNER_GAP_RANK_DOLLAR_VOL_WEIGHT")
+    scanner_gap_rank_move_norm_pct: float = Field(15.0, alias="STOCVEST_SCANNER_GAP_RANK_MOVE_NORM_PCT")
+    scanner_gap_rank_rvol_norm: float = Field(2.0, alias="STOCVEST_SCANNER_GAP_RANK_RVOL_NORM")
+    scanner_gap_rank_dollar_vol_norm: float = Field(250_000_000.0, alias="STOCVEST_SCANNER_GAP_RANK_DOLLAR_VOL_NORM")
+    opportunity_desk_survivor_limit: int = Field(150, alias="STOCVEST_OPPORTUNITY_DESK_SURVIVOR_LIMIT")
+    opportunity_desk_adaptive_survivor_limit: bool = Field(
+        True, alias="STOCVEST_OPPORTUNITY_DESK_ADAPTIVE_SURVIVOR_LIMIT"
+    )
+    opportunity_desk_elevated_survivor_limit: int = Field(
+        220, alias="STOCVEST_OPPORTUNITY_DESK_ELEVATED_SURVIVOR_LIMIT"
+    )
+    opportunity_desk_elevated_breadth_trigger: int = Field(
+        180, alias="STOCVEST_OPPORTUNITY_DESK_ELEVATED_BREADTH_TRIGGER"
+    )
 
     # ── Broker sandbox integration / OAuth ───────────────────────
     sandbox_integration_enabled: bool = Field(

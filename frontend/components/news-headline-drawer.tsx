@@ -38,6 +38,17 @@ function nonEmpty(s: string | null | undefined): string | null {
   return t.length > 0 ? t : null;
 }
 
+function relevanceLabel(score: number): "high" | "medium" | "low" {
+  if (score >= 70) return "high";
+  if (score >= 40) return "medium";
+  return "low";
+}
+
+/** @internal tests */
+export function relevanceLabelForTests(score: number): "high" | "medium" | "low" {
+  return relevanceLabel(score);
+}
+
 /** Badge next to source/time: Bullish / Bearish / Mixed (amber). Uses `sentiment` or infers from `sentiment_score`. */
 function sentimentBadge(article: NewsPayload): { label: string; tone: "bullish" | "bearish" | "mixed" } | null {
   const raw = (article.sentiment ?? "").trim().toLowerCase();
@@ -242,8 +253,20 @@ export function NewsHeadlineDrawer({ open, article, onClose }: NewsHeadlineDrawe
                 </span>
               ) : null}
               {typeof article.relevance_score === "number" ? (
-                <span style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted }}>
-                  Relevance score {article.relevance_score}/100
+                <span
+                  style={{
+                    borderRadius: borderRadius.full,
+                    padding: "4px 10px",
+                    fontSize: typography.scale.xs,
+                    fontWeight: 700,
+                    border: `1px solid ${colors.border}`,
+                    background: colors.surfaceMuted,
+                    color: colors.text
+                  }}
+                  title={`Model relevance ${article.relevance_score}/100`}
+                  data-testid="headline-relevance-chip"
+                >
+                  Relevance: {relevanceLabel(article.relevance_score)}
                 </span>
               ) : null}
             </div>

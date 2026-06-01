@@ -204,3 +204,28 @@ def test_dynamic_gap_candidates_with_stats_eligible_can_exceed_returned_limit():
     )
     assert res.eligible_symbol_count == 15
     assert len(res.candidates) == 5
+
+
+@pytest.mark.unit
+def test_dynamic_gap_candidates_with_stats_ranking_is_liquidity_aware():
+    snaps = [
+        Snapshot(
+            symbol="THIN",
+            prev_close=100.0,
+            last_trade_price=118.0,
+            day_volume=550_000.0,
+            prev_day_volume=2_500_000.0,
+        ),
+        Snapshot(
+            symbol="LIQ",
+            prev_close=100.0,
+            last_trade_price=108.0,
+            day_volume=8_500_000.0,
+            prev_day_volume=2_000_000.0,
+        ),
+    ]
+    res = dynamic_gap_candidates_from_snapshots_with_stats(
+        snaps, limit=2, min_abs_gap_percent=2.0, min_day_volume=500_000.0
+    )
+    assert [c.symbol for c in res.candidates] == ["LIQ", "THIN"]
+    assert res.candidates[0].rank_score > res.candidates[1].rank_score
