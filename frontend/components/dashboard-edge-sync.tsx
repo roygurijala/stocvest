@@ -8,18 +8,10 @@ import {
   useDashboardPayload
 } from "@/lib/hooks/use-dashboard-payload";
 import { useLiveSignals } from "@/lib/live-signals";
-
-const MODE_STORAGE = "stocvest_trading_mode";
-
-function readTradingMode(): "swing" | "day" {
-  if (typeof window === "undefined") return "swing";
-  try {
-    const v = localStorage.getItem(MODE_STORAGE);
-    return v === "day" ? "day" : "swing";
-  } catch {
-    return "swing";
-  }
-}
+import {
+  resolveTradingModeForSurfaces,
+  TRADING_MODE_STORAGE_KEY
+} from "@/lib/trading-mode-preference";
 
 /**
  * Best-effort Edge cache sync: polls /api/dashboard, subscribes to live hints for day mode.
@@ -41,9 +33,11 @@ export function DashboardEdgeSync() {
   const { mutate } = useSWRConfig();
 
   useEffect(() => {
-    setMode(readTradingMode());
+    setMode(resolveTradingModeForSurfaces(true, "swing"));
     const onStorage = (e: StorageEvent) => {
-      if (e.key === MODE_STORAGE) setMode(readTradingMode());
+      if (e.key === TRADING_MODE_STORAGE_KEY) {
+        setMode(resolveTradingModeForSurfaces(true, "swing"));
+      }
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);

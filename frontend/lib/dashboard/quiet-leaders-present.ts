@@ -106,6 +106,8 @@ export function buildQuietLeaderCardModel(
 
 export { hotInMarketSignalsHref as quietLeaderSignalsHref };
 
+export const QUIET_LEADERS_SCANNER_LINK_LABEL = "Quiet leaders on Scanner →";
+
 export function quietLeadersScannerHref(mode: DeskTodayMode = "swing"): string {
   return `/dashboard/scanner?mode=${mode}#scanner-quiet-leaders`;
 }

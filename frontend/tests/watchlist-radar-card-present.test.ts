@@ -42,8 +42,8 @@ function baseRow(overrides: Partial<WatchlistRadarRow> = {}): WatchlistRadarRow 
     directionChip: null,
     statusBanner: null,
     conviction: null,
-    attentionLine: "Strong setup — desk gated (bearish regime)",
-    attentionReason: "Strong setup — desk gated (bearish regime)",
+    attentionLine: "Strong setup — bearish market",
+    attentionReason: "Strong setup — bearish market",
     sessionMovePct: 2.4,
     ...overrides
   };
@@ -57,11 +57,11 @@ describe("watchlist-radar-card-present", () => {
   test("check_now tier gets bullish badge", () => {
     const model = buildWatchlistRadarCardModel(baseRow(), colors);
     expect(model.badgeLabel).toBe("Check now");
-    expect(model.attentionLine).toContain("desk gated");
+    expect(model.attentionLine).toContain("bearish market");
   });
 
-  test("disclaimer explains strong vs desk gated", () => {
-    expect(WATCHLIST_RADAR_DISCLAIMER.toLowerCase()).toContain("desk gated");
+  test("disclaimer explains strong vs market hold", () => {
+    expect(WATCHLIST_RADAR_DISCLAIMER.toLowerCase()).toContain("held lines");
   });
 
   test("resolveWatchlistCardTone uses session move when quote missing", () => {

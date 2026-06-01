@@ -16,7 +16,7 @@ export const WATCHLIST_RADAR_SUBTITLE =
   "Progress on symbols you track — near actionable beats session hype.";
 
 export const WATCHLIST_RADAR_DISCLAIMER =
-  "Not trade recommendations. Strong means layer alignment on your list; desk gated means the market desk is holding execution. " +
+  "Not trade recommendations. Strong means layer alignment on your list; held lines mean the broader market is quiet or bearish, so timing may wait even when structure looks good. " +
   "Open Watchlists to manage tiers and refresh evaluations.";
 
 const TIER_BADGE: Record<WatchlistAttentionTier, string> = {

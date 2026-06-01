@@ -339,8 +339,14 @@ export function hotInMarketAwaitingMessage(input: {
   return "Session movers appear here once data is available.";
 }
 
-export function hotInMarketEmptyMessage(deskCacheMiss: boolean): string {
+export function hotInMarketEmptyMessage(
+  deskCacheMiss: boolean,
+  opts?: { loadInHeader?: boolean }
+): string {
   if (deskCacheMiss) {
+    if (opts?.loadInHeader) {
+      return "Nothing cached for this desk yet. Use Load movers above (a few minutes between runs).";
+    }
     return "Nothing cached for this desk yet. Tap Load movers for a quick scan (a few minutes between runs).";
   }
   return "No session movers this load — the tape may be quiet or filters cleared the list.";

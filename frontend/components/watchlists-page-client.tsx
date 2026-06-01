@@ -1714,7 +1714,8 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
 
             <p className="m-0 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
               Your watchlist is a prioritized queue — click a card for Signals. Strong means layer alignment on your
-              list; desk gated means the market desk is holding execution (regime or quiet desk). Use Refresh for the
+              list; held lines mean the market is quiet or bearish, so timing may wait even when structure looks good.
+              Use Refresh for the
               active desk
               {dualDeskMaturation ? "; Compare desks opens swing vs day for that symbol" : ""}.
               <Link href="/dashboard/signals" prefetch={false} className="ml-1 font-semibold" style={{ color: colors.accent }}>

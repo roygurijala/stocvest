@@ -7,13 +7,17 @@ import type { DeskTodayData } from "@/lib/api/desk-today";
 import { DashboardOpportunityListSection } from "@/components/dashboard/dashboard-opportunity-list-section";
 import { BUILDING_STRUCTURE_PREVIEW_COUNT } from "@/lib/dashboard/opportunity-row-present";
 import {
+  buildingStructureAwaitingDeskMessage,
   buildingStructureBackfillNote,
-  buildingStructureEmptyMessage,
+  buildingStructureDeskChecked,
+  buildingStructureLoadedEmptyMessage,
+  buildingStructureLoadingMessage,
   buildBuildingStructureRowModels,
   resolveBuildingStructureRows
 } from "@/lib/dashboard/building-structure-present";
 import { buildingStructureListHeadline } from "@/lib/dashboard/opportunity-row-present";
 import {
+  QUIET_LEADERS_SCANNER_LINK_LABEL,
   QUIET_LEADERS_SUBTITLE,
   QUIET_LEADERS_TITLE,
   quietLeadersScannerHref
@@ -32,6 +36,7 @@ type Props = {
   sessionActivitySymbols?: string[];
   marketStatus?: MarketStatusPayload | null;
   isLoading?: boolean;
+  deskSource?: string | null;
   variant?: "standalone" | "pipeline";
 };
 
@@ -42,6 +47,7 @@ export function DashboardQuietLeadersFeed({
   sessionActivitySymbols = [],
   marketStatus = null,
   isLoading = false,
+  deskSource = null,
   variant = "standalone"
 }: Props) {
   const { colors } = useTheme();
@@ -71,6 +77,7 @@ export function DashboardQuietLeadersFeed({
 
   if (mode !== "swing") return null;
 
+  const deskChecked = buildingStructureDeskChecked(isLoading, deskSource, deskData);
   const embedded = variant === "pipeline";
   const shellStyle = embedded
     ? { padding: 0, border: "none", background: "transparent", borderRadius: 0 }
@@ -136,8 +143,10 @@ export function DashboardQuietLeadersFeed({
           style={{ fontSize: typography.scale.sm, color: colors.textMuted }}
         >
           {isLoading
-            ? "Scanning for low-velocity leaders…"
-            : buildingStructureEmptyMessage(sessionActivitySymbols.length)}
+            ? buildingStructureLoadingMessage()
+            : deskChecked
+              ? buildingStructureLoadedEmptyMessage(sessionActivitySymbols.length)
+              : buildingStructureAwaitingDeskMessage()}
         </p>
       )}
 
@@ -149,7 +158,7 @@ export function DashboardQuietLeadersFeed({
           data-testid="dashboard-quiet-leaders-scanner-link"
           style={{ fontSize: typography.scale.sm, color: colors.accent, fontWeight: 600 }}
         >
-          View all on Scanner →
+          {QUIET_LEADERS_SCANNER_LINK_LABEL}
         </Link>
       </p>
     </section>

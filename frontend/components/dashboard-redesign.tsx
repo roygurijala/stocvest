@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { DashboardDeskModePills } from "@/components/dashboard/dashboard-desk-mode-pills";
 import { DashboardEdgeSync } from "@/components/dashboard-edge-sync";
@@ -55,6 +55,11 @@ import type { ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
+import {
+  resolveTradingModeForSurfaces,
+  TRADING_MODE_STORAGE_KEY,
+  writeTradingModePreference
+} from "@/lib/trading-mode-preference";
 import {
   dayDeskPostureKind,
   type DayDeskPostureKind,
@@ -254,9 +259,27 @@ function DashboardRedesignBody({
   const { data: macroPulse } = useMacroContext();
   const { data: edgeDashboard } = useDashboardPayload("swing");
   const { data: dayDashboard } = useDashboardPayload("day");
-  const [deskMode, setDeskMode] = useState<DashboardDeskMode>(
-    dayTradingSurfaces ? "day" : "swing"
+  const [deskMode, setDeskModeState] = useState<DashboardDeskMode>(() =>
+    resolveTradingModeForSurfaces(dayTradingSurfaces, "swing")
   );
+
+  useEffect(() => {
+    setDeskModeState(resolveTradingModeForSurfaces(dayTradingSurfaces, "swing"));
+  }, [dayTradingSurfaces]);
+
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== TRADING_MODE_STORAGE_KEY) return;
+      setDeskModeState(resolveTradingModeForSurfaces(dayTradingSurfaces, "swing"));
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [dayTradingSurfaces]);
+
+  const setDeskMode = useCallback((mode: DashboardDeskMode) => {
+    setDeskModeState(mode);
+    writeTradingModePreference(mode);
+  }, []);
 
   const snapshotsBySymbol = useMemo(
     () => new Map(marketOverview.snapshots.map((s) => [(s.symbol || "").toUpperCase(), s])),
@@ -654,8 +677,8 @@ function DashboardRedesignBody({
             lineHeight: 1.5
           }}
         >
-          <strong style={{ color: colors.text, fontWeight: 600 }}>Desk gated.</strong> No actionable setups
-          on the {activeDeskMode} desk right now — normal when session or structure gates are closed.
+          <strong style={{ color: colors.text, fontWeight: 600 }}>Market on hold.</strong> No actionable setups
+          on the {activeDeskMode} desk right now — normal when the session is quiet or structure gates are closed.
         </p>
       ) : null}
 

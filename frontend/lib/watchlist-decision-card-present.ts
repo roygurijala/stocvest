@@ -22,6 +22,7 @@ import {
 } from "@/lib/trade-conviction-tier";
 import {
   isWatchlistRadarDeskGated,
+  watchlistMarketHoldShortLabel,
   resolveWatchlistRadarAttentionLine,
   WATCHLIST_DESK_OPEN,
   type WatchlistRadarDeskContext
@@ -372,13 +373,17 @@ export function buildWatchlistTierPreview(
   if (tier === "check_now") {
     const parts: string[] = [];
     if (deskGatedStrong > 0) {
+      const hold = watchlistMarketHoldShortLabel(desk);
       parts.push(
-        deskGatedStrong === 1 ? "1 desk gated" : `${deskGatedStrong} desk gated`
+        deskGatedStrong === 1 ? `1 held — ${hold}` : `${deskGatedStrong} held — ${hold}`
       );
     }
     if (actionable > 0) parts.push(`${actionable} actionable`);
     if (deskGatedNear > 0) {
-      parts.push(deskGatedNear === 1 ? "1 near ready, desk gated" : `${deskGatedNear} near ready, desk gated`);
+      const hold = watchlistMarketHoldShortLabel(desk);
+      parts.push(
+        deskGatedNear === 1 ? `1 near ready, ${hold}` : `${deskGatedNear} near ready, ${hold}`
+      );
     }
     if (nearReady > 0) parts.push(`${nearReady} near actionable`);
     return parts.length > 0 ? parts.join(", ") : null;

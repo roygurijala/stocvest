@@ -6,6 +6,7 @@ import { beforeAll, describe, expect, test, vi } from "vitest";
 
 import { DashboardRedesign } from "@/components/dashboard-redesign";
 import { ThemeProvider } from "@/lib/theme-provider";
+import { TRADING_MODE_STORAGE_KEY } from "@/lib/trading-mode-preference";
 import type { MarketOverview } from "@/lib/api/market";
 import type { ScannerOverview } from "@/lib/api/scanner";
 
@@ -52,7 +53,26 @@ function wrap(ui: ReactElement) {
 }
 
 describe("Dashboard scanner partition (focus layout)", () => {
+  test("defaults to swing desk when no saved preference", () => {
+    wrap(
+      <DashboardRedesign
+        marketOverview={baseMarket}
+        scannerOverview={baseScanner}
+        earningsEvents={[]}
+        earningsRecent={[]}
+        weeklyIndexRows={[
+          { symbol: "SPY", label: "Large cap", pct5d: 1, lastPrice: 500 },
+          { symbol: "QQQ", label: "Tech / growth", pct5d: 1, lastPrice: 400 },
+          { symbol: "IWM", label: "Small cap", pct5d: 1, lastPrice: 200 }
+        ]}
+        sectorRotation={[]}
+      />
+    );
+    expect(screen.getByTestId("dashboard-desk-mode-swing")).toHaveAttribute("data-active", "true");
+  });
+
   test("intraday_row_surfaces_as_day_active_while_swing_stays_suppressed", () => {
+    localStorage.setItem(TRADING_MODE_STORAGE_KEY, "day");
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
@@ -86,6 +106,7 @@ describe("Dashboard scanner partition (focus layout)", () => {
   });
 
   test("swing_daily_rows_make_swing_desk_active_without_ticker_cards_on_dashboard", () => {
+    localStorage.setItem(TRADING_MODE_STORAGE_KEY, "swing");
     wrap(
       <DashboardRedesign
         marketOverview={baseMarket}
@@ -114,6 +135,7 @@ describe("Dashboard scanner partition (focus layout)", () => {
       />
     );
     fireEvent.click(screen.getByTestId("dashboard-desk-mode-swing"));
+    expect(localStorage.getItem(TRADING_MODE_STORAGE_KEY)).toBe("swing");
     expect(screen.getByTestId("dashboard-market-pulse-hero").textContent || "").toMatch(/ACTIONABLE/i);
     expect(screen.getByTestId("dashboard-desk-mode-swing")).toHaveAttribute("data-active", "true");
     expect(screen.queryByTestId("swing-desk-panel")).toBeNull();
