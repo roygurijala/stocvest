@@ -39,42 +39,66 @@ export type StructuralStopAnchorInput = {
   last: number | null;
   swingLow?: number | null;
   swingHigh?: number | null;
+  /** Support edge of the entry zone (when distinct from session low). */
+  zoneLo?: number | null;
+  /** Resistance edge of the entry zone (when distinct from session high). */
+  zoneHi?: number | null;
 };
+
+const SUPPORT_STOP_BUFFER = 0.995;
+const RESISTANCE_STOP_BUFFER = 1.005;
+
+function collectBullishSupportBase(input: StructuralStopAnchorInput): number | null {
+  const lows: number[] = [];
+  if (input.sessionLow != null && input.sessionLow > 0) lows.push(input.sessionLow);
+  if (input.swingLow != null && input.swingLow > 0) lows.push(input.swingLow);
+  if (input.zoneLo != null && input.zoneLo > 0) lows.push(input.zoneLo);
+  if (lows.length === 0) return null;
+  return Math.min(...lows);
+}
+
+function collectBearishResistanceBase(input: StructuralStopAnchorInput): number | null {
+  const highs: number[] = [];
+  if (input.sessionHigh != null && input.sessionHigh > 0) highs.push(input.sessionHigh);
+  if (input.swingHigh != null && input.swingHigh > 0) highs.push(input.swingHigh);
+  if (input.zoneHi != null && input.zoneHi > 0) highs.push(input.zoneHi);
+  if (highs.length === 0) return null;
+  return Math.max(...highs);
+}
 
 /**
  * Session-anchored stop before ATR merge (matches composite long/short geometry cascade).
+ *
+ * Long stops sit below the lowest support (session / swing / zone), not at min(low, VWAP)
+ * when VWAP is mid-range — that pattern clusters stops where liquidity hunts.
  */
 export function resolveStructuralStopAnchor(input: StructuralStopAnchorInput): number | null {
-  const sessionLo =
-    input.sessionLow != null && input.sessionLow > 0
-      ? input.swingLow != null && input.swingLow > 0
-        ? Math.min(input.sessionLow, input.swingLow)
-        : input.sessionLow
-      : input.swingLow != null && input.swingLow > 0
-        ? input.swingLow
-        : null;
-  const sessionHi =
-    input.sessionHigh != null && input.sessionHigh > 0
-      ? input.swingHigh != null && input.swingHigh > 0
-        ? Math.max(input.sessionHigh, input.swingHigh)
-        : input.sessionHigh
-      : input.swingHigh != null && input.swingHigh > 0
-        ? input.swingHigh
-        : null;
   const { vwap, prevClose, last } = input;
 
   if (input.direction === "bullish") {
-    if (sessionLo != null && vwap != null && vwap > 0) return round4(Math.min(sessionLo, vwap) * 0.998);
-    if (sessionLo != null) return round4(sessionLo * 0.995);
-    if (vwap != null && vwap > 0) return round4(vwap * 0.995);
+    const supportBase = collectBullishSupportBase(input);
+    if (supportBase != null) {
+      let stop = round4(supportBase * SUPPORT_STOP_BUFFER);
+      if (vwap != null && vwap > 0 && vwap <= supportBase) {
+        stop = round4(Math.min(stop, vwap * SUPPORT_STOP_BUFFER));
+      }
+      return stop;
+    }
+    if (vwap != null && vwap > 0) return round4(vwap * SUPPORT_STOP_BUFFER);
     if (prevClose != null && prevClose > 0) return round4(prevClose * 0.99);
     if (last != null && last > 0) return round4(last * 0.98);
     return null;
   }
 
-  if (sessionHi != null && vwap != null && vwap > 0) return round4(Math.max(sessionHi, vwap) * 1.002);
-  if (sessionHi != null) return round4(sessionHi * 1.005);
-  if (vwap != null && vwap > 0) return round4(vwap * 1.005);
+  const resistanceBase = collectBearishResistanceBase(input);
+  if (resistanceBase != null) {
+    let stop = round4(resistanceBase * RESISTANCE_STOP_BUFFER);
+    if (vwap != null && vwap > 0 && vwap >= resistanceBase) {
+      stop = round4(Math.max(stop, vwap * RESISTANCE_STOP_BUFFER));
+    }
+    return stop;
+  }
+  if (vwap != null && vwap > 0) return round4(vwap * RESISTANCE_STOP_BUFFER);
   if (prevClose != null && prevClose > 0) return round4(prevClose * 1.01);
   if (last != null && last > 0) return round4(last * 1.02);
   return null;
@@ -144,40 +168,38 @@ export function formatMergedStopProvenance(
 }
 
 export function longStopProvenanceLabel(input: StructuralStopAnchorInput): string {
-  const sessionLo =
-    input.sessionLow != null && input.sessionLow > 0
-      ? input.swingLow != null && input.swingLow > 0
-        ? Math.min(input.sessionLow, input.swingLow)
-        : input.sessionLow
-      : input.swingLow != null && input.swingLow > 0
-        ? input.swingLow
-        : null;
+  const supportBase = collectBullishSupportBase(input);
   const { vwap, prevClose, last } = input;
-  if (sessionLo != null && vwap != null && vwap > 0) {
-    return "Below min(session low, VWAP) — structural buffer";
+  if (supportBase != null) {
+    const usesSwing =
+      (input.swingLow != null && input.swingLow > 0 && input.swingLow <= supportBase + 1e-6) ||
+      (input.zoneLo != null && input.zoneLo > 0 && input.zoneLo <= supportBase + 1e-6);
+    return usesSwing
+      ? "Below swing/support zone — structural buffer"
+      : "Below session low — structural buffer";
   }
-  if (sessionLo != null) return "Below session low — structural buffer";
-  if (vwap != null && vwap > 0) return "Below VWAP — structural buffer";
+  if (vwap != null && vwap > 0) {
+    return "Below VWAP — structural buffer";
+  }
   if (prevClose != null && prevClose > 0) return "Below prior close (99% rule) — fallback";
   if (last != null && last > 0) return "Below last price (98% rule) — fallback";
   return "Structural stop — source unavailable";
 }
 
 export function shortStopProvenanceLabel(input: StructuralStopAnchorInput): string {
-  const sessionHi =
-    input.sessionHigh != null && input.sessionHigh > 0
-      ? input.swingHigh != null && input.swingHigh > 0
-        ? Math.max(input.sessionHigh, input.swingHigh)
-        : input.sessionHigh
-      : input.swingHigh != null && input.swingHigh > 0
-        ? input.swingHigh
-        : null;
+  const resistanceBase = collectBearishResistanceBase(input);
   const { vwap, prevClose, last } = input;
-  if (sessionHi != null && vwap != null && vwap > 0) {
-    return "Above max(session high, VWAP) — structural buffer";
+  if (resistanceBase != null) {
+    const usesSwing =
+      (input.swingHigh != null && input.swingHigh > 0 && input.swingHigh >= resistanceBase - 1e-6) ||
+      (input.zoneHi != null && input.zoneHi > 0 && input.zoneHi >= resistanceBase - 1e-6);
+    return usesSwing
+      ? "Above swing/resistance zone — structural buffer"
+      : "Above session high — structural buffer";
   }
-  if (sessionHi != null) return "Above session high — structural buffer";
-  if (vwap != null && vwap > 0) return "Above VWAP — structural buffer";
+  if (vwap != null && vwap > 0) {
+    return "Above VWAP — structural buffer";
+  }
   if (prevClose != null && prevClose > 0) return "Above prior close (101% rule) — fallback";
   if (last != null && last > 0) return "Above last price (102% rule) — fallback";
   return "Structural stop — source unavailable";

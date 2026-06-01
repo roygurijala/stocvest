@@ -157,7 +157,9 @@ function resolveStop(
       prevClose: source.prevClose ?? null,
       last: source.last,
       swingLow: source.swingLow ?? null,
-      swingHigh: source.swingHigh ?? null
+      swingHigh: source.swingHigh ?? null,
+      zoneLo: source.entryZoneLow ?? null,
+      zoneHi: source.entryZoneHigh ?? null
     });
     const merged = resolveMergedReferenceStop({
       direction,

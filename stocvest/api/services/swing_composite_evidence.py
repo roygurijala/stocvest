@@ -300,6 +300,8 @@ def _long_side_geometry(
     trading_mode: str = "swing",
     swing_lo: float | None = None,
     swing_hi: float | None = None,
+    zone_lo: float | None = None,
+    zone_hi: float | None = None,
 ) -> tuple[float | None, float | None, float | None, bool]:
     """
     Bullish reference levels anchored to session structure (not fixed % off day low).
@@ -316,6 +318,8 @@ def _long_side_geometry(
         last=last,
         swing_low=swing_lo,
         swing_high=swing_hi,
+        zone_lo=zone_lo,
+        zone_hi=zone_hi,
     )
     entry_for_stop = entry if entry is not None and entry > 0 else (last if last is not None and last > 0 else None)
     reference_stop = structural
@@ -537,6 +541,8 @@ def build_swing_composite_evidence_fields(
             trading_mode=trading_mode,
             swing_lo=swing_lo,
             swing_hi=swing_hi,
+            zone_lo=zone_lo,
+            zone_hi=zone_hi,
         )
         reference_stop_provenance = format_merged_stop_provenance(
             _long_stop_provenance_label(

@@ -1730,10 +1730,35 @@ export function referenceLevelsFromSessionStructure(
     if (merged.stop != null) reference_stop_level = merged.stop;
   }
 
+  let reference_target_2 = g.target2;
+  if (
+    reference_stop_level != null &&
+    g.target1 != null &&
+    entry != null &&
+    useLong &&
+    entry > reference_stop_level
+  ) {
+    const t2R = roundPrice4(entry + 2.0 * (entry - reference_stop_level));
+    if (t2R > g.target1 + 1e-6) {
+      reference_target_2 = t2R;
+    }
+  } else if (
+    reference_stop_level != null &&
+    g.target1 != null &&
+    entry != null &&
+    !useLong &&
+    reference_stop_level > entry
+  ) {
+    const t2R = roundPrice4(entry - 2.0 * (reference_stop_level - entry));
+    if (t2R < g.target1 - 1e-6) {
+      reference_target_2 = t2R;
+    }
+  }
+
   return {
     reference_stop_level,
     reference_target_1: g.target1,
-    reference_target_2: g.target2
+    reference_target_2
   };
 }
 

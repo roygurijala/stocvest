@@ -176,7 +176,7 @@ describe("session reference levels and fallback R/R", () => {
       prevClose: 99
     });
     expect(lv.reference_target_1).toBe(102);
-    expect(lv.reference_stop_level).toBeCloseTo(Math.round(Math.min(98, 99.5) * 0.998 * 10000) / 10000, 4);
+    expect(lv.reference_stop_level).toBeCloseTo(98 * 0.995, 4);
   });
 
   test("referenceLevelsFromSessionStructure widens stop to ATR floor when structural is tight", () => {
@@ -208,7 +208,7 @@ describe("session reference levels and fallback R/R", () => {
     );
     const insight = deriveEvidenceInsightFallback(ev);
     expect(insight.reference_target_1).toBe(102);
-    const stop = Math.min(98, 99.5) * 0.998;
+    const stop = 98 * 0.995;
     const t2 = 100 + 2 * (100 - stop);
     const rrT1 = (102 - 100) / (100 - stop);
     const rrT2 = (t2 - 100) / (100 - stop);

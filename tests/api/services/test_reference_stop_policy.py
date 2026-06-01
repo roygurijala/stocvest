@@ -16,7 +16,22 @@ def test_structural_long_anchor() -> None:
         prev_close=99.0,
         last=100.0,
     )
-    assert stop == round(min(98.0, 99.5) * 0.998, 4)
+    assert stop == round(98.0 * 0.995, 4)
+
+
+def test_structural_long_uses_swing_support_not_vwap_cluster() -> None:
+    stop = resolve_structural_stop_anchor(
+        direction="bullish",
+        session_low=424.0,
+        session_high=445.0,
+        vwap=426.0,
+        prev_close=425.0,
+        last=427.0,
+        swing_low=420.0,
+        zone_lo=420.0,
+    )
+    assert stop == round(420.0 * 0.995, 4)
+    assert stop < 422.0
 
 
 def test_merged_long_widens_with_atr() -> None:

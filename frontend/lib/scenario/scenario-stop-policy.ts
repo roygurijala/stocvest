@@ -68,7 +68,7 @@ export function suggestStopForEntry(input: StopSuggestionInput): number | null {
 
   if (direction === "bullish") {
     const underZone =
-      zoneLo != null && zoneLo > 0 && zoneLo < entry ? round4(zoneLo * 0.998) : null;
+      zoneLo != null && zoneLo > 0 && zoneLo < entry ? round4(zoneLo * 0.995) : null;
     const structural =
       structuralStop != null && structuralStop > 0 && structuralStop < entry
         ? round4(structuralStop)
