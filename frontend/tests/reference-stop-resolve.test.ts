@@ -6,7 +6,7 @@ import {
 } from "@/lib/scenario/reference-stop-resolve";
 
 describe("reference-stop-resolve", () => {
-  test("structural long anchor matches session low + VWAP buffer", () => {
+  test("structural long anchor sits below support, not at VWAP cluster", () => {
     const structural = resolveStructuralStopAnchor({
       direction: "bullish",
       sessionLow: 98,
@@ -15,7 +15,23 @@ describe("reference-stop-resolve", () => {
       prevClose: 99,
       last: 100
     });
-    expect(structural).toBeCloseTo(Math.round(98 * 0.998 * 10000) / 10000, 4);
+    expect(structural).toBeCloseTo(98 * 0.995, 4);
+  });
+
+  test("TSLA-style: stop below swing support, not at session/VWAP liquidity", () => {
+    const structural = resolveStructuralStopAnchor({
+      direction: "bullish",
+      sessionLow: 424,
+      sessionHigh: 445,
+      vwap: 426,
+      prevClose: 425,
+      last: 427,
+      swingLow: 420,
+      zoneLo: 420
+    });
+    expect(structural).toBeCloseTo(420 * 0.995, 4);
+    expect(structural!).toBeLessThan(422);
+    expect(structural!).not.toBeCloseTo(423, 0);
   });
 
   test("without ATR, merged stop equals structural", () => {

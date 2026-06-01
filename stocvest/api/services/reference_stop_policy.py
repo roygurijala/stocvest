@@ -41,42 +41,49 @@ def resolve_structural_stop_anchor(
     last: float | None,
     swing_low: float | None = None,
     swing_high: float | None = None,
+    zone_lo: float | None = None,
+    zone_hi: float | None = None,
 ) -> float | None:
-    session_lo: float | None = None
-    if session_low is not None and session_low > 0:
-        session_lo = float(session_low)
-        if swing_low is not None and swing_low > 0:
-            session_lo = min(session_lo, float(swing_low))
-    elif swing_low is not None and swing_low > 0:
-        session_lo = float(swing_low)
-
-    session_hi: float | None = None
-    if session_high is not None and session_high > 0:
-        session_hi = float(session_high)
-        if swing_high is not None and swing_high > 0:
-            session_hi = max(session_hi, float(swing_high))
-    elif swing_high is not None and swing_high > 0:
-        session_hi = float(swing_high)
+    support_buffer = 0.995
+    resistance_buffer = 1.005
 
     if direction == "bullish":
-        if session_lo is not None and vwap is not None and vwap > 0:
-            return _round4(min(session_lo, float(vwap)) * 0.998)
-        if session_lo is not None:
-            return _round4(session_lo * 0.995)
+        lows: list[float] = []
+        if session_low is not None and session_low > 0:
+            lows.append(float(session_low))
+        if swing_low is not None and swing_low > 0:
+            lows.append(float(swing_low))
+        if zone_lo is not None and zone_lo > 0:
+            lows.append(float(zone_lo))
+        if lows:
+            support_base = min(lows)
+            stop = _round4(support_base * support_buffer)
+            if vwap is not None and vwap > 0 and vwap <= support_base:
+                stop = _round4(min(stop, float(vwap) * support_buffer))
+            return stop
         if vwap is not None and vwap > 0:
-            return _round4(float(vwap) * 0.995)
+            return _round4(float(vwap) * support_buffer)
         if prev_close is not None and prev_close > 0:
             return _round4(float(prev_close) * 0.99)
         if last is not None and last > 0:
             return _round4(float(last) * 0.98)
         return None
 
-    if session_hi is not None and vwap is not None and vwap > 0:
-        return _round4(max(session_hi, float(vwap)) * 1.002)
-    if session_hi is not None:
-        return _round4(session_hi * 1.005)
+    highs: list[float] = []
+    if session_high is not None and session_high > 0:
+        highs.append(float(session_high))
+    if swing_high is not None and swing_high > 0:
+        highs.append(float(swing_high))
+    if zone_hi is not None and zone_hi > 0:
+        highs.append(float(zone_hi))
+    if highs:
+        resistance_base = max(highs)
+        stop = _round4(resistance_base * resistance_buffer)
+        if vwap is not None and vwap > 0 and vwap >= resistance_base:
+            stop = _round4(max(stop, float(vwap) * resistance_buffer))
+        return stop
     if vwap is not None and vwap > 0:
-        return _round4(float(vwap) * 1.005)
+        return _round4(float(vwap) * resistance_buffer)
     if prev_close is not None and prev_close > 0:
         return _round4(float(prev_close) * 1.01)
     if last is not None and last > 0:
