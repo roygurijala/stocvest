@@ -209,7 +209,7 @@ describe("signals-page-present", () => {
       isComplete: true
     });
     expect(d.state).toBe("monitor");
-    expect(executionHeadline(d.state)).toMatch(/Setup still forming/);
+    expect(executionHeadline(d.state)).toMatch(/Skip for now/);
     expect(d.line).toMatch(/layer agreement|risk\/reward/);
   });
 

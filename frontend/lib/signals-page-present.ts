@@ -789,7 +789,7 @@ export function resolveExecutionDisplay(
     return {
       label: "Not actionable yet",
       subline: null,
-      headline: "→ Setup still forming — waiting on more agreement or better risk/reward",
+      headline: "→ Skip for now — some checks support this setup, but key blockers still remain",
       tone: "muted",
       gatesCleared: false
     };
@@ -921,7 +921,7 @@ export function executionDetailToggleLabel(
 ): string | null {
   if (state === "actionable") return null;
   if (executionHint) return executionHint;
-  if (state === "monitor" || state === "blocked") return "See what's holding this back";
+  if (state === "monitor" || state === "blocked") return "See what is working, blocking, and what must change";
   return null;
 }
 

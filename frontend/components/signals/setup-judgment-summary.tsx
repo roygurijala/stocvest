@@ -93,14 +93,14 @@ export function SetupJudgmentSummary({ judgment, executionLabel, executionTone }
 
       {primaryBlocker ? (
         <p className="m-0 text-sm leading-snug" style={{ color: colors.text }} data-testid="setup-judgment-blocker">
-          <span style={{ color: colors.textMuted, fontWeight: 600 }}>Blocking: </span>
+          <span style={{ color: colors.textMuted, fontWeight: 600 }}>What is blocking this trade: </span>
           {primaryBlocker}
         </p>
       ) : null}
 
       {watchFor ? (
         <p className="m-0 text-sm leading-snug" style={{ color: colors.textMuted }} data-testid="setup-judgment-watch-for">
-          <span style={{ fontWeight: 600, color: colors.accent }}>Watch for: </span>
+          <span style={{ fontWeight: 600, color: colors.accent }}>What must change: </span>
           {watchFor}
         </p>
       ) : null}

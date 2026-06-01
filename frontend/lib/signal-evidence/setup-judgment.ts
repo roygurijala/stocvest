@@ -247,15 +247,15 @@ export function deriveSetupJudgment(input: {
   const band = tradeabilityBand(tScore, flags);
   const primaryBlocker =
     flags.find((f) => f.severity === "block")?.label ??
-    (missing.length > 0 ? `Missing alignment: ${missing.slice(0, 3).join(", ")}` : null) ??
+    (missing.length > 0 ? `Key checks still disagree: ${missing.slice(0, 3).join(", ")}` : null) ??
     flags.find((f) => f.severity === "warn")?.label ??
     null;
   const watchFor =
     input.unlockWatchFor?.trim() ||
     (flags.find((f) => f.severity === "block")
-      ? `Watch for pullback — ${flags.find((f) => f.severity === "block")!.label.toLowerCase()}`
+      ? `What must change next: ${flags.find((f) => f.severity === "block")!.label.toLowerCase()}`
       : missing.length > 0
-        ? `Watch ${missing[0]} for alignment with setup bias`
+        ? `What must change next: ${missing[0]} needs to align with setup bias`
         : null);
   const qualityBase = Math.round((100 * alignment.aligned) / Math.max(1, alignment.total));
   const ar =
