@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DashboardOpportunityListSection } from "@/components/dashboard/dashboard-opportunity-list-section";
 import Link from "next/link";
 import type { GapIntelligenceItem } from "@/lib/api/scanner";
@@ -81,6 +81,7 @@ export function DashboardDiscoveryFeed({
   variant = "standalone"
 }: Props) {
   const { colors } = useTheme();
+  const [showWhyMissing, setShowWhyMissing] = useState(false);
   const sessionMode = resolveSessionActivityUiMode(marketStatus);
   const sessionClosed = sessionMode === "closed";
   const sessionExtended = sessionMode === "extended";
@@ -325,14 +326,35 @@ export function DashboardDiscoveryFeed({
       <DashboardMissedTodayStrip mode={mode} deskData={effectiveDeskData} gapFallback={gapFallback} />
 
       <div className="mt-3">
-        <ScannerWhyMissingPanel
-          rejectedSamples={effectiveDeskData?.rejected_samples ?? []}
-          rejectionReasonCounts={effectiveDeskData?.rejection_reason_counts}
-          suggestedSymbols={leaders.map((l) => l.symbol)}
-          showSymbolSuggestions={false}
-          deskModeForLookup={mode}
-        />
+        <button
+          type="button"
+          onClick={() => setShowWhyMissing((v) => !v)}
+          data-testid="dashboard-why-missing-toggle"
+          style={{
+            border: `1px solid ${colors.border}`,
+            borderRadius: borderRadius.md,
+            background: colors.surfaceMuted,
+            color: colors.text,
+            padding: `${spacing[1]} ${spacing[2]}`,
+            fontSize: typography.scale.xs,
+            fontWeight: 600,
+            cursor: "pointer"
+          }}
+        >
+          {showWhyMissing ? "Hide why missing" : "Why missing lookup"}
+        </button>
       </div>
+      {showWhyMissing ? (
+        <div className="mt-3">
+          <ScannerWhyMissingPanel
+            rejectedSamples={effectiveDeskData?.rejected_samples ?? []}
+            rejectionReasonCounts={effectiveDeskData?.rejection_reason_counts}
+            suggestedSymbols={leaders.map((l) => l.symbol)}
+            showSymbolSuggestions={false}
+            deskModeForLookup={mode}
+          />
+        </div>
+      ) : null}
 
       {footnote ? (
         <p className="m-0 mt-3" style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>

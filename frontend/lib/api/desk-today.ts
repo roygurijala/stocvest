@@ -87,12 +87,33 @@ export type DeskTodayResponse = {
   disclaimer?: string;
 };
 
+const RETRYABLE_STATUSES = new Set([502, 503, 504]);
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function fetchDeskToday(mode: DeskTodayMode): Promise<DeskTodayResponse> {
-  const res = await fetch(`/api/stocvest/desk/today?mode=${encodeURIComponent(mode)}`, {
-    cache: "no-store"
-  });
+  let response: Response | null = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    response = await fetch(`/api/stocvest/desk/today?mode=${encodeURIComponent(mode)}`, {
+      cache: "no-store"
+    });
+    if (response.ok || !RETRYABLE_STATUSES.has(response.status) || attempt === 2) break;
+    await sleep(500 * (attempt + 1));
+  }
+  const res = response;
+  if (!res) throw new Error("desk/today failed: no response");
   const body = (await res.json().catch(() => ({}))) as DeskTodayResponse;
   if (!res.ok) {
+    if (res.status >= 500) {
+      return {
+        mode,
+        source: "cache_miss",
+        data: null,
+        envelope: null
+      };
+    }
     throw new Error(`desk/today failed: ${res.status}`);
   }
   return body;
@@ -104,12 +125,20 @@ export async function fetchDeskWhyMissing(
 ): Promise<DeskWhyMissingDiagnostic | null> {
   const sym = symbol.trim().toUpperCase();
   if (!sym) return null;
-  const res = await fetch(
-    `/api/stocvest/desk/today?mode=${encodeURIComponent(mode)}&why_symbol=${encodeURIComponent(sym)}`,
-    { cache: "no-store" }
-  );
+  let response: Response | null = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    response = await fetch(
+      `/api/stocvest/desk/today?mode=${encodeURIComponent(mode)}&why_symbol=${encodeURIComponent(sym)}`,
+      { cache: "no-store" }
+    );
+    if (response.ok || !RETRYABLE_STATUSES.has(response.status) || attempt === 2) break;
+    await sleep(500 * (attempt + 1));
+  }
+  const res = response;
+  if (!res) return null;
   const body = (await res.json().catch(() => ({}))) as DeskTodayResponse;
   if (!res.ok) {
+    if (res.status >= 500) return null;
     throw new Error(`desk/today why_missing failed: ${res.status}`);
   }
   return body.why_missing ?? null;

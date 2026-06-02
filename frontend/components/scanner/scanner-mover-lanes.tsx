@@ -18,6 +18,7 @@ type Props = {
   setups: IntradaySetupPayload[];
   nearQualification: ScannerNearQualificationRow[];
   evaluationTrace: ScannerEvaluationTraceRow[];
+  compact?: boolean;
   onExplainMissingSymbol?: (symbol: string) => void;
 };
 
@@ -37,7 +38,8 @@ function uniqueRows(rows: LaneRow[], limit = PER_LANE_LIMIT): LaneRow[] {
 }
 
 function laneHref(symbol: string): string {
-  return `/dashboard/signals?symbol=${encodeURIComponent(symbol.trim().toUpperCase())}`;
+  const sym = encodeURIComponent(symbol.trim().toUpperCase());
+  return `/dashboard/signals?symbol=${sym}&ref=scanner`;
 }
 
 function actionableRows(setups: IntradaySetupPayload[]): LaneRow[] {
@@ -99,6 +101,7 @@ export function ScannerMoverLanes({
   setups,
   nearQualification,
   evaluationTrace,
+  compact = false,
   onExplainMissingSymbol
 }: Props) {
   const { colors } = useTheme();
@@ -137,33 +140,37 @@ export function ScannerMoverLanes({
           Mover lanes
         </p>
         <p style={{ margin: `0 0 ${spacing[3]}`, fontSize: typography.scale.xs, color: colors.textMuted }}>
-          Potential is watch-only. Actionable is the only trade-ready lane.
+          {compact ? "Watch -> Close -> Ready -> Cooling" : "Potential is watch-only. Actionable is the only trade-ready lane."}
         </p>
         <div style={{ display: "grid", gap: spacing[3], gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
           <LaneCard
-            title="Potential movers"
-            subtitle="Watchlist candidates, not entries"
+            title={compact ? "Watch" : "Potential movers"}
+            subtitle={compact ? "Not entry-ready" : "Watchlist candidates, not entries"}
             tone="muted"
             rows={potential}
+            compact={compact}
             onExplainMissingSymbol={onExplainMissingSymbol}
           />
           <LaneCard
-            title="Near qualification"
-            subtitle="Close, but still blocked"
+            title={compact ? "Close" : "Near qualification"}
+            subtitle={compact ? "Almost ready" : "Close, but still blocked"}
             tone="warning"
             rows={near}
+            compact={compact}
           />
           <LaneCard
-            title="Actionable setups"
-            subtitle="Meets qualification gates now"
+            title={compact ? "Ready" : "Actionable setups"}
+            subtitle={compact ? "Entry-ready now" : "Meets qualification gates now"}
             tone="active"
             rows={actionable}
+            compact={compact}
           />
           <LaneCard
             title="Cooling"
-            subtitle="Was close, then lost quality"
+            subtitle={compact ? "Lost momentum" : "Was close, then lost quality"}
             tone="cooling"
             rows={cooling}
+            compact={compact}
           />
         </div>
       </div>
@@ -176,12 +183,14 @@ function LaneCard({
   subtitle,
   tone,
   rows,
+  compact,
   onExplainMissingSymbol
 }: {
   title: string;
   subtitle: string;
   tone: "muted" | "warning" | "active" | "cooling";
   rows: LaneRow[];
+  compact: boolean;
   onExplainMissingSymbol?: (symbol: string) => void;
 }) {
   const { colors } = useTheme();
@@ -193,22 +202,72 @@ function LaneCard({
         : tone === "cooling"
           ? { border: colors.bearish, bg: `color-mix(in srgb, ${colors.bearish} 9%, ${colors.surface})` }
           : { border: colors.border, bg: colors.surfaceMuted };
+  const compactTone =
+    compact && tone === "active"
+      ? {
+          border: `2px solid ${colors.bullish}`,
+          background: `color-mix(in srgb, ${colors.bullish} 14%, ${colors.surface})`
+        }
+      : compact && tone === "muted"
+        ? {
+            border: `1px dashed ${colors.border}`,
+            background: `color-mix(in srgb, ${colors.surfaceMuted} 88%, ${colors.surface})`
+          }
+        : null;
+  const border = compactTone?.border ?? `1px solid ${palette.border}`;
+  const background = compactTone?.background ?? palette.bg;
+  const titleTone = compact && tone === "muted" ? colors.textMuted : colors.text;
+  const symbolTone =
+    compact && tone === "muted" ? colors.textMuted : tone === "active" ? colors.bullish : colors.accent;
+  const showRoleBadge = compact && (tone === "muted" || tone === "active");
+  const badgeLabel = tone === "active" ? "Trade-ready" : "Watch-only";
+  const badgeStyle =
+    tone === "active"
+      ? {
+          color: colors.bullish,
+          background: `color-mix(in srgb, ${colors.bullish} 14%, ${colors.surface})`,
+          border: `1px solid ${colors.bullish}`
+        }
+      : {
+          color: colors.textMuted,
+          background: colors.surface,
+          border: `1px solid ${colors.border}`
+        };
 
   return (
     <article
       style={{
         borderRadius: borderRadius.lg,
-        border: `1px solid ${palette.border}`,
-        background: palette.bg,
+        border,
+        background,
         padding: spacing[3],
         display: "grid",
         gap: spacing[2],
         minHeight: 140
       }}
     >
-      <div>
-        <p style={{ margin: 0, fontSize: typography.scale.sm, fontWeight: 700, color: colors.text }}>{title}</p>
-        <p style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted }}>{subtitle}</p>
+      <div style={{ display: "grid", gap: spacing[1] }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing[2] }}>
+          <p style={{ margin: 0, fontSize: typography.scale.sm, fontWeight: 700, color: titleTone }}>{title}</p>
+          {showRoleBadge ? (
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                borderRadius: borderRadius.sm,
+                padding: `2px ${spacing[1]}`,
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+                ...badgeStyle
+              }}
+            >
+              {badgeLabel}
+            </span>
+          ) : null}
+        </div>
+        <p style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted }}>
+          {subtitle}
+        </p>
       </div>
       {rows.length === 0 ? (
         <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted }}>None this scan.</p>
@@ -217,7 +276,10 @@ function LaneCard({
           {rows.map((row) => (
             <li key={`${title}-${row.symbol}`} style={{ display: "flex", justifyContent: "space-between", gap: spacing[2] }}>
               <div style={{ display: "grid", gap: spacing[1], minWidth: 0 }}>
-                <Link href={row.href} style={{ fontSize: typography.scale.xs, fontWeight: 700, color: colors.accent, textDecoration: "none" }}>
+                <Link
+                  href={row.href}
+                  style={{ fontSize: typography.scale.xs, fontWeight: 700, color: symbolTone, textDecoration: "none" }}
+                >
                   {row.symbol}
                 </Link>
                 {tone === "muted" && onExplainMissingSymbol ? (
@@ -241,7 +303,9 @@ function LaneCard({
                   </button>
                 ) : null}
               </div>
-              <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>{row.detail ?? ""}</span>
+              {!compact ? (
+                <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>{row.detail ?? ""}</span>
+              ) : null}
             </li>
           ))}
         </ul>
