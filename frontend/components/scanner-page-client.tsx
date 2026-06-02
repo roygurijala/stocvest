@@ -261,7 +261,7 @@ export function ScannerPageClient({
   const { colors, theme } = useTheme();
   const [overview, setOverview] = useState<ScannerOverview>(initialOverview);
   const [scannerSetupMode, setScannerSetupMode] = useState<ScannerSetupLoadMode>(initialScannerSetupLoadMode);
-  const [simpleView, setSimpleView] = useState(true);
+  const [showAdvancedScannerPanels, setShowAdvancedScannerPanels] = useState(false);
   const [earningsBySymbol, setEarningsBySymbol] = useState<Record<string, EarningsEvent>>(() => ({
     ...initialEarningsBySymbol
   }));
@@ -365,9 +365,14 @@ export function ScannerPageClient({
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem("scanner_simple_view");
-      if (raw === "0") setSimpleView(false);
-      if (raw === "1") setSimpleView(true);
+      const rawAdvanced = localStorage.getItem("scanner_show_advanced");
+      if (rawAdvanced === "0") setShowAdvancedScannerPanels(false);
+      if (rawAdvanced === "1") setShowAdvancedScannerPanels(true);
+      if (rawAdvanced !== "0" && rawAdvanced !== "1") {
+        const legacySimple = localStorage.getItem("scanner_simple_view");
+        if (legacySimple === "0") setShowAdvancedScannerPanels(true);
+        if (legacySimple === "1") setShowAdvancedScannerPanels(false);
+      }
     } catch {
       /* ignore */
     }
@@ -375,11 +380,11 @@ export function ScannerPageClient({
 
   useEffect(() => {
     try {
-      localStorage.setItem("scanner_simple_view", simpleView ? "1" : "0");
+      localStorage.setItem("scanner_show_advanced", showAdvancedScannerPanels ? "1" : "0");
     } catch {
       /* ignore */
     }
-  }, [simpleView]);
+  }, [showAdvancedScannerPanels]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1352,7 +1357,7 @@ export function ScannerPageClient({
   const handleExplainMissingFromPotential = useCallback((symbol: string) => {
     const sym = symbol.trim().toUpperCase();
     if (!sym) return;
-    setSimpleView(false);
+    setShowAdvancedScannerPanels(true);
     setWhyMissingPrefillSymbol(sym);
     const target = document.getElementById("scanner-why-missing-panel");
     if (target) {
@@ -1586,17 +1591,14 @@ export function ScannerPageClient({
         hideWatchlistStrip={showQuietInterpretation}
         nextScanLabel={marketOpen ? scanCountdownLabel : null}
       />
-      <div
-        data-testid="scanner-view-mode-toggle"
-        style={{ display: "flex", justifyContent: "flex-end", gap: spacing[1], marginTop: -spacing[2] }}
-      >
+      <div data-testid="scanner-view-mode-toggle" style={{ display: "flex", justifyContent: "flex-end", marginTop: -spacing[2] }}>
         <button
           type="button"
-          onClick={() => setSimpleView(true)}
+          onClick={() => setShowAdvancedScannerPanels((v) => !v)}
           style={{
             border: `1px solid ${colors.border}`,
             borderRadius: borderRadius.md,
-            background: simpleView ? colors.surfaceMuted : colors.surface,
+            background: showAdvancedScannerPanels ? colors.surfaceMuted : colors.surface,
             color: colors.text,
             padding: `${spacing[1]} ${spacing[2]}`,
             fontSize: typography.scale.xs,
@@ -1604,35 +1606,19 @@ export function ScannerPageClient({
             cursor: "pointer"
           }}
         >
-          Simple view
-        </button>
-        <button
-          type="button"
-          onClick={() => setSimpleView(false)}
-          style={{
-            border: `1px solid ${colors.border}`,
-            borderRadius: borderRadius.md,
-            background: !simpleView ? colors.surfaceMuted : colors.surface,
-            color: colors.text,
-            padding: `${spacing[1]} ${spacing[2]}`,
-            fontSize: typography.scale.xs,
-            fontWeight: 600,
-            cursor: "pointer"
-          }}
-        >
-          Detailed view
+          {showAdvancedScannerPanels ? "Hide details" : "Show details"}
         </button>
       </div>
-      {!showQuietInterpretation && !simpleView ? <ScannerOutcomeCards summary={scanSummary} /> : null}
+      {!showQuietInterpretation && showAdvancedScannerPanels ? <ScannerOutcomeCards summary={scanSummary} /> : null}
       <ScannerMoverLanes
         gapItems={overview.gapIntelligence}
         setups={overview.setups}
         nearQualification={scanSummary.near_qualification}
         evaluationTrace={evaluationTrace}
-        compact={simpleView}
+        compact={false}
         onExplainMissingSymbol={handleExplainMissingFromPotential}
       />
-      {!simpleView ? (
+      {showAdvancedScannerPanels ? (
         <ScannerWhyMissingPanel
           rejectedSamples={activeDeskRejections.rejectedSamples}
           rejectionReasonCounts={activeDeskRejections.rejectionReasonCounts}
@@ -1641,7 +1627,7 @@ export function ScannerPageClient({
           showSymbolSuggestions={false}
         />
       ) : null}
-      {!simpleView && activeDeskRejections.survivorLimitUsed > 0 ? (
+      {showAdvancedScannerPanels && activeDeskRejections.survivorLimitUsed > 0 ? (
         <section
           data-testid="scanner-retained-pool-section"
           style={{
@@ -1874,13 +1860,13 @@ export function ScannerPageClient({
           ) : null}
         </section>
       ) : null}
-      {!showQuietInterpretation && !simpleView ? (
+      {!showQuietInterpretation && showAdvancedScannerPanels ? (
         <ScannerNearQualificationSection
           nearQualification={scanSummary.near_qualification}
           watchlistProgression={scanSummary.watchlist_progression}
         />
       ) : null}
-      {!showQuietInterpretation && !simpleView ? (
+      {!showQuietInterpretation && showAdvancedScannerPanels ? (
         <ScannerQuietLeadersSection scannerMode={scannerSetupMode === "both" ? "swing" : scannerSetupMode} />
       ) : null}
       {showQuietInterpretation ? (
@@ -1888,7 +1874,7 @@ export function ScannerPageClient({
           summary={scanSummary}
           synthesis={scannerSynthesis}
           deskFilter={evaluationTraceDeskFilter}
-          compact={simpleView}
+          compact={!showAdvancedScannerPanels}
         />
       ) : null}
 
@@ -1945,7 +1931,7 @@ export function ScannerPageClient({
         </div>
       ) : null}
 
-      {showQuietInterpretation && !simpleView ? (
+      {showQuietInterpretation && showAdvancedScannerPanels ? (
         <p
           data-testid="scanner-why-nothing-qualified"
           style={{
