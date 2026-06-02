@@ -110,6 +110,7 @@ export function ScannerWhyMissingPanel({
   }, [rejectedSamples]);
 
   const active = normalized ? sampleBySymbol.get(normalized) ?? null : null;
+  const hasResult = Boolean(normalized && (active || snapshotReason));
   const topReasons = useMemo(() => topReasonRows(rejectionReasonCounts), [rejectionReasonCounts]);
   const symbolOptions = useMemo(() => {
     const fromRejected = rejectedSamples.map((row) => row.symbol.trim().toUpperCase()).filter(Boolean);
@@ -193,7 +194,7 @@ export function ScannerWhyMissingPanel({
         list={showSymbolSuggestions ? "scanner-why-missing-symbols" : undefined}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="NVDA"
+        placeholder="Enter a symbol"
         style={{
           marginTop: spacing[1],
           width: "100%",
@@ -213,7 +214,7 @@ export function ScannerWhyMissingPanel({
         </datalist>
       ) : null}
 
-      {normalized ? (
+      {hasResult ? (
         <div
           data-testid="scanner-why-missing-result"
           style={{
@@ -236,24 +237,14 @@ export function ScannerWhyMissingPanel({
                 {humanizeReason(active.reason)}
               </p>
             </>
-          ) : (
-            <>
-              <p
-                data-testid="scanner-why-missing-not-found"
-                style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45 }}
-              >
-                {normalized} is not in the latest sampled rejections.
-              </p>
-              {snapshotReason ? (
-                <p
-                  data-testid="scanner-why-missing-snapshot-reason"
-                  style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45 }}
-                >
-                  {snapshotReason}
-                </p>
-              ) : null}
-            </>
-          )}
+          ) : snapshotReason ? (
+            <p
+              data-testid="scanner-why-missing-snapshot-reason"
+              style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45 }}
+            >
+              {snapshotReason}
+            </p>
+          ) : null}
         </div>
       ) : null}
 
