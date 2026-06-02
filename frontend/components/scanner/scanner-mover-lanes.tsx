@@ -38,7 +38,8 @@ function uniqueRows(rows: LaneRow[], limit = PER_LANE_LIMIT): LaneRow[] {
 }
 
 function laneHref(symbol: string): string {
-  return `/dashboard/signals?symbol=${encodeURIComponent(symbol.trim().toUpperCase())}`;
+  const sym = encodeURIComponent(symbol.trim().toUpperCase());
+  return `/dashboard/signals?symbol=${sym}&ref=scanner`;
 }
 
 function actionableRows(setups: IntradaySetupPayload[]): LaneRow[] {

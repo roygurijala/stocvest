@@ -1803,7 +1803,7 @@ export function ScannerPageClient({
                         </div>
                         <div>
                           <Link
-                            href={`/dashboard/signals?symbol=${encodeURIComponent(row.symbol)}`}
+                            href={`/dashboard/signals?symbol=${encodeURIComponent(row.symbol)}&ref=scanner&trading_mode=${row.desk}`}
                             style={{
                               color: colors.accent,
                               fontSize: typography.scale.xs,

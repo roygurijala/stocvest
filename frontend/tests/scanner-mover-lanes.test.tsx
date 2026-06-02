@@ -38,5 +38,7 @@ describe("<ScannerMoverLanes />", () => {
     const btn = screen.getByTestId("scanner-potential-why-missing-NVDA");
     fireEvent.click(btn);
     expect(onExplain).toHaveBeenCalledWith("NVDA");
+    const link = screen.getByRole("link", { name: "NVDA" });
+    expect(link.getAttribute("href")).toContain("/dashboard/signals?symbol=NVDA&ref=scanner");
   });
 });
