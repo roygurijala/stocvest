@@ -118,7 +118,17 @@ export function DashboardDiscoveryFeed({
   const scannerHref = dualDeskSurfaces
     ? `/dashboard/scanner?mode=${mode === "swing" ? "swing" : "day"}`
     : "/dashboard/scanner?mode=swing";
+  const scannerRetainedHref = `${scannerHref}&retained=1`;
+  const retainedCount = Math.max(
+    0,
+    Number(
+      effectiveDeskData?.retained_pool?.length ??
+        effectiveDeskData?.survivor_limit_used ??
+        0
+    )
+  );
   const scannerHover = useHoverPrefetch(scannerHref);
+  const scannerRetainedHover = useHoverPrefetch(scannerRetainedHref);
   const deskCacheMiss = deskSource === "cache_miss" || (deskData == null && deskSource !== "cache");
   const embedded = variant === "pipeline";
   const subtitle = hotInMarketFeedSubtitle({
@@ -343,6 +353,21 @@ export function DashboardDiscoveryFeed({
           Open Scanner for patterns →
         </Link>
       </p>
+      {retainedCount > 0 ? (
+        <p className="m-0 mt-1">
+          <Link
+            href={scannerRetainedHref}
+            prefetch={false}
+            data-hover-prefetch="true"
+            {...interactionLevelProps("deep")}
+            {...scannerRetainedHover}
+            data-testid="dashboard-discovery-retained-link"
+            style={{ fontSize: typography.scale.xs, color: colors.textMuted, fontWeight: 600 }}
+          >
+            Browse retained pool ({retainedCount}) →
+          </Link>
+        </p>
+      ) : null}
     </section>
   );
 }

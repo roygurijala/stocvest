@@ -79,7 +79,7 @@ describe("<ScannerWhyMissingPanel />", () => {
     expect(screen.getByText(/Most common blockers this cycle/i)).toBeInTheDocument();
   });
 
-  test("shows fallback copy when symbol is not in sampled rejections", () => {
+  test("shows diagnostic reason instead of sampled-rejections fallback text", async () => {
     wrap(
       <ScannerWhyMissingPanel
         rejectedSamples={[{ symbol: "MU", reason: "gap_below_2.0pct" }]}
@@ -89,9 +89,10 @@ describe("<ScannerWhyMissingPanel />", () => {
     );
 
     fireEvent.change(screen.getByTestId("scanner-why-missing-input"), { target: { value: "AAPL" } });
-    expect(screen.getByTestId("scanner-why-missing-not-found")).toHaveTextContent(
-      "AAPL is not in the latest sampled rejections"
+    expect(await screen.findByTestId("scanner-why-missing-snapshot-reason")).toHaveTextContent(
+      "snapshot is unavailable right now"
     );
+    expect(screen.queryByTestId("scanner-why-missing-not-found")).not.toBeInTheDocument();
   });
 
   test("prefills query from quick action symbol", () => {
@@ -118,5 +119,10 @@ describe("<ScannerWhyMissingPanel />", () => {
     expect(input).not.toHaveAttribute("list");
     fireEvent.change(input, { target: { value: "NVDA" } });
     expect(screen.getByTestId("scanner-why-missing-result")).toHaveTextContent("NVDA is currently filtered out");
+  });
+
+  test("uses Enter a symbol placeholder", () => {
+    wrap(<ScannerWhyMissingPanel rejectedSamples={[]} showSymbolSuggestions={false} />);
+    expect(screen.getByTestId("scanner-why-missing-input")).toHaveAttribute("placeholder", "Enter a symbol");
   });
 });

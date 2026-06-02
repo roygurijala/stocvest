@@ -82,3 +82,20 @@ def movers_radar_payload(movers: tuple[FunnelMover, ...], *, limit: int) -> list
             }
         )
     return out
+
+
+def retained_pool_payload(movers: tuple[FunnelMover, ...]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for idx, m in enumerate(movers, start=1):
+        out.append(
+            {
+                "symbol": m.symbol,
+                "gap_percent": m.gap_percent,
+                "direction": m.direction,
+                "rank_score": m.rank_score,
+                "day_volume": m.day_volume,
+                "session_price": m.session_price,
+                "rank_position": idx,
+            }
+        )
+    return out
