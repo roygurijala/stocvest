@@ -414,36 +414,61 @@ async def _gap_intelligence_async(payload: dict[str, Any], user_id: str | None) 
     settings = get_settings()
     gap_symbols = [g.symbol for g in gaps]
     sym_need = frozenset(gap_symbols)
+    sym_map = {s.symbol: s for s in snapshots if s.symbol in sym_need}
     # Default client news_limit is 400; a single huge global news pull can dominate latency.
     global_cap = min(120, max(50, min(news_limit, 500)))
-    async with PolygonClient(api_key=settings.polygon_api_key) as client:
-        news = await collect_news_for_gap_intelligence(
-            client,
-            gap_symbols,
-            global_limit=global_cap,
-            per_symbol_limit=5,
-            max_symbols=_GAP_INTEL_TOP_N,
-        )
-        sym_map = {s.symbol: s for s in snapshots if s.symbol in sym_need}
-        from datetime import date as date_cls, timedelta as td
+    from datetime import date as date_cls, timedelta as td
 
-        from stocvest.data.earnings_calendar_fetch import fetch_earnings_events
+    from stocvest.data.earnings_calendar_fetch import fetch_earnings_events
 
-        today = date_cls.today()
-        earn_rows, _, _ = await fetch_earnings_events(
-            gap_symbols,
-            from_date=today - td(days=3),
-            to_date=today + td(days=14),
-            polygon_client=client,
-        )
-        items = build_gap_intelligence_items(
-            gaps,
-            sym_map,
-            news,
-            earnings_events=earn_rows,
-            session_date=today,
-        )
-        await _enrich_gap_company_names(client, items)
+    today = date_cls.today()
+    news: list[Any] = []
+    earn_rows: list[Any] = []
+    items = build_gap_intelligence_items(
+        gaps,
+        sym_map,
+        news,
+        earnings_events=earn_rows,
+        session_date=today,
+    )
+    try:
+        async with PolygonClient(api_key=settings.polygon_api_key) as client:
+            try:
+                news = await collect_news_for_gap_intelligence(
+                    client,
+                    gap_symbols,
+                    global_limit=global_cap,
+                    per_symbol_limit=5,
+                    max_symbols=_GAP_INTEL_TOP_N,
+                )
+            except Exception as exc:  # noqa: BLE001 — keep scanner shell alive on upstream news failures
+                _LOG.warning("gap_intelligence news_enrichment_failed err=%s", str(exc)[:200])
+                news = []
+
+            try:
+                earn_rows, _, _ = await fetch_earnings_events(
+                    gap_symbols,
+                    from_date=today - td(days=3),
+                    to_date=today + td(days=14),
+                    polygon_client=client,
+                )
+            except Exception as exc:  # noqa: BLE001 — do not fail gap cards on earnings transport errors
+                _LOG.warning("gap_intelligence earnings_enrichment_failed err=%s", str(exc)[:200])
+                earn_rows = []
+
+            items = build_gap_intelligence_items(
+                gaps,
+                sym_map,
+                news,
+                earnings_events=earn_rows,
+                session_date=today,
+            )
+            try:
+                await _enrich_gap_company_names(client, items)
+            except Exception as exc:  # noqa: BLE001 — best effort, never block card rendering
+                _LOG.warning("gap_intelligence company_name_enrichment_failed err=%s", str(exc)[:200])
+    except Exception as exc:  # noqa: BLE001 — fallback to snapshot-only cards when Polygon client cannot initialize
+        _LOG.warning("gap_intelligence enrichment_transport_unavailable err=%s; using snapshot-only items", str(exc)[:200])
     return ok(
         {
             "items": items,
