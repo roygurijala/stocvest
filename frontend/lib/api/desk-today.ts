@@ -58,11 +58,25 @@ export type DeskTodayData = {
   quiet_leaders?: DeskQuietLeader[];
 };
 
+export type DeskWhyMissingDiagnostic = {
+  symbol: string;
+  stage: string;
+  reason_code: string;
+  reason: string;
+  rank_position?: number;
+  rank_score?: number;
+  snapshot_source?: string;
+  scanned_snapshot_count?: number;
+  eligible_symbol_count?: number;
+  survivor_limit_used?: number;
+};
+
 export type DeskTodayResponse = {
   mode: DeskTodayMode;
   source: "cache" | "cache_miss" | string;
   envelope?: Record<string, unknown> | null;
   data: DeskTodayData | null;
+  why_missing?: DeskWhyMissingDiagnostic | null;
   disclaimer?: string;
 };
 
@@ -75,4 +89,21 @@ export async function fetchDeskToday(mode: DeskTodayMode): Promise<DeskTodayResp
     throw new Error(`desk/today failed: ${res.status}`);
   }
   return body;
+}
+
+export async function fetchDeskWhyMissing(
+  mode: DeskTodayMode,
+  symbol: string
+): Promise<DeskWhyMissingDiagnostic | null> {
+  const sym = symbol.trim().toUpperCase();
+  if (!sym) return null;
+  const res = await fetch(
+    `/api/stocvest/desk/today?mode=${encodeURIComponent(mode)}&why_symbol=${encodeURIComponent(sym)}`,
+    { cache: "no-store" }
+  );
+  const body = (await res.json().catch(() => ({}))) as DeskTodayResponse;
+  if (!res.ok) {
+    throw new Error(`desk/today why_missing failed: ${res.status}`);
+  }
+  return body.why_missing ?? null;
 }

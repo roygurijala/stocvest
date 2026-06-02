@@ -49,14 +49,29 @@ def try_acquire_desk_refresh_cooldown(user_id: str | None) -> tuple[bool, int]:
         return True, 0
 
 
+def release_desk_refresh_cooldown(user_id: str | None) -> None:
+    """Best-effort cooldown rollback for failed manual refresh attempts."""
+    if not upstash_configured():
+        return
+    key = desk_refresh_cooldown_key(user_id)
+    try:
+        get_upstash().delete(key)
+    except Exception as exc:  # noqa: BLE001 - cooldown cleanup should never break request flow
+        _LOG.warning("desk_refresh_cooldown_release_failed: %s", exc)
+
+
 def run_manual_desk_refresh(user_id: str | None) -> dict[str, Any]:
     """Tier B (movers) then Tier C (full discovery composite)."""
     acquired, retry_after = try_acquire_desk_refresh_cooldown(user_id)
     if not acquired:
         raise DeskRefreshCooldownError(retry_after_seconds=retry_after)
 
-    movers = run_opportunity_desk_batch_sync(tier="movers")
-    full = run_opportunity_desk_batch_sync(tier="full")
+    try:
+        movers = run_opportunity_desk_batch_sync(tier="movers")
+        full = run_opportunity_desk_batch_sync(tier="full")
+    except Exception:
+        release_desk_refresh_cooldown(user_id)
+        raise
     return {
         "status": "ok",
         "tiers": ["movers", "full"],

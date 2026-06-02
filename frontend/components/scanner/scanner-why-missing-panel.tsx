@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { fetchDeskWhyMissing, type DeskTodayMode } from "@/lib/api/desk-today";
+import { fetchSymbolSnapshot } from "@/lib/api/fetch-symbol-snapshot";
+import type { SnapshotPayload } from "@/lib/api/market";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -14,6 +17,8 @@ type Props = {
   rejectionReasonCounts?: Record<string, number>;
   suggestedSymbols?: string[];
   prefillSymbol?: string | null;
+  showSymbolSuggestions?: boolean;
+  deskModeForLookup?: DeskTodayMode | null;
 };
 
 function humanizeReason(reason: string): string {
@@ -49,14 +54,49 @@ function topReasonRows(counts: Record<string, number> | undefined): Array<{ reas
     .map(([reason, count]) => ({ reason, count }));
 }
 
+function plainEnglishSnapshotReason(symbol: string, snap: SnapshotPayload | null): string {
+  if (!snap) {
+    return `${symbol} snapshot is unavailable right now, so we can't diagnose the exact gate yet.`;
+  }
+  const prevClose = Number(snap.prev_close ?? 0);
+  if (!Number.isFinite(prevClose) || prevClose <= 0) {
+    return "Previous close is missing/invalid, so this symbol is excluded from the scanner universe.";
+  }
+  const last = Number(snap.last_trade_price ?? 0);
+  const dayOpen = Number(snap.day_open ?? 0);
+  const sessionPrice = last > 0 ? last : dayOpen > 0 ? dayOpen : 0;
+  if (!Number.isFinite(sessionPrice) || sessionPrice <= 0) {
+    return "Session price is unavailable, so this symbol is excluded from ranking.";
+  }
+  if (sessionPrice < 5) {
+    return `Price is $${sessionPrice.toFixed(2)} (below the $5 minimum), so it is excluded.`;
+  }
+  const dayVol = Number(snap.day_volume ?? 0);
+  if (!Number.isFinite(dayVol) || dayVol < 500_000) {
+    return `Day volume is ${Math.max(0, dayVol).toLocaleString()} (below 500,000), so it is excluded.`;
+  }
+  const prevDayVol = Number(snap.prev_day_volume ?? 0);
+  if (Number.isFinite(prevDayVol) && prevDayVol > 0 && prevDayVol < 1_000_000) {
+    return `Average daily volume is ${prevDayVol.toLocaleString()} (below 1,000,000), so it is excluded.`;
+  }
+  const gapPct = ((sessionPrice - prevClose) / prevClose) * 100;
+  if (!Number.isFinite(gapPct) || Math.abs(gapPct) < 2.0) {
+    return `Gap is ${gapPct.toFixed(2)}% (below the 2.0% threshold), so it is excluded.`;
+  }
+  return `${symbol} passes baseline price/volume/gap filters. If it's still missing, it was filtered later by ranking cutoff or downstream setup gates this cycle.`;
+}
+
 export function ScannerWhyMissingPanel({
   rejectedSamples,
   rejectionReasonCounts,
   suggestedSymbols = [],
-  prefillSymbol = null
+  prefillSymbol = null,
+  showSymbolSuggestions = true,
+  deskModeForLookup = null
 }: Props) {
   const { colors } = useTheme();
   const [query, setQuery] = useState("");
+  const [snapshotReason, setSnapshotReason] = useState<string | null>(null);
   const normalized = query.trim().toUpperCase();
 
   const sampleBySymbol = useMemo(() => {
@@ -84,6 +124,39 @@ export function ScannerWhyMissingPanel({
     setQuery(sym);
   }, [prefillSymbol]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const sym = normalized;
+    if (!sym || active) {
+      setSnapshotReason(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    const id = window.setTimeout(async () => {
+      try {
+        if (deskModeForLookup) {
+          const diag = await fetchDeskWhyMissing(deskModeForLookup, sym);
+          if (cancelled) return;
+          if (diag?.reason?.trim()) {
+            setSnapshotReason(diag.reason.trim());
+            return;
+          }
+        }
+        const snap = await fetchSymbolSnapshot(sym);
+        if (cancelled) return;
+        setSnapshotReason(plainEnglishSnapshotReason(sym, snap));
+      } catch {
+        if (cancelled) return;
+        setSnapshotReason(`${sym} lookup failed right now. Try again in a moment.`);
+      }
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(id);
+    };
+  }, [normalized, active, deskModeForLookup]);
+
   return (
     <section
       id="scanner-why-missing-panel"
@@ -108,7 +181,7 @@ export function ScannerWhyMissingPanel({
         Why missing
       </p>
       <p style={{ margin: `0 0 ${spacing[3]}`, fontSize: typography.scale.xs, color: colors.textMuted }}>
-        Search a symbol to see the latest funnel rejection reason from the desk snapshot.
+        Type any symbol (for example, NVDA) to check the latest funnel rejection reason from the desk snapshot.
       </p>
 
       <label htmlFor="scanner-why-missing-input" style={{ display: "block", fontSize: typography.scale.xs, color: colors.text }}>
@@ -117,7 +190,7 @@ export function ScannerWhyMissingPanel({
       <input
         id="scanner-why-missing-input"
         data-testid="scanner-why-missing-input"
-        list="scanner-why-missing-symbols"
+        list={showSymbolSuggestions ? "scanner-why-missing-symbols" : undefined}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="NVDA"
@@ -132,11 +205,13 @@ export function ScannerWhyMissingPanel({
           padding: `${spacing[2]} ${spacing[2]}`
         }}
       />
-      <datalist id="scanner-why-missing-symbols">
-        {symbolOptions.map((sym) => (
-          <option key={sym} value={sym} />
-        ))}
-      </datalist>
+      {showSymbolSuggestions ? (
+        <datalist id="scanner-why-missing-symbols">
+          {symbolOptions.map((sym) => (
+            <option key={sym} value={sym} />
+          ))}
+        </datalist>
+      ) : null}
 
       {normalized ? (
         <div
@@ -162,12 +237,22 @@ export function ScannerWhyMissingPanel({
               </p>
             </>
           ) : (
-            <p
-              data-testid="scanner-why-missing-not-found"
-              style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45 }}
-            >
-              {normalized} is not in the latest sampled rejections. It may be in the retained survivor pool or outside the current sample window.
-            </p>
+            <>
+              <p
+                data-testid="scanner-why-missing-not-found"
+                style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45 }}
+              >
+                {normalized} is not in the latest sampled rejections.
+              </p>
+              {snapshotReason ? (
+                <p
+                  data-testid="scanner-why-missing-snapshot-reason"
+                  style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45 }}
+                >
+                  {snapshotReason}
+                </p>
+              ) : null}
+            </>
           )}
         </div>
       ) : null}

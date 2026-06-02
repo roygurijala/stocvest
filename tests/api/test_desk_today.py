@@ -18,6 +18,12 @@ def _event(mode: str = "swing") -> dict:
     }
 
 
+def _event_with_symbol(mode: str = "swing", symbol: str = "NVDA") -> dict:
+    ev = _event(mode)
+    ev["queryStringParameters"] = {"mode": mode, "why_symbol": symbol}
+    return ev
+
+
 def test_desk_today_cache_miss() -> None:
     out = desk_today_handler(_event("swing"), {})
     assert out["statusCode"] == 200
@@ -56,3 +62,20 @@ def test_desk_today_invalid_mode() -> None:
     ev = _event("invalid")
     out = desk_today_handler(ev, {})
     assert out["statusCode"] == 400
+
+
+def test_desk_today_returns_symbol_diagnostic_on_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _fake_diag(symbol: str) -> dict:
+        return {
+            "symbol": symbol,
+            "stage": "eligibility_gate",
+            "reason_code": "price_below_5",
+            "reason": "Trade price below $5 minimum.",
+        }
+
+    monkeypatch.setattr("stocvest.api.handlers.desk._desk_symbol_diagnostic_async", _fake_diag)
+    out = desk_today_handler(_event_with_symbol("swing", "nvda"), {})
+    assert out["statusCode"] == 200
+    body = json.loads(out["body"])
+    assert body["why_missing"]["symbol"] == "NVDA"
+    assert body["why_missing"]["reason_code"] == "price_below_5"

@@ -314,15 +314,15 @@ export function DashboardDiscoveryFeed({
 
       <DashboardMissedTodayStrip mode={mode} deskData={effectiveDeskData} gapFallback={gapFallback} />
 
-      {(effectiveDeskData?.rejected_samples?.length ?? 0) > 0 ? (
-        <div className="mt-3">
-          <ScannerWhyMissingPanel
-            rejectedSamples={effectiveDeskData?.rejected_samples ?? []}
-            rejectionReasonCounts={effectiveDeskData?.rejection_reason_counts}
-            suggestedSymbols={leaders.map((l) => l.symbol)}
-          />
-        </div>
-      ) : null}
+      <div className="mt-3">
+        <ScannerWhyMissingPanel
+          rejectedSamples={effectiveDeskData?.rejected_samples ?? []}
+          rejectionReasonCounts={effectiveDeskData?.rejection_reason_counts}
+          suggestedSymbols={leaders.map((l) => l.symbol)}
+          showSymbolSuggestions={false}
+          deskModeForLookup={mode}
+        />
+      </div>
 
       {footnote ? (
         <p className="m-0 mt-3" style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>
