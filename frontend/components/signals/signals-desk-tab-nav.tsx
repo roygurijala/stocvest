@@ -31,7 +31,7 @@ export function SignalsDeskTabNav({ activeTab, onTabChange }: Props) {
             type="button"
             role="tab"
             aria-selected={active}
-            className="min-h-9 rounded-md px-1.5 text-xs font-semibold sm:min-h-9 sm:px-2 sm:text-sm"
+            className="min-h-11 rounded-md px-2 text-sm font-semibold"
             style={{
               background: active ? colors.surface : "transparent",
               color: active ? colors.text : colors.textMuted,

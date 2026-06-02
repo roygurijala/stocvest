@@ -1601,6 +1601,7 @@ export function ScannerPageClient({
             background: showAdvancedScannerPanels ? colors.surfaceMuted : colors.surface,
             color: colors.text,
             padding: `${spacing[1]} ${spacing[2]}`,
+            minHeight: 44,
             fontSize: typography.scale.xs,
             fontWeight: 600,
             cursor: "pointer"
@@ -1677,6 +1678,7 @@ export function ScannerPageClient({
                 background: colors.surfaceMuted,
                 color: colors.text,
                 padding: `${spacing[1]} ${spacing[2]}`,
+                minHeight: 44,
                 fontSize: typography.scale.xs,
                 fontWeight: 600,
                 cursor: "pointer"
@@ -1687,7 +1689,8 @@ export function ScannerPageClient({
           </div>
           {showRetainedPool ? (
             <>
-              <div style={{ display: "grid", gap: spacing[1] }}>
+              <div style={{ overflowX: "auto", margin: `0 -${spacing[1]}` }}>
+                <div style={{ display: "grid", gap: spacing[1], minWidth: 520, padding: `0 ${spacing[1]}` }}>
                 <div
                   style={{
                     display: "grid",
@@ -1804,6 +1807,7 @@ export function ScannerPageClient({
                     ) : null}
                   </div>
                 ))}
+                </div>
               </div>
               {retainedPoolPages > 1 ? (
                 <div
@@ -1825,6 +1829,7 @@ export function ScannerPageClient({
                       background: colors.surfaceMuted,
                       color: colors.text,
                       padding: `${spacing[1]} ${spacing[2]}`,
+                      minHeight: 44,
                       fontSize: typography.scale.xs,
                       fontWeight: 600,
                       cursor: safeRetainedPoolPage <= 1 ? "not-allowed" : "pointer",
@@ -1846,6 +1851,7 @@ export function ScannerPageClient({
                       background: colors.surfaceMuted,
                       color: colors.text,
                       padding: `${spacing[1]} ${spacing[2]}`,
+                      minHeight: 44,
                       fontSize: typography.scale.xs,
                       fontWeight: 600,
                       cursor: safeRetainedPoolPage >= retainedPoolPages ? "not-allowed" : "pointer",
