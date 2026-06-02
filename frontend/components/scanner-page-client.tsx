@@ -268,6 +268,7 @@ export function ScannerPageClient({
   const [showAllGaps, setShowAllGaps] = useState(false);
   const [showRetainedPool, setShowRetainedPool] = useState(false);
   const [retainedPoolPage, setRetainedPoolPage] = useState(1);
+  const [expandedRetainedRowKey, setExpandedRetainedRowKey] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [evidenceLoading, setEvidenceLoading] = useState(false);
@@ -410,7 +411,12 @@ export function ScannerPageClient({
 
   useEffect(() => {
     setRetainedPoolPage(1);
+    setExpandedRetainedRowKey(null);
   }, [scannerSetupMode, showRetainedPool]);
+
+  useEffect(() => {
+    setExpandedRetainedRowKey(null);
+  }, [retainedPoolPage]);
 
   useEffect(() => {
     try {
@@ -1672,6 +1678,9 @@ export function ScannerPageClient({
               <p style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.sm, color: colors.text }}>
                 {activeDeskRejections.survivorLimitUsed} symbols passed the hard filters this cycle.
               </p>
+              <p style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted }}>
+                Score = pre-setup rank score (gap quality + liquidity bias). Higher means stronger discovery priority.
+              </p>
             </div>
             <button
               type="button"
@@ -1693,38 +1702,120 @@ export function ScannerPageClient({
           {showRetainedPool ? (
             <>
               <div style={{ display: "grid", gap: spacing[1] }}>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "minmax(7rem,1.3fr) minmax(4.5rem,0.8fr) minmax(4rem,0.8fr) minmax(5rem,1fr)",
+                    gap: spacing[2],
+                    padding: `${spacing[1]} ${spacing[2]}`,
+                    color: colors.textMuted,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    letterSpacing: "0.05em",
+                    textTransform: "uppercase"
+                  }}
+                >
+                  <span>Symbol</span>
+                  <span>Gap %</span>
+                  <span>Rank</span>
+                  <span>Score</span>
+                </div>
                 {retainedPoolRows.map((row) => (
                   <div
                     key={`${row.desk}-${row.symbol}-${row.rank_position ?? row.rank_score}`}
                     style={{
-                      display: "grid",
-                      gridTemplateColumns: "minmax(5rem,1fr) minmax(4rem,1fr) minmax(4rem,1fr) minmax(6rem,1fr)",
-                      gap: spacing[2],
-                      padding: `${spacing[1]} ${spacing[2]}`,
                       borderRadius: borderRadius.md,
                       border: `1px solid ${colors.border}`,
-                      background: colors.surfaceMuted,
-                      fontSize: typography.scale.xs,
-                      alignItems: "center"
+                      background: colors.surfaceMuted
                     }}
                   >
-                    <span style={{ color: colors.text, fontWeight: 700 }}>
-                      {row.symbol}
-                      {scannerSetupMode === "both" ? (
-                        <span style={{ marginLeft: spacing[1], color: colors.textMuted, fontWeight: 500 }}>
-                          {row.desk}
-                        </span>
-                      ) : null}
-                    </span>
-                    <span style={{ color: colors.textMuted }}>
-                      Gap {Number(row.gap_percent ?? 0).toFixed(2)}%
-                    </span>
-                    <span style={{ color: colors.textMuted }}>
-                      Rank {row.rank_position && row.rank_position > 0 ? `#${row.rank_position}` : "n/a"}
-                    </span>
-                    <span style={{ color: colors.textMuted }}>
-                      Score {Number(row.rank_score ?? 0).toFixed(1)}
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpandedRetainedRowKey((current) => {
+                          const rowKey = `${row.desk}-${row.symbol}-${row.rank_position ?? row.rank_score}`;
+                          return current === rowKey ? null : rowKey;
+                        })
+                      }
+                      aria-expanded={
+                        expandedRetainedRowKey === `${row.desk}-${row.symbol}-${row.rank_position ?? row.rank_score}`
+                      }
+                      style={{
+                        width: "100%",
+                        border: "none",
+                        background: "transparent",
+                        display: "grid",
+                        gridTemplateColumns: "minmax(7rem,1.3fr) minmax(4.5rem,0.8fr) minmax(4rem,0.8fr) minmax(5rem,1fr)",
+                        gap: spacing[2],
+                        padding: `${spacing[1]} ${spacing[2]}`,
+                        fontSize: typography.scale.xs,
+                        alignItems: "center",
+                        cursor: "pointer",
+                        textAlign: "left"
+                      }}
+                    >
+                      <span style={{ color: colors.text, fontWeight: 700 }}>
+                        {row.symbol}
+                        {scannerSetupMode === "both" ? (
+                          <span style={{ marginLeft: spacing[1], color: colors.textMuted, fontWeight: 500 }}>
+                            {row.desk}
+                          </span>
+                        ) : null}
+                      </span>
+                      <span style={{ color: colors.textMuted }}>{Number(row.gap_percent ?? 0).toFixed(2)}</span>
+                      <span style={{ color: colors.textMuted }}>
+                        {row.rank_position && row.rank_position > 0 ? `#${row.rank_position}` : "n/a"}
+                      </span>
+                      <span style={{ color: colors.textMuted }}>{Number(row.rank_score ?? 0).toFixed(1)}</span>
+                    </button>
+                    {expandedRetainedRowKey === `${row.desk}-${row.symbol}-${row.rank_position ?? row.rank_score}` ? (
+                      <div
+                        style={{
+                          borderTop: `1px solid ${colors.border}`,
+                          padding: `${spacing[2]} ${spacing[2]}`,
+                          display: "grid",
+                          gap: spacing[1]
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(auto-fit, minmax(11rem, 1fr))",
+                            gap: spacing[1],
+                            fontSize: typography.scale.xs,
+                            color: colors.textMuted
+                          }}
+                        >
+                          <span>Direction: {row.direction === "down" ? "Down gap" : "Up gap"}</span>
+                          <span>
+                            Session price:{" "}
+                            {row.session_price && Number.isFinite(row.session_price)
+                              ? `$${row.session_price.toFixed(2)}`
+                              : "n/a"}
+                          </span>
+                          <span>
+                            Day volume:{" "}
+                            {row.day_volume && Number.isFinite(row.day_volume)
+                              ? row.day_volume.toLocaleString()
+                              : "n/a"}
+                          </span>
+                          <span>Desk: {row.desk}</span>
+                        </div>
+                        <div>
+                          <Link
+                            href={`/dashboard/signals?symbol=${encodeURIComponent(row.symbol)}`}
+                            style={{
+                              color: colors.accent,
+                              fontSize: typography.scale.xs,
+                              fontWeight: 600,
+                              textDecoration: "none"
+                            }}
+                          >
+                            Open signal details {"->"}
+                          </Link>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 ))}
               </div>
