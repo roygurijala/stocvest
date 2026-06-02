@@ -25,13 +25,14 @@ type Props = {
   summary: ScannerScanSummary;
   synthesis?: ScannerSynthesis | null;
   deskFilter: "swing" | "day" | "all";
+  compact?: boolean;
 };
 
 /**
  * Quiet-scan body: closest to qualifying → market conditions → scan outcome.
  * Full “what would change” only when the cause is not already obvious (mixed / complex).
  */
-export function ScannerQuietDesk({ summary, synthesis, deskFilter }: Props) {
+export function ScannerQuietDesk({ summary, synthesis, deskFilter, compact = false }: Props) {
   const regimeLabel = summary.regime.label;
 
   const marketConditions = useMemo(
@@ -79,7 +80,7 @@ export function ScannerQuietDesk({ summary, synthesis, deskFilter }: Props) {
 
       <ScannerMarketConditionsCard model={marketConditions} />
 
-      {synthesis ? (
+      {!compact && synthesis ? (
         <RejectionGroups
           groups={synthesis.rejection_groups}
           qualifiedCount={summary.qualifying.total}
@@ -88,7 +89,7 @@ export function ScannerQuietDesk({ summary, synthesis, deskFilter }: Props) {
         />
       ) : null}
 
-      {whatWouldChangeContent ? <WhatWouldChangeFooter content={whatWouldChangeContent} /> : null}
+      {!compact && whatWouldChangeContent ? <WhatWouldChangeFooter content={whatWouldChangeContent} /> : null}
     </div>
   );
 }

@@ -261,6 +261,7 @@ export function ScannerPageClient({
   const { colors, theme } = useTheme();
   const [overview, setOverview] = useState<ScannerOverview>(initialOverview);
   const [scannerSetupMode, setScannerSetupMode] = useState<ScannerSetupLoadMode>(initialScannerSetupLoadMode);
+  const [simpleView, setSimpleView] = useState(true);
   const [earningsBySymbol, setEarningsBySymbol] = useState<Record<string, EarningsEvent>>(() => ({
     ...initialEarningsBySymbol
   }));
@@ -360,6 +361,24 @@ export function ScannerPageClient({
       }
     }
   }, [dayTradingSurfaces]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("scanner_simple_view");
+      if (raw === "0") setSimpleView(false);
+      if (raw === "1") setSimpleView(true);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("scanner_simple_view", simpleView ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [simpleView]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1327,6 +1346,7 @@ export function ScannerPageClient({
   const handleExplainMissingFromPotential = useCallback((symbol: string) => {
     const sym = symbol.trim().toUpperCase();
     if (!sym) return;
+    setSimpleView(false);
     setWhyMissingPrefillSymbol(sym);
     const target = document.getElementById("scanner-why-missing-panel");
     if (target) {
@@ -1560,22 +1580,62 @@ export function ScannerPageClient({
         hideWatchlistStrip={showQuietInterpretation}
         nextScanLabel={marketOpen ? scanCountdownLabel : null}
       />
-      {!showQuietInterpretation ? <ScannerOutcomeCards summary={scanSummary} /> : null}
+      <div
+        data-testid="scanner-view-mode-toggle"
+        style={{ display: "flex", justifyContent: "flex-end", gap: spacing[1], marginTop: -spacing[2] }}
+      >
+        <button
+          type="button"
+          onClick={() => setSimpleView(true)}
+          style={{
+            border: `1px solid ${colors.border}`,
+            borderRadius: borderRadius.md,
+            background: simpleView ? colors.surfaceMuted : colors.surface,
+            color: colors.text,
+            padding: `${spacing[1]} ${spacing[2]}`,
+            fontSize: typography.scale.xs,
+            fontWeight: 600,
+            cursor: "pointer"
+          }}
+        >
+          Simple view
+        </button>
+        <button
+          type="button"
+          onClick={() => setSimpleView(false)}
+          style={{
+            border: `1px solid ${colors.border}`,
+            borderRadius: borderRadius.md,
+            background: !simpleView ? colors.surfaceMuted : colors.surface,
+            color: colors.text,
+            padding: `${spacing[1]} ${spacing[2]}`,
+            fontSize: typography.scale.xs,
+            fontWeight: 600,
+            cursor: "pointer"
+          }}
+        >
+          Detailed view
+        </button>
+      </div>
+      {!showQuietInterpretation && !simpleView ? <ScannerOutcomeCards summary={scanSummary} /> : null}
       <ScannerMoverLanes
         gapItems={overview.gapIntelligence}
         setups={overview.setups}
         nearQualification={scanSummary.near_qualification}
         evaluationTrace={evaluationTrace}
+        compact={simpleView}
         onExplainMissingSymbol={handleExplainMissingFromPotential}
       />
-      <ScannerWhyMissingPanel
-        rejectedSamples={activeDeskRejections.rejectedSamples}
-        rejectionReasonCounts={activeDeskRejections.rejectionReasonCounts}
-        suggestedSymbols={whyMissingSuggestedSymbols}
-        prefillSymbol={whyMissingPrefillSymbol}
-        showSymbolSuggestions={false}
-      />
-      {activeDeskRejections.survivorLimitUsed > 0 ? (
+      {!simpleView ? (
+        <ScannerWhyMissingPanel
+          rejectedSamples={activeDeskRejections.rejectedSamples}
+          rejectionReasonCounts={activeDeskRejections.rejectionReasonCounts}
+          suggestedSymbols={whyMissingSuggestedSymbols}
+          prefillSymbol={whyMissingPrefillSymbol}
+          showSymbolSuggestions={false}
+        />
+      ) : null}
+      {!simpleView && activeDeskRejections.survivorLimitUsed > 0 ? (
         <section
           data-testid="scanner-retained-pool-section"
           style={{
@@ -1723,13 +1783,13 @@ export function ScannerPageClient({
           ) : null}
         </section>
       ) : null}
-      {!showQuietInterpretation ? (
+      {!showQuietInterpretation && !simpleView ? (
         <ScannerNearQualificationSection
           nearQualification={scanSummary.near_qualification}
           watchlistProgression={scanSummary.watchlist_progression}
         />
       ) : null}
-      {!showQuietInterpretation ? (
+      {!showQuietInterpretation && !simpleView ? (
         <ScannerQuietLeadersSection scannerMode={scannerSetupMode === "both" ? "swing" : scannerSetupMode} />
       ) : null}
       {showQuietInterpretation ? (
@@ -1737,6 +1797,7 @@ export function ScannerPageClient({
           summary={scanSummary}
           synthesis={scannerSynthesis}
           deskFilter={evaluationTraceDeskFilter}
+          compact={simpleView}
         />
       ) : null}
 
@@ -1793,7 +1854,7 @@ export function ScannerPageClient({
         </div>
       ) : null}
 
-      {showQuietInterpretation ? (
+      {showQuietInterpretation && !simpleView ? (
         <p
           data-testid="scanner-why-nothing-qualified"
           style={{

@@ -154,7 +154,8 @@ describe("DashboardDiscoveryFeed", () => {
     );
     expect(screen.getByText("Market activity")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-opportunity-row-MU")).toBeInTheDocument();
-    expect(screen.getByTestId("scanner-why-missing-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-why-missing-toggle")).toBeInTheDocument();
+    expect(screen.queryByTestId("scanner-why-missing-panel")).toBeNull();
     expect(screen.getByTestId("opportunity-row-badge-MU")).toHaveTextContent(/R\/R blocks entry/i);
     expect(screen.queryByText(/Signals →/)).toBeNull();
   });
