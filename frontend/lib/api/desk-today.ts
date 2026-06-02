@@ -27,6 +27,12 @@ export type DeskMoverRadarRow = {
   rank_score: number;
 };
 
+export type DeskRetainedPoolRow = DeskMoverRadarRow & {
+  day_volume?: number;
+  session_price?: number;
+  rank_position?: number;
+};
+
 export type DeskRecentlyHotRow = {
   symbol: string;
   dropped_at: string;
@@ -52,6 +58,7 @@ export type DeskTodayData = {
   session_trading_date?: string;
   discovery?: DeskDiscoveryLeader[];
   movers_radar?: DeskMoverRadarRow[];
+  retained_pool?: DeskRetainedPoolRow[];
   rejection_reason_counts?: Record<string, number>;
   rejected_samples?: Array<{ symbol: string; reason: string; seen_at?: string }>;
   recently_hot?: DeskRecentlyHotRow[];

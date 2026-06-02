@@ -17,6 +17,7 @@ from stocvest.api.services.opportunity_desk.discovery_row import (
     DeskMode,
     discovery_row_from_mover,
     movers_radar_payload,
+    retained_pool_payload,
 )
 from stocvest.api.services.opportunity_desk.funnel import (
     OpportunityDeskFunnelConfig,
@@ -202,6 +203,7 @@ def _desk_payload_base(
         "eligible_symbol_count": funnel.eligible_symbol_count,
         "survivor_limit_used": funnel.survivor_limit_used,
         "movers_radar": movers_radar_payload(funnel.movers, limit=fcfg.movers_radar_limit),
+        "retained_pool": retained_pool_payload(funnel.movers),
         "rejection_reason_counts": funnel.rejection_reason_counts,
         "rejected_samples": rejected_samples_window,
         "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),

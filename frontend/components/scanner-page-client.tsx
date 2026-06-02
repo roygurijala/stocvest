@@ -51,7 +51,12 @@ import { buildScannerProgressHints } from "@/lib/scanner-progress-messaging";
 import type { ScannerEvaluationTraceRow } from "@/lib/scanner-setups-response";
 import { fetchEarningsCalendarClient } from "@/lib/api/earnings-client";
 import type { EarningsEvent } from "@/lib/api/earnings";
-import { fetchDeskToday, type DeskTodayData, type DeskTodayMode } from "@/lib/api/desk-today";
+import {
+  fetchDeskToday,
+  type DeskRetainedPoolRow,
+  type DeskTodayData,
+  type DeskTodayMode
+} from "@/lib/api/desk-today";
 import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { GAP_INTEL_ACTIVE_GUIDANCE, GAP_INTEL_EMPTY_CONTEXT } from "@/lib/scanner-quiet-copy";
@@ -185,14 +190,26 @@ function isSecondarySharedCatalyst(item: GapIntelligenceItem): boolean {
 type DeskRejectionSnapshot = {
   rejectionReasonCounts: Record<string, number>;
   rejectedSamples: Array<{ symbol: string; reason: string }>;
+  retainedPool: Array<
+    DeskRetainedPoolRow & {
+      symbol: string;
+      desk: DeskTodayMode;
+    }
+  >;
+  survivorLimitUsed: number;
 };
 
 const EMPTY_DESK_REJECTION_SNAPSHOT: DeskRejectionSnapshot = {
   rejectionReasonCounts: {},
-  rejectedSamples: []
+  rejectedSamples: [],
+  retainedPool: [],
+  survivorLimitUsed: 0
 };
 
-function extractDeskRejectionSnapshot(data: DeskTodayData | null | undefined): DeskRejectionSnapshot {
+function extractDeskRejectionSnapshot(
+  data: DeskTodayData | null | undefined,
+  mode: DeskTodayMode
+): DeskRejectionSnapshot {
   const rejectionReasonCounts =
     data?.rejection_reason_counts && typeof data.rejection_reason_counts === "object"
       ? data.rejection_reason_counts
@@ -205,9 +222,32 @@ function extractDeskRejectionSnapshot(data: DeskTodayData | null | undefined): D
         }))
         .filter((row) => row.symbol && row.reason)
     : [];
+  const retainedPool = Array.isArray(data?.retained_pool)
+    ? data.retained_pool
+        .map((row) => {
+          const direction: "up" | "down" = row.direction === "down" ? "down" : "up";
+          return {
+            symbol: String(row.symbol ?? "").trim().toUpperCase(),
+            gap_percent: Number(row.gap_percent ?? 0),
+            direction,
+            rank_score: Number(row.rank_score ?? 0),
+            day_volume: Number(row.day_volume ?? 0),
+            session_price: Number(row.session_price ?? 0),
+            rank_position: Number(row.rank_position ?? 0),
+            desk: mode
+          };
+        })
+        .filter((row) => row.symbol)
+    : [];
+  const survivorLimitUsed =
+    typeof data?.survivor_limit_used === "number" && Number.isFinite(data.survivor_limit_used)
+      ? Math.max(0, Math.floor(data.survivor_limit_used))
+      : retainedPool.length;
   return {
     rejectionReasonCounts,
-    rejectedSamples
+    rejectedSamples,
+    retainedPool,
+    survivorLimitUsed
   };
 }
 
@@ -225,6 +265,8 @@ export function ScannerPageClient({
     ...initialEarningsBySymbol
   }));
   const [showAllGaps, setShowAllGaps] = useState(false);
+  const [showRetainedPool, setShowRetainedPool] = useState(false);
+  const [retainedPoolPage, setRetainedPoolPage] = useState(1);
   const [isPending, startTransition] = useTransition();
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [evidenceLoading, setEvidenceLoading] = useState(false);
@@ -270,6 +312,10 @@ export function ScannerPageClient({
     try {
       const url = new URL(window.location.href);
       const urlMode = url.searchParams.get("mode");
+      const showRetained = url.searchParams.get("retained");
+      if (showRetained === "1" || showRetained === "true") {
+        setShowRetainedPool(true);
+      }
       if (urlMode === "day" || urlMode === "swing" || urlMode === "both") {
         next = urlMode;
       } else {
@@ -344,13 +390,31 @@ export function ScannerPageClient({
   }, [scannerSetupMode]);
 
   useEffect(() => {
+    setRetainedPoolPage(1);
+  }, [scannerSetupMode, showRetainedPool]);
+
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      if (showRetainedPool) {
+        url.searchParams.set("retained", "1");
+      } else {
+        url.searchParams.delete("retained");
+      }
+      window.history.replaceState(null, "", url.pathname + (url.search || "") + (url.hash || ""));
+    } catch {
+      /* ignore */
+    }
+  }, [showRetainedPool]);
+
+  useEffect(() => {
     let cancelled = false;
     const modes: DeskTodayMode[] = dayTradingSurfaces ? ["swing", "day"] : ["swing"];
     void Promise.all(
       modes.map(async (mode) => {
         try {
           const payload = await fetchDeskToday(mode);
-          return [mode, extractDeskRejectionSnapshot(payload?.data)] as const;
+          return [mode, extractDeskRejectionSnapshot(payload?.data, mode)] as const;
         } catch {
           return [mode, EMPTY_DESK_REJECTION_SNAPSHOT] as const;
         }
@@ -1228,8 +1292,27 @@ export function ScannerPageClient({
         return true;
       }
     );
-    return { rejectionReasonCounts: counts, rejectedSamples };
+    const retainedPool = [...deskRejections.swing.retainedPool, ...deskRejections.day.retainedPool];
+    const survivorLimitUsed = Math.max(
+      deskRejections.swing.survivorLimitUsed,
+      deskRejections.day.survivorLimitUsed,
+      retainedPool.length
+    );
+    return { rejectionReasonCounts: counts, rejectedSamples, retainedPool, survivorLimitUsed };
   }, [deskRejections, scannerSetupMode]);
+  const retainedPoolPageSize = 25;
+  const retainedPoolTotal = activeDeskRejections.retainedPool.length;
+  const retainedPoolPages = Math.max(1, Math.ceil(retainedPoolTotal / retainedPoolPageSize));
+  const safeRetainedPoolPage = Math.min(retainedPoolPage, retainedPoolPages);
+  const retainedPoolRows = useMemo(() => {
+    const start = (safeRetainedPoolPage - 1) * retainedPoolPageSize;
+    return activeDeskRejections.retainedPool.slice(start, start + retainedPoolPageSize);
+  }, [activeDeskRejections.retainedPool, safeRetainedPoolPage]);
+  useEffect(() => {
+    if (retainedPoolPage !== safeRetainedPoolPage) {
+      setRetainedPoolPage(safeRetainedPoolPage);
+    }
+  }, [retainedPoolPage, safeRetainedPoolPage]);
   const whyMissingSuggestedSymbols = useMemo(() => {
     return [
       ...new Set([
@@ -1491,6 +1574,154 @@ export function ScannerPageClient({
         suggestedSymbols={whyMissingSuggestedSymbols}
         prefillSymbol={whyMissingPrefillSymbol}
       />
+      {activeDeskRejections.survivorLimitUsed > 0 ? (
+        <section
+          data-testid="scanner-retained-pool-section"
+          style={{
+            borderRadius: borderRadius.xl,
+            border: `1px solid ${colors.border}`,
+            background: colors.surface,
+            padding: spacing[4],
+            display: "grid",
+            gap: spacing[2]
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: spacing[2],
+              flexWrap: "wrap"
+            }}
+          >
+            <div>
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: typography.scale.xs,
+                  color: colors.textMuted,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  fontWeight: 700
+                }}
+              >
+                Retained pool
+              </p>
+              <p style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.sm, color: colors.text }}>
+                {activeDeskRejections.survivorLimitUsed} symbols passed the hard filters this cycle.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowRetainedPool((v) => !v)}
+              style={{
+                border: `1px solid ${colors.border}`,
+                borderRadius: borderRadius.md,
+                background: colors.surfaceMuted,
+                color: colors.text,
+                padding: `${spacing[1]} ${spacing[2]}`,
+                fontSize: typography.scale.xs,
+                fontWeight: 600,
+                cursor: "pointer"
+              }}
+            >
+              {showRetainedPool ? "Hide retained list" : `Browse retained list (${retainedPoolTotal})`}
+            </button>
+          </div>
+          {showRetainedPool ? (
+            <>
+              <div style={{ display: "grid", gap: spacing[1] }}>
+                {retainedPoolRows.map((row) => (
+                  <div
+                    key={`${row.desk}-${row.symbol}-${row.rank_position ?? row.rank_score}`}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "minmax(5rem,1fr) minmax(4rem,1fr) minmax(4rem,1fr) minmax(6rem,1fr)",
+                      gap: spacing[2],
+                      padding: `${spacing[1]} ${spacing[2]}`,
+                      borderRadius: borderRadius.md,
+                      border: `1px solid ${colors.border}`,
+                      background: colors.surfaceMuted,
+                      fontSize: typography.scale.xs,
+                      alignItems: "center"
+                    }}
+                  >
+                    <span style={{ color: colors.text, fontWeight: 700 }}>
+                      {row.symbol}
+                      {scannerSetupMode === "both" ? (
+                        <span style={{ marginLeft: spacing[1], color: colors.textMuted, fontWeight: 500 }}>
+                          {row.desk}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span style={{ color: colors.textMuted }}>
+                      Gap {Number(row.gap_percent ?? 0).toFixed(2)}%
+                    </span>
+                    <span style={{ color: colors.textMuted }}>
+                      Rank {row.rank_position && row.rank_position > 0 ? `#${row.rank_position}` : "n/a"}
+                    </span>
+                    <span style={{ color: colors.textMuted }}>
+                      Score {Number(row.rank_score ?? 0).toFixed(1)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              {retainedPoolPages > 1 ? (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: spacing[2],
+                    marginTop: spacing[1]
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setRetainedPoolPage((p) => Math.max(1, p - 1))}
+                    disabled={safeRetainedPoolPage <= 1}
+                    style={{
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: borderRadius.md,
+                      background: colors.surfaceMuted,
+                      color: colors.text,
+                      padding: `${spacing[1]} ${spacing[2]}`,
+                      fontSize: typography.scale.xs,
+                      fontWeight: 600,
+                      cursor: safeRetainedPoolPage <= 1 ? "not-allowed" : "pointer",
+                      opacity: safeRetainedPoolPage <= 1 ? 0.6 : 1
+                    }}
+                  >
+                    Previous
+                  </button>
+                  <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>
+                    Page {safeRetainedPoolPage} of {retainedPoolPages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setRetainedPoolPage((p) => Math.min(retainedPoolPages, p + 1))}
+                    disabled={safeRetainedPoolPage >= retainedPoolPages}
+                    style={{
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: borderRadius.md,
+                      background: colors.surfaceMuted,
+                      color: colors.text,
+                      padding: `${spacing[1]} ${spacing[2]}`,
+                      fontSize: typography.scale.xs,
+                      fontWeight: 600,
+                      cursor: safeRetainedPoolPage >= retainedPoolPages ? "not-allowed" : "pointer",
+                      opacity: safeRetainedPoolPage >= retainedPoolPages ? 0.6 : 1
+                    }}
+                  >
+                    Next
+                  </button>
+                </div>
+              ) : null}
+            </>
+          ) : null}
+        </section>
+      ) : null}
       {!showQuietInterpretation ? (
         <ScannerNearQualificationSection
           nearQualification={scanSummary.near_qualification}
