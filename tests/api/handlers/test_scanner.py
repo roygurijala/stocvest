@@ -488,6 +488,65 @@ def test_scanner_gap_intelligence_timeout_falls_back_to_bounded_universe(monkeyp
     assert body.get("snapshot_symbol_count") == 1
 
 
+def test_scanner_gap_intelligence_degrades_gracefully_when_enrichment_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """News/earnings transport failures should not 5xx the gap-intelligence endpoint."""
+    scanner_response_cache._MEMORY.clear()
+
+    class _FakePoly:
+        def __init__(self, api_key: str) -> None:
+            _ = api_key
+
+        async def __aenter__(self) -> "_FakePoly":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            _ = args
+
+        async def get_ticker_details(self, sym: str) -> dict:
+            _ = sym
+            return {"name": ""}
+
+    async def _fake_news(*args: object, **kwargs: object) -> list[NewsArticle]:
+        _ = args, kwargs
+        raise RuntimeError("news backend down")
+
+    async def _fake_earnings(*args: object, **kwargs: object) -> tuple[list[dict], bool, str | None]:
+        _ = args, kwargs
+        raise RuntimeError("earnings backend down")
+
+    monkeypatch.setattr("stocvest.api.handlers.scanner.PolygonClient", _FakePoly)
+    monkeypatch.setattr(
+        "stocvest.api.handlers.scanner.collect_news_for_gap_intelligence",
+        _fake_news,
+    )
+    monkeypatch.setattr("stocvest.data.earnings_calendar_fetch.fetch_earnings_events", _fake_earnings)
+    monkeypatch.setattr("stocvest.api.handlers.scanner.get_settings", lambda: SimpleNamespace(polygon_api_key="k"))
+
+    event = {
+        "body": json.dumps(
+            {
+                "snapshots": [
+                    {
+                        "symbol": "SAFE1",
+                        "prev_close": 100.0,
+                        "last_trade_price": 106.0,
+                        "day_volume": 2_400_000.0,
+                        "prev_day_volume": 1_700_000.0,
+                        "company_name": "Safe Co",
+                    }
+                ],
+            }
+        )
+    }
+    response = scanner_gap_intelligence_handler(event, {})
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert isinstance(body.get("items"), list)
+    assert body.get("snapshot_symbol_count") == 1
+
+
 def test_scanner_handlers_validate_inputs() -> None:
     response = scanner_gaps_handler({"body": json.dumps({"snapshots": {}})}, {})
     assert response["statusCode"] == 400
