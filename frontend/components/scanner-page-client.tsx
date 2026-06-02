@@ -1573,6 +1573,7 @@ export function ScannerPageClient({
         rejectionReasonCounts={activeDeskRejections.rejectionReasonCounts}
         suggestedSymbols={whyMissingSuggestedSymbols}
         prefillSymbol={whyMissingPrefillSymbol}
+        showSymbolSuggestions={false}
       />
       {activeDeskRejections.survivorLimitUsed > 0 ? (
         <section
