@@ -53,7 +53,7 @@ export function SignalsReferenceLevels({ levels, setupPattern }: Props) {
             <p className="m-0 text-sm font-semibold" style={{ color: colors.text }}>
               {fmt(item.value)}
             </p>
-            <p className="m-0 text-[10px] leading-snug" style={{ color: colors.textMuted, opacity: 0.85 }}>
+            <p className="m-0 text-xs leading-snug" style={{ color: colors.textMuted, opacity: 0.85 }}>
               {item.hint}
             </p>
           </div>

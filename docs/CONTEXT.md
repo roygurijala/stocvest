@@ -4,7 +4,7 @@
 
 **Cursor AI rules** for agents live in **`.cursorrules`** at the repo root (see **`docs/CURSOR_RULES.md`** for a short pointer—do not duplicate the full rules there).
 
-**Last updated:** 2026-05-22 (latest — **B62** validation ledger capture + execution quality; prior **B58–B61**).
+**Last updated:** 2026-06-02 (latest — comprehensive codebase architecture/context documentation refresh for maintainers; prior **B62** validation ledger capture + execution quality; prior **B58–B61**).
 **Repo:** https://github.com/roygurijala/stocvest  
 **Test baseline (regression gate — must match §13):** Backend `pytest tests/ -q` → **1760 passed**, **3 skipped** (unchanged — B57 frontend-only); Frontend `cd frontend && npm run test` → **1426 passed** (**183** test files; targeted verify **2026-05-19** after **B57**); `cd frontend && npm run build` → **success** (pending re-verify after **B57**). Prior **1424** / **183** (B56). Prior **1421** / **183** (B55).
 
@@ -301,3 +301,80 @@ Report exact counts. If any count dropped, fix before proceeding to documentatio
 - **What STOCVEST is:** signal intelligence + execution tooling; user keeps custody via their broker.  
 - **What it is not:** RIA, broker-dealer, custodian, fund manager.  
 - Before **paid** users: attorney-reviewed ToS/Privacy, LLC, Stripe, production infra.
+
+---
+
+## 15. Codebase architecture map (maintainer reference)
+
+This section is the high-level "where things live and how they connect" map for the entire repository.
+Use it when onboarding, scoping changes, and reviewing cross-cutting impact before implementation.
+
+### 15.1 Repository layout (top level)
+
+| Path | Purpose |
+|------|---------|
+| `stocvest/` | Python domain + API package (handlers, services, engines, workers, brokers, config) |
+| `frontend/` | Next.js App Router UI + BFF routes + frontend tests |
+| `tests/` | Backend pytest suites by domain (`api`, `signals`, `data`, `brokers`, `workers`, `integration`) |
+| `infra/` | Terraform for Lambda/API Gateway/Cognito/Dynamo/Redis/ECS/EventBridge |
+| `docs/` | Product/architecture contracts (`CONTEXT`, `API_CONTRACTS`, `SIGNAL_ENGINE`, `PERFORMANCE`, plans) |
+| `.github/workflows/` | CI + deployment workflows |
+| `scripts/` | Packaging, parameter/bootstrap, and utility scripts |
+
+### 15.2 Backend architecture
+
+- **Dispatch model:** `stocvest/api/lambda_dispatch.py` routes by `STOCVEST_LAMBDA_MODULE` (health, signals, brokers, scanner, market_data, portfolio, journal, pdt, websocket, workers).
+- **Route handlers:** grouped under `stocvest/api/handlers/` (notably `signals.py`, `scanner.py`, `brokers.py`, `desk.py`, `watchlists.py`, `orders.py`, `analytics.py`).
+- **Core signal engine:** `stocvest/signals/` with layer analyzers (technical/news/macro/sector/geopolitical/internals), composite scoring, scanner engines, confluence, and setup judgment.
+- **Opportunity Desk / scanner services:** `stocvest/api/services/opportunity_desk/` (`funnel.py`, `batch.py`, `desk_refresh.py`, `discovery_row.py`, `quiet_leaders.py`) power dashboard/scanner discovery, why-missing, retained-pool, and refresh cadence behavior.
+- **Composite services:** `stocvest/api/services/*composite*` (day + swing service surfaces), with per-mode parameter resolution.
+- **Data/integration clients:** `stocvest/data/` (Polygon primary; Benzinga/EDGAR/FRED/Finnhub/FMP support), plus Anthropic synthesis integration.
+- **Brokers/execution:** `stocvest/brokers/` (`factory`, adapters, PDT enforcement), with API-level order safety hooks.
+- **Config/runtime controls:** `stocvest/utils/config.py` (`Settings`) + `stocvest/config/parameter_store.py` / `signal_parameters.py` for dynamic signal weights/thresholds and history.
+
+### 15.3 Frontend architecture
+
+- **App shell + routes:** `frontend/app/` with dashboard surfaces (`/dashboard`, `/dashboard/scanner`, `/dashboard/signals`, `/dashboard/watchlists`, `/dashboard/portfolio`, `/dashboard/journal`, admin routes, etc.).
+- **Scanner surface:** `frontend/components/scanner-page-client.tsx` + `components/scanner/*` (lanes, why-missing panel, quiet desk, near qualification, market cards).
+- **Signals surface:** `frontend/components/signals-page-client.tsx` + `components/signals/*` (desk tabs, reference levels, setup readouts, judgment, evidence and action context).
+- **Dashboard surface:** `frontend/components/dashboard/*` (opportunity pipeline/discovery/radar/market pulse with scanner + desk integrations).
+- **Watchlists surface:** `frontend/components/watchlists-page-client.tsx` + `components/watchlists/*` (maturation cards/rails/queue and interactions).
+- **BFF/API routes:** `frontend/app/api/stocvest/**/route.ts` normalize browser calls to backend endpoints and preserve auth/session contracts.
+- **Shared APIs/libs/hooks:** `frontend/lib/api/*`, `frontend/lib/hooks/*`, and presentation helpers in `frontend/lib/**`.
+
+### 15.4 Cross-cutting system contracts
+
+- **Auth/session:** Cognito/JWT + refresh flow; server-side auth context in BFF and backend authorizer paths.
+- **Mode separation:** Swing vs Day is an explicit system contract (frontend mode state, URL/query plumbing, backend route/service mode handling, parameter resolution).
+- **Resilience/degradation:** retry/fallback paths in browser + BFF fetch wrappers, plus graceful handling for partial upstream failures (especially scanner/desk flows).
+- **Caching/refresh:** desk/scanner caches, scheduled jobs, and explicit manual refresh endpoints work together; UI should never assume single-source real-time freshness.
+- **Legal/safety framing:** explanatory language and non-advisory constraints are intentional product behavior, not cosmetic copy.
+
+### 15.5 Testing architecture
+
+- **Backend tests:** `tests/` cover handlers, services, analyzers, stores, workers, integration edges.
+- **Frontend tests:** `frontend/tests/` cover component behavior, BFF contracts, mode routing, scanner/dashboard/signals/watchlists UX invariants.
+- **Regression posture:** when changing shared contracts (mode, desk/scanner payloads, composite routing, auth/session), update both backend + frontend tests together.
+
+### 15.6 Deployment and operations
+
+- **Infrastructure as code:** `infra/*.tf` defines API Gateway, Lambdas, Cognito, DynamoDB, Redis, ECS services/workers, schedules, and wiring.
+- **CI/CD:** `.github/workflows/ci.yml` runs backend tests, frontend build/tests, Terraform checks, and deployment hooks on protected branches.
+- **Secrets/runtime env:** managed outside git; handlers/services rely on documented env + secret keys in config loaders.
+
+### 15.7 "Must stay in sync" checklist
+
+When changing one side of these boundaries, verify and update the paired surfaces:
+
+1. **Backend routes/shape** (`stocvest/api/handlers/**`) <-> **BFF routes/types** (`frontend/app/api/stocvest/**`, `frontend/lib/api/**`).
+2. **Mode semantics** (swing/day routing + parameter resolution) <-> **frontend mode plumbing and links**.
+3. **Opportunity desk payloads** (`desk/today`, why-missing, retained-pool) <-> **scanner/dashboard presenters and tests**.
+4. **Composite/evidence route selection** <-> **signals/scanner UI chips and explanations**.
+5. **Auth/session flow** (401/refresh/expiry behavior) <-> **browser fetch wrappers + session UI behavior**.
+6. **Config parameters/weights** <-> **admin parameter tools + signal docs/tests**.
+7. **Infra env/secrets contracts** <-> **runtime `Settings` assumptions in Python and frontend env usage**.
+
+If a change crosses one of these boundaries, update:
+- implementation,
+- tests on both sides,
+- and this context document (plus `docs/API_CONTRACTS.md` where relevant).

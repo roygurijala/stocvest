@@ -87,7 +87,7 @@ export function WatchlistDecisionCard({
       >
         <button
           type="button"
-          className="absolute right-2 top-2 z-20 rounded-md p-1 opacity-60 transition hover:opacity-100"
+          className="absolute right-2 top-2 z-20 inline-flex min-h-11 min-w-11 items-center justify-center rounded-md p-1 opacity-60 transition hover:opacity-100"
           style={{ color: colors.textMuted }}
           aria-label={`Remove ${model.symbol} from watchlist`}
           data-testid={`watchlist-remove-${model.symbol}`}

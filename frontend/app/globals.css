@@ -682,6 +682,18 @@ a {
   justify-self: start;
 }
 
+@media (max-width: 639px) {
+  .watchlist-desk-lines__header {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .watchlist-desk-lines__fetched {
+    max-width: 100%;
+  }
+}
+
 /* Watchlist search — placeholder barely visible; typed text uses inline color from theme. */
 .watchlist-search-input::placeholder {
   opacity: 1;
@@ -760,7 +772,7 @@ a {
   }
   .signals-snap-section {
     scroll-snap-align: start;
-    scroll-margin-top: 0.5rem;
+    scroll-margin-top: var(--signals-mobile-scroll-margin-top, 12rem);
   }
 }
 @media (prefers-reduced-motion: reduce) {
