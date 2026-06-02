@@ -193,10 +193,10 @@ describe("ScannerPageClient setup mode toggle", () => {
 
     // Symbols from each engine must surface (proves both sections render rows,
     // not just headers).
-    expect(screen.getByText("SWINGA")).toBeTruthy();
-    expect(screen.getByText("SWINGB")).toBeTruthy();
-    expect(screen.getByText("DAYA")).toBeTruthy();
-    expect(screen.getByText("DAYB")).toBeTruthy();
+    expect(screen.getAllByText("SWINGA").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("SWINGB").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("DAYA").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("DAYB").length).toBeGreaterThan(0);
   });
 
   test("test_scanner_mode_url_param_overrides_localstorage", async () => {
