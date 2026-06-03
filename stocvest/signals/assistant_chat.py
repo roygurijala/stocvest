@@ -206,8 +206,73 @@ def serialize_symbol_context(ctx: AssistantSymbolContext) -> str:
                 f"  - {g.guidance_type}  period={g.period}  date={date_str}  headline={g.headline[:120]}"
             )
 
+    # ── Broader coverage (Benzinga newsfeed, channel-tagged) ─────────────────
+    # Complements the structured catalyst sections above with general / M&A /
+    # policy / sector headlines so the assistant has wider context. Deduped
+    # against the Polygon NEWS section and the dedicated WIIM section.
+    broader = _broader_coverage_lines(ctx)
+    if broader:
+        lines.append("")
+        lines.append("BROADER COVERAGE (Benzinga newsfeed, last 48h, by channel):")
+        lines.extend(broader)
+
     lines.append("")  # trailing newline
     return "\n".join(lines)
+
+
+# Channel-keyword → short category label. First match wins; order matters.
+_BENZINGA_CHANNEL_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("analyst", ("analyst", "upgrade", "downgrade", "price target", "rating", "initiat")),
+    ("m&a", ("m&a", "merger", "acquisition", "buyout", "takeover")),
+    ("guidance/earnings", ("guidance", "earnings", "eps", "outlook")),
+    ("policy/legal", ("government", "politic", "regulat", "legal", "lawsuit", "fda", "antitrust", "tariff")),
+    ("capital", ("offering", "dividend", "buyback", "repurchase", "ipo", "insider", "split", "secondary")),
+    ("markets/macro", ("macro", "econom", "fed", "inflation", "rates", "futures", "markets")),
+    ("product/tech", ("product", "launch", "partnership", "contract", "tech")),
+)
+
+
+def _benzinga_channel_category(channels: list[str]) -> str:
+    """Map a Benzinga article's channels to a short, human category label."""
+    joined = " ".join(c.lower() for c in (channels or []))
+    if not joined:
+        return "general"
+    for label, keywords in _BENZINGA_CHANNEL_CATEGORIES:
+        if any(kw in joined for kw in keywords):
+            return label
+    return "general"
+
+
+def _broader_coverage_lines(ctx: AssistantSymbolContext, *, limit: int = 6) -> list[str]:
+    """Build deduped, channel-categorized headline lines from the Benzinga feed."""
+    articles = getattr(ctx, "benzinga_news", None) or []
+    if not articles:
+        return []
+
+    # Titles already shown in the Polygon NEWS section (avoid repeating).
+    seen_titles = {((a.title or "").strip().lower()) for a in (ctx.news or [])}
+    wim_reason = (ctx.wim.reason.strip().lower() if ctx.wim and ctx.wim.reason else "")
+
+    out: list[str] = []
+    for article in articles:
+        title = (getattr(article, "title", "") or "").strip()
+        if not title:
+            continue
+        key = title.lower()
+        if key in seen_titles:
+            continue
+        # Skip pure WIIM items — already surfaced in the dedicated WIIM section.
+        channels = getattr(article, "channels", []) or []
+        if wim_reason and key == wim_reason:
+            continue
+        seen_titles.add(key)
+        category = _benzinga_channel_category(channels)
+        age = _age_label(getattr(article, "published_at", None))
+        clipped = title if len(title) <= 140 else title[:137] + "..."
+        out.append(f"  - [{category}] {clipped}  ({age})")
+        if len(out) >= limit:
+            break
+    return out
 
 
 def _fmt_volume(vol: float | int | None) -> str:
@@ -345,6 +410,8 @@ class AssistantChatService:
         symbol_context: AssistantSymbolContext | None = None,
         attached_image: dict[str, str] | None = None,
         discovery_context: str = "",
+        market_context: str = "",
+        watchlist_context: str = "",
     ) -> AssistantChatResult:
         """Authenticated chat turn.
 
@@ -392,10 +459,18 @@ class AssistantChatService:
         symbol_block = serialize_symbol_context(symbol_context) if symbol_context else ""
         if symbol_block:
             system_text += "\n" + symbol_block
+        if market_context:
+            system_text += "\n" + market_context
         if discovery_context:
             system_text += "\n" + discovery_context
+        if watchlist_context:
+            system_text += "\n" + watchlist_context
         # Increase token budget when live symbol or discovery data is present.
-        max_tokens = 900 if (symbol_block or discovery_context) else 380
+        max_tokens = (
+            900
+            if (symbol_block or discovery_context or market_context or watchlist_context)
+            else 380
+        )
         ai_text = await self._claude_chat_or_none(
             system=system_text,
             messages=clean,

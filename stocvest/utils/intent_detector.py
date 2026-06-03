@@ -89,6 +89,7 @@ def is_watchlist_remove_intent(text: str) -> bool:
 _DISCOVERY_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\bwhat('?s|\s+is)\s+(moving|up|down|happening)\b", re.IGNORECASE),
     re.compile(r"\bwhat\s+(stocks?\s+)?(have\s+)?(momentum|volume|strength)\b", re.IGNORECASE),
+    re.compile(r"\bmomentum\s+stocks?\b", re.IGNORECASE),
     re.compile(r"\b(top\s+)?(gainers?|losers?|movers?)\b", re.IGNORECASE),
     re.compile(r"\bgap\s+(stocks?|ups?|plays?)\b", re.IGNORECASE),
     re.compile(r"\bany\s+(good\s+)?(setups?|plays?|opportunities)\b", re.IGNORECASE),
@@ -104,3 +105,72 @@ def is_discovery_query(text: str) -> bool:
     if not text or not text.strip():
         return False
     return any(p.search(text) for p in _DISCOVERY_PATTERNS)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Market overview intent
+# ─────────────────────────────────────────────────────────────────────────────
+
+_MARKET_OVERVIEW_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\bhow\s+is\s+the\s+stock\s+market\s+doing\b", re.IGNORECASE),
+    re.compile(r"\bhow('?s|\s+is)\s+the\s+market\s+(doing|today)\b", re.IGNORECASE),
+    re.compile(r"\bmarket\s+(outlook|status|pulse|regime)\b", re.IGNORECASE),
+    re.compile(r"\b(what('?s|\s+is)\s+)?the\s+market\s+(like|doing)\s+(today|this\s+morning)\b", re.IGNORECASE),
+    re.compile(r"\bspy\s+and\s+qqq\b", re.IGNORECASE),
+)
+
+
+def is_market_overview_query(text: str) -> bool:
+    """Return True when the user asks for broad market status/regime context."""
+    if not text or not text.strip():
+        return False
+    return any(p.search(text) for p in _MARKET_OVERVIEW_PATTERNS)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Watchlist intelligence intent ("how is my watchlist doing?" / opportunities)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Status / health questions about the user's own watchlist as a whole. These are
+# deliberately scoped to phrasings that reference *my/the* watchlist so a stray
+# "watchlist" mention (e.g. "add NVDA to my watchlist") never trips them — the
+# add/remove action intents are checked first by the handler regardless.
+_WATCHLIST_STATUS_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\bhow('?s|\s+is|\s+are)\b.{0,20}\b(my|the)\s+watchlist\b", re.IGNORECASE),
+    re.compile(r"\b(my|the)\s+watchlist\b.{0,20}\b(doing|today|look|looking|status|update)\b", re.IGNORECASE),
+    re.compile(r"\b(what('?s|\s+is)\s+)?(happening|going\s+on|moving)\b.{0,25}\b(my|the)\s+watchlist\b", re.IGNORECASE),
+    re.compile(r"\b(update|summary|recap)\b.{0,20}\b(my|the)\s+watchlist\b", re.IGNORECASE),
+    re.compile(r"\banything\s+(moving|happening|new)\b.{0,20}\bwatchlist\b", re.IGNORECASE),
+)
+
+# Opportunity / readiness questions ("best opportunities from my watchlist today").
+_WATCHLIST_OPPORTUNITY_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\b(best|top|good)\s+(opportunit(y|ies)|setups?|plays?|trades?|ideas?)\b.{0,25}\bwatchlist\b", re.IGNORECASE),
+    re.compile(r"\bwatchlist\b.{0,25}\b(opportunit(y|ies)|setups?|plays?|ready|actionable)\b", re.IGNORECASE),
+    re.compile(r"\bwhat('?s|\s+is)\s+(ready|actionable|close|near\s+ready)\b.{0,25}\bwatchlist\b", re.IGNORECASE),
+    re.compile(r"\bwhat\s+should\s+i\s+(trade|buy|look\s+at)\b.{0,25}\b(my|the)\s+watchlist\b", re.IGNORECASE),
+    re.compile(r"\b(any|which)\s+(of\s+)?(my\s+)?watchlist\b.{0,20}\b(setups?|plays?|ready|opportunit)", re.IGNORECASE),
+    re.compile(r"\b(setups?|plays?|opportunit(y|ies)|ready|actionable)\b.{0,25}\bwatchlist\b", re.IGNORECASE),
+)
+
+
+def is_watchlist_status_query(text: str) -> bool:
+    """Return True when the user asks how their watchlist as a whole is doing."""
+    if not text or not text.strip():
+        return False
+    return any(p.search(text) for p in _WATCHLIST_STATUS_PATTERNS)
+
+
+def is_watchlist_opportunity_query(text: str) -> bool:
+    """Return True when the user asks for the best/ready opportunities on their watchlist."""
+    if not text or not text.strip():
+        return False
+    return any(p.search(text) for p in _WATCHLIST_OPPORTUNITY_PATTERNS)
+
+
+def is_watchlist_intelligence_query(text: str) -> bool:
+    """Return True for any watchlist status OR opportunity question.
+
+    Used by the assistant handler to decide whether to attach watchlist context.
+    """
+    return is_watchlist_status_query(text) or is_watchlist_opportunity_query(text)

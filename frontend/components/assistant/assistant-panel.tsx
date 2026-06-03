@@ -227,6 +227,19 @@ export const AssistantPanel = forwardRef<HTMLDivElement, AssistantPanelProps>(
     );
 
     const canSend = composerValue.trim().length > 0 && !loading;
+    const composerShellBorder = composerFocused
+      ? colors.accent
+      : `color-mix(in srgb, ${colors.accent} 40%, ${colors.border})`;
+    const composerShellBg = composerFocused
+      ? isLightTheme
+        ? `color-mix(in srgb, ${colors.accent} 12%, ${colors.surface})`
+        : `color-mix(in srgb, ${colors.accent} 10%, ${colors.surface})`
+      : isLightTheme
+        ? `color-mix(in srgb, ${colors.accent} 7%, ${colors.surface})`
+        : `color-mix(in srgb, ${colors.accent} 8%, ${colors.surface})`;
+    const composerTextareaBg = isLightTheme
+      ? `color-mix(in srgb, ${colors.accent} 11%, #ffffff)`
+      : `color-mix(in srgb, ${colors.accent} 16%, ${colors.surface})`;
 
     return (
       <div
@@ -416,13 +429,11 @@ export const AssistantPanel = forwardRef<HTMLDivElement, AssistantPanelProps>(
               gap: spacing[1],
               padding: `${spacing[2]} ${spacing[2]}`,
               borderRadius: borderRadius.lg,
-              border: `1.5px solid ${composerFocused ? colors.accent : colors.border}`,
-              background: composerFocused
-                ? `color-mix(in srgb, ${colors.accent} 6%, ${colors.surface})`
-                : colors.surface,
+              border: `1.5px solid ${composerShellBorder}`,
+              background: composerShellBg,
               boxShadow: composerFocused
-                ? `0 0 0 3px color-mix(in srgb, ${colors.accent} 18%, transparent)`
-                : "none",
+                ? `0 0 0 3px color-mix(in srgb, ${colors.accent} 24%, transparent), 0 10px 24px color-mix(in srgb, ${colors.accent} 18%, transparent)`
+                : `0 4px 14px color-mix(in srgb, ${colors.accent} 8%, transparent)`,
               transition: "border-color 150ms ease, box-shadow 150ms ease, background 150ms ease"
             }}
           >
@@ -446,12 +457,15 @@ export const AssistantPanel = forwardRef<HTMLDivElement, AssistantPanelProps>(
                 border: "none",
                 color: attachedImage ? colors.accent : colors.textMuted,
                 cursor: loading ? "default" : "pointer",
-                padding: "6px 4px",
+                minWidth: 40,
+                minHeight: 40,
+                padding: 0,
                 borderRadius: borderRadius.sm,
                 flexShrink: 0,
                 opacity: loading ? 0.4 : 1,
-                display: "flex",
-                alignItems: "center"
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center"
               }}
             >
               <Paperclip size={15} aria-hidden />
@@ -474,13 +488,16 @@ export const AssistantPanel = forwardRef<HTMLDivElement, AssistantPanelProps>(
                 minHeight: 44,
                 maxHeight: 140,
                 resize: "none",
-                border: "none",
+                border: `1px solid color-mix(in srgb, ${colors.accent} 35%, transparent)`,
+                borderRadius: borderRadius.md,
                 outline: "none",
-                background: "transparent",
+                background: composerTextareaBg,
                 color: colors.text,
-                fontSize: typography.scale.sm,
+                // 16px keeps the field readable and prevents iOS Safari's
+                // auto-zoom on focus (which fires below 16px) on mobile.
+                fontSize: 16,
                 lineHeight: 1.55,
-                padding: `${spacing[1]} ${spacing[1]}`,
+                padding: `${spacing[1]} ${spacing[2]}`,
                 fontFamily: "inherit"
               }}
             />
@@ -503,12 +520,15 @@ export const AssistantPanel = forwardRef<HTMLDivElement, AssistantPanelProps>(
                 border: isRecording ? `1px solid ${colors.accent}55` : "none",
                 color: isRecording ? colors.accent : colors.textMuted,
                 cursor: loading || !micSupported ? "default" : "pointer",
-                padding: "6px 4px",
+                minWidth: 40,
+                minHeight: 40,
+                padding: 0,
                 borderRadius: borderRadius.sm,
                 flexShrink: 0,
                 opacity: !micSupported || loading ? 0.35 : 1,
-                display: "flex",
+                display: "inline-flex",
                 alignItems: "center",
+                justifyContent: "center",
                 transition: "color 150ms ease, background 150ms ease"
               }}
             >
@@ -522,8 +542,8 @@ export const AssistantPanel = forwardRef<HTMLDivElement, AssistantPanelProps>(
               disabled={!canSend}
               aria-label="Send message"
               style={{
-                minWidth: 36,
-                minHeight: 36,
+                minWidth: 40,
+                minHeight: 40,
                 borderRadius: borderRadius.md,
                 border: "none",
                 background: canSend ? colors.accent : colors.surfaceMuted,

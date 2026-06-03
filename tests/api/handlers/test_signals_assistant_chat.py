@@ -585,6 +585,46 @@ def test_assistant_chat_detects_symbol_and_calls_context_fetch(
     assert captured.get("symbol_context") is symbol_context_sentinel
 
 
+def test_assistant_chat_includes_chart_payload_in_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When a symbol is detected, the response carries the deterministic chart
+    payload built from the symbol context."""
+    paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.get_user_profile_store",
+        lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: paid_profile)})(),
+    )
+
+    symbol_context_sentinel = object()
+
+    async def fake_fetch(sym: str):  # type: ignore[no-untyped-def]
+        return symbol_context_sentinel
+
+    monkeypatch.setattr("stocvest.api.handlers.signals.fetch_assistant_symbol_context", fake_fetch)
+    monkeypatch.setattr("stocvest.api.handlers.signals.detect_symbol_from_messages", lambda msgs: "NVDA")
+
+    chart_sentinel = {"symbol": "NVDA", "kind": "intraday", "points": [], "last": 100.0,
+                      "change_pct": 1.0, "direction": "up"}
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.build_symbol_chart",
+        lambda ctx: chart_sentinel if ctx is symbol_context_sentinel else None,
+    )
+
+    async def fake_reply(self, *, messages, page_context, user_profile, **kwargs):  # type: ignore[no-untyped-def]
+        return AssistantChatResult(text="NVDA is up.", source="ai", mode="contextual", upgrade_available=False)
+
+    monkeypatch.setattr("stocvest.signals.assistant_chat.AssistantChatService.reply", fake_reply)
+
+    response = assistant_chat_handler(
+        _event(body={"messages": [{"role": "user", "content": "how is NVDA doing today?"}]}),
+        {},
+    )
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["chart"] == chart_sentinel
+
+
 def test_assistant_chat_context_fetch_failure_does_not_break_chat(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

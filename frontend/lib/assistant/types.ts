@@ -282,6 +282,11 @@ export interface AssistantMessage {
    * renders a compact card confirming what was done.
    */
   action?: AssistantAction | null;
+  /**
+   * Price chart for this assistant turn. When present, the rail renders a
+   * compact sparkline mini-card under the message text.
+   */
+  chart?: AssistantChart | null;
 }
 
 /** Structured action result attached to an assistant message. */
@@ -291,6 +296,49 @@ export interface AssistantAction {
   company_name?: string;
   success: boolean;
   message: string;
+}
+
+/** One point on an assistant price chart (intraday close). */
+export interface AssistantChartPoint {
+  /** ISO-8601 timestamp (UTC) for the bar's start. */
+  t: string;
+  /** Close price for the bar. */
+  c: number;
+}
+
+/** A labeled reference level overlaid on an assistant price chart. */
+export interface AssistantChartLevel {
+  /** Human label, e.g. "VWAP", "Support", "50-day avg", "Analyst target". */
+  label: string;
+  /** Machine kind for color/ordering. */
+  kind: "vwap" | "prev_close" | "target" | "support" | "resistance" | "sma50";
+  value: number;
+  /** Distance of the level from the latest price, in percent (level above = positive). */
+  distance_pct?: number;
+}
+
+/**
+ * Deterministic price chart attached to an assistant turn. Built server-side
+ * from live Polygon snapshot/bars (never invented by the model). Rendered as a
+ * compact sparkline mini-card under the assistant message.
+ */
+export interface AssistantChart {
+  symbol: string;
+  /** "intraday" carries a points series; "quote" is headline-only. */
+  kind: "intraday" | "quote";
+  /** Bar interval for intraday charts, e.g. "5m". */
+  interval?: string;
+  points: AssistantChartPoint[];
+  /** Latest price (snapshot day close, else last bar close). */
+  last: number | null;
+  /** Percent change vs prior close (or first→last bar when snapshot absent). */
+  change_pct: number | null;
+  direction: "up" | "down" | "flat";
+  prev_close?: number | null;
+  /** Reference levels (VWAP, support/resistance, analyst target, 50-day avg). */
+  levels?: AssistantChartLevel[];
+  /** When the underlying data was fetched (ISO-8601). */
+  as_of?: string;
 }
 
 export interface AssistantChatResponse {
@@ -303,4 +351,6 @@ export interface AssistantChatResponse {
   navigate_to?: string | null;
   /** Structured action result (watchlist add/remove). */
   action?: AssistantAction | null;
+  /** Deterministic price chart built from live market data. */
+  chart?: AssistantChart | null;
 }

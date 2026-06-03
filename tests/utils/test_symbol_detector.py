@@ -7,7 +7,11 @@ from __future__ import annotations
 
 import pytest
 
-from stocvest.utils.symbol_detector import detect_symbol, detect_symbol_from_messages
+from stocvest.utils.symbol_detector import (
+    detect_symbol,
+    detect_symbol_from_messages,
+    extract_action_symbol,
+)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -157,6 +161,42 @@ def test_only_assistant_messages_returns_none() -> None:
     """Only assistant turns present — no user intent to scan."""
     messages = [{"role": "assistant", "content": "MRVL is a chip maker."}]
     assert detect_symbol_from_messages(messages) is None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# extract_action_symbol — explicit add/remove actions (blocklist bypass)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_action_symbol_extracts_blocklisted_ticker_pe() -> None:
+    """'PE' is a blocklisted abbreviation but a valid ticker when named explicitly."""
+    assert extract_action_symbol("add PE to my watchlist") == "PE"
+
+
+def test_action_symbol_extracts_lowercase_remove() -> None:
+    assert extract_action_symbol("remove mrvl from my watchlist") == "MRVL"
+
+
+def test_action_symbol_extracts_ev_on_add() -> None:
+    assert extract_action_symbol("can you add EV to my watchlist") == "EV"
+
+
+def test_action_symbol_dollar_sign_wins() -> None:
+    assert extract_action_symbol("add $AAPL to my watchlist") == "AAPL"
+
+
+def test_action_symbol_skips_pronoun_then_falls_back() -> None:
+    # "add it to my watchlist" — no real ticker; should not return a stopword.
+    assert extract_action_symbol("add it to my watchlist") is None
+
+
+def test_action_symbol_watch_verb() -> None:
+    assert extract_action_symbol("watch TSLA") == "TSLA"
+
+
+def test_action_symbol_no_verb_falls_back_to_detect() -> None:
+    # No action verb — behaves like detect_symbol.
+    assert extract_action_symbol("why is NVDA up today?") == "NVDA"
 
 
 def test_scans_at_most_three_user_turns() -> None:

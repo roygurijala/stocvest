@@ -299,6 +299,76 @@ def detect_symbol(text: str) -> str | None:
     return None
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Explicit watchlist-action ticker extraction
+# ─────────────────────────────────────────────────────────────────────────────
+# When a user issues an explicit action ("add PE to my watchlist", "remove MRVL"),
+# the named token IS the ticker by intent — even when it collides with a
+# blocklisted abbreviation (PE, EV, CD, …). The blocklist exists to avoid false
+# positives in free-text *questions*; for an explicit action we trust the token
+# that directly follows the action verb instead.
+
+_ACTION_VERB_PATTERN = re.compile(
+    r"\b(add|watch|track|put|remove|delete|unwatch|drop|stop\s+watching|stop\s+tracking)\b",
+    re.IGNORECASE,
+)
+
+# Small stoplist of connectors/pronouns that can sit right after an action verb
+# but are never tickers ("add IT to my watchlist", "remove the stock").
+_ACTION_STOPWORDS: frozenset[str] = frozenset({
+    "IT", "TO", "MY", "THE", "A", "AN", "THIS", "THAT", "ME", "ON", "OF",
+    "FROM", "STOCK", "STOCKS", "SYMBOL", "TICKER", "SHARE", "SHARES",
+    "PLEASE", "CAN", "YOU", "FOR", "AND", "OUT", "OFF", "WATCH", "LIST",
+})
+
+
+def extract_action_symbol(text: str) -> str | None:
+    """Extract the ticker named in an explicit add/remove watchlist action.
+
+    Unlike :func:`detect_symbol`, this trusts the token immediately following the
+    action verb so blocklisted-but-valid tickers (e.g. ``PE``) are honoured. Falls
+    back to :func:`detect_symbol` when no action verb is present or no plausible
+    token follows it.
+
+    Examples
+    --------
+    >>> extract_action_symbol("add PE to my watchlist")
+    'PE'
+    >>> extract_action_symbol("remove mrvl from my watchlist")
+    'MRVL'
+    >>> extract_action_symbol("add it to my watchlist")  # -> falls back, None
+    """
+    if not text or not text.strip():
+        return None
+
+    upper = text.upper()
+    # Explicit dollar-sign ticker always wins (highest confidence).
+    dollar_hits = _DOLLAR_PATTERN.findall(upper)
+    if dollar_hits:
+        return dollar_hits[-1]
+
+    verb_match = _ACTION_VERB_PATTERN.search(text)
+    if verb_match is not None:
+        rest = text[verb_match.end():]
+        # Whole-word tokens only, so "watchlist" is never partially matched as "watch".
+        for tok in re.findall(r"\b[A-Za-z]{1,5}\b", rest):
+            up = tok.upper()
+            if up in _ACTION_STOPWORDS:
+                continue
+            if up not in _BLOCKLIST:
+                # A clear, non-ambiguous ticker (e.g. MRVL, TSLA, NVDA).
+                return up
+            # The token collides with a blocklisted abbreviation. Only trust it as
+            # a ticker when the user wrote it as a deliberate ticker — all-caps
+            # ("add PE") — otherwise it's an English word ("track been doing").
+            if tok.isupper() and len(tok) >= 2:
+                return up
+            # Lowercase blocklisted word — skip and keep scanning.
+
+    # No usable token right after the verb — fall back to the general detector.
+    return detect_symbol(text)
+
+
 def detect_symbol_from_messages(messages: list[dict]) -> str | None:
     """Scan the most-recent user turns (up to last 3) for a ticker symbol.
 
