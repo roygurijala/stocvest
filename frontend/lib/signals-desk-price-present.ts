@@ -14,6 +14,8 @@ export type SignalsDeskPriceDayTone = "up" | "down" | "flat";
 export type SignalsDeskPriceContext = {
   priceLabel: "Last" | "After hours" | "Pre-market" | "As of close" | "Prior close";
   priceFormatted: string;
+  /** Raw numeric display price — used to mark the live level on the price chart. */
+  priceValue: number;
   dayChangePct: number | null;
   dayChangeFormatted: string | null;
   dayChangeTone: SignalsDeskPriceDayTone | null;
@@ -97,6 +99,7 @@ export function buildSignalsDeskPriceContext(
   return {
     priceLabel: display.label,
     priceFormatted: formatSignalPrice(display.price),
+    priceValue: display.price,
     dayChangePct,
     dayChangeFormatted,
     dayChangeTone: tone,

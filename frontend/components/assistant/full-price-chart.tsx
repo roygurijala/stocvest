@@ -24,6 +24,13 @@ interface FullPriceChartProps {
   /** Daily bars to request (defaults to ~7 months — enough for a 50-day avg). */
   limit?: number;
   height?: number;
+  /**
+   * Live/last price from the same source as the surrounding header. When set, a
+   * labeled "Current" line is drawn at this level and the candle's lagging
+   * last-bar tag is suppressed, so the chart always agrees with the header
+   * (a daily chart's last completed bar can be the prior close).
+   */
+  currentPrice?: number | null;
 }
 
 interface DailyBar {
@@ -53,9 +60,18 @@ function levelColor(kind: AssistantChartLevel["kind"], colors: ThemeColors): str
   }
 }
 
-export function FullPriceChart({ symbol, colors, levels = [], limit = 150, height = 280 }: FullPriceChartProps) {
+export function FullPriceChart({
+  symbol,
+  colors,
+  levels = [],
+  limit = 150,
+  height = 280,
+  currentPrice = null
+}: FullPriceChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "empty" | "error">("loading");
+
+  const livePrice = typeof currentPrice === "number" && Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice : null;
 
   // Stable identity for the levels so the effect doesn't re-run each render.
   const levelsKey = useMemo(
@@ -140,10 +156,12 @@ export function FullPriceChart({ symbol, colors, levels = [], limit = 150, heigh
         borderVisible: false,
         wickUpColor: colors.bullish,
         wickDownColor: colors.bearish ?? "#ef4444",
-        // Keep ONE clean axis tag (the current price); drop the dotted auto
-        // price line so it doesn't add to the label clutter near the top.
+        // Drop the dotted auto price line. When a live price is supplied we also
+        // hide the last-bar tag, because a daily chart's last completed bar can
+        // be the prior close and would disagree with the header; the explicit
+        // "Current" line below carries the live value instead.
         priceLineVisible: false,
-        lastValueVisible: true
+        lastValueVisible: livePrice == null
       });
       candles.setData(
         bars.map((b) => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close }))
@@ -209,6 +227,20 @@ export function FullPriceChart({ symbol, colors, levels = [], limit = 150, heigh
         });
       }
 
+      // Live "current price" marker — a solid line with its value on the axis so
+      // the chart always agrees with the header's last price (vs. the last
+      // completed daily bar, which may be the prior close).
+      if (livePrice != null) {
+        candles.createPriceLine({
+          price: livePrice,
+          color: colors.text,
+          lineWidth: 1,
+          lineStyle: 0, // LineStyle.Solid
+          axisLabelVisible: true,
+          title: "Current"
+        });
+      }
+
       chartApi.timeScale().fitContent();
       setStatus("ready");
 
@@ -235,7 +267,7 @@ export function FullPriceChart({ symbol, colors, levels = [], limit = 150, heigh
         }
       }
     };
-  }, [symbol, levelsKey, height, limit, colors]);
+  }, [symbol, levelsKey, height, limit, colors, livePrice]);
 
   return (
     <div data-testid="assistant-full-chart" style={{ display: "grid", gap: spacing[1] }}>

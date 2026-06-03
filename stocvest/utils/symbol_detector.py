@@ -402,6 +402,11 @@ _LOOKUP_FILLER: frozenset[str] = frozenset({
     "STOCK", "STOCKS", "SHARES", "SHARE", "COMPANY", "TICKER", "SYMBOL",
     "RATIO", "EVALUATION", "EVERYTHING", "POSITION", "POSITIONS", "USED",
     "PLEASE", "RAN", "FROM", "MUCH",
+    # Forecast / outlook framing — common trailing words that aren't the name.
+    "FORECAST", "FORECASTS", "OUTLOOK", "PREDICT", "PREDICTION", "PREDICTIONS",
+    "TARGET", "TARGETS", "EXPECT", "EXPECTED", "FUTURE", "PROSPECTS",
+    "GUIDANCE", "ESTIMATE", "ESTIMATES", "OPINION", "THOUGHTS", "ANALYSIS",
+    "COMING", "AHEAD", "SESSION", "CLOSE", "CLOSED", "OPEN", "OPENING",
 })
 
 # Market-/portfolio-level subjects: their presence means the question is NOT

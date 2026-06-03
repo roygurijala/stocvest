@@ -795,7 +795,12 @@ function ChartCard({ chart, colors }: { chart: AssistantChart; colors: ThemeColo
 
       {expanded && chart.symbol ? (
         <div style={{ marginTop: spacing[1] }}>
-          <FullPriceChart symbol={chart.symbol} colors={colors} levels={levels} />
+          <FullPriceChart
+            symbol={chart.symbol}
+            colors={colors}
+            levels={levels}
+            currentPrice={typeof chart.last === "number" ? chart.last : null}
+          />
           <span style={{ fontSize: 10, color: colors.textMuted, letterSpacing: "0.04em" }}>
             Daily candles · 50-day average · reference levels
           </span>

@@ -30,8 +30,15 @@ class _FakeClient:
 class _FakeSearchClient:
     """Stand-in exposing ``search_reference_tickers`` for company lookups."""
 
-    def __init__(self, *, rows: list[dict[str, str]] | None = None, error: Exception | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        rows: list[dict[str, str]] | None = None,
+        rows_by_query: dict[str, list[dict[str, str]]] | None = None,
+        error: Exception | None = None,
+    ) -> None:
         self._rows = rows or []
+        self._rows_by_query = rows_by_query
         self._error = error
         self.queries: list[str] = []
 
@@ -39,6 +46,8 @@ class _FakeSearchClient:
         self.queries.append(query)
         if self._error is not None:
             raise self._error
+        if self._rows_by_query is not None:
+            return self._rows_by_query.get(query, [])
         return self._rows
 
 
@@ -151,3 +160,23 @@ def test_company_name_too_short_skips_search() -> None:
     sym = _run(resolve_company_to_symbol("ai", client=client))
     assert sym is None
     assert client.queries == []  # never reached the network
+
+
+def test_company_name_falls_back_to_token_when_phrase_fails() -> None:
+    # "broadcom forecast" has no company match as a phrase, but the "broadcom"
+    # token resolves to AVGO — the resolver must try the token after the phrase.
+    client = _FakeSearchClient(rows_by_query={
+        "broadcom forecast": [],
+        "broadcom": [{"ticker": "AVGO", "name": "Broadcom Inc."}],
+    })
+    sym = _run(resolve_company_to_symbol("broadcom forecast", client=client))
+    assert sym == "AVGO"
+    assert client.queries[0] == "broadcom forecast"  # full phrase tried first
+
+
+def test_company_name_skips_short_tokens_in_fallback() -> None:
+    # The 2-char "do" must never be searched as a standalone token.
+    client = _FakeSearchClient(rows_by_query={"tesla": [{"ticker": "TSLA", "name": "Tesla, Inc."}]})
+    sym = _run(resolve_company_to_symbol("tesla do", client=client))
+    assert sym == "TSLA"
+    assert "do" not in client.queries
