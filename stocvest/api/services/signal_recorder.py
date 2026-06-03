@@ -849,6 +849,9 @@ class DynamoDBSignalRecorder:
         outcome = outcome_from_prices(direction, price_at, float(exit_price))
         val = _validation_label_from_directional_outcome(outcome)
         mo = mode.strip().lower()
+        # Only declare the name aliases actually referenced below — DynamoDB rejects
+        # update_item with a ValidationException when ExpressionAttributeNames contains
+        # keys unused in any expression. The mode-specific trio is added per branch.
         names: dict[str, str] = {
             "#ca": "closed_at",
             "#lp": "ledger_position_open",
@@ -858,12 +861,6 @@ class DynamoDBSignalRecorder:
             "#hm": "hold_duration_minutes",
             "#dse": "decision_state_exit",
             "#vo": "validation_outcome",
-            "#p1h": "price_1h_after",
-            "#o1h": "outcome_1h",
-            "#r1h": "resolved_1h",
-            "#p1d": "price_1d_after",
-            "#o1d": "outcome_1d",
-            "#r1d": "resolved_1d",
         }
         vals: dict[str, Any] = {
             ":ca": now.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
@@ -882,6 +879,9 @@ class DynamoDBSignalRecorder:
             names["#mre"] = "market_regime_exit"
             vals[":mre"] = market_regime_exit
         if mo == "swing":
+            names["#p1d"] = "price_1d_after"
+            names["#o1d"] = "outcome_1d"
+            names["#r1d"] = "resolved_1d"
             set_parts = [
                 "#p1d = :p",
                 "#o1d = :o",
@@ -896,6 +896,9 @@ class DynamoDBSignalRecorder:
                 "#vo = :vo",
             ]
         else:
+            names["#p1h"] = "price_1h_after"
+            names["#o1h"] = "outcome_1h"
+            names["#r1h"] = "resolved_1h"
             set_parts = [
                 "#p1h = :p",
                 "#o1h = :o",
