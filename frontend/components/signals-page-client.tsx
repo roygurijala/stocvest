@@ -1976,6 +1976,7 @@ export function SignalsPageClient({
                     colors={colors}
                     levels={chartLevels}
                     height={320}
+                    currentPrice={deskPriceContext?.priceValue ?? null}
                   />
                 </div>
               </article>

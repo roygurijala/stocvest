@@ -14,6 +14,7 @@ describe("buildSignalsDeskPriceContext", () => {
     expect(ctx).not.toBeNull();
     expect(ctx?.priceLabel).toBe("Last");
     expect(ctx?.priceFormatted).toBe("$185.20");
+    expect(ctx?.priceValue).toBe(185.2);
     expect(ctx?.dayChangeFormatted).toBe("+1.2%");
     expect(ctx?.dayChangeTone).toBe("up");
   });
