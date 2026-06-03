@@ -56,6 +56,7 @@ def _item_to_profile(user_id: str, item: dict[str, Any]) -> UserProfile:
         trial_ends_at=_s(item.get("trialEndsAt")),
         trial_reminder_day10_sent_at=_s(item.get("trialReminderDay10SentAt")),
         trial_reminder_day14_sent_at=_s(item.get("trialReminderDay14SentAt")),
+        assistant_preferred_desk=_s(item.get("assistantPreferredDesk")),
     )
 
 
@@ -111,6 +112,8 @@ def _profile_to_item(profile: UserProfile) -> dict[str, Any]:
         item["trialReminderDay10SentAt"] = profile.trial_reminder_day10_sent_at
     if profile.trial_reminder_day14_sent_at:
         item["trialReminderDay14SentAt"] = profile.trial_reminder_day14_sent_at
+    if profile.assistant_preferred_desk:
+        item["assistantPreferredDesk"] = profile.assistant_preferred_desk
     return item
 
 

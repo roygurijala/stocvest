@@ -426,6 +426,7 @@ class AssistantChatService:
         discovery_context: str = "",
         market_context: str = "",
         watchlist_context: str = "",
+        preference_context: str = "",
     ) -> AssistantChatResult:
         """Authenticated chat turn.
 
@@ -479,6 +480,8 @@ class AssistantChatService:
             system_text += "\n" + discovery_context
         if watchlist_context:
             system_text += "\n" + watchlist_context
+        if preference_context:
+            system_text += "\n" + preference_context
         # Increase token budget when live symbol or discovery data is present.
         max_tokens = (
             900

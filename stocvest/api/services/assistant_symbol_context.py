@@ -280,6 +280,48 @@ def build_symbol_chart(ctx: AssistantSymbolContext | None) -> dict | None:
 # Daily look-back windows for derived levels.
 _SMA_PERIOD = 50
 _SWING_LOOKBACK = 20
+# Support/resistance are only shown when they sit within this band of the current
+# price. In a strong trend the nearest *real* structure can be far away; rather
+# than surface a window-extreme 40-50% from price (which is not actionable and
+# misleads, e.g. a "Support" $158 while the stock trades $300), we omit the level.
+_SR_PROXIMITY_PCT = 25.0
+# Bars on each side that define a confirmed fractal swing pivot.
+_PIVOT_WINDOW = 2
+# Recent window whose extreme is always considered a candidate level (captures the
+# latest high/low that has not yet been confirmed as a fractal pivot).
+_RECENT_WINDOW = 12
+
+
+def _swing_pivots(bars: list, attr: str, *, is_high: bool) -> list[float]:
+    """Return the values of confirmed fractal swing pivots for an OHLC attribute.
+
+    A pivot high is a bar whose ``high`` is >= every neighbor within
+    ``_PIVOT_WINDOW`` bars on each side; a pivot low is the symmetric minimum.
+    These mark prices where the tape actually turned — far more meaningful as
+    support/resistance than the raw min/max of a lookback window.
+    """
+    vals: list[float] = []
+    n = len(bars)
+    for i in range(_PIVOT_WINDOW, n - _PIVOT_WINDOW):
+        try:
+            center = float(getattr(bars[i], attr))
+        except (TypeError, ValueError, AttributeError):
+            continue
+        is_pivot = True
+        for j in range(i - _PIVOT_WINDOW, i + _PIVOT_WINDOW + 1):
+            if j == i:
+                continue
+            try:
+                other = float(getattr(bars[j], attr))
+            except (TypeError, ValueError, AttributeError):
+                is_pivot = False
+                break
+            if (is_high and other > center) or (not is_high and other < center):
+                is_pivot = False
+                break
+        if is_pivot:
+            vals.append(center)
+    return vals
 
 
 def _compute_chart_levels(ctx: AssistantSymbolContext, last: float | None) -> list[dict[str, object]]:
@@ -319,18 +361,37 @@ def _compute_chart_levels(ctx: AssistantSymbolContext, last: float | None) -> li
     if targets:
         _add("Analyst target", "target", sum(targets) / len(targets))
 
-    # Daily-bar derived levels: 50-day average + recent swing support/resistance.
+    # Daily-bar derived levels: 50-day average + swing support/resistance.
     daily = ctx.bars_1d or []
     closes = [float(b.close) for b in daily if getattr(b, "close", None) is not None]
     if len(closes) >= 20:
         window = closes[-_SMA_PERIOD:]
         _add(f"{len(window)}-day avg" if len(window) < _SMA_PERIOD else "50-day avg", "sma50", sum(window) / len(window))
-    swing = daily[-_SWING_LOOKBACK:]
-    lows = [float(b.low) for b in swing if getattr(b, "low", None) is not None]
-    highs = [float(b.high) for b in swing if getattr(b, "high", None) is not None]
-    if lows:
-        _add("Support", "support", min(lows))
-    if highs:
-        _add("Resistance", "resistance", max(highs))
+
+    # Support/resistance: confirmed swing pivots plus the most recent window
+    # extreme, filtered to the nearest level on each side that sits WITHIN the
+    # proximity band. When nothing qualifies near price (e.g. a parabolic move
+    # with no recent base), we deliberately render no level — an honest blank is
+    # better than a faraway window-extreme dressed up as "support".
+    if last and last > 0 and len(daily) >= (2 * _PIVOT_WINDOW + 1):
+        lo_band = last * (1 - _SR_PROXIMITY_PCT / 100.0)
+        hi_band = last * (1 + _SR_PROXIMITY_PCT / 100.0)
+        recent = daily[-_RECENT_WINDOW:]
+        recent_lows = [float(b.low) for b in recent if getattr(b, "low", None) is not None]
+        recent_highs = [float(b.high) for b in recent if getattr(b, "high", None) is not None]
+
+        support_candidates = _swing_pivots(daily, "low", is_high=False)
+        if recent_lows:
+            support_candidates.append(min(recent_lows))
+        nearby_support = [v for v in support_candidates if lo_band <= v < last]
+        if nearby_support:
+            _add("Support", "support", max(nearby_support))
+
+        resistance_candidates = _swing_pivots(daily, "high", is_high=True)
+        if recent_highs:
+            resistance_candidates.append(max(recent_highs))
+        nearby_resistance = [v for v in resistance_candidates if last < v <= hi_band]
+        if nearby_resistance:
+            _add("Resistance", "resistance", min(nearby_resistance))
 
     return levels

@@ -287,6 +287,62 @@ export interface AssistantMessage {
    * compact sparkline mini-card under the message text.
    */
   chart?: AssistantChart | null;
+  /**
+   * Ranked discovery rows for a "what's moving today?" answer. When present, the
+   * rail renders a compact ranked table (symbol · why · open) under the message.
+   */
+  discovery?: AssistantDiscovery | null;
+  /**
+   * Source citations behind a live-symbol synthesis. Rendered as numbered chips
+   * linking to the underlying news/Benzinga items.
+   */
+  citations?: AssistantCitation[] | null;
+  /**
+   * Clarifying quick-reply options (e.g. swing vs day desk). Rendered as
+   * selectable chips that send a refining message when clicked.
+   */
+  clarify?: AssistantClarify | null;
+}
+
+/** One row in an in-chat ranked discovery card. */
+export interface AssistantDiscoveryRow {
+  symbol: string;
+  /** Plain-English one-liner: why this symbol is notable (catalyst, gap, setup). */
+  context: string;
+}
+
+/** Compact ranked discovery payload built from the cached opportunity desk. */
+export interface AssistantDiscovery {
+  mode: "swing" | "day";
+  /** Provenance of the rows, e.g. "desk_cache". */
+  source: string;
+  generated_at?: string | null;
+  rows: AssistantDiscoveryRow[];
+  /** Deep-link to the full Scanner for this desk. */
+  scanner_href: string;
+}
+
+/** One source-citation chip behind an assistant synthesis. */
+export interface AssistantCitation {
+  title: string;
+  url: string;
+  /** Publisher / feed name shown on the chip. */
+  source: string;
+  published_at?: string | null;
+}
+
+/** A single selectable clarifying quick-reply. */
+export interface AssistantClarifyOption {
+  /** Short label shown on the chip. */
+  label: string;
+  /** The message text sent when the chip is clicked. */
+  send: string;
+}
+
+/** Clarifying-question card offering quick refinements (e.g. desk choice). */
+export interface AssistantClarify {
+  prompt?: string;
+  options: AssistantClarifyOption[];
 }
 
 /** Structured action result attached to an assistant message. */
@@ -353,4 +409,10 @@ export interface AssistantChatResponse {
   action?: AssistantAction | null;
   /** Deterministic price chart built from live market data. */
   chart?: AssistantChart | null;
+  /** Compact ranked discovery rows (cached opportunity desk). */
+  discovery?: AssistantDiscovery | null;
+  /** Source citations behind a live-symbol synthesis. */
+  citations?: AssistantCitation[] | null;
+  /** Clarifying quick-reply options (e.g. desk choice). */
+  clarify?: AssistantClarify | null;
 }

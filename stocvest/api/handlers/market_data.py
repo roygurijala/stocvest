@@ -39,6 +39,7 @@ from stocvest.data import PolygonClient, PolygonError, Timeframe
 from stocvest.data.models import EconomicCalendarEvent
 from stocvest.data.polygon_client import LIQUID_NEWS_TICKERS
 from stocvest.data.benzinga_client import BenzingaClient
+from stocvest.data.ticker_reference_cache import get_ticker_reference
 from stocvest.data.watchlist_store import get_watchlist_store
 from stocvest.utils.config import get_settings
 from stocvest.api.services.dashboard_summary import build_dashboard_summary
@@ -203,6 +204,66 @@ def tickers_search_handler(
         return asyncio.run(_run())
     except PolygonError as exc:
         return internal_error(str(exc))
+
+
+_SYMBOL_NAMES_MAX = 60
+
+
+def symbol_names_handler(
+    event: LambdaEvent,
+    context: LambdaContext,
+    client_factory: Callable[..., PolygonClient] = PolygonClient,
+) -> dict[str, Any]:
+    """GET ``/v1/market/symbol-names?symbols=AAPL,MSFT`` — map tickers → company name.
+
+    Backed by the 24h-cached Polygon reference lookup. Names are non-critical
+    decoration, so any upstream failure degrades to an empty/partial map rather
+    than an error (callers fall back to the bare ticker).
+    """
+    _ = context
+    query = _query_params(event)
+    raw = str(query.get("symbols") or "").strip()
+    if not raw:
+        return bad_request("Query param 'symbols' is required.")
+
+    seen: set[str] = set()
+    symbols: list[str] = []
+    for tok in raw.split(","):
+        sym = tok.strip().upper()
+        if not sym or sym in seen:
+            continue
+        core = sym.replace(".", "")
+        if not (1 <= len(sym) <= 12 and core.isalpha()):
+            continue
+        seen.add(sym)
+        symbols.append(sym)
+        if len(symbols) >= _SYMBOL_NAMES_MAX:
+            break
+    if not symbols:
+        return ok({"names": {}})
+
+    async def _run() -> dict[str, Any]:
+        settings = get_settings()
+        names: dict[str, str] = {}
+        async with client_factory(api_key=settings.polygon_api_key) as client:
+            sem = asyncio.Semaphore(8)
+
+            async def one(sym: str) -> None:
+                async with sem:
+                    try:
+                        ref = await get_ticker_reference(client, sym)
+                    except Exception:  # noqa: BLE001 — names are best-effort
+                        ref = None
+                if ref is not None and ref.name:
+                    names[sym] = ref.name
+
+            await asyncio.gather(*[one(s) for s in symbols])
+        return ok({"names": names})
+
+    try:
+        return asyncio.run(_run())
+    except Exception:  # noqa: BLE001 — never fail the page over decorative names
+        return ok({"names": {}})
 
 
 def vix_snapshot_handler(

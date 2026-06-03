@@ -81,7 +81,9 @@ from stocvest.data.dashboard_cache import (
 from stocvest.data import PolygonClient, PolygonError, Timeframe
 from stocvest.data.models import Bar, MarketStatus, SignalRecord, Snapshot
 from stocvest.signals.ai_explanations import AIExplanationService, news_articles_from_payload
+from stocvest.api.services.assistant_citations import build_citations
 from stocvest.api.services.assistant_discovery import (
+    discovery_payload,
     fetch_discovery_context,
     serialize_discovery_context,
 )
@@ -97,14 +99,17 @@ from stocvest.api.services.assistant_watchlist_action import (
     execute_watchlist_add,
     execute_watchlist_remove,
 )
+from stocvest.api.services.symbol_resolver import resolve_symbol
 from stocvest.api.services.assistant_watchlist_context import (
     fetch_watchlist_context,
     serialize_watchlist_context,
 )
 from stocvest.signals.assistant_chat import AssistantChatService
 from stocvest.utils.intent_detector import (
+    detect_explicit_desk,
     is_discovery_query,
     is_market_overview_query,
+    is_mode_sensitive_query,
     is_trade_planning_question,
     is_watchlist_add_intent,
     is_watchlist_intelligence_query,
@@ -1188,7 +1193,30 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
         action_sym = extract_action_symbol(last_user_text_for_intent)
         if action_sym:
             if is_watchlist_add_intent(last_user_text_for_intent):
-                wl_result = execute_watchlist_add(rc.user_id, action_sym)
+                # Validate the ticker against Polygon reference data BEFORE writing
+                # it, so a typo never silently lands on the watchlist. We only block
+                # on a definitive miss/delisting — transient failures fail open.
+                resolution = asyncio.run(resolve_symbol(action_sym))
+                if not resolution.valid:
+                    return ok({
+                        "text": resolution.reason or f'I couldn\'t verify the ticker "{action_sym}".',
+                        "source": "deterministic",
+                        "mode": "contextual",
+                        "upgrade_available": False,
+                        "disclaimer": API_SIGNAL_DISCLAIMER,
+                        "navigate_to": None,
+                        "action": {
+                            "type": "watchlist_add",
+                            "symbol": action_sym,
+                            "company_name": resolution.name,
+                            "success": False,
+                            "message": resolution.reason
+                            or f'I couldn\'t verify the ticker "{action_sym}".',
+                        },
+                    })
+                wl_result = execute_watchlist_add(
+                    rc.user_id, action_sym, company_name=resolution.name
+                )
                 return ok({
                     "text": wl_result.message,
                     "source": "deterministic",
@@ -1199,6 +1227,7 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
                     "action": {
                         "type": wl_result.action_type,
                         "symbol": wl_result.symbol,
+                        "company_name": wl_result.company_name,
                         "success": wl_result.success,
                         "message": wl_result.message,
                     },
@@ -1215,6 +1244,7 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
                     "action": {
                         "type": wl_result.action_type,
                         "symbol": wl_result.symbol,
+                        "company_name": wl_result.company_name,
                         "success": wl_result.success,
                         "message": wl_result.message,
                     },
@@ -1249,17 +1279,47 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
         historical_summary = None
         product_kpi_summary = None
 
+    # ── Light personalization: resolve the user's trading desk ───────────────
+    # Priority: explicit screen mode > explicit desk language in the message >
+    # stored preference > default (day). A newly stated preference is persisted so
+    # future desk-ambiguous questions inherit it without re-asking.
+    page_mode: str | None = None
+    if page_context and isinstance(page_context.get("trading_mode"), str):
+        _pm = page_context["trading_mode"].strip().lower()
+        page_mode = _pm if _pm in ("swing", "day") else None
+
+    explicit_desk = (
+        detect_explicit_desk(last_user_text_for_intent) if profile.has_ai_explanations else None
+    )
+    if (
+        explicit_desk
+        and profile.has_ai_explanations
+        and explicit_desk != (profile.assistant_preferred_desk or "")
+    ):
+        try:
+            updated = profile.model_copy(update={"assistant_preferred_desk": explicit_desk})
+            get_user_profile_store().put_profile(updated)
+            profile = updated
+        except Exception:  # noqa: BLE001 — preference persistence must never break chat
+            _LOG.warning("assistant_chat: failed to persist preferred desk", exc_info=True)
+
+    stored_desk = (
+        profile.assistant_preferred_desk
+        if profile.assistant_preferred_desk in ("swing", "day")
+        else None
+    )
+    resolved_desk = page_mode or explicit_desk or stored_desk or "day"
+
     # ── Discovery intent (A3) ────────────────────────────────────────────────
     # When the user asks "what's moving today?" / "any momentum stocks?", pull
     # from the cached desk results and inject them as context. No new scan.
     discovery_block = ""
+    discovery_payload_out: dict | None = None
     if profile.has_ai_explanations and is_discovery_query(last_user_text_for_intent):
         try:
-            desk_mode = "day"
-            if page_context and isinstance(page_context.get("trading_mode"), str):
-                desk_mode = page_context["trading_mode"]
-            disc = fetch_discovery_context(desk_mode)
+            disc = fetch_discovery_context(resolved_desk)
             discovery_block = serialize_discovery_context(disc)
+            discovery_payload_out = discovery_payload(disc)
             if not disc.has_data:
                 # No cached data — add a soft note so Claude routes correctly.
                 discovery_block = (
@@ -1293,10 +1353,7 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     watchlist_block = ""
     if profile.has_ai_explanations and is_watchlist_intelligence_query(last_user_text_for_intent):
         try:
-            wl_mode = "day"
-            if page_context and isinstance(page_context.get("trading_mode"), str):
-                wl_mode = "swing" if page_context["trading_mode"].strip().lower() == "swing" else "day"
-            wl_ctx = fetch_watchlist_context(rc.user_id, wl_mode)  # type: ignore[arg-type]
+            wl_ctx = fetch_watchlist_context(rc.user_id, resolved_desk)  # type: ignore[arg-type]
             watchlist_block = serialize_watchlist_context(wl_ctx)
             if not watchlist_block:
                 watchlist_block = (
@@ -1335,6 +1392,44 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     except Exception:  # noqa: BLE001
         chart_payload = None
 
+    # Source-citation chips — the underlying news/Benzinga items behind a
+    # "why is X moving?" synthesis, so the user can verify the sources.
+    citations_out: list[dict] | None = None
+    try:
+        citations_out = build_citations(symbol_context)
+    except Exception:  # noqa: BLE001
+        citations_out = None
+
+    # Clarifying-question chips — when a desk-ambiguous discovery/opportunity/
+    # trade-planning question arrives with no screen mode, no explicit desk
+    # language, and no stored preference, offer quick swing/day refinements.
+    clarify_out: dict | None = None
+    if (
+        profile.has_ai_explanations
+        and is_mode_sensitive_query(last_user_text_for_intent)
+        and not page_mode
+        and not explicit_desk
+        and not stored_desk
+    ):
+        clarify_out = {
+            "prompt": "Which desk should I focus on? STOCVEST gates swing and day independently.",
+            "options": [
+                {"label": "Swing (multi-day)", "send": "Focus on swing (multi-day) setups"},
+                {"label": "Day (intraday)", "send": "Focus on day (intraday) setups"},
+            ],
+        }
+
+    # Preference context — tells Claude to answer for the user's usual desk when a
+    # question is desk-ambiguous (and they have not overridden it this turn).
+    preference_block = ""
+    if stored_desk and not explicit_desk and not page_mode:
+        preference_block = (
+            "=== USER PREFERENCE ===\n"
+            f"preferred_desk={stored_desk}\n"
+            "note=The user usually focuses on this desk. For a desk-ambiguous question, answer for "
+            "this desk and briefly note they can ask about the other.\n"
+        )
+
     # Detect trade-planning intent to pre-attach navigate_to deep-link.
     # Checked before calling Claude so the result carries it even on the
     # deterministic (free-tier) path.
@@ -1364,6 +1459,7 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
                 discovery_context=discovery_block,
                 market_context=market_block,
                 watchlist_context=watchlist_block,
+                preference_context=preference_block,
             )
         )
     except (TypeError, ValueError) as exc:
@@ -1387,6 +1483,9 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
             "disclaimer": API_SIGNAL_DISCLAIMER,
             "navigate_to": navigate_to,
             "chart": chart_payload,
+            "discovery": discovery_payload_out,
+            "citations": citations_out,
+            "clarify": clarify_out,
         }
     )
 

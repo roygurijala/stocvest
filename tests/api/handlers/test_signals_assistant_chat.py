@@ -281,6 +281,93 @@ def test_assistant_chat_handler_swallows_summary_fetch_failure(
     assert captured.get("historical_validation_summary") is None
 
 
+def test_assistant_chat_validates_symbol_before_watchlist_add(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A valid ticker is resolved, added, and its company name flows to the action card."""
+    from stocvest.api.services.assistant_watchlist_action import WatchlistActionResult
+    from stocvest.api.services.symbol_resolver import SymbolResolution
+
+    paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.get_user_profile_store",
+        lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: paid_profile)})(),
+    )
+
+    async def _resolve(symbol: str, **_kwargs):  # type: ignore[no-untyped-def]
+        return SymbolResolution(
+            symbol=symbol.strip().upper(),
+            name="NVIDIA Corporation",
+            valid=True,
+            found=True,
+            active=True,
+            verified=True,
+        )
+
+    seen: dict = {}
+
+    def _add(user_id: str, symbol: str, *, company_name=None):  # type: ignore[no-untyped-def]
+        seen["company_name"] = company_name
+        return WatchlistActionResult(
+            success=True,
+            action_type="watchlist_add",
+            symbol=symbol,
+            message=f"Added {symbol} (NVIDIA Corporation) to your watchlist.",
+            company_name=company_name,
+        )
+
+    monkeypatch.setattr("stocvest.api.handlers.signals.resolve_symbol", _resolve)
+    monkeypatch.setattr("stocvest.api.handlers.signals.execute_watchlist_add", _add)
+
+    response = assistant_chat_handler(
+        _event(body={"messages": [{"role": "user", "content": "add nvda to my watchlist"}]}, sub="u-paid"),
+        {},
+    )
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["action"]["type"] == "watchlist_add"
+    assert body["action"]["success"] is True
+    assert body["action"]["company_name"] == "NVIDIA Corporation"
+    assert "NVIDIA Corporation" in body["action"]["message"]
+    assert seen["company_name"] == "NVIDIA Corporation"
+
+
+def test_assistant_chat_rejects_unknown_symbol_for_watchlist_add(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An unknown ticker is rejected before any write to the watchlist."""
+    from stocvest.api.services.symbol_resolver import SymbolResolution
+
+    paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.get_user_profile_store",
+        lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: paid_profile)})(),
+    )
+
+    async def _resolve(symbol: str, **_kwargs):  # type: ignore[no-untyped-def]
+        return SymbolResolution(
+            symbol=symbol.strip().upper(),
+            name=None,
+            valid=False,
+            found=False,
+            active=None,
+            verified=True,
+            reason='I couldn\'t find a tradable stock with the ticker "ZZZQ".',
+        )
+
+    def _add(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+        raise AssertionError("execute_watchlist_add must not run for an invalid symbol")
+
+    monkeypatch.setattr("stocvest.api.handlers.signals.resolve_symbol", _resolve)
+    monkeypatch.setattr("stocvest.api.handlers.signals.execute_watchlist_add", _add)
+
+    response = assistant_chat_handler(
+        _event(body={"messages": [{"role": "user", "content": "add zzzq to my watchlist"}]}, sub="u-paid"),
+        {},
+    )
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["action"]["type"] == "watchlist_add"
+    assert body["action"]["success"] is False
+    assert "ZZZQ" in body["action"]["message"]
+
+
 def test_assistant_chat_paid_user_calls_service_and_returns_ai_text(monkeypatch: pytest.MonkeyPatch) -> None:
     """Paid users get a Claude-generated turn; we patch the service so no network is needed."""
     paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
@@ -320,6 +407,117 @@ def test_assistant_chat_paid_user_calls_service_and_returns_ai_text(monkeypatch:
     assert body["upgrade_available"] is False
     assert "risk/reward" in body["text"]
     assert body["disclaimer"]
+
+
+# ---------------------------------------------------------------------------
+# Aime-parity gaps: discovery payload, citations, clarify chips, personalization
+# ---------------------------------------------------------------------------
+
+
+def _patch_paid_store(monkeypatch: pytest.MonkeyPatch, store=None):
+    """Install a profile store and stub network-bound helpers for chat tests."""
+    if store is None:
+        store = type(
+            "S",
+            (),
+            {"get_profile": staticmethod(lambda _uid: UserProfile(user_id="u-paid", subscription_plan="swing_pro"))},
+        )()
+    monkeypatch.setattr("stocvest.api.handlers.signals.get_user_profile_store", lambda: store)
+    monkeypatch.setattr("stocvest.api.handlers.signals.detect_symbol_from_messages", lambda msgs: None)
+
+    async def _ok_reply(self, *, messages, page_context, user_profile, **_kwargs):  # type: ignore[no-untyped-def]
+        return AssistantChatResult(text="ok.", source="ai", mode="general", upgrade_available=False)
+
+    monkeypatch.setattr("stocvest.signals.assistant_chat.AssistantChatService.reply", _ok_reply)
+    return store
+
+
+def test_assistant_chat_includes_discovery_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_paid_store(monkeypatch)
+    from stocvest.api.services.assistant_discovery import DiscoveryResult, DiscoveryRow
+
+    disc = DiscoveryResult(
+        rows=[DiscoveryRow(symbol="NVDA", context="earnings, strong setup")],
+        source="desk_cache",
+        mode="day",
+        has_data=True,
+    )
+    monkeypatch.setattr("stocvest.api.handlers.signals.fetch_discovery_context", lambda mode: disc)
+
+    response = assistant_chat_handler(
+        _event(body={"messages": [{"role": "user", "content": "what are the momentum stocks this morning?"}]}),
+        {},
+    )
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["discovery"]["mode"] == "day"
+    assert body["discovery"]["rows"][0]["symbol"] == "NVDA"
+    assert body["discovery"]["scanner_href"] == "/dashboard/scanner?focus=day"
+
+
+def test_assistant_chat_includes_clarify_for_ambiguous_discovery(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_paid_store(monkeypatch)
+    from stocvest.api.services.assistant_discovery import DiscoveryResult
+
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.fetch_discovery_context",
+        lambda mode: DiscoveryResult(mode=mode, source="empty_cache"),
+    )
+
+    response = assistant_chat_handler(
+        _event(body={"messages": [{"role": "user", "content": "what are the momentum stocks this morning?"}]}),
+        {},
+    )
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["clarify"] is not None
+    assert len(body["clarify"]["options"]) == 2
+
+
+def test_assistant_chat_no_clarify_when_explicit_desk(monkeypatch: pytest.MonkeyPatch) -> None:
+    from stocvest.api.services.user_profile_store import InMemoryUserProfileStore
+    from stocvest.api.services.assistant_discovery import DiscoveryResult
+
+    store = InMemoryUserProfileStore()
+    store.put_profile(UserProfile(user_id="u-paid", subscription_plan="swing_pro"))
+    _patch_paid_store(monkeypatch, store=store)
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.fetch_discovery_context",
+        lambda mode: DiscoveryResult(mode=mode, source="empty_cache"),
+    )
+
+    response = assistant_chat_handler(
+        _event(
+            body={"messages": [{"role": "user", "content": "show me day-trading momentum stocks"}]},
+            sub="u-paid",
+        ),
+        {},
+    )
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["clarify"] is None
+    # The explicit desk was persisted for next time.
+    assert store.get_profile("u-paid").assistant_preferred_desk == "day"
+
+
+def test_assistant_chat_includes_citations(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_paid_store(monkeypatch)
+    monkeypatch.setattr("stocvest.api.handlers.signals.detect_symbol_from_messages", lambda msgs: "MRVL")
+
+    async def fake_fetch(sym: str):  # type: ignore[no-untyped-def]
+        return object()
+
+    monkeypatch.setattr("stocvest.api.handlers.signals.fetch_assistant_symbol_context", fake_fetch)
+    citations_sentinel = [{"title": "Upgrade", "url": "https://e.com/a", "source": "Benzinga", "published_at": None}]
+    monkeypatch.setattr("stocvest.api.handlers.signals.build_citations", lambda ctx: citations_sentinel)
+
+    response = assistant_chat_handler(
+        _event(body={"messages": [{"role": "user", "content": "why is MRVL up?"}]}),
+        {},
+    )
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["citations"] == citations_sentinel
 
 
 # ---------------------------------------------------------------------------

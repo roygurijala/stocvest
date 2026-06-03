@@ -4,10 +4,19 @@ import { memo, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { ArrowRight, CheckCircle, LineChart, XCircle } from "lucide-react";
+import { ArrowRight, CheckCircle, ExternalLink, LineChart, XCircle } from "lucide-react";
 import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
-import type { AssistantAction, AssistantChart, AssistantChartLevel, AssistantMessage } from "@/lib/assistant/types";
+import { SymbolName } from "@/components/symbol-name";
+import type {
+  AssistantAction,
+  AssistantChart,
+  AssistantChartLevel,
+  AssistantCitation,
+  AssistantClarify,
+  AssistantDiscovery,
+  AssistantMessage
+} from "@/lib/assistant/types";
 
 // Lazy-loaded so TradingView's lightweight-charts (~35 KB) only ships when a
 // user actually expands a full chart — the chat stays featherweight.
@@ -31,6 +40,10 @@ interface AssistantConversationRailProps {
   colors: ThemeColors;
   /** Tone driving the assistant node color when contextual: caution / bullish / bearish / neutral. */
   contextTone: "neutral" | "bullish" | "bearish" | "caution";
+  /** True while a turn is in flight — disables clarifying quick-reply chips. */
+  loading?: boolean;
+  /** Send a refining message when a clarifying quick-reply chip is tapped. */
+  onQuickReply?: (text: string) => void;
 }
 
 function nodeColor(
@@ -52,7 +65,9 @@ function speakerLabel(role: AssistantMessage["role"]): string {
 export const AssistantConversationRail = memo(function AssistantConversationRail({
   messages,
   colors,
-  contextTone
+  contextTone,
+  loading,
+  onQuickReply
 }: AssistantConversationRailProps) {
   return (
     <ol
@@ -80,7 +95,14 @@ export const AssistantConversationRail = memo(function AssistantConversationRail
         }}
       />
       {messages.map((m) => (
-        <ConversationRow key={m.id} message={m} colors={colors} contextTone={contextTone} />
+        <ConversationRow
+          key={m.id}
+          message={m}
+          colors={colors}
+          contextTone={contextTone}
+          loading={loading}
+          onQuickReply={onQuickReply}
+        />
       ))}
     </ol>
   );
@@ -90,9 +112,11 @@ interface ConversationRowProps {
   message: AssistantMessage;
   colors: ThemeColors;
   contextTone: AssistantConversationRailProps["contextTone"];
+  loading?: boolean;
+  onQuickReply?: (text: string) => void;
 }
 
-function ConversationRow({ message, colors, contextTone }: ConversationRowProps) {
+function ConversationRow({ message, colors, contextTone, loading, onQuickReply }: ConversationRowProps) {
   const isUser = message.role === "user";
   const tone = nodeColor(message.role, colors, contextTone);
   /**
@@ -194,7 +218,225 @@ function ConversationRow({ message, colors, contextTone }: ConversationRowProps)
       {!isUser && message.action ? (
         <ActionCard action={message.action} colors={colors} />
       ) : null}
+      {/* Ranked discovery card — compact symbol · why · open table */}
+      {!isUser && message.discovery && message.discovery.rows.length > 0 ? (
+        <DiscoveryCard discovery={message.discovery} colors={colors} />
+      ) : null}
+      {/* Source-citation chips */}
+      {!isUser && message.citations && message.citations.length > 0 ? (
+        <CitationChips citations={message.citations} colors={colors} />
+      ) : null}
+      {/* Clarifying quick-reply chips (e.g. swing vs day desk) */}
+      {!isUser && message.clarify && message.clarify.options.length > 0 ? (
+        <ClarifyChips
+          clarify={message.clarify}
+          colors={colors}
+          disabled={Boolean(loading)}
+          onQuickReply={onQuickReply}
+        />
+      ) : null}
     </li>
+  );
+}
+
+function DiscoveryCard({ discovery, colors }: { discovery: AssistantDiscovery; colors: ThemeColors }) {
+  const deskLabel = discovery.mode === "swing" ? "Swing" : "Day";
+  return (
+    <div
+      data-testid="assistant-discovery-card"
+      data-discovery-mode={discovery.mode}
+      style={{
+        display: "grid",
+        gap: spacing[1],
+        padding: `${spacing[2]} ${spacing[3]}`,
+        borderRadius: borderRadius.md,
+        border: `1px solid ${colors.border}`,
+        background: colors.surfaceMuted
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "baseline",
+          justifyContent: "space-between",
+          gap: spacing[2]
+        }}
+      >
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 700,
+            letterSpacing: "0.14em",
+            textTransform: "uppercase",
+            color: colors.textMuted
+          }}
+        >
+          {deskLabel} desk · top movers
+        </span>
+        <Link
+          href={discovery.scanner_href}
+          data-testid="assistant-discovery-scanner-link"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            fontSize: 10,
+            fontWeight: 600,
+            color: colors.accent,
+            textDecoration: "none"
+          }}
+        >
+          Open Scanner
+          <ArrowRight size={11} aria-hidden />
+        </Link>
+      </div>
+      <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 2 }}>
+        {discovery.rows.map((row, i) => (
+          <li
+            key={row.symbol}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "auto minmax(2.6rem, auto) 1fr",
+              alignItems: "baseline",
+              gap: spacing[2],
+              padding: "3px 0",
+              borderTop: i === 0 ? "none" : `1px solid ${colors.border}55`
+            }}
+          >
+            <span style={{ fontSize: 10, color: colors.textMuted, fontVariantNumeric: "tabular-nums" }}>
+              {i + 1}
+            </span>
+            <Link
+              href={`/dashboard/signals?symbol=${encodeURIComponent(row.symbol)}&ref=assistant`}
+              style={{
+                fontWeight: 800,
+                fontSize: typography.scale.sm,
+                color: colors.text,
+                textDecoration: "none",
+                letterSpacing: "0.02em"
+              }}
+            >
+              <SymbolName
+                symbol={row.symbol}
+                layout="stacked"
+                symbolStyle={{ fontWeight: "inherit", color: "inherit", letterSpacing: "0.02em" }}
+                nameStyle={{ fontWeight: 400, fontSize: 10 }}
+                maxNameChars={18}
+              />
+            </Link>
+            <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45 }}>
+              {row.context}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+function CitationChips({ citations, colors }: { citations: AssistantCitation[]; colors: ThemeColors }) {
+  return (
+    <div data-testid="assistant-citations" style={{ display: "grid", gap: 4 }}>
+      <span
+        style={{
+          fontSize: 10,
+          fontWeight: 700,
+          letterSpacing: "0.14em",
+          textTransform: "uppercase",
+          color: colors.textMuted
+        }}
+      >
+        Sources
+      </span>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {citations.map((c, i) => (
+          <a
+            key={c.url}
+            href={c.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="assistant-citation-chip"
+            title={c.title}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              maxWidth: "100%",
+              fontSize: 10,
+              color: colors.textMuted,
+              border: `1px solid ${colors.accent}44`,
+              background: `${colors.accent}10`,
+              borderRadius: 999,
+              padding: "2px 9px",
+              textDecoration: "none"
+            }}
+          >
+            <span style={{ fontWeight: 800, color: colors.accent }}>{i + 1}</span>
+            <span
+              style={{
+                fontWeight: 600,
+                color: colors.text,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                maxWidth: 180
+              }}
+            >
+              {c.source}
+            </span>
+            <ExternalLink size={10} aria-hidden style={{ flexShrink: 0 }} />
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ClarifyChips({
+  clarify,
+  colors,
+  disabled,
+  onQuickReply
+}: {
+  clarify: AssistantClarify;
+  colors: ThemeColors;
+  disabled: boolean;
+  onQuickReply?: (text: string) => void;
+}) {
+  if (!onQuickReply) return null;
+  return (
+    <div data-testid="assistant-clarify" style={{ display: "grid", gap: 6 }}>
+      {clarify.prompt ? (
+        <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45 }}>
+          {clarify.prompt}
+        </span>
+      ) : null}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {clarify.options.map((opt) => (
+          <button
+            key={opt.send}
+            type="button"
+            data-testid="assistant-clarify-option"
+            disabled={disabled}
+            onClick={() => onQuickReply(opt.send)}
+            style={{
+              minHeight: 30,
+              padding: "4px 12px",
+              fontSize: typography.scale.xs,
+              fontWeight: 600,
+              cursor: disabled ? "default" : "pointer",
+              opacity: disabled ? 0.5 : 1,
+              color: colors.accent,
+              border: `1px solid ${colors.accent}66`,
+              background: `${colors.accent}14`,
+              borderRadius: 999
+            }}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -311,9 +553,12 @@ function ChartCard({ chart, colors }: { chart: AssistantChart; colors: ThemeColo
           gap: spacing[2]
         }}
       >
-        <span style={{ fontWeight: 800, fontSize: typography.scale.sm, color: colors.text, letterSpacing: "0.02em" }}>
-          {chart.symbol}
-        </span>
+        <SymbolName
+          symbol={chart.symbol}
+          symbolStyle={{ fontWeight: 800, fontSize: typography.scale.sm, color: colors.text, letterSpacing: "0.02em" }}
+          nameStyle={{ fontWeight: 400 }}
+          maxNameChars={22}
+        />
         <span style={{ display: "inline-flex", alignItems: "baseline", gap: 6 }}>
           {lastLabel ? (
             <span style={{ fontWeight: 700, fontSize: typography.scale.sm, color: colors.text }}>{lastLabel}</span>

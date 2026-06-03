@@ -15,6 +15,23 @@ from stocvest.signals.assistant_prompts import (
 
 
 # ---------------------------------------------------------------------------
+# Self-sufficiency rules — answers must not reflexively redirect to the app
+# ---------------------------------------------------------------------------
+
+
+def test_prompt_has_self_sufficiency_rules() -> None:
+    assert "ANSWER SELF-SUFFICIENTLY" in ASSISTANT_SYSTEM_PROMPT
+    # The redirect is explicitly named as a non-answer.
+    assert "A redirect is not an answer." in ASSISTANT_SYSTEM_PROMPT
+
+
+def test_prompt_drops_mandatory_scanner_redirect() -> None:
+    # The old hard rule that forced every discovery answer to end by sending the
+    # user to the Scanner page must be gone.
+    assert 'Always end with: "For the full ranked list' not in ASSISTANT_SYSTEM_PROMPT
+
+
+# ---------------------------------------------------------------------------
 # serialize_page_context — whitelist + emitting only known keys
 # ---------------------------------------------------------------------------
 

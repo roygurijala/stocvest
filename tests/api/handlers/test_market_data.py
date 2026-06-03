@@ -15,6 +15,7 @@ from stocvest.api.handlers.market_data import (
     options_chain_handler,
     snapshot_handler,
     snapshots_batch_handler,
+    symbol_names_handler,
     tickers_search_handler,
     vix_snapshot_handler,
 )
@@ -269,6 +270,39 @@ def test_tickers_search_handler_returns_items() -> None:
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
     assert body["items"] == [{"symbol": "BAH", "name": "Booz Allen Hamilton Holding Corporation"}]
+
+
+class _RefNamesClient(_FakePolygonClient):
+    async def get_ticker_details(self, symbol: str) -> dict:
+        catalog = {
+            "AAPL": {"ticker": "AAPL", "name": "Apple Inc.", "active": True},
+            "MSFT": {"ticker": "MSFT", "name": "Microsoft Corporation", "active": True},
+        }
+        return catalog.get(symbol.strip().upper(), {})
+
+
+def test_symbol_names_handler_requires_symbols() -> None:
+    response = symbol_names_handler({"queryStringParameters": {}}, {}, client_factory=_RefNamesClient)
+    assert response["statusCode"] == 400
+
+
+def test_symbol_names_handler_maps_known_tickers() -> None:
+    event = {"queryStringParameters": {"symbols": "aapl,msft,zzzz"}}
+    response = symbol_names_handler(event, {}, client_factory=_RefNamesClient)
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["names"]["AAPL"] == "Apple Inc."
+    assert body["names"]["MSFT"] == "Microsoft Corporation"
+    # Unknown ticker resolves to nothing and is simply omitted.
+    assert "ZZZZ" not in body["names"]
+
+
+def test_symbol_names_handler_ignores_malformed_tokens() -> None:
+    event = {"queryStringParameters": {"symbols": "aapl, , 123, !!"}}
+    response = symbol_names_handler(event, {}, client_factory=_RefNamesClient)
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["names"] == {"AAPL": "Apple Inc."}
 
 
 def test_snapshots_batch_handler_requires_symbols() -> None:

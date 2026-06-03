@@ -1,6 +1,8 @@
 from stocvest.utils.intent_detector import (
+    detect_explicit_desk,
     is_discovery_query,
     is_market_overview_query,
+    is_mode_sensitive_query,
     is_watchlist_intelligence_query,
     is_watchlist_opportunity_query,
     is_watchlist_status_query,
@@ -35,4 +37,27 @@ def test_add_to_watchlist_is_not_a_status_query() -> None:
     # An explicit add action mentions "watchlist" but must not trip status intent.
     assert not is_watchlist_status_query("add NVDA to my watchlist")
     assert not is_watchlist_opportunity_query("add NVDA to my watchlist")
+
+
+def test_detect_explicit_desk_day_variants() -> None:
+    assert detect_explicit_desk("show me day-trading momentum stocks") == "day"
+    assert detect_explicit_desk("any intraday setups?") == "day"
+    assert detect_explicit_desk("Focus on day (intraday) setups") == "day"
+
+
+def test_detect_explicit_desk_swing_variants() -> None:
+    assert detect_explicit_desk("what swing setups look good") == "swing"
+    assert detect_explicit_desk("Focus on swing (multi-day) setups") == "swing"
+    assert detect_explicit_desk("any multi-day plays?") == "swing"
+
+
+def test_detect_explicit_desk_none_when_ambiguous() -> None:
+    assert detect_explicit_desk("what's moving today?") is None
+    assert detect_explicit_desk("") is None
+
+
+def test_is_mode_sensitive_query_covers_discovery_and_opportunity() -> None:
+    assert is_mode_sensitive_query("what are the momentum stocks this morning")
+    assert is_mode_sensitive_query("what are the best opportunities from my watchlist today")
+    assert not is_mode_sensitive_query("what is a P/E ratio")
 

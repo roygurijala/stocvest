@@ -885,7 +885,8 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
       }
       if (!res.ok) {
         setRows(prev);
-        setSymErr("Add failed");
+        // 422 invalid_symbol carries a specific reason ("…not a recognized ticker").
+        setSymErr((data as { message?: string }).message || "Add failed");
         return;
       }
       setRows((r) => {

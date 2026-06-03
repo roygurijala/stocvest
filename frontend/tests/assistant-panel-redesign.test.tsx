@@ -244,6 +244,126 @@ describe("AssistantPanel — chart mini-card", () => {
   });
 });
 
+// ─── Ranked discovery card ───────────────────────────────────────────────────
+
+describe("AssistantPanel — discovery card", () => {
+  it("renders a compact ranked table when an assistant message carries discovery rows", () => {
+    renderPanel({
+      messages: [
+        { id: "1", role: "user", content: "what's moving today?" },
+        {
+          id: "2",
+          role: "assistant",
+          content: "A few names are active today.",
+          discovery: {
+            mode: "day",
+            source: "desk_cache",
+            generated_at: "2026-06-03T13:30:00Z",
+            scanner_href: "/dashboard/scanner?focus=day",
+            rows: [
+              { symbol: "NVDA", context: "earnings, gap up 4.0%, strong setup" },
+              { symbol: "AVGO", context: "guidance, moderate setup" },
+            ],
+          },
+        },
+      ],
+    });
+    const card = screen.getByTestId("assistant-discovery-card");
+    expect(card.getAttribute("data-discovery-mode")).toBe("day");
+    expect(screen.getByText("NVDA")).toBeDefined();
+    expect(screen.getByText("AVGO")).toBeDefined();
+    const scannerLink = screen.getByTestId("assistant-discovery-scanner-link");
+    expect(scannerLink.getAttribute("href")).toBe("/dashboard/scanner?focus=day");
+  });
+
+  it("does not render a discovery card when rows are empty", () => {
+    renderPanel({
+      messages: [
+        { id: "1", role: "user", content: "what's moving today?" },
+        {
+          id: "2",
+          role: "assistant",
+          content: "Nothing cached.",
+          discovery: { mode: "day", source: "desk_cache", scanner_href: "/x", rows: [] },
+        },
+      ],
+    });
+    expect(screen.queryByTestId("assistant-discovery-card")).toBeNull();
+  });
+});
+
+// ─── Source-citation chips ───────────────────────────────────────────────────
+
+describe("AssistantPanel — citation chips", () => {
+  it("renders numbered citation chips linking to the source URLs", () => {
+    renderPanel({
+      messages: [
+        { id: "1", role: "user", content: "why is MRVL up?" },
+        {
+          id: "2",
+          role: "assistant",
+          content: "MRVL is up on an analyst upgrade.",
+          citations: [
+            { title: "Marvell upgraded", url: "https://example.com/a", source: "Benzinga" },
+            { title: "Chip rally", url: "https://example.com/b", source: "Reuters" },
+          ],
+        },
+      ],
+    });
+    const chips = screen.getAllByTestId("assistant-citation-chip");
+    expect(chips.length).toBe(2);
+    expect(chips[0].getAttribute("href")).toBe("https://example.com/a");
+    expect(chips[0].getAttribute("target")).toBe("_blank");
+    expect(screen.getByText("Benzinga")).toBeDefined();
+  });
+});
+
+// ─── Clarifying quick-reply chips ─────────────────────────────────────────────
+
+describe("AssistantPanel — clarify chips", () => {
+  it("renders clarifying options and sends the option text on click", () => {
+    const onQuickReply = vi.fn();
+    renderPanel({
+      onQuickReply,
+      messages: [
+        { id: "1", role: "user", content: "what are the best opportunities?" },
+        {
+          id: "2",
+          role: "assistant",
+          content: "Which desk should I focus on?",
+          clarify: {
+            prompt: "Which desk should I focus on?",
+            options: [
+              { label: "Swing (multi-day)", send: "Focus on swing (multi-day) setups" },
+              { label: "Day (intraday)", send: "Focus on day (intraday) setups" },
+            ],
+          },
+        },
+      ],
+    });
+    const options = screen.getAllByTestId("assistant-clarify-option");
+    expect(options.length).toBe(2);
+    fireEvent.click(options[1]);
+    expect(onQuickReply).toHaveBeenCalledWith("Focus on day (intraday) setups");
+  });
+
+  it("does not render clarify chips without an onQuickReply handler", () => {
+    renderPanel({
+      onQuickReply: undefined,
+      messages: [
+        { id: "1", role: "user", content: "what are the best opportunities?" },
+        {
+          id: "2",
+          role: "assistant",
+          content: "Which desk?",
+          clarify: { options: [{ label: "Day", send: "day" }] },
+        },
+      ],
+    });
+    expect(screen.queryByTestId("assistant-clarify-option")).toBeNull();
+  });
+});
+
 // ─── Close button ────────────────────────────────────────────────────────────
 
 describe("AssistantPanel — close", () => {

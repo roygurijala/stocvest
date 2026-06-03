@@ -32,6 +32,8 @@ interface AssistantPanelProps {
   composerValue: string;
   setComposerValue: (next: string) => void;
   onSubmit: (text: string, image?: AttachedImage) => void;
+  /** Send a refining message when the user taps a clarifying quick-reply chip. */
+  onQuickReply?: (text: string) => void;
   onClose: () => void;
   loading: boolean;
   notice?: string | null;
@@ -92,6 +94,7 @@ export const AssistantPanel = forwardRef<HTMLDivElement, AssistantPanelProps>(
       composerValue,
       setComposerValue,
       onSubmit,
+      onQuickReply,
       onClose,
       loading,
       notice,
@@ -336,6 +339,8 @@ export const AssistantPanel = forwardRef<HTMLDivElement, AssistantPanelProps>(
               messages={messages}
               colors={colors}
               contextTone={tone}
+              loading={loading}
+              onQuickReply={onQuickReply}
             />
           )}
         </div>

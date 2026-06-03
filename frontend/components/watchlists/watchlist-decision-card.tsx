@@ -2,6 +2,7 @@
 
 import { X } from "lucide-react";
 import { SignalsDeeplinkLink } from "@/components/nav/signals-deeplink-link";
+import { SymbolName } from "@/components/symbol-name";
 import {
   buildWatchlistCardModel,
   type WatchlistCardModel,
@@ -101,9 +102,14 @@ export function WatchlistDecisionCard({
         </button>
 
         <header className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 pr-8">
-          <span className="text-base font-bold tracking-wide" style={{ color: colors.text }}>
-            {model.symbol}
-          </span>
+          <SymbolName
+            symbol={model.symbol}
+            layout="stacked"
+            className="text-base font-bold tracking-wide"
+            symbolStyle={{ color: colors.text, fontWeight: "inherit" }}
+            nameStyle={{ fontWeight: 400 }}
+            maxNameChars={28}
+          />
           {model.directionChip ? (
             <span
               className="rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide"

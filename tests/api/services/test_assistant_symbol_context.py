@@ -311,6 +311,54 @@ def test_build_chart_includes_reference_levels() -> None:
     assert "distance_pct" in by_kind["vwap"]
 
 
+def test_support_omitted_when_no_base_near_price_parabolic() -> None:
+    """A parabolic move has no recent base near price → Support is omitted rather
+    than rendered as a faraway window low (the MRVL $158-vs-$300 bug)."""
+    # Steep ramp 20 → 400; the most recent lows are all >25% below the $400 price.
+    daily = [_daily_bar(20.0 + i * 10.0, (i % 28) + 1) for i in range(39)]
+    snap = Snapshot(symbol="NVDA", day_close=400.0, prev_close=388.0, change_percent=3.0, day_vwap=399.0)
+    ctx = AssistantSymbolContext(
+        symbol="NVDA",
+        snapshot=snap,
+        bars_5m=[_bar(395.0, 30), _bar(398.0, 35), _bar(400.0, 40)],
+        bars_1d=daily,
+    )
+    chart = build_symbol_chart(ctx)
+    assert chart is not None
+    kinds = {lvl["kind"] for lvl in chart["levels"]}
+    assert "support" not in kinds  # nothing within the proximity band → omitted
+    # Resistance (recent high just above price) and the factual averages still show.
+    assert "sma50" in kinds
+
+
+def test_support_uses_nearest_level_not_faraway_window_min() -> None:
+    """Support must reflect a nearby base, never the absolute lookback minimum."""
+    # Range-bound near $100 with an OLD crash low at $50 (far away) and a RECENT
+    # pullback low at $92 (within band). Support must pick $92, never $50.
+    daily: list[Bar] = []
+    for i in range(25):
+        if i == 2:
+            daily.append(_daily_bar(100.0, i + 1, high=104.0, low=50.0))  # old crash low
+        elif i == 20:
+            daily.append(_daily_bar(96.0, i + 1, high=101.0, low=92.0))   # recent pivot low
+        else:
+            daily.append(_daily_bar(100.0, i + 1, high=104.0, low=97.0))
+    snap = Snapshot(symbol="NVDA", day_close=100.0, prev_close=99.0, change_percent=1.0, day_vwap=100.5)
+    ctx = AssistantSymbolContext(
+        symbol="NVDA",
+        snapshot=snap,
+        bars_5m=[_bar(99.0, 30), _bar(100.0, 35), _bar(100.0, 40)],
+        bars_1d=daily,
+    )
+    chart = build_symbol_chart(ctx)
+    assert chart is not None
+    by_kind = {lvl["kind"]: lvl for lvl in chart["levels"]}
+    assert "support" in by_kind
+    # Picks the nearest tested floor (~97), NOT the faraway $50 crash low.
+    assert by_kind["support"]["value"] != 50.0
+    assert by_kind["support"]["value"] >= 92.0  # safely inside the proximity band, near price
+
+
 def test_build_chart_levels_empty_without_aux_data() -> None:
     ctx = AssistantSymbolContext(
         symbol="NVDA",
