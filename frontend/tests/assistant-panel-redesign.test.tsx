@@ -316,6 +316,34 @@ describe("AssistantPanel — citation chips", () => {
     expect(chips[0].getAttribute("target")).toBe("_blank");
     expect(screen.getByText("Benzinga")).toBeDefined();
   });
+
+  it("collapses multiple same-source citations into one chip that expands on click", () => {
+    renderPanel({
+      messages: [
+        { id: "1", role: "user", content: "why is MRVL up?" },
+        {
+          id: "2",
+          role: "assistant",
+          content: "MRVL is up on chip-sector strength.",
+          citations: [
+            { title: "Marvell pops on AI demand", url: "https://example.com/a", source: "polygon" },
+            { title: "Analysts lift targets", url: "https://example.com/b", source: "polygon" },
+            { title: "Sector rally broadens", url: "https://example.com/c", source: "Polygon" },
+          ],
+        },
+      ],
+    });
+    // Three articles, one source → a single chip (not three).
+    const chips = screen.getAllByTestId("assistant-citation-chip");
+    expect(chips.length).toBe(1);
+    // Detail list is hidden until the chip is clicked.
+    expect(screen.queryByTestId("assistant-citation-detail")).toBeNull();
+    fireEvent.click(chips[0]);
+    const links = screen.getAllByTestId("assistant-citation-detail-link");
+    expect(links.length).toBe(3);
+    expect(links[0].getAttribute("href")).toBe("https://example.com/a");
+    expect(links[0].getAttribute("target")).toBe("_blank");
+  });
 });
 
 // ─── Clarifying quick-reply chips ─────────────────────────────────────────────

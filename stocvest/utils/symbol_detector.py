@@ -369,6 +369,88 @@ def extract_action_symbol(text: str) -> str | None:
     return detect_symbol(text)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Company-name → ticker fallback extraction
+# ─────────────────────────────────────────────────────────────────────────────
+# When no ticker token is detected but the user clearly asks about a single
+# named instrument's state ("how did marvell do today?", "any news on palantir?"),
+# we extract a best-effort company-name phrase. The caller MUST confirm it via a
+# reference search before fetching data — this extractor is intentionally loose,
+# and the search's name-match guard is the real protection against wrong fetches.
+
+# Phrases that signal the user is asking about a specific instrument right now.
+_LOOKUP_CUES: tuple[str, ...] = (
+    "how is", "how's", "how are", "how did", "how has", "how about",
+    "doing", "perform", "trading", "trade", "happening", "activity",
+    "moving", "moved", "price of", "quote", "news on", "news about",
+    "tell me about", "what about", "going on", "look up", "pull up",
+    "update on", "is it up", "is it down", "today", "this morning",
+    "right now", "lately", "recently", "rally", "drop", "gap",
+)
+
+# Verb / time / generic-noun tokens that are never the company name.
+_LOOKUP_FILLER: frozenset[str] = frozenset({
+    "PERFORM", "PERFORMED", "PERFORMING", "PERFORMS", "DOING", "DONE",
+    "TODAY", "TODAYS", "MORNING", "AFTERNOON", "EVENING", "TONIGHT",
+    "NOW", "LATELY", "RECENTLY", "CURRENTLY", "TRADING", "TRADED", "TRADE",
+    "TRADES", "HAPPENING", "HAPPEN", "HAPPENED", "GOING", "MOVING", "MOVED",
+    "MOVE", "MOVES", "PRICE", "PRICED", "QUOTE", "QUOTES", "NEWS", "ACTIVITY",
+    "UPDATE", "UPDATES", "UPDATED", "LOOK", "PULL", "TELL", "ABOUT", "GIVE",
+    "SHOW", "FIND", "CHECK", "RALLY", "RALLYING", "DROP", "DROPPING",
+    "GAP", "GAPPED", "GAPPING", "RISING", "FALLING", "STATUS", "FARED",
+    "FARING", "STAND", "STANDING", "LOOKING", "WEEK", "MONTH", "YEAR",
+    "STOCK", "STOCKS", "SHARES", "SHARE", "COMPANY", "TICKER", "SYMBOL",
+    "RATIO", "EVALUATION", "EVERYTHING", "POSITION", "POSITIONS", "USED",
+    "PLEASE", "RAN", "FROM", "MUCH",
+})
+
+# Market-/portfolio-level subjects: their presence means the question is NOT
+# about a single company, so we never resolve to a ticker (those go to the
+# market-overview / watchlist intents instead).
+_MARKET_LEVEL_SUBJECTS: frozenset[str] = frozenset({
+    "MARKET", "MARKETS", "ECONOMY", "ECONOMIC", "SECTOR", "SECTORS",
+    "INDUSTRY", "PORTFOLIO", "WATCHLIST", "WATCHLISTS", "FUTURES",
+    "INDEX", "INDICES", "DOW", "NASDAQ", "NYSE", "CRYPTO", "BITCOIN",
+    "ETHEREUM",
+})
+
+
+def extract_company_lookup_phrase(text: str) -> str | None:
+    """Return a candidate company-name phrase from a symbol-directed question.
+
+    Used only as a fallback when :func:`detect_symbol` finds no ticker token, so
+    questions phrased with a company name ("how did marvell do today?") can still
+    resolve to a ticker via a reference search. Returns ``None`` unless the
+    message clearly asks about a single named instrument and a clean 1–3 word
+    candidate survives the stoplists.
+
+    This is intentionally loose; callers MUST confirm the phrase against a
+    reference search (company-name match) before fetching any market data.
+    """
+    if not text or not text.strip():
+        return None
+    low = text.lower()
+    if not any(cue in low for cue in _LOOKUP_CUES):
+        return None
+
+    candidate: list[str] = []
+    for tok in re.findall(r"[A-Za-z][A-Za-z.&'\-]*", text):
+        up = tok.upper().strip(".'&-")
+        if len(up) < 2:
+            continue
+        if up in _MARKET_LEVEL_SUBJECTS:
+            # A market-/portfolio-level subject — not a single-company lookup.
+            return None
+        if up in _BLOCKLIST or up in _LOOKUP_FILLER or up in _ACTION_STOPWORDS:
+            continue
+        candidate.append(tok)
+
+    if not 1 <= len(candidate) <= 3:
+        return None
+    phrase = " ".join(candidate).strip()
+    return phrase if len(phrase) >= 3 else None
+
+
 def detect_symbol_from_messages(messages: list[dict]) -> str | None:
     """Scan the most-recent user turns (up to last 3) for a ticker symbol.
 

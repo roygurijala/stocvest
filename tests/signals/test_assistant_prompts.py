@@ -31,6 +31,13 @@ def test_prompt_drops_mandatory_scanner_redirect() -> None:
     assert 'Always end with: "For the full ranked list' not in ASSISTANT_SYSTEM_PROMPT
 
 
+def test_prompt_forbids_redirect_when_no_live_symbol_context() -> None:
+    # Even with no live data for a named symbol, the assistant must answer from
+    # general knowledge and never bounce the user to the Scanner/Signals page.
+    assert "NO LIVE CONTEXT FOR A NAMED SYMBOL — STILL DO NOT REDIRECT" in ASSISTANT_SYSTEM_PROMPT
+    assert 'A "no data, so check the Scanner/Signals" response is never allowed.' in ASSISTANT_SYSTEM_PROMPT
+
+
 # ---------------------------------------------------------------------------
 # serialize_page_context — whitelist + emitting only known keys
 # ---------------------------------------------------------------------------

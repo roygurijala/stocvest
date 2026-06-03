@@ -783,6 +783,55 @@ def test_assistant_chat_detects_symbol_and_calls_context_fetch(
     assert captured.get("symbol_context") is symbol_context_sentinel
 
 
+def test_assistant_chat_resolves_company_name_when_no_ticker_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A company-name question ("how did marvell do today?") carries no ticker
+    token, so the handler must resolve the name to a ticker and fetch live data
+    for it — instead of falling back to a no-data redirect."""
+    paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.get_user_profile_store",
+        lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: paid_profile)})(),
+    )
+    # No bare/dollar ticker in the message.
+    monkeypatch.setattr("stocvest.api.handlers.signals.detect_symbol_from_messages", lambda msgs: None)
+
+    resolved_queries: list[str] = []
+
+    async def fake_resolve(phrase: str):  # type: ignore[no-untyped-def]
+        resolved_queries.append(phrase)
+        return "MRVL"
+
+    monkeypatch.setattr("stocvest.api.handlers.signals.resolve_company_to_symbol", fake_resolve)
+
+    symbol_context_sentinel = object()
+    fetched_symbols: list[str] = []
+
+    async def fake_fetch(sym: str):  # type: ignore[no-untyped-def]
+        fetched_symbols.append(sym)
+        return symbol_context_sentinel
+
+    monkeypatch.setattr("stocvest.api.handlers.signals.fetch_assistant_symbol_context", fake_fetch)
+
+    captured: dict[str, object] = {}
+
+    async def fake_reply(self, *, messages, page_context, user_profile, **kwargs):  # type: ignore[no-untyped-def]
+        captured["symbol_context"] = kwargs.get("symbol_context")
+        return AssistantChatResult(text="Marvell is a chipmaker.", source="ai", mode="contextual", upgrade_available=False)
+
+    monkeypatch.setattr("stocvest.signals.assistant_chat.AssistantChatService.reply", fake_reply)
+
+    response = assistant_chat_handler(
+        _event(body={"messages": [{"role": "user", "content": "can you tell me how marvell performed today"}]}),
+        {},
+    )
+    assert response["statusCode"] == 200
+    assert resolved_queries == ["marvell"]
+    assert "MRVL" in fetched_symbols
+    assert captured.get("symbol_context") is symbol_context_sentinel
+
+
 def test_assistant_chat_includes_chart_payload_in_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

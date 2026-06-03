@@ -99,7 +99,7 @@ from stocvest.api.services.assistant_watchlist_action import (
     execute_watchlist_add,
     execute_watchlist_remove,
 )
-from stocvest.api.services.symbol_resolver import resolve_symbol
+from stocvest.api.services.symbol_resolver import resolve_company_to_symbol, resolve_symbol
 from stocvest.api.services.assistant_watchlist_context import (
     fetch_watchlist_context,
     serialize_watchlist_context,
@@ -115,7 +115,11 @@ from stocvest.utils.intent_detector import (
     is_watchlist_intelligence_query,
     is_watchlist_remove_intent,
 )
-from stocvest.utils.symbol_detector import detect_symbol_from_messages, extract_action_symbol
+from stocvest.utils.symbol_detector import (
+    detect_symbol_from_messages,
+    extract_action_symbol,
+    extract_company_lookup_phrase,
+)
 from stocvest.signals.historical_validation import (
     BucketStats,
     HistoricalValidationSummary,
@@ -1377,6 +1381,18 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
             # Fall back to the symbol already loaded on the current page.
             if not detected_sym and page_context and isinstance(page_context.get("symbol"), str):
                 detected_sym = page_context["symbol"].strip().upper() or None
+            # Company-name fallback: "how did marvell do today?" carries no ticker
+            # token, so resolve the named company to a ticker via a reference
+            # search (guarded by a name match) — but only for single-instrument
+            # questions, never for market-overview / watchlist intents.
+            if (
+                not detected_sym
+                and not is_market_overview_query(last_user_text_for_intent)
+                and not is_watchlist_intelligence_query(last_user_text_for_intent)
+            ):
+                lookup_phrase = extract_company_lookup_phrase(last_user_text_for_intent)
+                if lookup_phrase:
+                    detected_sym = asyncio.run(resolve_company_to_symbol(lookup_phrase))
             if detected_sym:
                 symbol_context = asyncio.run(fetch_assistant_symbol_context(detected_sym))
         except Exception:  # noqa: BLE001

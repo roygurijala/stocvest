@@ -139,16 +139,24 @@ export function FullPriceChart({ symbol, colors, levels = [], limit = 150, heigh
         downColor: colors.bearish ?? "#ef4444",
         borderVisible: false,
         wickUpColor: colors.bullish,
-        wickDownColor: colors.bearish ?? "#ef4444"
+        wickDownColor: colors.bearish ?? "#ef4444",
+        // Keep ONE clean axis tag (the current price); drop the dotted auto
+        // price line so it doesn't add to the label clutter near the top.
+        priceLineVisible: false,
+        lastValueVisible: true
       });
       candles.setData(
         bars.map((b) => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close }))
       );
 
-      // Volume histogram pinned to the bottom on its own (overlay) scale.
+      // Volume histogram pinned to the bottom on its own (overlay) scale. Its
+      // auto last-value tag (e.g. "112.68M") collided with the price labels, so
+      // it's suppressed — volume is read from the bar heights, not a number.
       const volume = chartApi.addSeries(HistogramSeries, {
         priceScaleId: "",
-        priceFormat: { type: "volume" }
+        priceFormat: { type: "volume" },
+        lastValueVisible: false,
+        priceLineVisible: false
       });
       volume.setData(
         bars.map((b) => ({
@@ -163,7 +171,15 @@ export function FullPriceChart({ symbol, colors, levels = [], limit = 150, heigh
       const closes = bars.map((b) => b.close);
       if (closes.length >= 20) {
         const period = Math.min(50, closes.length);
-        const sma = chartApi.addSeries(LineSeries, { color: "#8b5cf6", lineWidth: 1 });
+        // The moving-average curve carries its own meaning; its auto last-value
+        // tag duplicated the "50-day avg" reference label, so it's suppressed.
+        const sma = chartApi.addSeries(LineSeries, {
+          color: "#8b5cf6",
+          lineWidth: 1,
+          lastValueVisible: false,
+          priceLineVisible: false,
+          crosshairMarkerVisible: false
+        });
         const smaData: Array<{ time: DailyBar["time"]; value: number }> = [];
         for (let i = period - 1; i < bars.length; i += 1) {
           let sum = 0;
@@ -173,15 +189,22 @@ export function FullPriceChart({ symbol, colors, levels = [], limit = 150, heigh
         sma.setData(smaData);
       }
 
-      // Reference levels as labeled, dashed horizontal price lines.
+      // Reference levels as dashed horizontal lines with a quiet inline label.
+      // We DON'T render axis value tags here — several levels cluster within a
+      // few percent and their boxes overlapped illegibly on the price scale.
+      // The colour-matched legend chips above the chart carry the exact values,
+      // so each line just needs an inline name to identify it.
       for (const l of levels) {
         if (!Number.isFinite(l.value)) continue;
+        // The 50-day average is already drawn as its own curve above — a flat
+        // line + label for it would be both redundant and misleading.
+        if (l.kind === "sma50") continue;
         candles.createPriceLine({
           price: l.value,
           color: levelColor(l.kind, colors),
           lineWidth: 1,
           lineStyle: DASHED_LINE_STYLE,
-          axisLabelVisible: true,
+          axisLabelVisible: false,
           title: l.label
         });
       }
