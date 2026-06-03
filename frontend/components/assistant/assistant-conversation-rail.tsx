@@ -2,9 +2,11 @@
 
 import { memo, useMemo } from "react";
 import type { CSSProperties } from "react";
+import Link from "next/link";
+import { ArrowRight, CheckCircle, XCircle } from "lucide-react";
 import type { ThemeColors } from "@/lib/design-system";
-import { spacing, typography } from "@/lib/design-system";
-import type { AssistantMessage } from "@/lib/assistant/types";
+import { borderRadius, spacing, typography } from "@/lib/design-system";
+import type { AssistantAction, AssistantMessage } from "@/lib/assistant/types";
 
 /**
  * No-bubble vertical timeline for STOCVEST Assistant turns.
@@ -172,7 +174,70 @@ function ConversationRow({ message, colors, contextTone }: ConversationRowProps)
       <div style={bodyWrapperStyle}>
         <MessageBody message={message} colors={colors} align={isUser ? "right" : "left"} />
       </div>
+      {/* Deep-link CTA — shown on assistant turns with a navigate_to field */}
+      {!isUser && message.navigate_to ? (
+        <NavigateCta href={message.navigate_to} colors={colors} />
+      ) : null}
+      {/* Watchlist action confirmation card */}
+      {!isUser && message.action ? (
+        <ActionCard action={message.action} colors={colors} />
+      ) : null}
     </li>
+  );
+}
+
+function NavigateCta({ href, colors }: { href: string; colors: ThemeColors }) {
+  return (
+    <Link
+      href={href}
+      data-testid="assistant-navigate-cta"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        padding: `${spacing[2]} ${spacing[3]}`,
+        borderRadius: borderRadius.md,
+        border: `1px solid ${colors.accent}55`,
+        background: `${colors.accent}12`,
+        color: colors.accent,
+        fontSize: typography.scale.xs,
+        fontWeight: 600,
+        textDecoration: "none",
+        cursor: "pointer",
+        transition: "background 120ms ease"
+      }}
+    >
+      Open full analysis
+      <ArrowRight size={12} aria-hidden />
+    </Link>
+  );
+}
+
+function ActionCard({ action, colors }: { action: AssistantAction; colors: ThemeColors }) {
+  const isSuccess = action.success;
+  const iconColor = isSuccess ? colors.bullish : colors.bearish ?? colors.textMuted;
+  return (
+    <div
+      data-testid="assistant-action-card"
+      data-action-type={action.type}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: spacing[2],
+        padding: `${spacing[2]} ${spacing[3]}`,
+        borderRadius: borderRadius.md,
+        border: `1px solid ${iconColor}44`,
+        background: `${iconColor}10`,
+        fontSize: typography.scale.xs,
+        color: colors.textMuted
+      }}
+    >
+      {isSuccess
+        ? <CheckCircle size={13} style={{ color: iconColor, flexShrink: 0 }} aria-hidden />
+        : <XCircle size={13} style={{ color: iconColor, flexShrink: 0 }} aria-hidden />
+      }
+      <span>{action.message}</span>
+    </div>
   );
 }
 

@@ -92,15 +92,15 @@ def detect_symbol(text: str) -> str | None:
     if not text or not text.strip():
         return None
 
-    upper = text.upper()
-
-    # Phase 1 — dollar-sign tickers
-    dollar_hits = _DOLLAR_PATTERN.findall(upper)
+    # Phase 1 — dollar-sign tickers (case-insensitive: $mrvl → MRVL).
+    dollar_hits = _DOLLAR_PATTERN.findall(text.upper())
     if dollar_hits:
         return dollar_hits[-1]
 
-    # Phase 2 — bare uppercase words not in blocklist
-    bare_hits = [m for m in _BARE_PATTERN.findall(upper) if m not in _BLOCKLIST]
+    # Phase 2 — bare uppercase words already uppercase in the ORIGINAL text.
+    # Do NOT uppercase the whole input — that turns "market" into "MARKET"
+    # and "today" into "TODAY", causing false-positive ticker matches.
+    bare_hits = [m for m in _BARE_PATTERN.findall(text) if m not in _BLOCKLIST]
     if bare_hits:
         return bare_hits[-1]
 

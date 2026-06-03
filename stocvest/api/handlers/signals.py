@@ -81,7 +81,23 @@ from stocvest.data.dashboard_cache import (
 from stocvest.data import PolygonClient, PolygonError, Timeframe
 from stocvest.data.models import Bar, MarketStatus, SignalRecord, Snapshot
 from stocvest.signals.ai_explanations import AIExplanationService, news_articles_from_payload
+from stocvest.api.services.assistant_discovery import (
+    fetch_discovery_context,
+    serialize_discovery_context,
+)
+from stocvest.api.services.assistant_symbol_context import fetch_assistant_symbol_context
+from stocvest.api.services.assistant_watchlist_action import (
+    execute_watchlist_add,
+    execute_watchlist_remove,
+)
 from stocvest.signals.assistant_chat import AssistantChatService
+from stocvest.utils.intent_detector import (
+    is_discovery_query,
+    is_trade_planning_question,
+    is_watchlist_add_intent,
+    is_watchlist_remove_intent,
+)
+from stocvest.utils.symbol_detector import detect_symbol_from_messages
 from stocvest.signals.historical_validation import (
     BucketStats,
     HistoricalValidationSummary,
@@ -1142,6 +1158,54 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     )
 
     profile = get_user_profile_store().get_profile(rc.user_id)
+
+    # ── Watchlist action intent (A2) ──────────────────────────────────────────
+    # Detect add/remove intents BEFORE calling Claude. These are clear actions,
+    # not questions — we execute immediately and return a structured confirmation.
+    raw_messages_list = raw_messages if isinstance(raw_messages, list) else []
+    last_user_text_for_intent = ""
+    for _m in reversed(raw_messages_list):
+        if isinstance(_m, dict) and _m.get("role") == "user":
+            last_user_text_for_intent = str(_m.get("content") or "")
+            break
+
+    if last_user_text_for_intent and profile.has_ai_explanations:
+        from stocvest.utils.symbol_detector import detect_symbol
+        action_sym = detect_symbol(last_user_text_for_intent)
+        if action_sym:
+            if is_watchlist_add_intent(last_user_text_for_intent):
+                wl_result = execute_watchlist_add(rc.user_id, action_sym)
+                return ok({
+                    "text": wl_result.message,
+                    "source": "deterministic",
+                    "mode": "contextual",
+                    "upgrade_available": False,
+                    "disclaimer": API_SIGNAL_DISCLAIMER,
+                    "navigate_to": None,
+                    "action": {
+                        "type": wl_result.action_type,
+                        "symbol": wl_result.symbol,
+                        "success": wl_result.success,
+                        "message": wl_result.message,
+                    },
+                })
+            if is_watchlist_remove_intent(last_user_text_for_intent):
+                wl_result = execute_watchlist_remove(rc.user_id, action_sym)
+                return ok({
+                    "text": wl_result.message,
+                    "source": "deterministic",
+                    "mode": "contextual",
+                    "upgrade_available": False,
+                    "disclaimer": API_SIGNAL_DISCLAIMER,
+                    "navigate_to": None,
+                    "action": {
+                        "type": wl_result.action_type,
+                        "symbol": wl_result.symbol,
+                        "success": wl_result.success,
+                        "message": wl_result.message,
+                    },
+                })
+
     svc = AssistantChatService()
 
     # Product KPI cohort for the user (trailing 90d, 1d) — same definition as /performance.
@@ -1171,17 +1235,34 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
         historical_summary = None
         product_kpi_summary = None
 
+    # ── Discovery intent (A3) ────────────────────────────────────────────────
+    # When the user asks "what's moving today?" / "any momentum stocks?", pull
+    # from the cached desk results and inject them as context. No new scan.
+    discovery_block = ""
+    if profile.has_ai_explanations and is_discovery_query(last_user_text_for_intent):
+        try:
+            desk_mode = "day"
+            if page_context and isinstance(page_context.get("trading_mode"), str):
+                desk_mode = page_context["trading_mode"]
+            disc = fetch_discovery_context(desk_mode)
+            discovery_block = serialize_discovery_context(disc)
+            if not disc.has_data:
+                # No cached data — add a soft note so Claude routes correctly.
+                discovery_block = (
+                    "=== SCANNER DISCOVERY ===\n"
+                    "source=no_cached_results\n"
+                    "note=No scanner results are cached right now. Suggest the user open the Scanner page for a fresh scan.\n"
+                )
+        except Exception:  # noqa: BLE001
+            discovery_block = ""
+
     # Detect a ticker symbol from the conversation and pre-fetch live market
     # data so the assistant can answer factual questions (e.g. "why is MRVL
     # up?") with real data rather than generic explanations.
     symbol_context = None
+    detected_sym: str | None = None
     if profile.has_ai_explanations:
         try:
-            from stocvest.api.services.assistant_symbol_context import (
-                fetch_assistant_symbol_context,
-            )
-            from stocvest.utils.symbol_detector import detect_symbol_from_messages
-
             messages_list = raw_messages if isinstance(raw_messages, list) else []
             detected_sym = detect_symbol_from_messages(messages_list)
             # Fall back to the symbol already loaded on the current page.
@@ -1193,6 +1274,22 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
             _LOG.exception("assistant_chat: symbol context fetch failed — continuing without it")
             symbol_context = None
 
+    # Detect trade-planning intent to pre-attach navigate_to deep-link.
+    # Checked before calling Claude so the result carries it even on the
+    # deterministic (free-tier) path.
+    navigate_to: str | None = None
+    try:
+        last_user_text = ""
+        if isinstance(raw_messages, list):
+            for m in reversed(raw_messages):
+                if isinstance(m, dict) and m.get("role") == "user":
+                    last_user_text = str(m.get("content") or "")
+                    break
+        if detected_sym and is_trade_planning_question(last_user_text):
+            navigate_to = f"/dashboard/signals?symbol={detected_sym}"
+    except Exception:  # noqa: BLE001
+        navigate_to = None
+
     try:
         result = asyncio.run(
             svc.reply(
@@ -1203,18 +1300,29 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
                 product_kpi_summary=product_kpi_summary,
                 symbol_context=symbol_context,
                 attached_image=attached_image,
+                discovery_context=discovery_block,
             )
         )
     except (TypeError, ValueError) as exc:
         return bad_request(f"Invalid assistant request: {exc}")
 
+    # Strip the [OPEN_SIGNALS] marker Claude may have emitted — the
+    # navigate_to field in the response is the authoritative signal.
+    result_text = result.text.replace("[OPEN_SIGNALS]", "").strip()
+    # If the prompt rule fired AND intent was detected, navigate_to is set.
+    # If the prompt rule fired but intent wasn't pre-detected (edge case),
+    # still honour the marker by using the detected_sym or page symbol.
+    if "[OPEN_SIGNALS]" in result.text and not navigate_to and detected_sym:
+        navigate_to = f"/dashboard/signals?symbol={detected_sym}"
+
     return ok(
         {
-            "text": result.text,
+            "text": result_text,
             "source": result.source,
             "mode": result.mode,
             "upgrade_available": result.upgrade_available,
             "disclaimer": API_SIGNAL_DISCLAIMER,
+            "navigate_to": navigate_to,
         }
     )
 
