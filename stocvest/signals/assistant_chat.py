@@ -137,6 +137,20 @@ def serialize_symbol_context(ctx: AssistantSymbolContext) -> str:
                 f"  afterhours_price=${snap.after_hours_price:.2f}"
                 f"  afterhours_change={snap.after_hours_change_percent:+.2f}%"
             )
+    elif ctx.bars_5m:
+        # Snapshot unavailable, but intraday bars arrived — derive a minimal
+        # price read so the answer is still grounded in real numbers instead of
+        # falling back to "I don't have live data".
+        try:
+            first_close = float(ctx.bars_5m[0].close)
+            last_close = float(ctx.bars_5m[-1].close)
+            chg = ((last_close - first_close) / first_close * 100.0) if first_close else None
+            lines.append("SNAPSHOT (derived from intraday bars):")
+            lines.append(f"  price=${last_close:.2f}")
+            if chg is not None:
+                lines.append(f"  intraday_change={chg:+.2f}% (since first bar of the session window)")
+        except (AttributeError, TypeError, ValueError, IndexError):
+            pass
 
     # ── Why Is It Moving (Benzinga WIIM) ───────────────────────────────────
     if ctx.wim and ctx.wim.reason:
