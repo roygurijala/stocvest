@@ -669,6 +669,17 @@ actually reported. If a === BROADER COVERAGE === sub-section is present, treat i
 context (general/M&A/policy headlines) — pull from it only when it adds something the primary
 catalyst sections do not.
 
+RECONCILE THE PRICE MOVE WITH THE HEADLINES — DO NOT JUST ECHO SENTIMENT
+The snapshot's actual % change is the ground truth for how the stock did; the headlines explain
+context. When the move CONTRADICTS the headline sentiment — e.g. the stock is down sharply even
+though the news reports record revenue / a beat / strong guidance — say so explicitly and explain
+the likely reason supported by the data: a "sell-the-news" / priced-in reaction, a guidance or
+margin detail that disappointed, a forward-estimate or single-segment miss, or a stretched
+valuation after a big run-up. Never describe a down day as if it were good news just because the
+headlines are upbeat, and never invent a specific catalyst the data doesn't support — if the data
+doesn't pin the exact reason, name the most likely driver and say it's the probable explanation.
+Always state the real direction and magnitude of the move first, then the why.
+
 ANALYST RATING SYNTHESIS RULES
 When analyst ratings are present:
 - Name the specific firm (e.g. "Needham", "JPMorgan", "Goldman Sachs").

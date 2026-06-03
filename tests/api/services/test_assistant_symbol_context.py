@@ -16,9 +16,27 @@ from stocvest.api.services.assistant_symbol_context import (
     AssistantSymbolContext,
     build_symbol_chart,
     fetch_assistant_symbol_context,
+    news_relevance_rank,
 )
 from stocvest.data.benzinga_client import BenzingaRating
 from stocvest.data.models import Bar, Snapshot, Timeframe
+
+
+def test_news_relevance_rank_symbol_first_ticker_is_top() -> None:
+    assert news_relevance_rank("AVGO", ["AVGO"], "Broadcom Announces Results") == 0
+
+
+def test_news_relevance_rank_symbol_in_title_is_top() -> None:
+    assert news_relevance_rank("AVGO", ["AAPL", "AVGO"], "AVGO surges on earnings") == 0
+
+
+def test_news_relevance_rank_buried_in_many_tickers_is_low() -> None:
+    rank = news_relevance_rank("AVGO", ["AI", "NVDA", "PLTR", "SMCI", "MSFT", "AVGO"], "C3 AI earnings")
+    assert rank >= 3
+
+
+def test_news_relevance_rank_absent_symbol_is_lowest() -> None:
+    assert news_relevance_rank("AVGO", ["AAPL", "MSFT"], "Apple news") == 4
 
 
 def _bar(close: float, minute: int) -> Bar:

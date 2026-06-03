@@ -1047,9 +1047,14 @@ class PolygonClient:
                 image_url = str(img_raw).strip() if img_raw not in (None, "") else None
                 if image_url == "":
                     image_url = None
-                src = str(r.get("source") or "").strip()
+                # Prefer the real outlet (publisher.name: "Benzinga", "Zacks",
+                # "GlobeNewswire", …). get_market_news stamps a generic
+                # source="polygon" vendor tag, so reading `source` first would
+                # surface the data vendor instead of the publisher the user
+                # recognises. Fall back to the vendor tag only when no publisher.
+                src = str((r.get("publisher") or {}).get("name") or "").strip()
                 if not src:
-                    src = str((r.get("publisher") or {}).get("name") or "").strip()
+                    src = str(r.get("source") or "").strip()
                 articles.append(
                     NewsArticle(
                         article_id=r.get("id", ""),

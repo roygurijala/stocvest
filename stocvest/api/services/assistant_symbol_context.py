@@ -164,6 +164,12 @@ async def fetch_assistant_symbol_context(symbol: str) -> AssistantSymbolContext 
     except Exception as exc:  # noqa: BLE001
         _LOG.warning("assistant_ctx gather error %s: %s", sym, exc)
 
+    # Promote articles that are actually ABOUT this ticker above sector roundups
+    # and off-ticker pieces (e.g. a "C3 AI earnings" story tagged with AVGO).
+    # Stable sort preserves the newest-first order within each relevance tier.
+    if ctx.news:
+        ctx.news = sorted(ctx.news, key=lambda a: news_relevance_rank(sym, getattr(a, "tickers", None), getattr(a, "title", None)))
+
     if not ctx.has_data:
         _LOG.warning(
             "assistant_ctx: NO live data for %s (snapshot=%s news=%d benzinga_news=%d) — "
@@ -183,6 +189,31 @@ async def _safe(coro):
         return await coro
     except Exception:  # noqa: BLE001
         return None
+
+
+def news_relevance_rank(symbol: str, tickers: object, title: object) -> int:
+    """Rank a news article's relevance to *symbol* (lower = more on-target).
+
+    Polygon tags sector/roundup pieces with many tickers, so a "C3 AI earnings"
+    story can surface in AVGO's feed. We rank an article's relevance by where the
+    symbol sits among its tickers (and whether the company is named in the title)
+    so the synthesis leads with coverage that is genuinely about the symbol.
+    """
+    sym = str(symbol or "").strip().upper()
+    title_u = str(title or "").upper()
+    tks = [str(t).strip().upper() for t in (tickers or []) if str(t).strip()]
+    if sym and sym in title_u:
+        return 0
+    if not tks:
+        return 3
+    if tks[0] == sym:
+        return 0
+    if sym in tks[:2]:
+        return 1
+    if sym in tks:
+        # Present but buried among many tickers → likely a market roundup.
+        return 2 if len(tks) <= 5 else 3
+    return 4
 
 
 # Most intraday points we forward to the client for a sparkline. A 5-min session
