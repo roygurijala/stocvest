@@ -6,11 +6,24 @@ from datetime import datetime, timezone
 
 from stocvest.api.services.assistant_symbol_context import AssistantSymbolContext
 from stocvest.data.benzinga_client import BenzingaArticle
-from stocvest.data.models import NewsArticle
+from stocvest.data.models import Bar, NewsArticle, Timeframe
 from stocvest.signals.assistant_chat import (
     _benzinga_channel_category,
     serialize_symbol_context,
 )
+
+
+def _intraday_bar(close: float, minute: int) -> Bar:
+    return Bar(
+        symbol="NVDA",
+        timestamp=datetime(2026, 6, 3, 14, minute, tzinfo=timezone.utc),
+        timeframe=Timeframe.MIN_5,
+        open=close,
+        high=close,
+        low=close,
+        close=close,
+        volume=1000.0,
+    )
 
 
 def _article(title: str, channels: list[str]) -> BenzingaArticle:
@@ -92,3 +105,24 @@ def test_broader_coverage_absent_without_benzinga_news() -> None:
     )
     block = serialize_symbol_context(ctx)
     assert "BROADER COVERAGE" not in block
+
+
+def test_bars_only_context_has_data_and_derives_price() -> None:
+    """When snapshot/news fail but intraday bars arrive, the assistant still gets
+    a grounded price read instead of falling back to a generic answer."""
+    ctx = AssistantSymbolContext(
+        symbol="NVDA",
+        bars_5m=[_intraday_bar(100.0, 0), _intraday_bar(104.0, 30)],
+    )
+    assert ctx.has_data is True
+    block = serialize_symbol_context(ctx)
+    assert "SNAPSHOT (derived from intraday bars)" in block
+    assert "$104.00" in block
+    # 100 -> 104 is +4% intraday.
+    assert "+4.00%" in block
+
+
+def test_empty_context_renders_nothing() -> None:
+    ctx = AssistantSymbolContext(symbol="NVDA")
+    assert ctx.has_data is False
+    assert serialize_symbol_context(ctx) == ""

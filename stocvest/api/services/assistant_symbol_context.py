@@ -37,8 +37,11 @@ from stocvest.utils.logging import get_logger
 _LOG = get_logger(__name__)
 
 # Hard timeout for the entire parallel fetch so a slow upstream never stalls
-# the assistant response by more than this many seconds.
-_FETCH_TIMEOUT_S = 4.0
+# the assistant response by more than this many seconds. Kept comfortably under
+# the API Gateway limit so the subsequent Claude call still has room; 4s proved
+# too tight once a single shared client made partial timeouts the common
+# failure mode for live symbol answers.
+_FETCH_TIMEOUT_S = 7.0
 
 
 @dataclass
@@ -62,8 +65,19 @@ class AssistantSymbolContext:
 
     @property
     def has_data(self) -> bool:
-        """True when at least snapshot or news were successfully fetched."""
-        return self.snapshot is not None or bool(self.news) or bool(self.benzinga_news)
+        """True when any usable market data was fetched.
+
+        Snapshot or news are the richest signals, but intraday/daily bars alone
+        are still enough to talk about price action (and render a chart), so we
+        treat them as data too rather than falling back to a generic answer.
+        """
+        return (
+            self.snapshot is not None
+            or bool(self.news)
+            or bool(self.benzinga_news)
+            or bool(self.bars_5m)
+            or bool(self.bars_1d)
+        )
 
 
 async def fetch_assistant_symbol_context(symbol: str) -> AssistantSymbolContext | None:
@@ -78,21 +92,42 @@ async def fetch_assistant_symbol_context(symbol: str) -> AssistantSymbolContext 
 
     ctx = AssistantSymbolContext(symbol=sym)
 
-    async def _snapshot() -> None:
-        try:
-            async with PolygonClient() as poly:
+    # All Polygon REST calls share ONE client/session. Opening a separate client
+    # per call (snapshot/news/bars/daily) multiplied connection setup cost and
+    # was prone to exhausting the fetch budget before snapshot/news returned —
+    # which left the assistant with no data and forced the generic
+    # "I don't have live data" answer. Each sub-call assigns ctx as soon as it
+    # completes, so partial data still survives an overall timeout.
+    async def _polygon(poly: PolygonClient) -> None:
+        async def _snapshot() -> None:
+            try:
                 ctx.snapshot = await poly.get_snapshot(sym)
-        except Exception as exc:  # noqa: BLE001
-            _LOG.debug("assistant_ctx.snapshot failed %s: %s", sym, exc)
+            except Exception as exc:  # noqa: BLE001
+                _LOG.warning("assistant_ctx.snapshot failed %s: %s", sym, exc)
 
-    async def _news() -> None:
-        try:
-            async with PolygonClient() as poly:
+        async def _news() -> None:
+            try:
                 # Keep recency tight (≤2 days) — older headlines rarely explain
                 # today's move and just add noise.
                 ctx.news = await poly.get_news(sym, limit=8, days=2)
-        except Exception as exc:  # noqa: BLE001
-            _LOG.debug("assistant_ctx.news failed %s: %s", sym, exc)
+            except Exception as exc:  # noqa: BLE001
+                _LOG.warning("assistant_ctx.news failed %s: %s", sym, exc)
+
+        async def _bars() -> None:
+            try:
+                ctx.bars_5m = await poly.get_bars(sym, Timeframe.MIN_5, limit=78)
+            except Exception as exc:  # noqa: BLE001
+                _LOG.warning("assistant_ctx.bars failed %s: %s", sym, exc)
+
+        async def _daily_bars() -> None:
+            try:
+                # ~3 months of daily bars → enough for a 50-day average and
+                # recent swing support/resistance.
+                ctx.bars_1d = await poly.get_bars(sym, Timeframe.DAY_1, limit=65)
+            except Exception as exc:  # noqa: BLE001
+                _LOG.warning("assistant_ctx.daily_bars failed %s: %s", sym, exc)
+
+        await asyncio.gather(_snapshot(), _news(), _bars(), _daily_bars())
 
     async def _benzinga() -> None:
         try:
@@ -113,33 +148,28 @@ async def fetch_assistant_symbol_context(symbol: str) -> AssistantSymbolContext 
             ctx.guidance = guidance or []
             ctx.benzinga_news = news if isinstance(news, list) else []
         except Exception as exc:  # noqa: BLE001
-            _LOG.debug("assistant_ctx.benzinga failed %s: %s", sym, exc)
-
-    async def _bars() -> None:
-        try:
-            async with PolygonClient() as poly:
-                ctx.bars_5m = await poly.get_bars(sym, Timeframe.MIN_5, limit=78)
-        except Exception as exc:  # noqa: BLE001
-            _LOG.debug("assistant_ctx.bars failed %s: %s", sym, exc)
-
-    async def _daily_bars() -> None:
-        try:
-            async with PolygonClient() as poly:
-                # ~3 months of daily bars → enough for a 50-day average and
-                # recent swing support/resistance.
-                ctx.bars_1d = await poly.get_bars(sym, Timeframe.DAY_1, limit=65)
-        except Exception as exc:  # noqa: BLE001
-            _LOG.debug("assistant_ctx.daily_bars failed %s: %s", sym, exc)
+            _LOG.warning("assistant_ctx.benzinga failed %s: %s", sym, exc)
 
     try:
-        await asyncio.wait_for(
-            asyncio.gather(_snapshot(), _news(), _benzinga(), _bars(), _daily_bars()),
-            timeout=_FETCH_TIMEOUT_S,
-        )
+        async with PolygonClient() as poly:
+            await asyncio.wait_for(
+                asyncio.gather(_polygon(poly), _benzinga()),
+                timeout=_FETCH_TIMEOUT_S,
+            )
     except asyncio.TimeoutError:
-        _LOG.debug("assistant_ctx fetch timed out for %s (partial data returned)", sym)
+        _LOG.warning("assistant_ctx fetch timed out for %s (partial data returned)", sym)
     except Exception as exc:  # noqa: BLE001
-        _LOG.debug("assistant_ctx gather error %s: %s", sym, exc)
+        _LOG.warning("assistant_ctx gather error %s: %s", sym, exc)
+
+    if not ctx.has_data:
+        _LOG.warning(
+            "assistant_ctx: NO live data for %s (snapshot=%s news=%d benzinga_news=%d) — "
+            "assistant will fall back to generic answer",
+            sym,
+            ctx.snapshot is not None,
+            len(ctx.news),
+            len(ctx.benzinga_news),
+        )
 
     return ctx
 
