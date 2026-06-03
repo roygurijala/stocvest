@@ -11,6 +11,9 @@ from stocvest.api.services.morning_brief_fetch import get_vix_snapshot_with_fall
 from stocvest.data import PolygonClient, PolygonError, Timeframe
 from stocvest.data.models import Bar, EarningsEvent, Snapshot
 from stocvest.utils.config import Settings, get_settings
+from stocvest.utils.logging import get_logger
+
+_LOG = get_logger(__name__)
 
 # Keep in lockstep with `frontend/lib/dashboard/dashboard-page-data.ts` symbol lists.
 DASHBOARD_TAPE_SYMBOLS: tuple[str, ...] = ("SPY", "QQQ", "IWM", "I:VIX", "^VIX")
@@ -62,7 +65,11 @@ async def _fetch_daily_closes(
         return {}
 
     async def one(sym: str) -> tuple[str, list[float]]:
-        bars = await client.get_bars(symbol=sym, timeframe=Timeframe.DAY_1, limit=limit)
+        try:
+            bars = await client.get_bars(symbol=sym, timeframe=Timeframe.DAY_1, limit=limit)
+        except Exception as exc:  # noqa: BLE001 - one unentitled/failed symbol must not abort the batch
+            _LOG.warning("dashboard daily closes failed for %s: %s", sym, exc)
+            return sym, []
         return sym, _closes_from_bars(bars, limit=limit)
 
     pairs = await asyncio.gather(*[one(s) for s in symbols])
@@ -79,7 +86,11 @@ async def _fetch_sparklines(
         return {}
 
     async def one(sym: str) -> tuple[str, list[float]]:
-        bars = await client.get_bars(symbol=sym, timeframe=Timeframe.MIN_5, limit=limit)
+        try:
+            bars = await client.get_bars(symbol=sym, timeframe=Timeframe.MIN_5, limit=limit)
+        except Exception as exc:  # noqa: BLE001 - I:VIX minute bars are 403 NOT_ENTITLED on most plans
+            _LOG.warning("dashboard sparkline failed for %s: %s", sym, exc)
+            return sym, []
         return sym, _closes_from_bars(bars, limit=limit)
 
     pairs = await asyncio.gather(*[one(s) for s in symbols])
@@ -190,9 +201,25 @@ async def build_dashboard_summary(
         spark_coro = _fetch_sparklines(client, tape, limit=sparkline_limit)
         daily_coro = _fetch_daily_closes(client, daily, limit=daily_limit)
 
+        # return_exceptions=True so a single failing fetch (e.g. I:VIX 403) cannot
+        # cancel its still-pending siblings — that cancellation mid-flight is what
+        # previously left the shared Polygon client closed under a pending request.
         status, snaps, sparklines, daily_closes = await asyncio.gather(
-            status_coro, snaps_coro, spark_coro, daily_coro
+            status_coro, snaps_coro, spark_coro, daily_coro, return_exceptions=True
         )
+
+        if isinstance(sparklines, BaseException):
+            _LOG.warning("dashboard sparklines fetch failed: %s", sparklines)
+            sparklines = {}
+        if isinstance(daily_closes, BaseException):
+            _LOG.warning("dashboard daily closes fetch failed: %s", daily_closes)
+            daily_closes = {}
+        if isinstance(snaps, BaseException):
+            _LOG.warning("dashboard snapshots fetch failed: %s", snaps)
+            snaps = []
+        if isinstance(status, BaseException):
+            # Market status drives the payload shape; surface it once siblings settled.
+            raise status
 
         earnings: dict[str, Any]
         if earn_syms:
