@@ -28,6 +28,7 @@ import httpx
 
 import math
 
+from stocvest.api.services.assistant_symbol_context import AssistantSymbolContext
 from stocvest.data.models import UserProfile
 from stocvest.signals.assistant_prompts import (
     ASSISTANT_SYSTEM_PROMPT,
@@ -81,6 +82,158 @@ _DETERMINISTIC_PUBLIC_REPLY = (
 
 
 HISTORICAL_VALIDATION_BLOCK_HEADER = "=== HISTORICAL VALIDATION ==="
+SYMBOL_CONTEXT_BLOCK_HEADER = "=== LIVE SYMBOL CONTEXT"
+
+
+def serialize_symbol_context(ctx: AssistantSymbolContext) -> str:
+    """Render live market data for a ticker as a structured context block.
+
+    The block is appended to the system message so Claude can synthesize a
+    factual, data-grounded answer to questions like "why is MRVL up today?"
+    without inventing information.
+
+    Deliberately formats each sub-section for readability over compactness:
+    field-name labels help Claude identify data points reliably even when
+    some fields are absent.
+    """
+    if not ctx or not ctx.has_data:
+        return ""
+
+    lines: list[str] = [f"{SYMBOL_CONTEXT_BLOCK_HEADER}: {ctx.symbol} ==="]
+
+    # ── Snapshot ────────────────────────────────────────────────────────────
+    snap = ctx.snapshot
+    if snap is not None:
+        price = snap.last_trade_price
+        chg_pct = snap.change_percent
+        vol = snap.day_volume
+        vwap = snap.day_vwap
+        prev_vol = snap.prev_day_volume
+
+        price_str = f"${price:.2f}" if price else "n/a"
+        chg_str = (
+            f"{chg_pct:+.2f}%" if chg_pct is not None else "n/a"
+        )
+        vol_str = _fmt_volume(vol)
+        vwap_str = f"${vwap:.2f}" if vwap else "n/a"
+        vol_ratio_str = ""
+        if vol and prev_vol and prev_vol > 0:
+            ratio = vol / prev_vol
+            vol_ratio_str = f" ({ratio:.1f}x vs prior session)"
+
+        lines.append("SNAPSHOT:")
+        lines.append(f"  price={price_str}  change={chg_str}")
+        lines.append(f"  volume={vol_str}{vol_ratio_str}")
+        lines.append(f"  session_vwap={vwap_str}")
+
+        if snap.pre_market_price and snap.pre_market_change_percent is not None:
+            lines.append(
+                f"  premarket_price=${snap.pre_market_price:.2f}"
+                f"  premarket_change={snap.pre_market_change_percent:+.2f}%"
+            )
+        if snap.after_hours_price and snap.after_hours_change_percent is not None:
+            lines.append(
+                f"  afterhours_price=${snap.after_hours_price:.2f}"
+                f"  afterhours_change={snap.after_hours_change_percent:+.2f}%"
+            )
+
+    # ── Why Is It Moving (Benzinga WIIM) ───────────────────────────────────
+    if ctx.wim and ctx.wim.reason:
+        lines.append("")
+        lines.append("WHY IS IT MOVING (Benzinga analyst note):")
+        lines.append(f"  direction={ctx.wim.direction}")
+        lines.append(f"  reason={ctx.wim.reason}")
+
+    # ── News articles ───────────────────────────────────────────────────────
+    if ctx.news:
+        lines.append("")
+        lines.append(f"NEWS (last 24h, {len(ctx.news)} articles, newest first):")
+        for i, article in enumerate(ctx.news[:8], 1):
+            pub = article.published_at
+            age = _age_label(pub)
+            source = article.source or "unknown"
+            title = article.title or ""
+            desc = (article.description or "").strip()
+            if desc and len(desc) > 300:
+                desc = desc[:297] + "..."
+            lines.append(f"  [{i}] {source} · {age}")
+            lines.append(f"      headline: {title}")
+            if desc:
+                lines.append(f"      summary: {desc}")
+
+    # ── Analyst ratings ─────────────────────────────────────────────────────
+    if ctx.analyst_ratings:
+        lines.append("")
+        lines.append(f"ANALYST RATINGS (last 30d, {len(ctx.analyst_ratings)} entries):")
+        for r in ctx.analyst_ratings[:6]:
+            pt_str = f"  pt=${r.price_target:.2f}" if r.price_target else ""
+            date_str = r.published_at.strftime("%Y-%m-%d") if r.published_at else ""
+            lines.append(
+                f"  - {r.analyst_firm}: action={r.action}  rating={r.rating}{pt_str}  date={date_str}"
+            )
+
+    # ── Earnings results ────────────────────────────────────────────────────
+    if ctx.earnings:
+        lines.append("")
+        lines.append("RECENT EARNINGS:")
+        for e in ctx.earnings[:2]:
+            beat_str = "beat" if e.beat is True else ("miss" if e.beat is False else "n/a")
+            surprise_str = (
+                f"  eps_surprise={e.eps_surprise_pct:+.1f}%"
+                if e.eps_surprise_pct is not None
+                else ""
+            )
+            eps_str = ""
+            if e.eps_actual is not None and e.eps_estimate is not None:
+                eps_str = f"  eps_actual=${e.eps_actual:.2f}  eps_estimate=${e.eps_estimate:.2f}{surprise_str}"
+            elif e.eps_actual is not None:
+                eps_str = f"  eps_actual=${e.eps_actual:.2f}"
+            rev_str = ""
+            if e.revenue_actual is not None:
+                rev_str = f"  revenue_actual=${e.revenue_actual / 1e9:.2f}B" if e.revenue_actual > 1e8 else f"  revenue_actual=${e.revenue_actual / 1e6:.1f}M"
+            lines.append(
+                f"  period={e.period}  result={beat_str}{eps_str}{rev_str}"
+            )
+
+    # ── Corporate guidance ──────────────────────────────────────────────────
+    if ctx.guidance:
+        lines.append("")
+        lines.append("CORPORATE GUIDANCE (recent):")
+        for g in ctx.guidance[:3]:
+            date_str = g.published_at.strftime("%Y-%m-%d") if g.published_at else ""
+            lines.append(
+                f"  - {g.guidance_type}  period={g.period}  date={date_str}  headline={g.headline[:120]}"
+            )
+
+    lines.append("")  # trailing newline
+    return "\n".join(lines)
+
+
+def _fmt_volume(vol: float | int | None) -> str:
+    if vol is None:
+        return "n/a"
+    if vol >= 1_000_000:
+        return f"{vol / 1_000_000:.1f}M"
+    if vol >= 1_000:
+        return f"{vol / 1_000:.0f}K"
+    return str(int(vol))
+
+
+def _age_label(dt: "datetime | None") -> str:  # noqa: F821
+    if dt is None:
+        return "unknown time"
+    now = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
+    try:
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=__import__("datetime").timezone.utc)
+        diff = int((now - dt).total_seconds())
+    except Exception:
+        return "unknown time"
+    if diff < 3600:
+        return f"{diff // 60}m ago"
+    if diff < 86400:
+        return f"{diff // 3600}h ago"
+    return dt.strftime("%Y-%m-%d")
 
 
 def _fmt_accuracy_percent(value: float) -> str:
@@ -188,6 +341,8 @@ class AssistantChatService:
         historical_validation_summary: HistoricalValidationSummary | None = None,
         historical_validation_window_days: int = 90,
         product_kpi_summary: ProductKpiSummary | None = None,
+        symbol_context: AssistantSymbolContext | None = None,
+        attached_image: dict[str, str] | None = None,
     ) -> AssistantChatResult:
         """Authenticated chat turn.
 
@@ -232,10 +387,18 @@ class AssistantChatService:
         )
         if validation_block:
             system_text += "\n" + validation_block
+        symbol_block = serialize_symbol_context(symbol_context) if symbol_context else ""
+        if symbol_block:
+            system_text += "\n" + symbol_block
+        # Increase token budget when live symbol data is present — detailed
+        # synthesis of news + analyst context needs more room than framework
+        # explanations.
+        max_tokens = 900 if symbol_block else 380
         ai_text = await self._claude_chat_or_none(
             system=system_text,
             messages=clean,
-            max_tokens=320,
+            max_tokens=max_tokens,
+            attached_image=attached_image,
         )
         if ai_text:
             return AssistantChatResult(
@@ -317,17 +480,47 @@ class AssistantChatService:
         system: str,
         messages: list[dict[str, str]],
         max_tokens: int,
+        attached_image: dict[str, str] | None = None,
     ) -> str | None:
         settings = get_settings()
         api_key = (settings.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY") or "").strip()
         if not api_key:
             return None
+
+        # When an image is attached, upgrade the last user message to a
+        # multi-part content block so Claude vision can inspect it.
+        wire_messages: list[dict] = list(messages)
+        if (
+            attached_image
+            and isinstance(attached_image.get("data"), str)
+            and isinstance(attached_image.get("media_type"), str)
+            and wire_messages
+            and wire_messages[-1].get("role") == "user"
+        ):
+            last = wire_messages[-1]
+            wire_messages = wire_messages[:-1] + [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": attached_image["media_type"],
+                                "data": attached_image["data"],
+                            },
+                        },
+                        {"type": "text", "text": last.get("content", "")},
+                    ],
+                }
+            ]
+
         payload = {
             "model": AI_MODEL_FAST,
             "max_tokens": max_tokens,
             "temperature": 0,
             "system": system,
-            "messages": messages,
+            "messages": wire_messages,
         }
         headers = {
             "x-api-key": api_key,
