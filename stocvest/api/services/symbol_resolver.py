@@ -172,13 +172,26 @@ async def resolve_company_to_symbol(
     if not q_lower:
         return None
 
+    # Try the full phrase first, then each individual word (longest first). This
+    # rescues queries where a stray word survived extraction ("broadcom forecast"
+    # → no full match → "broadcom" → AVGO) without ever matching a 1–2 char token.
+    tokens = [t for t in q_lower.split(" ") if len(t) >= 3]
+    queries: list[str] = []
+    for cand in [q_lower, *sorted(tokens, key=len, reverse=True)]:
+        if cand and cand not in queries:
+            queries.append(cand)
+
     async def _search(active_client: PolygonClient) -> str | None:
-        try:
-            rows = await active_client.search_reference_tickers(q, limit=10)
-        except Exception as exc:  # noqa: BLE001 — best-effort resolution
-            _LOG.warning("resolve_company_to_symbol search failed for %r: %s", q, str(exc)[:160])
-            return None
-        return _best_company_match(q_lower, rows)
+        for cand in queries:
+            try:
+                rows = await active_client.search_reference_tickers(cand, limit=10)
+            except Exception as exc:  # noqa: BLE001 — best-effort resolution
+                _LOG.warning("resolve_company_to_symbol search failed for %r: %s", cand, str(exc)[:160])
+                continue
+            match = _best_company_match(cand, rows)
+            if match:
+                return match
+        return None
 
     if client is not None:
         return await _search(client)

@@ -246,3 +246,11 @@ def test_company_phrase_none_without_cue() -> None:
 
 def test_company_phrase_multiword_kept() -> None:
     assert extract_company_lookup_phrase("how did palo alto perform today") == "palo alto"
+
+
+def test_company_phrase_strips_forecast_framing() -> None:
+    # Trailing "forecast for next few days" must not pollute the company name.
+    assert (
+        extract_company_lookup_phrase("how did broadcom do today what is its forecast for next few days")
+        == "broadcom"
+    )

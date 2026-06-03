@@ -38,6 +38,12 @@ def test_prompt_forbids_redirect_when_no_live_symbol_context() -> None:
     assert 'A "no data, so check the Scanner/Signals" response is never allowed.' in ASSISTANT_SYSTEM_PROMPT
 
 
+def test_prompt_treats_market_closed_as_having_data() -> None:
+    # A closed market still has the latest session's close/change — the assistant
+    # must report it, not refuse because the market is closed.
+    assert "MARKET CLOSED IS NOT \"NO DATA\"" in ASSISTANT_SYSTEM_PROMPT
+
+
 # ---------------------------------------------------------------------------
 # serialize_page_context — whitelist + emitting only known keys
 # ---------------------------------------------------------------------------
