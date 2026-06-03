@@ -57,6 +57,7 @@ class AssistantChatResult:
     source: AssistantSource
     mode: AssistantMode
     upgrade_available: bool
+    navigate_to: str | None = None
 
 
 _DETERMINISTIC_GENERAL_REPLY = (
@@ -343,6 +344,7 @@ class AssistantChatService:
         product_kpi_summary: ProductKpiSummary | None = None,
         symbol_context: AssistantSymbolContext | None = None,
         attached_image: dict[str, str] | None = None,
+        discovery_context: str = "",
     ) -> AssistantChatResult:
         """Authenticated chat turn.
 
@@ -390,10 +392,10 @@ class AssistantChatService:
         symbol_block = serialize_symbol_context(symbol_context) if symbol_context else ""
         if symbol_block:
             system_text += "\n" + symbol_block
-        # Increase token budget when live symbol data is present — detailed
-        # synthesis of news + analyst context needs more room than framework
-        # explanations.
-        max_tokens = 900 if symbol_block else 380
+        if discovery_context:
+            system_text += "\n" + discovery_context
+        # Increase token budget when live symbol or discovery data is present.
+        max_tokens = 900 if (symbol_block or discovery_context) else 380
         ai_text = await self._claude_chat_or_none(
             system=system_text,
             messages=clean,

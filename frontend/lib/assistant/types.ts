@@ -271,6 +271,26 @@ export interface AssistantMessage {
   fresh?: boolean;
   /** Image attached to this user message, shown as a preview in the conversation rail. */
   attachedImage?: AttachedImage;
+  /**
+   * Deep-link to a dashboard page for this assistant turn. When present, the
+   * conversation rail renders a "→ Open full analysis" CTA button below the message.
+   * Example: "/dashboard/signals?symbol=MRVL"
+   */
+  navigate_to?: string | null;
+  /**
+   * Action confirmation card for watchlist mutations. When present, the rail
+   * renders a compact card confirming what was done.
+   */
+  action?: AssistantAction | null;
+}
+
+/** Structured action result attached to an assistant message. */
+export interface AssistantAction {
+  type: "watchlist_add" | "watchlist_remove";
+  symbol: string;
+  company_name?: string;
+  success: boolean;
+  message: string;
 }
 
 export interface AssistantChatResponse {
@@ -279,4 +299,8 @@ export interface AssistantChatResponse {
   mode: "general" | "contextual";
   upgrade_available: boolean;
   disclaimer?: string;
+  /** Deep-link to open for this response (e.g. Signals page for trade-planning questions). */
+  navigate_to?: string | null;
+  /** Structured action result (watchlist add/remove). */
+  action?: AssistantAction | null;
 }

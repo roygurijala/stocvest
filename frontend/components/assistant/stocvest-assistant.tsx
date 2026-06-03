@@ -296,7 +296,9 @@ export function StocvestAssistant({ isAuthenticated }: StocvestAssistantProps) {
                   pending: false,
                   fresh: true,
                   mode: data.mode === "contextual" ? "contextual" : "general",
-                  content: data.text!
+                  content: data.text!,
+                  navigate_to: data.navigate_to ?? null,
+                  action: data.action ?? null,
                 }
               : { ...m, fresh: false }
           )

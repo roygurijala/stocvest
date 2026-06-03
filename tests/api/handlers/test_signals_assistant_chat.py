@@ -458,6 +458,172 @@ def test_public_assistant_chat_handles_empty_messages(monkeypatch: pytest.Monkey
     assert body["source"] == "deterministic"
 
 
+# ---------------------------------------------------------------------------
+# A1 — image MIME validation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("media_type", ["image/jpeg", "image/png", "image/webp", "image/gif"])
+def test_assistant_chat_accepts_valid_image_mime_types(
+    monkeypatch: pytest.MonkeyPatch, media_type: str
+) -> None:
+    """Handler must accept PNG, JPG, WebP, and GIF — pass them through to svc.reply."""
+    paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.get_user_profile_store",
+        lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: paid_profile)})(),
+    )
+
+    captured: dict[str, object] = {}
+
+    async def fake_reply(self, *, messages, page_context, user_profile, **kwargs):  # type: ignore[no-untyped-def]
+        captured["attached_image"] = kwargs.get("attached_image")
+        return AssistantChatResult(text="ok", source="ai", mode="general", upgrade_available=False)
+
+    monkeypatch.setattr("stocvest.signals.assistant_chat.AssistantChatService.reply", fake_reply)
+    # Suppress symbol context fetch so the test is fast.
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.fetch_assistant_symbol_context",
+        None,
+        raising=False,
+    )
+
+    response = assistant_chat_handler(
+        _event(
+            body={
+                "messages": [{"role": "user", "content": "Analyze this chart"}],
+                "attached_image": {"data": "base64data==", "media_type": media_type},
+            }
+        ),
+        {},
+    )
+    assert response["statusCode"] == 200
+    img = captured.get("attached_image")
+    assert isinstance(img, dict)
+    assert img["media_type"] == media_type
+
+
+@pytest.mark.parametrize("media_type", ["application/pdf", "image/svg+xml", "text/plain", "video/mp4"])
+def test_assistant_chat_rejects_invalid_image_mime_types(
+    monkeypatch: pytest.MonkeyPatch, media_type: str
+) -> None:
+    """Non-image and unsupported types must be stripped before reaching svc.reply."""
+    paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.get_user_profile_store",
+        lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: paid_profile)})(),
+    )
+
+    captured: dict[str, object] = {}
+
+    async def fake_reply(self, *, messages, page_context, user_profile, **kwargs):  # type: ignore[no-untyped-def]
+        captured["attached_image"] = kwargs.get("attached_image")
+        return AssistantChatResult(text="ok", source="ai", mode="general", upgrade_available=False)
+
+    monkeypatch.setattr("stocvest.signals.assistant_chat.AssistantChatService.reply", fake_reply)
+
+    response = assistant_chat_handler(
+        _event(
+            body={
+                "messages": [{"role": "user", "content": "Analyze this"}],
+                "attached_image": {"data": "base64data==", "media_type": media_type},
+            }
+        ),
+        {},
+    )
+    assert response["statusCode"] == 200
+    # Invalid MIME → stripped, service receives None
+    assert captured.get("attached_image") is None
+
+
+# ---------------------------------------------------------------------------
+# A1 — symbol detection wiring
+# ---------------------------------------------------------------------------
+
+
+def test_assistant_chat_detects_symbol_and_calls_context_fetch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When a ticker appears in the user message, fetch_assistant_symbol_context
+    must be called with the detected symbol and the result forwarded to svc.reply."""
+    paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.get_user_profile_store",
+        lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: paid_profile)})(),
+    )
+
+    symbol_context_sentinel = object()
+    fetched_symbols: list[str] = []
+
+    async def fake_fetch(sym: str):  # type: ignore[no-untyped-def]
+        fetched_symbols.append(sym)
+        return symbol_context_sentinel
+
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.fetch_assistant_symbol_context",
+        fake_fetch,
+    )
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.detect_symbol_from_messages",
+        lambda msgs: "MRVL",
+    )
+
+    captured: dict[str, object] = {}
+
+    async def fake_reply(self, *, messages, page_context, user_profile, **kwargs):  # type: ignore[no-untyped-def]
+        captured["symbol_context"] = kwargs.get("symbol_context")
+        return AssistantChatResult(text="MRVL is up.", source="ai", mode="contextual", upgrade_available=False)
+
+    monkeypatch.setattr("stocvest.signals.assistant_chat.AssistantChatService.reply", fake_reply)
+
+    response = assistant_chat_handler(
+        _event(body={"messages": [{"role": "user", "content": "why is MRVL up today?"}]}),
+        {},
+    )
+    assert response["statusCode"] == 200
+    assert "MRVL" in fetched_symbols
+    assert captured.get("symbol_context") is symbol_context_sentinel
+
+
+def test_assistant_chat_context_fetch_failure_does_not_break_chat(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If the symbol context fetch raises, the chat turn must still return 200
+    and svc.reply receives symbol_context=None."""
+    paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.get_user_profile_store",
+        lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: paid_profile)})(),
+    )
+
+    async def broken_fetch(sym: str):  # type: ignore[no-untyped-def]
+        raise RuntimeError("Polygon down")
+
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.fetch_assistant_symbol_context",
+        broken_fetch,
+    )
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.detect_symbol_from_messages",
+        lambda msgs: "MRVL",
+    )
+
+    captured: dict[str, object] = {}
+
+    async def fake_reply(self, *, messages, page_context, user_profile, **kwargs):  # type: ignore[no-untyped-def]
+        captured["symbol_context"] = kwargs.get("symbol_context")
+        return AssistantChatResult(text="ok", source="ai", mode="general", upgrade_available=False)
+
+    monkeypatch.setattr("stocvest.signals.assistant_chat.AssistantChatService.reply", fake_reply)
+
+    response = assistant_chat_handler(
+        _event(body={"messages": [{"role": "user", "content": "why is MRVL up?"}]}),
+        {},
+    )
+    assert response["statusCode"] == 200
+    assert captured.get("symbol_context") is None
+
+
 def test_assistant_chat_drops_client_system_role(monkeypatch: pytest.MonkeyPatch) -> None:
     """Clients must not be able to inject `system` turns — sanitization keeps only user/assistant."""
     paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
