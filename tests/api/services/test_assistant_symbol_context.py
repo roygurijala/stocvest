@@ -207,6 +207,46 @@ def test_symbol_normalized_to_polygon_form() -> None:
     assert "BRK-B" not in called_with
 
 
+def test_polygon_client_constructed_with_api_key() -> None:
+    """Regression: PolygonClient must be built WITH api_key.
+
+    Constructing it bare raised a TypeError that silently left the assistant
+    with no live data (the "I don't have live market data for X" fallback).
+    """
+    with (
+        patch(
+            "stocvest.api.services.assistant_symbol_context.PolygonClient",
+        ) as MockPoly,
+        patch(
+            "stocvest.api.services.assistant_symbol_context.BenzingaClient",
+        ) as MockBz,
+        patch(
+            "stocvest.api.services.assistant_symbol_context.get_settings",
+        ) as MockSettings,
+    ):
+        MockSettings.return_value = MagicMock(polygon_api_key="TEST_POLYGON_KEY")
+
+        mock_poly = AsyncMock()
+        mock_poly.get_snapshot = AsyncMock(return_value=None)
+        mock_poly.get_news = AsyncMock(return_value=[])
+        mock_poly.get_bars = AsyncMock(return_value=[])
+        mock_poly.__aenter__ = AsyncMock(return_value=mock_poly)
+        mock_poly.__aexit__ = AsyncMock(return_value=None)
+        MockPoly.return_value = mock_poly
+
+        mock_bz = AsyncMock()
+        mock_bz.get_why_is_it_moving = AsyncMock(return_value=None)
+        mock_bz.get_analyst_ratings = AsyncMock(return_value=[])
+        mock_bz.get_earnings_results = AsyncMock(return_value=[])
+        mock_bz.get_corporate_guidance = AsyncMock(return_value=[])
+        mock_bz.get_news = AsyncMock(return_value=[])
+        MockBz.return_value = mock_bz
+
+        asyncio.run(fetch_assistant_symbol_context("MRVL"))
+
+    MockPoly.assert_called_once_with(api_key="TEST_POLYGON_KEY")
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # build_symbol_chart
 # ─────────────────────────────────────────────────────────────────────────────
