@@ -85,19 +85,32 @@ from stocvest.api.services.assistant_discovery import (
     fetch_discovery_context,
     serialize_discovery_context,
 )
-from stocvest.api.services.assistant_symbol_context import fetch_assistant_symbol_context
+from stocvest.api.services.assistant_market_context import (
+    fetch_market_pulse_context,
+    serialize_market_pulse_context,
+)
+from stocvest.api.services.assistant_symbol_context import (
+    build_symbol_chart,
+    fetch_assistant_symbol_context,
+)
 from stocvest.api.services.assistant_watchlist_action import (
     execute_watchlist_add,
     execute_watchlist_remove,
 )
+from stocvest.api.services.assistant_watchlist_context import (
+    fetch_watchlist_context,
+    serialize_watchlist_context,
+)
 from stocvest.signals.assistant_chat import AssistantChatService
 from stocvest.utils.intent_detector import (
     is_discovery_query,
+    is_market_overview_query,
     is_trade_planning_question,
     is_watchlist_add_intent,
+    is_watchlist_intelligence_query,
     is_watchlist_remove_intent,
 )
-from stocvest.utils.symbol_detector import detect_symbol_from_messages
+from stocvest.utils.symbol_detector import detect_symbol_from_messages, extract_action_symbol
 from stocvest.signals.historical_validation import (
     BucketStats,
     HistoricalValidationSummary,
@@ -1170,8 +1183,9 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
             break
 
     if last_user_text_for_intent and profile.has_ai_explanations:
-        from stocvest.utils.symbol_detector import detect_symbol
-        action_sym = detect_symbol(last_user_text_for_intent)
+        # Explicit actions name the ticker directly, so trust the token after the
+        # verb even when it collides with a blocklisted abbreviation (e.g. "PE").
+        action_sym = extract_action_symbol(last_user_text_for_intent)
         if action_sym:
             if is_watchlist_add_intent(last_user_text_for_intent):
                 wl_result = execute_watchlist_add(rc.user_id, action_sym)
@@ -1256,6 +1270,44 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
         except Exception:  # noqa: BLE001
             discovery_block = ""
 
+    # ── Market overview intent ───────────────────────────────────────────────
+    # Broad market questions ("how is the stock market doing today?") should
+    # get concrete pulse context from the cached market snapshot.
+    market_block = ""
+    if profile.has_ai_explanations and is_market_overview_query(last_user_text_for_intent):
+        try:
+            market_ctx = fetch_market_pulse_context()
+            market_block = serialize_market_pulse_context(market_ctx)
+            if not market_ctx.has_data:
+                market_block = (
+                    "=== MARKET PULSE CONTEXT ===\n"
+                    "source=no_cached_market_pulse\n"
+                    "note=No market pulse cache is available right now. Use a cautious, non-specific summary and suggest checking Dashboard pulse cards.\n"
+                )
+        except Exception:  # noqa: BLE001
+            market_block = ""
+
+    # ── Watchlist intelligence intent ────────────────────────────────────────
+    # "How is my watchlist doing today?" / "best opportunities from my watchlist"
+    # are answered from cached maturation data (no expensive recompute).
+    watchlist_block = ""
+    if profile.has_ai_explanations and is_watchlist_intelligence_query(last_user_text_for_intent):
+        try:
+            wl_mode = "day"
+            if page_context and isinstance(page_context.get("trading_mode"), str):
+                wl_mode = "swing" if page_context["trading_mode"].strip().lower() == "swing" else "day"
+            wl_ctx = fetch_watchlist_context(rc.user_id, wl_mode)  # type: ignore[arg-type]
+            watchlist_block = serialize_watchlist_context(wl_ctx)
+            if not watchlist_block:
+                watchlist_block = (
+                    "=== WATCHLIST CONTEXT ===\n"
+                    "source=no_cached_watchlist_data\n"
+                    "note=No watchlist maturation data is cached right now. Suggest the user open the "
+                    "Watchlists page so STOCVEST can evaluate their symbols.\n"
+                )
+        except Exception:  # noqa: BLE001
+            watchlist_block = ""
+
     # Detect a ticker symbol from the conversation and pre-fetch live market
     # data so the assistant can answer factual questions (e.g. "why is MRVL
     # up?") with real data rather than generic explanations.
@@ -1273,6 +1325,15 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
         except Exception:  # noqa: BLE001
             _LOG.exception("assistant_chat: symbol context fetch failed — continuing without it")
             symbol_context = None
+
+    # Deterministic chart payload (intraday sparkline) built from the live
+    # snapshot/bars so a "how is NVDA doing today?" answer can ship a mini-chart.
+    chart_payload: dict | None = None
+    try:
+        if symbol_context is not None:
+            chart_payload = build_symbol_chart(symbol_context)
+    except Exception:  # noqa: BLE001
+        chart_payload = None
 
     # Detect trade-planning intent to pre-attach navigate_to deep-link.
     # Checked before calling Claude so the result carries it even on the
@@ -1301,6 +1362,8 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
                 symbol_context=symbol_context,
                 attached_image=attached_image,
                 discovery_context=discovery_block,
+                market_context=market_block,
+                watchlist_context=watchlist_block,
             )
         )
     except (TypeError, ValueError) as exc:
@@ -1323,6 +1386,7 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
             "upgrade_available": result.upgrade_available,
             "disclaimer": API_SIGNAL_DISCLAIMER,
             "navigate_to": navigate_to,
+            "chart": chart_payload,
         }
     )
 

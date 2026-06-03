@@ -299,6 +299,7 @@ export function StocvestAssistant({ isAuthenticated }: StocvestAssistantProps) {
                   content: data.text!,
                   navigate_to: data.navigate_to ?? null,
                   action: data.action ?? null,
+                  chart: data.chart ?? null,
                 }
               : { ...m, fresh: false }
           )

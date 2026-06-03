@@ -157,6 +157,93 @@ describe("AssistantPanel — loading state", () => {
   });
 });
 
+// ─── Chart mini-card ─────────────────────────────────────────────────────────
+
+describe("AssistantPanel — chart mini-card", () => {
+  it("renders a sparkline chart card when an assistant message carries a chart", () => {
+    renderPanel({
+      messages: [
+        { id: "1", role: "user", content: "how is NVDA doing today?" },
+        {
+          id: "2",
+          role: "assistant",
+          content: "NVDA is up about 4% today.",
+          chart: {
+            symbol: "NVDA",
+            kind: "intraday",
+            interval: "5m",
+            points: [
+              { t: "2026-06-03T13:30:00+00:00", c: 100 },
+              { t: "2026-06-03T13:35:00+00:00", c: 102 },
+              { t: "2026-06-03T13:40:00+00:00", c: 104 },
+            ],
+            last: 104,
+            change_pct: 4.0,
+            direction: "up",
+            levels: [
+              { label: "VWAP", kind: "vwap", value: 101.5, distance_pct: -2.4 },
+              { label: "Support", kind: "support", value: 96, distance_pct: -7.7 },
+              { label: "Analyst target", kind: "target", value: 180, distance_pct: 73.1 },
+            ],
+          },
+        },
+      ],
+    });
+    const card = screen.getByTestId("assistant-chart-card");
+    expect(card).toBeDefined();
+    expect(card.getAttribute("data-chart-symbol")).toBe("NVDA");
+    expect(card.getAttribute("data-chart-direction")).toBe("up");
+    expect(screen.getByText("+4.00%")).toBeDefined();
+    expect(screen.getByText("$104.00")).toBeDefined();
+    // Reference-level chips render with labels and values.
+    expect(screen.getByTestId("assistant-chart-levels")).toBeDefined();
+    expect(screen.getByText("VWAP")).toBeDefined();
+    expect(screen.getByText("Analyst target")).toBeDefined();
+    expect(screen.getByText("$180.00")).toBeDefined();
+  });
+
+  it("offers an expand-chart toggle that flips its label and aria state", () => {
+    renderPanel({
+      messages: [
+        { id: "1", role: "user", content: "how is NVDA doing today?" },
+        {
+          id: "2",
+          role: "assistant",
+          content: "NVDA is up about 4% today.",
+          chart: {
+            symbol: "NVDA",
+            kind: "intraday",
+            interval: "5m",
+            points: [
+              { t: "2026-06-03T13:30:00+00:00", c: 100 },
+              { t: "2026-06-03T13:35:00+00:00", c: 102 },
+            ],
+            last: 102,
+            change_pct: 2.0,
+            direction: "up",
+          },
+        },
+      ],
+    });
+    const expandBtn = screen.getByTestId("assistant-chart-expand");
+    expect(expandBtn.getAttribute("aria-expanded")).toBe("false");
+    expect(expandBtn.textContent).toContain("Expand chart");
+    fireEvent.click(expandBtn);
+    expect(expandBtn.getAttribute("aria-expanded")).toBe("true");
+    expect(expandBtn.textContent).toContain("Hide full chart");
+  });
+
+  it("does not render a chart card when no chart is attached", () => {
+    renderPanel({
+      messages: [
+        { id: "1", role: "user", content: "what is a P/E ratio?" },
+        { id: "2", role: "assistant", content: "Price to earnings is..." },
+      ],
+    });
+    expect(screen.queryByTestId("assistant-chart-card")).toBeNull();
+  });
+});
+
 // ─── Close button ────────────────────────────────────────────────────────────
 
 describe("AssistantPanel — close", () => {

@@ -46,6 +46,8 @@ import { SignalsWatchlistPickerModal } from "@/components/signals/signals-watchl
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
 import { normalizeWatchlistMaturationBySymbol } from "@/lib/watchlist-page-utils";
 import { SignalsReferenceLevels } from "@/components/signals/signals-reference-levels";
+import { FullPriceChart } from "@/components/assistant/full-price-chart";
+import type { AssistantChartLevel } from "@/lib/assistant/types";
 import { SignalsSetupRead } from "@/components/signals/signals-setup-read";
 import { buildFundamentalBackdropSummary } from "@/lib/signal-evidence/fundamental-present";
 import { parseFundamentalContext } from "@/lib/signal-evidence";
@@ -868,6 +870,17 @@ export function SignalsPageClient({
         : null;
     return deriveSessionReferenceLevels(snapshot, comp);
   }, [snapshot, compositeResult]);
+
+  // Reference levels reused as horizontal price lines on the interactive chart.
+  const chartLevels = useMemo<AssistantChartLevel[]>(() => {
+    const out: AssistantChartLevel[] = [];
+    if (referenceLevels.vwap != null) out.push({ label: "VWAP", kind: "vwap", value: referenceLevels.vwap });
+    if (referenceLevels.support != null) out.push({ label: "Support", kind: "support", value: referenceLevels.support });
+    if (referenceLevels.resistance != null) {
+      out.push({ label: "Resistance", kind: "resistance", value: referenceLevels.resistance });
+    }
+    return out;
+  }, [referenceLevels]);
 
   const rows: LayerRow[] = useMemo(() => {
     const rawLayers = compositeResult?.layers;
@@ -1939,6 +1952,33 @@ export function SignalsPageClient({
               <div data-testid="signals-setup-insufficient">{insufficientLayerMessage}</div>
             ) : compositeServiceMessage ? (
               <div data-testid="signals-setup-service-error">{compositeServiceMessage}</div>
+            ) : null}
+            {hasValidSignal && symbol.trim() ? (
+              <article
+                className={surfaceGlowClassName}
+                data-testid="signals-price-chart"
+                style={{
+                  background: colors.surface,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: borderRadius.xl,
+                  padding: spacing[4]
+                }}
+              >
+                <h3 className="m-0" style={{ fontSize: typography.scale.lg }}>
+                  Price Chart
+                </h3>
+                <p className="m-0 mt-1 text-xs leading-snug" style={{ color: colors.textMuted }}>
+                  Daily candles with the 50-day average and reference levels — context only, not entry signals
+                </p>
+                <div className="mt-3">
+                  <FullPriceChart
+                    symbol={symbol.trim().toUpperCase()}
+                    colors={colors}
+                    levels={chartLevels}
+                    height={320}
+                  />
+                </div>
+              </article>
             ) : null}
             {hasValidSignal && timeframeContext ? (
               <TimeframeContextPanel context={timeframeContext} tradingMode={tradingMode} setupBias={setupBias} compact />

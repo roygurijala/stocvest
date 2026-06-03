@@ -1,12 +1,20 @@
 "use client";
 
-import { memo, useMemo } from "react";
+import { memo, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import Link from "next/link";
-import { ArrowRight, CheckCircle, XCircle } from "lucide-react";
+import dynamic from "next/dynamic";
+import { ArrowRight, CheckCircle, LineChart, XCircle } from "lucide-react";
 import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
-import type { AssistantAction, AssistantMessage } from "@/lib/assistant/types";
+import type { AssistantAction, AssistantChart, AssistantChartLevel, AssistantMessage } from "@/lib/assistant/types";
+
+// Lazy-loaded so TradingView's lightweight-charts (~35 KB) only ships when a
+// user actually expands a full chart — the chat stays featherweight.
+const FullPriceChart = dynamic(
+  () => import("./full-price-chart").then((m) => m.FullPriceChart),
+  { ssr: false }
+);
 
 /**
  * No-bubble vertical timeline for STOCVEST Assistant turns.
@@ -174,6 +182,10 @@ function ConversationRow({ message, colors, contextTone }: ConversationRowProps)
       <div style={bodyWrapperStyle}>
         <MessageBody message={message} colors={colors} align={isUser ? "right" : "left"} />
       </div>
+      {/* Price chart mini-card — shown on assistant turns with live market data */}
+      {!isUser && message.chart ? (
+        <ChartCard chart={message.chart} colors={colors} />
+      ) : null}
       {/* Deep-link CTA — shown on assistant turns with a navigate_to field */}
       {!isUser && message.navigate_to ? (
         <NavigateCta href={message.navigate_to} colors={colors} />
@@ -239,6 +251,248 @@ function ActionCard({ action, colors }: { action: AssistantAction; colors: Theme
       <span>{action.message}</span>
     </div>
   );
+}
+
+const CHART_H = 40; // svg viewBox height units
+
+function levelColor(kind: AssistantChartLevel["kind"], colors: ThemeColors): string {
+  switch (kind) {
+    case "support":
+      return colors.bullish;
+    case "resistance":
+      return colors.bearish ?? colors.textMuted;
+    case "target":
+      return colors.caution ?? colors.accent;
+    case "vwap":
+      return colors.accent;
+    case "sma50":
+      return "#8b5cf6"; // violet — distinct from VWAP/accent
+    case "prev_close":
+    default:
+      return colors.textMuted;
+  }
+}
+
+function ChartCard({ chart, colors }: { chart: AssistantChart; colors: ThemeColors }) {
+  const [expanded, setExpanded] = useState(false);
+  const up = chart.direction === "up";
+  const down = chart.direction === "down";
+  const lineColor = up ? colors.bullish : down ? (colors.bearish ?? colors.textMuted) : colors.textMuted;
+
+  const changeLabel =
+    typeof chart.change_pct === "number"
+      ? `${chart.change_pct >= 0 ? "+" : ""}${chart.change_pct.toFixed(2)}%`
+      : null;
+  const lastLabel = typeof chart.last === "number" ? formatPrice(chart.last) : null;
+  const asOfLabel = formatAsOf(chart.as_of);
+  const levels = Array.isArray(chart.levels) ? chart.levels.filter((l) => Number.isFinite(l.value)) : [];
+
+  const geo = useMemo(() => buildChartGeometry(chart.points, levels), [chart.points, levels]);
+
+  return (
+    <div
+      data-testid="assistant-chart-card"
+      data-chart-symbol={chart.symbol}
+      data-chart-direction={chart.direction}
+      style={{
+        display: "grid",
+        gap: spacing[1],
+        padding: `${spacing[2]} ${spacing[3]}`,
+        borderRadius: borderRadius.md,
+        border: `1px solid ${lineColor}44`,
+        background: `${lineColor}10`
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "baseline",
+          justifyContent: "space-between",
+          gap: spacing[2]
+        }}
+      >
+        <span style={{ fontWeight: 800, fontSize: typography.scale.sm, color: colors.text, letterSpacing: "0.02em" }}>
+          {chart.symbol}
+        </span>
+        <span style={{ display: "inline-flex", alignItems: "baseline", gap: 6 }}>
+          {lastLabel ? (
+            <span style={{ fontWeight: 700, fontSize: typography.scale.sm, color: colors.text }}>{lastLabel}</span>
+          ) : null}
+          {changeLabel ? (
+            <span style={{ fontWeight: 700, fontSize: typography.scale.xs, color: lineColor }}>{changeLabel}</span>
+          ) : null}
+        </span>
+      </div>
+
+      {geo ? (
+        <svg
+          role="img"
+          aria-label={`${chart.symbol} intraday price trend, ${chart.direction}`}
+          viewBox={`0 0 100 ${CHART_H}`}
+          preserveAspectRatio="none"
+          style={{ width: "100%", height: 52, display: "block", overflow: "visible" }}
+        >
+          {/* Reference level lines that fall within the visible range */}
+          {geo.drawnLevels.map((l) => (
+            <line
+              key={`${l.kind}-${l.value}`}
+              x1={0}
+              x2={100}
+              y1={l.y}
+              y2={l.y}
+              stroke={levelColor(l.kind, colors)}
+              strokeWidth={0.75}
+              strokeDasharray="2 2"
+              vectorEffect="non-scaling-stroke"
+              opacity={0.7}
+            />
+          ))}
+          <path d={`${geo.path} L 100,${CHART_H} L 0,${CHART_H} Z`} fill={`${lineColor}1f`} stroke="none" />
+          <path
+            d={geo.path}
+            fill="none"
+            stroke={lineColor}
+            strokeWidth={1.5}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
+      ) : null}
+
+      {/* Level chips — always shown when levels exist, even if off-chart */}
+      {levels.length > 0 ? (
+        <div data-testid="assistant-chart-levels" style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 2 }}>
+          {levels.map((l) => (
+            <span
+              key={`${l.kind}-${l.value}`}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                fontSize: 10,
+                color: colors.textMuted,
+                border: `1px solid ${levelColor(l.kind, colors)}55`,
+                background: `${levelColor(l.kind, colors)}12`,
+                borderRadius: 999,
+                padding: "1px 7px"
+              }}
+            >
+              <span aria-hidden style={{ width: 6, height: 6, borderRadius: "50%", background: levelColor(l.kind, colors) }} />
+              <span style={{ fontWeight: 600, color: colors.text }}>{l.label}</span>
+              <span>{formatPrice(l.value)}</span>
+              {typeof l.distance_pct === "number" ? (
+                <span style={{ color: levelColor(l.kind, colors) }}>
+                  {l.distance_pct >= 0 ? "+" : ""}
+                  {l.distance_pct.toFixed(1)}%
+                </span>
+              ) : null}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing[2] }}>
+        <span style={{ fontSize: 10, color: colors.textMuted, letterSpacing: "0.04em" }}>
+          {chart.kind === "intraday" ? `Intraday · ${chart.interval ?? "5m"}` : "Latest quote"}
+          {asOfLabel ? ` · ${asOfLabel}` : ""}
+        </span>
+        {chart.symbol ? (
+          <button
+            type="button"
+            data-testid="assistant-chart-expand"
+            aria-expanded={expanded}
+            onClick={() => setExpanded((v) => !v)}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+              minHeight: 28,
+              padding: "2px 8px",
+              fontSize: 10,
+              fontWeight: 600,
+              cursor: "pointer",
+              color: colors.accent,
+              border: `1px solid ${colors.accent}55`,
+              background: `${colors.accent}12`,
+              borderRadius: 999
+            }}
+          >
+            <LineChart size={12} aria-hidden />
+            {expanded ? "Hide full chart" : "Expand chart"}
+          </button>
+        ) : null}
+      </div>
+
+      {expanded && chart.symbol ? (
+        <div style={{ marginTop: spacing[1] }}>
+          <FullPriceChart symbol={chart.symbol} colors={colors} levels={levels} />
+          <span style={{ fontSize: 10, color: colors.textMuted, letterSpacing: "0.04em" }}>
+            Daily candles · 50-day average · reference levels
+          </span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+interface ChartGeometry {
+  path: string;
+  drawnLevels: Array<AssistantChartLevel & { y: number }>;
+}
+
+/**
+ * Build the sparkline path plus the y-coordinates of any reference levels that
+ * fall close enough to the price band to be drawn. The y-domain auto-scales to
+ * the intraday closes, then expands to include nearby levels (within ~1.2× the
+ * price range) so support/resistance/VWAP render on-chart without flattening the
+ * line for far-away levels (e.g. a distant analyst target stays chips-only).
+ */
+function buildChartGeometry(
+  points: AssistantChart["points"],
+  levels: AssistantChartLevel[]
+): ChartGeometry | null {
+  if (!Array.isArray(points) || points.length < 2) return null;
+  const closes = points.map((p) => p.c).filter((c) => typeof c === "number" && Number.isFinite(c));
+  if (closes.length < 2) return null;
+
+  let domMin = Math.min(...closes);
+  let domMax = Math.max(...closes);
+  const priceRange = domMax - domMin || Math.max(Math.abs(domMax) * 0.01, 1);
+  const proximity = priceRange * 1.2;
+
+  const nearby = levels.filter(
+    (l) => Number.isFinite(l.value) && l.value >= domMin - proximity && l.value <= domMax + proximity
+  );
+  for (const l of nearby) {
+    domMin = Math.min(domMin, l.value);
+    domMax = Math.max(domMax, l.value);
+  }
+  const range = domMax - domMin || 1;
+  const yOf = (v: number) => CHART_H - ((v - domMin) / range) * CHART_H;
+
+  const n = closes.length;
+  const path = closes
+    .map((c, i) => `${i === 0 ? "M" : "L"} ${((i / (n - 1)) * 100).toFixed(2)},${yOf(c).toFixed(2)}`)
+    .join(" ");
+
+  const drawnLevels = nearby.map((l) => ({ ...l, y: Number(yOf(l.value).toFixed(2)) }));
+  return { path, drawnLevels };
+}
+
+function formatPrice(value: number): string {
+  return `$${value.toFixed(2)}`;
+}
+
+function formatAsOf(iso?: string): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  try {
+    return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  } catch {
+    return null;
+  }
 }
 
 function MessageBody({
