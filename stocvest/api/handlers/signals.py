@@ -1131,6 +1131,15 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     raw_messages = body.get("messages")
     raw_context = body.get("page_context")
     page_context = raw_context if isinstance(raw_context, dict) else None
+    raw_image = body.get("attached_image")
+    attached_image = (
+        raw_image
+        if isinstance(raw_image, dict)
+        and isinstance(raw_image.get("data"), str)
+        and isinstance(raw_image.get("media_type"), str)
+        and raw_image["media_type"] in ("image/jpeg", "image/png", "image/webp", "image/gif")
+        else None
+    )
 
     profile = get_user_profile_store().get_profile(rc.user_id)
     svc = AssistantChatService()
@@ -1162,6 +1171,28 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
         historical_summary = None
         product_kpi_summary = None
 
+    # Detect a ticker symbol from the conversation and pre-fetch live market
+    # data so the assistant can answer factual questions (e.g. "why is MRVL
+    # up?") with real data rather than generic explanations.
+    symbol_context = None
+    if profile.has_ai_explanations:
+        try:
+            from stocvest.api.services.assistant_symbol_context import (
+                fetch_assistant_symbol_context,
+            )
+            from stocvest.utils.symbol_detector import detect_symbol_from_messages
+
+            messages_list = raw_messages if isinstance(raw_messages, list) else []
+            detected_sym = detect_symbol_from_messages(messages_list)
+            # Fall back to the symbol already loaded on the current page.
+            if not detected_sym and page_context and isinstance(page_context.get("symbol"), str):
+                detected_sym = page_context["symbol"].strip().upper() or None
+            if detected_sym:
+                symbol_context = asyncio.run(fetch_assistant_symbol_context(detected_sym))
+        except Exception:  # noqa: BLE001
+            _LOG.exception("assistant_chat: symbol context fetch failed — continuing without it")
+            symbol_context = None
+
     try:
         result = asyncio.run(
             svc.reply(
@@ -1170,6 +1201,8 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
                 user_profile=profile,
                 historical_validation_summary=historical_summary,
                 product_kpi_summary=product_kpi_summary,
+                symbol_context=symbol_context,
+                attached_image=attached_image,
             )
         )
     except (TypeError, ValueError) as exc:

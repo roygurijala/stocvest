@@ -8,7 +8,7 @@ import {
   ASSISTANT_STORAGE_KEY,
   subscribeAssistantReset
 } from "@/lib/assistant/session-reset";
-import type { AssistantChatResponse, AssistantMessage } from "@/lib/assistant/types";
+import type { AssistantChatResponse, AssistantMessage, AttachedImage } from "@/lib/assistant/types";
 import { surfaceAuthErrorIfAny } from "@/lib/auth/surface-auth-error";
 import { subscribeSessionExpired } from "@/lib/auth/session-expired";
 import { AssistantLauncher } from "@/components/assistant/assistant-launcher";
@@ -196,14 +196,19 @@ export function StocvestAssistant({ isAuthenticated }: StocvestAssistantProps) {
   );
 
   const submit = useCallback(
-    async (text: string) => {
+    async (text: string, attachedImage?: AttachedImage) => {
       const trimmed = text.trim();
       if (!trimmed || loading) return;
       setNotice(null);
 
       const userId = `u-${Date.now()}`;
       const pendingId = `a-${Date.now() + 1}`;
-      const userMsg: AssistantMessage = { id: userId, role: "user", content: trimmed };
+      const userMsg: AssistantMessage = {
+        id: userId,
+        role: "user",
+        content: trimmed,
+        attachedImage
+      };
       const pendingMsg: AssistantMessage = {
         id: pendingId,
         role: "assistant",
@@ -223,18 +228,22 @@ export function StocvestAssistant({ isAuthenticated }: StocvestAssistantProps) {
       const controller = new AbortController();
       abortRef.current = controller;
 
-      // Endpoint selection is the only place auth state directly affects what the
-      // assistant does: anonymous → public/no-context handler; authenticated →
-      // contextual handler with full page-context payload.
       const endpoint = isAuthenticated
         ? "/api/stocvest/signals/assistant/chat"
         : "/api/stocvest/public/assistant/chat";
-      const body = {
+      const body: Record<string, unknown> = {
         messages: nextMessages
           .filter((m) => !m.pending)
           .map((m) => ({ role: m.role, content: m.content })),
         page_context: pageContext ?? null
       };
+      // Forward image to backend only on the authenticated path.
+      if (isAuthenticated && attachedImage) {
+        body.attached_image = {
+          data: attachedImage.data,
+          media_type: attachedImage.media_type
+        };
+      }
 
       try {
         const res = await fetch(endpoint, {
@@ -363,7 +372,7 @@ export function StocvestAssistant({ isAuthenticated }: StocvestAssistantProps) {
             messages={messages}
             composerValue={composerValue}
             setComposerValue={setComposerValue}
-            onSubmit={submit}
+            onSubmit={(text, image) => submit(text, image)}
             onClose={close}
             loading={loading}
             notice={notice}
