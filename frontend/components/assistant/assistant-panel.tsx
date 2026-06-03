@@ -11,17 +11,19 @@ import {
   type CSSProperties,
   type KeyboardEvent
 } from "react";
-import { Send, X } from "lucide-react";
+import { Mic, MicOff, Paperclip, Send, X } from "lucide-react";
 import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import type {
   AssistantLayerKey,
   AssistantLayerStatus,
   AssistantMessage,
-  AssistantPageContext
+  AssistantPageContext,
+  AttachedImage
 } from "@/lib/assistant/types";
 import { AssistantConversationRail } from "@/components/assistant/assistant-conversation-rail";
-import { buildContextualEmptyState, buildContextualQuickPrompts } from "@/lib/assistant/quick-prompts";
+import { buildContextualQuickPrompts } from "@/lib/assistant/quick-prompts";
+import { useVoiceInput } from "@/lib/hooks/use-voice-input";
 
 interface AssistantPanelProps {
   colors: ThemeColors;
@@ -29,31 +31,28 @@ interface AssistantPanelProps {
   messages: AssistantMessage[];
   composerValue: string;
   setComposerValue: (next: string) => void;
-  onSubmit: (text: string) => void;
+  onSubmit: (text: string, image?: AttachedImage) => void;
   onClose: () => void;
   loading: boolean;
-  /** Optional gentle hint surfaced under the composer (e.g. upgrade or transient error). */
   notice?: string | null;
-  /**
-   * Whether the active visitor has a STOCVEST session. Controls the empty-state copy,
-   * quick prompts (anonymous visitors get marketing-flavored entry points like "What is
-   * STOCVEST?" / "How is STOCVEST different from signal-alert services?" / "What is R/R?")
-   * and the disclaimer wording.
-   */
   isAuthenticated: boolean;
 }
 
-/** Six signal layers shown in the constellation context strip. Stable order matches the engine. */
 const LAYER_ORDER: { key: AssistantLayerKey; abbr: string }[] = [
-  { key: "technical", abbr: "TCH" },
-  { key: "news", abbr: "NWS" },
-  { key: "macro", abbr: "MAC" },
-  { key: "sector", abbr: "SCT" },
-  { key: "geopolitical", abbr: "GEO" },
-  { key: "internals", abbr: "INT" }
+  { key: "technical", abbr: "T" },
+  { key: "news", abbr: "N" },
+  { key: "macro", abbr: "M" },
+  { key: "sector", abbr: "S" },
+  { key: "geopolitical", abbr: "G" },
+  { key: "internals", abbr: "I" }
 ];
 
-function statusTone(status: AssistantLayerStatus | undefined): "bullish" | "bearish" | "neutral" | "unavailable" {
+const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
+
+function statusTone(
+  status: AssistantLayerStatus | undefined
+): "bullish" | "bearish" | "neutral" | "unavailable" {
   if (status === "Bullish") return "bullish";
   if (status === "Bearish") return "bearish";
   if (status === "Neutral") return "neutral";
@@ -69,490 +68,632 @@ function decisionContextTone(
   return "caution";
 }
 
-export const AssistantPanel = forwardRef<HTMLDivElement, AssistantPanelProps>(function AssistantPanel(
-  { colors, context, messages, composerValue, setComposerValue, onSubmit, onClose, loading, notice, isAuthenticated },
-  ref
-) {
-  const tone = decisionContextTone(context);
-  const headingId = useId();
-  const conversationRef = useRef<HTMLDivElement | null>(null);
-  const [composerFocused, setComposerFocused] = useState(false);
-
-  useEffect(() => {
-    const el = conversationRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  }, [messages]);
-
-  useEffect(() => {
-    function onEsc(e: globalThis.KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", onEsc);
-    return () => window.removeEventListener("keydown", onEsc);
-  }, [onClose]);
-
-  const submit = useCallback(() => {
-    const text = composerValue.trim();
-    if (!text || loading) return;
-    onSubmit(text);
-  }, [composerValue, loading, onSubmit]);
-
-  const onKeyDown = useCallback(
-    (e: KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        submit();
-      }
-    },
-    [submit]
-  );
-
-  const accentRing = tone === "bullish"
-    ? "rgba(34,197,94,0.42)"
-    : tone === "bearish"
-      ? "rgba(239,68,68,0.45)"
-      : tone === "caution"
-        ? "rgba(245,158,11,0.45)"
-        : "rgba(56,189,248,0.42)";
-
-  const panelStyle: CSSProperties = {
-    background:
-      "linear-gradient(180deg, rgba(15,23,42,0.92) 0%, rgba(13,21,38,0.88) 60%, rgba(11,19,34,0.92) 100%)",
-    backdropFilter: "blur(18px)",
-    WebkitBackdropFilter: "blur(18px)",
-    border: `1px solid ${colors.border}`,
-    boxShadow: `0 28px 60px rgba(2,6,23,0.55), 0 0 0 1px ${accentRing}, 0 0 40px ${accentRing}`,
-    borderRadius: borderRadius.xl,
-    width: "min(440px, calc(100vw - 24px))",
-    maxHeight: "min(720px, 78vh)",
-    display: "grid",
-    gridTemplateRows: "auto auto 1fr auto",
-    overflow: "hidden",
-    color: colors.text
-  };
-
-  const isLightTheme = isLightSurface(colors.surface);
-  const lightOverride: CSSProperties = isLightTheme
-    ? {
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(248,250,252,0.92) 60%, rgba(241,245,249,0.95) 100%)"
-      }
-    : {};
-
-  const showQuickPrompts = messages.length === 0 && !loading;
-  const quickPrompts = useMemo(
-    () => buildContextualQuickPrompts(context, isAuthenticated),
-    [context, isAuthenticated]
-  );
-  const emptyCopy = useMemo(
-    () => buildContextualEmptyState(context, isAuthenticated),
-    [context, isAuthenticated]
-  );
-  const mode: "general" | "contextual" = context ? "contextual" : "general";
-
-  return (
-    <div
-      ref={ref}
-      role="dialog"
-      aria-modal="false"
-      aria-labelledby={headingId}
-      className="stocvest-assistant-panel"
-      style={{ ...panelStyle, ...lightOverride }}
-    >
-      <header
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: spacing[2],
-          padding: `${spacing[3]} ${spacing[3]}`,
-          borderBottom: `1px solid ${colors.border}`
-        }}
-      >
-        <div className="flex min-w-0 items-center gap-2">
-          <h2
-            id={headingId}
-            style={{ margin: 0, fontSize: typography.scale.sm, fontWeight: 700, color: colors.text }}
-          >
-            STOCVEST Assistant
-          </h2>
-          <ModeBadge mode={mode} colors={colors} tone={tone} />
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close STOCVEST Assistant"
-          style={{
-            background: "transparent",
-            border: "none",
-            color: colors.textMuted,
-            cursor: "pointer",
-            padding: 4,
-            borderRadius: borderRadius.md
-          }}
-        >
-          <X size={16} aria-hidden />
-        </button>
-      </header>
-
-      <ConstellationStrip context={context} colors={colors} />
-
-      <div
-        ref={conversationRef}
-        style={{
-          padding: `${spacing[3]} ${spacing[4]}`,
-          overflowY: "auto",
-          minHeight: 240,
-          maxHeight: "100%"
-        }}
-      >
-        {messages.length === 0 ? (
-          <EmptyState colors={colors} title={emptyCopy.title} subtitle={emptyCopy.subtitle} />
-        ) : (
-          <AssistantConversationRail messages={messages} colors={colors} contextTone={tone} />
-        )}
-      </div>
-
-      <div
-        style={{
-          padding: `${spacing[2]} ${spacing[3]} ${spacing[3]}`,
-          borderTop: `1px solid ${colors.border}`,
-          display: "grid",
-          gap: spacing[2]
-        }}
-      >
-        {notice ? (
-          <p
-            role="status"
-            style={{
-              margin: 0,
-              fontSize: typography.scale.xs,
-              color: colors.textMuted,
-              lineHeight: 1.5
-            }}
-          >
-            {notice}
-          </p>
-        ) : null}
-
-        <div
-          className="stocvest-assistant-composer"
-          data-focused={composerFocused ? "true" : "false"}
-          style={{
-            display: "grid",
-            gap: spacing[2],
-            padding: spacing[3],
-            borderRadius: borderRadius.lg,
-            border: `2px solid ${composerFocused ? colors.accent : colors.border}`,
-            background: `color-mix(in srgb, ${colors.background} 88%, ${colors.surfaceMuted})`,
-            boxShadow: composerFocused
-              ? `0 0 0 3px color-mix(in srgb, ${colors.accent} 22%, transparent)`
-              : `inset 0 1px 0 rgba(255,255,255,0.04)`,
-            transition: "border-color 160ms ease, box-shadow 160ms ease"
-          }}
-        >
-          <label
-            htmlFor="stocvest-assistant-composer-input"
-            style={{
-              margin: 0,
-              fontSize: typography.scale.xs,
-              fontWeight: 700,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              color: composerFocused ? colors.accent : colors.textMuted
-            }}
-          >
-            Your question
-          </label>
-          <div style={{ display: "flex", alignItems: "flex-end", gap: spacing[2] }}>
-          <textarea
-            id="stocvest-assistant-composer-input"
-            value={composerValue}
-            onChange={(e) => setComposerValue(e.target.value)}
-            onKeyDown={onKeyDown}
-            onFocus={() => setComposerFocused(true)}
-            onBlur={() => setComposerFocused(false)}
-            placeholder={
-              context?.symbol
-                ? `Ask about ${context.symbol.toUpperCase()} on this screen…`
-                : context
-                  ? "Ask about what you see on this screen…"
-                  : "Ask how STOCVEST works…"
-            }
-            rows={2}
-            aria-label="Message STOCVEST Assistant"
-            style={{
-              flex: 1,
-              minHeight: 52,
-              maxHeight: 160,
-              resize: "vertical",
-              border: `1px solid ${colors.border}`,
-              borderRadius: borderRadius.md,
-              outline: "none",
-              background: colors.surface,
-              color: colors.text,
-              fontSize: typography.scale.sm,
-              lineHeight: 1.55,
-              padding: `${spacing[2]} ${spacing[3]}`,
-              fontFamily: "inherit"
-            }}
-          />
-          <button
-            type="button"
-            onClick={submit}
-            disabled={loading || composerValue.trim().length === 0}
-            aria-label="Send message"
-            style={{
-              minWidth: 44,
-              minHeight: 44,
-              borderRadius: borderRadius.md,
-              border: "none",
-              background: loading || composerValue.trim().length === 0 ? colors.surfaceMuted : colors.accent,
-              color: loading || composerValue.trim().length === 0 ? colors.textMuted : "#0b1322",
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: loading || composerValue.trim().length === 0 ? "default" : "pointer",
-              boxShadow:
-                loading || composerValue.trim().length === 0
-                  ? "none"
-                  : `0 4px 14px color-mix(in srgb, ${colors.accent} 35%, transparent)`
-            }}
-          >
-            <Send size={16} aria-hidden />
-          </button>
-          </div>
-        </div>
-
-        {showQuickPrompts ? (
-          <div style={{ display: "grid", gap: spacing[1] }}>
-            <p
-              style={{
-                margin: 0,
-                fontSize: 10,
-                fontWeight: 700,
-                letterSpacing: "0.1em",
-                textTransform: "uppercase",
-                color: colors.textMuted
-              }}
-            >
-              Suggested for this screen
-            </p>
-            <ul
-              style={{
-                listStyle: "none",
-                margin: 0,
-                padding: 0,
-                display: "flex",
-                flexWrap: "wrap",
-                gap: spacing[1]
-              }}
-            >
-              {quickPrompts.map((q) => (
-                <li key={q}>
-                  <button
-                    type="button"
-                    onClick={() => onSubmit(q)}
-                    disabled={loading}
-                    style={{
-                      border: `1px solid color-mix(in srgb, ${colors.accent} 45%, ${colors.border})`,
-                      background: `color-mix(in srgb, ${colors.accent} 12%, ${colors.surface})`,
-                      color: colors.text,
-                      borderRadius: borderRadius.full,
-                      padding: "7px 12px",
-                      fontSize: typography.scale.xs,
-                      lineHeight: 1.35,
-                      cursor: loading ? "default" : "pointer",
-                      opacity: loading ? 0.5 : 1,
-                      textAlign: "left"
-                    }}
-                  >
-                    {q}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-
-        <p
-          style={{
-            margin: 0,
-            fontSize: 10,
-            color: colors.textMuted,
-            letterSpacing: "0.02em",
-            lineHeight: 1.45
-          }}
-        >
-          Explanations only — not trading advice or price predictions.
-        </p>
-      </div>
-    </div>
-  );
-});
-
-function ModeBadge({
-  mode,
-  colors,
-  tone
-}: {
-  mode: "general" | "contextual";
-  colors: ThemeColors;
-  tone: "neutral" | "bullish" | "bearish" | "caution";
-}) {
-  const isContextual = mode === "contextual";
-  const accent = isContextual
-    ? tone === "bullish"
-      ? colors.bullish
-      : tone === "bearish"
-        ? colors.bearish
-        : tone === "caution"
-          ? colors.caution
-          : colors.accent
-    : colors.textMuted;
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 4,
-        fontSize: 10,
-        fontWeight: 700,
-        letterSpacing: "0.12em",
-        textTransform: "uppercase",
-        padding: "3px 8px",
-        borderRadius: borderRadius.full,
-        border: `1px solid ${accent}55`,
-        background: `${accent}14`,
-        color: accent
-      }}
-    >
-      <span
-        aria-hidden
-        style={{
-          width: 6,
-          height: 6,
-          borderRadius: "50%",
-          background: accent,
-          boxShadow: `0 0 6px ${accent}88`
-        }}
-      />
-      {isContextual ? "Contextual" : "General"}
-    </span>
-  );
+/** Convert a File to a base64 string (no data-URI prefix). */
+async function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      // Strip "data:image/...;base64," prefix
+      const base64 = result.split(",")[1] ?? result;
+      resolve(base64);
+    };
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsDataURL(file);
+  });
 }
 
-function ConstellationStrip({
-  context,
-  colors
-}: {
-  context: AssistantPageContext | null;
-  colors: ThemeColors;
-}) {
-  if (!context) {
+export const AssistantPanel = forwardRef<HTMLDivElement, AssistantPanelProps>(
+  function AssistantPanel(
+    {
+      colors,
+      context,
+      messages,
+      composerValue,
+      setComposerValue,
+      onSubmit,
+      onClose,
+      loading,
+      notice,
+      isAuthenticated
+    },
+    ref
+  ) {
+    const tone = decisionContextTone(context);
+    const headingId = useId();
+    const conversationRef = useRef<HTMLDivElement | null>(null);
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
+    const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+    const [composerFocused, setComposerFocused] = useState(false);
+    const [attachedImage, setAttachedImage] = useState<AttachedImage | null>(null);
+    const [attachError, setAttachError] = useState<string | null>(null);
+    const [voiceError, setVoiceError] = useState<string | null>(null);
+
+    // Auto-scroll conversation to bottom on new messages.
+    useEffect(() => {
+      const el = conversationRef.current;
+      if (!el) return;
+      el.scrollTop = el.scrollHeight;
+    }, [messages]);
+
+    // Escape closes the panel.
+    useEffect(() => {
+      function onEsc(e: globalThis.KeyboardEvent) {
+        if (e.key === "Escape") onClose();
+      }
+      window.addEventListener("keydown", onEsc);
+      return () => window.removeEventListener("keydown", onEsc);
+    }, [onClose]);
+
+    const { isRecording, isSupported: micSupported, toggle: toggleMic } = useVoiceInput({
+      onTranscript: useCallback(
+        (text: string) => {
+          setComposerValue(composerValue ? composerValue + " " + text : text);
+          setVoiceError(null);
+          textareaRef.current?.focus();
+        },
+        [composerValue, setComposerValue]
+      ),
+      onError: useCallback((msg: string) => {
+        setVoiceError(msg);
+      }, [])
+    });
+
+    const submit = useCallback(() => {
+      const text = composerValue.trim();
+      if (!text || loading) return;
+      onSubmit(text, attachedImage ?? undefined);
+      setAttachedImage(null);
+      setAttachError(null);
+      setVoiceError(null);
+    }, [composerValue, loading, onSubmit, attachedImage]);
+
+    const onKeyDown = useCallback(
+      (e: KeyboardEvent<HTMLTextAreaElement>) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          submit();
+        }
+      },
+      [submit]
+    );
+
+    const handleFileSelect = useCallback(
+      async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        e.target.value = "";
+        setAttachError(null);
+
+        if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+          setAttachError("Only PNG, JPG, and WebP images are supported.");
+          return;
+        }
+        if (file.size > MAX_IMAGE_BYTES) {
+          setAttachError("Image must be under 5 MB.");
+          return;
+        }
+        try {
+          const data = await fileToBase64(file);
+          setAttachedImage({
+            data,
+            media_type: file.type as AttachedImage["media_type"],
+            name: file.name
+          });
+        } catch {
+          setAttachError("Failed to read image. Try again.");
+        }
+      },
+      []
+    );
+
+    const accentRing =
+      tone === "bullish"
+        ? "rgba(34,197,94,0.38)"
+        : tone === "bearish"
+          ? "rgba(239,68,68,0.40)"
+          : tone === "caution"
+            ? "rgba(245,158,11,0.40)"
+            : "rgba(56,189,248,0.35)";
+
+    const panelStyle: CSSProperties = {
+      background:
+        "linear-gradient(180deg, rgba(15,23,42,0.95) 0%, rgba(13,21,38,0.92) 60%, rgba(11,19,34,0.95) 100%)",
+      backdropFilter: "blur(20px)",
+      WebkitBackdropFilter: "blur(20px)",
+      border: `1px solid ${colors.border}`,
+      boxShadow: `0 24px 56px rgba(2,6,23,0.6), 0 0 0 1px ${accentRing}`,
+      borderRadius: borderRadius.xl,
+      width: "min(420px, calc(100vw - 24px))",
+      maxHeight: "min(680px, 80vh)",
+      display: "grid",
+      gridTemplateRows: "auto 1fr auto",
+      overflow: "hidden",
+      color: colors.text
+    };
+
+    const isLightTheme = isLightSurface(colors.surface);
+    const lightOverride: CSSProperties = isLightTheme
+      ? {
+          background:
+            "linear-gradient(180deg, rgba(255,255,255,0.97) 0%, rgba(248,250,252,0.94) 100%)"
+        }
+      : {};
+
+    const showQuickPrompts = messages.length === 0 && !loading;
+    const quickPrompts = useMemo(
+      () => buildContextualQuickPrompts(context, isAuthenticated).slice(0, 3),
+      [context, isAuthenticated]
+    );
+
+    const canSend = composerValue.trim().length > 0 && !loading;
+
     return (
       <div
-        style={{
-          padding: `${spacing[2]} ${spacing[3]}`,
-          fontSize: 10,
-          color: colors.textMuted,
-          letterSpacing: "0.12em",
-          textTransform: "uppercase",
-          borderBottom: `1px solid ${colors.border}`
-        }}
+        ref={ref}
+        role="dialog"
+        aria-modal="false"
+        aria-labelledby={headingId}
+        className="stocvest-assistant-panel"
+        style={{ ...panelStyle, ...lightOverride }}
       >
-        General mode · STOCVEST product help
+        {/* ── Header ────────────────────────────────────────────────────── */}
+        <header
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: spacing[2],
+            padding: `${spacing[3]} ${spacing[4]}`,
+            borderBottom: `1px solid ${colors.border}`
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: spacing[2], minWidth: 0 }}>
+            <h2
+              id={headingId}
+              style={{
+                margin: 0,
+                fontSize: typography.scale.sm,
+                fontWeight: 700,
+                color: colors.text,
+                whiteSpace: "nowrap"
+              }}
+            >
+              STOCVEST Assistant
+            </h2>
+            {/* Compact context chip — replaces the full constellation strip */}
+            {context?.symbol ? (
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  letterSpacing: "0.06em",
+                  padding: "2px 8px",
+                  borderRadius: borderRadius.full,
+                  background: `${colors.accent}18`,
+                  border: `1px solid ${colors.accent}40`,
+                  color: colors.accent,
+                  whiteSpace: "nowrap"
+                }}
+              >
+                {context.symbol.toUpperCase()}
+              </span>
+            ) : context ? (
+              <LayerDots context={context} colors={colors} />
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close STOCVEST Assistant"
+            style={{
+              background: "transparent",
+              border: "none",
+              color: colors.textMuted,
+              cursor: "pointer",
+              padding: 4,
+              borderRadius: borderRadius.md,
+              flexShrink: 0
+            }}
+          >
+            <X size={15} aria-hidden />
+          </button>
+        </header>
+
+        {/* ── Conversation ──────────────────────────────────────────────── */}
+        <div
+          ref={conversationRef}
+          style={{
+            padding: `${spacing[3]} ${spacing[4]}`,
+            overflowY: "auto",
+            minHeight: 200
+          }}
+        >
+          {messages.length === 0 ? (
+            <EmptyState
+              colors={colors}
+              isAuthenticated={isAuthenticated}
+              showQuickPrompts={showQuickPrompts}
+              quickPrompts={quickPrompts}
+              loading={loading}
+              onPrompt={onSubmit}
+            />
+          ) : (
+            <AssistantConversationRail
+              messages={messages}
+              colors={colors}
+              contextTone={tone}
+            />
+          )}
+        </div>
+
+        {/* ── Composer ──────────────────────────────────────────────────── */}
+        <div
+          style={{
+            padding: `${spacing[2]} ${spacing[3]} ${spacing[3]}`,
+            borderTop: `1px solid ${colors.border}`,
+            display: "grid",
+            gap: spacing[2]
+          }}
+        >
+          {/* Transient notices (upgrade prompt, errors) */}
+          {(notice || attachError || voiceError) ? (
+            <p
+              role="status"
+              style={{
+                margin: 0,
+                fontSize: typography.scale.xs,
+                color: attachError || voiceError ? colors.bearish ?? colors.textMuted : colors.textMuted,
+                lineHeight: 1.5
+              }}
+            >
+              {attachError || voiceError || notice}
+            </p>
+          ) : null}
+
+          {/* Attached image preview */}
+          {attachedImage ? (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: spacing[2],
+                padding: `${spacing[1]} ${spacing[2]}`,
+                borderRadius: borderRadius.md,
+                background: `${colors.accent}14`,
+                border: `1px solid ${colors.accent}35`
+              }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`data:${attachedImage.media_type};base64,${attachedImage.data}`}
+                alt="Attached"
+                style={{
+                  width: 36,
+                  height: 36,
+                  objectFit: "cover",
+                  borderRadius: borderRadius.sm,
+                  flexShrink: 0
+                }}
+              />
+              <span
+                style={{
+                  flex: 1,
+                  fontSize: typography.scale.xs,
+                  color: colors.textMuted,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap"
+                }}
+              >
+                {attachedImage.name}
+              </span>
+              <button
+                type="button"
+                onClick={() => setAttachedImage(null)}
+                aria-label="Remove attached image"
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: colors.textMuted,
+                  cursor: "pointer",
+                  padding: 2,
+                  borderRadius: borderRadius.sm,
+                  flexShrink: 0
+                }}
+              >
+                <X size={12} aria-hidden />
+              </button>
+            </div>
+          ) : null}
+
+          {/* Main input row */}
+          <div
+            data-focused={composerFocused ? "true" : "false"}
+            style={{
+              display: "flex",
+              alignItems: "flex-end",
+              gap: spacing[1],
+              padding: `${spacing[2]} ${spacing[2]}`,
+              borderRadius: borderRadius.lg,
+              border: `1.5px solid ${composerFocused ? colors.accent : colors.border}`,
+              background: composerFocused
+                ? `color-mix(in srgb, ${colors.accent} 6%, ${colors.surface})`
+                : colors.surface,
+              boxShadow: composerFocused
+                ? `0 0 0 3px color-mix(in srgb, ${colors.accent} 18%, transparent)`
+                : "none",
+              transition: "border-color 150ms ease, box-shadow 150ms ease, background 150ms ease"
+            }}
+          >
+            {/* Attachment button (+) */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={ACCEPTED_IMAGE_TYPES.join(",")}
+              style={{ display: "none" }}
+              onChange={handleFileSelect}
+              aria-label="Attach image"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={loading}
+              title="Attach image (PNG, JPG, WebP · max 5 MB)"
+              aria-label="Attach image"
+              style={{
+                background: "transparent",
+                border: "none",
+                color: attachedImage ? colors.accent : colors.textMuted,
+                cursor: loading ? "default" : "pointer",
+                padding: "6px 4px",
+                borderRadius: borderRadius.sm,
+                flexShrink: 0,
+                opacity: loading ? 0.4 : 1,
+                display: "flex",
+                alignItems: "center"
+              }}
+            >
+              <Paperclip size={15} aria-hidden />
+            </button>
+
+            {/* Textarea */}
+            <textarea
+              ref={textareaRef}
+              id="stocvest-assistant-composer-input"
+              value={composerValue}
+              onChange={(e) => setComposerValue(e.target.value)}
+              onKeyDown={onKeyDown}
+              onFocus={() => setComposerFocused(true)}
+              onBlur={() => setComposerFocused(false)}
+              placeholder="Ask me anything about stocks…"
+              rows={2}
+              aria-label="Message STOCVEST Assistant"
+              style={{
+                flex: 1,
+                minHeight: 44,
+                maxHeight: 140,
+                resize: "none",
+                border: "none",
+                outline: "none",
+                background: "transparent",
+                color: colors.text,
+                fontSize: typography.scale.sm,
+                lineHeight: 1.55,
+                padding: `${spacing[1]} ${spacing[1]}`,
+                fontFamily: "inherit"
+              }}
+            />
+
+            {/* Mic button */}
+            <button
+              type="button"
+              onClick={toggleMic}
+              disabled={loading || !micSupported}
+              title={
+                !micSupported
+                  ? "Voice input · Chrome and Edge only · English"
+                  : isRecording
+                    ? "Stop recording"
+                    : "Start voice input (English only)"
+              }
+              aria-label={isRecording ? "Stop voice input" : "Start voice input (English only)"}
+              style={{
+                background: isRecording ? `${colors.accent}22` : "transparent",
+                border: isRecording ? `1px solid ${colors.accent}55` : "none",
+                color: isRecording ? colors.accent : colors.textMuted,
+                cursor: loading || !micSupported ? "default" : "pointer",
+                padding: "6px 4px",
+                borderRadius: borderRadius.sm,
+                flexShrink: 0,
+                opacity: !micSupported || loading ? 0.35 : 1,
+                display: "flex",
+                alignItems: "center",
+                transition: "color 150ms ease, background 150ms ease"
+              }}
+            >
+              {isRecording ? <MicOff size={15} aria-hidden /> : <Mic size={15} aria-hidden />}
+            </button>
+
+            {/* Send button */}
+            <button
+              type="button"
+              onClick={submit}
+              disabled={!canSend}
+              aria-label="Send message"
+              style={{
+                minWidth: 36,
+                minHeight: 36,
+                borderRadius: borderRadius.md,
+                border: "none",
+                background: canSend ? colors.accent : colors.surfaceMuted,
+                color: canSend ? "#0b1322" : colors.textMuted,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: canSend ? "pointer" : "default",
+                flexShrink: 0,
+                boxShadow: canSend
+                  ? `0 3px 10px color-mix(in srgb, ${colors.accent} 30%, transparent)`
+                  : "none",
+                transition: "background 150ms ease, box-shadow 150ms ease"
+              }}
+            >
+              <Send size={14} aria-hidden />
+            </button>
+          </div>
+
+          {/* Recording indicator */}
+          {isRecording ? (
+            <p
+              role="status"
+              style={{
+                margin: 0,
+                fontSize: typography.scale.xs,
+                color: colors.accent,
+                display: "flex",
+                alignItems: "center",
+                gap: 6
+              }}
+            >
+              <span
+                aria-hidden
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: "50%",
+                  background: colors.accent,
+                  animation: "stocvest-assistant-pulse 1s ease-in-out infinite"
+                }}
+              />
+              Listening… speak clearly in English
+            </p>
+          ) : null}
+
+          {/* Disclaimer */}
+          <p
+            style={{
+              margin: 0,
+              fontSize: 10,
+              color: colors.textMuted,
+              letterSpacing: "0.02em",
+              lineHeight: 1.4
+            }}
+          >
+            Facts and analysis only — not trading advice.
+          </p>
+        </div>
       </div>
     );
   }
+);
+
+/** Six tiny status dots replacing the verbose constellation strip. */
+function LayerDots({
+  context,
+  colors
+}: {
+  context: AssistantPageContext;
+  colors: ThemeColors;
+}) {
   return (
     <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: spacing[2],
-        padding: `${spacing[2]} ${spacing[3]}`,
-        borderBottom: `1px solid ${colors.border}`,
-        color: colors.textMuted,
-        fontSize: 10,
-        letterSpacing: "0.12em",
-        textTransform: "uppercase"
-      }}
+      role="group"
+      aria-label="Signal layer status"
+      style={{ display: "inline-flex", alignItems: "center", gap: 4, marginLeft: 2 }}
     >
-      <span aria-label="Active context">Context</span>
-      {context.symbol ? (
-        <span
-          style={{
-            color: colors.text,
-            fontSize: typography.scale.xs,
-            fontWeight: 700,
-            letterSpacing: "0.05em"
-          }}
-        >
-          {context.symbol}
-        </span>
-      ) : null}
-      {context.decision_state ? (
-        <span style={{ color: colors.textMuted, fontSize: 10 }}>
-          · {capitalize(context.decision_state)}
-        </span>
-      ) : null}
-      <div
-        role="group"
-        aria-label="Signal layer constellation"
-        style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 8 }}
-      >
-        {LAYER_ORDER.map((layer) => {
-          const status = context.layer_status?.[layer.key];
-          const tone = statusTone(status);
-          return (
-            <span
-              key={layer.key}
-              title={`${capitalize(layer.key)}: ${status ?? "Unavailable"}`}
-              data-tone={tone}
-              className="stocvest-assistant-constellation-dot"
-              aria-label={`${capitalize(layer.key)} ${status ?? "unavailable"}`}
-            />
-          );
-        })}
-      </div>
+      {LAYER_ORDER.map((layer) => {
+        const status = context.layer_status?.[layer.key];
+        const tone = statusTone(status);
+        const dotColor =
+          tone === "bullish"
+            ? colors.bullish
+            : tone === "bearish"
+              ? colors.bearish
+              : tone === "neutral"
+                ? colors.textMuted
+                : `${colors.textMuted}55`;
+        return (
+          <span
+            key={layer.key}
+            title={`${capitalize(layer.key)}: ${status ?? "Unavailable"}`}
+            aria-label={`${capitalize(layer.key)} ${status ?? "unavailable"}`}
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              background: dotColor,
+              flexShrink: 0
+            }}
+          />
+        );
+      })}
     </div>
   );
 }
 
 function EmptyState({
   colors,
-  title,
-  subtitle
+  isAuthenticated,
+  showQuickPrompts,
+  quickPrompts,
+  loading,
+  onPrompt
 }: {
   colors: ThemeColors;
-  title: string;
-  subtitle: string;
+  isAuthenticated: boolean;
+  showQuickPrompts: boolean;
+  quickPrompts: string[];
+  loading: boolean;
+  onPrompt: (text: string) => void;
 }) {
   return (
-    <div style={{ display: "grid", gap: spacing[2] }}>
-      <p
-        style={{
-          margin: 0,
-          color: colors.text,
-          fontSize: typography.scale.sm,
-          lineHeight: 1.55,
-          fontWeight: 600
-        }}
-      >
-        {title}
-      </p>
+    <div style={{ display: "grid", gap: spacing[3] }}>
       <p
         style={{
           margin: 0,
           color: colors.textMuted,
-          fontSize: typography.scale.xs,
-          lineHeight: 1.55
+          fontSize: typography.scale.sm,
+          lineHeight: 1.6
         }}
       >
-        {subtitle}
+        {isAuthenticated
+          ? "Ask about any stock — why it's moving, what analysts are saying, or what the signal engine shows."
+          : "Ask what STOCVEST is, how it works, or for explanations of common trading terms."}
       </p>
+
+      {showQuickPrompts && quickPrompts.length > 0 ? (
+        <div
+          style={{ display: "flex", flexWrap: "wrap", gap: spacing[1] }}
+          role="list"
+          aria-label="Suggested questions"
+        >
+          {quickPrompts.map((q) => (
+            <button
+              key={q}
+              type="button"
+              role="listitem"
+              onClick={() => onPrompt(q)}
+              disabled={loading}
+              style={{
+                border: `1px solid ${colors.border}`,
+                background: colors.surface,
+                color: colors.textMuted,
+                borderRadius: borderRadius.full,
+                padding: "6px 12px",
+                fontSize: typography.scale.xs,
+                lineHeight: 1.35,
+                cursor: loading ? "default" : "pointer",
+                opacity: loading ? 0.5 : 1,
+                textAlign: "left",
+                transition: "border-color 120ms ease, color 120ms ease"
+              }}
+            >
+              {q}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -562,18 +703,18 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-/** Crude check for whether the resolved surface color is light so the gradient can adapt. */
 function isLightSurface(surface: string): boolean {
   const s = surface.trim().toLowerCase();
   if (s.startsWith("#")) {
     const hex = s.slice(1);
     if (hex.length === 3 || hex.length === 6) {
       try {
-        const full = hex.length === 3 ? hex.split("").map((c) => c + c).join("") : hex;
+        const full =
+          hex.length === 3 ? hex.split("").map((c) => c + c).join("") : hex;
         const r = parseInt(full.slice(0, 2), 16);
         const g = parseInt(full.slice(2, 4), 16);
         const b = parseInt(full.slice(4, 6), 16);
-        return r + g + b > 380; // ~light if average channel > ~127
+        return r + g + b > 380;
       } catch {
         return false;
       }

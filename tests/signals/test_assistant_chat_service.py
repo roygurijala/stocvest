@@ -46,7 +46,7 @@ def test_reply_public_calls_claude_with_public_mode_marker(
     marker before calling the LLM, never anything else."""
     captured: dict[str, object] = {}
 
-    async def fake_claude(self, *, system, messages, max_tokens):  # type: ignore[no-untyped-def]
+    async def fake_claude(self, *, system, messages, max_tokens, **_kwargs):  # type: ignore[no-untyped-def]
         captured["system"] = system
         captured["messages"] = list(messages)
         captured["max_tokens"] = max_tokens
@@ -88,7 +88,7 @@ def test_reply_public_falls_back_to_deterministic_on_claude_outage(
     """When Claude is unreachable the visitor still gets a calm deterministic answer —
     the marketing surface must never appear broken."""
 
-    async def fake_claude(self, *, system, messages, max_tokens):  # type: ignore[no-untyped-def]
+    async def fake_claude(self, *, system, messages, max_tokens, **_kwargs):  # type: ignore[no-untyped-def]
         return None
 
     monkeypatch.setattr(
@@ -249,7 +249,7 @@ def test_reply_authenticated_appends_block_when_summary_provided(
     that connects the serializer to Claude's input."""
     captured: dict[str, object] = {}
 
-    async def fake_claude(self, *, system, messages, max_tokens):  # type: ignore[no-untyped-def]
+    async def fake_claude(self, *, system, messages, max_tokens, **_kwargs):  # type: ignore[no-untyped-def]
         captured["system"] = system
         return "Explained."
 
@@ -288,7 +288,7 @@ def test_reply_authenticated_omits_block_when_summary_absent(
     Locks in the "no block means no comment" contract from the LLM side."""
     captured: dict[str, object] = {}
 
-    async def fake_claude(self, *, system, messages, max_tokens):  # type: ignore[no-untyped-def]
+    async def fake_claude(self, *, system, messages, max_tokens, **_kwargs):  # type: ignore[no-untyped-def]
         captured["system"] = system
         return "Explained."
 
@@ -325,7 +325,7 @@ def test_reply_public_never_receives_historical_validation_block(
     into the public path gets caught immediately."""
     captured: dict[str, object] = {}
 
-    async def fake_claude(self, *, system, messages, max_tokens):  # type: ignore[no-untyped-def]
+    async def fake_claude(self, *, system, messages, max_tokens, **_kwargs):  # type: ignore[no-untyped-def]
         captured["system"] = system
         return "STOCVEST explanation."
 

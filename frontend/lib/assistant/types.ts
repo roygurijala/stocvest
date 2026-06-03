@@ -249,6 +249,16 @@ export interface AssistantGapIntel {
 
 export type AssistantMessageRole = "user" | "assistant";
 
+/** An image the user attached to a message before sending. */
+export interface AttachedImage {
+  /** Base-64 encoded image data (no data-URI prefix). */
+  data: string;
+  /** MIME type — one of: image/jpeg, image/png, image/webp */
+  media_type: "image/jpeg" | "image/png" | "image/webp";
+  /** Original filename, shown in the attachment preview. */
+  name: string;
+}
+
 export interface AssistantMessage {
   id: string;
   role: AssistantMessageRole;
@@ -259,6 +269,8 @@ export interface AssistantMessage {
   mode?: "general" | "contextual";
   /** Drives the word-fade reveal animation only for the most recent assistant turn. */
   fresh?: boolean;
+  /** Image attached to this user message, shown as a preview in the conversation rail. */
+  attachedImage?: AttachedImage;
 }
 
 export interface AssistantChatResponse {
