@@ -245,6 +245,16 @@ class UserProfile(BaseModel):
     trial_ends_at: str | None = None
     trial_reminder_day10_sent_at: str | None = None
     trial_reminder_day14_sent_at: str | None = None
+    # Light personalization for the assistant: the user's preferred trading desk
+    # ("swing" | "day"), inferred from explicit desk language in their questions.
+    # Used to resolve ambiguous discovery/opportunity queries without re-asking.
+    assistant_preferred_desk: str | None = None
+
+    @field_validator("assistant_preferred_desk", mode="before")
+    @classmethod
+    def _normalize_assistant_preferred_desk(cls, v: object) -> str | None:
+        s = str(v or "").strip().lower()
+        return s if s in ("swing", "day") else None
 
     @field_validator("subscription_plan", mode="before")
     @classmethod

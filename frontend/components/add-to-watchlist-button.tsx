@@ -179,7 +179,11 @@ export function AddToWatchlistButton({ symbol, dualDeskTracking = true, classNam
           track_day: defaults.day
         })
       });
-      const data = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
+      const data = (await res.json().catch(() => ({}))) as {
+        message?: string;
+        error?: string;
+        added_symbol?: { symbol?: string; company_name?: string | null };
+      };
       if (res.status === 400 && data.error === "symbol_limit") {
         setStatusMsg("Watchlist full (50 symbols)");
         setAddPhase("err");
@@ -194,7 +198,8 @@ export function AddToWatchlistButton({ symbol, dualDeskTracking = true, classNam
       await refresh();
       void primeWatchlistSymbolMaturation(symU, dualDeskTracking);
       setAddPhase("idle");
-      setToast(`${symU} added to your watchlist`);
+      const addedName = data.added_symbol?.company_name?.trim();
+      setToast(addedName ? `${symU} (${addedName}) added to your watchlist` : `${symU} added to your watchlist`);
     } catch {
       setStatusMsg("Network error");
       setAddPhase("err");

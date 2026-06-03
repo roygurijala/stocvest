@@ -83,6 +83,24 @@ def fetch_discovery_context(mode: str = "day") -> DiscoveryResult:
         return result
 
 
+def discovery_payload(result: DiscoveryResult) -> dict | None:
+    """Structured discovery rows for the assistant UI (compact ranked card).
+
+    Returns None when there is nothing to render so the client never shows an
+    empty card. Mirrors the same data the model sees via serialize_discovery_context.
+    """
+    if not result.has_data or not result.rows:
+        return None
+    focus = "swing" if str(result.mode).strip().lower() == "swing" else "day"
+    return {
+        "mode": focus,
+        "source": result.source,
+        "generated_at": result.generated_at,
+        "rows": [{"symbol": r.symbol, "context": r.context} for r in result.rows],
+        "scanner_href": f"/dashboard/scanner?focus={focus}",
+    }
+
+
 def serialize_discovery_context(result: DiscoveryResult) -> str:
     """Render a DiscoveryResult as a compact context block for Claude.
 

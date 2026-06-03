@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { DashboardLayerDots } from "@/components/dashboard/dashboard-layer-dots";
+import { SymbolName } from "@/components/symbol-name";
 import type { WatchlistRadarCardModel } from "@/lib/dashboard/watchlist-radar-card-present";
 import { watchlistRadarSignalsHref } from "@/lib/dashboard/watchlist-radar-card-present";
 import type { DashboardDeskMode } from "@/lib/dashboard/live-status-copy";
@@ -52,9 +53,14 @@ export function WatchlistRadarCard({ model, mode }: Props) {
           <header className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                <span className="text-base font-bold tracking-wide" style={{ color: colors.text }}>
-                  {model.symbol}
-                </span>
+                <SymbolName
+                  symbol={model.symbol}
+                  layout="stacked"
+                  className="text-base font-bold tracking-wide"
+                  symbolStyle={{ color: colors.text, fontWeight: "inherit" }}
+                  nameStyle={{ fontWeight: 400 }}
+                  maxNameChars={26}
+                />
                 {model.directionChip ? (
                   <span
                     className="rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide"

@@ -5,6 +5,7 @@ import { borderRadius, spacing, typography } from "@/lib/design-system";
 import type { GapIntelligenceItem, IntradaySetupPayload } from "@/lib/api/scanner";
 import type { ScannerEvaluationTraceRow } from "@/lib/scanner-setups-response";
 import type { ScannerNearQualificationRow } from "@/lib/scanner-scan-summary";
+import { useSymbolNames } from "@/lib/hooks/use-symbol-names";
 import { useTheme } from "@/lib/theme-provider";
 
 type LaneRow = {
@@ -194,6 +195,7 @@ function LaneCard({
   onExplainMissingSymbol?: (symbol: string) => void;
 }) {
   const { colors } = useTheme();
+  const symbolNames = useSymbolNames(rows.map((r) => r.symbol));
   const palette =
     tone === "active"
       ? { border: colors.bullish, bg: `color-mix(in srgb, ${colors.bullish} 10%, ${colors.surface})` }
@@ -282,6 +284,20 @@ function LaneCard({
                 >
                   {row.symbol}
                 </Link>
+                {symbolNames[row.symbol] ? (
+                  <span
+                    title={symbolNames[row.symbol]}
+                    style={{
+                      fontSize: 11,
+                      color: colors.textMuted,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap"
+                    }}
+                  >
+                    {symbolNames[row.symbol]}
+                  </span>
+                ) : null}
                 {tone === "muted" && onExplainMissingSymbol ? (
                   <button
                     type="button"

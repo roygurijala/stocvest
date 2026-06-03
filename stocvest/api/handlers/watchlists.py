@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from stocvest.api.http_route import http_route_descriptor
 from stocvest.api.response import bad_request, json_response, not_found, ok, unauthorized
+from stocvest.api.services.symbol_resolver import resolve_symbol
 from stocvest.api.shared import build_request_context, parse_json_body
 from stocvest.api.text_sanitize import WATCHLIST_NAME_MAX, sanitize_free_text
 from stocvest.api.types import LambdaContext, LambdaEvent
@@ -39,6 +41,29 @@ def _serialize(w: WatchlistItem) -> dict[str, Any]:
 def _max_symbols_for_user(user_id: str) -> int:
     prof = get_user_profile_store().get_profile(user_id)
     return watchlist_symbol_cap_for_profile(prof)
+
+
+def _validate_symbol_for_add(raw_symbol: str) -> tuple[str, str | None, dict[str, Any] | None]:
+    """Resolve and validate a ticker before it is written to a watchlist.
+
+    Returns ``(normalized_symbol, company_name, error_response)``. ``error_response``
+    is a ready-to-return HTTP payload when the symbol is rejected (unknown /
+    delisted); it is ``None`` when the symbol is valid (or could not be verified
+    due to a transient upstream failure, in which case we fail open).
+    """
+    try:
+        resolution = asyncio.run(resolve_symbol(raw_symbol))
+    except Exception as exc:  # noqa: BLE001 — never block an add on resolver failure
+        _LOG.warning("watchlist add symbol resolution failed for %s: %s", raw_symbol, exc)
+        return str(raw_symbol or "").strip().upper(), None, None
+    if not resolution.valid:
+        message = resolution.reason or f'"{raw_symbol}" is not a recognized stock ticker.'
+        return (
+            resolution.symbol,
+            None,
+            json_response(422, {"error": "invalid_symbol", "message": message}),
+        )
+    return resolution.symbol, resolution.name, None
 
 
 def watchlists_dispatch_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
@@ -188,6 +213,9 @@ def watchlists_add_symbol_handler(event: LambdaEvent, context: LambdaContext) ->
     sym = str(body.get("symbol") or "").strip()
     if not sym:
         return bad_request("symbol is required.")
+    sym, company_name, err = _validate_symbol_for_add(sym)
+    if err is not None:
+        return err
     track_swing = body.get("track_swing")
     track_day = body.get("track_day")
     swing = True if track_swing is None else bool(track_swing)
@@ -208,7 +236,9 @@ def watchlists_add_symbol_handler(event: LambdaEvent, context: LambdaContext) ->
         return json_response(400, {"error": "symbol_limit", "message": msg})
     if out is None:
         return not_found("Watchlist not found.")
-    return ok(_serialize(out))
+    payload = _serialize(out)
+    payload["added_symbol"] = {"symbol": sym, "company_name": company_name}
+    return ok(payload)
 
 
 def watchlists_symbol_tracking_patch_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
@@ -475,6 +505,9 @@ def watchlists_default_symbols_post_handler(event: LambdaEvent, context: LambdaC
     sym = str(body.get("symbol") or "").strip()
     if not sym:
         return bad_request("symbol is required.")
+    sym, company_name, err = _validate_symbol_for_add(sym)
+    if err is not None:
+        return err
     store = get_watchlist_store()
     wl = store.get_default_watchlist(rc.user_id)
     if wl is None:
@@ -505,7 +538,9 @@ def watchlists_default_symbols_post_handler(event: LambdaEvent, context: LambdaC
         return json_response(400, {"error": "symbol_limit", "message": msg})
     if out is None:
         return not_found("Watchlist not found.")
-    return ok(_serialize(out))
+    payload = _serialize(out)
+    payload["added_symbol"] = {"symbol": sym, "company_name": company_name}
+    return ok(payload)
 
 
 def _watchlist_id_from_event(event: LambdaEvent) -> str | None:

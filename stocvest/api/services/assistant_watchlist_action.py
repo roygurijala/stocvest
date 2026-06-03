@@ -8,11 +8,11 @@ a structured result the handler can attach to the response.
 Design notes:
 - Only the user's *default* watchlist is targeted. Users with multiple named
   watchlists should use the Watchlists page for targeted management.
-- Symbol validation is deferred to the store layer (if the symbol doesn't exist
-  as a valid ticker, the store still writes it — the signal engine will simply
-  produce no analysis for it). Strict validation would require a Polygon call
-  and adds latency; a user who accidentally types a typo will see no signals
-  for it and will notice quickly.
+- Symbol validation happens in the chat handler via
+  :func:`stocvest.api.services.symbol_resolver.resolve_symbol` *before* this
+  service is called, so an unknown ticker never reaches the store. The resolved
+  company name is threaded through here purely for a friendlier confirmation
+  ("Added NVDA (NVIDIA Corp) to your watchlist.").
 - add_symbol is idempotent (adding an already-present symbol is a no-op that
   returns the existing watchlist).
 """
@@ -38,13 +38,27 @@ class WatchlistActionResult:
     action_type: str          # "watchlist_add" | "watchlist_remove"
     symbol: str
     message: str              # human-readable confirmation or error
+    company_name: str | None = None  # resolved name, for display next to the ticker
 
 
-def execute_watchlist_add(user_id: str, symbol: str) -> WatchlistActionResult:
+def _with_name(sym: str, company_name: str | None) -> str:
+    """Return ``AAPL (Apple Inc.)`` when a name is known, else just the ticker."""
+    name = (company_name or "").strip()
+    return f"{sym} ({name})" if name else sym
+
+
+def execute_watchlist_add(
+    user_id: str,
+    symbol: str,
+    *,
+    company_name: str | None = None,
+) -> WatchlistActionResult:
     """Add *symbol* to the user's default watchlist.
 
     Creates a default watchlist if the user has none.  Returns a structured
-    result suitable for inclusion in the assistant response.
+    result suitable for inclusion in the assistant response. *company_name*, when
+    provided by the caller's symbol resolution, is echoed in the confirmation and
+    on the result for display next to the ticker.
     """
     sym = symbol.strip().upper()
     if not sym:
@@ -54,6 +68,7 @@ def execute_watchlist_add(user_id: str, symbol: str) -> WatchlistActionResult:
             symbol=symbol,
             message="I couldn't identify a valid stock symbol to add.",
         )
+    label = _with_name(sym, company_name)
 
     try:
         store = get_watchlist_store()
@@ -75,7 +90,8 @@ def execute_watchlist_add(user_id: str, symbol: str) -> WatchlistActionResult:
                 success=True,
                 action_type="watchlist_add",
                 symbol=sym,
-                message=f"{sym} is already on your watchlist.",
+                message=f"{label} is already on your watchlist.",
+                company_name=company_name,
             )
 
         updated = store.add_symbol(
@@ -91,14 +107,16 @@ def execute_watchlist_add(user_id: str, symbol: str) -> WatchlistActionResult:
                 success=False,
                 action_type="watchlist_add",
                 symbol=sym,
-                message=f"Couldn't add {sym} — your watchlist may be full (max {_DEFAULT_MAX_SYMBOLS} symbols).",
+                message=f"Couldn't add {label} — your watchlist may be full (max {_DEFAULT_MAX_SYMBOLS} symbols).",
+                company_name=company_name,
             )
 
         return WatchlistActionResult(
             success=True,
             action_type="watchlist_add",
             symbol=sym,
-            message=f"Added {sym} to your watchlist.",
+            message=f"Added {label} to your watchlist.",
+            company_name=company_name,
         )
 
     except Exception as exc:  # noqa: BLE001
@@ -107,11 +125,17 @@ def execute_watchlist_add(user_id: str, symbol: str) -> WatchlistActionResult:
             success=False,
             action_type="watchlist_add",
             symbol=sym,
-            message=f"Couldn't add {sym} to your watchlist right now. Try again in a moment.",
+            message=f"Couldn't add {label} to your watchlist right now. Try again in a moment.",
+            company_name=company_name,
         )
 
 
-def execute_watchlist_remove(user_id: str, symbol: str) -> WatchlistActionResult:
+def execute_watchlist_remove(
+    user_id: str,
+    symbol: str,
+    *,
+    company_name: str | None = None,
+) -> WatchlistActionResult:
     """Remove *symbol* from the user's default watchlist."""
     sym = symbol.strip().upper()
     if not sym:
@@ -121,6 +145,7 @@ def execute_watchlist_remove(user_id: str, symbol: str) -> WatchlistActionResult
             symbol=symbol,
             message="I couldn't identify a valid stock symbol to remove.",
         )
+    label = _with_name(sym, company_name)
 
     try:
         store = get_watchlist_store()
@@ -131,7 +156,8 @@ def execute_watchlist_remove(user_id: str, symbol: str) -> WatchlistActionResult
                 success=False,
                 action_type="watchlist_remove",
                 symbol=sym,
-                message=f"You don't have a default watchlist yet, so {sym} isn't on it.",
+                message=f"You don't have a default watchlist yet, so {label} isn't on it.",
+                company_name=company_name,
             )
 
         updated = store.remove_symbol(
@@ -144,14 +170,16 @@ def execute_watchlist_remove(user_id: str, symbol: str) -> WatchlistActionResult
                 success=False,
                 action_type="watchlist_remove",
                 symbol=sym,
-                message=f"{sym} wasn't found on your watchlist.",
+                message=f"{label} wasn't found on your watchlist.",
+                company_name=company_name,
             )
 
         return WatchlistActionResult(
             success=True,
             action_type="watchlist_remove",
             symbol=sym,
-            message=f"Removed {sym} from your watchlist.",
+            message=f"Removed {label} from your watchlist.",
+            company_name=company_name,
         )
 
     except Exception as exc:  # noqa: BLE001
@@ -160,5 +188,6 @@ def execute_watchlist_remove(user_id: str, symbol: str) -> WatchlistActionResult
             success=False,
             action_type="watchlist_remove",
             symbol=sym,
-            message=f"Couldn't remove {sym} right now. Try again in a moment.",
+            message=f"Couldn't remove {label} right now. Try again in a moment.",
+            company_name=company_name,
         )

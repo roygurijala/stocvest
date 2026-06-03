@@ -40,6 +40,30 @@ def _body(resp: dict[str, Any]) -> Any:
     return json.loads(str(resp.get("body") or "{}"))
 
 
+@pytest.fixture(autouse=True)
+def _stub_symbol_resolver(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep watchlist add validation deterministic (no Polygon calls in unit tests).
+
+    By default every ticker resolves as valid with no name (fail-open). Individual
+    tests can re-patch ``stocvest.api.handlers.watchlists.resolve_symbol`` to assert
+    rejection behavior.
+    """
+    from stocvest.api.services.symbol_resolver import SymbolResolution
+
+    async def _fake_resolve(symbol: str, **_kwargs: Any) -> SymbolResolution:
+        sym = str(symbol or "").strip().upper()
+        return SymbolResolution(
+            symbol=sym,
+            name=None,
+            valid=True,
+            found=False,
+            active=None,
+            verified=False,
+        )
+
+    monkeypatch.setattr("stocvest.api.handlers.watchlists.resolve_symbol", _fake_resolve)
+
+
 @pytest.fixture
 def brokers(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("STOCVEST_LAMBDA_MODULE", "brokers")
@@ -68,6 +92,62 @@ def test_add_symbol_to_watchlist(brokers: None) -> None:
     assert r["statusCode"] == 200
     syms = _body(r)["symbols"]
     assert "SPY" in syms and "QQQ" in syms
+
+
+def test_add_symbol_returns_resolved_company_name(brokers: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    from stocvest.api.services.symbol_resolver import SymbolResolution
+
+    async def _resolve(symbol: str, **_kwargs: Any) -> SymbolResolution:
+        return SymbolResolution(
+            symbol=str(symbol).strip().upper(),
+            name="NVIDIA Corporation",
+            valid=True,
+            found=True,
+            active=True,
+            verified=True,
+        )
+
+    monkeypatch.setattr("stocvest.api.handlers.watchlists.resolve_symbol", _resolve)
+    wid = _body(
+        lambda_handler(_ev("POST", "/v1/watchlists", body={"name": "Main", "symbols": ["SPY"]}), {})
+    )["watchlist_id"]
+    r = lambda_handler(
+        _ev("POST", f"/v1/watchlists/{wid}/symbols", body={"symbol": "nvda"}, path_parameters={"watchlist_id": wid}),
+        {},
+    )
+    assert r["statusCode"] == 200
+    b = _body(r)
+    assert "NVDA" in b["symbols"]
+    assert b["added_symbol"] == {"symbol": "NVDA", "company_name": "NVIDIA Corporation"}
+
+
+def test_add_unknown_symbol_rejected(brokers: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    from stocvest.api.services.symbol_resolver import SymbolResolution
+
+    async def _resolve(symbol: str, **_kwargs: Any) -> SymbolResolution:
+        return SymbolResolution(
+            symbol=str(symbol).strip().upper(),
+            name=None,
+            valid=False,
+            found=False,
+            active=None,
+            verified=True,
+            reason='I couldn\'t find a tradable stock with the ticker "ZZZZ".',
+        )
+
+    monkeypatch.setattr("stocvest.api.handlers.watchlists.resolve_symbol", _resolve)
+    wid = _body(
+        lambda_handler(_ev("POST", "/v1/watchlists", body={"name": "Main", "symbols": ["SPY"]}), {})
+    )["watchlist_id"]
+    r = lambda_handler(
+        _ev("POST", f"/v1/watchlists/{wid}/symbols", body={"symbol": "ZZZZ"}, path_parameters={"watchlist_id": wid}),
+        {},
+    )
+    assert r["statusCode"] == 422
+    assert _body(r).get("error") == "invalid_symbol"
+    # The unknown symbol must not have been written.
+    got = lambda_handler(_ev("GET", "/v1/watchlists/default/symbols"), {})
+    assert "ZZZZ" not in _body(got).get("symbols", [])
 
 
 def test_remove_symbol_from_watchlist(brokers: None) -> None:

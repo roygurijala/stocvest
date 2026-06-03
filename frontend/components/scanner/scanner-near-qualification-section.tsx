@@ -5,6 +5,7 @@ import { scannerToSignalsHref } from "@/lib/nav/watchlist-signals-deeplink";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { roleAccents } from "@/lib/design-system";
 import type { ScannerNearQualificationRow, ScannerWatchlistProgressionRow } from "@/lib/scanner-scan-summary";
+import { SymbolName } from "@/components/symbol-name";
 import { useTheme } from "@/lib/theme-provider";
 
 type Props = {
@@ -118,9 +119,14 @@ function NearRow({
       }}
     >
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: spacing[2] }}>
-        <span className="font-mono font-bold" style={{ color: colors.text }}>
-          {row.symbol}
-        </span>
+        <SymbolName
+          symbol={row.symbol}
+          name={row.company_name}
+          className="font-mono font-bold"
+          symbolStyle={{ color: colors.text, fontWeight: "inherit" }}
+          nameStyle={{ fontWeight: 400 }}
+          maxNameChars={26}
+        />
         <span
           style={{
             fontSize: 10,
@@ -173,9 +179,13 @@ function ProgressionRow({
       }}
     >
       <div>
-        <span className="font-mono font-bold" style={{ color: colors.text }}>
-          {row.symbol}
-        </span>
+        <SymbolName
+          symbol={row.symbol}
+          className="font-mono font-bold"
+          symbolStyle={{ color: colors.text, fontWeight: "inherit" }}
+          nameStyle={{ fontWeight: 400 }}
+          maxNameChars={26}
+        />
         <span style={{ marginLeft: spacing[2], fontSize: 10, fontWeight: 700, color: accent.borderAccent }}>
           {row.desk.toUpperCase()}
         </span>

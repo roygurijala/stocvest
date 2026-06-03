@@ -174,3 +174,49 @@ def is_watchlist_intelligence_query(text: str) -> bool:
     Used by the assistant handler to decide whether to attach watchlist context.
     """
     return is_watchlist_status_query(text) or is_watchlist_opportunity_query(text)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Explicit trading-desk language (mode resolution + light personalization)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_DAY_MODE_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\bday[\s-]?trad(e|es|ing)\b", re.IGNORECASE),
+    re.compile(r"\bintraday\b", re.IGNORECASE),
+    re.compile(r"\bday\s+(setups?|desk|signals?|momentum)\b", re.IGNORECASE),
+    re.compile(r"\bday\s*\(intraday\)", re.IGNORECASE),
+)
+
+_SWING_MODE_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\bswing[\s-]?trad(e|es|ing)\b", re.IGNORECASE),
+    re.compile(r"\bswing\s+(setups?|desk|signals?|momentum)\b", re.IGNORECASE),
+    re.compile(r"\bmulti[\s-]?day\b", re.IGNORECASE),
+    re.compile(r"\bswing\s*\(multi[\s-]?day\)", re.IGNORECASE),
+    re.compile(r"\bswing\b", re.IGNORECASE),
+)
+
+
+def detect_explicit_desk(text: str) -> str | None:
+    """Return 'day' or 'swing' when the message names a desk explicitly, else None.
+
+    Day patterns are checked first because "day trade" is the more specific
+    phrase; a bare "swing" still resolves to swing. Returns None when the text
+    carries no explicit desk language so the caller can fall back to preference
+    or ask a clarifying question.
+    """
+    if not text or not text.strip():
+        return None
+    if any(p.search(text) for p in _DAY_MODE_PATTERNS):
+        return "day"
+    if any(p.search(text) for p in _SWING_MODE_PATTERNS):
+        return "swing"
+    return None
+
+
+def is_mode_sensitive_query(text: str) -> bool:
+    """Discovery / opportunity / trade-planning questions whose answer depends on desk."""
+    return (
+        is_discovery_query(text)
+        or is_watchlist_opportunity_query(text)
+        or is_trade_planning_question(text)
+    )

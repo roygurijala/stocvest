@@ -96,6 +96,7 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
             options_chain_handler,
             snapshot_handler,
             snapshots_batch_handler,
+            symbol_names_handler,
             tickers_search_handler,
             vix_snapshot_handler,
         )
@@ -112,6 +113,7 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
                     "GET /v1/market/snapshot": snapshot_handler,
                     "GET /v1/market/vix-snapshot": vix_snapshot_handler,
                     "GET /v1/market/snapshots": snapshots_batch_handler,
+                    "GET /v1/market/symbol-names": symbol_names_handler,
                     "GET /v1/market/tickers-search": tickers_search_handler,
                     "GET /v1/market/bars": bars_handler,
                     "POST /v1/market/bars-batch": bars_batch_handler,

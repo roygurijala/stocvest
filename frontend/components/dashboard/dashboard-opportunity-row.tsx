@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { DashboardLayerDots } from "@/components/dashboard/dashboard-layer-dots";
+import { SymbolName } from "@/components/symbol-name";
 import type { OpportunityRowModel } from "@/lib/dashboard/opportunity-row-present";
 import { interactionLevelProps } from "@/lib/dashboard/click-hierarchy";
 import { useHoverPrefetch } from "@/lib/hooks/use-hover-prefetch";
@@ -51,12 +52,14 @@ export function DashboardOpportunityRow({ model, demoteGap = false }: Props) {
             background: `color-mix(in srgb, ${colors.surfaceMuted} 88%, transparent)`
           }}
         >
-          <span
+          <SymbolName
+            symbol={model.symbol}
+            layout="stacked"
             className="min-w-[3.25rem] text-sm font-bold tracking-wide"
-            style={{ color: colors.text }}
-          >
-            {model.symbol}
-          </span>
+            symbolStyle={{ color: colors.text, fontWeight: "inherit" }}
+            nameStyle={{ fontWeight: 400 }}
+            maxNameChars={24}
+          />
 
           {filled > 0 ? (
             <DashboardLayerDots filled={model.layerDots} total={model.layerTotal} accent={accent} />

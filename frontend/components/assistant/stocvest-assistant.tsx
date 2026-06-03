@@ -300,6 +300,9 @@ export function StocvestAssistant({ isAuthenticated }: StocvestAssistantProps) {
                   navigate_to: data.navigate_to ?? null,
                   action: data.action ?? null,
                   chart: data.chart ?? null,
+                  discovery: data.discovery ?? null,
+                  citations: data.citations ?? null,
+                  clarify: data.clarify ?? null,
                 }
               : { ...m, fresh: false }
           )
@@ -376,6 +379,7 @@ export function StocvestAssistant({ isAuthenticated }: StocvestAssistantProps) {
             composerValue={composerValue}
             setComposerValue={setComposerValue}
             onSubmit={(text, image) => submit(text, image)}
+            onQuickReply={(text) => submit(text)}
             onClose={close}
             loading={loading}
             notice={notice}

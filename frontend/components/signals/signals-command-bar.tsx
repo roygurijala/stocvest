@@ -5,6 +5,7 @@ import { Layers } from "lucide-react";
 import { DeskModeTabNav } from "@/components/desk-mode-tab-nav";
 import type { ReactNode } from "react";
 import { InfoTip } from "@/components/info-tip";
+import { SymbolName } from "@/components/symbol-name";
 import { setupEvolutionHubHref } from "@/lib/nav/setup-analytics-deeplink";
 import { TAB_LABEL_DAY, TAB_LABEL_SWING } from "@/lib/mode-terminology";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
@@ -119,7 +120,12 @@ export function SignalsCommandBar({
               className="m-0 text-xl font-semibold tracking-tight sm:text-2xl"
               style={{ color: colors.text, lineHeight: 1.15 }}
             >
-              {symU}
+              <SymbolName
+                symbol={symU}
+                layout="stacked"
+                symbolStyle={{ fontWeight: "inherit", color: "inherit" }}
+                nameStyle={{ fontWeight: 400, fontSize: "0.7rem", letterSpacing: "0.01em" }}
+              />
             </h2>
             {directionChip ? (
               <span

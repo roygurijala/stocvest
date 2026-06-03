@@ -78,6 +78,7 @@ import { overviewRegimeToVolatilityRegime } from "@/lib/scenario/scenario-input-
 import { DeskModeTabNav } from "@/components/desk-mode-tab-nav";
 import { MarketEnvironmentStrip } from "@/components/market-environment-strip";
 import { useMarketEnvironment } from "@/lib/hooks/use-market-environment";
+import { useSymbolNames } from "@/lib/hooks/use-symbol-names";
 import { roleAccents } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -1338,6 +1339,7 @@ export function ScannerPageClient({
     const start = (safeRetainedPoolPage - 1) * retainedPoolPageSize;
     return activeDeskRejections.retainedPool.slice(start, start + retainedPoolPageSize);
   }, [activeDeskRejections.retainedPool, safeRetainedPoolPage]);
+  const retainedPoolNames = useSymbolNames(retainedPoolRows.map((row) => row.symbol));
   useEffect(() => {
     if (retainedPoolPage !== safeRetainedPoolPage) {
       setRetainedPoolPage(safeRetainedPoolPage);
@@ -1743,11 +1745,27 @@ export function ScannerPageClient({
                         textAlign: "left"
                       }}
                     >
-                      <span style={{ color: colors.text, fontWeight: 700 }}>
-                        {row.symbol}
-                        {scannerSetupMode === "both" ? (
-                          <span style={{ marginLeft: spacing[1], color: colors.textMuted, fontWeight: 500 }}>
-                            {row.desk}
+                      <span style={{ color: colors.text, fontWeight: 700, minWidth: 0 }}>
+                        <span style={{ display: "inline-flex", alignItems: "baseline", gap: spacing[1], minWidth: 0 }}>
+                          {row.symbol}
+                          {scannerSetupMode === "both" ? (
+                            <span style={{ color: colors.textMuted, fontWeight: 500 }}>{row.desk}</span>
+                          ) : null}
+                        </span>
+                        {retainedPoolNames[row.symbol] ? (
+                          <span
+                            title={retainedPoolNames[row.symbol]}
+                            style={{
+                              display: "block",
+                              color: colors.textMuted,
+                              fontWeight: 400,
+                              fontSize: 11,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap"
+                            }}
+                          >
+                            {retainedPoolNames[row.symbol]}
                           </span>
                         ) : null}
                       </span>

@@ -1023,12 +1023,22 @@ class PolygonClient:
         symbol: Optional[str] = None,
         limit: int = 50,
         order: str = "desc",  # "desc" = newest first
+        days: int | None = None,
     ) -> list[NewsArticle]:
-        """Fetch parsed news articles for existing callers."""
+        """Fetch parsed news articles for existing callers.
+
+        ``days`` (optional) restricts results to articles published within the last
+        N days via ``published_utc.gte`` — useful for "what's driving X today?"
+        synthesis where stale headlines just add noise.
+        """
+        published_gte: datetime | None = None
+        if days is not None and days > 0:
+            published_gte = datetime.now(timezone.utc) - timedelta(days=days)
         rows = await self.get_market_news(
             tickers=[symbol] if symbol else None,
             limit=limit,
             order=order,
+            published_utc_gte=published_gte,
         )
         articles: list[NewsArticle] = []
         for r in rows:

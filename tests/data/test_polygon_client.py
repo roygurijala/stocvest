@@ -435,6 +435,32 @@ class TestGetNews:
 
     @pytest.mark.asyncio
     @respx.mock
+    async def test_get_news_days_sends_published_utc_gte(self):
+        """`get_news(days=N)` must translate to a published_utc.gte recency filter.
+
+        Regression for the assistant bug where `get_news(sym, days=2)` raised a
+        TypeError (unexpected kwarg) and silently dropped all Polygon news."""
+        route = respx.get("https://api.polygon.io/v2/reference/news").mock(
+            return_value=httpx.Response(200, json={"status": "OK", "results": []})
+        )
+        async with PolygonClient(FAKE_KEY, benzinga_api_key="") as client:
+            articles = await client.get_news("AAPL", limit=8, days=2)
+        assert articles == []
+        gte = route.calls[0].request.url.params.get("published_utc.gte")
+        assert gte and gte.endswith("Z")
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_get_news_without_days_omits_time_filter(self):
+        route = respx.get("https://api.polygon.io/v2/reference/news").mock(
+            return_value=httpx.Response(200, json={"status": "OK", "results": []})
+        )
+        async with PolygonClient(FAKE_KEY, benzinga_api_key="") as client:
+            await client.get_news("AAPL", limit=8)
+        assert route.calls[0].request.url.params.get("published_utc.gte") is None
+
+    @pytest.mark.asyncio
+    @respx.mock
     async def test_returns_articles(self):
         respx.get("https://api.polygon.io/v2/reference/news").mock(
             return_value=httpx.Response(200, json=NEWS_PAYLOAD)

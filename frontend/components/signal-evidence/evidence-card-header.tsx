@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { InfoTip } from "@/components/info-tip";
+import { SymbolName } from "@/components/symbol-name";
 import { borderRadius, spacing, surfaceGlowClassName } from "@/lib/design-system";
 import {
   buildEvidenceAnchorLine,
@@ -76,7 +77,12 @@ export function EvidenceCardHeader({
             Evidence
           </p>
           <h2 className="m-0 mt-1 text-xl font-semibold sm:text-2xl" style={{ color: colors.text }}>
-            {symbol.trim().toUpperCase()}
+            <SymbolName
+              symbol={symbol.trim().toUpperCase()}
+              layout="stacked"
+              symbolStyle={{ fontWeight: "inherit", color: "inherit" }}
+              nameStyle={{ fontWeight: 400, fontSize: "0.7rem" }}
+            />
           </h2>
           {symbolRowExtras ? (
             <div className="mt-2 flex flex-wrap items-center gap-2">{symbolRowExtras}</div>
