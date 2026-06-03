@@ -32,6 +32,7 @@ from stocvest.data.benzinga_client import (
 from stocvest.data.models import Bar, NewsArticle, Snapshot, Timeframe
 from stocvest.data.polygon_client import PolygonClient
 from stocvest.data.symbol_normalize import to_polygon_symbol
+from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
@@ -151,7 +152,9 @@ async def fetch_assistant_symbol_context(symbol: str) -> AssistantSymbolContext 
             _LOG.warning("assistant_ctx.benzinga failed %s: %s", sym, exc)
 
     try:
-        async with PolygonClient() as poly:
+        # PolygonClient requires the API key explicitly — constructing it bare
+        # raised a TypeError that left the assistant with no live data.
+        async with PolygonClient(api_key=get_settings().polygon_api_key) as poly:
             await asyncio.wait_for(
                 asyncio.gather(_polygon(poly), _benzinga()),
                 timeout=_FETCH_TIMEOUT_S,
