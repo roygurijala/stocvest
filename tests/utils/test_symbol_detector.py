@@ -11,6 +11,7 @@ from stocvest.utils.symbol_detector import (
     detect_symbol,
     detect_symbol_from_messages,
     extract_action_symbol,
+    extract_company_lookup_phrase,
 )
 
 
@@ -214,3 +215,34 @@ def test_scans_at_most_three_user_turns() -> None:
     ]
     # AAPL is only in turn 1, which is beyond the 3-turn look-back window
     assert detect_symbol_from_messages(messages) is None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# extract_company_lookup_phrase — company-name fallback for symbol-directed Qs
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_company_phrase_extracted_from_performance_question() -> None:
+    assert extract_company_lookup_phrase("can you tell me how marvel performed today") == "marvel"
+
+
+def test_company_phrase_extracted_for_news_question() -> None:
+    assert extract_company_lookup_phrase("any news on palantir?") == "palantir"
+
+
+def test_company_phrase_none_for_market_overview() -> None:
+    # Market-level subject → not a single-company lookup.
+    assert extract_company_lookup_phrase("how is the market doing today") is None
+
+
+def test_company_phrase_none_for_concept_question() -> None:
+    # No symbol-directed cue / only generic words → no candidate.
+    assert extract_company_lookup_phrase("what is a p/e ratio and how is it used") is None
+
+
+def test_company_phrase_none_without_cue() -> None:
+    assert extract_company_lookup_phrase("hello there friend") is None
+
+
+def test_company_phrase_multiword_kept() -> None:
+    assert extract_company_lookup_phrase("how did palo alto perform today") == "palo alto"

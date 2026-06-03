@@ -5,7 +5,10 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from stocvest.api.services.symbol_resolver import resolve_symbol
+from stocvest.api.services.symbol_resolver import (
+    resolve_company_to_symbol,
+    resolve_symbol,
+)
 from stocvest.data.polygon_client import PolygonError
 
 
@@ -22,6 +25,21 @@ class _FakeClient:
         if self._error is not None:
             raise self._error
         return self._result or {}
+
+
+class _FakeSearchClient:
+    """Stand-in exposing ``search_reference_tickers`` for company lookups."""
+
+    def __init__(self, *, rows: list[dict[str, str]] | None = None, error: Exception | None = None) -> None:
+        self._rows = rows or []
+        self._error = error
+        self.queries: list[str] = []
+
+    async def search_reference_tickers(self, query: str, *, limit: int = 15) -> list[dict[str, str]]:
+        self.queries.append(query)
+        if self._error is not None:
+            raise self._error
+        return self._rows
 
 
 def _run(coro: Any) -> Any:
@@ -84,3 +102,52 @@ def test_empty_symbol_rejected() -> None:
     res = _run(resolve_symbol("   "))
     assert res.valid is False
     assert res.found is False
+
+
+# ── resolve_company_to_symbol ────────────────────────────────────────────────
+
+
+def test_company_name_resolves_via_name_prefix() -> None:
+    # "marvel" should resolve to MRVL because "Marvell Technology" starts with it.
+    client = _FakeSearchClient(rows=[
+        {"ticker": "MRVL", "name": "Marvell Technology, Inc."},
+        {"ticker": "MVIS", "name": "MicroVision, Inc."},
+    ])
+    sym = _run(resolve_company_to_symbol("marvel", client=client))
+    assert sym == "MRVL"
+
+
+def test_company_name_exact_ticker_wins() -> None:
+    client = _FakeSearchClient(rows=[
+        {"ticker": "PLTR", "name": "Palantir Technologies Inc."},
+    ])
+    sym = _run(resolve_company_to_symbol("pltr", client=client))
+    assert sym == "PLTR"
+
+
+def test_company_name_no_match_returns_none() -> None:
+    # A garbage phrase that matches no company name must not resolve.
+    client = _FakeSearchClient(rows=[
+        {"ticker": "XYZ", "name": "Totally Unrelated Holdings"},
+    ])
+    sym = _run(resolve_company_to_symbol("ratio evaluation", client=client))
+    assert sym is None
+
+
+def test_company_name_empty_rows_returns_none() -> None:
+    client = _FakeSearchClient(rows=[])
+    sym = _run(resolve_company_to_symbol("nonexistentco", client=client))
+    assert sym is None
+
+
+def test_company_name_search_error_fails_closed() -> None:
+    client = _FakeSearchClient(error=PolygonError("Polygon 503: busy"))
+    sym = _run(resolve_company_to_symbol("apple", client=client))
+    assert sym is None
+
+
+def test_company_name_too_short_skips_search() -> None:
+    client = _FakeSearchClient(rows=[{"ticker": "AA", "name": "Alcoa"}])
+    sym = _run(resolve_company_to_symbol("ai", client=client))
+    assert sym is None
+    assert client.queries == []  # never reached the network

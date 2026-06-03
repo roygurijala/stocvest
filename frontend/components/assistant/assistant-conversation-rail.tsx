@@ -4,7 +4,7 @@ import { memo, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { ArrowRight, CheckCircle, ExternalLink, LineChart, XCircle } from "lucide-react";
+import { ArrowRight, CheckCircle, ChevronDown, ExternalLink, LineChart, XCircle } from "lucide-react";
 import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { SymbolName } from "@/components/symbol-name";
@@ -334,7 +334,34 @@ function DiscoveryCard({ discovery, colors }: { discovery: AssistantDiscovery; c
   );
 }
 
+interface CitationGroup {
+  source: string;
+  items: AssistantCitation[];
+}
+
+/** Group citations by publisher so a source that backs several articles shows as
+ *  a single chip ("polygon · 3") instead of repeating the same name N times. */
+function groupCitationsBySource(citations: AssistantCitation[]): CitationGroup[] {
+  const order: string[] = [];
+  const byKey = new Map<string, CitationGroup>();
+  for (const c of citations) {
+    const source = (c.source || "source").trim();
+    const key = source.toLowerCase();
+    let group = byKey.get(key);
+    if (!group) {
+      group = { source, items: [] };
+      byKey.set(key, group);
+      order.push(key);
+    }
+    group.items.push(c);
+  }
+  return order.map((k) => byKey.get(k) as CitationGroup);
+}
+
 function CitationChips({ citations, colors }: { citations: AssistantCitation[]; colors: ThemeColors }) {
+  const groups = useMemo(() => groupCitationsBySource(citations), [citations]);
+  const [openSource, setOpenSource] = useState<string | null>(null);
+
   return (
     <div data-testid="assistant-citations" style={{ display: "grid", gap: 4 }}>
       <span
@@ -349,29 +376,22 @@ function CitationChips({ citations, colors }: { citations: AssistantCitation[]; 
         Sources
       </span>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-        {citations.map((c, i) => (
-          <a
-            key={c.url}
-            href={c.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            data-testid="assistant-citation-chip"
-            title={c.title}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 5,
-              maxWidth: "100%",
-              fontSize: 10,
-              color: colors.textMuted,
-              border: `1px solid ${colors.accent}44`,
-              background: `${colors.accent}10`,
-              borderRadius: 999,
-              padding: "2px 9px",
-              textDecoration: "none"
-            }}
-          >
-            <span style={{ fontWeight: 800, color: colors.accent }}>{i + 1}</span>
+        {groups.map((g) => {
+          const single = g.items.length === 1;
+          const chipStyle: CSSProperties = {
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 5,
+            maxWidth: "100%",
+            fontSize: 10,
+            color: colors.textMuted,
+            border: `1px solid ${colors.accent}44`,
+            background: `${colors.accent}10`,
+            borderRadius: 999,
+            padding: "2px 9px",
+            textDecoration: "none"
+          };
+          const sourceLabel = (
             <span
               style={{
                 fontWeight: 600,
@@ -382,12 +402,116 @@ function CitationChips({ citations, colors }: { citations: AssistantCitation[]; 
                 maxWidth: 180
               }}
             >
-              {c.source}
+              {g.source}
             </span>
-            <ExternalLink size={10} aria-hidden style={{ flexShrink: 0 }} />
-          </a>
-        ))}
+          );
+
+          if (single) {
+            return (
+              <a
+                key={g.source}
+                href={g.items[0].url}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="assistant-citation-chip"
+                title={g.items[0].title}
+                style={chipStyle}
+              >
+                {sourceLabel}
+                <ExternalLink size={10} aria-hidden style={{ flexShrink: 0 }} />
+              </a>
+            );
+          }
+
+          const open = openSource === g.source;
+          return (
+            <button
+              key={g.source}
+              type="button"
+              data-testid="assistant-citation-chip"
+              aria-expanded={open}
+              title={`${g.items.length} articles from ${g.source}`}
+              onClick={() => setOpenSource(open ? null : g.source)}
+              style={{ ...chipStyle, cursor: "pointer" }}
+            >
+              {sourceLabel}
+              <span
+                aria-hidden
+                style={{
+                  fontWeight: 700,
+                  color: colors.accent,
+                  background: `${colors.accent}1f`,
+                  borderRadius: 999,
+                  padding: "0 5px",
+                  lineHeight: "14px"
+                }}
+              >
+                {g.items.length}
+              </span>
+              <ChevronDown
+                size={11}
+                aria-hidden
+                style={{ flexShrink: 0, transform: open ? "rotate(180deg)" : "none", transition: "transform 120ms" }}
+              />
+            </button>
+          );
+        })}
       </div>
+
+      {openSource
+        ? (() => {
+            const group = groups.find((g) => g.source === openSource);
+            if (!group) return null;
+            return (
+              <div
+                data-testid="assistant-citation-detail"
+                style={{
+                  display: "grid",
+                  gap: 2,
+                  marginTop: 2,
+                  padding: "6px 8px",
+                  borderRadius: 8,
+                  border: `1px solid ${colors.border}`,
+                  background: `${colors.accent}08`
+                }}
+              >
+                {group.items.map((c, idx) => (
+                  <a
+                    key={c.url}
+                    href={c.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-testid="assistant-citation-detail-link"
+                    title={c.title}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      fontSize: 11,
+                      lineHeight: 1.35,
+                      color: colors.text,
+                      textDecoration: "none",
+                      padding: "3px 2px"
+                    }}
+                  >
+                    <span style={{ fontWeight: 800, color: colors.accent, flexShrink: 0 }}>{idx + 1}</span>
+                    <span
+                      style={{
+                        flex: 1,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap"
+                      }}
+                    >
+                      {c.title || c.url}
+                    </span>
+                    <ExternalLink size={11} aria-hidden style={{ flexShrink: 0, color: colors.textMuted }} />
+                  </a>
+                ))}
+              </div>
+            );
+          })()
+        : null}
     </div>
   );
 }

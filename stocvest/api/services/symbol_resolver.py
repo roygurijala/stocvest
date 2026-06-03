@@ -122,6 +122,78 @@ def _is_definitive_miss(exc: Exception) -> bool:
     return "Polygon 404" in msg or "NOT_FOUND" in msg.upper() or "not found" in msg.lower()
 
 
+def _normalize_name(value: str | None) -> str:
+    """Lowercase a company name and strip punctuation for fuzzy comparison."""
+    return re.sub(r"[^a-z0-9 ]", "", str(value or "").lower()).strip()
+
+
+def _best_company_match(query_lower: str, rows: list[dict[str, str]]) -> str | None:
+    """Pick the ticker whose company name best matches *query_lower*.
+
+    Only returns a ticker when there is a confident name/ticker match, so a
+    fuzzy reference search never hands back an unrelated symbol. Match order:
+    exact ticker → company name starts with the query → first name-word starts
+    with the query (e.g. "marvel" → "Marvell Technology").
+    """
+    if not rows:
+        return None
+    q_compact = query_lower.replace(" ", "")
+    for row in rows:
+        if str(row.get("ticker") or "").lower() == q_compact:
+            return str(row["ticker"]).upper()
+    for row in rows:
+        name = _normalize_name(row.get("name"))
+        if name and name.startswith(query_lower):
+            return str(row.get("ticker") or "").upper() or None
+    for row in rows:
+        name = _normalize_name(row.get("name"))
+        first_word = name.split(" ", 1)[0] if name else ""
+        if first_word and first_word.startswith(query_lower):
+            return str(row.get("ticker") or "").upper() or None
+    return None
+
+
+async def resolve_company_to_symbol(
+    query: str,
+    *,
+    client: PolygonClient | None = None,
+) -> str | None:
+    """Resolve a company-name *query* (e.g. "marvell") to its ticker, or None.
+
+    Used as a fallback when the assistant detects no ticker token but the user
+    asks about a named company. Returns a ticker only on a confident name/ticker
+    match (see :func:`_best_company_match`); fails closed (None) on any upstream
+    error so a bad search never triggers a wrong-symbol fetch.
+    """
+    q = (query or "").strip()
+    if len(q) < 3:
+        return None
+    q_lower = _normalize_name(q)
+    if not q_lower:
+        return None
+
+    async def _search(active_client: PolygonClient) -> str | None:
+        try:
+            rows = await active_client.search_reference_tickers(q, limit=10)
+        except Exception as exc:  # noqa: BLE001 — best-effort resolution
+            _LOG.warning("resolve_company_to_symbol search failed for %r: %s", q, str(exc)[:160])
+            return None
+        return _best_company_match(q_lower, rows)
+
+    if client is not None:
+        return await _search(client)
+
+    api_key = get_settings().polygon_api_key
+    if not api_key:
+        return None
+    try:
+        async with PolygonClient(api_key=api_key) as owned:
+            return await _search(owned)
+    except Exception as exc:  # noqa: BLE001 — client construction / session failure
+        _LOG.warning("resolve_company_to_symbol client error for %r: %s", q, str(exc)[:160])
+        return None
+
+
 async def resolve_symbol(
     symbol: str,
     *,
