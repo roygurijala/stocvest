@@ -32,6 +32,15 @@ def test_dollar_sign_lowercase_message_upcased() -> None:
     assert detect_symbol("why is $mrvl up?") == "MRVL"
 
 
+def test_bare_ticker_lowercase_detected() -> None:
+    """Users often type tickers in lowercase — 'mrvl', 'nvda', 'aapl'."""
+    assert detect_symbol("can you explain why mrvl increased today?") == "MRVL"
+
+
+def test_bare_ticker_mixed_case_detected() -> None:
+    assert detect_symbol("what is happening with Nvda") == "NVDA"
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # detect_symbol — bare uppercase tickers
 # ─────────────────────────────────────────────────────────────────────────────
