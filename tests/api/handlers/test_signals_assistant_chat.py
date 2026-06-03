@@ -832,6 +832,55 @@ def test_assistant_chat_resolves_company_name_when_no_ticker_token(
     assert captured.get("symbol_context") is symbol_context_sentinel
 
 
+def test_assistant_chat_named_company_beats_page_context_symbol(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: asking about "broadcom" while a different symbol (SHAK) is
+    loaded on the page must resolve and fetch AVGO — NOT the ambient page symbol.
+
+    The page-context fallback used to run before the company-name lookup, so the
+    handler silently fetched the page symbol and then refused ("no data for
+    Broadcom"). The named company must win."""
+    paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.get_user_profile_store",
+        lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: paid_profile)})(),
+    )
+    monkeypatch.setattr("stocvest.api.handlers.signals.detect_symbol_from_messages", lambda msgs: None)
+
+    async def fake_resolve(phrase: str):  # type: ignore[no-untyped-def]
+        return "AVGO"
+
+    monkeypatch.setattr("stocvest.api.handlers.signals.resolve_company_to_symbol", fake_resolve)
+
+    fetched_symbols: list[str] = []
+    symbol_context_sentinel = object()
+
+    async def fake_fetch(sym: str):  # type: ignore[no-untyped-def]
+        fetched_symbols.append(sym)
+        return symbol_context_sentinel
+
+    monkeypatch.setattr("stocvest.api.handlers.signals.fetch_assistant_symbol_context", fake_fetch)
+
+    async def fake_reply(self, *, messages, page_context, user_profile, **kwargs):  # type: ignore[no-untyped-def]
+        return AssistantChatResult(text="AVGO is down on earnings.", source="ai", mode="contextual", upgrade_available=False)
+
+    monkeypatch.setattr("stocvest.signals.assistant_chat.AssistantChatService.reply", fake_reply)
+
+    response = assistant_chat_handler(
+        _event(
+            body={
+                "messages": [{"role": "user", "content": "broadcom how did it do today"}],
+                "page_context": {"symbol": "SHAK"},
+            }
+        ),
+        {},
+    )
+    assert response["statusCode"] == 200
+    # AVGO (the named company) was fetched, NOT SHAK (the ambient page symbol).
+    assert fetched_symbols == ["AVGO"]
+
+
 def test_assistant_chat_includes_chart_payload_in_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

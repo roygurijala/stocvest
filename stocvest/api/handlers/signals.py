@@ -1378,13 +1378,16 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
         try:
             messages_list = raw_messages if isinstance(raw_messages, list) else []
             detected_sym = detect_symbol_from_messages(messages_list)
-            # Fall back to the symbol already loaded on the current page.
-            if not detected_sym and page_context and isinstance(page_context.get("symbol"), str):
-                detected_sym = page_context["symbol"].strip().upper() or None
-            # Company-name fallback: "how did marvell do today?" carries no ticker
+            # Company-name lookup: "how did broadcom do today?" carries no ticker
             # token, so resolve the named company to a ticker via a reference
             # search (guarded by a name match) — but only for single-instrument
             # questions, never for market-overview / watchlist intents.
+            #
+            # This MUST run before the page-context fallback: a company the user
+            # explicitly names in their message always wins over whatever symbol
+            # happens to be loaded on the current page. Otherwise asking about
+            # "broadcom" while a different ticker is open would silently answer
+            # about that page symbol and then refuse ("no data for Broadcom").
             if (
                 not detected_sym
                 and not is_market_overview_query(last_user_text_for_intent)
@@ -1393,6 +1396,11 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
                 lookup_phrase = extract_company_lookup_phrase(last_user_text_for_intent)
                 if lookup_phrase:
                     detected_sym = asyncio.run(resolve_company_to_symbol(lookup_phrase))
+            # Last resort: the symbol already loaded on the current page. Only used
+            # when the user named neither a ticker nor a company in their message
+            # (e.g. "how is it doing today?" while viewing a symbol).
+            if not detected_sym and page_context and isinstance(page_context.get("symbol"), str):
+                detected_sym = page_context["symbol"].strip().upper() or None
             if detected_sym:
                 symbol_context = asyncio.run(fetch_assistant_symbol_context(detected_sym))
         except Exception:  # noqa: BLE001
