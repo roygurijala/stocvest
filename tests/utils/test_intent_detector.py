@@ -2,12 +2,29 @@ from stocvest.utils.intent_detector import (
     detect_explicit_desk,
     is_chart_relevant_query,
     is_discovery_query,
+    is_forecast_query,
     is_market_overview_query,
     is_mode_sensitive_query,
+    is_price_chart_query,
     is_watchlist_intelligence_query,
     is_watchlist_opportunity_query,
     is_watchlist_status_query,
 )
+
+
+def test_price_chart_vs_forecast_query_split() -> None:
+    # Price/movement/technical -> price chart query (always charts).
+    assert is_price_chart_query("how is broadcom doing today")
+    assert is_price_chart_query("why is AVGO down today")
+    assert is_price_chart_query("what is the support and resistance for nvda")
+    assert not is_price_chart_query("what is the forecast of broadcom")
+    assert not is_price_chart_query("whats the outlook for AVGO")
+    # Forecast/outlook/target -> forecast query (charts only when targets exist).
+    assert is_forecast_query("what is the forecast of broadcom")
+    assert is_forecast_query("whats the outlook for AVGO")
+    assert is_forecast_query("what's the analyst price target for nvda")
+    assert not is_forecast_query("how is broadcom doing today")
+    assert not is_forecast_query("what does stocvest think of broadcom")
 
 
 def test_chart_relevant_for_price_movement_and_forecast_questions() -> None:

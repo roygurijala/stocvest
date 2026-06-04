@@ -193,7 +193,7 @@ def serialize_symbol_context(ctx: AssistantSymbolContext) -> str:
             last_price = float(snap.day_close)
         lines.extend(_analyst_consensus_lines(ctx.analyst_ratings, last_price))
         lines.append("")
-        lines.append(f"ANALYST RATINGS (last 30d, {len(ctx.analyst_ratings)} entries):")
+        lines.append(f"ANALYST RATINGS (recent standing ratings, {len(ctx.analyst_ratings)} firms):")
         for r in ctx.analyst_ratings[:6]:
             pt_str = f"  pt=${r.price_target:.2f}" if r.price_target else ""
             date_str = r.published_at.strftime("%Y-%m-%d") if r.published_at else ""
