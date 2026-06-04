@@ -367,7 +367,7 @@ export interface AssistantChartLevel {
   /** Human label, e.g. "VWAP", "Support", "50-day avg", "Analyst target". */
   label: string;
   /** Machine kind for color/ordering. */
-  kind: "vwap" | "prev_close" | "target" | "support" | "resistance" | "sma50";
+  kind: "vwap" | "prev_close" | "target" | "target_high" | "target_low" | "support" | "resistance" | "sma50";
   value: number;
   /** Distance of the level from the latest price, in percent (level above = positive). */
   distance_pct?: number;
@@ -395,6 +395,9 @@ export interface AssistantChart {
   levels?: AssistantChartLevel[];
   /** When the underlying data was fetched (ISO-8601). */
   as_of?: string;
+  /** Candle interval the expanded (full) chart should request: "1hour" for the
+   * day desk, "1day" for the swing desk. */
+  full_chart_timeframe?: string | null;
 }
 
 export interface AssistantChatResponse {

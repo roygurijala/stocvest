@@ -21,7 +21,9 @@ interface FullPriceChartProps {
   symbol: string;
   colors: ThemeColors;
   levels?: AssistantChartLevel[];
-  /** Daily bars to request (defaults to ~7 months — enough for a 50-day avg). */
+  /** Candle interval: "1day" (swing desk) or "1hour" (day desk). */
+  timeframe?: "1day" | "1hour";
+  /** Bars to request (defaults to ~7 months daily / ~3 weeks hourly). */
   limit?: number;
   height?: number;
   /**
@@ -33,8 +35,12 @@ interface FullPriceChartProps {
   currentPrice?: number | null;
 }
 
-interface DailyBar {
-  time: { year: number; month: number; day: number };
+// Time is a business-day object for daily candles, or a UNIX timestamp (seconds)
+// for intraday (hourly) candles — the format lightweight-charts expects per scale.
+type BarTime = { year: number; month: number; day: number } | number;
+
+interface OhlcBar {
+  time: BarTime;
   open: number;
   high: number;
   low: number;
@@ -50,6 +56,10 @@ function levelColor(kind: AssistantChartLevel["kind"], colors: ThemeColors): str
       return colors.bearish ?? colors.textMuted;
     case "target":
       return colors.caution ?? colors.accent;
+    case "target_high":
+      return colors.bullish;
+    case "target_low":
+      return colors.bearish ?? colors.textMuted;
     case "vwap":
       return colors.accent;
     case "sma50":
@@ -64,12 +74,17 @@ export function FullPriceChart({
   symbol,
   colors,
   levels = [],
-  limit = 150,
+  timeframe = "1day",
+  limit,
   height = 280,
   currentPrice = null
 }: FullPriceChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "empty" | "error">("loading");
+
+  const intraday = timeframe === "1hour";
+  // ~7 months of daily bars (enough for a 50-day avg) or ~3 weeks of hourly bars.
+  const effectiveLimit = limit ?? (intraday ? 130 : 150);
 
   const livePrice = typeof currentPrice === "number" && Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice : null;
 
@@ -89,17 +104,17 @@ export function FullPriceChart({
       const container = containerRef.current;
       if (!container) return;
 
-      let bars: DailyBar[] = [];
+      let bars: OhlcBar[] = [];
       try {
         const res = await fetch(
-          `/api/stocvest/market/bars?symbol=${encodeURIComponent(symbol)}&timeframe=1day&limit=${limit}`,
+          `/api/stocvest/market/bars?symbol=${encodeURIComponent(symbol)}&timeframe=${timeframe}&limit=${effectiveLimit}`,
           { method: "GET" }
         );
         const data = await res.json().catch(() => null);
         const rows: unknown[] = Array.isArray(data) ? data : Array.isArray(data?.bars) ? data.bars : [];
         bars = rows
-          .map((r) => toDailyBar(r))
-          .filter((b): b is DailyBar => b !== null);
+          .map((r) => toOhlcBar(r, intraday))
+          .filter((b): b is OhlcBar => b !== null);
       } catch {
         if (!disposed) setStatus("error");
         return;
@@ -137,7 +152,8 @@ export function FullPriceChart({
           horzLines: { color: `${colors.border}55` }
         },
         rightPriceScale: { borderColor: colors.border },
-        timeScale: { borderColor: colors.border, timeVisible: false },
+        // Show the time-of-day on the axis for hourly (intraday) candles.
+        timeScale: { borderColor: colors.border, timeVisible: intraday },
         crosshair: { mode: 1 }
       }) as unknown as typeof chart;
 
@@ -185,9 +201,12 @@ export function FullPriceChart({
       );
       volume.priceScale().applyOptions({ scaleMargins: { top: 0.78, bottom: 0 } });
 
-      // 50-day simple moving average overlay.
+      // 50-day simple moving average overlay — only meaningful on the DAILY chart.
+      // On the hourly (day-desk) chart a 50-bar average would be a 50-hour line
+      // mislabeled as "50-day", so we skip the curve and instead let the daily
+      // "50-day avg" value render as a flat reference line in the levels loop.
       const closes = bars.map((b) => b.close);
-      if (closes.length >= 20) {
+      if (!intraday && closes.length >= 20) {
         const period = Math.min(50, closes.length);
         // The moving-average curve carries its own meaning; its auto last-value
         // tag duplicated the "50-day avg" reference label, so it's suppressed.
@@ -198,7 +217,7 @@ export function FullPriceChart({
           priceLineVisible: false,
           crosshairMarkerVisible: false
         });
-        const smaData: Array<{ time: DailyBar["time"]; value: number }> = [];
+        const smaData: Array<{ time: BarTime; value: number }> = [];
         for (let i = period - 1; i < bars.length; i += 1) {
           let sum = 0;
           for (let j = i - period + 1; j <= i; j += 1) sum += closes[j];
@@ -214,9 +233,10 @@ export function FullPriceChart({
       // so each line just needs an inline name to identify it.
       for (const l of levels) {
         if (!Number.isFinite(l.value)) continue;
-        // The 50-day average is already drawn as its own curve above — a flat
-        // line + label for it would be both redundant and misleading.
-        if (l.kind === "sma50") continue;
+        // On the daily chart the 50-day average is drawn as its own curve above, so
+        // a flat line + label would be redundant. On the hourly chart there is no
+        // curve, so we DO draw it as a flat reference line.
+        if (l.kind === "sma50" && !intraday) continue;
         candles.createPriceLine({
           price: l.value,
           color: levelColor(l.kind, colors),
@@ -267,7 +287,7 @@ export function FullPriceChart({
         }
       }
     };
-  }, [symbol, levelsKey, height, limit, colors, livePrice]);
+  }, [symbol, levelsKey, height, effectiveLimit, timeframe, intraday, colors, livePrice]);
 
   return (
     <div data-testid="assistant-full-chart" style={{ display: "grid", gap: spacing[1] }}>
@@ -289,7 +309,7 @@ export function FullPriceChart({
   );
 }
 
-function toDailyBar(row: unknown): DailyBar | null {
+function toOhlcBar(row: unknown, intraday: boolean): OhlcBar | null {
   if (!row || typeof row !== "object") return null;
   const r = row as Record<string, unknown>;
   const ts = typeof r.timestamp === "string" ? r.timestamp : null;
@@ -301,8 +321,13 @@ function toDailyBar(row: unknown): DailyBar | null {
   if (!ts || ![open, high, low, close].every((v) => Number.isFinite(v))) return null;
   const d = new Date(ts);
   if (Number.isNaN(d.getTime())) return null;
+  // Intraday candles key on a UNIX timestamp (seconds); daily candles key on a
+  // business-day object so the time scale renders calendar dates.
+  const time: BarTime = intraday
+    ? Math.floor(d.getTime() / 1000)
+    : { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() };
   return {
-    time: { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() },
+    time,
     open,
     high,
     low,

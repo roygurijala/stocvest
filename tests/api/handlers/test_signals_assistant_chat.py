@@ -409,6 +409,63 @@ def test_assistant_chat_paid_user_calls_service_and_returns_ai_text(monkeypatch:
     assert body["disclaimer"]
 
 
+def test_assistant_chat_current_message_company_beats_prior_turn_ticker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A company NAMED in the current message must win over a ticker mentioned in a
+    prior turn — otherwise asking "what's the forecast of broadcom" right after an
+    AXON turn fetches (and charts) AXON, then refuses ("no data for AVGO")."""
+    paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals_assistant.get_user_profile_store",
+        lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: paid_profile)})(),
+    )
+
+    async def _resolve_company(phrase):  # type: ignore[no-untyped-def]
+        # The current message names "broadcom" -> resolves to AVGO.
+        return "AVGO" if "broadcom" in (phrase or "").lower() else None
+
+    fetched: dict[str, str] = {}
+
+    async def _fetch_ctx(symbol):  # type: ignore[no-untyped-def]
+        fetched["symbol"] = symbol
+        return None
+
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals_assistant.resolve_company_to_symbol", _resolve_company
+    )
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals_assistant.fetch_assistant_symbol_context", _fetch_ctx
+    )
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals_assistant.fetch_stocvest_composite_read",
+        lambda *a, **k: None,
+    )
+
+    async def _ok_reply(self, *, messages, page_context, user_profile, **_kwargs):  # type: ignore[no-untyped-def]
+        return AssistantChatResult(text="ok.", source="ai", mode="general", upgrade_available=False)
+
+    monkeypatch.setattr("stocvest.signals.assistant_chat.AssistantChatService.reply", _ok_reply)
+
+    response = assistant_chat_handler(
+        _event(
+            body={
+                "messages": [
+                    {"role": "user", "content": "how is AXON doing today"},
+                    {"role": "assistant", "content": "Axon is up 2% ..."},
+                    {"role": "user", "content": "what is the forecast of broadcom"},
+                ]
+            },
+            sub="u-paid",
+        ),
+        {},
+    )
+    assert response["statusCode"] == 200
+    # The fetched symbol must be the current-message company (AVGO), NOT the stale
+    # prior-turn ticker (AXON).
+    assert fetched.get("symbol") == "AVGO"
+
+
 # ---------------------------------------------------------------------------
 # Aime-parity gaps: discovery payload, citations, clarify chips, personalization
 # ---------------------------------------------------------------------------
@@ -904,7 +961,7 @@ def test_assistant_chat_includes_chart_payload_in_response(
                       "change_pct": 1.0, "direction": "up"}
     monkeypatch.setattr(
         "stocvest.api.handlers.signals_assistant.build_symbol_chart",
-        lambda ctx: chart_sentinel if ctx is symbol_context_sentinel else None,
+        lambda ctx, desk="swing": chart_sentinel if ctx is symbol_context_sentinel else None,
     )
 
     async def fake_reply(self, *, messages, page_context, user_profile, **kwargs):  # type: ignore[no-untyped-def]
@@ -919,6 +976,46 @@ def test_assistant_chat_includes_chart_payload_in_response(
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
     assert body["chart"] == chart_sentinel
+
+
+def test_assistant_chat_omits_chart_for_non_price_question(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A symbol may be in context, but a non-chart question (e.g. a verdict ask)
+    must NOT carry a chart — charts only accompany price/performance/technical/
+    forecast asks."""
+    paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals_assistant.get_user_profile_store",
+        lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: paid_profile)})(),
+    )
+
+    async def fake_fetch(sym: str):  # type: ignore[no-untyped-def]
+        return object()
+
+    monkeypatch.setattr("stocvest.api.handlers.signals_assistant.fetch_assistant_symbol_context", fake_fetch)
+    monkeypatch.setattr("stocvest.api.handlers.signals_assistant.detect_symbol_from_messages", lambda msgs: "NVDA")
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals_assistant.fetch_stocvest_composite_read", lambda *a, **k: None
+    )
+    # If the gate ever lets it through, this sentinel would surface in the body.
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals_assistant.build_symbol_chart",
+        lambda ctx: {"symbol": "NVDA", "kind": "intraday", "points": []},
+    )
+
+    async def fake_reply(self, *, messages, page_context, user_profile, **kwargs):  # type: ignore[no-untyped-def]
+        return AssistantChatResult(text="Analysts ...", source="ai", mode="general", upgrade_available=False)
+
+    monkeypatch.setattr("stocvest.signals.assistant_chat.AssistantChatService.reply", fake_reply)
+
+    response = assistant_chat_handler(
+        _event(body={"messages": [{"role": "user", "content": "what does stocvest think"}]}),
+        {},
+    )
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body.get("chart") is None
 
 
 def test_assistant_chat_context_fetch_failure_does_not_break_chat(

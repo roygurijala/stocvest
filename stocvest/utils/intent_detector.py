@@ -220,3 +220,62 @@ def is_mode_sensitive_query(text: str) -> bool:
         or is_watchlist_opportunity_query(text)
         or is_trade_planning_question(text)
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Price-chart relevance — should a symbol's price mini-chart accompany the answer?
+# ─────────────────────────────────────────────────────────────────────────────
+# A price/levels mini-chart only adds value when the question is actually about
+# price behavior, performance, technical levels, or a trade setup. Attaching it to
+# every turn (forecast text, a verdict question, a definition, a news ask) is just
+# noise, so the handler gates the chart on this detector.
+_CHART_RELEVANT_PATTERNS: tuple[re.Pattern[str], ...] = (
+    # "how is / how's / how did X doing / trading / performing / today"
+    re.compile(r"\bhow('?s|\s+is|\s+are|\s+did|\s+has|\s+have)\b.{0,40}\b(doing|trading|trade|perform\w*|today|do|done|fare\w*)\b", re.IGNORECASE),
+    # Price / quote / chart language.
+    re.compile(r"\bprice\b", re.IGNORECASE),
+    re.compile(r"\bquote\b", re.IGNORECASE),
+    re.compile(r"\bchart\b", re.IGNORECASE),
+    re.compile(r"\bcandles?\b", re.IGNORECASE),
+    re.compile(r"\b(trading|trend|trends|trending|intraday)\b", re.IGNORECASE),
+    re.compile(r"\bperform(ance|ing|ed|s)?\b", re.IGNORECASE),
+    # Movement language.
+    re.compile(r"\b(moving|move|moved|movement|momentum)\b", re.IGNORECASE),
+    re.compile(r"\b(gap|gapped|gapping|rally|rallied|rallying|sell[\s-]?off|selloff|drop|dropped|dropping|dip|dipped|surge|surged|jump|jumped|plunge|plunged|spike|spiked|breakout|break\s+out|pullback|tank\w*)\b", re.IGNORECASE),
+    re.compile(r"\b(up|down|higher|lower|red|green)\s+(today|so\s+far|pre[\s-]?market|after[\s-]?hours|this\s+morning|right\s+now)\b", re.IGNORECASE),
+    re.compile(r"\bwhy\s+(is|are|did|was|were|s)\b.{0,40}\b(up|down|moving|moved|falling|fell|rising|rose|dropping|dropped|gaining|tanking|surging|selling|red|green)\b", re.IGNORECASE),
+    re.compile(r"\bwhat('?s| is| has)\s+happen(ing|ed)\b", re.IGNORECASE),
+    # Technical reference levels.
+    re.compile(r"\b(support|resistance|vwap|moving\s+average|\d{2,3}[\s-]?day(\s+(avg|average|ma))?)\b", re.IGNORECASE),
+    # "pull up / look up / show me" a chart-worthy lookup.
+    re.compile(r"\b(pull\s+up|look\s+up|show\s+me)\b", re.IGNORECASE),
+    # Forecast / outlook / analyst-target framing — the chart shows the current
+    # price against the forecasted high/low (analyst target range), so these ARE
+    # chart-worthy. Verdict ("what does STOCVEST think"), news-only, and conceptual
+    # questions still get no chart.
+    re.compile(r"\bforecast\b", re.IGNORECASE),
+    re.compile(r"\boutlook\b", re.IGNORECASE),
+    re.compile(r"\bprospects\b", re.IGNORECASE),
+    re.compile(r"\b(analyst|analysts)\b", re.IGNORECASE),
+    re.compile(r"\bconsensus\b", re.IGNORECASE),
+    re.compile(r"\bestimate(s|d)?\b", re.IGNORECASE),
+    re.compile(r"\btarget(s)?\b", re.IGNORECASE),
+    re.compile(r"\b(fair\s+value|valuation)\b", re.IGNORECASE),
+    re.compile(r"\b(upside|downside)\b", re.IGNORECASE),
+)
+
+
+def is_chart_relevant_query(text: str) -> bool:
+    """Return True when a price/levels mini-chart is relevant to the question.
+
+    Covers price-action, performance, movement, technical-level, trade-setup, and
+    forecast/outlook questions (forecast shows the current price vs the analyst
+    target range). Deliberately EXCLUDES verdict ("what does STOCVEST think"),
+    news-only, and conceptual questions so charts stop appearing on every turn.
+    """
+    if not text or not text.strip():
+        return False
+    if any(p.search(text) for p in _CHART_RELEVANT_PATTERNS):
+        return True
+    # Trade-planning questions lean on support/resistance/target levels.
+    return is_trade_planning_question(text)

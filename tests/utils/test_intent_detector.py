@@ -1,5 +1,6 @@
 from stocvest.utils.intent_detector import (
     detect_explicit_desk,
+    is_chart_relevant_query,
     is_discovery_query,
     is_market_overview_query,
     is_mode_sensitive_query,
@@ -7,6 +8,28 @@ from stocvest.utils.intent_detector import (
     is_watchlist_opportunity_query,
     is_watchlist_status_query,
 )
+
+
+def test_chart_relevant_for_price_movement_and_forecast_questions() -> None:
+    assert is_chart_relevant_query("how is broadcom doing today")
+    assert is_chart_relevant_query("why is AVGO down today")
+    assert is_chart_relevant_query("what is the support and resistance for nvda")
+    assert is_chart_relevant_query("show me the chart for tsla")
+    assert is_chart_relevant_query("how did broadcom do today")
+    # Trade-planning leans on levels -> chart relevant.
+    assert is_chart_relevant_query("what's the entry price for mrvl")
+    # Forecast/outlook now shows the current price vs the analyst target range.
+    assert is_chart_relevant_query("what is the forecast of broadcom")
+    assert is_chart_relevant_query("whats the outlook for AVGO")
+    assert is_chart_relevant_query("what's the analyst price target for nvda")
+
+
+def test_chart_not_relevant_for_verdict_news_or_concept() -> None:
+    assert not is_chart_relevant_query("what does stocvest think of broadcom")
+    assert not is_chart_relevant_query("any news on palantir")
+    assert not is_chart_relevant_query("what is a p/e ratio")
+    assert not is_chart_relevant_query("tell me about broadcom")
+    assert not is_chart_relevant_query("")
 
 
 def test_discovery_query_detects_momentum_stocks_phrase() -> None:
