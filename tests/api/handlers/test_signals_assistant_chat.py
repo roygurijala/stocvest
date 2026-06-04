@@ -1124,6 +1124,62 @@ def test_assistant_chat_omits_chart_for_non_price_question(
     assert body.get("chart") is None
 
 
+def _forecast_chart_response(monkeypatch: pytest.MonkeyPatch, *, has_targets: bool) -> dict:
+    """Run a forecast question through the handler with a symbol context that
+    does/doesn't carry analyst targets; return the parsed response body."""
+    paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals_assistant.get_user_profile_store",
+        lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: paid_profile)})(),
+    )
+
+    ratings = [type("R", (), {"price_target": 250.0})()] if has_targets else []
+    ctx = type("Ctx", (), {"analyst_ratings": ratings})()
+
+    async def fake_fetch(sym: str):  # type: ignore[no-untyped-def]
+        return ctx
+
+    monkeypatch.setattr("stocvest.api.handlers.signals_assistant.fetch_assistant_symbol_context", fake_fetch)
+    monkeypatch.setattr("stocvest.api.handlers.signals_assistant.detect_symbol_from_messages", lambda msgs: "NVDA")
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals_assistant.fetch_stocvest_composite_read", lambda *a, **k: None
+    )
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals_assistant.build_symbol_chart",
+        lambda c, desk="swing": {"symbol": "NVDA", "kind": "intraday", "points": [],
+                                 "full_chart_timeframe": "1day"},
+    )
+
+    async def fake_reply(self, *, messages, page_context, user_profile, **kwargs):  # type: ignore[no-untyped-def]
+        return AssistantChatResult(text="Analysts ...", source="ai", mode="general", upgrade_available=False)
+
+    monkeypatch.setattr("stocvest.signals.assistant_chat.AssistantChatService.reply", fake_reply)
+
+    response = assistant_chat_handler(
+        _event(body={"messages": [{"role": "user", "content": "what's the forecast for NVDA?"}]}),
+        {},
+    )
+    assert response["statusCode"] == 200
+    return json.loads(response["body"])
+
+
+def test_forecast_chart_shown_only_when_analyst_targets_exist(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A forecast question shows a chart (the analyst target range) when targets
+    exist, and shows NO chart when there are none — so a forecast answer never
+    carries a redundant plain price chart."""
+    body = _forecast_chart_response(monkeypatch, has_targets=True)
+    assert body.get("chart") is not None
+
+
+def test_forecast_chart_omitted_when_no_analyst_targets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    body = _forecast_chart_response(monkeypatch, has_targets=False)
+    assert body.get("chart") is None
+
+
 def test_assistant_chat_context_fetch_failure_does_not_break_chat(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

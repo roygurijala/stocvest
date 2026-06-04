@@ -45,6 +45,13 @@ _LOG = get_logger(__name__)
 # failure mode for live symbol answers.
 _FETCH_TIMEOUT_S = 7.0
 
+# Analyst-ratings look-back for the assistant. A 30-day window often returned
+# zero standing targets for actively-covered names (analysts don't re-rate every
+# month), which left forecast answers with no consensus and the chart with no
+# target range to draw. A wider window captures each firm's CURRENT standing
+# target while staying recent enough to be relevant.
+_ANALYST_RATINGS_LOOKBACK_DAYS = 120
+
 
 @dataclass
 class AssistantSymbolContext:
@@ -140,7 +147,7 @@ async def fetch_assistant_symbol_context(symbol: str) -> AssistantSymbolContext 
             bz = BenzingaClient()
             wim, ratings, earnings, guidance, news = await asyncio.gather(
                 _safe(bz.get_why_is_it_moving(sym)),
-                _safe(bz.get_analyst_ratings(sym, days=30)),
+                _safe(bz.get_analyst_ratings(sym, days=_ANALYST_RATINGS_LOOKBACK_DAYS)),
                 _safe(bz.get_earnings_results(sym, periods=2)),
                 _safe(bz.get_corporate_guidance(sym, days=30)),
                 # Broader channel-tagged newsfeed (last 48h) for general/M&A/policy
@@ -149,7 +156,21 @@ async def fetch_assistant_symbol_context(symbol: str) -> AssistantSymbolContext 
                 return_exceptions=False,
             )
             ctx.wim = wim
-            ctx.analyst_ratings = ratings or []
+            # The wider look-back can surface the same firm multiple times (it
+            # re-rated within the window). Keep each firm's MOST RECENT standing
+            # rating so the consensus average/range and the chart's target lines
+            # aren't double-counted toward firms that simply re-rated more often.
+            # Benzinga returns newest-first, so the first row seen per firm wins.
+            deduped: list[BenzingaRating] = []
+            seen_firms: set[str] = set()
+            for r in (ratings or []):
+                firm = (getattr(r, "analyst_firm", "") or "").strip().lower()
+                if firm and firm in seen_firms:
+                    continue
+                if firm:
+                    seen_firms.add(firm)
+                deduped.append(r)
+            ctx.analyst_ratings = deduped
             ctx.earnings = earnings or []
             ctx.guidance = guidance or []
             ctx.benzinga_news = news if isinstance(news, list) else []

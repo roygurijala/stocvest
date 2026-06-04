@@ -51,10 +51,11 @@ from stocvest.api.services.assistant_watchlist_context import (
 from stocvest.signals.assistant_chat import AssistantChatService
 from stocvest.utils.intent_detector import (
     detect_explicit_desk,
-    is_chart_relevant_query,
     is_discovery_query,
+    is_forecast_query,
     is_market_overview_query,
     is_mode_sensitive_query,
+    is_price_chart_query,
     is_trade_planning_question,
     is_watchlist_add_intent,
     is_watchlist_intelligence_query,
@@ -70,6 +71,20 @@ from stocvest.utils.symbol_detector import (
 from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
+
+
+def _has_analyst_targets(symbol_context: Any) -> bool:
+    """True when the symbol context carries at least one positive analyst price
+    target — i.e. there's a forecast range worth drawing on a chart."""
+    ratings = getattr(symbol_context, "analyst_ratings", None) or []
+    for r in ratings:
+        pt = getattr(r, "price_target", None)
+        try:
+            if pt is not None and float(pt) > 0:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
 
 
 def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
@@ -370,8 +385,17 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     # news, or conceptual answer is just noise, so we gate it on relevance.
     chart_payload: dict | None = None
     try:
-        if symbol_context is not None and is_chart_relevant_query(last_user_text_for_intent):
-            chart_payload = build_symbol_chart(symbol_context, resolved_desk)
+        if symbol_context is not None:
+            q = last_user_text_for_intent
+            # Price / movement / technical questions always warrant a chart. A
+            # forecast/outlook question only warrants one when we actually have an
+            # analyst target RANGE to plot (current vs forecasted high/low) —
+            # otherwise the chart is a redundant price chart, so we skip it.
+            show_chart = is_price_chart_query(q)
+            if not show_chart and is_forecast_query(q):
+                show_chart = _has_analyst_targets(symbol_context)
+            if show_chart:
+                chart_payload = build_symbol_chart(symbol_context, resolved_desk)
     except Exception:  # noqa: BLE001
         chart_payload = None
 

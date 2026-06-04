@@ -229,7 +229,9 @@ def is_mode_sensitive_query(text: str) -> bool:
 # price behavior, performance, technical levels, or a trade setup. Attaching it to
 # every turn (forecast text, a verdict question, a definition, a news ask) is just
 # noise, so the handler gates the chart on this detector.
-_CHART_RELEVANT_PATTERNS: tuple[re.Pattern[str], ...] = (
+# Price / performance / movement / technical questions. A price mini-chart is
+# inherently useful for these regardless of what else is in the context.
+_PRICE_CHART_PATTERNS: tuple[re.Pattern[str], ...] = (
     # "how is / how's / how did X doing / trading / performing / today"
     re.compile(r"\bhow('?s|\s+is|\s+are|\s+did|\s+has|\s+have)\b.{0,40}\b(doing|trading|trade|perform\w*|today|do|done|fare\w*)\b", re.IGNORECASE),
     # Price / quote / chart language.
@@ -249,10 +251,13 @@ _CHART_RELEVANT_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\b(support|resistance|vwap|moving\s+average|\d{2,3}[\s-]?day(\s+(avg|average|ma))?)\b", re.IGNORECASE),
     # "pull up / look up / show me" a chart-worthy lookup.
     re.compile(r"\b(pull\s+up|look\s+up|show\s+me)\b", re.IGNORECASE),
-    # Forecast / outlook / analyst-target framing — the chart shows the current
-    # price against the forecasted high/low (analyst target range), so these ARE
-    # chart-worthy. Verdict ("what does STOCVEST think"), news-only, and conceptual
-    # questions still get no chart.
+)
+
+# Forecast / outlook / analyst-target framing. The chart for these is only worth
+# showing when there is an actual analyst target RANGE to draw (current vs
+# forecasted high/low) — otherwise it's a redundant price chart, so the handler
+# gates the forecast chart on target availability.
+_FORECAST_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\bforecast\b", re.IGNORECASE),
     re.compile(r"\boutlook\b", re.IGNORECASE),
     re.compile(r"\bprospects\b", re.IGNORECASE),
@@ -265,17 +270,32 @@ _CHART_RELEVANT_PATTERNS: tuple[re.Pattern[str], ...] = (
 )
 
 
-def is_chart_relevant_query(text: str) -> bool:
-    """Return True when a price/levels mini-chart is relevant to the question.
-
-    Covers price-action, performance, movement, technical-level, trade-setup, and
-    forecast/outlook questions (forecast shows the current price vs the analyst
-    target range). Deliberately EXCLUDES verdict ("what does STOCVEST think"),
-    news-only, and conceptual questions so charts stop appearing on every turn.
-    """
+def is_price_chart_query(text: str) -> bool:
+    """Return True for price / performance / movement / technical / trade-setup
+    questions, where a price mini-chart is inherently useful."""
     if not text or not text.strip():
         return False
-    if any(p.search(text) for p in _CHART_RELEVANT_PATTERNS):
+    if any(p.search(text) for p in _PRICE_CHART_PATTERNS):
         return True
     # Trade-planning questions lean on support/resistance/target levels.
     return is_trade_planning_question(text)
+
+
+def is_forecast_query(text: str) -> bool:
+    """Return True for forecast / outlook / analyst-target questions. The chart
+    for these only adds value when analyst targets exist to plot (gated by the
+    handler), so this is kept distinct from :func:`is_price_chart_query`."""
+    if not text or not text.strip():
+        return False
+    return any(p.search(text) for p in _FORECAST_PATTERNS)
+
+
+def is_chart_relevant_query(text: str) -> bool:
+    """Return True when a price/levels mini-chart is potentially relevant.
+
+    Union of price-action and forecast questions. Deliberately EXCLUDES verdict
+    ("what does STOCVEST think"), news-only, and conceptual questions. NOTE: for
+    forecast questions the handler additionally requires analyst targets before
+    actually attaching a chart, so a forecast with no targets shows no graph.
+    """
+    return is_price_chart_query(text) or is_forecast_query(text)
