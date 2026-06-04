@@ -341,6 +341,7 @@ export const AssistantPanel = forwardRef<HTMLDivElement, AssistantPanelProps>(
               contextTone={tone}
               loading={loading}
               onQuickReply={onQuickReply}
+              tradingMode={context?.trading_mode ?? null}
             />
           )}
         </div>
