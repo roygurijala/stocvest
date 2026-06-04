@@ -1865,7 +1865,9 @@ export function SignalsPageClient({
                   Price Chart
                 </h3>
                 <p className="m-0 mt-1 text-xs leading-snug" style={{ color: colors.textMuted }}>
-                  Daily candles with the 50-day average and reference levels — context only, not entry signals
+                  {tradingMode === "day"
+                    ? "Hourly candles with reference levels — context only, not entry signals"
+                    : "Daily candles with the 50-day average and reference levels — context only, not entry signals"}
                 </p>
                 <div className="mt-3">
                   <FullPriceChart
@@ -1873,6 +1875,7 @@ export function SignalsPageClient({
                     colors={colors}
                     levels={chartLevels}
                     height={320}
+                    timeframe={tradingMode === "day" ? "1hour" : "1day"}
                     currentPrice={deskPriceContext?.priceValue ?? null}
                   />
                 </div>
