@@ -46,7 +46,7 @@ def test_assistant_chat_free_user_gets_deterministic_reply(monkeypatch: pytest.M
     """Free users (no has_ai_explanations) MUST never reach Claude — they get canned text."""
     free_profile = UserProfile(user_id="u-free", subscription_plan="free")
     monkeypatch.setattr(
-        "stocvest.api.handlers.signals.get_user_profile_store",
+        "stocvest.api.handlers.signals_assistant.get_user_profile_store",
         lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: free_profile)})(),
     )
     response = assistant_chat_handler(
@@ -65,7 +65,7 @@ def test_assistant_chat_contextual_mode_uses_page_context(monkeypatch: pytest.Mo
     """Symbol or decision_state on page_context → mode=contextual; deterministic copy varies."""
     free_profile = UserProfile(user_id="u-free", subscription_plan="free")
     monkeypatch.setattr(
-        "stocvest.api.handlers.signals.get_user_profile_store",
+        "stocvest.api.handlers.signals_assistant.get_user_profile_store",
         lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: free_profile)})(),
     )
     response = assistant_chat_handler(
@@ -89,7 +89,7 @@ def test_assistant_chat_scanner_page_alone_is_contextual(monkeypatch: pytest.Mon
     the LLM's scanner-aware rule activates and the user gets a screen-anchored answer."""
     paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
     monkeypatch.setattr(
-        "stocvest.api.handlers.signals.get_user_profile_store",
+        "stocvest.api.handlers.signals_assistant.get_user_profile_store",
         lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: paid_profile)})(),
     )
 
@@ -148,7 +148,7 @@ def test_assistant_chat_handler_fetches_user_scoped_validation_summary_and_forwa
     proves the LOGGED-IN assistant gets per-user historical numbers."""
     paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
     monkeypatch.setattr(
-        "stocvest.api.handlers.signals.get_user_profile_store",
+        "stocvest.api.handlers.signals_assistant.get_user_profile_store",
         lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: paid_profile)})(),
     )
 
@@ -168,19 +168,19 @@ def test_assistant_chat_handler_fetches_user_scoped_validation_summary_and_forwa
             return ["cohort-row"]
 
     monkeypatch.setattr(
-        "stocvest.api.handlers.signals.HistoricalValidationService",
+        "stocvest.api.handlers.signals_assistant.HistoricalValidationService",
         _FakeService,
     )
     monkeypatch.setattr(
-        "stocvest.api.handlers.signals.filter_product_kpi_cohort",
+        "stocvest.api.handlers.signals_assistant.filter_product_kpi_cohort",
         lambda rows: rows,
     )
     monkeypatch.setattr(
-        "stocvest.api.handlers.signals.validate_signal_history",
+        "stocvest.api.handlers.signals_assistant.validate_signal_history",
         lambda _rows, horizon="1d": hist_sentinel,
     )
     monkeypatch.setattr(
-        "stocvest.api.handlers.signals.summarize_product_kpi",
+        "stocvest.api.handlers.signals_assistant.summarize_product_kpi",
         lambda *_args, **_kwargs: kpi_sentinel,
     )
 
@@ -233,7 +233,7 @@ def test_assistant_chat_handler_swallows_summary_fetch_failure(
     the user's ability to ask STOCVEST a question."""
     paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
     monkeypatch.setattr(
-        "stocvest.api.handlers.signals.get_user_profile_store",
+        "stocvest.api.handlers.signals_assistant.get_user_profile_store",
         lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: paid_profile)})(),
     )
 
@@ -245,7 +245,7 @@ def test_assistant_chat_handler_swallows_summary_fetch_failure(
             raise RuntimeError("signal history briefly unavailable")
 
     monkeypatch.setattr(
-        "stocvest.api.handlers.signals.HistoricalValidationService",
+        "stocvest.api.handlers.signals_assistant.HistoricalValidationService",
         _BrokenService,
     )
 
@@ -288,7 +288,7 @@ def test_assistant_chat_validates_symbol_before_watchlist_add(monkeypatch: pytes
 
     paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
     monkeypatch.setattr(
-        "stocvest.api.handlers.signals.get_user_profile_store",
+        "stocvest.api.handlers.signals_assistant.get_user_profile_store",
         lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: paid_profile)})(),
     )
 
@@ -314,8 +314,8 @@ def test_assistant_chat_validates_symbol_before_watchlist_add(monkeypatch: pytes
             company_name=company_name,
         )
 
-    monkeypatch.setattr("stocvest.api.handlers.signals.resolve_symbol", _resolve)
-    monkeypatch.setattr("stocvest.api.handlers.signals.execute_watchlist_add", _add)
+    monkeypatch.setattr("stocvest.api.handlers.signals_assistant.resolve_symbol", _resolve)
+    monkeypatch.setattr("stocvest.api.handlers.signals_assistant.execute_watchlist_add", _add)
 
     response = assistant_chat_handler(
         _event(body={"messages": [{"role": "user", "content": "add nvda to my watchlist"}]}, sub="u-paid"),
@@ -336,7 +336,7 @@ def test_assistant_chat_rejects_unknown_symbol_for_watchlist_add(monkeypatch: py
 
     paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
     monkeypatch.setattr(
-        "stocvest.api.handlers.signals.get_user_profile_store",
+        "stocvest.api.handlers.signals_assistant.get_user_profile_store",
         lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: paid_profile)})(),
     )
 
@@ -354,8 +354,8 @@ def test_assistant_chat_rejects_unknown_symbol_for_watchlist_add(monkeypatch: py
     def _add(*_args, **_kwargs):  # type: ignore[no-untyped-def]
         raise AssertionError("execute_watchlist_add must not run for an invalid symbol")
 
-    monkeypatch.setattr("stocvest.api.handlers.signals.resolve_symbol", _resolve)
-    monkeypatch.setattr("stocvest.api.handlers.signals.execute_watchlist_add", _add)
+    monkeypatch.setattr("stocvest.api.handlers.signals_assistant.resolve_symbol", _resolve)
+    monkeypatch.setattr("stocvest.api.handlers.signals_assistant.execute_watchlist_add", _add)
 
     response = assistant_chat_handler(
         _event(body={"messages": [{"role": "user", "content": "add zzzq to my watchlist"}]}, sub="u-paid"),
@@ -372,7 +372,7 @@ def test_assistant_chat_paid_user_calls_service_and_returns_ai_text(monkeypatch:
     """Paid users get a Claude-generated turn; we patch the service so no network is needed."""
     paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
     monkeypatch.setattr(
-        "stocvest.api.handlers.signals.get_user_profile_store",
+        "stocvest.api.handlers.signals_assistant.get_user_profile_store",
         lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: paid_profile)})(),
     )
 
@@ -422,8 +422,8 @@ def _patch_paid_store(monkeypatch: pytest.MonkeyPatch, store=None):
             (),
             {"get_profile": staticmethod(lambda _uid: UserProfile(user_id="u-paid", subscription_plan="swing_pro"))},
         )()
-    monkeypatch.setattr("stocvest.api.handlers.signals.get_user_profile_store", lambda: store)
-    monkeypatch.setattr("stocvest.api.handlers.signals.detect_symbol_from_messages", lambda msgs: None)
+    monkeypatch.setattr("stocvest.api.handlers.signals_assistant.get_user_profile_store", lambda: store)
+    monkeypatch.setattr("stocvest.api.handlers.signals_assistant.detect_symbol_from_messages", lambda msgs: None)
 
     async def _ok_reply(self, *, messages, page_context, user_profile, **_kwargs):  # type: ignore[no-untyped-def]
         return AssistantChatResult(text="ok.", source="ai", mode="general", upgrade_available=False)
@@ -442,7 +442,7 @@ def test_assistant_chat_includes_discovery_payload(monkeypatch: pytest.MonkeyPat
         mode="day",
         has_data=True,
     )
-    monkeypatch.setattr("stocvest.api.handlers.signals.fetch_discovery_context", lambda mode: disc)
+    monkeypatch.setattr("stocvest.api.handlers.signals_assistant.fetch_discovery_context", lambda mode: disc)
 
     response = assistant_chat_handler(
         _event(body={"messages": [{"role": "user", "content": "what are the momentum stocks this morning?"}]}),
@@ -460,7 +460,7 @@ def test_assistant_chat_includes_clarify_for_ambiguous_discovery(monkeypatch: py
     from stocvest.api.services.assistant_discovery import DiscoveryResult
 
     monkeypatch.setattr(
-        "stocvest.api.handlers.signals.fetch_discovery_context",
+        "stocvest.api.handlers.signals_assistant.fetch_discovery_context",
         lambda mode: DiscoveryResult(mode=mode, source="empty_cache"),
     )
 
@@ -482,7 +482,7 @@ def test_assistant_chat_no_clarify_when_explicit_desk(monkeypatch: pytest.Monkey
     store.put_profile(UserProfile(user_id="u-paid", subscription_plan="swing_pro"))
     _patch_paid_store(monkeypatch, store=store)
     monkeypatch.setattr(
-        "stocvest.api.handlers.signals.fetch_discovery_context",
+        "stocvest.api.handlers.signals_assistant.fetch_discovery_context",
         lambda mode: DiscoveryResult(mode=mode, source="empty_cache"),
     )
 
@@ -502,14 +502,14 @@ def test_assistant_chat_no_clarify_when_explicit_desk(monkeypatch: pytest.Monkey
 
 def test_assistant_chat_includes_citations(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_paid_store(monkeypatch)
-    monkeypatch.setattr("stocvest.api.handlers.signals.detect_symbol_from_messages", lambda msgs: "MRVL")
+    monkeypatch.setattr("stocvest.api.handlers.signals_assistant.detect_symbol_from_messages", lambda msgs: "MRVL")
 
     async def fake_fetch(sym: str):  # type: ignore[no-untyped-def]
         return object()
 
-    monkeypatch.setattr("stocvest.api.handlers.signals.fetch_assistant_symbol_context", fake_fetch)
+    monkeypatch.setattr("stocvest.api.handlers.signals_assistant.fetch_assistant_symbol_context", fake_fetch)
     citations_sentinel = [{"title": "Upgrade", "url": "https://e.com/a", "source": "Benzinga", "published_at": None}]
-    monkeypatch.setattr("stocvest.api.handlers.signals.build_citations", lambda ctx: citations_sentinel)
+    monkeypatch.setattr("stocvest.api.handlers.signals_assistant.build_citations", lambda ctx: citations_sentinel)
 
     response = assistant_chat_handler(
         _event(body={"messages": [{"role": "user", "content": "why is MRVL up?"}]}),
@@ -668,7 +668,7 @@ def test_assistant_chat_accepts_valid_image_mime_types(
     """Handler must accept PNG, JPG, WebP, and GIF — pass them through to svc.reply."""
     paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
     monkeypatch.setattr(
-        "stocvest.api.handlers.signals.get_user_profile_store",
+        "stocvest.api.handlers.signals_assistant.get_user_profile_store",
         lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: paid_profile)})(),
     )
 
@@ -681,7 +681,7 @@ def test_assistant_chat_accepts_valid_image_mime_types(
     monkeypatch.setattr("stocvest.signals.assistant_chat.AssistantChatService.reply", fake_reply)
     # Suppress symbol context fetch so the test is fast.
     monkeypatch.setattr(
-        "stocvest.api.handlers.signals.fetch_assistant_symbol_context",
+        "stocvest.api.handlers.signals_assistant.fetch_assistant_symbol_context",
         None,
         raising=False,
     )
@@ -708,7 +708,7 @@ def test_assistant_chat_rejects_invalid_image_mime_types(
     """Non-image and unsupported types must be stripped before reaching svc.reply."""
     paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
     monkeypatch.setattr(
-        "stocvest.api.handlers.signals.get_user_profile_store",
+        "stocvest.api.handlers.signals_assistant.get_user_profile_store",
         lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: paid_profile)})(),
     )
 
@@ -746,7 +746,7 @@ def test_assistant_chat_detects_symbol_and_calls_context_fetch(
     must be called with the detected symbol and the result forwarded to svc.reply."""
     paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
     monkeypatch.setattr(
-        "stocvest.api.handlers.signals.get_user_profile_store",
+        "stocvest.api.handlers.signals_assistant.get_user_profile_store",
         lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: paid_profile)})(),
     )
 
@@ -758,11 +758,11 @@ def test_assistant_chat_detects_symbol_and_calls_context_fetch(
         return symbol_context_sentinel
 
     monkeypatch.setattr(
-        "stocvest.api.handlers.signals.fetch_assistant_symbol_context",
+        "stocvest.api.handlers.signals_assistant.fetch_assistant_symbol_context",
         fake_fetch,
     )
     monkeypatch.setattr(
-        "stocvest.api.handlers.signals.detect_symbol_from_messages",
+        "stocvest.api.handlers.signals_assistant.detect_symbol_from_messages",
         lambda msgs: "MRVL",
     )
 
@@ -791,11 +791,11 @@ def test_assistant_chat_resolves_company_name_when_no_ticker_token(
     for it — instead of falling back to a no-data redirect."""
     paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
     monkeypatch.setattr(
-        "stocvest.api.handlers.signals.get_user_profile_store",
+        "stocvest.api.handlers.signals_assistant.get_user_profile_store",
         lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: paid_profile)})(),
     )
     # No bare/dollar ticker in the message.
-    monkeypatch.setattr("stocvest.api.handlers.signals.detect_symbol_from_messages", lambda msgs: None)
+    monkeypatch.setattr("stocvest.api.handlers.signals_assistant.detect_symbol_from_messages", lambda msgs: None)
 
     resolved_queries: list[str] = []
 
@@ -803,7 +803,7 @@ def test_assistant_chat_resolves_company_name_when_no_ticker_token(
         resolved_queries.append(phrase)
         return "MRVL"
 
-    monkeypatch.setattr("stocvest.api.handlers.signals.resolve_company_to_symbol", fake_resolve)
+    monkeypatch.setattr("stocvest.api.handlers.signals_assistant.resolve_company_to_symbol", fake_resolve)
 
     symbol_context_sentinel = object()
     fetched_symbols: list[str] = []
@@ -812,7 +812,7 @@ def test_assistant_chat_resolves_company_name_when_no_ticker_token(
         fetched_symbols.append(sym)
         return symbol_context_sentinel
 
-    monkeypatch.setattr("stocvest.api.handlers.signals.fetch_assistant_symbol_context", fake_fetch)
+    monkeypatch.setattr("stocvest.api.handlers.signals_assistant.fetch_assistant_symbol_context", fake_fetch)
 
     captured: dict[str, object] = {}
 
@@ -843,15 +843,15 @@ def test_assistant_chat_named_company_beats_page_context_symbol(
     Broadcom"). The named company must win."""
     paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
     monkeypatch.setattr(
-        "stocvest.api.handlers.signals.get_user_profile_store",
+        "stocvest.api.handlers.signals_assistant.get_user_profile_store",
         lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: paid_profile)})(),
     )
-    monkeypatch.setattr("stocvest.api.handlers.signals.detect_symbol_from_messages", lambda msgs: None)
+    monkeypatch.setattr("stocvest.api.handlers.signals_assistant.detect_symbol_from_messages", lambda msgs: None)
 
     async def fake_resolve(phrase: str):  # type: ignore[no-untyped-def]
         return "AVGO"
 
-    monkeypatch.setattr("stocvest.api.handlers.signals.resolve_company_to_symbol", fake_resolve)
+    monkeypatch.setattr("stocvest.api.handlers.signals_assistant.resolve_company_to_symbol", fake_resolve)
 
     fetched_symbols: list[str] = []
     symbol_context_sentinel = object()
@@ -860,7 +860,7 @@ def test_assistant_chat_named_company_beats_page_context_symbol(
         fetched_symbols.append(sym)
         return symbol_context_sentinel
 
-    monkeypatch.setattr("stocvest.api.handlers.signals.fetch_assistant_symbol_context", fake_fetch)
+    monkeypatch.setattr("stocvest.api.handlers.signals_assistant.fetch_assistant_symbol_context", fake_fetch)
 
     async def fake_reply(self, *, messages, page_context, user_profile, **kwargs):  # type: ignore[no-untyped-def]
         return AssistantChatResult(text="AVGO is down on earnings.", source="ai", mode="contextual", upgrade_available=False)
@@ -888,7 +888,7 @@ def test_assistant_chat_includes_chart_payload_in_response(
     payload built from the symbol context."""
     paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
     monkeypatch.setattr(
-        "stocvest.api.handlers.signals.get_user_profile_store",
+        "stocvest.api.handlers.signals_assistant.get_user_profile_store",
         lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: paid_profile)})(),
     )
 
@@ -897,13 +897,13 @@ def test_assistant_chat_includes_chart_payload_in_response(
     async def fake_fetch(sym: str):  # type: ignore[no-untyped-def]
         return symbol_context_sentinel
 
-    monkeypatch.setattr("stocvest.api.handlers.signals.fetch_assistant_symbol_context", fake_fetch)
-    monkeypatch.setattr("stocvest.api.handlers.signals.detect_symbol_from_messages", lambda msgs: "NVDA")
+    monkeypatch.setattr("stocvest.api.handlers.signals_assistant.fetch_assistant_symbol_context", fake_fetch)
+    monkeypatch.setattr("stocvest.api.handlers.signals_assistant.detect_symbol_from_messages", lambda msgs: "NVDA")
 
     chart_sentinel = {"symbol": "NVDA", "kind": "intraday", "points": [], "last": 100.0,
                       "change_pct": 1.0, "direction": "up"}
     monkeypatch.setattr(
-        "stocvest.api.handlers.signals.build_symbol_chart",
+        "stocvest.api.handlers.signals_assistant.build_symbol_chart",
         lambda ctx: chart_sentinel if ctx is symbol_context_sentinel else None,
     )
 
@@ -928,7 +928,7 @@ def test_assistant_chat_context_fetch_failure_does_not_break_chat(
     and svc.reply receives symbol_context=None."""
     paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
     monkeypatch.setattr(
-        "stocvest.api.handlers.signals.get_user_profile_store",
+        "stocvest.api.handlers.signals_assistant.get_user_profile_store",
         lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: paid_profile)})(),
     )
 
@@ -936,11 +936,11 @@ def test_assistant_chat_context_fetch_failure_does_not_break_chat(
         raise RuntimeError("Polygon down")
 
     monkeypatch.setattr(
-        "stocvest.api.handlers.signals.fetch_assistant_symbol_context",
+        "stocvest.api.handlers.signals_assistant.fetch_assistant_symbol_context",
         broken_fetch,
     )
     monkeypatch.setattr(
-        "stocvest.api.handlers.signals.detect_symbol_from_messages",
+        "stocvest.api.handlers.signals_assistant.detect_symbol_from_messages",
         lambda msgs: "MRVL",
     )
 
@@ -964,7 +964,7 @@ def test_assistant_chat_drops_client_system_role(monkeypatch: pytest.MonkeyPatch
     """Clients must not be able to inject `system` turns — sanitization keeps only user/assistant."""
     paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
     monkeypatch.setattr(
-        "stocvest.api.handlers.signals.get_user_profile_store",
+        "stocvest.api.handlers.signals_assistant.get_user_profile_store",
         lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: paid_profile)})(),
     )
 
