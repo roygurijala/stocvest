@@ -28,6 +28,9 @@ type TradingMode = "day" | "swing";
 
 type Props = {
   symbol: string;
+  /** Known company name (e.g. from the active snapshot) shown next to the ticker.
+   * When omitted, SymbolName resolves it asynchronously. */
+  companyName?: string | null;
   tradingMode: TradingMode;
   dayTradingSurfaces: boolean;
   watchlistControl: ReactNode;
@@ -75,6 +78,7 @@ function signalsDeskActionButtonStyle(colors: {
 
 export function SignalsCommandBar({
   symbol,
+  companyName = null,
   tradingMode,
   dayTradingSurfaces,
   watchlistControl,
@@ -122,6 +126,7 @@ export function SignalsCommandBar({
             >
               <SymbolName
                 symbol={symU}
+                name={companyName ?? undefined}
                 layout="stacked"
                 symbolStyle={{ fontWeight: "inherit", color: "inherit" }}
                 nameStyle={{ fontWeight: 400, fontSize: "0.7rem", letterSpacing: "0.01em" }}

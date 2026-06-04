@@ -1761,6 +1761,7 @@ export function SignalsPageClient({
       >
         <SignalsCommandBar
           symbol={symbol}
+          companyName={rawSnapshot?.company_name ?? undefined}
           tradingMode={tradingMode}
           dayTradingSurfaces={dayTradingSurfaces}
           watchlistControl={<AddToWatchlistButton symbol={symbol} dualDeskTracking={dayTradingSurfaces} />}

@@ -140,6 +140,26 @@ describe("SignalsCommandBar", () => {
     expect(onDeskKpiTarget).toHaveBeenCalledWith("execution");
   });
 
+  test("shows company name next to the ticker when provided", () => {
+    render(
+      <ThemeProvider>
+        <SignalsCommandBar
+          symbol="SHAK"
+          companyName="Shake Shack Inc."
+          tradingMode="swing"
+          dayTradingSurfaces={false}
+          watchlistControl={<span>Watchlist</span>}
+          maturationLine={null}
+          evaluationFreshness={null}
+          onTradingModeChange={vi.fn()}
+        />
+      </ThemeProvider>
+    );
+    const bar = screen.getByTestId("signals-command-bar");
+    expect(bar).toHaveTextContent("SHAK");
+    expect(bar).toHaveTextContent("Shake Shack Inc.");
+  });
+
   test("renders direction chip when provided", () => {
     render(
       <ThemeProvider>

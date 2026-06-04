@@ -16,6 +16,7 @@ from stocvest.api.services.assistant_symbol_context import (
     AssistantSymbolContext,
     build_symbol_chart,
     fetch_assistant_symbol_context,
+    fetch_stocvest_composite_read,
     news_relevance_rank,
 )
 from stocvest.data.benzinga_client import BenzingaRating
@@ -37,6 +38,86 @@ def test_news_relevance_rank_buried_in_many_tickers_is_low() -> None:
 
 def test_news_relevance_rank_absent_symbol_is_lowest() -> None:
     assert news_relevance_rank("AVGO", ["AAPL", "MSFT"], "Apple news") == 4
+
+
+# ── STOCVEST composite read (cached evidence) ───────────────────────────────
+
+_EVIDENCE_ENVELOPE = {
+    "computed_at": "2026-06-03T20:00:00Z",
+    "data": {
+        "symbol": "AVGO",
+        "signal_summary": "neutral",
+        "alignment_ratio": 0.5,
+        "alignment": {"label": "Balanced"},
+        "regime": "risk-on",
+        "causal_narrative": "Layers split with no clear leader.",
+        "layers": [
+            {"layer": "technical", "status": "available", "verdict": "bullish"},
+            {"layer": "macro", "status": "available", "verdict": "bearish"},
+            {"layer": "sector", "status": "available", "verdict": "bearish"},
+            {"layer": "internals", "status": "available", "verdict": "bearish"},
+            {"layer": "news", "status": "available", "verdict": "neutral"},
+            {"layer": "geopolitical", "status": "unavailable", "verdict": "neutral"},
+        ],
+    },
+}
+
+
+def test_fetch_stocvest_read_extracts_verdict_and_leans() -> None:
+    with patch(
+        "stocvest.api.services.assistant_symbol_context.read_dashboard_cache",
+        return_value=_EVIDENCE_ENVELOPE,
+    ):
+        read = fetch_stocvest_composite_read("AVGO", "swing")
+    assert read is not None
+    assert read["verdict"] == "neutral"
+    # Only the 5 "available" layers are counted; the unavailable one is excluded.
+    assert read["leans"] == {"bullish": 1, "bearish": 3, "neutral": 1, "available": 5}
+    assert read["alignment_label"] == "Balanced"
+    assert read["regime"] == "risk-on"
+    assert read["reasoning"] == "Layers split with no clear leader."
+    assert read["stale"] is False
+
+
+def test_fetch_stocvest_read_none_when_uncached() -> None:
+    with patch(
+        "stocvest.api.services.assistant_symbol_context.read_dashboard_cache",
+        return_value=None,
+    ):
+        assert fetch_stocvest_composite_read("AVGO", "swing") is None
+
+
+def test_fetch_stocvest_read_none_on_error_body() -> None:
+    with patch(
+        "stocvest.api.services.assistant_symbol_context.read_dashboard_cache",
+        return_value={"data": {"error": "timeout"}},
+    ):
+        assert fetch_stocvest_composite_read("AVGO", "swing") is None
+
+
+def test_fetch_stocvest_read_none_on_blank_symbol() -> None:
+    assert fetch_stocvest_composite_read("", "swing") is None
+
+
+def test_fetch_stocvest_read_marks_stale_from_cache_source() -> None:
+    envelope = {
+        "computed_at": "2026-06-03T20:00:00Z",
+        "data": {
+            "symbol": "AVGO",
+            "signal_summary": "bullish",
+            "source": "cache_stale",
+            "layers": [{"layer": "technical", "status": "available", "verdict": "bullish"}],
+        },
+    }
+    with patch(
+        "stocvest.api.services.assistant_symbol_context.read_dashboard_cache",
+        return_value=envelope,
+    ):
+        read = fetch_stocvest_composite_read("AVGO", "day")
+    assert read is not None
+    assert read["verdict"] == "bullish"
+    assert read["mode"] == "day"
+    assert read["stale"] is True
 
 
 def _bar(close: float, minute: int) -> Bar:
