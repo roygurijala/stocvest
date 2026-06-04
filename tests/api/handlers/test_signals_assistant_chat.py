@@ -466,6 +466,62 @@ def test_assistant_chat_current_message_company_beats_prior_turn_ticker(
     assert fetched.get("symbol") == "AVGO"
 
 
+def test_assistant_chat_pronoun_followup_inherits_prior_company_over_page_symbol(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A pronoun follow-up ("how do you see it will perform today?") names no
+    ticker or company, so it must inherit the prior turn's subject (Broadcom ->
+    AVGO) rather than the page's loaded symbol (AXON) or a stray word ("see")."""
+    paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals_assistant.get_user_profile_store",
+        lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: paid_profile)})(),
+    )
+
+    async def _resolve_company(phrase):  # type: ignore[no-untyped-def]
+        return "AVGO" if "broadcom" in (phrase or "").lower() else None
+
+    fetched: dict[str, str] = {}
+
+    async def _fetch_ctx(symbol):  # type: ignore[no-untyped-def]
+        fetched["symbol"] = symbol
+        return None
+
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals_assistant.resolve_company_to_symbol", _resolve_company
+    )
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals_assistant.fetch_assistant_symbol_context", _fetch_ctx
+    )
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals_assistant.fetch_stocvest_composite_read",
+        lambda *a, **k: None,
+    )
+
+    async def _ok_reply(self, *, messages, page_context, user_profile, **_kwargs):  # type: ignore[no-untyped-def]
+        return AssistantChatResult(text="ok.", source="ai", mode="general", upgrade_available=False)
+
+    monkeypatch.setattr("stocvest.signals.assistant_chat.AssistantChatService.reply", _ok_reply)
+
+    response = assistant_chat_handler(
+        _event(
+            body={
+                "messages": [
+                    {"role": "user", "content": "how did broadcom do yesterday"},
+                    {"role": "assistant", "content": "Broadcom reported record Q2 ..."},
+                    {"role": "user", "content": "how do you see it will perform today?"},
+                ],
+                "page_context": {"symbol": "AXON"},
+            },
+            sub="u-paid",
+        ),
+        {},
+    )
+    assert response["statusCode"] == 200
+    # Inherited the prior company (AVGO) — not the page symbol AXON, not "SEE".
+    assert fetched.get("symbol") == "AVGO"
+
+
 # ---------------------------------------------------------------------------
 # Aime-parity gaps: discovery payload, citations, clarify chips, personalization
 # ---------------------------------------------------------------------------
@@ -976,6 +1032,56 @@ def test_assistant_chat_includes_chart_payload_in_response(
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
     assert body["chart"] == chart_sentinel
+
+
+def test_assistant_chat_passes_day_desk_to_chart_builder(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When the page reports the DAY desk, the chart builder is called with
+    desk="day" (so the expanded chart requests hourly candles). The desk follows
+    page_context.trading_mode first."""
+    paid_profile = UserProfile(user_id="u-paid", subscription_plan="swing_pro")
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals_assistant.get_user_profile_store",
+        lambda: type("S", (), {"get_profile": staticmethod(lambda _uid: paid_profile)})(),
+    )
+
+    symbol_context_sentinel = object()
+
+    async def fake_fetch(sym: str):  # type: ignore[no-untyped-def]
+        return symbol_context_sentinel
+
+    monkeypatch.setattr("stocvest.api.handlers.signals_assistant.fetch_assistant_symbol_context", fake_fetch)
+    monkeypatch.setattr("stocvest.api.handlers.signals_assistant.detect_symbol_from_messages", lambda msgs: "NVDA")
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals_assistant.fetch_stocvest_composite_read", lambda *a, **k: None
+    )
+
+    captured_desk: dict[str, str] = {}
+
+    def fake_build(ctx, desk="swing"):  # type: ignore[no-untyped-def]
+        captured_desk["desk"] = desk
+        return {"symbol": "NVDA", "kind": "intraday", "points": [], "last": 100.0,
+                "change_pct": 1.0, "direction": "up", "full_chart_timeframe": "1hour"}
+
+    monkeypatch.setattr("stocvest.api.handlers.signals_assistant.build_symbol_chart", fake_build)
+
+    async def fake_reply(self, *, messages, page_context, user_profile, **kwargs):  # type: ignore[no-untyped-def]
+        return AssistantChatResult(text="NVDA is up.", source="ai", mode="contextual", upgrade_available=False)
+
+    monkeypatch.setattr("stocvest.signals.assistant_chat.AssistantChatService.reply", fake_reply)
+
+    response = assistant_chat_handler(
+        _event(body={
+            "messages": [{"role": "user", "content": "how is NVDA doing today?"}],
+            "page_context": {"symbol": "NVDA", "trading_mode": "day"},
+        }),
+        {},
+    )
+    assert response["statusCode"] == 200
+    assert captured_desk.get("desk") == "day"
+    body = json.loads(response["body"])
+    assert body["chart"]["full_chart_timeframe"] == "1hour"
 
 
 def test_assistant_chat_omits_chart_for_non_price_question(

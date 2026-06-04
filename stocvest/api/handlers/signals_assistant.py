@@ -61,6 +61,7 @@ from stocvest.utils.intent_detector import (
     is_watchlist_remove_intent,
 )
 from stocvest.utils.symbol_detector import (
+    detect_company_phrase_from_messages,
     detect_symbol,
     detect_symbol_from_messages,
     extract_action_symbol,
@@ -327,7 +328,20 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
             #    when the current message named neither a ticker nor a company.
             if not detected_sym:
                 detected_sym = detect_symbol_from_messages(messages_list)
-            # 4) Last resort: the symbol already loaded on the current page.
+            # 4) Follow-up context #2: a COMPANY named a turn earlier ("how do you
+            #    see it will perform today?" after "how did broadcom do?"). The
+            #    prior turn carried no ticker token, only a name, so inherit it via
+            #    a reference search. Guarded to single-instrument follow-ups so a
+            #    market/watchlist question never inherits a stale single symbol.
+            if (
+                not detected_sym
+                and not is_market_overview_query(last_user_text_for_intent)
+                and not is_watchlist_intelligence_query(last_user_text_for_intent)
+            ):
+                prior_phrase = detect_company_phrase_from_messages(messages_list)
+                if prior_phrase:
+                    detected_sym = asyncio.run(resolve_company_to_symbol(prior_phrase))
+            # 5) Last resort: the symbol already loaded on the current page.
             if not detected_sym and page_context and isinstance(page_context.get("symbol"), str):
                 detected_sym = page_context["symbol"].strip().upper() or None
             if detected_sym:

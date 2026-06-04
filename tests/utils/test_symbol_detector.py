@@ -8,11 +8,34 @@ from __future__ import annotations
 import pytest
 
 from stocvest.utils.symbol_detector import (
+    detect_company_phrase_from_messages,
     detect_symbol,
     detect_symbol_from_messages,
     extract_action_symbol,
     extract_company_lookup_phrase,
 )
+
+
+def test_common_word_see_is_not_a_ticker() -> None:
+    """"how do you see it will perform today?" must NOT detect SEE as a ticker."""
+    assert detect_symbol("how do you see it will perform today?") is None
+    assert detect_symbol("let's see how nvda does") == "NVDA"
+    # An explicit dollar-sign still lets a user force the rare SEE ticker.
+    assert detect_symbol("what about $SEE") == "SEE"
+
+
+def test_prior_turn_company_phrase_inherited_for_followup() -> None:
+    msgs = [
+        {"role": "user", "content": "how did broadcom do yesterday"},
+        {"role": "assistant", "content": "Broadcom rose..."},
+        {"role": "user", "content": "how do you see it will perform today?"},
+    ]
+    # The follow-up names no company; we fall back to the prior turn's subject.
+    phrase = detect_company_phrase_from_messages(msgs)
+    assert phrase is not None
+    assert "broadcom" in phrase.lower()
+    # "yesterday" is stripped as a trailing time word, not treated as the name.
+    assert "yesterday" not in phrase.lower()
 
 
 # ─────────────────────────────────────────────────────────────────────────────

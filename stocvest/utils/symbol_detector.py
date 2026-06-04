@@ -59,7 +59,7 @@ _BLOCKLIST: frozenset[str] = frozenset({
     "RAG", "RAN", "RAP", "RAT", "RAW", "RAY", "RID", "RIG", "RIM",
     "RIP", "ROB", "ROD", "ROE", "ROT", "ROW", "RUB", "RUG", "RUM",
     "RUN", "RUT",
-    "SAC", "SAG", "SAP", "SAT", "SAW", "SAY", "SEA", "SET", "SEW",
+    "SAC", "SAG", "SAP", "SAT", "SAW", "SAY", "SEA", "SEE", "SET", "SEW",
     "SHE", "SHY", "SIN", "SIP", "SIT", "SKI", "SKY", "SLY", "SOB",
     "SOD", "SOT", "SOW", "SOY", "SPA", "SPY", "STY", "SUB", "SUM",
     "SUN", "SUP",
@@ -133,7 +133,7 @@ _BLOCKLIST: frozenset[str] = frozenset({
     "RISK", "ROAD", "ROCK", "ROLE", "ROLL", "ROOF", "ROOM", "ROOT",
     "ROPE", "ROSE", "RUIN", "RULE",
     "SAFE", "SAID", "SAIL", "SALE", "SALT", "SAND", "SANG", "SAME",
-    "SAVE", "SEAL", "SEED", "SEEK", "SEEN", "SELF", "SELL", "SEND",
+    "SAVE", "SEAL", "SEED", "SEEK", "SEEN", "SEES", "SELF", "SELL", "SEND",
     "SHIP", "SHOP", "SHOT", "SHOW", "SHUT", "SICK", "SIDE", "SIGN",
     "SILK", "SIZE", "SKIN", "SKIP", "SLAM", "SLIP", "SLOW", "SLUG",
     "SNAP", "SNOW", "SOIL", "SOLD", "SOLE", "SOME", "SONG", "SOON",
@@ -417,6 +417,8 @@ _LOOKUP_FILLER: frozenset[str] = frozenset({
     "ANALYST", "ANALYSTS", "CONSENSUS", "RATING", "RATINGS",
     "COMING", "AHEAD", "SESSION", "CLOSE", "CLOSED", "OPEN", "OPENING",
     "FAIR", "VALUE", "VALUATION", "WORTH",
+    # Relative time words that trail a question but are never the company name.
+    "YESTERDAY", "YESTERDAYS", "TOMORROW", "TOMORROWS",
     # Framing tokens for "what does STOCVEST think of X" / "what's the … for X".
     "STOCVEST", "THINK", "THINKS", "THINKING", "WHATS", "DOES", "OPINION",
 })
@@ -487,5 +489,31 @@ def detect_symbol_from_messages(messages: list[dict]) -> str | None:
         sym = detect_symbol(text)
         if sym:
             return sym
+
+    return None
+
+
+def detect_company_phrase_from_messages(messages: list[dict]) -> str | None:
+    """Scan recent prior user turns for a company-name lookup phrase.
+
+    Mirrors :func:`detect_symbol_from_messages` but for company NAMES, so a
+    pronoun follow-up ("how do you see it will perform today?") can inherit the
+    subject named a turn earlier ("how did broadcom do yesterday?") instead of
+    falling through to the page's loaded symbol. The caller MUST still confirm
+    the phrase via a reference search before fetching data.
+    """
+    if not isinstance(messages, list):
+        return None
+
+    user_texts = [
+        str(m.get("content") or "")
+        for m in reversed(messages)
+        if isinstance(m, dict) and m.get("role") == "user"
+    ][:3]
+
+    for text in user_texts:
+        phrase = extract_company_lookup_phrase(text)
+        if phrase:
+            return phrase
 
     return None
