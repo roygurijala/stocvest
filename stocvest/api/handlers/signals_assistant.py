@@ -37,6 +37,7 @@ from stocvest.api.services.assistant_market_context import (
 from stocvest.api.services.assistant_symbol_context import (
     build_symbol_chart,
     fetch_assistant_symbol_context,
+    fetch_stocvest_composite_read,
 )
 from stocvest.api.services.assistant_watchlist_action import (
     execute_watchlist_add,
@@ -323,6 +324,19 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
                 detected_sym = page_context["symbol"].strip().upper() or None
             if detected_sym:
                 symbol_context = asyncio.run(fetch_assistant_symbol_context(detected_sym))
+                # Attach STOCVEST's own most-recent six-layer read (cached, global
+                # per symbol+mode) so the assistant can lead with what STOCVEST
+                # thinks — not just an external news synthesis. Best-effort: a
+                # missing/failed read simply leaves the field None.
+                if symbol_context is not None:
+                    try:
+                        symbol_context.stocvest_read = fetch_stocvest_composite_read(
+                            detected_sym, resolved_desk
+                        )
+                    except Exception:  # noqa: BLE001
+                        _LOG.warning(
+                            "assistant_chat: STOCVEST read fetch failed for %s", detected_sym
+                        )
         except Exception:  # noqa: BLE001
             _LOG.exception("assistant_chat: symbol context fetch failed — continuing without it")
             symbol_context = None

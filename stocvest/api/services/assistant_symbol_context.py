@@ -29,6 +29,7 @@ from stocvest.data.benzinga_client import (
     BenzingaRating,
     BenzingaWIMEntry,
 )
+from stocvest.data.dashboard_cache import evidence_cache_key, read_dashboard_cache
 from stocvest.data.models import Bar, NewsArticle, Snapshot, Timeframe
 from stocvest.data.polygon_client import PolygonClient
 from stocvest.data.symbol_normalize import to_polygon_symbol
@@ -62,6 +63,10 @@ class AssistantSymbolContext:
     bars_5m: list[Bar] = field(default_factory=list)
     # Recent daily bars (~3 months) for SMA50 / support / resistance levels.
     bars_1d: list[Bar] = field(default_factory=list)
+    # STOCVEST's own most-recent six-layer composite read for this symbol, when one
+    # is cached (see ``fetch_stocvest_composite_read``). ``None`` means STOCVEST has
+    # not evaluated this symbol recently — we never fabricate a verdict.
+    stocvest_read: dict | None = None
     fetched_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     @property
@@ -214,6 +219,97 @@ def news_relevance_rank(symbol: str, tickers: object, title: object) -> int:
         # Present but buried among many tickers → likely a market roundup.
         return 2 if len(tks) <= 5 else 3
     return 4
+
+
+def fetch_stocvest_composite_read(symbol: str, mode: str) -> dict | None:
+    """Return STOCVEST's most-recent cached six-layer read for *symbol*, or ``None``.
+
+    The evidence cache is keyed globally per symbol+mode (not per user), so any
+    recent evaluation — from this user opening the Evidence card, the scanner, or
+    another user — is reusable here. This lets the assistant answer "what does
+    STOCVEST think of AVGO?" with STOCVEST's own verdict rather than only an
+    external news synthesis. A full live six-layer recompute is far too slow for
+    the chat path, so we deliberately surface only what is already cached and never
+    fabricate a verdict when nothing is.
+
+    Returns a compact, JSON-serializable dict (verdict, alignment, per-layer leans,
+    regime, short reasoning, freshness) or ``None`` when no usable read is cached.
+    """
+    sym = str(symbol or "").strip().upper()
+    if not sym:
+        return None
+    try:
+        envelope = read_dashboard_cache(evidence_cache_key(sym, mode))
+    except Exception as exc:  # noqa: BLE001 — STOCVEST read is best-effort
+        _LOG.warning("assistant_ctx.stocvest_read cache read failed %s: %s", sym, exc)
+        return None
+    if not isinstance(envelope, dict):
+        return None
+    body = envelope.get("data") if isinstance(envelope.get("data"), dict) else envelope
+    if not isinstance(body, dict):
+        return None
+    # Skip error / insufficient bodies — they carry no usable verdict.
+    if body.get("error") or str(body.get("status") or "").strip().lower() == "insufficient_data":
+        return None
+
+    verdict = str(body.get("signal_summary") or "").strip().lower()
+    if verdict not in ("bullish", "bearish", "neutral"):
+        return None
+
+    layers = body.get("layers") if isinstance(body.get("layers"), list) else []
+    bullish = bearish = neutral = available = 0
+    for row in layers:
+        if not isinstance(row, dict):
+            continue
+        status = str(row.get("status") or "").strip().lower()
+        # Only layers that actually contributed a read are counted.
+        if status not in ("available", "active", "fresh"):
+            continue
+        available += 1
+        lv = str(row.get("verdict") or "").strip().lower()
+        if lv == "bullish":
+            bullish += 1
+        elif lv == "bearish":
+            bearish += 1
+        else:
+            neutral += 1
+
+    read: dict[str, object] = {
+        "verdict": verdict,
+        "mode": "day" if str(mode or "").strip().lower() in ("day", "intraday", "real") else "swing",
+        "leans": {"bullish": bullish, "bearish": bearish, "neutral": neutral, "available": available},
+    }
+
+    align = body.get("alignment")
+    if isinstance(align, dict):
+        label = str(align.get("label") or align.get("state") or "").strip()
+        if label:
+            read["alignment_label"] = label
+    try:
+        if body.get("alignment_ratio") is not None:
+            read["alignment_ratio"] = round(float(body["alignment_ratio"]), 2)
+    except (TypeError, ValueError):
+        pass
+
+    regime = str(body.get("regime") or body.get("market_regime") or "").strip()
+    if regime:
+        read["regime"] = regime
+
+    narrative = body.get("causal_narrative")
+    if isinstance(narrative, str) and narrative.strip():
+        read["reasoning"] = narrative.strip()[:400]
+    elif isinstance(narrative, dict):
+        summary = str(narrative.get("summary") or narrative.get("text") or "").strip()
+        if summary:
+            read["reasoning"] = summary[:400]
+
+    computed_at = str(envelope.get("computed_at") or "").strip()
+    if computed_at:
+        read["computed_at"] = computed_at
+    src = str(body.get("source") or "").strip().lower()
+    read["stale"] = src.startswith("cache")
+
+    return read
 
 
 # Most intraday points we forward to the client for a sparkline. A 5-min session

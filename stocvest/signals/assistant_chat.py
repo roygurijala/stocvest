@@ -22,6 +22,7 @@ import asyncio
 import json
 import os
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 import httpx
@@ -102,6 +103,13 @@ def serialize_symbol_context(ctx: AssistantSymbolContext) -> str:
 
     lines: list[str] = [f"{SYMBOL_CONTEXT_BLOCK_HEADER}: {ctx.symbol} ==="]
 
+    # ── STOCVEST's own read (lead with it) ───────────────────────────────────
+    # When STOCVEST has a recent cached six-layer composite for this symbol, surface
+    # it FIRST so the assistant can answer "what does STOCVEST think?" with the
+    # system's own verdict before layering in external news. Absent ⇒ omitted (we
+    # never invent a verdict).
+    lines.extend(_stocvest_read_lines(getattr(ctx, "stocvest_read", None)))
+
     # ── Snapshot ────────────────────────────────────────────────────────────
     snap = ctx.snapshot
     if snap is not None:
@@ -176,8 +184,14 @@ def serialize_symbol_context(ctx: AssistantSymbolContext) -> str:
             if desc:
                 lines.append(f"      summary: {desc}")
 
-    # ── Analyst ratings ─────────────────────────────────────────────────────
+    # ── Analyst consensus + ratings ──────────────────────────────────────────
     if ctx.analyst_ratings:
+        last_price = None
+        if snap is not None and snap.last_trade_price:
+            last_price = float(snap.last_trade_price)
+        elif snap is not None and snap.day_close:
+            last_price = float(snap.day_close)
+        lines.extend(_analyst_consensus_lines(ctx.analyst_ratings, last_price))
         lines.append("")
         lines.append(f"ANALYST RATINGS (last 30d, {len(ctx.analyst_ratings)} entries):")
         for r in ctx.analyst_ratings[:6]:
@@ -286,6 +300,150 @@ def _broader_coverage_lines(ctx: AssistantSymbolContext, *, limit: int = 6) -> l
         out.append(f"  - [{category}] {clipped}  ({age})")
         if len(out) >= limit:
             break
+    return out
+
+
+def _stocvest_read_lines(read: dict | None) -> list[str]:
+    """Render STOCVEST's cached composite read as a leading context section.
+
+    Returns an empty list when no read is present so the block is simply omitted
+    (the prompt's STOCVEST READ rule then stays silent rather than inventing one).
+    """
+    if not isinstance(read, dict):
+        return []
+    verdict = str(read.get("verdict") or "").strip().lower()
+    if verdict not in ("bullish", "bearish", "neutral"):
+        return []
+
+    mode = str(read.get("mode") or "swing").strip().lower()
+    out: list[str] = ["", f"STOCVEST'S CURRENT READ (six-layer composite, {mode} desk):"]
+    out.append(f"  verdict={verdict}")
+
+    leans = read.get("leans") if isinstance(read.get("leans"), dict) else {}
+    if leans:
+        b = int(leans.get("bullish", 0) or 0)
+        be = int(leans.get("bearish", 0) or 0)
+        n = int(leans.get("neutral", 0) or 0)
+        avail = int(leans.get("available", 0) or 0)
+        out.append(
+            f"  layer_leans={b} bullish / {be} bearish / {n} neutral"
+            f" (of {avail} contributing layers)"
+        )
+
+    align = str(read.get("alignment_label") or "").strip()
+    ratio = read.get("alignment_ratio")
+    if align and ratio is not None:
+        out.append(f"  alignment={align} (ratio={ratio})")
+    elif align:
+        out.append(f"  alignment={align}")
+    elif ratio is not None:
+        out.append(f"  alignment_ratio={ratio}")
+
+    regime = str(read.get("regime") or "").strip()
+    if regime:
+        out.append(f"  market_regime={regime}")
+
+    reasoning = str(read.get("reasoning") or "").strip()
+    if reasoning:
+        out.append(f"  reasoning={reasoning}")
+
+    if read.get("stale"):
+        out.append("  freshness=last cached evaluation (may be from a prior session)")
+
+    out.append("")  # separate from the snapshot section that follows
+    return out
+
+
+# Rating-string buckets for a coarse buy/hold/sell consensus lean. Lowercased
+# substring match; first matching bucket wins. Order matters (check bearish/
+# bullish modifiers before the generic words).
+_RATING_BULLISH = ("strong buy", "buy", "outperform", "overweight", "accumulate", "positive", "add")
+_RATING_BEARISH = ("strong sell", "sell", "underperform", "underweight", "reduce", "negative")
+_RATING_NEUTRAL = ("hold", "neutral", "market perform", "sector perform", "equal", "in-line", "in line", "peer perform")
+
+
+def _classify_rating(rating: str) -> str:
+    """Bucket an analyst rating string into bullish / neutral / bearish / unknown."""
+    r = str(rating or "").strip().lower()
+    if not r:
+        return "unknown"
+    for kw in _RATING_NEUTRAL:
+        if kw in r:
+            return "neutral"
+    for kw in _RATING_BEARISH:
+        if kw in r:
+            return "bearish"
+    for kw in _RATING_BULLISH:
+        if kw in r:
+            return "bullish"
+    return "unknown"
+
+
+def _analyst_consensus_lines(ratings: list, last_price: float | None) -> list[str]:
+    """Aggregate raw analyst ratings into a clean consensus summary for narration.
+
+    Pre-computing the average/high/low target, the implied move versus the current
+    price, the buy/hold/sell mix, and the most-recent action gives Claude clean
+    facts to turn into a plain-English forecast narrative — instead of forcing it
+    to do arithmetic over a list of rows (which it does inconsistently).
+    """
+    rows = [r for r in (ratings or []) if r is not None]
+    if not rows:
+        return []
+
+    targets = []
+    for r in rows:
+        pt = getattr(r, "price_target", None)
+        try:
+            if pt is not None and float(pt) > 0:
+                targets.append(float(pt))
+        except (TypeError, ValueError):
+            continue
+
+    bull = sum(1 for r in rows if _classify_rating(getattr(r, "rating", "")) == "bullish")
+    hold = sum(1 for r in rows if _classify_rating(getattr(r, "rating", "")) == "neutral")
+    bear = sum(1 for r in rows if _classify_rating(getattr(r, "rating", "")) == "bearish")
+
+    out: list[str] = ["", "ANALYST CONSENSUS (synthesize this into a plain-English forecast):"]
+
+    if targets:
+        avg = sum(targets) / len(targets)
+        lo, hi = min(targets), max(targets)
+        line = f"  price_target_avg=${avg:.2f}  range=${lo:.2f}-${hi:.2f}  (n_targets={len(targets)})"
+        out.append(line)
+        if last_price and last_price > 0:
+            implied = (avg - last_price) / last_price * 100.0
+            out.append(
+                f"  implied_vs_current={implied:+.1f}% (current ${last_price:.2f} -> avg target ${avg:.2f})"
+            )
+    else:
+        out.append("  price_target_avg=n/a (no targets in the recent ratings)")
+
+    mix_parts = []
+    if bull:
+        mix_parts.append(f"{bull} buy/outperform")
+    if hold:
+        mix_parts.append(f"{hold} hold/neutral")
+    if bear:
+        mix_parts.append(f"{bear} sell/underperform")
+    if mix_parts:
+        out.append(f"  rating_mix={' / '.join(mix_parts)} (of {len(rows)} ratings)")
+
+    # Most-recent action — rows arrive newest-first from Benzinga; fall back to
+    # an explicit max-by-date if ordering is ever not guaranteed.
+    try:
+        latest = max(rows, key=lambda r: getattr(r, "published_at", None) or datetime.min.replace(tzinfo=timezone.utc))
+    except (TypeError, ValueError):
+        latest = rows[0]
+    firm = str(getattr(latest, "analyst_firm", "") or "an analyst").strip()
+    action = str(getattr(latest, "action", "") or "").strip()
+    rating = str(getattr(latest, "rating", "") or "").strip()
+    lpt = getattr(latest, "price_target", None)
+    ldate = getattr(latest, "published_at", None)
+    pt_txt = f" with a ${float(lpt):.2f} target" if lpt else ""
+    date_txt = f" on {ldate.strftime('%Y-%m-%d')}" if ldate else ""
+    out.append(f"  most_recent={firm} {action} ({rating}){pt_txt}{date_txt}")
+
     return out
 
 
