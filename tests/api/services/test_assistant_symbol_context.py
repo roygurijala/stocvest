@@ -406,8 +406,39 @@ def test_build_chart_includes_reference_levels() -> None:
     assert by_kind["prev_close"]["value"] == 100.0
     # Analyst target is the average of 180 and 200.
     assert by_kind["target"]["value"] == 190.0
+    # Forecast range — high/low of the analyst targets (current vs max/min).
+    assert by_kind["target_high"]["value"] == 200.0
+    assert by_kind["target_low"]["value"] == 180.0
     # Each level carries a distance from the last price.
     assert "distance_pct" in by_kind["vwap"]
+
+
+def test_build_chart_forecast_range_collapses_for_tight_consensus() -> None:
+    # Targets within ~1% of the average produce no separate high/low lines.
+    ctx = AssistantSymbolContext(
+        symbol="NVDA",
+        snapshot=Snapshot(symbol="NVDA", day_close=100.0, prev_close=99.0, change_percent=1.0),
+        bars_5m=[_bar(100.0, 30), _bar(100.5, 35)],
+        analyst_ratings=[_rating(200.0), _rating(200.5)],
+    )
+    chart = build_symbol_chart(ctx)
+    assert chart is not None
+    kinds = {lvl["kind"] for lvl in chart["levels"]}
+    assert "target" in kinds
+    assert "target_high" not in kinds
+    assert "target_low" not in kinds
+
+
+def test_build_chart_full_timeframe_by_desk() -> None:
+    ctx = AssistantSymbolContext(
+        symbol="NVDA",
+        snapshot=Snapshot(symbol="NVDA", day_close=100.0, prev_close=99.0, change_percent=1.0),
+        bars_5m=[_bar(100.0, 30), _bar(100.5, 35)],
+    )
+    assert build_symbol_chart(ctx, "day")["full_chart_timeframe"] == "1hour"
+    assert build_symbol_chart(ctx, "swing")["full_chart_timeframe"] == "1day"
+    # Default desk is swing -> daily candles.
+    assert build_symbol_chart(ctx)["full_chart_timeframe"] == "1day"
 
 
 def test_support_omitted_when_no_base_near_price_parabolic() -> None:

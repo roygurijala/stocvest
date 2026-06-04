@@ -317,7 +317,7 @@ def fetch_stocvest_composite_read(symbol: str, mode: str) -> dict | None:
 _MAX_CHART_POINTS = 80
 
 
-def build_symbol_chart(ctx: AssistantSymbolContext | None) -> dict | None:
+def build_symbol_chart(ctx: AssistantSymbolContext | None, desk: str = "swing") -> dict | None:
     """Build a compact, deterministic chart payload from a symbol context.
 
     Returns a JSON-serializable dict for the assistant response, or ``None`` when
@@ -325,14 +325,21 @@ def build_symbol_chart(ctx: AssistantSymbolContext | None) -> dict | None:
     numbers come straight from Polygon snapshot/bars — Claude is never asked to
     invent price data.
 
+    ``desk`` controls only the *expanded* (full) chart's candle interval surfaced
+    via ``full_chart_timeframe``: the day desk reads hourly candles, the swing desk
+    reads daily. The inline sparkline stays an intraday 5-minute series regardless.
+
     Shapes
     ------
     intraday: {symbol, kind:"intraday", interval:"5m", points:[{t,c}], last,
-               change_pct, direction, prev_close, as_of}
+               change_pct, direction, prev_close, as_of, full_chart_timeframe}
     quote:    same without a points series (when only a snapshot is available).
     """
     if ctx is None:
         return None
+
+    desk_norm = "day" if str(desk or "").strip().lower() in ("day", "intraday", "real") else "swing"
+    full_chart_timeframe = "1hour" if desk_norm == "day" else "1day"
 
     bars = ctx.bars_5m or []
     snap = ctx.snapshot
@@ -390,6 +397,7 @@ def build_symbol_chart(ctx: AssistantSymbolContext | None) -> dict | None:
         "prev_close": prev_close,
         "as_of": ctx.fetched_at.isoformat(),
         "levels": _compute_chart_levels(ctx, effective_last),
+        "full_chart_timeframe": full_chart_timeframe,
     }
 
     # Need at least two points to draw a meaningful line; otherwise quote-only.
@@ -479,14 +487,24 @@ def _compute_chart_levels(ctx: AssistantSymbolContext, last: float | None) -> li
         _add("VWAP", "vwap", snap.day_vwap)
         _add("Prev close", "prev_close", snap.prev_close)
 
-    # Analyst price target — average of recent non-null targets.
+    # Analyst price target — average of recent non-null targets, plus the forecast
+    # range (high/low) so a forecast answer can show "current vs forecasted max/min".
     targets = [
         float(r.price_target)
         for r in (ctx.analyst_ratings or [])
-        if getattr(r, "price_target", None) is not None
+        if getattr(r, "price_target", None) is not None and float(r.price_target) > 0
     ]
     if targets:
-        _add("Analyst target", "target", sum(targets) / len(targets))
+        avg_t = sum(targets) / len(targets)
+        _add("Analyst target", "target", avg_t)
+        if len(targets) >= 2:
+            hi_t, lo_t = max(targets), min(targets)
+            # Only surface the bounds when they sit meaningfully apart from the
+            # average — otherwise three near-identical lines just stack illegibly.
+            if hi_t > avg_t * 1.01:
+                _add("Target high", "target_high", hi_t)
+            if lo_t < avg_t * 0.99:
+                _add("Target low", "target_low", lo_t)
 
     # Daily-bar derived levels: 50-day average + swing support/resistance.
     daily = ctx.bars_1d or []

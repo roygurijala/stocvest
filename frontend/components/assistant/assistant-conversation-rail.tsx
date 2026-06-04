@@ -629,6 +629,10 @@ function levelColor(kind: AssistantChartLevel["kind"], colors: ThemeColors): str
       return colors.bearish ?? colors.textMuted;
     case "target":
       return colors.caution ?? colors.accent;
+    case "target_high":
+      return colors.bullish; // forecasted upside bound
+    case "target_low":
+      return colors.bearish ?? colors.textMuted; // forecasted downside bound
     case "vwap":
       return colors.accent;
     case "sma50":
@@ -799,10 +803,13 @@ function ChartCard({ chart, colors }: { chart: AssistantChart; colors: ThemeColo
             symbol={chart.symbol}
             colors={colors}
             levels={levels}
+            timeframe={chart.full_chart_timeframe === "1hour" ? "1hour" : "1day"}
             currentPrice={typeof chart.last === "number" ? chart.last : null}
           />
           <span style={{ fontSize: 10, color: colors.textMuted, letterSpacing: "0.04em" }}>
-            Daily candles · 50-day average · reference levels
+            {chart.full_chart_timeframe === "1hour"
+              ? "Hourly candles · reference levels"
+              : "Daily candles · 50-day average · reference levels"}
           </span>
         </div>
       ) : null}

@@ -254,3 +254,26 @@ def test_company_phrase_strips_forecast_framing() -> None:
         extract_company_lookup_phrase("how did broadcom do today what is its forecast for next few days")
         == "broadcom"
     )
+
+
+def test_company_phrase_forecast_question_resolves_name() -> None:
+    # "what is the forecast of broadcom" must trigger the company lookup (forecast
+    # is a single-instrument cue) so it resolves AVGO instead of falling back to a
+    # stale prior-turn ticker.
+    assert extract_company_lookup_phrase("what is the forecast of broadcom") == "broadcom"
+
+
+def test_company_phrase_outlook_and_target_cues() -> None:
+    assert extract_company_lookup_phrase("outlook on broadcom") == "broadcom"
+    assert extract_company_lookup_phrase("whats the price target for palantir") == "palantir"
+    assert extract_company_lookup_phrase("analyst consensus for shake shack") == "shake shack"
+
+
+def test_company_phrase_stocvest_think_framing_stripped() -> None:
+    # "what does STOCVEST think of X" keeps only the company name.
+    assert extract_company_lookup_phrase("what does stocvest think of broadcom") == "broadcom"
+
+
+def test_company_phrase_forecast_market_level_still_none() -> None:
+    # Forecast cue + market-level subject is still not a single-company lookup.
+    assert extract_company_lookup_phrase("what is the outlook for the market") is None

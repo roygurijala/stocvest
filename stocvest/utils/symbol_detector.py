@@ -386,6 +386,14 @@ _LOOKUP_CUES: tuple[str, ...] = (
     "tell me about", "what about", "going on", "look up", "pull up",
     "update on", "is it up", "is it down", "today", "this morning",
     "right now", "lately", "recently", "rally", "drop", "gap",
+    # Forecast / outlook framing — "what's the forecast for broadcom",
+    # "outlook on AVGO", "analyst target for X". These ask about one named
+    # instrument just as much as "how is X doing", so they must resolve a
+    # company name (the reference search still guards against bad matches).
+    "forecast", "outlook", "prediction", "predict", "price target",
+    "target for", "target on", "expect", "future of", "prospects",
+    "analyst", "estimate", "consensus", "what does stocvest think",
+    "stocvest think", "fair value", "valuation of",
 )
 
 # Verb / time / generic-noun tokens that are never the company name.
@@ -404,9 +412,13 @@ _LOOKUP_FILLER: frozenset[str] = frozenset({
     "PLEASE", "RAN", "FROM", "MUCH",
     # Forecast / outlook framing — common trailing words that aren't the name.
     "FORECAST", "FORECASTS", "OUTLOOK", "PREDICT", "PREDICTION", "PREDICTIONS",
-    "TARGET", "TARGETS", "EXPECT", "EXPECTED", "FUTURE", "PROSPECTS",
+    "TARGET", "TARGETS", "EXPECT", "EXPECTED", "EXPECTS", "FUTURE", "PROSPECTS",
     "GUIDANCE", "ESTIMATE", "ESTIMATES", "OPINION", "THOUGHTS", "ANALYSIS",
+    "ANALYST", "ANALYSTS", "CONSENSUS", "RATING", "RATINGS",
     "COMING", "AHEAD", "SESSION", "CLOSE", "CLOSED", "OPEN", "OPENING",
+    "FAIR", "VALUE", "VALUATION", "WORTH",
+    # Framing tokens for "what does STOCVEST think of X" / "what's the … for X".
+    "STOCVEST", "THINK", "THINKS", "THINKING", "WHATS", "DOES", "OPINION",
 })
 
 # Market-/portfolio-level subjects: their presence means the question is NOT

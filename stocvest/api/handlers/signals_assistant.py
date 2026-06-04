@@ -51,6 +51,7 @@ from stocvest.api.services.assistant_watchlist_context import (
 from stocvest.signals.assistant_chat import AssistantChatService
 from stocvest.utils.intent_detector import (
     detect_explicit_desk,
+    is_chart_relevant_query,
     is_discovery_query,
     is_market_overview_query,
     is_mode_sensitive_query,
@@ -60,6 +61,7 @@ from stocvest.utils.intent_detector import (
     is_watchlist_remove_intent,
 )
 from stocvest.utils.symbol_detector import (
+    detect_symbol,
     detect_symbol_from_messages,
     extract_action_symbol,
     extract_company_lookup_phrase,
@@ -298,17 +300,20 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     if profile.has_ai_explanations:
         try:
             messages_list = raw_messages if isinstance(raw_messages, list) else []
-            detected_sym = detect_symbol_from_messages(messages_list)
-            # Company-name lookup: "how did broadcom do today?" carries no ticker
-            # token, so resolve the named company to a ticker via a reference
-            # search (guarded by a name match) — but only for single-instrument
-            # questions, never for market-overview / watchlist intents.
+            # The CURRENT message is authoritative. Resolve the symbol from it
+            # FIRST — before scanning prior turns — so a fresh question wins over
+            # a ticker mentioned earlier in the conversation. Otherwise asking
+            # "what's the forecast for broadcom" right after a turn about AXON
+            # would silently answer (and chart) AXON, then refuse ("no data for
+            # AVGO"), because a stale prior-turn ticker was picked up first.
             #
-            # This MUST run before the page-context fallback: a company the user
-            # explicitly names in their message always wins over whatever symbol
-            # happens to be loaded on the current page. Otherwise asking about
-            # "broadcom" while a different ticker is open would silently answer
-            # about that page symbol and then refuse ("no data for Broadcom").
+            # 1) Explicit ticker token in the current message (highest confidence).
+            detected_sym = detect_symbol(last_user_text_for_intent)
+            # 2) A company NAMED in the current message ("how did broadcom do?")
+            #    carries no ticker token, so resolve it via a reference search
+            #    (guarded by a name match) — only for single-instrument questions,
+            #    never for market-overview / watchlist intents. This beats any
+            #    prior-turn ticker and the page-context symbol.
             if (
                 not detected_sym
                 and not is_market_overview_query(last_user_text_for_intent)
@@ -317,9 +322,12 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
                 lookup_phrase = extract_company_lookup_phrase(last_user_text_for_intent)
                 if lookup_phrase:
                     detected_sym = asyncio.run(resolve_company_to_symbol(lookup_phrase))
-            # Last resort: the symbol already loaded on the current page. Only used
-            # when the user named neither a ticker nor a company in their message
-            # (e.g. "how is it doing today?" while viewing a symbol).
+            # 3) Follow-up context: a ticker from a recent PRIOR turn, so terse
+            #    follow-ups like "why did it gap up?" still resolve. Only reached
+            #    when the current message named neither a ticker nor a company.
+            if not detected_sym:
+                detected_sym = detect_symbol_from_messages(messages_list)
+            # 4) Last resort: the symbol already loaded on the current page.
             if not detected_sym and page_context and isinstance(page_context.get("symbol"), str):
                 detected_sym = page_context["symbol"].strip().upper() or None
             if detected_sym:
@@ -343,10 +351,13 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
 
     # Deterministic chart payload (intraday sparkline) built from the live
     # snapshot/bars so a "how is NVDA doing today?" answer can ship a mini-chart.
+    # Only attached when the question is actually about price / performance /
+    # movement / technical levels / a trade setup — a chart on a forecast, verdict,
+    # news, or conceptual answer is just noise, so we gate it on relevance.
     chart_payload: dict | None = None
     try:
-        if symbol_context is not None:
-            chart_payload = build_symbol_chart(symbol_context)
+        if symbol_context is not None and is_chart_relevant_query(last_user_text_for_intent):
+            chart_payload = build_symbol_chart(symbol_context, resolved_desk)
     except Exception:  # noqa: BLE001
         chart_payload = None
 
