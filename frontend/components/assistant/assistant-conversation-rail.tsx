@@ -44,6 +44,10 @@ interface AssistantConversationRailProps {
   loading?: boolean;
   /** Send a refining message when a clarifying quick-reply chip is tapped. */
   onQuickReply?: (text: string) => void;
+  /** Live page trading mode. When set, it drives the expanded chart's candle
+   * interval (day → hourly, swing → daily), overriding the server's resolved
+   * desk so the chart always matches the desk toggle the user is looking at. */
+  tradingMode?: "day" | "swing" | null;
 }
 
 function nodeColor(
@@ -67,7 +71,8 @@ export const AssistantConversationRail = memo(function AssistantConversationRail
   colors,
   contextTone,
   loading,
-  onQuickReply
+  onQuickReply,
+  tradingMode = null
 }: AssistantConversationRailProps) {
   return (
     <ol
@@ -102,6 +107,7 @@ export const AssistantConversationRail = memo(function AssistantConversationRail
           contextTone={contextTone}
           loading={loading}
           onQuickReply={onQuickReply}
+          tradingMode={tradingMode}
         />
       ))}
     </ol>
@@ -114,9 +120,10 @@ interface ConversationRowProps {
   contextTone: AssistantConversationRailProps["contextTone"];
   loading?: boolean;
   onQuickReply?: (text: string) => void;
+  tradingMode?: "day" | "swing" | null;
 }
 
-function ConversationRow({ message, colors, contextTone, loading, onQuickReply }: ConversationRowProps) {
+function ConversationRow({ message, colors, contextTone, loading, onQuickReply, tradingMode = null }: ConversationRowProps) {
   const isUser = message.role === "user";
   const tone = nodeColor(message.role, colors, contextTone);
   /**
@@ -208,7 +215,7 @@ function ConversationRow({ message, colors, contextTone, loading, onQuickReply }
       </div>
       {/* Price chart mini-card — shown on assistant turns with live market data */}
       {!isUser && message.chart ? (
-        <ChartCard chart={message.chart} colors={colors} />
+        <ChartCard chart={message.chart} colors={colors} tradingMode={tradingMode} />
       ) : null}
       {/* Deep-link CTA — shown on assistant turns with a navigate_to field */}
       {!isUser && message.navigate_to ? (
@@ -643,8 +650,27 @@ function levelColor(kind: AssistantChartLevel["kind"], colors: ThemeColors): str
   }
 }
 
-function ChartCard({ chart, colors }: { chart: AssistantChart; colors: ThemeColors }) {
+function ChartCard({
+  chart,
+  colors,
+  tradingMode = null
+}: {
+  chart: AssistantChart;
+  colors: ThemeColors;
+  tradingMode?: "day" | "swing" | null;
+}) {
   const [expanded, setExpanded] = useState(false);
+  // The live page desk toggle wins so the expanded chart always matches what the
+  // user is looking at (day → hourly, swing → daily). Fall back to the server's
+  // resolved desk only when the page mode is unknown.
+  const fullChartTimeframe: "1hour" | "1day" =
+    tradingMode === "day"
+      ? "1hour"
+      : tradingMode === "swing"
+        ? "1day"
+        : chart.full_chart_timeframe === "1hour"
+          ? "1hour"
+          : "1day";
   const up = chart.direction === "up";
   const down = chart.direction === "down";
   const lineColor = up ? colors.bullish : down ? (colors.bearish ?? colors.textMuted) : colors.textMuted;
@@ -803,11 +829,11 @@ function ChartCard({ chart, colors }: { chart: AssistantChart; colors: ThemeColo
             symbol={chart.symbol}
             colors={colors}
             levels={levels}
-            timeframe={chart.full_chart_timeframe === "1hour" ? "1hour" : "1day"}
+            timeframe={fullChartTimeframe}
             currentPrice={typeof chart.last === "number" ? chart.last : null}
           />
           <span style={{ fontSize: 10, color: colors.textMuted, letterSpacing: "0.04em" }}>
-            {chart.full_chart_timeframe === "1hour"
+            {fullChartTimeframe === "1hour"
               ? "Hourly candles · reference levels"
               : "Daily candles · 50-day average · reference levels"}
           </span>
