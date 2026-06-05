@@ -13,6 +13,7 @@ locals {
     "GET /v1/market/bars"           = { module_key = "market_data", authorizer = true }
     "POST /v1/market/bars-batch"    = { module_key = "market_data", authorizer = true }
     "GET /v1/market/news"           = { module_key = "market_data", authorizer = true }
+    "GET /v1/market/brief"          = { module_key = "market_data", authorizer = true }
     "GET /v1/market/options"        = { module_key = "market_data", authorizer = true }
     "GET /v1/market/earnings"       = { module_key = "market_data", authorizer = true }
     "GET /v1/dashboard/summary"     = { module_key = "market_data", authorizer = true }

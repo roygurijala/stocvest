@@ -8,7 +8,7 @@ from collections import defaultdict, deque
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-from stocvest.api.response import bad_request, internal_error, ok
+from stocvest.api.response import bad_request, internal_error, ok, unauthorized
 from stocvest.api.services.analyst_panel_format import format_analyst_ratings_for_panel
 from stocvest.api.services.news_impact_analyzer import analyze_news_impact, generate_impact_summary
 from stocvest.api.services.news_panel_format import (
@@ -869,4 +869,39 @@ def _query_params(event: LambdaEvent) -> dict[str, str]:
     if not isinstance(query, dict):
         return {}
     return query
+
+
+def market_brief_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    """GET /v1/market/brief — cached, AI-written plain-English market narrative.
+
+    User-agnostic and shared via Redis, so this is one Claude call per ~10-minute
+    window regardless of how many users hit it. Returns ``available: false`` (never
+    an error) when no narrative can be produced, so the dashboard degrades gracefully
+    to its deterministic summary.
+    """
+    _ = context
+    request_context = build_request_context(event)
+    if not request_context.user_id:
+        return unauthorized("Authenticated user is required.")
+    try:
+        from stocvest.api.services.market_brief import get_market_brief_narrative
+
+        result = get_market_brief_narrative()
+    except Exception as exc:  # noqa: BLE001 - the brief is optional; never 500 the dashboard
+        from stocvest.utils.logging import get_logger
+
+        get_logger(__name__).warning("market_brief handler skip: %s", type(exc).__name__)
+        result = None
+    if not result or not result.get("narrative"):
+        return ok({"available": False, "narrative": None})
+    return ok(
+        {
+            "available": True,
+            "narrative": result.get("narrative"),
+            "generated_at": result.get("generated_at"),
+            "market_state": result.get("market_state"),
+            "model": result.get("model"),
+            "cached": bool(result.get("cached")),
+        }
+    )
 
