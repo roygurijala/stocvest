@@ -302,6 +302,7 @@ def _serialize_user_profile(
     snap = resolve_access(profile, is_admin=is_admin)
     return {
         "user_id": profile.user_id,
+        "first_name": profile.first_name,
         "trading_mode": profile.trading_mode.value,
         "onboarding_completed": profile.onboarding_completed,
         "onboarding_completed_at": profile.onboarding_completed_at,
@@ -408,6 +409,14 @@ def users_me_patch_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     store = get_user_profile_store()
     cur = store.get_profile(request_context.user_id)
     updates: dict[str, Any] = {}
+
+    if "first_name" in body:
+        raw_name = body.get("first_name")
+        if raw_name is None or str(raw_name).strip() == "":
+            updates["first_name"] = None
+        else:
+            cleaned = sanitize_free_text(raw_name, max_len=60)
+            updates["first_name"] = cleaned or None
 
     if "trading_mode" in body:
         try:
