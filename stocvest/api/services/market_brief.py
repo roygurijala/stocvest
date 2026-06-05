@@ -33,6 +33,11 @@ from stocvest.utils.redis_client import get_sync_redis
 
 _LOG = get_logger(__name__)
 
+# Warm-container fallback cache: this Lambda often runs with Redis disabled
+# (STOCVEST_DISABLE_REDIS=1), so the shared cache no-ops. A module-level cache keyed by
+# the 10-minute window keeps warm invocations instant and avoids a Claude call per request.
+_INPROC_CACHE: dict[str, dict[str, Any]] = {}
+
 _SECTOR_LABELS: dict[str, str] = {
     "XLK": "Tech",
     "XLC": "Comm",
@@ -182,6 +187,7 @@ async def _claude_narrative_or_none(data: dict[str, Any]) -> str | None:
     settings = get_settings()
     api_key = (getattr(settings, "anthropic_api_key", None) or os.environ.get("ANTHROPIC_API_KEY") or "").strip()
     if not api_key:
+        _LOG.warning("market_brief: ANTHROPIC_API_KEY not configured; skipping narrative.")
         return None
     user_prompt = "Market data (JSON):\n" + json.dumps(data, ensure_ascii=False)
     payload = {
@@ -200,6 +206,7 @@ async def _claude_narrative_or_none(data: dict[str, Any]) -> str | None:
         async with httpx.AsyncClient(timeout=20.0) as client:
             res = await client.post(ANTHROPIC_API_URL, headers=headers, json=payload)
         if res.status_code >= 400:
+            _LOG.warning("market_brief: Claude returned HTTP %s; skipping narrative.", res.status_code)
             return None
         body = res.json()
         blocks = body.get("content")
@@ -241,26 +248,40 @@ def get_market_brief_narrative() -> dict[str, Any] | None:
     """Cached, user-agnostic AI market narrative. Returns ``None`` to signal frontend fallback."""
     now = _ny_now()
     key = _cache_key(now)
+
+    # 1) Warm-container in-process cache (works even when Redis is disabled).
+    inproc = _INPROC_CACHE.get(key)
+    if isinstance(inproc, dict) and inproc.get("narrative"):
+        return {**inproc, "cached": True}
+
     redis = None
     try:
         redis = get_sync_redis()
     except Exception:  # noqa: BLE001 - cache is best-effort
         redis = None
 
+    # 2) Shared Redis cache (no-op when STOCVEST_DISABLE_REDIS=1).
     if redis is not None:
         try:
             cached = redis.get(key)
             if cached:
                 parsed = json.loads(cached)
                 if isinstance(parsed, dict) and parsed.get("narrative"):
+                    _INPROC_CACHE[key] = parsed
                     parsed["cached"] = True
                     return parsed
         except Exception as exc:  # noqa: BLE001
             _LOG.debug("market_brief cache read skip: %s", type(exc).__name__)
 
+    # 3) Build live (≈5–6s: dashboard summary + headlines + one Claude call).
     result = asyncio.run(_build_narrative_live())
     if not result:
         return None
+
+    # Cap the in-process cache so a long-lived warm container can't grow unbounded.
+    if len(_INPROC_CACHE) > 8:
+        _INPROC_CACHE.clear()
+    _INPROC_CACHE[key] = result
 
     if redis is not None:
         try:
