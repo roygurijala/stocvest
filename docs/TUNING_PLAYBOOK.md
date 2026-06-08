@@ -1,6 +1,6 @@
 # STOCVEST — Monthly signal tuning playbook
 
-**Last reviewed:** 2026-05-08 — optional composite **`layers[]`** field **`sic_mapping_tier`** on the **sector** row supports cohort analysis (e.g. exclude **`coarse`** / **`fallback_spy`** when studying sector-layer accuracy); see [`docs/SIGNAL_ENGINE.md`](./SIGNAL_ENGINE.md) § Sector and [`docs/API_CONTRACTS.md`](./API_CONTRACTS.md) §4.3. Other pointers: [`docs/CONTEXT.md`](./CONTEXT.md) §1–§2, founding-member API, beta override, HTTP audit infra.
+**Last reviewed:** 2026-06-08 — **Secrets v1.1.0 (P65 pre-beta)** applied in development: **`macro.momentum_weight`** **0.45** (must align with code regime thresholds in **`macro_analyzer.py`**); new **`swing_composite`** / **`day_composite`** weight blocks; **`swing_technical`** / **`entry_zone`** tunables. Prior: optional composite **`layers[]`** field **`sic_mapping_tier`** on the **sector** row supports cohort analysis (e.g. exclude **`coarse`** / **`fallback_spy`** when studying sector-layer accuracy); see [`docs/SIGNAL_ENGINE.md`](./SIGNAL_ENGINE.md) § Sector and [`docs/API_CONTRACTS.md`](./API_CONTRACTS.md) §4.3. Other pointers: [`docs/CONTEXT.md`](./CONTEXT.md) §1–§2, founding-member API, beta override, HTTP audit infra.
 
 Use with **`stocvest/config/signal_parameters.py`** (defaults), **Secrets Manager** secret `stocvest/signal-parameters`, **DynamoDB** `ParameterHistory`, and **`GET /v1/signals/analysis`**.
 

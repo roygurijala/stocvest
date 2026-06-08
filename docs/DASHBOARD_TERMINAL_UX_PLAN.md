@@ -158,4 +158,6 @@ The dashboard's **presentation** was rebuilt as a focused "Trading Room" decisio
 
 **Backend additions:** persisted **`first_name`** on `UserProfile` (`GET`/`PATCH /v1/users/me`) for the greeting, and the AI market narrative **`GET /v1/market/brief`** (`stocvest/api/services/market_brief.py`, Claude Haiku, warm-container in-process cache) with same-origin BFF proxies `app/api/stocvest/market/{brief,news}/route.ts`. See **`API_CONTRACTS.md` §4.2 / §4.10** and **`IMPLEMENTED.md` B63**.
 
+**B65 reliability (2026-06-08):** When the server RSC first segment returns empty index snapshots (common on **cold Lambda**), **`useDashboardTape`** client-backfills SPY/QQQ/IWM/VIX and market status without blocking the shell. All Trading Room client fetches route through the BFF (`browserApiFetch` + **`api-path-to-bff.ts`**) — see **`API_CONTRACTS.md` §4.11** and **`IMPLEMENTED.md` B65**.
+
 **Deliberately absent** (per the redesign brief): scrolling data tables, percentage-change columns, sidebar-style navigation inside the surface, and an embedded news ticker — context lives in the Brief and Deep Dive, not in dense grids.

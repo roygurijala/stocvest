@@ -43,6 +43,7 @@ import {
   isPreparationPhase,
   resolveBriefSessionPhase
 } from "@/lib/dashboard/trading-room/brief-session-copy";
+import { useDashboardTape } from "@/lib/hooks/use-dashboard-tape";
 import { useWatchlistAtClose } from "@/lib/hooks/use-watchlist-at-close";
 import { useWeeklySetupOutcomes } from "@/lib/hooks/use-weekly-setup-outcomes";
 import { DeepDive } from "@/components/dashboard/trading-room/deep-dive";
@@ -324,10 +325,7 @@ function TradingRoomBody({
     fallbackData: deskInitial?.day
   });
 
-  const snapshotsBySymbol = useMemo(
-    () => new Map(marketOverview.snapshots.map((s) => [(s.symbol || "").toUpperCase(), s])),
-    [marketOverview.snapshots]
-  );
+  const { snapshotsBySymbol, status: marketStatus } = useDashboardTape(marketOverview);
 
   const { swingSetups, daySetups } = useMemo(() => {
     const swing = scannerOverview.setups.filter((s) => s.scanner_mode === "swing_daily");
@@ -520,11 +518,11 @@ function TradingRoomBody({
   const updatedAtIso =
     swingDesk?.data?.generated_at ??
     dayDesk?.data?.generated_at ??
-    marketOverview.status?.server_time ??
+    marketStatus?.server_time ??
     lastRefreshedIso;
 
-  const marketOpen = marketOverview.status ? isRegularSessionOpen(marketOverview.status) : null;
-  const marketStatusLabel = marketStatusLabelFor(marketOverview.status?.market, marketOpen);
+  const marketOpen = marketStatus ? isRegularSessionOpen(marketStatus) : null;
+  const marketStatusLabel = marketStatusLabelFor(marketStatus?.market, marketOpen);
 
   // Sectors: prefer the latest-session move when the tape is shut (that's "today"),
   // otherwise lean on the 5-day rotation for a steadier leadership read.

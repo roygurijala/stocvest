@@ -1,3 +1,4 @@
+import { apiPathToBffUrl } from "@/lib/api/api-path-to-bff";
 import { readWsTokenFromDocumentCookie } from "@/lib/auth/ws-token-cookie";
 import { markSessionExpired } from "@/lib/auth/session-expired";
 import { refreshSession } from "@/lib/auth/refresh-session";
@@ -45,9 +46,14 @@ function buildHeaders(init?: RequestInit): Headers {
  *     denials (PDT lockout, margin, paid-tier gating) where the user IS authenticated.
  *   - 502/503/504 are retried up to 3 times with linear backoff before surfacing an error.
  */
+function resolveFetchUrl(path: string): string {
+  const bff = typeof window !== "undefined" ? apiPathToBffUrl(path) : null;
+  return bff ?? `${apiBaseUrl()}${path}`;
+}
+
 export async function browserApiFetch<T>(path: string, init?: RequestInit): Promise<T | null> {
   const timeoutSignal = AbortSignal.timeout(DEFAULT_TIMEOUT_MS);
-  const url = `${apiBaseUrl()}${path}`;
+  const url = resolveFetchUrl(path);
 
   const doFetch = async (): Promise<Response | null> => {
     let pending: ReturnType<typeof fetch>;

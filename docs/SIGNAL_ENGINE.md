@@ -159,6 +159,23 @@ Weighting math and permission-style gates should stay **separate concerns** in c
 
 **Product / entitlements (2026-05):** on-demand **AI signal explanations** and related paid surfaces gate on **`UserProfile.has_ai_explanations`** (true when subscribed or **beta** full access is active). See **`docs/API_CONTRACTS.md`** §4.10 and **`docs/CONTEXT.md`** §1.
 
+## Macro / FOMC limitations (assessed 2026-06-08)
+
+What the engine does **today** around Fed and macro events:
+
+| Capability | Status |
+|------------|--------|
+| Economic calendar in macro layer | ✅ Benzinga economics rows; **event-risk** keyword scoring (20% of macro blend) lowers score on high-impact event days |
+| Reactive regime (`risk_on` / `risk_off` / `avoid`) | ✅ From SPY/QQQ momentum + VIX; thresholds in **`macro_analyzer.py`** (not Secrets) |
+| Calendar warnings in UI copy | ✅ Dashboard/scanner posture lines reference known event days |
+| **`MacroEventDetector`** (hawkish/dovish headline keywords) | ✅ Used in news/AI assistant paths; **not** wired into live composite layer scores |
+| Pre-FOMC directional prediction | ❌ Not implemented — no model of expected vs actual policy move |
+| Per-symbol FOMC beta / event sensitivity | ❌ Deferred |
+| Hard entry gates before Fed decisions | ❌ Not implemented — event risk is a **score dampener**, not a veto |
+| Contextual layer weight boosts around events | ❌ **P1 backlog** (`P1-MACRO` in **`BACKLOG.md`**) |
+
+**Product posture:** STOCVEST surfaces macro event risk as **data and score friction**, not as a trade call. Planned P1 work adds contextual boosts, layer-card polarity consistency, and optional user feedback — not a directional "Fed play" engine.
+
 ## Future enhancements (non-blocking)
 
 These are **intentional backlog themes**, not corrections to current behavior:

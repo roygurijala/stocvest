@@ -12,7 +12,7 @@ Use this map to find the right doc quickly. **Authoritative technical specs** li
 | [`OPPORTUNITY_DESK_AND_DASHBOARD_RADAR.md`](./OPPORTUNITY_DESK_AND_DASHBOARD_RADAR.md) | **Opportunity Desk (D13):** full-market funnel, tiered refresh, dashboard sentiment/discovery/**quiet leaders**/watchlist radar, watchlist scanner reserve — phased plan + acceptance criteria (Phases 0–7). |
 | [`API_CONTRACTS.md`](./API_CONTRACTS.md) | HTTP API contracts. |
 | [`SIGNAL_ENGINE.md`](./SIGNAL_ENGINE.md) | Signal engine reference. |
-| [`DEPLOYMENT.md`](./DEPLOYMENT.md) | Deploy / infra notes. |
+| [`DEPLOYMENT.md`](./DEPLOYMENT.md) | Deploy / infra notes (incl. **Lambda Linux packaging** — `scripts/build_lambda_package.ps1`). |
 | [`TUNING_PLAYBOOK.md`](./TUNING_PLAYBOOK.md) | Tuning parameters playbook. |
 | [`D1_SIGNAL_RESOLUTION_SCHEDULE.md`](./D1_SIGNAL_RESOLUTION_SCHEDULE.md) | D1 resolution schedule. |
 | [`CURSOR_RULES.md`](./CURSOR_RULES.md) | Cursor / editor rules for contributors. |

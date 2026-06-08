@@ -1,8 +1,29 @@
 # STOCVEST — API contracts (immutable sections)
 
-**Last reviewed:** 2026-05-15
+**Last reviewed:** 2026-06-08
 
 Sections referenced from **`docs/CONTEXT.md`** §7 must not change without explicit review and coordinated code updates.
+
+---
+
+## 4.11 Client Component BFF routing (B65)
+
+Browser Client Components must **not** call API Gateway `/v1/*` directly — localhost dev blocks cross-origin requests. **`frontend/lib/api/browser-api-fetch.ts`** rewrites upstream paths through **`apiPathToBffUrl()`** in **`frontend/lib/api/api-path-to-bff.ts`**: `/v1/foo/bar` → **`/api/stocvest/foo/bar`** (same-origin, session cookie).
+
+**BFF routes added for Trading Room + scanner client paths (2026-06-08):**
+
+| Upstream | BFF proxy |
+|----------|-----------|
+| `GET /v1/market/snapshot` (single symbol) | `GET /api/stocvest/market/snapshot` |
+| `GET /v1/market/macro-context` | `GET /api/stocvest/market/macro-context` |
+| `GET /v1/market/bars-batch` | `GET /api/stocvest/market/bars-batch` |
+| `GET /v1/market/earnings` | `GET /api/stocvest/market/earnings` |
+| `POST /v1/scanner/gap-intelligence` | `POST /api/stocvest/scanner/gap-intelligence` |
+| `POST /v1/signals/day/setups` | `POST /api/stocvest/signals/day/setups` |
+| `POST /v1/signals/swing/setups` | `POST /api/stocvest/signals/swing/setups` |
+| `GET /v1/signals/scanner-trace` | `GET /api/stocvest/signals/scanner-trace` |
+
+**Rule:** When adding a new Client Component fetch to a `/v1/*` route, add a matching thin BFF route under **`frontend/app/api/stocvest/**`** (session via **`stocvestAuthedFetch`**) and extend **`apiPathToBffUrl`** if the path is not covered by the generic `/v1` → `/api/stocvest` slice.
 
 ---
 
