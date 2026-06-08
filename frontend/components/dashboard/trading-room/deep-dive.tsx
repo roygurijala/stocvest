@@ -49,8 +49,13 @@ import { TimeframeContextPanel } from "@/components/signals/timeframe-context-pa
 import { SetupEvolutionPanel } from "@/components/signals/setup-evolution-panel";
 import { FullPriceChart, type ChartSignalOverlay } from "@/components/assistant/full-price-chart";
 import { ScenarioWhatIf } from "@/components/dashboard/trading-room/scenario-what-if";
+import { RiskStackPanel } from "@/components/signal-evidence/risk-stack-panel";
 import { isExecutionStageEligibleForScenarioAdjust } from "@/lib/scenario/scenario-variants";
 import type { FeedBias, FeedCard, FeedState } from "@/lib/dashboard/trading-room/feed-model";
+import { parseLedgerGateSummary } from "@/lib/signal-evidence/ledger-gate-present";
+import { parseMarketEnvironment } from "@/lib/signal-evidence/market-environment-present";
+import { parseApiDecisionState } from "@/lib/signal-evidence/risk-stack-present";
+import type { TradeDecisionState } from "@/lib/signal-evidence/trade-decision";
 
 type Colors = ReturnType<typeof useTheme>["colors"];
 type DeepDiveTab = "setup" | "layers" | "evolution" | "charts";
@@ -810,6 +815,23 @@ export function DeepDive({
     return resolveTimeframeContext(composite as Record<string, unknown>, activeLane);
   }, [composite, isInsufficient, activeLane]);
 
+  const marketEnvironment = useMemo(
+    () => (composite ? parseMarketEnvironment(composite as Record<string, unknown>) : null),
+    [composite]
+  );
+  const ledgerGateSummary = useMemo(
+    () => (composite ? parseLedgerGateSummary(composite as Record<string, unknown>) : null),
+    [composite]
+  );
+  const apiDecisionState = useMemo((): TradeDecisionState | null => {
+    if (!composite) return null;
+    return (
+      parseApiDecisionState((composite as Record<string, unknown>).decision_state) ??
+      (pageDecision?.state as TradeDecisionState | undefined) ??
+      null
+    );
+  }, [composite, pageDecision?.state]);
+
   const setupJudgment = useMemo(() => {
     if (isInsufficient) return null;
     return resolveSetupJudgmentFromComposite(composite as Record<string, unknown>, {
@@ -1210,6 +1232,16 @@ export function DeepDive({
           </div>
         ) : null}
       </div>
+
+      {marketEnvironment && apiDecisionState ? (
+        <RiskStackPanel
+          environment={marketEnvironment}
+          signalState={apiDecisionState}
+          insight={insight}
+          ledgerGates={ledgerGateSummary}
+          testId="trading-room-deep-dive-risk-stack"
+        />
+      ) : null}
 
       {/* ── Tabs + tab content: one card ── */}
       <div

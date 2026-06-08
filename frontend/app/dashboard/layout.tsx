@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { DashboardComplianceClient } from "@/components/dashboard-compliance-client";
 import { SessionExpiredBanner } from "@/components/auth/session-expired-banner";
 import { SessionExpiryWatcher } from "@/components/auth/session-expiry-watcher";
@@ -24,7 +24,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
     <DashboardComplianceClient hasSession={!!session}>
       <SessionExpiryWatcher />
-      <SessionExpiredBanner />
+      <Suspense fallback={null}>
+        <SessionExpiredBanner />
+      </Suspense>
       {children}
     </DashboardComplianceClient>
   );

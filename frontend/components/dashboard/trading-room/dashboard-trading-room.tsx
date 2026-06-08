@@ -50,6 +50,10 @@ import { DeepDive } from "@/components/dashboard/trading-room/deep-dive";
 import { QuietFeed } from "@/components/dashboard/trading-room/quiet-feed";
 import { SymbolSearch } from "@/components/dashboard/trading-room/symbol-search";
 import { WatchlistRail } from "@/components/dashboard/trading-room/watchlist-rail";
+import { MarketEnvironmentStrip } from "@/components/market-environment-strip";
+import { useMarketEnvironment } from "@/lib/hooks/use-market-environment";
+import { environmentSessionCardHint } from "@/lib/signal-evidence/environment-session-hint";
+import type { MarketEnvironmentPayload } from "@/lib/signal-evidence/market-environment-present";
 import { getLastSelectedId, setLastSelectedId } from "@/lib/dashboard/trading-room/session-selection";
 import {
   buildFeedCards,
@@ -319,6 +323,8 @@ function TradingRoomBody({
   const { data: macro } = useMacroContext();
   const { articles: newsArticles } = useMarketNews();
   const { data: aiBrief } = useMarketBriefNarrative();
+  const swingEnvironment = useMarketEnvironment("swing", { macroRegime: macro?.market_regime });
+  const dayEnvironment = useMarketEnvironment("day", { macroRegime: macro?.market_regime });
 
   const { data: swingDesk } = useDeskToday("swing", { fallbackData: deskInitial?.swing });
   const { data: dayDesk } = useDeskToday("day", {
@@ -367,6 +373,7 @@ function TradingRoomBody({
   }, [swingDesk?.data, dayDesk?.data, swingSetups, daySetups, snapshotsBySymbol, dayTradingSurfaces, companyBySymbol]);
 
   const [filters, setFilters] = useState<FeedFilters>(DEFAULT_FEED_FILTERS);
+  const feedEnvironment = filters.lane === "day" ? dayEnvironment : swingEnvironment;
   const ranked = useMemo(() => rankAndCapFeed(allCards, filters), [allCards, filters]);
   const { day, swing } = useMemo(() => groupFeedByLane(ranked), [ranked]);
 
@@ -705,6 +712,9 @@ function TradingRoomBody({
       colors={colors}
       staleDateLabel={staleDateLabel}
       isWeekend={isWeekendSession}
+      feedEnvironment={feedEnvironment}
+      swingEnvironment={swingEnvironment}
+      dayEnvironment={dayEnvironment}
     />
   );
   const centerPanel = selected ? (
@@ -1175,7 +1185,10 @@ function SignalFeed({
   isMobile = false,
   colors,
   staleDateLabel = null,
-  isWeekend = false
+  isWeekend = false,
+  feedEnvironment = null,
+  swingEnvironment = null,
+  dayEnvironment = null
 }: {
   day: FeedCard[];
   swing: FeedCard[];
@@ -1195,6 +1208,9 @@ function SignalFeed({
   staleDateLabel?: string | null;
   /** True when it is a weekend — shows a weekend-specific empty message instead of hiding the feed. */
   isWeekend?: boolean;
+  feedEnvironment?: MarketEnvironmentPayload | null;
+  swingEnvironment?: MarketEnvironmentPayload | null;
+  dayEnvironment?: MarketEnvironmentPayload | null;
 }) {
   const empty = day.length === 0 && swing.length === 0;
   // Desktop: an independently-scrolling feed zone (sticky pane) with a vertical
@@ -1234,8 +1250,27 @@ function SignalFeed({
           hint="See where any ticker stands — even if it's not on the desk yet."
         />
       </div>
+      {feedEnvironment ? (
+        <MarketEnvironmentStrip environment={feedEnvironment} testId="trading-room-environment-strip" />
+      ) : null}
+      {showDay &&
+      dayEnvironment &&
+      swingEnvironment &&
+      dayEnvironment.environment_tier !== swingEnvironment.environment_tier ? (
+        <p className="m-0 text-[11px] leading-snug" style={{ color: colors.textMuted }}>
+          Day desk: {dayEnvironment.headline}
+        </p>
+      ) : null}
       {showDay ? (
-        <FeedLaneSection title="Day" count={day.length} cards={day} selectedId={selectedId} onSelect={onSelect} colors={colors} />
+        <FeedLaneSection
+          title="Day"
+          count={day.length}
+          cards={day}
+          selectedId={selectedId}
+          onSelect={onSelect}
+          colors={colors}
+          environment={dayEnvironment}
+        />
       ) : null}
       <FeedLaneSection
         title="Swing"
@@ -1245,6 +1280,7 @@ function SignalFeed({
         onSelect={onSelect}
         colors={colors}
         staleLabel={staleDateLabel}
+        environment={swingEnvironment}
       />
       {empty ? (
         deskEmpty || isWeekend ? (
@@ -1299,7 +1335,8 @@ function FeedLaneSection({
   selectedId,
   onSelect,
   colors,
-  staleLabel = null
+  staleLabel = null,
+  environment = null
 }: {
   title: string;
   count: number;
@@ -1309,6 +1346,7 @@ function FeedLaneSection({
   colors: ReturnType<typeof useTheme>["colors"];
   /** When non-null, shown beside the count as a staleness badge (e.g. "Fri Jun 6 close"). */
   staleLabel?: string | null;
+  environment?: MarketEnvironmentPayload | null;
 }) {
   if (cards.length === 0) return null;
   return (
@@ -1353,6 +1391,7 @@ function FeedLaneSection({
           onSelect={onSelect}
           colors={colors}
           staleDate={staleLabel}
+          environmentHint={environmentSessionCardHint(environment, card.lane, card.state)}
         />
       ))}
     </div>
@@ -1386,7 +1425,8 @@ function SignalCard({
   active,
   onSelect,
   colors,
-  staleDate = null
+  staleDate = null,
+  environmentHint = null
 }: {
   card: FeedCard;
   active: boolean;
@@ -1394,6 +1434,8 @@ function SignalCard({
   colors: ReturnType<typeof useTheme>["colors"];
   /** When non-null, this card's price data is from a prior day — shown as a small badge. */
   staleDate?: string | null;
+  /** Layer 0 ledger policy hint for actionable/near cards in elevated/stressed sessions. */
+  environmentHint?: string | null;
 }) {
   const laneAccent =
     card.lane === "day" ? roleAccents.dark.day.borderAccent : roleAccents.dark.swing.borderAccent;
@@ -1441,6 +1483,20 @@ function SignalCard({
         <span style={{ fontSize: typography.scale.xs, fontWeight: 600, color: sTone }}>{STATE_LABEL[card.state]}</span>
       </div>
       <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.4 }}>{card.verdict}</span>
+      {environmentHint ? (
+        <span
+          data-testid={`signal-card-environment-hint-${card.symbol}`}
+          style={{
+            fontSize: 10,
+            fontWeight: 600,
+            letterSpacing: "0.04em",
+            color: colors.caution,
+            lineHeight: 1.35
+          }}
+        >
+          {environmentHint}
+        </span>
+      ) : null}
       {staleDate ? (
         <span style={{ fontSize: 10, color: "#c04cf5", marginTop: 2 }}>
           from {staleDate} · valid through weekend

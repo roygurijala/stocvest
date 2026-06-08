@@ -50,7 +50,9 @@ export function useMarketSessionPhase(): MarketSessionPhase {
     revalidateOnFocus: false,
     // Status flips at open/close/holiday boundaries — a minute of latency is fine.
     refreshInterval: 60_000,
-    dedupingInterval: 30_000
+    dedupingInterval: 30_000,
+    errorRetryCount: 0,
+    shouldRetryOnError: false
   });
   return resolveSessionPhase(data);
 }

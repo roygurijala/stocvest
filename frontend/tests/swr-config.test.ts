@@ -54,7 +54,11 @@ describe("STOCVEST_SWR_DEFAULTS", () => {
 });
 
 describe("STOCVEST_SWR_DEFAULTS.shouldRetryOnError", () => {
-  const predicate = STOCVEST_SWR_DEFAULTS.shouldRetryOnError;
+  const predicate = STOCVEST_SWR_DEFAULTS.shouldRetryOnError!;
+
+  test("does not retry on Failed to fetch network errors", () => {
+    expect((predicate as (e: unknown) => boolean)(new Error("Failed to fetch"))).toBe(false);
+  });
 
   test("never retries on 401 (would re-surface session-expired banner)", () => {
     expect(predicate).toBeTypeOf("function");

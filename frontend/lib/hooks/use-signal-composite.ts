@@ -115,13 +115,19 @@ async function fetchSignalComposite(
     mode === "swing"
       ? "/api/stocvest/signals/composite/swing"
       : "/api/stocvest/signals/composite/real";
-  const response = await fetch(path, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ symbol }),
-    credentials: "same-origin",
-    signal: opts.signal
-  });
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ symbol }),
+      credentials: "same-origin",
+      signal: opts.signal
+    });
+  } catch (err: unknown) {
+    if (opts.signal?.aborted) throw err;
+    return { error: "upstream_unavailable" };
+  }
   if (!response.ok) {
     throw new Error(
       `Composite request to ${path} failed: ${response.status} ${response.statusText}`

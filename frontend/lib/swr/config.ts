@@ -84,6 +84,9 @@ export const STOCVEST_SWR_DEFAULTS: SWRConfiguration = {
     }
     if (err instanceof Error) {
       if (/\bfailed:\s*50[234]\b/i.test(err.message)) return false;
+      // Dev-server restarts / offline tabs — retrying fans out Failed to fetch noise.
+      if (/failed to fetch/i.test(err.message)) return false;
+      if (/networkerror/i.test(err.message)) return false;
     }
     return true;
   }
