@@ -647,6 +647,8 @@ function TradingRoomBody({
     marketOpen,
     marketStatusLabel,
     regimeLabel,
+    marketRegime: macro?.market_regime ?? null,
+    macroScore: macro?.macro_score ?? null,
     sessionNarrative,
     aiNarrative: aiBrief?.available ? aiBrief.narrative : null,
     spyPct,

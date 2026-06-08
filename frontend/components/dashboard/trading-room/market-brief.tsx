@@ -6,6 +6,12 @@ import { useTheme } from "@/lib/theme-provider";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { regimeTone } from "@/lib/market-context/regime";
 import {
+  buildRegimeWhyLine,
+  buildRegimeWhyTooltip,
+  regimeWhyEmphasize
+} from "@/lib/market-context/regime-why-present";
+import { InfoTip } from "@/components/info-tip";
+import {
   briefNoSetupLabel,
   briefSessionSubtitle,
   isPreparationPhase,
@@ -75,6 +81,10 @@ export interface MarketBriefData {
   /** Short status chip text, e.g. "Market open", "Market closed". */
   marketStatusLabel: string;
   regimeLabel: string;
+  /** Backend macro bucket: risk_on | neutral | risk_off | avoid. */
+  marketRegime?: string | null;
+  /** Weighted macro score (0–100) behind `marketRegime`. */
+  macroScore?: number | null;
   /** One-line deterministic read on how the tape is acting. */
   sessionNarrative: string | null;
   /** AI-written multi-sentence market narrative (preferred when present). */
@@ -190,6 +200,18 @@ export function MarketBrief({ data, onViewTopSetup, onSearch }: MarketBriefProps
   const sessionLead = briefSessionSubtitle(data.sessionPhase);
   const showPrep = isPreparationPhase(data.sessionPhase);
   const noSetupLabel = briefNoSetupLabel(data.sessionPhase);
+  const regimeWhyInput = {
+    regimeLabel: data.regimeLabel,
+    marketRegime: data.marketRegime,
+    macroScore: data.macroScore,
+    spyPct: data.spyPct,
+    qqqPct: data.qqqPct,
+    vixLevel: data.vixLevel,
+    vixPct: data.vixPct
+  };
+  const regimeWhyLine = buildRegimeWhyLine(regimeWhyInput);
+  const regimeWhyTip = buildRegimeWhyTooltip(regimeWhyInput);
+  const emphasizeRegimeWhy = regimeWhyEmphasize(regimeWhyInput);
 
   const dotFor = (s: BriefHeadline["sentiment"]) =>
     s === "bullish" ? colors.bullish : s === "bearish" ? colors.bearish : colors.textMuted;
@@ -272,11 +294,26 @@ export function MarketBrief({ data, onViewTopSetup, onSearch }: MarketBriefProps
             <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, whiteSpace: "nowrap" }}>{updated}</span>
           ) : null}
         </div>
-        <span style={{ fontSize: typography.scale.xl, fontWeight: 700, lineHeight: 1.25 }}>
-          <span style={{ color: tone.fg }}>{data.regimeLabel} regime</span>
-          <span style={{ color: colors.textMuted, fontWeight: 400 }}> · </span>
-          <span style={{ fontWeight: 600 }}>{sessionLead}</span>
-        </span>
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: spacing[2] }}>
+          <span style={{ fontSize: typography.scale.xl, fontWeight: 700, lineHeight: 1.25 }}>
+            <span style={{ color: tone.fg }}>{data.regimeLabel} regime</span>
+            <span style={{ color: colors.textMuted, fontWeight: 400 }}> · </span>
+            <span style={{ fontWeight: 600 }}>{sessionLead}</span>
+          </span>
+          <InfoTip text={regimeWhyTip} label="Why this regime" maxWidth={360} />
+        </div>
+        {regimeWhyLine ? (
+          <p
+            data-testid="market-brief-regime-why"
+            className="m-0 text-xs leading-relaxed"
+            style={{
+              color: emphasizeRegimeWhy ? colors.caution : colors.textMuted,
+              fontWeight: emphasizeRegimeWhy ? 600 : 400
+            }}
+          >
+            {regimeWhyLine}
+          </p>
+        ) : null}
         {data.aiNarrative ? (
           <span style={{ fontSize: typography.scale.base, color: colors.text, lineHeight: 1.6 }}>
             {data.aiNarrative}
