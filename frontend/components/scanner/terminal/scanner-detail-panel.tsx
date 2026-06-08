@@ -2,8 +2,12 @@
 
 import Link from "next/link";
 import { AddToWatchlistButton } from "@/components/add-to-watchlist-button";
+import { ScannerSymbolLookupPanel } from "@/components/scanner/terminal/scanner-symbol-lookup-panel";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import type { ThemeColors } from "@/lib/design-system";
+import type { ScannerEvaluationTraceRow } from "@/lib/scanner-setups-response";
+import { minRrForDeskMode } from "@/lib/signal-evidence/market-environment-present";
+import type { MarketEnvironmentPayload } from "@/lib/signal-evidence/market-environment-present";
 import type {
   ScannerTerminalGapRow,
   ScannerTerminalRadarGroup,
@@ -17,6 +21,8 @@ type Props = {
   actionable: ScannerTerminalSignalRow[];
   developing: ScannerTerminalSignalRow[];
   radar: ScannerTerminalRadarGroup[];
+  environment: MarketEnvironmentPayload | null;
+  evaluationTrace: ScannerEvaluationTraceRow[];
   colors: ThemeColors;
 };
 
@@ -42,7 +48,7 @@ function EmptyState({ colors }: { colors: ThemeColors }) {
         Select any symbol
       </p>
       <p style={{ margin: `${spacing[2]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.5 }}>
-        Tap a row, card, or theme to see a quick preview. Open on dashboard for full detail.
+        Tap a row, card, or theme to see a quick preview. Search a ticker to see why it is missing from the funnel.
       </p>
     </div>
   );
@@ -72,8 +78,61 @@ function CtaRow({ symbol, lane, colors }: { symbol: string; lane: "day" | "swing
   );
 }
 
-export function ScannerDetailPanel({ selection, gaps, actionable, developing, radar, colors }: Props) {
+function RrGateLine({
+  riskReward,
+  lane,
+  environment,
+  colors
+}: {
+  riskReward: number | null;
+  lane: "day" | "swing";
+  environment: MarketEnvironmentPayload | null;
+  colors: ThemeColors;
+}) {
+  if (riskReward == null) return null;
+  const minRr = minRrForDeskMode(environment, lane);
+  const clears = riskReward >= minRr;
+  return (
+    <p
+      style={{
+        margin: `${spacing[2]} 0 0`,
+        fontSize: typography.scale.xs,
+        color: clears ? colors.bullish : colors.caution,
+        fontWeight: 600
+      }}
+    >
+      {clears
+        ? `Clears ${minRr.toFixed(1)}:1 desk gate`
+        : `Below ${minRr.toFixed(1)}:1 desk gate (${riskReward.toFixed(1)}:1)`}
+      {environment && environment.environment_tier !== "normal"
+        ? ` · ${environment.environment_tier} session`
+        : ""}
+    </p>
+  );
+}
+
+export function ScannerDetailPanel({
+  selection,
+  gaps,
+  actionable,
+  developing,
+  radar,
+  environment,
+  evaluationTrace,
+  colors
+}: Props) {
   if (!selection) return <EmptyState colors={colors} />;
+
+  if (selection.kind === "lookup") {
+    return (
+      <ScannerSymbolLookupPanel
+        symbol={selection.symbol}
+        lane={selection.lane}
+        evaluationTrace={evaluationTrace}
+        colors={colors}
+      />
+    );
+  }
 
   if (selection.kind === "gap") {
     const row = gaps.find((g) => g.symbol === selection.symbol);
@@ -144,6 +203,7 @@ export function ScannerDetailPanel({ selection, gaps, actionable, developing, ra
           {align ? ` · ${align}` : ""}
           {row.riskReward != null ? ` · R/R ${row.riskReward.toFixed(1)}:1` : ""}
         </p>
+        <RrGateLine riskReward={row.riskReward} lane={row.lane} environment={environment} colors={colors} />
         <p style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.sm, color: colors.textMuted }}>
           {fmtPrice(row.price)}
           {row.changePct != null ? ` (${fmtPct(row.changePct)})` : ""}
@@ -198,6 +258,7 @@ export function ScannerDetailPanel({ selection, gaps, actionable, developing, ra
           Blocking: {row.blockerNote}
         </p>
       ) : null}
+      <RrGateLine riskReward={row.riskReward} lane={row.lane} environment={environment} colors={colors} />
       <CtaRow symbol={row.symbol} lane={row.lane} colors={colors} />
     </div>
   );

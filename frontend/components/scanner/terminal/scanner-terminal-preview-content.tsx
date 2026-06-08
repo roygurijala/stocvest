@@ -5,6 +5,8 @@ import { ScannerTerminal } from "@/components/scanner/terminal/scanner-terminal"
 import { loadScannerDataWithoutBrief } from "@/lib/api/scanner-client-load";
 import type { ScannerOverview, ScannerSetupLoadMode } from "@/lib/api/scanner";
 import { mergeScannerCoreIntoOverview } from "@/lib/scanner-overview-merge";
+import { fetchScannerEvaluationTraceClient } from "@/lib/api/scanner-trace-client";
+import type { ScannerEvaluationTraceRow } from "@/lib/scanner-setups-response";
 import { nearRowsFromSetups } from "@/lib/scanner-scan-summary";
 import { useDeskToday } from "@/lib/hooks/use-desk-today";
 import { useTheme } from "@/lib/theme-provider";
@@ -32,6 +34,7 @@ export function ScannerTerminalPreviewContent({ initialScannerSetupLoadMode, day
   const [loadedAt, setLoadedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [watchlistSymbols, setWatchlistSymbols] = useState<string[]>([]);
+  const [evaluationTrace, setEvaluationTrace] = useState<ScannerEvaluationTraceRow[]>([]);
 
   const { data: swingDeskRes } = useDeskToday("swing");
   const { data: dayDeskRes } = useDeskToday("day", { fallbackData: undefined });
@@ -53,6 +56,12 @@ export function ScannerTerminalPreviewContent({ initialScannerSetupLoadMode, day
       if (!core.error) {
         setOverview((prev) => mergeScannerCoreIntoOverview(prev, core));
         setLoadedAt(new Date().toISOString());
+      }
+      try {
+        const trace = await fetchScannerEvaluationTraceClient(scannerSetupMode, 24);
+        if (!cancelled) setEvaluationTrace(trace);
+      } catch {
+        /* ignore */
       }
       try {
         const wl = await fetch("/api/stocvest/watchlists/default/symbols", { cache: "no-store" });
@@ -100,6 +109,7 @@ export function ScannerTerminalPreviewContent({ initialScannerSetupLoadMode, day
       nearQualification={nearQualification}
       watchlistSymbols={watchlistSymbols}
       dayTradingSurfaces={dayTradingSurfaces}
+      evaluationTrace={evaluationTrace}
       updatedLabel={updatedLabel}
     />
   );

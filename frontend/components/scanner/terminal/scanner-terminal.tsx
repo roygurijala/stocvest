@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useTheme } from "@/lib/theme-provider";
 import { borderRadius, roleAccents, spacing, typography } from "@/lib/design-system";
 import { MarketEnvironmentStrip } from "@/components/market-environment-strip";
@@ -10,10 +10,14 @@ import { mapMacroRegimeToLabel } from "@/lib/market-context/regime";
 import { isUsRegularSessionOpenEt } from "@/lib/market-hours-et";
 import type { ScannerOverview } from "@/lib/api/scanner";
 import type { DeskTodayData } from "@/lib/api/desk-today";
+import type { ScannerEvaluationTraceRow } from "@/lib/scanner-setups-response";
 import type { ScannerNearQualificationRow } from "@/lib/scanner-scan-summary";
+import { environmentSessionCardHint } from "@/lib/signal-evidence/environment-session-hint";
+import type { MarketEnvironmentPayload } from "@/lib/signal-evidence/market-environment-present";
 import {
   buildScannerTerminalSections,
   DEFAULT_SCANNER_TERMINAL_FILTERS,
+  isTickerSearchQuery,
   type ScannerTerminalFilters,
   type ScannerTerminalGapRow,
   type ScannerTerminalRadarGroup,
@@ -29,6 +33,7 @@ type Props = {
   nearQualification: ScannerNearQualificationRow[];
   watchlistSymbols: string[];
   dayTradingSurfaces: boolean;
+  evaluationTrace?: ScannerEvaluationTraceRow[];
   updatedLabel?: string | null;
 };
 
@@ -148,12 +153,14 @@ function SignalRow({
   highlight,
   selected,
   onSelect,
+  sessionHint,
   colors
 }: {
   row: ScannerTerminalSignalRow;
   highlight?: boolean;
   selected: boolean;
   onSelect: () => void;
+  sessionHint?: string | null;
   colors: ReturnType<typeof useTheme>["colors"];
 }) {
   const laneAccent =
@@ -192,7 +199,27 @@ function SignalRow({
       {highlight && row.verdict ? (
         <p style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted }}>{row.verdict}</p>
       ) : null}
+      {sessionHint ? (
+        <p style={{ margin: `${spacing[1]} 0 0`, fontSize: 10, color: colors.caution, fontWeight: 600 }}>{sessionHint}</p>
+      ) : null}
     </button>
+  );
+}
+
+function DevelopingSubLabel({ children, colors }: { children: string; colors: ReturnType<typeof useTheme>["colors"] }) {
+  return (
+    <p
+      style={{
+        margin: `${spacing[2]} 0 ${spacing[1]}`,
+        fontSize: 9.5,
+        fontWeight: 700,
+        letterSpacing: "0.1em",
+        textTransform: "uppercase",
+        color: colors.textMuted
+      }}
+    >
+      {children}
+    </p>
   );
 }
 
@@ -244,6 +271,7 @@ export function ScannerTerminal({
   nearQualification,
   watchlistSymbols,
   dayTradingSurfaces,
+  evaluationTrace = [],
   updatedLabel
 }: Props) {
   const { colors } = useTheme();
@@ -251,6 +279,7 @@ export function ScannerTerminal({
   const { data: macro } = useMacroContext();
   const [filters, setFilters] = useState<ScannerTerminalFilters>(DEFAULT_SCANNER_TERMINAL_FILTERS);
   const [selection, setSelection] = useState<ScannerTerminalSelection>(null);
+  const [narrowLayout, setNarrowLayout] = useState(false);
   const [openSections, setOpenSections] = useState({
     gaps: true,
     actionable: true,
@@ -259,6 +288,14 @@ export function ScannerTerminal({
   });
 
   const watchSet = useMemo(() => new Set(watchlistSymbols.map((s) => s.trim().toUpperCase())), [watchlistSymbols]);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 900px)");
+    const apply = () => setNarrowLayout(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
 
   const sections = useMemo(
     () =>
@@ -285,11 +322,34 @@ export function ScannerTerminal({
       ? `VIX ${environment.environment_tier === "normal" ? "calm" : environment.environment_tier} ${environment.vix_level.toFixed(1)}`
       : null;
 
+  const feedStateForHint = (state: ScannerTerminalSignalRow["state"]) =>
+    state === "actionable" ? "actionable" : state === "near" ? "near" : "potential";
+
+  const sessionHintForRow = (row: ScannerTerminalSignalRow, env: MarketEnvironmentPayload | null) => {
+    if (!env) return null;
+    return environmentSessionCardHint(env, row.lane, feedStateForHint(row.state));
+  };
+
+  const allVisibleSymbols = useMemo(() => {
+    const set = new Set<string>();
+    for (const g of sections.gaps) set.add(g.symbol);
+    for (const r of [...sections.actionable, ...sections.developing]) set.add(r.symbol);
+    return set;
+  }, [sections]);
+
+  useEffect(() => {
+    const ticker = isTickerSearchQuery(filters.query);
+    if (!ticker) return;
+    if (allVisibleSymbols.has(ticker)) return;
+    const lane = filters.mode === "day" ? "day" : "swing";
+    setSelection({ kind: "lookup", symbol: ticker, lane });
+  }, [filters.query, filters.mode, allVisibleSymbols]);
+
   const shellStyle: CSSProperties = {
     display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr) minmax(280px, 340px)",
+    gridTemplateColumns: narrowLayout ? "1fr" : "minmax(0, 1fr) minmax(280px, 340px)",
     gap: spacing[4],
-    minHeight: "calc(100vh - 4rem)"
+    minHeight: narrowLayout ? undefined : "calc(100vh - 4rem)"
   };
 
   const toggleSection = (key: keyof typeof openSections) =>
@@ -360,7 +420,10 @@ export function ScannerTerminal({
         type="search"
         placeholder="Is a symbol in our radar? Search to find out…"
         value={filters.query}
-        onChange={(e) => setFilters((f) => ({ ...f, query: e.target.value }))}
+        onChange={(e) => {
+          setFilters((f) => ({ ...f, query: e.target.value }));
+          if (!e.target.value.trim()) setSelection(null);
+        }}
         style={{
           width: "100%",
           padding: `${spacing[2]} ${spacing[3]}`,
@@ -448,6 +511,7 @@ export function ScannerTerminal({
                       highlight
                       selected={selection?.kind === "signal" && selection.id === row.id}
                       onSelect={() => setSelection({ kind: "signal", id: row.id })}
+                      sessionHint={sessionHintForRow(row, environment)}
                       colors={colors}
                     />
                   ))
@@ -469,15 +533,37 @@ export function ScannerTerminal({
                 {sections.developing.length === 0 ? (
                   <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted }}>No developing setups in this filter.</p>
                 ) : (
-                  sections.developing.map((row) => (
-                    <SignalRow
-                      key={row.id}
-                      row={row}
-                      selected={selection?.kind === "signal" && selection.id === row.id}
-                      onSelect={() => setSelection({ kind: "signal", id: row.id })}
-                      colors={colors}
-                    />
-                  ))
+                  <>
+                    {sections.developingClosest.length > 0 ? (
+                      <>
+                        <DevelopingSubLabel colors={colors}>Closest to triggering</DevelopingSubLabel>
+                        {sections.developingClosest.map((row) => (
+                          <SignalRow
+                            key={row.id}
+                            row={row}
+                            selected={selection?.kind === "signal" && selection.id === row.id}
+                            onSelect={() => setSelection({ kind: "signal", id: row.id })}
+                            sessionHint={sessionHintForRow(row, environment)}
+                            colors={colors}
+                          />
+                        ))}
+                      </>
+                    ) : null}
+                    {sections.developingAlso.length > 0 ? (
+                      <>
+                        <DevelopingSubLabel colors={colors}>Also developing</DevelopingSubLabel>
+                        {sections.developingAlso.map((row) => (
+                          <SignalRow
+                            key={row.id}
+                            row={row}
+                            selected={selection?.kind === "signal" && selection.id === row.id}
+                            onSelect={() => setSelection({ kind: "signal", id: row.id })}
+                            colors={colors}
+                          />
+                        ))}
+                      </>
+                    ) : null}
+                  </>
                 )}
               </div>
             ) : null}
@@ -513,7 +599,7 @@ export function ScannerTerminal({
 
         <aside
           style={{
-            position: "sticky",
+            position: narrowLayout ? "static" : "sticky",
             top: spacing[4],
             alignSelf: "start",
             border: `1px solid ${colors.border}`,
@@ -528,6 +614,8 @@ export function ScannerTerminal({
             actionable={sections.actionable}
             developing={sections.developing}
             radar={sections.radar}
+            environment={environment}
+            evaluationTrace={evaluationTrace}
             colors={colors}
           />
         </aside>

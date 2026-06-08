@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
 import { Menu } from "lucide-react";
 import { useTheme } from "@/lib/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -412,6 +413,9 @@ function TradingRoomBody({
   // Open any searched symbol in the deep dive: reuse the richer feed card when
   // the symbol is already on the desk; otherwise synthesize a minimal card and
   // let the deep dive's composite fetch fill in the read.
+  const searchParams = useSearchParams();
+  const deepLinkHandled = useRef(false);
+
   const openSymbol = (symbol: string, company?: string | null) => {
     const sym = symbol.trim().toUpperCase();
     if (!sym) return;
@@ -445,6 +449,14 @@ function TradingRoomBody({
     if (overrideCard && overrideCard.id === selectedId) return overrideCard;
     return null;
   }, [allCards, selectedId, overrideCard]);
+
+  useEffect(() => {
+    if (deepLinkHandled.current) return;
+    const sym = searchParams.get("symbol")?.trim().toUpperCase();
+    if (!sym) return;
+    deepLinkHandled.current = true;
+    openSymbol(sym);
+  }, [searchParams, allCards]);
 
   // Top setup for the brief CTA: hottest actionable, else hottest overall.
   const topCard = useMemo(

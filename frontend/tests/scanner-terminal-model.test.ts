@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vitest";
-import { buildScannerTerminalSections } from "@/lib/scanner/terminal/scanner-terminal-model";
+import {
+  buildScannerTerminalSections,
+  isTickerSearchQuery,
+  splitDevelopingRows
+} from "@/lib/scanner/terminal/scanner-terminal-model";
 import type { IntradaySetupPayload } from "@/lib/api/scanner";
 
 describe("scanner-terminal-model", () => {
@@ -101,5 +105,48 @@ describe("scanner-terminal-model", () => {
 
     expect(sections.gaps).toHaveLength(1);
     expect(sections.gaps[0]?.symbol).toBe("ORCL");
+  });
+
+  test("splitDevelopingRows separates near from potential", () => {
+    const { closest, also } = splitDevelopingRows([
+      {
+        id: "swing:AMD",
+        symbol: "AMD",
+        company: null,
+        lane: "swing",
+        state: "near",
+        bias: "bull",
+        alignment: { aligned: 5, total: 6 },
+        riskReward: null,
+        verdict: "Near",
+        price: null,
+        changePct: null,
+        blockerNote: null
+      },
+      {
+        id: "swing:MSFT",
+        symbol: "MSFT",
+        company: null,
+        lane: "swing",
+        state: "potential",
+        bias: "bull",
+        alignment: null,
+        riskReward: null,
+        verdict: "Watch",
+        price: null,
+        changePct: null,
+        blockerNote: null
+      }
+    ]);
+    expect(closest).toHaveLength(1);
+    expect(closest[0]?.symbol).toBe("AMD");
+    expect(also).toHaveLength(1);
+    expect(also[0]?.symbol).toBe("MSFT");
+  });
+
+  test("isTickerSearchQuery accepts tickers only", () => {
+    expect(isTickerSearchQuery("OKTA")).toBe("OKTA");
+    expect(isTickerSearchQuery("  nvda ")).toBe("NVDA");
+    expect(isTickerSearchQuery("why missing")).toBeNull();
   });
 });

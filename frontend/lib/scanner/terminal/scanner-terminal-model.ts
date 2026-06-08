@@ -67,7 +67,16 @@ export type ScannerTerminalSelection =
   | { kind: "gap"; symbol: string }
   | { kind: "signal"; id: string }
   | { kind: "radar"; groupId: string; symbol?: string }
+  | { kind: "lookup"; symbol: string; lane: FeedLane }
   | null;
+
+/** Ticker-shaped search (1–6 alnum) for why-missing lookup. */
+export function isTickerSearchQuery(query: string): string | null {
+  const q = query.trim().toUpperCase();
+  if (!q || q.length > 6) return null;
+  if (!/^[A-Z][A-Z0-9.-]{0,5}$/.test(q)) return null;
+  return q;
+}
 
 function normQuery(q: string): string {
   return q.trim().toUpperCase();
@@ -268,9 +277,20 @@ export type ScannerTerminalSections = {
   gaps: ScannerTerminalGapRow[];
   actionable: ScannerTerminalSignalRow[];
   developing: ScannerTerminalSignalRow[];
+  developingClosest: ScannerTerminalSignalRow[];
+  developingAlso: ScannerTerminalSignalRow[];
   radar: ScannerTerminalRadarGroup[];
   actionableCount: number;
 };
+
+export function splitDevelopingRows(rows: ScannerTerminalSignalRow[]): {
+  closest: ScannerTerminalSignalRow[];
+  also: ScannerTerminalSignalRow[];
+} {
+  const closest = rows.filter((r) => r.state === "near");
+  const also = rows.filter((r) => r.state !== "near");
+  return { closest, also };
+}
 
 export function buildScannerTerminalSections(input: BuildScannerTerminalInput): ScannerTerminalSections {
   const { filters, watchlistSymbols } = input;
@@ -319,10 +339,15 @@ export function buildScannerTerminalSections(input: BuildScannerTerminalInput): 
   if (filters.state === "actionable") developingOut = [];
   if (filters.state === "developing") actionableOut = [];
 
+  const developingCapped = developingOut.slice(0, 16);
+  const { closest, also } = splitDevelopingRows(developingCapped);
+
   return {
     gaps,
     actionable: actionableOut.slice(0, 12),
-    developing: developingOut.slice(0, 16),
+    developing: developingCapped,
+    developingClosest: closest,
+    developingAlso: also,
     radar: buildRadarGroups(input.swingDesk, input.dayDesk, filters.mode),
     actionableCount: actionable.length
   };
