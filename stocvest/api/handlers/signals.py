@@ -549,6 +549,15 @@ def swing_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[
                 macro_regime = str(
                     payload.get("macro_market_regime") or payload.get("market_regime") or regime or "neutral"
                 )
+                _sector_gate_score = None
+                for _key in ("sector_layer_score", "sector_score"):
+                    _raw_sec = payload.get(_key)
+                    if _raw_sec is not None:
+                        try:
+                            _sector_gate_score = float(_raw_sec)
+                        except (TypeError, ValueError):
+                            pass
+                        break
                 eligible, gates = evaluate_swing_ledger_entry(
                     response_status=str(response_body.get("status") or "active"),
                     verdict=composite.verdict,
@@ -557,6 +566,7 @@ def swing_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[
                     macro_market_regime=macro_regime,
                     risk_reward=rr_f,
                     layer_scores=layer_scores,
+                    sector_layer_score=_sector_gate_score,
                 )
                 gen_at = datetime.now(timezone.utc)
                 uid = request_context.user_id

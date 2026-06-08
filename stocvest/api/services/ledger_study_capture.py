@@ -51,6 +51,7 @@ def maybe_persist_ledger_study_row(
     risk_reward: float | None,
     price_at_signal: float | None,
     layer_scores: dict[str, float],
+    sector_layer_score: float | None = None,
     signal_strength: int,
     pattern: str,
     params: SignalParameters,
@@ -131,6 +132,7 @@ def maybe_persist_ledger_study_row(
             macro_market_regime=macro_market_regime,
             risk_reward=risk_reward,
             layer_scores=layer_scores,
+            sector_layer_score=sector_layer_score,
             market_environment=market_environment,
         )
         if eligible:

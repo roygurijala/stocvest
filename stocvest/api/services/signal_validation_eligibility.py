@@ -68,6 +68,27 @@ def _score_0_100_from_composite(composite_score: float) -> int:
     return max(0, min(100, v))
 
 
+def _sector_score_for_gate(
+    *,
+    sector_layer_score: float | None,
+    layer_scores: dict[str, float],
+) -> float | None:
+    """Return sector analyzer score (0–100) for the ledger gate.
+
+    ``layer_scores["sector"]`` stores composite ``LayerSignal`` values on [-1, 1];
+    those must not be compared to ``MIN_SECTOR_LAYER_SCORE`` (45).
+    """
+    if sector_layer_score is not None:
+        return float(sector_layer_score)
+    raw = {str(k).lower(): float(v) for k, v in layer_scores.items()}
+    legacy = raw.get("sector")
+    if legacy is None:
+        return None
+    if -1.0 <= legacy <= 1.0:
+        return None
+    return legacy
+
+
 def evaluate_swing_ledger_entry(
     *,
     response_status: str,
@@ -77,6 +98,7 @@ def evaluate_swing_ledger_entry(
     macro_market_regime: str,
     risk_reward: float | None,
     layer_scores: dict[str, float],
+    sector_layer_score: float | None = None,
     market_environment: dict[str, Any] | None = None,
 ) -> tuple[bool, dict[str, Any]]:
     """Swing: multi-day framing; R/R minimum from environment policy when provided."""
@@ -140,9 +162,10 @@ def evaluate_swing_ledger_entry(
     else:
         gates["risk_reward"] = {"pass": True, "value": float(risk_reward)}
 
-    raw = {str(k).lower(): float(v) for k, v in layer_scores.items()}
-    sec = raw.get("sector")
-    if sec is not None and sec < MIN_SECTOR_LAYER_SCORE:
+    sec = _sector_score_for_gate(sector_layer_score=sector_layer_score, layer_scores=layer_scores)
+    if sec is None:
+        gates["sector_gate"] = {"pass": True, "value": None, "reason": "sector_unavailable"}
+    elif sec < MIN_SECTOR_LAYER_SCORE:
         gates["sector_gate"] = {"pass": False, "value": sec, "min": MIN_SECTOR_LAYER_SCORE}
         ok = False
     else:

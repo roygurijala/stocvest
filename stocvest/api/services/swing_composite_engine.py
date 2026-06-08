@@ -723,6 +723,9 @@ async def build_swing_composite_response(
                         rr_f = float(rr_raw)
                     except (TypeError, ValueError):
                         rr_f = None
+                _sector_gate_score = (
+                    float(sector.score) if getattr(sector, "score", None) is not None else None
+                )
                 eligible, gates = evaluate_swing_ledger_entry(
                     response_status=str(response_body.get("status") or "active"),
                     verdict=composite.verdict,
@@ -731,6 +734,7 @@ async def build_swing_composite_response(
                     macro_market_regime=str(macro.market_regime or "neutral"),
                     risk_reward=rr_f,
                     layer_scores=layer_scores,
+                    sector_layer_score=_sector_gate_score,
                     market_environment=_market_env,
                 )
                 gen_at = datetime.now(timezone.utc)
@@ -866,6 +870,9 @@ async def build_swing_composite_response(
                 risk_reward=_rr_eq,
                 price_at_signal=float(last_px) if last_px else None,
                 layer_scores=layer_scores_neutral,
+                sector_layer_score=(
+                    float(sector.score) if getattr(sector, "score", None) is not None else None
+                ),
                 signal_strength=int(round(max(0.0, min(1.0, composite.confidence)) * 100)),
                 pattern=pattern,
                 params=params,
