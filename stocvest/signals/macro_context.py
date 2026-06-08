@@ -106,6 +106,41 @@ def polygon_econ_to_macro_events(rows: list[EconomicCalendarEvent]) -> list[Macr
     return out
 
 
+def _collapse_fed_meeting_events(events: list[MacroEvent]) -> list[MacroEvent]:
+    """FOMC meetings span at most two days — keep the decision day (last day of each pair)."""
+    fed = [e for e in events if e.category == MacroEventCategory.FED]
+    other = [e for e in events if e.category != MacroEventCategory.FED]
+    if len(fed) <= 1:
+        return events
+
+    fed.sort(key=lambda x: x.scheduled_time)
+    collapsed: list[MacroEvent] = []
+    cluster: list[MacroEvent] = []
+    for e in fed:
+        if not cluster:
+            cluster = [e]
+            continue
+        gap = (e.scheduled_time.date() - cluster[-1].scheduled_time.date()).days
+        if gap == 0:
+            continue
+        if gap == 1 and len(cluster) < 2:
+            cluster.append(e)
+        else:
+            collapsed.append(max(cluster, key=lambda x: x.scheduled_time))
+            cluster = [e]
+    if cluster:
+        collapsed.append(max(cluster, key=lambda x: x.scheduled_time))
+    if len(collapsed) > 1:
+        collapsed.sort(key=lambda x: x.scheduled_time)
+        trimmed = [collapsed[0]]
+        for e in collapsed[1:]:
+            if (e.scheduled_time.date() - trimmed[-1].scheduled_time.date()).days <= 5:
+                continue
+            trimmed.append(e)
+        collapsed = trimmed
+    return sorted(other + collapsed, key=lambda x: x.scheduled_time)
+
+
 def _merge_dedupe_events(primary: list[MacroEvent], extra: list[MacroEvent]) -> list[MacroEvent]:
     seen: set[tuple[str, str]] = set()
     merged: list[MacroEvent] = []
@@ -115,7 +150,7 @@ def _merge_dedupe_events(primary: list[MacroEvent], extra: list[MacroEvent]) -> 
             continue
         seen.add(key)
         merged.append(e)
-    return merged
+    return _collapse_fed_meeting_events(merged)
 
 
 async def get_macro_context(
@@ -147,6 +182,8 @@ async def get_macro_context(
 
     if poly_macro:
         events = _merge_dedupe_events(list(events), poly_macro)
+    else:
+        events = _collapse_fed_meeting_events(list(events))
 
     for e in events:
         compute_event_status(e)
