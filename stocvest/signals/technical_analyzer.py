@@ -230,6 +230,64 @@ def _orb_signal_from_store_state(
     return "unavailable", None, None
 
 
+def _session_open_price(bars: list[Bar]) -> Optional[float]:
+    if not bars:
+        return None
+    o = float(bars[0].open or 0.0)
+    if o > 0:
+        return o
+    c = float(bars[0].close or 0.0)
+    return c if c > 0 else None
+
+
+def _session_high(bars: list[Bar]) -> Optional[float]:
+    if not bars:
+        return None
+    highs = [float(b.high) for b in bars if b.high and float(b.high) > 0]
+    return max(highs) if highs else None
+
+
+def _apply_session_momentum_score(
+    base_score: float,
+    *,
+    price: float,
+    bars: list[Bar],
+    closes: list[float],
+    params: TechnicalParameters,
+) -> float:
+    """Nudge intraday score from session open trend and pullback from session high."""
+    session_open = _session_open_price(bars)
+    if session_open and session_open > 0:
+        session_roc = (price - session_open) / session_open
+        if session_roc >= params.session_momentum_strong_pct:
+            base_score += params.session_momentum_strong_score
+        elif session_roc >= params.session_momentum_moderate_pct:
+            base_score += params.session_momentum_moderate_score
+        elif session_roc <= -params.session_momentum_strong_pct:
+            base_score -= params.session_momentum_strong_score
+        elif session_roc <= -params.session_momentum_moderate_pct:
+            base_score -= params.session_momentum_moderate_score
+
+    session_high = _session_high(bars)
+    if session_high and session_high > 0:
+        pullback = (price - session_high) / session_high
+        if pullback <= -params.session_pullback_strong_pct:
+            base_score -= params.session_pullback_strong_penalty
+        elif pullback <= -params.session_pullback_moderate_pct:
+            base_score -= params.session_pullback_moderate_penalty
+
+    lb = params.recent_bar_momentum_lookback
+    if lb > 0 and len(closes) >= 2 * lb:
+        recent_chg = closes[-1] - closes[-lb]
+        prior_chg = closes[-lb] - closes[-2 * lb]
+        if recent_chg < 0 and prior_chg > 0:
+            base_score -= params.recent_bar_momentum_score
+        elif recent_chg > 0 and prior_chg < 0:
+            base_score += params.recent_bar_momentum_score
+
+    return base_score
+
+
 def _compute_volume_ratio(
     bars: list[Bar],
     params: TechnicalParameters,
@@ -339,6 +397,12 @@ class TechnicalAnalyzer:
 
         prev_day_high: Optional[float] = None
         prev_day_low: Optional[float] = None
+        _pdh = snapshot.prev_day_high
+        _pdl = snapshot.prev_day_low
+        if _pdh is not None and float(_pdh) > 0:
+            prev_day_high = float(_pdh)
+        if _pdl is not None and float(_pdl) > 0:
+            prev_day_low = float(_pdl)
 
         base_score = 50.0
 
@@ -375,6 +439,22 @@ class TechnicalAnalyzer:
         if volume_surge:
             direction = 1 if base_score > 50 else -1
             base_score += direction * params.volume_amplifier
+
+        if prev_day_high is not None and prev_day_high > 0:
+            if price > prev_day_high:
+                base_score += params.pdh_pdl_score_delta
+            elif price < prev_day_high * 0.995:
+                base_score -= params.pdh_pdl_score_delta // 2
+        if prev_day_low is not None and prev_day_low > 0 and price < prev_day_low:
+            base_score -= params.pdh_pdl_score_delta
+
+        base_score = _apply_session_momentum_score(
+            base_score,
+            price=price,
+            bars=bars,
+            closes=closes,
+            params=params,
+        )
 
         final_score = int(max(0, min(100, round(base_score))))
 
@@ -414,7 +494,16 @@ class TechnicalAnalyzer:
                 parts.append(f"RSI {rsi:.0f}")
         if volume_surge:
             parts.append(f"Volume {volume_ratio:.1f}x recent average — surge")
-        reasoning = ". ".join(parts[:3]) or f"Technical score {final_score}/100 from {len(bars)} bars"
+        session_open = _session_open_price(bars)
+        if session_open and session_open > 0:
+            s_roc = (price - session_open) / session_open * 100.0
+            parts.append(f"Session {s_roc:+.2f}% vs open")
+        session_high = _session_high(bars)
+        if session_high and session_high > 0:
+            pull = (price - session_high) / session_high * 100.0
+            if pull <= -params.session_pullback_moderate_pct:
+                parts.append(f"Pullback {pull * 100:.2f}% from session high")
+        reasoning = ". ".join(parts[:4]) or f"Technical score {final_score}/100 from {len(bars)} bars"
 
         chips: list[str] = []
         if rsi is not None:

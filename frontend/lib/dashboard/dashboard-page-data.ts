@@ -19,7 +19,13 @@ import type { WeeklyIndexRow } from "@/components/weekly-market-context-widget";
 import { timeoutFallback } from "@/lib/dashboard/dashboard-fetch-resilience";
 import { timeDashboardPhase } from "@/lib/dashboard/load-timing";
 
-export type DashboardSectorRotationRow = { symbol: string; label: string; pct5d: number | null };
+export type DashboardSectorRotationRow = {
+  symbol: string;
+  label: string;
+  pct5d: number | null;
+  /** Most recent daily-session change (today's close vs prior when the tape is shut). */
+  pct1d: number | null;
+};
 
 export const DASHBOARD_MARKET_TIMEOUT_MS = 58_000;
 export const DASHBOARD_SCANNER_TIMEOUT_MS = 58_000;
@@ -71,10 +77,14 @@ function buildWeeklyRows(dailyCloses: Record<string, number[]>, snapshots: Snaps
 }
 
 function buildSectorRows(dailyCloses: Record<string, number[]>): DashboardSectorRotationRow[] {
-  return SECTOR_ROTATION_META.map((row) => ({
-    ...row,
-    pct5d: pctChangeOverDailySessions(dailyCloses[row.symbol] ?? [], 5)
-  }));
+  return SECTOR_ROTATION_META.map((row) => {
+    const closes = dailyCloses[row.symbol] ?? [];
+    return {
+      ...row,
+      pct5d: pctChangeOverDailySessions(closes, 5),
+      pct1d: pctChangeOverDailySessions(closes, 1)
+    };
+  });
 }
 
 const marketFallback: MarketOverview = { snapshots: [], news: [], error: "Market data timed out." };

@@ -114,6 +114,8 @@ class Snapshot(BaseModel):
     day_volume:         Optional[float] = None
     day_vwap:           Optional[float] = None
     prev_close:         Optional[float] = None
+    prev_day_high:      Optional[float] = None   # prior completed session high (day desk PDH)
+    prev_day_low:       Optional[float] = None    # prior completed session low (day desk PDL)
     change:             Optional[float] = None   # price change vs prev close
     change_percent:     Optional[float] = None   # % change vs prev close
     pre_market_price:   Optional[float] = None

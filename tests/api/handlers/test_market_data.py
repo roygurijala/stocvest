@@ -387,11 +387,17 @@ class _DiversityPolygonClient(_FakePolygonClient):
 
 
 def test_news_handler_applies_publisher_diversity_cap() -> None:
+    """The market-wide (no-symbol) tape spreads across publishers: it prefers one
+    headline per source and never lets a single outlet exceed two, so no publisher
+    dominates the brief even when it has the most candidates."""
     event = {"queryStringParameters": {"limit": "8"}}
     response = news_handler(event, {}, client_factory=_DiversityPolygonClient)
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
     pubs = [h["publisher"]["name"] for h in body["headlines"]]
+    # All three distinct publishers represented; Reuters (3 candidates) capped at 2.
+    assert set(pubs) == {"Reuters", "Bloomberg", "CNBC"}
+    assert max(pubs.count(p) for p in set(pubs)) <= 2
     assert pubs.count("Reuters") == 2
 
 

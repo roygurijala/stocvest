@@ -2,7 +2,30 @@ import { NextResponse } from "next/server";
 import { stocvestAuthedFetch } from "@/lib/bff/stocvest-authed";
 import { canonicalUsTickerFromSearch } from "@/lib/symbol-ticker";
 import { isTickerSearchQueryReady } from "@/lib/ticker-search-query";
-import { finalizeTickerSearchItems } from "@/lib/symbol-typeahead";
+import { finalizeTickerSearchItems, type TickerSearchItem } from "@/lib/symbol-typeahead";
+import { rankSymbolCandidates } from "@/lib/symbol-suggestion-rank";
+
+/**
+ * Rank search hits so the exact ticker match (bucket 0) and prefix
+ * matches (bucket 1) always surface before company-name matches,
+ * regardless of the order the upstream API returns them.
+ */
+function rankTickerItems(q: string, items: TickerSearchItem[]): TickerSearchItem[] {
+  const ranked = rankSymbolCandidates(
+    items.map((i) => ({
+      symbol: i.symbol,
+      label: i.name ? `${i.symbol} — ${i.name}` : i.symbol
+    })),
+    q
+  );
+  const symbolOrder = new Map(ranked.map((r, idx) => [r.symbol, idx]));
+  const sorted = [...items].sort((a, b) => {
+    const ai = symbolOrder.get(a.symbol) ?? 999;
+    const bi = symbolOrder.get(b.symbol) ?? 999;
+    return ai - bi;
+  });
+  return finalizeTickerSearchItems(q, sorted);
+}
 
 function mapPolygonResults(data: unknown): { symbol: string; name: string }[] {
   if (!data || typeof data !== "object") return [];
@@ -50,11 +73,9 @@ export async function GET(req: Request) {
       method: "GET"
     });
     if (res.ok) {
-      const text = await res.text();
-      return new Response(text, {
-        status: 200,
-        headers: { "content-type": res.headers.get("content-type") || "application/json" }
-      });
+      const data = await res.json().catch(() => null);
+      const raw: TickerSearchItem[] = Array.isArray(data?.items) ? data.items : [];
+      return NextResponse.json({ items: rankTickerItems(q, raw) });
     }
   } catch {
     /* fall through to Polygon / soft error */
@@ -62,7 +83,7 @@ export async function GET(req: Request) {
 
   const direct = await polygonDirectSearch(q);
   if (direct.length > 0) {
-    return NextResponse.json({ items: finalizeTickerSearchItems(q, direct) });
+    return NextResponse.json({ items: rankTickerItems(q, direct) });
   }
 
   return NextResponse.json(

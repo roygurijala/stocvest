@@ -1,16 +1,158 @@
 "use client";
 
+import { useState } from "react";
 import type { SetupJudgment } from "@/lib/signal-evidence/setup-judgment";
-import { formatLayerProgressDots } from "@/lib/signal-evidence/setup-judgment";
+import { explainBlocker } from "@/lib/signal-evidence/blocker-explainer";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
+
+/** Prototype-style segmented pill progress meter (replaces unicode dots). */
+function ProgressPillMeter({
+  aligned,
+  total,
+  tier
+}: {
+  aligned: number;
+  total: number;
+  tier: string;
+}) {
+  const { colors } = useTheme();
+  const isActionable = tier === "actionable";
+  const isInvalidated = tier === "invalidated" || tier === "re_evaluating";
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
+      <div style={{ display: "flex", gap: 4 }}>
+        {Array.from({ length: total }, (_, i) => {
+          const filled = i < aligned;
+          const isNext = !filled && i === aligned && !isInvalidated;
+          // Empty pills get a visible "track" fill so the remaining steps read
+          // clearly against the dark card (a faint border alone disappeared).
+          let bg = "rgba(148,163,184,0.20)";
+          let shadow = "none";
+          if (filled) {
+            if (isInvalidated) {
+              bg = "linear-gradient(90deg, #f0726c, #ef4444)";
+              shadow = "0 0 7px rgba(239,68,68,.4)";
+            } else if (isActionable) {
+              bg = "linear-gradient(90deg, #34d77a, #22c55e)";
+              shadow = "0 0 8px rgba(34,197,94,.5)";
+            } else {
+              bg = "linear-gradient(90deg, #fbbf24, #f59e0b)";
+              shadow = "0 0 6px rgba(245,158,11,.4)";
+            }
+          } else if (isNext) {
+            // The upcoming step: amber ring + faint amber tint.
+            bg = "rgba(245,158,11,0.18)";
+            shadow = "inset 0 0 0 1px #f59e0b";
+          }
+          return (
+            <div
+              key={i}
+              style={{
+                width: 20,
+                height: 6,
+                borderRadius: 999,
+                background: bg,
+                boxShadow: shadow,
+                transition: "background .2s, box-shadow .2s"
+              }}
+            />
+          );
+        })}
+      </div>
+      <span
+        style={{
+          fontSize: typography.scale.sm,
+          fontWeight: 700,
+          color: colors.text,
+          fontVariantNumeric: "tabular-nums"
+        }}
+      >
+        {aligned}
+        <span style={{ color: colors.textMuted, fontWeight: 600 }}>/{total}</span>
+      </span>
+    </div>
+  );
+}
 
 type Props = {
   judgment: SetupJudgment;
   /** When set, shown as authoritative execution read (decision state). */
   executionLabel?: string | null;
   executionTone?: "bullish" | "bearish" | "caution" | "muted";
+  /** Desk lane — tunes the plain-English blocker phrasing. */
+  mode?: "swing" | "day";
 };
+
+/**
+ * Renders the trade blocker as a clear, plain-English explanation with the
+ * terse technical phrasing available behind a toggle for users who want it.
+ */
+function BlockerExplainer({ blocker, mode }: { blocker: string; mode: "swing" | "day" }) {
+  const { colors } = useTheme();
+  const [showTechnical, setShowTechnical] = useState(false);
+  const explanation = explainBlocker(blocker, { mode });
+  if (!explanation) return null;
+
+  return (
+    <div
+      data-testid="setup-judgment-blocker"
+      style={{
+        borderRadius: borderRadius.md,
+        border: `1px solid ${colors.border}`,
+        background: "rgba(245,158,11,0.06)",
+        borderLeft: `3px solid ${colors.caution}`,
+        padding: `${spacing[2]} ${spacing[3]}`
+      }}
+    >
+      <p
+        className="m-0 text-[10px] font-semibold uppercase tracking-wide"
+        style={{ color: colors.caution }}
+      >
+        Why this isn&apos;t a trade yet
+      </p>
+      <div className="mt-1.5 grid gap-1.5">
+        {explanation.plain.map((para, i) => (
+          <p key={i} className="m-0 text-sm leading-relaxed" style={{ color: colors.text }}>
+            {para}
+          </p>
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={() => setShowTechnical((v) => !v)}
+        data-testid="setup-judgment-blocker-toggle"
+        className="mt-2 inline-flex items-center gap-1 text-xs font-medium"
+        style={{
+          color: colors.textMuted,
+          background: "transparent",
+          border: "none",
+          cursor: "pointer",
+          padding: 0
+        }}
+        aria-expanded={showTechnical}
+      >
+        <span style={{ transform: showTechnical ? "rotate(90deg)" : "none", transition: "transform .15s" }}>
+          ▸
+        </span>
+        {showTechnical ? "Hide technical detail" : "Show technical detail"}
+      </button>
+      {showTechnical ? (
+        <p
+          className="m-0 mt-1.5 text-xs leading-snug"
+          style={{
+            color: colors.textMuted,
+            fontFamily: "var(--font-mono, ui-monospace, monospace)"
+          }}
+          data-testid="setup-judgment-blocker-technical"
+        >
+          {explanation.technical}
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 function bandColor(band: SetupJudgment["tradeability"]["band"], colors: ReturnType<typeof useTheme>["colors"]) {
   if (band === "strong") return colors.bullish;
@@ -18,10 +160,9 @@ function bandColor(band: SetupJudgment["tradeability"]["band"], colors: ReturnTy
   return colors.caution;
 }
 
-export function SetupJudgmentSummary({ judgment, executionLabel, executionTone }: Props) {
+export function SetupJudgmentSummary({ judgment, executionLabel, executionTone, mode = "swing" }: Props) {
   const { colors } = useTheme();
   const { process, setupPhase, tradeability, primaryBlocker, watchFor } = judgment;
-  const dots = formatLayerProgressDots(process.layersAligned, process.layersTotal);
 
   return (
     <section
@@ -39,10 +180,12 @@ export function SetupJudgmentSummary({ judgment, executionLabel, executionTone }
           <p className="m-0 text-[10px] font-semibold uppercase tracking-wide" style={{ color: colors.textMuted }}>
             Setup progress
           </p>
-          <p className="m-0 mt-1 text-lg font-semibold tabular-nums" style={{ color: colors.text }} data-testid="setup-judgment-process">
-            {dots} {process.layersAligned}/{process.layersTotal}
-          </p>
-          <p className="m-0 mt-0.5 text-sm font-medium" style={{ color: colors.accent }}>
+          <ProgressPillMeter
+            aligned={process.layersAligned}
+            total={process.layersTotal}
+            tier={process.tier}
+          />
+          <p className="m-0 mt-1.5 text-sm font-medium" style={{ color: colors.accent }} data-testid="setup-judgment-process">
             {process.label}
           </p>
         </div>
@@ -91,12 +234,7 @@ export function SetupJudgmentSummary({ judgment, executionLabel, executionTone }
         </div>
       </div>
 
-      {primaryBlocker ? (
-        <p className="m-0 text-sm leading-snug" style={{ color: colors.text }} data-testid="setup-judgment-blocker">
-          <span style={{ color: colors.textMuted, fontWeight: 600 }}>What is blocking this trade: </span>
-          {primaryBlocker}
-        </p>
-      ) : null}
+      {primaryBlocker ? <BlockerExplainer blocker={primaryBlocker} mode={mode} /> : null}
 
       {watchFor ? (
         <p className="m-0 text-sm leading-snug" style={{ color: colors.textMuted }} data-testid="setup-judgment-watch-for">

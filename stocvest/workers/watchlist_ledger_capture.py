@@ -150,42 +150,59 @@ def run_watchlist_ledger_capture_sync(*, desk: LedgerCaptureDesk = "both") -> di
     swing_qualified = 0
     users_touched: set[str] = set()
 
-    for user_id, sym in _round_robin_jobs(day_queue):
-        if calls >= max_calls:
-            break
-        try:
-            body = real_composite_body_sync(
-                symbol=sym,
-                user_id=user_id,
-                user_email=None,
-                ledger_capture=True,
-            )
-            if body.get("ledger_qualified"):
-                day_qualified += 1
-            day_ok += 1
-            users_touched.add(user_id)
-        except Exception as exc:  # noqa: BLE001
-            day_err += 1
-            _LOG.debug("ledger capture day failed user=%s sym=%s: %s", user_id, sym, exc)
-        calls += 1
+    # Interleave day and swing jobs so neither desk can starve the other. The
+    # previous implementation drained the *entire* day queue before touching
+    # swing; under the Lambda timeout the invocation died inside the day loop and
+    # the swing loop never ran, so zero swing signals were ever captured. By
+    # alternating desks, a timeout or call-budget cap truncates both desks evenly
+    # rather than dropping one wholesale. (Production also schedules day and swing
+    # as separate single-desk invocations — this interleave is defense-in-depth
+    # for any combined ``desk="both"`` run, e.g. manual/admin triggers.)
+    day_jobs = _round_robin_jobs(day_queue)
+    swing_jobs = _round_robin_jobs(swing_queue)
+    interleaved: list[tuple[str, str, str]] = []  # (desk, user_id, symbol)
+    di = si = 0
+    while di < len(day_jobs) or si < len(swing_jobs):
+        if di < len(day_jobs):
+            uid_d, sym_d = day_jobs[di]
+            interleaved.append(("day", uid_d, sym_d))
+            di += 1
+        if si < len(swing_jobs):
+            uid_s, sym_s = swing_jobs[si]
+            interleaved.append(("swing", uid_s, sym_s))
+            si += 1
 
-    for user_id, sym in _round_robin_jobs(swing_queue):
+    for desk_lit, user_id, sym in interleaved:
         if calls >= max_calls:
             break
         try:
-            body = swing_composite_body_sync(
-                symbol=sym,
-                user_id=user_id,
-                user_email=None,
-                ledger_capture=True,
-            )
-            if body.get("ledger_qualified"):
-                swing_qualified += 1
-            swing_ok += 1
+            if desk_lit == "day":
+                body = real_composite_body_sync(
+                    symbol=sym,
+                    user_id=user_id,
+                    user_email=None,
+                    ledger_capture=True,
+                )
+                if body.get("ledger_qualified"):
+                    day_qualified += 1
+                day_ok += 1
+            else:
+                body = swing_composite_body_sync(
+                    symbol=sym,
+                    user_id=user_id,
+                    user_email=None,
+                    ledger_capture=True,
+                )
+                if body.get("ledger_qualified"):
+                    swing_qualified += 1
+                swing_ok += 1
             users_touched.add(user_id)
         except Exception as exc:  # noqa: BLE001
-            swing_err += 1
-            _LOG.debug("ledger capture swing failed user=%s sym=%s: %s", user_id, sym, exc)
+            if desk_lit == "day":
+                day_err += 1
+            else:
+                swing_err += 1
+            _LOG.debug("ledger capture %s failed user=%s sym=%s: %s", desk_lit, user_id, sym, exc)
         calls += 1
 
     day_jobs_planned = len(day_queue)

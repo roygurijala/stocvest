@@ -37,7 +37,15 @@ export async function POST(): Promise<NextResponse> {
   if (!refreshToken) {
     // No refresh cookie at all — either the user signed in before refresh support shipped, or
     // the dev-mock login path was used, or the cookie has already been cleared. Either way,
-    // the client should treat this as a hard signed-out state.
+    // the session is unrecoverable.
+    //
+    // Clear the ID + mirror cookies too (honoring this route's "clear on any failure" contract).
+    // Without this, a token whose `exp` is still in the future but which the API Gateway rejects
+    // (e.g. a dev-mock unsigned token pointed at the deployed authorizer) lingers in the cookie
+    // jar: the client marks the session expired, but the middleware/login gate still sees a
+    // "valid" (un-expired) cookie and bounces the user back to /dashboard — an infinite loop.
+    // Scrubbing the cookies here makes the failure a clean logout so re-login sticks.
+    clearSessionTokenCookies();
     return NextResponse.json({ error: "no_refresh_token" }, { status: 401 });
   }
 

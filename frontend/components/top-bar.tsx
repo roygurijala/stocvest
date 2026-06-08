@@ -64,9 +64,9 @@ export function TopBar({ onMenuClick }: TopBarProps) {
       // flex/grid ancestors. Page content scrolls on ``body`` (see
       // ``app-shell.tsx``); fixed chrome stays visible while the
       // document scrolls. On
-      // ``lg+`` the bar starts after the 248px sidebar. ``z-30`` sits
-      // below modals/drawers (40+) but above page content.
-      className="fixed left-0 right-0 top-0 z-30 grid min-h-14 grid-cols-[auto_1fr_auto] items-center gap-2 px-4 backdrop-blur-sm lg:left-[248px] lg:px-6"
+      // ``lg+`` the bar starts after the 56px collapsed nav rail. ``z-30``
+      // sits below modals/drawers (40+) but above page content.
+      className="app-topbar fixed left-0 right-0 top-0 z-30 grid min-h-14 grid-cols-[auto_1fr_auto] items-center gap-2 px-4 backdrop-blur-sm min-[900px]:left-[56px] min-[900px]:px-6"
       style={{
         paddingTop: spacing[3],
         paddingBottom: spacing[3],
@@ -76,7 +76,7 @@ export function TopBar({ onMenuClick }: TopBarProps) {
     >
       <button
         type="button"
-        className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md border lg:hidden"
+        className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md border min-[900px]:hidden"
         style={{
           borderColor: colors.border,
           background: "transparent",
@@ -93,7 +93,7 @@ export function TopBar({ onMenuClick }: TopBarProps) {
           <StocvestTitle href="/dashboard" />
         </div>
       ) : (
-        <h1 className="m-0 min-w-0 truncate text-center text-lg font-bold lg:text-left lg:text-xl">{title}</h1>
+        <h1 className="m-0 min-w-0 truncate text-center text-lg font-bold min-[900px]:text-left min-[900px]:text-xl">{title}</h1>
       )}
       <div className="flex shrink-0 items-center justify-end gap-2">
         {brokersEnabled() ? <TradingModeBadge /> : null}

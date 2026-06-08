@@ -526,6 +526,7 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
 
       <SetupJudgmentSummary
         judgment={evidenceSetupJudgment}
+        mode={evidenceMode === "day" ? "day" : "swing"}
         executionLabel={executionReadinessLabel(evidenceDecision.state, {
           tradingMode: evidenceMode,
           regularSessionOpen: evidenceRegularSessionOpen,

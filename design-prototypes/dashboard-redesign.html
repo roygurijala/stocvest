@@ -1,0 +1,1641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>STOCVEST — Trading Room (static prototype)</title>
+<style>
+  /* ─────────────────────────────────────────────────────────────
+     STOCVEST dashboard redesign — STATIC, NON-WIRED prototype.
+     Mock data only. Nothing here calls the backend. Aesthetic +
+     layout study for the "Trading Room" concept (Spec v1.1).
+     ───────────────────────────────────────────────────────────── */
+  :root {
+    --base:        #0D0F12;
+    --surface:     #161920;
+    --surface-2:   #1C2029;
+    --border:      #262B36;
+    --border-soft: #1F242E;
+    --text:        #E6EAF2;
+    --text-muted:  #94A3B8;
+    --text-dim:    #5E6878;
+    --green:       #22C55E;
+    --amber:       #F59E0B;
+    --red:         #EF4444;
+    --neutral:     #94A3B8;
+    --accent:      #2E8BFF;  /* electric blue — DAY + interactive */
+    --indigo:      #C04CF5;  /* SWING — deliberately far from blue (violet/magenta) */
+    --radius:      14px;
+    --radius-sm:   9px;
+    font-synthesis: none;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--base);
+    color: var(--text);
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    letter-spacing: 0.1px;
+  }
+  .root { display: flex; height: 100vh; }
+  .app { flex: 1; min-width: 0; display: grid; grid-template-rows: auto auto 1fr; height: 100%; }
+
+  /* ── Left navigation (collapsed 56px, hover expands to 222px) ── */
+  .sidenav { width: 56px; background: #0A0C10; border-right: 1px solid var(--border-soft); display: flex; flex-direction: column; padding: 10px 0 6px; transition: width .16s ease; overflow: hidden; flex: none; z-index: 20; }
+  .sidenav:hover { width: 222px; }
+  .nav-orb { display: flex; align-items: center; gap: 12px; padding: 6px 19px 12px; color: var(--text-muted); font-size: 12px; white-space: nowrap; }
+  .nav-orb .o { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px 1px rgba(34,197,94,.5); flex: none; }
+  .nav-fade { opacity: 0; transition: opacity .12s; }
+  .sidenav:hover .nav-fade { opacity: 1; }
+  .nav-sec { font-size: 9.5px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-dim); padding: 13px 19px 5px; white-space: nowrap; }
+  .nav-item { display: flex; align-items: center; gap: 14px; padding: 9px 19px; color: var(--text-muted); cursor: pointer; white-space: nowrap; border-left: 2px solid transparent; position: relative; }
+  .nav-item:hover { color: var(--text); background: rgba(255,255,255,.03); }
+  .nav-item.active { color: var(--text); border-left-color: var(--green); background: rgba(34,197,94,.06); }
+  .nav-item.active svg { color: var(--green); }
+  .nav-item svg { width: 18px; height: 18px; flex: none; }
+  .nav-item .t { font-size: 13px; }
+  .nav-dot { width: 6px; height: 6px; border-radius: 50%; position: absolute; left: 31px; top: 10px; }
+  .nav-dot.green { background: var(--green); box-shadow: 0 0 6px 1px rgba(34,197,94,.5); }
+  .nav-dot.amber { background: var(--amber); }
+  .sidenav:hover .nav-dot { left: auto; right: 16px; top: 50%; transform: translateY(-50%); }
+  .nav-spacer { flex: 1; }
+  .nav-sub { overflow: hidden; max-height: 0; transition: max-height .18s ease; }
+  .nav-item.admin.open ~ .nav-sub { max-height: 320px; }
+  .sidenav:not(:hover) .nav-sub { max-height: 0; }
+  .nav-subitem { padding: 6px 19px 6px 51px; color: var(--text-dim); font-size: 12px; white-space: nowrap; cursor: pointer; }
+  .nav-subitem:hover { color: var(--text-muted); }
+  .caret-sm { margin-left: auto; transition: transform .15s; }
+  .nav-item.admin.open .caret-sm { transform: rotate(90deg); }
+  .nav-user { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-top: 1px solid var(--border-soft); white-space: nowrap; }
+  .nav-user .av { width: 27px; height: 27px; border-radius: 50%; background: rgba(59,130,246,.22); border: 1px solid var(--accent); color: #7fb0ff; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none; }
+  .nav-user .nm { font-size: 12.5px; font-weight: 600; color: var(--text); }
+  .nav-user .role { font-size: 10.5px; color: var(--text-dim); }
+  .nav-signout { color: #f2807a; }
+  .nav-signout svg { color: #f2807a; }
+  .nav-signout:hover { color: #ef4444; background: rgba(239,68,68,.07); }
+
+  /* ── Session header ─────────────────────────────────────────── */
+  .header {
+    display: flex; align-items: center; gap: 22px;
+    padding: 12px 22px;
+    border-bottom: 1px solid var(--border-soft);
+    background: var(--surface);
+  }
+  .brand { font-weight: 700; letter-spacing: 2px; font-size: 13px; color: var(--text); }
+  .brand .dot { color: var(--accent); }
+  .pulse { display: flex; align-items: center; gap: 12px; color: var(--text-muted); font-size: 13px; }
+  .orb { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .orb.green { background: var(--green); box-shadow: 0 0 10px 1px rgba(34,197,94,.55); }
+  .orb.amber { background: var(--amber); box-shadow: 0 0 10px 1px rgba(245,158,11,.45); }
+  .pulse b { color: var(--text); font-weight: 600; }
+  .header .spacer { flex: 1; }
+  .count-chip {
+    display: inline-flex; align-items: baseline; gap: 6px;
+    padding: 5px 12px; border-radius: 999px;
+    background: rgba(34,197,94,.10); border: 1px solid rgba(34,197,94,.30);
+    color: var(--green); font-size: 12px; font-weight: 600;
+  }
+  .count-chip .n { font-size: 15px; }
+  .asof { color: var(--text-dim); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  .asof b { color: var(--text-muted); font-weight: 600; }
+
+  /* ── Global symbol search (top-right, type-ahead) ───────────── */
+  .gsearch { position: relative; width: 248px; }
+  .gsearch .ic { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--text-dim); font-size: 14px; pointer-events: none; }
+  .gsearch input {
+    width: 100%; background: var(--base); border: 1px solid var(--border);
+    border-radius: 999px; color: var(--text); font: inherit; font-size: 12.5px;
+    padding: 8px 12px 8px 32px; outline: none; transition: border-color .15s, width .15s;
+  }
+  .gsearch input:focus { border-color: var(--accent); }
+  .gsearch-drop {
+    position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 60;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    box-shadow: 0 16px 40px rgba(0,0,0,.5); overflow: hidden; display: none; max-height: 320px; overflow-y: auto;
+  }
+  .gsearch-drop.show { display: block; }
+  .gs-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; cursor: pointer; border-bottom: 1px solid var(--border-soft); }
+  .gs-item:last-child { border-bottom: 0; }
+  .gs-item:hover, .gs-item.active { background: rgba(59,130,246,.10); }
+  .gs-item .gs-sym { font-weight: 700; font-size: 13px; min-width: 54px; }
+  .gs-item .gs-co { font-size: 11.5px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .gs-item .gs-state { margin-left: auto; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--text-dim); }
+  .gs-empty { padding: 11px 12px; font-size: 12px; color: var(--text-dim); }
+
+  /* ── Filter bar ─────────────────────────────────────────────── */
+  .filters { display: flex; gap: 18px; padding: 9px 22px; border-bottom: 1px solid var(--border-soft); background: var(--base); }
+  .pillset { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 3px; }
+  .pill { border: 0; background: transparent; color: var(--text-muted); font: inherit; font-size: 12px; padding: 5px 13px; border-radius: 999px; cursor: pointer; transition: all .14s; }
+  .pill:hover { color: var(--text); }
+  .pill.active { background: var(--surface-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--border); }
+  .pill.day.active { color: var(--accent); }
+  .pill.swing.active { color: var(--indigo); }
+
+  /* ── 3-zone body ────────────────────────────────────────────── */
+  .body { --rail-w: 48px; display: grid; min-height: 0; transition: grid-template-columns .2s ease; }
+  .zone { min-height: 0; overflow-y: auto; }
+  .zone::-webkit-scrollbar { width: 9px; }
+  .zone::-webkit-scrollbar-thumb { background: #2a303c; border-radius: 9px; border: 2px solid var(--base); }
+  .feed { border-right: 1px solid var(--border-soft); }
+  .rail { border-left: 1px solid var(--border-soft); background: #12151b; }
+
+  .zone-pad { padding: 16px; }
+  .section-label { font-size: 10.5px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-dim); margin: 18px 4px 9px; display: flex; align-items: center; gap: 8px; }
+  .section-label:first-child { margin-top: 4px; }
+  .section-label .ct { color: var(--text-muted); }
+  .section-label .rule { flex: 1; height: 1px; background: var(--border-soft); }
+
+  /* ── Search (sticky to top of feed) ─────────────────────────── */
+  .search { position: sticky; top: 0; z-index: 6; background: var(--base); margin: -4px -16px 0; padding: 8px 16px 10px; border-bottom: 1px solid var(--border-soft); }
+  .search input {
+    width: 100%; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); color: var(--text); font: inherit; font-size: 13px;
+    padding: 10px 12px 10px 34px; outline: none; transition: border-color .15s;
+  }
+  .search input:focus { border-color: var(--accent); }
+  .search-hint { display: none; font-size: 11px; line-height: 1.45; color: var(--text-dim); margin-top: 7px; padding-left: 2px; }
+  .search-hint.show { display: block; }
+  .search .ic { position: absolute; left: 27px; top: 18px; color: var(--text-dim); }
+  .reasoncard { margin-top: 9px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); padding: 12px; border-left: 3px solid var(--red); display: none; }
+  .reasoncard.show { display: block; }
+  .reasoncard .rc-head { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  .reasoncard .rc-reason { color: var(--text-muted); font-size: 12.5px; margin-top: 7px; }
+  .reasoncard .rc-reason b { color: var(--amber); font-weight: 600; }
+
+  /* ── Signal cards (old language: thick left + bottom highlight) ─ */
+  .card { position: relative; background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--border); border-bottom: 3px solid var(--border); border-radius: var(--radius-sm); padding: 12px 13px 12px 15px; margin-bottom: 10px; cursor: pointer; transition: border-color .15s, transform .08s; }
+  .card:hover { border-top-color: #34404f; border-right-color: #34404f; }
+  .card:active { transform: scale(.995); }
+  .card.sel { box-shadow: inset 0 0 0 1px var(--accent); }
+  /* Lane color drives the thick left + bottom edges (day = blue, swing = violet) */
+  .card.lane-day { border-left-color: var(--accent); border-bottom-color: var(--accent); }
+  .card.lane-swing { border-left-color: var(--indigo); border-bottom-color: var(--indigo); }
+  .card.cooling { opacity: .5; }
+  .card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .sym { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .sym .t { font-size: 15.5px; font-weight: 700; letter-spacing: .3px; line-height: 1.2; }
+  .sym .co { font-size: 11.5px; color: var(--text-dim); max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .px { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 64px; }
+  .px .p { font-size: 13px; font-weight: 600; }
+  .px .p.long { font-size: 11px; }
+  .px .ch { font-size: 11px; }
+  /* Price + change both colored by direction: increase green, decrease red */
+  .px.up .p, .px.up .ch { color: var(--green); }
+  .px.down .p, .px.down .ch { color: var(--red); }
+  .up { color: var(--green); } .down { color: var(--red); }
+  .verdict { margin-top: 8px; font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  .lane-ic { font-size: 11px; }
+  .lane-day .lane-ic { color: var(--accent); }
+  .lane-swing .lane-ic { color: var(--indigo); }
+  /* Bullish / bearish as a distinct pill */
+  .bias-pill { font-size: 10px; letter-spacing: .5px; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; font-weight: 700; }
+  .bias-pill.bull { background: rgba(34,197,94,.15); color: var(--green); }
+  .bias-pill.bear { background: rgba(239,68,68,.15); color: var(--red); }
+  .vtext { color: var(--text-muted); }
+  .tag { font-size: 10px; letter-spacing: .6px; text-transform: uppercase; padding: 2px 7px; border-radius: 5px; font-weight: 600; }
+  .tag.act { background: rgba(34,197,94,.13); color: var(--green); }
+  .tag.near { background: rgba(245,158,11,.13); color: var(--amber); }
+  .tag.pot { background: rgba(148,163,184,.12); color: var(--neutral); }
+  .tag.cool { background: rgba(239,68,68,.12); color: var(--red); }
+  .meta { margin-top: 7px; font-size: 11px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+
+  /* ── Deep dive ──────────────────────────────────────────────── */
+  .dive { display: none; }
+  .dive.show { display: block; }
+  .verdict-banner { border-left: 4px solid var(--green); background: var(--surface); border-radius: var(--radius); padding: 18px 20px; }
+  .verdict-banner.swing { border-left-color: var(--indigo); }
+  .vb-line { font-size: 22px; font-weight: 700; letter-spacing: .4px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .vb-line .pill-mode { font-size: 11px; letter-spacing: 1px; padding: 3px 9px; border-radius: 6px; background: rgba(59,130,246,.14); color: var(--accent); text-transform: uppercase; }
+  .verdict-banner.swing .pill-mode { background: rgba(139,123,240,.16); color: var(--indigo); }
+  .vb-sub { margin-top: 9px; color: var(--text-muted); display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; }
+  .vb-sub .asof { font-size: 11.5px; }
+
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+  .panel + .panel, .verdict-banner + .panel, .panel + .verdict-banner { margin-top: 14px; }
+  .panel h4 { font-size: 11px; letter-spacing: 1.3px; text-transform: uppercase; color: var(--text-dim); font-weight: 600; margin-bottom: 14px; }
+
+  /* Evidence funnel (gated sequence, not a wheel) */
+  .funnel { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+  .seg { text-align: center; }
+  .seg .bar { height: 46px; border-radius: 6px 6px 3px 3px; background: var(--surface-2); position: relative; overflow: hidden; border: 1px solid var(--border); }
+  .seg .fill { position: absolute; bottom: 0; left: 0; right: 0; }
+  .seg.pass .fill { background: linear-gradient(180deg, rgba(34,197,94,.85), rgba(34,197,94,.5)); height: 100%; }
+  .seg.weak .fill { background: linear-gradient(180deg, rgba(245,158,11,.8), rgba(245,158,11,.45)); height: 55%; }
+  .seg.fail .fill { background: rgba(239,68,68,.4); height: 22%; }
+  .seg .nm { font-size: 9.5px; letter-spacing: .3px; color: var(--text-dim); margin-top: 7px; text-transform: uppercase; }
+  .seg.pass .nm { color: var(--text-muted); }
+
+  .brief { font-size: 15px; line-height: 1.6; color: var(--text); border-left: 3px solid var(--accent); padding-left: 14px; }
+  .brief.swing { border-left-color: var(--indigo); }
+  .brief.amber { border-left-color: var(--amber); }
+  .brief .accent { color: var(--text); font-weight: 600; }
+
+  /* Scenario price ladder */
+  .ladder { position: relative; height: 92px; margin: 6px 4px 2px; }
+  .ladder .line { position: absolute; left: 0; right: 0; top: 50%; height: 2px; background: var(--border); }
+  .node { position: absolute; top: 50%; transform: translate(-50%,-50%); text-align: center; }
+  .node .dot { width: 12px; height: 12px; border-radius: 50%; margin: 0 auto; border: 2px solid var(--base); }
+  .node .lbl { font-size: 10px; color: var(--text-dim); margin-top: 30px; position: absolute; left: 50%; transform: translateX(-50%); white-space: nowrap; }
+  .node .val { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); white-space: nowrap; }
+  .node.stop .dot { background: var(--red); }
+  .node.entry .dot { background: var(--accent); }
+  .node.t1 .dot, .node.t2 .dot { background: var(--green); }
+  .node.now .dot { background: var(--text); }
+
+  /* R/R gauge */
+  .rr { display: flex; align-items: center; gap: 18px; }
+  .gauge { position: relative; width: 120px; height: 70px; }
+  .gauge svg { width: 120px; height: 70px; }
+  .rr-info .big { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .rr-info .sub { color: var(--text-muted); font-size: 12px; }
+  .rr-info .pass { color: var(--green); } .rr-info .warn { color: var(--amber); }
+
+  .actions { margin-top: 16px; }
+  .btn { background: var(--accent); color: #06101f; font: inherit; font-weight: 700; font-size: 13px; border: 0; border-radius: 9px; padding: 11px 18px; cursor: pointer; letter-spacing: .3px; }
+  .btn:hover { filter: brightness(1.06); }
+
+  /* Bridge line — funnel state in prose + low-emphasis entry to full detail */
+  .bridge { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 13px; padding-top: 12px; border-top: 1px solid var(--border-soft); flex-wrap: wrap; }
+  .bridge-state { font-size: 12px; color: var(--text-muted); }
+  .bridge-state b { color: var(--text); font-weight: 600; }
+  .bridge-link { font-size: 12.5px; color: var(--accent); cursor: pointer; font-weight: 600; white-space: nowrap; }
+  .bridge-link:hover { text-decoration: underline; }
+
+  /* ── Setup / Layers / Evolution — segmented control (matches the
+   *    real SignalsDeskTabNav: recessed bar, raised bordered active tab). ── */
+  .setup-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; margin: 6px 0 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+  .stab { display: flex; align-items: center; justify-content: center; min-height: 40px; background: transparent; border: 1px solid transparent; color: var(--text-muted); font: inherit; font-size: 13px; font-weight: 600; padding: 0 8px; cursor: pointer; border-radius: 7px; transition: background .12s, color .12s, border-color .12s; }
+  .stab:hover { color: var(--text); background: rgba(255,255,255,.03); }
+  /* Selected tab pops in the electric-blue accent for clear contrast */
+  .stab.active { background: rgba(46,139,255,.16); color: #cfe2ff; border-color: var(--accent); box-shadow: inset 0 0 0 1px rgba(46,139,255,.35); font-weight: 700; }
+  .tabpane { display: none; }
+  .tabpane.active { display: block; }
+
+  /* Evolution timeline — vertical, newest first, state-colored nodes */
+  .evo { position: relative; }
+  .evo-row { display: grid; grid-template-columns: 96px 18px 1fr; gap: 10px; align-items: start; padding-bottom: 16px; }
+  .evo-row:last-child { padding-bottom: 0; }
+  .evo-when { font-size: 11px; color: var(--text-dim); padding-top: 1px; text-align: right; font-variant-numeric: tabular-nums; }
+  .evo-axis { position: relative; display: flex; justify-content: center; }
+  .evo-dot { width: 11px; height: 11px; border-radius: 50%; background: var(--neutral); border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--border); margin-top: 2px; z-index: 1; }
+  .evo-row:not(:last-child) .evo-axis::after { content: ""; position: absolute; top: 14px; bottom: -16px; width: 2px; background: var(--border); }
+  .evo-dot.sc-act { background: var(--green); box-shadow: 0 0 0 1px var(--green), 0 0 8px rgba(34,197,94,.5); }
+  .evo-dot.sc-near { background: var(--amber); box-shadow: 0 0 0 1px var(--amber); }
+  .evo-dot.sc-pot { background: var(--neutral); }
+  .evo-dot.sc-cool { background: var(--red); }
+  .evo-dot.sc-mon { background: var(--surface-2); }
+  .evo-state { font-size: 13px; font-weight: 600; color: var(--text); }
+  .evo-note { font-size: 12px; color: var(--text-muted); margin-top: 2px; line-height: 1.45; }
+  .evo-row.now .evo-state { color: var(--green); }
+  .evo-cap { font-size: 12px; color: var(--text-muted); margin: 0 0 14px; }
+
+  /* ── Setup / Layers tab content (mirrors old Signals app) ───── */
+  .microlabel { font-size: 10px; font-weight: 600; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-muted); }
+  .microlabel.mt { margin-top: 16px; }
+  .bias-big { font-size: 21px; font-weight: 700; color: var(--green); margin-top: 3px; }
+  .bias-sub { font-size: 12px; color: var(--text-dim); }
+  .syn { font-size: 13px; color: var(--text); margin: 11px 0 0; line-height: 1.5; }
+  .force-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 13px; padding: 13px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); }
+  .force-grid.tight { margin-top: 11px; }
+  .force-wide { grid-column: 1 / -1; }
+  .force-label { font-size: 10px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; }
+  .force-label.support { color: var(--green); }
+  .force-label.oppose { color: var(--red); }
+  .force-label.muted { color: var(--text-muted); }
+  .force-names { font-size: 13px; color: var(--text); margin-top: 4px; }
+  .force-foot { font-size: 11px; color: var(--text-muted); line-height: 1.5; margin: 2px 0 0; }
+
+  .chart-cap, .radar-cap { font-size: 11.5px; color: var(--text-muted); margin: 0 0 12px; }
+  .pchart { height: 168px; }
+  .pchart svg { width: 100%; height: 100%; display: block; }
+
+  .tf-head { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; }
+  .desk-badge { font-size: 9.5px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--accent); border: 1px solid rgba(46,139,255,.4); background: rgba(46,139,255,.1); padding: 2px 7px; border-radius: 5px; }
+  .tf-line { font-size: 13px; color: var(--text); margin: 0; line-height: 1.5; }
+  .tf-line b { font-weight: 600; }
+  .tf-sub { font-size: 12px; color: var(--text-muted); margin: 5px 0 0; }
+  .tf-line2 { font-size: 12px; color: var(--text-dim); margin: 8px 0 0; }
+
+  .why-sum { font-size: 13px; color: var(--text); margin: 9px 0 0; line-height: 1.55; }
+  .chain-label { font-size: 11px; font-weight: 600; letter-spacing: .6px; text-transform: uppercase; color: var(--text-muted); margin-top: 11px; }
+  .chain { display: flex; flex-direction: column; gap: 9px; margin-top: 12px; }
+  .chain-row { border: 1px solid var(--border); background: var(--surface-2); border-radius: var(--radius-sm); padding: 9px 12px; }
+  .chain-row .nm { font-size: 13px; font-weight: 600; color: var(--text); }
+  .chain-row .bc { font-size: 12px; color: var(--text-muted); margin-top: 2px; line-height: 1.45; }
+  .why-foot { font-size: 10px; color: var(--text-dim); margin: 11px 0 0; }
+
+  .panel.judgment { background: var(--surface-2); }
+  /* Wrap to 2 / 1 columns when the center narrows (e.g. watchlist open) so
+     the Entry-timing column never gets clipped. */
+  .judge-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
+  .judge-grid > div { min-width: 0; }
+  .judge-exec, .judge-dim, .judge-accent { overflow-wrap: anywhere; }
+  .judge-big { font-size: 17px; font-weight: 700; color: var(--text); margin-top: 5px; }
+  /* Sleek segmented progress meter (replaces the unicode dots) */
+  .progress-meter { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+  .pm-track { display: flex; gap: 4px; }
+  .pm-seg { width: 20px; height: 6px; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--border); transition: background .2s, box-shadow .2s; }
+  .pm-seg.on { background: linear-gradient(90deg, #34d77a, var(--green)); box-shadow: 0 0 8px rgba(34,197,94,.5); }
+  .pm-seg.next { box-shadow: inset 0 0 0 1px var(--amber); animation: pmPulse 1.8s ease-in-out infinite; }
+  .pm-seg.cur { box-shadow: 0 0 9px rgba(34,197,94,.7); }
+  .pm-seg.cool { background: linear-gradient(90deg, #f0726c, var(--red)); box-shadow: 0 0 7px rgba(239,68,68,.45); }
+  @keyframes pmPulse { 0%,100% { box-shadow: inset 0 0 0 1px var(--amber); } 50% { box-shadow: inset 0 0 0 1px var(--amber), 0 0 7px rgba(245,158,11,.5); } }
+  .pm-count { font-size: 15px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; letter-spacing: .3px; }
+  .pm-count .tot { color: var(--text-dim); font-weight: 600; }
+  /* Compact variant for The Watch rows + watchlist cards */
+  .pm-track.sm .pm-seg { width: 15px; height: 5px; }
+  .pm-label { font-size: 11px; color: var(--text-dim); margin-left: 4px; }
+  .pm-label.amber { color: var(--amber); }
+  .pm-label.cool { color: var(--red); }
+  .judge-accent { font-size: 12.5px; font-weight: 600; color: var(--accent); margin-top: 2px; }
+  .judge-dim { font-size: 11px; color: var(--text-dim); margin-top: 3px; }
+  .judge-exec { font-size: 12.5px; font-weight: 600; color: var(--green); margin-top: 2px; }
+  .judge-note, .judge-watch { font-size: 12.5px; color: var(--text); margin: 13px 0 0; line-height: 1.5; }
+  .judge-watch { color: var(--text-muted); margin-top: 8px; }
+  .judge-note .lbl { color: var(--text-muted); font-weight: 600; }
+  .judge-watch .lbl.acc { color: var(--accent); font-weight: 600; }
+
+  .exec-head { font-size: 13px; font-weight: 600; color: var(--green); margin: 11px 0 0; }
+  .exec-line { font-size: 12px; color: var(--text-muted); margin: 5px 0 0; line-height: 1.5; }
+  .conviction { display: inline-block; margin-top: 10px; font-size: 10px; font-weight: 700; letter-spacing: .8px; color: var(--green); border: 1px solid rgba(34,197,94,.4); background: rgba(34,197,94,.1); padding: 3px 9px; border-radius: 999px; }
+
+  .panel.fund { border-color: rgba(34,197,94,.32); background: rgba(34,197,94,.05); }
+  .fund-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .fund-title { font-size: 13px; font-weight: 600; color: var(--green); }
+  .fund-opt { font-size: 9.5px; letter-spacing: .8px; text-transform: uppercase; color: var(--text-dim); }
+  .fund-list { margin: 9px 0 0; padding-left: 18px; }
+  .fund-list li { font-size: 13px; color: var(--text); line-height: 1.6; }
+  .fund-note { font-size: 11.5px; font-style: italic; color: var(--text-muted); margin: 9px 0 0; }
+
+  /* 6-Layer breakdown rows */
+  .lb-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .lb-sub { font-size: 11.5px; color: var(--text-muted); }
+  .lb-asof { font-size: 11.5px; color: var(--text-muted); margin-top: 4px; }
+  .layer-rows { display: flex; flex-direction: column; gap: 9px; margin-top: 12px; }
+  .lrow { display: flex; gap: 11px; padding: 11px 12px; border: 1px solid var(--border); background: var(--surface-2); border-radius: var(--radius-sm); }
+  .lrow .ldot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex: none; }
+  .lrow .lbody { flex: 1; min-width: 0; }
+  .lrow .lname { font-size: 13px; font-weight: 600; color: var(--text); }
+  .lrow .lread { font-size: 11.5px; color: var(--text-muted); margin-top: 1px; }
+  .lrow .lhead { font-size: 12px; font-weight: 500; color: var(--text); margin-top: 2px; }
+  .lrow .llevel { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 7px; }
+  .lrow .llevel .lv { font-size: 11.5px; font-weight: 600; color: var(--text); }
+  .lrow .llevel .ld { font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .lrow .lbar { height: 6px; border-radius: 999px; background: var(--border); overflow: hidden; margin-top: 5px; }
+  .lrow .lbar > span { display: block; height: 100%; background: var(--accent); opacity: .85; }
+  .lrow .ldesc { font-size: 12px; color: var(--text-muted); margin-top: 7px; line-height: 1.5; }
+
+  /* Radar + notable moves */
+  .radar-legend, .moves-legend { display: flex; gap: 16px; font-size: 11.5px; color: var(--text-muted); margin-bottom: 8px; }
+  .rl-item, .ml-item { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+  .sw.cur { background: rgba(14,165,233,.5); border: 1px solid #38bdf8; }
+  .sw.base { border: 2px dashed var(--text-muted); }
+  .sw.hot { background: var(--green); }
+  .sw.cold { background: var(--red); }
+  .sw.inline { background: var(--text-dim); }
+  .radar-wrap { display: flex; justify-content: center; }
+  .radar-wrap svg { width: 100%; max-width: 360px; height: auto; }
+  .moves { display: flex; flex-direction: column; gap: 7px; margin-top: 4px; }
+  .move-row { display: grid; grid-template-columns: 84px 1fr; align-items: center; gap: 10px; font-size: 11.5px; }
+  .move-row .mlabel { color: var(--text-muted); text-align: right; }
+  .move-track { position: relative; height: 16px; }
+  .move-track .mid { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--border); }
+  .move-bar { position: absolute; top: 3px; height: 10px; border-radius: 3px; }
+
+  /* ── Full detail mode ───────────────────────────────────────── */
+  .detail { display: none; }
+  .detail.show { display: block; }
+  /* Full-analysis header — sticky so the symbol + verdict stay visible while scrolling */
+  .detail-head { position: sticky; top: 0; z-index: 8; display: flex; align-items: center; gap: 12px; margin: 0 -16px 14px; padding: 11px 16px; background: color-mix(in srgb, var(--base) 92%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); }
+  .back { background: var(--surface); border: 1px solid var(--border); color: var(--text); width: 34px; height: 34px; border-radius: 9px; cursor: pointer; font-size: 17px; line-height: 1; flex: none; }
+  .back:hover { border-color: #34404f; }
+  .dh-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .dh-title { font-size: 18px; line-height: 1.15; } .dh-title b { font-weight: 700; letter-spacing: .3px; }
+  .dh-sub { font-size: 12px; color: var(--text-dim); font-weight: 400; margin-left: 5px; }
+  .dh-meta { font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dh-pills { margin-left: auto; display: flex; gap: 6px; flex: none; }
+  .dh-pill { font-size: 10px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+  .dh-pill.long { background: rgba(34,197,94,.15); color: var(--green); }
+  .dh-pill.short { background: rgba(239,68,68,.15); color: var(--red); }
+  .dh-pill.act { background: rgba(34,197,94,.14); color: var(--green); }
+  .dh-pill.near { background: rgba(245,158,11,.14); color: var(--amber); }
+  .dh-pill.pot { background: rgba(148,163,184,.13); color: var(--neutral); }
+  .dh-pill.cool { background: rgba(239,68,68,.13); color: var(--red); }
+  .asof-inline { font-size: 10px; letter-spacing: .4px; color: var(--text-dim); text-transform: none; font-weight: 400; margin-left: 8px; }
+  .funnel.mini .bar { height: 26px; }
+  .funnel.mini { margin-bottom: 14px; cursor: default; }
+
+  /* Evidence accordion */
+  .acc-row { border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 7px; overflow: hidden; }
+  .acc-head { display: flex; align-items: center; gap: 10px; padding: 11px 13px; cursor: pointer; background: var(--surface-2); }
+  .acc-head:hover { background: #20252f; }
+  .acc-head .layer-nm { font-weight: 600; font-size: 13px; min-width: 78px; }
+  .acc-head .reason { color: var(--text-muted); font-size: 12px; flex: 1; }
+  .acc-head .caret { color: var(--text-dim); transition: transform .15s; }
+  .acc-row.open .caret { transform: rotate(90deg); }
+  .v-chip { font-size: 9.5px; letter-spacing: .6px; text-transform: uppercase; padding: 2px 7px; border-radius: 5px; font-weight: 700; }
+  .v-chip.pass { background: rgba(34,197,94,.14); color: var(--green); }
+  .v-chip.weak { background: rgba(245,158,11,.14); color: var(--amber); }
+  .v-chip.fail { background: rgba(239,68,68,.14); color: var(--red); }
+  .acc-body { display: none; padding: 12px 13px; font-size: 12.5px; color: var(--text-muted); line-height: 1.55; border-top: 1px solid var(--border); }
+  .acc-row.open .acc-body { display: block; }
+
+  /* Analyst consensus + ratings */
+  .consensus { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 12px; }
+  .cons-main { font-size: 13.5px; } .cons-main b { font-weight: 700; }
+  .cons-main .lead { font-weight: 700; }
+  .cons-range { color: var(--text-muted); font-size: 12px; margin-left: 4px; }
+  .cons-dist { display: flex; gap: 6px; margin-top: 9px; flex-wrap: wrap; }
+  .cons-dist .r-chip { font-size: 11px; }
+  .cons-sub { color: var(--text-dim); font-size: 11px; margin-top: 9px; }
+  .ratings { margin-bottom: 18px; }
+  .rating-row { display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 12px; padding: 9px 2px; border-bottom: 1px solid var(--border-soft); font-size: 12.5px; }
+  .rating-row:last-child { border-bottom: 0; }
+  .rating-row .firm { color: var(--text); font-weight: 600; }
+  .rating-row .action { color: var(--text-muted); font-size: 11px; }
+  .rating-row .pt { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .rating-row .when { color: var(--text-dim); font-size: 11px; text-align: right; min-width: 64px; }
+  .r-chip { font-size: 10px; letter-spacing: .4px; text-transform: uppercase; padding: 2px 8px; border-radius: 5px; font-weight: 700; }
+  .r-buy { background: rgba(34,197,94,.14); color: var(--green); }
+  .r-hold { background: rgba(148,163,184,.14); color: var(--neutral); }
+  .r-sell { background: rgba(239,68,68,.14); color: var(--red); }
+
+  /* News */
+  .news-label, .news-item .src { color: var(--text-dim); }
+  .news-label { font-size: 11px; letter-spacing: .8px; text-transform: uppercase; margin-bottom: 9px; }
+  .news-item { padding: 9px 0; border-bottom: 1px solid var(--border-soft); }
+  .news-item:last-child { border-bottom: 0; }
+  .news-item .hl { font-size: 13px; color: var(--text); }
+  .news-item .meta-row { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 11px; }
+  .news-item .src { font-weight: 600; }
+  .news-item .when { color: var(--text-dim); }
+  .sent { font-size: 9.5px; letter-spacing: .4px; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; font-weight: 700; }
+  .sent.pos { background: rgba(34,197,94,.13); color: var(--green); }
+  .sent.neg { background: rgba(239,68,68,.13); color: var(--red); }
+  .sent.neu { background: rgba(148,163,184,.12); color: var(--neutral); }
+
+  /* Reference levels + risk factors (full-analysis screen) */
+  .ref-cap { font-size: 11.5px; color: var(--text-muted); margin: 0 0 12px; }
+  .ref-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 13px; }
+  .ref-item { min-width: 0; }
+  .ref-item .rl-label { font-size: 11px; color: var(--text-muted); }
+  .ref-item .rl-val { font-size: 14px; font-weight: 700; color: var(--text); margin-top: 1px; font-variant-numeric: tabular-nums; }
+  .ref-item .rl-hint { font-size: 10.5px; color: var(--text-dim); line-height: 1.4; margin-top: 2px; }
+  .ref-pattern { font-size: 12px; color: var(--text-muted); margin-top: 13px; }
+  .risk-list { display: flex; flex-direction: column; gap: 9px; }
+  .risk-item { display: flex; gap: 10px; font-size: 13px; color: var(--text); line-height: 1.5; }
+  .risk-item .rk-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); margin-top: 6px; flex: none; }
+  .risk-empty { font-size: 13px; color: var(--text-muted); }
+  .ev-recap { font-size: 13px; color: var(--text); margin: 0 0 10px; }
+  .ev-recap-panel .bridge-link { font-size: 12.5px; }
+
+  /* The Watch (empty-state hero) */
+  .watch { display: none; }
+  .watch.show { display: block; }
+  .watch .lead { font-size: 18px; font-weight: 600; }
+  .watch .lead .muted { color: var(--text-muted); font-weight: 400; }
+  .watch-row { display: flex; align-items: center; justify-content: space-between; padding: 13px 0; border-bottom: 1px solid var(--border-soft); }
+  .watch-row:last-child { border-bottom: 0; }
+  .progress { display: flex; align-items: center; gap: 6px; }
+  .pdot { width: 8px; height: 8px; border-radius: 50%; background: var(--surface-2); border: 1px solid var(--border); }
+  .pdot.on { background: var(--amber); border-color: var(--amber); }
+  .why { color: var(--text-dim); font-size: 11.5px; margin-top: 3px; }
+
+  /* Watchlist rail */
+  /* Watchlist cards — same thick left + bottom highlight, colored by state:
+     actionable = green, near = amber, cooling = red (dim), else neutral. */
+  .wl-card { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--border); border-bottom: 3px solid var(--border); border-radius: var(--radius-sm); padding: 11px 12px; margin-bottom: 10px; position: relative; }
+  .wl-card.sc-act { border-left-color: var(--green); border-bottom-color: var(--green); }
+  .wl-card.sc-act.glow { box-shadow: 0 0 0 1px rgba(34,197,94,.22); }
+  .wl-card.sc-near { border-left-color: var(--amber); border-bottom-color: var(--amber); }
+  .wl-card.sc-cool { border-left-color: var(--red); border-bottom-color: var(--red); opacity: .72; }
+  .wl-card.sc-pot { border-left-color: var(--neutral); border-bottom-color: var(--neutral); }
+  .wl-state { font-size: 11.5px; color: var(--text-muted); margin-top: 5px; }
+  .track { display: flex; align-items: center; gap: 5px; margin-top: 9px; }
+  .track .step { width: 7px; height: 7px; border-radius: 50%; background: var(--surface-2); border: 1px solid var(--border); }
+  .track .step.done { background: var(--neutral); border-color: var(--neutral); }
+  .track .step.now { background: var(--green); border-color: var(--green); }
+  .track .seg-line { flex: 1; height: 1px; background: var(--border); max-width: 22px; }
+  .notify { margin-top: 10px; }
+  .toggle { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; color: var(--text-muted); cursor: pointer; user-select: none; }
+  .switch { width: 30px; height: 17px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); position: relative; transition: background .15s; }
+  .switch::after { content: ""; position: absolute; top: 1.5px; left: 1.5px; width: 12px; height: 12px; border-radius: 50%; background: var(--text-dim); transition: all .15s; }
+  .toggle.on .switch { background: rgba(59,130,246,.35); border-color: var(--accent); }
+  .toggle.on .switch::after { left: 14px; background: var(--accent); }
+
+  /* dev-only control — clearly flagged, not a production affordance */
+  .pillset.dev { border-style: dashed; border-color: #3a3320; }
+  .pill.dev { color: #8a7a3a; }
+  .pill.dev::before { content: "DEV "; font-size: 9px; letter-spacing: 1px; opacity: .8; }
+  .pill.dev.active { color: var(--amber); }
+
+  .note { font-size: 11px; color: var(--text-dim); text-align: center; padding: 10px 10px 32px; }
+  .floatnote { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); background: var(--surface-2); border: 1px solid var(--border); color: var(--text-muted); font-size: 11px; padding: 6px 14px; border-radius: 999px; }
+  /* Watchlist is a collapsible right drawer: a thin 48px handle is always
+     visible (so users know it exists); opening expands the column to 300px. */
+  .body { grid-template-columns: 300px minmax(0,1fr) var(--rail-w); }
+  .body.rail-open { --rail-w: 300px; }
+  @media (max-width: 1180px) { .body { grid-template-columns: 260px minmax(0,1fr) var(--rail-w); } }
+  @media (max-width: 940px)  { .body { grid-template-columns: 220px minmax(0,1fr) var(--rail-w); } }
+
+  /* Collapsed handle (the "Watchlist" tab) */
+  .rail { position: relative; }
+  .rail-tab { width: var(--rail-w); height: 100%; background: #12151b; border: 0; color: var(--text-muted); cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 16px 0; transition: color .15s, background .15s; }
+  .rail-tab:hover { color: var(--text); background: #161a22; }
+  .rail-tab .chev { font-size: 17px; color: var(--accent); }
+  .rail-tab .vlabel { writing-mode: vertical-rl; letter-spacing: 2.5px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+  .rail-tab .vcount { writing-mode: vertical-rl; font-size: 10px; color: var(--text-dim); letter-spacing: 1px; }
+  .rail-body { display: none; }
+  .body.rail-open .rail-tab { display: none; }
+  .body.rail-open .rail-body { display: block; }
+  .rail-head { display: flex; align-items: center; justify-content: space-between; margin: 0 0 4px; }
+  .rail-close { background: transparent; border: 1px solid var(--border); color: var(--text-muted); width: 24px; height: 24px; border-radius: 7px; cursor: pointer; font-size: 15px; line-height: 1; }
+  .rail-close:hover { color: var(--text); border-color: #34404f; }
+  .rail-tools { display: flex; align-items: center; gap: 6px; }
+
+  /* Add-to-watchlist controls */
+  .wl-add-btn { background: rgba(34,197,94,.12); border: 1px solid rgba(34,197,94,.4); color: var(--green); font: inherit; font-size: 11px; font-weight: 600; padding: 4px 9px; border-radius: 7px; cursor: pointer; line-height: 1; }
+  .wl-add-btn:hover { background: rgba(34,197,94,.2); }
+  .wl-addrow { display: none; gap: 6px; margin: 4px 0 10px; }
+  .wl-addrow.show { display: flex; }
+  .wl-addrow input { flex: 1; min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); font: inherit; font-size: 12.5px; padding: 8px 10px; outline: none; text-transform: uppercase; }
+  .wl-addrow input:focus { border-color: var(--green); }
+  .wl-addrow button { background: var(--green); border: 0; color: #06210f; font: inherit; font-size: 12px; font-weight: 700; padding: 0 12px; border-radius: var(--radius-sm); cursor: pointer; }
+  .wl-addrow .hint { font-size: 11px; color: var(--text-dim); margin: -4px 0 8px; }
+  .wl-card .wl-remove { position: absolute; top: 8px; right: 8px; width: 18px; height: 18px; border-radius: 5px; border: 0; background: transparent; color: var(--text-dim); cursor: pointer; font-size: 13px; line-height: 1; opacity: 0; transition: opacity .12s; }
+  .wl-card:hover .wl-remove { opacity: 1; }
+  .wl-card .wl-remove:hover { color: var(--red); background: rgba(239,68,68,.12); }
+  .wl-flash { animation: wlflash 1.1s ease; }
+  @keyframes wlflash { 0% { box-shadow: 0 0 0 2px rgba(34,197,94,.6); } 100% { box-shadow: 0 0 0 2px rgba(34,197,94,0); } }
+
+  /* "+ Watch" button on the search result + deep-dive verdict banner */
+  .watch-btn { background: transparent; border: 1px solid var(--border); color: var(--text-muted); font: inherit; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 7px; cursor: pointer; line-height: 1; white-space: nowrap; }
+  .watch-btn:hover { color: var(--text); border-color: var(--green); }
+  .watch-btn.on { background: rgba(34,197,94,.14); border-color: rgba(34,197,94,.45); color: var(--green); }
+  .rc-watch { margin-left: auto; }
+  .vb-watch { margin-left: auto; }
+</style>
+</head>
+<body>
+<div class="root">
+
+  <!-- ── LEFT NAVIGATION ────────────────────────────────────── -->
+  <nav class="sidenav">
+    <div class="nav-orb"><span class="o"></span><span class="nav-fade">Market open</span></div>
+
+    <div class="nav-sec nav-fade">Trading</div>
+    <div class="nav-item active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      <span class="t nav-fade">Dashboard</span>
+    </div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <span class="t nav-fade">Scanner</span>
+    </div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      <span class="t nav-fade">Watchlist</span>
+    </div>
+
+    <div class="nav-sec nav-fade">Analysis</div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      <span class="t nav-fade">Signal history</span>
+    </div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+      <span class="t nav-fade">Scenario builder</span>
+    </div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+      <span class="t nav-fade">Portfolio</span>
+    </div>
+
+    <div class="nav-sec nav-fade">System</div>
+    <div class="nav-item admin" id="navAdmin">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z"/></svg>
+      <span class="t nav-fade">Admin</span>
+      <span class="nav-dot amber"></span>
+      <svg class="caret-sm nav-fade" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+    </div>
+    <div class="nav-sub" id="navAdminSub">
+      <div class="nav-subitem nav-fade">Overview</div>
+      <div class="nav-subitem nav-fade">Weight proposals</div>
+      <div class="nav-subitem nav-fade">Parameters</div>
+      <div class="nav-subitem nav-fade">Historical validation</div>
+      <div class="nav-subitem nav-fade">Users</div>
+      <div class="nav-subitem nav-fade">Audit log</div>
+      <div class="nav-subitem nav-fade">Error logs</div>
+      <div class="nav-subitem nav-fade">Dashboard timing</div>
+    </div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+      <span class="t nav-fade">Alerts</span>
+      <span class="nav-dot green"></span>
+    </div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <span class="t nav-fade">Settings</span>
+    </div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span class="t nav-fade">How it works</span>
+    </div>
+
+    <div class="nav-spacer"></div>
+    <div class="nav-user">
+      <span class="av">RG</span>
+      <span class="nav-fade"><div class="nm">Roy Gurijala</div><div class="role" id="navRole">Admin · STOCVEST</div></span>
+    </div>
+    <div class="nav-item nav-signout">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      <span class="t nav-fade">Sign out</span>
+    </div>
+  </nav>
+
+<div class="app">
+
+  <!-- ── SESSION HEADER ─────────────────────────────────────── -->
+  <div class="header">
+    <div class="brand">STOCVEST<span class="dot">.</span></div>
+    <div class="pulse">
+      <span class="orb green"></span>
+      <span>Market in <b>expansion</b> · breadth <b>positive</b> · VIX <b>calm (14.2)</b> · <b>Active session</b></span>
+    </div>
+    <div class="spacer"></div>
+    <div class="gsearch">
+      <span class="ic">⌕</span>
+      <input id="globalSearch" placeholder="Jump to a symbol or company…" autocomplete="off" />
+      <div class="gsearch-drop" id="gsearchDrop"></div>
+    </div>
+    <div class="count-chip"><span class="n">3</span> actionable · 2 cooling</div>
+    <div class="asof">Market data as of <b id="clock">—</b></div>
+  </div>
+
+  <!-- ── FILTER BAR ─────────────────────────────────────────── -->
+  <div class="filters">
+    <div class="pillset" data-group="mode">
+      <button class="pill active" data-mode="all">All</button>
+      <button class="pill day" data-mode="day">⚡ Day</button>
+      <button class="pill swing" data-mode="swing">◈ Swing</button>
+    </div>
+    <div class="pillset" data-group="state">
+      <button class="pill active" data-state="all">All states</button>
+      <button class="pill" data-state="act">Actionable</button>
+      <button class="pill" data-state="near">Near</button>
+    </div>
+    <div class="pillset dev" data-group="demo" title="Prototype-only control — not shipped to production">
+      <button class="pill dev" id="quietBtn">Simulate quiet market</button>
+    </div>
+  </div>
+
+  <!-- ── 3-ZONE BODY ────────────────────────────────────────── -->
+  <div class="body">
+
+    <!-- ZONE 1 — SIGNAL FEED -->
+    <div class="zone feed"><div class="zone-pad">
+      <div class="search">
+        <span class="ic">⌕</span>
+        <input id="searchInput" placeholder="Why isn't a symbol in the feed?" autocomplete="off" />
+        <div class="search-hint" id="searchHint">Type a ticker to see its feed status and what's gating it — this won't open the symbol, it explains why it is or isn't here.</div>
+        <div class="reasoncard" id="reasonCard">
+          <div class="rc-head"><span style="color:var(--red)">✕</span> <span id="rcSym">SPCX</span> · Not in feed
+            <button class="watch-btn rc-watch" id="rcWatch">+ Watch</button>
+          </div>
+          <div class="rc-reason">Reason: <b id="rcReason">Not in universe</b><br /><span id="rcDetail">Doesn't meet minimum price or liquidity requirements for signal evaluation.</span></div>
+        </div>
+      </div>
+
+      <div class="section-label">Day trade <span class="ct">· 2</span><span class="rule"></span></div>
+      <div id="feedDay"></div>
+      <div class="section-label">Swing <span class="ct">· 2</span><span class="rule"></span></div>
+      <div id="feedSwing"></div>
+      <div class="section-label">Cooling <span class="ct">· 1</span><span class="rule"></span></div>
+      <div id="feedCool"></div>
+      <div class="note">Capped feed — strongest setups only. Quality over quantity.</div>
+    </div></div>
+
+    <!-- ZONE 2 — DEEP DIVE / THE WATCH -->
+    <div class="zone center"><div class="zone-pad" style="max-width:760px;margin:0 auto">
+
+      <!-- The Watch (empty-state hero) -->
+      <div class="watch" id="watch">
+        <div class="verdict-banner" style="border-left-color:var(--amber)">
+          <div class="lead">2 actionable setups today. <span class="muted">Conditions are selective — quality over quantity.</span></div>
+          <div class="vb-sub"><span class="asof">Market read as of <b id="clock2">—</b></span></div>
+        </div>
+        <div class="panel">
+          <h4>The Watch — closest to firing</h4>
+          <div class="watch-row">
+            <div>
+              <div class="sym"><span class="t">TSLA</span><span class="co">Tesla Inc · $242.10 <span class="up">+1.1%</span></span></div>
+              <div class="why">Being monitored · 3 of 6 layers aligned · needs stronger technical + macro confirmation</div>
+            </div>
+            <div class="progress"><span class="pm-track sm"><span class="pm-seg on"></span><span class="pm-seg on"></span><span class="pm-seg next"></span></span><span class="pm-label amber">Near</span></div>
+          </div>
+          <div class="watch-row">
+            <div>
+              <div class="sym"><span class="t">META</span><span class="co">Meta Platforms · $508.30 <span class="up">+0.4%</span></span></div>
+              <div class="why">Potential · directional edge forming, R/R not yet at 2:1</div>
+            </div>
+            <div class="progress"><span class="pm-track sm"><span class="pm-seg on"></span><span class="pm-seg next"></span><span class="pm-seg"></span></span><span class="pm-label">Potential</span></div>
+          </div>
+          <div class="watch-row">
+            <div>
+              <div class="sym"><span class="t">OKTA</span><span class="co">Okta Inc · $98.65 <span class="down">-0.7%</span></span></div>
+              <div class="why">Cooling · was actionable 2h ago, now resting — monitor for re-entry</div>
+            </div>
+            <div class="progress"><span class="pm-track sm"><span class="pm-seg on"></span><span class="pm-seg on"></span><span class="pm-seg cool"></span></span><span class="pm-label cool">Cooling</span></div>
+          </div>
+        </div>
+        <div class="panel">
+          <h4>Market brief</h4>
+          <div class="brief amber">Breadth is <span class="accent">positive</span> with leadership in semis and software. The tape favors continuation over reversal, but the engine is gating most names on entry timing rather than direction — <span class="accent">wait for alignment</span> rather than chasing. Two swing names cleared all gates; nothing on the day desk qualifies yet this session.</div>
+        </div>
+      </div>
+
+      <!-- Deep dive -->
+      <div class="dive show" id="dive">
+        <div class="verdict-banner" id="vBanner">
+          <div class="vb-line"><span id="vDir">LONG</span> · <span id="vSym">NVDA</span> · <span id="vState">Actionable</span> <span class="pill-mode" id="vMode">Day</span><button class="watch-btn vb-watch" id="vbWatch">+ Watch</button></div>
+          <div class="vb-sub">
+            <span id="vCo">NVIDIA Corp · $128.40 <span class="up">+2.4%</span></span>
+            <span class="asof">Price as of <b id="clock3">—</b></span>
+            <span class="asof">Evaluated <b>3:20:00 PM ET</b></span>
+          </div>
+        </div>
+
+        <!-- Plain-English brief — moved above the tabs -->
+        <div class="panel">
+          <h4>Plain-English brief</h4>
+          <div class="brief" id="brief">NVDA is showing a clean long setup on the day desk. Trend, momentum, and volume are all confirming in the same direction, and price is holding above VWAP after a controlled pullback. The setup cleared every gate — the only caution is that it's extended into the prior high, so the entry favors a pullback to the zone rather than chasing strength.</div>
+          <div class="bridge">
+            <span class="bridge-state"><b>5 of 6 layers confirmed</b> · Macro neutral · 1 timing caution</span>
+            <a class="bridge-link" id="openDetail">View full analysis →</a>
+          </div>
+        </div>
+
+        <!-- Setup / Layers / Evolution tabs (from the old design) -->
+        <div class="setup-tabs" id="setupTabs">
+          <button class="stab active" data-tab="setup">Setup</button>
+          <button class="stab" data-tab="layers">Layers</button>
+          <button class="stab" data-tab="evolution">Evolution</button>
+        </div>
+
+        <!-- ░░ SETUP TAB — mirrors the old Signals "Setup" read ░░ -->
+        <div class="tabpane active" data-pane="setup">
+
+          <!-- Bias + composite synthesis + layer force grouping -->
+          <div class="panel">
+            <div class="microlabel">Bias</div>
+            <div class="bias-big">Bullish</div>
+            <div class="bias-sub">Directional lean</div>
+            <p class="syn" id="synLine">Composite synthesis leans bullish. Sector leadership and improving internals carry the read.</p>
+            <div class="force-grid">
+              <div><div class="force-label support">Bullish-leaning layers</div><div class="force-names" data-force="support">—</div></div>
+              <div><div class="force-label oppose">Bearish-leaning layers</div><div class="force-names" data-force="oppose">—</div></div>
+              <div class="force-wide"><div class="force-label muted">Neutral / no edge</div><div class="force-names" data-force="neutral">—</div></div>
+            </div>
+          </div>
+
+          <!-- Price chart (context, not entry signals) -->
+          <div class="panel">
+            <h4>Price chart</h4>
+            <div class="chart-cap">Daily candles with the 50-day average and reference levels — context only, not entry signals</div>
+            <div class="pchart" id="pchart"></div>
+          </div>
+
+          <!-- Timeframe alignment -->
+          <div class="panel">
+            <div class="tf-head"><h4 style="margin:0">Timeframe alignment</h4><span class="desk-badge" id="deskBadge">DAY DESK</span></div>
+            <p class="tf-line"><b>Aligned timeframe:</b> daily constructive, intraday holding above VWAP.</p>
+            <p class="tf-sub">Impact on current setup: supports the long bias on the day desk.</p>
+            <p class="tf-line2">Daily structure vs intraday — price above the 50-day average; intraday higher-low intact. RSI 61.</p>
+          </div>
+
+          <!-- Why layers read this way -->
+          <div class="panel">
+            <h4>Why layers read this way</h4>
+            <p class="why-sum">Sector leadership and improving internals are the tailwind; macro is the only layer not actively confirming right now.</p>
+            <div class="chain-label">Tailwind chain: SECTOR → MARKET INTERNALS → TECHNICAL</div>
+            <div class="chain" id="chain"></div>
+            <p class="why-foot">Informational — does not change actionable gates</p>
+          </div>
+
+          <!-- Setup progress / phase / entry timing -->
+          <div class="panel judgment">
+            <div class="judge-grid">
+              <div>
+                <div class="microlabel">Setup progress</div>
+                <div class="progress-meter" id="progMeter"></div>
+                <div class="judge-accent">Near ready</div>
+              </div>
+              <div>
+                <div class="microlabel">Phase</div>
+                <div class="judge-big">Expansion</div>
+                <div class="judge-dim">Momentum stage — not a trade signal</div>
+              </div>
+              <div>
+                <div class="microlabel">Entry timing</div>
+                <div class="judge-big" style="color:var(--green)">Strong</div>
+                <div class="judge-exec">Execution: Actionable</div>
+              </div>
+            </div>
+            <p class="judge-note"><span class="lbl">What is blocking this trade:</span> price is extended into the prior high — favor a pullback to the entry zone rather than chasing strength.</p>
+            <p class="judge-watch"><span class="lbl acc">What must change:</span> a controlled pullback into the zone keeps R/R above 2:1.</p>
+          </div>
+
+          <!-- Setup & scenario (carries the new-design ladder + R/R gauge) -->
+          <div class="panel">
+            <div class="microlabel">Setup &amp; scenario</div>
+            <p class="exec-head">Setup is actionable — entry timing aligned.</p>
+            <p class="exec-line">All six gates support the long; the higher-probability entry is a pullback into the zone rather than chasing the breakout.</p>
+            <span class="conviction">A-TIER · HIGH CONVICTION</span>
+
+            <div class="microlabel mt">Scenario geometry</div>
+            <div class="ladder" id="ladder"></div>
+
+            <div class="microlabel mt">Risk / reward</div>
+            <div class="rr">
+              <div class="gauge">
+                <svg viewBox="0 0 120 70">
+                  <path d="M10 65 A 50 50 0 0 1 110 65" fill="none" stroke="#262B36" stroke-width="9" stroke-linecap="round"/>
+                  <path id="rrArc" d="M10 65 A 50 50 0 0 1 110 65" fill="none" stroke="#22C55E" stroke-width="9" stroke-linecap="round" stroke-dasharray="157" stroke-dashoffset="40"/>
+                  <line x1="60" y1="13" x2="60" y2="22" stroke="#94A3B8" stroke-width="2"/>
+                </svg>
+              </div>
+              <div class="rr-info">
+                <div class="big" id="rrVal">4.2:1</div>
+                <div class="sub"><span class="pass" id="rrStatus">Clears 2:1 threshold</span> · risk $2.10 / reward $8.80</div>
+              </div>
+            </div>
+            <div class="actions"><button class="btn" id="copyBtn">Copy scenario</button></div>
+          </div>
+
+          <!-- Fundamental backdrop (optional, not scored) -->
+          <div class="panel fund">
+            <div class="fund-head"><span class="fund-title">Fundamental backdrop: Constructive</span><span class="fund-opt">optional · not scored</span></div>
+            <ul class="fund-list">
+              <li>Data-center demand remains a positive catalyst</li>
+              <li>Guidance raised at the last update</li>
+              <li>Earnings beat consensus last quarter</li>
+              <li>Analysts active — multiple target raises in the window</li>
+            </ul>
+            <p class="fund-note">Constructive fundamentals reinforce the layer alignment — alignment remains primary.</p>
+          </div>
+        </div>
+
+        <!-- ░░ LAYERS TAB — mirrors the old "6-Layer Breakdown" + radar ░░ -->
+        <div class="tabpane" data-pane="layers">
+          <div class="panel">
+            <div class="lb-head"><h4 style="margin:0">6-Layer Breakdown</h4><span class="lb-sub">Level 0–100 per layer ⓘ</span></div>
+            <div class="lb-asof" id="lbAsof">as of latest close · leaning bullish</div>
+            <div class="force-grid tight">
+              <div><div class="force-label support">Bullish-leaning layers</div><div class="force-names" data-force="support">—</div></div>
+              <div><div class="force-label oppose">Bearish-leaning layers</div><div class="force-names" data-force="oppose">—</div></div>
+              <div class="force-wide"><div class="force-label muted">Neutral / no edge</div><div class="force-names" data-force="neutral">—</div></div>
+              <p class="force-foot force-wide">Level scores show today's layer read, not how much each layer weighs in the composite. Structure and breadth usually matter more than a single headline.</p>
+            </div>
+            <div class="layer-rows" id="layerRows"></div>
+          </div>
+
+          <div class="panel">
+            <h4>Signal radar</h4>
+            <p class="radar-cap">Level 0–100 vs baseline (50). Bars = Δ per layer.</p>
+            <div class="radar-legend">
+              <span class="rl-item"><span class="sw cur"></span>Current</span>
+              <span class="rl-item"><span class="sw base"></span>Baseline</span>
+            </div>
+            <div class="radar-wrap" id="radarWrap"></div>
+            <h4 class="mt">Notable moves (Δ)</h4>
+            <div class="moves-legend">
+              <span class="ml-item"><span class="sw hot"></span>Hotter (+Δ)</span>
+              <span class="ml-item"><span class="sw cold"></span>Cooler (−Δ)</span>
+              <span class="ml-item"><span class="sw inline"></span>In line (~0)</span>
+            </div>
+            <div class="moves" id="moves"></div>
+          </div>
+        </div>
+
+        <!-- ░░ EVOLUTION TAB ░░ -->
+        <div class="tabpane" data-pane="evolution">
+          <div class="panel">
+            <h4>Setup evolution</h4>
+            <p class="evo-cap">How this setup matured across recent sessions — newest first.</p>
+            <div class="evo" id="evo"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Full detail mode -->
+      <div class="detail" id="detail">
+        <div class="detail-head">
+          <button class="back" id="backBtn">←</button>
+          <div class="dh-main">
+            <div class="dh-title"><b id="dSym">NVDA</b> <span class="dh-sub">full analysis</span></div>
+            <div class="dh-meta" id="dMeta">NVIDIA Corp · $128.40 <span class="up">+2.4%</span></div>
+          </div>
+          <div class="dh-pills">
+            <span class="dh-pill dir long" id="dDir">Long</span>
+            <span class="dh-pill state act" id="dStatePill">Actionable</span>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h4>AI synthesis <span class="asof-inline">generated 3:20 PM ET</span></h4>
+          <div class="brief" id="synthesis">NVDA is the cleanest long on the day desk right now. The technical layer is fully aligned — price reclaimed VWAP on rising volume after a shallow pullback, and momentum is expanding without becoming stretched on the lower timeframes. Sector and internals are supportive: semis are leading and breadth is positive. The one drag is macro, which is neutral rather than a tailwind, and entry timing is the single caution — price is pressing the prior high, so the higher-probability entry is a pullback into the zone rather than chasing the breakout.</div>
+        </div>
+
+        <div class="panel ev-recap-panel">
+          <h4>Layer evidence</h4>
+          <p class="ev-recap" id="evRecap">5 of 6 layers confirmed · Macro neutral · 0 bearish.</p>
+          <a class="bridge-link" id="toLayers">View the full 6-layer breakdown &amp; radar →</a>
+        </div>
+
+        <div class="panel">
+          <h4>Reference levels</h4>
+          <div class="ref-cap">Context only — not entry signals</div>
+          <div class="ref-grid" id="refLevels"></div>
+          <div class="ref-pattern">Pattern context: pullback-to-VWAP continuation</div>
+        </div>
+
+        <div class="panel">
+          <h4>Risk factors</h4>
+          <div class="risk-list" id="riskFactors"></div>
+        </div>
+
+        <div class="panel">
+          <h4>News &amp; analyst context</h4>
+
+          <div class="consensus" id="consensus">
+            <div class="cons-main"><span id="consLabel"></span> · avg target <b id="consAvg">$140</b> <span class="cons-range" id="consRange">range $128–$160</span></div>
+            <div class="cons-dist" id="consDist"></div>
+            <div class="cons-sub" id="consSub">5 most recent actions · last 30 days · most recent 2 days ago</div>
+          </div>
+          <div class="ratings" id="ratings"></div>
+
+          <div class="news-label">Recent headlines</div>
+          <div class="news" id="news"></div>
+        </div>
+
+        <div class="actions"><button class="btn" id="openScenarioBtn">Open scenario</button></div>
+      </div>
+
+    </div></div>
+
+    <!-- ZONE 3 — WATCHLIST RAIL (collapsible drawer, collapsed by default) -->
+    <div class="zone rail">
+      <button class="rail-tab" id="railOpen" title="Open watchlist">
+        <span class="chev">‹</span>
+        <span class="vlabel">Watchlist</span>
+        <span class="vcount">5 symbols</span>
+      </button>
+      <div class="rail-body"><div class="zone-pad">
+        <div class="rail-head">
+          <span class="section-label" style="margin:0">Your watchlist <span class="ct" id="wlCount">· 5</span></span>
+          <div class="rail-tools">
+            <button class="wl-add-btn" id="wlAddBtn" title="Add a symbol to your watchlist">+ Add</button>
+            <button class="rail-close" id="railClose" title="Collapse">›</button>
+          </div>
+        </div>
+        <div class="wl-addrow" id="wlAddRow">
+          <input id="wlAddInput" placeholder="Add symbol — e.g. AAPL" maxlength="6" />
+          <button id="wlAddGo">Add</button>
+        </div>
+        <div id="watchlist"></div>
+        <div class="note">State-aware monitoring · not a price list</div>
+      </div></div>
+    </div>
+
+  </div>
+</div>
+</div>
+<div class="floatnote">Static prototype · mock data · nothing wired to the backend</div>
+
+<script>
+  // ── Mock data ───────────────────────────────────────────────
+  const feed = {
+    day: [
+      { sym:"NVDA", co:"NVIDIA Corp", p:"$128.40", ch:"+2.4%", up:true, dir:"LONG", bias:"bull", vtext:"strong alignment", state:"act", since:"fired 11m ago" },
+      { sym:"AMD",  co:"Adv. Micro Devices", p:"$168.92", ch:"+1.3%", up:true, dir:"LONG", bias:"bull", vtext:"entry timing forming", state:"near", since:"near 4m" },
+    ],
+    swing: [
+      { sym:"AVGO", co:"Broadcom Inc", p:"$1,642.10", ch:"+0.9%", up:true, dir:"LONG", bias:"bull", vtext:"expansion phase", state:"act", since:"fired 1h ago", swing:true },
+      { sym:"MSFT", co:"Microsoft Corp", p:"$438.20", ch:"-0.2%", up:false, dir:"SHORT", bias:"bear", vtext:"momentum fading", state:"pot", since:"watching 2d", swing:true },
+    ],
+    cool: [
+      { sym:"OKTA", co:"Okta Inc", p:"$98.65", ch:"-0.7%", up:false, dir:"LONG", bias:"bull", vtext:"was actionable 2h ago", state:"cool", since:"resting", swing:true },
+    ]
+  };
+  const watchlist = [
+    { sym:"NVDA", co:"NVIDIA Corp", p:"$128.40", ch:"+2.4%", up:true, sc:"act",  state:"Swing · Actionable · Long", track:["done","done","now"], glow:true, notify:false },
+    { sym:"TSLA", co:"Tesla Inc", p:"$242.10", ch:"+1.1%", up:true, sc:"near", state:"Being monitored · 3/6 aligned", track:["done","now",""], glow:false, notify:true },
+    { sym:"OKTA", co:"Okta Inc", p:"$98.65", ch:"-0.7%", up:false, sc:"cool", state:"Cooling · was actionable 2h ago", track:["done","done","cool"], glow:false, notify:true },
+    { sym:"AMZN", co:"Amazon.com", p:"$185.40", ch:"+0.6%", up:true, sc:"pot",  state:"Potential · edge forming", track:["now","",""], glow:false, notify:false },
+    { sym:"AAPL", co:"Apple Inc", p:"$214.05", ch:"+0.1%", up:true, sc:"pot",  state:"Monitored · no directional edge", track:["",""], glow:false, notify:false },
+  ];
+  const ladder = [
+    {cls:"stop", lbl:"Stop", val:"126.30", x:8},
+    {cls:"now", lbl:"Now", val:"128.40", x:34},
+    {cls:"entry", lbl:"Entry", val:"127.80", x:28},
+    {cls:"t1", lbl:"T1", val:"132.10", x:64},
+    {cls:"t2", lbl:"T2", val:"137.20", x:92},
+  ];
+  const reasons = {
+    SPCX:["Not in universe","Doesn't meet minimum price or liquidity requirements for signal evaluation.","var(--red)"],
+    TSLA:["Below score threshold","Signal strength below actionable threshold — being monitored. 3 of 6 layers aligned.","var(--amber)"],
+    OKTA:["Cooling","Recently actionable — now in cooldown period. Monitor for re-entry conditions.","var(--amber)"],
+    F:["Failed R/R","Setup geometry doesn't meet the minimum 2:1 R/R standard right now.","var(--amber)"],
+  };
+
+  // ── Render feed ─────────────────────────────────────────────
+  function laneClass(it){ return it.swing ? "lane-swing" : "lane-day"; }
+  function laneIc(it){ return it.swing ? "◈" : "⚡"; }
+  function tagFor(s){ return ({act:["act","Actionable"],near:["near","Near"],pot:["pot","Potential"],cool:["cool","Cooling"]})[s]; }
+  function priceClass(p){ return parseFloat(String(p).replace(/[^0-9.]/g,'')) > 999 ? 'long' : ''; }
+  function biasPill(it){
+    const lbl = it.bias === "bear" ? "Bearish" : "Bullish";
+    return `<span class="bias-pill ${it.bias === "bear" ? "bear" : "bull"}">${lbl}</span>`;
+  }
+  function card(it){
+    const [tc,tl] = tagFor(it.state);
+    return `<div class="card ${laneClass(it)} ${it.state==='cool'?'cooling':''}" data-mode="${it.swing?'swing':'day'}" data-state="${it.state}" data-sym="${it.sym}">
+      <div class="card-top">
+        <div class="sym"><span class="t">${it.sym}</span><span class="co">${it.co}</span></div>
+        <div class="px ${it.up?'up':'down'}"><div class="p ${priceClass(it.p)}">${it.p}</div><div class="ch">${it.ch}</div></div>
+      </div>
+      <div class="verdict"><span class="lane-ic">${laneIc(it)}</span>${biasPill(it)}<span class="vtext">${it.vtext}</span><span class="tag ${tc}">${tl}</span></div>
+      <div class="meta">${it.since}</div>
+    </div>`;
+  }
+  document.getElementById('feedDay').innerHTML = feed.day.map(card).join('');
+  document.getElementById('feedSwing').innerHTML = feed.swing.map(card).join('');
+  document.getElementById('feedCool').innerHTML = feed.cool.map(card).join('');
+
+  // ── Render watchlist ────────────────────────────────────────
+  function trackHtml(t){
+    // State ladder as sleek segments: done = filled green, now = current
+    // (green + glow), cool = red, empty = outline. Matches the setup meter.
+    const seg = (s)=>{
+      if(s==='done') return '<span class="pm-seg on"></span>';
+      if(s==='now')  return '<span class="pm-seg on cur"></span>';
+      if(s==='cool') return '<span class="pm-seg cool"></span>';
+      return '<span class="pm-seg"></span>';
+    };
+    return `<span class="pm-track sm">${t.map(seg).join('')}</span>`;
+  }
+  const watchlistEl = document.getElementById('watchlist');
+  function renderWatchlist(){
+    watchlistEl.innerHTML = watchlist.map((w,i)=>`
+    <div class="wl-card sc-${w.sc} ${w.glow?'glow':''}">
+      <button class="wl-remove" data-remove="${i}" title="Remove from watchlist">×</button>
+      <div class="card-top">
+        <div class="sym"><span class="t" style="font-size:14px">${w.sym}</span></div>
+        <div class="px ${w.up?'up':'down'}"><div class="p" style="font-size:12px">${w.p}</div><div class="ch">${w.ch}</div></div>
+      </div>
+      <div class="co" style="font-size:11px;color:var(--text-dim);margin-top:2px">${w.co}</div>
+      <div class="wl-state">${w.state}</div>
+      <div class="track">${trackHtml(w.track)}</div>
+      <div class="notify"><span class="toggle ${w.notify?'on':''}"><span class="switch"></span>Notify when actionable</span></div>
+      <div class="asof" style="margin-top:8px">as of <b>${nowStr()}</b></div>
+    </div>`).join('');
+    const c = document.getElementById('wlCount'); if(c) c.textContent = '· ' + watchlist.length;
+    const vc = document.querySelector('.rail-tab .vcount'); if(vc) vc.textContent = watchlist.length + ' symbols';
+  }
+  renderWatchlist();
+
+  // ── Add / remove watchlist symbols ──────────────────────────
+  // Symbol directory so added symbols inherit price/company where we know it.
+  const symInfo = {};
+  [...feed.day,...feed.swing,...feed.cool].forEach(it=>{ symInfo[it.sym] = { co:it.co, p:it.p, ch:it.ch, up:it.up }; });
+  Object.assign(symInfo, {
+    META:{ co:"Meta Platforms", p:"$508.30", ch:"+0.4%", up:true },
+    AAPL:{ co:"Apple Inc", p:"$214.05", ch:"+0.1%", up:true },
+    SPCX:{ co:"SpaceX Holdings", p:"—", ch:"", up:true },
+    F:{ co:"Ford Motor Co", p:"$11.20", ch:"-0.3%", up:false },
+  });
+  function inWatchlist(sym){ return watchlist.some(w=>w.sym===sym); }
+  function flashCard(sym){
+    const el = [...watchlistEl.querySelectorAll('.wl-card')].find(c=>c.querySelector('.t').textContent===sym);
+    if(el){ el.classList.add('wl-flash'); setTimeout(()=>el.classList.remove('wl-flash'),1200); el.scrollIntoView({block:'nearest'}); }
+  }
+  function addToWatchlist(sym){
+    sym = (sym||"").toUpperCase().trim();
+    if(!/^[A-Z]{1,6}$/.test(sym)) return false;
+    if(!document.querySelector('.body').classList.contains('rail-open'))
+      document.querySelector('.body').classList.add('rail-open');
+    if(inWatchlist(sym)){ flashCard(sym); return true; }
+    const info = symInfo[sym] || {};
+    watchlist.unshift({
+      sym, co: info.co || sym, p: info.p || "—", ch: info.ch || "", up: info.up !== false,
+      sc: "pot", state: "Added · monitoring for state changes", track: ["now","",""], glow: false, notify: false
+    });
+    renderWatchlist();
+    flashCard(sym);
+    return true;
+  }
+  function removeFromWatchlist(i){ watchlist.splice(i,1); renderWatchlist(); }
+  // Delegated handlers (survive re-render): remove buttons + notify toggles.
+  watchlistEl.addEventListener('click', (e)=>{
+    const rm = e.target.closest('.wl-remove');
+    if(rm){ removeFromWatchlist(+rm.dataset.remove); return; }
+    const tg = e.target.closest('.toggle');
+    if(tg){ tg.classList.toggle('on'); }
+  });
+
+  // ── Scenario ladder (Setup tab) ─────────────────────────────
+  document.getElementById('ladder').innerHTML =
+    `<div class="line"></div>` + ladder.map(n=>`
+      <div class="node ${n.cls}" style="left:${n.x}%">
+        <div class="val">${n.val}</div><div class="dot"></div><div class="lbl">${n.lbl}</div>
+      </div>`).join('');
+
+  // ── Layers tab: 6-layer breakdown + radar + notable moves ───
+  // pol: support (bullish-leaning) / oppose (bearish) / neutral
+  // Single source of truth for the 6 layers — Setup grouping, Layers rows,
+  // radar, notable moves, AND the full-analysis evidence chain all derive
+  // from this array so nothing can contradict. pol: support=bullish-leaning,
+  // neutral=no edge, oppose=bearish-leaning.
+  const layers = [
+    { name:"Technical",       short:"Technical", pol:"support", read:"Bullish read",  level:72, d:+12, desc:"Price reclaimed VWAP on rising volume after a shallow pullback; above rising 20/50 MAs. Daily RSI 61, MACD above signal." },
+    { name:"News",            short:"News",      pol:"support", read:"Bullish read",  level:64, d:+8,  desc:"News 64/100 from 10 quality articles — coverage skews positive; no fresh negative catalyst in the window." },
+    { name:"Macro",           short:"Macro",     pol:"neutral", read:"Neutral read",  level:48, d:-2,  desc:"Macro 48/100 — rates and the broad regime are neither a tailwind nor a clear headwind right now. The one layer not actively confirming." },
+    { name:"Sector",          short:"Sector",    pol:"support", read:"Bullish read",  level:70, d:+15, desc:"Semis are leading the tape today; the symbol is moving with, not against, its group." },
+    { name:"Geopolitical",    short:"Geo",       pol:"support", read:"Bullish read",  level:60, d:+8,  desc:"No geopolitical overhang on the name or its supply chain — the macro-geo backdrop is not fighting the long." },
+    { name:"Market Internals",short:"Internals", pol:"support", read:"Bullish read",  level:66, d:+10, desc:"Breadth positive, advancing volume dominant; the internals support continuation." },
+  ];
+  const polDot = { support:"var(--green)", oppose:"var(--red)", neutral:"var(--text-muted)" };
+  const dStr = (d)=> d>0?`+${d}`: d<0?`${d}`:`~0`;
+  // Layer → evidence status mapping (used by the full-analysis chain).
+  const layerStatus = (pol)=> pol==='support'?'pass': pol==='oppose'?'fail':'weak';
+  const statusLabel = (s)=> s==='pass'?'Confirmed': s==='fail'?'Failed':'Neutral';
+  // Force grouping shared by the Setup + Layers force grids and the counts.
+  const forceGroups = { support:[], oppose:[], neutral:[] };
+  layers.forEach(l=> forceGroups[l.pol].push(l.name));
+  const forceNames = (g)=> g.length ? g.join(' · ') : '—';
+  const alignedCount = forceGroups.support.length;
+  document.getElementById('layerRows').innerHTML = layers.map(l=>`
+    <div class="lrow">
+      <span class="ldot" style="background:${polDot[l.pol]}"></span>
+      <div class="lbody">
+        <div class="lname">${l.name}</div>
+        <div class="lread">${l.read}</div>
+        <div class="llevel"><span class="lv">Level ${l.level}/100</span><span class="ld">${dStr(l.d)} Δ vs 50</span></div>
+        <div class="lbar"><span style="width:${l.level}%"></span></div>
+        <div class="ldesc">${l.desc}</div>
+      </div>
+    </div>`).join('');
+
+  // Populate every force grouping (Setup + Layers tabs) from the same array
+  document.querySelectorAll('[data-force]').forEach(el=>{ el.textContent = forceNames(forceGroups[el.dataset.force]); });
+  // Composite synthesis + aligned count — derived counts, never hardcoded
+  const synEl = document.getElementById('synLine');
+  if(synEl) synEl.textContent =
+    `Composite synthesis leans bullish — ${forceGroups.support.length} layers lean bullish, ${forceGroups.oppose.length} bearish, and ${forceGroups.neutral.length} neutral. Sector leadership and improving internals carry the read.`;
+  const lbAsofEl = document.getElementById('lbAsof');
+  if(lbAsofEl) lbAsofEl.textContent = `as of latest close · ${alignedCount} of ${layers.length} aligned · leaning bullish`;
+
+  // Sleek segmented setup-progress meter — derived from alignedCount
+  (function(){
+    const total = layers.length, done = alignedCount;
+    const segs = Array.from({length: total}, (_, i)=>{
+      const cls = i < done ? 'on' : (i === done ? 'next' : '');
+      return `<span class="pm-seg ${cls}"></span>`;
+    }).join('');
+    const pm = document.getElementById('progMeter');
+    if(pm) pm.innerHTML = `<span class="pm-track">${segs}</span><span class="pm-count">${done}<span class="tot">/${total}</span></span>`;
+  })();
+
+  // Radar: hexagon, current (filled) vs baseline 50 (dashed)
+  (function(){
+    const labels = ["Tech","News","Macro","Sector","Geo","Intl"];
+    const cx=180, cy=150, R=110, n=6;
+    const pt=(i,val)=>{ const a=-Math.PI/2 + i*2*Math.PI/n; const r=R*val/100; return [cx+r*Math.cos(a), cy+r*Math.sin(a)]; };
+    const ringPts = (val)=> labels.map((_,i)=>pt(i,val).join(',')).join(' ');
+    const curPts = layers.map((l,i)=>pt(i,l.level).join(',')).join(' ');
+    const basePts = labels.map((_,i)=>pt(i,50).join(',')).join(' ');
+    const spokes = labels.map((_,i)=>{ const [x,y]=pt(i,100); return `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="var(--border)" stroke-width="1"/>`; }).join('');
+    const rings = [25,50,75,100].map(v=>`<polygon points="${ringPts(v)}" fill="none" stroke="var(--border-soft)" stroke-width="1"/>`).join('');
+    const labelEls = labels.map((lb,i)=>{ const [x,y]=pt(i,118); return `<text x="${x}" y="${y}" fill="var(--text-muted)" font-size="11" text-anchor="middle" dominant-baseline="middle">${lb}</text>`; }).join('');
+    document.getElementById('radarWrap').innerHTML = `
+      <svg viewBox="0 0 360 300" role="img" aria-label="Signal radar">
+        ${rings}${spokes}
+        <polygon points="${basePts}" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-dasharray="5 4"/>
+        <polygon points="${curPts}" fill="rgba(14,165,233,.34)" stroke="#38bdf8" stroke-width="2"/>
+        ${labelEls}
+      </svg>`;
+  })();
+
+  // Notable moves (Δ) — diverging horizontal bars around a midline
+  (function(){
+    const maxAbs = Math.max(...layers.map(l=>Math.abs(l.d)), 1);
+    document.getElementById('moves').innerHTML = layers.map(l=>{
+      const tone = l.d>2?'var(--green)': l.d<-2?'var(--red)':'var(--text-dim)';
+      const w = Math.abs(l.d)/maxAbs*48; // up to 48% each side
+      const style = l.d>=0 ? `left:50%;width:${w}%` : `right:50%;width:${w}%`;
+      return `<div class="move-row">
+        <span class="mlabel">${l.name}</span>
+        <div class="move-track"><span class="mid"></span><span class="move-bar" style="${style};background:${tone}"></span></div>
+      </div>`;
+    }).join('');
+  })();
+
+  // Full-analysis: reference levels + risk factors
+  const refLevels = [
+    { label:"VWAP",       val:"$127.10", hint:"Session fair-value pivot" },
+    { label:"Support",    val:"$126.30", hint:"Nearest demand shelf" },
+    { label:"Resistance", val:"$132.10", hint:"Nearest supply / prior high" },
+    { label:"OR High",    val:"$129.05", hint:"Opening-range high" },
+    { label:"OR Low",     val:"$125.40", hint:"Opening-range low" },
+  ];
+  document.getElementById('refLevels').innerHTML = refLevels.map(r=>`
+    <div class="ref-item">
+      <div class="rl-label">${r.label}</div>
+      <div class="rl-val">${r.val}</div>
+      <div class="rl-hint">${r.hint}</div>
+    </div>`).join('');
+  const riskFactors = [
+    "Extended into the prior high — chasing here pays a worse price; favor a pullback to the entry zone.",
+    "Macro is neutral, not a tailwind — a risk-off turn would remove support for the move.",
+    "Day-desk setup — the edge expires intraday; carrying overnight changes the thesis.",
+  ];
+  document.getElementById('riskFactors').innerHTML = riskFactors.length
+    ? riskFactors.map(r=>`<div class="risk-item"><span class="rk-dot"></span><span>${r}</span></div>`).join('')
+    : `<div class="risk-empty">No significant risk factors detected.</div>`;
+
+  // Why-layers tailwind chain rows
+  const chain = [
+    { nm:"Sector", bc:"Semiconductors are leading the tape — the strongest environmental tailwind for this name right now." },
+    { nm:"Market Internals", bc:"Breadth and advancing volume confirm; the internals are not fighting the move." },
+    { nm:"Technical", bc:"Structure follows the environment — price is holding above VWAP and the rising 50-day average." },
+  ];
+  document.getElementById('chain').innerHTML = chain.map(c=>`
+    <div class="chain-row"><div class="nm">${c.nm}</div><div class="bc">${c.bc}</div></div>`).join('');
+
+  // Setup-tab price chart — stylised daily candles + 50-day average
+  (function(){
+    const W=680, H=168, pad=8, n=46;
+    let price=360; const candles=[];
+    for(let i=0;i<n;i++){
+      const drift = (i/n)*70;                       // gentle uptrend
+      const o=price; const c=price + (Math.sin(i*0.7)*6) + (Math.random()*9-3) + 2.2;
+      const hi=Math.max(o,c)+Math.random()*5; const lo=Math.min(o,c)-Math.random()*5;
+      candles.push({o:o+drift*0.3,c:c+drift*0.3,hi:hi+drift*0.3,lo:lo+drift*0.3}); price=c;
+    }
+    const vals=candles.flatMap(k=>[k.hi,k.lo]); const min=Math.min(...vals), max=Math.max(...vals);
+    const y=(v)=> pad + (H-2*pad)*(1-(v-min)/(max-min));
+    const cw=(W-2*pad)/n;
+    const body=candles.map((k,i)=>{
+      const x=pad+i*cw+cw*0.5; const up=k.c>=k.o; const col=up?'var(--green)':'var(--red)';
+      const yo=y(k.o), yc=y(k.c); const top=Math.min(yo,yc); const h=Math.max(2,Math.abs(yc-yo));
+      return `<line x1="${x}" y1="${y(k.hi)}" x2="${x}" y2="${y(k.lo)}" stroke="${col}" stroke-width="1"/>`+
+             `<rect x="${x-cw*0.3}" y="${top}" width="${cw*0.6}" height="${h}" fill="${col}"/>`;
+    }).join('');
+    // 50-day average line (simple smoothed path over closes)
+    const sma=candles.map((_,i)=>{ const s=Math.max(0,i-9); const seg=candles.slice(s,i+1); const a=seg.reduce((p,k)=>p+k.c,0)/seg.length; return [pad+i*cw+cw*0.5, y(a)]; });
+    const smaPath='M'+sma.map(p=>p.join(' ')).join(' L');
+    const last=candles[candles.length-1].c; const ly=y(last);
+    document.getElementById('pchart').innerHTML = `
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+        ${body}
+        <path d="${smaPath}" fill="none" stroke="var(--accent)" stroke-width="1.5" opacity=".9"/>
+        <line x1="${pad}" y1="${ly}" x2="${W-pad}" y2="${ly}" stroke="var(--text-dim)" stroke-width="1" stroke-dasharray="3 3"/>
+      </svg>`;
+  })();
+
+  // Evolution timeline — how this setup matured (newest first)
+  const evolution = [
+    { when:"Today 11:04 AM", state:"Actionable", sc:"act",  note:"Cleared all six gates — entry timing aligned on the pullback into the zone." },
+    { when:"Today 9:48 AM",  state:"Near",       sc:"near", note:"5 of 6 layers aligned; held back only by entry timing." },
+    { when:"Yesterday",      state:"Potential",  sc:"pot",  note:"Directional edge formed, but R/R had not yet reached the 2:1 standard." },
+    { when:"2 days ago",     state:"Monitored",  sc:"mon",  note:"Entered the universe — engine began building a directional read." },
+  ];
+  document.getElementById('evo').innerHTML = evolution.map((e,i)=>`
+    <div class="evo-row ${i===0?'now':''}">
+      <div class="evo-when">${e.when}</div>
+      <div class="evo-axis"><span class="evo-dot sc-${e.sc}"></span></div>
+      <div class="evo-body"><div class="evo-state">${e.state}</div><div class="evo-note">${e.note}</div></div>
+    </div>`).join('');
+
+  // Setup / Layers / Evolution tab switching
+  document.querySelectorAll('.stab').forEach(t=>t.addEventListener('click', ()=>{
+    document.querySelectorAll('.stab').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    const pane = t.dataset.tab;
+    document.querySelectorAll('.tabpane').forEach(p=>p.classList.toggle('active', p.dataset.pane===pane));
+  }));
+
+  // ── Full detail: analyst ratings, news ──────────────────────
+  // Recent, deduped (one per firm), capped to 5 — newest first.
+  const ratings = [
+    { firm:"Morgan Stanley", action:"Reiterated Overweight", rc:"buy",  pt:"$160", when:"2d ago" },
+    { firm:"Goldman Sachs",  action:"Raised target",          rc:"buy",  pt:"$150", when:"5d ago" },
+    { firm:"Citi",           action:"Maintained Buy",          rc:"buy",  pt:"$144", when:"1w ago" },
+    { firm:"UBS",            action:"Neutral",                 rc:"hold", pt:"$128", when:"2w ago" },
+    { firm:"Wells Fargo",    action:"Initiated Overweight",    rc:"buy",  pt:"$155", when:"3w ago" },
+  ];
+  const news = [
+    { hl:"NVIDIA expands data-center partnerships ahead of product cycle", src:"Benzinga", when:"3h ago", sent:"pos" },
+    { hl:"Semiconductor demand commentary lifts the group into the close", src:"Reuters",  when:"6h ago", sent:"pos" },
+    { hl:"Options activity skews bullish into next week's events",          src:"Benzinga", when:"1d ago", sent:"neu" },
+  ];
+
+  // Full analysis: a one-line evidence recap that points back to the Layers
+  // tab (the canonical 6-layer breakdown) — no duplicated breakdown here.
+  (function(){
+    const conf = forceGroups.support.length, neu = forceGroups.neutral.length, bear = forceGroups.oppose.length;
+    const neuName = forceGroups.neutral[0];
+    const recap = document.getElementById('evRecap');
+    if(recap) recap.textContent =
+      `${conf} of ${layers.length} layers confirmed · ${neu>0 ? (neuName + (neu>1?` +${neu-1} neutral`:' neutral')) : 'no neutral'} · ${bear} bearish.`;
+    const link = document.getElementById('toLayers');
+    if(link) link.addEventListener('click', ()=>{
+      setView('dive');
+      const layersTab = document.querySelector('.stab[data-tab="layers"]');
+      if(layersTab) layersTab.click();
+    });
+  })();
+
+  // Consensus + distribution — derived from the SAME (capped, recent) ratings
+  // so the headline label, distribution, and rows can never disagree.
+  (function(){
+    const counts = { buy:0, hold:0, sell:0 };
+    const targets = [];
+    ratings.forEach(r=>{ counts[r.rc]++; const n = parseFloat(r.pt.replace(/[^0-9.]/g,'')); if(n) targets.push(n); });
+    const winner = Object.keys(counts).sort((a,b)=>counts[b]-counts[a])[0];
+    const labelTxt = { buy:"Buy", hold:"Hold", sell:"Sell" }[winner];
+    document.getElementById('consLabel').innerHTML =
+      `<span class="r-chip r-${winner}">${labelTxt}</span> <span class="lead">consensus</span>`;
+    if(targets.length){
+      const avg = Math.round(targets.reduce((a,b)=>a+b,0)/targets.length);
+      document.getElementById('consAvg').textContent = `$${avg}`;
+      document.getElementById('consRange').textContent = `range $${Math.min(...targets)}–$${Math.max(...targets)}`;
+    }
+    const order = ['buy','hold','sell'];
+    document.getElementById('consDist').innerHTML = order
+      .filter(k=>counts[k]>0)
+      .map(k=>`<span class="r-chip r-${k}">${counts[k]} ${({buy:'Buy',hold:'Hold',sell:'Sell'})[k]}</span>`)
+      .join('');
+    document.getElementById('consSub').textContent =
+      `${ratings.length} most recent actions · last 30 days · most recent ${ratings[0].when}`;
+  })();
+
+  document.getElementById('ratings').innerHTML = ratings.map(r=>`
+    <div class="rating-row">
+      <span class="firm">${r.firm} <span class="action">· ${r.action}</span></span>
+      <span class="r-chip r-${r.rc}">${r.rc}</span>
+      <span class="pt">${r.pt}</span>
+      <span class="when">${r.when}</span>
+    </div>`).join('');
+
+  document.getElementById('news').innerHTML = news.map(n=>`
+    <div class="news-item">
+      <div class="hl">${n.hl}</div>
+      <div class="meta-row"><span class="src">${n.src}</span><span class="when">${n.when}</span><span class="sent ${n.sent}">${n.sent==='pos'?'Positive':n.sent==='neg'?'Negative':'Neutral'}</span></div>
+    </div>`).join('');
+
+  // ── Interactions ────────────────────────────────────────────
+  function nowStr(){
+    const d = new Date();
+    return d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true}) + " ET";
+  }
+  function tick(){ ['clock','clock2','clock3'].forEach(id=>{const el=document.getElementById(id); if(el) el.textContent=nowStr();}); }
+  tick(); setInterval(tick, 1000);
+
+  // ── Symbol directory (for the header type-ahead) ────────────
+  const directory = [
+    {sym:"NVDA",co:"NVIDIA Corp"},        {sym:"AMD",co:"Advanced Micro Devices"},
+    {sym:"AVGO",co:"Broadcom Inc"},        {sym:"MSFT",co:"Microsoft Corp"},
+    {sym:"OKTA",co:"Okta Inc"},            {sym:"TSLA",co:"Tesla Inc"},
+    {sym:"META",co:"Meta Platforms"},      {sym:"AAPL",co:"Apple Inc"},
+    {sym:"AMZN",co:"Amazon.com Inc"},      {sym:"GOOGL",co:"Alphabet Inc"},
+    {sym:"NFLX",co:"Netflix Inc"},         {sym:"CRM",co:"Salesforce Inc"},
+    {sym:"PLTR",co:"Palantir Technologies"},{sym:"COIN",co:"Coinbase Global"},
+    {sym:"SHOP",co:"Shopify Inc"},         {sym:"F",co:"Ford Motor Co"},
+  ];
+  const defaultBrief = document.getElementById('brief').innerHTML;
+
+  // Populate the center deep-dive panel for any symbol (feed or not).
+  function selectSymbol(sym){
+    sym = (sym||"").toUpperCase().trim();
+    if(!sym) return;
+    showDive();
+    document.querySelectorAll('.card').forEach(x=>x.classList.toggle('sel', x.dataset.sym===sym));
+    const data = [...feed.day,...feed.swing,...feed.cool].find(x=>x.sym===sym);
+    const mode = document.getElementById('vMode');
+    document.getElementById('vSym').textContent = sym;
+    if(data){
+      const swing = !!data.swing;
+      document.getElementById('vDir').textContent = data.dir;
+      document.getElementById('vState').textContent = tagFor(data.state)[1];
+      document.getElementById('vCo').innerHTML = `${data.co} · ${data.p} <span class="${data.up?'up':'down'}">${data.ch}</span>`;
+      mode.style.display = ''; mode.textContent = swing?'Swing':'Day';
+      document.getElementById('vBanner').classList.toggle('swing', swing);
+      const laneColor = swing ? 'var(--indigo)' : 'var(--accent)';
+      const brief = document.getElementById('brief');
+      brief.classList.toggle('swing', swing);
+      brief.innerHTML = defaultBrief;
+      document.getElementById('copyBtn').style.background = laneColor;
+      document.getElementById('openScenarioBtn').style.background = laneColor;
+      document.getElementById('dSym').textContent = sym;
+      document.getElementById('dMeta').innerHTML = `${data.co} · ${data.p} <span class="${data.up?'up':'down'}">${data.ch}</span>`;
+      const dirPill = document.getElementById('dDir');
+      dirPill.style.display = '';
+      dirPill.textContent = data.dir.charAt(0) + data.dir.slice(1).toLowerCase();
+      dirPill.className = 'dh-pill dir ' + (data.dir==='SHORT'?'short':'long');
+      const [scls, slbl] = tagFor(data.state);
+      const statePill = document.getElementById('dStatePill');
+      statePill.textContent = slbl;
+      statePill.className = 'dh-pill state ' + scls;
+      document.getElementById('synthesis').classList.toggle('swing', swing);
+    } else {
+      // not in the live feed — show a clear "being monitored" read
+      const info = symInfo[sym] || directory.find(d=>d.sym===sym) || {};
+      document.getElementById('vDir').textContent = "—";
+      document.getElementById('vState').textContent = "Monitored";
+      document.getElementById('vCo').innerHTML = info.p
+        ? `${info.co||sym} · ${info.p} <span class="${info.up!==false?'up':'down'}">${info.ch||''}</span>`
+        : `${info.co||sym}`;
+      mode.style.display = 'none';
+      document.getElementById('vBanner').classList.remove('swing');
+      const brief = document.getElementById('brief');
+      brief.classList.remove('swing');
+      brief.textContent = `${sym} isn't in the signal feed right now — it's being monitored. The engine hasn't found a setup that clears all six gates for this name in the current session. Check the Layers and Evolution tabs to see how close it is and what's holding it back.`;
+      document.getElementById('dSym').textContent = sym;
+      document.getElementById('dMeta').innerHTML = info.p
+        ? `${info.co||sym} · ${info.p} <span class="${info.up!==false?'up':'down'}">${info.ch||''}</span>`
+        : `${info.co||sym}`;
+      document.getElementById('dDir').style.display = 'none';
+      const statePill = document.getElementById('dStatePill');
+      statePill.textContent = 'Monitored';
+      statePill.className = 'dh-pill state pot';
+    }
+    syncVbWatch(sym);
+  }
+  document.querySelectorAll('.card').forEach(c=> c.addEventListener('click', ()=> selectSymbol(c.dataset.sym)));
+
+  // ── Global header search (type-ahead, symbol OR company) ────
+  const gsInput = document.getElementById('globalSearch');
+  const gsDrop = document.getElementById('gsearchDrop');
+  let gsResults = [], gsActive = -1;
+  function feedStateLabel(sym){
+    const f = [...feed.day,...feed.swing,...feed.cool].find(x=>x.sym===sym);
+    if(f) return tagFor(f.state)[1];
+    if(inWatchlist(sym)) return 'Watching';
+    return 'Monitored';
+  }
+  function renderGs(q){
+    const ql = q.toLowerCase();
+    gsActive = -1;
+    if(!q){ gsDrop.classList.remove('show'); gsDrop.innerHTML=''; gsResults=[]; return; }
+    gsResults = directory.filter(d=> d.sym.toLowerCase().includes(ql) || d.co.toLowerCase().includes(ql)).slice(0,8);
+    if(!gsResults.length){ gsDrop.innerHTML = `<div class="gs-empty">No match for “${q}” — press Enter to load anyway</div>`; gsDrop.classList.add('show'); return; }
+    gsDrop.innerHTML = gsResults.map((d,i)=>`
+      <div class="gs-item" data-sym="${d.sym}" data-i="${i}">
+        <span class="gs-sym">${d.sym}</span>
+        <span class="gs-co">${d.co}</span>
+        <span class="gs-state">${feedStateLabel(d.sym)}</span>
+      </div>`).join('');
+    gsDrop.classList.add('show');
+  }
+  function hlGs(){ gsDrop.querySelectorAll('.gs-item').forEach((el,i)=>el.classList.toggle('active', i===gsActive)); }
+  function chooseGs(sym){ selectSymbol(sym); gsInput.value=''; gsDrop.classList.remove('show'); gsDrop.innerHTML=''; gsResults=[]; }
+  gsInput.addEventListener('input', ()=> renderGs(gsInput.value.trim()));
+  gsInput.addEventListener('keydown', (e)=>{
+    if(e.key==='ArrowDown' && gsResults.length){ e.preventDefault(); gsActive=Math.min(gsActive+1,gsResults.length-1); hlGs(); }
+    else if(e.key==='ArrowUp' && gsResults.length){ e.preventDefault(); gsActive=Math.max(gsActive-1,0); hlGs(); }
+    else if(e.key==='Enter'){
+      e.preventDefault();
+      if(gsResults.length){ chooseGs(gsActive>=0 ? gsResults[gsActive].sym : gsResults[0].sym); }
+      else if(gsInput.value.trim()){ chooseGs(gsInput.value.trim().toUpperCase()); }
+    }
+    else if(e.key==='Escape'){ gsDrop.classList.remove('show'); }
+  });
+  gsDrop.addEventListener('click', (e)=>{ const it=e.target.closest('.gs-item'); if(it) chooseGs(it.dataset.sym); });
+  document.addEventListener('click', (e)=>{ if(!e.target.closest('.gsearch')) gsDrop.classList.remove('show'); });
+
+  // filter pills
+  document.querySelectorAll('.pillset[data-group="mode"] .pill, .pillset[data-group="state"] .pill').forEach(p=>{
+    p.addEventListener('click', ()=>{
+      const group = p.closest('.pillset');
+      group.querySelectorAll('.pill').forEach(x=>x.classList.remove('active'));
+      p.classList.add('active');
+      applyFilters();
+    });
+  });
+  function applyFilters(){
+    const mode = document.querySelector('.pillset[data-group="mode"] .active').dataset.mode;
+    const state = document.querySelector('.pillset[data-group="state"] .active').dataset.state;
+    document.querySelectorAll('.card').forEach(c=>{
+      const okM = mode==='all' || c.dataset.mode===mode;
+      const okS = state==='all' || c.dataset.state===state;
+      c.style.display = (okM&&okS) ? '' : 'none';
+    });
+  }
+
+  // quiet-market toggle -> The Watch
+  let quiet=false;
+  document.getElementById('quietBtn').addEventListener('click', (e)=>{
+    quiet=!quiet; e.target.classList.toggle('active', quiet);
+    if(quiet) showWatch(); else showDive();
+  });
+  function showWatch(){ setView('watch'); }
+  function showDive(){ setView('dive'); }
+  function setView(which){
+    ['watch','dive','detail'].forEach(v=>{
+      document.getElementById(v).classList.toggle('show', v===which);
+    });
+  }
+  document.getElementById('openDetail').addEventListener('click', ()=> setView('detail'));
+  document.getElementById('backBtn').addEventListener('click', ()=> setView('dive'));
+  document.getElementById('openScenarioBtn').addEventListener('click', ()=> setView('dive'));
+
+  // admin accordion in the left nav
+  // Admin nav is gated: only admin users see the Admin item + its sub-menu.
+  // In the real app this resolves from the server session (isSessionAdmin);
+  // the backend gate remains the real perimeter — this only hides the UI.
+  // Flip to false to preview the non-admin experience.
+  const IS_ADMIN = true;
+  if(!IS_ADMIN){
+    document.getElementById('navAdmin').style.display = 'none';
+    document.getElementById('navAdminSub').style.display = 'none';
+  } else {
+    document.getElementById('navAdmin').addEventListener('click', function(){ this.classList.toggle('open'); });
+  }
+  const navRole = document.getElementById('navRole');
+  if(navRole) navRole.textContent = IS_ADMIN ? 'Admin · STOCVEST' : 'Member';
+
+  // watchlist drawer — collapsed by default, opens on click of the tab
+  const bodyEl = document.querySelector('.body');
+  document.getElementById('railOpen').addEventListener('click', ()=> bodyEl.classList.add('rail-open'));
+  document.getElementById('railClose').addEventListener('click', ()=> bodyEl.classList.remove('rail-open'));
+
+  // ── Add to watchlist: rail "+ Add" inline input ─────────────
+  const wlAddBtn = document.getElementById('wlAddBtn');
+  const wlAddRow = document.getElementById('wlAddRow');
+  const wlAddInput = document.getElementById('wlAddInput');
+  wlAddBtn.addEventListener('click', ()=>{
+    wlAddRow.classList.toggle('show');
+    if(wlAddRow.classList.contains('show')) wlAddInput.focus();
+  });
+  function submitAdd(){ if(addToWatchlist(wlAddInput.value)){ wlAddInput.value=''; wlAddInput.focus(); } }
+  document.getElementById('wlAddGo').addEventListener('click', submitAdd);
+  wlAddInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') submitAdd(); });
+
+  // ── Add to watchlist: deep-dive verdict banner toggle ───────
+  const vbWatch = document.getElementById('vbWatch');
+  function syncVbWatch(sym){
+    const on = inWatchlist(sym);
+    vbWatch.classList.toggle('on', on);
+    vbWatch.textContent = on ? '✓ Watching' : '+ Watch';
+  }
+  vbWatch.addEventListener('click', ()=>{
+    addToWatchlist(document.getElementById('vSym').textContent);
+    syncVbWatch(document.getElementById('vSym').textContent);
+  });
+
+  // search -> reason card (with a "+ Watch" affordance)
+  const ri = document.getElementById('searchInput');
+  const rcWatch = document.getElementById('rcWatch');
+  const searchHint = document.getElementById('searchHint');
+  function updateSearchHint(){
+    // Show the "what this does" hint only while focused + empty.
+    const focused = document.activeElement === ri;
+    searchHint.classList.toggle('show', focused && ri.value.trim() === '');
+  }
+  ri.addEventListener('focus', updateSearchHint);
+  ri.addEventListener('blur', ()=> searchHint.classList.remove('show'));
+  ri.addEventListener('input', ()=>{
+    updateSearchHint();
+    const v = ri.value.trim().toUpperCase();
+    const rc = document.getElementById('reasonCard');
+    if(reasons[v]){
+      const [r,d,c] = reasons[v];
+      document.getElementById('rcSym').textContent = v;
+      document.getElementById('rcReason').textContent = r;
+      document.getElementById('rcDetail').textContent = d;
+      rc.style.borderLeftColor = c;
+      rc.classList.add('show');
+      syncRcWatch(v);
+    } else { rc.classList.remove('show'); }
+  });
+  function syncRcWatch(sym){
+    const on = inWatchlist(sym);
+    rcWatch.classList.toggle('on', on);
+    rcWatch.textContent = on ? '✓ Watching' : '+ Watch';
+  }
+  rcWatch.addEventListener('click', ()=>{
+    const sym = document.getElementById('rcSym').textContent;
+    addToWatchlist(sym);
+    syncRcWatch(sym);
+  });
+
+  // reflect the default-selected setup's watch state on load
+  syncVbWatch(document.getElementById('vSym').textContent);
+</script>
+</body>
+</html>

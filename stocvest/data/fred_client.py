@@ -67,6 +67,38 @@ RELEASE_IMPORTANCE: dict[str, int] = {
     "retail": 3,
 }
 
+# FRED can list every calendar day of a multi-day FOMC meeting when
+# include_release_dates_with_no_data=true. The rate decision is announced once on
+# the final meeting day (e.g. June 16–17, 2026 → decision Wednesday June 17 at 2 PM ET).
+_FOMC_MAX_MEETING_DAYS = 2
+
+
+def _collapse_fomc_meeting_dates(dates: list[date]) -> list[date]:
+    """Keep one decision day per FOMC meeting (last day of each adjacent run, max 2 days)."""
+    if len(dates) <= 1:
+        return dates
+    sorted_dates = sorted(set(dates))
+    clusters: list[list[date]] = [[sorted_dates[0]]]
+    for d in sorted_dates[1:]:
+        prev = clusters[-1][-1]
+        gap = (d - prev).days
+        if gap == 0:
+            continue
+        if gap == 1 and len(clusters[-1]) < _FOMC_MAX_MEETING_DAYS:
+            clusters[-1].append(d)
+        else:
+            clusters.append([d])
+    decision_days = [max(c) for c in clusters]
+    if len(decision_days) <= 1:
+        return decision_days
+    # Drop spurious tail clusters in the same meeting week (e.g. Thu–Fri after Tue–Wed).
+    merged = [decision_days[0]]
+    for d in decision_days[1:]:
+        if (d - merged[-1]).days <= 5:
+            continue
+        merged.append(d)
+    return merged
+
 REDIS_PREFIX = "stocvest:fred:"
 REDIS_TTL = 86400
 VIX_REDIS_TTL = 300
@@ -151,6 +183,8 @@ class FREDClient:
         from_date: date,
         to_date: date,
     ) -> list[MacroEvent]:
+        # FOMC: only dates with an actual statement release (avoids Tue–Fri duplicates).
+        include_no_data = "false" if release_name == "fomc" else "true"
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             resp = await client.get(
                 f"{FRED_BASE}/release/dates",
@@ -160,13 +194,13 @@ class FREDClient:
                     "realtime_start": from_date.isoformat(),
                     "realtime_end": to_date.isoformat(),
                     "file_type": "json",
-                    "include_release_dates_with_no_data": "true",
+                    "include_release_dates_with_no_data": include_no_data,
                 },
             )
             resp.raise_for_status()
             data = resp.json()
 
-        out: list[MacroEvent] = []
+        parsed_dates: list[date] = []
         for item in data.get("release_dates") or []:
             if not isinstance(item, dict):
                 continue
@@ -179,7 +213,14 @@ class FREDClient:
                 continue
             if release_date < from_date:
                 continue
+            parsed_dates.append(release_date)
 
+        if release_name == "fomc":
+            parsed_dates = _collapse_fomc_meeting_dates(parsed_dates)
+
+        out: list[MacroEvent] = []
+        for release_date in parsed_dates:
+            release_date_str = release_date.isoformat()
             default_times = {
                 "fomc": (14, 0),
                 "cpi": (8, 30),

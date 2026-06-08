@@ -26,12 +26,7 @@ function jwtExpiresAt(token: string): number | null {
   const normalized = pad === 0 ? seg : seg + "=".repeat(4 - pad);
   let json: string;
   try {
-    if (typeof atob === "function") {
-      json = atob(normalized);
-    } else {
-      // Fallback for environments without `atob` — should not run in Edge but keeps types happy.
-      json = Buffer.from(normalized, "base64").toString("utf-8");
-    }
+    json = atob(normalized);
   } catch {
     return null;
   }

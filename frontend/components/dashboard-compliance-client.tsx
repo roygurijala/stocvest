@@ -8,6 +8,7 @@ import { OnboardingWizardModal } from "@/components/onboarding-wizard-modal";
 import { TrialUpgradeWall } from "@/components/trial/trial-upgrade-wall";
 import { UserProfileProvider } from "@/lib/user-profile-context";
 import { needsPhoneVerification, trialExpired } from "@/lib/trial-access";
+import { surfaceAuthErrorIfAny } from "@/lib/auth/surface-auth-error";
 
 interface DashboardComplianceClientProps {
   hasSession: boolean;
@@ -27,7 +28,16 @@ export function DashboardComplianceClient({ hasSession, children }: DashboardCom
       return;
     }
     try {
-      const res = await fetch("/api/stocvest/users/me", { cache: "no-store" });
+      let res = await fetch("/api/stocvest/users/me", { cache: "no-store" });
+      if (res.status === 401) {
+        // Surface auth failures instead of silently limping with a dead token.
+        // This refreshes the session when possible, or marks it expired so the
+        // user gets a clean "Sign in" path rather than a stuck dashboard.
+        const handled = await surfaceAuthErrorIfAny(res);
+        if (handled) {
+          res = await fetch("/api/stocvest/users/me", { cache: "no-store" });
+        }
+      }
       if (!res.ok) {
         setProfile(null);
         return;

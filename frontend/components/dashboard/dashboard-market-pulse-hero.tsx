@@ -9,6 +9,7 @@ import { interactionLevelProps } from "@/lib/dashboard/click-hierarchy";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { dashboardPulseSessionHeading } from "@/lib/dashboard/desk-today-present";
 import type { SessionActivityUiMode } from "@/lib/market/session-activity-mode";
+import { regimeTone } from "@/lib/market-context/regime";
 import { useTheme } from "@/lib/theme-provider";
 
 type Props = {
@@ -106,6 +107,7 @@ export function DashboardMarketPulseHero({
   scannerPending = false
 }: Props) {
   const { colors } = useTheme();
+  const tone = regimeTone(regimeLabel, colors);
   const { lead, lag } = topSectors(sectorRotation);
   const environmentSummary = marketContext.environmentSummary;
   const sessionCopy = dashboardPulseSessionHeading(sessionMode);
@@ -128,6 +130,7 @@ export function DashboardMarketPulseHero({
       style={{
         borderRadius: borderRadius.lg,
         border: `1px solid color-mix(in srgb, ${colors.border} 80%, ${colors.accent} 20%)`,
+        borderLeft: `4px solid ${tone.fg}`,
         background: `linear-gradient(135deg, color-mix(in srgb, ${colors.surface} 92%, ${colors.accent} 8%) 0%, ${colors.surface} 100%)`,
         padding: `${spacing[4]} ${spacing[4]}`
       }}

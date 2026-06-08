@@ -1,8 +1,29 @@
 # STOCVEST — API contracts (immutable sections)
 
-**Last reviewed:** 2026-05-15
+**Last reviewed:** 2026-06-08
 
 Sections referenced from **`docs/CONTEXT.md`** §7 must not change without explicit review and coordinated code updates.
+
+---
+
+## 4.11 Client Component BFF routing (B65)
+
+Browser Client Components must **not** call API Gateway `/v1/*` directly — localhost dev blocks cross-origin requests. **`frontend/lib/api/browser-api-fetch.ts`** rewrites upstream paths through **`apiPathToBffUrl()`** in **`frontend/lib/api/api-path-to-bff.ts`**: `/v1/foo/bar` → **`/api/stocvest/foo/bar`** (same-origin, session cookie).
+
+**BFF routes added for Trading Room + scanner client paths (2026-06-08):**
+
+| Upstream | BFF proxy |
+|----------|-----------|
+| `GET /v1/market/snapshot` (single symbol) | `GET /api/stocvest/market/snapshot` |
+| `GET /v1/market/macro-context` | `GET /api/stocvest/market/macro-context` |
+| `GET /v1/market/bars-batch` | `GET /api/stocvest/market/bars-batch` |
+| `GET /v1/market/earnings` | `GET /api/stocvest/market/earnings` |
+| `POST /v1/scanner/gap-intelligence` | `POST /api/stocvest/scanner/gap-intelligence` |
+| `POST /v1/signals/day/setups` | `POST /api/stocvest/signals/day/setups` |
+| `POST /v1/signals/swing/setups` | `POST /api/stocvest/signals/swing/setups` |
+| `GET /v1/signals/scanner-trace` | `GET /api/stocvest/signals/scanner-trace` |
+
+**Rule:** When adding a new Client Component fetch to a `/v1/*` route, add a matching thin BFF route under **`frontend/app/api/stocvest/**`** (session via **`stocvestAuthedFetch`**) and extend **`apiPathToBffUrl`** if the path is not covered by the generic `/v1` → `/api/stocvest` slice.
 
 ---
 
@@ -44,6 +65,7 @@ All REST routes are versioned under `/v1/`.
 - `GET /v1/market/news` — shape depends on **`symbol`**:
   - **Without `symbol`:** query **`limit`** (1–1000, default **20**). JSON **`{ "headlines": [ ... ] }`** (not a bare array). Authenticated users merge default-watchlist tickers into the Polygon query with a fixed liquid-ticker set (cap **30** merged symbols). Server fetches up to **50** Polygon rows (**4h** `published_utc_gte`, **24h** widen once if empty), scores and dedupes, returns at most **`min(limit, 20)`** headlines. Each headline includes at least: **`id`**, **`title`**, **`published_utc`**, **`publisher`** (`name`, **`tier`**), **`tickers`**, **`article_url`**, **`sentiment`**, **`affected_stocks`**, **`impact_summary`**, **`relevance_score`** (0–100), **`category`** (`earnings` \| `analyst` \| `macro` \| `sector` \| `merger` \| `breaking` \| `general`), **`catalyst_category`** (legacy buckets incl. `ma` / `fda`), **`credibility`** (`label`, `band`), **`matches_watchlist`**, plus back-compat **`article_id`**, **`published_at`**, **`url`**, **`source`**, optional **`description`**, **`image_url`**.
   - **With `symbol`:** query **`days`** (1–20, default **20**), **`limit`** (1–100, default **20**), optional **`recent_hours`** (1–168, default **8**) — defines the “recent” window for **`has_recent_news`** / **`is_recent`** vs archive labeling. JSON **`{ "symbol", "has_recent_news", "recent_cutoff_hours", "articles", "total_found", "oldest_included" }`** (`recent_cutoff_hours` echoes the applied window). **`articles`** items are panel-oriented: **`id`**, **`title`**, **`source`**, **`source_label`**, **`published_at`**, **`sentiment_score`**, **`sentiment_label`**, **`catalyst_type`**, **`url`**, **`is_recent`**, **`age_label`**.
+- `GET /v1/market/brief` — **authenticated**. AI-written plain-English market narrative for the Trading Room **Market Brief**. JSON **`{ "available": <bool>, "narrative": <string|null>, "generated_at": <ISO|null>, "market_state": <string|null> }`**. Synthesized by **`stocvest/api/services/market_brief.py`** (Anthropic Claude, Haiku) from index / sector / breadth + headline inputs; served from a module-level **warm-container in-process cache** (~10 min TTL) so warm Lambda invocations are fast. Returns **`available: false`** (never an error) when **`ANTHROPIC_API_KEY`** is unset or Claude is unreachable, so the dashboard falls back to its deterministic on-device summary. **Next.js BFF:** **`GET /api/stocvest/market/brief`** (`frontend/app/api/stocvest/market/brief/route.ts`, session cookie via `stocvestAuthedFetch`); the broad **`GET /api/stocvest/market/news`** proxy (`market/news/route.ts`) feeds the same Brief's headline list.
 - `GET /v1/market/options?symbol={ticker}&limit={n}[&expiration={yyyy-mm-dd}&option_type={call|put}&strike_gte={x}&strike_lte={y}]`
 
 `timeframe` values are fixed to `Timeframe` enum values:
@@ -185,9 +207,9 @@ Supported default actions:
 
 Authenticated:
 
-- `GET /v1/users/me` — returns **`UserProfile`** JSON: **`user_id`**, **`trading_mode`**, onboarding/legal fields, **`subscription_plan`** (billing; not client-writable here), **`last_active_at`** (optional ISO timestamp; throttled server-side touch so admins can see recent app opens), **`beta_full_access`**, **`beta_access_until`**, **`beta_access_granted_at`**, derived **`has_full_access`** (**true** when paid **`subscription_plan`** or **active** beta window), **`has_ai_explanations`** (mirrors **`has_full_access`** for gating Claude explanations).
+- `GET /v1/users/me` — returns **`UserProfile`** JSON: **`user_id`**, **`trading_mode`**, optional **`first_name`** (used for the dashboard greeting; persisted as **`firstName`** in Dynamo), onboarding/legal fields, **`subscription_plan`** (billing; not client-writable here), **`last_active_at`** (optional ISO timestamp; throttled server-side touch so admins can see recent app opens), **`beta_full_access`**, **`beta_access_until`**, **`beta_access_granted_at`**, derived **`has_full_access`** (**true** when paid **`subscription_plan`** or **active** beta window), **`has_ai_explanations`** (mirrors **`has_full_access`** for gating Claude explanations).
 
-- `PATCH /v1/users/me` — updates onboarding/legal/trading-mode fields **only**. Body keys **`subscription_plan`**, **`beta_full_access`**, **`beta_access_until`**, **`beta_access_granted_at`** are **stripped** (billing + admin concern).
+- `PATCH /v1/users/me` — updates onboarding/legal/trading-mode fields **and** the optional **`first_name`** (sanitized; send `null`/empty to clear). Body keys **`subscription_plan`**, **`beta_full_access`**, **`beta_access_until`**, **`beta_access_granted_at`** are **stripped** (billing + admin concern).
 
 Admin (same authorization mode as **`GET /v1/signals/analysis`** — internal analysis header **`X-Stocvest-Internal-Analysis`**, JWT **`sub` ∈ `STOCVEST_ANALYSIS_ADMIN_SUBS`**, or Cognito group **`signal-analytics-admin`**):
 

@@ -174,8 +174,12 @@ def test_swing_composite_handler_returns_bullish_signal_summary() -> None:
     assert isinstance(body.get("risk_factors"), list)
     assert len(body["risk_factors"]) >= 1
     assert isinstance(body.get("signal_parameters"), str) and body["signal_parameters"]
-    assert body["historical_entry_zone"]["low"] == 175.0
-    assert body["historical_entry_zone"]["high"] == 182.0
+    # Entry zone is now a tight, anchored, validated band (not the full session
+    # range). Anchor = VWAP (179) for this swing payload; band = [anchor, last].
+    assert body["historical_entry_zone"]["low"] == pytest.approx(179.0, abs=0.5)
+    assert body["historical_entry_zone"]["high"] == pytest.approx(180.0, abs=0.5)
+    assert body["historical_entry_zone"]["high"] < body["reference_target_1"]
+    assert body.get("entry_zone_quality") in {"clean", "clamped", "no_clean_entry"}
     assert body.get("vwap") == 179.0
 
 

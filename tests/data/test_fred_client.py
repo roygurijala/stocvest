@@ -45,6 +45,52 @@ async def test_get_upcoming_events_returns_list(fred_api_key) -> None:
 
 
 @pytest.mark.asyncio
+async def test_fomc_multi_day_meeting_collapses_to_decision_day(fred_api_key) -> None:
+    rid = FRED_RELEASES["fomc"]
+
+    def side_effect(request: httpx.Request) -> httpx.Response:
+        if f"release_id={rid}" in str(request.url):
+            # June 16–17, 2026 meeting → decision Wednesday June 17 at 2 PM ET.
+            return httpx.Response(
+                200,
+                json=_release_dates_payload(["2026-06-16", "2026-06-17"]),
+            )
+        return httpx.Response(200, json=_release_dates_payload([]))
+
+    with respx.mock:
+        respx.get(re.compile(r"https://api\.stlouisfed\.org/fred/release/dates\?.*")).mock(side_effect=side_effect)
+        client = FREDClient()
+        events = await client.get_upcoming_events(days_ahead=60)
+    fomc = [e for e in events if e.category == MacroEventCategory.FED]
+    assert len(fomc) == 1
+    assert fomc[0].scheduled_time.date().isoformat() == "2026-06-17"
+    assert fomc[0].scheduled_time.hour == 14
+
+
+@pytest.mark.asyncio
+async def test_fomc_spurious_weekday_streak_collapses_to_one_decision(fred_api_key) -> None:
+    rid = FRED_RELEASES["fomc"]
+
+    def side_effect(request: httpx.Request) -> httpx.Response:
+        if f"release_id={rid}" in str(request.url):
+            return httpx.Response(
+                200,
+                json=_release_dates_payload(
+                    ["2026-06-16", "2026-06-17", "2026-06-18", "2026-06-19"]
+                ),
+            )
+        return httpx.Response(200, json=_release_dates_payload([]))
+
+    with respx.mock:
+        respx.get(re.compile(r"https://api\.stlouisfed\.org/fred/release/dates\?.*")).mock(side_effect=side_effect)
+        client = FREDClient()
+        events = await client.get_upcoming_events(days_ahead=60)
+    fomc = [e for e in events if e.category == MacroEventCategory.FED]
+    assert len(fomc) == 1
+    assert fomc[0].scheduled_time.date().isoformat() == "2026-06-17"
+
+
+@pytest.mark.asyncio
 async def test_fomc_event_has_correct_time(fred_api_key) -> None:
     rid = FRED_RELEASES["fomc"]
 

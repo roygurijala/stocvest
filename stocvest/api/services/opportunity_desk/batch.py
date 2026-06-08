@@ -436,7 +436,7 @@ async def run_opportunity_desk_batch(
         written = write_dashboard_cache(
             key,
             payload,
-            "opportunity_desk",
+            f"opportunity_desk_{mode_lit}",  # mode-specific TTL: swing=4 days, day=intraday
             mode_lit,
         )
         results["modes"][mode] = {

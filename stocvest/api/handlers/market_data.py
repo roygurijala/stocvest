@@ -26,6 +26,7 @@ from stocvest.api.services.news_relevance import (
     catalyst_category_for_text,
     categorize_article,
     deduplicate_articles,
+    publisher_credibility_rank,
     source_credibility_meta,
 )
 from stocvest.api.services.symbol_news_fetch import (
@@ -45,6 +46,8 @@ from stocvest.utils.config import get_settings
 from stocvest.api.services.dashboard_summary import build_dashboard_summary
 from stocvest.api.services.morning_brief_fetch import get_vix_snapshot_with_fallback
 from stocvest.signals.macro_context import get_macro_context
+from stocvest.signals.macro_analyzer import MacroAnalyzer
+from stocvest.config.parameter_store import ParameterStore
 
 
 def _published_utc_sort_key(article: dict[str, Any]) -> str:
@@ -62,6 +65,27 @@ def _news_relevance_sort_key(article: dict[str, Any]) -> tuple[int, float]:
     except (TypeError, ValueError, OSError):
         ts = 0.0
     return (-score, -ts)
+
+
+def _news_broad_tape_sort_key(article: dict[str, Any]) -> tuple[int, int, float]:
+    """Sort key for the market-wide (no-symbol) feed.
+
+    Ranks by relevance, then **publisher credibility** (so reputable wires —
+    Reuters / Bloomberg / CNBC — float above retail-opinion outlets like Motley
+    Fool at equal relevance), then recency.
+    """
+    score = int(article.get("_relevance_score") or 0)
+    publisher = str((article.get("publisher") or {}).get("name") or "")
+    cred = publisher_credibility_rank(publisher)
+    raw = str(article.get("published_utc") or "").replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(raw)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        ts = dt.timestamp()
+    except (TypeError, ValueError, OSError):
+        ts = 0.0
+    return (-score, -cred, -ts)
 
 
 def _publisher_diversity_ranked(articles: list[dict[str, Any]], *, max_per_publisher: int = 2) -> list[dict[str, Any]]:
@@ -111,6 +135,41 @@ def _publisher_diversity_cap_preserving_order(
     return out
 
 
+def _publisher_diversity_fill(
+    articles: list[dict[str, Any]],
+    *,
+    target: int,
+    hard_cap: int = 2,
+) -> list[dict[str, Any]]:
+    """Prefer one headline per publisher, but progressively relax the per-publisher
+    cap (up to ``hard_cap``) so the feed still reaches ``target`` items when source
+    diversity is thin (e.g. a quiet weekend tape dominated by a few wires).
+
+    Input is assumed pre-sorted by desirability (relevance → credibility → recency);
+    each pass walks that order so the best remaining articles fill the gaps.
+    """
+    if not articles or target <= 0:
+        return []
+    out: list[dict[str, Any]] = []
+    taken: set[int] = set()
+    counts: dict[str, int] = {}
+    for cap in range(1, max(1, hard_cap) + 1):
+        if len(out) >= target:
+            break
+        for idx, article in enumerate(articles):
+            if len(out) >= target:
+                break
+            if idx in taken:
+                continue
+            publisher = str(((article.get("publisher") or {}).get("name") or "unknown")).strip().lower()
+            if counts.get(publisher, 0) >= cap:
+                continue
+            counts[publisher] = counts.get(publisher, 0) + 1
+            taken.add(idx)
+            out.append(article)
+    return out
+
+
 def market_status_handler(
     event: LambdaEvent,
     context: LambdaContext,
@@ -142,12 +201,35 @@ def macro_context_handler(
     async def _run() -> dict[str, Any]:
         settings = get_settings()
         econ: list[EconomicCalendarEvent] = []
+        snapshots: dict[str, Any] = {}
+        vix_snapshot = None
         try:
             async with client_factory(api_key=settings.polygon_api_key) as client:
                 econ = await client.get_polygon_econ_events(date.today(), date.today() + timedelta(days=14))
+                snapshots = await client.get_snapshots(["SPY", "QQQ"])
+                vix_snapshot = await get_vix_snapshot_with_fallback(client)
         except Exception:
             econ = []
         ctx = await get_macro_context(polygon_econ_events=econ)
+        # Attach the weighted macro regime (the same engine that gates setups and the
+        # morning brief) so the dashboard headline reads from a single source of truth
+        # rather than a separate index-only classifier. Best-effort — never fail the
+        # banner over it.
+        try:
+            params = ParameterStore.get_parameters_sync()
+            macro_result = MacroAnalyzer().analyze(
+                snapshots.get("SPY"),
+                snapshots.get("QQQ"),
+                vix_snapshot,
+                econ,
+                params.macro,
+                macro_context=ctx,
+            )
+            if macro_result.status != "unavailable":
+                ctx["market_regime"] = macro_result.market_regime
+                ctx["macro_score"] = macro_result.score
+        except Exception:
+            pass
         return ok(ctx)
 
     try:
@@ -617,8 +699,10 @@ def news_handler(
 
     async def _run() -> dict[str, Any]:
         settings = get_settings()
-        since_4h = datetime.now(timezone.utc) - timedelta(hours=4)
-        since_24h = datetime.now(timezone.utc) - timedelta(hours=24)
+        now_utc = datetime.now(timezone.utc)
+        since_4h = now_utc - timedelta(hours=4)
+        since_24h = now_utc - timedelta(hours=24)
+        since_72h = now_utc - timedelta(hours=72)
         async with client_factory(api_key=settings.polygon_api_key) as client:
             raw_articles = await client.get_market_news(
                 tickers=news_query_tickers,
@@ -634,6 +718,15 @@ def news_handler(
                     order="desc",
                     published_utc_gte=since_24h,
                 )
+            # Weekends / holidays can be dry even over 24h — reach back to the last
+            # active session so the brief still shows the headlines that moved the tape.
+            if not raw_articles and not symbol:
+                raw_articles = await client.get_market_news(
+                    tickers=news_query_tickers,
+                    limit=50,
+                    order="desc",
+                    published_utc_gte=since_72h,
+                )
 
         def collect_scored(min_relevance: int) -> list[dict[str, Any]]:
             rows: list[dict[str, Any]] = []
@@ -648,15 +741,25 @@ def news_handler(
                 rows.append({**article, "_relevance_score": rel})
             return rows
 
-        scored_polygon = collect_scored(10)
-        if not scored_polygon:
-            scored_polygon = collect_scored(0)
-
-        scored_polygon.sort(key=_news_relevance_sort_key)
-        deduped_polygon = deduplicate_articles(scored_polygon, score_key="_relevance_score")
-        diversity_polygon = _publisher_diversity_cap_preserving_order(deduped_polygon, max_per_publisher=2)
-
         out_cap = min(limit, 20)
+
+        if symbol:
+            scored_polygon = collect_scored(10)
+            if not scored_polygon:
+                scored_polygon = collect_scored(0)
+            scored_polygon.sort(key=_news_relevance_sort_key)
+            deduped_polygon = deduplicate_articles(scored_polygon, score_key="_relevance_score")
+            diversity_polygon = _publisher_diversity_cap_preserving_order(deduped_polygon, max_per_publisher=2)
+        else:
+            # Market-wide tape: rank ALL gate-passing articles by relevance, then
+            # credibility, then recency — no relevance floor, which can starve the
+            # brief to a single headline on a quiet day. Diversity favors one per
+            # publisher but fills up to the target so reputable sources lead without
+            # any single outlet (e.g. Motley Fool) dominating.
+            scored_polygon = collect_scored(0)
+            scored_polygon.sort(key=_news_broad_tape_sort_key)
+            deduped_polygon = deduplicate_articles(scored_polygon, score_key="_relevance_score")
+            diversity_polygon = _publisher_diversity_fill(deduped_polygon, target=out_cap, hard_cap=2)
         candidates: list[dict[str, Any]] = []
         for article in diversity_polygon[:out_cap]:
             relevance_score = int(article.pop("_relevance_score", 0))

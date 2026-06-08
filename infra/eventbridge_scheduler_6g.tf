@@ -165,9 +165,15 @@ resource "aws_scheduler_schedule" "scanner_eod" {
 # Watchlist maturation batch refresh (8:15 swing / 9:35 day / 4:30 EOD) removed — per-user refresh on
 # Dashboard/Watchlists login and row Refresh (see frontend watchlist-session-refresh).
 
-# 3:55 PM ET — validation ledger capture inside day RTH (≤15:59) and swing post-close window (≥15:50).
-resource "aws_scheduler_schedule" "scanner_ledger_capture" {
-  name       = "stocvest-development-scanner-ledger-capture"
+# Validation ledger capture is split into two single-desk invocations so neither
+# desk starves the other under the Lambda timeout, and so each runs inside its own
+# correct timing window:
+#   • Day  — 3:55 PM ET, inside day RTH (≤15:59).
+#   • Swing — 4:00 PM ET, inside the swing post-close window (15:50–16:15 ET).
+# (Previously a single "both" invocation at 15:55 drained the day queue first and
+#  timed out before reaching swing — swing signals were never captured.)
+resource "aws_scheduler_schedule" "scanner_ledger_capture_day" {
+  name       = "stocvest-development-scanner-ledger-capture-day"
   group_name = aws_scheduler_schedule_group.scanner.name
 
   state = "ENABLED"
@@ -184,7 +190,30 @@ resource "aws_scheduler_schedule" "scanner_ledger_capture" {
     role_arn = aws_iam_role.eventbridge_scanner_invoke.arn
     input = jsonencode({
       source    = "eventbridge"
-      scan_type = "ledger_capture"
+      scan_type = "ledger_capture_day"
+    })
+  }
+}
+
+resource "aws_scheduler_schedule" "scanner_ledger_capture_swing" {
+  name       = "stocvest-development-scanner-ledger-capture-swing"
+  group_name = aws_scheduler_schedule_group.scanner.name
+
+  state = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  schedule_expression          = "cron(0 16 ? * MON-FRI *)"
+  schedule_expression_timezone = "America/New_York"
+
+  target {
+    arn      = aws_lambda_function.api["scanner"].arn
+    role_arn = aws_iam_role.eventbridge_scanner_invoke.arn
+    input = jsonencode({
+      source    = "eventbridge"
+      scan_type = "ledger_capture_swing"
     })
   }
 }

@@ -112,6 +112,36 @@ def test_swing_elevated_requires_3_to_1() -> None:
     assert gates["risk_reward"]["min"] == 3.0
 
 
+def test_swing_sector_gate_uses_analyzer_score_not_composite_signal() -> None:
+    ok, gates = evaluate_swing_ledger_entry(
+        response_status="active",
+        verdict=CompositeVerdict.BULLISH,
+        composite_score=0.5,
+        alignment_ratio=0.6,
+        macro_market_regime="bull",
+        risk_reward=MIN_RISK_REWARD_SWING,
+        layer_scores={"sector": -0.6},
+        sector_layer_score=55.0,
+    )
+    assert gates["sector_gate"]["pass"] is True
+    assert gates["sector_gate"]["value"] == 55.0
+    assert ok
+
+
+def test_swing_sector_gate_ignores_composite_signal_scale_in_layer_scores() -> None:
+    ok, gates = evaluate_swing_ledger_entry(
+        response_status="active",
+        verdict=CompositeVerdict.BULLISH,
+        composite_score=0.5,
+        alignment_ratio=0.6,
+        macro_market_regime="bull",
+        risk_reward=MIN_RISK_REWARD_SWING,
+        layer_scores={"sector": -0.6},
+    )
+    assert gates["sector_gate"]["pass"] is True
+    assert gates["sector_gate"].get("reason") == "sector_unavailable"
+
+
 def test_blocked_short_circuits_other_gates() -> None:
     ok, gates = evaluate_swing_ledger_entry(
         response_status="insufficient_data",

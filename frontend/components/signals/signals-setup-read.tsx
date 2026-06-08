@@ -125,6 +125,7 @@ export function SignalsSetupRead({
       {setupJudgment ? (
         <SetupJudgmentSummary
           judgment={setupJudgment}
+          mode={tradingMode === "day" ? "day" : "swing"}
           executionLabel={executionReadinessLabel(decision.state, {
             tradingMode,
             regularSessionOpen,

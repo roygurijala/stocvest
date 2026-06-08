@@ -1,6 +1,8 @@
 # Deployment notes
 
-**Last updated:** 2026-05-22 · See also [`docs/CONTEXT.md`](./CONTEXT.md) §3 (full deploy checklist).
+**Last updated:** 2026-06-08 · See also [`docs/CONTEXT.md`](./CONTEXT.md) §3 (full deploy checklist).
+
+**Lambda packaging (P65, 2026-06-08):** API Lambdas run on **Amazon Linux**. Do **not** build deployment zips on Windows with `pip install` into a local folder + `Compress-Archive` — that produces Windows wheels (e.g. `pydantic_core._pydantic_core`) and causes **`Runtime.ImportModuleError`** in production. Use **`scripts/build_lambda_package.ps1`**, which installs **manylinux** wheels into a clean `build/lambda-package` tree and zips from there. Upload the artifact via CI **`deploy-lambda`** or your usual S3 → Lambda update path. Rebuild and redeploy **all** `stocvest-development-api-*` functions after any Python dependency change.
 
 **Validation ledger capture (B62, 2026-05-22):** Requires **`terraform apply`** to create EventBridge schedule **`stocvest-development-scanner-ledger-capture`** (`scan_type: ledger_capture`, **3:55 PM ET** Mon–Fri). Push to **`main`** runs CI **`deploy-lambda`**, which must update **`scanner`** (schedule handler) and **`signals`** (composite engines + gate persistence). No new secrets or Dynamo tables.
 

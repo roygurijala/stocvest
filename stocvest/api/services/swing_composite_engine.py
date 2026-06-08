@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import asdict
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from typing import Any
@@ -620,6 +621,11 @@ async def build_swing_composite_response(
                 payload_stub["atr"] = round(_atr_f, 4)
         except (TypeError, ValueError):
             pass
+    # Entry-zone synthesis inputs: config (Secrets Manager) + swing anchors (SMA).
+    payload_stub["entry_zone_config"] = asdict(params.entry_zone)
+    for _k, _v in (("sma20", getattr(tech, "sma20", None)), ("sma50", getattr(tech, "sma50", None))):
+        if isinstance(_v, (int, float)) and float(_v) > 0:
+            payload_stub[_k] = round(float(_v), 4)
     response_body.update(
         build_swing_composite_evidence_fields(
             composite=composite,
@@ -717,6 +723,9 @@ async def build_swing_composite_response(
                         rr_f = float(rr_raw)
                     except (TypeError, ValueError):
                         rr_f = None
+                _sector_gate_score = (
+                    float(sector.score) if getattr(sector, "score", None) is not None else None
+                )
                 eligible, gates = evaluate_swing_ledger_entry(
                     response_status=str(response_body.get("status") or "active"),
                     verdict=composite.verdict,
@@ -725,6 +734,7 @@ async def build_swing_composite_response(
                     macro_market_regime=str(macro.market_regime or "neutral"),
                     risk_reward=rr_f,
                     layer_scores=layer_scores,
+                    sector_layer_score=_sector_gate_score,
                     market_environment=_market_env,
                 )
                 gen_at = datetime.now(timezone.utc)
@@ -860,6 +870,9 @@ async def build_swing_composite_response(
                 risk_reward=_rr_eq,
                 price_at_signal=float(last_px) if last_px else None,
                 layer_scores=layer_scores_neutral,
+                sector_layer_score=(
+                    float(sector.score) if getattr(sector, "score", None) is not None else None
+                ),
                 signal_strength=int(round(max(0.0, min(1.0, composite.confidence)) * 100)),
                 pattern=pattern,
                 params=params,

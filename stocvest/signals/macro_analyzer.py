@@ -74,9 +74,14 @@ class MacroAnalyzer:
                 chips=[],
             )
 
-        spy_s = _clamp(50.0 + (spy_pct or 0.0) * 10.0, 0.0, 100.0)
-        qqq_s = _clamp(50.0 + (qqq_pct or 0.0) * 10.0, 0.0, 100.0)
-        momentum_score = (spy_s + qqq_s) / 2.0
+        # Only average the indices that have real data — padding a missing
+        # reading with 0% (neutral) would distort the score in either direction.
+        valid_scores = []
+        if spy_pct is not None:
+            valid_scores.append(_clamp(50.0 + spy_pct * 10.0, 0.0, 100.0))
+        if qqq_pct is not None:
+            valid_scores.append(_clamp(50.0 + qqq_pct * 10.0, 0.0, 100.0))
+        momentum_score = sum(valid_scores) / len(valid_scores)
 
         vix_price = float(vix_snapshot.last_trade_price) if vix_snapshot and vix_snapshot.last_trade_price else None
         vix_chg = float(vix_snapshot.change_percent) if vix_snapshot and vix_snapshot.change_percent is not None else None
@@ -138,9 +143,14 @@ class MacroAnalyzer:
         label = infer_regime(spy_pct, qqq_pct, vix_for_regime)
         if vix_price is not None and vix_price > params.vix_high:
             market_regime = "avoid"
-        elif macro_score >= 60:
+        elif macro_score >= 63:
+            # 63 (not 60) so that a mild positive day (+1%/+1.5%) stays
+            # neutral; genuine risk_on requires a clearly strong session.
             market_regime = "risk_on"
-        elif macro_score <= 40:
+        elif macro_score <= 45:
+            # 45 (not 40) so that orderly selloffs where VIX stays calm
+            # still register as risk_off when index performance is sharply
+            # negative (e.g. SPY -2.6%, QQQ -5.4%).
             market_regime = "risk_off"
         else:
             market_regime = "neutral"

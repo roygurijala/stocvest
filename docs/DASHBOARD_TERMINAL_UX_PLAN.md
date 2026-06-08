@@ -1,6 +1,6 @@
 # Dashboard — terminal-grade UX & performance master plan
 
-**Status:** Tier **1.C Phases 0–5 shipped** (2026-05-15). See §5 + §8 + [`PERFORMANCE.md`](./PERFORMANCE.md) §1 for SLOs.
+**Status:** Tier **1.C Phases 0–5 shipped** (2026-05-15). **Live `/dashboard` is now the Trading Room redesign (B63, 2026-06-05) — see §9.** Phases 0–5 below describe the **data-loading orchestration + IA + SLOs** that still underpin the dashboard; the Trading Room reuses that machinery (`fetchDashboardFirstSegment`, deferred scanner hydrate) behind a new three-zone presentation. See §5 + §8 + §9 + [`PERFORMANCE.md`](./PERFORMANCE.md) §1 for SLOs.
 
 **Theme:** Keep **current site color tokens** (dark theme, existing `design-system` / `DashboardCard` patterns). External mockups are **IA and interaction reference only**, not pixel specs.
 
@@ -139,3 +139,25 @@ Cold Lambda / Polygon spikes are **measured**, then **cached** or **moved off** 
 | Phase 3 IA surfaces | `frontend/components/dashboard/dashboard-universe-strip.tsx`, `dashboard-discovery-row.tsx`, `dashboard-desk-posture-summary.tsx` |
 | Scanner fan-in | `frontend/lib/api/scanner-load.ts` |
 | Perf invariants | `docs/PERFORMANCE.md` §3 |
+
+---
+
+## 9. Trading Room redesign — live `/dashboard` (B63, 2026-06-05)
+
+The dashboard's **presentation** was rebuilt as a focused "Trading Room" decision surface. The Tier 1.C **data tiers, streaming, SLOs, and IA principles** (§1–§8) are unchanged and still apply — the Trading Room reuses `fetchDashboardFirstSegment` (now also returns `sectorRotation` 1d/5d) plus the deferred `DashboardScannerClientFetch` hydrate; only the rendered UI changed.
+
+**Live wiring:** `app/dashboard/page.tsx` → `TradingRoomPreviewContent` (`frontend/components/dashboard/trading-room/trading-room-preview-content.tsx`) → `DashboardTradingRoom`. The same surface is also served at `/dashboard/preview`.
+
+**Three zones** (`dashboard-trading-room.tsx`):
+
+1. **Session header** — market regime + a plain-English read of what it implies, market-status pill, SPY / QQQ / IWM / **VIX** (value + change, window-labeled `today` / `prior session`), desk counts (`actionable · near · potential`), a **global `SymbolSearch`** typeahead, and an "Updated …" freshness stamp.
+2. **Signal feed** — ranked, capped, lane-aware compact cards (Day / Swing) built by the **pure** `lib/dashboard/trading-room/feed-model.ts` from Opportunity-Desk discovery + scanner setups. Filter bar = `[All · Day · Swing] · [Actionable · Near · Potential] · [Long · Short · Both]`. When the desk is genuinely quiet (no qualified setups) the feed renders **`QuietFeed`** — **Session activity** (today's bigger movers) + **Building structure** (quiet leaders / near-ready, via `resolveBuildingStructureRows`) — instead of empty space. A per-feed `SymbolSearch` lets the user look up any ticker (even one not on the desk).
+3. **Center panel** — defaults to the **Market Brief** (`market-brief.tsx`: first-name greeting, AI narrative from `GET /v1/market/brief`, indices + VIX, **1-day + 5-day** sector chips, notable movers, headlines, signal summary, "What to watch", and a right-aligned "Market pulse" refresh time) and swaps to the **Deep Dive** (`deep-dive.tsx`: verdict header, plain-English brief, **Setup / Layers / Evolution** segmented tabs, analyst ratings) when a card/symbol is selected. The **Watchlist rail** (`watchlist-rail.tsx`) is the collapsible third column.
+
+**Selection memory:** module-scoped `session-selection.ts` restores the last selected signal on SPA return; a hard refresh returns to the Brief.
+
+**Backend additions:** persisted **`first_name`** on `UserProfile` (`GET`/`PATCH /v1/users/me`) for the greeting, and the AI market narrative **`GET /v1/market/brief`** (`stocvest/api/services/market_brief.py`, Claude Haiku, warm-container in-process cache) with same-origin BFF proxies `app/api/stocvest/market/{brief,news}/route.ts`. See **`API_CONTRACTS.md` §4.2 / §4.10** and **`IMPLEMENTED.md` B63**.
+
+**B65 reliability (2026-06-08):** When the server RSC first segment returns empty index snapshots (common on **cold Lambda**), **`useDashboardTape`** client-backfills SPY/QQQ/IWM/VIX and market status without blocking the shell. All Trading Room client fetches route through the BFF (`browserApiFetch` + **`api-path-to-bff.ts`**) — see **`API_CONTRACTS.md` §4.11** and **`IMPLEMENTED.md` B65**.
+
+**Deliberately absent** (per the redesign brief): scrolling data tables, percentage-change columns, sidebar-style navigation inside the surface, and an embedded news ticker — context lives in the Brief and Deep Dive, not in dense grids.

@@ -75,6 +75,11 @@ export function vixSnapshotSessionChangePct(s: MarketSnapshotVixFields | null | 
   return null;
 }
 
+/** True when a snapshot row has a computable session change (indexes + VIX). */
+export function snapshotHasUsableQuote(s: MarketSnapshotVixFields | null | undefined): boolean {
+  return vixSnapshotSessionChangePct(s) != null;
+}
+
 /** True when the hero strip can show a usable VIX level or session %. */
 export function vixPulseDataAvailable(
   snapshot: MarketSnapshotVixFields | undefined,
