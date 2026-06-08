@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import asdict
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from typing import Any
@@ -620,6 +621,11 @@ async def build_swing_composite_response(
                 payload_stub["atr"] = round(_atr_f, 4)
         except (TypeError, ValueError):
             pass
+    # Entry-zone synthesis inputs: config (Secrets Manager) + swing anchors (SMA).
+    payload_stub["entry_zone_config"] = asdict(params.entry_zone)
+    for _k, _v in (("sma20", getattr(tech, "sma20", None)), ("sma50", getattr(tech, "sma50", None))):
+        if isinstance(_v, (int, float)) and float(_v) > 0:
+            payload_stub[_k] = round(float(_v), 4)
     response_body.update(
         build_swing_composite_evidence_fields(
             composite=composite,

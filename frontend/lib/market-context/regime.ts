@@ -15,6 +15,53 @@ export function regimeFromSpyQqq(spyPct: number | null, qqqPct: number | null, f
   return fallback;
 }
 
+/**
+ * Tape moves sharp enough that calling the day "Neutral" would be obviously
+ * wrong to a user staring at red/green index chips. Acts as a frontend safety
+ * net if the backend regime classifier drifts (e.g. a -5% QQQ day labeled
+ * "Neutral"). Deliberately conservative — only fires on clearly one-sided tape.
+ */
+const REGIME_SANITY_DOWN_SPY = -1.5;
+const REGIME_SANITY_DOWN_QQQ = -2.0;
+const REGIME_SANITY_UP_SPY = 1.5;
+const REGIME_SANITY_UP_QQQ = 2.0;
+
+/**
+ * Override a non-directional ("Neutral"/"Mixed") regime label when the index
+ * tape is sharply one-sided. Leaves already-directional labels untouched and
+ * never flips an existing bull/bear call.
+ */
+export function applyRegimeSanityGuard(
+  label: string,
+  spyPct: number | null,
+  qqqPct: number | null
+): string {
+  if (regimeLabelIsDirectional(label)) return label;
+  const spy = typeof spyPct === "number" && Number.isFinite(spyPct) ? spyPct : null;
+  const qqq = typeof qqqPct === "number" && Number.isFinite(qqqPct) ? qqqPct : null;
+  if (spy == null && qqq == null) return label;
+  const sharplyDown = (spy != null && spy <= REGIME_SANITY_DOWN_SPY) || (qqq != null && qqq <= REGIME_SANITY_DOWN_QQQ);
+  if (sharplyDown) return "Bearish";
+  const sharplyUp =
+    spy != null && qqq != null && spy >= REGIME_SANITY_UP_SPY && qqq >= REGIME_SANITY_UP_QQQ;
+  if (sharplyUp) return "Bullish";
+  return label;
+}
+
+/**
+ * Map the backend weighted macro regime (`macro_analyzer.market_regime`:
+ * risk_on / neutral / risk_off / avoid) onto the headline's Bullish / Bearish /
+ * Neutral vocabulary that the rest of the UI (tone, guard) already understands.
+ * `avoid` (extreme / high-VIX) collapses to Bearish so the tone stays red.
+ */
+export function mapMacroRegimeToLabel(marketRegime: string | null | undefined): string | null {
+  const r = (marketRegime ?? "").trim().toLowerCase();
+  if (r === "risk_on") return "Bullish";
+  if (r === "risk_off" || r === "avoid") return "Bearish";
+  if (r === "neutral") return "Neutral";
+  return null;
+}
+
 export function resolveRegimeLabel(opts: {
   scannerError?: string;
   scannerRegimeLabel?: string;
@@ -26,9 +73,10 @@ export function resolveRegimeLabel(opts: {
   const qqqFromScanner =
     typeof opts.qqqPct === "number" && Number.isFinite(opts.qqqPct) && opts.qqqPct > -99.5 ? opts.qqqPct : null;
   const useScannerRegime = !opts.scannerError && spyFromScanner != null && qqqFromScanner != null;
-  const label = useScannerRegime
+  const rawLabel = useScannerRegime
     ? (opts.scannerRegimeLabel ?? "Neutral")
     : regimeFromSpyQqq(spyFromScanner, qqqFromScanner, opts.scannerRegimeLabel ?? "Neutral");
+  const label = applyRegimeSanityGuard(rawLabel, spyFromScanner, qqqFromScanner);
   return { label, useScannerRegime };
 }
 

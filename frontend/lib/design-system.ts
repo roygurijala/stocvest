@@ -15,13 +15,15 @@ export interface ThemeColors {
 
 export const colorTokens: Record<ThemeName, ThemeColors> = {
   dark: {
-    background: "#0a0e1a",
-    surface: "#10172b",
-    surfaceMuted: "#17223d",
-    text: "#f8fafc",
+    // Neutral charcoal/graphite palette (Trading Room prototype) — deliberately
+    // free of the old navy/blue tint so the accent blue reads as interactive.
+    background: "#0d0f12",
+    surface: "#161920",
+    surfaceMuted: "#1c2029",
+    text: "#e6eaf2",
     textMuted: "#94a3b8",
-    border: "#1e293b",
-    accent: "#3b82f6",
+    border: "#262b36",
+    accent: "#2e8bff",
     bullish: "#22c55e",
     bearish: "#ef4444",
     caution: "#f59e0b"

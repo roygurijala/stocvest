@@ -8,6 +8,36 @@ from stocvest.signals.swing_technical_analyzer import SwingTechnicalAnalyzer, Sw
 from stocvest.signals.technical_analyzer import TechnicalAnalyzer, TechnicalLayerResult
 
 # Reduced composite weight vs live session technical (see composite_score effective_weight).
+
+
+def prior_session_levels_from_daily_bars(daily_bars: list[Bar]) -> tuple[float | None, float | None]:
+    """Return (prior session high, prior session low) from daily bar history.
+
+    Uses the bar immediately before the latest daily bar (typically yesterday when
+    today's session bar is present in the fetch window).
+    """
+    if len(daily_bars) < 2:
+        return None, None
+    bars = sorted(daily_bars, key=lambda b: b.timestamp)
+    prior = bars[-2]
+    pdh = float(prior.high) if prior.high and float(prior.high) > 0 else None
+    pdl = float(prior.low) if prior.low and float(prior.low) > 0 else None
+    return pdh, pdl
+
+
+def snapshot_with_prior_session_levels(snapshot: Snapshot, daily_bars: list[Bar]) -> Snapshot:
+    """Attach PDH/PDL to the snapshot passed into the day technical analyzer."""
+    pdh, pdl = prior_session_levels_from_daily_bars(daily_bars)
+    if pdh is None and pdl is None:
+        return snapshot
+    updates: dict[str, float] = {}
+    if pdh is not None:
+        updates["prev_day_high"] = pdh
+    if pdl is not None:
+        updates["prev_day_low"] = pdl
+    return snapshot.model_copy(update=updates)
+
+
 AS_OF_CLOSE_COMPOSITE_CONFIDENCE = 0.45
 
 _CLOSE_FALLBACK_PREFIX = (
@@ -76,7 +106,8 @@ def resolve_day_technical_layer(
     """
     Prefer live intraday technical; when bars are insufficient, use completed daily history.
     """
-    tech = TechnicalAnalyzer().analyze(symbol, intraday_bars, snapshot, technical_params, adv=adv)
+    snap = snapshot_with_prior_session_levels(snapshot, daily_bars)
+    tech = TechnicalAnalyzer().analyze(symbol, intraday_bars, snap, technical_params, adv=adv)
     if not intraday_technical_needs_close_fallback(tech):
         return tech
 

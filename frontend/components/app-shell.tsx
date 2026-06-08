@@ -6,6 +6,7 @@ import { MobileNavDrawer } from "@/components/mobile-nav-drawer";
 import { PageLoader } from "@/components/page-loader";
 import { Sidebar } from "@/components/sidebar";
 import { APP_TOP_BAR_LAYOUT_HEIGHT, TopBar } from "@/components/top-bar";
+import { AppChromeProvider } from "@/lib/app-chrome-context";
 import type { AuthSession } from "@/lib/auth/types";
 import { resetBodyScrollLock } from "@/lib/body-scroll-lock";
 import { spacing } from "@/lib/design-system";
@@ -25,6 +26,13 @@ interface AppShellProps {
    * `<main>` top padding is zero and spacing is reserved in-page.
    */
   mainTopLayout?: "default" | "watchlist-flush" | "signals-flush";
+  /**
+   * Suppress the global brand `TopBar` so the page can render its own header
+   * (e.g. the dashboard's single prototype-style header bar). The page is then
+   * responsible for the brand/theme controls; the mobile nav drawer is still
+   * reachable via `useAppChrome().openNavDrawer`.
+   */
+  hideTopBar?: boolean;
 }
 
 export function AppShell({
@@ -32,7 +40,8 @@ export function AppShell({
   children,
   isAdmin = false,
   mainTopExtra = spacing[6],
-  mainTopLayout = "default"
+  mainTopLayout = "default",
+  hideTopBar = false
 }: AppShellProps) {
   const mainFlushTop = mainTopLayout !== "default";
   const { colors } = useTheme();
@@ -56,22 +65,28 @@ export function AppShell({
   return (
     <>
       {loading ? <PageLoader /> : null}
-      <div className="app-shell-layout grid min-h-screen grid-cols-1 items-start lg:grid-cols-[248px_1fr]">
+      <div className="app-shell-layout grid min-h-screen items-start">
         <Sidebar userLabel={userLabel} isAdmin={isAdmin} />
         <div
           className="flex min-w-0 flex-col"
           data-testid="app-shell-right-column"
           style={{ background: colors.background }}
         >
-          <TopBar onMenuClick={() => setDrawerOpen(true)} />
+          {hideTopBar ? null : <TopBar onMenuClick={() => setDrawerOpen(true)} />}
           <main
-            className="min-w-0 px-4 pb-6 lg:px-6"
+            className="min-w-0 px-4 pb-6 min-[900px]:px-6"
             data-main-top-layout={mainTopLayout}
             style={{
-              paddingTop: mainFlushTop ? 0 : `calc(${APP_TOP_BAR_LAYOUT_HEIGHT} + ${mainTopExtra})`
+              paddingTop: hideTopBar
+                ? 0
+                : mainFlushTop
+                  ? 0
+                  : `calc(${APP_TOP_BAR_LAYOUT_HEIGHT} + ${mainTopExtra})`
             }}
           >
-            {children}
+            <AppChromeProvider value={{ openNavDrawer: () => setDrawerOpen(true) }}>
+              {children}
+            </AppChromeProvider>
           </main>
         </div>
       </div>

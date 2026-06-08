@@ -23,6 +23,22 @@ def test_vix_unavailable_no_crash(mock_parameter_store) -> None:
     assert m.score is not None
 
 
+def test_sharp_selloff_calm_vix_registers_risk_off(mock_parameter_store) -> None:
+    """Regression: an orderly-but-sharp selloff (SPY -2.6%, QQQ -5.4%) with a
+    non-extreme VIX must register as risk_off, not neutral. This is the live
+    scenario the momentum-weight (0.45) + risk_off ceiling (45) tuning targets."""
+    m = MacroAnalyzer().analyze(
+        make_spy_snapshot(-2.6),
+        make_qqq_snapshot(-5.4),
+        make_vix_snapshot(15.4, 8.0),
+        [],
+        mock_parameter_store.macro,
+    )
+    assert m.status == "available"
+    assert m.score is not None and m.score <= 45
+    assert m.market_regime == "risk_off"
+
+
 def test_fomc_reduces_score(mock_parameter_store) -> None:
     ev = [EconomicCalendarEvent(time_et="14:00", event_name="FOMC statement", impact="high")]
     m = MacroAnalyzer().analyze(

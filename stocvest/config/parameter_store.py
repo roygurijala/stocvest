@@ -13,6 +13,8 @@ from botocore.exceptions import ClientError
 
 from stocvest.config.signal_parameters import (
     CompositeParameters,
+    EntryZoneModeParameters,
+    EntryZoneParameters,
     MacroParameters,
     NewsParameters,
     SectorParameters,
@@ -68,6 +70,35 @@ def _parse_optional_composite_block(raw: Any) -> CompositeParameters | None:
     return _coerce_dataclass(CompositeParameters, raw)
 
 
+def _merge_entry_zone_mode(base: EntryZoneModeParameters, raw: Any) -> EntryZoneModeParameters:
+    """Override only the keys present in ``raw`` so missing keys keep the
+    *mode-specific* defaults (swing's 0.005 ≠ the class default 0.002)."""
+    if not isinstance(raw, dict):
+        return base
+    allowed = {f.name for f in fields(EntryZoneModeParameters)}
+    kwargs = {f.name: getattr(base, f.name) for f in fields(EntryZoneModeParameters)}
+    for k, v in raw.items():
+        if k in allowed and v is not None:
+            kwargs[k] = v
+    try:
+        return EntryZoneModeParameters(**kwargs)
+    except TypeError:
+        return base
+
+
+def _parse_entry_zone(raw: Any) -> EntryZoneParameters:
+    """Parse the ``entry_zone`` block (nested ``day``/``swing`` dataclasses need
+    explicit coercion because string annotations defeat the recursive path)."""
+    base = EntryZoneParameters()
+    if not isinstance(raw, dict):
+        return base
+    day = _merge_entry_zone_mode(base.day, raw.get("day"))
+    swing = _merge_entry_zone_mode(base.swing, raw.get("swing"))
+    mrr = raw.get("min_rr_from_zone_high")
+    min_rr = float(mrr) if isinstance(mrr, (int, float)) and float(mrr) > 0 else base.min_rr_from_zone_high
+    return EntryZoneParameters(day=day, swing=swing, min_rr_from_zone_high=min_rr)
+
+
 def signal_parameters_from_dict(data: dict[str, Any]) -> SignalParameters:
     """Build :class:`SignalParameters` from a JSON object; unknown keys ignored."""
     base = default_signal_parameters()
@@ -81,6 +112,7 @@ def signal_parameters_from_dict(data: dict[str, Any]) -> SignalParameters:
     swing_comp = _parse_optional_composite_block(data.get("swing_composite"))
     day_comp = _parse_optional_composite_block(data.get("day_composite"))
     swing_t = _coerce_dataclass(SwingTechnicalParameters, data.get("swing_technical") or {})
+    entry_zone = _parse_entry_zone(data.get("entry_zone"))
     return SignalParameters(
         version=str(data.get("version") or base.version),
         created_at=str(data.get("created_at") or ""),
@@ -93,6 +125,7 @@ def signal_parameters_from_dict(data: dict[str, Any]) -> SignalParameters:
         swing_composite=swing_comp,
         day_composite=day_comp,
         swing_technical=swing_t,
+        entry_zone=entry_zone,
         swing_news_lookback_hours=int(data.get("swing_news_lookback_hours", base.swing_news_lookback_hours)),
         swing_macro_events_days=int(data.get("swing_macro_events_days", base.swing_macro_events_days)),
         swing_geo_lookback_hours=int(data.get("swing_geo_lookback_hours", base.swing_geo_lookback_hours)),

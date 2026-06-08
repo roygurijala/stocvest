@@ -1,39 +1,40 @@
 "use client";
 
-import { useContext, useEffect, useState } from "react";
+import { Fragment, useContext, useEffect, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity,
   AlertTriangle,
   BarChart2,
+  BadgeCheck,
   BookOpen,
   Bookmark,
   Briefcase,
-  ChevronDown,
+  CalendarDays,
   ChevronRight,
   ClipboardList,
+  HelpCircle,
   History,
   Layers,
   LayoutDashboard,
   LogOut,
   MessageCircle,
   Radio,
-  CalendarDays,
   ScrollText,
   Settings,
   ShieldCheck,
   Timer,
   TrendingUp,
   Users,
-  Zap,
-  BadgeCheck
+  Zap
 } from "lucide-react";
 import { logoutAction } from "@/app/login/actions";
 import { clearAssistantSession } from "@/lib/assistant/session-reset";
 import { openCrispChat } from "@/components/crisp-chat";
 import { isDashboardNavItemActive } from "@/lib/dashboard-nav-active";
-import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
+import { useMarketSessionPhase } from "@/lib/hooks/use-market-session-phase";
+import type { MarketSessionPhase } from "@/lib/market-hours-et";
 import { isDashboardNavItemEnabled, type NavFeatureKey } from "@/lib/nav-features";
 
 export { NAV_FEATURES } from "@/lib/nav-features";
@@ -45,45 +46,72 @@ import type { LucideIcon } from "lucide-react";
 interface SidebarProps {
   userLabel: string;
   /** Whether to render admin-gated nav items. Resolved by the server (dashboard
-   *  layout reads `getServerSession()` + `isSessionAdmin()` and forwards). */
+   *  layout reads `getServerSession()` + `isSessionAdmin()` and forwards). The
+   *  backend gate is the real perimeter; this flag only controls UI visibility. */
   isAdmin?: boolean;
 }
 
-export const DASHBOARD_NAV_ITEMS: ReadonlyArray<{
+interface NavItem {
   href: string;
   label: string;
   icon: LucideIcon;
   feature?: NavFeatureKey;
-}> = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/dashboard/scanner", label: "Scanner", icon: Radio },
-  { href: "/dashboard/watchlists", label: "Watchlists", icon: Bookmark },
-  { href: "/dashboard/signals", label: "Signals", icon: Zap },
-  { href: "/dashboard/setup-evolution", label: "Setup evolution", icon: History },
-  { href: "/dashboard/setup-outcomes", label: "Setup outcomes", icon: ClipboardList },
-  { href: "/dashboard/earnings", label: "Earnings", icon: CalendarDays },
-  { href: "/dashboard/portfolio", label: "Portfolio", icon: Briefcase, feature: "brokersEnabled" },
-  { href: "/dashboard/options", label: "Options", icon: Layers, feature: "options" },
-  { href: "/dashboard/crypto", label: "Crypto", icon: TrendingUp, feature: "crypto" },
-  { href: "/dashboard/futures", label: "Futures", icon: BarChart2, feature: "futures" },
-  { href: "/dashboard/journal", label: "Journal", icon: BookOpen, feature: "brokersEnabled" },
-  { href: "/dashboard/legal", label: "Legal & agreements", icon: BadgeCheck },
-  { href: "/dashboard/settings", label: "Settings", icon: Settings }
+}
+
+/**
+ * Destinations grouped into the three nav sections (Trading / Analysis /
+ * System). Feature-gated items (`feature`) are filtered by
+ * `isDashboardNavItemEnabled` so plan/flag-gated surfaces stay hidden.
+ */
+const NAV_SECTIONS: ReadonlyArray<{ id: string; label: string; items: ReadonlyArray<NavItem> }> = [
+  {
+    id: "trading",
+    label: "Trading",
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/dashboard/scanner", label: "Scanner", icon: Radio },
+      { href: "/dashboard/watchlists", label: "Watchlist", icon: Bookmark }
+    ]
+  },
+  {
+    id: "analysis",
+    label: "Analysis",
+    items: [
+      { href: "/dashboard/signals", label: "Signals", icon: Zap },
+      { href: "/dashboard/setup-evolution", label: "Setup evolution", icon: History },
+      { href: "/dashboard/setup-outcomes", label: "Setup outcomes", icon: ClipboardList },
+      { href: "/dashboard/earnings", label: "Earnings", icon: CalendarDays },
+      { href: "/dashboard/portfolio", label: "Portfolio", icon: Briefcase, feature: "brokersEnabled" },
+      { href: "/dashboard/options", label: "Options", icon: Layers, feature: "options" },
+      { href: "/dashboard/crypto", label: "Crypto", icon: TrendingUp, feature: "crypto" },
+      { href: "/dashboard/futures", label: "Futures", icon: BarChart2, feature: "futures" },
+      { href: "/dashboard/journal", label: "Journal", icon: BookOpen, feature: "brokersEnabled" }
+    ]
+  },
+  {
+    id: "system",
+    label: "System",
+    items: [
+      { href: "/dashboard/legal", label: "Legal & agreements", icon: BadgeCheck },
+      { href: "/dashboard/settings", label: "Settings", icon: Settings },
+      { href: "/how-it-works", label: "How it works", icon: HelpCircle }
+    ]
+  }
 ];
+
+/**
+ * Flattened nav list — preserved as a named export for back-compatibility
+ * with existing tests and any consumers that import the destination set.
+ */
+export const DASHBOARD_NAV_ITEMS: ReadonlyArray<NavItem> = NAV_SECTIONS.flatMap((s) => s.items);
 
 /**
  * Admin-only nav items, rendered as a collapsible group when the
  * server-side `isSessionAdmin()` check passes. Order is intentional:
  * Overview first (entry point) → high-touch operations → maintenance.
- *
- * The backend gate (`analysis_authorized()`) is still the real
- * perimeter on every request — hiding the nav is a UX courtesy only.
+ * The backend gate (`analysis_authorized()`) remains the real perimeter.
  */
-export const DASHBOARD_ADMIN_NAV_ITEMS: ReadonlyArray<{
-  href: string;
-  label: string;
-  icon: LucideIcon;
-}> = [
+export const DASHBOARD_ADMIN_NAV_ITEMS: ReadonlyArray<{ href: string; label: string; icon: LucideIcon }> = [
   { href: "/dashboard/admin", label: "Overview", icon: Activity },
   { href: "/dashboard/admin/proposals", label: "Weight proposals", icon: ShieldCheck },
   { href: "/dashboard/admin/parameters", label: "Parameters", icon: History },
@@ -97,28 +125,19 @@ export const DASHBOARD_ADMIN_NAV_ITEMS: ReadonlyArray<{
 const ADMIN_NAV_STORAGE_KEY = "stocvest:sidebar:admin-expanded";
 
 /**
- * Hook: persisted-expand state for the Admin collapsible group.
- *
- * Defaults to **collapsed** on first paint — admin users care about the
- * 14 main-nav items 95% of the time. localStorage keeps the choice
- * across navigations and reloads. The hook is SSR-safe (no `window`
- * reference until `useEffect`) so the sidebar can server-render the
- * collapsed state without hydration mismatch.
- *
- * Auto-expand override: if the current pathname is under
- * `/dashboard/admin`, the group is shown expanded regardless of stored
- * preference. The operator is clearly inside the admin surface, so the
- * sub-items must be visible to navigate between them.
+ * Persisted-expand state for the Admin collapsible group. Defaults to
+ * collapsed; localStorage keeps the choice across navigations. Auto-expands
+ * when the current route is under `/dashboard/admin` so sub-items are
+ * reachable. SSR-safe (no `window` until effect).
  */
 function useAdminNavExpanded(autoExpand: boolean): [boolean, (next: boolean) => void] {
   const [expanded, setExpanded] = useState<boolean>(false);
 
   useEffect(() => {
     try {
-      const stored = window.localStorage.getItem(ADMIN_NAV_STORAGE_KEY);
-      if (stored === "1") setExpanded(true);
+      if (window.localStorage.getItem(ADMIN_NAV_STORAGE_KEY) === "1") setExpanded(true);
     } catch {
-      // SSR / disabled storage — keep collapsed.
+      /* SSR / disabled storage — keep collapsed. */
     }
   }, []);
 
@@ -131,235 +150,159 @@ function useAdminNavExpanded(autoExpand: boolean): [boolean, (next: boolean) => 
     try {
       window.localStorage.setItem(ADMIN_NAV_STORAGE_KEY, next ? "1" : "0");
     } catch {
-      // ignore
+      /* ignore */
     }
   };
 
   return [expanded, set];
 }
 
+function initialsFromLabel(label: string): string {
+  const base = (label || "").replace(/@.*/, "").trim();
+  const parts = base.split(/[.\s_-]+/).filter(Boolean);
+  const letters = (parts.length >= 2 ? `${parts[0][0]}${parts[1][0]}` : base.slice(0, 2)).toUpperCase();
+  return letters || "U";
+}
+
 export function Sidebar({ userLabel, isAdmin = false }: SidebarProps) {
   const pathname = usePathname();
-  const { colors } = useTheme();
+  const { theme, colors } = useTheme();
   const { profile } = useContext(UserProfileContext);
-  const adminItems = isAdmin ? DASHBOARD_ADMIN_NAV_ITEMS : [];
-  const pathInAdmin =
-    pathname === "/dashboard/admin" || pathname.startsWith("/dashboard/admin/");
+  const pathInAdmin = pathname === "/dashboard/admin" || pathname.startsWith("/dashboard/admin/");
   const [adminExpanded, setAdminExpanded] = useAdminNavExpanded(pathInAdmin && isAdmin);
   const adminActive = isAdmin && pathInAdmin;
 
+  // Status orb reflects the live session phase rather than a fixed "live" state.
+  const sessionPhase = useMarketSessionPhase();
+  const orbInfo: Record<MarketSessionPhase, { label: string; color: string }> = {
+    pre: { label: "Pre-market", color: colors.accent },
+    live: { label: "Markets live", color: colors.bullish ?? "#22c55e" },
+    post: { label: "After hours", color: colors.caution ?? "#f59e0b" },
+    closed: { label: "Markets closed", color: colors.textMuted }
+  };
+  const orb = orbInfo[sessionPhase];
+  const orbGlow = sessionPhase === "closed" ? "none" : `0 0 8px 1px ${orb.color}66`;
+
+  // Theme tokens → CSS custom properties consumed by the `.lnav-*` rules in
+  // globals.css (so hover/active states are pure CSS but stay theme-aware).
+  // In dark mode the rail uses the prototype's distinct near-black (`#0a0c10`,
+  // a touch darker than the page background) with a soft border, so it reads as
+  // its own recessed rail rather than blending into the content. Light mode
+  // keeps the lighter `surface` panel.
+  const railSurface = theme === "dark" ? "#0a0c10" : colors.surface;
+  const railBorder = theme === "dark" ? "#1f242e" : colors.border;
+  const navVars = {
+    "--lnav-surface": railSurface,
+    "--lnav-border": railBorder,
+    "--lnav-text": colors.textMuted,
+    "--lnav-strong": colors.text,
+    "--lnav-dim": colors.textMuted,
+    "--lnav-hover": "rgba(255,255,255,0.04)",
+    "--lnav-active": colors.bullish ?? "#22C55E",
+    "--lnav-active-bg": "rgba(34,197,94,0.09)",
+    "--lnav-active-glow": "rgba(34,197,94,0.55)"
+  } as CSSProperties;
+
   return (
-    <aside
-      className="relative hidden w-[248px] shrink-0 flex-col lg:sticky lg:top-0 lg:flex lg:max-h-screen lg:flex-col lg:self-start"
-      style={{
-        background: colors.surface,
-        borderRight: `1px solid ${colors.border}`
-      }}
-    >
-      <nav
-        style={{
-          padding: spacing[4],
-          display: "grid",
-          gap: spacing[2],
-          alignContent: "start",
-          flexGrow: 1,
-          overflowY: "auto",
-          minHeight: 0
-        }}
-      >
-        {DASHBOARD_NAV_ITEMS.filter(isDashboardNavItemEnabled).map((item) => {
-          const Icon = item.icon;
-          const isActive = isDashboardNavItemActive(pathname, item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="sidebar-nav-item"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: spacing[3],
-                borderRadius: borderRadius.md,
-                padding: `${spacing[2]} ${spacing[3]}`,
-                borderLeft: `3px solid ${isActive ? colors.accent : "transparent"}`,
-                background: isActive ? "rgba(59,130,246,0.12)" : "transparent",
-                color: isActive ? colors.accent : colors.text,
-                fontSize: typography.scale.sm,
-                fontWeight: isActive ? 600 : 500
-              }}
-            >
-              <Icon size={18} />
-              <span className="sidebar-nav-label">{item.label}</span>
-            </Link>
-          );
-        })}
-        {adminItems.length > 0 ? (
-          <div
-            data-testid="sidebar-admin-section"
-            style={{
-              marginTop: spacing[3],
-              paddingTop: spacing[3],
-              borderTop: `1px solid ${colors.border}`,
-              display: "grid",
-              gap: spacing[1]
-            }}
-          >
-            <button
-              type="button"
-              data-testid="sidebar-admin-toggle"
-              data-expanded={adminExpanded}
-              aria-expanded={adminExpanded}
-              aria-controls="sidebar-admin-items"
-              onClick={() => setAdminExpanded(!adminExpanded)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: spacing[3],
-                width: "100%",
-                borderRadius: borderRadius.md,
-                padding: `${spacing[2]} ${spacing[3]}`,
-                borderLeft: `3px solid ${adminActive ? colors.accent : "transparent"}`,
-                border: "none",
-                borderTop: "none",
-                borderRight: "none",
-                borderBottom: "none",
-                background: adminActive && !adminExpanded ? "rgba(59,130,246,0.12)" : "transparent",
-                color: adminActive ? colors.accent : colors.text,
-                fontSize: typography.scale.sm,
-                fontWeight: adminActive ? 600 : 500,
-                cursor: "pointer",
-                textAlign: "left"
-              }}
-            >
-              <ShieldCheck size={18} />
-              <span className="sidebar-nav-label" style={{ flex: 1 }}>
-                Admin
-              </span>
-              {adminExpanded ? (
-                <ChevronDown size={14} aria-hidden />
-              ) : (
-                <ChevronRight size={14} aria-hidden />
-              )}
-            </button>
-            {adminExpanded ? (
-              <div
-                id="sidebar-admin-items"
-                style={{
-                  display: "grid",
-                  gap: spacing[1],
-                  paddingLeft: spacing[3]
-                }}
-              >
-                {adminItems.map((item) => {
+    <aside className="lnav" style={navVars} data-testid="app-sidebar">
+      <div className="lnav-rail">
+        <div className="lnav-orb" title={orb.label}>
+          <span className="o" style={{ background: orb.color, boxShadow: orbGlow }} />
+          <span className="lnav-fade">{orb.label}</span>
+        </div>
+
+        <div className="lnav-scroll">
+          {NAV_SECTIONS.map((section) => {
+            const items = section.items.filter(isDashboardNavItemEnabled);
+            if (items.length === 0 && section.id !== "system") return null;
+            return (
+              <Fragment key={section.id}>
+                <div className="lnav-sec lnav-fade">{section.label}</div>
+                {items.map((item) => {
                   const Icon = item.icon;
-                  const isActive = isDashboardNavItemActive(pathname, item.href);
+                  const active = isDashboardNavItemActive(pathname, item.href);
                   return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className="sidebar-nav-item"
-                      data-testid={`sidebar-admin-item-${item.href}`}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: spacing[3],
-                        borderRadius: borderRadius.md,
-                        padding: `${spacing[2]} ${spacing[3]}`,
-                        borderLeft: `2px solid ${isActive ? colors.accent : colors.border}`,
-                        background: isActive ? "rgba(59,130,246,0.12)" : "transparent",
-                        color: isActive ? colors.accent : colors.text,
-                        fontSize: typography.scale.sm,
-                        fontWeight: isActive ? 600 : 500
-                      }}
-                    >
-                      <Icon size={16} />
-                      <span className="sidebar-nav-label">{item.label}</span>
+                    <Link key={item.href} href={item.href} className={`lnav-item${active ? " active" : ""}`}>
+                      <span className="lnav-ic">
+                        <Icon size={18} />
+                      </span>
+                      <span className="lnav-label lnav-fade">{item.label}</span>
                     </Link>
                   );
                 })}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-      </nav>
 
-      <div
-        className="sidebar-footer"
-        style={{
-          padding: spacing[4],
-          borderTop: `1px solid ${colors.border}`,
-          flexShrink: 0
-        }}
-      >
-        <div
-          className={surfaceGlowClassName}
-          style={{
-            display: "grid",
-            gap: spacing[3],
-            padding: spacing[3],
-            borderRadius: borderRadius.lg,
-            background: colors.surfaceMuted,
-            border: `1px solid ${colors.border}`
-          }}
-        >
-          <TrialSidebarPill profile={profile} />
-          <p
-            className="sidebar-user-label"
-            style={{ margin: 0, color: colors.textMuted, fontSize: typography.scale.sm, overflowWrap: "anywhere", lineHeight: 1.4 }}
-          >
-            {userLabel}
-          </p>
-          <form action={logoutAction}>
-            <button
-              type="submit"
-              onClick={() => clearAssistantSession()}
-              className="sidebar-signout-btn"
-              style={{
-                width: "100%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: spacing[2],
-                minHeight: 44,
-                borderRadius: borderRadius.md,
-                border: `1px solid ${colors.border}`,
-                padding: `${spacing[2]} ${spacing[3]}`,
-                background: colors.surface,
-                color: colors.text,
-                cursor: "pointer",
-                fontSize: typography.scale.sm,
-                fontWeight: 600
-              }}
-            >
-              <LogOut size={18} strokeWidth={2} />
-              <span className="sidebar-signout-label">Sign out</span>
-            </button>
-          </form>
+                {section.id === "system" && isAdmin ? (
+                  <>
+                    <button
+                      type="button"
+                      data-testid="sidebar-admin-toggle"
+                      data-expanded={adminExpanded}
+                      aria-expanded={adminExpanded}
+                      aria-controls="sidebar-admin-items"
+                      onClick={() => setAdminExpanded(!adminExpanded)}
+                      className={`lnav-item${adminActive ? " active" : ""}${adminExpanded ? " open" : ""}`}
+                    >
+                      <span className="lnav-ic">
+                        <ShieldCheck size={18} />
+                      </span>
+                      <span className="lnav-label lnav-fade">Admin</span>
+                      {!adminExpanded ? <span className="lnav-dot amber" /> : null}
+                      <ChevronRight className="lnav-caret lnav-fade" size={14} aria-hidden />
+                    </button>
+                    <div id="sidebar-admin-items" className="lnav-sub">
+                      {DASHBOARD_ADMIN_NAV_ITEMS.map((item) => {
+                        const active = isDashboardNavItemActive(pathname, item.href);
+                        return (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            data-testid={`sidebar-admin-item-${item.href}`}
+                            className={`lnav-subitem lnav-fade${active ? " active" : ""}`}
+                          >
+                            {item.label}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : null}
+              </Fragment>
+            );
+          })}
+        </div>
+
+        <div className="lnav-foot">
+          <div className="lnav-fade" style={{ padding: "0 12px 6px" }}>
+            <TrialSidebarPill profile={profile} />
+          </div>
+          <div className="lnav-user">
+            <span className="lnav-av">{initialsFromLabel(userLabel)}</span>
+            <span className="lnav-who lnav-fade">
+              <div className="nm" title={userLabel}>
+                {userLabel}
+              </div>
+              <div className="role">{isAdmin ? "Admin · STOCVEST" : "Member"}</div>
+            </span>
+          </div>
           <button
             type="button"
             onClick={() => openCrispChat()}
             title="Share feedback or report issues"
-            className="sidebar-feedback-link"
-            style={{
-              width: "100%",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: spacing[2],
-              minHeight: 40,
-              borderRadius: borderRadius.md,
-              border: `1px dashed ${colors.border}`,
-              padding: `${spacing[2]} ${spacing[3]}`,
-              background: "transparent",
-              cursor: "pointer",
-              fontSize: typography.scale.sm,
-              fontWeight: 500,
-              color: colors.textMuted
-            }}
+            className="lnav-item"
           >
-            <MessageCircle size={16} strokeWidth={2} aria-hidden />
-            Send feedback
+            <span className="lnav-ic">
+              <MessageCircle size={18} />
+            </span>
+            <span className="lnav-label lnav-fade">Send feedback</span>
           </button>
+          <form action={logoutAction}>
+            <button type="submit" onClick={() => clearAssistantSession()} className="lnav-item lnav-signout">
+              <span className="lnav-ic">
+                <LogOut size={18} />
+              </span>
+              <span className="lnav-label lnav-fade">Sign out</span>
+            </button>
+          </form>
         </div>
       </div>
     </aside>

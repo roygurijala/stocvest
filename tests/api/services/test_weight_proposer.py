@@ -213,6 +213,27 @@ def test_build_rows_drops_empty_layer_scores() -> None:
     assert len(rows) == 1
 
 
+def test_build_rows_excludes_shadow_and_unavailable_patterns() -> None:
+    """Optimizer cohort excludes gate-study shadow rows and unavailable patterns."""
+    good = _make_record(mode="day", days_ago=1)
+    good.pattern = "breakout_long"
+    shadow = _make_record(mode="day", days_ago=2)
+    shadow.pattern = "breakout_long:ledger_capture_shadow"
+    shadow.capture_kind = "shadow"
+    unavailable = _make_record(mode="day", days_ago=3)
+    unavailable.pattern = "unavailable"
+    unavailable_shadow = _make_record(mode="day", days_ago=4)
+    unavailable_shadow.pattern = "unavailable:ledger_capture_shadow"
+    unavailable_shadow.capture_kind = "shadow"
+    rows = build_historical_rows_for_mode(
+        [good, shadow, unavailable, unavailable_shadow],
+        mode="day",
+        now=_NOW,
+        trailing_days=30,
+    )
+    assert len(rows) == 1
+
+
 def test_build_rows_sorted_chronologically_ascending() -> None:
     """Output is sorted ASC by generated_at — walk_forward_split's invariant."""
     records = [

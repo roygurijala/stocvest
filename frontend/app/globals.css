@@ -10,34 +10,34 @@ html {
 }
 
 :root {
-  --color-bg: #0a0e1a;
-  --color-surface: #10172b;
-  --color-surface-muted: #17223d;
-  --color-text: #f8fafc;
-  --color-text-primary: #f8fafc;
+  --color-bg: #0d0f12;
+  --color-surface: #161920;
+  --color-surface-muted: #1c2029;
+  --color-text: #e6eaf2;
+  --color-text-primary: #e6eaf2;
   --color-text-muted: #94a3b8;
-  --color-text-tertiary: #64748b;
-  --color-border: #1e293b;
-  --color-border-tertiary: rgba(100, 116, 139, 0.45);
-  --color-background-secondary: #17223d;
-  --color-accent: #3b82f6;
+  --color-text-tertiary: #5e6878;
+  --color-border: #262b36;
+  --color-border-tertiary: rgba(94, 104, 120, 0.45);
+  --color-background-secondary: #1c2029;
+  --color-accent: #2e8bff;
   --color-bullish: #22c55e;
   --color-bearish: #ef4444;
   --color-caution: #f59e0b;
 }
 
 .theme-dark {
-  --color-bg: #0a0e1a;
-  --color-surface: #10172b;
-  --color-surface-muted: #17223d;
-  --color-text: #f8fafc;
-  --color-text-primary: #f8fafc;
+  --color-bg: #0d0f12;
+  --color-surface: #161920;
+  --color-surface-muted: #1c2029;
+  --color-text: #e6eaf2;
+  --color-text-primary: #e6eaf2;
   --color-text-muted: #94a3b8;
-  --color-text-tertiary: #64748b;
-  --color-border: #1e293b;
-  --color-border-tertiary: rgba(100, 116, 139, 0.45);
-  --color-background-secondary: #17223d;
-  --color-accent: #3b82f6;
+  --color-text-tertiary: #5e6878;
+  --color-border: #262b36;
+  --color-border-tertiary: rgba(94, 104, 120, 0.45);
+  --color-background-secondary: #1c2029;
+  --color-accent: #2e8bff;
   --color-bullish: #22c55e;
   --color-bearish: #ef4444;
   --color-caution: #f59e0b;
@@ -100,11 +100,90 @@ a {
   grid-template-columns: minmax(0, 1fr);
 }
 
-@media (min-width: 1024px) {
-  .app-shell-layout {
-    grid-template-columns: 248px minmax(0, 1fr);
+/* Market-brief bento: single column on narrow screens, a deterministic two
+ * columns once there's room — so paired modules (e.g. Sector + Week-in-review)
+ * stay side-by-side rather than reflowing to 3+ columns on wide displays. */
+.brief-bento {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 680px) {
+  .brief-bento {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+@media (min-width: 900px) {
+  .app-shell-layout {
+    grid-template-columns: 56px minmax(0, 1fr);
+    transition: grid-template-columns 0.16s ease;
+  }
+  /* Expand the rail's grid column on hover/focus so the page content reflows
+   * (shifts right) instead of being overlaid. `:has()` lets the parent grid
+   * react to the child sidebar's hover state in pure CSS. */
+  .app-shell-layout:has(.lnav:hover),
+  .app-shell-layout:has(.lnav-rail:focus-within) {
+    grid-template-columns: 222px minmax(0, 1fr);
+  }
+  /* The global top bar is position:fixed, so it can't reflow with the grid —
+   * shift its left edge in step with the expanding rail. */
+  .app-topbar { transition: left 0.16s ease; }
+  .app-shell-layout:has(.lnav:hover) .app-topbar,
+  .app-shell-layout:has(.lnav-rail:focus-within) .app-topbar {
+    left: 222px;
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────
+ * Left navigation — collapsed 56px rail that expands to 222px on
+ * hover and pushes the page content right (the grid column above
+ * grows in step). Theme colors are injected as `--lnav-*` custom
+ * properties on the <aside> from useTheme(). Horizontal paddings
+ * (19px) center the 18px icons in the 56px rail.
+ * ────────────────────────────────────────────────────────────── */
+.lnav { position: sticky; top: 0; height: 100vh; width: 100%; flex: none; z-index: 40; }
+@media (max-width: 899px) { .lnav { display: none; } }
+.lnav-rail {
+  position: absolute; top: 0; bottom: 0; left: 0; width: 56px;
+  display: flex; flex-direction: column; padding: 10px 0 6px;
+  background: var(--lnav-surface); border-right: 1px solid var(--lnav-border);
+  overflow: hidden; transition: width 0.16s ease;
+}
+.lnav:hover .lnav-rail, .lnav-rail:focus-within { width: 222px; box-shadow: 12px 0 32px rgba(0, 0, 0, 0.30); }
+.lnav-fade { opacity: 0; transition: opacity 0.12s ease; white-space: nowrap; pointer-events: none; }
+.lnav:hover .lnav-fade, .lnav-rail:focus-within .lnav-fade { opacity: 1; pointer-events: auto; }
+.lnav-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+.lnav-scroll::-webkit-scrollbar { width: 0; }
+.lnav-orb { display: flex; align-items: center; gap: 12px; padding: 6px 19px 12px; color: var(--lnav-dim); font-size: 12px; white-space: nowrap; }
+.lnav-orb .o { width: 8px; height: 8px; border-radius: 50%; background: var(--lnav-dim); flex: none; }
+.lnav-orb.open .o { background: var(--lnav-active); box-shadow: 0 0 8px 1px var(--lnav-active-glow); }
+.lnav-sec { font-size: 9.5px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--lnav-dim); padding: 13px 19px 5px; white-space: nowrap; }
+.lnav-item { display: flex; align-items: center; gap: 14px; padding: 9px 19px; color: var(--lnav-text); cursor: pointer; white-space: nowrap; border-left: 2px solid transparent; text-decoration: none; width: 100%; background: none; border-top: 0; border-right: 0; border-bottom: 0; font: inherit; text-align: left; position: relative; }
+.lnav-item:hover { color: var(--lnav-strong); background: var(--lnav-hover); }
+.lnav-item.active { color: var(--lnav-strong); border-left-color: var(--lnav-active); background: var(--lnav-active-bg); }
+.lnav-item.active .lnav-ic { color: var(--lnav-active); }
+.lnav-ic { width: 18px; height: 18px; flex: none; display: inline-flex; align-items: center; justify-content: center; }
+.lnav-label { font-size: 13px; }
+.lnav-dot { width: 6px; height: 6px; border-radius: 50%; position: absolute; left: 31px; top: 10px; }
+.lnav:hover .lnav-dot, .lnav-rail:focus-within .lnav-dot { position: static; margin-left: auto; left: auto; top: auto; }
+.lnav-dot.green { background: var(--lnav-active); }
+.lnav-dot.amber { background: #f59e0b; }
+.lnav-caret { margin-left: auto; transition: transform 0.15s ease; flex: none; }
+.lnav-item.open .lnav-caret { transform: rotate(90deg); }
+.lnav-sub { display: grid; gap: 1px; overflow: hidden; max-height: 0; transition: max-height 0.18s ease; }
+.lnav-item.open + .lnav-sub { max-height: 380px; }
+.lnav:not(:hover) .lnav-rail:not(:focus-within) .lnav-sub { max-height: 0; }
+.lnav-subitem { padding: 6px 19px 6px 51px; color: var(--lnav-dim); font-size: 12px; white-space: nowrap; text-decoration: none; display: block; border-left: 2px solid transparent; }
+.lnav-subitem:hover { color: var(--lnav-strong); }
+.lnav-subitem.active { color: var(--lnav-strong); border-left-color: var(--lnav-active); }
+.lnav-foot { flex: none; border-top: 1px solid var(--lnav-border); padding-top: 8px; }
+.lnav-user { display: flex; align-items: center; gap: 12px; padding: 10px 14px; white-space: nowrap; }
+.lnav-av { width: 27px; height: 27px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; flex: none; background: var(--lnav-active-bg); border: 1px solid var(--lnav-active); color: var(--lnav-active); }
+.lnav-who .nm { font-size: 12.5px; font-weight: 600; color: var(--lnav-strong); line-height: 1.25; }
+.lnav-who .role { font-size: 10.5px; color: var(--lnav-dim); }
+.lnav-signout { color: #f2807a; }
+.lnav-signout .lnav-ic { color: #f2807a; }
+.lnav-signout:hover { color: #ef4444; background: rgba(239, 68, 68, 0.07); }
 
 @keyframes stocvest-skeleton {
   0% {
@@ -360,6 +439,21 @@ a {
   border-color: rgba(125, 211, 252, 0.55);
 }
 
+/* Gentle one-time entrance so the "Ask AI" pill arrives softly rather than
+ * popping in. Opacity-only so it never fights the :hover lift transform. */
+@keyframes stocvest-assistant-launcher-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.stocvest-assistant-launcher-pill {
+  animation: stocvest-assistant-launcher-in 280ms ease-out;
+}
+
 .stocvest-assistant-launcher-button:hover {
   transform: translateY(-1px);
 }
@@ -459,6 +553,7 @@ a {
 /* Reduced-motion override: the assistant must respect the OS pref. */
 @media (prefers-reduced-motion: reduce) {
   .stocvest-assistant-launcher-pulse,
+  .stocvest-assistant-launcher-pill,
   .stocvest-assistant-panel,
   .stocvest-assistant-word,
   .stocvest-assistant-thinking-dot {

@@ -39,7 +39,7 @@ describe("TopBar viewport pinning", () => {
     expect(cls).toMatch(/(^|\s)top-0(\s|$)/);
     expect(cls).toMatch(/(^|\s)left-0(\s|$)/);
     expect(cls).toMatch(/(^|\s)z-30(\s|$)/);
-    expect(cls).toMatch(/lg:left-\[248px\]/);
+    expect(cls).toMatch(/min-\[900px\]:left-\[56px\]/);
   });
 });
 

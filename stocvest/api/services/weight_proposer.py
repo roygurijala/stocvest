@@ -43,6 +43,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from stocvest.api.services.signal_backtest_capture import infer_capture_kind
 from stocvest.config.parameter_store import ParameterStore
 from stocvest.config.signal_parameters import SignalParameters
 from stocvest.data.models import SignalRecord
@@ -154,6 +155,21 @@ def _is_resolved_at(record: SignalRecord, horizon: str) -> bool:
     return bool(record.resolved_1d) and record.price_1d_after is not None
 
 
+def _is_weight_optimizer_eligible(record: SignalRecord) -> bool:
+    """Exclude study telemetry and rows without a real technical pattern.
+
+    Shadow ledger-capture rows (gate audit / retry duplicates) and
+    ``unavailable`` patterns (no technical setup) pollute walk-forward fits
+    without representing actionable product signals.
+    """
+    if infer_capture_kind(record) == "shadow":
+        return False
+    pattern = (record.pattern or "").strip().lower()
+    if pattern == "unavailable" or pattern.startswith("unavailable:"):
+        return False
+    return True
+
+
 def build_historical_rows_for_mode(
     records: list[SignalRecord],
     *,
@@ -179,6 +195,9 @@ def build_historical_rows_for_mode(
       break down on year-old data.
     * **Non-empty layer_scores** — a row with no stored layer scores
       can't be re-scored; the live engine would have skipped it too.
+    * **Optimizer eligibility** — excludes shadow ledger-capture rows and
+      ``unavailable`` patterns (no technical setup) so the fit cohort
+      reflects real signal quality, not gate-study telemetry.
 
     Returns rows **sorted by ``generated_at`` ascending** so
     :func:`walk_forward_split` can apply its chronological invariant
@@ -193,6 +212,8 @@ def build_historical_rows_for_mode(
     out: list[HistoricalSignalRow] = []
     for rec in records:
         if rec.mode != mode:
+            continue
+        if not _is_weight_optimizer_eligible(rec):
             continue
         if not _is_resolved_at(rec, horizon):
             continue

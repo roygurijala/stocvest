@@ -10,9 +10,12 @@ from stocvest.signals.day_technical_close_fallback import (
     AS_OF_CLOSE_COMPOSITE_CONFIDENCE,
     composite_confidence_for_technical_status,
     intraday_technical_needs_close_fallback,
+    prior_session_levels_from_daily_bars,
     resolve_day_technical_layer,
+    snapshot_with_prior_session_levels,
     swing_to_technical_as_of_close,
 )
+from tests.signals.conftest import make_bars
 from stocvest.signals.swing_technical_analyzer import SwingTechnicalLayerResult
 from stocvest.signals.technical_analyzer import TechnicalAnalyzer, TechnicalLayerResult
 
@@ -87,3 +90,35 @@ def test_composite_confidence_reduced_for_as_of_close() -> None:
     assert composite_confidence_for_technical_status("available") == 1.0
     assert composite_confidence_for_technical_status("as_of_close") == AS_OF_CLOSE_COMPOSITE_CONFIDENCE
     assert composite_confidence_for_technical_status("unavailable") == 0.0
+
+
+def test_prior_session_levels_from_daily_bars() -> None:
+    daily = _daily_bars()
+    daily[-2] = daily[-2].model_copy(update={"high": 112.5, "low": 88.0})
+    pdh, pdl = prior_session_levels_from_daily_bars(daily)
+    assert pdh == 112.5
+    assert pdl == 88.0
+
+
+def test_resolve_day_technical_wires_pdh_pdl_from_daily_bars() -> None:
+    daily = _daily_bars()
+    daily[-2] = daily[-2].model_copy(update={"high": 110.0, "low": 95.0})
+    snap = Snapshot(symbol="NFLX", last_trade_price=94.0, prev_close=100.0)
+    tech = resolve_day_technical_layer(
+        symbol="NFLX",
+        intraday_bars=make_bars(30, base_price=94.0, trend=0.0),
+        snapshot=snap,
+        technical_params=TechnicalParameters(),
+        swing_params=SwingTechnicalParameters(),
+        daily_bars=daily,
+    )
+    assert tech.status == "available"
+    assert tech.prev_day_high == 110.0
+    assert tech.prev_day_low == 95.0
+
+
+def test_snapshot_with_prior_session_levels_noop_when_insufficient_history() -> None:
+    snap = Snapshot(symbol="NFLX")
+    out = snapshot_with_prior_session_levels(snap, _daily_bars(n=1))
+    assert out.prev_day_high is None
+    assert out.prev_day_low is None

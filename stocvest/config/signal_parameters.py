@@ -53,6 +53,19 @@ class TechnicalParameters:
     # Previous session levels (when upstream provides prior OHLC)
     pdh_pdl_score_delta: int = 8
 
+    # Intraday session momentum (day desk — recent price action, not structural trend)
+    session_momentum_lookback_bars: int = 0  # 0 = use all bars in window
+    session_momentum_moderate_pct: float = 0.002
+    session_momentum_strong_pct: float = 0.005
+    session_momentum_moderate_score: int = 10
+    session_momentum_strong_score: int = 15
+    session_pullback_moderate_pct: float = 0.008
+    session_pullback_strong_pct: float = 0.015
+    session_pullback_moderate_penalty: int = 10
+    session_pullback_strong_penalty: int = 18
+    recent_bar_momentum_lookback: int = 10
+    recent_bar_momentum_score: int = 8
+
     # Verdict thresholds
     bullish_threshold: int = 65
     bearish_threshold: int = 35
@@ -85,10 +98,15 @@ class NewsParameters:
 
 @dataclass
 class MacroParameters:
-    # Component weights
-    momentum_weight: float = 0.40
-    volatility_weight: float = 0.30
-    event_weight: float = 0.30
+    # Component weights:
+    #   momentum=0.45 — dominant but not so high that a normal pullback
+    #     (-0.5% to -1.5%) fires risk_off; needs a genuine bad day (-2%+).
+    #   volatility=0.35 — slight increase so VIX spikes (crashes) pull
+    #     harder toward risk_off / avoid.
+    #   event=0.20 — events are forward-looking risk, not regime confirmation.
+    momentum_weight: float = 0.45
+    volatility_weight: float = 0.35
+    event_weight: float = 0.20
 
     # VIX levels
     vix_low: float = 15.0
@@ -163,15 +181,45 @@ class SwingTechnicalParameters:
     rsi_momentum_strong_max: float = 70.0
     rsi_overbought_penalty: int = 12
 
-    above_sma50_score: int = 20
-    above_sma200_score: int = 15
+    # SMA20 — primary swing anchor (price vs multi-week mean)
+    above_sma20_score: int = 10
+    below_sma20_score: int = 20
+    sma20_extended_pct: float = 15.0
+    sma20_extended_penalty: int = 15
+
+    above_sma50_score: int = 10
+    above_sma200_score: int = 5
     extension_above_sma50_pct: float = 15.0
     extension_above_sma50_penalty: int = 8
     extension_above_sma200_pct: float = 40.0
-    extension_above_sma200_penalty: int = 15
-    higher_highs_lows_score: int = 15
+    extension_above_sma200_penalty: int = 10
+    extension_extra_per_10_pct: int = 3
+    extension_penalty_cap: int = 25
+
+    # Recent momentum — swing horizon (multi-day breakdown vs structural uptrend)
+    roc_lookback_sessions: int = 10
+    roc_strong_up_pct: float = 10.0
+    roc_moderate_up_pct: float = 5.0
+    roc_strong_down_pct: float = -10.0
+    roc_moderate_down_pct: float = -5.0
+    roc_strong_score: int = 25
+    roc_moderate_score: int = 15
+
+    recent_high_lookback_sessions: int = 60
+    pct_from_high_strong_break_pct: float = -10.0
+    pct_from_high_moderate_break_pct: float = -5.0
+    pct_from_high_strong_penalty: int = 15
+    pct_from_high_moderate_penalty: int = 8
+
+    higher_highs_lows_score: int = 12
+    lower_highs_lows_score: int = 15
+    macd_histogram_positive_score: int = 10
+    macd_histogram_negative_penalty: int = 10
+    macd_histogram_fading_penalty: int = 5
+    rsi_exhaustion_extended_penalty: int = 10
+
     volume_accumulation_score: int = 15
-    near_52w_high_score: int = 10
+    near_52w_high_score: int = 8
     base_formation_score: int = 10
 
     base_min_days: int = 15
@@ -184,6 +232,43 @@ class SwingTechnicalParameters:
     bearish_threshold: int = 40
 
     daily_bars_lookback: int = 210
+
+
+@dataclass
+class EntryZoneModeParameters:
+    """Per-desk entry-zone geometry. Widths are a fraction of price.
+
+    The zone is a *tight, actionable* band anchored to a structural level
+    (``preferred_anchor``); it is NOT the full session/swing range. See
+    ``stocvest.api.services.entry_zone`` for the synthesis + validation logic.
+    """
+
+    max_width_pct: float = 0.005
+    min_width_pct: float = 0.002
+    preferred_anchor: str = "vwap"  # vwap | sma20 | sma50 | prev_close | last
+    atr_k: float = 0.5  # natural half-width = atr_k × ATR, clamped by the % rails
+
+
+@dataclass
+class EntryZoneParameters:
+    """Config-driven entry-zone widths/anchors + the shared worst-case R/R floor.
+
+    Tunable via Secrets Manager without a deploy. Defaults: day band ≤ 0.5% of
+    price anchored to VWAP; swing band ≤ 2.0% anchored to SMA20; both must keep
+    R/R ≥ 1.5 measured from the worst-case (far) edge of the zone.
+    """
+
+    day: EntryZoneModeParameters = field(
+        default_factory=lambda: EntryZoneModeParameters(
+            max_width_pct=0.005, min_width_pct=0.002, preferred_anchor="vwap", atr_k=0.5
+        )
+    )
+    swing: EntryZoneModeParameters = field(
+        default_factory=lambda: EntryZoneModeParameters(
+            max_width_pct=0.020, min_width_pct=0.005, preferred_anchor="sma20", atr_k=1.0
+        )
+    )
+    min_rr_from_zone_high: float = 1.5
 
 
 @dataclass
@@ -247,6 +332,7 @@ class SignalParameters:
     day_composite: CompositeParameters | None = None
 
     swing_technical: SwingTechnicalParameters = field(default_factory=SwingTechnicalParameters)
+    entry_zone: EntryZoneParameters = field(default_factory=EntryZoneParameters)
     swing_news_lookback_hours: int = 120
     swing_macro_events_days: int = 14
     swing_geo_lookback_hours: int = 168

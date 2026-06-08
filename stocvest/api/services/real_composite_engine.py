@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -773,6 +773,8 @@ async def build_real_composite_response(
                 payload_stub["atr"] = round(_atr_f, 4)
         except (TypeError, ValueError):
             pass
+    # Entry-zone synthesis config (day anchor is VWAP, already in the snapshot).
+    payload_stub["entry_zone_config"] = asdict(params.entry_zone)
     response_body.update(
         build_swing_composite_evidence_fields(
             composite=composite,

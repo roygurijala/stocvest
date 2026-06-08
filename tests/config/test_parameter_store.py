@@ -112,6 +112,37 @@ def test_signal_parameters_from_dict_roundtrip() -> None:
     d = signal_parameters_to_dict(p)
     q = signal_parameters_from_dict(d)
     assert q.composite.technical_weight == p.composite.technical_weight
+    # entry_zone block roundtrips (nested day/swing dataclasses + shared floor).
+    assert q.entry_zone.day.max_width_pct == p.entry_zone.day.max_width_pct
+    assert q.entry_zone.swing.preferred_anchor == p.entry_zone.swing.preferred_anchor
+    assert q.entry_zone.min_rr_from_zone_high == p.entry_zone.min_rr_from_zone_high
+
+
+def test_signal_parameters_from_dict_entry_zone_overrides() -> None:
+    """Secrets Manager can override entry-zone widths/anchors without a deploy."""
+    data = {
+        "entry_zone": {
+            "day": {"max_width_pct": 0.004, "preferred_anchor": "vwap"},
+            "swing": {"max_width_pct": 0.025, "preferred_anchor": "sma50", "atr_k": 1.2},
+            "min_rr_from_zone_high": 1.8,
+        }
+    }
+    p = signal_parameters_from_dict(data)
+    assert p.entry_zone.day.max_width_pct == 0.004
+    assert p.entry_zone.swing.max_width_pct == 0.025
+    assert p.entry_zone.swing.preferred_anchor == "sma50"
+    assert p.entry_zone.swing.atr_k == 1.2
+    assert p.entry_zone.min_rr_from_zone_high == 1.8
+    # Untouched swing key keeps its default.
+    assert p.entry_zone.swing.min_width_pct == 0.005
+
+
+def test_signal_parameters_from_dict_legacy_secret_has_default_entry_zone() -> None:
+    """A legacy secret without an entry_zone block parses with safe defaults."""
+    p = signal_parameters_from_dict({"version": "1.0.0"})
+    assert p.entry_zone.day.preferred_anchor == "vwap"
+    assert p.entry_zone.swing.preferred_anchor == "sma20"
+    assert p.entry_zone.min_rr_from_zone_high == 1.5
 
 
 # ---------------------------------------------------------------------------

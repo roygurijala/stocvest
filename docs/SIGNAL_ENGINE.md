@@ -1,6 +1,6 @@
 # Signal engine (real composite)
 
-**Last updated:** 2026-05-08
+**Last updated:** 2026-06-08
 
 This document describes the **server-side** multi-layer stacks behind **`POST /v1/signals/composite/real`** (intraday / day-trade mode) and **`POST /v1/signals/composite/swing`** (daily-bar swing mode). Both reuse the same six layer *types*, `CompositeScoreEngine`, and confluence/evidence plumbing; data fetch windows and the technical implementation differ (`technical_analyzer` vs `swing_technical_analyzer`). Tunables live in `SignalParameters` (Secrets Manager JSON); defaults in `stocvest/config/signal_parameters.py` and `stocvest/config/sector_etf_defaults.py`.
 
@@ -19,14 +19,16 @@ This document describes the **server-side** multi-layer stacks behind **`POST /v
 ### Technical — day (`technical_analyzer.py`)
 
 - **Inputs**: 1-minute `Bar` list (caller/Lambda fetch), `Snapshot`, `TechnicalParameters`, optional `adv` (otherwise volume ratio uses recent-bar average vs `Snapshot.prev_day_volume` when provided as ADV proxy).
-- **Outputs**: RSI (Wilder), session VWAP from bars, EMA9/EMA20 stack, ORB over `orb_period_minutes` with expiry at `orb_expiry_hour_et`, ATR-qualified breakout via `orb_atr_qualification_ratio`, volume surge vs `volume_surge_multiplier`.
+- **PDH/PDL**: `resolve_day_technical_layer` (`day_technical_close_fallback.py`) sets `Snapshot.prev_day_high` / `prev_day_low` from the **prior completed daily bar** (`daily_bars[-2]`) before scoring.
+- **Outputs**: RSI (Wilder), session VWAP from bars, EMA9/EMA20 stack, ORB over `orb_period_minutes` with expiry at `orb_expiry_hour_et`, ATR-qualified breakout via `orb_atr_qualification_ratio`, volume surge vs `volume_surge_multiplier`, **session momentum** (ROC vs session open, pullback from session high, recent-bar momentum fade), PDH/PDL score contributions when prior levels are present.
 - **Unavailable**: Fewer than five bars or no valid closes.
-- **Limitation**: No dedicated prior-session OHLC on `Snapshot`; PDH/PDL slots on `TechnicalLayerResult` stay `None` until a prior session feed is wired.
+- **Closed session**: When intraday bars are insufficient, `resolve_day_technical_layer` falls back to daily-bar swing technical with status `as_of_close` and reduced composite confidence (`AS_OF_CLOSE_COMPOSITE_CONFIDENCE`).
 
 ### Technical — swing (`swing_technical_analyzer.py`)
 
-- **Inputs**: Daily `Bar` list (`Timeframe.DAY_1`), `Snapshot`, `SwingTechnicalParameters`.
-- **Outputs**: SMA50/SMA200 stack, daily RSI, MACD vs signal, higher-high/higher-low heuristic, base-range detection, volume accumulation/distribution regime, range-high proximity; chips are **not** VWAP/ORB (swing-specific labels).
+- **Inputs**: Daily `Bar` list (`Timeframe.DAY_1`), `Snapshot`, `SwingTechnicalParameters` (Secrets `swing_technical` block).
+- **Outputs**: **SMA20 primary anchor**, SMA50/SMA200 structural context, daily RSI, **10-session ROC**, **% below 60-session high**, MACD histogram (incl. fading), higher-highs/lows and lower-highs/lows, base-range detection, volume accumulation/distribution regime; chips are swing-specific (not VWAP/ORB).
+- **Tuning goal**: Recent multi-day breakdown must dominate extended structural uptrend (avoids DELL-like “bullish 77” on a sharp drawdown).
 
 ### News (`news_analyzer.py`)
 
@@ -38,8 +40,9 @@ This document describes the **server-side** multi-layer stacks behind **`POST /v
 ### Macro (`macro_analyzer.py`)
 
 - **Inputs**: SPY/QQQ/VIX `Snapshot`, Benzinga economics rows (`EconomicCalendarEvent`), `MacroParameters`, optional **`events_lookback_days`** (caller fetches a multi-day calendar via `PolygonClient.get_economic_calendar_range` for swing).
-- **Scoring**: Weighted blend of momentum (change %), VIX level/trend (`vix_direction_from_change`), and event-risk keywords on event titles.
+- **Scoring**: Weighted blend of momentum (change %), VIX level/trend (`vix_direction_from_change`), and event-risk keywords on event titles. Default blend: **momentum 0.45**, **volatility 0.35**, **event 0.20** (`MacroParameters` / Secrets `macro` block).
 - **Regime labels**: `risk_on` / `risk_off` / `avoid` / `neutral` for UI and confluence normalization.
+- **Regime thresholds (code, not Secrets)**: `market_regime=risk_on` when `macro_score >= 63`; `risk_off` when `macro_score <= 45` (sharp index selloffs with calm VIX must not read neutral); `avoid` when VIX above `vix_high`. Secrets `macro.momentum_weight` must stay at **0.45** for the blend to align with these thresholds.
 
 ### Sector (`sector_analyzer.py` + `sector_mapper.py`)
 
@@ -63,6 +66,7 @@ This document describes the **server-side** multi-layer stacks behind **`POST /v
 ### Engine
 
 - **`CompositeScoreEngine`** (`stocvest/signals/composite_score.py`): base weights from `CompositeParameters`, **regime multipliers** (`bull` / `bear` / `sideways`) keyed off macro **`market_regime`**, per-layer confidence, normalized composite score and verdict, plus **`alignment_ratio`** and **`conflicted_layers`**.
+- **Per-mode weights**: `resolve_composite_block(params, mode)` selects **`swing_composite`** or **`day_composite`** from Secrets when present; otherwise falls back to shared **`composite`**. Pre-beta priors (v1.1.0): swing favors macro/sector (`technical 0.22`, `macro 0.20`, `sector 0.18`); day favors technical/internals (`technical 0.35`, `internals 0.21`).
 
 ### Weighting, regime, and layer direction (invariant)
 
@@ -88,6 +92,28 @@ Signals and watchlist cards may show **A+** / **B+** / **Developing** bands from
 | **Developing** | Below B+ floor or major blocks |
 
 Desk **verdict** R/R gates remain mode-specific: swing **≥ 2.0**, day **≥ 1.3** (`minRiskRewardForVerdict`). **Scenario Builder** structural `low_risk_reward` uses the same desk minimum; the **2.0** bar is the separate **A-tier** label, not the day desk gate.
+
+### Entry-zone synthesis & validation
+
+The served **entry zone** is a **tight, anchored, validated band** — the price
+region where it is still reasonable to enter — **not** the full session/swing
+range (a historical bug had it spanning `[day_low, day_high]`, which also let the
+top edge equal T1). Implemented in **`stocvest/api/services/entry_zone.py`** and
+wired as a **post-processing step** on the finalized reference levels in both
+engines, so the headline R/R (computed from the **current price**) is unchanged.
+
+- **Compute** — anchor to `preferred_anchor` (VWAP for day, SMA20 for swing, with
+  fallback), cap the width by `min/max_width_pct` rails (ATR-scaled within them).
+  Long → `[anchor‐clamped low, last]`; short mirrored.
+- **Validate** — clamp the **far** edge inward so the band clears the stop, sits
+  short of the **traded** target (the same T1/T2 selection the headline R/R uses),
+  and keeps **worst-case R/R ≥ `min_rr_from_zone_high`** measured from that far
+  edge. We **clamp, never raise**; if no valid band remains it is flagged
+  `no_clean_entry` (graceful degradation, not suppression).
+- **Served fields** — `historical_entry_zone {low, high}`, `entry_zone_quality`
+  (`clean` \| `clamped` \| `no_clean_entry`), `entry_zone_worst_case_rr`. The
+  worst-case floor is held **≤ headline `min_rr`** so elevated-VIX days never get
+  contradictory thresholds. Config: `entry_zone` block (see TUNING_PLAYBOOK.md).
 
 ### Gate taxonomy: eligibility vs degradation
 
@@ -118,7 +144,8 @@ Weighting math and permission-style gates should stay **separate concerns** in c
 
 - **Purpose**: Audit how logged **Actionable** decisions behave under **fixed, disclosed rules** — decision-first language, not a brokerage portfolio or performance marketing. Swing vs day are **separate** tracks (`SignalRecord.mode` is `swing` or `day`).
 - **Storage**: DynamoDB **`SignalHistory`** rows shaped as **`SignalRecord`** (`stocvest/data/models.py`). Optional ledger attributes (written when enrichment / close jobs populate them) include: **`closed_at`**, **`ledger_entry_date_et`** / **`ledger_exit_date_et`** (NY session dates for swing daily-close framing), **`entry_rationale`**, **`exit_reason`**, **`decision_state_entry`** / **`decision_state_exit`**, **`market_regime_exit`**, **`gate_status_json`** (stored JSON; **`GET /v1/signals/me/history`** returns parsed **`gate_status`** when valid — may nest **`gates`**, soft **`execution_quality`**, **`evaluation_source`**: `ledger_capture` \| `on_demand`), **`setup_type`**, **`exit_rule`**, **`max_adverse_excursion_pct`**, **`max_favorable_excursion_pct`**, **`hold_duration_minutes`**, **`ledger_qualified`** (bool).
-- **Scheduled gate capture (B62, 2026-05-22):** EventBridge **`ledger_capture`** at **~3:55 PM ET** Mon–Fri runs day + swing composites with **`ledger_capture=True`** inside ledger entry windows (see **`WATCHLIST_MATURATION_ARCH.md`**). Writes **qualified** rows when all gates pass, or **shadow** audit rows when they do not (`pattern` suffix **`:ledger_capture_shadow`**, **`ledger_qualified=false`**) with full layer snapshots and per-gate outcomes in **`gate_status_json`**. Prior maturation-only schedules (8:15 swing, 9:35 day, 4:30 EOD) did **not** align with ledger entry windows — that timing gap explains pre-B62 **`ledger_qualified=true`** counts of zero despite maturation **Actionable** transitions. **Coverage:** default watchlists only; env caps **`STOCVEST_LEDGER_CAPTURE_SCAN_LIMIT`** (500) and **`STOCVEST_LEDGER_CAPTURE_MAX_CALLS`** (1500 composites/run); round-robin across users — not every Cognito user on every run.
+- **Scheduled gate capture (B62, 2026-05-22):** EventBridge runs day + swing composites with **`ledger_capture=True`** inside ledger entry windows (see **`WATCHLIST_MATURATION_ARCH.md`**). Writes **qualified** rows when all gates pass, or **shadow** audit rows when they do not (`pattern` suffix **`:ledger_capture_shadow`**, **`ledger_qualified=false`**) with full layer snapshots and per-gate outcomes in **`gate_status_json`**. Prior maturation-only schedules (8:15 swing, 9:35 day, 4:30 EOD) did **not** align with ledger entry windows — that timing gap explains pre-B62 **`ledger_qualified=true`** counts of zero despite maturation **Actionable** transitions. **Coverage:** default watchlists only; env caps **`STOCVEST_LEDGER_CAPTURE_SCAN_LIMIT`** (500) and **`STOCVEST_LEDGER_CAPTURE_MAX_CALLS`** (1500 composites/run); round-robin across users — not every Cognito user on every run.
+- **Split day/swing schedules (fix, 2026-06-08):** The original single **`ledger_capture`** invocation (`desk="both"`) at 3:55 PM ET drained the **entire day queue first**, then swing. With the scanner Lambda's 120 s timeout the invocation **died inside the day loop and never reached swing** — so **zero `mode="swing"` rows were ever captured** (confirmed: every shadow row in `SignalHistory` was `mode="day"`, generated 19:55–20:05 UTC, with 2–3 async retries per day re-running the day loop and inflating day shadow volume). Fix: (1) two dedicated single-desk schedules — **`ledger_capture_day`** at **3:55 PM ET** (day RTH ≤15:59) and **`ledger_capture_swing`** at **4:00 PM ET** (swing post-close window 15:50–16:15 ET); (2) the worker now **interleaves** day/swing jobs for any combined `desk="both"` run so neither desk can starve the other; (3) scanner Lambda timeout raised **120 s → 300 s** for headroom. Requires an infra deploy to take effect.
 - **Execution quality (B62 Phase 2):** Informational soft payload on day/swing composite responses — **`band`**, **`stop_atr_ratio`**, **`level_path`**, **`volume_band`**, **`session_window`**, **`setup_tags`**, **`disclaimer`**. **Not a gate** — does not change actionable verdicts or maturation state. Persisted inside **`gate_status_json.execution_quality`** during capture; surfaced on Evidence card summary line.
 - **Phase 3 (deferred ~2–3 weeks post-deploy):** Analyze shadow rows (`ledger_only=false`, pattern **`*:ledger_capture_shadow`**) to see which gates bind before changing swing R/R or other thresholds. **Do not** lower swing R/R from **2.0 → 1.5** without this telemetry — would confound execution-quality improvements with threshold tuning.
 - **API**: Authenticated **`GET /v1/signals/me/history`** with query **`mode=day|swing`** (optional), plus existing **`days`**, **`limit`**, **`symbol`**. Same row shape on **`GET /v1/signals/me/records/{signal_id}`** and public detail helpers that wrap **`_public_api_shape`**.

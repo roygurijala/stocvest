@@ -8,7 +8,7 @@ Use this map to find the right doc quickly. **Authoritative technical specs** li
 | [`BACKLOG.md`](./BACKLOG.md) | Planned work only (IDs, priority). Shipped items move to `IMPLEMENTED.md`. |
 | [`IMPLEMENTED.md`](./IMPLEMENTED.md) | Shipped work archive (stable IDs for PRs/commits). |
 | [`PERFORMANCE.md`](./PERFORMANCE.md) | Performance architecture, tiers, invariants — **source of truth** for latency, prefetch, caching, streaming. |
-| [`DASHBOARD_TERMINAL_UX_PLAN.md`](./DASHBOARD_TERMINAL_UX_PLAN.md) | **Dashboard + terminal-grade UX**: IA direction, click hierarchy, SLOs, phased delivery, assistant contract — aligned with current **dark theme** (mockups are reference only). Includes **scanner quiet-day** section roles (B49). |
+| [`DASHBOARD_TERMINAL_UX_PLAN.md`](./DASHBOARD_TERMINAL_UX_PLAN.md) | **Dashboard + terminal-grade UX**: IA direction, click hierarchy, SLOs, phased delivery, assistant contract — aligned with current **dark theme** (mockups are reference only). Includes **scanner quiet-day** section roles (B49) and the **§9 Trading Room redesign** now live on `/dashboard` (B63). |
 | [`OPPORTUNITY_DESK_AND_DASHBOARD_RADAR.md`](./OPPORTUNITY_DESK_AND_DASHBOARD_RADAR.md) | **Opportunity Desk (D13):** full-market funnel, tiered refresh, dashboard sentiment/discovery/**quiet leaders**/watchlist radar, watchlist scanner reserve — phased plan + acceptance criteria (Phases 0–7). |
 | [`API_CONTRACTS.md`](./API_CONTRACTS.md) | HTTP API contracts. |
 | [`SIGNAL_ENGINE.md`](./SIGNAL_ENGINE.md) | Signal engine reference. |

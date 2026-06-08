@@ -84,6 +84,12 @@ def get_market_ttl(key_type: str) -> int:
             "upcoming_events": 86400,
             "active_positions": 86400,
             "geo_themes": 86400,
+            # Swing desk must survive long weekends (Fri close → Mon open ≈ 65 h);
+            # use 4 days to cover 3-day holiday weekends with margin.
+            "opportunity_desk_swing": 345600,
+            # Day desk is intraday-only; 1-hour off-hours TTL is fine.
+            "opportunity_desk_day": 3600,
+            # Legacy key — keep for backwards compat during rollout.
             "opportunity_desk": 3600,
             "evidence": 300,
         }.get(key_type, 86400)
@@ -96,6 +102,11 @@ def get_market_ttl(key_type: str) -> int:
         "upcoming_events": 86400,
         "active_positions": 300,
         "geo_themes": 86400,
+        # During market hours the batch refreshes every ~5 min; use short TTL
+        # so stale runs don't linger. Swing still gets a long off-hours TTL
+        # (see above) because the last market-hours write sets the weekend TTL.
+        "opportunity_desk_swing": 345600,
+        "opportunity_desk_day": 300,
         "opportunity_desk": 300,
         "evidence": 300,
     }.get(key_type, 300)

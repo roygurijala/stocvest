@@ -82,11 +82,44 @@ Each successful save:
 
 ---
 
+## Entry-zone tuning (`entry_zone` block)
+
+The served **entry zone** is a *tight, actionable* band — anchored to a structural
+level and capped to a width — **not** the full session/swing range. It is computed
+as a post-processing step on the finalized reference levels and validated so it
+never overlaps the target and keeps a worst-case R/R floor. Logic lives in
+**`stocvest/api/services/entry_zone.py`**; it is wired into both engines
+(`real_composite_engine.py` for day, `swing_composite_engine.py` for swing).
+
+Tunable via Secrets Manager `stocvest/signal-parameters` under the `entry_zone`
+key — **no deploy required** (300 s TTL cache):
+
+```jsonc
+"entry_zone": {
+  "day":   { "max_width_pct": 0.005, "min_width_pct": 0.002, "preferred_anchor": "vwap",  "atr_k": 0.5 },
+  "swing": { "max_width_pct": 0.020, "min_width_pct": 0.005, "preferred_anchor": "sma20", "atr_k": 1.0 },
+  "min_rr_from_zone_high": 1.5
+}
+```
+
+| Field | Meaning |
+|-------|---------|
+| `max_width_pct` / `min_width_pct` | Band width as a fraction of price (rails). |
+| `preferred_anchor` | Structural level the band pulls to: `vwap` \| `sma20` \| `sma50` \| `prev_close` \| `last`. Falls through to whatever is available. |
+| `atr_k` | Natural half-width = `atr_k × ATR`, clamped by the % rails. |
+| `min_rr_from_zone_high` | Worst-case R/R floor from the **far** edge of the band. Held **≤ headline `min_rr`** so an elevated-VIX day never produces contradictory gates. |
+
+Served fields: `historical_entry_zone {low, high}`, `entry_zone_quality`
+(`clean` \| `clamped` \| `no_clean_entry`), `entry_zone_worst_case_rr`. A
+`no_clean_entry` result also emits a medium-severity **"No Clean Entry Zone"**
+risk factor. Defaults mirror `EntryZoneParameters` in `signal_parameters.py`.
+
 ## Related code
 
 | Piece | Location |
 |--------|-----------|
 | Parameter schema | `stocvest/config/signal_parameters.py` |
+| Entry-zone synthesis/validation | `stocvest/api/services/entry_zone.py` |
 | Load / save / cache | `stocvest/config/parameter_store.py` |
 | History rows | `stocvest/data/parameter_history_store.py` |
 | Snapshots on record | `stocvest/api/services/signal_snapshot_builders.py` |

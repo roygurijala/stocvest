@@ -15,6 +15,11 @@ from stocvest.api.services.market_environment import (
     suppress_reference_target_2,
     target_policy_from_environment,
 )
+from stocvest.api.services.entry_zone import (
+    config_for_mode as entry_zone_config_for_mode,
+    resolve_anchor as entry_zone_resolve_anchor,
+    resolve_entry_zone,
+)
 from stocvest.signals.composite_score import CompositeSignal, CompositeVerdict
 from stocvest.api.services.reference_stop_policy import (
     format_merged_stop_provenance,
@@ -286,6 +291,36 @@ def _payload_atr(payload: dict[str, Any]) -> float | None:
 def _trading_mode_from_payload(payload: dict[str, Any]) -> str:
     mode = str(payload.get("trading_mode") or payload.get("mode") or "swing").strip().lower()
     return "day" if mode == "day" else "swing"
+
+
+def _effective_rr_target(
+    *,
+    entry: float,
+    stop: float,
+    target_1: float,
+    target_2: float | None,
+    is_long: bool,
+) -> float:
+    """The target the trade plans to — mirrors ``structure_risk_reward_*``: prefer
+    T1, but use T2 when T1's R/R is sub-1:1 and T2 improves it."""
+    def _rr(t: float) -> float | None:
+        risk = (entry - stop) if is_long else (stop - entry)
+        reward = (t - entry) if is_long else (entry - t)
+        if risk <= 1e-6 or reward <= 1e-6:
+            return None
+        return reward / risk
+
+    if target_2 is None:
+        return target_1
+    rr1 = _rr(target_1)
+    rr2 = _rr(target_2)
+    if rr1 is None:
+        return target_2 if rr2 is not None else target_1
+    if rr2 is None:
+        return target_1
+    if rr1 < 1.0 and rr2 > rr1:
+        return target_2
+    return target_1
 
 
 def _long_side_geometry(
@@ -650,6 +685,52 @@ def build_swing_composite_evidence_fields(
     else:
         rr_quality = "strong"
 
+    # --- Entry-zone synthesis (post-processing on the finalized reference levels) ---
+    # Replace the raw session/swing range with a tight, anchored, validated band so
+    # the served "entry zone" is actionable and never overlaps T1. The headline R/R
+    # above is unchanged (it uses the current price as entry); the zone only carries
+    # a *secondary* worst-case R/R. The worst-case floor is held at or below the
+    # headline ``min_rr`` so an elevated-VIX day never produces contradictory gates.
+    ez_cfg = dict(entry_zone_config_for_mode(payload.get("entry_zone_config"), trading_mode))
+    ez_cfg["min_rr_from_zone_high"] = min(float(ez_cfg["min_rr_from_zone_high"]), max(1.0, float(min_rr)))
+    entry_zone_quality: str | None = None
+    entry_zone_worst_case_rr: float | None = None
+    if last is not None and last > 0 and reference_stop_level is not None and reference_target_1 is not None:
+        ez_anchor = entry_zone_resolve_anchor(
+            preferred=str(ez_cfg["preferred_anchor"]),
+            vwap=vwap,
+            prev_close=prev_close,
+            sma20=_float_or_none(payload.get("sma20")),
+            sma50=_float_or_none(payload.get("sma50")),
+            last=last,
+        )
+        # Validate against the target the engine actually trades to (the same T1/T2
+        # selection the headline R/R uses), not T1 unconditionally — otherwise a
+        # signal whose T1 sits just above entry (and plans to T2) gets a false
+        # "no clean entry" flag.
+        ez_effective_target = _effective_rr_target(
+            entry=last,
+            stop=reference_stop_level,
+            target_1=reference_target_1,
+            target_2=reference_target_2,
+            is_long=use_long,
+        )
+        ez = resolve_entry_zone(
+            direction="long" if use_long else "short",
+            last=last,
+            stop=reference_stop_level,
+            target_1=ez_effective_target,
+            anchor=ez_anchor,
+            atr=atr,
+            config=ez_cfg,
+        )
+        if ez is not None:
+            # Keep the band for display even when flagged "no_clean_entry"; the flag
+            # + risk factor let callers downgrade tradeability rather than hide it.
+            historical_entry_zone = {"low": ez.low, "high": ez.high}
+            entry_zone_quality = ez.quality
+            entry_zone_worst_case_rr = ez.worst_case_rr
+
     signal_score = int(round(max(0.0, min(100.0, (score + 1.0) / 2.0 * 100.0))))
     if rr_warning:
         signal_score = int(round(max(0.0, min(100.0, signal_score * 0.8))))
@@ -748,6 +829,17 @@ def build_swing_composite_evidence_fields(
                 "detail": f"R/R {risk_reward:.1f}:1 is below minimum {min_rr:.1f}:1 threshold",
             }
         )
+    if entry_zone_quality == "no_clean_entry":
+        risk_factors_detailed.append(
+            {
+                "label": "No Clean Entry Zone",
+                "severity": "medium",
+                "detail": (
+                    "Stop and first target are too close to carve an entry band that keeps "
+                    f"R/R ≥ {ez_cfg['min_rr_from_zone_high']:.1f}:1 from the far edge — wait for a better structure."
+                ),
+            }
+        )
     alignment_ratio = float(composite.alignment_ratio)
     total_layers = int(round(float(composite.aligned_weight + composite.conflicted_weight)))
     conflicted_count = int(round(float(composite.conflicted_weight)))
@@ -817,6 +909,8 @@ def build_swing_composite_evidence_fields(
         "signal_parameters": signal_parameters,
         "historical_entry_zone": historical_entry_zone,
         "session_entry_zone": historical_entry_zone,
+        "entry_zone_quality": entry_zone_quality,
+        "entry_zone_worst_case_rr": entry_zone_worst_case_rr,
         "swing_range_zone": swing_range_zone,
         "reference_target_1": reference_target_1,
         "reference_target_2": reference_target_2,

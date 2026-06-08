@@ -10,8 +10,10 @@ from stocvest.signals.swing_technical_analyzer import (
     SwingTechnicalAnalyzer,
     _base_formation,
     _higher_highs_lows,
+    _lower_highs_lows,
     _macd_momentum_clause,
     _macd_series,
+    _rate_of_change,
     _rsi_momentum_phase,
     _sma,
     _volume_pattern,
@@ -116,8 +118,14 @@ def test_death_cross_detected() -> None:
 
 
 def test_price_above_sma50_adds_score() -> None:
-    bars = make_daily_bars(220, trend=0.02)
-    snap = Snapshot(symbol="TEST", last_trade_price=300.0, prev_close=290.0, change_percent=1.0, change=10.0)
+    bars = make_daily_bars(220, trend=0.006)
+    snap = Snapshot(
+        symbol="TEST",
+        last_trade_price=bars[-1].close,
+        prev_close=bars[-2].close,
+        change_percent=1.0,
+        change=1.0,
+    )
     r = SwingTechnicalAnalyzer().analyze("TEST", bars, snap, SwingTechnicalParameters())
     assert r.status == "available"
     assert r.score is not None and r.score > 50
@@ -326,6 +334,37 @@ def test_strong_bearish_daily_setup() -> None:
     assert r.score is not None and r.score <= 30
 
 
+def test_breakdown_from_recent_high_scores_bearish_not_extended_bullish() -> None:
+    """DELL-like: long uptrend then sharp ~16% drop — must not read bullish 77."""
+    up = make_daily_bars(200, trend=0.008)
+    bars = list(up)
+    price = bars[-1].close
+    for _ in range(10):
+        price *= 0.982
+        prev = bars[-1]
+        bars.append(
+            Bar(
+                symbol="TEST",
+                timestamp=prev.timestamp + timedelta(days=1),
+                timeframe=Timeframe.DAY_1,
+                open=price * 1.01,
+                high=price * 1.02,
+                low=price * 0.97,
+                close=price,
+                volume=6_000_000.0,
+            )
+        )
+    snap = Snapshot(symbol="TEST", last_trade_price=price, prev_close=bars[-2].close, change_percent=-3.0, change=-1.0)
+    r = SwingTechnicalAnalyzer().analyze("TEST", bars, snap, SwingTechnicalParameters())
+    assert r.status == "available"
+    assert r.score is not None and r.score <= 45
+    assert r.verdict in ("bearish", "neutral")
+    closes = [b.close for b in bars]
+    roc = _rate_of_change(closes, 10)
+    assert roc is not None and roc < -0.05
+    assert _lower_highs_lows(bars, 20) or r.score <= 40
+
+
 # ---------------------------------------------------------------------------
 # D3 — wire-is-live lock-in
 # ---------------------------------------------------------------------------
@@ -380,13 +419,28 @@ def test_above_sma50_score_param_actually_moves_score() -> None:
     flat_kwargs = dict(
         rsi_score_delta=0,
         rsi_overbought_penalty=0,
+        rsi_exhaustion_extended_penalty=0,
+        above_sma20_score=0,
+        below_sma20_score=0,
+        sma20_extended_penalty=0,
+        sma20_extended_pct=999.0,
         above_sma50_score=0,
         above_sma200_score=0,
         extension_above_sma50_penalty=0,
         extension_above_sma50_pct=999.0,
         extension_above_sma200_penalty=0,
         extension_above_sma200_pct=999.0,
+        extension_extra_per_10_pct=0,
+        extension_penalty_cap=0,
+        roc_strong_score=0,
+        roc_moderate_score=0,
+        pct_from_high_strong_penalty=0,
+        pct_from_high_moderate_penalty=0,
         higher_highs_lows_score=0,
+        lower_highs_lows_score=0,
+        macd_histogram_positive_score=0,
+        macd_histogram_negative_penalty=0,
+        macd_histogram_fading_penalty=0,
         volume_accumulation_score=0,
         near_52w_high_score=0,
         base_formation_score=0,

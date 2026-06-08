@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 import pytest
 
 from stocvest.config.signal_parameters import TechnicalParameters
@@ -63,6 +65,38 @@ def test_vwap_none_when_zero_volume(mock_parameter_store) -> None:
 # action), the analyzer must DROP the value rather than render a misleading
 # tiny number on the Evidence card. The user-facing fallback is the existing
 # "VWAP Forming" state.
+
+
+def test_session_pullback_from_high_reduces_intraday_score(mock_parameter_store) -> None:
+    """Day desk must react to session pullback, not only structural EMA stack."""
+    ta = TechnicalAnalyzer()
+    up = make_bars(30, base_price=100.0, trend=0.001)
+    peak = up[-1].close * 1.02
+    last = up[-1]
+    up[-1] = up[-1].model_copy(
+        update={
+            "high": peak,
+            "close": peak,
+            "open": peak * 0.999,
+        }
+    )
+    baseline = ta.analyze("T", up, make_snapshot(price=peak), mock_parameter_store.technical)
+    crash_price = peak * 0.97
+    down = list(up) + [
+        last.model_copy(
+            update={
+                "timestamp": last.timestamp + timedelta(minutes=1),
+                "open": crash_price * 1.002,
+                "high": crash_price * 1.003,
+                "low": crash_price * 0.99,
+                "close": crash_price,
+            }
+        )
+    ]
+    pulled = ta.analyze("T", down, make_snapshot(price=crash_price), mock_parameter_store.technical)
+    assert baseline.status == "available" and pulled.status == "available"
+    assert baseline.score is not None and pulled.score is not None
+    assert pulled.score < baseline.score - 10
 
 
 def test_vwap_anomaly_suppressed_when_value_deviates_far_from_price(

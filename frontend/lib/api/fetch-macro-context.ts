@@ -16,6 +16,10 @@ export interface MacroContextPayload {
   macro_risk: string;
   macro_risk_level?: string;
   yield_curve: MacroYieldCurveWire | null;
+  /** Weighted macro regime from the backend engine: risk_on | neutral | risk_off | avoid. */
+  market_regime?: string | null;
+  /** Composite macro score 0–100 that the regime is derived from. */
+  macro_score?: number | null;
 }
 
 export async function fetchMacroContext(): Promise<MacroContextPayload | null> {

@@ -37,8 +37,21 @@ export function parseSessionFromToken(token: string): AuthSession {
     token,
     subject: sub,
     expiresAtUnix: exp,
-    email: typeof payload.email === "string" ? payload.email : undefined
+    email: typeof payload.email === "string" ? payload.email : undefined,
+    firstName: firstNameFromClaims(payload)
   };
+}
+
+/** Prefer Cognito `given_name`; otherwise take the first token of a full `name` claim. */
+function firstNameFromClaims(payload: Record<string, unknown>): string | undefined {
+  const given = typeof payload.given_name === "string" ? payload.given_name.trim() : "";
+  if (given) return given;
+  const full = typeof payload.name === "string" ? payload.name.trim() : "";
+  if (full) {
+    const first = full.split(/\s+/)[0]?.trim();
+    if (first) return first;
+  }
+  return undefined;
 }
 
 export function isSessionExpired(expiresAtUnix: number, nowUnix: number = Date.now() / 1000): boolean {
