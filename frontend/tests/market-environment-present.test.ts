@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { environmentTierLabel, parseMarketEnvironment } from "@/lib/signal-evidence/market-environment-present";
+import {
+  environmentTierLabel,
+  minRrForDeskMode,
+  parseMarketEnvironment,
+  type MarketEnvironmentPayload
+} from "@/lib/signal-evidence/market-environment-present";
 
 describe("market-environment-present", () => {
   test("parseMarketEnvironment reads composite block", () => {
@@ -28,5 +33,23 @@ describe("market-environment-present", () => {
     expect(env?.vix_change_5d_pct).toBe(4.2);
     expect(env?.min_rr).toBe(3);
     expect(environmentTierLabel("crisis")).toBe("Crisis");
+  });
+
+  test("minRrForDeskMode uses VIX-tier swing and day mins", () => {
+    const env = parseMarketEnvironment({
+      market_environment: {
+        headline: "Elevated volatility.",
+        min_rr_swing: 3,
+        min_rr_day: 1.8,
+        min_rr: 3
+      }
+    }) as MarketEnvironmentPayload;
+    expect(minRrForDeskMode(env, "swing")).toBe(3);
+    expect(minRrForDeskMode(env, "day")).toBe(1.8);
+  });
+
+  test("minRrForDeskMode falls back to static desk baseline", () => {
+    expect(minRrForDeskMode(null, "swing")).toBe(2);
+    expect(minRrForDeskMode(null, "day")).toBe(1.3);
   });
 });

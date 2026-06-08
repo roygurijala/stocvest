@@ -57,6 +57,7 @@ export function ScenarioWhatIf({
   vwap,
   atr,
   systemRiskReward,
+  minRrGate,
   colors
 }: {
   direction: Direction;
@@ -71,6 +72,8 @@ export function ScenarioWhatIf({
   vwap: number | null;
   atr: number | null;
   systemRiskReward: number | null;
+  /** VIX-tier desk minimum when available; falls back to static desk baseline. */
+  minRrGate?: number;
   colors: ThemeColors;
 }) {
   const source = useMemo(
@@ -123,7 +126,10 @@ export function ScenarioWhatIf({
   };
 
   const rr = rrFor(direction, entry, stop, target);
-  const gate = minRiskRewardForVerdict(mode);
+  const gate =
+    typeof minRrGate === "number" && Number.isFinite(minRrGate) && minRrGate > 0
+      ? minRrGate
+      : minRiskRewardForVerdict(mode);
   const clears = rr != null && rr >= gate;
   const risk = direction === "bullish" ? entry - stop : stop - entry;
   const reward = direction === "bullish" ? target - entry : entry - target;
