@@ -33,7 +33,6 @@ import {
   type SignalsSetupBias
 } from "@/lib/signals-page-present";
 import { isInsufficientCompositeResponse } from "@/lib/api/swing-composite";
-import { isRrBelowVerdictThreshold } from "@/lib/trade-conviction-tier";
 import { resolveCausalNarrative } from "@/lib/signal-evidence/causal-narrative";
 import { resolveTimeframeContext, isTimeframeCounterTrend } from "@/lib/signal-evidence/timeframe-context";
 import { resolveSetupJudgmentFromComposite } from "@/lib/signal-evidence/setup-judgment";
@@ -53,7 +52,7 @@ import { RiskStackPanel } from "@/components/signal-evidence/risk-stack-panel";
 import { isExecutionStageEligibleForScenarioAdjust } from "@/lib/scenario/scenario-variants";
 import type { FeedBias, FeedCard, FeedState } from "@/lib/dashboard/trading-room/feed-model";
 import { parseLedgerGateSummary } from "@/lib/signal-evidence/ledger-gate-present";
-import { parseMarketEnvironment } from "@/lib/signal-evidence/market-environment-present";
+import { minRrForDeskMode, parseMarketEnvironment } from "@/lib/signal-evidence/market-environment-present";
 import { parseApiDecisionState } from "@/lib/signal-evidence/risk-stack-present";
 import type { TradeDecisionState } from "@/lib/signal-evidence/trade-decision";
 
@@ -116,7 +115,8 @@ function buildRichBrief(
   causalChainLabel: string | null,
   setupJudgment: { process: { layersAligned: number; layersTotal: number }; tradeability: { label: string; flags: { label: string }[] }; primaryBlocker: string | null; watchFor: string | null } | null,
   riskReward: number | null,
-  activeLane: "day" | "swing"
+  activeLane: "day" | "swing",
+  deskMinRr: number
 ): string {
   const dir = card.bias === "bull" ? "long" : card.bias === "bear" ? "short" : "two-sided";
   const desk = activeLane === "day" ? "day desk" : "swing desk";
@@ -171,9 +171,10 @@ function buildRichBrief(
   // S6 — R/R + what-to-watch
   let s6 = "";
   if (riskReward != null && riskReward > 0) {
-    const rrStr = riskReward >= 2
-      ? `Risk/reward is ${riskReward.toFixed(1)}:1, clearing the 2:1 gate`
-      : `Risk/reward is ${riskReward.toFixed(1)}:1 — below the 2:1 threshold`;
+    const gateLabel = `${deskMinRr.toFixed(1)}:1`;
+    const rrStr = riskReward >= deskMinRr
+      ? `Risk/reward is ${riskReward.toFixed(1)}:1, clearing the ${gateLabel} gate`
+      : `Risk/reward is ${riskReward.toFixed(1)}:1 — below the ${gateLabel} threshold`;
     const watch = setupJudgment?.watchFor;
     s6 = watch ? `${rrStr}. ${watch}` : `${rrStr}.`;
   } else if (setupJudgment?.watchFor) {
@@ -581,21 +582,26 @@ function SectionLabel({ children, colors }: { children: string; colors: Colors }
 /** Semi-circle SVG gauge matching the prototype Risk/Reward panel. */
 function RiskRewardGauge({
   rr,
+  minRr,
   riskAmount,
   rewardAmount,
   colors
 }: {
   rr: number;
+  /** VIX-tier desk minimum (swing 3.0 elevated, etc.). */
+  minRr: number;
   riskAmount?: number | null;
   rewardAmount?: number | null;
   colors: Colors;
 }) {
   const MAX_RR = 6;
+  const gate = Number.isFinite(minRr) && minRr > 0 ? minRr : 2;
   const capped = Math.min(Math.max(rr, 0), MAX_RR);
   const totalArc = 157; // π·r, r=50 semicircle
   const dashOffset = (totalArc - (capped / MAX_RR) * totalArc).toFixed(1);
-  const passes = rr >= 2;
+  const passes = rr >= gate;
   const arcColor = passes ? colors.bullish : colors.caution;
+  const gateLabel = `${gate.toFixed(1)}:1`;
 
   // Point on the semicircle (center 60,65 · r 50) at fraction f (0 = left, 1 = right).
   const cx = 60;
@@ -605,7 +611,7 @@ function RiskRewardGauge({
     const a = (1 - Math.min(Math.max(f, 0), 1)) * Math.PI;
     return { x: cx + radius * Math.cos(a), y: cy - radius * Math.sin(a) };
   };
-  const thrFrac = 2 / MAX_RR; // the 2:1 pass line
+  const thrFrac = gate / MAX_RR;
   const thrInner = arcPoint(thrFrac, r - 7);
   const thrOuter = arcPoint(thrFrac, r + 7);
   const cur = arcPoint(capped / MAX_RR); // current-position dot
@@ -631,7 +637,7 @@ function RiskRewardGauge({
           strokeDasharray={totalArc}
           strokeDashoffset={dashOffset}
         />
-        {/* 2:1 threshold marker */}
+        {/* desk min R/R threshold marker */}
         <line
           x1={thrInner.x}
           y1={thrInner.y}
@@ -642,7 +648,7 @@ function RiskRewardGauge({
           strokeLinecap="round"
         />
         <text x={thrOuter.x - 3} y={thrOuter.y - 3} fontSize={7} fontWeight={700} fill={colors.textMuted}>
-          2:1
+          {gateLabel}
         </text>
         {/* current-position dot */}
         <circle cx={cur.x} cy={cur.y} r={4.5} fill={arcColor} stroke={colors.surface} strokeWidth={2} />
@@ -675,7 +681,7 @@ function RiskRewardGauge({
           reward : risk
         </p>
         <p style={{ margin: "5px 0 0", fontSize: typography.scale.xs, color: arcColor }}>
-          {passes ? "Clears 2:1 threshold" : "Below 2:1 threshold"}
+          {passes ? `Clears ${gateLabel} threshold` : `Below ${gateLabel} threshold`}
         </p>
         {riskAmount != null && rewardAmount != null ? (
           <p style={{ margin: "2px 0 0", fontSize: typography.scale.xs, color: colors.textMuted }}>
@@ -774,11 +780,20 @@ export function DeepDive({
     return setupBias;
   }, [composite, isInsufficient, setupBias]);
 
+  const marketEnvironment = useMemo(
+    () => (composite ? parseMarketEnvironment(composite as Record<string, unknown>) : null),
+    [composite]
+  );
+  const deskMinRr = useMemo(
+    () => minRrForDeskMode(marketEnvironment, activeLane),
+    [marketEnvironment, activeLane]
+  );
+
   const pageDecision = useMemo(() => {
     if (isInsufficient) return null;
     const c = composite as Record<string, unknown>;
     const rr = typeof c.risk_reward === "number" && Number.isFinite(c.risk_reward) ? c.risk_reward : 1.5;
-    const rrWarning = Boolean(c.rr_warning) || isRrBelowVerdictThreshold(rr, activeLane);
+    const rrWarning = Boolean(c.rr_warning) || (Number.isFinite(rr) && rr < deskMinRr);
     const ar = typeof c.alignment_ratio === "number" ? c.alignment_ratio : null;
     const tfCtx = resolveTimeframeContext(c, activeLane);
     return buildSignalsPageDecision({
@@ -792,7 +807,7 @@ export function DeepDive({
       counterTrend: parseCompositeAlignment(composite)?.is_counter_trend === true,
       timeframeCounterTrend: isTimeframeCounterTrend(tfCtx)
     });
-  }, [composite, isInsufficient, setupBias, layerRows, activeLane]);
+  }, [composite, isInsufficient, setupBias, layerRows, activeLane, deskMinRr]);
 
   const previewBlockingLayers = useMemo(
     () => pickPreviewLayers(layerRows, setupBias, 3),
@@ -815,10 +830,6 @@ export function DeepDive({
     return resolveTimeframeContext(composite as Record<string, unknown>, activeLane);
   }, [composite, isInsufficient, activeLane]);
 
-  const marketEnvironment = useMemo(
-    () => (composite ? parseMarketEnvironment(composite as Record<string, unknown>) : null),
-    [composite]
-  );
   const ledgerGateSummary = useMemo(
     () => (composite ? parseLedgerGateSummary(composite as Record<string, unknown>) : null),
     [composite]
@@ -1006,10 +1017,11 @@ export function DeepDive({
         causalNarrative?.chainLabel ?? null,
         setupJudgment,
         riskReward,
-        activeLane
+        activeLane,
+        deskMinRr
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [card, insight, layerRows, pageDecision?.state, pageDecision?.line, causalNarrative?.summary, causalNarrative?.chainLabel, setupJudgment, riskReward, activeLane]
+    [card, insight, layerRows, pageDecision?.state, pageDecision?.line, causalNarrative?.summary, causalNarrative?.chainLabel, setupJudgment, riskReward, activeLane, deskMinRr]
   );
 
   const sTone = stateTone(card.state, colors);
@@ -1400,6 +1412,7 @@ export function DeepDive({
                           </p>
                           <RiskRewardGauge
                             rr={riskReward}
+                            minRr={deskMinRr}
                             riskAmount={scenario?.riskAmount ?? null}
                             rewardAmount={scenario?.rewardAmount ?? null}
                             colors={colors}
@@ -1464,6 +1477,7 @@ export function DeepDive({
                         vwap={scenario.vwap}
                         atr={scenario.atr}
                         systemRiskReward={riskReward ?? null}
+                        minRrGate={deskMinRr}
                         colors={colors}
                       />
                     ) : null}

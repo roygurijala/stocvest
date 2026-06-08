@@ -2,6 +2,8 @@
  * Layer 0 market environment (VIX tier) — mirrors API `market_environment`.
  */
 
+import { minRiskRewardForVerdict } from "@/lib/trade-conviction-tier";
+
 export type EnvironmentTier = "normal" | "elevated" | "stressed" | "crisis";
 export type TargetPolicy = "t1_and_t2" | "t1_preferred" | "t1_only";
 
@@ -80,4 +82,17 @@ export function environmentTierLabel(tier: EnvironmentTier): string {
     default:
       return "Normal";
   }
+}
+
+/** Desk min R/R for planning UI — prefers VIX-tier policy from composite, else static baseline. */
+export function minRrForDeskMode(
+  environment: MarketEnvironmentPayload | null | undefined,
+  mode: "day" | "swing"
+): number {
+  if (environment) {
+    const modeKey = mode === "day" ? environment.min_rr_day : environment.min_rr_swing;
+    if (Number.isFinite(modeKey) && modeKey > 0) return modeKey;
+    if (Number.isFinite(environment.min_rr) && environment.min_rr > 0) return environment.min_rr;
+  }
+  return minRiskRewardForVerdict(mode);
 }
