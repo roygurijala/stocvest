@@ -680,21 +680,13 @@ function TradingRoomBody({
   // feed panel (e.g. "Day only" filter with no day cards but swing cards still in allCards).
   const deskEmpty = allCards.length === 0;
 
-  // On weekends the feed panel stays visible even when the desk cache has expired.
-  // This keeps the signal feed column present so Friday's data can surface once the
-  // cache warms (TTL fix) and avoids a fully blank left column during prep time.
   const isWeekendSession = sessionPhase === "weekend";
-  // feedVisible: the actual gate for rendering the left column.
-  const feedVisible = !deskEmpty || isWeekendSession;
-  // When the desk is empty, collapse the feed column so the center panel
-  // takes the full width. Feed returns when signals appear.
-  const gridTemplate = feedVisible
-    ? watchlistOpen
-      ? `300px minmax(0, 1fr) 300px`
-      : `300px minmax(0, 1fr) 44px`
-    : watchlistOpen
-      ? `minmax(0, 1fr) 300px`
-      : `minmax(0, 1fr) 44px`;
+  // Keep the signal feed column mounted every session. Quiet days (zero qualified
+  // setups) still surface symbol search + session activity / building structure via
+  // QuietFeed — collapsing the column on weekdays left users with no left pane all day.
+  const gridTemplate = watchlistOpen
+    ? `300px minmax(0, 1fr) 300px`
+    : `300px minmax(0, 1fr) 44px`;
 
   const feedPanel = (
     <SignalFeed
@@ -787,15 +779,15 @@ function TradingRoomBody({
         }}
       >
         {isMobile ? (
-          // Mobile: center brief/deep-dive leads; feed shown when there are signals or on weekends.
+          // Mobile: center brief/deep-dive leads, then feed + watchlist rail.
           <>
             {centerPanel}
-            {feedVisible ? feedPanel : null}
+            {feedPanel}
             {railPanel}
           </>
         ) : (
           <>
-            {feedVisible ? feedPanel : null}
+            {feedPanel}
             {centerPanel}
             {railPanel}
           </>
@@ -1307,7 +1299,7 @@ function SignalFeed({
                 </span>
               </div>
             ) : null}
-            {!deskEmpty || (swingDeskData || dayDeskData) ? (
+            {swingDeskData || dayDeskData ? (
               <QuietFeed
                 swingDesk={swingDeskData}
                 dayDesk={dayDeskData}
@@ -1318,7 +1310,12 @@ function SignalFeed({
                 onSelectCard={onSelectCard}
                 colors={colors}
               />
-            ) : null}
+            ) : (
+              <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted, lineHeight: 1.5 }}>
+                No qualified setups on the desk right now. Use search above to open any symbol, or check back after the
+                next desk refresh.
+              </p>
+            )}
           </>
         ) : (
           <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted }}>
