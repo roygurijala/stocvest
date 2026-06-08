@@ -25,6 +25,10 @@ import {
   type ScannerTerminalSignalRow
 } from "@/lib/scanner/terminal/scanner-terminal-model";
 import { ScannerDetailPanel } from "@/components/scanner/terminal/scanner-detail-panel";
+import { ScannerTerminalQuietPanel } from "@/components/scanner/terminal/scanner-terminal-quiet-panel";
+import type { ScannerScanSummary } from "@/lib/scanner-scan-summary";
+import type { ScannerSynthesis } from "@/lib/scanner-synthesis";
+import type { SectorRotationChip } from "@/lib/market-context/types";
 
 type Props = {
   overview: ScannerOverview;
@@ -34,6 +38,10 @@ type Props = {
   watchlistSymbols: string[];
   dayTradingSurfaces: boolean;
   evaluationTrace?: ScannerEvaluationTraceRow[];
+  scanSummary?: ScannerScanSummary | null;
+  synthesis?: ScannerSynthesis | null;
+  sectorRotation?: SectorRotationChip[];
+  showPreviewBadge?: boolean;
   updatedLabel?: string | null;
 };
 
@@ -272,6 +280,10 @@ export function ScannerTerminal({
   watchlistSymbols,
   dayTradingSurfaces,
   evaluationTrace = [],
+  scanSummary = null,
+  synthesis = null,
+  sectorRotation = [],
+  showPreviewBadge = false,
   updatedLabel
 }: Props) {
   const { colors } = useTheme();
@@ -307,9 +319,10 @@ export function ScannerTerminal({
         dayDesk,
         nearQualification,
         dayTradingSurfaces,
-        watchlistSymbols: watchSet
+        watchlistSymbols: watchSet,
+        sectorRotation
       }),
-    [filters, overview, swingDesk, dayDesk, nearQualification, dayTradingSurfaces, watchSet]
+    [filters, overview, swingDesk, dayDesk, nearQualification, dayTradingSurfaces, watchSet, sectorRotation]
   );
 
   const sessionOpen = isUsRegularSessionOpenEt(new Date());
@@ -369,20 +382,22 @@ export function ScannerTerminal({
         }}
       >
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: spacing[2] }}>
-          <span
-            style={{
-              fontSize: 9,
-              fontWeight: 700,
-              letterSpacing: "0.14em",
-              textTransform: "uppercase",
-              color: colors.caution,
-              padding: `2px ${spacing[2]}`,
-              border: `1px solid ${colors.caution}`,
-              borderRadius: borderRadius.sm
-            }}
-          >
-            Preview
-          </span>
+          {showPreviewBadge ? (
+            <span
+              style={{
+                fontSize: 9,
+                fontWeight: 700,
+                letterSpacing: "0.14em",
+                textTransform: "uppercase",
+                color: colors.caution,
+                padding: `2px ${spacing[2]}`,
+                border: `1px solid ${colors.caution}`,
+                borderRadius: borderRadius.sm
+              }}
+            >
+              Preview
+            </span>
+          ) : null}
           <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>
             {regimeLabel} market
             {vixLine ? ` · ${vixLine}` : ""}
@@ -464,6 +479,18 @@ export function ScannerTerminal({
 
       <div style={shellStyle}>
         <div style={{ display: "flex", flexDirection: "column", gap: spacing[4], minWidth: 0 }}>
+          {sections.actionableCount === 0 ? (
+            <ScannerTerminalQuietPanel
+              scanSummary={scanSummary}
+              synthesis={synthesis}
+              swingDesk={swingDesk}
+              dayDesk={dayDesk}
+              developingClosest={sections.developingClosest}
+              colors={colors}
+              onSelectSymbol={(symbol, lane) => setSelection({ kind: "lookup", symbol, lane })}
+            />
+          ) : null}
+
           <section>
             <SectionHeader
               title="Gap intelligence — pre-market & opening hour"

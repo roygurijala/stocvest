@@ -52,7 +52,8 @@ describe("scanner-terminal-model", () => {
       dayDesk: null,
       nearQualification: [],
       dayTradingSurfaces: true,
-      watchlistSymbols: new Set()
+      watchlistSymbols: new Set(),
+      sectorRotation: [{ symbol: "XLK", label: "Tech", pct5d: 1.1 }]
     });
 
     expect(sections.gaps).toHaveLength(1);
@@ -100,7 +101,8 @@ describe("scanner-terminal-model", () => {
       dayDesk: null,
       nearQualification: [],
       dayTradingSurfaces: true,
-      watchlistSymbols: new Set()
+      watchlistSymbols: new Set(),
+      sectorRotation: [{ symbol: "XLK", label: "Tech", pct5d: 1.1 }]
     });
 
     expect(sections.gaps).toHaveLength(1);

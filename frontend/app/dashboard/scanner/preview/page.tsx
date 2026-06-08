@@ -23,6 +23,7 @@ export default async function ScannerTerminalPreviewPage() {
       <ScannerTerminalPreviewContent
         initialScannerSetupLoadMode={scannerSetupLoadMode}
         dayTradingSurfaces={dayTradingSurfaces}
+        showPreviewBadge
       />
     </AppShell>
   );

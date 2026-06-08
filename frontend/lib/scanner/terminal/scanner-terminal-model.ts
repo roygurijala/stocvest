@@ -12,8 +12,13 @@ import {
   type FeedLane,
   type FeedState
 } from "@/lib/dashboard/trading-room/feed-model";
+import type { SectorRotationChip } from "@/lib/market-context/types";
 import { isSwingSetupRow } from "@/lib/scanner-setups-response";
 import type { ScannerNearQualificationRow } from "@/lib/scanner-scan-summary";
+import {
+  buildSectorThemeGroups,
+  collectFunnelSymbols
+} from "@/lib/scanner/terminal/scanner-terminal-sector-themes";
 
 export type ScannerTerminalModeFilter = "all" | "day" | "swing";
 export type ScannerTerminalStateFilter = "all" | "actionable" | "developing";
@@ -271,6 +276,7 @@ export type BuildScannerTerminalInput = {
   nearQualification: ScannerNearQualificationRow[];
   dayTradingSurfaces: boolean;
   watchlistSymbols: Set<string>;
+  sectorRotation?: SectorRotationChip[];
 };
 
 export type ScannerTerminalSections = {
@@ -342,13 +348,24 @@ export function buildScannerTerminalSections(input: BuildScannerTerminalInput): 
   const developingCapped = developingOut.slice(0, 16);
   const { closest, also } = splitDevelopingRows(developingCapped);
 
+  const funnelSymbols = collectFunnelSymbols({
+    gapIntelligence: input.gapIntelligence,
+    setups: input.setups,
+    swingDesk: input.swingDesk,
+    dayDesk: input.dayDesk,
+    watchlistSymbols: input.watchlistSymbols
+  });
+  const sectorThemes = buildSectorThemeGroups(input.sectorRotation ?? [], funnelSymbols);
+  const radarBase = buildRadarGroups(input.swingDesk, input.dayDesk, filters.mode);
+  const radar = [...sectorThemes, ...radarBase].slice(0, 6);
+
   return {
     gaps,
     actionable: actionableOut.slice(0, 12),
     developing: developingCapped,
     developingClosest: closest,
     developingAlso: also,
-    radar: buildRadarGroups(input.swingDesk, input.dayDesk, filters.mode),
+    radar,
     actionableCount: actionable.length
   };
 }

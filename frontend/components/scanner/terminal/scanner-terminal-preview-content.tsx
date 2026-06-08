@@ -7,8 +7,10 @@ import type { ScannerOverview, ScannerSetupLoadMode } from "@/lib/api/scanner";
 import { mergeScannerCoreIntoOverview } from "@/lib/scanner-overview-merge";
 import { fetchScannerEvaluationTraceClient } from "@/lib/api/scanner-trace-client";
 import type { ScannerEvaluationTraceRow } from "@/lib/scanner-setups-response";
-import { nearRowsFromSetups } from "@/lib/scanner-scan-summary";
+import { buildScannerScanSummary, nearRowsFromSetups } from "@/lib/scanner-scan-summary";
 import { useDeskToday } from "@/lib/hooks/use-desk-today";
+import { useDashboardPayload } from "@/lib/hooks/use-dashboard-payload";
+import { parseSectorRotationEnvelope } from "@/lib/scanner/terminal/scanner-terminal-sector-themes";
 import { useTheme } from "@/lib/theme-provider";
 import { spacing, typography } from "@/lib/design-system";
 
@@ -27,7 +29,11 @@ type Props = {
   dayTradingSurfaces: boolean;
 };
 
-export function ScannerTerminalPreviewContent({ initialScannerSetupLoadMode, dayTradingSurfaces }: Props) {
+export function ScannerTerminalPreviewContent({
+  initialScannerSetupLoadMode,
+  dayTradingSurfaces,
+  showPreviewBadge = false
+}: Props) {
   const { colors } = useTheme();
   const [overview, setOverview] = useState<ScannerOverview>(EMPTY_OVERVIEW);
   const [scannerSetupMode] = useState<ScannerSetupLoadMode>(initialScannerSetupLoadMode);
@@ -38,6 +44,8 @@ export function ScannerTerminalPreviewContent({ initialScannerSetupLoadMode, day
 
   const { data: swingDeskRes } = useDeskToday("swing");
   const { data: dayDeskRes } = useDeskToday("day", { fallbackData: undefined });
+  const { data: dashboardPayload } = useDashboardPayload("swing");
+  const sectorRotation = parseSectorRotationEnvelope(dashboardPayload?.sector_rotation);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,6 +94,17 @@ export function ScannerTerminalPreviewContent({ initialScannerSetupLoadMode, day
     return nearRowsFromSetups(nearSetups);
   }, [overview.setups]);
 
+  const scanSummary = useMemo(() => {
+    if (overview.scanSummary) return overview.scanSummary;
+    if (!loadedAt) return null;
+    return buildScannerScanSummary({
+      scannedAtIso: loadedAt,
+      overview,
+      nearQualificationSetups: overview.setups.filter((s) => s.qualification_tier === "near"),
+      watchlistProgression: []
+    });
+  }, [overview, loadedAt]);
+
   const updatedLabel = useMemo(() => {
     if (!loadedAt) return null;
     const mins = Math.max(0, Math.round((Date.now() - new Date(loadedAt).getTime()) / 60000));
@@ -110,6 +129,10 @@ export function ScannerTerminalPreviewContent({ initialScannerSetupLoadMode, day
       watchlistSymbols={watchlistSymbols}
       dayTradingSurfaces={dayTradingSurfaces}
       evaluationTrace={evaluationTrace}
+      scanSummary={scanSummary}
+      synthesis={overview.scannerSynthesis ?? null}
+      sectorRotation={sectorRotation}
+      showPreviewBadge={showPreviewBadge}
       updatedLabel={updatedLabel}
     />
   );
