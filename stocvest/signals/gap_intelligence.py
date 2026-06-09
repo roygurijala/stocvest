@@ -592,14 +592,31 @@ def build_gap_intelligence_items(
     return items[:10]
 
 
+@dataclass(frozen=True)
+class GapMarketContextEnrichment:
+    """Ranked gap movers plus unscored IPO watch rows (unseasoned listed issuers)."""
+
+    items: tuple[dict[str, Any], ...]
+    ipo_watch: tuple[dict[str, Any], ...]
+
+
+def _ipo_watch_note(flags: dict[str, Any], sym: str) -> str:
+    entity = str(flags.get("ecosystem_entity") or sym).strip()
+    listed = flags.get("listed_days")
+    if isinstance(listed, int) and listed >= 0:
+        return f"{entity} · {listed} sessions listed · not evaluated by signal engine"
+    return f"{entity} · IPO watch · not evaluated by signal engine"
+
+
 def enrich_gap_items_with_market_context(
     items: list[dict[str, Any]],
     *,
     references_by_symbol: dict[str, TickerReference | None] | None = None,
-) -> list[dict[str, Any]]:
-    """Attach IPO/index context and down-rank volume on unseasoned or inclusion-window names."""
+) -> GapMarketContextEnrichment:
+    """Attach IPO/index context; route unseasoned listed issuers to ``ipo_watch``."""
     refs = references_by_symbol or {}
     kept: list[dict[str, Any]] = []
+    ipo_watch: list[dict[str, Any]] = []
     for row in items:
         sym = str(row.get("symbol") or "").strip().upper()
         if not sym:
@@ -609,8 +626,12 @@ def enrich_gap_items_with_market_context(
         warn = gap_item_market_context_warning(flags)
         if warn:
             row["market_context_warning"] = warn
-        # Unseasoned listed issuers: exclude from ranked movers (composite blocks these).
         if flags.get("ipo_unseasoned") and flags.get("ecosystem_role") == "listed_issuer":
+            watch_row = dict(row)
+            watch_row["ipo_watch"] = True
+            watch_row["unscored"] = True
+            watch_row["ipo_watch_note"] = _ipo_watch_note(flags, sym)
+            ipo_watch.append(watch_row)
             continue
         if flags.get("ipo_unseasoned") or flags.get("index_inclusion_window"):
             cat = row.get("catalyst") if isinstance(row.get("catalyst"), dict) else None
@@ -629,4 +650,4 @@ def enrich_gap_items_with_market_context(
             )
         kept.append(row)
     kept.sort(key=lambda row: (row.get("has_catalyst"), row.get("gap_quality_score")), reverse=True)
-    return kept
+    return GapMarketContextEnrichment(items=tuple(kept), ipo_watch=tuple(ipo_watch))

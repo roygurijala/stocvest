@@ -11,10 +11,24 @@ export type MarketContextFlags = {
   warnings: string[];
 };
 
+export type MarketContextDampenedLayer = {
+  layer: string;
+  multiplier: number;
+  original_contribution: number;
+  adjusted_contribution: number;
+};
+
 export type MarketContextDampening = {
-  dampened_layers: string[];
-  layer_multipliers: Record<string, number>;
+  active: boolean;
   reason: string;
+  trigger: string | null;
+  window_end: string | null;
+  confidence_level: string;
+  undampened_score: number;
+  adjusted_score: number;
+  dampened_layers: MarketContextDampenedLayer[];
+  /** Back-compat flat map */
+  layer_multipliers?: Record<string, number>;
 };
 
 function strOrNull(v: unknown): string | null {
@@ -60,20 +74,68 @@ export function parseMarketContextDampening(
   const raw = body.market_context_dampening;
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
+
   const layersRaw = o.dampened_layers;
-  const dampened_layers = Array.isArray(layersRaw)
-    ? layersRaw.map((x) => String(x).trim()).filter(Boolean)
-    : [];
-  const multRaw = o.layer_multipliers;
-  const layer_multipliers: Record<string, number> = {};
-  if (multRaw && typeof multRaw === "object") {
-    for (const [k, v] of Object.entries(multRaw as Record<string, unknown>)) {
-      if (typeof v === "number" && Number.isFinite(v)) layer_multipliers[k] = v;
+  let dampened_layers: MarketContextDampenedLayer[] = [];
+  if (Array.isArray(layersRaw)) {
+    dampened_layers = layersRaw
+      .map((row) => {
+        if (!row || typeof row !== "object") return null;
+        const r = row as Record<string, unknown>;
+        const layer = strOrNull(r.layer);
+        const mult = typeof r.multiplier === "number" ? r.multiplier : null;
+        const orig = typeof r.original_contribution === "number" ? r.original_contribution : null;
+        const adj = typeof r.adjusted_contribution === "number" ? r.adjusted_contribution : null;
+        if (!layer || mult == null || orig == null || adj == null) return null;
+        return {
+          layer,
+          multiplier: mult,
+          original_contribution: orig,
+          adjusted_contribution: adj
+        };
+      })
+      .filter((x): x is MarketContextDampenedLayer => x != null);
+  }
+
+  // Legacy shape: dampened_layers was string[] + layer_multipliers map
+  if (!dampened_layers.length && Array.isArray(layersRaw)) {
+    const multRaw = o.layer_multipliers;
+    if (multRaw && typeof multRaw === "object") {
+      dampened_layers = Object.entries(multRaw as Record<string, unknown>)
+        .map(([layer, mult]) =>
+          typeof mult === "number"
+            ? { layer, multiplier: mult, original_contribution: 0, adjusted_contribution: 0 }
+            : null
+        )
+        .filter((x): x is MarketContextDampenedLayer => x != null);
     }
   }
-  const reason = typeof o.reason === "string" ? o.reason.trim() : "";
-  if (!dampened_layers.length && !reason) return null;
-  return { dampened_layers, layer_multipliers, reason };
+
+  const undampened =
+    typeof o.undampened_score === "number" && Number.isFinite(o.undampened_score)
+      ? Math.round(o.undampened_score)
+      : null;
+  const adjusted =
+    typeof o.adjusted_score === "number" && Number.isFinite(o.adjusted_score)
+      ? Math.round(o.adjusted_score)
+      : null;
+
+  if (!dampened_layers.length && undampened == null && adjusted == null) return null;
+
+  return {
+    active: o.active !== false,
+    reason: strOrNull(o.reason) ?? "market_context",
+    trigger: strOrNull(o.trigger),
+    window_end: strOrNull(o.window_end),
+    confidence_level: strOrNull(o.confidence_level) ?? "reduced",
+    undampened_score: undampened ?? adjusted ?? 0,
+    adjusted_score: adjusted ?? undampened ?? 0,
+    dampened_layers,
+    layer_multipliers:
+      o.layer_multipliers && typeof o.layer_multipliers === "object"
+        ? (o.layer_multipliers as Record<string, number>)
+        : undefined
+  };
 }
 
 export function marketContextHeadline(flags: MarketContextFlags): string {

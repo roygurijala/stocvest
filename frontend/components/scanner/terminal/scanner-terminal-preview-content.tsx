@@ -22,7 +22,8 @@ const EMPTY_OVERVIEW: ScannerOverview = {
   qqqPct: null,
   regimeLabel: "Neutral",
   swingUniverseSymbolCount: null,
-  gapIntelligenceSnapshotSymbolCount: null
+  gapIntelligenceSnapshotSymbolCount: null,
+  gapIpoWatch: []
 };
 
 type Props = {

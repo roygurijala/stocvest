@@ -120,7 +120,7 @@ engines, so the headline R/R (computed from the **current price**) is unchanged.
 
 - **`MIN_LISTED_DAYS = 90`** — composite (day + swing) blocks symbols listed fewer than 90 sessions when Polygon `list_date` is present.
 - **Known recent IPO tickers** (e.g. `SPCX` from `ipo_ecosystem_registry.py`) **fail closed** when reference/`list_date` is missing — composite returns **`liquidity_filtered`**, not an unscored body.
-- **Snapshot-only paths** (`PremarketGapScanner`, `dynamic_gap_candidates_from_snapshots`, opportunity-desk funnel) apply **`listing_age_exclusion_reason(symbol, None)`** using IPO calendar + known-ticker fail-closed — no Polygon reference call. Gap intel still attaches **`market_context_flags`** and caps volume on unseasoned / index-inclusion windows (`gap_intelligence.enrich_gap_items_with_market_context`).
+- **Snapshot-only paths** (`PremarketGapScanner`, `dynamic_gap_candidates_from_snapshots`, opportunity-desk funnel) apply **`listing_age_exclusion_reason(symbol, None)`** using IPO calendar + known-ticker fail-closed — no Polygon reference call. Gap intel attaches **`market_context_flags`**, caps volume on unseasoned / index-inclusion windows, and routes unseasoned **listed issuers** to **`ipo_watch`** (unscored) instead of ranked movers (`gap_intelligence.enrich_gap_items_with_market_context`).
 - **Intraday setup scanner** (`intraday_listing_age_filter.py`): `POST /v1/signals/day/setups`, `POST /v1/scanner/intraday`, and scheduled intraday/EOD scans **filter** `bars_by_symbol` through the same listing-age gate before `IntradaySetupScanner` runs.
 - **IPO ecosystem metadata** — `ipo_ecosystem_registry.py` + `market_context_flags.py` drive laggard peer groups (`sector_peer_registry` PRE_IPO_PROXY), composite **`market_context_flags.warnings`**, and scanner gap caveats. Refresh stake notes after S-1 / holdings reports.
 
@@ -131,7 +131,7 @@ Keep these **conceptually separate** when adding features:
 | Kind | Role | Examples |
 |------|------|----------|
 | **Eligibility gates** | Withhold or replace the **composite body** until inputs are trustworthy | Fewer than `composite.min_available_layers` → **`insufficient_data`** HTTP 200 envelope (real + swing composites); market/session preconditions documented on handlers |
-| **Degradation / honesty checks** | Adjust **how strongly** the composite speaks once eligible | `_apply_contradiction_penalty` on the net score from alignment; **`market_context_composite_dampener`** scales sector/internals (and technical on unseasoned listings) during IPO/index-inclusion windows; swing evidence **`rr_warning`** — quality checks, **not** extra “layers” |
+| **Degradation / honesty checks** | Adjust **how strongly** the composite speaks once eligible | `_apply_contradiction_penalty` on the net score from alignment; **`market_context_composite_dampener`** (Option B renormalize — no weight redistribution) scales sector/internals during **active index-inclusion windows** only; technical dampening tiers by `listed_days`; ecosystem backers dampen at 0.70 only during inclusion windows (not S-1 roadshow alone); swing evidence **`rr_warning`** — quality checks, **not** extra “layers” |
 
 Weighting math and permission-style gates should stay **separate concerns** in code reviews.
 

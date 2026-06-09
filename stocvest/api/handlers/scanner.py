@@ -433,6 +433,7 @@ async def _gap_intelligence_async(payload: dict[str, Any], user_id: str | None) 
     from stocvest.data.earnings_calendar_fetch import fetch_earnings_events
 
     today = date_cls.today()
+    ipo_watch: list[Any] = []
     news: list[Any] = []
     earn_rows: list[Any] = []
     items = build_gap_intelligence_items(
@@ -482,7 +483,9 @@ async def _gap_intelligence_async(payload: dict[str, Any], user_id: str | None) 
                 refs: dict[str, Any] = {}
                 for sym in gap_symbols[: _GAP_INTEL_TOP_N]:
                     refs[sym] = await get_ticker_reference(client, sym)
-                items = enrich_gap_items_with_market_context(items, references_by_symbol=refs)
+                enriched = enrich_gap_items_with_market_context(items, references_by_symbol=refs)
+                items = list(enriched.items)
+                ipo_watch = list(enriched.ipo_watch)
             except Exception as exc:  # noqa: BLE001
                 _LOG.warning("gap_intelligence market_context_failed err=%s", str(exc)[:200])
     except Exception as exc:  # noqa: BLE001 — fallback to snapshot-only cards when Polygon client cannot initialize
@@ -490,6 +493,7 @@ async def _gap_intelligence_async(payload: dict[str, Any], user_id: str | None) 
     return ok(
         {
             "items": items,
+            "ipo_watch": ipo_watch,
             "disclaimer": API_SIGNAL_DISCLAIMER,
             "snapshot_symbol_count": gap_scan.eligible_symbol_count,
             "snapshot_source": snapshot_source,

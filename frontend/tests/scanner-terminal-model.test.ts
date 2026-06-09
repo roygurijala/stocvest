@@ -68,6 +68,41 @@ describe("scanner-terminal-model", () => {
     expect(sections.actionableCount).toBeGreaterThanOrEqual(1);
   });
 
+  test("ipo watch rows are separate from ranked gaps", () => {
+    const sections = buildScannerTerminalSections({
+      filters: { mode: "all", state: "all", watchlistOnly: false, query: "" },
+      gapIntelligence: [],
+      gapIpoWatch: [
+        {
+          symbol: "SPCX",
+          company_name: "SpaceX",
+          gap_pct: 8.4,
+          gap_dollars: 10,
+          prev_close: 120,
+          current_price: 130,
+          volume: 2_000_000,
+          volume_vs_avg: 3,
+          gap_quality_score: 80,
+          catalyst: null,
+          has_catalyst: false,
+          no_catalyst_warning: null,
+          ipo_watch: true,
+          unscored: true,
+          ipo_watch_note: "SpaceX · IPO day · not evaluated"
+        }
+      ],
+      setups: [],
+      swingDesk: null,
+      dayDesk: null,
+      nearQualification: [],
+      dayTradingSurfaces: true,
+      watchlistSymbols: new Set()
+    });
+    expect(sections.gaps).toHaveLength(0);
+    expect(sections.ipoWatch).toHaveLength(1);
+    expect(sections.ipoWatch[0]?.statusLabel).toBe("unscored");
+  });
+
   test("query filter narrows gap rows", () => {
     const sections = buildScannerTerminalSections({
       filters: { mode: "all", state: "all", watchlistOnly: false, query: "ORCL" },

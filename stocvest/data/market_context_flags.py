@@ -48,6 +48,7 @@ def resolve_market_context_flags(
     ecosystem_entities: list[str] = []
     ecosystem_roles: list[str] = []
     index_inclusion_window = False
+    index_inclusion_window_end: str | None = None
 
     if ipo_unseasoned:
         warnings.append(_UNSEASONED_GAP_WARNING)
@@ -60,6 +61,7 @@ def resolve_market_context_flags(
         if eco.index_inclusion_window_end is not None and eco.ipo_date is not None:
             if eco.ipo_date <= ref_day <= eco.index_inclusion_window_end:
                 index_inclusion_window = True
+                index_inclusion_window_end = eco.index_inclusion_window_end.isoformat()
                 if _INDEX_WINDOW_WARNING not in warnings:
                     warnings.append(_INDEX_WINDOW_WARNING)
 
@@ -86,6 +88,7 @@ def resolve_market_context_flags(
         "ipo_unseasoned": ipo_unseasoned,
         "listed_days": listed_days,
         "index_inclusion_window": index_inclusion_window,
+        "index_inclusion_window_end": index_inclusion_window_end,
         "ecosystem_entities": ecosystem_entities,
         "ecosystem_roles": ecosystem_roles,
         "ecosystem_entity": ecosystem_entities[0] if ecosystem_entities else None,

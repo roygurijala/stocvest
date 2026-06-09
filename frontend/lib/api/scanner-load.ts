@@ -344,6 +344,7 @@ export async function runScannerLoadWithoutBrief(
     if (tuning?.signalsPageMinimal === true) {
       return {
         gapIntelligence: [],
+        gapIpoWatch: [],
         setups: [],
         spyPct: null,
         qqqPct: null,
@@ -359,6 +360,7 @@ export async function runScannerLoadWithoutBrief(
     const includeDeskUniverse = tuning?.includeOpportunityDeskUniverse !== false;
     const gapIntelPromise = jsonFetch<{
       items: GapIntelligenceItem[];
+      ipo_watch?: GapIntelligenceItem[];
       disclaimer?: string;
       /** Symbols that passed gap-intel liquidity/price/gap gates (before top-N), not raw Polygon row count. */
       snapshot_symbol_count?: number;
@@ -396,15 +398,18 @@ export async function runScannerLoadWithoutBrief(
         ? (gapIntelResp as { items?: unknown }).items
         : undefined;
     const gapItemsOk = Array.isArray(rawItems);
+    const gapIntelObj =
+      gapIntelResp != null && typeof gapIntelResp === "object" ? (gapIntelResp as Record<string, unknown>) : null;
     let gapItems: GapIntelligenceItem[] = gapItemsOk ? (rawItems as GapIntelligenceItem[]) : [];
+    const gapIpoWatch: GapIntelligenceItem[] =
+      gapIntelObj != null && Array.isArray(gapIntelObj.ipo_watch)
+        ? (gapIntelObj.ipo_watch as GapIntelligenceItem[])
+        : [];
     if (!gapItemsOk && gapIntelResp != null) {
       console.warn("scanner-load: gap-intelligence response missing items[]; using empty gaps + fallback universe");
     } else if (gapIntelResp == null) {
       console.warn("scanner-load: gap-intelligence request failed; using empty gaps + fallback universe");
     }
-
-    const gapIntelObj =
-      gapIntelResp != null && typeof gapIntelResp === "object" ? (gapIntelResp as Record<string, unknown>) : null;
     const gapIntelSnapshotCount =
       gapIntelObj != null &&
       typeof gapIntelObj.snapshot_symbol_count === "number" &&
@@ -599,6 +604,7 @@ export async function runScannerLoadWithoutBrief(
       if (dayRaw == null) {
         return {
           gapIntelligence: [],
+        gapIpoWatch: [],
           setups: [],
           spyPct,
           qqqPct,
@@ -626,6 +632,7 @@ export async function runScannerLoadWithoutBrief(
       if (dayRaw == null) {
         return {
           gapIntelligence: [],
+        gapIpoWatch: [],
           setups: [],
           spyPct,
           qqqPct,
@@ -694,6 +701,7 @@ export async function runScannerLoadWithoutBrief(
 
     return {
       gapIntelligence: gapItems,
+      gapIpoWatch,
       setups,
       spyPct,
       qqqPct,

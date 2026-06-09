@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vitest";
-import { marketContextHeadline, parseMarketContextFlags } from "@/lib/signal-evidence/market-context-present";
+import {
+  marketContextHeadline,
+  parseMarketContextDampening,
+  parseMarketContextFlags
+} from "@/lib/signal-evidence/market-context-present";
 
 describe("parseMarketContextFlags", () => {
   test("returns null when flags absent or empty", () => {
@@ -32,5 +36,27 @@ describe("parseMarketContextFlags", () => {
     });
     expect(flags?.ecosystem_entity).toBe("SpaceX");
     expect(flags?.ecosystem_role).toBe("corporate_backer");
+  });
+});
+
+describe("parseMarketContextDampening", () => {
+  test("parses structured dampening payload", () => {
+    const d = parseMarketContextDampening({
+      market_context_dampening: {
+        active: true,
+        reason: "index_inclusion_window",
+        trigger: "SpaceX",
+        window_end: "2026-07-17",
+        confidence_level: "reduced",
+        undampened_score: 79,
+        adjusted_score: 71,
+        dampened_layers: [
+          { layer: "sector", multiplier: 0.55, original_contribution: 0.14, adjusted_contribution: 0.077 }
+        ]
+      }
+    });
+    expect(d?.active).toBe(true);
+    expect(d?.adjusted_score).toBe(71);
+    expect(d?.dampened_layers[0]?.layer).toBe("sector");
   });
 });

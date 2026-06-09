@@ -103,8 +103,11 @@ def test_enrich_gap_items_excludes_unseasoned_listed_issuer() -> None:
             "gap_quality_score": 80,
         }
     ]
-    out = enrich_gap_items_with_market_context(items, references_by_symbol={"SPCX": None})
-    assert out == []
+    enriched = enrich_gap_items_with_market_context(items, references_by_symbol={"SPCX": None})
+    assert enriched.items == ()
+    assert len(enriched.ipo_watch) == 1
+    assert enriched.ipo_watch[0]["ipo_watch"] is True
+    assert enriched.ipo_watch[0]["unscored"] is True
 
 def test_get_ecosystem_by_entity() -> None:
     assert get_ecosystem("anthropic") is ANTHROPIC_ECOSYSTEM
