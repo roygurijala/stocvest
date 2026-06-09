@@ -68,6 +68,48 @@ def test_scanner_sorts_by_rank_score_desc():
 
 
 @pytest.mark.unit
+def test_scanner_excludes_unseasoned_known_ipo_without_reference():
+    scanner = PremarketGapScanner(min_abs_gap_percent=2.0)
+    snaps = [
+        snapshot("SPCX", prev_close=100.0, pre_market_price=110.0, day_volume=20_000_000),
+        snapshot("AAPL", prev_close=100.0, pre_market_price=104.0, day_volume=20_000_000),
+    ]
+    results = scanner.scan_snapshots(snaps)
+    assert len(results) == 1
+    assert results[0].symbol == "AAPL"
+
+
+@pytest.mark.unit
+def test_dynamic_gap_candidates_exclude_unseasoned_known_ipo():
+    snaps = [
+        Snapshot(
+            symbol="SPCX",
+            prev_close=100.0,
+            last_trade_price=110.0,
+            day_volume=2_000_000,
+            prev_day_volume=2_000_000,
+        ),
+        Snapshot(
+            symbol="MSFT",
+            prev_close=100.0,
+            last_trade_price=105.0,
+            day_volume=2_000_000,
+            prev_day_volume=2_000_000,
+        ),
+    ]
+    out = dynamic_gap_candidates_from_snapshots_with_stats(
+        snaps,
+        limit=10,
+        min_abs_gap_percent=2.0,
+        min_day_volume=500_000.0,
+        min_trade_price=5.0,
+    )
+    assert out.eligible_symbol_count == 1
+    assert len(out.candidates) == 1
+    assert out.candidates[0].symbol == "MSFT"
+
+
+@pytest.mark.unit
 def test_scanner_applies_volume_filter_and_limit():
     scanner = PremarketGapScanner(min_abs_gap_percent=2.0, min_day_volume=10_000_000)
     snaps = [

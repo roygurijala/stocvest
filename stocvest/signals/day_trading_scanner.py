@@ -17,7 +17,10 @@ from zoneinfo import ZoneInfo
 from stocvest.data.models import Bar, Snapshot, Timeframe
 from stocvest.indicators.core import OpeningRange, gap_percent, opening_range
 from stocvest.signals.session_price_guard import is_corporate_action_session_move
-from stocvest.data.symbol_universe_eligibility import snapshot_universe_exclusion_reason
+from stocvest.data.symbol_universe_eligibility import (
+    listing_age_exclusion_reason,
+    snapshot_universe_exclusion_reason,
+)
 from stocvest.utils.config import get_settings
 
 
@@ -126,6 +129,8 @@ def dynamic_gap_candidates_from_snapshots_with_stats(
             frequent_reverse_split_symbols=frequent_reverse_split_symbols,
         )
         if universe_reason:
+            continue
+        if listing_age_exclusion_reason(snap.symbol, None):
             continue
         vol = float(snap.day_volume or 0.0)
         if vol < min_day_volume:
@@ -238,6 +243,8 @@ class PremarketGapScanner:
         if prev_close is None or prev_close <= 0 or premarket_price is None or premarket_price <= 0:
             return None
         if float(premarket_price) < self._min_trade_price:
+            return None
+        if listing_age_exclusion_reason(snapshot.symbol, None):
             return None
 
         gp = gap_percent(prev_close, premarket_price)
