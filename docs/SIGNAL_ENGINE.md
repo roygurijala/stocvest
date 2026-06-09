@@ -34,6 +34,7 @@ This document describes the **server-side** multi-layer stacks behind **`POST /v
 
 - **Inputs**: Polygon `/v2/reference/news` rows (dicts), `NewsParameters`, optional **`lookback_hours`** (defaults to `NewsParameters.lookback_hours`, **8**). Rows older than the window are dropped before scoring.
 - **Sentiment**: Prefers `insights[0].sentiment`; quality gate via `is_quality_article()` (`news_quality_filter.py`).
+- **IPO narrative filter** (`news_ipo_narrative.py`): During active S-1 / post-listing windows, competitive-displacement headlines mentioning OpenAI/Anthropic/SpaceX on **corporate backer** symbols (e.g. MSFT, GOOGL) are **downweighted**; stake-repricing copy is modestly boosted. Surfaced in layer chips/reasoning — does not change verdict thresholds directly.
 - **Unavailable**: Zero quality articles after filtering (distinct from neutral verdict).
 - **Dashboard Market Intelligence** (`GET /v1/market/news` in `market_data.py`) uses a **different** path: `passes_market_intelligence_gate()` (PR wires may enter the pool) plus **`news_relevance.py`** scoring, deduplication, and `categorize_article()` — do not assume the same filter as the composite news layer.
 
@@ -114,6 +115,14 @@ engines, so the headline R/R (computed from the **current price**) is unchanged.
   (`clean` \| `clamped` \| `no_clean_entry`), `entry_zone_worst_case_rr`. The
   worst-case floor is held **≤ headline `min_rr`** so elevated-VIX days never get
   contradictory thresholds. Config: `entry_zone` block (see TUNING_PLAYBOOK.md).
+
+### Universe eligibility (`symbol_universe_eligibility.py`)
+
+- **`MIN_LISTED_DAYS = 90`** — composite (day + swing) blocks symbols listed fewer than 90 sessions when Polygon `list_date` is present.
+- **Known recent IPO tickers** (e.g. `SPCX` from `ipo_ecosystem_registry.py`) **fail closed** when reference/`list_date` is missing — composite returns **`liquidity_filtered`**, not an unscored body.
+- **Snapshot-only paths** (gap intelligence funnel, opportunity-desk movers pre-filter) **do not** apply listing age by default; gap intel attaches **`market_context_flags`** and caps volume contribution on unseasoned / index-inclusion windows (`gap_intelligence.enrich_gap_items_with_market_context`).
+- **Intraday setup scanner** (`intraday_listing_age_filter.py`): `POST /v1/signals/day/setups`, `POST /v1/scanner/intraday`, and scheduled intraday/EOD scans **filter** `bars_by_symbol` through the same listing-age gate before `IntradaySetupScanner` runs.
+- **IPO ecosystem metadata** — `ipo_ecosystem_registry.py` + `market_context_flags.py` drive laggard peer groups (`sector_peer_registry` PRE_IPO_PROXY), composite **`market_context_flags.warnings`**, and scanner gap caveats. Refresh stake notes after S-1 / holdings reports.
 
 ### Gate taxonomy: eligibility vs degradation
 

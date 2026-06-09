@@ -64,6 +64,7 @@ from stocvest.data.models import Bar, SignalRecord, Snapshot, Timeframe
 from stocvest.data.polygon_client import PolygonClient, PolygonError
 from stocvest.data.symbol_normalize import to_polygon_symbol
 from stocvest.data.corporate_actions import recent_split_symbols, symbols_with_frequent_reverse_splits
+from stocvest.data.market_context_flags import resolve_market_context_flags
 from stocvest.data.symbol_universe_eligibility import UniverseEligibilityContext, universe_exclusion_reason
 from stocvest.data.ticker_reference_cache import get_ticker_reference
 from stocvest.signals.confluence import ConfluenceDetector, confluence_result_to_response_fields, normalize_direction
@@ -474,6 +475,7 @@ async def build_swing_composite_response(
         "signal_expires": expires_at.replace(microsecond=0).isoformat(),
         "alignment_ratio": composite.alignment_ratio,
         "conflicted_layers": list(composite.conflicted_layers or []),
+        "market_context_flags": resolve_market_context_flags(sym, reference=ticker_ref),
     }
     response_body["alignment"] = alignment_to_response_dict(alignment)
     response_body.update(composite_direction_fields(response_body))

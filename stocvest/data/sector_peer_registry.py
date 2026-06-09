@@ -16,6 +16,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
+from stocvest.data.ipo_ecosystem_registry import (
+    ANTHROPIC_ECOSYSTEM,
+    OPENAI_ECOSYSTEM,
+    SPACEX_ECOSYSTEM,
+)
+
 # International ADRs — noisier vs US listings; higher lag threshold in get_lag_threshold().
 ADR_SYMBOLS: frozenset[str] = frozenset({"TSM", "ASML"})
 
@@ -231,28 +237,28 @@ _PEER_GROUPS: dict[str, SectorPeerGroup] = {
     # ── PRE-IPO PROXY ──────────────────────────────────────────────────────
     "openai_ecosystem": _g(
         "openai_ecosystem",
-        sector_name="OpenAI ecosystem",
+        sector_name=OPENAI_ECOSYSTEM.sector_name,
         group_type=PeerGroupType.PRE_IPO_PROXY,
         primary_etf=None,
-        peers=["MSFT", "NVDA", "AMZN", "GOOGL", "META", "AMD"],
+        peers=list(OPENAI_ECOSYSTEM.all_tradable_peers()),
         requires_etf_confirmation=False,
         trigger_entity="OpenAI",
     ),
     "spacex_adjacent": _g(
         "spacex_adjacent",
-        sector_name="Space economy",
+        sector_name=SPACEX_ECOSYSTEM.sector_name,
         group_type=PeerGroupType.PRE_IPO_PROXY,
         primary_etf=None,
-        peers=["RKLB", "ASTS", "LMT", "BA", "SPCE", "MNTS", "VSAT"],
+        peers=list(SPACEX_ECOSYSTEM.all_tradable_peers()),
         requires_etf_confirmation=False,
         trigger_entity="SpaceX",
     ),
     "anthropic_ecosystem": _g(
         "anthropic_ecosystem",
-        sector_name="Anthropic ecosystem",
+        sector_name=ANTHROPIC_ECOSYSTEM.sector_name,
         group_type=PeerGroupType.PRE_IPO_PROXY,
         primary_etf=None,
-        peers=["AMZN", "GOOGL", "NVDA"],
+        peers=list(ANTHROPIC_ECOSYSTEM.all_tradable_peers()),
         min_peers_for_signal=2,
         requires_etf_confirmation=False,
         trigger_entity="Anthropic",

@@ -25,6 +25,7 @@ from stocvest.api.services.signal_snapshot_builders import build_swing_composite
 from stocvest.config.parameter_store import ParameterStore
 from stocvest.api.services.composite_market_context import fetch_composite_market_status_payload_sync
 from stocvest.api.services.day_setups_geo_preview import attach_geo_preview_to_intraday_rows
+from stocvest.api.services.intraday_listing_age_filter import filter_bars_by_listing_age
 from stocvest.api.services.scanner_setups_bundle import (
     bundle_setups_response,
     ensure_setups_v2_bundle,
@@ -748,6 +749,13 @@ def day_setups_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, 
             bars_by_symbol[symbol.upper()] = [parse_bar(item, symbol.upper()) for item in bars]
 
         liq = parse_liquidity_by_symbol_payload(payload.get("liquidity_by_symbol"))
+        settings = get_settings()
+
+        async def _seasoned_bars() -> dict[str, list[Bar]]:
+            async with PolygonClient(api_key=settings.polygon_api_key) as client:
+                return await filter_bars_by_listing_age(client, bars_by_symbol)
+
+        bars_by_symbol = asyncio.run(_seasoned_bars())
         scanner = IntradaySetupScanner(min_score=min_score)
         setups = scanner.scan(bars_by_symbol, liquidity_by_symbol=liq, limit=limit)
         if include_near:

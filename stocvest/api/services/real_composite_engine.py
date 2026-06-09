@@ -50,7 +50,9 @@ from stocvest.data.models import Bar, SignalRecord, Snapshot, Timeframe
 from stocvest.data.polygon_client import PolygonClient, PolygonError
 from stocvest.data.symbol_normalize import to_polygon_symbol
 from stocvest.data.corporate_actions import recent_split_symbols, symbols_with_frequent_reverse_splits
+from stocvest.data.market_context_flags import resolve_market_context_flags
 from stocvest.data.symbol_universe_eligibility import UniverseEligibilityContext, universe_exclusion_reason
+from stocvest.data.ticker_reference import TickerReference
 from stocvest.data.ticker_reference_cache import get_ticker_reference
 from stocvest.signals.confluence import ConfluenceDetector, confluence_result_to_response_fields, normalize_direction
 from stocvest.signals.composite_score import (
@@ -266,6 +268,7 @@ class RealCompositeEnginePhase:
     sector_display: str | None = None
     sic_bucket_for_geo: str | None = None
     vix_snap: Snapshot | None = None
+    ticker_ref: TickerReference | None = None
 
 
 async def run_real_composite_engine_phase(
@@ -522,6 +525,7 @@ async def run_real_composite_engine_phase(
         sector_display=sector_display,
         sic_bucket_for_geo=sic_bucket_for_geo,
         vix_snap=vix_snap,
+        ticker_ref=ticker_ref,
     )
 
 
@@ -671,6 +675,7 @@ async def build_real_composite_response(
         "signal_valid_until": _next_rth_close_utc_iso(),
         "alignment_ratio": composite.alignment_ratio,
         "conflicted_layers": list(composite.conflicted_layers or []),
+        "market_context_flags": resolve_market_context_flags(sym, reference=phase.ticker_ref),
     }
     if alignment is not None:
         response_body["alignment"] = alignment_to_response_dict(alignment)

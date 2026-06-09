@@ -147,6 +147,7 @@ locals {
     "POST /v1/scanner/briefing"         = { module_key = "scanner", authorizer = true }
     "POST /v1/scanner/gap-intelligence" = { module_key = "scanner", authorizer = true }
     "GET /v1/scanner/laggards"          = { module_key = "scanner", authorizer = true }
+    "GET /v1/scanner/ipo-ecosystems"    = { module_key = "scanner", authorizer = true }
   }
 
   http_lambda_integration_keys = distinct([for _, v in local.http_api_route_definitions : v.module_key])

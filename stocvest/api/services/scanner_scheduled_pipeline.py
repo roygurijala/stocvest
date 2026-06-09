@@ -9,6 +9,7 @@ from typing import Any
 from stocvest.api.services.alerts_store import put_scanner_alert
 from stocvest.api.services.day_trading_setups_store import SCANNER_SYSTEM_ACCOUNT_ID, get_day_trading_setups_store
 from stocvest.api.services.scanner_alert_macro import fetch_macro_regime_for_scanner_alerts
+from stocvest.api.services.intraday_listing_age_filter import filter_bars_by_listing_age
 from stocvest.api.services.watchlist_scanner_alerts import notify_intraday_setups_for_watchlist_users
 from stocvest.api.services.signal_dto import (
     serialize_catalyst,
@@ -165,6 +166,7 @@ async def run_scheduled_scan(scan_type: str) -> dict[str, Any]:
                 document["data"]["gaps"] = [serialize_gap_candidate(c) for c in gaps]
             elif scan_type == "intraday":
                 bars_by_symbol = await _fetch_bars_by_symbol(client, symbols)
+                bars_by_symbol = await filter_bars_by_listing_age(client, bars_by_symbol)
                 snaps = await _fetch_snapshots(client, symbols)
                 liq = _liquidity_from_snapshots(snaps)
                 setups = IntradaySetupScanner(min_score=0.55).scan(
@@ -194,6 +196,7 @@ async def run_scheduled_scan(scan_type: str) -> dict[str, Any]:
                 articles = await client.get_news(limit=25)
                 catalyst_objs = NewsCatalystDetector(min_score=0.35).detect(articles, limit=8)
                 bars_by_symbol = await _fetch_bars_by_symbol(client, symbols)
+                bars_by_symbol = await filter_bars_by_listing_age(client, bars_by_symbol)
                 liq_eod = _liquidity_from_snapshots(snaps)
                 setup_objs = IntradaySetupScanner(min_score=0.55).scan(
                     bars_by_symbol, liquidity_by_symbol=liq_eod, limit=8

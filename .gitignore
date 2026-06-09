@@ -36,6 +36,7 @@ Thumbs.db
 # Frontend
 frontend/node_modules/
 frontend/.next/
+frontend/build-out.txt
 frontend/.env.local
 *.tsbuildinfo
 # Stray root-level node_modules (e.g. from running `npm install` from the
