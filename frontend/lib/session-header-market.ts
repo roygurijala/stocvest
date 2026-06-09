@@ -83,8 +83,8 @@ export function resolveSessionRegimeLabel(args: {
   return applyRegimeSanityGuard(
     macroRegimeLabel ??
       resolveRegimeLabel({
-        scannerError: args.scannerError,
-        scannerRegimeLabel: args.scannerRegimeLabel,
+        scannerError: args.scannerError ?? undefined,
+        scannerRegimeLabel: args.scannerRegimeLabel ?? undefined,
         spyPct: typeof args.spyPct === "number" ? args.spyPct : null,
         qqqPct: typeof args.qqqPct === "number" ? args.qqqPct : null
       }).label,
