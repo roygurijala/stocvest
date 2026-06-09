@@ -1,4 +1,4 @@
-import { apiFetch } from "@/lib/api/client";
+import { browserApiFetch } from "@/lib/api/browser-api-fetch";
 
 export type IpoEcosystemPayload = {
   trigger_entity: string;
@@ -22,9 +22,8 @@ export type IpoEcosystemsResponse = {
   disclaimer?: string;
 };
 
+/** Browser-safe fetch (Client Components — no `next/headers`). */
 export async function fetchIpoEcosystems(): Promise<IpoEcosystemPayload[]> {
-  const res = await apiFetch<IpoEcosystemsResponse>("/api/stocvest/scanner/ipo-ecosystems", {
-    cache: "no-store"
-  });
+  const res = await browserApiFetch<IpoEcosystemsResponse>("/v1/scanner/ipo-ecosystems");
   return Array.isArray(res?.ecosystems) ? res.ecosystems : [];
 }
