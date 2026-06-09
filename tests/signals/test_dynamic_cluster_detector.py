@@ -106,6 +106,13 @@ def test_cluster_built_correctly() -> None:
     assert cluster.cluster_direction == "up"
 
 
+def test_leader_is_ipo_mode_for_unseasoned_listing() -> None:
+    from stocvest.signals.dynamic_cluster_detector import leader_is_ipo_mode
+
+    assert leader_is_ipo_mode("SPCX") is True
+    assert leader_is_ipo_mode("AAPL") is False
+
+
 def test_cluster_too_small_returns_none() -> None:
     stats = _stats({"SPCX": 8.0, "RKLB": 5.0})
     assert build_cluster_around_leader("SPCX", 8.0, stats, min_cluster_size=3) is None

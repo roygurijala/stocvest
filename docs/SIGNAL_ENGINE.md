@@ -120,7 +120,7 @@ engines, so the headline R/R (computed from the **current price**) is unchanged.
 
 - **`MIN_LISTED_DAYS = 90`** — composite (day + swing) blocks symbols listed fewer than 90 sessions when Polygon `list_date` is present.
 - **Known recent IPO tickers** (e.g. `SPCX` from `ipo_ecosystem_registry.py`) **fail closed** when reference/`list_date` is missing — composite returns **`liquidity_filtered`**, not an unscored body.
-- **Snapshot-only paths** (gap intelligence funnel, opportunity-desk movers pre-filter) **do not** apply listing age by default; gap intel attaches **`market_context_flags`** and caps volume contribution on unseasoned / index-inclusion windows (`gap_intelligence.enrich_gap_items_with_market_context`).
+- **Snapshot-only paths** (`PremarketGapScanner`, `dynamic_gap_candidates_from_snapshots`, opportunity-desk funnel) apply **`listing_age_exclusion_reason(symbol, None)`** using IPO calendar + known-ticker fail-closed — no Polygon reference call. Gap intel still attaches **`market_context_flags`** and caps volume on unseasoned / index-inclusion windows (`gap_intelligence.enrich_gap_items_with_market_context`).
 - **Intraday setup scanner** (`intraday_listing_age_filter.py`): `POST /v1/signals/day/setups`, `POST /v1/scanner/intraday`, and scheduled intraday/EOD scans **filter** `bars_by_symbol` through the same listing-age gate before `IntradaySetupScanner` runs.
 - **IPO ecosystem metadata** — `ipo_ecosystem_registry.py` + `market_context_flags.py` drive laggard peer groups (`sector_peer_registry` PRE_IPO_PROXY), composite **`market_context_flags.warnings`**, and scanner gap caveats. Refresh stake notes after S-1 / holdings reports.
 

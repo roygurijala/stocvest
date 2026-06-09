@@ -10,6 +10,7 @@ import statistics
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from stocvest.data.market_context_flags import resolve_market_context_flags
 from stocvest.data.sector_peer_registry import PeerGroupType, SectorPeerGroup, is_etf
 from stocvest.utils.logging import get_logger
 
@@ -137,6 +138,17 @@ def detect_emerging_leaders(
     return [s for s, _ in scored]
 
 
+def leader_is_ipo_mode(leader: str) -> bool:
+    """True when the cluster leader is an unseasoned listing or in an index-inclusion window."""
+    sym = leader.strip().upper()
+    if not sym:
+        return False
+    flags = resolve_market_context_flags(sym, reference=None)
+    if flags.get("ipo_unseasoned") or flags.get("index_inclusion_window"):
+        return True
+    return flags.get("ecosystem_role") == "listed_issuer"
+
+
 def build_cluster_around_leader(
     leader: str,
     leader_move_1d: float,
@@ -234,6 +246,7 @@ def detect_all_dynamic_clusters(
                 move,
                 stats,
                 min_cluster_size=min_cluster_size,
+                is_ipo_mode=leader_is_ipo_mode(leader),
             )
             if cluster is not None:
                 vol = price_cache.get_volume_ratio(leader)

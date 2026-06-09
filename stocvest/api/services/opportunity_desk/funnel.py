@@ -12,7 +12,10 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Literal
 
-from stocvest.data.symbol_universe_eligibility import snapshot_universe_exclusion_reason
+from stocvest.data.symbol_universe_eligibility import (
+    listing_age_exclusion_reason,
+    snapshot_universe_exclusion_reason,
+)
 from stocvest.data.models import Snapshot
 from stocvest.signals.day_trading_scanner import (
     PremarketGapCandidate,
@@ -139,6 +142,9 @@ def _rejection_reason_for_snapshot(
     )
     if universe_reason:
         return universe_reason
+    listing_reason = listing_age_exclusion_reason(snap.symbol, None)
+    if listing_reason:
+        return listing_reason
     vol = float(snap.day_volume or 0.0)
     if vol < cfg.min_day_volume:
         return f"day_volume_below_{int(cfg.min_day_volume):d}"
