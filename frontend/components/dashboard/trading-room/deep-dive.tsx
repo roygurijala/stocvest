@@ -54,7 +54,10 @@ import { isExecutionStageEligibleForScenarioAdjust } from "@/lib/scenario/scenar
 import type { FeedBias, FeedCard, FeedState } from "@/lib/dashboard/trading-room/feed-model";
 import { parseLedgerGateSummary } from "@/lib/signal-evidence/ledger-gate-present";
 import { minRrForDeskMode, parseMarketEnvironment } from "@/lib/signal-evidence/market-environment-present";
-import { parseMarketContextFlags } from "@/lib/signal-evidence/market-context-present";
+import {
+  parseMarketContextDampening,
+  parseMarketContextFlags
+} from "@/lib/signal-evidence/market-context-present";
 import { parseApiDecisionState } from "@/lib/signal-evidence/risk-stack-present";
 import type { TradeDecisionState } from "@/lib/signal-evidence/trade-decision";
 
@@ -794,6 +797,10 @@ export function DeepDive({
     () => (composite ? parseMarketContextFlags(composite as Record<string, unknown>) : null),
     [composite]
   );
+  const marketContextDampening = useMemo(
+    () => (composite ? parseMarketContextDampening(composite as Record<string, unknown>) : null),
+    [composite]
+  );
   const deskMinRr = useMemo(
     () => minRrForDeskMode(marketEnvironment, activeLane),
     [marketEnvironment, activeLane]
@@ -1295,6 +1302,7 @@ export function DeepDive({
       {marketContextFlags ? (
         <MarketContextPanel
           flags={marketContextFlags}
+          dampening={marketContextDampening}
           compact
           testId="trading-room-deep-dive-market-context"
         />

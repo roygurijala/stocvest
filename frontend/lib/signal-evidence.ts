@@ -20,7 +20,9 @@ import {
   type MarketEnvironmentPayload
 } from "@/lib/signal-evidence/market-environment-present";
 import {
+  parseMarketContextDampening,
   parseMarketContextFlags,
+  type MarketContextDampening,
   type MarketContextFlags
 } from "@/lib/signal-evidence/market-context-present";
 import {
@@ -289,6 +291,8 @@ export interface SignalEvidenceData {
   marketEnvironment?: MarketEnvironmentPayload | null;
   /** Advisory IPO / index-inclusion flags from composite (`market_context_flags`). */
   marketContextFlags?: MarketContextFlags | null;
+  /** Layer weight dampening applied for mechanical-flow windows (`market_context_dampening`). */
+  marketContextDampening?: MarketContextDampening | null;
   /** Layer 3 ledger gate checklist from composite (`gate_status` / `ledger_qualified`). */
   ledgerGateSummary?: import("@/lib/signal-evidence/ledger-gate-present").LedgerGateSummary | null;
   /** Authoritative tri-state from composite API (`decision_state`), when present. */
@@ -2029,6 +2033,7 @@ export function applySwingCompositeEnrichment(
     planningGates: planningGates ?? evidence.planningGates ?? null,
     marketEnvironment: marketEnvironment ?? evidence.marketEnvironment ?? null,
     marketContextFlags: marketContextFlags ?? evidence.marketContextFlags ?? null,
+    marketContextDampening: marketContextDampening ?? evidence.marketContextDampening ?? null,
     ledgerGateSummary,
     apiDecisionState,
     compositePayload: body,

@@ -131,7 +131,7 @@ Keep these **conceptually separate** when adding features:
 | Kind | Role | Examples |
 |------|------|----------|
 | **Eligibility gates** | Withhold or replace the **composite body** until inputs are trustworthy | Fewer than `composite.min_available_layers` → **`insufficient_data`** HTTP 200 envelope (real + swing composites); market/session preconditions documented on handlers |
-| **Degradation / honesty checks** | Adjust **how strongly** the composite speaks once eligible | `_apply_contradiction_penalty` on the net score from alignment; swing evidence **`rr_warning`** and related narrative fields (`swing_composite_evidence.py`) — quality checks, **not** extra “layers” |
+| **Degradation / honesty checks** | Adjust **how strongly** the composite speaks once eligible | `_apply_contradiction_penalty` on the net score from alignment; **`market_context_composite_dampener`** scales sector/internals (and technical on unseasoned listings) during IPO/index-inclusion windows; swing evidence **`rr_warning`** — quality checks, **not** extra “layers” |
 
 Weighting math and permission-style gates should stay **separate concerns** in code reviews.
 

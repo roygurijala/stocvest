@@ -599,6 +599,7 @@ def enrich_gap_items_with_market_context(
 ) -> list[dict[str, Any]]:
     """Attach IPO/index context and down-rank volume on unseasoned or inclusion-window names."""
     refs = references_by_symbol or {}
+    kept: list[dict[str, Any]] = []
     for row in items:
         sym = str(row.get("symbol") or "").strip().upper()
         if not sym:
@@ -608,6 +609,9 @@ def enrich_gap_items_with_market_context(
         warn = gap_item_market_context_warning(flags)
         if warn:
             row["market_context_warning"] = warn
+        # Unseasoned listed issuers: exclude from ranked movers (composite blocks these).
+        if flags.get("ipo_unseasoned") and flags.get("ecosystem_role") == "listed_issuer":
+            continue
         if flags.get("ipo_unseasoned") or flags.get("index_inclusion_window"):
             cat = row.get("catalyst") if isinstance(row.get("catalyst"), dict) else None
             cat_type = str(cat.get("category") or "") if cat else None
@@ -623,5 +627,6 @@ def enrich_gap_items_with_market_context(
                 catalyst_sentiment=cat_sent or None,
                 cap_volume_for_mechanical_flow=True,
             )
-    items.sort(key=lambda row: (row.get("has_catalyst"), row.get("gap_quality_score")), reverse=True)
-    return items
+        kept.append(row)
+    kept.sort(key=lambda row: (row.get("has_catalyst"), row.get("gap_quality_score")), reverse=True)
+    return kept

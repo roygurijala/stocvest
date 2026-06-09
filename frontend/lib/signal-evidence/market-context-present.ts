@@ -11,6 +11,12 @@ export type MarketContextFlags = {
   warnings: string[];
 };
 
+export type MarketContextDampening = {
+  dampened_layers: string[];
+  layer_multipliers: Record<string, number>;
+  reason: string;
+};
+
 function strOrNull(v: unknown): string | null {
   if (typeof v !== "string") return null;
   const t = v.trim();
@@ -45,6 +51,29 @@ export function parseMarketContextFlags(body: Record<string, unknown> | null | u
     return null;
   }
   return flags;
+}
+
+export function parseMarketContextDampening(
+  body: Record<string, unknown> | null | undefined
+): MarketContextDampening | null {
+  if (!body || typeof body !== "object") return null;
+  const raw = body.market_context_dampening;
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const layersRaw = o.dampened_layers;
+  const dampened_layers = Array.isArray(layersRaw)
+    ? layersRaw.map((x) => String(x).trim()).filter(Boolean)
+    : [];
+  const multRaw = o.layer_multipliers;
+  const layer_multipliers: Record<string, number> = {};
+  if (multRaw && typeof multRaw === "object") {
+    for (const [k, v] of Object.entries(multRaw as Record<string, unknown>)) {
+      if (typeof v === "number" && Number.isFinite(v)) layer_multipliers[k] = v;
+    }
+  }
+  const reason = typeof o.reason === "string" ? o.reason.trim() : "";
+  if (!dampened_layers.length && !reason) return null;
+  return { dampened_layers, layer_multipliers, reason };
 }
 
 export function marketContextHeadline(flags: MarketContextFlags): string {
