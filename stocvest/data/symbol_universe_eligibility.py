@@ -11,6 +11,7 @@ from datetime import date
 from typing import Literal
 
 from stocvest.data.chinese_adr_watchlist import chinese_adr_exclusion_reason
+from stocvest.data.ipo_ecosystem_registry import get_ecosystem_for_symbol, known_recent_ipo_tickers
 from stocvest.data.models import Snapshot
 from stocvest.data.ticker_reference import TickerReference
 
@@ -21,6 +22,43 @@ MIN_TRADE_PRICE_SWING = 5.0
 MIN_TRADE_PRICE_SESSION = 2.0
 MIN_SUB_DOLLAR_FLOOR = 1.0
 MIN_LISTED_DAYS = 90
+
+
+def resolve_listed_days(
+    symbol: str,
+    reference: TickerReference | None,
+    *,
+    as_of: date | None = None,
+) -> int | None:
+    """
+    Sessions since ``list_date`` when Polygon provides it; else IPO calendar for known tickers.
+    """
+    ref_day = as_of or date.today()
+    if reference is not None and reference.listed_days(as_of=ref_day) is not None:
+        return reference.listed_days(as_of=ref_day)
+    eco = get_ecosystem_for_symbol(symbol)
+    if eco is not None and eco.listed_ticker and eco.ipo_date is not None:
+        if (symbol or "").strip().upper() == eco.listed_ticker.upper():
+            return (ref_day - eco.ipo_date).days
+    return None
+
+
+def listing_age_exclusion_reason(
+    symbol: str,
+    reference: TickerReference | None,
+    *,
+    min_days: int = MIN_LISTED_DAYS,
+    as_of: date | None = None,
+) -> str | None:
+    """Composite-grade listing-age gate with fail-closed for known recent IPO tickers."""
+    sym = (symbol or "").strip().upper()
+    days = resolve_listed_days(sym, reference, as_of=as_of)
+    if days is not None and days < min_days:
+        return f"listed fewer than {min_days} days on current exchange"
+    if sym in known_recent_ipo_tickers():
+        if reference is None or reference.list_date is None:
+            return f"listing age unverified for recent IPO (minimum {min_days} days required)"
+    return None
 
 
 @dataclass(frozen=True)
@@ -180,10 +218,9 @@ def universe_exclusion_reason(
     if ref is not None and ref.active is False:
         return "ticker not active (suspended or delisted)"
 
-    if ref is not None and ref.listed_days() is not None:
-        days = ref.listed_days()
-        if days is not None and days < MIN_LISTED_DAYS:
-            return f"listed fewer than {MIN_LISTED_DAYS} days on current exchange"
+    listing_reason = listing_age_exclusion_reason(sym, ref)
+    if listing_reason:
+        return listing_reason
 
     prev_vol = _prev_volume(snap) if snap else None
     cap_or_vol = _passes_market_cap_or_volume(

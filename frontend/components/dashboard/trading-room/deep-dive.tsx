@@ -44,6 +44,7 @@ import { SignalsBiasRationalePanel } from "@/components/signals/signals-bias-rat
 import { SignalsSetupRead } from "@/components/signals/signals-setup-read";
 import { SignalsLayerBreakdown } from "@/components/signals/signals-layer-breakdown";
 import { CausalNarrativePanel } from "@/components/signals/causal-narrative-panel";
+import { MarketContextPanel } from "@/components/signals/market-context-panel";
 import { TimeframeContextPanel } from "@/components/signals/timeframe-context-panel";
 import { SetupEvolutionPanel } from "@/components/signals/setup-evolution-panel";
 import { FullPriceChart, type ChartSignalOverlay } from "@/components/assistant/full-price-chart";
@@ -53,6 +54,7 @@ import { isExecutionStageEligibleForScenarioAdjust } from "@/lib/scenario/scenar
 import type { FeedBias, FeedCard, FeedState } from "@/lib/dashboard/trading-room/feed-model";
 import { parseLedgerGateSummary } from "@/lib/signal-evidence/ledger-gate-present";
 import { minRrForDeskMode, parseMarketEnvironment } from "@/lib/signal-evidence/market-environment-present";
+import { parseMarketContextFlags } from "@/lib/signal-evidence/market-context-present";
 import { parseApiDecisionState } from "@/lib/signal-evidence/risk-stack-present";
 import type { TradeDecisionState } from "@/lib/signal-evidence/trade-decision";
 
@@ -788,6 +790,10 @@ export function DeepDive({
     () => (composite ? parseMarketEnvironment(composite as Record<string, unknown>) : null),
     [composite]
   );
+  const marketContextFlags = useMemo(
+    () => (composite ? parseMarketContextFlags(composite as Record<string, unknown>) : null),
+    [composite]
+  );
   const deskMinRr = useMemo(
     () => minRrForDeskMode(marketEnvironment, activeLane),
     [marketEnvironment, activeLane]
@@ -1283,6 +1289,14 @@ export function DeepDive({
           insight={insight}
           ledgerGates={ledgerGateSummary}
           testId="trading-room-deep-dive-risk-stack"
+        />
+      ) : null}
+
+      {marketContextFlags ? (
+        <MarketContextPanel
+          flags={marketContextFlags}
+          compact
+          testId="trading-room-deep-dive-market-context"
         />
       ) : null}
 

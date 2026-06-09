@@ -14,7 +14,9 @@ from zoneinfo import ZoneInfo
 
 from stocvest.data.earnings_catalyst import match_earnings_catalyst
 from stocvest.data.earnings_calendar_fetch import index_earnings_by_symbol
+from stocvest.data.market_context_flags import gap_item_market_context_warning, resolve_market_context_flags
 from stocvest.data.models import EarningsEvent, NewsArticle, Snapshot
+from stocvest.data.ticker_reference import TickerReference
 from stocvest.signals.day_trading_scanner import PremarketGapCandidate
 from stocvest.signals.news_catalyst_detector import NewsCatalystCandidate, NewsCatalystDetector
 from stocvest.utils.logging import get_logger
@@ -84,6 +86,7 @@ def calculate_gap_quality_score(
     catalyst_narrative_score: int | None = None,
     catalyst_type: str | None = None,
     catalyst_sentiment: str | None = None,
+    cap_volume_for_mechanical_flow: bool = False,
 ) -> int:
     """
     Scanner gap quality: smooth saturating gap + volume, soft price liquidity, type-weighted catalyst.
@@ -105,6 +108,9 @@ def calculate_gap_quality_score(
 
     excess_vol = max(0.0, vv - 1.0)
     vol_pts = _VOL_MAX * (1.0 - math.exp(-excess_vol))
+    if cap_volume_for_mechanical_flow:
+        # IPO / index-flow windows: note volume but do not treat it as full conviction.
+        vol_pts = min(vol_pts, _VOL_MAX * 0.4)
 
     if px < 5.0:
         price_pts = 0.0
@@ -584,3 +590,38 @@ def build_gap_intelligence_items(
     _dedupe_shared_catalyst_headlines(items)
     items.sort(key=lambda row: (row["has_catalyst"], row["gap_quality_score"]), reverse=True)
     return items[:10]
+
+
+def enrich_gap_items_with_market_context(
+    items: list[dict[str, Any]],
+    *,
+    references_by_symbol: dict[str, TickerReference | None] | None = None,
+) -> list[dict[str, Any]]:
+    """Attach IPO/index context and down-rank volume on unseasoned or inclusion-window names."""
+    refs = references_by_symbol or {}
+    for row in items:
+        sym = str(row.get("symbol") or "").strip().upper()
+        if not sym:
+            continue
+        flags = resolve_market_context_flags(sym, reference=refs.get(sym))
+        row["market_context_flags"] = flags
+        warn = gap_item_market_context_warning(flags)
+        if warn:
+            row["market_context_warning"] = warn
+        if flags.get("ipo_unseasoned") or flags.get("index_inclusion_window"):
+            cat = row.get("catalyst") if isinstance(row.get("catalyst"), dict) else None
+            cat_type = str(cat.get("category") or "") if cat else None
+            cat_sent = str(cat.get("sentiment") or "") if cat else None
+            narrative = int(cat.get("score") or 0) if cat and cat.get("score") is not None else None
+            row["gap_quality_score"] = calculate_gap_quality_score(
+                float(row.get("gap_pct") or 0.0),
+                float(row.get("volume_vs_avg") or 1.0),
+                bool(row.get("has_catalyst")),
+                float(row.get("current_price") or 0.0),
+                catalyst_narrative_score=narrative,
+                catalyst_type=cat_type or None,
+                catalyst_sentiment=cat_sent or None,
+                cap_volume_for_mechanical_flow=True,
+            )
+    items.sort(key=lambda row: (row.get("has_catalyst"), row.get("gap_quality_score")), reverse=True)
+    return items

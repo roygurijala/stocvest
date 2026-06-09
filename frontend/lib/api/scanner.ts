@@ -53,6 +53,13 @@ export interface GapIntelligenceItem {
    * the user can audit why the classifier could not pick.
    */
   mode_best_fit_reasons?: string[];
+  /** IPO / index-inclusion caveat from backend market-context flags (optional). */
+  market_context_warning?: string | null;
+  market_context_flags?: {
+    ipo_unseasoned?: boolean;
+    index_inclusion_window?: boolean;
+    warnings?: string[];
+  };
 }
 
 export interface ConfluenceSignalChip {

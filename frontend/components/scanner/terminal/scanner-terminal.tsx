@@ -42,6 +42,7 @@ import { ScannerTerminalQuietPanel } from "@/components/scanner/terminal/scanner
 import type { ScannerScanSummary } from "@/lib/scanner-scan-summary";
 import type { ScannerSynthesis } from "@/lib/scanner-synthesis";
 import type { SectorRotationChip } from "@/lib/market-context/types";
+import type { IpoEcosystemPayload } from "@/lib/api/fetch-ipo-ecosystems";
 
 type Props = {
   overview: ScannerOverview;
@@ -54,6 +55,7 @@ type Props = {
   scanSummary?: ScannerScanSummary | null;
   synthesis?: ScannerSynthesis | null;
   sectorRotation?: SectorRotationChip[];
+  ipoEcosystems?: IpoEcosystemPayload[];
   showPreviewBadge?: boolean;
   onRefresh?: () => void;
   refreshing?: boolean;
@@ -365,6 +367,7 @@ export function ScannerTerminal({
   scanSummary = null,
   synthesis = null,
   sectorRotation = [],
+  ipoEcosystems = [],
   showPreviewBadge = false,
   onRefresh,
   refreshing = false,
@@ -403,9 +406,10 @@ export function ScannerTerminal({
         nearQualification,
         dayTradingSurfaces,
         watchlistSymbols: watchSet,
-        sectorRotation
+        sectorRotation,
+        ipoEcosystems
       }),
-    [filters, overview, swingDesk, dayDesk, nearQualification, dayTradingSurfaces, watchSet, sectorRotation]
+    [filters, overview, swingDesk, dayDesk, nearQualification, dayTradingSurfaces, watchSet, sectorRotation, ipoEcosystems]
   );
 
   const feedStateForHint = (state: ScannerTerminalSignalRow["state"]) =>

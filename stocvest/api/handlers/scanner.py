@@ -10,6 +10,8 @@ from stocvest.api.http_route import http_route_descriptor
 from stocvest.api.legal_copy import API_SIGNAL_DISCLAIMER
 from stocvest.api.response import bad_request, internal_error, not_found, ok
 from stocvest.api.services.gap_intelligence_news import collect_news_for_gap_intelligence
+from stocvest.api.services.intraday_listing_age_filter import filter_bars_by_listing_age
+from stocvest.api.services.ipo_ecosystems_api import build_ipo_ecosystems_payload
 from stocvest.api.handlers.desk import desk_refresh_handler
 from stocvest.api.handlers.laggard import scanner_laggards_handler
 from stocvest.api.services.scanner_response_cache import build_cache_key, cache_get, cache_set
@@ -41,7 +43,8 @@ from stocvest.signals.day_trading_scanner import (
     dynamic_gap_candidates_from_snapshots,
     dynamic_gap_candidates_from_snapshots_with_stats,
 )
-from stocvest.signals.gap_intelligence import build_gap_intelligence_items
+from stocvest.data.ticker_reference_cache import get_ticker_reference
+from stocvest.signals.gap_intelligence import build_gap_intelligence_items, enrich_gap_items_with_market_context
 from stocvest.signals.morning_brief import build_morning_brief_payload
 from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
@@ -246,6 +249,7 @@ def handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
         "POST /v1/scanner/briefing": scanner_briefing_handler,
         "POST /v1/scanner/gap-intelligence": scanner_gap_intelligence_handler,
         "GET /v1/scanner/laggards": scanner_laggards_handler,
+        "GET /v1/scanner/ipo-ecosystems": scanner_ipo_ecosystems_handler,
         "POST /v1/desk/refresh": desk_refresh_handler,
     }
     target = routes.get(route)
@@ -336,6 +340,13 @@ def scanner_intraday_handler(event: LambdaEvent, context: LambdaContext) -> dict
                 return bad_request("bars_by_symbol entries must map symbol strings to bar arrays.")
             bars_by_symbol[symbol.upper()] = [parse_bar(item, symbol.upper()) for item in bars]
         liq = parse_liquidity_by_symbol_payload(payload.get("liquidity_by_symbol"))
+        settings = get_settings()
+
+        async def _filtered_bars() -> dict[str, list[Bar]]:
+            async with PolygonClient(api_key=settings.polygon_api_key) as client:
+                return await filter_bars_by_listing_age(client, bars_by_symbol)
+
+        bars_by_symbol = asyncio.run(_filtered_bars())
         setups = IntradaySetupScanner(min_score=min_score).scan(
             bars_by_symbol, liquidity_by_symbol=liq, limit=limit
         )
@@ -467,6 +478,13 @@ async def _gap_intelligence_async(payload: dict[str, Any], user_id: str | None) 
                 await _enrich_gap_company_names(client, items)
             except Exception as exc:  # noqa: BLE001 — best effort, never block card rendering
                 _LOG.warning("gap_intelligence company_name_enrichment_failed err=%s", str(exc)[:200])
+            try:
+                refs: dict[str, Any] = {}
+                for sym in gap_symbols[: _GAP_INTEL_TOP_N]:
+                    refs[sym] = await get_ticker_reference(client, sym)
+                items = enrich_gap_items_with_market_context(items, references_by_symbol=refs)
+            except Exception as exc:  # noqa: BLE001
+                _LOG.warning("gap_intelligence market_context_failed err=%s", str(exc)[:200])
     except Exception as exc:  # noqa: BLE001 — fallback to snapshot-only cards when Polygon client cannot initialize
         _LOG.warning("gap_intelligence enrichment_transport_unavailable err=%s; using snapshot-only items", str(exc)[:200])
     return ok(
@@ -479,6 +497,13 @@ async def _gap_intelligence_async(payload: dict[str, Any], user_id: str | None) 
             "snapshot_rows_loaded": len(snapshots),
         }
     )
+
+
+def scanner_ipo_ecosystems_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    """GET /v1/scanner/ipo-ecosystems — curated IPO exposure baskets for scanner On radar."""
+    _ = context
+    _ = build_request_context(event)
+    return ok(build_ipo_ecosystems_payload())
 
 
 def scanner_gap_intelligence_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:

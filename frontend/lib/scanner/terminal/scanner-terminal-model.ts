@@ -3,8 +3,10 @@
  * Reuses Trading Room feed cards + existing scanner/desk contracts.
  */
 
+import type { IpoEcosystemPayload } from "@/lib/api/fetch-ipo-ecosystems";
 import type { DeskQuietLeader, DeskTodayData } from "@/lib/api/desk-today";
 import type { GapIntelligenceItem, IntradaySetupPayload } from "@/lib/api/scanner";
+import { buildIpoEcosystemRadarGroups } from "@/lib/scanner/terminal/scanner-terminal-ipo-themes";
 import {
   buildFeedCards,
   type FeedBias,
@@ -52,6 +54,7 @@ export type ScannerTerminalGapRow = {
   catalystDescription: string | null;
   hasCatalyst: boolean;
   noCatalystWarning: string | null;
+  marketContextWarning: string | null;
   fillWatchReason: string;
   monitorNote: string;
   lane: FeedLane | "either";
@@ -130,6 +133,7 @@ function gapStatusLabel(item: GapIntelligenceItem): string {
 function gapNote(item: GapIntelligenceItem): string | null {
   const catalyst = item.catalyst?.headline?.trim() || item.catalyst?.article_description?.trim();
   if (catalyst) return catalyst;
+  if (item.market_context_warning?.trim()) return item.market_context_warning.trim();
   if (item.no_catalyst_warning?.trim()) return item.no_catalyst_warning.trim();
   return item.company_name?.trim() || null;
 }
@@ -188,6 +192,7 @@ export function buildGapRows(
       catalystDescription: item.catalyst?.article_description?.trim() || null,
       hasCatalyst: item.has_catalyst,
       noCatalystWarning: item.no_catalyst_warning?.trim() || null,
+      marketContextWarning: item.market_context_warning?.trim() || null,
       fillWatchReason: gapFillWatchReason(item),
       monitorNote: gapMonitorNote(item),
       lane: gapLane(item)
@@ -326,6 +331,7 @@ export type BuildScannerTerminalInput = {
   dayTradingSurfaces: boolean;
   watchlistSymbols: Set<string>;
   sectorRotation?: SectorRotationChip[];
+  ipoEcosystems?: IpoEcosystemPayload[];
 };
 
 export type ScannerTerminalSections = {
@@ -422,8 +428,9 @@ export function buildScannerTerminalSections(input: BuildScannerTerminalInput): 
     watchlistSymbols: input.watchlistSymbols
   });
   const sectorThemes = buildSectorThemeGroups(input.sectorRotation ?? [], funnelSymbols);
+  const ipoThemes = buildIpoEcosystemRadarGroups(input.ipoEcosystems);
   const radarBase = buildRadarGroups(input.swingDesk, input.dayDesk, filters.mode);
-  const radar = [...sectorThemes, ...radarBase].slice(0, 6);
+  const radar = [...ipoThemes, ...sectorThemes, ...radarBase].slice(0, 6);
 
   return {
     gaps,

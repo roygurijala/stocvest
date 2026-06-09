@@ -116,6 +116,17 @@ def test_recent_listing_blocked() -> None:
     assert "90 days" in reason
 
 
+def test_known_ipo_ticker_blocked_without_reference() -> None:
+    snap = _snap("SPCX")
+    reason = universe_exclusion_reason(
+        "SPCX",
+        UniverseEligibilityContext(snapshot=snap, reference=None),
+        mode="day",
+    )
+    assert reason is not None
+    assert "unverified" in reason.lower() or "90 days" in reason
+
+
 def test_micro_cap_chinese_adr_blocked_by_reference() -> None:
     ref = TickerReference(
         symbol="ADR1",

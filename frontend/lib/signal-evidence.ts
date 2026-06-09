@@ -20,6 +20,10 @@ import {
   type MarketEnvironmentPayload
 } from "@/lib/signal-evidence/market-environment-present";
 import {
+  parseMarketContextFlags,
+  type MarketContextFlags
+} from "@/lib/signal-evidence/market-context-present";
+import {
   buildPlanningGatesClient,
   parsePlanningGates,
   type PlanningGatesPayload
@@ -283,6 +287,8 @@ export interface SignalEvidenceData {
   planningGates?: PlanningGatesPayload | null;
   /** Layer 0 VIX environment policy from composite (`market_environment`). */
   marketEnvironment?: MarketEnvironmentPayload | null;
+  /** Advisory IPO / index-inclusion flags from composite (`market_context_flags`). */
+  marketContextFlags?: MarketContextFlags | null;
   /** Layer 3 ledger gate checklist from composite (`gate_status` / `ledger_qualified`). */
   ledgerGateSummary?: import("@/lib/signal-evidence/ledger-gate-present").LedgerGateSummary | null;
   /** Authoritative tri-state from composite API (`decision_state`), when present. */
@@ -1988,6 +1994,7 @@ export function applySwingCompositeEnrichment(
   const setupJudgment = parseSetupJudgment(body) ?? evidence.setupJudgment ?? null;
   const modeForGates: "day" | "swing" = cm === "day" ? "day" : "swing";
   const marketEnvironment = parseMarketEnvironment(body);
+  const marketContextFlags = parseMarketContextFlags(body);
   const ledgerGateSummary = parseLedgerGateSummary(body) ?? evidence.ledgerGateSummary ?? null;
   const apiDecisionState = parseApiDecisionState(body.decision_state) ?? evidence.apiDecisionState ?? null;
   const planningGates =
@@ -2021,6 +2028,7 @@ export function applySwingCompositeEnrichment(
     executionQuality: executionQuality ?? evidence.executionQuality ?? null,
     planningGates: planningGates ?? evidence.planningGates ?? null,
     marketEnvironment: marketEnvironment ?? evidence.marketEnvironment ?? null,
+    marketContextFlags: marketContextFlags ?? evidence.marketContextFlags ?? null,
     ledgerGateSummary,
     apiDecisionState,
     compositePayload: body,

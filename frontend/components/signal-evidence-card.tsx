@@ -22,6 +22,7 @@ import {
   evidenceLayerInsightText
 } from "@/lib/signal-evidence/layer-plain-english";
 import { CausalNarrativePanel } from "@/components/signals/causal-narrative-panel";
+import { MarketContextPanel } from "@/components/signals/market-context-panel";
 import { TimeframeContextPanel } from "@/components/signals/timeframe-context-panel";
 import { resolveCausalNarrative } from "@/lib/signal-evidence/causal-narrative";
 import { resolveTimeframeContext } from "@/lib/signal-evidence/timeframe-context";
@@ -556,6 +557,10 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
           planningGates={evidence.planningGates}
           ledgerGates={evidence.ledgerGateSummary}
         />
+      ) : null}
+
+      {evidence.marketContextFlags ? (
+        <MarketContextPanel flags={evidence.marketContextFlags} compact testId="signal-evidence-market-context" />
       ) : null}
 
       {evidence.planningGates ? <PlanningGatesPanel gates={evidence.planningGates} /> : null}

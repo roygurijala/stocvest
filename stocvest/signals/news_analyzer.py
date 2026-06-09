@@ -15,6 +15,7 @@ from stocvest.signals.analyst_rating_score import (
     compute_structured_analyst_score,
 )
 from stocvest.signals.news_copy import no_qualifying_news_reasoning
+from stocvest.signals.news_ipo_narrative import classify_ipo_narrative_adjustment
 from stocvest.signals.news_sentiment import (
     DAY_NEWS_LOOKBACK_HOURS,
     SWING_NEWS_LOOKBACK_HOURS,
@@ -247,6 +248,8 @@ class NewsAnalyzer:
         sentiments: list[float] = []
         catalyst_type: str | None = None
         catalyst_headline: str | None = None
+        ipo_competitive_filtered = 0
+        ipo_stake_boosted = 0
 
         for art in quality:
             title = str(art.get("title") or "")
@@ -281,6 +284,12 @@ class NewsAnalyzer:
             combined = w_time * rel * _article_benzinga_weight(art)
             if mode == "swing":
                 combined *= swing_recency_weight(pub.astimezone(timezone.utc), now)
+            ipo_adj = classify_ipo_narrative_adjustment(sym, title, desc)
+            if ipo_adj.tag == "ipo_narrative_competitive":
+                ipo_competitive_filtered += 1
+            elif ipo_adj.tag == "ipo_narrative_stake_repricing":
+                ipo_stake_boosted += 1
+            combined *= ipo_adj.weight_multiplier
             weights.append(combined)
             sentiments.append(sent)
 
@@ -333,9 +342,24 @@ class NewsAnalyzer:
             chips.append(f"headline {headline_avg:+.2f} · analyst {structured.score:+.2f}")
         if catalyst_type:
             chips.append(f"Catalyst: {catalyst_type}")
+        if ipo_competitive_filtered:
+            chips.append(f"IPO narrative downweighted ({ipo_competitive_filtered})")
+        if ipo_stake_boosted:
+            chips.append(f"Stake repricing noted ({ipo_stake_boosted})")
         if benzinga_data and benzinga_data.wim:
             chips.append("WIM context")
         chips.extend(analyst_chips)
+
+        reasoning = (
+            f"News score {score}/100 from {len(quality)} quality articles "
+            f"(blended sentiment {weighted_avg:+.2f}; "
+            f"headline {headline_avg:+.2f}, analyst {structured.score:+.2f})."
+        )
+        if ipo_competitive_filtered:
+            reasoning += (
+                f" {ipo_competitive_filtered} headline(s) dampened as IPO competitive narrative "
+                "(not fundamental issuer news)."
+            )
 
         return _fill_benzinga_fields(
             NewsLayerResult(
@@ -351,11 +375,7 @@ class NewsAnalyzer:
                 wim_summary=(benzinga_data.wim.reason if benzinga_data and benzinga_data.wim else None),
                 data_state="fresh",
                 analyst_feed_state=analyst_feed_state,
-                reasoning=(
-                    f"News score {score}/100 from {len(quality)} quality articles "
-                    f"(blended sentiment {weighted_avg:+.2f}; "
-                    f"headline {headline_avg:+.2f}, analyst {structured.score:+.2f})."
-                ),
+                reasoning=reasoning,
                 chips=chips,
             ),
             benzinga_data,

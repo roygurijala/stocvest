@@ -10,6 +10,7 @@ import type { ScannerEvaluationTraceRow } from "@/lib/scanner-setups-response";
 import { buildScannerScanSummary, nearRowsFromSetups } from "@/lib/scanner-scan-summary";
 import { useDeskToday } from "@/lib/hooks/use-desk-today";
 import { useDashboardPayload } from "@/lib/hooks/use-dashboard-payload";
+import { fetchIpoEcosystems, type IpoEcosystemPayload } from "@/lib/api/fetch-ipo-ecosystems";
 import { parseSectorRotationEnvelope } from "@/lib/scanner/terminal/scanner-terminal-sector-themes";
 import { useTheme } from "@/lib/theme-provider";
 import { spacing, typography } from "@/lib/design-system";
@@ -43,6 +44,7 @@ export function ScannerTerminalPreviewContent({
   const [watchlistSymbols, setWatchlistSymbols] = useState<string[]>([]);
   const [evaluationTrace, setEvaluationTrace] = useState<ScannerEvaluationTraceRow[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [ipoEcosystems, setIpoEcosystems] = useState<IpoEcosystemPayload[]>([]);
 
   const { data: swingDeskRes } = useDeskToday("swing");
   const { data: dayDeskRes } = useDeskToday("day", { fallbackData: undefined });
@@ -68,6 +70,12 @@ export function ScannerTerminalPreviewContent({
     try {
       const trace = await fetchScannerEvaluationTraceClient(scannerSetupMode, 24);
       setEvaluationTrace(trace);
+    } catch {
+      /* ignore */
+    }
+    try {
+      const ecosystems = await fetchIpoEcosystems();
+      setIpoEcosystems(ecosystems);
     } catch {
       /* ignore */
     }
@@ -127,6 +135,7 @@ export function ScannerTerminalPreviewContent({
       scanSummary={scanSummary}
       synthesis={overview.scannerSynthesis ?? null}
       sectorRotation={sectorRotation}
+      ipoEcosystems={ipoEcosystems}
       showPreviewBadge={showPreviewBadge}
       onRefresh={() => void loadScanner({ silent: true })}
       refreshing={refreshing}
