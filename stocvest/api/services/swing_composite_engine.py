@@ -65,6 +65,7 @@ from stocvest.data.polygon_client import PolygonClient, PolygonError
 from stocvest.data.symbol_normalize import to_polygon_symbol
 from stocvest.data.corporate_actions import recent_split_symbols, symbols_with_frequent_reverse_splits
 from stocvest.data.market_context_flags import resolve_market_context_flags
+from stocvest.signals.market_context_composite_dampener import apply_market_context_composite_dampening
 from stocvest.data.symbol_universe_eligibility import UniverseEligibilityContext, universe_exclusion_reason
 from stocvest.data.ticker_reference_cache import get_ticker_reference
 from stocvest.signals.confluence import ConfluenceDetector, confluence_result_to_response_fields, normalize_direction
@@ -357,6 +358,14 @@ async def build_swing_composite_response(
         alignment.technical_direction,
     )
 
+    ctx_flags = resolve_market_context_flags(sym, reference=ticker_ref)
+    composite, damp_meta = apply_market_context_composite_dampening(
+        composite,
+        ctx_flags,
+        bullish_threshold=float(swing_composite.bullish_threshold),
+        bearish_threshold=float(swing_composite.bearish_threshold),
+    )
+
     composite, weekly_timeframe, timeframe_alignment = apply_multi_timeframe_to_composite(
         composite,
         technical_verdict=str(tech.verdict or "neutral"),
@@ -477,6 +486,8 @@ async def build_swing_composite_response(
         "conflicted_layers": list(composite.conflicted_layers or []),
         "market_context_flags": resolve_market_context_flags(sym, reference=ticker_ref),
     }
+    if damp_meta:
+        response_body["market_context_dampening"] = damp_meta
     response_body["alignment"] = alignment_to_response_dict(alignment)
     response_body.update(composite_direction_fields(response_body))
     response_body["weekly_timeframe"] = weekly_timeframe

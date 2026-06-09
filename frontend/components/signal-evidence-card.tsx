@@ -560,7 +560,12 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
       ) : null}
 
       {evidence.marketContextFlags ? (
-        <MarketContextPanel flags={evidence.marketContextFlags} compact testId="signal-evidence-market-context" />
+        <MarketContextPanel
+          flags={evidence.marketContextFlags}
+          dampening={evidence.marketContextDampening}
+          compact
+          testId="signal-evidence-market-context"
+        />
       ) : null}
 
       {evidence.planningGates ? <PlanningGatesPanel gates={evidence.planningGates} /> : null}

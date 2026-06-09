@@ -4,6 +4,7 @@ import { InfoTip } from "@/components/info-tip";
 import { borderRadius, spacing, surfaceGlowClassName } from "@/lib/design-system";
 import {
   marketContextHeadline,
+  type MarketContextDampening,
   type MarketContextFlags
 } from "@/lib/signal-evidence/market-context-present";
 import { useTheme } from "@/lib/theme-provider";
@@ -14,11 +15,17 @@ const MARKET_CONTEXT_TIP =
 
 type Props = {
   flags: MarketContextFlags;
+  dampening?: MarketContextDampening | null;
   compact?: boolean;
   testId?: string;
 };
 
-export function MarketContextPanel({ flags, compact = false, testId = "market-context-panel" }: Props) {
+export function MarketContextPanel({
+  flags,
+  dampening = null,
+  compact = false,
+  testId = "market-context-panel"
+}: Props) {
   const { colors } = useTheme();
   if (flags.warnings.length === 0 && !flags.ipo_unseasoned && !flags.index_inclusion_window) {
     return null;
@@ -67,6 +74,13 @@ export function MarketContextPanel({ flags, compact = false, testId = "market-co
             </span>
           ))}
         </div>
+      ) : null}
+      {dampening && dampening.dampened_layers.length > 0 ? (
+        <p className="m-0 mt-2 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
+          Composite down-weighted{" "}
+          {dampening.dampened_layers.join(", ")} layer{dampening.dampened_layers.length === 1 ? "" : "s"} for
+          mechanical-flow risk.
+        </p>
       ) : null}
       {flags.warnings.length > 0 ? (
         <ul className="m-0 mt-3 list-disc space-y-1.5 pl-5 text-sm leading-relaxed" style={{ color: colors.text }}>

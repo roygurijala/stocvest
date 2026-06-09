@@ -92,7 +92,7 @@ def test_gap_volume_capped_for_mechanical_flow() -> None:
     assert capped < full
 
 
-def test_enrich_gap_items_adds_warning_for_unseasoned_listing() -> None:
+def test_enrich_gap_items_excludes_unseasoned_listed_issuer() -> None:
     items = [
         {
             "symbol": "SPCX",
@@ -104,9 +104,7 @@ def test_enrich_gap_items_adds_warning_for_unseasoned_listing() -> None:
         }
     ]
     out = enrich_gap_items_with_market_context(items, references_by_symbol={"SPCX": None})
-    assert out[0].get("market_context_warning")
-    assert out[0]["gap_quality_score"] < 80
-
+    assert out == []
 
 def test_get_ecosystem_by_entity() -> None:
     assert get_ecosystem("anthropic") is ANTHROPIC_ECOSYSTEM
