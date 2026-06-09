@@ -187,6 +187,7 @@ function GapRow({
   colors: ReturnType<typeof useTheme>["colors"];
 }) {
   const pctTone = row.gapPct >= 0 ? colors.bullish : colors.bearish;
+  const chrome = gapCardChrome(row, selected, colors);
   return (
     <button
       type="button"
@@ -194,7 +195,10 @@ function GapRow({
       onClick={onSelect}
       style={{
         padding: spacing[3],
-        ...gapCardChrome(row, selected, colors)
+        ...chrome,
+        ...(row.isIpoWatch
+          ? { borderStyle: "dashed", borderColor: "rgba(245,158,11,0.45)", background: "rgba(245,158,11,0.06)" }
+          : null)
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: spacing[2] }}>
@@ -388,6 +392,7 @@ export function ScannerTerminal({
   const narrowLayout = isMobile;
   const [openSections, setOpenSections] = useState({
     gaps: true,
+    ipoWatch: true,
     actionable: true,
     developing: true,
     radar: true
@@ -400,6 +405,7 @@ export function ScannerTerminal({
       buildScannerTerminalSections({
         filters,
         gapIntelligence: overview.gapIntelligence,
+        gapIpoWatch: overview.gapIpoWatch,
         setups: overview.setups,
         swingDesk,
         dayDesk,
@@ -422,7 +428,7 @@ export function ScannerTerminal({
 
   const allVisibleSymbols = useMemo(() => {
     const set = new Set<string>();
-    for (const g of sections.gaps) set.add(g.symbol);
+    for (const g of [...sections.gaps, ...sections.ipoWatch]) set.add(g.symbol);
     for (const r of [...sections.actionable, ...sections.developing]) set.add(r.symbol);
     return set;
   }, [sections]);
@@ -446,7 +452,7 @@ export function ScannerTerminal({
   const detailPanel = (
     <ScannerDetailPanel
       selection={selection}
-      gaps={sections.gaps}
+      gaps={[...sections.gaps, ...sections.ipoWatch]}
       actionable={sections.actionable}
       developing={sections.developing}
       radar={sections.radar}
@@ -461,7 +467,9 @@ export function ScannerTerminal({
   const detailAccent = useMemo(() => {
     if (!selection) return colors.accent;
     if (selection.kind === "gap") {
-      const row = sections.gaps.find((g) => g.symbol === selection.symbol);
+      const row =
+        sections.gaps.find((g) => g.symbol === selection.symbol) ??
+        sections.ipoWatch.find((g) => g.symbol === selection.symbol);
       return selectionAccentColor({ kind: "gap", gapPct: row?.gapPct }, colors);
     }
     if (selection.kind === "radar") {
@@ -657,6 +665,36 @@ export function ScannerTerminal({
               </div>
             ) : null}
           </section>
+
+          {sections.ipoWatch.length > 0 ? (
+            <section>
+              <SectionHeader
+                title="IPO watch — unscored"
+                count={sections.ipoWatch.length}
+                open={openSections.ipoWatch}
+                onToggle={() => toggleSection("ipoWatch")}
+                accent={colors.caution}
+                colors={colors}
+              />
+              {openSections.ipoWatch ? (
+                <div style={{ display: "grid", gap: spacing[2] }}>
+                  <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45 }}>
+                    New listings excluded from ranked movers. Gaps shown for monitoring only — not evaluated by the signal
+                    engine.
+                  </p>
+                  {sections.ipoWatch.map((row) => (
+                    <GapRow
+                      key={`ipo-${row.symbol}`}
+                      row={row}
+                      selected={selection?.kind === "gap" && selection.symbol === row.symbol}
+                      onSelect={() => setSelection({ kind: "gap", symbol: row.symbol })}
+                      colors={colors}
+                    />
+                  ))}
+                </div>
+              ) : null}
+            </section>
+          ) : null}
 
           {sections.actionable.length > 0 ? (
             <section>

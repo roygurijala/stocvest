@@ -1999,6 +1999,7 @@ export function applySwingCompositeEnrichment(
   const modeForGates: "day" | "swing" = cm === "day" ? "day" : "swing";
   const marketEnvironment = parseMarketEnvironment(body);
   const marketContextFlags = parseMarketContextFlags(body);
+  const marketContextDampening = parseMarketContextDampening(body);
   const ledgerGateSummary = parseLedgerGateSummary(body) ?? evidence.ledgerGateSummary ?? null;
   const apiDecisionState = parseApiDecisionState(body.decision_state) ?? evidence.apiDecisionState ?? null;
   const planningGates =

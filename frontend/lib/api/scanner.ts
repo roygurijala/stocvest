@@ -60,6 +60,10 @@ export interface GapIntelligenceItem {
     index_inclusion_window?: boolean;
     warnings?: string[];
   };
+  /** Unseasoned listed issuer in IPO Watch (unscored, not ranked). */
+  ipo_watch?: boolean;
+  unscored?: boolean;
+  ipo_watch_note?: string | null;
 }
 
 export interface ConfluenceSignalChip {
@@ -184,6 +188,8 @@ export type WatchlistDashboardStatus = {
 
 export interface ScannerOverview {
   gapIntelligence: GapIntelligenceItem[];
+  /** Unseasoned IPO listings excluded from ranked gap movers. */
+  gapIpoWatch?: GapIntelligenceItem[];
   setups: IntradaySetupPayload[];
   morningBrief?: MorningBriefPayload;
   error?: string;
@@ -212,6 +218,7 @@ export interface ScannerOverview {
 /** Placeholder before deferred scanner RSC hydrates (Tier 1.C — `/dashboard`). */
 export const EMPTY_SCANNER_OVERVIEW: ScannerOverview = {
   gapIntelligence: [],
+  gapIpoWatch: [],
   setups: [],
   spyPct: null,
   qqqPct: null,
@@ -229,6 +236,8 @@ export const EMPTY_SCANNER_OVERVIEW: ScannerOverview = {
 /** Snapshot + gap pipeline through intraday setups (no morning briefing). */
 export type ScannerCoreData = {
   gapIntelligence: GapIntelligenceItem[];
+  /** Unseasoned IPO listings excluded from ranked gap movers. */
+  gapIpoWatch?: GapIntelligenceItem[];
   setups: IntradaySetupPayload[];
   spyPct: number | null;
   qqqPct: number | null;
@@ -349,6 +358,7 @@ export async function fetchScannerOverview(
   if (core.error) {
     return {
       gapIntelligence: [],
+  gapIpoWatch: [],
       setups: [],
       error: core.error,
       swingUniverseSymbolCount: null,
@@ -367,6 +377,7 @@ export async function fetchScannerOverview(
   }
   return {
     gapIntelligence: core.gapIntelligence,
+    gapIpoWatch: core.gapIpoWatch ?? [],
     setups: core.setups,
     morningBrief,
     error: undefined,

@@ -58,6 +58,8 @@ export type ScannerTerminalGapRow = {
   fillWatchReason: string;
   monitorNote: string;
   lane: FeedLane | "either";
+  isIpoWatch: boolean;
+  unscored: boolean;
 };
 
 export type ScannerTerminalSignalRow = {
@@ -165,6 +167,39 @@ export function gapMonitorNote(item: GapIntelligenceItem): string {
   return `Monitor for capitulation vs. dead-cat bounce — prev close $${prev.toFixed(2)} is the reclaim line.`;
 }
 
+function gapRowFromItem(item: GapIntelligenceItem, opts?: { ipoWatch?: boolean }): ScannerTerminalGapRow {
+  const ipoWatch = opts?.ipoWatch === true || item.ipo_watch === true;
+  const note = ipoWatch
+    ? item.ipo_watch_note?.trim() || gapNote(item) || "Not evaluated by signal engine"
+    : gapNote(item);
+  return {
+    symbol: item.symbol.trim().toUpperCase(),
+    company: item.company_name?.trim() || null,
+    gapPct: item.gap_pct,
+    gapDollars: item.gap_dollars,
+    prevClose: item.prev_close,
+    currentPrice: item.current_price,
+    volumeVsAvg: item.volume_vs_avg,
+    gapQualityScore: item.gap_quality_score,
+    statusLabel: ipoWatch ? "unscored" : gapStatusLabel(item),
+    note,
+    catalystHeadline: item.catalyst?.headline?.trim() || null,
+    catalystDescription: item.catalyst?.article_description?.trim() || null,
+    hasCatalyst: item.has_catalyst,
+    noCatalystWarning: item.no_catalyst_warning?.trim() || null,
+    marketContextWarning: item.market_context_warning?.trim() || null,
+    fillWatchReason: ipoWatch
+      ? "New listing — gap shown for monitoring only; composite and ranked movers exclude this symbol."
+      : gapFillWatchReason(item),
+    monitorNote: ipoWatch
+      ? "Add to watchlist to track; open symbol for context. Signal engine requires 90 sessions of listing history."
+      : gapMonitorNote(item),
+    lane: gapLane(item),
+    isIpoWatch: ipoWatch,
+    unscored: ipoWatch || item.unscored === true
+  };
+}
+
 export function buildGapRows(
   items: GapIntelligenceItem[],
   filters: ScannerTerminalFilters
@@ -177,26 +212,18 @@ export function buildGapRows(
       return matchesQuery(item.symbol, item.company_name, query);
     })
     .slice(0, 12)
-    .map((item) => ({
-      symbol: item.symbol.trim().toUpperCase(),
-      company: item.company_name?.trim() || null,
-      gapPct: item.gap_pct,
-      gapDollars: item.gap_dollars,
-      prevClose: item.prev_close,
-      currentPrice: item.current_price,
-      volumeVsAvg: item.volume_vs_avg,
-      gapQualityScore: item.gap_quality_score,
-      statusLabel: gapStatusLabel(item),
-      note: gapNote(item),
-      catalystHeadline: item.catalyst?.headline?.trim() || null,
-      catalystDescription: item.catalyst?.article_description?.trim() || null,
-      hasCatalyst: item.has_catalyst,
-      noCatalystWarning: item.no_catalyst_warning?.trim() || null,
-      marketContextWarning: item.market_context_warning?.trim() || null,
-      fillWatchReason: gapFillWatchReason(item),
-      monitorNote: gapMonitorNote(item),
-      lane: gapLane(item)
-    }));
+    .map((item) => gapRowFromItem(item));
+}
+
+export function buildIpoWatchRows(
+  items: GapIntelligenceItem[],
+  filters: ScannerTerminalFilters
+): ScannerTerminalGapRow[] {
+  const query = normQuery(filters.query);
+  return items
+    .filter((item) => matchesQuery(item.symbol, item.company_name, query))
+    .slice(0, 6)
+    .map((item) => gapRowFromItem(item, { ipoWatch: true }));
 }
 
 function rrFromSetup(setup: IntradaySetupPayload | undefined): number | null {
@@ -324,6 +351,7 @@ export function buildRadarGroups(
 export type BuildScannerTerminalInput = {
   filters: ScannerTerminalFilters;
   gapIntelligence: GapIntelligenceItem[];
+  gapIpoWatch?: GapIntelligenceItem[];
   setups: IntradaySetupPayload[];
   swingDesk: DeskTodayData | null | undefined;
   dayDesk: DeskTodayData | null | undefined;
@@ -336,6 +364,7 @@ export type BuildScannerTerminalInput = {
 
 export type ScannerTerminalSections = {
   gaps: ScannerTerminalGapRow[];
+  ipoWatch: ScannerTerminalGapRow[];
   actionable: ScannerTerminalSignalRow[];
   developing: ScannerTerminalSignalRow[];
   developingClosest: ScannerTerminalSignalRow[];
@@ -411,6 +440,9 @@ export function buildScannerTerminalSections(input: BuildScannerTerminalInput): 
   const developing = [...developingById.values()].slice(0, 16);
 
   const gaps = buildGapRows(input.gapIntelligence, filters).filter((g) => passesWatchlist(g.symbol));
+  const ipoWatch = buildIpoWatchRows(input.gapIpoWatch ?? [], filters).filter((g) =>
+    passesWatchlist(g.symbol)
+  );
 
   let actionableOut = actionable;
   let developingOut = developing;
@@ -434,6 +466,7 @@ export function buildScannerTerminalSections(input: BuildScannerTerminalInput): 
 
   return {
     gaps,
+    ipoWatch,
     actionable: actionableOut.slice(0, 12),
     developing: developingCapped,
     developingClosest: closest,

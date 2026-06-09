@@ -10,8 +10,8 @@ import {
 import { useTheme } from "@/lib/theme-provider";
 
 const MARKET_CONTEXT_TIP =
-  "Advisory flags when a symbol is unseasoned, in an index-inclusion window, or tied to a tracked IPO ecosystem. " +
-  "Does not change composite layer scores — use to sanity-check volume, news, and gap reads.";
+  "IPO and index-inclusion windows can distort sector, internals, and technical reads. " +
+  "When dampening is active, those layers contribute less weight — composite confidence is reduced, not hidden.";
 
 type Props = {
   flags: MarketContextFlags;
@@ -20,6 +20,10 @@ type Props = {
   testId?: string;
 };
 
+function layerLabel(layer: string): string {
+  return layer.charAt(0).toUpperCase() + layer.slice(1);
+}
+
 export function MarketContextPanel({
   flags,
   dampening = null,
@@ -27,7 +31,7 @@ export function MarketContextPanel({
   testId = "market-context-panel"
 }: Props) {
   const { colors } = useTheme();
-  if (flags.warnings.length === 0 && !flags.ipo_unseasoned && !flags.index_inclusion_window) {
+  if (flags.warnings.length === 0 && !flags.ipo_unseasoned && !flags.index_inclusion_window && !dampening?.active) {
     return null;
   }
 
@@ -40,6 +44,12 @@ export function MarketContextPanel({
     const role = flags.ecosystem_role ? flags.ecosystem_role.replace(/_/g, " ") : "exposure";
     pills.push(`${flags.ecosystem_entity} · ${role}`);
   }
+  if (dampening?.confidence_level === "reduced") pills.push("Composite confidence reduced");
+
+  const showScoreCompare =
+    dampening != null &&
+    dampening.undampened_score !== dampening.adjusted_score &&
+    dampening.dampened_layers.length > 0;
 
   return (
     <article
@@ -75,13 +85,42 @@ export function MarketContextPanel({
           ))}
         </div>
       ) : null}
-      {dampening && dampening.dampened_layers.length > 0 ? (
-        <p className="m-0 mt-2 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
-          Composite down-weighted{" "}
-          {dampening.dampened_layers.join(", ")} layer{dampening.dampened_layers.length === 1 ? "" : "s"} for
-          mechanical-flow risk.
+
+      {showScoreCompare ? (
+        <p className="m-0 mt-2 text-sm leading-relaxed" style={{ color: colors.text }} data-testid="market-context-score-compare">
+          Normal composite score would be{" "}
+          <span style={{ fontWeight: 700 }}>{dampening!.undampened_score}</span> · adjusted score is{" "}
+          <span style={{ fontWeight: 700 }}>{dampening!.adjusted_score}</span>
+          {dampening!.window_end ? (
+            <span style={{ color: colors.textMuted }}> (window through {dampening!.window_end})</span>
+          ) : null}
         </p>
       ) : null}
+
+      {dampening && dampening.dampened_layers.length > 0 ? (
+        <ul className="m-0 mt-3 list-none space-y-2 p-0" data-testid="market-context-dampened-layers">
+          {dampening.dampened_layers.map((row) => {
+            const pct = Math.round(row.multiplier * 100);
+            return (
+              <li
+                key={row.layer}
+                className="rounded-lg px-3 py-2 text-sm"
+                style={{
+                  background: "rgba(0,0,0,0.2)",
+                  border: "1px dashed rgba(245,158,11,0.45)",
+                  color: colors.textMuted
+                }}
+              >
+                <span style={{ fontWeight: 600, color: colors.text }}>{layerLabel(row.layer)}</span>
+                <span className="ml-2 text-xs uppercase tracking-wide" style={{ color: colors.caution }}>
+                  {pct}% weight
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+
       {flags.warnings.length > 0 ? (
         <ul className="m-0 mt-3 list-disc space-y-1.5 pl-5 text-sm leading-relaxed" style={{ color: colors.text }}>
           {flags.warnings.map((w) => (
@@ -90,7 +129,7 @@ export function MarketContextPanel({
         </ul>
       ) : null}
       <p className="m-0 mt-2 text-[10px] leading-snug" style={{ color: colors.textMuted }}>
-        Informational — does not change actionable gates
+        Informational — dampening reduces layer influence; actionable gates unchanged
       </p>
     </article>
   );
