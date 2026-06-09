@@ -34,6 +34,7 @@ import {
   formatTransitionTimelineRow
 } from "@/lib/setup-evolution-present";
 import type { FeedBias, FeedCard, FeedLane, FeedState } from "@/lib/dashboard/trading-room/feed-model";
+import { useSymbolName } from "@/lib/hooks/use-symbol-names";
 
 type Colors = ReturnType<typeof useTheme>["colors"];
 
@@ -210,6 +211,8 @@ function RailCard({
     card.lane === "day" ? roleAccents.dark.day.borderAccent : roleAccents.dark.swing.borderAccent;
   const pct = card.changePct;
   const pctTone = pct == null ? colors.textMuted : pct >= 0 ? colors.bullish : colors.bearish;
+  const autoCompany = useSymbolName(card.company ? undefined : card.symbol);
+  const company = card.company || autoCompany || null;
   return (
     <div
       style={{
@@ -248,9 +251,9 @@ function RailCard({
             ) : null}
           </span>
         </div>
-        {card.company ? (
+        {company ? (
           <span style={{ fontSize: 10, color: colors.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {card.company}
+            {company}
           </span>
         ) : null}
         <div style={{ display: "flex", alignItems: "center", gap: spacing[2], marginTop: 1 }}>
@@ -460,7 +463,13 @@ export function WatchlistRail({
 
   const cards = useMemo(() => {
     const list = symbols.map((sym) =>
-      cardFromWatchlist(sym, bySymbol[sym], snaps.get(sym), snaps.get(sym)?.company_name?.trim() || companyBySymbol.get(sym) || null, mode)
+      cardFromWatchlist(
+        sym,
+        bySymbol[sym],
+        snaps.get(sym),
+        snaps.get(sym)?.company_name?.trim() || companyBySymbol.get(sym) || null,
+        mode
+      )
     );
     return list.sort((a, b) => {
       const byState = STATE_RANK[a.state] - STATE_RANK[b.state];
@@ -585,7 +594,7 @@ export function WatchlistRail({
           </div>
         ) : cards.length === 0 ? (
           <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.5 }}>
-            Your watchlist is empty. Add symbols from any setup or use the search bar to start monitoring names.
+            Your watchlist is empty. Add symbols from any setup or use the header search to start monitoring names.
           </p>
         ) : (
           cards.map((card) => (

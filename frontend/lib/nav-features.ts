@@ -47,7 +47,13 @@ export const NAV_FEATURES = {
    * `brokerPortfolio` keep filtering correctly. Resolves to `brokersEnabled`
    * — do not set this independently; flip `brokersEnabled` (or the env var).
    */
-  brokerPortfolio: _brokers
+  brokerPortfolio: _brokers,
+  /**
+   * Scanner Terminal redesign (funnel sections + detail rail). Default on — `/dashboard/scanner`
+   * renders the terminal; legacy UI at `/dashboard/scanner/classic`. Roll back with
+   * `NEXT_PUBLIC_STOCVEST_FEATURE_SCANNER_TERMINAL=false`.
+   */
+  scannerTerminal: envFlag("SCANNER_TERMINAL", true)
 } as const;
 
 export type NavFeatureKey = keyof typeof NAV_FEATURES;
@@ -72,4 +78,8 @@ export function isDashboardNavItemEnabled(item: NavItemWithFeature): boolean {
  */
 export function brokersEnabled(): boolean {
   return NAV_FEATURES.brokersEnabled === true;
+}
+
+export function scannerTerminalEnabled(): boolean {
+  return NAV_FEATURES.scannerTerminal === true;
 }

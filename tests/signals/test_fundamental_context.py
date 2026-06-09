@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -22,7 +22,8 @@ from stocvest.signals.fundamental_context import (
 
 
 def _dt() -> datetime:
-    return datetime(2026, 5, 10, tzinfo=timezone.utc)
+    # Keep fixtures inside the analyst consensus window as calendar time advances.
+    return datetime.now(timezone.utc) - timedelta(days=7)
 
 
 def test_backdrop_positive_all_good() -> None:

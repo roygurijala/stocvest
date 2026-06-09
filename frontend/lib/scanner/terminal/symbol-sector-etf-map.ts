@@ -1,0 +1,163 @@
+/**
+ * Curated symbol → sector ETF map for Scanner Terminal theme grouping.
+ * Expand over time; unmapped symbols still appear in movers/structure cards.
+ */
+
+export const SYMBOL_TO_SECTOR_ETF: Record<string, string> = {
+  // Financials (XLF / KBE)
+  JPM: "XLF",
+  GS: "XLF",
+  BAC: "XLF",
+  WFC: "XLF",
+  MS: "XLF",
+  C: "XLF",
+  BLK: "XLF",
+  SCHW: "XLF",
+  AXP: "XLF",
+  V: "XLF",
+  MA: "XLF",
+  COF: "XLF",
+  USB: "XLF",
+  PNC: "XLF",
+  TFC: "XLF",
+
+  // Tech / software / semis (XLK / SMH)
+  MSFT: "XLK",
+  AMZN: "XLK",
+  CRM: "XLK",
+  NOW: "XLK",
+  NVDA: "XLK",
+  AMD: "XLK",
+  AVGO: "XLK",
+  ORCL: "XLK",
+  INTC: "XLK",
+  AAPL: "XLK",
+  ADBE: "XLK",
+  PANW: "XLK",
+  CRWD: "XLK",
+  SNOW: "XLK",
+  PLTR: "XLK",
+  MU: "XLK",
+  QCOM: "XLK",
+  TXN: "XLK",
+  LRCX: "XLK",
+  KLAC: "XLK",
+  ASML: "XLK",
+  DELL: "XLK",
+  HPQ: "XLK",
+  IBM: "XLK",
+  CSCO: "XLK",
+  UBER: "XLK",
+  ABNB: "XLK",
+
+  // Communication / media (XLC)
+  GOOGL: "XLC",
+  GOOG: "XLC",
+  META: "XLC",
+  NFLX: "XLC",
+  DIS: "XLC",
+  CMCSA: "XLC",
+  T: "XLC",
+  VZ: "XLC",
+  TMUS: "XLC",
+  SPOT: "XLC",
+  RDDT: "XLC",
+
+  // Consumer discretionary / EV (XLY)
+  TSLA: "XLY",
+  RIVN: "XLY",
+  LCID: "XLY",
+  F: "XLY",
+  GM: "XLY",
+  NKE: "XLY",
+  SBUX: "XLY",
+  MCD: "XLY",
+  HD: "XLY",
+  LOW: "XLY",
+  TGT: "XLY",
+  BKNG: "XLY",
+  MAR: "XLY",
+  ROST: "XLY",
+  CMG: "XLY",
+
+  // Energy (XLE)
+  XOM: "XLE",
+  CVX: "XLE",
+  OXY: "XLE",
+  COP: "XLE",
+  SLB: "XLE",
+  EOG: "XLE",
+  MPC: "XLE",
+  VLO: "XLE",
+  HAL: "XLE",
+  DVN: "XLE",
+
+  // Healthcare (XLV)
+  JNJ: "XLV",
+  UNH: "XLV",
+  PFE: "XLV",
+  LLY: "XLV",
+  ABBV: "XLV",
+  MRK: "XLV",
+  TMO: "XLV",
+  AMGN: "XLV",
+  GILD: "XLV",
+  ISRG: "XLV",
+  VRTX: "XLV",
+  MRNA: "XLV",
+
+  // Consumer staples (XLP)
+  WMT: "XLP",
+  PG: "XLP",
+  KO: "XLP",
+  COST: "XLP",
+  PEP: "XLP",
+  PM: "XLP",
+  MO: "XLP",
+  CL: "XLP",
+  MDLZ: "XLP",
+
+  // Industrials (XLI)
+  BA: "XLI",
+  CAT: "XLI",
+  DE: "XLI",
+  GE: "XLI",
+  HON: "XLI",
+  UPS: "XLI",
+  FDX: "XLI",
+  RTX: "XLI",
+  LMT: "XLI",
+  NOC: "XLI",
+  UNP: "XLI",
+  CSX: "XLI",
+
+  // Real estate (XLRE)
+  PLD: "XLRE",
+  AMT: "XLRE",
+  EQIX: "XLRE",
+  SPG: "XLRE",
+  O: "XLRE",
+
+  // Utilities (XLU)
+  NEE: "XLU",
+  DUK: "XLU",
+  SO: "XLU",
+  AEP: "XLU",
+
+  // Materials (XLB)
+  LIN: "XLB",
+  APD: "XLB",
+  SHW: "XLB",
+  FCX: "XLB",
+  NEM: "XLB",
+
+  // SaaS / cloud aliases often on desk
+  PATH: "XLK",
+  SMAR: "XLK",
+  MDB: "XLK",
+  OKTA: "XLK",
+  ZS: "XLK",
+  DDOG: "XLK",
+  NET: "XLK",
+  AXON: "XLK"
+};

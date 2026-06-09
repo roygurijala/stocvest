@@ -31,7 +31,11 @@ async function fetchChunk(chunk: string[]): Promise<void> {
       `/api/stocvest/market/symbol-names?symbols=${encodeURIComponent(chunk.join(","))}`,
       { cache: "no-store" }
     );
-    const data = (await res.json().catch(() => ({}))) as { names?: Record<string, string> };
+    const data = (await res.json().catch(() => ({}))) as {
+      names?: Record<string, string>;
+      degraded?: boolean;
+    };
+    if (data.degraded) return;
     const names = data.names ?? {};
     for (const sym of chunk) {
       RESOLVED.add(sym);
@@ -39,8 +43,7 @@ async function fetchChunk(chunk: string[]): Promise<void> {
       if (nm && typeof nm === "string") NAME_CACHE.set(sym, nm);
     }
   } catch {
-    // Mark resolved so we don't hammer a failing endpoint repeatedly this session.
-    for (const sym of chunk) RESOLVED.add(sym);
+    // Transient failure — leave unresolved so a later mount can retry.
   }
 }
 
