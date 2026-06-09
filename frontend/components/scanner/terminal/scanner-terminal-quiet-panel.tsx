@@ -47,8 +47,12 @@ export function ScannerTerminalQuietPanel({
       style={{
         padding: spacing[4],
         borderRadius: borderRadius.lg,
-        border: `1px solid ${colors.border}`,
-        background: "rgba(46,139,255,.06)"
+        borderTop: `1px solid rgba(255,255,255,0.06)`,
+        borderRight: `1px solid rgba(255,255,255,0.06)`,
+        borderLeft: `3px solid ${colors.accent}`,
+        borderBottom: `3px solid ${colors.accent}88`,
+        background: "linear-gradient(135deg, rgba(46,139,255,0.1) 0%, rgba(15,23,42,0.35) 100%)",
+        boxShadow: "0 6px 20px rgba(0,0,0,0.28)"
       }}
     >
       <p style={{ margin: 0, fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: colors.textMuted }}>

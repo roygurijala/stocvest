@@ -1,12 +1,13 @@
 "use client";
 
-import Link from "next/link";
+import type { ReactNode } from "react";
 import { AddToWatchlistButton } from "@/components/add-to-watchlist-button";
+import { OpenTradingRoomSetupButton } from "@/components/dashboard/trading-room/open-trading-room-setup-button";
+import { ScannerDetailKeyLevels } from "@/components/scanner/terminal/scanner-detail-key-levels";
 import { ScannerSymbolLookupPanel } from "@/components/scanner/terminal/scanner-symbol-lookup-panel";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import type { ThemeColors } from "@/lib/design-system";
 import type { ScannerEvaluationTraceRow } from "@/lib/scanner-setups-response";
-import { minRrForDeskMode } from "@/lib/signal-evidence/market-environment-present";
 import type { MarketEnvironmentPayload } from "@/lib/signal-evidence/market-environment-present";
 import type {
   ScannerTerminalGapRow,
@@ -37,10 +38,6 @@ function fmtPrice(n: number | null): string {
   return `$${n.toFixed(2)}`;
 }
 
-function dashboardHref(symbol: string, lane: "day" | "swing"): string {
-  return `/dashboard?symbol=${encodeURIComponent(symbol)}&lane=${lane}`;
-}
-
 function EmptyState({ colors }: { colors: ThemeColors }) {
   return (
     <div style={{ padding: spacing[6], textAlign: "center" }}>
@@ -48,8 +45,88 @@ function EmptyState({ colors }: { colors: ThemeColors }) {
         Select any symbol
       </p>
       <p style={{ margin: `${spacing[2]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.5 }}>
-        Tap a row, card, or theme to see a quick preview. Search a ticker to see why it is missing from the funnel.
+        Tap a row, card, or theme to see a quick preview. Use the header search to jump to any symbol&apos;s full read.
       </p>
+    </div>
+  );
+}
+
+function MetricChip({ label, value, tone, colors }: { label: string; value: string; tone: string; colors: ThemeColors }) {
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        flexDirection: "column",
+        gap: 2,
+        padding: `${spacing[1]} ${spacing[2]}`,
+        borderRadius: borderRadius.sm,
+        border: `1px solid ${colors.border}`,
+        background: colors.background,
+        minWidth: 72
+      }}
+    >
+      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: colors.textMuted }}>
+        {label}
+      </span>
+      <span style={{ fontSize: typography.scale.sm, fontWeight: 700, color: tone, fontVariantNumeric: "tabular-nums" }}>
+        {value}
+      </span>
+    </span>
+  );
+}
+
+function DetailBlock({
+  title,
+  children,
+  colors
+}: {
+  title: string;
+  children: ReactNode;
+  colors: ThemeColors;
+}) {
+  return (
+    <div
+      style={{
+        marginTop: spacing[3],
+        padding: spacing[3],
+        borderRadius: borderRadius.md,
+        border: `1px solid ${colors.border}`,
+        background: colors.surfaceMuted ?? colors.surface
+      }}
+    >
+      <p style={{ margin: 0, fontSize: 9.5, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: colors.textMuted }}>
+        {title}
+      </p>
+      <div style={{ marginTop: spacing[2], fontSize: typography.scale.xs, color: colors.text, lineHeight: 1.55 }}>{children}</div>
+    </div>
+  );
+}
+
+function PriceHero({
+  price,
+  changePct,
+  secondary,
+  colors
+}: {
+  price: number | null;
+  changePct: number | null;
+  secondary?: string | null;
+  colors: ThemeColors;
+}) {
+  const pctTone = changePct == null ? colors.textMuted : changePct >= 0 ? colors.bullish : colors.bearish;
+  return (
+    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: spacing[2], marginTop: spacing[2] }}>
+      <span style={{ fontSize: typography.scale.xl, fontWeight: 700, color: colors.text, fontVariantNumeric: "tabular-nums" }}>
+        {fmtPrice(price)}
+      </span>
+      {changePct != null ? (
+        <span style={{ fontSize: typography.scale.base, fontWeight: 700, color: pctTone, fontVariantNumeric: "tabular-nums" }}>
+          {fmtPct(changePct)}
+        </span>
+      ) : null}
+      {secondary ? (
+        <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, marginLeft: "auto" }}>{secondary}</span>
+      ) : null}
     </div>
   );
 }
@@ -57,8 +134,9 @@ function EmptyState({ colors }: { colors: ThemeColors }) {
 function CtaRow({ symbol, lane, colors }: { symbol: string; lane: "day" | "swing"; colors: ThemeColors }) {
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: spacing[2], marginTop: spacing[4] }}>
-      <Link
-        href={dashboardHref(symbol, lane)}
+      <OpenTradingRoomSetupButton
+        symbol={symbol}
+        lane={lane}
         style={{
           display: "inline-flex",
           alignItems: "center",
@@ -72,42 +150,9 @@ function CtaRow({ symbol, lane, colors }: { symbol: string; lane: "day" | "swing
         }}
       >
         Open full setup →
-      </Link>
+      </OpenTradingRoomSetupButton>
       <AddToWatchlistButton symbol={symbol} />
     </div>
-  );
-}
-
-function RrGateLine({
-  riskReward,
-  lane,
-  environment,
-  colors
-}: {
-  riskReward: number | null;
-  lane: "day" | "swing";
-  environment: MarketEnvironmentPayload | null;
-  colors: ThemeColors;
-}) {
-  if (riskReward == null) return null;
-  const minRr = minRrForDeskMode(environment, lane);
-  const clears = riskReward >= minRr;
-  return (
-    <p
-      style={{
-        margin: `${spacing[2]} 0 0`,
-        fontSize: typography.scale.xs,
-        color: clears ? colors.bullish : colors.caution,
-        fontWeight: 600
-      }}
-    >
-      {clears
-        ? `Clears ${minRr.toFixed(1)}:1 desk gate`
-        : `Below ${minRr.toFixed(1)}:1 desk gate (${riskReward.toFixed(1)}:1)`}
-      {environment && environment.environment_tier !== "normal"
-        ? ` · ${environment.environment_tier} session`
-        : ""}
-    </p>
   );
 }
 
@@ -129,6 +174,7 @@ export function ScannerDetailPanel({
         symbol={selection.symbol}
         lane={selection.lane}
         evaluationTrace={evaluationTrace}
+        environment={environment}
         colors={colors}
       />
     );
@@ -138,6 +184,8 @@ export function ScannerDetailPanel({
     const row = gaps.find((g) => g.symbol === selection.symbol);
     if (!row) return <EmptyState colors={colors} />;
     const lane = row.lane === "either" ? "swing" : row.lane;
+    const statusTone =
+      row.statusLabel === "accepted" ? colors.bullish : row.statusLabel === "fill watch" ? colors.caution : colors.textMuted;
     return (
       <div style={{ padding: spacing[4] }}>
         <p style={{ margin: 0, fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: colors.textMuted }}>
@@ -147,14 +195,57 @@ export function ScannerDetailPanel({
         {row.company ? (
           <p style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted }}>{row.company}</p>
         ) : null}
-        <p style={{ margin: `${spacing[3]} 0 0`, fontSize: typography.scale.sm, color: colors.text }}>
-          Gap {fmtPct(row.gapPct)} · <span style={{ color: colors.textMuted }}>{row.statusLabel}</span>
+        <PriceHero
+          price={row.currentPrice}
+          changePct={row.gapPct}
+          secondary={`Prev ${fmtPrice(row.prevClose)}`}
+          colors={colors}
+        />
+        <p style={{ margin: `${spacing[2]} 0 0`, fontSize: typography.scale.sm, color: colors.text }}>
+          Gap {row.gapDollars >= 0 ? "+" : ""}${Math.abs(row.gapDollars).toFixed(2)} from prev close ·{" "}
+          <span style={{ color: statusTone, fontWeight: 700 }}>{row.statusLabel}</span>
         </p>
-        {row.note ? (
-          <p style={{ margin: `${spacing[2]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.5 }}>
+
+        {row.catalystHeadline ? (
+          <DetailBlock title="Catalyst" colors={colors}>
+            <p style={{ margin: 0, fontWeight: 600 }}>{row.catalystHeadline}</p>
+            {row.catalystDescription ? <p style={{ margin: `${spacing[1]} 0 0`, color: colors.textMuted }}>{row.catalystDescription}</p> : null}
+          </DetailBlock>
+        ) : row.noCatalystWarning ? (
+          <DetailBlock title="Catalyst" colors={colors}>
+            <p style={{ margin: 0, color: colors.caution }}>{row.noCatalystWarning}</p>
+          </DetailBlock>
+        ) : null}
+
+        <DetailBlock title="Fill watch reasoning" colors={colors}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: spacing[2], marginBottom: spacing[2] }}>
+            <MetricChip
+              label="Volume"
+              value={`${row.volumeVsAvg.toFixed(1)}× avg`}
+              tone={row.volumeVsAvg >= 1.2 ? colors.bullish : row.volumeVsAvg >= 1 ? colors.caution : colors.textMuted}
+              colors={colors}
+            />
+          </div>
+          <p style={{ margin: 0 }}>{row.fillWatchReason}</p>
+        </DetailBlock>
+
+        <DetailBlock title="What to monitor" colors={colors}>
+          <p style={{ margin: 0 }}>{row.monitorNote}</p>
+        </DetailBlock>
+
+        <ScannerDetailKeyLevels
+          symbol={row.symbol}
+          lane={lane}
+          colors={colors}
+          environment={environment}
+        />
+
+        {row.note && row.note !== row.catalystHeadline ? (
+          <p style={{ margin: `${spacing[3]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.5 }}>
             {row.note}
           </p>
         ) : null}
+
         <CtaRow symbol={row.symbol} lane={lane} colors={colors} />
       </div>
     );
@@ -190,29 +281,49 @@ export function ScannerDetailPanel({
   const biasLabel = row.bias === "bull" ? "Bullish" : row.bias === "bear" ? "Bearish" : "Neutral";
   const align =
     row.alignment != null ? `${row.alignment.aligned}/${row.alignment.total} layers` : null;
+  const stateLabel = row.state === "actionable" ? "Actionable" : "Developing";
+  const stateColor = row.state === "actionable" ? colors.bullish : colors.caution;
+
+  const signalBody = (
+    <>
+      <p style={{ margin: `${spacing[2]} 0 0`, fontSize: typography.scale.sm, color: colors.text }}>
+        {biasLabel}
+        {align ? ` · ${align}` : ""}
+      </p>
+      {row.verdict ? (
+        <p style={{ margin: `${spacing[2]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.5 }}>
+          {row.verdict}
+        </p>
+      ) : null}
+      {row.triggers.length > 0 ? (
+        <ul style={{ margin: `${spacing[2]} 0 0`, paddingLeft: spacing[4], fontSize: typography.scale.xs, color: colors.textMuted }}>
+          {row.triggers.slice(0, 4).map((t) => (
+            <li key={t}>{t}</li>
+          ))}
+        </ul>
+      ) : null}
+      <ScannerDetailKeyLevels
+        symbol={row.symbol}
+        lane={row.lane}
+        colors={colors}
+        environment={environment}
+        bias={row.bias}
+      />
+    </>
+  );
 
   if (row.state === "actionable") {
     return (
       <div style={{ padding: spacing[4] }}>
-        <p style={{ margin: 0, fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: colors.bullish }}>
-          Actionable
+        <p style={{ margin: 0, fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: stateColor }}>
+          {stateLabel}
         </p>
         <h3 style={{ margin: `${spacing[2]} 0 0`, fontSize: typography.scale.lg, color: colors.text }}>{row.symbol}</h3>
-        <p style={{ margin: `${spacing[2]} 0 0`, fontSize: typography.scale.sm, color: colors.text }}>
-          {biasLabel}
-          {align ? ` · ${align}` : ""}
-          {row.riskReward != null ? ` · R/R ${row.riskReward.toFixed(1)}:1` : ""}
-        </p>
-        <RrGateLine riskReward={row.riskReward} lane={row.lane} environment={environment} colors={colors} />
-        <p style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.sm, color: colors.textMuted }}>
-          {fmtPrice(row.price)}
-          {row.changePct != null ? ` (${fmtPct(row.changePct)})` : ""}
-        </p>
-        {row.verdict ? (
-          <p style={{ margin: `${spacing[2]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.5 }}>
-            {row.verdict}
-          </p>
+        {row.company ? (
+          <p style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted }}>{row.company}</p>
         ) : null}
+        <PriceHero price={row.price} changePct={row.changePct} colors={colors} />
+        {signalBody}
         <CtaRow symbol={row.symbol} lane={row.lane} colors={colors} />
       </div>
     );
@@ -227,10 +338,14 @@ export function ScannerDetailPanel({
 
   return (
     <div style={{ padding: spacing[4] }}>
-      <p style={{ margin: 0, fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: colors.caution }}>
-        Developing
+      <p style={{ margin: 0, fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: stateColor }}>
+        {stateLabel}
       </p>
       <h3 style={{ margin: `${spacing[2]} 0 0`, fontSize: typography.scale.lg, color: colors.text }}>{row.symbol}</h3>
+      {row.company ? (
+        <p style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted }}>{row.company}</p>
+      ) : null}
+      <PriceHero price={row.price} changePct={row.changePct} colors={colors} />
       <p style={{ margin: `${spacing[2]} 0 0`, fontSize: typography.scale.sm, color: colors.text }}>
         {biasLabel}
         {align ? ` · ${align}` : ""}
@@ -258,7 +373,7 @@ export function ScannerDetailPanel({
           Blocking: {row.blockerNote}
         </p>
       ) : null}
-      <RrGateLine riskReward={row.riskReward} lane={row.lane} environment={environment} colors={colors} />
+      {signalBody}
       <CtaRow symbol={row.symbol} lane={row.lane} colors={colors} />
     </div>
   );

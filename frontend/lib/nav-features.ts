@@ -49,11 +49,11 @@ export const NAV_FEATURES = {
    */
   brokerPortfolio: _brokers,
   /**
-   * Scanner Terminal redesign (funnel sections + detail rail). When true, `/dashboard/scanner`
-   * renders the new terminal instead of `ScannerPageClient`. Preview always available at
-   * `/dashboard/scanner/preview`. Override: `NEXT_PUBLIC_STOCVEST_FEATURE_SCANNER_TERMINAL=true`.
+   * Scanner Terminal redesign (funnel sections + detail rail). Default on — `/dashboard/scanner`
+   * renders the terminal; legacy UI at `/dashboard/scanner/classic`. Roll back with
+   * `NEXT_PUBLIC_STOCVEST_FEATURE_SCANNER_TERMINAL=false`.
    */
-  scannerTerminal: envFlag("SCANNER_TERMINAL", false)
+  scannerTerminal: envFlag("SCANNER_TERMINAL", true)
 } as const;
 
 export type NavFeatureKey = keyof typeof NAV_FEATURES;

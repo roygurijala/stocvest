@@ -364,33 +364,35 @@ function ScenarioGeometry({
   );
 }
 
-/** Day/Swing interactive toggle matching the prototype bracket style. */
-/** Small colored indicator showing the lane's current signal state. */
-function StateHint({ state }: { state: FeedState | null }) {
+/** Feed-state dot on each lane tab (actionable / near / cooling / potential). */
+function LaneStateDot({ state, colors }: { state: FeedState | null; colors: Colors }) {
   if (!state) return null;
-  const map: Record<FeedState, { char: string; color: string }> = {
-    actionable: { char: "●", color: "#22c55e" },
-    near:       { char: "○", color: "#f59e0b" },
-    cooling:    { char: "◷", color: "#ef4444" },
-    potential:  { char: "·", color: "#94a3b8" }
-  };
-  const { char, color } = map[state];
+  const tone =
+    state === "actionable"
+      ? colors.bullish
+      : state === "near"
+        ? colors.caution
+        : state === "cooling"
+          ? colors.bearish
+          : colors.textMuted;
   return (
-    <span style={{ fontSize: 9, color, lineHeight: 1, marginLeft: 3 }} aria-hidden="true">
-      {char}
-    </span>
+    <span
+      aria-hidden
+      style={{
+        width: 6,
+        height: 6,
+        borderRadius: "50%",
+        background: tone,
+        flexShrink: 0,
+        boxShadow: state === "actionable" ? `0 0 8px ${tone}99` : undefined
+      }}
+    />
   );
 }
 
 /**
- * Day / Swing lane toggle with per-lane state hints and dimming when the
- * other lane has no signal in the current feed.
- *
- * Visual:  ⚡ Day ●  |  ◈ Swing ○
- *          Blue active for Day, purple for Swing.
- *          Small hint chars: ● = actionable (green), ○ = near (amber),
- *          ◷ = cooling (red), · = potential (muted).
- *          When a lane has no card at all it is dimmed + tooltip shown.
+ * Day / Swing segmented control — desk-colored pills with a clear active state.
+ * State dots reflect each lane's feed card when one exists.
  */
 function LaneToggle({
   activeLane,
@@ -408,69 +410,71 @@ function LaneToggle({
   symbol: string;
   colors: Colors;
 }) {
-  const SWING_COLOR = "#6366f1";
+  const dayAccent = roleAccents.dark.day;
+  const swingAccent = roleAccents.dark.swing;
 
   const btn = (
     lane: "day" | "swing",
-    icon: string,
     label: string,
-    laneState: FeedState | null
+    laneState: FeedState | null,
+    accent: (typeof roleAccents)["dark"]["day"]
   ) => {
     const active = activeLane === lane;
     const available = laneState !== null;
-    const accentColor = lane === "day" ? colors.accent : SWING_COLOR;
-    const tooltip = !available
-      ? `No ${lane} setup for ${symbol} right now`
-      : undefined;
+    const rail = accent.borderAccent;
+    const text = accent.accentStrong;
+    const tooltip = !available ? `No ${lane} setup for ${symbol} in today's feed` : undefined;
 
     return (
       <button
         key={lane}
         type="button"
+        role="tab"
+        aria-selected={active}
         onClick={() => onChange(lane)}
         title={tooltip}
-        aria-pressed={active}
         style={{
-          border: active ? `1px solid ${accentColor}` : "1px solid transparent",
-          background: active ? `${accentColor}22` : "transparent",
-          color: active ? accentColor : colors.textMuted,
-          fontSize: typography.scale.xs,
+          border: "none",
+          background: active ? `${rail}30` : "transparent",
+          boxShadow: active ? `inset 0 0 0 1.5px ${rail}, 0 0 14px ${rail}40` : "none",
+          color: active ? text : colors.textMuted,
+          fontSize: typography.scale.sm,
           fontWeight: 700,
-          padding: "3px 10px",
-          borderRadius: borderRadius.sm,
+          padding: "7px 16px",
+          borderRadius: borderRadius.full,
           cursor: "pointer",
-          letterSpacing: "0.04em",
-          display: "flex",
+          letterSpacing: "0.03em",
+          display: "inline-flex",
           alignItems: "center",
-          gap: 4,
-          opacity: available ? 1 : 0.4,
-          transition: "background .12s, color .12s, opacity .12s"
+          gap: 6,
+          opacity: available || active ? 1 : 0.55,
+          transition: "background .14s, color .14s, box-shadow .14s, opacity .14s",
+          whiteSpace: "nowrap"
         }}
       >
-        <span>{icon}</span>
-        <span>{label}</span>
-        <StateHint state={laneState} />
+        <LaneStateDot state={laneState} colors={colors} />
+        {label}
       </button>
     );
   };
 
   return (
     <div
+      role="tablist"
+      aria-label={`${symbol} desk mode`}
       style={{
         display: "inline-flex",
         alignItems: "center",
-        gap: 2,
-        padding: "2px 4px",
+        gap: 4,
+        padding: 4,
         border: `1px solid ${colors.border}`,
-        borderRadius: borderRadius.md,
-        background: colors.surfaceMuted
+        borderRadius: borderRadius.full,
+        background: colors.background,
+        flexShrink: 0
       }}
     >
-      <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, paddingLeft: 4 }}>[</span>
-      {btn("day", "⚡", "Day", dayState)}
-      <span style={{ fontSize: typography.scale.xs, color: colors.border }}>|</span>
-      {btn("swing", "◈", "Swing", swingState)}
-      <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, paddingRight: 4 }}>]</span>
+      {btn("day", "Day", dayState, dayAccent)}
+      {btn("swing", "Swing", swingState, swingAccent)}
     </div>
   );
 }
@@ -1101,9 +1105,36 @@ export function DeepDive({
           gap: spacing[2]
         }}
       >
-        {/* Row 1: LONG · NVDA · Actionable  [Day/Swing toggle]  +  ✓ Watching */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing[3], flexWrap: "wrap" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: spacing[2], flexWrap: "wrap" }}>
+        {/* Row 1: verdict + symbol · Day/Swing (center on desktop, beside symbol on mobile) · Watching */}
+        <div
+          style={
+            isMobile
+              ? {
+                  display: "flex",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: spacing[2],
+                  width: "100%"
+                }
+              : {
+                  display: "grid",
+                  gridTemplateColumns: "minmax(0, 1fr) auto minmax(0, 1fr)",
+                  alignItems: "center",
+                  gap: spacing[2],
+                  width: "100%"
+                }
+          }
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: spacing[2],
+              flexWrap: "wrap",
+              minWidth: 0,
+              justifySelf: isMobile ? undefined : "start"
+            }}
+          >
             <span
               style={{
                 fontSize: typography.scale.base,
@@ -1122,19 +1153,19 @@ export function DeepDive({
             <span style={{ fontSize: typography.scale.base, fontWeight: 700, color: sTone, letterSpacing: "0.02em" }}>
               {STATE_LABEL[card.state]}
             </span>
-            {/* Lane toggle inline — replaces the duplicate badge pill */}
-            <LaneToggle
-              activeLane={activeLane}
-              onChange={setActiveLane}
-              dayState={dayState}
-              swingState={swingState}
-              symbol={card.symbol}
-              colors={colors}
-            />
           </div>
-          {/* Watching indicator (top-right) */}
+          <LaneToggle
+            activeLane={activeLane}
+            onChange={setActiveLane}
+            dayState={dayState}
+            swingState={swingState}
+            symbol={card.symbol}
+            colors={colors}
+          />
           <span
             style={{
+              justifySelf: isMobile ? undefined : "end",
+              marginLeft: isMobile ? "auto" : undefined,
               fontSize: typography.scale.xs,
               fontWeight: 600,
               color: colors.bullish,

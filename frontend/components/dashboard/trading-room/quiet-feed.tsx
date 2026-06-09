@@ -15,18 +15,26 @@
  * synthesized FeedCard (the composite fetch keys off symbol + lane).
  */
 
-import { useMemo, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { borderRadius, roleAccents, spacing, typography } from "@/lib/design-system";
 import type { useTheme } from "@/lib/theme-provider";
 import type { DeskTodayData } from "@/lib/api/desk-today";
 import type { SnapshotPayload } from "@/lib/api/market";
 import { resolveBuildingStructureRows } from "@/lib/dashboard/building-structure-present";
 import { alignedLayersFromAlignmentRatio } from "@/lib/signals-page-present";
-import type { FeedBias, FeedCard, FeedLane } from "@/lib/dashboard/trading-room/feed-model";
+import type { FeedBias, FeedCard, FeedLane, FeedState } from "@/lib/dashboard/trading-room/feed-model";
+import { useSymbolNames } from "@/lib/hooks/use-symbol-names";
 
 type Colors = ReturnType<typeof useTheme>["colors"];
 
 const LAYER_TOTAL = 6;
+
+function stateTone(state: FeedState, colors: Colors): string {
+  if (state === "actionable") return colors.bullish;
+  if (state === "near") return colors.caution;
+  if (state === "cooling") return colors.bearish;
+  return colors.textMuted;
+}
 
 function biasFromDirection(direction: "up" | "down" | null | undefined): FeedBias {
   if (direction === "up") return "bull";
@@ -70,6 +78,7 @@ function QuietCard({
     card.lane === "day" ? roleAccents.dark.day.borderAccent : roleAccents.dark.swing.borderAccent;
   const pct = card.changePct;
   const pctTone = pct == null ? colors.textMuted : pct >= 0 ? colors.bullish : colors.bearish;
+  const sTone = stateTone(card.state, colors);
   return (
     <button
       type="button"
@@ -79,22 +88,26 @@ function QuietCard({
         background: active ? colors.surfaceMuted : colors.surface,
         border: `1px solid ${active ? colors.accent : colors.border}`,
         borderLeft: `3px solid ${laneAccent}`,
+        borderBottom: `3px solid ${sTone}`,
         borderRadius: borderRadius.md,
         padding: spacing[2],
         cursor: "pointer",
         display: "flex",
         flexDirection: "column",
-        gap: 2,
+        gap: 3,
         color: colors.text
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: spacing[2] }}>
         <span style={{ fontSize: typography.scale.sm, fontWeight: 700 }}>{card.symbol}</span>
-        {pct != null ? (
-          <span style={{ fontSize: typography.scale.xs, fontWeight: 700, color: pctTone }}>
-            {`${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`}
+        <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+          <span style={{ fontSize: typography.scale.xs, fontWeight: 600, color: pctTone }}>
+            {card.price != null ? `$${card.price.toFixed(2)}` : "—"}
           </span>
-        ) : null}
+          {pct != null ? (
+            <span style={{ fontSize: 9, color: pctTone }}>{`${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`}</span>
+          ) : null}
+        </span>
       </div>
       {card.company ? (
         <span style={{ fontSize: 10, color: colors.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -176,10 +189,70 @@ export function QuietFeed({
   onSelectCard: (card: FeedCard) => void;
   colors: Colors;
 }) {
+  const symbolsToQuote = useMemo(() => {
+    const syms = new Set<string>();
+    for (const m of swingDesk?.movers_radar ?? []) syms.add(m.symbol.trim().toUpperCase());
+    if (showDay) {
+      for (const m of dayDesk?.movers_radar ?? []) syms.add(m.symbol.trim().toUpperCase());
+    }
+    const sessionSymbols = Array.from(syms);
+    const structureRows = resolveBuildingStructureRows({
+      deskData: swingDesk,
+      nearQualification: [],
+      sessionActivitySymbols: sessionSymbols
+    });
+    for (const row of structureRows) syms.add(row.symbol.trim().toUpperCase());
+    return Array.from(syms).slice(0, 40);
+  }, [swingDesk, dayDesk, showDay]);
+
+  const [feedSnaps, setFeedSnaps] = useState<Map<string, SnapshotPayload>>(new Map());
+
+  useEffect(() => {
+    if (symbolsToQuote.length === 0) {
+      setFeedSnaps(new Map());
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/stocvest/market/snapshots?symbols=${encodeURIComponent(symbolsToQuote.join(","))}`,
+          { cache: "no-store" }
+        );
+        if (!res.ok || cancelled) return;
+        const json = (await res.json().catch(() => ({}))) as { snapshots?: SnapshotPayload[] };
+        const rows = Array.isArray(json.snapshots) ? json.snapshots : [];
+        if (cancelled) return;
+        const next = new Map<string, SnapshotPayload>();
+        for (const row of rows) {
+          const sym = (row.symbol || "").trim().toUpperCase();
+          if (sym) next.set(sym, row);
+        }
+        setFeedSnaps(next);
+      } catch {
+        /* quotes are best-effort */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [symbolsToQuote.join(",")]);
+
+  const mergedSnapshots = useMemo(() => {
+    const map = new Map(snapshotsBySymbol);
+    for (const [sym, snap] of feedSnaps) map.set(sym, snap);
+    return map;
+  }, [snapshotsBySymbol, feedSnaps]);
+
+  const symbolNames = useSymbolNames(symbolsToQuote);
+
   const companyFor = (sym: string): string | null =>
-    snapshotsBySymbol.get(sym)?.company_name?.trim() || companyBySymbol.get(sym) || null;
+    mergedSnapshots.get(sym)?.company_name?.trim() ||
+    companyBySymbol.get(sym) ||
+    symbolNames[sym] ||
+    null;
   const priceFor = (sym: string): number | null => {
-    const snap = snapshotsBySymbol.get(sym);
+    const snap = mergedSnapshots.get(sym);
     const p = snap?.last_trade_price ?? snap?.day_close;
     return typeof p === "number" && Number.isFinite(p) ? p : null;
   };
@@ -221,7 +294,7 @@ export function QuietFeed({
         note: `Moving ${r.gap >= 0 ? "up" : "down"} ${Math.abs(r.gap).toFixed(1)}% this session`
       }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [swingDesk?.movers_radar, dayDesk?.movers_radar, showDay, snapshotsBySymbol, companyBySymbol]);
+  }, [swingDesk?.movers_radar, dayDesk?.movers_radar, showDay, mergedSnapshots, companyBySymbol, symbolNames]);
 
   const buildingStructure = useMemo<QuietCardData[]>(() => {
     const sessionSymbols = sessionActivity.map((s) => s.card.symbol);
@@ -261,7 +334,7 @@ export function QuietFeed({
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [swingDesk, sessionActivity, snapshotsBySymbol, companyBySymbol]);
+  }, [swingDesk, sessionActivity, mergedSnapshots, companyBySymbol, symbolNames]);
 
   if (sessionActivity.length === 0 && buildingStructure.length === 0) {
     return (

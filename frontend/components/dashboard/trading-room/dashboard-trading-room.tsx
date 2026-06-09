@@ -1,11 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { useSearchParams } from "next/navigation";
-import { Menu } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { AppSessionHeader } from "@/components/app-session-header";
 import { useTheme } from "@/lib/theme-provider";
-import { ThemeToggle } from "@/components/theme-toggle";
-import { useAppChrome } from "@/lib/app-chrome-context";
 import { borderRadius, roleAccents, spacing, typography } from "@/lib/design-system";
 import {
   ScannerOverviewProvider,
@@ -21,7 +19,8 @@ import { formatTradingDateLabel, isoDateInNewYork } from "@/lib/market-hours-et"
 import { useMacroContext } from "@/lib/hooks/use-macro-context";
 import { useMarketNews } from "@/lib/hooks/use-market-news";
 import { useMarketBriefNarrative } from "@/lib/hooks/use-market-brief-narrative";
-import { applyRegimeSanityGuard, mapMacroRegimeToLabel, resolveRegimeLabel } from "@/lib/market-context/regime";
+import { useStackedLayout } from "@/lib/hooks/use-stacked-layout";
+import { marketStatusLabelFor, resolveSessionRegimeLabel, snapPct } from "@/lib/session-header-market";
 import { isRegularSessionOpen } from "@/lib/market/regular-session";
 import type { MarketOverview, SnapshotPayload } from "@/lib/api/market";
 import type { ScannerOverview } from "@/lib/api/scanner";
@@ -49,13 +48,20 @@ import { useWatchlistAtClose } from "@/lib/hooks/use-watchlist-at-close";
 import { useWeeklySetupOutcomes } from "@/lib/hooks/use-weekly-setup-outcomes";
 import { DeepDive } from "@/components/dashboard/trading-room/deep-dive";
 import { QuietFeed } from "@/components/dashboard/trading-room/quiet-feed";
-import { SymbolSearch } from "@/components/dashboard/trading-room/symbol-search";
 import { WatchlistRail } from "@/components/dashboard/trading-room/watchlist-rail";
 import { MarketEnvironmentStrip } from "@/components/market-environment-strip";
 import { useMarketEnvironment } from "@/lib/hooks/use-market-environment";
 import { environmentSessionCardHint } from "@/lib/signal-evidence/environment-session-hint";
 import type { MarketEnvironmentPayload } from "@/lib/signal-evidence/market-environment-present";
 import { getLastSelectedId, setLastSelectedId } from "@/lib/dashboard/trading-room/session-selection";
+import {
+  applyDashboardSymbolUrl,
+  clearTradingRoomOpenIntent,
+  feedCardIdForDeepLink,
+  resolveTradingRoomOpenIntent,
+  syntheticFeedCardForDeepLink,
+  type DashboardTradingRoomDeepLink
+} from "@/lib/nav/dashboard-trading-room-deeplink";
 import {
   buildFeedCards,
   groupFeedByLane,
@@ -68,7 +74,7 @@ import {
   DEFAULT_FEED_FILTERS
 } from "@/lib/dashboard/trading-room/feed-model";
 
-interface DashboardTradingRoomProps {
+export interface DashboardTradingRoomProps {
   marketOverview: MarketOverview;
   scannerOverview: ScannerOverview;
   earningsEvents: EarningsEvent[];
@@ -81,6 +87,8 @@ interface DashboardTradingRoomProps {
   userName?: string | null;
   /** Renders null; hydrates the scanner overview context with live setups/gaps. */
   deferredScannerSlot?: ReactNode;
+  /** Symbol handoff from `?symbol=` / scanner intent — seeds Deep Dive on first paint. */
+  openIntent?: DashboardTradingRoomDeepLink | null;
 }
 
 const STATE_LABEL: Record<FeedState, string> = {
@@ -146,77 +154,6 @@ function formatEventWhen(scheduledIso: string | null | undefined, hoursUntil: nu
 /** Swing-lane accent (violet/magenta) — deliberately far from the day/interactive blue. */
 const SWING_ACCENT = "#c04cf5";
 
-/**
- * Stacks the Trading Room into a single column below `maxPx`. Uses a lower
- * threshold (900px) than the app-wide `useIsMobileLayout` (1024px) so the
- * three-column terminal still appears on narrower desktop windows / scaled
- * laptops — matching where the nav rail also becomes visible.
- */
-function useStackedLayout(maxPx = 899): boolean {
-  const [stacked, setStacked] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia(`(max-width: ${maxPx}px)`);
-    const update = () => setStacked(mq.matches);
-    update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
-  }, [maxPx]);
-  return stacked;
-}
-
-/** Breadth read from how many of the tracked indices are advancing. */
-function breadthWord(spyPct: number | null, qqqPct: number | null, iwmPct: number | null): string {
-  const vals = [spyPct, qqqPct, iwmPct].filter((v): v is number => typeof v === "number" && Number.isFinite(v));
-  if (vals.length === 0) return "mixed";
-  const up = vals.filter((v) => v > 0.05).length;
-  const down = vals.filter((v) => v < -0.05).length;
-  if (up > down) return "positive";
-  if (down > up) return "negative";
-  return "mixed";
-}
-
-/** VIX in plain English. */
-function vixWord(level: number | null): string {
-  if (level == null) return "—";
-  if (level < 14) return "calm";
-  if (level >= 20) return "elevated";
-  return "moderate";
-}
-
-/** Concise session word for the pulse line. */
-function sessionWord(marketOpen: boolean | null, marketStatusLabel: string): string {
-  if (marketOpen === true) return "Active session";
-  if (/extended/i.test(marketStatusLabel)) return "Extended hours";
-  if (marketOpen === false) return "Market closed";
-  return "Session pending";
-}
-
-/** "Market data as of" clock, in US Eastern, matching the prototype's tabular time. */
-function asOfTimeET(iso: string | null): string | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  try {
-    return d.toLocaleTimeString("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-      second: "2-digit",
-      timeZone: "America/New_York",
-      timeZoneName: "short"
-    });
-  } catch {
-    return d.toLocaleTimeString();
-  }
-}
-
-function marketStatusLabelFor(market: string | undefined, open: boolean | null): string {
-  const m = (market || "").trim().toLowerCase();
-  if (m === "open" || open === true) return "Market open";
-  if (m === "extended-hours" || m === "extended_hours") return "Extended hours";
-  if (m === "closed" || open === false) return "Market closed";
-  return "Market status unknown";
-}
-
 /** Plain-English read on the tape from index moves + sector tilt + VIX. Null when no index data. */
 function buildSessionNarrative({
   marketOpen,
@@ -278,24 +215,6 @@ function joinClauses(parts: string[]): string {
   return `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]}`;
 }
 
-function snapPct(s: SnapshotPayload | undefined): number | null {
-  if (!s) return null;
-  const c = s.change_percent;
-  if (typeof c === "number" && Number.isFinite(c) && c > -99.5) return c;
-  const last = s.last_trade_price;
-  const prev = s.prev_close;
-  if (
-    typeof last === "number" &&
-    typeof prev === "number" &&
-    Number.isFinite(last) &&
-    Number.isFinite(prev) &&
-    prev !== 0
-  ) {
-    return ((last - prev) / prev) * 100;
-  }
-  return null;
-}
-
 export function DashboardTradingRoom(props: DashboardTradingRoomProps) {
   return (
     <ScannerOverviewProvider initialOverview={props.scannerOverview}>
@@ -315,9 +234,11 @@ function TradingRoomBody({
   dayTradingSurfaces = true,
   deskInitial,
   sectorRotation = [],
-  userName
+  userName,
+  openIntent = null
 }: DashboardTradingRoomProps) {
   const { colors } = useTheme();
+  const pathname = usePathname();
   const isMobile = useStackedLayout(899);
   const scannerOverview = useScannerOverview();
   const earnings = useDashboardEarnings();
@@ -391,35 +312,62 @@ function TradingRoomBody({
     ? formatTradingDateLabel(swingDeskDate!)
     : null;
 
-  // Center panel = Brief by default. Restore the last selection on SPA return
-  // (module-scoped memory survives navigation but not a hard refresh / login).
-  const [selectedId, setSelectedId] = useState<string | null>(() => getLastSelectedId());
+  const [selectedId, setSelectedId] = useState<string | null>(() => openIntent?.key ?? null);
+  const selectionBootstrappedRef = useRef(false);
   // Holds a synthetic card for symbols that live only on the watchlist (not in
   // the desk/scanner feed), so the deep dive can open for any monitored symbol.
-  const [overrideCard, setOverrideCard] = useState<FeedCard | null>(null);
+  const [overrideCard, setOverrideCard] = useState<FeedCard | null>(() =>
+    openIntent ? syntheticFeedCardForDeepLink(openIntent) : null
+  );
   // Collapsed by default on every breakpoint — the watchlist is a peek-on-demand
   // rail, not a persistent third column. The user opens it from the collapsed tab.
   const [watchlistOpen, setWatchlistOpen] = useState(false);
-  const select = (id: string | null) => {
-    setSelectedId(id);
-    setOverrideCard(null);
-    setLastSelectedId(id);
+
+  const searchParams = useSearchParams();
+
+  const syncSymbolInUrl = (card: FeedCard | null) => {
+    applyDashboardSymbolUrl(card, pathname || "/dashboard", searchParams.toString());
   };
+
   const selectCard = (card: FeedCard) => {
     setSelectedId(card.id);
     setOverrideCard(card);
     setLastSelectedId(card.id);
+    syncSymbolInUrl(card);
+  };
+  const select = (id: string | null) => {
+    if (!id) {
+      setSelectedId(null);
+      setOverrideCard(null);
+      setLastSelectedId(null);
+      syncSymbolInUrl(null);
+      return;
+    }
+    const card = allCards.find((c) => c.id === id);
+    if (card) {
+      selectCard(card);
+      return;
+    }
+    setSelectedId(id);
+    setOverrideCard(null);
+    setLastSelectedId(id);
+    const colon = id.indexOf(":");
+    if (colon > 0) {
+      const lane = (id.slice(0, colon) === "day" ? "day" : "swing") as FeedLane;
+      const sym = id.slice(colon + 1).trim().toUpperCase();
+      if (sym) {
+        syncSymbolInUrl(syntheticFeedCardForDeepLink({ symbol: sym, lane, key: id }));
+      }
+    }
   };
   // Open any searched symbol in the deep dive: reuse the richer feed card when
   // the symbol is already on the desk; otherwise synthesize a minimal card and
   // let the deep dive's composite fetch fill in the read.
-  const searchParams = useSearchParams();
-  const deepLinkHandled = useRef(false);
-
-  const openSymbol = (symbol: string, company?: string | null) => {
+  const openSymbol = (symbol: string, company?: string | null, lane: FeedLane = "swing") => {
     const sym = symbol.trim().toUpperCase();
     if (!sym) return;
-    const existing = allCards.find((c) => c.symbol === sym);
+    const existing =
+      allCards.find((c) => c.symbol === sym && c.lane === lane) ?? allCards.find((c) => c.symbol === sym);
     if (existing) {
       selectCard(existing);
       return;
@@ -427,10 +375,10 @@ function TradingRoomBody({
     const snap = snapshotsBySymbol.get(sym);
     const last = snap?.last_trade_price;
     selectCard({
-      id: `swing:${sym}`,
+      id: feedCardIdForDeepLink(sym, lane),
       symbol: sym,
       company: company?.trim() || companyBySymbol.get(sym) || snap?.company_name?.trim() || null,
-      lane: "swing",
+      lane,
       state: "potential",
       bias: "neutral",
       verdict: "Looked up from search — full read below.",
@@ -450,13 +398,51 @@ function TradingRoomBody({
     return null;
   }, [allCards, selectedId, overrideCard]);
 
+  const applyDeepLinkOrRestoreSelection = () => {
+    const intent = resolveTradingRoomOpenIntent(searchParams);
+
+    // Card clicks update the URL via `replaceState`, which does not refresh
+    // `useSearchParams`. When the user already has a selection, keep it and heal
+    // the address bar — never stomp a fresh click with stale hook params.
+    if (selectedId && selected) {
+      syncSymbolInUrl(selected);
+      clearTradingRoomOpenIntent();
+      selectionBootstrappedRef.current = true;
+      return;
+    }
+
+    if (intent) {
+      openSymbol(intent.symbol, null, intent.lane);
+      clearTradingRoomOpenIntent();
+      selectionBootstrappedRef.current = true;
+      return;
+    }
+
+    if (selectionBootstrappedRef.current) return;
+    selectionBootstrappedRef.current = true;
+
+    const lastId = getLastSelectedId();
+    if (!lastId) return;
+    const existing = allCards.find((c) => c.id === lastId);
+    if (existing) {
+      selectCard(existing);
+      return;
+    }
+    const colon = lastId.indexOf(":");
+    if (colon <= 0) return;
+    const lane = lastId.slice(0, colon) === "day" ? "day" : "swing";
+    const sym = lastId.slice(colon + 1).trim().toUpperCase();
+    if (sym) openSymbol(sym, null, lane);
+  };
+
+  useLayoutEffect(() => {
+    applyDeepLinkOrRestoreSelection();
+  }, [openIntent, searchParams, allCards, selectedId]);
+
+  // Safety net: `useSearchParams` can hydrate one frame after `window.location`.
   useEffect(() => {
-    if (deepLinkHandled.current) return;
-    const sym = searchParams.get("symbol")?.trim().toUpperCase();
-    if (!sym) return;
-    deepLinkHandled.current = true;
-    openSymbol(sym);
-  }, [searchParams, allCards]);
+    applyDeepLinkOrRestoreSelection();
+  }, [openIntent, searchParams, allCards, selectedId]);
 
   // Top setup for the brief CTA: hottest actionable, else hottest overall.
   const topCard = useMemo(
@@ -482,18 +468,13 @@ function TradingRoomBody({
   // that gates setups and the morning brief). Fall back to the index-return
   // classifier when the macro read is unavailable (e.g. cold cache). The sanity
   // guard is the final net so a sharply red tape can never read "Neutral".
-  const macroRegimeLabel = mapMacroRegimeToLabel(macro?.market_regime);
-  const regimeLabel = applyRegimeSanityGuard(
-    macroRegimeLabel ??
-      resolveRegimeLabel({
-        scannerError: scannerOverview.error,
-        scannerRegimeLabel: scannerOverview.regimeLabel,
-        spyPct: typeof spyPct === "number" ? spyPct : null,
-        qqqPct: typeof qqqPct === "number" ? qqqPct : null
-      }).label,
-    typeof spyPct === "number" ? spyPct : null,
-    typeof qqqPct === "number" ? qqqPct : null
-  );
+  const regimeLabel = resolveSessionRegimeLabel({
+    macroRegime: macro?.market_regime,
+    scannerError: scannerOverview.error,
+    scannerRegimeLabel: scannerOverview.regimeLabel,
+    spyPct: typeof spyPct === "number" ? spyPct : null,
+    qqqPct: typeof qqqPct === "number" ? qqqPct : null
+  });
 
   const vixSnap =
     snapshotsBySymbol.get("I:VIX") ?? snapshotsBySymbol.get("^VIX") ?? snapshotsBySymbol.get("VIX");
@@ -694,8 +675,8 @@ function TradingRoomBody({
 
   const isWeekendSession = sessionPhase === "weekend";
   // Keep the signal feed column mounted every session. Quiet days (zero qualified
-  // setups) still surface symbol search + session activity / building structure via
-  // QuietFeed — collapsing the column on weekdays left users with no left pane all day.
+  // setups) still surface session activity / building structure via QuietFeed —
+  // collapsing the column on weekdays left users with no left pane all day.
   const gridTemplate = watchlistOpen
     ? `300px minmax(0, 1fr) 300px`
     : `300px minmax(0, 1fr) 44px`;
@@ -706,14 +687,12 @@ function TradingRoomBody({
       swing={swing}
       showDay={dayTradingSurfaces}
       selectedId={selected?.id ?? null}
-      onSelect={select}
       deskEmpty={deskEmpty}
       swingDeskData={swingDesk?.data}
       dayDeskData={dayDesk?.data}
       snapshotsBySymbol={snapshotsBySymbol}
       companyBySymbol={companyBySymbol}
       onSelectCard={selectCard}
-      onOpenSymbol={openSymbol}
       isMobile={isMobile}
       colors={colors}
       staleDateLabel={staleDateLabel}
@@ -726,7 +705,7 @@ function TradingRoomBody({
   const centerPanel = selected ? (
     <DeepDive card={selected} allCards={allCards} companyBySymbol={companyBySymbol} onBackToBrief={() => select(null)} isMobile={isMobile} colors={colors} />
   ) : (
-    <MarketBrief data={briefData} onViewTopSetup={() => topCard && select(topCard.id)} onSearch={undefined} />
+    <MarketBrief data={briefData} onViewTopSetup={() => topCard && selectCard(topCard)} onSearch={undefined} />
   );
   const railPanel = (
     <WatchlistRail
@@ -752,7 +731,7 @@ function TradingRoomBody({
       className="stocvest-dashboard-v2"
       style={{ display: "grid", gap: 0, color: colors.text }}
     >
-      <SessionHeader
+      <AppSessionHeader
         regimeLabel={regimeLabel}
         spyPct={spyPct}
         qqqPct={qqqPct}
@@ -806,229 +785,6 @@ function TradingRoomBody({
         )}
       </div>
     </section>
-  );
-}
-
-/* ── Session header ─────────────────────────────────────────────────────── */
-
-function SessionHeader({
-  regimeLabel,
-  spyPct,
-  qqqPct,
-  iwmPct,
-  vixLevel,
-  marketStatusLabel,
-  marketOpen,
-  counts,
-  updatedAtIso,
-  onOpenSymbol,
-  bleed,
-  isMobile = false,
-  colors
-}: {
-  regimeLabel: string;
-  spyPct: number | null;
-  qqqPct: number | null;
-  iwmPct: number | null;
-  vixLevel: number | null;
-  marketStatusLabel: string;
-  marketOpen: boolean | null;
-  counts: Record<FeedState, number>;
-  updatedAtIso: string | null;
-  onOpenSymbol: (symbol: string, name?: string | null) => void;
-  bleed: string;
-  isMobile?: boolean;
-  colors: ReturnType<typeof useTheme>["colors"];
-}) {
-  // Orb: green while the tape is live, amber in extended hours, dim when closed.
-  const orbTone =
-    marketOpen === true ? colors.bullish : /extended/i.test(marketStatusLabel) ? colors.caution : colors.textMuted;
-  const breadth = breadthWord(spyPct, qqqPct, iwmPct);
-  const vix = vixWord(vixLevel);
-  const session = sessionWord(marketOpen, marketStatusLabel);
-  const asOf = asOfTimeET(updatedAtIso);
-  const deskIsEmpty = counts.actionable + counts.near + counts.potential + counts.cooling === 0;
-  const hasActionable = counts.actionable > 0;
-  // Color tier: green when actionable, amber when only near/potential, hidden when empty.
-  const chipTone = hasActionable
-    ? colors.bullish
-    : counts.near > 0 || counts.potential > 0
-      ? colors.caution
-      : colors.textMuted;
-  const vixText = vixLevel != null ? `${vix} (${vixLevel.toFixed(1)})` : vix;
-
-  // Color-coded reads so the pulse line is scannable at a glance.
-  const regimeTone = /expansion|risk-?on|bull/i.test(regimeLabel)
-    ? colors.bullish
-    : /contraction|risk-?off|bear/i.test(regimeLabel)
-      ? colors.bearish
-      : colors.accent;
-  const breadthTone =
-    breadth === "positive" ? colors.bullish : breadth === "negative" ? colors.bearish : colors.caution;
-  const vixTone =
-    vix === "calm" ? colors.bullish : vix === "elevated" ? colors.bearish : vix === "moderate" ? colors.caution : colors.textMuted;
-  const sessionTone = /active/i.test(session)
-    ? colors.bullish
-    : /extended|pending/i.test(session)
-      ? colors.caution
-      : colors.textMuted;
-
-  const Tone = ({ color, children }: { color: string; children: ReactNode }) => (
-    <b style={{ color, fontWeight: 600 }}>{children}</b>
-  );
-
-  // The dashboard suppresses the global TopBar, so this bar owns the mobile
-  // nav-drawer trigger (the rail is hidden < 900px).
-  const { openNavDrawer } = useAppChrome();
-
-  return (
-    <header
-      style={{
-        display: "flex",
-        alignItems: "center",
-        columnGap: spacing[5],
-        rowGap: spacing[2],
-        flexWrap: "wrap",
-        padding: `${spacing[3]} ${bleed}`,
-        marginLeft: `-${bleed}`,
-        marginRight: `-${bleed}`,
-        background: colors.surface,
-        borderBottom: `1px solid ${colors.border}`
-      }}
-    >
-      {/* Mobile menu — opens the nav drawer (rail is hidden below 900px) */}
-      {isMobile ? (
-        <button
-          type="button"
-          aria-label="Open navigation menu"
-          onClick={openNavDrawer}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            width: 36,
-            height: 36,
-            flex: "none",
-            border: `1px solid ${colors.border}`,
-            borderRadius: borderRadius.md,
-            background: "transparent",
-            color: colors.text,
-            cursor: "pointer"
-          }}
-        >
-          <Menu size={20} />
-        </button>
-      ) : null}
-
-      {/* Compact wordmark — mirrors the prototype's `.brand` */}
-      <span
-        style={{
-          fontWeight: 700,
-          letterSpacing: "0.16em",
-          fontSize: 13,
-          flex: "none",
-          whiteSpace: "nowrap",
-          // Subtle brand sheen: a restrained gradient from the text color toward
-          // the accent, clipped to the glyphs. Reads premium without being loud.
-          backgroundImage: `linear-gradient(95deg, ${colors.text} 35%, ${colors.accent})`,
-          WebkitBackgroundClip: "text",
-          backgroundClip: "text",
-          color: "transparent",
-          WebkitTextFillColor: "transparent"
-        }}
-      >
-        STOCVEST<span style={{ color: colors.accent, WebkitTextFillColor: colors.accent }}>.</span>
-      </span>
-
-      {/* Theme toggle — pinned to the right of the first line on mobile */}
-      {isMobile ? <div style={{ marginLeft: "auto", flex: "none" }}><ThemeToggle /></div> : null}
-
-      {/* Pulse line — plain-English session read */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: spacing[3],
-          color: colors.textMuted,
-          fontSize: typography.scale.sm,
-          minWidth: 0,
-          flex: isMobile ? "1 1 100%" : "0 1 auto"
-        }}
-      >
-        <span
-          aria-hidden
-          style={{
-            width: 9,
-            height: 9,
-            borderRadius: "50%",
-            background: orbTone,
-            boxShadow: marketOpen === true ? `0 0 10px 1px ${orbTone}88` : "none",
-            flex: "none"
-          }}
-        />
-        <span style={{ lineHeight: 1.4 }}>
-          Market in <Tone color={regimeTone}>{regimeLabel}</Tone> · breadth <Tone color={breadthTone}>{breadth}</Tone> ·{" "}
-          VIX <Tone color={vixTone}>{vixText}</Tone> · <Tone color={sessionTone}>{session}</Tone>
-        </span>
-      </div>
-
-      {/* Right cluster — search + desk count + freshness + theme toggle.
-          `marginLeft: auto` shoves it to the far right on desktop; on mobile it
-          drops to its own full-width line. */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: spacing[4],
-          flexWrap: "wrap",
-          minWidth: 0,
-          marginLeft: isMobile ? 0 : "auto",
-          flex: isMobile ? "1 1 100%" : "0 0 auto"
-        }}
-      >
-        <SymbolSearch
-          placeholder="Jump to a symbol or company…"
-          onPick={onOpenSymbol}
-          colors={colors}
-          width={isMobile ? "100%" : 248}
-          pill
-        />
-
-        {/* Count chip — hidden when the desk is completely empty */}
-        {!deskIsEmpty ? (
-          <span
-            style={{
-              display: "inline-flex",
-              alignItems: "baseline",
-              gap: 6,
-              padding: "5px 12px",
-              borderRadius: borderRadius.full,
-              background: `${chipTone}1a`,
-              border: `1px solid ${chipTone}4d`,
-              color: chipTone,
-              fontSize: typography.scale.xs,
-              fontWeight: 600,
-              whiteSpace: "nowrap"
-            }}
-          >
-            <span style={{ fontSize: typography.scale.base }}>{counts.actionable}</span> actionable
-          </span>
-        ) : null}
-
-        <span
-          style={{
-            fontSize: 11.5,
-            color: colors.textMuted,
-            fontVariantNumeric: "tabular-nums",
-            whiteSpace: "nowrap"
-          }}
-        >
-          Market data as of <b style={{ color: colors.text, fontWeight: 600 }}>{asOf ?? "—"}</b>
-        </span>
-
-        {!isMobile ? <ThemeToggle /> : null}
-      </div>
-    </header>
   );
 }
 
@@ -1180,14 +936,12 @@ function SignalFeed({
   swing,
   showDay,
   selectedId,
-  onSelect,
   deskEmpty,
   swingDeskData,
   dayDeskData,
   snapshotsBySymbol,
   companyBySymbol,
   onSelectCard,
-  onOpenSymbol,
   isMobile = false,
   colors,
   staleDateLabel = null,
@@ -1200,14 +954,12 @@ function SignalFeed({
   swing: FeedCard[];
   showDay: boolean;
   selectedId: string | null;
-  onSelect: (id: string) => void;
   deskEmpty: boolean;
   swingDeskData: DeskTodayData | null | undefined;
   dayDeskData: DeskTodayData | null | undefined;
   snapshotsBySymbol: Map<string, SnapshotPayload>;
   companyBySymbol: Map<string, string>;
   onSelectCard: (card: FeedCard) => void;
-  onOpenSymbol: (symbol: string, name?: string | null) => void;
   isMobile?: boolean;
   colors: ReturnType<typeof useTheme>["colors"];
   /** When non-null, swing data is from a previous trading day — shown in the section header. */
@@ -1237,25 +989,6 @@ function SignalFeed({
       };
   return (
     <div style={paneStyle}>
-      {/* Sticky symbol search — pinned to the top of the feed zone. */}
-      <div
-        style={{
-          position: isMobile ? "static" : "sticky",
-          top: 0,
-          zIndex: 6,
-          background: colors.background,
-          paddingBottom: spacing[3],
-          borderBottom: `1px solid ${colors.border}`
-        }}
-      >
-        <SymbolSearch
-          placeholder="Look up any symbol…"
-          onPick={onOpenSymbol}
-          colors={colors}
-          width="100%"
-          hint="See where any ticker stands — even if it's not on the desk yet."
-        />
-      </div>
       {feedEnvironment ? (
         <MarketEnvironmentStrip environment={feedEnvironment} testId="trading-room-environment-strip" />
       ) : null}
@@ -1273,7 +1006,7 @@ function SignalFeed({
           count={day.length}
           cards={day}
           selectedId={selectedId}
-          onSelect={onSelect}
+          onSelectCard={onSelectCard}
           colors={colors}
           environment={dayEnvironment}
         />
@@ -1283,7 +1016,7 @@ function SignalFeed({
         count={swing.length}
         cards={swing}
         selectedId={selectedId}
-        onSelect={onSelect}
+        onSelectCard={onSelectCard}
         colors={colors}
         staleLabel={staleDateLabel}
         environment={swingEnvironment}
@@ -1324,8 +1057,8 @@ function SignalFeed({
               />
             ) : (
               <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted, lineHeight: 1.5 }}>
-                No qualified setups on the desk right now. Use search above to open any symbol, or check back after the
-                next desk refresh.
+                No qualified setups on the desk right now. Use the header search to open any symbol, or check back after
+                the next desk refresh.
               </p>
             )}
           </>
@@ -1344,7 +1077,7 @@ function FeedLaneSection({
   count,
   cards,
   selectedId,
-  onSelect,
+  onSelectCard,
   colors,
   staleLabel = null,
   environment = null
@@ -1353,7 +1086,7 @@ function FeedLaneSection({
   count: number;
   cards: FeedCard[];
   selectedId: string | null;
-  onSelect: (id: string) => void;
+  onSelectCard: (card: FeedCard) => void;
   colors: ReturnType<typeof useTheme>["colors"];
   /** When non-null, shown beside the count as a staleness badge (e.g. "Fri Jun 6 close"). */
   staleLabel?: string | null;
@@ -1399,7 +1132,7 @@ function FeedLaneSection({
           key={card.id}
           card={card}
           active={card.id === selectedId}
-          onSelect={onSelect}
+          onSelectCard={onSelectCard}
           colors={colors}
           staleDate={staleLabel}
           environmentHint={environmentSessionCardHint(environment, card.lane, card.state)}
@@ -1434,14 +1167,14 @@ function stateTone(state: FeedState, colors: ReturnType<typeof useTheme>["colors
 function SignalCard({
   card,
   active,
-  onSelect,
+  onSelectCard,
   colors,
   staleDate = null,
   environmentHint = null
 }: {
   card: FeedCard;
   active: boolean;
-  onSelect: (id: string) => void;
+  onSelectCard: (card: FeedCard) => void;
   colors: ReturnType<typeof useTheme>["colors"];
   /** When non-null, this card's price data is from a prior day — shown as a small badge. */
   staleDate?: string | null;
@@ -1456,7 +1189,7 @@ function SignalCard({
   return (
     <button
       type="button"
-      onClick={() => onSelect(card.id)}
+      onClick={() => onSelectCard(card)}
       style={{
         textAlign: "left",
         background: active ? colors.surfaceMuted : colors.surface,

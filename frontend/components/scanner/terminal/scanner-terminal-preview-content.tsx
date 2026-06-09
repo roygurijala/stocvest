@@ -27,6 +27,7 @@ const EMPTY_OVERVIEW: ScannerOverview = {
 type Props = {
   initialScannerSetupLoadMode: ScannerSetupLoadMode;
   dayTradingSurfaces: boolean;
+  showPreviewBadge?: boolean;
 };
 
 export function ScannerTerminalPreviewContent({
@@ -41,52 +42,53 @@ export function ScannerTerminalPreviewContent({
   const [loading, setLoading] = useState(true);
   const [watchlistSymbols, setWatchlistSymbols] = useState<string[]>([]);
   const [evaluationTrace, setEvaluationTrace] = useState<ScannerEvaluationTraceRow[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
 
   const { data: swingDeskRes } = useDeskToday("swing");
   const { data: dayDeskRes } = useDeskToday("day", { fallbackData: undefined });
   const { data: dashboardPayload } = useDashboardPayload("swing");
   const sectorRotation = parseSectorRotationEnvelope(dashboardPayload?.sector_rotation);
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    void (async () => {
-      const core = await loadScannerDataWithoutBrief(null, [], {
-        parallelDefaultWatchlist: true,
-        includeOpportunityDeskUniverse: true,
-        maxUniverseSymbols: 150,
-        scannerSetupLoadMode: scannerSetupMode,
-        intradayBarLimit: 120,
-        daySetupsLimit: 10,
-        swingSetupsLimit: 6
-      });
-      if (cancelled) return;
-      if (!core.error) {
-        setOverview((prev) => mergeScannerCoreIntoOverview(prev, core));
-        setLoadedAt(new Date().toISOString());
-      }
-      try {
-        const trace = await fetchScannerEvaluationTraceClient(scannerSetupMode, 24);
-        if (!cancelled) setEvaluationTrace(trace);
-      } catch {
-        /* ignore */
-      }
-      try {
-        const wl = await fetch("/api/stocvest/watchlists/default/symbols", { cache: "no-store" });
-        if (wl.ok) {
-          const body = (await wl.json()) as { symbols?: string[] };
-          if (!cancelled && Array.isArray(body.symbols)) {
-            setWatchlistSymbols(body.symbols.map((s) => String(s).trim().toUpperCase()).filter(Boolean));
-          }
+  const loadScanner = async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
+    else setRefreshing(true);
+    const core = await loadScannerDataWithoutBrief(null, [], {
+      parallelDefaultWatchlist: true,
+      includeOpportunityDeskUniverse: true,
+      maxUniverseSymbols: 150,
+      scannerSetupLoadMode: scannerSetupMode,
+      intradayBarLimit: 120,
+      daySetupsLimit: 10,
+      swingSetupsLimit: 6
+    });
+    if (!core.error) {
+      setOverview((prev) => mergeScannerCoreIntoOverview(prev, core));
+      setLoadedAt(new Date().toISOString());
+    }
+    try {
+      const trace = await fetchScannerEvaluationTraceClient(scannerSetupMode, 24);
+      setEvaluationTrace(trace);
+    } catch {
+      /* ignore */
+    }
+    try {
+      const wl = await fetch("/api/stocvest/watchlists/default/symbols", { cache: "no-store" });
+      if (wl.ok) {
+        const body = (await wl.json()) as { symbols?: string[] };
+        if (Array.isArray(body.symbols)) {
+          setWatchlistSymbols(body.symbols.map((s) => String(s).trim().toUpperCase()).filter(Boolean));
         }
-      } catch {
-        /* ignore */
       }
-      setLoading(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
+    } catch {
+      /* ignore */
+    }
+    if (!opts?.silent) setLoading(false);
+    else setRefreshing(false);
+  };
+
+  useEffect(() => {
+    void loadScanner();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- initial load only
   }, [scannerSetupMode]);
 
   const nearQualification = useMemo(() => {
@@ -104,13 +106,6 @@ export function ScannerTerminalPreviewContent({
       watchlistProgression: []
     });
   }, [overview, loadedAt]);
-
-  const updatedLabel = useMemo(() => {
-    if (!loadedAt) return null;
-    const mins = Math.max(0, Math.round((Date.now() - new Date(loadedAt).getTime()) / 60000));
-    if (mins < 1) return "just now";
-    return `${mins}m ago`;
-  }, [loadedAt]);
 
   if (loading && overview.setups.length === 0 && overview.gapIntelligence.length === 0) {
     return (
@@ -133,7 +128,9 @@ export function ScannerTerminalPreviewContent({
       synthesis={overview.scannerSynthesis ?? null}
       sectorRotation={sectorRotation}
       showPreviewBadge={showPreviewBadge}
-      updatedLabel={updatedLabel}
+      onRefresh={() => void loadScanner({ silent: true })}
+      refreshing={refreshing}
+      sessionUpdatedAtIso={loadedAt}
     />
   );
 }

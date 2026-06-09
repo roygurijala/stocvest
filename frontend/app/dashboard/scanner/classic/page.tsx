@@ -1,15 +1,23 @@
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
-import { ScannerTerminalPreviewContent } from "@/components/scanner/terminal/scanner-terminal-preview-content";
+import { ScannerPageClient } from "@/components/scanner-page-client";
+import type { ScannerOverview } from "@/lib/api/scanner";
 import { getDashboardAuthContext } from "@/lib/auth/dashboard-session";
 import { fetchDashboardUserMe, subscriptionPlanFromMe } from "@/lib/dashboard-user-subscription";
-import { scannerTerminalEnabled } from "@/lib/nav-features";
 import { scannerSetupLoadModeForSubscription, subscriptionAllowsDayTradingSurfaces } from "@/lib/subscription-access";
 
-/** Scanner terminal preview — same client load path as live `/dashboard/scanner`. */
-export const maxDuration = 60;
+/** Legacy scanner UI — always `ScannerPageClient` regardless of terminal flag. */
+const SCANNER_PAGE_SHELL_OVERVIEW: ScannerOverview = {
+  gapIntelligence: [],
+  setups: [],
+  spyPct: null,
+  qqqPct: null,
+  regimeLabel: "Neutral",
+  swingUniverseSymbolCount: null,
+  gapIntelligenceSnapshotSymbolCount: null
+};
 
-export default async function ScannerTerminalPreviewPage() {
+export default async function DashboardScannerClassicPage() {
   const { session, isAdmin } = getDashboardAuthContext();
   if (!session) {
     redirect("/login");
@@ -19,16 +27,14 @@ export default async function ScannerTerminalPreviewPage() {
   const dayTradingSurfaces = subscriptionAllowsDayTradingSurfaces(plan, me?.has_full_access === true);
   const scannerSetupLoadMode = scannerSetupLoadModeForSubscription(plan, me?.has_full_access === true);
 
-  if (scannerTerminalEnabled()) {
-    redirect("/dashboard/scanner");
-  }
-
   return (
-    <AppShell session={session} isAdmin={isAdmin} hideTopBar>
-      <ScannerTerminalPreviewContent
+    <AppShell session={session} isAdmin={isAdmin}>
+      <ScannerPageClient
+        initialOverview={SCANNER_PAGE_SHELL_OVERVIEW}
         initialScannerSetupLoadMode={scannerSetupLoadMode}
+        initialTimestampIso={new Date().toISOString()}
+        earningsBySymbol={{}}
         dayTradingSurfaces={dayTradingSurfaces}
-        showPreviewBadge
       />
     </AppShell>
   );

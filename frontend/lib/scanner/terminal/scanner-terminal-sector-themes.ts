@@ -6,52 +6,9 @@ import type { DeskTodayData } from "@/lib/api/desk-today";
 import type { GapIntelligenceItem, IntradaySetupPayload } from "@/lib/api/scanner";
 import type { SectorRotationChip } from "@/lib/market-context/types";
 import type { ScannerTerminalRadarGroup } from "@/lib/scanner/terminal/scanner-terminal-model";
+import { SYMBOL_TO_SECTOR_ETF } from "@/lib/scanner/terminal/symbol-sector-etf-map";
 
-/** Curated map for grouping desk/symbol funnel names into sector ETF themes. */
-export const SYMBOL_TO_SECTOR_ETF: Record<string, string> = {
-  JPM: "XLF",
-  GS: "XLF",
-  BAC: "XLF",
-  WFC: "XLF",
-  MS: "XLF",
-  C: "XLF",
-  MSFT: "XLK",
-  AMZN: "XLK",
-  CRM: "XLK",
-  NOW: "XLK",
-  NVDA: "XLK",
-  AMD: "XLK",
-  AVGO: "XLK",
-  ORCL: "XLK",
-  INTC: "XLK",
-  AAPL: "XLK",
-  GOOGL: "XLC",
-  GOOG: "XLC",
-  META: "XLC",
-  NFLX: "XLC",
-  TSLA: "XLY",
-  RIVN: "XLY",
-  F: "XLY",
-  GM: "XLY",
-  NKE: "XLY",
-  XOM: "XLE",
-  CVX: "XLE",
-  OXY: "XLE",
-  COP: "XLE",
-  JNJ: "XLV",
-  UNH: "XLV",
-  PFE: "XLV",
-  LLY: "XLV",
-  WMT: "XLP",
-  PG: "XLP",
-  KO: "XLP",
-  COST: "XLP",
-  BA: "XLI",
-  CAT: "XLI",
-  DE: "XLI",
-  PLD: "XLRE",
-  AMT: "XLRE"
-};
+export { SYMBOL_TO_SECTOR_ETF };
 
 const ETF_DISPLAY: Record<string, string> = {
   XLK: "Tech / cloud",

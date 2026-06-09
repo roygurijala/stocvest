@@ -41,8 +41,19 @@ export type ScannerTerminalGapRow = {
   symbol: string;
   company: string | null;
   gapPct: number;
+  gapDollars: number;
+  prevClose: number;
+  currentPrice: number;
+  volumeVsAvg: number;
+  gapQualityScore: number;
   statusLabel: string;
   note: string | null;
+  catalystHeadline: string | null;
+  catalystDescription: string | null;
+  hasCatalyst: boolean;
+  noCatalystWarning: string | null;
+  fillWatchReason: string;
+  monitorNote: string;
   lane: FeedLane | "either";
 };
 
@@ -59,6 +70,7 @@ export type ScannerTerminalSignalRow = {
   price: number | null;
   changePct: number | null;
   blockerNote: string | null;
+  triggers: string[];
 };
 
 export type ScannerTerminalRadarGroup = {
@@ -116,13 +128,37 @@ function gapStatusLabel(item: GapIntelligenceItem): string {
 }
 
 function gapNote(item: GapIntelligenceItem): string | null {
-  const name = item.company_name?.trim();
-  const catalyst =
-    item.catalyst?.headline?.trim() || item.catalyst?.article_description?.trim();
-  if (name && catalyst) return `${name} — ${catalyst}`;
+  const catalyst = item.catalyst?.headline?.trim() || item.catalyst?.article_description?.trim();
   if (catalyst) return catalyst;
   if (item.no_catalyst_warning?.trim()) return item.no_catalyst_warning.trim();
-  return name || null;
+  return item.company_name?.trim() || null;
+}
+
+export function gapFillWatchReason(item: GapIntelligenceItem): string {
+  const status = gapStatusLabel(item);
+  const volLabel =
+    item.volume_vs_avg >= 1.5 ? "heavy" : item.volume_vs_avg >= 1 ? "above average" : "light";
+  if (status === "accepted") {
+    return `${volLabel.charAt(0).toUpperCase()}${volLabel.slice(1)} volume — gap cleared our open filter.`;
+  }
+  if (status === "fill watch") {
+    return `Gap is material but ${volLabel} volume keeps it on fill watch until the open proves direction.`;
+  }
+  return "Monitoring only until volume and catalyst improve.";
+}
+
+export function gapMonitorNote(item: GapIntelligenceItem): string {
+  const prev = item.prev_close;
+  const status = gapStatusLabel(item);
+  if (status === "fill watch") {
+    return item.gap_pct >= 0
+      ? `Watch for gap fill toward $${prev.toFixed(2)} (prev close). Hold above the open = continuation; fade back through VWAP = caution.`
+      : `Watch for bounce or further flush — reclaim of $${prev.toFixed(2)} would negate the gap down.`;
+  }
+  if (item.gap_pct >= 0) {
+    return `Monitor pre-market high and first 15m volume — extension needs ${item.volume_vs_avg >= 1.2 ? "sustained" : "stronger"} participation.`;
+  }
+  return `Monitor for capitulation vs. dead-cat bounce — prev close $${prev.toFixed(2)} is the reclaim line.`;
 }
 
 export function buildGapRows(
@@ -141,8 +177,19 @@ export function buildGapRows(
       symbol: item.symbol.trim().toUpperCase(),
       company: item.company_name?.trim() || null,
       gapPct: item.gap_pct,
+      gapDollars: item.gap_dollars,
+      prevClose: item.prev_close,
+      currentPrice: item.current_price,
+      volumeVsAvg: item.volume_vs_avg,
+      gapQualityScore: item.gap_quality_score,
       statusLabel: gapStatusLabel(item),
       note: gapNote(item),
+      catalystHeadline: item.catalyst?.headline?.trim() || null,
+      catalystDescription: item.catalyst?.article_description?.trim() || null,
+      hasCatalyst: item.has_catalyst,
+      noCatalystWarning: item.no_catalyst_warning?.trim() || null,
+      fillWatchReason: gapFillWatchReason(item),
+      monitorNote: gapMonitorNote(item),
       lane: gapLane(item)
     }));
 }
@@ -185,7 +232,8 @@ export function feedCardToSignalRow(
     verdict: card.verdict,
     price: card.price,
     changePct: card.changePct,
-    blockerNote: blocker
+    blockerNote: blocker,
+    triggers: setup?.triggers?.filter((t) => t.trim()) ?? []
   };
 }
 
@@ -194,7 +242,7 @@ function developingBlocker(row: ScannerNearQualificationRow): string | null {
     return `needs ${row.layers_away} more layer${row.layers_away === 1 ? "" : "s"}`;
   }
   if (row.alignment?.label?.trim()) return row.alignment.label.trim();
-  return `score ${Math.round(row.score)}`;
+  return null;
 }
 
 export function nearQualToDevelopingRows(
@@ -218,7 +266,8 @@ export function nearQualToDevelopingRows(
       verdict: row.alignment?.label ?? "Approaching threshold",
       price: null,
       changePct: null,
-      blockerNote: developingBlocker(row)
+      blockerNote: developingBlocker(row),
+      triggers: []
     }));
 }
 
@@ -288,6 +337,23 @@ export type ScannerTerminalSections = {
   radar: ScannerTerminalRadarGroup[];
   actionableCount: number;
 };
+
+export function selectionTitle(
+  selection: ScannerTerminalSelection,
+  sections: Pick<ScannerTerminalSections, "gaps" | "actionable" | "developing" | "radar">
+): string | null {
+  if (!selection) return null;
+  if (selection.kind === "gap") return selection.symbol;
+  if (selection.kind === "lookup") return selection.symbol;
+  if (selection.kind === "radar") {
+    const group = sections.radar.find((g) => g.id === selection.groupId);
+    return group?.title ?? "On radar";
+  }
+  const row =
+    sections.actionable.find((r) => r.id === selection.id) ??
+    sections.developing.find((r) => r.id === selection.id);
+  return row?.symbol ?? null;
+}
 
 export function splitDevelopingRows(rows: ScannerTerminalSignalRow[]): {
   closest: ScannerTerminalSignalRow[];

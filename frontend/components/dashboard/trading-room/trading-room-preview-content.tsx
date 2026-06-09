@@ -1,4 +1,4 @@
-import { DashboardTradingRoom } from "@/components/dashboard/trading-room/dashboard-trading-room";
+import { TradingRoomClientEntry } from "@/components/dashboard/trading-room/trading-room-client-entry";
 import { DashboardScannerClientFetch } from "@/components/dashboard/dashboard-scanner-client-fetch";
 import { DASHBOARD_SCANNER_TUNING_BASE } from "@/components/dashboard-page-content";
 import { fetchDashboardFirstSegment } from "@/lib/dashboard/dashboard-page-data";
@@ -43,7 +43,7 @@ export async function TradingRoomPreviewContent({ userName }: { userName?: strin
     const profileFirstName = me?.first_name?.trim() || null;
 
     return (
-      <DashboardTradingRoom
+      <TradingRoomClientEntry
         marketOverview={marketOverview}
         scannerOverview={EMPTY_SCANNER_OVERVIEW}
         earningsEvents={earnings.upcoming}
@@ -58,7 +58,7 @@ export async function TradingRoomPreviewContent({ userName }: { userName?: strin
   } catch (err: unknown) {
     if (isNextRedirect(err)) throw err;
     return (
-      <DashboardTradingRoom
+      <TradingRoomClientEntry
         marketOverview={marketOverviewFallback}
         scannerOverview={EMPTY_SCANNER_OVERVIEW}
         earningsEvents={[]}
