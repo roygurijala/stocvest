@@ -18,7 +18,7 @@ import argparse
 import json
 import os
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -31,6 +31,39 @@ _ET = ZoneInfo("America/New_York")
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _DEFAULT_OUT = _REPO_ROOT / "reports" / "ledger"
 _SHADOW_SUFFIX = ":ledger_capture_shadow"
+
+# Order used to pick the "primary" blocker when multiple gates failed.
+_GATE_PRIMARY_ORDER: tuple[str, ...] = (
+    "decision_state",
+    "market_environment",
+    "decision_score",
+    "alignment",
+    "macro_regime",
+    "risk_reward",
+    "sector_gate",
+    "intraday_depth",
+    "session_setup",
+    "entry_daily_close_window",
+    "entry_session_timing",
+    "session_liquidity",
+    "dedupe_open_position",
+)
+
+_GATE_LABELS: dict[str, str] = {
+    "decision_state": "Decision state",
+    "market_environment": "Market environment",
+    "decision_score": "Decision score",
+    "alignment": "Layer alignment",
+    "macro_regime": "Macro regime",
+    "risk_reward": "Risk / reward",
+    "sector_gate": "Sector gate",
+    "intraday_depth": "Intraday bar depth",
+    "session_setup": "Session setup (ORB/VWAP)",
+    "entry_daily_close_window": "Swing entry window (post-close)",
+    "entry_session_timing": "Day entry session timing",
+    "session_liquidity": "Session liquidity",
+    "dedupe_open_position": "Open validation position",
+}
 
 
 def _valid_endpoint(url: str | None) -> str | None:
@@ -132,6 +165,108 @@ def _is_ledger_row(item: dict[str, Any]) -> bool:
     return False
 
 
+def _parse_gate_blob(item: dict[str, Any]) -> dict[str, Any] | None:
+    raw = str(item.get("gate_status_json") or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _gate_passes(gate_data: Any) -> bool:
+    if not isinstance(gate_data, dict):
+        return True
+    if gate_data.get("pass") is False:
+        return False
+    return True
+
+
+def _describe_gate_failure(gate_name: str, gate_data: Any) -> str | None:
+    if not isinstance(gate_data, dict) or _gate_passes(gate_data):
+        return None
+    label = _GATE_LABELS.get(gate_name, gate_name.replace("_", " "))
+    if gate_name == "decision_state":
+        val = str(gate_data.get("value") or "unknown").strip().lower()
+        need = str(gate_data.get("need") or "actionable").strip().lower()
+        return f"{label}: was {val}, need {need}"
+    if gate_name == "market_environment":
+        reason = str(gate_data.get("reason") or "environment_blocked").strip()
+        tier = gate_data.get("tier")
+        tier_bit = f" (tier {tier})" if tier else ""
+        return f"{label}: {reason}{tier_bit}"
+    if gate_name == "decision_score":
+        val = gate_data.get("value")
+        min_v = gate_data.get("min")
+        return f"{label}: score {val} below minimum {min_v}"
+    if gate_name == "alignment":
+        val = gate_data.get("value")
+        min_v = gate_data.get("min")
+        return f"{label}: {val} below minimum {min_v}"
+    if gate_name == "macro_regime":
+        val = gate_data.get("value") or gate_data.get("blocked")
+        return f"{label}: blocked ({val})"
+    if gate_name == "risk_reward":
+        if gate_data.get("reason") == "missing_risk_reward":
+            return f"{label}: missing R/R"
+        val = gate_data.get("value")
+        min_v = gate_data.get("min")
+        return f"{label}: {val} below minimum {min_v}"
+    if gate_name == "sector_gate":
+        if gate_data.get("reason") == "sector_unavailable":
+            return f"{label}: sector data unavailable (gate skipped)"
+        val = gate_data.get("value")
+        min_v = gate_data.get("min")
+        return f"{label}: score {val} below minimum {min_v}"
+    if gate_name == "intraday_depth":
+        bars = gate_data.get("bars")
+        min_v = gate_data.get("min")
+        return f"{label}: {bars} bars, need at least {min_v}"
+    if gate_name == "session_setup":
+        orb = gate_data.get("orb_signal") or "none"
+        vwap = gate_data.get("vwap_state") or "none"
+        return f"{label}: no ORB/VWAP signal (orb={orb}, vwap={vwap})"
+    if gate_name == "entry_daily_close_window":
+        return f"{label}: outside post-close capture window"
+    if gate_name == "entry_session_timing":
+        return f"{label}: outside allowed day entry session"
+    if gate_name == "session_liquidity":
+        return f"{label}: session liquidity below floor"
+    if gate_name == "dedupe_open_position":
+        reason = gate_data.get("reason") or "open_position_exists"
+        return f"{label}: {reason}"
+    reason = gate_data.get("reason")
+    if reason:
+        return f"{label}: {reason}"
+    return f"{label}: failed"
+
+
+def _failed_gates_from_item(item: dict[str, Any]) -> dict[str, str]:
+    blob = _parse_gate_blob(item)
+    if not blob:
+        return {}
+    gates = blob.get("gates")
+    if not isinstance(gates, dict):
+        return {}
+    out: dict[str, str] = {}
+    for name, data in gates.items():
+        desc = _describe_gate_failure(str(name), data)
+        if desc:
+            out[str(name)] = desc
+    return out
+
+
+def _primary_gate_failure(failed: dict[str, str]) -> str | None:
+    if not failed:
+        return None
+    for name in _GATE_PRIMARY_ORDER:
+        if name in failed:
+            return failed[name]
+    return next(iter(failed.values()))
+
+
 def _decision_state(item: dict[str, Any]) -> str:
     raw = str(item.get("decision_state_entry") or "").strip().lower()
     if raw in ("actionable", "monitor", "blocked"):
@@ -178,16 +313,51 @@ class DeskTally:
     monitor: int = 0
     blocked: int = 0
     symbols: set[str] = field(default_factory=set)
+    qualified_symbols: set[str] = field(default_factory=set)
+    shadow_symbols: set[str] = field(default_factory=set)
+    shadow_with_gate_detail: int = 0
+    shadow_without_gate_detail: int = 0
+    failed_gate_counts: Counter[str] = field(default_factory=Counter)
+    primary_gate_name_counts: Counter[str] = field(default_factory=Counter)
+    primary_blocker_counts: Counter[str] = field(default_factory=Counter)
+    detail_reason_counts: Counter[str] = field(default_factory=Counter)
+    symbol_primary_blocker: dict[str, str] = field(default_factory=dict)
 
     def add(self, item: dict[str, Any]) -> None:
         self.ledger_rows += 1
         sym = str(item.get("symbol") or "").strip().upper()
         if sym:
             self.symbols.add(sym)
-        if item.get("ledger_qualified") is True:
+        is_qualified = item.get("ledger_qualified") is True
+        if is_qualified:
             self.qualified += 1
+            if sym:
+                self.qualified_symbols.add(sym)
         else:
             self.shadow += 1
+            if sym:
+                self.shadow_symbols.add(sym)
+            failed = _failed_gates_from_item(item)
+            if failed:
+                self.shadow_with_gate_detail += 1
+                for gate_name in failed:
+                    self.failed_gate_counts[gate_name] += 1
+                primary_name = next(
+                    (n for n in _GATE_PRIMARY_ORDER if n in failed),
+                    next(iter(failed.keys())),
+                )
+                self.primary_gate_name_counts[primary_name] += 1
+                primary = _primary_gate_failure(failed)
+                if primary:
+                    self.primary_blocker_counts[primary] += 1
+                    self.detail_reason_counts[primary] += 1
+                    for desc in failed.values():
+                        if desc != primary:
+                            self.detail_reason_counts[desc] += 1
+                    if sym and sym not in self.symbol_primary_blocker:
+                        self.symbol_primary_blocker[sym] = primary
+            else:
+                self.shadow_without_gate_detail += 1
         ds = _decision_state(item)
         if ds == "actionable":
             self.actionable += 1
@@ -261,6 +431,59 @@ def _maturation_actionable_counts(start: date, end: date) -> dict[str, int]:
     return out
 
 
+def _format_gate_breakdown(desk: str, st: DeskTally) -> list[str]:
+    lines: list[str] = []
+    lines.append(f"--- {desk.upper()} DESK - TRACKING & GATE FAILURES ---")
+    lines.append(f"  Symbols tracked (unique)   : {len(st.symbols)}")
+    lines.append(f"  Capture attempts (rows)    : {st.ledger_rows}")
+    lines.append(f"  Qualified symbols          : {len(st.qualified_symbols)}")
+    lines.append(f"  Shadow-only symbols        : {len(st.shadow_symbols - st.qualified_symbols)}")
+    lines.append(f"  Qualified rows             : {st.qualified}")
+    lines.append(f"  Shadow rows (did not pass) : {st.shadow}")
+    if st.shadow == 0:
+        lines.append("  (No shadow rows - nothing to diagnose.)")
+        lines.append("")
+        return lines
+    lines.append(f"  Shadow rows with gate JSON : {st.shadow_with_gate_detail}")
+    lines.append(f"  Shadow rows missing gates  : {st.shadow_without_gate_detail}")
+    lines.append("")
+    if st.primary_gate_name_counts:
+        lines.append("  Primary blocker by gate (first failure per shadow row):")
+        for gate_name, count in st.primary_gate_name_counts.most_common():
+            label = _GATE_LABELS.get(gate_name, gate_name)
+            lines.append(f"    [{count:4d}]  {label}")
+        lines.append("")
+    if st.primary_blocker_counts:
+        lines.append("  Top failure messages (plain English):")
+        for reason, count in st.primary_blocker_counts.most_common(10):
+            lines.append(f"    [{count:4d}]  {reason}")
+        lines.append("")
+    if st.failed_gate_counts:
+        lines.append("  Failed gates (audit counts; a row may fail multiple):")
+        for gate_name, count in st.failed_gate_counts.most_common():
+            label = _GATE_LABELS.get(gate_name, gate_name)
+            lines.append(f"    [{count:4d}]  {label} ({gate_name})")
+        lines.append("")
+    extra = [
+        (reason, cnt)
+        for reason, cnt in st.detail_reason_counts.most_common()
+        if reason not in st.primary_blocker_counts
+    ]
+    if extra:
+        lines.append("  Additional failure detail (secondary gates on same rows):")
+        for reason, count in extra[:8]:
+            lines.append(f"    [{count:4d}]  {reason}")
+        lines.append("")
+    if st.symbol_primary_blocker:
+        lines.append("  Per-symbol primary blocker (shadow rows, up to 20):")
+        for sym in sorted(st.symbol_primary_blocker.keys())[:20]:
+            lines.append(f"    {sym:6s}  {st.symbol_primary_blocker[sym]}")
+        if len(st.symbol_primary_blocker) > 20:
+            lines.append(f"    ... and {len(st.symbol_primary_blocker) - 20} more symbols")
+        lines.append("")
+    return lines
+
+
 def _format_report(
     *,
     period: str,
@@ -304,6 +527,9 @@ def _format_report(
             suffix = " ..." if len(st.symbols) > 20 else ""
             lines.append(f"  Symbols                 : {preview}{suffix}")
         lines.append("")
+    for desk in ("day", "swing"):
+        st = desks.get(desk) or DeskTally()
+        lines.extend(_format_gate_breakdown(desk, st))
     lines.append("--- WATCHLIST MATURATION (actionable state, same ET window) ---")
     lines.append("  (Separate from ledger - shows watchlist rows marked actionable.)")
     lines.append(f"  Day actionable rows     : {maturation.get('day', 0)}")
@@ -317,7 +543,11 @@ def _format_report(
             qual = item.get("ledger_qualified")
             ds = _decision_state(item)
             led = item.get("ledger_entry_date_et") or _et_date_of(item)
-            lines.append(f"  {led}  {mode}  {sym}  qualified={qual}  decision={ds}")
+            blocker = _primary_gate_failure(_failed_gates_from_item(item))
+            extra = f"  blocker={blocker}" if blocker and not qual else ""
+            lines.append(
+                f"  {led}  {mode}  {sym}  qualified={qual}  decision={ds}{extra}"
+            )
     lines.append("")
     lines.append("--- QUICK HEALTH CHECK ---")
     day_q = (desks.get("day") or DeskTally()).qualified

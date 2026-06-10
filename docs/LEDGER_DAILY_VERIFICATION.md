@@ -103,6 +103,28 @@ Open the `.txt` file in Cursor or any editor. The same summary is also printed i
 | **Decision blocked** | Failed gates or blocked direction |
 | **Unique symbols** | How many tickers were evaluated |
 
+### Tracking & gate failures section (per desk)
+
+| Line | Meaning |
+|------|---------|
+| **Symbols tracked (unique)** | Distinct tickers the ledger job evaluated in the window |
+| **Capture attempts (rows)** | Total rows written (qualified + shadow); can exceed unique symbols if multiple captures |
+| **Qualified symbols** | Tickers with at least one qualified row |
+| **Shadow-only symbols** | Evaluated but never qualified in this window |
+| **Shadow rows with gate JSON** | Shadow rows that include `gate_status_json` (usable for diagnosis) |
+| **Primary blocker** | First gate that failed on each shadow row (plain English) |
+| **Failed gates (audit counts)** | How often each gate failed; one row can increment several gates |
+| **Per-symbol primary blocker** | Quick lookup: why each shadow symbol did not qualify |
+
+Common primary blockers:
+
+- **Decision state: was monitor/blocked, need actionable** — composite was not trade-ready (most common).
+- **Decision score below minimum 72** — composite strength too low.
+- **Layer alignment below minimum 0.52** — too many layers disagree.
+- **Risk / reward below minimum** — day needs **1.3:1**, swing needs **2.0:1** (or higher in stressed markets).
+- **Sector gate** — sector analyzer score below **45** (swing).
+- **Market environment** — VIX / tier policy blocked entry.
+
 ### Watchlist maturation section
 
 Separate from ledger: how many watchlist rows are in **actionable** maturation state that day.  
