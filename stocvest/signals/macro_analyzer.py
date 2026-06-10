@@ -90,6 +90,16 @@ class MacroAnalyzer:
             vol_score = 50.0
             vix_trend = None
         else:
+            # VIX bucket → score mapping (higher VIX = lower score = more bearish):
+            #   vix_price >= vix_high (≥30)      → vix_extreme_score (~15, most bearish)
+            #   vix_price >= vix_elevated (25–30) → vix_high_score    (~30)
+            #   vix_price >= vix_normal (20–25)   → vix_elevated_score (~45)
+            #   vix_price >= vix_low (15–20)      → vix_normal_score  (~65)
+            #   vix_price < vix_low (<15)          → vix_low_score    (~80, most bullish)
+            # NOTE: "vix_high_score" is the score for the *vix_elevated* tier, not the
+            # vix_high tier — the names are one tier offset from the threshold names.
+            # Changing any score value here requires a corresponding update to the
+            # MacroParameters docstring in signal_parameters.py.
             if vix_price >= params.vix_high:
                 vol_score = float(params.vix_extreme_score)
             elif vix_price >= params.vix_elevated:

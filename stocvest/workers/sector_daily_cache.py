@@ -6,6 +6,7 @@ import asyncio
 import dataclasses
 import json
 import logging
+import time
 from dataclasses import dataclass
 from datetime import date, timedelta
 
@@ -37,6 +38,7 @@ SECTOR_ETFS_TO_TRACK = [
 
 SECTOR_DAILY_KEY_PREFIX = "stocvest:sector_daily:"
 SECTOR_DAILY_TTL = 86400
+SECTOR_DAILY_DYNAMO_PREFIX = "DAILY#"
 
 
 @dataclass
@@ -136,6 +138,68 @@ async def compute_daily_returns_for_etf(
     return daily_returns[-5:]
 
 
+def _sector_daily_dynamo_key(etf: str) -> str:
+    return f"{SECTOR_DAILY_DYNAMO_PREFIX}{etf.strip().upper()}"
+
+
+def _parse_daily_returns_payload(raw: str) -> list[DailyReturn] | None:
+    try:
+        data = json.loads(raw)
+        if not isinstance(data, list):
+            return None
+        return [DailyReturn(**d) for d in data]
+    except (json.JSONDecodeError, TypeError, ValueError) as exc:
+        _LOG.warning("sector_daily_parse_failed error=%s", exc)
+        return None
+
+
+def _write_sector_daily_dynamo(etf: str, returns: list[DailyReturn]) -> None:
+    settings = get_settings()
+    table_name = (settings.dynamodb_sector_cache_table or "").strip()
+    if not table_name or not returns:
+        return
+    try:
+        import boto3
+
+        ttl = int(time.time()) + SECTOR_DAILY_TTL
+        payload = json.dumps([dataclasses.asdict(ret) for ret in returns])
+        tbl = boto3.resource("dynamodb", region_name=settings.aws_region).Table(table_name)
+        tbl.put_item(
+            Item={
+                "symbol": _sector_daily_dynamo_key(etf),
+                "daily_returns_json": payload,
+                "expires_at": ttl,
+            }
+        )
+    except Exception as exc:
+        _LOG.warning("sector_daily_dynamo_write_failed etf=%s error=%s", etf, exc)
+
+
+def _read_sector_daily_dynamo(etf: str) -> list[DailyReturn] | None:
+    settings = get_settings()
+    table_name = (settings.dynamodb_sector_cache_table or "").strip()
+    if not table_name:
+        return None
+    try:
+        import boto3
+
+        tbl = boto3.resource("dynamodb", region_name=settings.aws_region).Table(table_name)
+        resp = tbl.get_item(Key={"symbol": _sector_daily_dynamo_key(etf)})
+        item = resp.get("Item")
+        if not item:
+            return None
+        exp = int(item.get("expires_at") or 0)
+        if exp and exp < int(time.time()):
+            return None
+        raw = item.get("daily_returns_json")
+        if not raw:
+            return None
+        return _parse_daily_returns_payload(str(raw))
+    except Exception as exc:
+        _LOG.warning("sector_daily_dynamo_read_failed etf=%s error=%s", etf, exc)
+        return None
+
+
 async def _update_sector_daily_cache_with_client(client: PolygonClient) -> dict[str, list[DailyReturn]]:
     results: dict[str, list[DailyReturn]] = {}
     spy_bars = await fetch_etf_daily_bars("SPY", client, sessions=7)
@@ -157,12 +221,10 @@ async def _update_sector_daily_cache_with_client(client: PolygonClient) -> dict[
         if not returns:
             continue
         try:
+            payload = json.dumps([dataclasses.asdict(ret) for ret in returns])
             if r is not None:
-                r.setex(
-                    f"{SECTOR_DAILY_KEY_PREFIX}{etf}",
-                    SECTOR_DAILY_TTL,
-                    json.dumps([dataclasses.asdict(ret) for ret in returns]),
-                )
+                r.setex(f"{SECTOR_DAILY_KEY_PREFIX}{etf}", SECTOR_DAILY_TTL, payload)
+            _write_sector_daily_dynamo(etf, returns)
             results[etf] = returns
             _LOG.info("sector_daily_cached etf=%s sessions=%d", etf, len(returns))
         except Exception as exc:
@@ -181,19 +243,19 @@ async def update_sector_daily_cache(
 
 
 def get_cached_sector_returns(etf: str) -> list[DailyReturn] | None:
+    etf_u = etf.strip().upper()
     try:
         r = get_sync_redis()
-        if r is None:
-            return None
-        cached = r.get(f"{SECTOR_DAILY_KEY_PREFIX}{etf.strip().upper()}")
-        if not cached:
-            return None
-        raw = cached.decode() if isinstance(cached, bytes) else str(cached)
-        data = json.loads(raw)
-        return [DailyReturn(**d) for d in data]
+        if r is not None:
+            cached = r.get(f"{SECTOR_DAILY_KEY_PREFIX}{etf_u}")
+            if cached:
+                raw = cached.decode() if isinstance(cached, bytes) else str(cached)
+                parsed = _parse_daily_returns_payload(raw)
+                if parsed:
+                    return parsed
     except Exception as exc:
-        _LOG.warning("sector_daily_read_failed etf=%s error=%s", etf, exc)
-    return None
+        _LOG.warning("sector_daily_redis_read_failed etf=%s error=%s", etf_u, exc)
+    return _read_sector_daily_dynamo(etf_u)
 
 
 def get_all_cached_sector_data() -> dict[str, list[DailyReturn]]:

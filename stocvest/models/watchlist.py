@@ -151,6 +151,25 @@ class WatchlistEntry:
         return STATE_LABELS[self.state]
 
 
+def derive_maturation_state(
+    layers_aligned: int,
+    previous_state: WatchlistState | None,
+    *,
+    was_invalidated: bool = False,
+    composite_decision_state: str | None = None,
+) -> WatchlistState:
+    """Derive maturation state; ``actionable`` requires ledger-style ``decision_state`` too."""
+    state = derive_state(layers_aligned, previous_state, was_invalidated=was_invalidated)
+    if state != WatchlistState.ACTIONABLE:
+        return state
+    ds = str(composite_decision_state or "").strip().lower()
+    if ds == "actionable":
+        return WatchlistState.ACTIONABLE
+    if was_invalidated:
+        return WatchlistState.RE_EVALUATING
+    return WatchlistState.DEVELOPING
+
+
 def derive_state(
     layers_aligned: int,
     previous_state: WatchlistState | None,
@@ -197,7 +216,11 @@ def derive_progress_band(
     if state == WatchlistState.INVALIDATED:
         return "not_aligned"
     if layers_aligned >= ACTIONABLE_THRESHOLD:
-        return "actionable"
+        if state is None or state == WatchlistState.ACTIONABLE:
+            return "actionable"
+        if layers_aligned == NEAR_READY_LAYER_COUNT:
+            return "near_ready"
+        return "developing"
     if layers_aligned == NEAR_READY_LAYER_COUNT:
         return "near_ready"
     if layers_aligned >= DEVELOPING_THRESHOLD:

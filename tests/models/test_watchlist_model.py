@@ -12,6 +12,7 @@ from stocvest.models.watchlist import (
     NEAR_READY_LAYER_COUNT,
     WatchlistEntry,
     WatchlistState,
+    derive_maturation_state,
     derive_progress_band,
     derive_state,
     user_state_gsi_keys,
@@ -37,6 +38,21 @@ def test_derive_progress_band_near_ready_at_four() -> None:
 
 def test_derive_progress_band_actionable_at_five() -> None:
     assert derive_progress_band(ACTIONABLE_THRESHOLD) == "actionable"
+    assert (
+        derive_progress_band(ACTIONABLE_THRESHOLD, state=WatchlistState.DEVELOPING)
+        == "developing"
+    )
+
+
+def test_derive_maturation_state_requires_decision_actionable() -> None:
+    assert (
+        derive_maturation_state(ACTIONABLE_THRESHOLD, None, composite_decision_state="monitor")
+        == WatchlistState.DEVELOPING
+    )
+    assert (
+        derive_maturation_state(ACTIONABLE_THRESHOLD, None, composite_decision_state="actionable")
+        == WatchlistState.ACTIONABLE
+    )
 
 
 def test_derive_progress_band_invalidated_not_near_ready() -> None:

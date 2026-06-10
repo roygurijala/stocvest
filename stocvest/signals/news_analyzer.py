@@ -177,7 +177,10 @@ class NewsAnalyzer:
                 if pub.tzinfo is None:
                     pub = pub.replace(tzinfo=timezone.utc)
             except (TypeError, ValueError):
-                time_filtered.append(a)
+                # Exclude articles with unparseable dates rather than including
+                # them. An article from an indeterminate past time should not
+                # influence sentiment scoring; stale or malformed inputs are
+                # more harmful than absent.
                 continue
             if pub.astimezone(timezone.utc) >= cutoff:
                 time_filtered.append(a)

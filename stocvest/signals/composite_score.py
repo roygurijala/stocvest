@@ -65,13 +65,18 @@ class CompositeSignal:
 
 # Phase-2 layer set from project decisions:
 # Technical + News + Sector + Macro + Geopolitical + Internals
+# NOTE: These values must stay in sync with CompositeParameters field defaults in
+# stocvest/config/signal_parameters.py. Previously they diverged (news 0.18 vs 0.20,
+# macro 0.16 vs 0.15, geopolitical 0.12 vs 0.10, internals 0.12 vs 0.10), causing
+# the no-args engine path used in tests to score against a different table than
+# production. Always update BOTH locations together.
 DEFAULT_BASE_WEIGHTS: dict[str, float] = {
     "technical": 0.30,
-    "news": 0.18,
-    "sector": 0.12,
-    "macro": 0.16,
-    "geopolitical": 0.12,
-    "internals": 0.12,
+    "news": 0.20,
+    "sector": 0.15,
+    "macro": 0.15,
+    "geopolitical": 0.10,
+    "internals": 0.10,
 }
 
 # Regime multipliers are applied on top of base weights.

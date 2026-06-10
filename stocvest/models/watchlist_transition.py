@@ -8,7 +8,7 @@ from typing import Literal
 from stocvest.models.watchlist import WatchlistEntry, WatchlistState
 
 WatchlistTransitionType = Literal["initial", "improved", "worsened", "unchanged"]
-EvaluationSource = Literal["evidence", "maturation_refresh"]
+EvaluationSource = Literal["evidence", "maturation_refresh", "ledger_capture"]
 
 MATURATION_STATE_RANK: dict[WatchlistState, int] = {
     WatchlistState.INVALIDATED: 1,

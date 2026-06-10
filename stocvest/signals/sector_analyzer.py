@@ -318,17 +318,35 @@ class SectorAnalyzer:
             sector_pct = float(sector_etf_snapshot.change_percent)
             spy_pct = float(spy_snapshot.change_percent)
         relative = sector_pct - spy_pct
-        final = _clamp_i(float(params.inline_score), 0, 100)
+        # Score SPY's absolute performance through the same threshold table as
+        # mapped symbols rather than hardlocking at inline_score (50). A strong
+        # or weak SPY session carries real information even for unmapped stocks.
+        if sector_pct > params.absolute_up_threshold:
+            base = float(params.moderate_outperform_score)
+        elif sector_pct < params.absolute_down_threshold:
+            base = float(params.moderate_underperform_score)
+        else:
+            base = float(params.inline_score)
+        final = _clamp_i(base, 0, 100)
+        if final >= params.bullish_threshold:
+            spy_signal = "bullish"
+            spy_verdict = "bullish"
+        elif final <= params.bearish_threshold:
+            spy_signal = "bearish"
+            spy_verdict = "bearish"
+        else:
+            spy_signal = "neutral"
+            spy_verdict = "neutral"
         return SectorLayerResult(
             status="available",
             score=final,
-            verdict="neutral",
+            verdict=spy_verdict,
             sector_etf="SPY",
             sector_name=sector_display_name,
             sector_day_pct=sector_pct,
             spy_day_pct=spy_pct,
             relative_strength=relative,
-            sector_signal="neutral",
-            reasoning=reasoning + f" Spread {relative:+.2f}% (SPY vs SPY leg).",
+            sector_signal=spy_signal,
+            reasoning=reasoning + f" SPY {sector_pct:+.2f}% → score {final}.",
             chips=chips,
         )

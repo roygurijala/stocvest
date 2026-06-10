@@ -40,6 +40,10 @@ from stocvest.api.services.signal_validation_eligibility import (
     evaluate_swing_ledger_entry,
     gate_blob_json,
 )
+from stocvest.api.services.validation_timing import (
+    build_regime_window_key,
+    is_swing_ledger_entry_window_et,
+)
 from stocvest.api.services.swing_composite_evidence import (
     build_swing_composite_evidence_fields,
     serialize_daily_bars_for_range,
@@ -497,6 +501,8 @@ async def build_swing_composite_response(
         layers=layers_out,
     )
     merge_earnings_horizon_into_response(response_body, earnings_horizon)
+    if getattr(sector, "score", None) is not None:
+        response_body["sector_layer_score"] = int(sector.score)
 
     try:
         cb = composite_bias_from_summary(str(composite.verdict.value))

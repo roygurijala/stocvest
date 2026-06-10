@@ -239,12 +239,36 @@ def adjust_composite_with_alignment(
     """Map composite.score (-1..1) to 0..100, apply alignment, map back and re-derive verdict."""
     from dataclasses import replace
 
+    if composite.verdict == CompositeVerdict.NEUTRAL:
+        # A neutral composite has no directional intent, so alignment modifiers
+        # must not be applied. Evaluating it as "long" (the previous fallback)
+        # caused macro/sector headwinds to silently push neutral composites into
+        # bearish territory. Return a zero-modifier alignment result instead.
+        neutral_alignment = AlignmentResult(
+            level=AlignmentLevel.WEAK,
+            score_modifier=0.0,
+            macro_supports=False,
+            sector_supports=False,
+            technical_supports=False,
+            macro_direction=_normalize_regime(macro_regime),
+            sector_direction=(sector_verdict or "neutral").strip().lower(),
+            technical_direction=(technical_verdict or "neutral").strip().lower(),
+            is_tailwind=False,
+            is_headwind=False,
+            is_counter_trend=False,
+            alignment_label="No directional intent",
+            alignment_detail=(
+                "Composite is neutral — alignment modifiers are not applied. "
+                "No direction to confirm or oppose."
+            ),
+            alignment_chip="Neutral composite",
+        )
+        return composite, neutral_alignment
+
     signal_direction = (
         "long"
         if composite.verdict == CompositeVerdict.BULLISH
         else "short"
-        if composite.verdict == CompositeVerdict.BEARISH
-        else "long"
     )
     raw_100 = (float(composite.score) + 1.0) * 50.0
     alignment = compute_alignment_score(

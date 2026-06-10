@@ -22,6 +22,7 @@ from stocvest.models.watchlist import (
     WatchlistEntry,
     WatchlistMode,
     WatchlistState,
+    derive_maturation_state,
     derive_progress_band,
     derive_state,
 )
@@ -291,7 +292,19 @@ def sync_watchlist_maturation_from_composite(
     prev = repo.get_entry(user_id, sym_u, wl_mode)
     prev_state = prev.state if prev else None
     was_invalidated = prev_state == WatchlistState.INVALIDATED
-    new_state = derive_state(layers_aligned, prev_state, was_invalidated=was_invalidated)
+    composite_decision = str(composite_body.get("decision_state") or "").strip().lower()
+    if not composite_decision:
+        summary = str(composite_body.get("signal_summary") or "").strip().lower()
+        if summary in ("bullish", "bearish"):
+            composite_decision = "actionable"
+        elif summary == "neutral":
+            composite_decision = "monitor"
+    new_state = derive_maturation_state(
+        layers_aligned,
+        prev_state,
+        was_invalidated=was_invalidated,
+        composite_decision_state=composite_decision or None,
+    )
 
     now = _utc_now()
     state_changed = prev_state is None or new_state != prev_state

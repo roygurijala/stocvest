@@ -550,15 +550,20 @@ def swing_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[
                 macro_regime = str(
                     payload.get("macro_market_regime") or payload.get("market_regime") or regime or "neutral"
                 )
-                _sector_gate_score = None
-                for _key in ("sector_layer_score", "sector_score"):
-                    _raw_sec = payload.get(_key)
-                    if _raw_sec is not None:
-                        try:
-                            _sector_gate_score = float(_raw_sec)
-                        except (TypeError, ValueError):
-                            pass
-                        break
+                from stocvest.api.services.signal_validation_eligibility import (
+                    sector_analyzer_score_from_body,
+                )
+
+                _sector_gate_score = sector_analyzer_score_from_body(payload)
+                if _sector_gate_score is None:
+                    for _key in ("sector_layer_score", "sector_score"):
+                        _raw_sec = payload.get(_key)
+                        if _raw_sec is not None:
+                            try:
+                                _sector_gate_score = float(_raw_sec)
+                            except (TypeError, ValueError):
+                                pass
+                            break
                 eligible, gates = evaluate_swing_ledger_entry(
                     response_status=str(response_body.get("status") or "active"),
                     verdict=composite.verdict,

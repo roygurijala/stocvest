@@ -141,13 +141,27 @@ def _calculate_atr(bars: list[Bar], period: int = 14) -> Optional[float]:
 
 
 def _detect_ema_crossover(closes: list[float], ema9: float, lookback: int = 3) -> Optional[str]:
+    # Compute EMA9 at the lookback bar using the prefix up to that point so
+    # that both "was price above EMA?" comparisons use the EMA value at that
+    # bar rather than a static snapshot of today's EMA. A static EMA caused
+    # spurious crossovers: a stock above EMA9 for weeks but briefly below it
+    # 3 bars ago would fire "up" on every call.
     if len(closes) < lookback + 1:
+        return None
+    period = 9  # mirrors ema_fast_period default; crossover is always EMA9
+    prev_closes = closes[:-(lookback)]
+    ema9_prev = _calculate_ema(prev_closes, period)
+    if ema9_prev is None:
         return None
     prev_close = closes[-(lookback + 1)]
     curr_close = closes[-1]
-    if prev_close < ema9 and curr_close >= ema9:
+    was_below = prev_close < ema9_prev
+    is_above = curr_close >= ema9
+    was_above = prev_close > ema9_prev
+    is_below = curr_close <= ema9
+    if was_below and is_above:
         return "up"
-    if prev_close > ema9 and curr_close <= ema9:
+    if was_above and is_below:
         return "down"
     return None
 
@@ -428,11 +442,17 @@ class TechnicalAnalyzer:
 
         if rsi is not None:
             if rsi > params.rsi_overbought:
-                base_score -= params.rsi_moderate_delta
+                # Extreme overbought should be at least as strong as the zone
+                # score — previously used rsi_moderate_delta (-5) while the
+                # bullish zone used rsi_strong_delta (+10), understating the
+                # signal. Now symmetric with the zone strength.
+                base_score -= params.rsi_strong_delta
             elif rsi >= params.rsi_bullish_zone:
                 base_score += params.rsi_strong_delta
             elif rsi <= params.rsi_oversold:
-                base_score += params.rsi_moderate_delta
+                # Symmetric with overbought: oversold bounce context is as
+                # meaningful as the bearish zone penalty.
+                base_score += params.rsi_strong_delta
             elif rsi <= params.rsi_bearish_zone:
                 base_score -= params.rsi_strong_delta
 
