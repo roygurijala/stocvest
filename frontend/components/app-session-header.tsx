@@ -88,20 +88,42 @@ export function AppSessionHeader({
 
   const { openNavDrawer } = useAppChrome();
 
+  const marketLine = isMobile ? (
+    <span style={{ lineHeight: 1.4 }}>
+      <Tone color={regimeTone}>{regimeLabel}</Tone> · <Tone color={sessionTone}>{session}</Tone> · VIX{" "}
+      <Tone color={vixTone}>{vixText}</Tone>
+    </span>
+  ) : (
+    <span style={{ lineHeight: 1.4 }}>
+      Market in <Tone color={regimeTone}>{regimeLabel}</Tone> · breadth <Tone color={breadthTone}>{breadth}</Tone> · VIX{" "}
+      <Tone color={vixTone}>{vixText}</Tone> · <Tone color={sessionTone}>{session}</Tone>
+    </span>
+  );
+
   return (
     <header
       data-testid="app-session-header"
+      className={isMobile ? "app-session-header-mobile" : undefined}
       style={{
         display: "flex",
         alignItems: "center",
-        columnGap: spacing[5],
+        columnGap: isMobile ? spacing[3] : spacing[5],
         rowGap: spacing[2],
         flexWrap: "wrap",
-        padding: `${spacing[3]} ${bleed}`,
+        padding: isMobile
+          ? `calc(${spacing[3]} + env(safe-area-inset-top, 0px)) ${bleed} ${spacing[3]}`
+          : `${spacing[3]} ${bleed}`,
         marginLeft: `-${bleed}`,
         marginRight: `-${bleed}`,
         background: colors.surface,
-        borderBottom: `1px solid ${colors.border}`
+        borderBottom: `1px solid ${colors.border}`,
+        ...(isMobile
+          ? {
+              position: "sticky" as const,
+              top: 0,
+              zIndex: 30
+            }
+          : {})
       }}
     >
       {isMobile ? (
@@ -174,10 +196,7 @@ export function AppSessionHeader({
             flex: "none"
           }}
         />
-        <span style={{ lineHeight: 1.4 }}>
-          Market in <Tone color={regimeTone}>{regimeLabel}</Tone> · breadth <Tone color={breadthTone}>{breadth}</Tone> ·{" "}
-          VIX <Tone color={vixTone}>{vixText}</Tone> · <Tone color={sessionTone}>{session}</Tone>
-        </span>
+        {marketLine}
       </div>
 
       <div

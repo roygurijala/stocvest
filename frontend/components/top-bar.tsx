@@ -66,7 +66,7 @@ export function TopBar({ onMenuClick }: TopBarProps) {
       // document scrolls. On
       // ``lg+`` the bar starts after the 56px collapsed nav rail. ``z-30``
       // sits below modals/drawers (40+) but above page content.
-      className="app-topbar fixed left-0 right-0 top-0 z-30 grid min-h-14 grid-cols-[auto_1fr_auto] items-center gap-2 px-4 backdrop-blur-sm min-[900px]:left-[56px] min-[900px]:px-6"
+      className="app-topbar fixed left-0 right-0 top-0 z-30 grid min-h-14 grid-cols-[auto_1fr_auto] items-center gap-2 px-4 backdrop-blur-sm min-[900px]:left-[56px] min-[900px]:px-6 max-[899px]:pt-[calc(0.75rem+env(safe-area-inset-top,0px))]"
       style={{
         paddingTop: spacing[3],
         paddingBottom: spacing[3],
@@ -88,12 +88,14 @@ export function TopBar({ onMenuClick }: TopBarProps) {
       >
         <Menu size={22} />
       </button>
-      {isDashboardHome ? (
-        <div className="flex min-w-0 justify-center px-2">
+      {isDashboardHome || title === "STOCVEST" ? (
+        <div className="flex min-w-0 justify-center px-2 min-[900px]:justify-start">
           <StocvestTitle href="/dashboard" />
         </div>
       ) : (
-        <h1 className="m-0 min-w-0 truncate text-center text-lg font-bold min-[900px]:text-left min-[900px]:text-xl">{title}</h1>
+        <h1 className="m-0 min-w-0 truncate text-center text-base font-bold min-[900px]:text-left min-[900px]:text-xl">
+          {title}
+        </h1>
       )}
       <div className="flex shrink-0 items-center justify-end gap-2">
         {brokersEnabled() ? <TradingModeBadge /> : null}

@@ -33,7 +33,8 @@ export function syntheticFeedCardForDeepLink(intent: DashboardTradingRoomDeepLin
     changePct: null,
     alignment: null,
     rankScore: 0,
-    source: "desk"
+    source: "desk",
+    lastEvaluatedAt: null
   };
 }
 

@@ -7,6 +7,7 @@ import { PageLoader } from "@/components/page-loader";
 import { Sidebar } from "@/components/sidebar";
 import { APP_TOP_BAR_LAYOUT_HEIGHT, TopBar } from "@/components/top-bar";
 import { AppChromeProvider } from "@/lib/app-chrome-context";
+import { usesTradingSessionChrome } from "@/lib/app-chrome-routes";
 import type { AuthSession } from "@/lib/auth/types";
 import { resetBodyScrollLock } from "@/lib/body-scroll-lock";
 import { spacing } from "@/lib/design-system";
@@ -46,6 +47,7 @@ export function AppShell({
   const mainFlushTop = mainTopLayout !== "default";
   const { colors } = useTheme();
   const pathname = usePathname();
+  const suppressTopBar = hideTopBar || usesTradingSessionChrome(pathname);
   const [loading, setLoading] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -72,12 +74,12 @@ export function AppShell({
           data-testid="app-shell-right-column"
           style={{ background: colors.background }}
         >
-          {hideTopBar ? null : <TopBar onMenuClick={() => setDrawerOpen(true)} />}
+          {suppressTopBar ? null : <TopBar onMenuClick={() => setDrawerOpen(true)} />}
           <main
             className="min-w-0 px-4 pb-6 min-[900px]:px-6"
             data-main-top-layout={mainTopLayout}
             style={{
-              paddingTop: hideTopBar
+              paddingTop: suppressTopBar
                 ? 0
                 : mainFlushTop
                   ? 0

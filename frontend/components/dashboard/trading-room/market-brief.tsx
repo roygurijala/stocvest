@@ -19,6 +19,7 @@ import {
 } from "@/lib/dashboard/trading-room/brief-session-copy";
 import type { WatchlistAtCloseItem } from "@/lib/hooks/use-watchlist-at-close";
 import type { FeedCard, FeedState } from "@/lib/dashboard/trading-room/feed-model";
+import { FeedCardUpdatedLine } from "@/lib/dashboard/trading-room/feed-card-present";
 
 const BRIEF_NAME_STORAGE_KEY = "stocvest:brief-name";
 
@@ -378,6 +379,7 @@ export function MarketBrief({ data, onViewTopSetup, onSearch }: MarketBriefProps
                   <span style={{ fontSize: typography.scale.sm, color: colors.textMuted, lineHeight: 1.45 }}>
                     {data.topSwingCard.verdict}
                   </span>
+                  <FeedCardUpdatedLine iso={data.topSwingCard.lastEvaluatedAt} colors={colors} />
                 </div>
                 <button
                   type="button"

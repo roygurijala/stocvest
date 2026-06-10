@@ -48,6 +48,11 @@ import { useWatchlistAtClose } from "@/lib/hooks/use-watchlist-at-close";
 import { useWeeklySetupOutcomes } from "@/lib/hooks/use-weekly-setup-outcomes";
 import { DeepDive } from "@/components/dashboard/trading-room/deep-dive";
 import { QuietFeed } from "@/components/dashboard/trading-room/quiet-feed";
+import { TradingRoomMountRefresh } from "@/components/dashboard/trading-room/trading-room-mount-refresh";
+import { TradingRoomPeriodicRefresh } from "@/components/dashboard/trading-room/trading-room-periodic-refresh";
+import { FeedCardUpdatedLine } from "@/lib/dashboard/trading-room/feed-card-present";
+import { overlayFeedCardTimestamps } from "@/lib/dashboard/trading-room/feed-card-timestamps";
+import { useTradingRoomMaturation } from "@/lib/hooks/use-trading-room-maturation";
 import { WatchlistRail } from "@/components/dashboard/trading-room/watchlist-rail";
 import { MarketEnvironmentStrip } from "@/components/market-environment-strip";
 import { useMarketEnvironment } from "@/lib/hooks/use-market-environment";
@@ -281,6 +286,8 @@ function TradingRoomBody({
     return map;
   }, [scannerOverview.setups, scannerOverview.gapIntelligence, snapshotsBySymbol]);
 
+  const { swingBySymbol, dayBySymbol } = useTradingRoomMaturation(dayTradingSurfaces);
+
   const allCards = useMemo(() => {
     const cards = buildFeedCards({
       mode: "swing",
@@ -291,13 +298,36 @@ function TradingRoomBody({
       snapshotsBySymbol,
       dayTradingSurfaces
     });
-    return cards.map((c) => ({ ...c, company: c.company ?? companyBySymbol.get(c.symbol) ?? null }));
-  }, [swingDesk?.data, dayDesk?.data, swingSetups, daySetups, snapshotsBySymbol, dayTradingSurfaces, companyBySymbol]);
+    const withCompany = cards.map((c) => ({
+      ...c,
+      company: c.company ?? companyBySymbol.get(c.symbol) ?? null
+    }));
+    return overlayFeedCardTimestamps(withCompany, {
+      swingBySymbol,
+      dayBySymbol,
+      swingDeskGeneratedAt: swingDesk?.data?.generated_at ?? null,
+      dayDeskGeneratedAt: dayDesk?.data?.generated_at ?? null
+    });
+  }, [
+    swingDesk?.data,
+    dayDesk?.data,
+    swingSetups,
+    daySetups,
+    snapshotsBySymbol,
+    dayTradingSurfaces,
+    companyBySymbol,
+    swingBySymbol,
+    dayBySymbol
+  ]);
 
   const [filters, setFilters] = useState<FeedFilters>(DEFAULT_FEED_FILTERS);
   const feedEnvironment = filters.lane === "day" ? dayEnvironment : swingEnvironment;
   const ranked = useMemo(() => rankAndCapFeed(allCards, filters), [allCards, filters]);
   const { day, swing } = useMemo(() => groupFeedByLane(ranked), [ranked]);
+  const sidebarRefreshSymbols = useMemo(
+    () => [...new Set(allCards.map((c) => c.symbol.trim().toUpperCase()).filter(Boolean))],
+    [allCards]
+  );
 
   // Staleness detection: compare the swing desk envelope's market_date against today's ET
   // calendar date. When the app is running on a weekend, the swing desk may have data
@@ -387,7 +417,8 @@ function TradingRoomBody({
       changePct: snapPct(snap),
       alignment: null,
       rankScore: 0,
-      source: "desk"
+      source: "desk",
+      lastEvaluatedAt: null
     });
   };
   const selected = useMemo(() => {
@@ -731,6 +762,14 @@ function TradingRoomBody({
       className="stocvest-dashboard-v2"
       style={{ display: "grid", gap: 0, color: colors.text }}
     >
+      <TradingRoomMountRefresh
+        dayTradingSurfaces={dayTradingSurfaces}
+        sidebarSymbols={sidebarRefreshSymbols}
+      />
+      <TradingRoomPeriodicRefresh
+        dayTradingSurfaces={dayTradingSurfaces}
+        feedSymbols={sidebarRefreshSymbols}
+      />
       <AppSessionHeader
         regimeLabel={regimeLabel}
         spyPct={spyPct}
@@ -1246,6 +1285,7 @@ function SignalCard({
           from {staleDate} · valid through weekend
         </span>
       ) : null}
+      <FeedCardUpdatedLine iso={card.lastEvaluatedAt} colors={colors} />
     </button>
   );
 }
