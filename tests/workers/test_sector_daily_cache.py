@@ -78,4 +78,5 @@ async def test_update_sector_daily_cache_writes_redis(monkeypatch: pytest.Monkey
 
 def test_get_cached_returns_none(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sdc, "get_sync_redis", lambda: None)
+    monkeypatch.setattr(sdc, "_read_sector_daily_dynamo", lambda _etf: None)
     assert get_cached_sector_returns("XLE") is None

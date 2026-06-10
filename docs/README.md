@@ -14,6 +14,7 @@ Use this map to find the right doc quickly. **Authoritative technical specs** li
 | [`SIGNAL_ENGINE.md`](./SIGNAL_ENGINE.md) | Signal engine reference. |
 | [`DEPLOYMENT.md`](./DEPLOYMENT.md) | Deploy / infra notes (incl. **Lambda Linux packaging** — `scripts/build_lambda_package.ps1`). |
 | [`TUNING_PLAYBOOK.md`](./TUNING_PLAYBOOK.md) | Tuning parameters playbook. |
+| [`LEDGER_DAILY_VERIFICATION.md`](./LEDGER_DAILY_VERIFICATION.md) | **Daily / weekly / monthly** ledger signal counts (day vs swing, qualified vs shadow, actionable) — commands + saved reports under `reports/ledger/`. |
 | [`D1_SIGNAL_RESOLUTION_SCHEDULE.md`](./D1_SIGNAL_RESOLUTION_SCHEDULE.md) | D1 resolution schedule. |
 | [`CURSOR_RULES.md`](./CURSOR_RULES.md) | Cursor / editor rules for contributors. |
 

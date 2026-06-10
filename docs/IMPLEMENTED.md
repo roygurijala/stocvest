@@ -87,10 +87,20 @@ This file archives **completed** backlog rows so `BACKLOG.md` stays focused on p
 
 ---
 
+## OPS — Operations runbooks
+
+| ID | Theme | Shipped | Summary |
+|----|-------|---------|---------|
+| OPS-LEDGER | Daily / weekly / monthly ledger signal reports | 2026-06-10 | Plain-English runbook **`docs/LEDGER_DAILY_VERIFICATION.md`** + **`scripts/ledger_signal_report.py`** — read-only `SignalHistory` scan; counts day/swing **qualified** (trade-ready), **shadow**, and decision actionable/monitor/blocked per desk; optional watchlist maturation actionable counts. Saves `.txt` under **`reports/ledger/`** (gitignored output, `.gitkeep` tracked). Tests: `tests/scripts/test_ledger_signal_report.py` (5). **Routine:** weekdays after 4:15 PM ET (daily), Monday (weekly), 1st of month (monthly). |
+
+---
+
 ## P / PF — Platform & quality
 
 | ID | Theme | Shipped | Summary |
 |----|-------|---------|---------|
+| P67 | Next.js dev cache — stale `.next` static 500s | 2026-06-09 · PR #123 | **`frontend/scripts/clear-next-cache.mjs`**, `npm run clean:next`, `npm run dev:3002`. Clears webpack chunk drift that broke `/login` and other static assets locally. Frontend-only. |
+| P66 | Signal engine calculations + sector/maturation/ledger fixes | 2026-06-09 · PR #121–#122 | **9 calculation fixes:** neutral alignment skip, news date filter, weight sync, MACD O(n), EMA crossover snapshot, RSI symmetry, sector unmapped SPY path, macro VIX tier docs, extension penalty deprecation. **Sector clustering:** Redis on scanner/signals (`infra/lambda_6e.tf`), Dynamo sector cache fallback, gate rejects composite-scale sector scores, `sector_layer_score` on swing shadow rows. **Maturation:** `derive_maturation_state` + post-capture sync; **`scripts/catchup_watchlist_maturation.py`** (prod catch-up 186 jobs). **Import fix:** `build_regime_window_key` on swing validation timing. Tests: `test_sector_score_and_maturation_fixes.py`, neutral alignment regression, sector cache Dynamo, ledger capture, catch-up script. **Deploy:** `terraform apply` + CI **`deploy-lambda`**. |
 | P65 | Pre-beta signal engine P0 — trust, ledger capture, tuning | 2026-06-08 · commit `4eb234f` (+ infra) | **Analyzers:** swing/day technical hardening (PDH/PDL from prior daily bar, session momentum fade, swing drawdown dominance over stale structural uptrend); macro regime thresholds aligned with **`macro.momentum_weight=0.45`** (Secrets v1.1.0). **Composite:** per-mode weights via **`swing_composite`** / **`day_composite`** blocks; entry-zone post-validation (`entry_zone.py`). **Ledger:** split EventBridge schedules **`ledger_capture_day`** (3:55 PM ET) + **`ledger_capture_swing`** (4:00 PM ET); worker interleaves day/swing on combined runs; scanner Lambda timeout **300 s**. **Data quality:** weight-proposer excludes shadow/unavailable cohorts; dedupe script for shadow retry duplicates. **Deploy:** `terraform apply` + **`scripts/build_lambda_package.ps1`** for Linux manylinux Lambda zips (Windows `pip` + zip caused `pydantic_core` import failures). Tests: swing/day technical, entry zone, proposer filters, dedupe, ledger capture. |
 | P6 | HTTP/API audit DynamoDB + gateway wiring | 2026-05-07 · commit `3e21d5c` | `AuditEvents` DDB table (`pk`/`sk`), `DYNAMODB_AUDIT_EVENTS_TABLE` env, IAM `lambda_dynamodb_resources`, admin audit routes, `x-stocvest-session-id` CORS allow-headers. |
 | PF11 | Signal card / composite data integrity (5 bugs) | 2026-05-05 · commit `313cf0f` | Composite contradiction penalty + `alignment_ratio` + `conflicted_layers`; evidence-builder VWAP fallback + `rr_warning`/`rr_quality`; `SignalRecord.status` filter for `incomplete`; lazy `user_profile_store`; Windows test conftest fix. |

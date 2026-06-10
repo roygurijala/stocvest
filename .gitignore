@@ -64,3 +64,7 @@ infra/brokers-*.json
 infra/scanner-*.json
 infra/watchlist-symbols-out.json
 vitest-summary.log
+
+# Local ledger verification reports (generated — keep on disk, do not commit)
+reports/ledger/*
+!reports/ledger/.gitkeep

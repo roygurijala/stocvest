@@ -1,6 +1,8 @@
 # Deployment notes
 
-**Last updated:** 2026-06-08 · See also [`docs/CONTEXT.md`](./CONTEXT.md) §3 (full deploy checklist).
+**Last updated:** 2026-06-10 · See also [`docs/CONTEXT.md`](./CONTEXT.md) §3 (full deploy checklist).
+
+**P66 ops note (2026-06-09):** After `terraform apply`, confirm scanner + signals Lambdas have **`STOCVEST_DISABLE_REDIS=0`** so sector momentum cache works. Warm sector data: invoke **`sector_daily_cache`** worker or wait for schedule. Ledger verification: **`python scripts/ledger_signal_report.py --period daily`** (see **`LEDGER_DAILY_VERIFICATION.md`**).
 
 **Lambda packaging (P65, 2026-06-08):** API Lambdas run on **Amazon Linux**. Do **not** build deployment zips on Windows with `pip install` into a local folder + `Compress-Archive` — that produces Windows wheels (e.g. `pydantic_core._pydantic_core`) and causes **`Runtime.ImportModuleError`** in production. Use **`scripts/build_lambda_package.ps1`**, which installs **manylinux** wheels into a clean `build/lambda-package` tree and zips from there. Upload the artifact via CI **`deploy-lambda`** or your usual S3 → Lambda update path. Rebuild and redeploy **all** `stocvest-development-api-*` functions after any Python dependency change.
 
