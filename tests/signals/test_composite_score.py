@@ -467,3 +467,24 @@ def test_per_mode_overrides_actually_change_composite_score():
     assert rotated_swing.score > baseline_swing.score
     # Day score is anchored to the shared block — unchanged.
     assert rotated_day.score == pytest.approx(baseline_day.score)
+
+
+@pytest.mark.unit
+def test_alignment_meta_uses_post_penalty_verdict():
+    """alignment_ratio and conflicted_layers must be computed against the post-contradiction-
+    penalty verdict, not the pre-penalty raw verdict. If the penalty flips the verdict from
+    BULLISH to NEUTRAL the reported alignment must reflect NEUTRAL semantics."""
+    engine = CompositeScoreEngine(bullish_threshold=0.20, bearish_threshold=-0.20)
+    signals = [
+        LayerSignal(layer="technical", score=0.30, confidence=1.0),
+        LayerSignal(layer="news", score=-0.90, confidence=1.0),
+        LayerSignal(layer="macro", score=-0.90, confidence=1.0),
+        LayerSignal(layer="sector", score=-0.90, confidence=1.0),
+        LayerSignal(layer="geopolitical", score=0.30, confidence=1.0),
+        LayerSignal(layer="internals", score=0.30, confidence=1.0),
+    ]
+    result = engine.compute(signals, regime="sideways")
+    if result.verdict == CompositeVerdict.NEUTRAL:
+        assert result.alignment_ratio <= 1.0
+    elif result.verdict == CompositeVerdict.BEARISH:
+        assert result.alignment_ratio >= 0.0

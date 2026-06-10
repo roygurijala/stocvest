@@ -313,18 +313,13 @@ def compute_structured_analyst_score(
 
     rating_score = 0.0
     catalyst: str | None = None
-    if mode == "day":
-        for r in ratings:
-            score, cat = _single_rating_score(r, mode=mode, current_price=current_price, now=ref)
-            if score != 0.0:
-                rating_score += score
-                if catalyst is None and cat:
-                    catalyst = cat
-                break
-    else:
-        score, cat = _single_rating_score(ratings[0], mode=mode, current_price=current_price, now=ref)
-        rating_score += score
-        catalyst = cat
+    for r in ratings:
+        score, cat = _single_rating_score(r, mode=mode, current_price=current_price, now=ref)
+        if score != 0.0:
+            rating_score += score
+            if catalyst is None and cat:
+                catalyst = cat
+            break
 
     upgrades, downgrades, momentum = consensus_counts(ratings, now=ref)
     consensus_score = 0.0

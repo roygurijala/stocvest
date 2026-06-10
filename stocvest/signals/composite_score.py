@@ -186,9 +186,10 @@ class CompositeScoreEngine:
             final_confidence = self._clamp(confidence_sum / total_confidence_weight, 0.0, 1.0)
 
         raw_verdict = self._to_verdict(final_score)
-        alignment = self._alignment_meta(signals, raw_verdict, regime, layer_effective_weights)
-        final_score = self._apply_contradiction_penalty(final_score, alignment["ratio"])
+        preliminary_alignment = self._alignment_meta(signals, raw_verdict, regime, layer_effective_weights)
+        final_score = self._apply_contradiction_penalty(final_score, preliminary_alignment["ratio"])
         verdict = self._to_verdict(final_score)
+        alignment = self._alignment_meta(signals, verdict, regime, layer_effective_weights)
         return CompositeSignal(
             score=round(final_score, 4),
             confidence=round(final_confidence, 4),

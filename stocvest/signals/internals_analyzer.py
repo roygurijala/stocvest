@@ -96,7 +96,7 @@ class InternalsAnalyzer:
                 participation_score = 50.0
                 participation = "mixed"
 
-        final = vix_score * 0.40 + breadth_score * 0.35 + participation_score * 0.25
+        final = vix_score * 0.20 + breadth_score * 0.50 + participation_score * 0.30
         score_i = int(round(_clamp(final, 0.0, 100.0)))
 
         if score_i >= 60:
@@ -122,8 +122,8 @@ class InternalsAnalyzer:
             breadth_signal=breadth_signal,
             participation=participation,
             reasoning=(
-                f"Internals {score_i}/100 — VIX component {vix_score:.0f}, "
-                f"breadth {breadth_score:.0f}, participation {participation_score:.0f}."
+                f"Internals {score_i}/100 — breadth {breadth_score:.0f} (50%), "
+                f"participation {participation_score:.0f} (30%), VIX {vix_score:.0f} (20%)."
             ),
             chips=chips,
         )

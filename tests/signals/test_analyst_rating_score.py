@@ -166,6 +166,21 @@ def test_unconfigured_feed_state() -> None:
     assert out.chips == ()
 
 
+def test_swing_skips_zero_score_latest_rating() -> None:
+    """Swing mode must iterate past a zero-scoring latest rating (e.g. maintain hold
+    with negligible PT) to find the first meaningful rating in the window."""
+    now = datetime.now(timezone.utc)
+    hold = BenzingaRating("AAPL", "Maintains", "Hold", 101.0, "Jefferies", now - timedelta(days=1))
+    upgrade = BenzingaRating("AAPL", "Upgrade", "Buy", 130.0, "Goldman Sachs", now - timedelta(days=3))
+    out = compute_structured_analyst_score(
+        BenzingaMultiResult(ratings=[hold, upgrade], analyst_feed_configured=True),
+        mode="swing",
+        current_price=100.0,
+        now=now,
+    )
+    assert out.score > 0.0, "Swing should pick up the meaningful upgrade when latest is zero-score"
+
+
 def test_blend_headline_and_analyst_mode_weights() -> None:
     swing = blend_headline_and_analyst(0.0, 0.6, mode="swing", analyst_active=True)
     day = blend_headline_and_analyst(0.0, 0.6, mode="day", analyst_active=True)
