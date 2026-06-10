@@ -316,6 +316,7 @@ resource "aws_lambda_function" "api" {
       },
       each.key == "scanner" ? {
         STOCVEST_WS_MANAGEMENT_API_URL = local.websocket_management_api_url
+        STOCVEST_DISABLE_REDIS         = "0"
       } : {},
       each.key == "news_consumer" ? {
         STOCVEST_DISABLE_REDIS = "0"
@@ -336,6 +337,7 @@ resource "aws_lambda_function" "api" {
         STOCVEST_DISABLE_REDIS = "0"
       } : {},
       each.key == "signals" ? {
+        STOCVEST_DISABLE_REDIS                  = "0"
         DYNAMODB_GAP_INTEL_CACHE_TABLE          = aws_dynamodb_table.gap_intel_cache.name
         DYNAMODB_SCANNER_EVALUATION_TRACE_TABLE = aws_dynamodb_table.scanner_evaluation_trace.name
         GAP_INTEL_TICK_SYMBOLS                  = "SPY,QQQ,IWM"

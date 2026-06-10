@@ -68,6 +68,38 @@ def _score_0_100_from_composite(composite_score: float) -> int:
     return max(0, min(100, v))
 
 
+def is_composite_layer_signal_scale(value: float) -> bool:
+    """True when ``value`` looks like a composite layer signal on [-1, 1], not 0–100."""
+    return -1.0 <= float(value) <= 1.0
+
+
+def sector_analyzer_score_from_layers(layers: list[dict[str, Any]] | None) -> float | None:
+    """Extract the sector analyzer 0–100 score from a composite ``layers`` payload."""
+    for row in layers or []:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("layer") or "").strip().lower() != "sector":
+            continue
+        raw = row.get("score")
+        if raw is None:
+            return None
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            return None
+        if is_composite_layer_signal_scale(value):
+            return None
+        return value
+    return None
+
+
+def sector_analyzer_score_from_body(body: dict[str, Any]) -> float | None:
+    layers = body.get("layers")
+    if not isinstance(layers, list):
+        return None
+    return sector_analyzer_score_from_layers(layers)
+
+
 def _sector_score_for_gate(
     *,
     sector_layer_score: float | None,
@@ -79,12 +111,16 @@ def _sector_score_for_gate(
     those must not be compared to ``MIN_SECTOR_LAYER_SCORE`` (45).
     """
     if sector_layer_score is not None:
-        return float(sector_layer_score)
+        value = float(sector_layer_score)
+        if is_composite_layer_signal_scale(value):
+            sector_layer_score = None
+        else:
+            return value
     raw = {str(k).lower(): float(v) for k, v in layer_scores.items()}
     legacy = raw.get("sector")
     if legacy is None:
         return None
-    if -1.0 <= legacy <= 1.0:
+    if is_composite_layer_signal_scale(legacy):
         return None
     return legacy
 

@@ -22,6 +22,7 @@ from stocvest.models.watchlist import (
     WatchlistState,
     derive_progress_band,
 )
+from stocvest.api.services.watchlist_maturation_sync import sync_watchlist_maturation_from_composite
 from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
@@ -186,6 +187,14 @@ def run_watchlist_ledger_capture_sync(*, desk: LedgerCaptureDesk = "both") -> di
                 if body.get("ledger_qualified"):
                     day_qualified += 1
                 day_ok += 1
+                sync_watchlist_maturation_from_composite(
+                    user_id=user_id,
+                    symbol=sym,
+                    mode="day",
+                    composite_body=body,
+                    email_on_state_change=False,
+                    evaluation_source="ledger_capture",
+                )
             else:
                 body = swing_composite_body_sync(
                     symbol=sym,
@@ -196,6 +205,14 @@ def run_watchlist_ledger_capture_sync(*, desk: LedgerCaptureDesk = "both") -> di
                 if body.get("ledger_qualified"):
                     swing_qualified += 1
                 swing_ok += 1
+                sync_watchlist_maturation_from_composite(
+                    user_id=user_id,
+                    symbol=sym,
+                    mode="swing",
+                    composite_body=body,
+                    email_on_state_change=False,
+                    evaluation_source="ledger_capture",
+                )
             users_touched.add(user_id)
         except Exception as exc:  # noqa: BLE001
             if desk_lit == "day":

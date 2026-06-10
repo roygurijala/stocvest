@@ -48,6 +48,30 @@ def infer_capture_kind(record: SignalRecord) -> CaptureKind:
     return "live"
 
 
+def decision_state_from_gate_blob(gate_status_json: str | None) -> DecisionState | None:
+    """Read composite ``decision_state`` gate value when present (audit / shadow rows)."""
+    if not gate_status_json or not str(gate_status_json).strip():
+        return None
+    try:
+        import json
+
+        blob = json.loads(gate_status_json)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(blob, dict):
+        return None
+    gates = blob.get("gates")
+    if not isinstance(gates, dict):
+        return None
+    ds = gates.get("decision_state")
+    if not isinstance(ds, dict):
+        return None
+    val = str(ds.get("value") or "").strip().lower()
+    if val in ("actionable", "monitor", "blocked"):
+        return val  # type: ignore[return-value]
+    return None
+
+
 def infer_decision_state_entry(
     record: SignalRecord,
     *,
@@ -59,6 +83,9 @@ def infer_decision_state_entry(
     is_eligible = record.ledger_qualified if eligible is None else bool(eligible)
     if is_eligible:
         return "actionable"
+    from_gates = decision_state_from_gate_blob(record.gate_status_json)
+    if from_gates is not None:
+        return from_gates
     if str(record.direction or "").strip().lower() == "neutral":
         return "monitor"
     return "blocked"

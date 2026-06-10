@@ -49,6 +49,19 @@ def test_infer_decision_shadow_blocked() -> None:
     assert infer_decision_state_entry(rec) == "blocked"
 
 
+def test_infer_decision_shadow_uses_gate_decision_state() -> None:
+    blob = json.dumps({"gates": {"decision_state": {"pass": True, "value": "actionable"}}})
+    rec = _record(eligible=False).model_copy(
+        update={
+            "pattern": "swing_composite:ledger_capture_shadow",
+            "ledger_qualified": False,
+            "direction": "bullish",
+            "gate_status_json": blob,
+        }
+    )
+    assert infer_decision_state_entry(rec, eligible=False) == "actionable"
+
+
 def test_enrich_sets_capture_kind() -> None:
     rec = enrich_record_for_backtest(_record(eligible=True), eligible=True)
     assert rec.capture_kind == "qualified"
