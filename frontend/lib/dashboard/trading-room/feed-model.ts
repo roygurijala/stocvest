@@ -39,6 +39,8 @@ export interface FeedCard {
   /** Higher = ranked first within a state bucket. */
   rankScore: number;
   source: "desk" | "scanner" | "gap";
+  /** Per-symbol composite evaluation time when known; desk generated_at as fallback. */
+  lastEvaluatedAt?: string | null;
 }
 
 /** Hard caps so the feed communicates market conditions, not a firehose. */
@@ -179,7 +181,8 @@ function cardFromLeader(
     alignment:
       ratio != null ? { aligned: Math.round(ratio * 6), total: 6 } : null,
     rankScore: cleanNum(leader.rank_score) ?? 0,
-    source: "desk"
+    source: "desk",
+    lastEvaluatedAt: null
   };
 }
 
@@ -206,7 +209,8 @@ function cardFromSetup(
         ? { aligned: setup.alignment.aligned, total: setup.alignment.total }
         : null,
     rankScore: cleanNum(setup.score) ?? 0,
-    source: "scanner"
+    source: "scanner",
+    lastEvaluatedAt: null
   };
 }
 

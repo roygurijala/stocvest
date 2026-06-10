@@ -53,7 +53,7 @@ export function MobileNavDrawer({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
-            className="fixed inset-0 z-[10000] cursor-default border-0 bg-black/50 lg:hidden"
+            className="fixed inset-0 z-[10000] cursor-default border-0 bg-black/50 min-[900px]:hidden"
             onClick={onClose}
           />
           <motion.aside
@@ -64,8 +64,9 @@ export function MobileNavDrawer({
             animate={{ x: 0 }}
             exit={{ x: "-100%" }}
             transition={{ type: "spring", stiffness: 380, damping: 34 }}
-            className="fixed left-0 top-0 z-[10001] flex h-full w-[min(100vw-3rem,288px)] max-w-[100vw] flex-col shadow-xl lg:hidden"
+            className="fixed left-0 top-0 z-[10001] flex h-full w-[min(100vw-3rem,288px)] max-w-[100vw] flex-col shadow-xl min-[900px]:hidden"
             style={{
+              paddingTop: "env(safe-area-inset-top, 0px)",
               background: colors.surface,
               borderRight: `1px solid ${colors.border}`
             }}

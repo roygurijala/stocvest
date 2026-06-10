@@ -26,6 +26,7 @@ import {
 } from "@/lib/watchlist-page-utils";
 import { parseMaturationSummaryEnvelope } from "@/lib/watchlist/maturation-summary-envelope";
 import { useWatchlistMaturationReloadNonce } from "@/lib/hooks/use-watchlist-maturation-reload";
+import { FeedCardUpdatedLine } from "@/lib/dashboard/trading-room/feed-card-present";
 import { WATCHLIST_SYMBOLS_CHANGED_EVENT } from "@/lib/watchlist-membership-client";
 import { fetchSetupEvolution, type SetupEvolutionResponse } from "@/lib/api/setup-evolution";
 import {
@@ -100,7 +101,8 @@ function cardFromWatchlist(
     changePct: cleanNum(snap?.change_percent),
     alignment: aligned != null ? { aligned, total } : null,
     rankScore: aligned ?? 0,
-    source: "desk"
+    source: "desk",
+    lastEvaluatedAt: r.last_evaluated_at?.trim() || null
   };
 }
 
@@ -263,6 +265,7 @@ function RailCard({
             <AlignmentDots aligned={card.alignment.aligned} total={card.alignment.total} tone={sTone} colors={colors} />
           ) : null}
         </div>
+        <FeedCardUpdatedLine iso={card.lastEvaluatedAt} colors={colors} />
       </button>
       <button
         type="button"
@@ -459,7 +462,7 @@ export function WatchlistRail({
     return () => {
       cancelled = true;
     };
-  }, [symbols]);
+  }, [symbols, reloadNonce]);
 
   const cards = useMemo(() => {
     const list = symbols.map((sym) =>

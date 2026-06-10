@@ -24,6 +24,7 @@ import { resolveBuildingStructureRows } from "@/lib/dashboard/building-structure
 import { alignedLayersFromAlignmentRatio } from "@/lib/signals-page-present";
 import type { FeedBias, FeedCard, FeedLane, FeedState } from "@/lib/dashboard/trading-room/feed-model";
 import { useSymbolNames } from "@/lib/hooks/use-symbol-names";
+import { FeedCardUpdatedLine } from "@/lib/dashboard/trading-room/feed-card-present";
 
 type Colors = ReturnType<typeof useTheme>["colors"];
 
@@ -135,6 +136,7 @@ function QuietCard({
         ) : null}
       </div>
       <span style={{ fontSize: 10, color: colors.textMuted, lineHeight: 1.4 }}>{data.note}</span>
+      <FeedCardUpdatedLine iso={card.lastEvaluatedAt} colors={colors} />
     </button>
   );
 }
@@ -289,7 +291,9 @@ export function QuietFeed({
           changePct: r.gap,
           alignment: null,
           rankScore: r.rank,
-          source: "desk"
+          source: "desk",
+          lastEvaluatedAt:
+            (r.lane === "day" ? dayDesk?.generated_at : swingDesk?.generated_at)?.trim() || null
         } satisfies FeedCard,
         note: `Moving ${r.gap >= 0 ? "up" : "down"} ${Math.abs(r.gap).toFixed(1)}% this session`
       }));
@@ -328,7 +332,8 @@ export function QuietFeed({
           changePct: typeof gap === "number" ? gap : null,
           alignment: aligned != null ? { aligned, total: LAYER_TOTAL } : null,
           rankScore: leader?.rank_score ?? mover?.rank_score ?? 0,
-          source: "desk"
+          source: "desk",
+          lastEvaluatedAt: swingDesk?.generated_at?.trim() || null
         } satisfies FeedCard,
         note
       };

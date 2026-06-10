@@ -21,7 +21,6 @@ import { isUsRegularSessionOpenEt, nextRegularSessionOpenLabel } from "@/lib/mar
 import type { useTheme } from "@/lib/theme-provider";
 import { useSignalComposite } from "@/lib/hooks/use-signal-composite";
 import { parseSwingCompositeInsight, parseCompositeAlignment, parseFundamentalContext } from "@/lib/signal-evidence";
-import type { SignalEvidenceInsight } from "@/lib/signal-evidence/wire-types";
 import {
   compositeToSignalsLayerRows,
   deriveSetupBiasFromComposite
@@ -32,6 +31,17 @@ import {
   type SignalsLayerRowInput,
   type SignalsSetupBias
 } from "@/lib/signals-page-present";
+import {
+  buildBriefMetaLine,
+  buildEntryZoneRrWarning,
+  buildRichBrief,
+  resolveDeepDiveDirection,
+  resolveDeepDiveVerdictLabel,
+  resolveDeepDiveVerdictTone,
+  resolveEntryZonePosition,
+  scenarioPriceAxisPercent,
+  scenarioTrackBounds
+} from "@/lib/dashboard/trading-room/deep-dive-present";
 import { isInsufficientCompositeResponse } from "@/lib/api/swing-composite";
 import { resolveCausalNarrative } from "@/lib/signal-evidence/causal-narrative";
 import { resolveTimeframeContext, isTimeframeCounterTrend } from "@/lib/signal-evidence/timeframe-context";
@@ -107,96 +117,8 @@ function stateTone(state: FeedState, colors: Colors): string {
 
 
 /**
- * Comprehensive plain-English brief that summarises every key data-point on
- * the page so the user gets the full picture before scrolling into the tabs.
- */
-function buildRichBrief(
-  card: FeedCard,
-  insight: SignalEvidenceInsight | null,
-  layerRows: SignalsLayerRowInput[],
-  pageDecisionState: string | null,
-  pageDecisionLine: string | null,
-  causalSummary: string | null,
-  causalChainLabel: string | null,
-  setupJudgment: { process: { layersAligned: number; layersTotal: number }; tradeability: { label: string; flags: { label: string }[] }; primaryBlocker: string | null; watchFor: string | null } | null,
-  riskReward: number | null,
-  activeLane: "day" | "swing",
-  deskMinRr: number
-): string {
-  const dir = card.bias === "bull" ? "long" : card.bias === "bear" ? "short" : "two-sided";
-  const desk = activeLane === "day" ? "day desk" : "swing desk";
-
-  // S1 — direction + desk + broad trend read
-  let s1: string;
-  if (insight) {
-    const trend = `${insight.trend_strength.toLowerCase()} ${insight.trend_direction.toLowerCase()}`.trim();
-    const conf = insight.confirming_signals.length;
-    const confl = insight.conflicting_signals.length;
-    s1 = `${card.symbol} is showing a ${dir} setup on the ${desk} — ${trend} read${conf ? `, with ${conf} signal${conf === 1 ? "" : "s"} confirming` : ""}${confl ? ` and ${confl} pushing back` : ""}.`;
-  } else {
-    s1 = `${card.symbol} is setting up ${dir} on the ${desk}.`;
-  }
-
-  // S2 — layer alignment detail
-  let s2 = "";
-  if (setupJudgment) {
-    const { layersAligned, layersTotal } = setupJudgment.process;
-    const aligned = layerRows
-      .filter((r) => (card.bias === "bull" ? r.status === "Bullish" : card.bias === "bear" ? r.status === "Bearish" : false))
-      .slice(0, 4)
-      .map((r) => r.name);
-    const neutral = layerRows.filter((r) => r.status === "Neutral").slice(0, 2).map((r) => r.name);
-    if (aligned.length > 0) {
-      s2 = `${layersAligned} of ${layersTotal} layers aligned: ${aligned.join(", ")} are all confirming${neutral.length > 0 ? `; ${neutral.join(", ")} read neutral` : ""}.`;
-    } else {
-      s2 = `${layersAligned} of ${layersTotal} layers currently carry a directional read.`;
-    }
-  }
-
-  // S3 — causal chain (why layers lean this way)
-  const s3 = causalSummary?.trim() ?? "";
-
-  // S4 — causal chain label if distinct and short
-  const s4 = causalChainLabel && causalChainLabel.length < 80 ? `Tailwind chain: ${causalChainLabel}.` : "";
-
-  // S5 — entry timing + primary blocker
-  let s5 = "";
-  if (setupJudgment) {
-    const timing = setupJudgment.tradeability.label;
-    const blocker = setupJudgment.primaryBlocker;
-    if (pageDecisionState === "actionable" && !blocker) {
-      s5 = `${timing} — all gates cleared for this trade.`;
-    } else if (blocker) {
-      s5 = `${timing}. Primary check: ${blocker}`;
-    } else {
-      s5 = `${timing}.`;
-    }
-  }
-
-  // S6 — R/R + what-to-watch
-  let s6 = "";
-  if (riskReward != null && riskReward > 0) {
-    const gateLabel = `${deskMinRr.toFixed(1)}:1`;
-    const rrStr = riskReward >= deskMinRr
-      ? `Risk/reward is ${riskReward.toFixed(1)}:1, clearing the ${gateLabel} gate`
-      : `Risk/reward is ${riskReward.toFixed(1)}:1 — below the ${gateLabel} threshold`;
-    const watch = setupJudgment?.watchFor;
-    s6 = watch ? `${rrStr}. ${watch}` : `${rrStr}.`;
-  } else if (setupJudgment?.watchFor) {
-    s6 = setupJudgment.watchFor;
-  }
-
-  // Fallback if composite hasn't loaded yet
-  if (!s2 && !s3 && !s5) return card.verdict || s1;
-
-  return [s1, s2, s3, s4, s5, s6].filter(Boolean).join(" ");
-}
-
-/**
- * Single-line scenario geometry: a horizontal Stop → Target track with a
- * proportionally-placed entry-zone band + current-price marker, and a clean
- * evenly-spaced label row below so the values never overlap regardless of how
- * close the price levels are.
+ * Scenario geometry on a low→high price axis. Long: stop left / target right.
+ * Short: target left (profit down) / stop right (loss up).
  */
 function ScenarioGeometry({
   currentPrice,
@@ -206,6 +128,7 @@ function ScenarioGeometry({
   target2,
   entryLow,
   entryHigh,
+  isShort,
   colors
 }: {
   currentPrice: number;
@@ -215,21 +138,39 @@ function ScenarioGeometry({
   target2?: number | null;
   entryLow: number;
   entryHigh: number;
+  isShort: boolean;
   colors: Colors;
 }) {
-  // The track spans Stop(0%) → the furthest target(100%) so both T1 and T2 fit.
-  const trackHigh = Math.max(targetPrice, target1 ?? targetPrice, target2 ?? targetPrice);
-  const span = trackHigh - stopPrice;
-  const pct = (p: number) => (span > 0 ? Math.max(0, Math.min(100, ((p - stopPrice) / span) * 100)) : 50);
+  const { trackMin, trackMax } = scenarioTrackBounds([
+    stopPrice,
+    targetPrice,
+    target1 ?? targetPrice,
+    target2 ?? targetPrice,
+    entryLow,
+    entryHigh,
+    currentPrice
+  ]);
+  const pct = (p: number) => scenarioPriceAxisPercent(p, trackMin, trackMax);
   const entryLowPct = pct(entryLow);
   const entryHighPct = pct(entryHigh);
   const currentPct = pct(currentPrice);
-  // Only show T1 as a distinct interior tick when it differs from the headline target.
-  const showT1 = target1 != null && Math.abs(target1 - targetPrice) > 0.01 && target1 < trackHigh - 0.01;
+  const showT1 =
+    target1 != null &&
+    Math.abs(target1 - targetPrice) > 0.01 &&
+    Math.abs(target1 - trackMax) > 0.01 &&
+    Math.abs(target1 - trackMin) > 0.01;
   const t1Pct = showT1 ? pct(target1 as number) : null;
-  // Keep the floating current-price label fully on-screen near the edges.
   const currentLabelPct = Math.min(92, Math.max(8, currentPct));
   const inZone = currentPrice >= entryLow && currentPrice <= entryHigh;
+  const leftLabel = isShort ? (showT1 ? "Target T2" : "Target") : "Stop";
+  const rightLabel = isShort ? "Stop" : showT1 ? "Target T2" : "Target";
+  const leftPrice = isShort ? targetPrice : stopPrice;
+  const rightPrice = isShort ? stopPrice : targetPrice;
+  const leftColor = isShort ? colors.bullish : colors.bearish;
+  const rightColor = isShort ? colors.bearish : colors.bullish;
+  const trackGradient = isShort
+    ? "linear-gradient(90deg, rgba(34,197,94,.45) 0%, rgba(148,163,184,.22) 50%, rgba(239,68,68,.45) 100%)"
+    : "linear-gradient(90deg, rgba(239,68,68,.45) 0%, rgba(148,163,184,.22) 50%, rgba(34,197,94,.45) 100%)";
 
   const ENTRY_BLUE = "rgba(46,139,255,1)";
 
@@ -243,14 +184,13 @@ function ScenarioGeometry({
 
   return (
     <div style={{ marginTop: 14 }}>
-      {/* Horizontal track: red (loss side, near stop) → green (profit side, near target) */}
       <div
         style={{
           position: "relative",
           height: 10,
           marginTop: 20,
           borderRadius: 999,
-          background: "linear-gradient(90deg, rgba(239,68,68,.45) 0%, rgba(148,163,184,.22) 50%, rgba(34,197,94,.45) 100%)"
+          background: trackGradient
         }}
       >
         {/* Entry-zone band */}
@@ -315,22 +255,27 @@ function ScenarioGeometry({
         </span>
       </div>
 
-      {/* Stop / Target anchored to the actual track ends */}
       <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
         <span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
           <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: colors.textMuted }}>
-            Stop
+            {leftLabel}
           </span>
-          <span style={{ fontSize: 12.5, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: colors.bearish }}>
-            ${stopPrice.toFixed(2)}
+          <span style={{ fontSize: 12.5, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: leftColor }}>
+            ${leftPrice.toFixed(2)}
+          </span>
+          <span style={{ fontSize: 9.5, color: colors.textMuted }}>
+            {isShort ? "profit if price falls" : "loss if price falls"}
           </span>
         </span>
         <span style={{ display: "flex", flexDirection: "column", gap: 1, textAlign: "right" }}>
           <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: colors.textMuted }}>
-            {showT1 ? "Target T2" : "Target"}
+            {rightLabel}
           </span>
-          <span style={{ fontSize: 12.5, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: colors.bullish }}>
-            ${targetPrice.toFixed(2)}
+          <span style={{ fontSize: 12.5, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: rightColor }}>
+            ${rightPrice.toFixed(2)}
+          </span>
+          <span style={{ fontSize: 9.5, color: colors.textMuted }}>
+            {isShort ? "loss if price rises" : "profit if price rises"}
           </span>
         </span>
       </div>
@@ -359,11 +304,20 @@ function ScenarioGeometry({
           : null}
       </div>
 
-      {/* One-line explanation of the gradient */}
       <p style={{ margin: "8px 0 0", fontSize: 10.5, lineHeight: 1.5, color: colors.textMuted }}>
-        Bar runs stop → target: <span style={{ color: colors.bearish, fontWeight: 700 }}>red</span> is the loss side
-        (toward your stop), <span style={{ color: colors.bullish, fontWeight: 700 }}>green</span> is the profit side
-        (toward your target).
+        {isShort ? (
+          <>
+            Low price (left) → high price (right):{" "}
+            <span style={{ color: colors.bullish, fontWeight: 700 }}>green</span> is profit toward target (down),{" "}
+            <span style={{ color: colors.bearish, fontWeight: 700 }}>red</span> is loss toward stop (up).
+          </>
+        ) : (
+          <>
+            Low price (left) → high price (right):{" "}
+            <span style={{ color: colors.bearish, fontWeight: 700 }}>red</span> is loss toward stop (down),{" "}
+            <span style={{ color: colors.bullish, fontWeight: 700 }}>green</span> is profit toward target (up).
+          </>
+        )}
       </p>
     </div>
   );
@@ -939,10 +893,15 @@ export function DeepDive({
   // the current price (`last`), R/R = reward/risk, preferring T1 unless T1 is
   // sub-1:1 and T2 improves it (see risk_reward_structure.py). Falls back to
   // session-derived support/resistance only when the engine omits a level.
+  const displayDirection = useMemo(
+    () => resolveDeepDiveDirection(setupBias, !isInsufficient, card.bias),
+    [setupBias, isInsufficient, card.bias]
+  );
+
   const scenario = useMemo(() => {
     const price = card.price;
     if (price == null || !Number.isFinite(price)) return null;
-    const isLong = card.bias !== "bear";
+    const isLong = setupBias !== "Bearish";
     const stopPrice =
       signalOverlay?.stop ??
       (referenceLevels.support != null ? referenceLevels.support * 0.997 : price * (isLong ? 0.97 : 1.03));
@@ -999,9 +958,28 @@ export function DeepDive({
       entryZoneQuality: ezQuality,
       worstCaseRr,
       vwap,
-      atr
+      atr,
+      displayRr: chosen?.ratio ?? null
     };
-  }, [card.price, card.bias, signalOverlay, referenceLevels, composite, isInsufficient]);
+  }, [card.price, setupBias, signalOverlay, referenceLevels, composite, isInsufficient]);
+
+  const currentRr = scenario?.displayRr ?? null;
+
+  const entryZoneWarning = useMemo(() => {
+    if (!scenario) return null;
+    const position = resolveEntryZonePosition(scenario.currentPrice, scenario.entryLow, scenario.entryHigh);
+    const lines = buildEntryZoneRrWarning({
+      position,
+      currentPrice: scenario.currentPrice,
+      entryLow: scenario.entryLow,
+      entryHigh: scenario.entryHigh,
+      currentRr,
+      zoneEdgeRr: scenario.worstCaseRr,
+      chosenLabel: scenario.chosenLabel,
+      minRr: deskMinRr
+    });
+    return lines.length > 0 ? lines : null;
+  }, [scenario, currentRr, deskMinRr]);
 
   // Fundamental backdrop (swing only — matches signals page behaviour)
   const fundamentalSummary = useMemo<FundamentalBackdropSummary | null>(() => {
@@ -1024,28 +1002,60 @@ export function DeepDive({
 
   const brief = useMemo(
     () =>
-      buildRichBrief(
-        card,
+      buildRichBrief({
+        symbol: card.symbol,
+        direction: displayDirection.direction,
         insight,
         layerRows,
-        pageDecision?.state ?? null,
-        pageDecision?.line ?? null,
-        causalNarrative?.summary ?? null,
-        causalNarrative?.chainLabel ?? null,
+        setupBias,
+        pageDecisionState: pageDecision?.state ?? null,
+        causalSummary: causalNarrative?.summary ?? null,
+        causalChainLabel: causalNarrative?.chainLabel ?? null,
         setupJudgment,
-        riskReward,
+        currentRr,
         activeLane,
-        deskMinRr
-      ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [card, insight, layerRows, pageDecision?.state, pageDecision?.line, causalNarrative?.summary, causalNarrative?.chainLabel, setupJudgment, riskReward, activeLane, deskMinRr]
+        deskMinRr,
+        verdictFallback: card.verdict
+      }),
+    [
+      card.symbol,
+      card.verdict,
+      displayDirection.direction,
+      insight,
+      layerRows,
+      setupBias,
+      pageDecision?.state,
+      causalNarrative?.summary,
+      causalNarrative?.chainLabel,
+      setupJudgment,
+      currentRr,
+      activeLane,
+      deskMinRr
+    ]
   );
 
-  const sTone = stateTone(card.state, colors);
+  const hasComposite = !isInsufficient;
+  const verdictLabel = resolveDeepDiveVerdictLabel(card.state, apiDecisionState, hasComposite);
+  const verdictTone = resolveDeepDiveVerdictTone(card.state, apiDecisionState, hasComposite);
+  const sTone =
+    verdictTone === "bullish"
+      ? colors.bullish
+      : verdictTone === "caution"
+        ? colors.caution
+        : verdictTone === "bearish"
+          ? colors.bearish
+          : verdictTone === "muted"
+            ? colors.textMuted
+            : stateTone(card.state, colors);
   const pct = card.changePct;
   const pctTone = pct == null ? colors.textMuted : pct >= 0 ? colors.bullish : colors.bearish;
   const laneAccent = activeLane === "day" ? roleAccents.dark.day.borderAccent : roleAccents.dark.swing.borderAccent;
-  const directionColor = card.bias === "bull" ? colors.bullish : card.bias === "bear" ? colors.bearish : colors.textMuted;
+  const directionColor =
+    displayDirection.direction === "long"
+      ? colors.bullish
+      : displayDirection.direction === "short"
+        ? colors.bearish
+        : colors.textMuted;
   const loading = isInitialLoading && !composite;
 
   const evalTime = useMemo(() => {
@@ -1068,17 +1078,14 @@ export function DeepDive({
   const dayMarketClosed = activeLane === "day" && !isUsRegularSessionOpenEt();
   const nextOpenLabel = dayMarketClosed ? nextRegularSessionOpenLabel() : null;
 
-  // Brief meta-line: "X of Y layers confirmed · Macro [status] · N timing caution(s)"
   const briefMeta = useMemo(() => {
     if (!setupJudgment) return null;
-    const { layersAligned, layersTotal } = setupJudgment.process;
-    const layersPart = `${layersAligned} of ${layersTotal} layers confirmed`;
-    const macroRow = layerRows.find((r) => r.key === "macro");
-    const macroPart = macroRow ? `Macro ${macroRow.status?.toLowerCase() ?? "n/a"}` : null;
-    const flags = setupJudgment.tradeability.flags.length;
-    const flagsPart = flags > 0 ? `${flags} timing caution${flags === 1 ? "" : "s"}` : null;
-    return [layersPart, macroPart, flagsPart].filter(Boolean).join(" · ");
-  }, [setupJudgment, layerRows]);
+    return buildBriefMetaLine({
+      bias: setupBias,
+      rows: layerRows,
+      timingFlagCount: setupJudgment.tradeability.flags.length
+    });
+  }, [setupJudgment, setupBias, layerRows]);
 
   return (
     <div
@@ -1156,7 +1163,7 @@ export function DeepDive({
                 letterSpacing: "0.06em"
               }}
             >
-              {card.bias === "bull" ? "LONG" : card.bias === "bear" ? "SHORT" : "NEUTRAL"}
+              {displayDirection.bannerLabel}
             </span>
             <span style={{ color: colors.textMuted, fontSize: typography.scale.sm }}>·</span>
             <span style={{ fontSize: typography.scale.xl, fontWeight: 800, letterSpacing: "0.02em", color: colors.text }}>
@@ -1164,7 +1171,7 @@ export function DeepDive({
             </span>
             <span style={{ color: colors.textMuted, fontSize: typography.scale.sm }}>·</span>
             <span style={{ fontSize: typography.scale.base, fontWeight: 700, color: sTone, letterSpacing: "0.02em" }}>
-              {STATE_LABEL[card.state]}
+              {verdictLabel}
             </span>
           </div>
           <LaneToggle
@@ -1402,7 +1409,7 @@ export function DeepDive({
                     <div
                       style={{
                         display: "grid",
-                        gridTemplateColumns: riskReward != null ? "1fr auto" : "1fr",
+                        gridTemplateColumns: currentRr != null ? "1fr auto" : "1fr",
                         gap: spacing[4],
                         alignItems: "start"
                       }}
@@ -1430,6 +1437,7 @@ export function DeepDive({
                             target2={scenario.target2}
                             entryLow={scenario.entryLow}
                             entryHigh={scenario.entryHigh}
+                            isShort={setupBias === "Bearish"}
                             colors={colors}
                           />
                         ) : null}
@@ -1442,9 +1450,36 @@ export function DeepDive({
                             No clean entry: stop and target are too close to carve a band with acceptable reward-to-risk — wait for a better structure.
                           </p>
                         ) : null}
+                        {entryZoneWarning ? (
+                          <div
+                            data-testid="entry-zone-rr-warning"
+                            style={{
+                              marginTop: spacing[3],
+                              padding: spacing[3],
+                              borderRadius: borderRadius.sm,
+                              border: `1px solid ${colors.caution}`,
+                              background: `${colors.caution}14`
+                            }}
+                          >
+                            {entryZoneWarning.map((line, idx) => (
+                              <p
+                                key={line}
+                                style={{
+                                  margin: idx === 0 ? 0 : "6px 0 0",
+                                  fontSize: typography.scale.xs,
+                                  lineHeight: 1.5,
+                                  color: idx === entryZoneWarning.length - 1 ? colors.caution : colors.text,
+                                  fontWeight: idx === entryZoneWarning.length - 1 ? 700 : 500
+                                }}
+                              >
+                                {idx === 0 ? `⚠ ${line}` : line}
+                              </p>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                       {/* Right: R/R gauge */}
-                      {riskReward != null ? (
+                      {currentRr != null ? (
                         <div
                           style={{
                             borderLeft: `1px solid ${colors.border}`,
@@ -1464,7 +1499,7 @@ export function DeepDive({
                             Reward / Risk{scenario?.chosenLabel ? ` → ${scenario.chosenLabel}` : ""}
                           </p>
                           <RiskRewardGauge
-                            rr={riskReward}
+                            rr={currentRr}
                             minRr={deskMinRr}
                             riskAmount={scenario?.riskAmount ?? null}
                             rewardAmount={scenario?.rewardAmount ?? null}
@@ -1503,7 +1538,12 @@ export function DeepDive({
                           ) : null}
                           {scenario?.worstCaseRr != null ? (
                             <p style={{ margin: "4px 0 0", fontSize: typography.scale.xs, color: colors.textMuted }}>
-                              Worst case (top of entry zone) → {scenario.chosenLabel}: {scenario.worstCaseRr.toFixed(1)}:1
+                              If entry zone reached (top of band) → {scenario.chosenLabel}: {scenario.worstCaseRr.toFixed(1)}:1
+                            </p>
+                          ) : null}
+                          {riskReward != null && currentRr != null && Math.abs(riskReward - currentRr) > 0.05 ? (
+                            <p style={{ margin: "4px 0 0", fontSize: typography.scale.xs, color: colors.textMuted }}>
+                              Eval-time composite R/R: {riskReward.toFixed(1)}:1 (may differ if price moved since evaluation)
                             </p>
                           ) : null}
                         </div>
@@ -1539,7 +1579,7 @@ export function DeepDive({
                       type="button"
                       onClick={() => {
                         const lines = [
-                          `${card.symbol} — ${card.bias === "bull" ? "LONG" : card.bias === "bear" ? "SHORT" : "—"} · ${activeLane === "day" ? "Day desk" : "Swing desk"}`,
+                          `${card.symbol} — ${displayDirection.bannerLabel} · ${activeLane === "day" ? "Day desk" : "Swing desk"}`,
                           `Current: $${card.price?.toFixed(2) ?? "—"}`,
                           scenario ? `Stop: $${scenario.stopPrice.toFixed(2)}` : "",
                           scenario
@@ -1551,7 +1591,7 @@ export function DeepDive({
                           scenario?.target2 != null
                             ? `T2: $${scenario.target2.toFixed(2)}${scenario.rrToT2 != null ? ` (${scenario.rrToT2.toFixed(1)}:1 from current)` : ""}`
                             : "",
-                          riskReward != null ? `R/R shown: ${riskReward.toFixed(1)}:1 (current → ${scenario?.chosenLabel ?? "target"})` : "",
+                          currentRr != null ? `R/R from current: ${currentRr.toFixed(1)}:1 (→ ${scenario?.chosenLabel ?? "target"})` : "",
                           scenario?.worstCaseRr != null ? `Worst-case R/R (zone top → ${scenario?.chosenLabel ?? "target"}): ${scenario.worstCaseRr.toFixed(1)}:1` : ""
                         ]
                           .filter(Boolean)
