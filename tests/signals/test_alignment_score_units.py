@@ -1,9 +1,36 @@
 from stocvest.signals.alignment_score import (
     AlignmentLevel,
     AlignmentResult,
+    adjust_composite_with_alignment,
     apply_alignment_modifier,
     compute_alignment_score,
 )
+from stocvest.signals.composite_score import CompositeSignal, CompositeVerdict
+
+
+def test_neutral_composite_skips_alignment_modifier() -> None:
+    """Neutral verdict must not inherit long-biased headwinds (alignment_score #2)."""
+    composite = CompositeSignal(
+        score=0.0,
+        confidence=0.5,
+        verdict=CompositeVerdict.NEUTRAL,
+        contributions=[],
+        alignment_ratio=0.5,
+    )
+    out, alignment = adjust_composite_with_alignment(
+        composite,
+        macro_verdict="bearish",
+        macro_regime="neutral",
+        sector_verdict="bearish",
+        sector_persistence=0.9,
+        technical_verdict="bullish",
+        bullish_threshold=0.15,
+        bearish_threshold=-0.15,
+    )
+    assert out.score == composite.score
+    assert out.verdict == CompositeVerdict.NEUTRAL
+    assert alignment.score_modifier == 0.0
+    assert alignment.alignment_chip == "Neutral composite"
 
 
 def test_full_alignment_long() -> None:
