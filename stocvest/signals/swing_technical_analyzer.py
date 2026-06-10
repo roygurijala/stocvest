@@ -21,37 +21,49 @@ def _daily_rsi(closes: list[float], period: int = 14) -> Optional[float]:
     return _calculate_rsi(closes, period)
 
 
+def _ema_incremental(values: list[float], period: int) -> list[float]:
+    """Single-pass incremental EMA over a full sequence.
+
+    Seeds from the SMA of the first ``period`` values, then streams the rest.
+    Returns a list aligned to ``values[period - 1:]`` (length = len(values) - period + 1).
+    """
+    if len(values) < period:
+        return []
+    mult = 2.0 / (period + 1)
+    ema = sum(values[:period]) / period
+    out = [ema]
+    for x in values[period:]:
+        ema = (x - ema) * mult + ema
+        out.append(ema)
+    return out
+
+
 def _macd_series(closes: list[float], fast: int = 12, slow: int = 26, signal: int = 9) -> tuple[Optional[float], Optional[float], Optional[float], Optional[float], Optional[float]]:
     """
     Returns (macd_now, signal_now, histogram_now, macd_prev, signal_prev) using the last two bars
     of the MACD / signal series, or Nones if insufficient data.
+
+    Uses a single-pass incremental EMA (O(n)) instead of recomputing the full EMA
+    from scratch for each bar (previously O(n²)).
     """
     n = len(closes)
     if n < slow + signal + 2:
         return None, None, None, None, None
 
-    macd_line: list[float] = []
-    for i in range(slow - 1, n):
-        sub = closes[: i + 1]
-        e12 = _calculate_ema(sub, fast)
-        e26 = _calculate_ema(sub, slow)
-        if e12 is None or e26 is None:
-            continue
-        macd_line.append(float(e12) - float(e26))
+    ema_fast = _ema_incremental(closes, fast)
+    ema_slow = _ema_incremental(closes, slow)
+
+    # ema_fast is aligned to closes[fast-1:], ema_slow to closes[slow-1:].
+    # MACD = ema_fast - ema_slow, aligned to closes[slow-1:] (the shorter series).
+    offset = slow - fast  # ema_fast is longer by this many leading values
+    if offset < 0 or len(ema_slow) == 0:
+        return None, None, None, None, None
+    macd_line = [ema_fast[offset + i] - ema_slow[i] for i in range(len(ema_slow))]
 
     if len(macd_line) < signal + 2:
         return None, None, None, None, None
 
-    def _ema_seq(vals: list[float], period: int) -> list[float]:
-        mult = 2.0 / (period + 1)
-        ema = sum(vals[:period]) / period
-        out = [ema]
-        for x in vals[period:]:
-            ema = (x - ema) * mult + ema
-            out.append(ema)
-        return out
-
-    sig_seq = _ema_seq(macd_line, signal)
+    sig_seq = _ema_incremental(macd_line, signal)
     if len(sig_seq) < 2:
         return None, None, None, None, None
 
@@ -222,6 +234,11 @@ def _extension_penalty(
     threshold_pct: float,
     penalty: int,
 ) -> int:
+    # DEPRECATED: returns a flat penalty regardless of how far extended the
+    # price is. Use _scaled_extension_penalty instead, which correctly
+    # increases the penalty for larger extensions beyond the threshold.
+    # This function is not called by SwingTechnicalAnalyzer.analyze; it is
+    # kept only to avoid breaking any external callers.
     if anchor is None or anchor <= 0 or threshold_pct <= 0:
         return 0
     pct_above = (last - anchor) / anchor * 100.0

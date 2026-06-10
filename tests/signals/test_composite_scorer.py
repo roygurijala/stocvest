@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from stocvest.signals.composite_score import CompositeScoreEngine, LayerSignal
 
 
@@ -37,10 +39,11 @@ def test_technical_layer_has_higher_alignment_weight() -> None:
         [LayerSignal("technical", 1.0, 1.0), LayerSignal("news", -1.0, 1.0)],
         regime="sideways",
     )
-    # base_weight × regime × confidence: technical 0.30, news 0.18 (sideways)
-    assert result.aligned_weight == 0.3
-    assert result.conflicted_weight == 0.18
-    assert result.alignment_ratio == 0.3 / (0.3 + 0.18)
+    # base_weight × regime × confidence: technical 0.30, news 0.20 (sideways)
+    # News weight updated from legacy 0.18 to 0.20 to match CompositeParameters defaults.
+    assert result.aligned_weight == pytest.approx(0.30)
+    assert result.conflicted_weight == pytest.approx(0.20)
+    assert result.alignment_ratio == pytest.approx(0.30 / (0.30 + 0.20))
 
 
 def test_alignment_ratio_stored_on_signal() -> None:

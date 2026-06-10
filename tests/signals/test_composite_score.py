@@ -115,9 +115,11 @@ def test_confidence_uses_weighted_average_not_squared_effect():
 def test_helper_uses_composite_params_weights_not_legacy_defaults():
     """Lock in that the helper reads `params.composite.*_weight`, not DEFAULT_BASE_WEIGHTS.
 
-    The two dictionaries differ on news / sector / macro / geopolitical / internals.
-    If anyone re-imports DEFAULT_BASE_WEIGHTS into a production codepath, this
-    test fails loud.
+    DEFAULT_BASE_WEIGHTS is now kept in sync with CompositeParameters field defaults
+    (fix #11 — the two tables previously diverged on news/sector/macro/geopolitical/
+    internals, causing tests using the no-args engine to score against different weights
+    than production). This test verifies the production helper produces weights that
+    match CompositeParameters AND that DEFAULT_BASE_WEIGHTS itself is also in sync.
     """
     params = default_signal_parameters()
     engine = build_composite_score_engine_from_params(params)
@@ -129,11 +131,13 @@ def test_helper_uses_composite_params_weights_not_legacy_defaults():
         "geopolitical": pytest.approx(params.composite.geopolitical_weight),
         "internals": pytest.approx(params.composite.internals_weight),
     }
-    # And explicitly NOT the legacy constants — these differ on at least
-    # news (0.18 vs 0.20), sector (0.12 vs 0.15), macro (0.16 vs 0.15).
-    assert engine._base_weights["news"] != pytest.approx(DEFAULT_BASE_WEIGHTS["news"])
-    assert engine._base_weights["sector"] != pytest.approx(DEFAULT_BASE_WEIGHTS["sector"])
-    assert engine._base_weights["macro"] != pytest.approx(DEFAULT_BASE_WEIGHTS["macro"])
+    # Verify DEFAULT_BASE_WEIGHTS is also in sync with CompositeParameters defaults
+    # so the no-args engine path used in tests uses the same table as production.
+    assert DEFAULT_BASE_WEIGHTS["news"] == pytest.approx(params.composite.news_weight)
+    assert DEFAULT_BASE_WEIGHTS["sector"] == pytest.approx(params.composite.sector_weight)
+    assert DEFAULT_BASE_WEIGHTS["macro"] == pytest.approx(params.composite.macro_weight)
+    assert DEFAULT_BASE_WEIGHTS["geopolitical"] == pytest.approx(params.composite.geopolitical_weight)
+    assert DEFAULT_BASE_WEIGHTS["internals"] == pytest.approx(params.composite.internals_weight)
 
 
 @pytest.mark.unit
