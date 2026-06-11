@@ -1240,24 +1240,25 @@ function FeedLaneSection({
       </div>
       {/* Refresh button for the section */}
       {onRefreshCard && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing[2] }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing[2], marginTop: spacing[1] }}>
           <button
             type="button"
             onClick={() => onRefreshCard(title.toLowerCase() as FeedLane)}
             style={{
               fontSize: typography.scale.xs,
-              color: colors.textMuted,
-              background: "transparent",
+              color: colors.text,
+              background: colors.surfaceMuted,
               border: `1px solid ${colors.border}`,
               borderRadius: borderRadius.sm,
-              padding: "2px 8px",
+              padding: "4px 10px",
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
-              gap: spacing[1]
+              gap: spacing[1],
+              fontWeight: 600
             }}
           >
-            ↻ Refresh
+            ↻ Refresh {title}
           </button>
           {lastRefreshTimestamp && (
             <span style={{ fontSize: 10, color: colors.textMuted }}>

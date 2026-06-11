@@ -569,17 +569,17 @@ export function WatchlistRail({
               display: "inline-flex",
               alignItems: "center",
               gap: 4,
-              background: "transparent",
+              background: colors.surfaceMuted,
               border: `1px solid ${colors.border}`,
               borderRadius: borderRadius.md,
-              color: colors.textMuted,
+              color: colors.text,
               cursor: "pointer",
               fontSize: typography.scale.xs,
               fontWeight: 600,
-              padding: "4px 8px"
+              padding: "4px 10px"
             }}
           >
-            ↻
+            ↻ Refresh
           </button>
           <button
             type="button"
