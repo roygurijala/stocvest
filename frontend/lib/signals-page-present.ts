@@ -56,6 +56,38 @@ export type SignalsLayerRowInput = {
   /** Today − baseline, when score is known (same scale as divergence chart). */
   deltaVsBaseline?: number | null;
   sectorCachePending?: boolean;
+  /** Company name for display */
+  companyName?: string;
+  /** Specific reasoning for the score */
+  reasoning?: string;
+  /** Data chips supporting the analysis */
+  chips?: string[];
+  /** Verdict from the layer analyzer */
+  verdict?: string;
+  /** Layer-specific technical data */
+  vwapState?: string | null;
+  vwapStateTooltip?: string | null;
+  /** Layer-specific news data */
+  articleCount?: number;
+  headlineSentiment?: number | null;
+  latestRating?: string | null;
+  analystConsensus?: string | null;
+  earningsResult?: string | null;
+  wimSummary?: string | null;
+  /** Layer-specific macro data */
+  macroWarnings?: string[];
+  upcomingEvents?: Array<{ event: string; date: string; impact?: string }>;
+  yieldCurve?: { status: string; signal: string } | null;
+  /** Layer-specific geopolitical data */
+  geoActiveEvents?: Array<{ title: string; severity: string }>;
+  geoExposureSummary?: string | null;
+  geoExposureBand?: string | null;
+  geoPrimaryTheme?: string | null;
+  /** Layer-specific sector data */
+  sectorEtf?: string | null;
+  sectorDisplayName?: string | null;
+  sectorMomentum?: number | null;
+  vsSectorPerformance?: number | null;
 };
 
 export function layerDeltaVsBaseline(

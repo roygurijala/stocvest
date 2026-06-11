@@ -18,7 +18,13 @@ import {
   Info,
   Target,
   Scale,
-  FileText
+  FileText,
+  Building2,
+  AlertTriangle,
+  Calendar,
+  Newspaper as NewsIcon,
+  TrendingUp as MomentumIcon,
+  Users
 } from "lucide-react";
 import { CuteLoader } from "@/components/cute-loader";
 import { InfoTip } from "@/components/info-tip";
@@ -350,6 +356,16 @@ function LayerRow({
           
           {/* Content */}
           <div className="flex-1 min-w-0">
+            {/* Company name if available */}
+            {row.companyName && (
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <Building2 className="w-3 h-3" style={{ color: colors.textMuted }} />
+                <span className="text-xs font-medium" style={{ color: colors.textMuted }}>
+                  {row.companyName}
+                </span>
+              </div>
+            )}
+            
             <div className="flex items-center gap-2 flex-wrap">
               <span 
                 className="text-sm font-bold tracking-tight"
@@ -513,13 +529,11 @@ function LayerDetailDrawer({
   const levelLabel = formatLayerScoreLabel(layer.score, layer.status);
   const levelPct = layer.score != null ? Math.max(0, Math.min(100, Number(levelLabel))) : 0;
 
-  // Mock detailed data - in real implementation, this would come from the layer data
-  const details = {
-    methodology: getLayerMethodology(layer.key),
-    factors: getLayerFactors(layer.key, levelPct),
-    confidence: levelPct >= 70 ? "High" : levelPct >= 50 ? "Medium" : "Low",
-    lastUpdated: "Just now"
-  };
+  // Use actual layer data for specific justifications
+  const confidence = levelPct >= 70 ? "High" : levelPct >= 50 ? "Medium" : "Low";
+  
+  // Build specific justification items based on layer data
+  const justificationItems = buildJustificationItems(layer, colors, dot);
 
   return (
     <AnimatePresence>
@@ -577,7 +591,7 @@ function LayerDetailDrawer({
                     {layer.name}
                   </h2>
                   <p className="m-0 text-xs" style={{ color: colors.textMuted }}>
-                    {symbol.toUpperCase()} • {bias.toUpperCase()} Setup
+                    {layer.companyName || symbol.toUpperCase()} • {bias.toUpperCase()} Setup
                   </p>
                 </div>
               </div>
@@ -617,7 +631,7 @@ function LayerDetailDrawer({
                       color: dot
                     }}
                   >
-                    {details.confidence} Confidence
+                    {confidence} Confidence
                   </span>
                 </div>
                 
@@ -660,56 +674,102 @@ function LayerDetailDrawer({
                 </div>
               </div>
 
-              {/* How We Calculate */}
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <Info className="w-4 h-4" style={{ color: colors.accent }} />
-                  <h3 className="m-0 text-sm font-bold uppercase tracking-wider" style={{ color: colors.text }}>
-                    How We Calculate
-                  </h3>
+              {/* Our Analysis - Specific Reasoning */}
+              {layer.reasoning && (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Info className="w-4 h-4" style={{ color: colors.accent }} />
+                    <h3 className="m-0 text-sm font-bold uppercase tracking-wider" style={{ color: colors.text }}>
+                      Our Analysis
+                    </h3>
+                  </div>
+                  <div 
+                    className="p-4 rounded-xl"
+                    style={{
+                      background: `${colors.surfaceMuted}60`,
+                      border: `1px solid ${colors.border}`
+                    }}
+                  >
+                    <p className="m-0 text-sm leading-relaxed" style={{ color: colors.text }}>
+                      {layer.reasoning}
+                    </p>
+                  </div>
                 </div>
-                <p className="m-0 text-sm leading-relaxed" style={{ color: colors.textMuted }}>
-                  {details.methodology}
-                </p>
-              </div>
+              )}
 
-              {/* Key Factors */}
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <Target className="w-4 h-4" style={{ color: colors.accent }} />
-                  <h3 className="m-0 text-sm font-bold uppercase tracking-wider" style={{ color: colors.text }}>
-                    Key Factors
-                  </h3>
+              {/* Supporting Data Points (Chips) */}
+              {layer.chips && layer.chips.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Target className="w-4 h-4" style={{ color: colors.accent }} />
+                    <h3 className="m-0 text-sm font-bold uppercase tracking-wider" style={{ color: colors.text }}>
+                      Supporting Evidence
+                    </h3>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {layer.chips.map((chip, i) => (
+                      <motion.span
+                        key={i}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium"
+                        style={{
+                          background: `${colors.accent}15`,
+                          border: `1px solid ${colors.accent}30`,
+                          color: colors.text
+                        }}
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: i * 0.05 }}
+                      >
+                        {chip}
+                      </motion.span>
+                    ))}
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  {details.factors.map((factor, i) => (
-                    <motion.div
-                      key={i}
-                      className="flex items-center gap-3 p-3 rounded-xl"
-                      style={{
-                        background: `${colors.surfaceMuted}80`,
-                        border: `1px solid ${colors.border}`
-                      }}
-                      initial={{ opacity: 0, x: 20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.1 }}
-                    >
-                      <div 
-                        className="w-2 h-2 rounded-full shrink-0"
-                        style={{ background: dot }}
-                      />
-                      <span className="text-sm" style={{ color: colors.text }}>
-                        {factor}
-                      </span>
-                    </motion.div>
-                  ))}
-                </div>
-              </div>
+              )}
 
-              {/* Why This Matters */}
+              {/* Layer-Specific Justifications */}
+              {justificationItems.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Scale className="w-4 h-4" style={{ color: colors.accent }} />
+                    <h3 className="m-0 text-sm font-bold uppercase tracking-wider" style={{ color: colors.text }}>
+                      What Drives This Score
+                    </h3>
+                  </div>
+                  <div className="space-y-2">
+                    {justificationItems.map((item, i) => (
+                      <motion.div
+                        key={i}
+                        className="flex items-start gap-3 p-3 rounded-xl"
+                        style={{
+                          background: `${colors.surfaceMuted}80`,
+                          border: `1px solid ${colors.border}`
+                        }}
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.1 }}
+                      >
+                        <div className="mt-0.5 shrink-0">
+                          {item.icon}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="m-0 text-xs font-semibold uppercase tracking-wider" style={{ color: colors.textMuted }}>
+                            {item.label}
+                          </p>
+                          <p className="m-0 mt-0.5 text-sm" style={{ color: colors.text }}>
+                            {item.value}
+                          </p>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Context / Why This Matters */}
               <div>
                 <div className="flex items-center gap-2 mb-3">
-                  <Scale className="w-4 h-4" style={{ color: colors.accent }} />
+                  <Users className="w-4 h-4" style={{ color: colors.accent }} />
                   <h3 className="m-0 text-sm font-bold uppercase tracking-wider" style={{ color: colors.text }}>
                     Why This Matters
                   </h3>
@@ -724,6 +784,7 @@ function LayerDetailDrawer({
                   <p className="m-0 text-sm leading-relaxed" style={{ color: colors.text }}>
                     This layer is <strong style={{ color: dot }}>{polarityStr === "with" ? "supporting" : polarityStr === "against" ? "countering" : "neutral to"}</strong> your {bias} setup. 
                     {layer.statusLabel && `The ${layer.name.toLowerCase()} reading shows ${layer.statusLabel.toLowerCase()}.`}
+                    {layer.explanation && ` ${layer.explanation}`}
                   </p>
                 </div>
               </div>
@@ -735,7 +796,7 @@ function LayerDetailDrawer({
               >
                 <FileText className="w-4 h-4" style={{ color: colors.textMuted }} />
                 <span className="text-xs" style={{ color: colors.textMuted }}>
-                  Analysis updated {details.lastUpdated}
+                  Analysis updated Just now
                 </span>
               </div>
             </div>
@@ -746,51 +807,177 @@ function LayerDetailDrawer({
   );
 }
 
-// Helper functions for layer details
-function getLayerMethodology(layerKey: string): string {
-  const methodologies: Record<string, string> = {
-    technical: "Technical analysis combines price action, volume patterns, and momentum indicators. We analyze SMA/EMA trends, RSI levels, MACD signals, and support/resistance zones to determine trend strength and potential reversal points.",
-    news: "News sentiment is derived from real-time analysis of market-moving headlines, earnings reports, and analyst ratings. We weight by recency, source credibility, and semantic sentiment scoring.",
-    macro: "Macro analysis evaluates broader market conditions including VIX volatility, index momentum (SPY/QQQ), yield curve dynamics, and economic calendar events that could impact price action.",
-    sector: "Sector analysis compares the symbol's performance against its sector ETF (e.g., XLK for tech). We measure relative strength, momentum divergence, and sector flow patterns.",
-    geopolitical: "Geopolitical analysis monitors risk events, trade tensions, and global developments that could impact market sentiment. We track sector-specific sensitivities to these events.",
-    internals: "Market internals measure breadth (advancing vs declining stocks), participation (SPY vs QQQ agreement), and volatility conditions to gauge underlying market health."
-  };
-  return methodologies[layerKey] || "Analysis methodology varies by layer type and market conditions.";
-}
+// Build specific justification items based on actual layer data
+type JustificationItem = {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+};
 
-function getLayerFactors(layerKey: string, score: number): string[] {
-  const factors: Record<string, string[]> = {
-    technical: score > 60 
-      ? ["Price above key moving averages", "RSI in healthy momentum zone", "Volume confirming trend", "Support level established"]
-      : score > 40
-      ? ["Mixed moving average signals", "Momentum flattening", "Volume declining", "Consolidation pattern"]
-      : ["Price below key averages", "RSI showing weakness", "Volume distribution", "Resistance overhead"],
-    news: score > 60
-      ? ["Positive earnings momentum", "Analyst upgrades present", "Favorable headlines dominant", "Management guidance raised"]
-      : score > 40
-      ? ["Mixed headline sentiment", "Earnings neutral", "Analyst coverage stable", "No major catalysts"]
-      : ["Negative headline flow", "Analyst downgrades", "Guidance concerns", "Regulatory uncertainty"],
-    macro: score > 60
-      ? ["VIX in favorable range", "Broad market trending up", "Sector tailwinds present", "Economic data supportive"]
-      : score > 40
-      ? ["VIX elevated but stable", "Market chop conditions", "Mixed economic signals", "Sector rotation occurring"]
-      : ["VIX showing stress", "Broad market weakness", "Headwind conditions", "Economic concerns"],
-    sector: score > 60
-      ? ["Outperforming sector ETF", "Sector momentum strong", "Relative strength positive", "Leadership in group"]
-      : score > 40
-      ? ["Tracking sector average", "Sector momentum mixed", "Relative strength neutral", "Middle of pack"]
-      : ["Underperforming sector", "Sector headwinds", "Relative strength negative", "Laggard status"],
-    geopolitical: score > 60
-      ? ["Favorable policy backdrop", "Trade environment stable", "No immediate risks", "Sector insulated"]
-      : score > 40
-      ? ["Policy uncertainty present", "Trade tensions watch", "Monitor developments", "Sector exposed"]
-      : ["Active geopolitical risks", "Trade concerns elevated", "Regulatory scrutiny", "Sector vulnerable"],
-    internals: score > 60
-      ? ["Broad market participation", "Breadth expansion", "VIX trending lower", "Healthy internals"]
-      : score > 40
-      ? ["Mixed participation", "Breadth narrowing", "VIX elevated", "Internals choppy"]
-      : ["Weak participation", "Breadth deterioration", "VIX spiking", "Internals stressed"]
-  };
-  return factors[layerKey] || ["Multiple factors considered", "Real-time data integration", "Weighting applied"];
+function buildJustificationItems(
+  layer: SignalsLayerRowInput,
+  colors: ReturnType<typeof useTheme>["colors"],
+  dot: string
+): JustificationItem[] {
+  const items: JustificationItem[] = [];
+
+  // Technical layer specific items
+  if (layer.key === "technical") {
+    if (layer.vwapState) {
+      items.push({
+        icon: <div style={{ color: dot }}><MomentumIcon className="w-4 h-4" /></div>,
+        label: "VWAP Position",
+        value: layer.vwapState
+      });
+    }
+    if (layer.vwapStateTooltip) {
+      items.push({
+        icon: <div style={{ color: colors.accent }}><Info className="w-4 h-4" /></div>,
+        label: "Technical Context",
+        value: layer.vwapStateTooltip
+      });
+    }
+  }
+
+  // News layer specific items
+  if (layer.key === "news") {
+    if (layer.articleCount !== undefined && layer.articleCount > 0) {
+      items.push({
+        icon: <div style={{ color: dot }}><NewsIcon className="w-4 h-4" /></div>,
+        label: "Articles Analyzed",
+        value: `${layer.articleCount} news items in scan window`
+      });
+    }
+    if (layer.headlineSentiment !== null && layer.headlineSentiment !== undefined) {
+      const sentiment = layer.headlineSentiment > 0.3 ? "Bullish" : layer.headlineSentiment < -0.3 ? "Bearish" : "Neutral";
+      items.push({
+        icon: <div style={{ color: dot }}><TrendingUp className="w-4 h-4" /></div>,
+        label: "Headline Sentiment",
+        value: `${sentiment} (${(layer.headlineSentiment * 100).toFixed(0)}%)`
+      });
+    }
+    if (layer.latestRating) {
+      items.push({
+        icon: <div style={{ color: colors.accent }}><Target className="w-4 h-4" /></div>,
+        label: "Latest Analyst Rating",
+        value: layer.latestRating
+      });
+    }
+    if (layer.analystConsensus) {
+      items.push({
+        icon: <div style={{ color: colors.accent }}><Users className="w-4 h-4" /></div>,
+        label: "Analyst Consensus",
+        value: layer.analystConsensus
+      });
+    }
+    if (layer.earningsResult) {
+      items.push({
+        icon: <div style={{ color: dot }}><Calendar className="w-4 h-4" /></div>,
+        label: "Recent Earnings",
+        value: layer.earningsResult
+      });
+    }
+    if (layer.wimSummary) {
+      items.push({
+        icon: <div style={{ color: colors.accent }}><FileText className="w-4 h-4" /></div>,
+        label: "What It Means",
+        value: layer.wimSummary
+      });
+    }
+  }
+
+  // Macro layer specific items
+  if (layer.key === "macro") {
+    if (layer.macroWarnings && layer.macroWarnings.length > 0) {
+      items.push({
+        icon: <div style={{ color: colors.caution }}><AlertTriangle className="w-4 h-4" /></div>,
+        label: "Macro Warnings",
+        value: layer.macroWarnings.join("; ")
+      });
+    }
+    if (layer.upcomingEvents && layer.upcomingEvents.length > 0) {
+      const nextEvent = layer.upcomingEvents[0];
+      items.push({
+        icon: <div style={{ color: dot }}><Calendar className="w-4 h-4" /></div>,
+        label: "Upcoming Event",
+        value: `${nextEvent.event} (${nextEvent.date})`
+      });
+    }
+    if (layer.yieldCurve) {
+      items.push({
+        icon: <div style={{ color: dot }}><TrendingUp className="w-4 h-4" /></div>,
+        label: "Yield Curve",
+        value: `${layer.yieldCurve.status} - ${layer.yieldCurve.signal}`
+      });
+    }
+  }
+
+  // Geopolitical layer specific items
+  if (layer.key === "geopolitical") {
+    if (layer.geoActiveEvents && layer.geoActiveEvents.length > 0) {
+      const topEvent = layer.geoActiveEvents[0];
+      items.push({
+        icon: <div style={{ color: colors.caution }}><AlertTriangle className="w-4 h-4" /></div>,
+        label: "Active Event",
+        value: `${topEvent.title} (${topEvent.severity})`
+      });
+    }
+    if (layer.geoExposureSummary) {
+      items.push({
+        icon: <div style={{ color: colors.accent }}><Info className="w-4 h-4" /></div>,
+        label: "Exposure Assessment",
+        value: layer.geoExposureSummary
+      });
+    }
+    if (layer.geoExposureBand) {
+      items.push({
+        icon: <div style={{ color: dot }}><Scale className="w-4 h-4" /></div>,
+        label: "Risk Band",
+        value: layer.geoExposureBand
+      });
+    }
+    if (layer.geoPrimaryTheme) {
+      items.push({
+        icon: <div style={{ color: colors.accent }}><FileText className="w-4 h-4" /></div>,
+        label: "Primary Theme",
+        value: layer.geoPrimaryTheme
+      });
+    }
+  }
+
+  // Sector layer specific items
+  if (layer.key === "sector") {
+    if (layer.sectorDisplayName) {
+      items.push({
+        icon: <div style={{ color: dot }}><Building2 className="w-4 h-4" /></div>,
+        label: "Sector",
+        value: layer.sectorDisplayName
+      });
+    }
+    if (layer.sectorEtf) {
+      items.push({
+        icon: <div style={{ color: colors.accent }}><Target className="w-4 h-4" /></div>,
+        label: "Sector ETF",
+        value: layer.sectorEtf
+      });
+    }
+    if (layer.vsSectorPerformance !== null && layer.vsSectorPerformance !== undefined) {
+      const perf = layer.vsSectorPerformance;
+      const perfStr = perf > 0 ? `+${perf.toFixed(2)}%` : `${perf.toFixed(2)}%`;
+      items.push({
+        icon: <div style={{ color: perf > 0 ? colors.bullish : colors.bearish }}><MomentumIcon className="w-4 h-4" /></div>,
+        label: "vs Sector ETF",
+        value: perfStr
+      });
+    }
+    if (layer.sectorMomentum !== null && layer.sectorMomentum !== undefined) {
+      items.push({
+        icon: <div style={{ color: dot }}><TrendingUp className="w-4 h-4" /></div>,
+        label: "Sector Momentum",
+        value: `${layer.sectorMomentum.toFixed(1)}/100`
+      });
+    }
+  }
+
+  return items;
 }
