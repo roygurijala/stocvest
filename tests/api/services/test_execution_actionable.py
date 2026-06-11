@@ -77,6 +77,14 @@ def test_apply_entry_gates_sets_decision_state() -> None:
     assert body2["decision_state"] == "monitor"
 
 
+def test_apply_entry_gates_blocked_when_rr_below_threshold() -> None:
+    body = _active_body(rr=0.5)
+    apply_entry_gates_to_response_body(body, mode="swing")
+    assert body["ledger_qualified"] is False
+    assert body["execution_actionable"] is False
+    assert body["decision_state"] == "blocked"
+
+
 def test_resolve_decision_state_blocked_when_ledger_fails() -> None:
     body = _active_body(rr=0.5)
     ledger_ok, exec_ok, _ = evaluate_execution_actionable(body, mode="swing")
