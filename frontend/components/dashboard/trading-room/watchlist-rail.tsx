@@ -16,7 +16,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PanelRightClose } from "lucide-react";
-import { borderRadius, roleAccents, spacing, typography } from "@/lib/design-system";
+import { borderRadius, spacing, typography } from "@/lib/design-system";
 import type { useTheme } from "@/lib/theme-provider";
 import type { SnapshotPayload } from "@/lib/api/market";
 import {
@@ -26,7 +26,12 @@ import {
 } from "@/lib/watchlist-page-utils";
 import { parseMaturationSummaryEnvelope } from "@/lib/watchlist/maturation-summary-envelope";
 import { useWatchlistMaturationReloadNonce } from "@/lib/hooks/use-watchlist-maturation-reload";
-import { FeedCardUpdatedLine } from "@/lib/dashboard/trading-room/feed-card-present";
+import {
+  CardRefreshButton,
+  FeedCardUpdatedLine,
+  laneBadgeStyle
+} from "@/lib/dashboard/trading-room/feed-card-present";
+import { feedBiasColor } from "@/lib/signal-direction-colors";
 import { WATCHLIST_SYMBOLS_CHANGED_EVENT } from "@/lib/watchlist-membership-client";
 import { fetchSetupEvolution, type SetupEvolutionResponse } from "@/lib/api/setup-evolution";
 import {
@@ -202,7 +207,9 @@ function RailCard({
   expanded,
   onSelect,
   onToggleExpand,
-  colors
+  colors,
+  onRefresh,
+  refreshing = false
 }: {
   card: FeedCard;
   active: boolean;
@@ -210,10 +217,11 @@ function RailCard({
   onSelect: () => void;
   onToggleExpand: () => void;
   colors: Colors;
+  onRefresh?: () => void;
+  refreshing?: boolean;
 }) {
   const sTone = stateTone(card.state, colors);
-  const laneAccent =
-    card.lane === "day" ? roleAccents.dark.day.borderAccent : roleAccents.dark.swing.borderAccent;
+  const biasAccent = feedBiasColor(card.bias, colors);
   const pct = card.changePct;
   const pctTone = pct == null ? colors.textMuted : pct >= 0 ? colors.bullish : colors.bearish;
   const autoCompany = useSymbolName(card.company ? undefined : card.symbol);
@@ -246,7 +254,11 @@ function RailCard({
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: spacing[2] }}>
-          <span style={{ fontSize: typography.scale.sm, fontWeight: 700 }}>{card.symbol}</span>
+          <span style={{ display: "flex", alignItems: "center", gap: spacing[1], minWidth: 0 }}>
+            <span style={{ fontSize: typography.scale.sm, fontWeight: 700 }}>{card.symbol}</span>
+            <span style={laneBadgeStyle(colors)}>{card.lane}</span>
+          </span>
+          <span style={{ display: "flex", alignItems: "flex-start", gap: spacing[1] }}>
           <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
             <span style={{ fontSize: typography.scale.xs, fontWeight: 600, color: pctTone }}>
               {card.price != null ? `$${card.price.toFixed(2)}` : "—"}
@@ -254,6 +266,15 @@ function RailCard({
             {pct != null ? (
               <span style={{ fontSize: 9, color: pctTone }}>{`${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`}</span>
             ) : null}
+          </span>
+          {onRefresh ? (
+            <CardRefreshButton
+              label={`Refresh ${card.symbol}`}
+              busy={refreshing}
+              colors={colors}
+              onRefresh={onRefresh}
+            />
+          ) : null}
           </span>
         </div>
         {company ? (
@@ -366,7 +387,9 @@ export function WatchlistRail({
   onToggleOpen,
   isMobile = false,
   colors,
-  liveBiasBySymbol
+  liveBiasBySymbol,
+  onRefreshCard,
+  refreshingCardIds
 }: {
   mode: FeedLane;
   selectedId: string | null;
@@ -378,6 +401,8 @@ export function WatchlistRail({
   colors: Colors;
   /** Live composite bias by symbol (e.g., from current signal) to override stale maturation bias */
   liveBiasBySymbol?: Map<string, string>;
+  onRefreshCard?: (card: FeedCard) => void | Promise<void>;
+  refreshingCardIds?: Set<string>;
 }) {
   const [symbols, setSymbols] = useState<string[]>([]);
   const [bySymbol, setBySymbol] = useState<Record<string, WatchlistMaturationRow>>({});
@@ -385,7 +410,6 @@ export function WatchlistRail({
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [reloadNonce, bumpReloadNonce] = useWatchlistMaturationReloadNonce();
-  const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null);
 
   // Escape closes the panel — a discoverable, standard way out when it's open.
   useEffect(() => {
@@ -549,38 +573,9 @@ export function WatchlistRail({
           <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, letterSpacing: "0.1em", textTransform: "uppercase" }}>
             Your watch · {symbols.length}
           </span>
-          {lastRefreshTime && (
-            <span style={{ fontSize: 10, color: colors.textMuted }}>
-              Updated {lastRefreshTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-            </span>
-          )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: spacing[2] }}>
           <NotifyToggle colors={colors} />
-          <button
-            type="button"
-            onClick={() => {
-              bumpReloadNonce();
-              setLastRefreshTime(new Date());
-            }}
-            aria-label="Refresh watchlist"
-            title="Refresh watchlist data"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 4,
-              background: colors.surfaceMuted,
-              border: `1px solid ${colors.border}`,
-              borderRadius: borderRadius.md,
-              color: colors.text,
-              cursor: "pointer",
-              fontSize: typography.scale.xs,
-              fontWeight: 600,
-              padding: "4px 10px"
-            }}
-          >
-            ↻ Refresh
-          </button>
           <button
             type="button"
             onClick={onToggleOpen}
@@ -648,6 +643,8 @@ export function WatchlistRail({
               onSelect={() => onSelectCard(card)}
               onToggleExpand={() => setExpanded((cur) => (cur === card.id ? null : card.id))}
               colors={colors}
+              onRefresh={onRefreshCard ? () => onRefreshCard(card) : undefined}
+              refreshing={refreshingCardIds?.has(card.id) ?? false}
             />
           ))
         )}

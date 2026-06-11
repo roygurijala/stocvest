@@ -48,6 +48,118 @@ export function sectorLayerStatusLabelFromEntry(
   return {};
 }
 
+function strField(v: unknown): string {
+  return typeof v === "string" ? v.trim() : "";
+}
+
+function numField(v: unknown): number | null {
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
+function layerMetadataFromEntry(
+  key: string,
+  entry: Record<string, unknown>
+): Partial<SignalsLayerRowInput> {
+  const meta: Partial<SignalsLayerRowInput> = {};
+  const chips = Array.isArray(entry.chips)
+    ? entry.chips.map((c) => String(c)).filter((c) => c.trim().length > 0)
+    : [];
+  if (chips.length > 0) meta.chips = chips;
+
+  const verdict = strField(entry.verdict);
+  if (verdict) meta.verdict = verdict;
+
+  if (key === "technical") {
+    meta.vwapState = strField(entry.vwap_state) || null;
+    const tooltip = strField(entry.vwap_state_tooltip ?? entry.vwap_tooltip);
+    if (tooltip) meta.vwapStateTooltip = tooltip;
+  }
+
+  if (key === "news") {
+    const ac = numField(entry.article_count ?? entry.articles_count);
+    if (ac != null) meta.articleCount = Math.round(ac);
+    meta.headlineSentiment = numField(entry.headline_sentiment);
+    const wim = strField(entry.wim_summary);
+    if (wim) meta.wimSummary = wim;
+    const lr = entry.latest_rating;
+    if (lr && typeof lr === "object") {
+      const o = lr as Record<string, unknown>;
+      const parts = [o.action, o.rating, o.firm].map((x) => strField(x)).filter(Boolean);
+      if (parts.length) meta.latestRating = parts.join(" · ");
+    }
+    const acRaw = entry.analyst_consensus;
+    if (acRaw && typeof acRaw === "object") {
+      const c = acRaw as Record<string, unknown>;
+      const label = strField(c.label);
+      if (label) meta.analystConsensus = label;
+    }
+    const er = entry.earnings_result;
+    if (er && typeof er === "object") {
+      const e = er as Record<string, unknown>;
+      const beat = e.beat === true ? "beat" : e.beat === false ? "miss" : "";
+      const period = strField(e.period);
+      meta.earningsResult = [beat, period].filter(Boolean).join(" · ") || null;
+    }
+  }
+
+  if (key === "macro") {
+    const mw = entry.macro_warnings;
+    if (Array.isArray(mw)) {
+      meta.macroWarnings = mw.map((x) => String(x)).filter((s) => s.trim().length > 0);
+    }
+    const ue = entry.upcoming_events;
+    if (Array.isArray(ue)) {
+      meta.upcomingEvents = ue
+        .filter((item) => item && typeof item === "object")
+        .map((item) => {
+          const o = item as Record<string, unknown>;
+          return {
+            event: strField(o.name ?? o.event),
+            date: strField(o.scheduled_time ?? o.date),
+            impact: strField(o.warning ?? o.importance) || undefined
+          };
+        })
+        .filter((row) => row.event.length > 0);
+    }
+    const yc = entry.yield_curve;
+    if (yc && typeof yc === "object") {
+      const y = yc as Record<string, unknown>;
+      meta.yieldCurve = {
+        status: strField(y.regime ?? y.label) || "unknown",
+        signal: strField(y.chip ?? y.label) || ""
+      };
+    }
+  }
+
+  if (key === "geopolitical") {
+    const events = entry.geo_active_events ?? entry.active_events;
+    if (Array.isArray(events)) {
+      meta.geoActiveEvents = events
+        .filter((item) => item && typeof item === "object")
+        .map((item) => {
+          const o = item as Record<string, unknown>;
+          return {
+            title: strField(o.title ?? o.name),
+            severity: strField(o.severity ?? o.level) || "medium"
+          };
+        })
+        .filter((row) => row.title.length > 0);
+    }
+    meta.geoExposureSummary = strField(entry.geo_exposure_summary) || null;
+    meta.geoExposureBand = strField(entry.geo_exposure_band) || null;
+    meta.geoPrimaryTheme = strField(entry.geo_primary_theme) || null;
+  }
+
+  if (key === "sector") {
+    meta.sectorEtf = strField(entry.sector_etf) || null;
+    meta.sectorDisplayName = strField(entry.sector_display_name) || null;
+    meta.sectorMomentum = numField(entry.sector_momentum ?? entry.sector_persistence);
+    meta.vsSectorPerformance = numField(entry.vs_sector_performance ?? entry.relative_strength);
+  }
+
+  return meta;
+}
+
 function verdictToLayerStatus(verdict: string, status: string): LayerStatus {
   const s = status.toLowerCase();
   if (s === "as_of_close") {
@@ -103,8 +215,10 @@ export function compositeToSignalsLayerRows(
         sectorMeta.statusLabel ??
         (asOfClose ? "As of close · daily structure" : undefined),
       explanation: reasoning,
+      reasoning: reasoning || undefined,
       score,
-      sectorCachePending: sectorMeta.sectorCachePending
+      sectorCachePending: sectorMeta.sectorCachePending,
+      ...layerMetadataFromEntry(key, entry ?? {})
     };
   });
 }

@@ -91,6 +91,42 @@ describe("compositeToSignalsLayerRows", () => {
     expect(internals?.name).toBe("Market Internals");
   });
 
+  test("maps reasoning to both explanation and reasoning fields", () => {
+    const rows = compositeToSignalsLayerRows({
+      layers: [
+        {
+          layer: "technical",
+          status: "available",
+          score: 72,
+          verdict: "bullish",
+          reasoning: "Price above VWAP with rising volume."
+        }
+      ]
+    });
+    const tech = rows.find((r) => r.key === "technical");
+    expect(tech?.explanation).toBe("Price above VWAP with rising volume.");
+    expect(tech?.reasoning).toBe("Price above VWAP with rising volume.");
+  });
+
+  test("maps technical chips and vwap metadata", () => {
+    const rows = compositeToSignalsLayerRows({
+      layers: [
+        {
+          layer: "technical",
+          status: "available",
+          score: 68,
+          verdict: "bullish",
+          reasoning: "Above VWAP",
+          chips: ["Above VWAP", "RSI 58"],
+          vwap_state: "Above VWAP"
+        }
+      ]
+    });
+    const tech = rows.find((r) => r.key === "technical");
+    expect(tech?.chips).toEqual(["Above VWAP", "RSI 58"]);
+    expect(tech?.vwapState).toBe("Above VWAP");
+  });
+
   test("preserves legitimate technical score of zero", () => {
     const rows = compositeToSignalsLayerRows({
       layers: [

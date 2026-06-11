@@ -20,6 +20,7 @@ import { borderRadius, roleAccents, spacing, typography } from "@/lib/design-sys
 import { isUsRegularSessionOpenEt, nextRegularSessionOpenLabel } from "@/lib/market-hours-et";
 import type { useTheme } from "@/lib/theme-provider";
 import { useSignalComposite } from "@/lib/hooks/use-signal-composite";
+import { revalidateSignalCompositeCache } from "@/lib/signal-composite-cache";
 import { parseSwingCompositeInsight, parseCompositeAlignment, parseFundamentalContext } from "@/lib/signal-evidence";
 import {
   compositeToSignalsLayerRows,
@@ -664,7 +665,8 @@ export function DeepDive({
   companyBySymbol,
   onBackToBrief,
   isMobile = false,
-  colors
+  colors,
+  dataRefreshNonce = 0
 }: {
   card: FeedCard;
   /** Full feed list — used to know the other lane's state for the toggle. */
@@ -674,6 +676,8 @@ export function DeepDive({
   onBackToBrief: () => void;
   isMobile?: boolean;
   colors: Colors;
+  /** Bumped by periodic or per-card refresh to re-fetch all tab data. */
+  dataRefreshNonce?: number;
 }) {
   const [tab, setTab] = useState<DeepDiveTab>("setup");
   // activeLane allows switching Day/Swing within the deep dive
@@ -725,9 +729,22 @@ export function DeepDive({
   const swingState: FeedState | null = swingLaneCard?.state ?? (card.lane === "swing" ? card.state : null);
   const { composite, isInitialLoading } = useSignalComposite(card.symbol, activeLane);
 
+  useEffect(() => {
+    if (dataRefreshNonce <= 0) return;
+    const sym = card.symbol.trim().toUpperCase();
+    void revalidateSignalCompositeCache(sym, activeLane);
+    const other: "day" | "swing" = activeLane === "day" ? "swing" : "day";
+    void revalidateSignalCompositeCache(sym, other);
+  }, [dataRefreshNonce, card.symbol, activeLane]);
+
   // ── Full signals-page computation pipeline ─────────────────────────────────
   const insight = useMemo(() => (composite ? parseSwingCompositeInsight(composite) : null), [composite]);
-  const layerRows = useMemo(() => compositeToSignalsLayerRows(composite), [composite]);
+  const layerRows = useMemo(() => {
+    const rows = compositeToSignalsLayerRows(composite);
+    const company = resolvedCompany ?? card.company ?? companyBySymbol?.get(card.symbol) ?? null;
+    if (!company) return rows;
+    return rows.map((row) => ({ ...row, companyName: row.companyName ?? company }));
+  }, [composite, resolvedCompany, card.company, card.symbol, companyBySymbol]);
   const setupBias: SignalsSetupBias = useMemo(
     () => deriveSetupBiasFromComposite(composite, layerRows),
     [composite, layerRows]
@@ -1642,7 +1659,11 @@ export function DeepDive({
             alignmentRatio={compositeAlignmentRatio}
           />
         ) : tab === "evolution" ? (
-          <SetupEvolutionPanel symbol={card.symbol} tradingMode={activeLane} />
+          <SetupEvolutionPanel
+            key={`evolution-${card.symbol}-${activeLane}-${dataRefreshNonce}`}
+            symbol={card.symbol}
+            tradingMode={activeLane}
+          />
         ) : (
           /* Charts tab — full day/swing trading chart */
           <article
@@ -1659,6 +1680,7 @@ export function DeepDive({
                 : "Daily candles · 6-month lookback · signal levels overlaid — context only, not entry signals"}
             </p>
             <FullPriceChart
+              key={`chart-${card.symbol}-${activeLane}-${dataRefreshNonce}`}
               symbol={card.symbol}
               colors={colors}
               mode={activeLane === "day" ? "day" : "swing"}
