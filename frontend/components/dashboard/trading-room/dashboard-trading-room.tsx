@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { usePathname, useSearchParams } from "next/navigation";
 import { AppSessionHeader } from "@/components/app-session-header";
 import { useTheme } from "@/lib/theme-provider";
-import { borderRadius, roleAccents, spacing, typography } from "@/lib/design-system";
+import { borderRadius, spacing, typography } from "@/lib/design-system";
 import {
   ScannerOverviewProvider,
   useScannerOverview
@@ -50,7 +50,16 @@ import { DeepDive } from "@/components/dashboard/trading-room/deep-dive";
 import { QuietFeed } from "@/components/dashboard/trading-room/quiet-feed";
 import { TradingRoomMountRefresh } from "@/components/dashboard/trading-room/trading-room-mount-refresh";
 import { TradingRoomPeriodicRefresh } from "@/components/dashboard/trading-room/trading-room-periodic-refresh";
-import { FeedCardUpdatedLine } from "@/lib/dashboard/trading-room/feed-card-present";
+import {
+  CardRefreshButton,
+  FeedCardUpdatedLine,
+  laneBadgeStyle
+} from "@/lib/dashboard/trading-room/feed-card-present";
+import {
+  refreshTradingRoomCard,
+  TRADING_ROOM_DATA_REFRESH_EVENT
+} from "@/lib/dashboard/trading-room/trading-room-card-refresh";
+import { feedBiasColor } from "@/lib/signal-direction-colors";
 import { overlayFeedCardTimestamps } from "@/lib/dashboard/trading-room/feed-card-timestamps";
 import { useTradingRoomMaturation } from "@/lib/hooks/use-trading-room-maturation";
 import { WatchlistRail } from "@/components/dashboard/trading-room/watchlist-rail";
@@ -264,23 +273,17 @@ function TradingRoomBody({
     fallbackData: deskInitial?.day
   });
 
-  // Track last refresh timestamps for UI display
-  const [lastRefreshTimestamps, setLastRefreshTimestamps] = useState<{
-    swing: Date | null;
-    day: Date | null;
-  }>({ swing: null, day: null });
+  const [snapshotOverrides, setSnapshotOverrides] = useState<Map<string, SnapshotPayload>>(new Map());
+  const [refreshingCardIds, setRefreshingCardIds] = useState<Set<string>>(() => new Set());
+  const [centerDataRefreshNonce, setCenterDataRefreshNonce] = useState(0);
 
-  const handleRefreshCard = useCallback(async (lane: FeedLane) => {
-    if (lane === "swing") {
-      await refreshSwingDesk();
-      setLastRefreshTimestamps((prev) => ({ ...prev, swing: new Date() }));
-    } else {
-      await refreshDayDesk();
-      setLastRefreshTimestamps((prev) => ({ ...prev, day: new Date() }));
-    }
-  }, [refreshSwingDesk, refreshDayDesk]);
-
-  const { snapshotsBySymbol, status: marketStatus } = useDashboardTape(marketOverview);
+  const { snapshotsBySymbol: tapeSnapshots, status: marketStatus } = useDashboardTape(marketOverview);
+  const snapshotsBySymbol = useMemo(() => {
+    if (snapshotOverrides.size === 0) return tapeSnapshots;
+    const merged = new Map(tapeSnapshots);
+    for (const [sym, snap] of snapshotOverrides) merged.set(sym, snap);
+    return merged;
+  }, [tapeSnapshots, snapshotOverrides]);
 
   const { swingSetups, daySetups } = useMemo(() => {
     const swing = scannerOverview.setups.filter((s) => s.scanner_mode === "swing_daily");
@@ -452,6 +455,39 @@ function TradingRoomBody({
     if (overrideCard && overrideCard.id === selectedId) return overrideCard;
     return null;
   }, [allCards, selectedId, overrideCard]);
+
+  const handleRefreshFeedCard = useCallback(
+    async (card: FeedCard) => {
+      const cardId = card.id;
+      setRefreshingCardIds((prev) => new Set(prev).add(cardId));
+      try {
+        const isSelected = selectedId === cardId;
+        const { snapshot } = await refreshTradingRoomCard(card.symbol, card.lane, {
+          refreshBothLanes: isSelected
+        });
+        void refreshSwingDesk();
+        void refreshDayDesk();
+        if (snapshot?.symbol) {
+          const sym = snapshot.symbol.trim().toUpperCase();
+          setSnapshotOverrides((prev) => new Map(prev).set(sym, snapshot));
+        }
+        if (isSelected) setCenterDataRefreshNonce((n) => n + 1);
+      } finally {
+        setRefreshingCardIds((prev) => {
+          const next = new Set(prev);
+          next.delete(cardId);
+          return next;
+        });
+      }
+    },
+    [refreshSwingDesk, refreshDayDesk, selectedId]
+  );
+
+  useEffect(() => {
+    const onDataRefresh = () => setCenterDataRefreshNonce((n) => n + 1);
+    window.addEventListener(TRADING_ROOM_DATA_REFRESH_EVENT, onDataRefresh);
+    return () => window.removeEventListener(TRADING_ROOM_DATA_REFRESH_EVENT, onDataRefresh);
+  }, []);
 
   const applyDeepLinkOrRestoreSelection = () => {
     const pendingHandoff = peekTradingRoomOpenIntent();
@@ -773,12 +809,20 @@ function TradingRoomBody({
       feedEnvironment={feedEnvironment}
       swingEnvironment={swingEnvironment}
       dayEnvironment={dayEnvironment}
-      onRefreshCard={handleRefreshCard}
-      lastRefreshTimestamps={lastRefreshTimestamps}
+      onRefreshFeedCard={handleRefreshFeedCard}
+      refreshingCardIds={refreshingCardIds}
     />
   );
   const centerPanel = selected ? (
-    <DeepDive card={selected} allCards={allCards} companyBySymbol={companyBySymbol} onBackToBrief={() => select(null)} isMobile={isMobile} colors={colors} />
+    <DeepDive
+      card={selected}
+      allCards={allCards}
+      companyBySymbol={companyBySymbol}
+      onBackToBrief={() => select(null)}
+      isMobile={isMobile}
+      colors={colors}
+      dataRefreshNonce={centerDataRefreshNonce}
+    />
   ) : (
     <MarketBrief data={briefData} onViewTopSetup={() => topCard && selectCard(topCard)} onSearch={undefined} />
   );
@@ -804,6 +848,8 @@ function TradingRoomBody({
       isMobile={isMobile}
       colors={colors}
       liveBiasBySymbol={liveBiasBySymbol}
+      onRefreshCard={handleRefreshFeedCard}
+      refreshingCardIds={refreshingCardIds}
     />
   );
 
@@ -825,6 +871,7 @@ function TradingRoomBody({
       <TradingRoomPeriodicRefresh
         dayTradingSurfaces={dayTradingSurfaces}
         feedSymbols={sidebarRefreshSymbols}
+        selectedCard={selected ? { symbol: selected.symbol, lane: selected.lane } : null}
       />
       <AppSessionHeader
         regimeLabel={regimeLabel}
@@ -1044,8 +1091,8 @@ function SignalFeed({
   feedEnvironment = null,
   swingEnvironment = null,
   dayEnvironment = null,
-  onRefreshCard,
-  lastRefreshTimestamps
+  onRefreshFeedCard,
+  refreshingCardIds
 }: {
   day: FeedCard[];
   swing: FeedCard[];
@@ -1066,10 +1113,8 @@ function SignalFeed({
   feedEnvironment?: MarketEnvironmentPayload | null;
   swingEnvironment?: MarketEnvironmentPayload | null;
   dayEnvironment?: MarketEnvironmentPayload | null;
-  /** Callback to refresh data for a specific lane */
-  onRefreshCard?: (lane: FeedLane) => void;
-  /** Last refresh timestamps for each lane */
-  lastRefreshTimestamps?: { swing: Date | null; day: Date | null };
+  onRefreshFeedCard?: (card: FeedCard) => void | Promise<void>;
+  refreshingCardIds?: Set<string>;
 }) {
   const empty = day.length === 0 && swing.length === 0;
   // Desktop: an independently-scrolling feed zone (sticky pane) with a vertical
@@ -1110,8 +1155,8 @@ function SignalFeed({
           onSelectCard={onSelectCard}
           colors={colors}
           environment={dayEnvironment}
-          onRefreshCard={onRefreshCard}
-          lastRefreshTimestamp={lastRefreshTimestamps?.day ?? null}
+          onRefreshFeedCard={onRefreshFeedCard}
+          refreshingCardIds={refreshingCardIds}
         />
       ) : null}
       <FeedLaneSection
@@ -1123,8 +1168,8 @@ function SignalFeed({
         colors={colors}
         staleLabel={staleDateLabel}
         environment={swingEnvironment}
-        onRefreshCard={onRefreshCard}
-        lastRefreshTimestamp={lastRefreshTimestamps?.swing ?? null}
+        onRefreshFeedCard={onRefreshFeedCard}
+        refreshingCardIds={refreshingCardIds}
       />
       {empty ? (
         deskEmpty || isWeekend ? (
@@ -1186,8 +1231,8 @@ function FeedLaneSection({
   colors,
   staleLabel = null,
   environment = null,
-  onRefreshCard,
-  lastRefreshTimestamp = null
+  onRefreshFeedCard,
+  refreshingCardIds
 }: {
   title: string;
   count: number;
@@ -1198,10 +1243,8 @@ function FeedLaneSection({
   /** When non-null, shown beside the count as a staleness badge (e.g. "Fri Jun 6 close"). */
   staleLabel?: string | null;
   environment?: MarketEnvironmentPayload | null;
-  /** Callback to refresh data for this lane */
-  onRefreshCard?: (lane: FeedLane) => void;
-  /** Last refresh timestamp for this lane */
-  lastRefreshTimestamp?: Date | null;
+  onRefreshFeedCard?: (card: FeedCard) => void | Promise<void>;
+  refreshingCardIds?: Set<string>;
 }) {
   if (cards.length === 0) return null;
   return (
@@ -1238,35 +1281,6 @@ function FeedLaneSection({
         ) : null}
         <span style={{ flex: 1, height: 1, background: colors.border }} />
       </div>
-      {/* Refresh button for the section */}
-      {onRefreshCard && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing[2], marginTop: spacing[1] }}>
-          <button
-            type="button"
-            onClick={() => onRefreshCard(title.toLowerCase() as FeedLane)}
-            style={{
-              fontSize: typography.scale.xs,
-              color: colors.text,
-              background: colors.surfaceMuted,
-              border: `1px solid ${colors.border}`,
-              borderRadius: borderRadius.sm,
-              padding: "4px 10px",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: spacing[1],
-              fontWeight: 600
-            }}
-          >
-            ↻ Refresh {title}
-          </button>
-          {lastRefreshTimestamp && (
-            <span style={{ fontSize: 10, color: colors.textMuted }}>
-              Updated {lastRefreshTimestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-            </span>
-          )}
-        </div>
-      )}
       {cards.map((card) => (
         <SignalCard
           key={card.id}
@@ -1276,6 +1290,8 @@ function FeedLaneSection({
           colors={colors}
           staleDate={staleLabel}
           environmentHint={environmentSessionCardHint(environment, card.lane, card.state)}
+          onRefresh={onRefreshFeedCard ? () => onRefreshFeedCard(card) : undefined}
+          refreshing={refreshingCardIds?.has(card.id) ?? false}
         />
       ))}
     </div>
@@ -1310,7 +1326,9 @@ function SignalCard({
   onSelectCard,
   colors,
   staleDate = null,
-  environmentHint = null
+  environmentHint = null,
+  onRefresh,
+  refreshing = false
 }: {
   card: FeedCard;
   active: boolean;
@@ -1320,9 +1338,10 @@ function SignalCard({
   staleDate?: string | null;
   /** Layer 0 ledger policy hint for actionable/near cards in elevated/stressed sessions. */
   environmentHint?: string | null;
+  onRefresh?: () => void;
+  refreshing?: boolean;
 }) {
-  const laneAccent =
-    card.lane === "day" ? roleAccents.dark.day.borderAccent : roleAccents.dark.swing.borderAccent;
+  const biasAccent = feedBiasColor(card.bias, colors);
   const sTone = stateTone(card.state, colors);
   const pct = card.changePct;
   const pctTone = pct == null ? colors.textMuted : pct >= 0 ? colors.bullish : colors.bearish;
@@ -1346,7 +1365,11 @@ function SignalCard({
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: spacing[2] }}>
-        <span style={{ fontSize: typography.scale.base, fontWeight: 700 }}>{card.symbol}</span>
+        <span style={{ display: "flex", alignItems: "center", gap: spacing[2], minWidth: 0 }}>
+          <span style={{ fontSize: typography.scale.base, fontWeight: 700 }}>{card.symbol}</span>
+          <span style={laneBadgeStyle(colors)}>{card.lane}</span>
+        </span>
+        <span style={{ display: "flex", alignItems: "flex-start", gap: spacing[1] }}>
         <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
           <span style={{ fontSize: typography.scale.sm, fontWeight: 600, color: pctTone }}>{fmtPrice(card.price)}</span>
           {pct != null ? (
@@ -1355,6 +1378,15 @@ function SignalCard({
               {staleDate ? <span style={{ color: colors.textMuted, fontWeight: 400 }}> {staleDate.slice(0, 3).toLowerCase()}</span> : null}
             </span>
           ) : null}
+        </span>
+        {onRefresh ? (
+          <CardRefreshButton
+            label={`Refresh ${card.symbol} ${card.lane}`}
+            busy={refreshing}
+            colors={colors}
+            onRefresh={onRefresh}
+          />
+        ) : null}
         </span>
       </div>
       {card.company ? (

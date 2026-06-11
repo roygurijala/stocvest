@@ -48,6 +48,7 @@ import {
   type SignalsSetupBias
 } from "@/lib/signals-page-present";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
+import { layerStatusColor, polarityTrendIconKind } from "@/lib/signal-direction-colors";
 import { useTheme } from "@/lib/theme-provider";
 
 // Layer icon mapping
@@ -293,26 +294,15 @@ function LayerRow({
   // Get icon for this layer
   const IconComponent = LAYER_ICONS[row.key] || Activity;
   
-  // Determine trend icon based on polarity
-  const polarityStr = String(polarity);
-  const TrendIcon = polarityStr === "with" ? TrendingUp : polarityStr === "against" ? TrendingDown : Activity;
-  
-  // Gradient colors based on status (not score) for consistent visual meaning
-  const getStatusGradient = (status: string | undefined) => {
-    const s = (status || "").toLowerCase();
-    if (s === "bullish") return `linear-gradient(90deg, ${colors.bullish}, ${colors.bullish}80)`;
-    if (s === "bearish") return `linear-gradient(90deg, ${colors.bearish}, ${colors.bearish}80)`;
-    // Neutral, Mixed, Unavailable, As of close → neutral color
-    return `linear-gradient(90deg, ${colors.accent}, ${colors.accent}80)`;
-  };
+  const trendKind = polarityTrendIconKind(String(polarity));
+  const TrendIcon =
+    trendKind === "up" ? TrendingUp : trendKind === "down" ? TrendingDown : Activity;
 
-  // Color based on status for numeric score display
-  const getStatusColor = (status: string | undefined): string => {
-    const s = (status || "").toLowerCase();
-    if (s === "bullish") return colors.bullish;
-    if (s === "bearish") return colors.bearish;
-    return colors.accent;
+  const getStatusGradient = (status: string | undefined) => {
+    const tone = layerStatusColor(status, colors);
+    return `linear-gradient(90deg, ${tone}, ${tone}80)`;
   };
+  const getStatusColor = (status: string | undefined): string => layerStatusColor(status, colors);
 
   return (
     <motion.div
@@ -533,8 +523,8 @@ function LayerDetailDrawer({
 
   const IconComponent = LAYER_ICONS[layer.key] || Activity;
   const polarity = layerPolarity(layer, bias);
-  const polarityStr = String(polarity);
   const dot = layerPolarityDotColor(polarity);
+  const statusTone = layerStatusColor(layer.status, colors);
   const levelLabel = formatLayerScoreLabel(layer.score, layer.status);
   const levelPct = layer.score != null ? Math.max(0, Math.min(100, Number(levelLabel))) : 0;
 
@@ -648,8 +638,8 @@ function LayerDetailDrawer({
                   <span 
                     className="text-5xl font-bold tabular-nums"
                     style={{ 
-                      color: dot,
-                      textShadow: `0 0 30px ${dot}40`
+                      color: statusTone,
+                      textShadow: `0 0 30px ${statusTone}40`
                     }}
                   >
                     {levelLabel}
@@ -671,8 +661,8 @@ function LayerDetailDrawer({
                       animate={{ width: `${levelPct}%` }}
                       transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
                       style={{
-                        background: `linear-gradient(90deg, ${dot}, ${dot}80)`,
-                        boxShadow: `0 0 16px ${dot}60`
+                        background: `linear-gradient(90deg, ${statusTone}, ${statusTone}80)`,
+                        boxShadow: `0 0 16px ${statusTone}60`
                       }}
                     />
                   </div>
@@ -684,7 +674,7 @@ function LayerDetailDrawer({
               </div>
 
               {/* Our Analysis - Specific Reasoning */}
-              {layer.reasoning && (
+              {(layer.reasoning ?? layer.explanation) && (
                 <div>
                   <div className="flex items-center gap-2 mb-3">
                     <Info className="w-4 h-4" style={{ color: colors.accent }} />
@@ -700,7 +690,7 @@ function LayerDetailDrawer({
                     }}
                   >
                     <p className="m-0 text-sm leading-relaxed" style={{ color: colors.text }}>
-                      {layer.reasoning}
+                      {layer.reasoning ?? layer.explanation}
                     </p>
                   </div>
                 </div>
@@ -786,38 +776,40 @@ function LayerDetailDrawer({
                 <div 
                   className="p-4 rounded-xl"
                   style={{
-                    background: `${polarity === "supportive" ? colors.bullish : polarity === "blocking" ? colors.bearish : colors.accent}10`,
-                    border: `1px solid ${polarity === "supportive" ? colors.bullish : polarity === "blocking" ? colors.bearish : colors.accent}25`
+                    background: `${polarity === "supportive" ? colors.bullish : polarity === "blocking" ? colors.bearish : colors.textMuted}10`,
+                    border: `1px solid ${polarity === "supportive" ? colors.bullish : polarity === "blocking" ? colors.bearish : colors.textMuted}25`
                   }}
                 >
                   <p className="m-0 text-sm leading-relaxed" style={{ color: colors.text }}>
                     {(() => {
-                      // Helper to determine actual signal direction from score
-                      const getSignalDirection = (): "bullish" | "bearish" | "neutral" => {
-                        if (layer.score == null) return "neutral";
-                        if (layer.score >= 55) return "bullish";
-                        if (layer.score <= 45) return "bearish";
-                        return "neutral";
-                      };
-                      
-                      const signal = getSignalDirection();
-                      
+                      const analysisText = layer.reasoning ?? layer.explanation;
+                      const statusLower = String(layer.status ?? "").toLowerCase();
+
                       if (bias === "Neutral") {
-                        // For neutral bias, describe what the layer actually shows based on score
-                        if (signal === "bullish") {
-                          return <>This layer shows a <strong style={{ color: colors.bullish }}>bullish signal</strong> (score {levelLabel}) despite the neutral setup. {layer.explanation && layer.explanation}</>;
-                        } else if (signal === "bearish") {
-                          return <>This layer shows a <strong style={{ color: colors.bearish }}>bearish signal</strong> (score {levelLabel}) despite the neutral setup. {layer.explanation && layer.explanation}</>;
-                        } else {
-                          return <>This layer is <strong style={{ color: colors.textMuted }}>neutral</strong> to your neutral setup. {layer.explanation && layer.explanation}</>;
+                        if (statusLower === "bullish") {
+                          return <>This layer shows a <strong style={{ color: colors.bullish }}>bullish</strong> read (score {levelLabel}) in a neutral setup. {analysisText}</>;
                         }
-                      } else {
-                        // For directional bias, show alignment using polarity
-                        const alignmentText = polarity === "supportive" ? "supporting" : 
-                                               polarity === "blocking" ? "countering" : 
-                                               polarity === "mixed" ? "sending mixed signals for" : "neutral to";
-                        return <>This layer is <strong style={{ color: dot }}>{alignmentText}</strong> your {bias} setup. {layer.statusLabel && `The ${layer.name.toLowerCase()} reading shows ${layer.statusLabel.toLowerCase()}.`} {layer.explanation && layer.explanation}</>;
+                        if (statusLower === "bearish") {
+                          return <>This layer shows a <strong style={{ color: colors.bearish }}>bearish</strong> read (score {levelLabel}) in a neutral setup. {analysisText}</>;
+                        }
+                        return <>This layer is <strong style={{ color: colors.textMuted }}>neutral</strong> to your neutral setup. {analysisText}</>;
                       }
+
+                      const alignmentText =
+                        polarity === "supportive"
+                          ? "supporting"
+                          : polarity === "blocking"
+                            ? "countering"
+                            : polarity === "mixed"
+                              ? "sending mixed signals for"
+                              : "neutral to";
+                      return (
+                        <>
+                          This layer is <strong style={{ color: statusTone }}>{alignmentText}</strong> your {bias} setup.
+                          {layer.statusLabel ? ` The ${layer.name.toLowerCase()} reading shows ${layer.statusLabel.toLowerCase()}.` : null}{" "}
+                          {analysisText}
+                        </>
+                      );
                     })()}
                   </p>
                 </div>
