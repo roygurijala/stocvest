@@ -111,12 +111,13 @@ export function AppSessionHeader({
     return () => ro?.disconnect();
   }, [mobile, regimeLabel, counts.actionable, counts.near, counts.potential, counts.cooling]);
 
-  const marketLine = mobile ? (
+  const marketLineCompact = (
     <span style={{ lineHeight: 1.4 }}>
       <Tone color={regimeTone}>{regimeLabel}</Tone> · <Tone color={sessionTone}>{session}</Tone> · VIX{" "}
       <Tone color={vixTone}>{vixText}</Tone>
     </span>
-  ) : (
+  );
+  const marketLineFull = (
     <span style={{ lineHeight: 1.4 }}>
       Market in <Tone color={regimeTone}>{regimeLabel}</Tone> · breadth <Tone color={breadthTone}>{breadth}</Tone> · VIX{" "}
       <Tone color={vixTone}>{vixText}</Tone> · <Tone color={sessionTone}>{session}</Tone>
@@ -124,57 +125,51 @@ export function AppSessionHeader({
   );
 
   return (
-    <div data-testid="app-session-header-wrap">
+    <div
+      data-testid="app-session-header-wrap"
+      style={{ ["--session-header-bleed" as string]: bleed }}
+    >
       <header
         ref={headerRef}
         data-testid="app-session-header"
-        className={mobile ? "app-session-header-mobile" : undefined}
+        className="app-session-header"
         style={{
           display: "flex",
           alignItems: "center",
-          columnGap: mobile ? spacing[3] : spacing[5],
+          columnGap: spacing[3],
           rowGap: spacing[2],
           flexWrap: "wrap",
-          padding: mobile
-            ? `calc(${spacing[3]} + env(safe-area-inset-top, 0px)) ${bleed} ${spacing[3]}`
-            : `${spacing[3]} ${bleed}`,
-          marginLeft: mobile ? 0 : `-${bleed}`,
-          marginRight: mobile ? 0 : `-${bleed}`,
+          paddingTop: `calc(${spacing[3]} + env(safe-area-inset-top, 0px))`,
+          paddingRight: bleed,
+          paddingBottom: spacing[3],
+          paddingLeft: bleed,
+          marginLeft: 0,
+          marginRight: 0,
           background: colors.surface,
-          borderBottom: `1px solid ${colors.border}`,
-          ...(mobile
-            ? {
-                position: "fixed" as const,
-                top: 0,
-                left: 0,
-                right: 0,
-                zIndex: 30
-              }
-            : {})
+          borderBottom: `1px solid ${colors.border}`
         }}
       >
-      {mobile ? (
-        <button
-          type="button"
-          aria-label="Open navigation menu"
-          onClick={openNavDrawer}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            width: 36,
-            height: 36,
-            flex: "none",
-            border: `1px solid ${colors.border}`,
-            borderRadius: borderRadius.md,
-            background: "transparent",
-            color: colors.text,
-            cursor: "pointer"
-          }}
-        >
-          <Menu size={20} />
-        </button>
-      ) : null}
+      <button
+        type="button"
+        className="compact-nav-only"
+        aria-label="Open navigation menu"
+        onClick={openNavDrawer}
+        style={{
+          display: "none",
+          alignItems: "center",
+          justifyContent: "center",
+          width: 36,
+          height: 36,
+          flex: "none",
+          border: `1px solid ${colors.border}`,
+          borderRadius: borderRadius.md,
+          background: "transparent",
+          color: colors.text,
+          cursor: "pointer"
+        }}
+      >
+        <Menu size={20} />
+      </button>
 
       <span
         style={{
@@ -195,21 +190,20 @@ export function AppSessionHeader({
 
       {badge ? <div style={{ flex: "none" }}>{badge}</div> : null}
 
-      {mobile ? (
-        <div style={{ marginLeft: badge ? 0 : "auto", flex: "none" }}>
-          <ThemeToggle />
-        </div>
-      ) : null}
+      <div className="compact-nav-only" style={{ marginLeft: badge ? 0 : "auto", flex: "none", display: "none" }}>
+        <ThemeToggle />
+      </div>
 
       <div
+        className="session-header-market-compact"
         style={{
-          display: "flex",
+          display: "none",
           alignItems: "center",
           gap: spacing[3],
           color: colors.textMuted,
           fontSize: typography.scale.sm,
           minWidth: 0,
-          flex: mobile ? "1 1 100%" : "0 1 auto"
+          flex: "1 1 100%"
         }}
       >
         <span
@@ -223,27 +217,56 @@ export function AppSessionHeader({
             flex: "none"
           }}
         />
-        {marketLine}
+        {marketLineCompact}
       </div>
 
       <div
+        className="session-header-market-full"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: spacing[3],
+          color: colors.textMuted,
+          fontSize: typography.scale.sm,
+          minWidth: 0,
+          flex: "0 1 auto"
+        }}
+      >
+        <span
+          aria-hidden
+          style={{
+            width: 9,
+            height: 9,
+            borderRadius: "50%",
+            background: orbTone,
+            boxShadow: marketOpen === true ? `0 0 10px 1px ${orbTone}88` : "none",
+            flex: "none"
+          }}
+        />
+        {marketLineFull}
+      </div>
+
+      <div
+        className="session-header-actions"
         style={{
           display: "flex",
           alignItems: "center",
           gap: spacing[4],
           flexWrap: "wrap",
           minWidth: 0,
-          marginLeft: mobile ? 0 : "auto",
-          flex: mobile ? "1 1 100%" : "0 0 auto"
+          marginLeft: "auto",
+          flex: "1 1 100%"
         }}
       >
-        <SymbolSearch
-          placeholder={searchPlaceholder}
-          onPick={onOpenSymbol}
-          colors={colors}
-          width={mobile ? "100%" : 248}
-          pill
-        />
+        <div className="session-header-search" style={{ minWidth: 0 }}>
+          <SymbolSearch
+            placeholder={searchPlaceholder}
+            onPick={onOpenSymbol}
+            colors={colors}
+            width="100%"
+            pill
+          />
+        </div>
 
         {!deskIsEmpty ? (
           <span
@@ -276,12 +299,16 @@ export function AppSessionHeader({
           Market data as of <b style={{ color: colors.text, fontWeight: 600 }}>{asOf ?? "—"}</b>
         </span>
 
-        {!mobile ? <ThemeToggle /> : null}
+        <div className="desktop-nav-only" style={{ display: "none" }}>
+          <ThemeToggle />
+        </div>
       </div>
       </header>
-      {mobile && headerHeightPx > 0 ? (
-        <div aria-hidden style={{ height: headerHeightPx, flexShrink: 0 }} />
-      ) : null}
+      <div
+        aria-hidden
+        className="app-session-header-spacer"
+        style={{ height: headerHeightPx > 0 ? headerHeightPx : undefined, flexShrink: 0, display: "none" }}
+      />
     </div>
   );
 }
