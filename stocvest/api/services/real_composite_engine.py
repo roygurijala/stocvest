@@ -1071,10 +1071,11 @@ async def build_real_composite_response(
         except Exception as exc:
             _LOG.warning("ledger study capture (neutral) skipped: %s", exc)
 
-    response_body["decision_state"] = derive_decision_state(
-        response_status=str(response_body.get("status") or "active"),
-        verdict=composite.verdict,
-    )
+    from stocvest.api.services.execution_actionable import apply_entry_gates_to_response_body
+
+    if last_px:
+        response_body.setdefault("last_trade_price", last_px)
+    apply_entry_gates_to_response_body(response_body, mode="day")
     return response_body
 
 

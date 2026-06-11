@@ -129,6 +129,9 @@ export function resolveSetupBadge(
   if (hint.includes("risk/reward")) return "blocked";
   if (hint.includes("execution quality weak")) return "weak";
 
+  if (leader.execution_actionable === true) return "actionable";
+  const decision = (leader.decision_state ?? "").trim().toLowerCase();
+  if (decision === "actionable") return "actionable";
   const status = (leader.composite_status ?? "").trim().toLowerCase();
   if (status === "actionable") return "actionable";
 

@@ -38,6 +38,10 @@ from stocvest.data.dashboard_cache import (
     read_dashboard_cache,
     write_dashboard_cache,
 )
+from stocvest.api.services.execution_actionable_tracker import (
+    advance_retained_pool_cursor,
+    process_composite_body,
+)
 from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
 
@@ -60,6 +64,8 @@ class OpportunityDeskBatchConfig:
     composite_limit_swing: int = 12
     composite_limit_day: int = 8
     composite_concurrency: int = 3
+    """Extra retained-pool symbols to composite per full batch (round-robin through survivors)."""
+    retained_pool_track_limit: int = 30
 
 
 DEFAULT_BATCH_CONFIG = OpportunityDeskBatchConfig()
@@ -162,6 +168,40 @@ async def _composite_for_mode(symbol: str, mode: DeskMode) -> dict[str, Any] | N
     return await _composite_swing(symbol)
 
 
+async def _track_retained_pool_symbols(
+    movers: tuple[Any, ...],
+    *,
+    mode: DeskMode,
+    skip_symbols: set[str],
+    limit: int,
+    concurrency: int,
+) -> int:
+    """Composite + track execution-actionable for retained-pool symbols not in discovery."""
+    pool = [m for m in movers if m.symbol.strip().upper() not in skip_symbols]
+    if not pool or limit <= 0:
+        return 0
+    start = advance_retained_pool_cursor(mode, pool_size=len(pool), batch_size=limit)
+    rotated = pool[start:] + pool[:start]
+    targets = rotated[:limit]
+    sem = asyncio.Semaphore(max(1, concurrency))
+    tracked = 0
+
+    async def one(mover: Any) -> None:
+        nonlocal tracked
+        async with sem:
+            composite = await _composite_for_mode(mover.symbol, mode)
+        if not isinstance(composite, dict):
+            return
+        try:
+            process_composite_body(composite, mode=mode, symbol=mover.symbol, notify=True)
+            tracked += 1
+        except Exception as exc:  # noqa: BLE001
+            _LOG.debug("retained_pool track failed %s %s: %s", mode, mover.symbol, exc)
+
+    await asyncio.gather(*[one(m) for m in targets])
+    return tracked
+
+
 async def _build_discovery_rows(
     movers: tuple[Any, ...],
     *,
@@ -179,6 +219,11 @@ async def _build_discovery_rows(
             composite = await _composite_for_mode(mover.symbol, mode)
         if composite is None:
             composite_failures += 1
+        elif isinstance(composite, dict):
+            try:
+                process_composite_body(composite, mode=mode, symbol=mover.symbol, notify=True)
+            except Exception as exc:  # noqa: BLE001
+                _LOG.debug("execution_actionable track failed %s %s: %s", mode, mover.symbol, exc)
         return discovery_row_from_mover(mover, mode=mode, composite=composite)
 
     if not targets:
@@ -405,6 +450,14 @@ async def run_opportunity_desk_batch(
                     continue
                 discovery.append(discovery_row_from_mover(mover, mode=mode_lit, composite=None))
             discovery = discovery[: cfg.funnel.discovery_display_limit]
+            retained_tracked = await _track_retained_pool_symbols(
+                funnel.movers,
+                mode=mode_lit,
+                skip_symbols=disc_syms,
+                limit=cfg.retained_pool_track_limit,
+                concurrency=cfg.composite_concurrency,
+            )
+            payload["retained_pool_tracked"] = retained_tracked
             payload["discovery"] = discovery
             payload["recently_hot"] = build_recently_hot(
                 previous_data=previous_data,

@@ -149,6 +149,11 @@ class EmailService:
             new_l = str(context.get("new_label") or context.get("new_state") or "").strip()
             arrow = f"{prev_l} → {new_l}" if prev_l and new_l else "state update"
             return f"STOCVEST · {sym}{mode_part} maturation: {arrow}"
+        if alert_type == AlertType.EXECUTION_ACTIONABLE:
+            mode_s = str(context.get("mode") or "").strip().lower()
+            mode_label = "Swing" if mode_s == "swing" else "Day" if mode_s == "day" else mode_s.capitalize()
+            direction = format_direction(str(context.get("direction") or ""))
+            return f"STOCVEST · {sym} {direction} — {mode_label} desk actionable"
         return "STOCVEST · Alert"
 
     def _alert_detail_rows(self, alert_type: AlertType, context: dict[str, Any]) -> list[tuple[str, str]]:
@@ -244,6 +249,15 @@ class EmailService:
             disclaimer = (
                 "Watchlist maturation reflects how many evidence layers align with the composite; "
                 "informational only. Not investment advice."
+            )
+        elif alert_type == AlertType.EXECUTION_ACTIONABLE:
+            sym = str(context.get("symbol") or "").strip().upper()
+            mode_s = str(context.get("mode") or "swing").strip().lower()
+            cta = f"{base}/dashboard?symbol={sym}&lane={mode_s}"
+            cta_label = "Open trading room"
+            disclaimer = (
+                "Execution-actionable means ledger gates passed and price is inside the entry zone "
+                "at evaluation time. Informational only — not investment advice."
             )
         else:
             cta = f"{base}/dashboard/signals"

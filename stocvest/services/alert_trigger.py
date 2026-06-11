@@ -233,6 +233,93 @@ class AlertTriggerService:
         )
         self.alert_store.create_alert_record(rec)
 
+    def trigger_execution_actionable(
+        self,
+        *,
+        user_id: str,
+        user_email: str,
+        symbol: str,
+        mode: str,
+        scenario: dict[str, Any],
+        on_watchlist: bool = True,
+    ) -> None:
+        """Email when a symbol crosses into execution-actionable (ledger + in-zone R/R)."""
+        prefs = self.alert_store.get_preferences(user_id)
+        if not prefs.email_enabled or not getattr(prefs, "on_execution_actionable", True):
+            return
+        sym_u = symbol.strip().upper()
+        mode_s = str(mode or "").strip().lower()
+        if prefs.watchlist_only and not on_watchlist:
+            return
+        if self._in_quiet_hours(prefs):
+            _LOG.debug("execution_actionable alert skipped: quiet hours user=%s", user_ref_for_logs(user_id))
+            return
+        if self._execution_actionable_email_deduped(user_id, sym_u, mode_s):
+            _LOG.debug(
+                "execution_actionable alert deduped user=%s sym=%s mode=%s",
+                user_ref_for_logs(user_id),
+                sym_u,
+                mode_s,
+            )
+            return
+        ctx: dict[str, Any] = dict(scenario)
+        ctx["symbol"] = sym_u
+        ctx["mode"] = mode_s
+        ctx["on_watchlist"] = on_watchlist
+        success = self.email_service.send_alert_email(
+            to_email=user_email,
+            alert_type=AlertType.EXECUTION_ACTIONABLE,
+            context=ctx,
+        )
+        now = datetime.now(timezone.utc).isoformat()
+        subj = self.email_service._build_subject(AlertType.EXECUTION_ACTIONABLE, ctx)
+        rec = AlertRecord(
+            alert_id=new_history_alert_id(),
+            user_id=user_id,
+            alert_type=AlertType.EXECUTION_ACTIONABLE,
+            channel=AlertChannel.EMAIL,
+            symbol=sym_u,
+            title=subj,
+            body=preview_context_json(ctx),
+            status=AlertStatus.SENT if success else AlertStatus.FAILED,
+            created_at=now,
+            sent_at=now if success else None,
+            error=None if success else "send_failed",
+        )
+        self.alert_store.create_alert_record(rec)
+        if success:
+            self._mark_execution_actionable_email_sent(user_id, sym_u, mode_s)
+
+    def _execution_actionable_email_deduped(self, user_id: str, symbol: str, mode: str) -> bool:
+        from stocvest.utils.config import get_settings
+
+        if get_settings().stocvest_disable_redis:
+            return False
+        try:
+            import redis
+
+            et_day = datetime.now(ZoneInfo("America/New_York")).date().isoformat()
+            key = f"stocvest:execution_actionable_email:{user_id}:{mode}:{symbol}:{et_day}"
+            r = redis.Redis.from_url(str(get_settings().redis_url), decode_responses=True)
+            return r.get(key) == "1"
+        except Exception:
+            return False
+
+    def _mark_execution_actionable_email_sent(self, user_id: str, symbol: str, mode: str) -> None:
+        from stocvest.utils.config import get_settings
+
+        if get_settings().stocvest_disable_redis:
+            return
+        try:
+            import redis
+
+            et_day = datetime.now(ZoneInfo("America/New_York")).date().isoformat()
+            key = f"stocvest:execution_actionable_email:{user_id}:{mode}:{symbol}:{et_day}"
+            r = redis.Redis.from_url(str(get_settings().redis_url), decode_responses=True)
+            r.setex(key, 86400, "1")
+        except Exception:
+            pass
+
     @staticmethod
     def _in_quiet_hours(prefs: AlertPreferences) -> bool:
         if not prefs.quiet_hours_enabled:

@@ -317,6 +317,7 @@ class AlertType(str, Enum):
     GAP_DETECTED = "gap_detected"
     SIGNAL_EXPIRED = "signal_expired"
     WATCHLIST_MATURATION = "watchlist_maturation"
+    EXECUTION_ACTIONABLE = "execution_actionable"
 
 
 class AlertChannel(str, Enum):
@@ -338,6 +339,7 @@ class AlertPreferences(BaseModel):
     on_pdt_blocked: bool = True
     on_gap_detected: bool = False
     on_watchlist_maturation: bool = True
+    on_execution_actionable: bool = True
     watchlist_only: bool = True
     quiet_hours_enabled: bool = False
     quiet_hours_start: str = "22:00"

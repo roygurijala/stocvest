@@ -437,3 +437,32 @@ async def test_swing_response_includes_earnings_horizon_fields(
     assert out.get("earnings_report_time") == "after_market"
     assert out.get("earnings_chip") == "⚠️ Earnings in 3 days"
     assert out.get("mode") == "swing"
+
+
+@pytest.mark.asyncio
+async def test_decision_state_blocked_when_ledger_unqualified(_mute_side_effects: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    """ decision_state must be 'blocked' when ledger_qualified is False (e.g., R/R < 2.0)."""
+    from stocvest.api.services.swing_composite_engine import build_swing_composite_response
+    from stocvest.api.services.signal_validation_eligibility import evaluate_swing_ledger_entry
+
+    # Mock a scenario where R/R gate fails (< 2.0)
+    def mock_evaluate(*, response_status, verdict, composite_score, alignment_ratio, macro_market_regime, risk_reward, layer_scores, sector_layer_score, market_environment):
+        return False, {"risk_reward": {"pass": False, "value": risk_reward, "min": 2.0}}
+
+    monkeypatch.setattr(
+        "stocvest.api.services.swing_composite_engine.evaluate_swing_ledger_entry",
+        mock_evaluate,
+    )
+    # Stub external data
+    monkeypatch.setattr("stocvest.api.services.swing_composite_engine.PolygonClient", AsyncMock())
+    monkeypatch.setattr("stocvest.api.services.swing_composite_engine.BenzingaClient", MagicMock())
+    monkeypatch.setattr("stocvest.api.services.swing_composite_engine.DynamoSectorCache", MagicMock())
+
+    out = await build_swing_composite_response(
+        symbol="AAPL",
+        user_id=None,
+        user_email=None,
+        params=default_signal_parameters(),
+    )
+    assert out.get("decision_state") == "blocked", "R/R below threshold should set decision_state to blocked"
+    assert out.get("ledger_qualified") is False
