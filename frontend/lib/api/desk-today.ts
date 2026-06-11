@@ -18,6 +18,8 @@ export type DeskDiscoveryLeader = {
   risk_reward?: number | null;
   composite_status?: string | null;
   execution_hint?: string | null;
+  execution_actionable?: boolean | null;
+  decision_state?: string | null;
 };
 
 export type DeskMoverRadarRow = {

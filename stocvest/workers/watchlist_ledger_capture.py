@@ -186,6 +186,12 @@ def run_watchlist_ledger_capture_sync(*, desk: LedgerCaptureDesk = "both") -> di
                 )
                 if body.get("ledger_qualified"):
                     day_qualified += 1
+                try:
+                    from stocvest.api.services.execution_actionable_tracker import process_composite_body
+
+                    process_composite_body(body, mode="day", symbol=sym, notify=True)
+                except Exception:
+                    pass
                 day_ok += 1
                 sync_watchlist_maturation_from_composite(
                     user_id=user_id,
@@ -204,6 +210,12 @@ def run_watchlist_ledger_capture_sync(*, desk: LedgerCaptureDesk = "both") -> di
                 )
                 if body.get("ledger_qualified"):
                     swing_qualified += 1
+                try:
+                    from stocvest.api.services.execution_actionable_tracker import process_composite_body
+
+                    process_composite_body(body, mode="swing", symbol=sym, notify=True)
+                except Exception:
+                    pass
                 swing_ok += 1
                 sync_watchlist_maturation_from_composite(
                     user_id=user_id,

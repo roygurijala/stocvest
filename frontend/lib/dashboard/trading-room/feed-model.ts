@@ -92,6 +92,11 @@ function biasFromDirection(direction: string | null | undefined): FeedBias {
 
 /** Map a desk leader's composite status / alignment into a single verdict state. */
 function leaderState(leader: DeskDiscoveryLeader): FeedState {
+  if (leader.execution_actionable === true) return "actionable";
+  const decision = (leader.decision_state || "").trim().toLowerCase();
+  if (decision === "actionable") return "actionable";
+  if (decision === "monitor") return "near";
+  if (decision === "blocked") return "cooling";
   const status = (leader.composite_status || leader.verdict || "").trim().toLowerCase();
   if (status.includes("actionable") || status.includes("qualified") || status.includes("ready")) {
     return "actionable";
