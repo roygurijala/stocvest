@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ensureSessionReady } from "@/lib/auth/ensure-session-ready";
 import { useWatchlistSessionRefresh } from "@/lib/hooks/use-watchlist-session-refresh";
 import type { WatchlistMaturationDesk } from "@/lib/watchlist-maturation-session-staleness";
 import {
@@ -29,6 +30,9 @@ export function WatchlistSessionRefreshOrchestrator({ dayTradingSurfaces }: Prop
     setReady(false);
     void (async () => {
       try {
+        const sessionOk = await ensureSessionReady();
+        if (!sessionOk || cancelled) return;
+
         const symRes = await fetch("/api/stocvest/watchlists/default/symbols", {
           cache: "no-store",
           credentials: "same-origin"

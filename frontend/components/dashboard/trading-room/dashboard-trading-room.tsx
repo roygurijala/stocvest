@@ -58,11 +58,17 @@ import { MarketEnvironmentStrip } from "@/components/market-environment-strip";
 import { useMarketEnvironment } from "@/lib/hooks/use-market-environment";
 import { environmentSessionCardHint } from "@/lib/signal-evidence/environment-session-hint";
 import type { MarketEnvironmentPayload } from "@/lib/signal-evidence/market-environment-present";
-import { getLastSelectedId, setLastSelectedId } from "@/lib/dashboard/trading-room/session-selection";
+import {
+  getLastSelectedId,
+  isFirstVisitOfTradingDay,
+  recordTradingRoomVisit,
+  setLastSelectedId
+} from "@/lib/dashboard/trading-room/session-selection";
 import {
   applyDashboardSymbolUrl,
   clearTradingRoomOpenIntent,
   feedCardIdForDeepLink,
+  peekTradingRoomOpenIntent,
   resolveTradingRoomOpenIntent,
   syntheticFeedCardForDeepLink,
   type DashboardTradingRoomDeepLink
@@ -430,7 +436,8 @@ function TradingRoomBody({
   }, [allCards, selectedId, overrideCard]);
 
   const applyDeepLinkOrRestoreSelection = () => {
-    const intent = resolveTradingRoomOpenIntent(searchParams);
+    const pendingHandoff = peekTradingRoomOpenIntent();
+    const freshTradingDay = !pendingHandoff && isFirstVisitOfTradingDay();
 
     // Card clicks update the URL via `replaceState`, which does not refresh
     // `useSearchParams`. When the user already has a selection, keep it and heal
@@ -438,19 +445,37 @@ function TradingRoomBody({
     if (selectedId && selected) {
       syncSymbolInUrl(selected);
       clearTradingRoomOpenIntent();
+      recordTradingRoomVisit();
       selectionBootstrappedRef.current = true;
       return;
     }
 
+    if (freshTradingDay) {
+      setLastSelectedId(null);
+      clearTradingRoomOpenIntent();
+      if (selectedId || overrideCard) {
+        setSelectedId(null);
+        setOverrideCard(null);
+      }
+      syncSymbolInUrl(null);
+      recordTradingRoomVisit();
+      selectionBootstrappedRef.current = true;
+      return;
+    }
+
+    const intent = resolveTradingRoomOpenIntent(searchParams);
+
     if (intent) {
       openSymbol(intent.symbol, null, intent.lane);
       clearTradingRoomOpenIntent();
+      recordTradingRoomVisit();
       selectionBootstrappedRef.current = true;
       return;
     }
 
     if (selectionBootstrappedRef.current) return;
     selectionBootstrappedRef.current = true;
+    recordTradingRoomVisit();
 
     const lastId = getLastSelectedId();
     if (!lastId) return;

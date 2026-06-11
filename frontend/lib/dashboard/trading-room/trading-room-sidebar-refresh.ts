@@ -9,11 +9,17 @@ import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
 import { notifyWatchlistMaturationUpdated } from "@/lib/watchlist-maturation-bump";
 
 async function fetchMaturationBySymbol(mode: "swing" | "day"): Promise<Record<string, WatchlistMaturationRow>> {
-  const res = await fetch(`/api/stocvest/watchlists/maturation-summary?mode=${encodeURIComponent(mode)}`, {
-    cache: "no-store",
-    credentials: "same-origin"
-  });
-  if (!res.ok) return {};
+  let res: Response | null = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    res = await fetch(`/api/stocvest/watchlists/maturation-summary?mode=${encodeURIComponent(mode)}`, {
+      cache: "no-store",
+      credentials: "same-origin"
+    });
+    if (!res) return {};
+    if (res.ok || (res.status !== 429 && res.status < 500) || attempt === 2) break;
+    await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
+  }
+  if (!res?.ok) return {};
   const json = await res.json().catch(() => ({}));
   return parseMaturationSummaryEnvelope(json).bySymbol;
 }
@@ -24,11 +30,11 @@ export const TRADING_ROOM_MATURATION_MAX_AGE_MS = 10 * 60 * 1000;
 /** Poll interval while the trading room stays open during RTH. */
 export const TRADING_ROOM_MATURATION_REFRESH_INTERVAL_MS = TRADING_ROOM_MATURATION_MAX_AGE_MS;
 
-/** Cap for background periodic refresh — mount refresh passes an explicit higher cap. */
-const MAX_SYMBOLS_PER_MOUNT = 12;
+/** Cap composites per mount/periodic refresh to avoid rate-limit storms on cold load. */
+export const MAX_SYMBOLS_PER_MOUNT = 12;
 
-/** On page load, refresh every visible feed + watchlist symbol. */
-export const TRADING_ROOM_MOUNT_MAX_SYMBOLS = 80;
+/** On page load, refresh stale feed + watchlist symbols (same cap as periodic refresh). */
+export const TRADING_ROOM_MOUNT_MAX_SYMBOLS = MAX_SYMBOLS_PER_MOUNT;
 const CONCURRENCY = 3;
 
 export async function fetchDefaultWatchlistSymbols(): Promise<string[]> {
