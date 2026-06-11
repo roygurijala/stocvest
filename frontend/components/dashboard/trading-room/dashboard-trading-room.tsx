@@ -302,8 +302,10 @@ function TradingRoomBody({
       swingSetups,
       daySetups,
       snapshotsBySymbol,
-      dayTradingSurfaces
+      dayTradingSurfaces,
+      companyBySymbol
     });
+    // Safety net: ensure company names are set (fallback to pre-resolved map)
     const withCompany = cards.map((c) => ({
       ...c,
       company: c.company ?? companyBySymbol.get(c.symbol) ?? null
