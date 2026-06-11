@@ -136,13 +136,23 @@ export function clearTradingRoomOpenIntent(): void {
 }
 
 export function hasPendingTradingRoomOpenIntent(): boolean {
-  return resolveTradingRoomOpenIntent() != null;
+  return peekTradingRoomOpenIntent() != null;
+}
+
+/** True when the address bar still carries a symbol from a prior in-session card click. */
+export function hasDashboardSymbolInLocation(): boolean {
+  if (typeof window === "undefined") return false;
+  return parseDashboardTradingRoomDeepLink(new URLSearchParams(window.location.search)) != null;
 }
 
 /**
  * Resolve scanner/dashboard handoff from every client source.
  * `useSearchParams` can lag behind `window.location` after `history.replaceState`
  * (same-page card clicks), so the address bar wins when both disagree.
+ *
+ * Bootstrap / cold load must NOT use this to open Deep Dive — only
+ * `peekTradingRoomOpenIntent()` (active scanner handoff). Passive `?symbol=` in
+ * the URL is cleared so users land on Market Brief first.
  */
 export function resolveTradingRoomOpenIntent(
   searchParams?: Pick<URLSearchParams, "get"> | null

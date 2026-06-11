@@ -68,8 +68,8 @@ import {
   applyDashboardSymbolUrl,
   clearTradingRoomOpenIntent,
   feedCardIdForDeepLink,
+  hasDashboardSymbolInLocation,
   peekTradingRoomOpenIntent,
-  resolveTradingRoomOpenIntent,
   syntheticFeedCardForDeepLink,
   type DashboardTradingRoomDeepLink
 } from "@/lib/nav/dashboard-trading-room-deeplink";
@@ -438,6 +438,7 @@ function TradingRoomBody({
   const applyDeepLinkOrRestoreSelection = () => {
     const pendingHandoff = peekTradingRoomOpenIntent();
     const freshTradingDay = !pendingHandoff && isFirstVisitOfTradingDay();
+    const staleUrlSymbol = !pendingHandoff && hasDashboardSymbolInLocation();
 
     // Card clicks update the URL via `replaceState`, which does not refresh
     // `useSearchParams`. When the user already has a selection, keep it and heal
@@ -450,7 +451,7 @@ function TradingRoomBody({
       return;
     }
 
-    if (freshTradingDay) {
+    if (freshTradingDay || staleUrlSymbol) {
       setLastSelectedId(null);
       clearTradingRoomOpenIntent();
       if (selectedId || overrideCard) {
@@ -463,10 +464,8 @@ function TradingRoomBody({
       return;
     }
 
-    const intent = resolveTradingRoomOpenIntent(searchParams);
-
-    if (intent) {
-      openSymbol(intent.symbol, null, intent.lane);
+    if (pendingHandoff) {
+      openSymbol(pendingHandoff.symbol, null, pendingHandoff.lane);
       clearTradingRoomOpenIntent();
       recordTradingRoomVisit();
       selectionBootstrappedRef.current = true;
