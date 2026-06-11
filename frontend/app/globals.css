@@ -125,11 +125,11 @@ a {
   .app-shell-layout:has(.lnav-rail:focus-within) {
     grid-template-columns: 222px minmax(0, 1fr);
   }
-  /* The global top bar is position:fixed, so it can't reflow with the grid —
+  /* Page chrome is position:fixed, so it can't reflow with the grid —
    * shift its left edge in step with the expanding rail. */
-  .app-topbar { transition: left 0.16s ease; }
-  .app-shell-layout:has(.lnav:hover) .app-topbar,
-  .app-shell-layout:has(.lnav-rail:focus-within) .app-topbar {
+  .dashboard-mobile-chrome { transition: left 0.16s ease; }
+  .app-shell-layout:has(.lnav:hover) .dashboard-mobile-chrome,
+  .app-shell-layout:has(.lnav-rail:focus-within) .dashboard-mobile-chrome {
     left: 222px;
   }
 }
@@ -144,8 +144,6 @@ a {
 .lnav { position: sticky; top: 0; height: 100vh; width: 100%; flex: none; z-index: 40; }
 @media (max-width: 899px) {
   .lnav { display: none; }
-  /* Belt-and-suspenders: legacy TopBar must never show below the nav-rail breakpoint. */
-  .app-topbar { display: none !important; }
   .dashboard-mobile-chrome { display: grid !important; }
   .compact-nav-only { display: inline-flex !important; }
   .desktop-nav-only { display: none !important; }
@@ -164,7 +162,7 @@ a {
   }
 }
 @media (min-width: 900px) {
-  .dashboard-mobile-chrome { display: none !important; }
+  .dashboard-mobile-chrome { display: grid !important; }
   .compact-nav-only { display: none !important; }
   .desktop-nav-only { display: inline-flex !important; }
   .session-header-market-compact { display: none !important; }

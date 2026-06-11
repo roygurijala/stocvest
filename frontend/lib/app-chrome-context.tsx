@@ -20,8 +20,8 @@ export function AppChromeProvider({
 }
 
 /**
- * Lets nested page chrome (e.g. the dashboard's own header bar, which replaces
- * the global `TopBar`) trigger the `AppShell`-owned mobile nav drawer.
+ * Lets nested page chrome (e.g. the trading-room session header) trigger the
+ * `AppShell`-owned mobile nav drawer.
  */
 export function useAppChrome(): AppChrome {
   return useContext(AppChromeContext);

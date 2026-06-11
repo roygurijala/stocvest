@@ -1,7 +1,7 @@
 import { normalizeAppPathname } from "@/lib/app-pathname";
 import { scannerTerminalEnabled } from "@/lib/nav-features";
 
-/** Routes that render their own session header instead of the legacy TopBar. */
+/** Routes that render their own session header instead of the global page chrome. */
 export function usesTradingSessionChrome(pathname: string | null | undefined): boolean {
   const path = normalizeAppPathname(pathname);
   if (!path) return false;

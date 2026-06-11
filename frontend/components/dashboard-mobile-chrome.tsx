@@ -3,7 +3,7 @@
 import { Menu } from "lucide-react";
 import { StocvestTitle } from "@/components/brand/stocvest-title";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { borderRadius, spacing } from "@/lib/design-system";
+import { spacing } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 
 type Props = {
@@ -12,8 +12,8 @@ type Props = {
 };
 
 /**
- * Fixed mobile header for dashboard subpages (watchlists, signals, settings, …).
- * Replaces the legacy TopBar below the 900px nav-rail breakpoint.
+ * Fixed page header for dashboard subpages (watchlists, signals, settings, …).
+ * Session-header routes (trading room, scanner terminal) render their own chrome.
  */
 export function DashboardMobileChrome({ title, onMenuClick }: Props) {
   const { colors } = useTheme();
@@ -22,7 +22,7 @@ export function DashboardMobileChrome({ title, onMenuClick }: Props) {
   return (
     <header
       data-testid="dashboard-mobile-chrome"
-      className="dashboard-mobile-chrome fixed left-0 right-0 top-0 z-30 grid min-h-14 grid-cols-[auto_1fr_auto] items-center gap-2 px-4 min-[900px]:hidden"
+      className="dashboard-mobile-chrome fixed left-0 right-0 top-0 z-30 grid min-h-14 grid-cols-[auto_1fr_auto] items-center gap-2 px-4 backdrop-blur-sm min-[900px]:left-[56px] min-[900px]:px-6"
       style={{
         paddingTop: `calc(${spacing[3]} + env(safe-area-inset-top, 0px))`,
         paddingRight: spacing[4],
@@ -34,7 +34,7 @@ export function DashboardMobileChrome({ title, onMenuClick }: Props) {
     >
       <button
         type="button"
-        className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md border"
+        className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md border min-[900px]:hidden"
         style={{
           borderColor: colors.border,
           background: "transparent",
@@ -47,11 +47,13 @@ export function DashboardMobileChrome({ title, onMenuClick }: Props) {
         <Menu size={22} />
       </button>
       {showBrand ? (
-        <div className="flex min-w-0 justify-center px-2">
+        <div className="flex min-w-0 justify-center px-2 min-[900px]:justify-start">
           <StocvestTitle href="/dashboard" />
         </div>
       ) : (
-        <h1 className="m-0 min-w-0 truncate text-center text-base font-bold">{title}</h1>
+        <h1 className="m-0 min-w-0 truncate text-center text-base font-bold min-[900px]:text-left min-[900px]:text-xl">
+          {title}
+        </h1>
       )}
       <div className="flex shrink-0 items-center justify-end gap-2">
         <ThemeToggle />
@@ -59,6 +61,3 @@ export function DashboardMobileChrome({ title, onMenuClick }: Props) {
     </header>
   );
 }
-
-/** Fallback height when the live mobile chrome bar is not mounted (tests, SSR). */
-export const DASHBOARD_MOBILE_CHROME_HEIGHT_PX = 80;

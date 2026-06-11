@@ -16,7 +16,7 @@ import type { ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
 import { fetchEarningsCalendarClient } from "@/lib/api/earnings-client";
 import { AddToWatchlistButton } from "@/components/add-to-watchlist-button";
-import { APP_TOP_BAR_LAYOUT_HEIGHT_PX, measureAppTopBarLayoutHeightPx } from "@/components/top-bar";
+import { APP_CHROME_LAYOUT_HEIGHT_PX, measureAppChromeLayoutHeightPx } from "@/lib/app-chrome-layout";
 import { SignalsCommandBar } from "@/components/signals/signals-command-bar";
 import { SignalsReturnLink } from "@/components/signals/signals-return-link";
 import { SignalsDeskTabNav } from "@/components/signals/signals-desk-tab-nav";
@@ -200,13 +200,13 @@ export function SignalsPageClient({
   const [unverifiedSymbolNote, setUnverifiedSymbolNote] = useState<string | null>(null);
   const symbolChromeRef = useRef<HTMLDivElement | null>(null);
   const [signalsChromeInsets, setSignalsChromeInsets] = useState({
-    topBarPx: APP_TOP_BAR_LAYOUT_HEIGHT_PX,
+    topBarPx: APP_CHROME_LAYOUT_HEIGHT_PX,
     searchChromePx: 88
   });
 
   useLayoutEffect(() => {
     const measure = () => {
-      const topBarPx = measureAppTopBarLayoutHeightPx();
+      const topBarPx = measureAppChromeLayoutHeightPx();
       const searchChromePx = symbolChromeRef.current
         ? Math.ceil(symbolChromeRef.current.getBoundingClientRect().height)
         : 0;

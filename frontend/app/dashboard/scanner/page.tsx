@@ -31,7 +31,7 @@ export default async function DashboardScannerPage() {
 
   if (scannerTerminalEnabled()) {
     return (
-      <AppShell session={session} isAdmin={isAdmin} hideTopBar>
+      <AppShell session={session} isAdmin={isAdmin}>
         <ScannerTerminalPreviewContent
           initialScannerSetupLoadMode={scannerSetupLoadMode}
           dayTradingSurfaces={dayTradingSurfaces}

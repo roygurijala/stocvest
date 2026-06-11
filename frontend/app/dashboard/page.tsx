@@ -28,7 +28,7 @@ export default function DashboardPage() {
     redirect("/login");
   }
   return (
-    <AppShell session={session} isAdmin={isAdmin} hideTopBar>
+    <AppShell session={session} isAdmin={isAdmin}>
       <Suspense fallback={<ContentLoading />}>
         <TradingRoomPreviewContent userName={resolveGreetingName(session)} />
       </Suspense>

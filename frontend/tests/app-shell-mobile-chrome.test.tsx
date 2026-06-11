@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, test, vi, beforeEach } from "vitest";
+import { usePathname } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { ThemeProvider } from "@/lib/theme-provider";
 import type { AuthSession } from "@/lib/auth/types";
@@ -7,7 +8,7 @@ import type { AuthSession } from "@/lib/auth/types";
 const session: AuthSession = { subject: "user-1", email: "test@example.com" };
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/dashboard/watchlists"
+  usePathname: vi.fn(() => "/dashboard/watchlists")
 }));
 
 vi.mock("@/lib/hooks/use-stacked-layout", () => ({
@@ -18,8 +19,9 @@ vi.mock("@/components/sidebar", () => ({
   Sidebar: () => <aside data-testid="sidebar-mock" />
 }));
 
-describe("AppShell mobile chrome", () => {
+describe("AppShell page chrome", () => {
   beforeEach(() => {
+    vi.mocked(usePathname).mockReturnValue("/dashboard/watchlists");
     vi.stubGlobal(
       "matchMedia",
       vi.fn(() => ({
@@ -30,7 +32,7 @@ describe("AppShell mobile chrome", () => {
     );
   });
 
-  test("renders dashboard mobile chrome instead of legacy top bar on compact nav", () => {
+  test("renders page chrome with title on subpages", () => {
     render(
       <ThemeProvider>
         <AppShell session={session}>
@@ -40,7 +42,20 @@ describe("AppShell mobile chrome", () => {
     );
 
     expect(screen.getByTestId("dashboard-mobile-chrome")).toBeInTheDocument();
-    expect(screen.queryByTestId("app-top-bar")).not.toBeInTheDocument();
     expect(screen.getByText("Watchlist")).toBeInTheDocument();
+  });
+
+  test("omits page chrome on trading-room session routes", () => {
+    vi.mocked(usePathname).mockReturnValue("/dashboard");
+
+    render(
+      <ThemeProvider>
+        <AppShell session={session}>
+          <div>child</div>
+        </AppShell>
+      </ThemeProvider>
+    );
+
+    expect(screen.queryByTestId("dashboard-mobile-chrome")).not.toBeInTheDocument();
   });
 });
