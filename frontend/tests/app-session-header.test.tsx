@@ -11,6 +11,9 @@ vi.mock("@/components/dashboard/trading-room/symbol-search", () => ({
 vi.mock("@/components/theme-toggle", () => ({
   ThemeToggle: () => <button type="button">Theme</button>
 }));
+vi.mock("@/lib/hooks/use-stacked-layout", () => ({
+  useStackedLayout: () => false
+}));
 
 describe("<AppSessionHeader />", () => {
   test("renders pulse line and actionable chip", () => {

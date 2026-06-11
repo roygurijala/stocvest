@@ -49,3 +49,18 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/components/dashboard-edge-sync", () => ({
   DashboardEdgeSync: () => null
 }));
+
+if (typeof window !== "undefined" && typeof window.matchMedia !== "function") {
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    value: (query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false
+    })
+  });
+}

@@ -2,12 +2,16 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
+import { DashboardMobileChrome } from "@/components/dashboard-mobile-chrome";
 import { MobileNavDrawer } from "@/components/mobile-nav-drawer";
 import { PageLoader } from "@/components/page-loader";
 import { Sidebar } from "@/components/sidebar";
 import { APP_TOP_BAR_LAYOUT_HEIGHT, TopBar } from "@/components/top-bar";
 import { AppChromeProvider } from "@/lib/app-chrome-context";
 import { usesTradingSessionChrome } from "@/lib/app-chrome-routes";
+import { normalizeAppPathname } from "@/lib/app-pathname";
+import { resolveAppPageTitle } from "@/lib/app-page-titles";
+import { useStackedLayout } from "@/lib/hooks/use-stacked-layout";
 import type { AuthSession } from "@/lib/auth/types";
 import { resetBodyScrollLock } from "@/lib/body-scroll-lock";
 import { spacing } from "@/lib/design-system";
@@ -47,7 +51,12 @@ export function AppShell({
   const mainFlushTop = mainTopLayout !== "default";
   const { colors } = useTheme();
   const pathname = usePathname();
-  const suppressTopBar = hideTopBar || usesTradingSessionChrome(pathname);
+  const normalizedPath = normalizeAppPathname(pathname);
+  const compactNav = useStackedLayout(899);
+  const sessionChrome = usesTradingSessionChrome(normalizedPath);
+  /** Legacy TopBar is desktop-only; trading-room pages bring their own session header. */
+  const suppressTopBar = hideTopBar || sessionChrome || compactNav;
+  const showMobileChrome = compactNav && !sessionChrome;
   const [loading, setLoading] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -74,16 +83,29 @@ export function AppShell({
           data-testid="app-shell-right-column"
           style={{ background: colors.background }}
         >
-          {suppressTopBar ? null : <TopBar onMenuClick={() => setDrawerOpen(true)} />}
+          {showMobileChrome ? (
+            <DashboardMobileChrome
+              title={resolveAppPageTitle(normalizedPath)}
+              onMenuClick={() => setDrawerOpen(true)}
+            />
+          ) : suppressTopBar ? null : (
+            <TopBar onMenuClick={() => setDrawerOpen(true)} />
+          )}
           <main
             className="min-w-0 px-4 pb-6 min-[900px]:px-6"
             data-main-top-layout={mainTopLayout}
+            data-compact-nav={compactNav ? "true" : undefined}
+            data-session-chrome={sessionChrome ? "true" : undefined}
             style={{
-              paddingTop: suppressTopBar
+              paddingTop: sessionChrome
                 ? 0
-                : mainFlushTop
-                  ? 0
-                  : `calc(${APP_TOP_BAR_LAYOUT_HEIGHT} + ${mainTopExtra})`
+                : showMobileChrome
+                  ? mainFlushTop
+                    ? 0
+                    : `calc(${APP_TOP_BAR_LAYOUT_HEIGHT} + env(safe-area-inset-top, 0px) + ${mainTopExtra})`
+                  : mainFlushTop
+                    ? 0
+                    : `calc(${APP_TOP_BAR_LAYOUT_HEIGHT} + ${mainTopExtra})`
             }}
           >
             <AppChromeProvider value={{ openNavDrawer: () => setDrawerOpen(true) }}>

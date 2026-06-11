@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
-import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
+import { usePathname } from "next/navigation";
 import { StocvestTitle } from "@/components/brand/stocvest-title";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { TradingModeBadge } from "@/components/trading-mode-badge";
+import { resolveAppPageTitle } from "@/lib/app-page-titles";
+import { normalizeAppPathname } from "@/lib/app-pathname";
 import { spacing } from "@/lib/design-system";
 import { brokersEnabled } from "@/lib/nav-features";
 import { useTheme } from "@/lib/theme-provider";
@@ -22,30 +23,15 @@ export const APP_TOP_BAR_LAYOUT_HEIGHT_PX = 80;
 /** IntersectionObserver `rootMargin` must use px or % — not `calc()`. */
 export function measureAppTopBarLayoutHeightPx(): number {
   if (typeof document === "undefined") return APP_TOP_BAR_LAYOUT_HEIGHT_PX;
-  const bar = document.querySelector('[data-testid="app-top-bar"]');
-  if (bar instanceof HTMLElement) {
-    const h = bar.getBoundingClientRect().height;
-    if (Number.isFinite(h) && h > 0) return Math.ceil(h);
+  for (const selector of ['[data-testid="dashboard-mobile-chrome"]', '[data-testid="app-top-bar"]']) {
+    const bar = document.querySelector(selector);
+    if (bar instanceof HTMLElement) {
+      const h = bar.getBoundingClientRect().height;
+      if (Number.isFinite(h) && h > 0) return Math.ceil(h);
+    }
   }
   return APP_TOP_BAR_LAYOUT_HEIGHT_PX;
 }
-
-const TITLE_BY_PATH: Record<string, string> = {
-  "/dashboard": "Dashboard",
-  "/dashboard/scanner": "Scanner",
-  "/dashboard/earnings": "Earnings",
-  "/dashboard/signals": "Signals",
-  "/dashboard/setup-evolution": "Setup evolution",
-  "/dashboard/setup-outcomes": "Setup outcomes",
-  "/dashboard/portfolio": "Portfolio",
-  "/dashboard/options": "Options",
-  "/dashboard/crypto": "Crypto",
-  "/dashboard/futures": "Futures",
-  "/dashboard/journal": "Journal",
-  "/dashboard/settings": "Settings",
-  "/dashboard/admin": "Admin",
-  "/dashboard/admin/historical-validation": "Historical validation (admin)"
-};
 
 interface TopBarProps {
   onMenuClick?: () => void;
@@ -54,8 +40,9 @@ interface TopBarProps {
 export function TopBar({ onMenuClick }: TopBarProps) {
   const pathname = usePathname();
   const { colors } = useTheme();
-  const title = useMemo(() => TITLE_BY_PATH[pathname] || "STOCVEST", [pathname]);
-  const isDashboardHome = pathname === "/dashboard";
+  const normalizedPath = normalizeAppPathname(pathname);
+  const title = resolveAppPageTitle(normalizedPath);
+  const isDashboardHome = normalizedPath === "/dashboard";
 
   return (
     <header
@@ -66,7 +53,7 @@ export function TopBar({ onMenuClick }: TopBarProps) {
       // document scrolls. On
       // ``lg+`` the bar starts after the 56px collapsed nav rail. ``z-30``
       // sits below modals/drawers (40+) but above page content.
-      className="app-topbar fixed left-0 right-0 top-0 z-30 grid min-h-14 grid-cols-[auto_1fr_auto] items-center gap-2 px-4 backdrop-blur-sm min-[900px]:left-[56px] min-[900px]:px-6 max-[899px]:pt-[calc(0.75rem+env(safe-area-inset-top,0px))]"
+      className="app-topbar fixed left-0 right-0 top-0 z-30 hidden min-h-14 grid-cols-[auto_1fr_auto] items-center gap-2 px-4 backdrop-blur-sm min-[900px]:left-[56px] min-[900px]:grid min-[900px]:px-6"
       style={{
         paddingTop: spacing[3],
         paddingBottom: spacing[3],
