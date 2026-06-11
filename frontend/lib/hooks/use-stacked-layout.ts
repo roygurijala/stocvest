@@ -1,18 +1,26 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 
-/** Stacks layout into a single column below `maxPx` (default 899 — nav rail breakpoint). */
+/**
+ * Stacks layout into a single column below `maxPx` (default 899 — nav rail breakpoint).
+ *
+ * Returns `false` on the server and on the first client paint so SSR markup matches
+ * hydration; flips to the real viewport match after mount (avoids hydration errors).
+ */
 export function useStackedLayout(maxPx = 899): boolean {
-  const query = `(max-width: ${maxPx}px)`;
+  const [stacked, setStacked] = useState(false);
+  const [ready, setReady] = useState(false);
 
-  return useSyncExternalStore(
-    (onStoreChange) => {
-      const mq = window.matchMedia(query);
-      mq.addEventListener("change", onStoreChange);
-      return () => mq.removeEventListener("change", onStoreChange);
-    },
-    () => window.matchMedia(query).matches,
-    () => true
-  );
+  useEffect(() => {
+    const query = `(max-width: ${maxPx}px)`;
+    const mq = window.matchMedia(query);
+    const update = () => setStacked(mq.matches);
+    update();
+    setReady(true);
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, [maxPx]);
+
+  return ready && stacked;
 }

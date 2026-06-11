@@ -25,7 +25,9 @@ export function DashboardMobileChrome({ title, onMenuClick }: Props) {
       className="dashboard-mobile-chrome fixed left-0 right-0 top-0 z-30 grid min-h-14 grid-cols-[auto_1fr_auto] items-center gap-2 px-4 min-[900px]:hidden"
       style={{
         paddingTop: `calc(${spacing[3]} + env(safe-area-inset-top, 0px))`,
+        paddingRight: spacing[4],
         paddingBottom: spacing[3],
+        paddingLeft: spacing[4],
         borderBottom: `1px solid ${colors.border}`,
         background: colors.surface
       }}

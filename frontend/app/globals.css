@@ -146,6 +146,44 @@ a {
   .lnav { display: none; }
   /* Belt-and-suspenders: legacy TopBar must never show below the nav-rail breakpoint. */
   .app-topbar { display: none !important; }
+  .dashboard-mobile-chrome { display: grid !important; }
+  .compact-nav-only { display: inline-flex !important; }
+  .desktop-nav-only { display: none !important; }
+  .session-header-market-compact { display: flex !important; }
+  .session-header-market-full { display: none !important; }
+  .app-session-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 30;
+  }
+  .app-session-header-spacer {
+    display: block;
+    min-height: 10.5rem;
+  }
+}
+@media (min-width: 900px) {
+  .dashboard-mobile-chrome { display: none !important; }
+  .compact-nav-only { display: none !important; }
+  .desktop-nav-only { display: inline-flex !important; }
+  .session-header-market-compact { display: none !important; }
+  .session-header-market-full { display: flex !important; }
+  .app-session-header-spacer { display: none !important; }
+  .app-session-header {
+    margin-left: calc(-1 * var(--session-header-bleed, 1rem));
+    margin-right: calc(-1 * var(--session-header-bleed, 1rem));
+    column-gap: 1.25rem;
+  }
+  .session-header-actions {
+    flex: 0 0 auto !important;
+    margin-left: auto !important;
+  }
+  .session-header-search {
+    width: 248px;
+    max-width: 248px;
+    flex: 0 0 auto;
+  }
 }
 .lnav-rail {
   position: absolute; top: 0; bottom: 0; left: 0; width: 56px;

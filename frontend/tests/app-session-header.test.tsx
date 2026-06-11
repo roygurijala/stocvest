@@ -39,8 +39,10 @@ describe("<AppSessionHeader />", () => {
     );
 
     expect(screen.getByTestId("app-session-header")).toBeInTheDocument();
-    expect(screen.getByText(/Market in/)).toBeInTheDocument();
-    expect(screen.getByText("Bearish")).toBeInTheDocument();
+    const marketFull = document.querySelector(".session-header-market-full");
+    expect(marketFull).not.toBeNull();
+    expect(marketFull).toHaveTextContent(/Market in/);
+    expect(marketFull).toHaveTextContent("Bearish");
     expect(screen.getByText("2", { selector: "span" })).toBeInTheDocument();
     expect(screen.getByText(/actionable/)).toBeInTheDocument();
   });
