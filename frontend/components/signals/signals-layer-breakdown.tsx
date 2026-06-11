@@ -1,7 +1,19 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { 
+  ChevronDown, 
+  ChevronUp, 
+  TrendingUp, 
+  TrendingDown, 
+  Activity,
+  Zap,
+  Globe,
+  Newspaper,
+  BarChart3,
+  Cpu
+} from "lucide-react";
 import { CuteLoader } from "@/components/cute-loader";
 import { InfoTip } from "@/components/info-tip";
 import { LAYER_NAME_HINTS, SIGNAL_LAYER_LEVEL_VS_DELTA_TIP } from "@/lib/ui-tooltips";
@@ -25,6 +37,16 @@ import {
 } from "@/lib/signals-page-present";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
+
+// Layer icon mapping
+const LAYER_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  technical: BarChart3,
+  news: Newspaper,
+  macro: Globe,
+  sector: Cpu,
+  geopolitical: Activity,
+  internals: Zap,
+};
 
 type Props = {
   symbol: string;
@@ -61,31 +83,79 @@ export function SignalsLayerBreakdown({
   const visible = expanded ? rows : preview.length > 0 ? preview : rows.slice(0, 3);
 
   return (
-    <section
+    <motion.section
       id="signals-layers"
       className={`signals-snap-section scroll-mt-4 ${surfaceGlowClassName}`}
       data-testid="signals-layer-breakdown"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
       style={{
-        background: colors.surface,
+        background: `linear-gradient(135deg, ${colors.surface} 0%, ${colors.surfaceMuted}50 100%)`,
         border: `1px solid ${colors.border}`,
         borderRadius: borderRadius.xl,
-        padding: spacing[4]
+        padding: spacing[6],
+        boxShadow: `0 8px 32px -12px ${colors.border}40, inset 0 1px 0 ${colors.surface}80`,
+        position: "relative",
+        overflow: "hidden"
       }}
     >
-      <div>
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h3 className="m-0" style={{ fontSize: typography.scale.lg }}>
-            6-Layer Breakdown
-          </h3>
-          <span className="inline-flex items-center gap-1 text-xs" style={{ color: colors.textMuted }}>
-            Level 0–100 per layer
+      {/* Background glow effect */}
+      <div 
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: `radial-gradient(ellipse 80% 50% at 50% -20%, ${colors.accent}15, transparent)`,
+        }}
+      />
+      
+      <div className="relative z-10">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+          <div className="flex items-center gap-3">
+            <div 
+              className="flex items-center justify-center w-10 h-10 rounded-xl"
+              style={{
+                background: `linear-gradient(135deg, ${colors.accent}20, ${colors.accent}05)`,
+                border: `1px solid ${colors.accent}30`,
+                boxShadow: `0 4px 12px -4px ${colors.accent}40`
+              }}
+            >
+              <Activity className="w-5 h-5" style={{ color: colors.accent }} />
+            </div>
+            <div>
+              <h3 
+                className="m-0 font-bold tracking-tight"
+                style={{ 
+                  fontSize: typography.scale.xl,
+                  background: `linear-gradient(135deg, ${colors.text}, ${colors.textMuted})`,
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent"
+                }}
+              >
+                Signal Layers
+              </h3>
+              <span className="text-xs font-medium" style={{ color: colors.textMuted }}>
+                6-Dimensional Analysis
+              </span>
+            </div>
+          </div>
+          
+          <div 
+            className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium"
+            style={{ 
+              background: `${colors.surfaceMuted}80`,
+              border: `1px solid ${colors.border}`,
+              color: colors.textMuted
+            }}
+          >
+            <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: colors.accent }} />
+            Live • 0–100 Scale
             <InfoTip text={SIGNAL_LAYER_LEVEL_VS_DELTA_TIP} label="Level vs Δ" maxWidth={320} />
-          </span>
+          </div>
         </div>
-        <span className="mt-1 block text-xs" style={{ color: colors.textMuted }}>
-          as of latest close ·{" "}
+        
+        <p className="m-0 text-sm mb-4" style={{ color: colors.textMuted }}>
           {formatSignalsAlignmentDisplayLine(alignment, bias, maturationState)}
-        </span>
+        </p>
       </div>
 
       {loading ? (
@@ -101,17 +171,30 @@ export function SignalsLayerBreakdown({
       ) : (
         <>
           <SignalsLayerForceSummary rows={rows} bias={bias} />
-          <ul className="m-0 mt-3 list-none space-y-2 p-0">
-            {visible.map((row) => (
-              <LayerRow
-                key={row.key}
-                row={row}
-                bias={bias}
-                colors={colors}
-                causalNarrative={causalNarrative}
-              />
-            ))}
-          </ul>
+          <div className="mt-5 space-y-3">
+            <AnimatePresence mode="popLayout">
+              {visible.map((row, index) => (
+                <motion.div
+                  key={row.key}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
+                  transition={{ 
+                    duration: 0.4, 
+                    delay: index * 0.08,
+                    ease: [0.22, 1, 0.36, 1]
+                  }}
+                >
+                  <LayerRow
+                    row={row}
+                    bias={bias}
+                    colors={colors}
+                    causalNarrative={causalNarrative}
+                  />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
           {!defaultExpanded && rows.length > preview.length ? (
             <button
               type="button"
@@ -136,7 +219,7 @@ export function SignalsLayerBreakdown({
           ) : null}
         </>
       )}
-    </section>
+    </motion.section>
   );
 }
 
@@ -166,85 +249,198 @@ function LayerRow({
       ? row.deltaVsBaseline
       : null;
 
+  // Get icon for this layer
+  const IconComponent = LAYER_ICONS[row.key] || Activity;
+  
+  // Determine trend icon based on polarity
+  const polarityStr = String(polarity);
+  const TrendIcon = polarityStr === "with" ? TrendingUp : polarityStr === "against" ? TrendingDown : Activity;
+  
+  // Gradient colors based on score
+  const getScoreGradient = (score: number) => {
+    if (score >= 70) return `linear-gradient(90deg, ${colors.bullish}, ${colors.bullish}80)`;
+    if (score >= 50) return `linear-gradient(90deg, ${colors.accent}, ${colors.accent}80)`;
+    if (score >= 30) return `linear-gradient(90deg, ${colors.caution}, ${colors.caution}80)`;
+    return `linear-gradient(90deg, ${colors.bearish}, ${colors.bearish}80)`;
+  };
+
   return (
-    <li
-      className="flex items-start gap-3 rounded-lg px-2 py-2"
-      style={{ background: colors.surfaceMuted, border: `1px solid ${colors.border}` }}
+    <motion.div
+      className="group relative overflow-hidden rounded-xl"
+      style={{ 
+        background: `linear-gradient(135deg, ${colors.surface}90, ${colors.surfaceMuted}60)`,
+        border: `1px solid ${colors.border}`,
+        boxShadow: `0 2px 8px -2px ${colors.border}30, inset 0 1px 0 ${colors.surface}50`
+      }}
+      whileHover={{ 
+        scale: 1.01,
+        boxShadow: `0 8px 24px -4px ${colors.border}50, inset 0 1px 0 ${colors.surface}80`
+      }}
+      transition={{ duration: 0.2 }}
       data-testid={`signals-layer-row-${row.key}`}
       data-layer-polarity={polarity}
     >
-      <span
-        className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
-        style={{ background: dot }}
-        aria-hidden
-        title={layerRoleLabel(polarity, bias)}
+      {/* Animated border glow on hover */}
+      <div 
+        className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
+        style={{
+          background: `linear-gradient(90deg, ${dot}20, transparent, ${dot}20)`,
+          backgroundSize: '200% 100%',
+        }}
       />
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-semibold" style={{ color: colors.text }}>
-            {row.name}
-          </span>
-          {hint ? <InfoTip text={hint} label={row.name} /> : null}
-        </div>
-        {row.statusLabel ? (
-          <p
-            className="m-0 mt-0.5 text-xs leading-snug"
-            style={{ color: colors.textMuted }}
-            data-testid={`signals-layer-benchmark-${row.key}`}
+      
+      <div className="relative z-10 p-4">
+        <div className="flex items-start gap-3">
+          {/* Icon with gradient background */}
+          <div 
+            className="flex-shrink-0 flex items-center justify-center w-11 h-11 rounded-xl"
+            style={{
+              background: `linear-gradient(135deg, ${dot}25, ${dot}05)`,
+              border: `1px solid ${dot}40`,
+              boxShadow: `0 4px 12px -4px ${dot}50`
+            }}
           >
-            {row.statusLabel}
-          </p>
-        ) : null}
-        <p className="m-0 mt-0.5 text-xs font-medium leading-snug" style={{ color: colors.text }}>
-          {roleHeadline}
-        </p>
-        {showLevel ? (
-          <div className="mt-1.5" data-testid={`signals-layer-level-${row.key}`}>
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <span className="text-xs font-medium" style={{ color: colors.text }}>
-                Level {levelLabel}/100
-              </span>
-              {delta != null ? (
-                <span
-                  className="text-xs tabular-nums"
-                  style={{ color: colors.textMuted }}
-                  data-testid={`signals-layer-delta-${row.key}`}
-                >
-                  {formatDeltaVsBaselineShort(delta)} vs {SIGNAL_LAYER_LEVEL_BASELINE}
-                </span>
-              ) : null}
-            </div>
-            <div
-              className="mt-1 h-1.5 overflow-hidden rounded-full"
-              style={{ background: colors.border }}
-              role="progressbar"
-              aria-valuenow={levelPct}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-label={`${row.name} level ${levelPct} out of 100`}
-            >
-              <div
-                data-testid={`signals-layer-level-bar-${row.key}`}
-                style={{
-                  width: `${levelPct}%`,
-                  height: "100%",
-                  background: colors.accent,
-                  opacity: 0.85
-                }}
-              />
+            <div style={{ color: dot }}>
+              <IconComponent className="w-5 h-5" />
             </div>
           </div>
-        ) : (
-          <p className="m-0 mt-1 text-xs" style={{ color: colors.textMuted }}>
-            {row.status === "Unavailable" ? "No live level score" : "Level unavailable"}
-          </p>
-        )}
-        {showInsight ? (
-          <p className="m-0 mt-1.5 text-sm leading-snug" style={{ color: colors.textMuted }}>
-            {insight}
-          </p>
-        ) : null}
+          
+          {/* Content */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span 
+                className="text-sm font-bold tracking-tight"
+                style={{ color: colors.text }}
+              >
+                {row.name}
+              </span>
+              
+              {/* Status badge */}
+              {row.statusLabel && (
+                <span 
+                  className="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider"
+                  style={{ 
+                    background: `${dot}15`,
+                    color: dot,
+                    border: `1px solid ${dot}30`
+                  }}
+                >
+                  {row.statusLabel}
+                </span>
+              )}
+              
+              {hint ? <InfoTip text={hint} label={row.name} /> : null}
+            </div>
+            
+            {/* Role headline with trend indicator */}
+            <div className="flex items-center gap-2 mt-1">
+              <div style={{ color: dot }}>
+                <TrendIcon className="w-3.5 h-3.5" />
+              </div>
+              <p className="m-0 text-sm font-medium" style={{ color: colors.text }}>
+                {roleHeadline}
+              </p>
+            </div>
+            
+            {/* Score bar with animation */}
+            {showLevel ? (
+              <div className="mt-3" data-testid={`signals-layer-level-${row.key}`}>
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <div className="flex items-center gap-2">
+                    <span 
+                      className="text-lg font-bold tabular-nums"
+                      style={{ 
+                        color: levelPct >= 60 ? colors.bullish : levelPct >= 40 ? colors.accent : colors.caution,
+                        textShadow: `0 0 20px ${levelPct >= 60 ? colors.bullish : levelPct >= 40 ? colors.accent : colors.caution}30`
+                      }}
+                    >
+                      {levelLabel}
+                    </span>
+                    <span className="text-xs font-medium" style={{ color: colors.textMuted }}>
+                      /100
+                    </span>
+                  </div>
+                  
+                  {delta != null && (
+                    <span
+                      className="text-xs font-medium tabular-nums px-2 py-0.5 rounded-full"
+                      style={{ 
+                        color: delta >= 0 ? colors.bullish : colors.bearish,
+                        background: delta >= 0 ? `${colors.bullish}15` : `${colors.bearish}15`,
+                        border: `1px solid ${delta >= 0 ? colors.bullish : colors.bearish}30`
+                      }}
+                      data-testid={`signals-layer-delta-${row.key}`}
+                    >
+                      {formatDeltaVsBaselineShort(delta)} vs {SIGNAL_LAYER_LEVEL_BASELINE}
+                    </span>
+                  )}
+                </div>
+                
+                {/* Animated progress bar with glow */}
+                <div className="relative">
+                  <div
+                    className="h-2.5 overflow-hidden rounded-full"
+                    style={{ 
+                      background: `${colors.border}50`,
+                      boxShadow: `inset 0 1px 2px ${colors.border}`
+                    }}
+                    role="progressbar"
+                    aria-valuenow={levelPct}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label={`${row.name} level ${levelPct} out of 100`}
+                  >
+                    <motion.div
+                      data-testid={`signals-layer-level-bar-${row.key}`}
+                      className="h-full rounded-full"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${levelPct}%` }}
+                      transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+                      style={{
+                        background: getScoreGradient(levelPct),
+                        boxShadow: `0 0 12px ${levelPct >= 60 ? colors.bullish : levelPct >= 40 ? colors.accent : colors.caution}60`
+                      }}
+                    />
+                  </div>
+                  
+                  {/* Score markers */}
+                  <div className="flex justify-between mt-1">
+                    {[0, 25, 50, 75, 100].map((mark) => (
+                      <div 
+                        key={mark}
+                        className="w-1 h-1 rounded-full"
+                        style={{ 
+                          background: levelPct >= mark ? colors.textMuted : colors.border,
+                          opacity: levelPct >= mark ? 0.8 : 0.3
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="m-0 mt-2 text-xs font-medium" style={{ color: colors.textMuted }}>
+                {row.status === "Unavailable" ? "No live level score" : "Level unavailable"}
+              </p>
+            )}
+            
+            {/* Insight with styling */}
+            {showInsight && (
+              <motion.div 
+                className="mt-3 pt-3 border-t"
+                style={{ borderColor: `${colors.border}50` }}
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                transition={{ duration: 0.3 }}
+              >
+                <p className="m-0 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
+                  {insight}
+                </p>
+              </motion.div>
+            )}
+          </div>
+        </div>
       </div>
-    </li>
+    </motion.div>
   );
 }
