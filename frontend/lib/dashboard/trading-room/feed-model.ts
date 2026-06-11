@@ -162,20 +162,25 @@ interface BuildFeedInput {
   daySetups: IntradaySetupPayload[];
   snapshotsBySymbol: Map<string, SnapshotPayload>;
   dayTradingSurfaces: boolean;
+  /** Pre-resolved company names (scanner + gap intelligence + snapshots) */
+  companyBySymbol?: Map<string, string>;
 }
 
 function cardFromLeader(
   leader: DeskDiscoveryLeader,
   lane: FeedLane,
-  snapshotsBySymbol: Map<string, SnapshotPayload>
+  snapshotsBySymbol: Map<string, SnapshotPayload>,
+  companyBySymbol?: Map<string, string>
 ): FeedCard {
   const symbol = leader.symbol.trim().toUpperCase();
   const snap = snapshotsBySymbol.get(symbol);
   const ratio = cleanNum(leader.alignment_ratio);
+  // Prefer pre-resolved company names (includes scanner + gap intelligence)
+  const company = companyBySymbol?.get(symbol) ?? snap?.company_name?.trim() ?? null;
   return {
     id: `${lane}:${symbol}`,
     symbol,
-    company: snap?.company_name?.trim() || null,
+    company,
     lane,
     state: leaderState(leader),
     bias: biasFromDirection(leader.direction),
@@ -194,14 +199,17 @@ function cardFromLeader(
 function cardFromSetup(
   setup: IntradaySetupPayload,
   lane: FeedLane,
-  snapshotsBySymbol: Map<string, SnapshotPayload>
+  snapshotsBySymbol: Map<string, SnapshotPayload>,
+  companyBySymbol?: Map<string, string>
 ): FeedCard {
   const symbol = setup.symbol.trim().toUpperCase();
   const snap = snapshotsBySymbol.get(symbol);
+  // Prefer setup company_name, fallback to pre-resolved map
+  const company = setup.company_name?.trim() || companyBySymbol?.get(symbol) || null;
   return {
     id: `${lane}:${symbol}`,
     symbol,
-    company: setup.company_name?.trim() || null,
+    company,
     lane,
     state: setupState(setup),
     bias: biasFromDirection(setup.direction),
@@ -225,7 +233,7 @@ function cardFromSetup(
  * carry richer fields (company name, alignment label, last price).
  */
 export function buildFeedCards(input: BuildFeedInput): FeedCard[] {
-  const { snapshotsBySymbol, dayTradingSurfaces } = input;
+  const { snapshotsBySymbol, dayTradingSurfaces, companyBySymbol } = input;
   const byId = new Map<string, FeedCard>();
 
   const ingest = (card: FeedCard, preferred: boolean) => {
@@ -247,19 +255,19 @@ export function buildFeedCards(input: BuildFeedInput): FeedCard[] {
   };
 
   for (const leader of input.swingDesk?.discovery ?? []) {
-    ingest(cardFromLeader(leader, "swing", snapshotsBySymbol), false);
+    ingest(cardFromLeader(leader, "swing", snapshotsBySymbol, companyBySymbol), false);
   }
   if (dayTradingSurfaces) {
     for (const leader of input.dayDesk?.discovery ?? []) {
-      ingest(cardFromLeader(leader, "day", snapshotsBySymbol), false);
+      ingest(cardFromLeader(leader, "day", snapshotsBySymbol, companyBySymbol), false);
     }
   }
   for (const setup of input.swingSetups) {
-    ingest(cardFromSetup(setup, "swing", snapshotsBySymbol), true);
+    ingest(cardFromSetup(setup, "swing", snapshotsBySymbol, companyBySymbol), true);
   }
   if (dayTradingSurfaces) {
     for (const setup of input.daySetups) {
-      ingest(cardFromSetup(setup, "day", snapshotsBySymbol), true);
+      ingest(cardFromSetup(setup, "day", snapshotsBySymbol, companyBySymbol), true);
     }
   }
 
