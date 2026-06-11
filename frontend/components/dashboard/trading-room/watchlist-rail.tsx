@@ -384,7 +384,8 @@ export function WatchlistRail({
   const [snaps, setSnaps] = useState<Map<string, SnapshotPayload>>(new Map());
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [reloadNonce] = useWatchlistMaturationReloadNonce();
+  const [reloadNonce, bumpReloadNonce] = useWatchlistMaturationReloadNonce();
+  const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null);
 
   // Escape closes the panel — a discoverable, standard way out when it's open.
   useEffect(() => {
@@ -544,11 +545,42 @@ export function WatchlistRail({
       }}
     >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing[2] }}>
-        <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, letterSpacing: "0.1em", textTransform: "uppercase" }}>
-          Your watch · {symbols.length}
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: spacing[2] }}>
+          <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+            Your watch · {symbols.length}
+          </span>
+          {lastRefreshTime && (
+            <span style={{ fontSize: 10, color: colors.textMuted }}>
+              Updated {lastRefreshTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+            </span>
+          )}
+        </div>
         <div style={{ display: "flex", alignItems: "center", gap: spacing[2] }}>
           <NotifyToggle colors={colors} />
+          <button
+            type="button"
+            onClick={() => {
+              bumpReloadNonce();
+              setLastRefreshTime(new Date());
+            }}
+            aria-label="Refresh watchlist"
+            title="Refresh watchlist data"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+              background: "transparent",
+              border: `1px solid ${colors.border}`,
+              borderRadius: borderRadius.md,
+              color: colors.textMuted,
+              cursor: "pointer",
+              fontSize: typography.scale.xs,
+              fontWeight: 600,
+              padding: "4px 8px"
+            }}
+          >
+            ↻
+          </button>
           <button
             type="button"
             onClick={onToggleOpen}

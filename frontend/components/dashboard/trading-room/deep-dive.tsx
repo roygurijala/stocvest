@@ -679,6 +679,11 @@ export function DeepDive({
   // activeLane allows switching Day/Swing within the deep dive
   const [activeLane, setActiveLane] = useState<"day" | "swing">(card.lane);
 
+  // Sync activeLane when card changes (fixes loading issue when clicking different signals)
+  useEffect(() => {
+    setActiveLane(card.lane);
+  }, [card.symbol, card.lane]);
+
   // Company name: use card data first, then companyBySymbol map, then fetch
   // from the tickers-search endpoint as a last resort (covers desk-only cards
   // where neither the scanner overview nor the snapshot carry a name).
