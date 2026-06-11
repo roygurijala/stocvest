@@ -231,8 +231,8 @@ function RailCard({
       style={{
         background: active ? colors.surfaceMuted : colors.surface,
         border: `1px solid ${active ? colors.accent : colors.border}`,
-        borderLeft: `3px solid ${laneAccent}`,
-        borderBottom: `3px solid ${sTone}`,
+        borderLeft: `3px solid ${biasAccent}`,
+        borderBottom: `3px solid ${biasAccent}`,
         borderRadius: borderRadius.md,
         opacity: card.state === "cooling" ? 0.78 : 1
       }}
