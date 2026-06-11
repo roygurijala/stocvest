@@ -34,3 +34,27 @@ describe("trading room session selection", () => {
     expect(isFirstVisitOfTradingDay()).toBe(false);
   });
 });
+
+describe("hasDashboardSymbolInLocation", () => {
+  test("detects symbol query in the address bar", async () => {
+    const { hasDashboardSymbolInLocation } = await import("@/lib/nav/dashboard-trading-room-deeplink");
+    const original = window.location.href;
+    window.history.replaceState({}, "", "/dashboard?symbol=SOXS&lane=swing");
+    try {
+      expect(hasDashboardSymbolInLocation()).toBe(true);
+    } finally {
+      window.history.replaceState({}, "", original);
+    }
+  });
+
+  test("false on bare dashboard path", async () => {
+    const { hasDashboardSymbolInLocation } = await import("@/lib/nav/dashboard-trading-room-deeplink");
+    const original = window.location.href;
+    window.history.replaceState({}, "", "/dashboard");
+    try {
+      expect(hasDashboardSymbolInLocation()).toBe(false);
+    } finally {
+      window.history.replaceState({}, "", original);
+    }
+  });
+});
