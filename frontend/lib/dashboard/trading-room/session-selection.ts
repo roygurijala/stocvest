@@ -1,27 +1,41 @@
 /**
  * Trading Room center-panel selection memory.
  *
- * Intentionally MODULE-SCOPED (not sessionStorage): the value lives as long as
- * the JS bundle is loaded. That yields exactly the desired UX:
+ * Uses sessionStorage so selection survives hard refreshes within the same
+ * session, but is cleared when the browser/tab is closed. This yields:
  *
- *   - Hard refresh / fresh login  → bundle reloads → memory empty → Brief shows.
- *   - SPA navigate away + back (same trading day) → selection restored.
- *   - First visit each NY calendar day → Market Brief (market pulse), not yesterday's symbol.
+ *   - Hard refresh → selection restored from sessionStorage
+ *   - New browser session → Brief shows (no stale selection from yesterday)
+ *   - SPA navigate away + back (same session) → selection restored
+ *   - First visit each NY calendar day → Market Brief (market pulse)
  *
  * Cross-day persistence uses localStorage only for the last-visit ET date key.
  */
 import { isoDateInNewYork } from "@/lib/market-hours-et";
 
 const LAST_VISIT_ET_DATE_KEY = "stocvest:trading-room:last-visit-et-date";
-
-let lastSelectedId: string | null = null;
+const LAST_SELECTED_ID_KEY = "stocvest:trading-room:last-selected-id";
 
 export function getLastSelectedId(): string | null {
-  return lastSelectedId;
+  if (typeof window === "undefined") return null;
+  try {
+    return window.sessionStorage.getItem(LAST_SELECTED_ID_KEY);
+  } catch {
+    return null;
+  }
 }
 
 export function setLastSelectedId(id: string | null): void {
-  lastSelectedId = id;
+  if (typeof window === "undefined") return;
+  try {
+    if (id) {
+      window.sessionStorage.setItem(LAST_SELECTED_ID_KEY, id);
+    } else {
+      window.sessionStorage.removeItem(LAST_SELECTED_ID_KEY);
+    }
+  } catch {
+    /* ignore storage errors */
+  }
 }
 
 /** True when the user has not opened the trading room yet this NY calendar day. */
@@ -47,7 +61,13 @@ export function recordTradingRoomVisit(now: Date = new Date()): void {
   }
 }
 
-/** Test hook — reset module memory between cases. */
+/** Test hook — reset sessionStorage between cases. */
 export function __resetSessionSelectionForTests(): void {
-  lastSelectedId = null;
+  if (typeof window !== "undefined") {
+    try {
+      window.sessionStorage.removeItem(LAST_SELECTED_ID_KEY);
+    } catch {
+      /* ignore */
+    }
+  }
 }
