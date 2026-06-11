@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import date, timedelta
 
 import httpx
 import pytest
@@ -31,6 +32,19 @@ def _obs(value: str) -> dict:
     return {"observations": [{"date": "2026-05-06", "value": value}]}
 
 
+def _future_date(days: int = 14) -> date:
+    """Calendar date inside typical ``days_ahead`` windows (always strictly future)."""
+    return date.today() + timedelta(days=days)
+
+
+def _future_fomc_decision_day(days: int = 21) -> date:
+    """Next Wednesday on/after ``today + days`` (FOMC rate decisions are Wed 2 PM ET)."""
+    d = date.today() + timedelta(days=days)
+    while d.weekday() != 2:
+        d += timedelta(days=1)
+    return d
+
+
 @pytest.mark.asyncio
 async def test_get_upcoming_events_returns_list(fred_api_key) -> None:
     with respx.mock:
@@ -47,13 +61,14 @@ async def test_get_upcoming_events_returns_list(fred_api_key) -> None:
 @pytest.mark.asyncio
 async def test_fomc_multi_day_meeting_collapses_to_decision_day(fred_api_key) -> None:
     rid = FRED_RELEASES["fomc"]
+    decision_day = _future_fomc_decision_day()
+    meeting_start = decision_day - timedelta(days=1)
 
     def side_effect(request: httpx.Request) -> httpx.Response:
         if f"release_id={rid}" in str(request.url):
-            # June 16–17, 2026 meeting → decision Wednesday June 17 at 2 PM ET.
             return httpx.Response(
                 200,
-                json=_release_dates_payload(["2026-06-16", "2026-06-17"]),
+                json=_release_dates_payload([meeting_start.isoformat(), decision_day.isoformat()]),
             )
         return httpx.Response(200, json=_release_dates_payload([]))
 
@@ -63,22 +78,22 @@ async def test_fomc_multi_day_meeting_collapses_to_decision_day(fred_api_key) ->
         events = await client.get_upcoming_events(days_ahead=60)
     fomc = [e for e in events if e.category == MacroEventCategory.FED]
     assert len(fomc) == 1
-    assert fomc[0].scheduled_time.date().isoformat() == "2026-06-17"
+    assert fomc[0].scheduled_time.date() == decision_day
     assert fomc[0].scheduled_time.hour == 14
 
 
 @pytest.mark.asyncio
 async def test_fomc_spurious_weekday_streak_collapses_to_one_decision(fred_api_key) -> None:
     rid = FRED_RELEASES["fomc"]
+    decision_day = _future_fomc_decision_day()
+    streak = [
+        (decision_day + timedelta(days=offset)).isoformat()
+        for offset in (-1, 0, 1, 2)
+    ]
 
     def side_effect(request: httpx.Request) -> httpx.Response:
         if f"release_id={rid}" in str(request.url):
-            return httpx.Response(
-                200,
-                json=_release_dates_payload(
-                    ["2026-06-16", "2026-06-17", "2026-06-18", "2026-06-19"]
-                ),
-            )
+            return httpx.Response(200, json=_release_dates_payload(streak))
         return httpx.Response(200, json=_release_dates_payload([]))
 
     with respx.mock:
@@ -87,16 +102,17 @@ async def test_fomc_spurious_weekday_streak_collapses_to_one_decision(fred_api_k
         events = await client.get_upcoming_events(days_ahead=60)
     fomc = [e for e in events if e.category == MacroEventCategory.FED]
     assert len(fomc) == 1
-    assert fomc[0].scheduled_time.date().isoformat() == "2026-06-17"
+    assert fomc[0].scheduled_time.date() == decision_day
 
 
 @pytest.mark.asyncio
 async def test_fomc_event_has_correct_time(fred_api_key) -> None:
     rid = FRED_RELEASES["fomc"]
+    decision_day = _future_fomc_decision_day()
 
     def side_effect(request: httpx.Request) -> httpx.Response:
         if f"release_id={rid}" in str(request.url):
-            return httpx.Response(200, json=_release_dates_payload(["2026-06-17"]))
+            return httpx.Response(200, json=_release_dates_payload([decision_day.isoformat()]))
         return httpx.Response(200, json=_release_dates_payload([]))
 
     with respx.mock:
@@ -112,10 +128,11 @@ async def test_fomc_event_has_correct_time(fred_api_key) -> None:
 @pytest.mark.asyncio
 async def test_cpi_event_has_correct_time(fred_api_key) -> None:
     rid = FRED_RELEASES["cpi"]
+    cpi_day = _future_date(14)
 
     def side_effect(request: httpx.Request) -> httpx.Response:
         if f"release_id={rid}" in str(request.url):
-            return httpx.Response(200, json=_release_dates_payload(["2026-06-10"]))
+            return httpx.Response(200, json=_release_dates_payload([cpi_day.isoformat()]))
         return httpx.Response(200, json=_release_dates_payload([]))
 
     with respx.mock:
@@ -124,6 +141,7 @@ async def test_cpi_event_has_correct_time(fred_api_key) -> None:
         events = await client.get_upcoming_events(days_ahead=90)
     cpi = [e for e in events if e.category == MacroEventCategory.CPI]
     assert cpi
+    assert cpi[0].scheduled_time.date() == cpi_day
     assert cpi[0].scheduled_time.hour == 8
     assert cpi[0].scheduled_time.minute == 30
 
