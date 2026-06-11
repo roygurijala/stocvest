@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Menu } from "lucide-react";
 import { SymbolSearch } from "@/components/dashboard/trading-room/symbol-search";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -13,6 +13,7 @@ import {
   sessionWord,
   vixWord
 } from "@/lib/session-header-market";
+import { useStackedLayout } from "@/lib/hooks/use-stacked-layout";
 
 export type SessionHeaderCounts = Record<FeedState, number>;
 
@@ -52,6 +53,11 @@ export function AppSessionHeader({
   badge,
   searchPlaceholder = "Jump to a symbol or company…"
 }: AppSessionHeaderProps) {
+  const compactNav = useStackedLayout(899);
+  const mobile = isMobile || compactNav;
+  const headerRef = useRef<HTMLElement | null>(null);
+  const [headerHeightPx, setHeaderHeightPx] = useState(0);
+
   const orbTone =
     marketOpen === true ? colors.bullish : /extended/i.test(marketStatusLabel) ? colors.caution : colors.textMuted;
   const breadth = breadthWord(spyPct, qqqPct, iwmPct);
@@ -88,7 +94,24 @@ export function AppSessionHeader({
 
   const { openNavDrawer } = useAppChrome();
 
-  const marketLine = isMobile ? (
+  useLayoutEffect(() => {
+    if (!mobile) {
+      setHeaderHeightPx(0);
+      return;
+    }
+    const el = headerRef.current;
+    if (!el) return;
+    const measure = () => {
+      const h = el.getBoundingClientRect().height;
+      if (Number.isFinite(h) && h > 0) setHeaderHeightPx(Math.ceil(h));
+    };
+    measure();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    ro?.observe(el);
+    return () => ro?.disconnect();
+  }, [mobile, regimeLabel, counts.actionable, counts.near, counts.potential, counts.cooling]);
+
+  const marketLine = mobile ? (
     <span style={{ lineHeight: 1.4 }}>
       <Tone color={regimeTone}>{regimeLabel}</Tone> · <Tone color={sessionTone}>{session}</Tone> · VIX{" "}
       <Tone color={vixTone}>{vixText}</Tone>
@@ -101,32 +124,36 @@ export function AppSessionHeader({
   );
 
   return (
-    <header
-      data-testid="app-session-header"
-      className={isMobile ? "app-session-header-mobile" : undefined}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        columnGap: isMobile ? spacing[3] : spacing[5],
-        rowGap: spacing[2],
-        flexWrap: "wrap",
-        padding: isMobile
-          ? `calc(${spacing[3]} + env(safe-area-inset-top, 0px)) ${bleed} ${spacing[3]}`
-          : `${spacing[3]} ${bleed}`,
-        marginLeft: `-${bleed}`,
-        marginRight: `-${bleed}`,
-        background: colors.surface,
-        borderBottom: `1px solid ${colors.border}`,
-        ...(isMobile
-          ? {
-              position: "sticky" as const,
-              top: 0,
-              zIndex: 30
-            }
-          : {})
-      }}
-    >
-      {isMobile ? (
+    <div data-testid="app-session-header-wrap">
+      <header
+        ref={headerRef}
+        data-testid="app-session-header"
+        className={mobile ? "app-session-header-mobile" : undefined}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          columnGap: mobile ? spacing[3] : spacing[5],
+          rowGap: spacing[2],
+          flexWrap: "wrap",
+          padding: mobile
+            ? `calc(${spacing[3]} + env(safe-area-inset-top, 0px)) ${bleed} ${spacing[3]}`
+            : `${spacing[3]} ${bleed}`,
+          marginLeft: mobile ? 0 : `-${bleed}`,
+          marginRight: mobile ? 0 : `-${bleed}`,
+          background: colors.surface,
+          borderBottom: `1px solid ${colors.border}`,
+          ...(mobile
+            ? {
+                position: "fixed" as const,
+                top: 0,
+                left: 0,
+                right: 0,
+                zIndex: 30
+              }
+            : {})
+        }}
+      >
+      {mobile ? (
         <button
           type="button"
           aria-label="Open navigation menu"
@@ -168,7 +195,7 @@ export function AppSessionHeader({
 
       {badge ? <div style={{ flex: "none" }}>{badge}</div> : null}
 
-      {isMobile ? (
+      {mobile ? (
         <div style={{ marginLeft: badge ? 0 : "auto", flex: "none" }}>
           <ThemeToggle />
         </div>
@@ -182,7 +209,7 @@ export function AppSessionHeader({
           color: colors.textMuted,
           fontSize: typography.scale.sm,
           minWidth: 0,
-          flex: isMobile ? "1 1 100%" : "0 1 auto"
+          flex: mobile ? "1 1 100%" : "0 1 auto"
         }}
       >
         <span
@@ -206,15 +233,15 @@ export function AppSessionHeader({
           gap: spacing[4],
           flexWrap: "wrap",
           minWidth: 0,
-          marginLeft: isMobile ? 0 : "auto",
-          flex: isMobile ? "1 1 100%" : "0 0 auto"
+          marginLeft: mobile ? 0 : "auto",
+          flex: mobile ? "1 1 100%" : "0 0 auto"
         }}
       >
         <SymbolSearch
           placeholder={searchPlaceholder}
           onPick={onOpenSymbol}
           colors={colors}
-          width={isMobile ? "100%" : 248}
+          width={mobile ? "100%" : 248}
           pill
         />
 
@@ -249,8 +276,12 @@ export function AppSessionHeader({
           Market data as of <b style={{ color: colors.text, fontWeight: 600 }}>{asOf ?? "—"}</b>
         </span>
 
-        {!isMobile ? <ThemeToggle /> : null}
+        {!mobile ? <ThemeToggle /> : null}
       </div>
-    </header>
+      </header>
+      {mobile && headerHeightPx > 0 ? (
+        <div aria-hidden style={{ height: headerHeightPx, flexShrink: 0 }} />
+      ) : null}
+    </div>
   );
 }
