@@ -78,7 +78,8 @@ function cardFromWatchlist(
   row: WatchlistMaturationRow | undefined,
   snap: SnapshotPayload | undefined,
   company: string | null,
-  mode: FeedLane
+  mode: FeedLane,
+  liveBias?: string | null
 ): FeedCard {
   const r = row ?? {};
   const state = mapMaturationState(r);
@@ -88,13 +89,15 @@ function cardFromWatchlist(
     aligned != null
       ? formatMaturationStateLine(r.state || r.label || state, aligned, total)
       : formatWatchlistMaturationLabel(r);
+  // Use live composite bias when available, fall back to maturation bias
+  const effectiveBias = liveBias ?? r.bias;
   return {
     id: `${mode}:${symbol}`,
     symbol,
     company,
     lane: mode,
     state,
-    bias: mapBias(r.bias),
+    bias: mapBias(effectiveBias),
     verdict,
     phase: r.readiness_label?.trim() || null,
     price: cleanNum(snap?.last_trade_price) ?? cleanNum(snap?.day_close),
@@ -362,7 +365,8 @@ export function WatchlistRail({
   open,
   onToggleOpen,
   isMobile = false,
-  colors
+  colors,
+  liveBiasBySymbol
 }: {
   mode: FeedLane;
   selectedId: string | null;
@@ -372,6 +376,8 @@ export function WatchlistRail({
   onToggleOpen: () => void;
   isMobile?: boolean;
   colors: Colors;
+  /** Live composite bias by symbol (e.g., from current signal) to override stale maturation bias */
+  liveBiasBySymbol?: Map<string, string>;
 }) {
   const [symbols, setSymbols] = useState<string[]>([]);
   const [bySymbol, setBySymbol] = useState<Record<string, WatchlistMaturationRow>>({});
@@ -471,7 +477,8 @@ export function WatchlistRail({
         bySymbol[sym],
         snaps.get(sym),
         snaps.get(sym)?.company_name?.trim() || companyBySymbol.get(sym) || null,
-        mode
+        mode,
+        liveBiasBySymbol?.get(sym)
       )
     );
     return list.sort((a, b) => {
@@ -480,7 +487,7 @@ export function WatchlistRail({
       if (b.rankScore !== a.rankScore) return b.rankScore - a.rankScore;
       return a.symbol.localeCompare(b.symbol);
     });
-  }, [symbols, bySymbol, snaps, companyBySymbol, mode]);
+  }, [symbols, bySymbol, snaps, companyBySymbol, mode, liveBiasBySymbol]);
 
   if (!open) {
     // Mobile: a full-width horizontal toggle bar; desktop: a thin vertical rail.

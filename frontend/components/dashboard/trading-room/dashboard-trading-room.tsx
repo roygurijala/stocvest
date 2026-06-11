@@ -762,6 +762,17 @@ function TradingRoomBody({
   ) : (
     <MarketBrief data={briefData} onViewTopSetup={() => topCard && selectCard(topCard)} onSearch={undefined} />
   );
+  // Build live bias map from current desk data for watchlist rail
+  const liveBiasBySymbol = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const card of allCards) {
+      // Use card bias (from live desk data) to override stale maturation bias
+      const biasStr = card.bias === "bull" ? "long" : card.bias === "bear" ? "short" : "neutral";
+      map.set(card.symbol, biasStr);
+    }
+    return map;
+  }, [allCards]);
+
   const railPanel = (
     <WatchlistRail
       mode="swing"
@@ -772,6 +783,7 @@ function TradingRoomBody({
       onToggleOpen={() => setWatchlistOpen((o) => !o)}
       isMobile={isMobile}
       colors={colors}
+      liveBiasBySymbol={liveBiasBySymbol}
     />
   );
 
