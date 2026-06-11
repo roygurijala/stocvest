@@ -24,7 +24,7 @@ export default async function ScannerTerminalPreviewPage() {
   }
 
   return (
-    <AppShell session={session} isAdmin={isAdmin} hideTopBar>
+    <AppShell session={session} isAdmin={isAdmin}>
       <ScannerTerminalPreviewContent
         initialScannerSetupLoadMode={scannerSetupLoadMode}
         dayTradingSurfaces={dayTradingSurfaces}

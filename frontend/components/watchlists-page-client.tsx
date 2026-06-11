@@ -31,7 +31,7 @@ import {
 } from "@/lib/watchlist-maturation-prime";
 import { useWatchlistSessionRefresh } from "@/lib/hooks/use-watchlist-session-refresh";
 import type { WatchlistMaturationDesk as SessionRefreshDesk } from "@/lib/watchlist-maturation-session-staleness";
-import { APP_TOP_BAR_LAYOUT_HEIGHT_PX, measureAppTopBarLayoutHeightPx } from "@/components/top-bar";
+import { APP_CHROME_LAYOUT_HEIGHT_PX, measureAppChromeLayoutHeightPx } from "@/lib/app-chrome-layout";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { borderRadius, spacing, surfaceGlowClassName } from "@/lib/design-system";
 import { watchlistSignalsOpenAriaLabel, watchlistToSignalsHref } from "@/lib/nav/watchlist-signals-deeplink";
@@ -160,7 +160,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   }, []);
 
   const watchlistHeaderRef = useRef<HTMLElement | null>(null);
-  const [watchlistTopBarPx, setWatchlistTopBarPx] = useState(APP_TOP_BAR_LAYOUT_HEIGHT_PX);
+  const [watchlistTopBarPx, setWatchlistTopBarPx] = useState(APP_CHROME_LAYOUT_HEIGHT_PX);
 
   const handleSortModeChange = useCallback((mode: WatchlistSortMode) => {
     setSortMode(mode);
@@ -266,7 +266,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
   useLayoutEffect(() => {
     if (!active) return;
     const measure = () => {
-      const topBarPx = measureAppTopBarLayoutHeightPx();
+      const topBarPx = measureAppChromeLayoutHeightPx();
       setWatchlistTopBarPx((prev) => (prev === topBarPx ? prev : topBarPx));
     };
     measure();

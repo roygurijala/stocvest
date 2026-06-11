@@ -6,8 +6,8 @@ import { DashboardMobileChrome } from "@/components/dashboard-mobile-chrome";
 import { MobileNavDrawer } from "@/components/mobile-nav-drawer";
 import { PageLoader } from "@/components/page-loader";
 import { Sidebar } from "@/components/sidebar";
-import { APP_TOP_BAR_LAYOUT_HEIGHT, TopBar } from "@/components/top-bar";
 import { AppChromeProvider } from "@/lib/app-chrome-context";
+import { APP_CHROME_LAYOUT_HEIGHT } from "@/lib/app-chrome-layout";
 import { usesTradingSessionChrome } from "@/lib/app-chrome-routes";
 import { normalizeAppPathname } from "@/lib/app-pathname";
 import { resolveAppPageTitle } from "@/lib/app-page-titles";
@@ -31,13 +31,6 @@ interface AppShellProps {
    * `<main>` top padding is zero and spacing is reserved in-page.
    */
   mainTopLayout?: "default" | "watchlist-flush" | "signals-flush";
-  /**
-   * Suppress the global brand `TopBar` so the page can render its own header
-   * (e.g. the dashboard's single prototype-style header bar). The page is then
-   * responsible for the brand/theme controls; the mobile nav drawer is still
-   * reachable via `useAppChrome().openNavDrawer`.
-   */
-  hideTopBar?: boolean;
 }
 
 export function AppShell({
@@ -45,8 +38,7 @@ export function AppShell({
   children,
   isAdmin = false,
   mainTopExtra = spacing[6],
-  mainTopLayout = "default",
-  hideTopBar = false
+  mainTopLayout = "default"
 }: AppShellProps) {
   const mainFlushTop = mainTopLayout !== "default";
   const { colors } = useTheme();
@@ -54,9 +46,7 @@ export function AppShell({
   const normalizedPath = normalizeAppPathname(pathname);
   const compactNav = useStackedLayout(899);
   const sessionChrome = usesTradingSessionChrome(normalizedPath);
-  /** Legacy TopBar is desktop-only; trading-room pages bring their own session header. */
-  const suppressTopBar = hideTopBar || sessionChrome || compactNav;
-  const showMobileChrome = compactNav && !sessionChrome;
+  const showPageChrome = !sessionChrome;
   const [loading, setLoading] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -83,14 +73,12 @@ export function AppShell({
           data-testid="app-shell-right-column"
           style={{ background: colors.background }}
         >
-          {showMobileChrome ? (
+          {showPageChrome ? (
             <DashboardMobileChrome
               title={resolveAppPageTitle(normalizedPath)}
               onMenuClick={() => setDrawerOpen(true)}
             />
-          ) : suppressTopBar ? null : (
-            <TopBar onMenuClick={() => setDrawerOpen(true)} />
-          )}
+          ) : null}
           <main
             className="min-w-0 px-4 pb-6 min-[900px]:px-6"
             data-main-top-layout={mainTopLayout}
@@ -99,13 +87,13 @@ export function AppShell({
             style={{
               paddingTop: sessionChrome
                 ? 0
-                : showMobileChrome
+                : showPageChrome
                   ? mainFlushTop
                     ? 0
-                    : `calc(${APP_TOP_BAR_LAYOUT_HEIGHT} + env(safe-area-inset-top, 0px) + ${mainTopExtra})`
+                    : `calc(${APP_CHROME_LAYOUT_HEIGHT} + env(safe-area-inset-top, 0px) + ${mainTopExtra})`
                   : mainFlushTop
                     ? 0
-                    : `calc(${APP_TOP_BAR_LAYOUT_HEIGHT} + ${mainTopExtra})`
+                    : mainTopExtra
             }}
           >
             <AppChromeProvider value={{ openNavDrawer: () => setDrawerOpen(true) }}>

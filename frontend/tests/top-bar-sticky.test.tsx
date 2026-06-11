@@ -1,8 +1,8 @@
 /**
- * Lock-in: the dashboard TopBar stays pinned to the viewport while the
+ * Lock-in: the dashboard page chrome stays pinned to the viewport while the
  * document (``body``) scrolls.
  *
- *   1. ``TopBar`` uses ``position: fixed`` + sidebar offset on ``lg+``.
+ *   1. ``DashboardMobileChrome`` uses ``position: fixed`` + sidebar offset on desktop.
  *   2. ``AppShell`` does not trap scroll in a nested ``overflow`` container.
  */
 
@@ -10,12 +10,12 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/dashboard",
+  usePathname: () => "/dashboard/settings",
   useRouter: () => ({ prefetch: vi.fn(), push: vi.fn(), replace: vi.fn() })
 }));
 
 import { AppShell } from "@/components/app-shell";
-import { TopBar } from "@/components/top-bar";
+import { DashboardMobileChrome } from "@/components/dashboard-mobile-chrome";
 import { ThemeProvider } from "@/lib/theme-provider";
 import type { AuthSession } from "@/lib/auth/types";
 
@@ -30,18 +30,16 @@ const SESSION: AuthSession = {
   isAdmin: false
 } as unknown as AuthSession;
 
-describe("TopBar viewport pinning", () => {
+describe("DashboardMobileChrome viewport pinning", () => {
   test("header carries the fixed-position classes that pin it during scroll", () => {
-    wrap(<TopBar />);
-    const header = screen.getByTestId("app-top-bar");
+    wrap(<DashboardMobileChrome title="Settings" />);
+    const header = screen.getByTestId("dashboard-mobile-chrome");
     const cls = header.className;
     expect(cls).toMatch(/(^|\s)fixed(\s|$)/);
     expect(cls).toMatch(/(^|\s)top-0(\s|$)/);
     expect(cls).toMatch(/(^|\s)left-0(\s|$)/);
     expect(cls).toMatch(/(^|\s)z-30(\s|$)/);
     expect(cls).toMatch(/min-\[900px\]:left-\[56px\]/);
-    expect(cls).toMatch(/min-\[900px\]:grid/);
-    expect(cls).toMatch(/(^|\s)hidden(\s|$)/);
   });
 });
 

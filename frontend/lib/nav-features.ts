@@ -70,7 +70,7 @@ export function isDashboardNavItemEnabled(item: NavItemWithFeature): boolean {
 }
 
 /**
- * Convenience reader for non-nav components (TopBar, Settings, Scanner CTAs,
+ * Convenience reader for non-nav components (Settings, Scanner CTAs,
  * Onboarding wizard) that need to gate broker-coupled UI inline.
  *
  * Always prefer this over reading `NAV_FEATURES.brokersEnabled` directly so a

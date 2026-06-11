@@ -30,7 +30,7 @@
  *
  * What we deliberately do NOT assert:
  *
- *   * That the sidebar / top-bar nav links carry `prefetch={false}`.
+ *   * That the sidebar nav links carry `prefetch={false}`.
  *     Those are 1-of-N targets (one Settings link, one Performance
  *     link, etc.), not N-of-N like repeated heavy CTAs. Next.js's default
  *     prefetch is fine for those.
