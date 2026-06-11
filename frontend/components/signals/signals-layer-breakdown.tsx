@@ -297,12 +297,21 @@ function LayerRow({
   const polarityStr = String(polarity);
   const TrendIcon = polarityStr === "with" ? TrendingUp : polarityStr === "against" ? TrendingDown : Activity;
   
-  // Gradient colors based on score
-  const getScoreGradient = (score: number) => {
-    if (score >= 70) return `linear-gradient(90deg, ${colors.bullish}, ${colors.bullish}80)`;
-    if (score >= 50) return `linear-gradient(90deg, ${colors.accent}, ${colors.accent}80)`;
-    if (score >= 30) return `linear-gradient(90deg, ${colors.caution}, ${colors.caution}80)`;
-    return `linear-gradient(90deg, ${colors.bearish}, ${colors.bearish}80)`;
+  // Gradient colors based on status (not score) for consistent visual meaning
+  const getStatusGradient = (status: string | undefined) => {
+    const s = (status || "").toLowerCase();
+    if (s === "bullish") return `linear-gradient(90deg, ${colors.bullish}, ${colors.bullish}80)`;
+    if (s === "bearish") return `linear-gradient(90deg, ${colors.bearish}, ${colors.bearish}80)`;
+    // Neutral, Mixed, Unavailable, As of close → neutral color
+    return `linear-gradient(90deg, ${colors.accent}, ${colors.accent}80)`;
+  };
+
+  // Color based on status for numeric score display
+  const getStatusColor = (status: string | undefined): string => {
+    const s = (status || "").toLowerCase();
+    if (s === "bullish") return colors.bullish;
+    if (s === "bearish") return colors.bearish;
+    return colors.accent;
   };
 
   return (
@@ -409,8 +418,8 @@ function LayerRow({
                     <span 
                       className="text-lg font-bold tabular-nums"
                       style={{ 
-                        color: levelPct >= 60 ? colors.bullish : levelPct >= 40 ? colors.accent : colors.caution,
-                        textShadow: `0 0 20px ${levelPct >= 60 ? colors.bullish : levelPct >= 40 ? colors.accent : colors.caution}30`
+                        color: getStatusColor(row.status),
+                        textShadow: `0 0 20px ${getStatusColor(row.status)}30`
                       }}
                     >
                       {levelLabel}
@@ -456,8 +465,8 @@ function LayerRow({
                       animate={{ width: `${levelPct}%` }}
                       transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
                       style={{
-                        background: getScoreGradient(levelPct),
-                        boxShadow: `0 0 12px ${levelPct >= 60 ? colors.bullish : levelPct >= 40 ? colors.accent : colors.caution}60`
+                        background: getStatusGradient(row.status),
+                        boxShadow: `0 0 12px ${row.status?.toLowerCase() === "bullish" ? colors.bullish : row.status?.toLowerCase() === "bearish" ? colors.bearish : colors.accent}60`
                       }}
                     />
                   </div>
