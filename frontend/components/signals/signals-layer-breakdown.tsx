@@ -777,14 +777,24 @@ function LayerDetailDrawer({
                 <div 
                   className="p-4 rounded-xl"
                   style={{
-                    background: `${polarityStr === "with" ? colors.bullish : polarityStr === "against" ? colors.bearish : colors.accent}10`,
-                    border: `1px solid ${polarityStr === "with" ? colors.bullish : polarityStr === "against" ? colors.bearish : colors.accent}25`
+                    background: `${polarity === "supportive" ? colors.bullish : polarity === "blocking" ? colors.bearish : colors.accent}10`,
+                    border: `1px solid ${polarity === "supportive" ? colors.bullish : polarity === "blocking" ? colors.bearish : colors.accent}25`
                   }}
                 >
                   <p className="m-0 text-sm leading-relaxed" style={{ color: colors.text }}>
-                    This layer is <strong style={{ color: dot }}>{polarityStr === "with" ? "supporting" : polarityStr === "against" ? "countering" : "neutral to"}</strong> your {bias} setup. 
-                    {layer.statusLabel && `The ${layer.name.toLowerCase()} reading shows ${layer.statusLabel.toLowerCase()}.`}
-                    {layer.explanation && ` ${layer.explanation}`}
+                    {bias === "Neutral" ? (
+                      // For neutral bias, describe what the layer actually shows
+                      layer.status === "Bullish" ? (
+                        <>This layer shows a <strong style={{ color: colors.bullish }}>bullish signal</strong> (score {levelLabel}) despite the neutral setup. {layer.explanation && layer.explanation}</>
+                      ) : layer.status === "Bearish" ? (
+                        <>This layer shows a <strong style={{ color: colors.bearish }}>bearish signal</strong> (score {levelLabel}) despite the neutral setup. {layer.explanation && layer.explanation}</>
+                      ) : (
+                        <>This layer is <strong style={{ color: colors.textMuted }}>neutral</strong> to your neutral setup. {layer.explanation && layer.explanation}</>
+                      )
+                    ) : (
+                      // For directional bias, show alignment
+                      <>This layer is <strong style={{ color: dot }}>{polarity === "supportive" ? "supporting" : polarity === "blocking" ? "countering" : polarity === "mixed" ? "sending mixed signals for" : "neutral to"}</strong> your {bias} setup. {layer.statusLabel && `The ${layer.name.toLowerCase()} reading shows ${layer.statusLabel.toLowerCase()}.`} {layer.explanation && layer.explanation}</>
+                    )}
                   </p>
                 </div>
               </div>
