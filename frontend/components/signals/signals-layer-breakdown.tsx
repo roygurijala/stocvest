@@ -17,7 +17,6 @@ import {
   Cpu,
   FileText,
   Building2,
-  Newspaper
 } from "lucide-react";
 import { CuteLoader } from "@/components/cute-loader";
 import { InfoTip } from "@/components/info-tip";

@@ -254,6 +254,7 @@ class NewsAnalyzer:
 
         weights: list[float] = []
         sentiments: list[float] = []
+        quality_article_rows: list[dict[str, Any]] = []
         catalyst_type: str | None = None
         catalyst_headline: str | None = None
         ipo_competitive_filtered = 0

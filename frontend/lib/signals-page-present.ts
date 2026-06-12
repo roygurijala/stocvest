@@ -87,6 +87,7 @@ export type SignalsLayerRowInput = {
   }>;
   indicatorSnapshot?: Record<string, string | number | boolean | null>;
   /** Layer-specific macro data */
+  macroRiskLevel?: string | null;
   macroWarnings?: string[];
   upcomingEvents?: Array<{ event: string; date: string; impact?: string }>;
   yieldCurve?: { status: string; signal: string } | null;
