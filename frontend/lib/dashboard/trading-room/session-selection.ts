@@ -4,7 +4,7 @@
  * Uses sessionStorage so selection survives hard refreshes within the same
  * session, but is cleared when the browser/tab is closed. This yields:
  *
- *   - Hard refresh → selection restored from sessionStorage
+ *   - Hard refresh → selection restored from URL query or sessionStorage
  *   - New browser session → Brief shows (no stale selection from yesterday)
  *   - SPA navigate away + back (same session) → selection restored
  *   - First visit each NY calendar day → Market Brief (market pulse)

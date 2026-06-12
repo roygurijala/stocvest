@@ -150,9 +150,9 @@ export function hasDashboardSymbolInLocation(): boolean {
  * `useSearchParams` can lag behind `window.location` after `history.replaceState`
  * (same-page card clicks), so the address bar wins when both disagree.
  *
- * Bootstrap / cold load must NOT use this to open Deep Dive — only
- * `peekTradingRoomOpenIntent()` (active scanner handoff). Passive `?symbol=` in
- * the URL is cleared so users land on Market Brief first.
+ * Bootstrap / cold load prefers `peekTradingRoomOpenIntent()` for scanner handoffs.
+ * A passive `?symbol=` in the URL is restored on hard refresh so the user stays
+ * on their open setup; first visit of a new NY day still opens Market Brief.
  */
 export function resolveTradingRoomOpenIntent(
   searchParams?: Pick<URLSearchParams, "get"> | null
